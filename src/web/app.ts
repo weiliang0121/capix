@@ -78,7 +78,7 @@ function renderDetail() {
   const node = selectedRecord();
   el('detail-title').textContent = node ? `${groupLabels[node.group]} / ${node.recordType} / ${node.label}` : '节点详情';
   el('detail-status').textContent = node ? `${statusLabels[node.status]} · ${ms(node.durationMs)}` : '';
-  el('detail-source').textContent = node ? `${node.id} → ${node.source}\nContext：${node.contextId}${node.executionId ? `\n执行记录：${node.executionId}${node.runtimeNodeId ? ` · 节点：${node.runtimeNodeId}` : ''}` : ''}` : '运行之后，点击节点查看真实输入输出。';
+  el('detail-source').textContent = node ? `${node.id} → ${node.source}\nContext：${node.contextId}${node.executionId ? `\n执行记录：${node.executionId}${node.operationInstanceId ? ` · 操作实例：${node.operationInstanceId}` : ''}` : ''}` : '运行之后，点击节点查看真实输入输出。';
   el('detail-input').textContent = pretty(node?.input);
   el('detail-output').textContent = node?.error ? pretty({ error: node.error }) : pretty(node?.output);
   if (codeTab) void renderCode(node);

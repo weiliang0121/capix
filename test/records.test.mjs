@@ -4,11 +4,11 @@ import { randomUUID } from 'node:crypto';
 import { RuntimeRecorder } from '../dist/server/records/recorder.js';
 import { test } from 'node:test';
 import { RuntimeRecord, ExecutionRecord, OperationRecord, RecordBook, RecordIndex, ExecutionRecordHelper, OperationRecordHelper } from '../dist/server/records/index.js';
-import { registerNode } from '../dist/server/node.js';
+import { TestOperation } from './fixtures/operation.mjs';
 import { Clock } from '../dist/server/runtime/clock.js';
 import { Runtime } from '../dist/server/runtime/runtime.js';
 import { identity } from '../dist/server/operations/operation.js';
-import { runPipeline } from '../dist/server/pipeline.js';
+import { runQuery } from '../dist/server/query/run.js';
 import { projectExecution, validateSnapshot } from '../dist/shared/execution/project.js';
 import { RuntimeError } from '../dist/server/errors/error.js';
 
@@ -25,7 +25,7 @@ const output = (content) => ({
 });
 async function execute(answer = '{"kind":"answer","content":"海盐项目"}') {
   const responses = [output('{"historyIndexes":[0]}'), output(answer)];
-  return runPipeline(acceptQuery(input), settings, {
+  return runQuery(acceptQuery(input), settings, {
     async invoke() {
       return responses.shift();
     },
@@ -71,11 +71,11 @@ test('Paired record operations create, query and write results independently of 
   const def = {
     contextId: randomUUID(),
     executionId: execution.id,
-    nodeId: 'n',
+    operationInstanceId: 'n',
     operation: 'echo',
     label: 'echo',
     source: 'test',
-    caller: 'pipeline',
+    caller: 'execution',
     callee: 'operation',
   };
   const operation = OperationRecordHelper.create(book, index, def, input);
@@ -115,11 +115,11 @@ test('RuntimeRecord is the base; execution and operation relations live outside 
     {
       contextId: randomUUID(),
       executionId: execution.id,
-      nodeId: 'n',
+      operationInstanceId: 'n',
       operation: 'echo',
       label: 'echo',
       source: 'test',
-      caller: 'pipeline',
+      caller: 'execution',
       callee: 'operation',
     },
     value,
@@ -144,19 +144,10 @@ test('RuntimeRecord is the base; execution and operation relations live outside 
   assert.throws(() => ExecutionRecordHelper.create(book, new Clock(), randomUUID(), { input: cycle, settings }), /cyclic/);
 });
 
-test('registration does not execute; repeated calls share node identity, not operation identity', async () => {
+test('construction does not execute; repeated calls share the callable identity, not the invocation identity', async () => {
   const runtime = createRuntime();
   const book = runtime.recorder.book;
-  let factories = 0;
-  const node = registerNode(
-    () => {
-      factories++;
-      return echo;
-    },
-    runtime,
-    definition,
-  );
-  assert.equal(factories, 1);
+  const node = new TestOperation(runtime, definition, echo);
   assert.equal(node.getRecords, undefined);
   assert.equal(node.exeId, undefined);
   const execution = begin(runtime);
@@ -167,8 +158,8 @@ test('registration does not execute; repeated calls share node identity, not ope
   const calls = OperationRecordHelper.findByExecution(book, runtime.recorder.operationIndex, runtime.recorder.record(execution.id).id);
   assert.equal(calls.length, 2);
   assert.notEqual(calls[0].id, calls[1].id);
-  assert.ok(calls.every((op) => op.nodeId === node.id && op.executionId === runtime.recorder.record(execution.id).id));
-  const secondNode = registerNode(() => echo, runtime, definition);
+  assert.ok(calls.every((op) => op.operationInstanceId === node.id && op.executionId === runtime.recorder.record(execution.id).id));
+  const secondNode = new TestOperation(runtime, definition, echo);
   assert.notEqual(secondNode.id, node.id);
   const past = runtime.recorder.snapshot(execution);
   complete(execution, value);
@@ -188,19 +179,15 @@ test('one node overlaps calls within and across executions without mixing input 
   const allStarted = new Promise((resolve) => {
     ready = resolve;
   });
-  const node = registerNode(
-    () => ({
-      before: identity,
-      commit: (value) =>
-        new Promise((resolve) => {
-          pending.set(value, resolve);
-          if (pending.size === 3) ready();
-        }),
-      after: (result, original) => ({ result, original }),
-    }),
-    runtime,
-    definition,
-  );
+  const node = new TestOperation(runtime, definition, {
+    before: identity,
+    commit: (value) =>
+      new Promise((resolve) => {
+        pending.set(value, resolve);
+        if (pending.size === 3) ready();
+      }),
+    after: (result, original) => ({ result, original }),
+  });
   const first = node.call(a, 'a1'),
     second = node.call(b, 'b'),
     third = node.call(a, 'a2');
@@ -216,7 +203,7 @@ test('one node overlaps calls within and across executions without mixing input 
   for (const execution of [a, b]) {
     const facts = runtime.recorder.snapshot(execution);
     validateSnapshot(facts);
-    assert.ok(facts.operations.every((op) => op.executionId === runtime.recorder.record(execution.id).id && op.nodeId === node.id));
+    assert.ok(facts.operations.every((op) => op.executionId === runtime.recorder.record(execution.id).id && op.operationInstanceId === node.id));
   }
   assert.deepEqual(
     OperationRecordHelper.findByExecution(book, runtime.recorder.operationIndex, runtime.recorder.record(a.id).id)
@@ -235,11 +222,11 @@ test('Paired operations reject foreign parents, duplicate endings and ending bef
   const def = {
     contextId: randomUUID(),
     executionId: a.id,
-    nodeId: 'n',
+    operationInstanceId: 'n',
     operation: 'x',
     label: 'x',
     source: 'test',
-    caller: 'pipeline',
+    caller: 'execution',
     callee: 'operation',
   };
   const parent = OperationRecordHelper.create(book, runtime.recorder.operationIndex, def, {});
@@ -258,7 +245,7 @@ test('Paired operations reject foreign parents, duplicate endings and ending bef
   assert.equal(child.status, 'succeeded');
 });
 
-test('pipeline observes execution, operations and boundaries from the same records', async () => {
+test('query execution observes execution, operations and boundaries from the same records', async () => {
   const facts = await execute();
   validateSnapshot(facts);
   assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations']);
@@ -303,16 +290,12 @@ test('After failure preserves raw output, records no accepted result, and propag
   const runtime = createRuntime(),
     execution = begin(runtime),
     failure = new RuntimeError('TEST', 'test');
-  const node = registerNode(
-    () => ({
-      ...echo,
-      commit() {
-        throw failure;
-      },
-    }),
-    runtime,
-    definition,
-  );
+  const node = new TestOperation(runtime, definition, {
+    ...echo,
+    commit() {
+      throw failure;
+    },
+  });
   await assert.rejects(node.call(execution, input), (error) => error === failure);
   assert.equal(
     runtime.recorder.snapshot(execution).attempts.some((attempt) => attempt.phase === 'after'),
@@ -410,7 +393,7 @@ test('publication failure does not change execution facts or operation output', 
     throw new Error('viewer unavailable');
   });
   const execution = begin(runtime);
-  const node = registerNode(() => echo, runtime, definition);
+  const node = new TestOperation(runtime, definition, echo);
   assert.equal(await node.call(execution, input), input);
   complete(execution, input);
   assert.equal(projectExecution(runtime.recorder.snapshot(execution)).status, 'succeeded');
@@ -428,11 +411,11 @@ test('Paired operations use the supplied index without scanning Book', (t) => {
     {
       contextId: randomUUID(),
       executionId: execution.id,
-      nodeId: 'n',
+      operationInstanceId: 'n',
       operation: 'x',
       label: 'x',
       source: 'test',
-      caller: 'pipeline',
+      caller: 'execution',
       callee: 'processing',
     },
     input,
@@ -474,11 +457,11 @@ test('Failed index selection does not register a partial operation', () => {
         {
           contextId: randomUUID(),
           executionId: execution.id,
-          nodeId: 'n',
+          operationInstanceId: 'n',
           operation: 'x',
           label: 'x',
           source: 'test',
-          caller: 'pipeline',
+          caller: 'execution',
           callee: 'processing',
         },
         input,

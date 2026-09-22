@@ -7,7 +7,7 @@ import { observeTranscript } from './transcript/observe.js';
 import { acceptQuery } from './query/input.js';
 import { RuntimeError } from './errors/error.js';
 import { DeepSeekProvider } from './provider.js';
-import { runPipeline } from './pipeline.js';
+import { runQuery } from './query/run.js';
 import { validateSettings } from './settings.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -23,11 +23,12 @@ const port = Number(process.env.PORT || 4317);
 if (!Number.isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 const allowedSources = new Set([
-  'pipeline.ts',
+  'query/run.ts',
+  'query/execution.ts',
+  'execution/execution.ts',
   'invocation/invoke.ts',
   'invocation/lifecycle.ts',
   'operations/operation.ts',
-  'node.ts',
   'runtime/runtime.ts',
   'runtime/clock.ts',
   'runtime/events.ts',
@@ -123,7 +124,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     res.on('close', () => {
       if (!res.writableEnded) controller.abort();
     });
-    await runPipeline(
+    await runQuery(
       input,
       runSettings,
       provider,

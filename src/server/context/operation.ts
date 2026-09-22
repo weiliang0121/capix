@@ -2,7 +2,7 @@ import { RuntimeContext } from './context.js';
 
 /** Static invocation declaration; contains no record identity or input/output snapshots. */
 export interface OperationDeclaration {
-  nodeId: string;
+  operationInstanceId: string;
   operation: string;
   label: string;
   source: string;
@@ -24,7 +24,7 @@ export class OperationContext<I = unknown, O = unknown> extends RuntimeContext<I
     Object.freeze(this);
   }
 
-  get nodeId(): string {
-    return this.declaration.nodeId;
+  get operationInstanceId(): string {
+    return this.declaration.operationInstanceId;
   }
 }

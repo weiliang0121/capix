@@ -11,7 +11,7 @@ function setup() {
   const runtime = new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId)));
   const executionLifecycle = runtime.execution({ input: {}, settings: {} });
   const execution = executionLifecycle.begin();
-  const operationLifecycle = runtime.operation(execution, { nodeId: 'n', operation: 'echo', label: 'echo', source: 'test', caller: 'pipeline', callee: 'operation' }, {});
+  const operationLifecycle = runtime.operation(execution, { operationInstanceId: 'n', operation: 'echo', label: 'echo', source: 'test', caller: 'execution', callee: 'operation' }, {});
   const operation = operationLifecycle.begin();
   const definition = { phase: 'after', source: 'test', caller: 'operation', callee: 'processing' };
   return { runtime, executionLifecycle, execution, operationLifecycle, operation, definition };
@@ -34,7 +34,7 @@ test('each phase invocation has its own attempt; an unsuccessful attempt does no
   assert.ok(secondRecord instanceof RuntimeRecord && secondRecord instanceof AttemptRecord);
   assert.equal(secondRecord instanceof OperationRecord, false);
   assert.equal('executionId' in second, false);
-  assert.equal('nodeId' in second, false);
+  assert.equal('operationInstanceId' in second, false);
   assert.equal(second.operationId, operation.id);
   assert.throws(() => operationLifecycle.succeed(operation, {}), /active child contexts/);
   assert.throws(() => operationLifecycle.fail(operation, failure), /active child contexts/);
@@ -82,7 +82,7 @@ test('attempt ownership uses operation index and rejects missing or incorrectly 
   });
   assert.deepEqual(AttemptRecordHelper.findByOperation(runtime.recorder.book, runtime.recorder.attemptIndex, operationRecord.id), [attempt]);
   assert.throws(() => AttemptRecordHelper.get(runtime.recorder.book, operationRecord.id), /Attempt does not exist/);
-  const other = runtime.operation(execution, { nodeId: 'other', operation: 'other', label: 'other', source: 'test', caller: 'pipeline', callee: 'operation' }, {}).begin();
+  const other = runtime.operation(execution, { operationInstanceId: 'other', operation: 'other', label: 'other', source: 'test', caller: 'execution', callee: 'operation' }, {}).begin();
   const otherRecord = runtime.recorder.record(other.id);
   const wrongIndex = new RecordIndex(() => otherRecord.id);
   wrongIndex.add(attempt);

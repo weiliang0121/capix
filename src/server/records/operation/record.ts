@@ -3,7 +3,7 @@ import type { OperationRecord as OperationData, OperationValue } from '../../../
 import { RuntimeRecord } from '../record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
-export type OperationDefinition = Omit<OperationData, 'id' | 'value' | 'status'>;
+export type OperationRecordDefinition = Omit<OperationData, 'id' | 'value' | 'status'>;
 export class OperationRecord extends RuntimeRecord<OperationValue> implements OperationData {
   #status: OperationData['status'] = 'running';
   get status(): OperationData['status'] {
@@ -11,18 +11,18 @@ export class OperationRecord extends RuntimeRecord<OperationValue> implements Op
   }
   readonly contextId: string;
   readonly executionId: string;
-  readonly nodeId: string;
+  readonly operationInstanceId: string;
   readonly parentOperationId?: string;
   readonly operation: string;
   readonly label: string;
   readonly source: string;
   readonly caller: string;
   readonly callee: string;
-  constructor(definition: OperationDefinition, input: unknown) {
+  constructor(definition: OperationRecordDefinition, input: unknown) {
     super(snapshotValue({ input }));
     this.contextId = definition.contextId;
     this.executionId = definition.executionId;
-    this.nodeId = definition.nodeId;
+    this.operationInstanceId = definition.operationInstanceId;
     this.parentOperationId = definition.parentOperationId;
     this.operation = definition.operation;
     this.label = definition.label;
@@ -50,7 +50,7 @@ export class OperationRecord extends RuntimeRecord<OperationValue> implements Op
       status: this.status,
       contextId: this.contextId,
       executionId: this.executionId,
-      nodeId: this.nodeId,
+      operationInstanceId: this.operationInstanceId,
       ...(this.parentOperationId ? { parentOperationId: this.parentOperationId } : {}),
       operation: this.operation,
       label: this.label,

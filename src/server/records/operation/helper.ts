@@ -4,11 +4,11 @@ import type { RecordIndex } from '../container/index.js';
 import type { AttemptRecord } from '../attempt/record.js';
 import { AttemptRecordHelper } from '../attempt/helper.js';
 import { ExecutionRecord } from '../execution/record.js';
-import { OperationRecord, type OperationDefinition } from './record.js';
+import { OperationRecord, type OperationRecordDefinition } from './record.js';
 
 /** Operation-specific recording operations. Index keys here represent execution IDs. */
 export class OperationRecordHelper {
-  static create(book: RecordBook, index: RecordIndex<OperationRecord>, definition: OperationDefinition, input: unknown): OperationRecord {
+  static create(book: RecordBook, index: RecordIndex<OperationRecord>, definition: OperationRecordDefinition, input: unknown): OperationRecord {
     const execution = book.get(definition.executionId);
     if (!(execution instanceof ExecutionRecord)) throw new Error('Execution does not exist');
     if (execution.status !== 'running') throw new Error('Record has already ended');

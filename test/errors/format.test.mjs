@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { RuntimeError } from '../../dist/server/errors/error.js';
 import { RuntimeErrorHelper } from '../../dist/server/errors/helper.js';
 import { snapshotValue } from '../../dist/server/records/value/snapshot.js';
-import { runPipeline } from '../../dist/server/pipeline.js';
+import { runQuery } from '../../dist/server/query/run.js';
 import { validateSnapshot } from '../../dist/shared/execution/project.js';
 
 function recordable(value) {
@@ -122,12 +122,12 @@ test('one conversion shares its budget across detail, cause and members, then re
   assert.notEqual(repeated.detail.first, repeated.detail.second);
 });
 
-test('unrecordable error detail and aggregates close the pipeline with diagnostic records', async () => {
+test('unrecordable error detail and aggregates close the query execution with diagnostic records', async () => {
   const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
   const input = { query: 'test', history: [] };
   const work = new RuntimeError('WORK', 'failed', { fn: () => {}, map: new Map([['x', 1]]) });
   for (const failure of [work, new AggregateError([work, new TypeError('registration')], 'combined', { cause: work })]) {
-    const facts = await runPipeline(acceptQuery(input), settings, {
+    const facts = await runQuery(acceptQuery(input), settings, {
       async invoke() {
         throw failure;
       },

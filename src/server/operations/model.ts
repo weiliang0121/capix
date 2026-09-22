@@ -1,6 +1,7 @@
 import type { ModelOutput, ModelRequest, ModelSettings, Purpose } from '../../shared/types.js';
 import { RuntimeError } from '../errors/error.js';
-import type { Operation } from './operation.js';
+import { Operation, type OperationDefinition } from './operation.js';
+import type { Runtime } from '../runtime/runtime.js';
 import type { ModelProvider } from '../provider.js';
 
 export interface ModelDependencies {
@@ -15,31 +16,38 @@ export interface ModelOutputContract<I, O> {
   accept(value: unknown, input: I): O;
 }
 
-export function createModelOperation<I, O>(
-  definition: {
-    purpose: Purpose;
-    task: string;
-    output: ModelOutputContract<I, O>;
-    prepare: (input: I) => unknown;
-  },
-  dependencies: ModelDependencies,
-): Operation<I, ModelRequest, ModelOutput, O> {
-  const { settings, provider, signal } = dependencies;
-  return {
-    before(input) {
-      const request = loadRequest(definition.prepare(input), definition.task, definition.output.schema, settings);
-      checkCapacity(request, settings);
-      return request;
-    },
-    commit(request) {
-      return provider.invoke(request, definition.purpose, AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]));
-    },
-    after(raw, input) {
-      checkCompletion(raw);
-      const value = parseContent(raw.content);
-      return definition.output.accept(value, input);
-    },
-  };
+export interface ModelOperationDefinition<I, O> extends OperationDefinition {
+  purpose: Purpose;
+  task: string;
+  output: ModelOutputContract<I, O>;
+  prepare(input: I): unknown;
+}
+
+export class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput, O> {
+  constructor(
+    runtime: Runtime,
+    private readonly model: ModelOperationDefinition<I, O>,
+    private readonly dependencies: ModelDependencies,
+  ) {
+    super(runtime, model);
+  }
+
+  before(input: I): ModelRequest {
+    const request = loadRequest(this.model.prepare(input), this.model.task, this.model.output.schema, this.dependencies.settings);
+    checkCapacity(request, this.dependencies.settings);
+    return request;
+  }
+
+  commit(request: ModelRequest): Promise<ModelOutput> {
+    const { settings, provider, signal } = this.dependencies;
+    return provider.invoke(request, this.model.purpose, AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]));
+  }
+
+  after(raw: ModelOutput, input: I): O {
+    checkCompletion(raw);
+    const value = parseContent(raw.content);
+    return this.model.output.accept(value, input);
+  }
 }
 
 function checkCompletion(output: ModelOutput): void {

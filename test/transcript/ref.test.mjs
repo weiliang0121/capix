@@ -6,7 +6,7 @@ import { snapshotValue } from '../../dist/server/records/value/snapshot.js';
 import { observeTranscript } from '../../dist/server/transcript/observe.js';
 import { selectionInput } from '../../dist/server/operations/history/input.js';
 import { selectionOutputContract } from '../../dist/server/operations/history/output.js';
-import { runPipeline } from '../../dist/server/pipeline.js';
+import { runQuery } from '../../dist/server/query/run.js';
 import { projectExecution, validateSnapshot } from '../../dist/shared/execution/project.js';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -38,11 +38,11 @@ test('query and history range keep their position and content as Transcript grow
   );
 });
 
-test('pipeline records keep immutable fact references while browser content is resolved at observation time', async () => {
+test('query execution records keep immutable fact references while browser content is resolved at observation time', async () => {
   const query = acceptQuery({ query: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] });
   const requests = [],
     snapshots = [];
-  const facts = await runPipeline(
+  const facts = await runQuery(
     query,
     settings,
     {

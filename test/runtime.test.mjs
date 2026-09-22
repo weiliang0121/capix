@@ -10,7 +10,7 @@ import { ExecutionContext } from '../dist/server/context/execution.js';
 import { OperationContext } from '../dist/server/context/operation.js';
 import { validateSnapshot, projectExecution } from '../dist/shared/execution/project.js';
 
-const definition = { nodeId: 'test-node', operation: 'test', label: 'test', source: 'test', caller: 'pipeline', callee: 'processing' };
+const definition = { operationInstanceId: 'test-node', operation: 'test', label: 'test', source: 'test', caller: 'execution', callee: 'processing' };
 const lifecycles = new WeakMap();
 const begin = (runtime) => {
   const lifecycle = runtime.execution({ input: {}, settings: {} });

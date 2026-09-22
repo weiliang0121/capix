@@ -1,7 +1,7 @@
 export { RuntimeRecord } from './record.js';
 export { ExecutionRecord } from './execution/record.js';
 export { ExecutionRecordHelper } from './execution/helper.js';
-export { OperationRecord, type OperationDefinition } from './operation/record.js';
+export { OperationRecord, type OperationRecordDefinition } from './operation/record.js';
 export { OperationRecordHelper } from './operation/helper.js';
 export { AttemptRecord, type AttemptDefinition } from './attempt/record.js';
 export { AttemptRecordHelper } from './attempt/helper.js';

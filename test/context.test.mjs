@@ -7,9 +7,9 @@ import { Runtime } from '../dist/server/runtime/runtime.js';
 import { RuntimeRecorder } from '../dist/server/records/recorder.js';
 import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
 import { invoke } from '../dist/server/invocation/invoke.js';
-import { registerNode } from '../dist/server/node.js';
+import { TestOperation } from './fixtures/operation.mjs';
 
-const declaration = { nodeId: 'test', operation: 'echo', label: 'echo', source: 'test', caller: 'pipeline', callee: 'operation' };
+const declaration = { operationInstanceId: 'test', operation: 'echo', label: 'echo', source: 'test', caller: 'execution', callee: 'operation' };
 const options = { input: {}, settings: {} };
 const recorder = () => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId));
 
@@ -42,13 +42,15 @@ test('Context keeps live refs, separates undefined outcomes, and fixes only exec
   assert.deepEqual(failed.state, { status: 'failed', error: undefined });
 });
 
-test('Node executes full BCA without records and preserves non-JSON intermediate and output refs', async () => {
+test('Operation executes full BCA without records and preserves non-JSON intermediate and output refs', async () => {
   const runtime = new Runtime(),
     seen = [],
     input = new Map([['query', 'hello']]);
   const fn = () => input.get('query');
-  const node = registerNode(
-    () => ({
+  const node = new TestOperation(
+    runtime,
+    { name: 'echo', label: 'echo', source: 'test', phaseSource: 'test' },
+    {
       before(value) {
         seen.push('before');
         assert.equal(value, input);
@@ -64,9 +66,7 @@ test('Node executes full BCA without records and preserves non-JSON intermediate
         assert.equal(original, input);
         return value;
       },
-    }),
-    runtime,
-    { name: 'echo', label: 'echo', source: 'test', phaseSource: 'test' },
+    },
   );
   let execution;
   const result = await invoke(runtime.execution({ ...options, input }), (context) => {

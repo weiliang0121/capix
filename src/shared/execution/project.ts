@@ -20,9 +20,9 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
     contextIds.add(record.contextId);
   };
   acceptContextIdentity(f.execution);
-  const actors = ['caller', 'pipeline', 'operation', 'processing', 'provider'];
+  const actors = ['caller', 'execution', 'operation', 'processing', 'provider'];
   for (const op of f.operations) {
-    if (!op || typeof op.id !== 'string' || !op.id || bodies.has(op.id) || op.executionId !== executionId || typeof op.nodeId !== 'string' || !op.nodeId || typeof op.operation !== 'string' || typeof op.label !== 'string' || typeof op.source !== 'string' || !actors.includes(op.caller) || !actors.includes(op.callee) || (op.parentOperationId !== undefined && typeof op.parentOperationId !== 'string') || Object.hasOwn(op, 'phase')) return fail();
+    if (!op || typeof op.id !== 'string' || !op.id || bodies.has(op.id) || op.executionId !== executionId || typeof op.operationInstanceId !== 'string' || !op.operationInstanceId || typeof op.operation !== 'string' || typeof op.label !== 'string' || typeof op.source !== 'string' || !actors.includes(op.caller) || !actors.includes(op.callee) || (op.parentOperationId !== undefined && typeof op.parentOperationId !== 'string') || Object.hasOwn(op, 'phase')) return fail();
     acceptContextIdentity(op);
     operations.set(op.id, op);
     parents.set(op.id, op.parentOperationId ?? executionId);
@@ -94,11 +94,11 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
     contextId: execution.contextId,
     id: execution.id,
     executionId: execution.id,
-    operation: 'pipeline',
+    operation: 'execution',
     caller: 'caller',
-    callee: 'pipeline',
-    label: 'runPipeline',
-    source: 'src/server/pipeline.ts · runPipeline',
+    callee: 'execution',
+    label: 'Execution.call',
+    source: 'src/server/execution/execution.ts · Execution.call',
     ...result(execution.id, execution.value, execution.status),
   };
   const operations = new Map(facts.operations.map((operation) => [operation.id, operation]));
@@ -109,7 +109,7 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
       contextId: op.contextId,
       id: op.id,
       executionId: op.executionId,
-      runtimeNodeId: op.nodeId,
+      operationInstanceId: op.operationInstanceId,
       operation: op.operation,
       parentId: op.parentOperationId ?? op.executionId,
       caller: op.caller as ParticipantId,
@@ -125,7 +125,7 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
         contextId: attempt.contextId,
         id: attempt.id,
         executionId: owner.executionId,
-        runtimeNodeId: owner.nodeId,
+        operationInstanceId: owner.operationInstanceId,
         operation: `${owner.operation}.${attempt.phase}`,
         parentId: owner.id,
         caller: attempt.caller as ParticipantId,
@@ -154,8 +154,8 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
       events: facts.events,
       participants: [
         { id: 'caller', label: '调用方', description: '运行入口' },
-        { id: 'pipeline', label: 'Pipeline', description: '节点的显式组合' },
-        { id: 'operation', label: 'Node', description: '一次节点 BCA 调用' },
+        { id: 'execution', label: 'Execution', description: '操作的显式组合' },
+        { id: 'operation', label: 'Operation', description: '一次操作 BCA 调用' },
         { id: 'processing', label: '本地处理', description: 'BCA 本地处理' },
         {
           id: 'provider',

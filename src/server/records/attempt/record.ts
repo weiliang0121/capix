@@ -5,7 +5,7 @@ import { snapshotValue } from '../value/snapshot.js';
 
 export type AttemptDefinition = Omit<AttemptData, 'id' | 'value' | 'status'>;
 
-/** Records one phase invocation. Its owner supplies execution and node identity. */
+/** Records one phase invocation. Its owner supplies execution and operation instance identity. */
 export class AttemptRecord extends RuntimeRecord<AttemptValue> implements AttemptData {
   #status: AttemptData['status'] = 'running';
   get status(): AttemptData['status'] {

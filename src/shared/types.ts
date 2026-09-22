@@ -40,7 +40,7 @@ export interface TraceNode {
   recordType: 'execution' | 'operation' | 'attempt';
   contextId: string;
   executionId?: string;
-  runtimeNodeId?: string;
+  operationInstanceId?: string;
   operation?: string;
   id: string;
   label: string;
@@ -53,12 +53,12 @@ export interface TraceNode {
   output?: unknown;
   error?: RuntimeErrorValue;
 }
-export type ParticipantId = 'caller' | 'pipeline' | 'operation' | 'processing' | 'provider';
+export type ParticipantId = 'caller' | 'execution' | 'operation' | 'processing' | 'provider';
 export interface CallSpan {
   recordType: 'execution' | 'operation' | 'attempt';
   contextId: string;
   executionId?: string;
-  runtimeNodeId?: string;
+  operationInstanceId?: string;
   operation?: string;
   id: string;
   parentId?: string;

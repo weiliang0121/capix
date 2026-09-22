@@ -22,7 +22,7 @@ export interface OperationRecord<I = unknown, O = unknown> extends RuntimeRecord
   readonly contextId: string;
   readonly status: 'running' | 'succeeded' | 'failed';
   readonly executionId: string;
-  readonly nodeId: string;
+  readonly operationInstanceId: string;
   readonly parentOperationId?: string;
   readonly operation: string;
   readonly label: string;

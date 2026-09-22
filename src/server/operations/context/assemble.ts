@@ -1,15 +1,15 @@
 import type { Selection } from '../../../shared/types.js';
 import type { SelectionInput } from '../history/input.js';
 import type { MessageRef } from '../../transcript/ref.js';
-import { identity, type Operation } from '../operation.js';
-import type { NodeDefinition } from '../../node.js';
+import { Operation, type OperationDefinition } from '../operation.js';
+import type { Runtime } from '../../runtime/runtime.js';
 
 export const assembleContextDefinition = {
   name: 'assemble',
   label: '组装上下文',
-  source: 'src/server/operations/context/assemble.ts · assembleContextOperation',
+  source: 'src/server/operations/context/assemble.ts · AssembleContext',
   phaseSource: 'src/server/operations/context/assemble.ts',
-} as const satisfies NodeDefinition;
+} as const satisfies OperationDefinition;
 
 export interface AssemblyInput {
   original: SelectionInput;
@@ -27,8 +27,17 @@ export interface AnswerInput {
   readonly messages: readonly MessageRef[];
 }
 
-export const assembleContextOperation: Operation<AssemblyInput, AssemblyInput, AnswerInput, AnswerInput> = {
-  before: identity,
-  commit: ({ original, selection }) => assembleContext(original, selection),
-  after: identity,
-};
+export class AssembleContext extends Operation<AssemblyInput, AssemblyInput, AnswerInput, AnswerInput> {
+  constructor(runtime: Runtime) {
+    super(runtime, assembleContextDefinition);
+  }
+  before(input: AssemblyInput): AssemblyInput {
+    return input;
+  }
+  commit({ original, selection }: AssemblyInput): AnswerInput {
+    return assembleContext(original, selection);
+  }
+  after(output: AnswerInput): AnswerInput {
+    return output;
+  }
+}

@@ -27,23 +27,29 @@ MessageRef 由 Transcript 实例及绝对 index 定位；TranscriptRangeRef 固�
 
 ## 操作、运行与记录
 
-`Operation<I,P,R,O>` 是 before/commit/after 三个函数。`runOperation` 顺序传递结果；after 同时接收原始输入用于结果接纳。任一阶段失败，不运行后续阶段。Operation 不持有调用 ID、状态或记录。
+`Operation<I,P,R,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。BCA 实现留在具体子类：ModelOperation 处理模型调用，AssembleContext 处理消息引用组装。Operation 实例只持有定义和依赖，不保存当前输入、上下文或最近结果。
 
-`registerNode(factory, runtime, definition)` 装配 Node，不启动执行。定义与对应操作同文件声明。每次 Node.call 创建一次 OperationContext，三个实际阶段各创建 AttemptContext。Node 不保存当前执行 ID 或最近结果。
+`Execution<I,O>` 是抽象类，call 建立 ExecutionContext 并调用具体 execute。QueryExecution 用顺序代码组合三个 Operation，返回 Answer；它不创建 Recorder、Book 或 HTTP 响应。每次调用按当前 Context 的配置装配模型操作，不把一次调用的配置或状态留在复用实例上。
 
 ```ts
-const recorder = new RuntimeRecorder(book, operationIndex, attemptIndex, clock, publish);
-const runtime = new Runtime(recorder);
-const query = acceptQuery(request);
-
-await invoke(runtime.execution({ input: query, transcript: query.transcript, settings }), async (execution) => {
-  // 节点工厂使用 execution.settings / execution.signal 装配依赖。
-  const input = selectionInput(execution.input);
-  const selection = await selectHistory.call(execution, input);
-  const assembled = await assemble.call(execution, { original: input, selection });
-  return generateAnswer.call(execution, assembled);
+const execution = new QueryExecution(runtime, provider);
+const answer = await execution.call(query, {
+  settings,
+  signal,
+  transcript: query.transcript,
 });
 ```
+
+QueryExecution.execute 内部仍然明确表达数据流：
+
+```ts
+const input = selectionInput(context.input);
+const selection = await selectHistory.call(context, input);
+const assembled = await assemble.call(context, { original: input, selection });
+const answer = await generateAnswer.call(context, assembled);
+```
+
+query/run.ts 只装配本次请求使用的 Book、索引、Clock、Recorder、Runtime 和 QueryExecution，调用后返回实际观测结果。没有 Node、registerNode、runOperation 或 Pipeline 类；也不新增流程 DSL、操作数组调度或实例上的 currentContext。
 
 | 对象             | 职责                                                                            |
 | ---------------- | ------------------------------------------------------------------------------- |
@@ -60,7 +66,7 @@ await invoke(runtime.execution({ input: query, transcript: query.transcript, set
 
 `invoke(lifecycle, execute)` 组合 begin、执行与等待、succeed/fail。begin 失败不执行工作；succeed 登记失败不重新进入 fail。工作失败且失败登记也失败时，AggregateError 保留两个异常。
 
-Runtime 可以不接 Recorder。接入时，工作完成先更新 Context，再登记记录；登记异常不改写已发生的工作结果。pipeline 只将完整登记的工作失败作为观测结果返回。当前没有登记补偿或进程恢复。
+Runtime 可以不接 Recorder。接入时，工作完成先更新 Context，再登记记录；登记异常不改写已发生的工作结果。query/run.ts 只将完整登记的工作失败作为观测结果返回。当前没有登记补偿或进程恢复。
 
 ## 事实引用与观测
 
@@ -75,11 +81,11 @@ ExecutionRecordHelper.snapshot 组合记录与事件：外层数据表达当时�
 ```text
 RuntimeRecord<T>：id + value
   ExecutionRecord：整次运行，contextId
-  OperationRecord：一次节点调用，contextId / executionId / nodeId / parentOperationId?
+  OperationRecord：一次操作调用，contextId / executionId / operationInstanceId / parentOperationId?
   AttemptRecord：一次阶段调用，contextId / operationId / phase
 ```
 
-Context 归属 ID 指向 Context；Record 归属 ID 指向 Record。三种记录自身 ID 与 Context ID 不同，顶层 contextId 关联对应运行实例。状态在具体记录顶层，基类不规定状态。
+operationInstanceId 指向可复用的 Operation 实例；OperationRecord.id 和 OperationContext.id 各自标识一次调用。Context 归属 ID 指向 Context；Record 归属 ID 指向 Record。三种记录自身 ID 与 Context ID 不同，顶层 contextId 关联对应运行实例。状态在具体记录顶层，基类不规定状态。
 
 完整成功链路为 1 条 Execution、3 条 Operation、9 条 Attempt、26 个 call/return/throw 边界事件。没有发生的阶段不创建记录。Attempt 失败不自动更改父操作状态，异常按实际调用链传播；After 拒绝时保留 Commit 原始返回，没有接纳输出。
 
@@ -106,7 +112,7 @@ pnpm dev
 pnpm check
 ```
 
-测试使用注入的模型返回和 HTTP 替身，覆盖真实链路、固定引用、失败截断、记录一致性及展示数据转换，不消费 API 额度。格式配置 printWidth 为 1000，不强制常规代码按 100 字符换行。
+测试命令只发现 test/**/*.test.mjs，不把辅助 fixture 当成测试。测试使用注入的模型返回和 HTTP 替身，覆盖真实链路、固定引用、失败截断、记录一致性及展示数据转换，不消费 API 额度。格式配置 printWidth 为 1000，不强制常规代码按 100 字符换行。
 
 ## 怎样观察
 
@@ -123,13 +129,14 @@ pnpm check
 
 ```text
 src/server/
-  pipeline.ts                三个节点的实际组合
+  execution/execution.ts     Execution.call 与抽象工作组合
+  query/execution.ts         QueryExecution：三个 Operation 的组合
+  query/run.ts               请求环境装配与观测响应
   query/input.ts             请求接纳
   transcript/                原始消息、固定引用与展示读取
   context/                   Execution / Operation / Attempt 运行上下文
   invocation/                通用调用流程与 lifecycle 契约
-  node.ts                    Node 装配
-  operations/                BCA、历史选择、上下文组装、回答生成
+  operations/                Operation.call/BCA、ModelOperation、具体操作
   runtime/                   scope 管理、时钟、边界事件
   records/                   容器、索引、三类记录及配对操作、正文快照
   errors/                    异常及诊断格式化

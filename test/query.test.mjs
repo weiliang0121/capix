@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { runPipeline as executePipeline } from '../dist/server/pipeline.js';
+import { runQuery as executePipeline } from '../dist/server/query/run.js';
 import { DeepSeekProvider } from '../dist/server/provider.js';
 import { acceptQuery } from '../dist/server/query/input.js';
 import { projectExecution } from '../dist/shared/execution/project.js';
@@ -9,7 +9,7 @@ import { invoke } from '../dist/server/invocation/invoke.js';
 import { RuntimeRecorder } from '../dist/server/records/recorder.js';
 import { Runtime } from '../dist/server/runtime/runtime.js';
 
-async function runPipeline(input, settings, provider, publish = () => {}, signal) {
+async function runQuery(input, settings, provider, publish = () => {}, signal) {
   return projectExecution(await executePipeline(acceptQuery(input), settings, provider, (facts) => publish(projectExecution(facts)), signal));
 }
 
@@ -44,7 +44,7 @@ function scripted(values) {
 }
 async function run(provider, options = settings) {
   const records = [];
-  const trace = await runPipeline(structuredClone(input), options, provider, (t) => records.push(t));
+  const trace = await runQuery(structuredClone(input), options, provider, (t) => records.push(t));
   return { trace, records };
 }
 test('two actual call stages produce a causal trace and selected original content', async () => {
@@ -203,16 +203,16 @@ test('BCA sequence records nested call and return boundaries rather than adjacen
   assert.ok(firstEnd.sequence < secondStart.sequence);
 });
 
-test('failure propagates through calls, is caught by pipeline, and never creates skipped calls', async () => {
+test('failure propagates through calls, is caught by query execution, and never creates skipped calls', async () => {
   const { trace } = await run(scripted([output('{"historyIndexes":[8]}')]));
   const { calls, events } = trace.callSequence;
   assert.deepEqual(
     events.filter((e) => e.type === 'throw').map((e) => calls.find((c) => c.id === e.callId).operation),
-    ['selection.after', 'selection', 'pipeline'],
+    ['selection.after', 'selection', 'execution'],
   );
-  assert.equal(events.at(-1).callId, calls.find((c) => c.operation === 'pipeline').id);
+  assert.equal(events.at(-1).callId, calls.find((c) => c.operation === 'execution').id);
   assert.equal(events.at(-1).type, 'throw');
-  assert.equal(calls.find((c) => c.operation === 'pipeline').status, 'failed');
+  assert.equal(calls.find((c) => c.operation === 'execution').status, 'failed');
   assert.ok(!calls.some((c) => c.operation === 'answer' || c.operation === 'assemble'));
 });
 
@@ -226,11 +226,11 @@ test('sequence ordering follows completion when calls overlap', async () => {
       runtime.operation(
         execution,
         {
-          nodeId: name,
+          operationInstanceId: name,
           operation: name,
           label: name,
           source: 'test',
-          caller: 'pipeline',
+          caller: 'execution',
           callee: 'processing',
         },
         input,
@@ -250,7 +250,7 @@ test('sequence ordering follows completion when calls overlap', async () => {
   );
 });
 
-test('pipeline uses its captured configuration even when caller settings change between model calls', async () => {
+test('query execution uses its captured configuration even when caller settings change between model calls', async () => {
   const mutable = { ...settings },
     requests = [];
   const provider = {
