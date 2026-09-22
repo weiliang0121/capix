@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CAPiX Observer · 运行链路实验</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="CAPiX Observer 首页"><span class="brand-mark">◈</span> CAPiX <span>Observer</span></a>
+      <div class="top-meta"><span class="live-dot"></span><span id="connection">连接本地服务…</span><span class="version">实验 01</span></div>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">FROM INPUT TO EVIDENCE</p>
+          <h1>让每一次推进，都有迹可循。</h1>
+          <p>沿着实际调用向下阅读：谁发起、谁执行、何时返回，以及异常如何传回。</p>
+        </div>
+        <div class="intro-meta"><span>01 / RELEVANCE</span><span>02 / RESPONSE</span></div>
+      </section>
+      <div class="workspace">
+        <aside class="composer">
+          <div class="section-title">
+            <h2>输入工作台</h2>
+            <button id="sample" class="text-button" type="button">载入澄清样例 ↗</button>
+          </div>
+          <div class="history-head"><label for="history">历史问答</label><span id="history-count">0 条</span></div>
+          <div id="history-preview" class="history-preview"></div>
+          <details id="history-editor">
+            <summary>编辑历史 JSON</summary>
+            <textarea id="history" rows="8" spellcheck="false" aria-label="历史消息 JSON">[]</textarea>
+          </details>
+          <label class="query-label" for="query">当前输入</label><textarea id="query" rows="3" placeholder="从一个问题开始…">天气怎么样？</textarea>
+          <div class="budget-row"><label for="budget">本地容量预算</label><input id="budget" type="number" min="256" max="1000000" value="32768" /></div>
+          <p class="field-note">完整请求按 UTF-8 字节保守估算，非精确 token 计数。</p>
+          <button id="run" class="primary" type="button">运行真实链路 <span>↗</span></button>
+          <p id="key-note" class="key-note" hidden>在项目 .env 中设置 DEEPSEEK_API_KEY 并重启服务。Key 只留在服务端。</p>
+          <p id="notice" role="status" aria-live="polite"></p>
+          <section id="answer-box" class="answer-box" hidden>
+            <div class="section-title">
+              <h3>返回给用户</h3>
+              <span id="answer-kind" class="pill"></span>
+            </div>
+            <p id="answer-text"></p>
+            <button id="continue" class="text-button" type="button">将本轮加入历史，继续提问 →</button>
+          </section>
+          <div class="archive">
+            <div class="section-title">
+              <h3>本页调用记录</h3>
+              <span id="archive-count">0</span>
+            </div>
+            <div id="archive-list"></div>
+          </div>
+        </aside>
+        <section class="observer" aria-label="运行观测">
+          <div class="observer-header">
+            <div>
+              <p class="eyebrow">CALL SEQUENCE</p>
+              <h2>调用时序 <span id="trace-status" class="pill">尚未运行</span></h2>
+            </div>
+          </div>
+          <div class="trace-meta"><span id="trace-id">等待第一条真实记录</span><span id="trace-duration">—</span></div>
+          <div class="sequence-legend"><span>实线 → 调用</span><span>虚线 ⇢ 返回</span><span class="legend-error">异常 ⇢ 逐层传回</span><span>纵向为事件顺序，非等比时间</span></div>
+          <div id="outcome" class="outcome" aria-live="polite">运行后展示真实调用，不预画未执行步骤。</div>
+          <div id="sequence" class="sequence-scroll" aria-label="真实调用时序图"></div>
+          <dialog id="inspect-dialog">
+            <section class="inspector">
+              <div class="detail-dialog-head">
+                <p id="detail-event"></p>
+                <button id="inspect-close" type="button" aria-label="关闭详情">关闭 ×</button>
+              </div>
+              <div class="section-title">
+                <h3 id="detail-title">节点详情</h3>
+                <span id="detail-status"></span>
+              </div>
+              <div id="detail-source" class="detail-source">点击链路节点，查看一次处理的证据。</div>
+              <div class="detail-tabs" role="tablist" aria-label="节点详情"><button id="tab-data" role="tab" aria-selected="true" aria-controls="detail-data" type="button">输入 / 输出</button><button id="tab-code" role="tab" aria-selected="false" aria-controls="detail-code" type="button">实际源码</button></div>
+              <div id="detail-data" role="tabpanel" aria-labelledby="tab-data">
+                <div class="data-grid">
+                  <div>
+                    <h4>INPUT</h4>
+                    <pre id="detail-input">尚无记录</pre>
+                  </div>
+                  <div>
+                    <h4>OUTPUT / ERROR</h4>
+                    <pre id="detail-output">尚无记录</pre>
+                  </div>
+                </div>
+              </div>
+              <div id="detail-code" role="tabpanel" aria-labelledby="tab-code" hidden>
+                <pre id="source-code"></pre>
+              </div>
+            </section>
+          </dialog>
+        </section>
+      </div>
+      <footer>
+        CAPiX Observer
+        <span>运行记录 ≠ 模型推理过程 · 当前记录只保存在本页</span>
+      </footer>
+    </main>
+  </body>
+</html>
