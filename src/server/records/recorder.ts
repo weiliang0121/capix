@@ -1,3 +1,4 @@
+import type { Operation } from '../operations/operation.js';
 import type { RuntimeSnapshot, EventValue } from '../../shared/records.js';
 import type { RuntimeContext } from '../context/context.js';
 import type { ExecutionContext } from '../context/execution.js';
@@ -52,17 +53,22 @@ export class RuntimeRecorder {
     this.event(record.id, record.id, 'call');
   }
 
-  beginOperation(context: OperationContext): void {
+  beginOperation<I, B, C, O>(context: OperationContext<I, O>, operation: Operation<I, B, C, O>, parentContext?: OperationContext): void {
     this.requireUnrecorded(context);
     const execution = this.record(context.executionId);
     if (!(execution instanceof ExecutionRecord)) throw new Error('Execution record does not exist');
-    const parent = context.parentOperationId === undefined ? undefined : this.record(context.parentOperationId);
+    const parent = parentContext ? this.record(parentContext.id) : undefined;
     if (parent && !(parent instanceof OperationRecord)) throw new Error('Parent operation record does not exist');
     const record = OperationRecordHelper.create(
       this.book,
       this.operationIndex,
       {
-        ...context.declaration,
+        operationInstanceId: operation.id,
+        operation: operation.name,
+        label: operation.label,
+        source: operation.source,
+        caller: parentContext ? 'operation' : 'execution',
+        callee: 'operation',
         contextId: context.id,
         executionId: execution.id,
         ...(parent ? { parentOperationId: parent.id } : {}),
@@ -73,11 +79,11 @@ export class RuntimeRecorder {
     this.event(execution.id, record.id, 'call');
   }
 
-  beginAttempt(context: AttemptContext): void {
+  beginAttempt(context: AttemptContext, source: string, callee: string): void {
     this.requireUnrecorded(context);
     const operation = this.record(context.operationId);
     if (!(operation instanceof OperationRecord)) throw new Error('Operation record does not exist');
-    const record = AttemptRecordHelper.create(this.book, this.attemptIndex, { ...context.declaration, contextId: context.id, operationId: operation.id }, context.input);
+    const record = AttemptRecordHelper.create(this.book, this.attemptIndex, { phase: context.phase, source, caller: 'operation', callee, contextId: context.id, operationId: operation.id }, context.input);
     this.#contexts.add(record);
     this.event(operation.executionId, record.id, 'call');
   }

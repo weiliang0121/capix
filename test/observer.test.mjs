@@ -1,3 +1,4 @@
+import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { observeFixture } from './fixtures/observer.mjs';
@@ -223,24 +224,15 @@ test('sequence ordering follows completion when calls overlap', async () => {
   const runtime = new Runtime(new RuntimeRecorder(book, new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)));
   const execution = runtime.execution({ input, settings }).begin();
   const resolvers = [];
-  const start = (name) =>
-    invoke(
-      runtime.operation(
-        execution,
-        {
-          operationInstanceId: name,
-          operation: name,
-          label: name,
-          source: 'test',
-          caller: 'execution',
-          callee: 'processing',
-        },
-        input,
-      ),
-      () => new Promise((resolve) => resolvers.push(resolve)),
-    );
-  const first = start('a'),
-    second = start('b');
+  class FirstOperation extends TestOperation {
+    name = 'a';
+  }
+  class SecondOperation extends TestOperation {
+    name = 'b';
+  }
+  const start = (operation) => invoke(runtime.operation(execution, operation, input), () => new Promise((resolve) => resolvers.push(resolve)));
+  const first = start(new FirstOperation(runtime)),
+    second = start(new SecondOperation(runtime));
   resolvers[1]('second');
   await second;
   resolvers[0]('first');

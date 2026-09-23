@@ -1,26 +1,15 @@
 import { RuntimeContext } from './context.js';
 
-export interface AttemptDeclaration {
-  phase: 'before' | 'commit' | 'after';
-  source: string;
-  caller: string;
-  callee: string;
-}
+export type AttemptPhase = 'before' | 'commit' | 'after';
 
+/** One phase invocation, independent of its source and observation description. */
 export class AttemptContext<I = unknown, O = unknown> extends RuntimeContext<I, O> {
-  readonly declaration: Readonly<AttemptDeclaration>;
-
   constructor(
     readonly operationId: string,
-    declaration: AttemptDeclaration,
+    readonly phase: AttemptPhase,
     input: I,
   ) {
     super(input);
-    this.declaration = Object.freeze({ ...declaration });
     Object.freeze(this);
-  }
-
-  get phase(): AttemptDeclaration['phase'] {
-    return this.declaration.phase;
   }
 }

@@ -30,7 +30,7 @@ Transcript 只增不改删，包含第一条和当前消息。接纳时检查角
 
 ## 操作、运行与记录
 
-`Operation<I,BeforeOutput,CommitOutput,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。BCA 实现留在具体子类：ModelOperation 处理模型调用，AssembleContext 处理选中消息组装。Operation 实例只持有定义和依赖，不保存当前输入、上下文或最近结果。
+`Operation<I,BeforeOutput,CommitOutput,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。ModelOperation 是公共模型 BCA 的抽象父类；SelectHistory 和 GenerateAnswer 子类固化任务说明、输入组织与输出契约。AssembleContext 直接继承 Operation。名称、说明和源码位置属于类自身，构造仅传 Runtime、Provider 等依赖，不传定义对象。实例不保存当前输入、上下文或最近结果。
 
 BCA 统一为阶段 input 与对应 IO 类型的 AttemptContext；before 输出传给 commit，commit 输出直接传给 after，不组合 `{ raw, input }`。需要操作原始输入时通过 Runtime.getOperationContext 查询，执行配置与消息范围通过 getExecutionContext 查询。阶段内部辅助函数不创建新 scope；不引入权限控制。
 
@@ -49,6 +49,8 @@ const generationOutput = await environment.execution.call(input, {
 
 环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 用 Execution.call 的 started 回调取得 Context ID，在首条记录发布前绑定本次调用，按 contextId 筛选记录，结束时解除订阅。它不再通过 input 对象身份关联记录。
 
+记录创建发生在 Context 创建、scope 登记之后，工作执行之前。Recorder 在这个边界直接读取已有 Operation 实例的描述及现场父 Context；Attempt 的源码和参与者描述也在记录创建时提供。Context 不携带这些描述、不保存 declaration；记录固化信息后，完成/失败只依据 Context 登记结果。不新增长期的实例关联表。
+
 可调用实例与 Context 为 1:N；开启记录时，每个 E/O/A Context 对应一条同层 Record。复用 Operation 的 operationInstanceId 保持不变，每次调用的 Context ID 与 Record ID 独立产生。记录容器保留所有调用，而非被新请求替换。
 
 GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer 运行实体。浏览器消费同一契约，所以其数据声明位于 shared/operations/generation.ts。GenerationInput 使用 message 与 selectedMessages；模型装载中的 message 保留 role/content。
@@ -57,8 +59,8 @@ GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer �
 | ---------------- | ------------------------------------------------------------------------------- |
 | RuntimeContext   | UUID、input 和 running/succeeded(output)/failed(error) 状态；持有真实 IO 与异常 |
 | ExecutionContext | 整次运行；固定配置浅快照、Transcript 范围与 AbortSignal 引用                    |
-| OperationContext | 一次操作调用；executionId、可选 parentOperationId 和操作声明                    |
-| AttemptContext   | 一次阶段调用；operationId 和阶段声明                                            |
+| OperationContext | 一次操作调用；executionId 和本次 IO/状态                                        |
+| AttemptContext   | 一次阶段调用；operationId、phase 和本次 IO/状态                                 |
 | Runtime          | 三层 lifecycle、活动 scope 归属与结束约束                                       |
 | RuntimeRecorder  | Context→Record 映射、登记、事件与观测发布；不执行工作或改写 Context             |
 | RecordBook       | add/get/values，保存记录实例、拒绝重复 ID                                       |

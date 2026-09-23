@@ -9,7 +9,6 @@ import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
 import { invoke } from '../dist/server/invocation/invoke.js';
 import { TestOperation } from './fixtures/operation.mjs';
 
-const declaration = { operationInstanceId: 'test', operation: 'echo', label: 'echo', source: 'test', caller: 'execution', callee: 'operation' };
 const options = { input: {}, settings: {} };
 const recorder = () => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId));
 
@@ -49,28 +48,24 @@ test('Operation executes full BCA without records and preserves non-JSON interme
     seen = [],
     input = new Map([['content', 'hello']]);
   const fn = () => input.get('content');
-  const node = new TestOperation(
-    runtime,
-    { name: 'echo', label: 'echo', source: 'test', phaseSource: 'test' },
-    {
-      before(value) {
-        seen.push('before');
-        assert.equal(value, input);
-        return fn;
-      },
-      commit(value) {
-        seen.push('commit');
-        assert.equal(value, fn);
-        return new Set([value()]);
-      },
-      after(value, context) {
-        seen.push('after');
-        assert.equal(runtime.getOperationContext(context).input, input);
-        assert.equal(context.input, value);
-        return value;
-      },
+  const node = new TestOperation(runtime, {
+    before(value) {
+      seen.push('before');
+      assert.equal(value, input);
+      return fn;
     },
-  );
+    commit(value) {
+      seen.push('commit');
+      assert.equal(value, fn);
+      return new Set([value()]);
+    },
+    after(value, context) {
+      seen.push('after');
+      assert.equal(runtime.getOperationContext(context).input, input);
+      assert.equal(context.input, value);
+      return value;
+    },
+  });
   let execution;
   const result = await invoke(runtime.execution({ ...options, input }), (context) => {
     execution = context;
@@ -91,7 +86,7 @@ test('Record failure after work success preserves the live result and does not r
     count = 0;
   const result = new Map([['value', 1]]);
   await assert.rejects(
-    invoke(runtime.operation(execution, declaration, {}), (current) => {
+    invoke(runtime.operation(execution, new TestOperation(runtime), {}), (current) => {
       context = current;
       count++;
       return result;
@@ -147,7 +142,7 @@ test('Failed begin prevents work and releases the live parent scope', async (t) 
     throw failure;
   });
   await assert.rejects(
-    invoke(runtime.operation(execution, declaration, {}), () => {
+    invoke(runtime.operation(execution, new TestOperation(runtime), {}), () => {
       entered = true;
       return {};
     }),
@@ -164,25 +159,21 @@ test('Runtime resolves execution ownership for nested operations and attempts wi
   const runtime = new Runtime(),
     foreign = new Runtime();
   let attempt, child, execution;
-  const operation = new TestOperation(
-    runtime,
-    { name: 'owned', label: 'owned', source: 'test', phaseSource: 'test' },
-    {
-      before(input, context) {
-        attempt = context;
-        assert.equal(runtime.getExecutionContext(context), execution);
-        assert.equal(runtime.getOperationContext(context).id, context.operationId);
-        assert.equal(runtime.getExecutionContext(runtime.getOperationContext(context)), execution);
-        assert.equal(Object.hasOwn(context, 'settings'), false);
-        return input;
-      },
-      commit: (input) => input,
-      after: (input) => input,
+  const operation = new TestOperation(runtime, {
+    before(input, context) {
+      attempt = context;
+      assert.equal(runtime.getExecutionContext(context), execution);
+      assert.equal(runtime.getOperationContext(context).id, context.operationId);
+      assert.equal(runtime.getExecutionContext(runtime.getOperationContext(context)), execution);
+      assert.equal(Object.hasOwn(context, 'settings'), false);
+      return input;
     },
-  );
+    commit: (input) => input,
+    after: (input) => input,
+  });
   await invoke(runtime.execution({ input: 'root', settings: {} }), (root) => {
     execution = root;
-    return invoke(runtime.operation(root, declaration, 'nested'), (parent) => {
+    return invoke(runtime.operation(root, new TestOperation(runtime), 'nested'), (parent) => {
       child = parent;
       return operation.call(root, 'work', parent);
     });

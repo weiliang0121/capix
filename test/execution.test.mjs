@@ -9,7 +9,6 @@ import { TestOperation } from './fixtures/operation.mjs';
 import { createInput, transcriptFor } from './fixtures/observer.mjs';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
-const definition = { name: 'echo', label: 'echo', source: 'test', phaseSource: 'test' };
 
 test('one Execution and Operation can be called again after success and failure with fresh Contexts and records', async () => {
   const snapshots = [];
@@ -17,7 +16,7 @@ test('one Execution and Operation can be called again after success and failure 
   const runtime = new Runtime(recorder);
   const failure = new Error('work failed');
   const contexts = [];
-  const operation = new TestOperation(runtime, definition, {
+  const operation = new TestOperation(runtime, {
     before: (value) => value,
     commit: (value) => {
       if (value.fail) throw failure;

@@ -2,15 +2,7 @@ import type { Selection } from '../../../shared/types.js';
 import type { Message } from '../../../shared/transcript/message.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import type { AttemptContext } from '../../context/attempt.js';
-import { Operation, type OperationDefinition } from '../operation.js';
-import type { Runtime } from '../../runtime/runtime.js';
-
-export const assembleContextDefinition = {
-  name: 'assemble',
-  label: '组装上下文',
-  source: 'src/server/operations/context/assemble.ts · AssembleContext',
-  phaseSource: 'src/server/operations/context/assemble.ts',
-} as const satisfies OperationDefinition;
+import { Operation } from '../operation.js';
 
 export interface GenerationInput {
   readonly message: Readonly<Message>;
@@ -28,9 +20,11 @@ export function assembleContext(execution: ExecutionContext, selection: Selectio
 }
 
 export class AssembleContext extends Operation<Selection, Selection, GenerationInput, GenerationInput> {
-  constructor(runtime: Runtime) {
-    super(runtime, assembleContextDefinition);
-  }
+  readonly name = 'assemble';
+  readonly label = '组装上下文';
+  readonly source = 'src/server/operations/context/assemble.ts · AssembleContext';
+  protected readonly phaseSource = 'src/server/operations/context/assemble.ts';
+
   before(input: Selection): Selection {
     return input;
   }

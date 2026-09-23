@@ -4,21 +4,21 @@ import type { Message } from '../../shared/transcript/message.js';
 import type { GenerationOutput } from '../../shared/operations/generation.js';
 import type { ModelProvider } from '../provider.js';
 import type { Runtime } from '../runtime/runtime.js';
-import { createSelectHistory } from '../operations/history/select.js';
+import { SelectHistory } from '../operations/history/select.js';
 import { AssembleContext } from '../operations/context/assemble.js';
-import { createGenerateAnswer } from '../operations/answer/generate.js';
+import { GenerateAnswer } from '../operations/answer/generate.js';
 
 /** The fixed composition used by this experiment, reusable across calls. */
 export class ObserverExecution extends Execution<Readonly<Message>, GenerationOutput> {
-  readonly selection: ReturnType<typeof createSelectHistory>;
+  readonly selection: SelectHistory;
   readonly assembly: AssembleContext;
-  readonly generation: ReturnType<typeof createGenerateAnswer>;
+  readonly generation: GenerateAnswer;
 
   constructor(runtime: Runtime, provider: ModelProvider) {
     super(runtime);
-    this.selection = createSelectHistory(runtime, { provider });
+    this.selection = new SelectHistory(runtime, provider);
     this.assembly = new AssembleContext(runtime);
-    this.generation = createGenerateAnswer(runtime, { provider });
+    this.generation = new GenerateAnswer(runtime, provider);
   }
 
   protected async execute(context: ExecutionContext<Readonly<Message>, GenerationOutput>): Promise<GenerationOutput> {

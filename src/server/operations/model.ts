@@ -1,14 +1,10 @@
 import type { ModelOutput, ModelRequest, ModelSettings, Purpose } from '../../shared/types.js';
 import { RuntimeError } from '../errors/error.js';
-import { Operation, type OperationDefinition } from './operation.js';
+import { Operation } from './operation.js';
 import type { AttemptContext } from '../context/attempt.js';
 import type { ExecutionContext } from '../context/execution.js';
 import type { Runtime } from '../runtime/runtime.js';
 import type { ModelProvider } from '../provider.js';
-
-export interface ModelDependencies {
-  readonly provider: ModelProvider;
-}
 
 /** Static output description paired with acceptance against the operation's input. */
 export interface ModelOutputContract<I, O> {
@@ -16,25 +12,25 @@ export interface ModelOutputContract<I, O> {
   accept(value: unknown, input: I, execution: ExecutionContext): O;
 }
 
-export interface ModelOperationDefinition<I, O> extends OperationDefinition {
-  purpose: Purpose;
-  task: string;
-  output: ModelOutputContract<I, O>;
-  prepare(input: I, execution: ExecutionContext): unknown;
-}
+/** Common model invocation stages; concrete operations own their purpose and contracts. */
+export abstract class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput, O> {
+  protected readonly remote = true;
+  protected readonly phaseSource = 'src/server/operations/model.ts';
+  protected abstract readonly purpose: Purpose;
+  protected abstract readonly task: string;
+  protected abstract readonly output: ModelOutputContract<I, O>;
+  protected abstract prepare(input: I, execution: ExecutionContext): unknown;
 
-export class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput, O> {
   constructor(
     runtime: Runtime,
-    private readonly model: ModelOperationDefinition<I, O>,
-    private readonly dependencies: ModelDependencies,
+    private readonly provider: ModelProvider,
   ) {
-    super(runtime, model);
+    super(runtime);
   }
 
   before(input: I, context: AttemptContext<I, ModelRequest>): ModelRequest {
     const execution = this.runtime.getExecutionContext(context);
-    const request = loadRequest(this.model.prepare(input, execution), this.model.task, this.model.output.schema, execution.settings);
+    const request = loadRequest(this.prepare(input, execution), this.task, this.output.schema, execution.settings);
     checkCapacity(request, execution.settings);
     return request;
   }
@@ -42,8 +38,7 @@ export class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput
   commit(request: ModelRequest, context: AttemptContext<ModelRequest, ModelOutput>): Promise<ModelOutput> {
     const execution = this.runtime.getExecutionContext(context);
     const { settings, signal } = execution;
-    const { provider } = this.dependencies;
-    return provider.invoke(request, this.model.purpose, AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]));
+    return this.provider.invoke(request, this.purpose, AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]));
   }
 
   after(input: ModelOutput, context: AttemptContext<ModelOutput, O>): O {
@@ -51,7 +46,7 @@ export class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput
     const value = parseContent(input.content);
     const operation = this.runtime.getOperationContext(context);
     const execution = this.runtime.getExecutionContext(context);
-    return this.model.output.accept(value, operation.input as I, execution);
+    return this.output.accept(value, operation.input as I, execution);
   }
 }
 

@@ -4,14 +4,13 @@ import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
 import { Runtime } from '../dist/server/runtime/runtime.js';
 import { invoke } from '../dist/server/invocation/invoke.js';
-import { createSelectHistory } from '../dist/server/operations/history/select.js';
+import { SelectHistory } from '../dist/server/operations/history/select.js';
 import { AssembleContext } from '../dist/server/operations/context/assemble.js';
 import { answerOutputContract } from '../dist/server/operations/answer/output.js';
 import { selectionOutputContract } from '../dist/server/operations/history/output.js';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
 const runtime = new Runtime();
-const definition = { name: 'test', label: 'test', source: 'test', phaseSource: 'test' };
 const call = (operation, input) => invoke(runtime.execution({ input, settings, transcript: transcriptFor(input) }), (context) => operation.call(context, input));
 const raw = (content) => ({
   id: 'test',
@@ -100,7 +99,7 @@ test('BCA passes values by reference, awaits each boundary, and resolves origina
       return 'accepted';
     },
   };
-  assert.equal(await call(new TestOperation(runtime, definition, op), input), 'accepted');
+  assert.equal(await call(new TestOperation(runtime, op), input), 'accepted');
   assert.deepEqual(order, ['before', 'commit', 'after']);
 });
 
@@ -113,7 +112,7 @@ test('failure at any BCA phase stops later phases and preserves the thrown error
       if (name === boundary) throw failure;
       return value;
     };
-    await assert.rejects(call(new TestOperation(runtime, definition, { before: phase('before'), commit: phase('commit'), after: phase('after') }), {}), (error) => error === failure);
+    await assert.rejects(call(new TestOperation(runtime, { before: phase('before'), commit: phase('commit'), after: phase('after') }), {}), (error) => error === failure);
     assert.deepEqual(order, ['before', 'commit', 'after'].slice(0, ['before', 'commit', 'after'].indexOf(boundary) + 1));
   }
 });
@@ -126,7 +125,7 @@ test('one selection operation can overlap calls without mixing their history bou
       return new Promise((resolve) => pending.set(message.content, resolve));
     },
   };
-  const op = createSelectHistory(runtime, { provider });
+  const op = new SelectHistory(runtime, provider);
   const first = { content: 'one', history: [{ role: 'user', content: 'a' }] };
   const second = { content: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
   const original = structuredClone([first, second]);

@@ -14,7 +14,6 @@ import { RuntimeError } from '../dist/server/errors/error.js';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const input = { content: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] };
-const definition = { name: 'echo', label: 'echo', source: 'test', phaseSource: 'test' };
 const echo = { before: identity, commit: identity, after: identity };
 const output = (content) => ({
   id: 'model',
@@ -147,7 +146,7 @@ test('RuntimeRecord is the base; execution and operation relations live outside 
 test('construction does not execute; repeated calls share the callable identity, not the invocation identity', async () => {
   const runtime = createRuntime();
   const book = runtime.recorder.book;
-  const node = new TestOperation(runtime, definition, echo);
+  const node = new TestOperation(runtime, echo);
   assert.equal(node.getRecords, undefined);
   assert.equal(node.exeId, undefined);
   const execution = begin(runtime);
@@ -159,7 +158,7 @@ test('construction does not execute; repeated calls share the callable identity,
   assert.equal(calls.length, 2);
   assert.notEqual(calls[0].id, calls[1].id);
   assert.ok(calls.every((op) => op.operationInstanceId === node.id && op.executionId === runtime.recorder.record(execution.id).id));
-  const secondNode = new TestOperation(runtime, definition, echo);
+  const secondNode = new TestOperation(runtime, echo);
   assert.notEqual(secondNode.id, node.id);
   const past = runtime.recorder.snapshot(execution);
   complete(execution, value);
@@ -179,7 +178,7 @@ test('one node overlaps calls within and across executions without mixing input 
   const allStarted = new Promise((resolve) => {
     ready = resolve;
   });
-  const node = new TestOperation(runtime, definition, {
+  const node = new TestOperation(runtime, {
     before: identity,
     commit: (value) =>
       new Promise((resolve) => {
@@ -296,7 +295,7 @@ test('After failure preserves raw output, records no accepted result, and propag
   const runtime = createRuntime(),
     execution = begin(runtime),
     failure = new RuntimeError('TEST', 'test');
-  const node = new TestOperation(runtime, definition, {
+  const node = new TestOperation(runtime, {
     ...echo,
     commit() {
       throw failure;
@@ -399,7 +398,7 @@ test('publication failure does not change execution facts or operation output', 
     throw new Error('viewer unavailable');
   });
   const execution = begin(runtime);
-  const node = new TestOperation(runtime, definition, echo);
+  const node = new TestOperation(runtime, echo);
   assert.equal(await node.call(execution, input), input);
   complete(execution, input);
   assert.equal(projectExecution(runtime.recorder.snapshot(execution)).status, 'succeeded');

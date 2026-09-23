@@ -1,8 +1,9 @@
 import type { InvocationLifecycle } from '../invocation/lifecycle.js';
 import { RuntimeContext } from '../context/context.js';
 import { ExecutionContext, type ExecutionOptions } from '../context/execution.js';
-import { OperationContext, type OperationDeclaration } from '../context/operation.js';
-import { AttemptContext, type AttemptDeclaration } from '../context/attempt.js';
+import { OperationContext } from '../context/operation.js';
+import { AttemptContext, type AttemptPhase } from '../context/attempt.js';
+import type { Operation } from '../operations/operation.js';
 import type { RuntimeRecorder } from '../records/recorder.js';
 
 interface Scope {
@@ -27,23 +28,23 @@ export class Runtime {
     );
   }
 
-  operation<I, O>(execution: ExecutionContext, declaration: OperationDeclaration, input: I, parent?: OperationContext): InvocationLifecycle<OperationContext<I, O>, O> {
+  operation<I, B, C, O>(execution: ExecutionContext, operation: Operation<I, B, C, O>, input: I, parent?: OperationContext): InvocationLifecycle<OperationContext<I, O>, O> {
     return this.lifecycle<I, O, OperationContext<I, O>>(
       () => {
         this.requireActive(execution);
         if (parent && parent.executionId !== execution.id) throw new Error('Parent operation belongs to another execution');
-        return new OperationContext(execution.id, declaration, input, parent?.id);
+        return new OperationContext<I, O>(execution.id, input);
       },
       parent ?? execution,
-      (context) => this.recorder?.beginOperation(context),
+      (context) => this.recorder?.beginOperation(context, operation, parent),
     );
   }
 
-  attempt<I, O>(operation: OperationContext, declaration: AttemptDeclaration, input: I): InvocationLifecycle<AttemptContext<I, O>, O> {
+  attempt<I, O>(operation: OperationContext, phase: AttemptPhase, input: I, source: string, callee: string): InvocationLifecycle<AttemptContext<I, O>, O> {
     return this.lifecycle<I, O, AttemptContext<I, O>>(
-      () => new AttemptContext(operation.id, declaration, input),
+      () => new AttemptContext<I, O>(operation.id, phase, input),
       operation,
-      (context) => this.recorder?.beginAttempt(context),
+      (context) => this.recorder?.beginAttempt(context, source, callee),
     );
   }
 

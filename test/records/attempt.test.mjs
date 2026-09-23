@@ -1,3 +1,4 @@
+import { TestOperation } from '../fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { RuntimeRecorder } from '../../dist/server/records/recorder.js';
@@ -11,7 +12,7 @@ function setup() {
   const runtime = new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)));
   const executionLifecycle = runtime.execution({ input: {}, settings: {} });
   const execution = executionLifecycle.begin();
-  const operationLifecycle = runtime.operation(execution, { operationInstanceId: 'n', operation: 'echo', label: 'echo', source: 'test', caller: 'execution', callee: 'operation' }, {});
+  const operationLifecycle = runtime.operation(execution, new TestOperation(runtime), {});
   const operation = operationLifecycle.begin();
   const definition = { phase: 'after', source: 'test', caller: 'operation', callee: 'processing' };
   return { runtime, executionLifecycle, execution, operationLifecycle, operation, definition };
@@ -22,13 +23,13 @@ test('each phase invocation has its own attempt; an unsuccessful attempt does no
   const input = { text: 'original' };
   const failure = new Error('first processing failed');
   await assert.rejects(
-    invoke(runtime.attempt(operation, definition, input), () => {
+    invoke(runtime.attempt(operation, definition.phase, input, definition.source, definition.callee), () => {
       throw failure;
     }),
     (error) => error === failure,
   );
   assert.equal(operation.status, 'running');
-  const secondLifecycle = runtime.attempt(operation, definition, input);
+  const secondLifecycle = runtime.attempt(operation, definition.phase, input, definition.source, definition.callee);
   const second = secondLifecycle.begin();
   const secondRecord = runtime.recorder.record(second.id);
   assert.ok(secondRecord instanceof RuntimeRecord && secondRecord instanceof AttemptRecord);
@@ -58,7 +59,7 @@ test('each phase invocation has its own attempt; an unsuccessful attempt does no
   assert.equal(second.state.output.accepted, false);
   assert.equal(secondRecord.value.output.accepted, true);
   assert.throws(() => second.complete({}), /ended/);
-  assert.throws(() => runtime.attempt(operation, definition, {}).begin(), /ended/);
+  assert.throws(() => runtime.attempt(operation, definition.phase, {}, definition.source, definition.callee).begin(), /ended/);
   const final = runtime.recorder.snapshot(execution);
   validateSnapshot(final);
   assert.deepEqual(
@@ -82,7 +83,7 @@ test('attempt ownership uses operation index and rejects missing or incorrectly 
   });
   assert.deepEqual(AttemptRecordHelper.findByOperation(runtime.recorder.book, runtime.recorder.attemptIndex, operationRecord.id), [attempt]);
   assert.throws(() => AttemptRecordHelper.get(runtime.recorder.book, operationRecord.id), /Attempt does not exist/);
-  const other = runtime.operation(execution, { operationInstanceId: 'other', operation: 'other', label: 'other', source: 'test', caller: 'execution', callee: 'operation' }, {}).begin();
+  const other = runtime.operation(execution, new TestOperation(runtime), {}).begin();
   const otherRecord = runtime.recorder.record(other.id);
   const wrongIndex = new RecordIndex(() => otherRecord.id);
   wrongIndex.add(attempt);
