@@ -1,5 +1,4 @@
-import { createInput } from './fixtures/observer.mjs';
-import { selectionInput } from '../dist/server/operations/history/input.js';
+import { createInput, contextFor, transcriptFor } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
@@ -13,7 +12,7 @@ import { selectionOutputContract } from '../dist/server/operations/history/outpu
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
 const runtime = new Runtime();
 const definition = { name: 'test', label: 'test', source: 'test', phaseSource: 'test' };
-const call = (operation, input) => invoke(runtime.execution({ input, settings }), (context) => operation.call(context, input));
+const call = (operation, input) => invoke(runtime.execution({ input, settings, transcript: transcriptFor(input) }), (context) => operation.call(context, input));
 const raw = (content) => ({
   id: 'test',
   model: 'test',
@@ -55,17 +54,19 @@ test('selection acceptance separates invalid shape from missing references and o
       { role: 'assistant', content: 'b' },
     ],
   };
+  const message = createInput(input);
+  const execution = contextFor(message);
   const value = { historyIndexes: [1, 0] };
-  assert.deepEqual(selectionOutputContract.accept(value, selectionInput(createInput(input))), { historyIndexes: [0, 1] });
+  assert.deepEqual(selectionOutputContract.accept(value, message, execution), { historyIndexes: [0, 1] });
   assert.deepEqual(value.historyIndexes, [1, 0]);
   for (const historyIndexes of [[0, 0], [-1], [0.5], [Number.MAX_SAFE_INTEGER + 1]]) {
     assert.throws(
-      () => selectionOutputContract.accept({ historyIndexes }, selectionInput(createInput(input))),
+      () => selectionOutputContract.accept({ historyIndexes }, message, execution),
       (error) => error.code === 'OUTPUT_SHAPE',
     );
   }
   assert.throws(
-    () => selectionOutputContract.accept({ historyIndexes: [2] }, selectionInput(createInput(input))),
+    () => selectionOutputContract.accept({ historyIndexes: [2] }, message, execution),
     (error) => error.code === 'INDEX_OUT_OF_RANGE',
   );
 });
@@ -123,9 +124,9 @@ test('one selection operation can overlap calls without mixing their history bou
   const first = { query: 'one', history: [{ role: 'user', content: 'a' }] };
   const second = { query: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
   const original = structuredClone([first, second]);
-  const short = call(op, selectionInput(createInput(first)));
+  const short = call(op, createInput(first));
   const shortFailure = assert.rejects(short, (error) => error.code === 'INDEX_OUT_OF_RANGE');
-  const long = call(op, selectionInput(createInput(second)));
+  const long = call(op, createInput(second));
   while (pending.size < 2) await new Promise((resolve) => setImmediate(resolve));
   pending.get('two')(raw('{"historyIndexes":[1]}'));
   assert.deepEqual(await long, { historyIndexes: [1] });
@@ -143,16 +144,16 @@ test('assembly operation consumes explicit sources and needs no recorder', async
       { role: 'assistant', content: 'excluded' },
     ],
   });
-  const input = { original: selectionInput(query), selection: { historyIndexes: [0] } };
+  const input = { historyIndexes: [0] };
   const operation = new AssembleContext(runtime);
   assert.equal(operation.before(input), input);
-  const result = await call(operation, input);
+  const result = await invoke(runtime.execution({ input: query, settings, transcript: transcriptFor(query) }), (context) => operation.call(context, input));
   assert.equal(result.query, query);
-  assert.equal(result.messages[0].transcript, query.transcript);
-  assert.equal(result.messages[0].read(), query.transcript.get(0));
+  assert.equal(Object.hasOwn(result.messages[0], 'transcript'), false);
+  assert.equal(result.messages[0].message, transcriptFor(query).get(0));
   assert.deepEqual(
     result.messages.map((ref) => ref.index),
     [0],
   );
-  assert.equal(Object.hasOwn(result.messages[0], 'content'), false);
+  assert.equal(result.messages[0].message.content, 'kept');
 });

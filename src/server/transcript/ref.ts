@@ -35,6 +35,11 @@ export class TranscriptRangeRef {
     return new MessageRef(this.transcript, index);
   }
 
+  read(index: number) {
+    if (!Number.isSafeInteger(index) || index < this.start || index >= this.end) throw new RangeError('Message is outside the fixed history range');
+    return this.transcript.get(index)!;
+  }
+
   refs(): readonly MessageRef[] {
     return Array.from({ length: this.length }, (_, offset) => this.ref(this.start + offset));
   }

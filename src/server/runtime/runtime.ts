@@ -16,11 +16,14 @@ export class Runtime {
 
   constructor(readonly recorder?: RuntimeRecorder) {}
 
-  execution<I, O>(request: ExecutionOptions & { input: I }): InvocationLifecycle<ExecutionContext<I, O>, O> {
+  execution<I, O>(request: ExecutionOptions & { input: I }, started?: (context: ExecutionContext<I, O>) => void): InvocationLifecycle<ExecutionContext<I, O>, O> {
     return this.lifecycle<I, O, ExecutionContext<I, O>>(
       () => new ExecutionContext(request.input, request),
       undefined,
-      (context) => this.recorder?.beginExecution(context),
+      (context) => {
+        started?.(context);
+        this.recorder?.beginExecution(context);
+      },
     );
   }
 
@@ -42,6 +45,23 @@ export class Runtime {
       operation,
       (context) => this.recorder?.beginAttempt(context),
     );
+  }
+
+  /** Resolve ownership from registered live scopes, never from records. Reads remain valid after completion. */
+  getExecutionContext(context: RuntimeContext): ExecutionContext {
+    let current = context;
+    while (true) {
+      const scope = this.scope(current);
+      if (current instanceof ExecutionContext) return current;
+      if (!scope.parent) throw new Error('Execution context does not exist');
+      current = scope.parent;
+    }
+  }
+
+  getOperationContext(context: AttemptContext): OperationContext {
+    const parent = this.scope(context).parent;
+    if (!(parent instanceof OperationContext) || parent.id !== context.operationId) throw new Error('Operation context does not exist');
+    return parent;
   }
 
   private lifecycle<I, O, C extends RuntimeContext<I, O>>(create: () => C, parent: RuntimeContext | undefined, recordStart: (context: C) => void): InvocationLifecycle<C, O> {

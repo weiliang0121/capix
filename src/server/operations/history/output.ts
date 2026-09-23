@@ -1,5 +1,6 @@
 import type { Selection } from '../../../shared/types.js';
-import type { SelectionInput } from './input.js';
+import type { Message } from '../../../shared/transcript/message.js';
+import type { ExecutionContext } from '../../context/execution.js';
 import { RuntimeError } from '../../errors/error.js';
 import { hasExactKeys, isObject } from '../../value/object.js';
 import type { ModelOutputContract } from '../model.js';
@@ -14,12 +15,14 @@ export const selectionOutputContract = {
       historyIndexes: { type: 'array', uniqueItems: true, items: { type: 'integer', minimum: 0 } },
     },
   },
-  accept(value: unknown, input: SelectionInput): Selection {
+  accept(value: unknown, _input: Readonly<Message>, execution: ExecutionContext): Selection {
     checkSelection(value);
-    checkHistoryReferences(value, input.historyRange.start, input.historyRange.end);
+    const range = execution.transcript;
+    if (!range) throw new Error('Execution Transcript range is required');
+    checkHistoryReferences(value, range.start, range.end - 1);
     return orderSelection(value);
   },
-} as const satisfies ModelOutputContract<SelectionInput, Selection>;
+} as const satisfies ModelOutputContract<Readonly<Message>, Selection>;
 
 function checkSelection(value: unknown): asserts value is Selection {
   // Local acceptance also requires safe integers; bounds depend on this invocation's history.

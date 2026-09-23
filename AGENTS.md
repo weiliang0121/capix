@@ -3,7 +3,7 @@
 这是独立的运行链路实验，不依赖或修改 CAPiX Runtime。
 
 - Transcript 是原始交流内容的持有者，位于 server/transcript/transcript.ts，包含当前输入。提供 append/current(role)/get/ref/length/snapshot，只增不改删。写入时检查并复制冻结每条消息；get/current 返回同一不可变消息，snapshot(end) 只复制固定前缀数组。批量追加先全部检查再写入，不截断或改写原文。按角色 current 表示最新消息，不表示问答配对。MessageRef 用 Transcript 实例和绝对 index 定位消息，TranscriptRangeRef 表达固定的 [start,end)；读取不受后续追加影响。不继承 RuntimeRecord、不依赖 Book，不增加全局 Transcript ID、多环境仓库或持久化。
-- Observer 的 Execution.input 是固定 MessageRef，output 是生成操作的 GenerationOutput；后者只是操作 IO 契约，不是独立运行实体。SelectionInput 为 query/historyRange，范围由 query.index 确定为 [0,index)；选择结果为绝对索引。GenerationInput 为 query/messages 引用，只有模型 before 装载时解析正文。EOA 使用共同的泛型 Context，但 IO 按各自语义异构；不把整个 Transcript 复制进各层，不重复增加 query/answer 字段。
+- Observer 的 Execution.input 是接纳后的只读 Message（role/content），不带 MessageRef、Transcript 或集合入口。ExecutionContext.transcript 为进入执行时固定的 TranscriptRangeRef [0,end)，包含本次输入；历史选择排除末条输入，执行期间追加内容不扩大范围。ExecutionContext.settings 固定本次配置的不可变浅快照，两次模型调用使用同一份；外部更新仅在下一次执行捕获。GenerationOutput 只是生成操作的 IO 契约。
 
 - 前端临时使用 web/messages/draft.ts 的 MessageDraft 处理消息编辑、展示和提交数据，只依赖共享 Message 契约，不导入服务端 Transcript。前端检查仅提供编辑提示，正式接纳仍由服务端完成。不因两端复用而将运行实体移入 shared。
 
@@ -15,11 +15,11 @@
 - 使用固定 Node/pnpm 与精确依赖版本；不推送、部署或发布。
 - 格式偏好：不按 100 字符强制拆行。Prettier 使用 printWidth: 1000，近似不限制常规代码行宽；保留代码块等结构换行，不为满足窄行宽拆散函数签名和调用参数。
 
-- HTTP 接收 ExecutionRequest { messages }，先检查本次配置，再由 observer/accept.ts 的 acceptExecutionInput 向已有 Transcript 接纳 1–501 条新消息，最后一条 user 消息的 MessageRef 成为本次输入。接纳失败不部分追加、不创建执行记录。入口正在执行时返回 409，不排队也不追加消息。不再使用 acceptQuery/runQuery 或 query/ 组织启动职责。
-- 移除集中式 contracts.ts。observer/accept.ts 组合提交规则、Transcript 消息接纳和 MessageRef 创建；消息规则仍归 Transcript，批量数量与末条 user 限制归提交边界。历史选择与回答生成在各自 output.ts 声明 { schema, accept } 配对输出契约，ModelOutputContract 类型位于 operations/model.ts。公共模型 after 只组合结束检查、JSON 解析、具体输出接纳。选择结果分别检查结构、引用并复制排序，回答严格检查 kind、不改写原内容。保持模型请求的 Schema，本地更严格的安全整数、非空白要求和动态引用范围由对应操作维护。value/object.ts 仅提供通用对象和字段判断；不建立审查管理器或新的结果实体类。
+- HTTP 接收 ExecutionRequest { messages }，先检查本次配置，再由 observer/accept.ts 的 acceptExecutionInput 向已有 Transcript 接纳 1–501 条新消息，最后一条 user 消息对象成为本次输入。接纳失败不部分追加、不创建执行记录。入口正在执行时返回 409，不排队也不追加消息。不再使用 acceptQuery/runQuery 或 query/ 组织启动职责。
+- 移除集中式 contracts.ts。observer/accept.ts 组合提交规则、Transcript 消息接纳和输入消息确定；消息规则仍归 Transcript，批量数量与末条 user 限制归提交边界。历史选择与回答生成在各自 output.ts 声明 { schema, accept } 配对输出契约，ModelOutputContract 类型位于 operations/model.ts。公共模型 after 只组合结束检查、JSON 解析、具体输出接纳。选择结果分别检查结构、引用并复制排序，回答严格检查 kind、不改写原内容。保持模型请求的 Schema，本地更严格的安全整数、非空白要求和动态引用范围由对应操作维护。value/object.ts 仅提供通用对象和字段判断；不建立审查管理器或新的结果实体类。
 
 - Operation<I,P,R,O> 已改为抽象类，自身持有静态定义、Runtime 和稳定实例 ID，提供 call 及抽象 before/commit/after；不另设 Node 或包装器。call 建立 OperationContext，按顺序为 BCA 建立 AttemptContext。具体 ModelOperation/AssembleContext 实现阶段方法，原工厂返回 ModelOperation 实例。输入、状态、结果只在每次调用的 Context 中。
-- Execution<I,O> 为抽象类，call 通过公共 invoke/Runtime 建立 ExecutionContext，再调用具体 execute。ObserverExecution 是实验场景的固定流程实现，构造时持有 selection/assembly/generation 三个 Operation。操作构造依赖不再含 settings/signal；BCA 显式接收本次 ExecutionContext，读取该次配置与信号，实例不保存 currentContext。不引入动态规划、Task、启动器、Pipeline 类或调度器。静态 OperationDefinition 与记录创建用 OperationRecordDefinition 不混用。
+- Execution<I,O> 为抽象类，call 通过公共 invoke/Runtime 建立 ExecutionContext，再调用具体 execute。ObserverExecution 是实验场景的固定流程实现，构造时持有 selection/assembly/generation 三个 Operation。操作构造依赖不再含 settings/signal；BCA 显式接收自己的 AttemptContext，使用 Runtime.getExecutionContext 取得所属执行的配置与信号，实例不保存 currentContext。不引入动态规划、Task、启动器、Pipeline 类或调度器。静态 OperationDefinition 与记录创建用 OperationRecordDefinition 不混用。
 - `RuntimeRecord<T>` 只有 id/value。ExecutionRecord、OperationRecord 和 AttemptRecord 具有顶层只读状态 running/succeeded/failed，基类不增加状态。操作关系 executionId/operationInstanceId/parentOperationId 位于顶层；每次调用有独立操作 ID。输入输出为记录正文，不可变消息引用保留实例，不为每个中间值生成 Record。
 - 一次 Operation.call 只创建一条 OperationRecord。BCA 每次阶段执行创建独立 AttemptRecord，继承 RuntimeRecord 而非 OperationRecord；顶层 operationId/phase/source/caller/callee，正文 input/output/error，不重复保存所属操作已有的 executionId/operationInstanceId/operation。OperationRecord 不再有 phase；parentOperationId 仅用于真正的嵌套操作。AttemptRecordHelper 位于 records/attempt/helper.ts，与 record.ts 配对，显式接收 Book 和按 operationId 装配的 RecordIndex。Operation 结束前拒绝运行中的 Attempt；Attempt 失败不自动结束操作。同阶段可有多条记录，但当前仍只执行一次串行 BCA，不实现自动重试。Context 与 Record 按三层对应，运行句柄使用 Context；Record 保存边界快照。EventRecord.callId 可指向三类记录；投影用 recordType 区分。
 - `RecordBook` 仅提供 add/get/values，保存原记录引用、拒绝重复 ID。Book 不认识记录种类、索引、时钟、状态转换、事件、通知或导出。不得把特化流程重新放回 Book。
@@ -31,8 +31,8 @@
 - 调用边界记录统一为 records/event/record.ts 的 EventRecord，继承 RuntimeRecord<EventValue>，value.type 为 call/return/throw。id 是事件记录自身的 UUID；executionId/callId 指向执行及被描述的 E/O/A Record，sequence/occurredAt/offsetMs 是顶层只读元数据。它没有 Context、运行状态或执行能力。EventRecordHelper 配对负责创建、归属检查、登记及按执行查询；RecordBook 统一持有正文，eventIndex 只存 ID。删除 runtime/events.ts 和 ExecutionEvents 数组，不保存第二份事件记录。
 - InvocationLifecycle 位于 invocation/lifecycle.ts，通用 invoke 位于 invocation/invoke.ts。begin/succeed/fail 同步处理边界，execute 可以异步；只有工作异常进入 fail，成功登记异常直接传播，失败登记再失败时 AggregateError 保留两个异常。observer/observe.ts 对已登记的工作失败返回快照，其余异常传播。handle 已改为 Context；记录是否完整另由 RuntimeRecorder.hasOutcome 判断，不用于决定工作状态。
 
-- 运行上下文位于 server/context/：RuntimeContext<I, O> 基类持有自身 UUID、input 与 running/succeeded(output)/failed(error) 状态联合；ExecutionContext、OperationContext、AttemptContext 分别对应完整运行、Operation 调用和一次阶段函数执行。IO 与异常保留原引用，允许非 JSON 值，不克隆或冻结正文；state 包装只读，complete/fail 拒绝重复结束。上下文实例字段只读，子类实例冻结不影响私有状态更新。操作辅助函数不新增 scope。
-- ExecutionContext 持有固定的 settings 浅复制冻结快照（当前配置字段均为标量），及 Transcript/AbortSignal 原引用。模型依赖使用该 settings/signal；查询执行持有 query MessageRef，不保留 QueryInput 运行适配。OperationContext 持有 executionId、可选 parentOperationId 及声明；AttemptContext 只持有 operationId 和阶段声明。这里的归属 ID 均指 Context；不添加 prepared/raw，中间内容在各 Attempt 的 IO 中。局部变量仍用于顺序传递，不另存第二份结果。
+- 运行上下文位于 server/context/：RuntimeContext<I, O> 基类持有自身 UUID、input 与 running/succeeded(output)/failed(error) 状态联合；ExecutionContext、OperationContext、AttemptContext 分别对应完整运行、Operation 调用和一次阶段函数执行。普通 IO 与异常保留原引用，允许非 JSON 值，不克隆或冻结正文；state 包装只读，complete/fail 拒绝重复结束。上下文实例字段只读，子类实例冻结不影响私有状态更新。操作辅助函数不新增 scope。
+- ExecutionContext 持有配置浅快照、固定 TranscriptRangeRef 与本次 AbortSignal，不保存原始 Transcript 入口副本。范围包含输入末条，后续追加不改变其 end。OperationContext 仅持有 executionId、可选 parentOperationId 及声明，AttemptContext 仅持有 operationId 和阶段声明，不复制配置或范围。Runtime.getExecutionContext 从 E/O/A 沿已登记 scope 查找执行上下文；getOperationContext 从 Attempt 查找所属 Operation。查询拒绝外部 Runtime 的 Context，不访问 Record、不新增全局 Context 仓库。
 - Runtime 只协调 live scope 与调用边界，用 WeakMap 保留归属和当前未结束子 scope 的引用；不遍历 Record、不维护运行内容仓库、不推导恢复流程。父级 Context 显式传入，拒绝外部 Runtime 的 Context、已结束父级和仍有子调用的结束操作。没有队列、调度、重试或并行策略。
 - RuntimeRecorder 位于 records/recorder.ts，持有 Book、索引、Clock 和记录事件；以 contextId 索引建立 Context → Record 映射。三种 Record 顶层增加 contextId，自身 ID 与 Context ID 不同；Record 的 executionId/operationId/parentOperationId 仍指对应 Record。记录查询归 Recorder/Book，不放入 Context/Operation。Recorder 不执行工作、不修改 Context。
 - Runtime 可以不注入 Recorder，此时三层调用仍可执行，不受 JSON 记录正文限制。注入时 begin 登记失败阻止工作；工作完成先写 Context，再登记记录。结果登记失败向外抛出，不能把已成功的 Context 改为失败；原始工作异常留在 Context，仅在记录侧格式化。失败登记也失败由 invoke 的 AggregateError 保留二者。未完成记录不能冒充完整记录；不补造结束事件。仍未提供登记补偿、进程恢复或持久化。
@@ -46,13 +46,13 @@
 - 观测选择统一使用调用记录 ID，不为它另设节点 ID 别名；operationInstanceId 表示实际 Operation 实例的身份。时序事件直接使用 EventRecord，错误正文直接使用 RuntimeErrorValue，不另维护相同形状的视图契约。失败调用没有 output，诊断内容保留在 error.detail，不将错误详情伪装成操作输出。
 
 - 观测服务于理解当前运行。不提供记录文件导入、导出和重放，不以独立解释、跨进程恢复或未来持久化要求增加当前链路不存在的对象。允许从已存在工作链路中提炼职责，避免由假设功能反向制造复杂度。
-- EOA 记录直接持有不可变 MessageRef/TranscriptRangeRef，与运行共享同一份消息事实，不复制 Transcript 或保存独立来源范围。records/value/copy.ts 复制普通正文、保留这两类引用；检查和冻结将其视为不可变叶子，不遍历或冻结 Transcript。其他内容仍遵循原快照限制。
+- ExecutionRecord.value 保存 input、settings 和可选 transcript 范围引用；配置与普通消息正文按原记录策略复制冻结，TranscriptRangeRef 保留不可变范围引用，不复制整个集合。OperationRecord/AttemptRecord 不重复保存配置或范围，通过已有记录归属追溯。模型实际请求仍是 Attempt IO 的记录内容，不因执行配置已记录而省略。选中消息以普通内容和 index 组织为生成操作输入，不再包 MessageRef。
 - ExecutionRecordHelper.snapshot 从 Book 与 operation/attempt/event 索引组织快照；EventRecord.toJSON 新建外层数据，正文不可变。RuntimeSnapshot.events 是 EventRecord 的查询输出，不是第二份存储。validateSnapshot 检查事件记录独立身份、执行归属、时间与边界一致性；不承担文件导入契约。
-- HTTP 发布时用 transcript/observe.ts 的 observeTranscript 读取引用：消息显示 index/message，范围显示 start/end/messages。该函数无状态、不创建记录、不保存消息副本；浏览器收到的是本次观测所需的数据。前端继续提问只提交新消息；刷新从 GET /api/transcript 读取服务端消息。未引入引用解析服务、独立消息仓库或恢复机制。发布仍为完整观测更新，传输去重尚未实现。
+- HTTP 发布时用 transcript/observe.ts 的 observeTranscript 读取引用：输入 Message 直接显示 role/content，执行范围显示 start/end/messages。该函数无状态、不创建记录、不保存消息副本；浏览器收到的是本次观测所需的数据。前端继续提问只提交新消息；刷新从 GET /api/transcript 读取服务端消息。未引入引用解析服务、独立消息仓库或恢复机制。发布仍为完整观测更新，传输去重尚未实现。
 
 - 本轮仅收敛可调用类的归属。反馈根和记录失败是否影响运行仍待共同设计，不更改现有异常传播策略。Context 与 Record 继续独立，Operation 实例 ID 使用 operationInstanceId，不保留 nodeId 别名。
 
 - initializeObserver 在 HTTP 服务开始接收请求前创建进程内单个环境，持有 Transcript、Book、索引、Clock、Recorder、Runtime 和 ObserverExecution。允许传入已装载的 Transcript；初始化不接纳本次提交，不创建 Context/Record，不调用模型。环境与记录在多次请求间保留，退出进程后丢失；本轮不实现持久化、恢复、多环境管理或清空接口。
-- 可调用实例与 Context 为 1:N，开启记录时 Context 与对应层 Record 为 1:1。ObserverExecution 与三个固定 Operation 跨调用复用，输入/输出/状态/配置/取消信号属于本次 Context。未来操作可以按需创建，本轮不提前抽象动态实例管理。 EventRecord 与被描述的调用 Record 为 N:1，不为事件记录虚构 Context；统计 Context 映射时仅包含 E/O/A。
-- RuntimeRecorder.subscribe 只订阅已有观测发布，返回解除订阅函数；不引入推进事件总线。observer/observe.ts 以本次新接纳 MessageRef 的引用身份筛选记录，finally 解除订阅；这是当前提交链路的观测适配，不是任意输入的通用执行接口。直接 execution.call 仍返回工作输出并传播工作异常。
+- 可调用实例与 Context 为 1:N，开启记录时 Context 与对应层 Record 为 1:1。ObserverExecution 与三个固定 Operation 跨调用复用，输入/输出/状态/配置/固定消息范围/取消信号属于本次 ExecutionContext。未来操作可以按需创建，本轮不提前抽象动态实例管理。 EventRecord 与被描述的调用 Record 为 N:1，不为事件记录虚构 Context；统计 Context 映射时仅包含 E/O/A。
+- RuntimeRecorder.subscribe 只订阅已有观测发布，返回解除订阅函数。observer/observe.ts 通过 Execution.call 的可选 started 回调获得本次 Context ID，随后按执行记录 contextId 筛选并在 finally 解除订阅，不依赖 input 对象身份。started 在执行上下文建立后、首条记录发布前调用，用于绑定本次调用，不执行业务处理。直接 execution.call 仍返回工作输出并传播工作异常。
 - 删除通用 Answer 类型，GenerationOutput 归生成操作的共享输出契约；不改变 kind/content 的模型输出，也不把分类强行加入 Message。过程变量使用 selectionOutput/assemblyOutput/generationOutput，query 仅是局部内容字段。

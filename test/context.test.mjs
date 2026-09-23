@@ -13,7 +13,7 @@ const declaration = { operationInstanceId: 'test', operation: 'echo', label: 'ec
 const options = { input: {}, settings: {} };
 const recorder = () => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId));
 
-test('Context keeps live refs, separates undefined outcomes, and fixes only execution configuration', () => {
+test('Context keeps live refs, separates undefined outcomes, and fixes execution configuration and Transcript visibility', () => {
   const input = { text: 'query' },
     settings = { model: 'original', temperature: 0 },
     transcript = new Transcript([]),
@@ -23,10 +23,12 @@ test('Context keeps live refs, separates undefined outcomes, and fixes only exec
   assert.equal(context.settings.model, 'original');
   assert.ok(Object.isFrozen(context.settings));
   assert.equal(context.input, input);
-  assert.equal(context.transcript, transcript);
+  assert.equal(context.transcript.transcript, transcript);
+  assert.equal(context.transcript.end, 0);
   assert.equal(context.signal, controller.signal);
   transcript.append({ role: 'user', content: 'new' });
-  assert.equal(context.transcript.current('user').content, 'new');
+  assert.equal(context.transcript.end, 0);
+  assert.throws(() => context.transcript.read(0), RangeError);
   controller.abort();
   assert.equal(context.signal.aborted, true);
   const initial = context.state;
@@ -155,4 +157,38 @@ test('Failed begin prevents work and releases the live parent scope', async (t) 
   root.succeed(execution, {});
   assert.equal(execution.status, 'succeeded');
   assert.equal(records.hasOutcome(execution), true);
+});
+
+test('Runtime resolves execution ownership for nested operations and attempts without consulting records', async () => {
+  const runtime = new Runtime(),
+    foreign = new Runtime();
+  let attempt, child, execution;
+  const operation = new TestOperation(
+    runtime,
+    { name: 'owned', label: 'owned', source: 'test', phaseSource: 'test' },
+    {
+      before(input, context) {
+        attempt = context;
+        assert.equal(runtime.getExecutionContext(context), execution);
+        assert.equal(runtime.getOperationContext(context).id, context.operationId);
+        assert.equal(runtime.getExecutionContext(runtime.getOperationContext(context)), execution);
+        assert.equal(Object.hasOwn(context, 'settings'), false);
+        return input;
+      },
+      commit: (input) => input,
+      after: (input) => input,
+    },
+  );
+  await invoke(runtime.execution({ input: 'root', settings: {} }), (root) => {
+    execution = root;
+    return invoke(runtime.operation(root, declaration, 'nested'), (parent) => {
+      child = parent;
+      return operation.call(root, 'work', parent);
+    });
+  });
+  assert.equal(runtime.getExecutionContext(attempt), execution);
+  assert.equal(runtime.getExecutionContext(child), execution);
+  assert.throws(() => foreign.getExecutionContext(attempt), /does not belong/);
+  assert.throws(() => foreign.getOperationContext(attempt), /does not belong/);
+  assert.equal(runtime.recorder, undefined);
 });

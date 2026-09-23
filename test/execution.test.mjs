@@ -6,7 +6,7 @@ import { Runtime } from '../dist/server/runtime/runtime.js';
 import { RuntimeRecorder } from '../dist/server/records/recorder.js';
 import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
 import { TestOperation } from './fixtures/operation.mjs';
-import { createInput } from './fixtures/observer.mjs';
+import { createInput, transcriptFor } from './fixtures/observer.mjs';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const definition = { name: 'echo', label: 'echo', source: 'test', phaseSource: 'test' };
@@ -64,9 +64,9 @@ test('ObserverExecution returns answers without a recorder and uses the configur
   const execution = new ObserverExecution(new Runtime(), provider);
   for (const model of ['one', 'two']) {
     const query = createInput({ query: model, history: [] });
-    const answer = await execution.call(query, { settings: { ...settings, model }, transcript: query.transcript });
+    const answer = await execution.call(query, { settings: { ...settings, model }, transcript: transcriptFor(query) });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });
-    assert.equal(query.transcript.current('assistant').content, 'done');
+    assert.equal(transcriptFor(query).current('assistant').content, 'done');
   }
   assert.deepEqual(
     requests.map((request) => request.model),

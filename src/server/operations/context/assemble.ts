@@ -1,6 +1,7 @@
 import type { Selection } from '../../../shared/types.js';
-import type { SelectionInput } from '../history/input.js';
-import type { MessageRef } from '../../transcript/ref.js';
+import type { Message } from '../../../shared/transcript/message.js';
+import type { ExecutionContext } from '../../context/execution.js';
+import type { AttemptContext } from '../../context/attempt.js';
 import { Operation, type OperationDefinition } from '../operation.js';
 import type { Runtime } from '../../runtime/runtime.js';
 
@@ -11,31 +12,30 @@ export const assembleContextDefinition = {
   phaseSource: 'src/server/operations/context/assemble.ts',
 } as const satisfies OperationDefinition;
 
-export interface AssemblyInput {
-  original: SelectionInput;
-  selection: Selection;
-}
-
-export function assembleContext(input: SelectionInput, selection: Selection) {
-  return Object.freeze({
-    query: input.query,
-    messages: Object.freeze(selection.historyIndexes.map((index) => input.historyRange.ref(index))),
-  });
-}
 export interface GenerationInput {
-  readonly query: MessageRef;
-  readonly messages: readonly MessageRef[];
+  readonly query: Readonly<Message>;
+  readonly messages: readonly { index: number; message: Readonly<Message> }[];
 }
 
-export class AssembleContext extends Operation<AssemblyInput, AssemblyInput, GenerationInput, GenerationInput> {
+export function assembleContext(execution: ExecutionContext, selection: Selection): GenerationInput {
+  const range = execution.transcript;
+  if (!range || range.length === 0) throw new Error('Execution Transcript range is required');
+  const messages = selection.historyIndexes.map((index) => {
+    if (!Number.isSafeInteger(index) || index < range.start || index >= range.end - 1) throw new RangeError('Selected message is outside the execution history');
+    return Object.freeze({ index, message: range.read(index) });
+  });
+  return Object.freeze({ query: execution.input as Readonly<Message>, messages: Object.freeze(messages) });
+}
+
+export class AssembleContext extends Operation<Selection, Selection, GenerationInput, GenerationInput> {
   constructor(runtime: Runtime) {
     super(runtime, assembleContextDefinition);
   }
-  before(input: AssemblyInput): AssemblyInput {
+  before(input: Selection): Selection {
     return input;
   }
-  commit({ original, selection }: AssemblyInput): GenerationInput {
-    return assembleContext(original, selection);
+  commit(input: Selection, context: AttemptContext): GenerationInput {
+    return assembleContext(this.runtime.getExecutionContext(context), input);
   }
   after(output: GenerationInput): GenerationInput {
     return output;

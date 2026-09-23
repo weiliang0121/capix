@@ -1,6 +1,7 @@
 import type { ModelOutput, ModelRequest, ModelSettings, Purpose } from '../../shared/types.js';
 import { RuntimeError } from '../errors/error.js';
 import { Operation, type OperationDefinition } from './operation.js';
+import type { AttemptContext } from '../context/attempt.js';
 import type { ExecutionContext } from '../context/execution.js';
 import type { Runtime } from '../runtime/runtime.js';
 import type { ModelProvider } from '../provider.js';
@@ -12,14 +13,14 @@ export interface ModelDependencies {
 /** Static output description paired with acceptance against the operation's input. */
 export interface ModelOutputContract<I, O> {
   readonly schema: unknown;
-  accept(value: unknown, input: I): O;
+  accept(value: unknown, input: I, execution: ExecutionContext): O;
 }
 
 export interface ModelOperationDefinition<I, O> extends OperationDefinition {
   purpose: Purpose;
   task: string;
   output: ModelOutputContract<I, O>;
-  prepare(input: I): unknown;
+  prepare(input: I, execution: ExecutionContext): unknown;
 }
 
 export class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput, O> {
@@ -31,22 +32,24 @@ export class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput
     super(runtime, model);
   }
 
-  before(input: I, execution: ExecutionContext): ModelRequest {
-    const request = loadRequest(this.model.prepare(input), this.model.task, this.model.output.schema, execution.settings);
+  before(input: I, context: AttemptContext): ModelRequest {
+    const execution = this.runtime.getExecutionContext(context);
+    const request = loadRequest(this.model.prepare(input, execution), this.model.task, this.model.output.schema, execution.settings);
     checkCapacity(request, execution.settings);
     return request;
   }
 
-  commit(request: ModelRequest, execution: ExecutionContext): Promise<ModelOutput> {
+  commit(request: ModelRequest, context: AttemptContext): Promise<ModelOutput> {
+    const execution = this.runtime.getExecutionContext(context);
     const { settings, signal } = execution;
     const { provider } = this.dependencies;
     return provider.invoke(request, this.model.purpose, AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]));
   }
 
-  after(raw: ModelOutput, input: I): O {
+  after(raw: ModelOutput, input: I, context: AttemptContext): O {
     checkCompletion(raw);
     const value = parseContent(raw.content);
-    return this.model.output.accept(value, input);
+    return this.model.output.accept(value, input, this.runtime.getExecutionContext(context));
   }
 }
 

@@ -6,8 +6,8 @@ import type { Runtime } from '../runtime/runtime.js';
 export abstract class Execution<I, O> {
   constructor(protected readonly runtime: Runtime) {}
 
-  call(input: I, options: ExecutionOptions): Promise<O> {
-    return invoke(this.runtime.execution<I, O>({ ...options, input }), (context) => this.execute(context));
+  call(input: I, options: ExecutionOptions, started?: (context: ExecutionContext<I, O>) => void): Promise<O> {
+    return invoke(this.runtime.execution<I, O>({ ...options, input }, started), (context) => this.execute(context));
   }
 
   protected abstract execute(context: ExecutionContext<I, O>): O | Promise<O>;

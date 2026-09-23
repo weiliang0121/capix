@@ -12,6 +12,7 @@ export interface OperationValue<I = unknown, O = unknown> {
 }
 export interface ExecutionValue<I = unknown, O = unknown> extends OperationValue<I, O> {
   settings: unknown;
+  transcript?: unknown;
   startedAt: string;
 }
 export interface ExecutionRecord<I = unknown, O = unknown> extends RuntimeRecord<ExecutionValue<I, O>> {

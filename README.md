@@ -13,7 +13,7 @@ initializeObserver(provider, transcript?)
 
 外部 ExecutionRequest { messages }
   → acceptExecutionInput：向已有 Transcript 追加一批新消息
-  → 最后一条 user MessageRef → Execution.input
+  → 最后一条只读 user Message → Execution.input
   → selection.call → selectionOutput
   → assembly.call → assemblyOutput
   → generation.call → generationOutput
@@ -22,7 +22,7 @@ initializeObserver(provider, transcript?)
 
 Transcript 只增不改删，包含第一条和当前消息。接纳时检查角色及非空正文，复制冻结每条消息；批量追加先全部检查，保留原文。get/current 返回同一不可变消息，snapshot(end) 只复制前缀数组。current(role) 是该角色最新消息，不表示问答配对。
 
-MessageRef 由 Transcript 实例及绝对 index 定位；TranscriptRangeRef 固定 `[start,end)`。query 和候选范围不随后续消息追加改变。EOA 的 IO 结构按实际操作异构，模型 before 装载时才读取选中消息正文。生成回答后追加 assistant 消息。
+本次 input 只有 role/content。ExecutionContext 在开始时固定 settings 的不可变取值与 TranscriptRangeRef [0,end)，范围包含本次输入；历史选择排除末条。外层修改配置或追加消息不会改变进行中的执行，下一次执行才捕获新的配置与范围。模型操作从所属 ExecutionContext 读取配置；消息只在需要时从固定范围读取。
 
 服务启动时初始化一个本地 Observer 环境，Transcript 可以为空，也可以传入已经装载的实例；初始化不产生 Context、Record 或模型调用。环境、消息与记录跨请求保留，进程退出后消失。当前不提供多环境路由、持久化、清空或恢复接口。
 
@@ -32,7 +32,7 @@ MessageRef 由 Transcript 实例及绝对 index 定位；TranscriptRangeRef 固�
 
 `Operation<I,P,R,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。BCA 实现留在具体子类：ModelOperation 处理模型调用，AssembleContext 处理消息引用组装。Operation 实例只持有定义和依赖，不保存当前输入、上下文或最近结果。
 
-`Execution<I,O>` 是抽象类，call 建立 ExecutionContext 并调用具体 execute。ObserverExecution 用顺序代码组合三个 Operation，返回 generationOutput；它不创建 Recorder、Book 或 HTTP 响应。构造时装配三个固定操作；BCA 显式接收本次 ExecutionContext，从中取得配置和取消信号。实例不保存本次调用状态。
+`Execution<I,O>` 是抽象类，call 建立 ExecutionContext 并调用具体 execute。ObserverExecution 用顺序代码组合三个 Operation，返回 generationOutput；它不创建 Recorder、Book 或 HTTP 响应。构造时装配三个固定操作；BCA 显式接收自己的 AttemptContext，通过 Runtime.getExecutionContext 取得执行配置和取消信号。实例不保存本次调用状态。
 
 ```ts
 const environment = initializeObserver(provider); // 请求到来前
@@ -41,11 +41,11 @@ const input = acceptExecutionInput(environment.transcript, request);
 const generationOutput = await environment.execution.call(input, {
   settings,
   signal,
-  transcript: environment.transcript,
+  transcript: environment.transcript, // 开始时固定范围，不放入 input
 });
 ```
 
-环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 为本次新接纳的 MessageRef 订阅对应执行记录，结束时解除订阅；按引用身份筛选，不比较消息正文。它用于当前每次提交创建独立引用的链路，不是通用调度或重放入口。
+环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 用 Execution.call 的 started 回调取得 Context ID，在首条记录发布前绑定本次调用，按 contextId 筛选记录，结束时解除订阅。它不再通过 input 对象身份关联记录。
 
 可调用实例与 Context 为 1:N；开启记录时，每个 E/O/A Context 对应一条同层 Record。复用 Operation 的 operationInstanceId 保持不变，每次调用的 Context ID 与 Record ID 独立产生。记录容器保留所有调用，而非被新请求替换。
 
@@ -54,7 +54,7 @@ GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer �
 | 对象             | 职责                                                                            |
 | ---------------- | ------------------------------------------------------------------------------- |
 | RuntimeContext   | UUID、input 和 running/succeeded(output)/failed(error) 状态；持有真实 IO 与异常 |
-| ExecutionContext | 整次运行；固定配置浅快照、Transcript/AbortSignal 引用                           |
+| ExecutionContext | 整次运行；固定配置浅快照、Transcript 范围与 AbortSignal 引用                    |
 | OperationContext | 一次操作调用；executionId、可选 parentOperationId 和操作声明                    |
 | AttemptContext   | 一次阶段调用；operationId 和阶段声明                                            |
 | Runtime          | 三层 lifecycle、活动 scope 归属与结束约束                                       |
@@ -70,17 +70,19 @@ Runtime 可以不接 Recorder。接入时，工作完成先更新 Context，再�
 
 ## 事实引用与观测
 
-记录不要求自包含。EOA 记录中的 MessageRef/TranscriptRangeRef 与运行共享同一份不可变消息事实，不额外保存 Transcript 副本或“本次执行消息来源”。
+记录不要求自包含。ExecutionRecord 保存本次 settings 快照与固定 Transcript 范围引用；OperationRecord 通过 executionId 关联，AttemptRecord 通过 operationId 关联，不重复保存这两项。
 
-普通过程数据仍在登记边界取得冻结快照，避免后续修改覆盖当时内容。`snapshotValue` 组合 `copyContent → assertRecordContent → freezeContent`；消息引用作为不可变叶子原样保留，不遍历或冻结 Transcript。其他内容仍限制为普通 JSON 值，拒绝循环、Map、函数和 undefined 等。
+普通过程数据在登记边界复制冻结，包括简单输入消息与实际模型请求。TranscriptRangeRef 是不可变范围引用，保持原实例，不遍历或复制整个 Transcript。历史选择从执行范围读取候选，组装操作输出选中的普通消息内容和索引，不把整个集合引用放回操作 IO。
 
-ExecutionRecordHelper.snapshot 从同一个 Book 与各索引查询 E/O/A 和 EventRecord：外层数据表达当时的状态，正文使用已登记的不可变值，消息引用仍指向事实。HTTP 发送观测响应时，`observeTranscript` 才读取消息引用，展开为 `{index,message}`；范围展开为 `{start,end,messages}`。这是无状态的展示转换，不创建新记录或保存内容副本。
+Runtime.getExecutionContext 沿已登记的 scope 关系解析 E/O/A 的所属执行；getOperationContext 解析 Attempt 的所属操作。辅助查询不读取任何 Record，未启用 Recorder 时同样工作。
+
+ExecutionRecordHelper.snapshot 查询已有记录；HTTP observeTranscript 在展示时展开执行范围为 start/end/messages。执行详情的 EXECUTION SCOPE 展示配置与范围，输入区域单独显示本次消息。当前没有持久化、独立来源副本或恢复机制。
 
 浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。当前每个边界仍发送完整更新，消息正文可能在展示传输中重复，尚未实现增量传输或按需查询。
 
 ```text
 RuntimeRecord<T>：id + value
-  ExecutionRecord：整次运行，contextId
+  ExecutionRecord：整次运行，contextId；value 中保存本次配置与消息范围
   OperationRecord：一次操作调用，contextId / executionId / operationInstanceId / parentOperationId?
   AttemptRecord：一次阶段调用，contextId / operationId / phase
   EventRecord：一次调用边界，executionId / callId / sequence / occurredAt / offsetMs；value.type

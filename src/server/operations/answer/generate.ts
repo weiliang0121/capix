@@ -23,7 +23,7 @@ export function createGenerateAnswer(runtime: Runtime, dependencies: ModelDepend
       purpose: 'answer',
       task,
       output: answerOutputContract,
-      prepare: (input) => ({ query: input.query.read().content, history: input.messages.map((ref) => ({ index: ref.index, ...ref.read() })) }),
+      prepare: (input) => ({ query: input.query.content, history: input.messages.map(({ index, message }) => ({ index, ...message })) }),
     },
     dependencies,
   );
