@@ -31,7 +31,7 @@ test('Runtime passes live Contexts; records retain separate identities, relation
     parent = context;
     assert.ok(context instanceof OperationContext);
     assert.equal(context.input, input);
-    assert.equal(context.executionId, execution.id);
+    assert.equal(context.executionContext, execution);
     assert.notEqual(recorder.record(context.id).id, context.id);
     assert.equal(recorder.record(context.id).value.input.count, 0);
     context.input.count++;
@@ -52,20 +52,25 @@ test('Runtime passes live Contexts; records retain separate identities, relation
   validateSnapshot(recorder.snapshot(execution));
 });
 
-test('Runtime rejects foreign live scopes and preserves original work failures independently of records', async () => {
+test('Runtime rejects ended or mismatched parent Contexts and preserves original work failures', async () => {
   const recorder = createRecorder(),
     runtime = new Runtime(recorder),
     execution = begin(runtime);
   let entered = false;
-  const foreign = begin(new Runtime());
+  const ended = begin(runtime);
+  lifecycles.get(ended).succeed(ended, {});
   await assert.rejects(
-    invoke(runtime.operation(foreign, new TestOperation(runtime), {}), () => {
+    invoke(runtime.operation(ended, new TestOperation(runtime), {}), () => {
       entered = true;
       return {};
     }),
-    /does not belong/,
+    /ended/,
   );
   assert.equal(entered, false);
+  const otherExecution = begin(runtime);
+  const otherParent = new OperationContext(otherExecution, {});
+  assert.throws(() => runtime.operation(execution, new TestOperation(runtime), {}, otherParent).begin(), /another execution/);
+  lifecycles.get(otherExecution).succeed(otherExecution, {});
   assert.equal(OperationRecordHelper.findByExecution(recorder.book, recorder.operationIndex, recorder.record(execution.id).id).length, 0);
   const failure = new RuntimeError('TEST_ERROR', 'test failure');
   let failed;
@@ -155,7 +160,7 @@ test('record creation captures instance descriptions at begin without storing th
   const operation = operationLifecycle.begin();
   const operationRecord = recorder.record(operation.id);
   assert.equal(reads, 1);
-  assert.deepEqual(Object.keys(operation).sort(), ['executionId', 'id', 'input']);
+  assert.deepEqual(Object.keys(operation).sort(), ['executionContext', 'id', 'input']);
   assert.equal(operationRecord.operationInstanceId, instance.id);
   assert.equal(operationRecord.operation, instance.name);
   assert.equal(operationRecord.label, 'initial label');
@@ -169,7 +174,7 @@ test('record creation captures instance descriptions at begin without storing th
   const attemptLifecycle = runtime.attempt(operation, 'before', 'phase input', 'test · before', 'processing');
   const attempt = attemptLifecycle.begin();
   const attemptRecord = recorder.record(attempt.id);
-  assert.deepEqual(Object.keys(attempt).sort(), ['id', 'input', 'operationId', 'phase']);
+  assert.deepEqual(Object.keys(attempt).sort(), ['id', 'input', 'operationContext', 'phase']);
   assert.equal(attemptRecord.phase, 'before');
   assert.equal(attemptRecord.source, 'test · before');
   assert.equal(attemptRecord.caller, 'operation');

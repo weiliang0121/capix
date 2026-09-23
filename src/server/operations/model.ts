@@ -1,4 +1,5 @@
 import type { ModelOutput, ModelRequest, ModelSettings, Purpose } from '../../shared/types.js';
+import { checkCapacity } from './model/capacity.js';
 import { RuntimeError } from '../errors/error.js';
 import { Operation } from './operation.js';
 import type { AttemptContext } from '../context/attempt.js';
@@ -30,9 +31,13 @@ export abstract class ModelOperation<I, O> extends Operation<I, ModelRequest, Mo
 
   before(input: I, context: AttemptContext<I, ModelRequest>): ModelRequest {
     const execution = this.runtime.getExecutionContext(context);
-    const request = loadRequest(this.prepare(input, execution), this.task, this.output.schema, execution.settings);
+    const request = this.createRequest(input, execution);
     checkCapacity(request, execution.settings);
     return request;
+  }
+
+  protected createRequest(input: I, execution: ExecutionContext): ModelRequest {
+    return loadRequest(this.prepare(input, execution), this.task, this.output.schema, execution.settings);
   }
 
   commit(request: ModelRequest, context: AttemptContext<ModelRequest, ModelOutput>): Promise<ModelOutput> {
@@ -78,22 +83,4 @@ function loadRequest(input: unknown, task: string, schema: unknown, settings: Mo
     max_tokens: settings.maxOutputTokens,
     stream: false,
   };
-}
-function checkCapacity(request: ModelRequest, settings: ModelSettings) {
-  const inputBytes = Buffer.byteLength(JSON.stringify(request), 'utf8');
-  const estimatedInputTokens = inputBytes + 256;
-  const required = estimatedInputTokens + request.max_tokens;
-  const result = {
-    method: 'UTF-8 bytes of full request + 256 reserve',
-    exact: false,
-    note: '保守的本地估算，不是 DeepSeek tokenizer；服务端仍可能拒绝。',
-    inputBytes,
-    estimatedInputTokens,
-    reservedOutputTokens: request.max_tokens,
-    contextBudget: settings.contextBudget,
-    required,
-    fits: required <= settings.contextBudget,
-  };
-  if (!result.fits) throw new RuntimeError('CAPACITY_EXCEEDED', `本地容量检查拒绝：估算需求 ${required} > 预算 ${settings.contextBudget}。未调用模型、未截断输入。`, result);
-  return result;
 }

@@ -20,7 +20,7 @@ export const selectionOutputContract = {
     const range = execution.transcriptRange;
     if (!range) throw new Error('Execution Transcript range is required');
     checkHistoryReferences(value, range.start, range.end - 1);
-    return orderSelection(value);
+    return { historyIndexes: [...value.historyIndexes] };
   },
 } as const satisfies ModelOutputContract<Readonly<Message>, Selection>;
 
@@ -35,8 +35,4 @@ function checkHistoryReferences(value: Selection, start: number, end: number): v
   const invalid = value.historyIndexes.filter((index) => index < start || index >= end);
   const count = end - start;
   if (invalid.length) throw new RuntimeError('INDEX_OUT_OF_RANGE', `索引不存在：${invalid.join(', ')}；历史条目数为 ${count}。`, { invalid, count });
-}
-
-function orderSelection(value: Selection): Selection {
-  return { historyIndexes: [...value.historyIndexes].sort((a, b) => a - b) };
 }

@@ -128,7 +128,7 @@ test('a cancelled call does not leave its signal on the reusable model operation
   );
 });
 
-test('configuration updates and Transcript appends take effect only in the next execution scope', async () => {
+test('configuration updates and Transcript appends take effect only in the next execution', async () => {
   const configuration = { ...settings, model: 'A' },
     requests = [];
   let environment;

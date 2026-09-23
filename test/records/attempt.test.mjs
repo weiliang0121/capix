@@ -36,10 +36,7 @@ test('each phase invocation has its own attempt; an unsuccessful attempt does no
   assert.equal(secondRecord instanceof OperationRecord, false);
   assert.equal('executionId' in second, false);
   assert.equal('operationInstanceId' in second, false);
-  assert.equal(second.operationId, operation.id);
-  assert.throws(() => operationLifecycle.succeed(operation, {}), /active child contexts/);
-  assert.throws(() => operationLifecycle.fail(operation, failure), /active child contexts/);
-  assert.throws(() => executionLifecycle.succeed(execution, {}), /active child contexts/);
+  assert.equal(second.operationContext, operation);
   const during = runtime.recorder.snapshot(execution);
   validateSnapshot(during);
   assert.equal(during.operations.length, 1);

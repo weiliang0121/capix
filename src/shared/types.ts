@@ -9,6 +9,7 @@ export interface ExecutionRequest {
   messages: Message[];
 }
 export interface Selection {
+  /** Model-ranked history indexes, highest priority first. */
   historyIndexes: number[];
 }
 export interface ModelSettings {

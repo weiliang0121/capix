@@ -55,7 +55,7 @@ export class RuntimeRecorder {
 
   beginOperation<I, B, C, O>(context: OperationContext<I, O>, operation: Operation<I, B, C, O>, parentContext?: OperationContext): void {
     this.requireUnrecorded(context);
-    const execution = this.record(context.executionId);
+    const execution = this.record(context.executionContext.id);
     if (!(execution instanceof ExecutionRecord)) throw new Error('Execution record does not exist');
     const parent = parentContext ? this.record(parentContext.id) : undefined;
     if (parent && !(parent instanceof OperationRecord)) throw new Error('Parent operation record does not exist');
@@ -81,7 +81,7 @@ export class RuntimeRecorder {
 
   beginAttempt(context: AttemptContext, source: string, callee: string): void {
     this.requireUnrecorded(context);
-    const operation = this.record(context.operationId);
+    const operation = this.record(context.operationContext.id);
     if (!(operation instanceof OperationRecord)) throw new Error('Operation record does not exist');
     const record = AttemptRecordHelper.create(this.book, this.attemptIndex, { phase: context.phase, source, caller: 'operation', callee, contextId: context.id, operationId: operation.id }, context.input);
     this.#contexts.add(record);

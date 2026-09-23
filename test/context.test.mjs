@@ -97,7 +97,7 @@ test('Record failure after work success preserves the live result and does not r
   assert.equal(context.state.output, result);
   assert.equal(records.record(context.id).status, 'running');
   assert.equal(records.snapshot(execution).events.filter((event) => event.callId === records.record(context.id).id).length, 1);
-  // The child is finished in the live scope. Only recording rejects its unfinished child record.
+  // The child Context is finished. Recording still rejects its unfinished child record.
   assert.throws(() => root.succeed(execution, {}), /active operations/);
   assert.equal(execution.status, 'succeeded');
   assert.equal(records.hasOutcome(execution), false);
@@ -129,7 +129,7 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
   assert.equal(records.record(execution.id).status, 'running');
 });
 
-test('Failed begin prevents work and releases the live parent scope', async (t) => {
+test('Failed begin prevents work without changing the parent Context', async (t) => {
   const records = recorder(),
     runtime = new Runtime(records),
     root = runtime.execution(options),
@@ -155,15 +155,15 @@ test('Failed begin prevents work and releases the live parent scope', async (t) 
   assert.equal(records.hasOutcome(execution), true);
 });
 
-test('Runtime resolves execution ownership for nested operations and attempts without consulting records', async () => {
+test('Parent Context references remain readable after completion without registration or records', async () => {
   const runtime = new Runtime(),
-    foreign = new Runtime();
+    reader = new Runtime();
   let attempt, child, execution;
   const operation = new TestOperation(runtime, {
     before(input, context) {
       attempt = context;
       assert.equal(runtime.getExecutionContext(context), execution);
-      assert.equal(runtime.getOperationContext(context).id, context.operationId);
+      assert.equal(runtime.getOperationContext(context), context.operationContext);
       assert.equal(runtime.getExecutionContext(runtime.getOperationContext(context)), execution);
       assert.equal(Object.hasOwn(context, 'settings'), false);
       return input;
@@ -180,7 +180,7 @@ test('Runtime resolves execution ownership for nested operations and attempts wi
   });
   assert.equal(runtime.getExecutionContext(attempt), execution);
   assert.equal(runtime.getExecutionContext(child), execution);
-  assert.throws(() => foreign.getExecutionContext(attempt), /does not belong/);
-  assert.throws(() => foreign.getOperationContext(attempt), /does not belong/);
+  assert.equal(reader.getExecutionContext(attempt), execution);
+  assert.equal(reader.getOperationContext(attempt), attempt.operationContext);
   assert.equal(runtime.recorder, undefined);
 });

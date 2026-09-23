@@ -80,8 +80,8 @@ function renderDetail() {
   el('detail-status').textContent = node ? `${statusLabels[node.status]} · ${ms(node.durationMs)}` : '';
   el('detail-source').textContent = node ? `${node.id} → ${node.source}\nContext：${node.contextId}${node.executionId ? `\n执行记录：${node.executionId}${node.operationInstanceId ? ` · 操作实例：${node.operationInstanceId}` : ''}` : ''}` : '运行之后，点击节点查看真实输入输出。';
   el('detail-input').textContent = pretty(node?.input);
-  el('execution-scope').hidden = node?.recordType !== 'execution';
-  el('detail-scope').textContent = node?.recordType === 'execution' ? pretty({ settings: trace?.facts.execution.value.settings, transcriptRange: trace?.facts.execution.value.transcriptRange }) : '';
+  el('execution-context').hidden = node?.recordType !== 'execution';
+  el('detail-context').textContent = node?.recordType === 'execution' ? pretty({ settings: trace?.facts.execution.value.settings, transcriptRange: trace?.facts.execution.value.transcriptRange }) : '';
   el('detail-output').textContent = node?.error ? pretty({ error: node.error }) : pretty(node?.output);
   if (codeTab) void renderCode(node);
 }

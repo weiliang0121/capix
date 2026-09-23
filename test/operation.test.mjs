@@ -45,7 +45,7 @@ test('answer acceptance rejects coerced kinds and preserves accepted text', () =
   assert.equal(answerOutputContract.accept(answer), answer);
 });
 
-test('selection acceptance separates invalid shape from missing references and orders a copy', () => {
+test('selection acceptance separates invalid shape from missing references and preserves priority in a copy', () => {
   const input = {
     content: 'x',
     history: [
@@ -56,7 +56,9 @@ test('selection acceptance separates invalid shape from missing references and o
   const message = createInput(input);
   const execution = contextFor(message);
   const value = { historyIndexes: [1, 0] };
-  assert.deepEqual(selectionOutputContract.accept(value, message, execution), { historyIndexes: [0, 1] });
+  const accepted = selectionOutputContract.accept(value, message, execution);
+  assert.deepEqual(accepted, { historyIndexes: [1, 0] });
+  assert.notEqual(accepted.historyIndexes, value.historyIndexes);
   assert.deepEqual(value.historyIndexes, [1, 0]);
   for (const historyIndexes of [[0, 0], [-1], [0.5], [Number.MAX_SAFE_INTEGER + 1]]) {
     assert.throws(
