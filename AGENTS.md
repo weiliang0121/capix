@@ -21,14 +21,14 @@
 - Operation<I,P,R,O> 已改为抽象类，自身持有静态定义、Runtime 和稳定实例 ID，提供 call 及抽象 before/commit/after；不另设 Node 或包装器。call 建立 OperationContext，按顺序为 BCA 建立 AttemptContext。具体 ModelOperation/AssembleContext 实现阶段方法，原工厂返回 ModelOperation 实例。输入、状态、结果只在每次调用的 Context 中。
 - Execution<I,O> 为抽象类，call 通过公共 invoke/Runtime 建立 ExecutionContext，再调用具体 execute。ObserverExecution 是实验场景的固定流程实现，构造时持有 selection/assembly/generation 三个 Operation。操作构造依赖不再含 settings/signal；BCA 显式接收本次 ExecutionContext，读取该次配置与信号，实例不保存 currentContext。不引入动态规划、Task、启动器、Pipeline 类或调度器。静态 OperationDefinition 与记录创建用 OperationRecordDefinition 不混用。
 - `RuntimeRecord<T>` 只有 id/value。ExecutionRecord、OperationRecord 和 AttemptRecord 具有顶层只读状态 running/succeeded/failed，基类不增加状态。操作关系 executionId/operationInstanceId/parentOperationId 位于顶层；每次调用有独立操作 ID。输入输出为记录正文，不可变消息引用保留实例，不为每个中间值生成 Record。
-- 一次 Operation.call 只创建一条 OperationRecord。BCA 每次阶段执行创建独立 AttemptRecord，继承 RuntimeRecord 而非 OperationRecord；顶层 operationId/phase/source/caller/callee，正文 input/output/error，不重复保存所属操作已有的 executionId/operationInstanceId/operation。OperationRecord 不再有 phase；parentOperationId 仅用于真正的嵌套操作。AttemptRecordHelper 位于 records/attempt/helper.ts，与 record.ts 配对，显式接收 Book 和按 operationId 装配的 RecordIndex。Operation 结束前拒绝运行中的 Attempt；Attempt 失败不自动结束操作。同阶段可有多条记录，但当前仍只执行一次串行 BCA，不实现自动重试。Context 与 Record 按三层对应，运行句柄使用 Context；Record 保存边界快照。RecordEvent.callId 可指向三类记录；投影用 recordType 区分。
+- 一次 Operation.call 只创建一条 OperationRecord。BCA 每次阶段执行创建独立 AttemptRecord，继承 RuntimeRecord 而非 OperationRecord；顶层 operationId/phase/source/caller/callee，正文 input/output/error，不重复保存所属操作已有的 executionId/operationInstanceId/operation。OperationRecord 不再有 phase；parentOperationId 仅用于真正的嵌套操作。AttemptRecordHelper 位于 records/attempt/helper.ts，与 record.ts 配对，显式接收 Book 和按 operationId 装配的 RecordIndex。Operation 结束前拒绝运行中的 Attempt；Attempt 失败不自动结束操作。同阶段可有多条记录，但当前仍只执行一次串行 BCA，不实现自动重试。Context 与 Record 按三层对应，运行句柄使用 Context；Record 保存边界快照。EventRecord.callId 可指向三类记录；投影用 recordType 区分。
 - `RecordBook` 仅提供 add/get/values，保存原记录引用、拒绝重复 ID。Book 不认识记录种类、索引、时钟、状态转换、事件、通知或导出。不得把特化流程重新放回 Book。
 - `ExecutionRecordHelper`、`OperationRecordHelper`、`AttemptRecordHelper` 是各子记录的配对静态操作，显式接收 Book、索引等参数，组合创建、登记、关系查询、检查及结果写入。记录按概念分组，execution/record.ts 与 execution/helper.ts 配对，operation/record.ts 与 operation/helper.ts 配对，避免跨概念循环导入。实例 complete/fail 只负责正文与自身状态的原子顺序更新；跨对象归属和子操作检查位于配对操作，RuntimeRecorder 使用配对入口。
 - `RecordIndex<R>` 是通用 selector → string key → IDs 实现；add 显式登记或重新索引、get 返回 ID 副本、remove 使用旧 key 清理。不持有正文、不调用 Book、不自动监听，不创建索引子类。当前由 observer/environment.ts 装配按 operation.executionId、attempt.operationId 的索引并传给 RuntimeRecorder/配对操作；查询和结束检查使用索引，不遍历 Book。状态索引暂不增加。
 - 具体记录在输入、输出及错误边界复制冻结普通正文，保留不可变消息引用；正文成功写入后才切换状态，拒绝重复结束。保留当前不支持 undefined、循环引用、Map、函数等正文的限制。基类不施加冻结策略，执行过程普通值不被修改。
 - records/value/snapshot.ts 只组合 copyContent → assertRecordContent → freezeContent；check.ts 承担记录正文类型及循环检查，freeze.ts 只冻结已检查的普通内容。保持先复制再检查的语义，不把正文类型策略混入冻结机制，不将业务契约检查放入快照函数。机制暂留 records/value/，不建立全局工具框架。
-- `Clock` 通过 now() 提供现实时间、tick() 提供单调时间，由装配处传给 RuntimeRecorder；ExecutionRecordHelper.create 使用 now() 写 startedAt，事件辅助函数使用 tick() 计算执行内偏移。测试可以注入 Clock 子类，不默认引入定时器或后台循环。
-- 删除 ExecutionEntries 和 active 状态副本。事件尚未完整建模：暂以 runtime/events.ts 的 ExecutionEvents 保留时间起点和原 RecordEvent 数组，由 RuntimeRecorder 按执行记录 ID 持有。它没有记录副本或索引。配对静态操作只处理记录，RuntimeRecorder 在记录边界追加事件并发布快照；不把 RecordEvent 当作推进指令或引入事件总线。该结构是保留旧行为的明确临时落点，不是已经确认的新领域对象。
+- `Clock` 通过 now() 提供现实时间、tick() 提供单调时间，由装配处传给 RuntimeRecorder；ExecutionRecordHelper.create 使用 now() 写 startedAt，EventRecordHelper 使用 now() 写 occurredAt、tick() 计算执行内偏移；单调计时起点仅由 RuntimeRecorder 按执行记录 ID 保存，序号取已登记事件记录，不维护事件正文副本。测试可以注入 Clock 子类，不默认引入定时器或后台循环。
+- 调用边界记录统一为 records/event/record.ts 的 EventRecord，继承 RuntimeRecord<EventValue>，value.type 为 call/return/throw。id 是事件记录自身的 UUID；executionId/callId 指向执行及被描述的 E/O/A Record，sequence/occurredAt/offsetMs 是顶层只读元数据。它没有 Context、运行状态或执行能力。EventRecordHelper 配对负责创建、归属检查、登记及按执行查询；RecordBook 统一持有正文，eventIndex 只存 ID。删除 runtime/events.ts 和 ExecutionEvents 数组，不保存第二份事件记录。
 - InvocationLifecycle 位于 invocation/lifecycle.ts，通用 invoke 位于 invocation/invoke.ts。begin/succeed/fail 同步处理边界，execute 可以异步；只有工作异常进入 fail，成功登记异常直接传播，失败登记再失败时 AggregateError 保留两个异常。observer/observe.ts 对已登记的工作失败返回快照，其余异常传播。handle 已改为 Context；记录是否完整另由 RuntimeRecorder.hasOutcome 判断，不用于决定工作状态。
 
 - 运行上下文位于 server/context/：RuntimeContext<I, O> 基类持有自身 UUID、input 与 running/succeeded(output)/failed(error) 状态联合；ExecutionContext、OperationContext、AttemptContext 分别对应完整运行、Operation 调用和一次阶段函数执行。IO 与异常保留原引用，允许非 JSON 值，不克隆或冻结正文；state 包装只读，complete/fail 拒绝重复结束。上下文实例字段只读，子类实例冻结不影响私有状态更新。操作辅助函数不新增 scope。
@@ -43,16 +43,16 @@
 
 - 文件按概念与动作分层，不用连字符拼接文件名，也不机械改成 camelCase：例如 operations/history/select.ts、operations/context/assemble.ts、shared/execution/project.ts。记录容器在 records/container/，正文操作在 records/value/，Runtime 支撑文件在 runtime/。工具规定的 pnpm-lock.yaml 等名称保持不变；已保存的运行记录不因源码整理被重写。测试命令使用 Node 内置测试运行器，按 test/**/*.test.mjs 递归匹配测试，排除辅助模块。
 
-- 观测选择统一使用调用记录 ID，不为它另设节点 ID 别名；operationInstanceId 表示实际 Operation 实例的身份。时序事件直接使用 RecordEvent，错误正文直接使用 RuntimeErrorValue，不另维护相同形状的视图契约。失败调用没有 output，诊断内容保留在 error.detail，不将错误详情伪装成操作输出。
+- 观测选择统一使用调用记录 ID，不为它另设节点 ID 别名；operationInstanceId 表示实际 Operation 实例的身份。时序事件直接使用 EventRecord，错误正文直接使用 RuntimeErrorValue，不另维护相同形状的视图契约。失败调用没有 output，诊断内容保留在 error.detail，不将错误详情伪装成操作输出。
 
 - 观测服务于理解当前运行。不提供记录文件导入、导出和重放，不以独立解释、跨进程恢复或未来持久化要求增加当前链路不存在的对象。允许从已存在工作链路中提炼职责，避免由假设功能反向制造复杂度。
 - EOA 记录直接持有不可变 MessageRef/TranscriptRangeRef，与运行共享同一份消息事实，不复制 Transcript 或保存独立来源范围。records/value/copy.ts 复制普通正文、保留这两类引用；检查和冻结将其视为不可变叶子，不遍历或冻结 Transcript。其他内容仍遵循原快照限制。
-- ExecutionRecordHelper.snapshot 组合当前记录及边界事件，记录正文不可变，因此只新建外层结构和事件副本，不深复制已登记正文。RuntimeSnapshot 不包含 schemaVersion、implementation 或重放字段。validateSnapshot 只检查当前记录的身份、状态与事件一致性，不承担文件导入契约。
+- ExecutionRecordHelper.snapshot 从 Book 与 operation/attempt/event 索引组织快照；EventRecord.toJSON 新建外层数据，正文不可变。RuntimeSnapshot.events 是 EventRecord 的查询输出，不是第二份存储。validateSnapshot 检查事件记录独立身份、执行归属、时间与边界一致性；不承担文件导入契约。
 - HTTP 发布时用 transcript/observe.ts 的 observeTranscript 读取引用：消息显示 index/message，范围显示 start/end/messages。该函数无状态、不创建记录、不保存消息副本；浏览器收到的是本次观测所需的数据。前端继续提问只提交新消息；刷新从 GET /api/transcript 读取服务端消息。未引入引用解析服务、独立消息仓库或恢复机制。发布仍为完整观测更新，传输去重尚未实现。
 
 - 本轮仅收敛可调用类的归属。反馈根和记录失败是否影响运行仍待共同设计，不更改现有异常传播策略。Context 与 Record 继续独立，Operation 实例 ID 使用 operationInstanceId，不保留 nodeId 别名。
 
 - initializeObserver 在 HTTP 服务开始接收请求前创建进程内单个环境，持有 Transcript、Book、索引、Clock、Recorder、Runtime 和 ObserverExecution。允许传入已装载的 Transcript；初始化不接纳本次提交，不创建 Context/Record，不调用模型。环境与记录在多次请求间保留，退出进程后丢失；本轮不实现持久化、恢复、多环境管理或清空接口。
-- 可调用实例与 Context 为 1:N，开启记录时 Context 与对应层 Record 为 1:1。ObserverExecution 与三个固定 Operation 跨调用复用，输入/输出/状态/配置/取消信号属于本次 Context。未来操作可以按需创建，本轮不提前抽象动态实例管理。
+- 可调用实例与 Context 为 1:N，开启记录时 Context 与对应层 Record 为 1:1。ObserverExecution 与三个固定 Operation 跨调用复用，输入/输出/状态/配置/取消信号属于本次 Context。未来操作可以按需创建，本轮不提前抽象动态实例管理。 EventRecord 与被描述的调用 Record 为 N:1，不为事件记录虚构 Context；统计 Context 映射时仅包含 E/O/A。
 - RuntimeRecorder.subscribe 只订阅已有观测发布，返回解除订阅函数；不引入推进事件总线。observer/observe.ts 以本次新接纳 MessageRef 的引用身份筛选记录，finally 解除订阅；这是当前提交链路的观测适配，不是任意输入的通用执行接口。直接 execution.call 仍返回工作输出并传播工作异常。
 - 删除通用 Answer 类型，GenerationOutput 归生成操作的共享输出契约；不改变 kind/content 的模型输出，也不把分类强行加入 Message。过程变量使用 selectionOutput/assemblyOutput/generationOutput，query 仅是局部内容字段。

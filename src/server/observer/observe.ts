@@ -16,7 +16,7 @@ export async function observeExecution(execution: ObserverExecution, recorder: R
     try {
       await execution.call(input, options);
     } catch (error) {
-      if (latest?.execution.status !== 'failed' || latest.events.at(-1)?.callId !== latest.execution.id || latest.events.at(-1)?.type !== 'throw') throw error;
+      if (latest?.execution.status !== 'failed' || latest.events.at(-1)?.callId !== latest.execution.id || latest.events.at(-1)?.value.type !== 'throw') throw error;
     }
     if (!latest || latest.execution.status === 'running') throw new Error('Execution observation is incomplete');
     return latest;

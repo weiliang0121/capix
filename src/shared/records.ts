@@ -45,17 +45,22 @@ export interface AttemptRecord<I = unknown, O = unknown> extends RuntimeRecord<A
   readonly caller: string;
   readonly callee: string;
 }
-/** callId addresses an execution, operation or attempt record. */
-export interface RecordEvent {
-  sequence: number;
-  callId: string;
-  type: 'call' | 'return' | 'throw';
-  offsetMs: number;
+/** The recorded boundary; its content is independent of record identity and timing. */
+export interface EventValue {
+  readonly type: 'call' | 'return' | 'throw';
+}
+/** callId addresses the invocation record, while id identifies this event record. */
+export interface EventRecord extends RuntimeRecord<EventValue> {
+  readonly executionId: string;
+  readonly callId: string;
+  readonly sequence: number;
+  readonly occurredAt: string;
+  readonly offsetMs: number;
 }
 /** Current execution records and their boundary events for observation. */
 export interface RuntimeSnapshot {
   execution: ExecutionRecord;
   operations: OperationRecord[];
   attempts: AttemptRecord[];
-  events: RecordEvent[];
+  events: EventRecord[];
 }

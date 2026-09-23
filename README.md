@@ -74,7 +74,7 @@ Runtime 可以不接 Recorder。接入时，工作完成先更新 Context，再�
 
 普通过程数据仍在登记边界取得冻结快照，避免后续修改覆盖当时内容。`snapshotValue` 组合 `copyContent → assertRecordContent → freezeContent`；消息引用作为不可变叶子原样保留，不遍历或冻结 Transcript。其他内容仍限制为普通 JSON 值，拒绝循环、Map、函数和 undefined 等。
 
-ExecutionRecordHelper.snapshot 组合记录与事件：外层数据表达当时的状态，正文使用已登记的不可变值，消息引用仍指向事实。HTTP 发送观测响应时，`observeTranscript` 才读取消息引用，展开为 `{index,message}`；范围展开为 `{start,end,messages}`。这是无状态的展示转换，不创建新记录或保存内容副本。
+ExecutionRecordHelper.snapshot 从同一个 Book 与各索引查询 E/O/A 和 EventRecord：外层数据表达当时的状态，正文使用已登记的不可变值，消息引用仍指向事实。HTTP 发送观测响应时，`observeTranscript` 才读取消息引用，展开为 `{index,message}`；范围展开为 `{start,end,messages}`。这是无状态的展示转换，不创建新记录或保存内容副本。
 
 浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。当前每个边界仍发送完整更新，消息正文可能在展示传输中重复，尚未实现增量传输或按需查询。
 
@@ -83,13 +83,14 @@ RuntimeRecord<T>：id + value
   ExecutionRecord：整次运行，contextId
   OperationRecord：一次操作调用，contextId / executionId / operationInstanceId / parentOperationId?
   AttemptRecord：一次阶段调用，contextId / operationId / phase
+  EventRecord：一次调用边界，executionId / callId / sequence / occurredAt / offsetMs；value.type
 ```
 
 operationInstanceId 指向可复用的 Operation 实例；OperationRecord.id 和 OperationContext.id 各自标识一次调用。Context 归属 ID 指向 Context；Record 归属 ID 指向 Record。三种记录自身 ID 与 Context ID 不同，顶层 contextId 关联对应运行实例。状态在具体记录顶层，基类不规定状态。
 
 完整成功链路为 1 条 Execution、3 条 Operation、9 条 Attempt、26 个 call/return/throw 边界事件。没有发生的阶段不创建记录。Attempt 失败不自动更改父操作状态，异常按实际调用链传播；After 拒绝时保留 Commit 原始返回，没有接纳输出。
 
-事件目前仅记录调用边界，由 RuntimeRecorder 持有计时基准及事件序列；不是推进指令或事件总线。validateSnapshot 检查当前记录身份、状态、归属与事件一致性，不是导入文件校验。
+EventRecord 继承 RuntimeRecord，自己的 id 与 callId 不同：callId 指向被描述的 E/O/A 调用记录。EventRecordHelper 负责创建和查询，Book 保存原记录，eventIndex 按执行 ID 查询，不另保存事件数组。sequence 为执行内顺序；occurredAt 为现实时间，offsetMs 使用单调时钟，现实时间回拨不改变时序。RuntimeRecorder 仅保留单调计时起点。事件记录没有 Context 或运行状态，不承担推进或消息传递；validateSnapshot 检查记录身份、归属与边界一致性。
 
 错误内嵌在 value.error。RuntimeErrorHelper.format 保留名称、code/message、堆栈、cause 与复合 errors；不可记录的诊断内容转为明确标记，不执行 detail 的 getter/toJSON。ErrorTraversal 管理一次格式化的预算与递归路径。没有独立错误记录或异常还原功能。
 
@@ -138,8 +139,8 @@ src/server/
   context/                   Execution / Operation / Attempt 运行上下文
   invocation/                通用调用流程与 lifecycle 契约
   operations/                Operation.call/BCA、ModelOperation、具体操作
-  runtime/                   scope 管理、时钟、边界事件
-  records/                   容器、索引、三类记录及配对操作、正文快照
+  runtime/                   scope 管理与时钟
+  records/                   容器、索引、E/O/A 与事件记录及配对操作、正文快照
   errors/                    异常及诊断格式化
   settings.ts                模型配置检查
   provider.ts                DeepSeek HTTP 接入

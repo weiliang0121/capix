@@ -8,7 +8,7 @@ import { RuntimeRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, Rec
 import { projectExecution, validateSnapshot } from '../../dist/shared/execution/project.js';
 
 function setup() {
-  const runtime = new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId)));
+  const runtime = new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)));
   const executionLifecycle = runtime.execution({ input: {}, settings: {} });
   const execution = executionLifecycle.begin();
   const operationLifecycle = runtime.operation(execution, { operationInstanceId: 'n', operation: 'echo', label: 'echo', source: 'test', caller: 'execution', callee: 'operation' }, {});

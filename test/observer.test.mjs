@@ -186,13 +186,13 @@ test('BCA sequence records nested call and return boundaries rather than adjacen
     assert.ok(event.offsetMs >= previousTime);
     previousTime = event.offsetMs;
     const call = calls.find((c) => c.id === event.callId);
-    if (event.type === 'call') {
+    if (event.value.type === 'call') {
       if (call.parentId) assert.ok(active.has(call.parentId));
       active.add(call.id);
     } else {
       assert.ok(active.has(call.id));
       active.delete(call.id);
-      assert.equal(event.type, 'return');
+      assert.equal(event.value.type, 'return');
     }
   });
   assert.equal(active.size, 0);
@@ -200,8 +200,8 @@ test('BCA sequence records nested call and return boundaries rather than adjacen
   assert.equal(invoke.parentId, calls.find((c) => c.operation === 'selection').id);
   assert.equal(invoke.caller, 'operation');
   assert.equal(invoke.callee, 'provider');
-  const firstEnd = events.find((e) => e.callId === calls.find((c) => c.operation === 'selection').id && e.type === 'return');
-  const secondStart = events.find((e) => e.callId === calls.find((c) => c.operation === 'answer').id && e.type === 'call');
+  const firstEnd = events.find((e) => e.callId === calls.find((c) => c.operation === 'selection').id && e.value.type === 'return');
+  const secondStart = events.find((e) => e.callId === calls.find((c) => c.operation === 'answer').id && e.value.type === 'call');
   assert.ok(firstEnd.sequence < secondStart.sequence);
 });
 
@@ -209,18 +209,18 @@ test('failure propagates through calls, is caught by query execution, and never 
   const { trace } = await run(scripted([output('{"historyIndexes":[8]}')]));
   const { calls, events } = trace.callSequence;
   assert.deepEqual(
-    events.filter((e) => e.type === 'throw').map((e) => calls.find((c) => c.id === e.callId).operation),
+    events.filter((e) => e.value.type === 'throw').map((e) => calls.find((c) => c.id === e.callId).operation),
     ['selection.after', 'selection', 'execution'],
   );
   assert.equal(events.at(-1).callId, calls.find((c) => c.operation === 'execution').id);
-  assert.equal(events.at(-1).type, 'throw');
+  assert.equal(events.at(-1).value.type, 'throw');
   assert.equal(calls.find((c) => c.operation === 'execution').status, 'failed');
   assert.ok(!calls.some((c) => c.operation === 'answer' || c.operation === 'assemble'));
 });
 
 test('sequence ordering follows completion when calls overlap', async () => {
   const book = new RecordBook();
-  const runtime = new Runtime(new RuntimeRecorder(book, new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId)));
+  const runtime = new Runtime(new RuntimeRecorder(book, new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)));
   const execution = runtime.execution({ input, settings }).begin();
   const resolvers = [];
   const start = (name) =>
@@ -247,7 +247,7 @@ test('sequence ordering follows completion when calls overlap', async () => {
   await first;
   const facts = runtime.recorder.snapshot(execution);
   assert.deepEqual(
-    facts.events.filter((e) => e.callId !== facts.execution.id).map((e) => `${e.type}:${facts.operations.find((op) => op.id === e.callId).operation}`),
+    facts.events.filter((e) => e.callId !== facts.execution.id).map((e) => `${e.value.type}:${facts.operations.find((op) => op.id === e.callId).operation}`),
     ['call:a', 'call:b', 'return:b', 'return:a'],
   );
 });

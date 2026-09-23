@@ -31,7 +31,7 @@ async function execute(answer = '{"kind":"answer","content":"海盐项目"}') {
     },
   });
 }
-const createRuntime = (publish) => new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new Clock(), publish));
+const createRuntime = (publish) => new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId), new Clock(), publish));
 const lifecycles = new WeakMap();
 const begin = (runtime, value = input) => {
   const lifecycle = runtime.execution({ input: value, settings });
@@ -357,8 +357,8 @@ test('missing or contradictory facts are rejected instead of repaired by the pro
       f.operations[0].phase = 'before';
     },
     (f) => {
-      const operationEnd = f.events.find((event) => event.callId === f.operations[0].id && event.type === 'return');
-      const attemptEnd = f.events.find((event) => event.callId === f.attempts[2].id && event.type === 'return');
+      const operationEnd = f.events.find((event) => event.callId === f.operations[0].id && event.value.type === 'return');
+      const attemptEnd = f.events.find((event) => event.callId === f.attempts[2].id && event.value.type === 'return');
       [operationEnd.callId, attemptEnd.callId] = [attemptEnd.callId, operationEnd.callId];
     },
     (f) => {

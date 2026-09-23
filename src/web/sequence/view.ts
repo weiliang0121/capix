@@ -1,4 +1,4 @@
-import type { RecordEvent } from '../../shared/records.js';
+import type { EventRecord } from '../../shared/records.js';
 import type { CallSpan, Trace } from '../../shared/types.js';
 
 const ns = 'http://www.w3.org/2000/svg';
@@ -27,7 +27,7 @@ function resultLabel(call: CallSpan): string {
 }
 
 // Rows come only from recorded boundary events, never from the planned stage list.
-export function renderSequence(container: HTMLElement, trace: Trace | undefined, selected: string, onSelect: (call: CallSpan, event: RecordEvent) => void) {
+export function renderSequence(container: HTMLElement, trace: Trace | undefined, selected: string, onSelect: (call: CallSpan, event: EventRecord) => void) {
   container.replaceChildren();
   const sequence = trace?.callSequence;
   if (!sequence?.events.length) {
@@ -77,14 +77,14 @@ export function renderSequence(container: HTMLElement, trace: Trace | undefined,
   const active: CallSpan[] = [];
   for (const event of sequence.events) {
     const call = calls.get(event.callId)!;
-    if (event.type === 'call') active.push(call);
+    if (event.value.type === 'call') active.push(call);
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `sequence-event ${event.type}${selected === call.id ? ' is-selected' : ''}`;
+    button.className = `sequence-event ${event.value.type}${selected === call.id ? ' is-selected' : ''}`;
     button.dataset.call = call.id;
     button.dataset.event = String(event.sequence);
-    const label = event.type === 'call' ? call.label : event.type === 'throw' ? `抛出 ${call.error?.code ?? 'ERROR'}` : resultLabel(call);
-    button.setAttribute('aria-label', `${event.sequence} ${event.type === 'call' ? '调用' : event.type === 'throw' ? '异常返回' : '返回'} ${call.label}：${label}`);
+    const label = event.value.type === 'call' ? call.label : event.value.type === 'throw' ? `抛出 ${call.error?.code ?? 'ERROR'}` : resultLabel(call);
+    button.setAttribute('aria-label', `${event.sequence} ${event.value.type === 'call' ? '调用' : event.value.type === 'throw' ? '异常返回' : '返回'} ${call.label}：${label}`);
     const row = svg('svg', {
       width,
       height: 70,
@@ -99,45 +99,45 @@ export function renderSequence(container: HTMLElement, trace: Trace | undefined,
     for (const item of active) {
       const depth = depths.get(item.callee) ?? 0;
       depths.set(item.callee, depth + 1);
-      const first = event.type === 'call' && item.id === call.id;
-      const last = event.type !== 'call' && item.id === call.id;
+      const first = event.value.type === 'call' && item.id === call.id;
+      const last = event.value.type !== 'call' && item.id === call.id;
       row.append(
         svg('rect', {
           x: positions.get(item.callee)! - 4 + depth * 5,
           y: first ? 37 : 0,
           width: 8,
           height: first || last ? (first ? 33 : 37) : 70,
-          class: `seq-activation${event.type === 'throw' && last ? ' failed' : ''}`,
+          class: `seq-activation${event.value.type === 'throw' && last ? ' failed' : ''}`,
         }),
       );
     }
     row.append(svg('text', { x: 12, y: 29, class: 'seq-number' }, `#${String(event.sequence).padStart(2, '0')}`));
     row.append(svg('text', { x: 12, y: 46, class: 'seq-time' }, `+${duration(event.offsetMs)}`));
-    const fromId = event.type === 'call' ? call.caller : call.callee;
-    const toId = event.type === 'call' ? call.callee : call.caller;
+    const fromId = event.value.type === 'call' ? call.caller : call.callee;
+    const toId = event.value.type === 'call' ? call.callee : call.caller;
     const from = positions.get(fromId)!;
     const to = positions.get(toId)!;
     const sign = to >= from ? 1 : -1;
     const start = from + sign * 5;
     const end = to - sign * 5;
-    row.append(svg('line', { x1: start, y1: 37, x2: end, y2: 37, class: `seq-arrow ${event.type}` }));
+    row.append(svg('line', { x1: start, y1: 37, x2: end, y2: 37, class: `seq-arrow ${event.value.type}` }));
     row.append(
       svg('path', {
         d: `M ${end - sign * 7} 33 L ${end} 37 L ${end - sign * 7} 41`,
-        class: `seq-arrowhead ${event.type}`,
+        class: `seq-arrowhead ${event.value.type}`,
       }),
     );
     const mid = (from + to) / 2;
     const charLimit = Math.max(12, Math.floor(Math.abs(to - from) / 7));
-    const text = svg('text', { x: mid, y: 23, 'text-anchor': 'middle', class: `seq-label ${event.type}` }, short(label, charLimit));
+    const text = svg('text', { x: mid, y: 23, 'text-anchor': 'middle', class: `seq-label ${event.value.type}` }, short(label, charLimit));
     text.append(svg('title', {}, `${call.label} · ${label}`));
     row.append(text);
-    const hint = event.type === 'call' ? (call.callee === 'provider' ? 'await · 等待接口返回' : '') : `耗时 ${duration(call.durationMs ?? 0)}`;
+    const hint = event.value.type === 'call' ? (call.callee === 'provider' ? 'await · 等待接口返回' : '') : `耗时 ${duration(call.durationMs ?? 0)}`;
     if (hint) row.append(svg('text', { x: mid, y: 59, 'text-anchor': 'middle', class: 'seq-hint' }, hint));
     button.append(row);
     button.addEventListener('click', () => onSelect(call, event));
     sheet.append(button);
-    if (event.type !== 'call')
+    if (event.value.type !== 'call')
       active.splice(
         active.findIndex((c) => c.id === call.id),
         1,

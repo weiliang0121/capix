@@ -13,7 +13,7 @@ const definition = { name: 'echo', label: 'echo', source: 'test', phaseSource: '
 
 test('one Execution and Operation can be called again after success and failure with fresh Contexts and records', async () => {
   const snapshots = [];
-  const recorder = new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), undefined, (snapshot) => snapshots.push(snapshot));
+  const recorder = new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId), undefined, (snapshot) => snapshots.push(snapshot));
   const runtime = new Runtime(recorder);
   const failure = new Error('work failed');
   const contexts = [];

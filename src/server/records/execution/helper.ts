@@ -1,5 +1,7 @@
+import type { EventRecord } from '../event/record.js';
+import { EventRecordHelper } from '../event/helper.js';
 import type { RuntimeErrorValue } from '../../../shared/errors.js';
-import type { ExecutionValue, RecordEvent, RuntimeSnapshot } from '../../../shared/records.js';
+import type { ExecutionValue, RuntimeSnapshot } from '../../../shared/records.js';
 import type { Clock } from '../../runtime/clock.js';
 import type { RecordBook } from '../container/book.js';
 import type { RecordIndex } from '../container/index.js';
@@ -38,13 +40,13 @@ export class ExecutionRecordHelper {
     return record;
   }
 
-  static snapshot(book: RecordBook, index: RecordIndex<OperationRecord>, attempts: RecordIndex<AttemptRecord>, id: string, events: readonly RecordEvent[]): RuntimeSnapshot {
+  static snapshot(book: RecordBook, index: RecordIndex<OperationRecord>, attempts: RecordIndex<AttemptRecord>, id: string, events: RecordIndex<EventRecord>): RuntimeSnapshot {
     const operations = OperationRecordHelper.findByExecution(book, index, id);
     return {
       execution: this.get(book, id).toJSON(),
       operations: operations.map((record) => record.toJSON()),
       attempts: operations.flatMap((operation) => AttemptRecordHelper.findByOperation(book, attempts, operation.id).map((record) => record.toJSON())),
-      events: events.map((event) => ({ ...event })),
+      events: EventRecordHelper.findByExecution(book, events, id).map((event) => event.toJSON()),
     };
   }
 }

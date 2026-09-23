@@ -64,8 +64,8 @@ function renderHistory() {
 function renderDiagram() {
   renderSequence(diagram, trace, selected, (call, event) => {
     selected = call.id;
-    const [from, to] = event.type === 'call' ? [call.caller, call.callee] : [call.callee, call.caller];
-    el('detail-event').textContent = `事件 #${event.sequence} · ${event.type} · +${ms(event.offsetMs)} · ${from} → ${to}${call.parentId ? ` · 父调用 ${call.parentId}` : ''}`;
+    const [from, to] = event.value.type === 'call' ? [call.caller, call.callee] : [call.callee, call.caller];
+    el('detail-event').textContent = `事件 #${event.sequence} · ${event.value.type} · 记录 ${event.id} · +${ms(event.offsetMs)} · ${from} → ${to}${call.parentId ? ` · 父调用 ${call.parentId}` : ''}`;
     renderDetail();
     renderDiagram();
     if (!inspector.open) inspector.showModal();

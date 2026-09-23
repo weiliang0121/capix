@@ -1,7 +1,7 @@
 import type { Message } from './transcript/message.js';
 export type { Message } from './transcript/message.js';
 import type { RuntimeErrorValue } from './errors.js';
-import type { RecordEvent, RuntimeSnapshot } from './records.js';
+import type { EventRecord, RuntimeSnapshot } from './records.js';
 export type Purpose = 'selection' | 'answer';
 export type NodeStatus = 'running' | 'passed' | 'failed';
 import type { GenerationOutput } from './operations/generation.js';
@@ -73,7 +73,7 @@ export interface CallSequence {
   version: 1;
   participants: { id: ParticipantId; label: string; description: string }[];
   calls: CallSpan[];
-  events: RecordEvent[];
+  events: EventRecord[];
 }
 export interface Trace {
   facts: RuntimeSnapshot;

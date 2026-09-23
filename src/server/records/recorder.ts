@@ -1,10 +1,11 @@
-import type { RuntimeSnapshot, RecordEvent } from '../../shared/records.js';
+import type { RuntimeSnapshot, EventValue } from '../../shared/records.js';
 import type { RuntimeContext } from '../context/context.js';
 import type { ExecutionContext } from '../context/execution.js';
 import type { OperationContext } from '../context/operation.js';
 import type { AttemptContext } from '../context/attempt.js';
 import { Clock } from '../runtime/clock.js';
-import { appendRecordEvent, createExecutionEvents, type ExecutionEvents } from '../runtime/events.js';
+import { EventRecord } from './event/record.js';
+import { EventRecordHelper } from './event/helper.js';
 import { RuntimeErrorHelper } from '../errors/helper.js';
 import { RecordBook } from './container/book.js';
 import { RecordIndex } from './container/index.js';
@@ -21,12 +22,13 @@ type InvocationRecord = ExecutionRecord | OperationRecord | AttemptRecord;
 export class RuntimeRecorder {
   readonly #listeners = new Set<(snapshot: RuntimeSnapshot) => void>();
   readonly #contexts = new RecordIndex<InvocationRecord>((record) => record.contextId);
-  readonly #events = new Map<string, ExecutionEvents>();
+  readonly #starts = new Map<string, number>();
 
   constructor(
     readonly book: RecordBook,
     readonly operationIndex: RecordIndex<OperationRecord>,
     readonly attemptIndex: RecordIndex<AttemptRecord>,
+    readonly eventIndex: RecordIndex<EventRecord>,
     private readonly clock = new Clock(),
     private readonly changed: (snapshot: RuntimeSnapshot) => void = () => {},
   ) {}
@@ -45,7 +47,7 @@ export class RuntimeRecorder {
       settings: context.settings,
     });
     this.#contexts.add(record);
-    this.#events.set(record.id, createExecutionEvents(this.clock));
+    this.#starts.set(record.id, this.clock.tick());
     this.event(record.id, record.id, 'call');
   }
 
@@ -98,8 +100,8 @@ export class RuntimeRecorder {
   /** Checks recording completion only; callers must inspect the Context for the work outcome. */
   hasOutcome(context: ExecutionContext): boolean {
     const record = this.record(context.id);
-    const last = this.events(record.id).events.at(-1);
-    return record.status !== 'running' && last?.callId === record.id && last.type === (record.status === 'succeeded' ? 'return' : 'throw');
+    const last = EventRecordHelper.last(this.book, this.eventIndex, record.id);
+    return record.status !== 'running' && last?.callId === record.id && last.value.type === (record.status === 'succeeded' ? 'return' : 'throw');
   }
 
   snapshot(context: ExecutionContext): RuntimeSnapshot {
@@ -132,17 +134,13 @@ export class RuntimeRecorder {
   }
 
   private snapshotRecord(id: string): RuntimeSnapshot {
-    return ExecutionRecordHelper.snapshot(this.book, this.operationIndex, this.attemptIndex, id, this.events(id).events);
+    return ExecutionRecordHelper.snapshot(this.book, this.operationIndex, this.attemptIndex, id, this.eventIndex);
   }
 
-  private events(id: string): ExecutionEvents {
-    const history = this.#events.get(id);
-    if (!history) throw new Error('Execution events do not exist');
-    return history;
-  }
-
-  private event(executionId: string, callId: string, type: RecordEvent['type']): void {
-    appendRecordEvent(this.events(executionId), this.clock, callId, type);
+  private event(executionId: string, callId: string, type: EventValue['type']): void {
+    const start = this.#starts.get(executionId);
+    if (start === undefined) throw new Error('Execution recording clock does not exist');
+    EventRecordHelper.create(this.book, this.eventIndex, this.clock, start, executionId, callId, type);
     let snapshot: RuntimeSnapshot;
     try {
       snapshot = this.snapshotRecord(executionId);

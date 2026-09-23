@@ -11,7 +11,7 @@ import { TestOperation } from './fixtures/operation.mjs';
 
 const declaration = { operationInstanceId: 'test', operation: 'echo', label: 'echo', source: 'test', caller: 'execution', callee: 'operation' };
 const options = { input: {}, settings: {} };
-const recorder = () => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId));
+const recorder = () => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId));
 
 test('Context keeps live refs, separates undefined outcomes, and fixes only execution configuration', () => {
   const input = { text: 'query' },

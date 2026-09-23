@@ -18,7 +18,7 @@ const begin = (runtime) => {
   lifecycles.set(context, lifecycle);
   return context;
 };
-const createRecorder = (clock = new Clock(), publish) => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), clock, publish);
+const createRecorder = (clock = new Clock(), publish) => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId), clock, publish);
 
 test('Runtime passes live Contexts; records retain separate identities, relations and snapshots', async () => {
   const recorder = createRecorder(),
@@ -128,7 +128,7 @@ test('Injected Clock measures recording boundaries without becoming live Context
     [0, 10, 35, 50],
   );
   assert.deepEqual(
-    facts.events.map((event) => event.type),
+    facts.events.map((event) => event.value.type),
     ['call', 'call', 'return', 'return'],
   );
   assert.equal(during.operations[0].status, 'running');

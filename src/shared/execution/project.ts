@@ -50,18 +50,20 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
   const active = new Set<string>(),
     entered = new Set<string>(),
     ended = new Set<string>();
+  const eventIds = new Set<string>();
   let time = 0;
   for (const [i, event] of f.events.entries()) {
-    if (!event || !bodies.has(event.callId) || event.sequence !== i + 1 || !Number.isFinite(event.offsetMs) || event.offsetMs < time) return fail();
+    if (!event || typeof event.id !== 'string' || !event.id || bodies.has(event.id) || contextIds.has(event.id) || eventIds.has(event.id) || event.executionId !== executionId || !event.value || !['call', 'return', 'throw'].includes(event.value.type) || typeof event.occurredAt !== 'string' || !Number.isFinite(Date.parse(event.occurredAt)) || !bodies.has(event.callId) || event.sequence !== i + 1 || !Number.isFinite(event.offsetMs) || event.offsetMs < time) return fail();
+    eventIds.add(event.id);
     time = event.offsetMs;
     const parentId = parents.get(event.callId);
-    if (event.type === 'call') {
+    if (event.value.type === 'call') {
       if (entered.has(event.callId) || (parentId !== undefined && (!active.has(executionId) || !active.has(parentId))) || (event.callId === executionId && i !== 0)) return fail();
       entered.add(event.callId);
       active.add(event.callId);
     } else {
       const body = bodies.get(event.callId)!;
-      if (!['return', 'throw'].includes(event.type) || !active.has(event.callId) || [...active].some((id) => id !== event.callId && (event.callId === executionId || parents.get(id) === event.callId)) || !Object.hasOwn(body, event.type === 'return' ? 'output' : 'error') || statuses.get(event.callId) !== (event.type === 'return' ? 'succeeded' : 'failed')) return fail();
+      if (!['return', 'throw'].includes(event.value.type) || !active.has(event.callId) || [...active].some((id) => id !== event.callId && (event.callId === executionId || parents.get(id) === event.callId)) || !Object.hasOwn(body, event.value.type === 'return' ? 'output' : 'error') || statuses.get(event.callId) !== (event.value.type === 'return' ? 'succeeded' : 'failed')) return fail();
       active.delete(event.callId);
       ended.add(event.callId);
     }
@@ -76,8 +78,8 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
 export function projectExecution(facts: RuntimeSnapshot): Trace {
   validateSnapshot(facts);
   const execution = facts.execution;
-  const starts = new Map(facts.events.filter((e) => e.type === 'call').map((e) => [e.callId, e]));
-  const ends = new Map(facts.events.filter((e) => e.type !== 'call').map((e) => [e.callId, e]));
+  const starts = new Map(facts.events.filter((e) => e.value.type === 'call').map((e) => [e.callId, e]));
+  const ends = new Map(facts.events.filter((e) => e.value.type !== 'call').map((e) => [e.callId, e]));
   const result = (id: string, body: OperationValue, status: OperationRecord['status']) => {
     const start = starts.get(id)!,
       end = ends.get(id);

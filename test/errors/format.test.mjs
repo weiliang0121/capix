@@ -136,7 +136,7 @@ test('unrecordable error detail and aggregates close the query execution with di
     assert.equal(facts.execution.status, 'failed');
     assert.ok(facts.operations.every((operation) => operation.status !== 'running'));
     assert.ok(facts.attempts.every((attempt) => attempt.status !== 'running'));
-    assert.equal(facts.events.at(-1).type, 'throw');
+    assert.equal(facts.events.at(-1).value.type, 'throw');
     recordable(facts.execution.value.error);
   }
 });
