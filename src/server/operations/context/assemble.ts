@@ -18,7 +18,7 @@ export interface GenerationInput {
 }
 
 export function assembleContext(execution: ExecutionContext, selection: Selection): GenerationInput {
-  const range = execution.transcript;
+  const range = execution.transcriptRange;
   if (!range || range.length === 0) throw new Error('Execution Transcript range is required');
   const messages = selection.historyIndexes.map((index) => {
     if (!Number.isSafeInteger(index) || index < range.start || index >= range.end - 1) throw new RangeError('Selected message is outside the execution history');

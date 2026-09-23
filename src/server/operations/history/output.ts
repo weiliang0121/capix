@@ -17,7 +17,7 @@ export const selectionOutputContract = {
   },
   accept(value: unknown, _input: Readonly<Message>, execution: ExecutionContext): Selection {
     checkSelection(value);
-    const range = execution.transcript;
+    const range = execution.transcriptRange;
     if (!range) throw new Error('Execution Transcript range is required');
     checkHistoryReferences(value, range.start, range.end - 1);
     return orderSelection(value);

@@ -64,7 +64,7 @@ test('one initialized world preserves messages and records while reusing its exe
     assert.equal(snapshot.events[0].sequence, 1);
     assert.equal(snapshot.events.at(-1).callId, snapshot.execution.id);
   }
-  assert.equal(snapshots[0].execution.value.transcript.end, 2);
+  assert.equal(snapshots[0].execution.value.transcriptRange.end, 2);
   assert.equal(snapshots[0].execution.value.input.content, 'first');
   assert.deepEqual(
     streamed.map((values) => new Set(values.map((snapshot) => snapshot.execution.id)).size),
@@ -157,13 +157,13 @@ test('configuration updates and Transcript appends take effect only in the next 
     ['A', 'B'],
   );
   assert.deepEqual(
-    snapshots.map((snapshot) => snapshot.execution.value.transcript.end),
+    snapshots.map((snapshot) => snapshot.execution.value.transcriptRange.end),
     [1, 4],
   );
   assert.equal(JSON.parse(requests[0].messages[1].content).history.length, 0);
   assert.equal(JSON.parse(requests[2].messages[1].content).history.length, 3);
   for (const snapshot of snapshots) {
     assert.ok(snapshot.operations.every((record) => record.executionId === snapshot.execution.id));
-    assert.ok([...snapshot.operations, ...snapshot.attempts].every((record) => !Object.hasOwn(record.value, 'settings') && !Object.hasOwn(record.value, 'transcript')));
+    assert.ok([...snapshot.operations, ...snapshot.attempts].every((record) => !Object.hasOwn(record.value, 'settings') && !Object.hasOwn(record.value, 'transcriptRange')));
   }
 });

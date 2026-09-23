@@ -20,13 +20,13 @@ test('input is a plain immutable message; the execution range fixes visibility a
   transcript.append({ role: 'user', content: 'later query' });
   assert.deepEqual(input, { role: 'user', content: '她负责什么' });
   assert.equal(Object.hasOwn(input, 'transcript'), false);
-  assert.equal(context.transcript.end, 2);
-  assert.equal(context.transcript.read(1), input);
-  assert.equal(context.transcript.read(0).content, '林岚负责海盐项目');
+  assert.equal(context.transcriptRange.end, 2);
+  assert.equal(context.transcriptRange.read(1), input);
+  assert.equal(context.transcriptRange.read(0).content, '林岚负责海盐项目');
   assert.throws(() => {
     input.content = 'mutated';
   }, TypeError);
-  for (const index of [2, -1, 0.5]) assert.throws(() => context.transcript.read(index), RangeError);
+  for (const index of [2, -1, 0.5]) assert.throws(() => context.transcriptRange.read(index), RangeError);
   for (const index of [1, 2])
     assert.throws(
       () => selectionOutputContract.accept({ historyIndexes: [index] }, input, context),
@@ -63,11 +63,11 @@ test('only the execution record holds the range; calls consume selected content 
   assert.equal(facts.events.length, 26);
   assert.deepEqual(facts.execution.value.input, input);
   assert.notEqual(facts.execution.value.input, input);
-  assert.equal(facts.execution.value.transcript.end, 2);
-  assert.equal(facts.execution.value.transcript.transcript, transcript);
-  assert.ok(snapshots.every((snapshot) => snapshot.execution.value.transcript === facts.execution.value.transcript));
+  assert.equal(facts.execution.value.transcriptRange.end, 2);
+  assert.equal(facts.execution.value.transcriptRange.transcript, transcript);
+  assert.ok(snapshots.every((snapshot) => snapshot.execution.value.transcriptRange === facts.execution.value.transcriptRange));
   for (const record of [...facts.operations, ...facts.attempts]) {
-    assert.equal(Object.hasOwn(record.value, 'transcript'), false);
+    assert.equal(Object.hasOwn(record.value, 'transcriptRange'), false);
     assert.equal(Object.hasOwn(record.value, 'settings'), false);
   }
   const assembled = facts.operations.find((record) => record.operation === 'assemble').value.output;
@@ -77,24 +77,24 @@ test('only the execution record holds the range; calls consume selected content 
   const browser = JSON.parse(JSON.stringify(facts, observeTranscript));
   validateSnapshot(browser);
   assert.deepEqual(browser.execution.value.input, input);
-  assert.equal(browser.execution.value.transcript.messages.length, 2);
+  assert.equal(browser.execution.value.transcriptRange.messages.length, 2);
   assert.equal(projectExecution(browser).result.content, '她负责海盐项目');
 });
 
 test('record snapshots copy input/configuration values and retain the fixed range reference', () => {
   const input = createInput({ query: 'query', history: [{ role: 'assistant', content: 'prior' }] });
   const context = contextFor(input, settings);
-  const mutable = { input, settings: { ...settings }, transcript: context.transcript };
+  const mutable = { input, settings: { ...settings }, transcriptRange: context.transcriptRange };
   const recorded = snapshotValue(mutable);
   assert.notEqual(recorded.input, input);
   assert.notEqual(recorded.settings, mutable.settings);
-  assert.equal(recorded.transcript, context.transcript);
+  assert.equal(recorded.transcriptRange, context.transcriptRange);
   mutable.settings.model = 'changed';
   transcriptFor(input).append({ role: 'user', content: 'later' });
   assert.equal(recorded.settings.model, 'test');
-  assert.equal(recorded.transcript.end, 2);
+  assert.equal(recorded.transcriptRange.end, 2);
   const record = new ExecutionRecord('context', { ...mutable, startedAt: 'now' });
-  assert.equal(record.value.transcript, context.transcript);
+  assert.equal(record.value.transcriptRange, context.transcriptRange);
   const circular = {};
   circular.self = circular;
   assert.throws(() => snapshotValue(circular), /cyclic/);

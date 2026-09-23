@@ -45,7 +45,7 @@ export class RuntimeRecorder {
     const record = ExecutionRecordHelper.create(this.book, this.clock, context.id, {
       input: context.input,
       settings: context.settings,
-      ...(context.transcript ? { transcript: context.transcript } : {}),
+      ...(context.transcriptRange ? { transcriptRange: context.transcriptRange } : {}),
     });
     this.#contexts.add(record);
     this.#starts.set(record.id, this.clock.tick());

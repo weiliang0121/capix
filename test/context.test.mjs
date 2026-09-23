@@ -23,12 +23,12 @@ test('Context keeps live refs, separates undefined outcomes, and fixes execution
   assert.equal(context.settings.model, 'original');
   assert.ok(Object.isFrozen(context.settings));
   assert.equal(context.input, input);
-  assert.equal(context.transcript.transcript, transcript);
-  assert.equal(context.transcript.end, 0);
+  assert.equal(context.transcriptRange.transcript, transcript);
+  assert.equal(context.transcriptRange.end, 0);
   assert.equal(context.signal, controller.signal);
   transcript.append({ role: 'user', content: 'new' });
-  assert.equal(context.transcript.end, 0);
-  assert.throws(() => context.transcript.read(0), RangeError);
+  assert.equal(context.transcriptRange.end, 0);
+  assert.throws(() => context.transcriptRange.read(0), RangeError);
   controller.abort();
   assert.equal(context.signal.aborted, true);
   const initial = context.state;

@@ -26,7 +26,7 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
     const selectionOutput = await this.selection.call(context, selectionInput);
     const assemblyOutput = await this.assembly.call(context, selectionOutput);
     const generationOutput = await this.generation.call(context, assemblyOutput);
-    context.transcript!.transcript.append({ role: 'assistant', content: generationOutput.content });
+    context.transcriptRange!.transcript.append({ role: 'assistant', content: generationOutput.content });
     return generationOutput;
   }
 }
