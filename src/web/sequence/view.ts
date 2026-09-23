@@ -20,7 +20,7 @@ function resultLabel(call: CallSpan): string {
     if ('historyIndexes' in output) return JSON.stringify((output as { historyIndexes: unknown }).historyIndexes);
     if ('finishReason' in output) return `模型返回 · ${(output as { finishReason: string }).finishReason}`;
     if ('kind' in output) return `${(output as { kind: string }).kind}`;
-    if ('query' in output && 'messages' in output && Array.isArray(output.messages)) return `当前消息 + ${output.messages.length} 条已选消息`;
+    if ('message' in output && 'selectedMessages' in output && Array.isArray(output.selectedMessages)) return `当前消息 + ${output.selectedMessages.length} 条已选消息`;
     if ('model' in output && 'messages' in output && Array.isArray(output.messages)) return '完整模型请求';
   }
   return '返回结果';

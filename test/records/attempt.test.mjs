@@ -19,7 +19,7 @@ function setup() {
 
 test('each phase invocation has its own attempt; an unsuccessful attempt does not end its operation', async () => {
   const { runtime, executionLifecycle, execution, operationLifecycle, operation, definition } = setup();
-  const input = { raw: { text: 'original' }, input: {} };
+  const input = { text: 'original' };
   const failure = new Error('first processing failed');
   await assert.rejects(
     invoke(runtime.attempt(operation, definition, input), () => {
@@ -47,9 +47,9 @@ test('each phase invocation has its own attempt; an unsuccessful attempt does no
     ['failed', 'running'],
   );
   assert.notEqual(during.attempts[0].id, during.attempts[1].id);
-  input.raw.text = 'changed';
-  assert.equal(second.input.raw.text, 'changed');
-  assert.equal(secondRecord.value.input.raw.text, 'original');
+  input.text = 'changed';
+  assert.equal(second.input.text, 'changed');
+  assert.equal(secondRecord.value.input.text, 'original');
   const output = { accepted: true };
   secondLifecycle.succeed(second, output);
   operationLifecycle.succeed(operation, output);

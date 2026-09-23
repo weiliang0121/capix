@@ -63,10 +63,10 @@ test('ObserverExecution returns answers without a recorder and uses the configur
   };
   const execution = new ObserverExecution(new Runtime(), provider);
   for (const model of ['one', 'two']) {
-    const query = createInput({ query: model, history: [] });
-    const answer = await execution.call(query, { settings: { ...settings, model }, transcript: transcriptFor(query) });
+    const message = createInput({ content: model, history: [] });
+    const answer = await execution.call(message, { settings: { ...settings, model }, transcript: transcriptFor(message) });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });
-    assert.equal(transcriptFor(query).current('assistant').content, 'done');
+    assert.equal(transcriptFor(message).current('assistant').content, 'done');
   }
   assert.deepEqual(
     requests.map((request) => request.model),

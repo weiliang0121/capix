@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Transcript } from '../../dist/server/transcript/transcript.js';
 
-test('history accumulates successive turns without changing an earlier query snapshot', () => {
+test('history accumulates successive turns without changing an earlier message snapshot', () => {
   const history = new Transcript();
   history.append({ role: 'user', content: '天气怎么样？' }, { role: 'assistant', content: '哪个城市？' });
   const previous = history.snapshot();

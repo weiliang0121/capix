@@ -30,7 +30,9 @@ Transcript 只增不改删，包含第一条和当前消息。接纳时检查角
 
 ## 操作、运行与记录
 
-`Operation<I,P,R,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。BCA 实现留在具体子类：ModelOperation 处理模型调用，AssembleContext 处理消息引用组装。Operation 实例只持有定义和依赖，不保存当前输入、上下文或最近结果。
+`Operation<I,BeforeOutput,CommitOutput,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。BCA 实现留在具体子类：ModelOperation 处理模型调用，AssembleContext 处理选中消息组装。Operation 实例只持有定义和依赖，不保存当前输入、上下文或最近结果。
+
+BCA 统一为阶段 input 与对应 IO 类型的 AttemptContext；before 输出传给 commit，commit 输出直接传给 after，不组合 `{ raw, input }`。需要操作原始输入时通过 Runtime.getOperationContext 查询，执行配置与消息范围通过 getExecutionContext 查询。阶段内部辅助函数不创建新 scope；不引入权限控制。
 
 `Execution<I,O>` 是抽象类，call 建立 ExecutionContext 并调用具体 execute。ObserverExecution 用顺序代码组合三个 Operation，返回 generationOutput；它不创建 Recorder、Book 或 HTTP 响应。构造时装配三个固定操作；BCA 显式接收自己的 AttemptContext，通过 Runtime.getExecutionContext 取得执行配置和取消信号。实例不保存本次调用状态。
 
@@ -49,7 +51,7 @@ const generationOutput = await environment.execution.call(input, {
 
 可调用实例与 Context 为 1:N；开启记录时，每个 E/O/A Context 对应一条同层 Record。复用 Operation 的 operationInstanceId 保持不变，每次调用的 Context ID 与 Record ID 独立产生。记录容器保留所有调用，而非被新请求替换。
 
-GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer 运行实体。浏览器消费同一契约，所以其数据声明位于 shared/operations/generation.ts。query 仅保留为选择、模型装载里的内容字段，不再决定入口或执行类的归属。
+GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer 运行实体。浏览器消费同一契约，所以其数据声明位于 shared/operations/generation.ts。GenerationInput 使用 message 与 selectedMessages；模型装载中的 message 保留 role/content。
 
 | 对象             | 职责                                                                            |
 | ---------------- | ------------------------------------------------------------------------------- |

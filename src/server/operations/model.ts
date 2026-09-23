@@ -32,24 +32,26 @@ export class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput
     super(runtime, model);
   }
 
-  before(input: I, context: AttemptContext): ModelRequest {
+  before(input: I, context: AttemptContext<I, ModelRequest>): ModelRequest {
     const execution = this.runtime.getExecutionContext(context);
     const request = loadRequest(this.model.prepare(input, execution), this.model.task, this.model.output.schema, execution.settings);
     checkCapacity(request, execution.settings);
     return request;
   }
 
-  commit(request: ModelRequest, context: AttemptContext): Promise<ModelOutput> {
+  commit(request: ModelRequest, context: AttemptContext<ModelRequest, ModelOutput>): Promise<ModelOutput> {
     const execution = this.runtime.getExecutionContext(context);
     const { settings, signal } = execution;
     const { provider } = this.dependencies;
     return provider.invoke(request, this.model.purpose, AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]));
   }
 
-  after(raw: ModelOutput, input: I, context: AttemptContext): O {
-    checkCompletion(raw);
-    const value = parseContent(raw.content);
-    return this.model.output.accept(value, input, this.runtime.getExecutionContext(context));
+  after(input: ModelOutput, context: AttemptContext<ModelOutput, O>): O {
+    checkCompletion(input);
+    const value = parseContent(input.content);
+    const operation = this.runtime.getOperationContext(context);
+    const execution = this.runtime.getExecutionContext(context);
+    return this.model.output.accept(value, operation.input as I, execution);
   }
 }
 

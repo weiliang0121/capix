@@ -13,18 +13,18 @@ export const assembleContextDefinition = {
 } as const satisfies OperationDefinition;
 
 export interface GenerationInput {
-  readonly query: Readonly<Message>;
-  readonly messages: readonly { index: number; message: Readonly<Message> }[];
+  readonly message: Readonly<Message>;
+  readonly selectedMessages: readonly { index: number; message: Readonly<Message> }[];
 }
 
 export function assembleContext(execution: ExecutionContext, selection: Selection): GenerationInput {
   const range = execution.transcriptRange;
   if (!range || range.length === 0) throw new Error('Execution Transcript range is required');
-  const messages = selection.historyIndexes.map((index) => {
+  const selectedMessages = selection.historyIndexes.map((index) => {
     if (!Number.isSafeInteger(index) || index < range.start || index >= range.end - 1) throw new RangeError('Selected message is outside the execution history');
     return Object.freeze({ index, message: range.read(index) });
   });
-  return Object.freeze({ query: execution.input as Readonly<Message>, messages: Object.freeze(messages) });
+  return Object.freeze({ message: execution.input as Readonly<Message>, selectedMessages: Object.freeze(selectedMessages) });
 }
 
 export class AssembleContext extends Operation<Selection, Selection, GenerationInput, GenerationInput> {
@@ -34,10 +34,10 @@ export class AssembleContext extends Operation<Selection, Selection, GenerationI
   before(input: Selection): Selection {
     return input;
   }
-  commit(input: Selection, context: AttemptContext): GenerationInput {
+  commit(input: Selection, context: AttemptContext<Selection, GenerationInput>): GenerationInput {
     return assembleContext(this.runtime.getExecutionContext(context), input);
   }
-  after(output: GenerationInput): GenerationInput {
-    return output;
+  after(input: GenerationInput): GenerationInput {
+    return input;
   }
 }

@@ -13,7 +13,7 @@ import { projectExecution, validateSnapshot } from '../dist/shared/execution/pro
 import { RuntimeError } from '../dist/server/errors/error.js';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
-const input = { query: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] };
+const input = { content: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] };
 const definition = { name: 'echo', label: 'echo', source: 'test', phaseSource: 'test' };
 const echo = { before: identity, commit: identity, after: identity };
 const output = (content) => ({
@@ -61,7 +61,7 @@ test('Book stores any record by identity without creating invocation boundaries'
   assert.equal([...book.values()].length, 1);
 });
 
-test('Paired record operations create, query and write results independently of boundary bookkeeping', () => {
+test('Paired record operations create, find and write results independently of boundary bookkeeping', () => {
   const book = new RecordBook();
   const clock = new Clock();
   const index = new RecordIndex((record) => record.executionId);
@@ -186,7 +186,7 @@ test('one node overlaps calls within and across executions without mixing input 
         pending.set(value, resolve);
         if (pending.size === 3) ready();
       }),
-    after: (result, original) => ({ result, original }),
+    after: (result, context) => ({ result, original: runtime.getOperationContext(context).input }),
   });
   const first = node.call(a, 'a1'),
     second = node.call(b, 'b'),
@@ -245,7 +245,7 @@ test('Paired operations reject foreign parents, duplicate endings and ending bef
   assert.equal(child.status, 'succeeded');
 });
 
-test('query execution observes execution, operations and boundaries from the same records', async () => {
+test('Observer execution observes execution, operations and boundaries from the same records', async () => {
   const facts = await execute();
   validateSnapshot(facts);
   assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations']);
@@ -253,10 +253,16 @@ test('query execution observes execution, operations and boundaries from the sam
   assert.equal(facts.attempts.length, 9);
   for (const operation of facts.operations) {
     assert.equal(Object.hasOwn(operation, 'phase'), false);
+    const attempts = facts.attempts.filter((attempt) => attempt.operationId === operation.id);
     assert.deepEqual(
-      facts.attempts.filter((attempt) => attempt.operationId === operation.id).map((attempt) => attempt.phase),
+      attempts.map((attempt) => attempt.phase),
       ['before', 'commit', 'after'],
     );
+    const [before, commit, after] = attempts;
+    assert.deepEqual(before.value.input, operation.value.input);
+    assert.deepEqual(commit.value.input, before.value.output);
+    assert.deepEqual(after.value.input, commit.value.output);
+    assert.deepEqual(operation.value.output, after.value.output);
   }
   const select = facts.operations.find((op) => op.operation === 'selection');
   const assemble = facts.operations.find((op) => op.operation === 'assemble');
@@ -282,7 +288,7 @@ test('After failure preserves raw output, records no accepted result, and propag
   const commit = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.phase === 'commit');
   const after = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.phase === 'after');
   assert.equal(commit.value.output.content, 'broken-json');
-  assert.equal(after.value.input.raw.content, 'broken-json');
+  assert.equal(after.value.input.content, 'broken-json');
   assert.equal(after.value.output, undefined);
   assert.equal(answer.value.output, undefined);
   assert.equal(facts.execution.value.error.code, 'INVALID_JSON');

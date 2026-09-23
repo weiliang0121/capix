@@ -6,7 +6,7 @@ import { renderSequence } from './sequence/view.js';
 function el<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
 }
-const query = el<HTMLTextAreaElement>('query');
+const messageInput = el<HTMLTextAreaElement>('messageInput');
 const historyEditor = el<HTMLTextAreaElement>('history');
 const budget = el<HTMLInputElement>('budget');
 const diagram = el('sequence');
@@ -222,10 +222,10 @@ async function execute(payload: ExecutionRequest & { contextBudget: number }) {
 }
 el('run').addEventListener('click', () => {
   try {
-    if (!query.value.trim()) throw new Error('请先填写当前输入。');
+    if (!messageInput.value.trim()) throw new Error('请先填写当前输入。');
     const contextBudget = Number(budget.value);
     if (!Number.isSafeInteger(contextBudget) || contextBudget < 256 || contextBudget > 1000000) throw new Error('容量预算需要是 256–1000000 的整数。');
-    void execute({ messages: [...readMessageDraft().snapshot(), { role: 'user', content: query.value }], contextBudget });
+    void execute({ messages: [...readMessageDraft().snapshot(), { role: 'user', content: messageInput.value }], contextBudget });
   } catch (error) {
     notice((error as Error).message);
   }
@@ -239,14 +239,14 @@ el('sample').addEventListener('click', () => {
     null,
     2,
   );
-  query.value = '上海';
+  messageInput.value = '上海';
   el<HTMLDetailsElement>('history-editor').open = true;
   notice('样例将在下一次调用时追加，不替换已有消息。');
 });
 historyEditor.addEventListener('change', renderHistory);
 el('continue').addEventListener('click', () => {
-  query.value = '';
-  query.focus();
+  messageInput.value = '';
+  messageInput.focus();
   notice('消息已由服务端保留；填写下一条输入即可。');
 });
 el('inspect-close').addEventListener('click', () => inspector.close());

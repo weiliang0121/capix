@@ -14,8 +14,8 @@ test('one initialized world preserves messages and records while reusing its exe
     async invoke(request, purpose, signal) {
       requests.push({ request, signal });
       const input = JSON.parse(request.messages[1].content);
-      if (input.query === 'failure' && purpose === 'selection') throw new Error('expected failure');
-      return raw(purpose === 'selection' ? { historyIndexes: input.history.map((message) => message.index) } : { kind: 'answer', content: `reply ${input.query}` });
+      if (input.message.content === 'failure' && purpose === 'selection') throw new Error('expected failure');
+      return raw(purpose === 'selection' ? { historyIndexes: input.history.map((message) => message.index) } : { kind: 'answer', content: `reply ${input.message.content}` });
     },
   };
   const transcript = new Transcript([{ role: 'user', content: 'initial' }]);

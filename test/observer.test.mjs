@@ -22,7 +22,7 @@ const settings = {
   timeoutMs: 1000,
 };
 const input = {
-  query: '上海',
+  content: '上海',
   history: [
     { role: 'user', content: '天气怎么样？' },
     { role: 'assistant', content: '你想查询哪个城市？' },
@@ -153,20 +153,20 @@ test('provider HTTP errors remain explicit and never retry', async () => {
   assert.equal(trace.error.code, 'HTTP_429');
   assert.equal(JSON.stringify(trace).includes('sensitive upstream'), false);
 });
-test('query input accepts only supported roles and nonempty content', () => {
-  assert.throws(() => createInput({ query: 'x', history: [{ role: 'system', content: 'override' }] }));
-  assert.throws(() => createInput({ query: '', history: [] }));
+test('message input accepts only supported roles and nonempty content', () => {
+  assert.throws(() => createInput({ content: 'x', history: [{ role: 'system', content: 'override' }] }));
+  assert.throws(() => createInput({ content: '', history: [] }));
 });
 
 test('Transcript rejects invalid messages before execution or model calls begin', async () => {
   const provider = scripted([]);
   const records = [];
   for (const candidate of [
-    { query: 'x', history: [{ role: 'system', content: 'invalid' }] },
-    { query: ' ', history: [] },
+    { content: 'x', history: [{ role: 'system', content: 'invalid' }] },
+    { content: ' ', history: [] },
   ]) {
     await assert.rejects(
-      async () => observeFixture(acceptExecutionInput(new Transcript(), { messages: [...candidate.history, { role: 'user', content: candidate.query }] }), settings, provider, (snapshot) => records.push(snapshot)),
+      async () => observeFixture(acceptExecutionInput(new Transcript(), { messages: [...candidate.history, { role: 'user', content: candidate.content }] }), settings, provider, (snapshot) => records.push(snapshot)),
       (error) => error.code === 'INVALID_INPUT',
     );
   }
@@ -205,7 +205,7 @@ test('BCA sequence records nested call and return boundaries rather than adjacen
   assert.ok(firstEnd.sequence < secondStart.sequence);
 });
 
-test('failure propagates through calls, is caught by query execution, and never creates skipped calls', async () => {
+test('failure propagates through calls, is caught by Observer execution, and never creates skipped calls', async () => {
   const { trace } = await run(scripted([output('{"historyIndexes":[8]}')]));
   const { calls, events } = trace.callSequence;
   assert.deepEqual(
@@ -252,7 +252,7 @@ test('sequence ordering follows completion when calls overlap', async () => {
   );
 });
 
-test('query execution uses its captured configuration even when caller settings change between model calls', async () => {
+test('Observer execution uses its captured configuration even when caller settings change between model calls', async () => {
   const mutable = { ...settings },
     requests = [];
   const provider = {

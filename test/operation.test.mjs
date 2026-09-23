@@ -48,7 +48,7 @@ test('answer acceptance rejects coerced kinds and preserves accepted text', () =
 
 test('selection acceptance separates invalid shape from missing references and orders a copy', () => {
   const input = {
-    query: 'x',
+    content: 'x',
     history: [
       { role: 'user', content: 'a' },
       { role: 'assistant', content: 'b' },
@@ -71,25 +71,31 @@ test('selection acceptance separates invalid shape from missing references and o
   );
 });
 
-test('BCA passes values by reference, awaits each boundary, and keeps original input explicit', async () => {
-  const input = { query: 'x' },
-    prepared = { request: 'y' },
+test('BCA passes values by reference, awaits each boundary, and resolves original input from the owning operation', async () => {
+  const input = { content: 'x' },
+    beforeOutput = { request: 'y' },
     result = { raw: 'z' };
   const order = [];
   const op = {
-    async before(value) {
+    async before(value, context) {
+      assert.equal(context.input, value);
+      assert.equal(context.phase, 'before');
       assert.equal(value, input);
       order.push('before');
-      return prepared;
+      return beforeOutput;
     },
-    async commit(value) {
-      assert.equal(value, prepared);
+    async commit(value, context) {
+      assert.equal(context.input, value);
+      assert.equal(context.phase, 'commit');
+      assert.equal(value, beforeOutput);
       order.push('commit');
       return result;
     },
-    after(value, original) {
+    after(value, context) {
+      assert.equal(context.input, value);
+      assert.equal(context.phase, 'after');
       assert.equal(value, result);
-      assert.equal(original, input);
+      assert.equal(runtime.getOperationContext(context).input, input);
       order.push('after');
       return 'accepted';
     },
@@ -116,13 +122,13 @@ test('one selection operation can overlap calls without mixing their history bou
   const pending = new Map();
   const provider = {
     invoke(request) {
-      const { query } = JSON.parse(request.messages[1].content);
-      return new Promise((resolve) => pending.set(query, resolve));
+      const { message } = JSON.parse(request.messages[1].content);
+      return new Promise((resolve) => pending.set(message.content, resolve));
     },
   };
   const op = createSelectHistory(runtime, { provider });
-  const first = { query: 'one', history: [{ role: 'user', content: 'a' }] };
-  const second = { query: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
+  const first = { content: 'one', history: [{ role: 'user', content: 'a' }] };
+  const second = { content: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
   const original = structuredClone([first, second]);
   const short = call(op, createInput(first));
   const shortFailure = assert.rejects(short, (error) => error.code === 'INDEX_OUT_OF_RANGE');
@@ -137,8 +143,8 @@ test('one selection operation can overlap calls without mixing their history bou
 });
 
 test('assembly operation consumes explicit sources and needs no recorder', async () => {
-  const query = createInput({
-    query: 'x',
+  const message = createInput({
+    content: 'x',
     history: [
       { role: 'user', content: 'kept' },
       { role: 'assistant', content: 'excluded' },
@@ -147,13 +153,13 @@ test('assembly operation consumes explicit sources and needs no recorder', async
   const input = { historyIndexes: [0] };
   const operation = new AssembleContext(runtime);
   assert.equal(operation.before(input), input);
-  const result = await invoke(runtime.execution({ input: query, settings, transcript: transcriptFor(query) }), (context) => operation.call(context, input));
-  assert.equal(result.query, query);
-  assert.equal(Object.hasOwn(result.messages[0], 'transcript'), false);
-  assert.equal(result.messages[0].message, transcriptFor(query).get(0));
+  const result = await invoke(runtime.execution({ input: message, settings, transcript: transcriptFor(message) }), (context) => operation.call(context, input));
+  assert.equal(result.message, message);
+  assert.equal(Object.hasOwn(result.selectedMessages[0], 'transcript'), false);
+  assert.equal(result.selectedMessages[0].message, transcriptFor(message).get(0));
   assert.deepEqual(
-    result.messages.map((ref) => ref.index),
+    result.selectedMessages.map((ref) => ref.index),
     [0],
   );
-  assert.equal(result.messages[0].message.content, 'kept');
+  assert.equal(result.selectedMessages[0].message.content, 'kept');
 });

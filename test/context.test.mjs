@@ -14,7 +14,7 @@ const options = { input: {}, settings: {} };
 const recorder = () => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId));
 
 test('Context keeps live refs, separates undefined outcomes, and fixes execution configuration and Transcript visibility', () => {
-  const input = { text: 'query' },
+  const input = { text: 'hello' },
     settings = { model: 'original', temperature: 0 },
     transcript = new Transcript([]),
     controller = new AbortController();
@@ -47,8 +47,8 @@ test('Context keeps live refs, separates undefined outcomes, and fixes execution
 test('Operation executes full BCA without records and preserves non-JSON intermediate and output refs', async () => {
   const runtime = new Runtime(),
     seen = [],
-    input = new Map([['query', 'hello']]);
-  const fn = () => input.get('query');
+    input = new Map([['content', 'hello']]);
+  const fn = () => input.get('content');
   const node = new TestOperation(
     runtime,
     { name: 'echo', label: 'echo', source: 'test', phaseSource: 'test' },
@@ -63,9 +63,10 @@ test('Operation executes full BCA without records and preserves non-JSON interme
         assert.equal(value, fn);
         return new Set([value()]);
       },
-      after(value, original) {
+      after(value, context) {
         seen.push('after');
-        assert.equal(original, input);
+        assert.equal(runtime.getOperationContext(context).input, input);
+        assert.equal(context.input, value);
         return value;
       },
     },

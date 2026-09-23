@@ -11,13 +11,13 @@ const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, t
 const reply = (value) => ({ id: 'fixture', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
 
 test('input is a plain immutable message; the execution range fixes visibility as Transcript grows', () => {
-  const original = { query: '她负责什么', history: [{ role: 'user', content: '林岚负责海盐项目' }] };
+  const original = { content: '她负责什么', history: [{ role: 'user', content: '林岚负责海盐项目' }] };
   const input = createInput(original),
     context = contextFor(input),
     transcript = transcriptFor(input);
-  original.query = 'changed';
+  original.content = 'changed';
   original.history[0].content = 'changed';
-  transcript.append({ role: 'user', content: 'later query' });
+  transcript.append({ role: 'user', content: 'later message' });
   assert.deepEqual(input, { role: 'user', content: '她负责什么' });
   assert.equal(Object.hasOwn(input, 'transcript'), false);
   assert.equal(context.transcriptRange.end, 2);
@@ -35,7 +35,7 @@ test('input is a plain immutable message; the execution range fixes visibility a
 });
 
 test('only the execution record holds the range; calls consume selected content and ignore later appends', async () => {
-  const input = createInput({ query: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] });
+  const input = createInput({ content: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] });
   const transcript = transcriptFor(input),
     requests = [],
     snapshots = [];
@@ -46,7 +46,7 @@ test('only the execution record holds the range; calls consume selected content 
       async invoke(request) {
         requests.push(request);
         if (requests.length === 1) {
-          transcript.append({ role: 'user', content: 'later unrelated query' });
+          transcript.append({ role: 'user', content: 'later unrelated message' });
           return reply({ historyIndexes: [0] });
         }
         return reply({ kind: 'answer', content: '她负责海盐项目' });
@@ -71,9 +71,9 @@ test('only the execution record holds the range; calls consume selected content 
     assert.equal(Object.hasOwn(record.value, 'settings'), false);
   }
   const assembled = facts.operations.find((record) => record.operation === 'assemble').value.output;
-  assert.deepEqual(assembled.query, input);
-  assert.deepEqual(assembled.messages, [{ index: 0, message: transcript.get(0) }]);
-  assert.deepEqual(JSON.parse(requests[1].messages[1].content), { query: '她呢', history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });
+  assert.deepEqual(assembled.message, input);
+  assert.deepEqual(assembled.selectedMessages, [{ index: 0, message: transcript.get(0) }]);
+  assert.deepEqual(JSON.parse(requests[1].messages[1].content), { message: input, history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });
   const browser = JSON.parse(JSON.stringify(facts, observeTranscript));
   validateSnapshot(browser);
   assert.deepEqual(browser.execution.value.input, input);
@@ -82,7 +82,7 @@ test('only the execution record holds the range; calls consume selected content 
 });
 
 test('record snapshots copy input/configuration values and retain the fixed range reference', () => {
-  const input = createInput({ query: 'query', history: [{ role: 'assistant', content: 'prior' }] });
+  const input = createInput({ content: 'current message', history: [{ role: 'assistant', content: 'prior' }] });
   const context = contextFor(input, settings);
   const mutable = { input, settings: { ...settings }, transcriptRange: context.transcriptRange };
   const recorded = snapshotValue(mutable);

@@ -122,9 +122,9 @@ test('one conversion shares its budget across detail, cause and members, then re
   assert.notEqual(repeated.detail.first, repeated.detail.second);
 });
 
-test('unrecordable error detail and aggregates close the query execution with diagnostic records', async () => {
+test('unrecordable error detail and aggregates close the Observer execution with diagnostic records', async () => {
   const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
-  const input = { query: 'test', history: [] };
+  const input = { content: 'test', history: [] };
   const work = new RuntimeError('WORK', 'failed', { fn: () => {}, map: new Map([['x', 1]]) });
   for (const failure of [work, new AggregateError([work, new TypeError('registration')], 'combined', { cause: work })]) {
     const facts = await observeFixture(createInput(input), settings, {

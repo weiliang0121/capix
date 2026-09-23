@@ -8,9 +8,9 @@ const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);
 export const contextFor = (input, settings = {}) => new ExecutionContext(input, { settings, transcript: transcriptFor(input) });
 
-export function createInput({ query, history }) {
+export function createInput({ content, history }) {
   const transcript = new Transcript(history);
-  const input = acceptExecutionInput(transcript, { messages: [{ role: 'user', content: query }] });
+  const input = acceptExecutionInput(transcript, { messages: [{ role: 'user', content }] });
   transcripts.set(input, transcript);
   return input;
 }

@@ -15,7 +15,7 @@ export interface OperationDefinition {
 }
 
 /** Callable BCA implementation. Each call owns its Context and intermediate values. */
-export abstract class Operation<I, P, R, O> {
+export abstract class Operation<I, BeforeOutput, CommitOutput, O> {
   readonly id = randomUUID();
   readonly definition: Readonly<OperationDefinition>;
   constructor(
@@ -25,9 +25,9 @@ export abstract class Operation<I, P, R, O> {
     this.definition = Object.freeze({ ...definition });
   }
 
-  abstract before(input: I, context: AttemptContext): Result<P>;
-  abstract commit(prepared: P, context: AttemptContext): Result<R>;
-  abstract after(raw: R, input: I, context: AttemptContext): Result<O>;
+  abstract before(input: I, context: AttemptContext<I, BeforeOutput>): Result<BeforeOutput>;
+  abstract commit(input: BeforeOutput, context: AttemptContext<BeforeOutput, CommitOutput>): Result<CommitOutput>;
+  abstract after(input: CommitOutput, context: AttemptContext<CommitOutput, O>): Result<O>;
 
   call(execution: ExecutionContext, input: I, parent?: OperationContext): Promise<O> {
     return invoke(
@@ -49,13 +49,12 @@ export abstract class Operation<I, P, R, O> {
   }
 
   private async execute(context: OperationContext<I, O>): Promise<O> {
-    const input = context.input;
-    const prepared = await this.phase(context, 'before', input, (value, attempt) => this.before(value, attempt));
-    const raw = await this.phase(context, 'commit', prepared, (value, attempt) => this.commit(value, attempt));
-    return this.phase(context, 'after', { raw, input }, (value, attempt) => this.after(value.raw, value.input, attempt));
+    const beforeOutput = await this.phase<I, BeforeOutput>(context, 'before', context.input, (input, attempt) => this.before(input, attempt));
+    const commitOutput = await this.phase<BeforeOutput, CommitOutput>(context, 'commit', beforeOutput, (input, attempt) => this.commit(input, attempt));
+    return this.phase<CommitOutput, O>(context, 'after', commitOutput, (input, attempt) => this.after(input, attempt));
   }
 
-  private phase<V, T>(context: OperationContext, phase: 'before' | 'commit' | 'after', input: V, execute: (value: V, context: AttemptContext) => Result<T>): Promise<T> {
+  private phase<V, T>(context: OperationContext, phase: 'before' | 'commit' | 'after', input: V, execute: (value: V, context: AttemptContext<V, T>) => Result<T>): Promise<T> {
     return invoke(
       this.runtime.attempt<V, T>(
         context,
