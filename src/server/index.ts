@@ -4,10 +4,11 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isObject } from './value/object.js';
 import { observeTranscript } from './transcript/observe.js';
-import { acceptQuery } from './query/input.js';
+import { acceptExecutionInput } from './observer/accept.js';
+import { initializeObserver } from './observer/environment.js';
 import { RuntimeError } from './errors/error.js';
 import { DeepSeekProvider } from './provider.js';
-import { runQuery } from './query/run.js';
+import { observeExecution } from './observer/observe.js';
 import { validateSettings } from './settings.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -19,12 +20,15 @@ const settings = validateSettings({
   timeoutMs: Number(process.env.MODEL_TIMEOUT_MS || 90000),
 });
 const key = process.env.DEEPSEEK_API_KEY?.trim() || '';
+const observer = initializeObserver(new DeepSeekProvider(key));
+let executing = false;
 const port = Number(process.env.PORT || 4317);
 if (!Number.isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 const allowedSources = new Set([
-  'query/run.ts',
-  'query/execution.ts',
+  'observer/environment.ts',
+  'observer/execution.ts',
+  'observer/observe.ts',
   'execution/execution.ts',
   'invocation/invoke.ts',
   'invocation/lifecycle.ts',
@@ -62,7 +66,7 @@ const allowedSources = new Set([
   'operations/history/select.ts',
   'operations/context/assemble.ts',
   'operations/answer/generate.ts',
-  'query/input.ts',
+  'observer/accept.ts',
   'transcript/ref.ts',
   'transcript/transcript.ts',
   'operations/history/input.ts',
@@ -99,6 +103,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
   if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured: Boolean(key) });
+  if (req.method === 'GET' && url.pathname === '/api/transcript') return json(res, 200, { messages: observer.transcript.snapshot() });
   if (req.method === 'GET' && url.pathname === '/api/source') {
     const name = url.searchParams.get('file') || '';
     if (!allowedSources.has(name)) return json(res, 404, { error: '未找到源码。' });
@@ -111,29 +116,28 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' });
     const data = await body(req);
     if (!isObject(data)) throw new RuntimeError('INVALID_INPUT', '无效请求。');
-    const input = acceptQuery(data);
     const runSettings = validateSettings({ ...settings, ...(data.contextBudget === undefined ? {} : { contextBudget: data.contextBudget }) });
-    const provider = new DeepSeekProvider(key);
-    res.writeHead(200, {
-      'Content-Type': 'application/x-ndjson; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'X-Accel-Buffering': 'no',
-    });
-    res.flushHeaders();
-    const controller = new AbortController();
-    res.on('close', () => {
-      if (!res.writableEnded) controller.abort();
-    });
-    await runQuery(
-      input,
-      runSettings,
-      provider,
-      (trace) => {
+    if (executing) return json(res, 409, { error: '当前环境正在执行，请等待本次调用结束。' });
+    const input = acceptExecutionInput(observer.transcript, data);
+    executing = true;
+    try {
+      res.writeHead(200, {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Accel-Buffering': 'no',
+      });
+      res.flushHeaders();
+      const controller = new AbortController();
+      res.on('close', () => {
+        if (!res.writableEnded) controller.abort();
+      });
+      await observeExecution(observer.execution, observer.recorder, input, { settings: runSettings, signal: controller.signal, transcript: observer.transcript }, (trace) => {
         if (!res.destroyed) res.write(JSON.stringify({ type: 'trace', trace }, observeTranscript) + '\n');
-      },
-      controller.signal,
-    );
-    res.end();
+      });
+      res.end();
+    } finally {
+      executing = false;
+    }
     return;
   }
   const files: Record<string, [string, string]> = {

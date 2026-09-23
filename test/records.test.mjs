@@ -1,4 +1,4 @@
-import { acceptQuery } from '../dist/server/query/input.js';
+import { createInput } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { RuntimeRecorder } from '../dist/server/records/recorder.js';
@@ -8,7 +8,7 @@ import { TestOperation } from './fixtures/operation.mjs';
 import { Clock } from '../dist/server/runtime/clock.js';
 import { Runtime } from '../dist/server/runtime/runtime.js';
 import { identity } from '../dist/server/operations/operation.js';
-import { runQuery } from '../dist/server/query/run.js';
+import { observeFixture } from './fixtures/observer.mjs';
 import { projectExecution, validateSnapshot } from '../dist/shared/execution/project.js';
 import { RuntimeError } from '../dist/server/errors/error.js';
 
@@ -25,7 +25,7 @@ const output = (content) => ({
 });
 async function execute(answer = '{"kind":"answer","content":"海盐项目"}') {
   const responses = [output('{"historyIndexes":[0]}'), output(answer)];
-  return runQuery(acceptQuery(input), settings, {
+  return observeFixture(createInput(input), settings, {
     async invoke() {
       return responses.shift();
     },

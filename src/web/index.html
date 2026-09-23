@@ -27,11 +27,11 @@
             <h2>输入工作台</h2>
             <button id="sample" class="text-button" type="button">载入澄清样例 ↗</button>
           </div>
-          <div class="history-head"><label for="history">历史问答</label><span id="history-count">0 条</span></div>
+          <div class="history-head"><label for="history">已接纳消息</label><span id="history-count">0 条</span></div>
           <div id="history-preview" class="history-preview"></div>
           <details id="history-editor">
-            <summary>编辑历史 JSON</summary>
-            <textarea id="history" rows="8" spellcheck="false" aria-label="历史消息 JSON">[]</textarea>
+            <summary>追加消息草稿 JSON</summary>
+            <textarea id="history" rows="8" spellcheck="false" aria-label="待追加消息 JSON">[]</textarea>
           </details>
           <label class="query-label" for="query">当前输入</label><textarea id="query" rows="3" placeholder="从一个问题开始…">天气怎么样？</textarea>
           <div class="budget-row"><label for="budget">本地容量预算</label><input id="budget" type="number" min="256" max="1000000" value="32768" /></div>
@@ -45,7 +45,7 @@
               <span id="answer-kind" class="pill"></span>
             </div>
             <p id="answer-text"></p>
-            <button id="continue" class="text-button" type="button">将本轮加入历史，继续提问 →</button>
+            <button id="continue" class="text-button" type="button">继续输入 →</button>
           </section>
           <div class="archive">
             <div class="section-title">
@@ -99,7 +99,7 @@
       </div>
       <footer>
         CAPiX Observer
-        <span>运行记录 ≠ 模型推理过程 · 当前记录只保存在本页</span>
+        <span>运行记录 ≠ 模型推理过程 · 消息与记录保留在服务端内存；本页显示调用记录</span>
       </footer>
     </main>
   </body>

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Execution } from '../dist/server/execution/execution.js';
-import { QueryExecution } from '../dist/server/query/execution.js';
+import { ObserverExecution } from '../dist/server/observer/execution.js';
 import { Runtime } from '../dist/server/runtime/runtime.js';
 import { RuntimeRecorder } from '../dist/server/records/recorder.js';
 import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
 import { TestOperation } from './fixtures/operation.mjs';
-import { acceptQuery } from '../dist/server/query/input.js';
+import { createInput } from './fixtures/observer.mjs';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const definition = { name: 'echo', label: 'echo', source: 'test', phaseSource: 'test' };
@@ -53,7 +53,7 @@ test('one Execution and Operation can be called again after success and failure 
   );
 });
 
-test('QueryExecution returns answers without a recorder and uses the configuration of each call', async () => {
+test('ObserverExecution returns answers without a recorder and uses the configuration of each call', async () => {
   const requests = [];
   const provider = {
     async invoke(request, purpose) {
@@ -61,9 +61,9 @@ test('QueryExecution returns answers without a recorder and uses the configurati
       return { id: 'test', model: request.model, content: JSON.stringify(purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' }), finishReason: 'stop', usage: null };
     },
   };
-  const execution = new QueryExecution(new Runtime(), provider);
+  const execution = new ObserverExecution(new Runtime(), provider);
   for (const model of ['one', 'two']) {
-    const query = acceptQuery({ query: model, history: [] });
+    const query = createInput({ query: model, history: [] });
     const answer = await execution.call(query, { settings: { ...settings, model }, transcript: query.transcript });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });
     assert.equal(query.transcript.current('assistant').content, 'done');

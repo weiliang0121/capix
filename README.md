@@ -7,49 +7,49 @@
 ## 当前链路
 
 ```text
-外部 QueryRequest { query, history }
-  → acceptQuery：检查请求，Transcript 接纳消息
-  → Execution.input = query MessageRef
-  → SelectionInput { query, historyRange: [0, query.index) }
-  → 选择历史：before → commit → after
-  → Selection { historyIndexes }
-  → 组装上下文：identity → commit → identity
-  → AnswerInput { query, messages: MessageRef[] }
-  → 生成回答：before → commit → after
-  → Execution.output = Answer
+initializeObserver(provider, transcript?)
+  → Transcript / Book / Index / Clock / Recorder / Runtime
+  → ObserverExecution（固定 selection / assembly / generation 实例）
+
+外部 ExecutionRequest { messages }
+  → acceptExecutionInput：向已有 Transcript 追加一批新消息
+  → 最后一条 user MessageRef → Execution.input
+  → selection.call → selectionOutput
+  → assembly.call → assemblyOutput
+  → generation.call → generationOutput
+  → 追加 assistant 消息 → Execution.output
 ```
 
 Transcript 只增不改删，包含第一条和当前消息。接纳时检查角色及非空正文，复制冻结每条消息；批量追加先全部检查，保留原文。get/current 返回同一不可变消息，snapshot(end) 只复制前缀数组。current(role) 是该角色最新消息，不表示问答配对。
 
 MessageRef 由 Transcript 实例及绝对 index 定位；TranscriptRangeRef 固定 `[start,end)`。query 和候选范围不随后续消息追加改变。EOA 的 IO 结构按实际操作异构，模型 before 装载时才读取选中消息正文。生成回答后追加 assistant 消息。
 
-请求入口检查 query 与最多 500 条历史；Transcript 自身维护消息规则。前端 MessageDraft 负责编辑与展示，仅共享 Message 契约，不导入服务端运行类。每次请求独立接纳 Transcript，当前没有跨请求仓库、持久化或问答配对关系。
+服务启动时初始化一个本地 Observer 环境，Transcript 可以为空，也可以传入已经装载的实例；初始化不产生 Context、Record 或模型调用。环境、消息与记录跨请求保留，进程退出后消失。当前不提供多环境路由、持久化、清空或恢复接口。
+
+请求只提交 1–501 条新消息，最后一条必须是 user；批量接纳失败不写入任何条目。HTTP 入口先检查本次配置，再接纳消息；当前仅接受串行调用，正在执行时拒绝新调用且不追加消息。已接纳消息不会因执行失败被删除。前端只编辑待追加草稿，已有消息从服务端读取，不再重发全部历史。
 
 ## 操作、运行与记录
 
 `Operation<I,P,R,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。BCA 实现留在具体子类：ModelOperation 处理模型调用，AssembleContext 处理消息引用组装。Operation 实例只持有定义和依赖，不保存当前输入、上下文或最近结果。
 
-`Execution<I,O>` 是抽象类，call 建立 ExecutionContext 并调用具体 execute。QueryExecution 用顺序代码组合三个 Operation，返回 Answer；它不创建 Recorder、Book 或 HTTP 响应。每次调用按当前 Context 的配置装配模型操作，不把一次调用的配置或状态留在复用实例上。
+`Execution<I,O>` 是抽象类，call 建立 ExecutionContext 并调用具体 execute。ObserverExecution 用顺序代码组合三个 Operation，返回 generationOutput；它不创建 Recorder、Book 或 HTTP 响应。构造时装配三个固定操作；BCA 显式接收本次 ExecutionContext，从中取得配置和取消信号。实例不保存本次调用状态。
 
 ```ts
-const execution = new QueryExecution(runtime, provider);
-const answer = await execution.call(query, {
+const environment = initializeObserver(provider); // 请求到来前
+
+const input = acceptExecutionInput(environment.transcript, request);
+const generationOutput = await environment.execution.call(input, {
   settings,
   signal,
-  transcript: query.transcript,
+  transcript: environment.transcript,
 });
 ```
 
-QueryExecution.execute 内部仍然明确表达数据流：
+环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 为本次新接纳的 MessageRef 订阅对应执行记录，结束时解除订阅；按引用身份筛选，不比较消息正文。它用于当前每次提交创建独立引用的链路，不是通用调度或重放入口。
 
-```ts
-const input = selectionInput(context.input);
-const selection = await selectHistory.call(context, input);
-const assembled = await assemble.call(context, { original: input, selection });
-const answer = await generateAnswer.call(context, assembled);
-```
+可调用实例与 Context 为 1:N；开启记录时，每个 E/O/A Context 对应一条同层 Record。复用 Operation 的 operationInstanceId 保持不变，每次调用的 Context ID 与 Record ID 独立产生。记录容器保留所有调用，而非被新请求替换。
 
-query/run.ts 只装配本次请求使用的 Book、索引、Clock、Recorder、Runtime 和 QueryExecution，调用后返回实际观测结果。没有 Node、registerNode、runOperation 或 Pipeline 类；也不新增流程 DSL、操作数组调度或实例上的 currentContext。
+GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer 运行实体。浏览器消费同一契约，所以其数据声明位于 shared/operations/generation.ts。query 仅保留为选择、模型装载里的内容字段，不再决定入口或执行类的归属。
 
 | 对象             | 职责                                                                            |
 | ---------------- | ------------------------------------------------------------------------------- |
@@ -66,7 +66,7 @@ query/run.ts 只装配本次请求使用的 Book、索引、Clock、Recorder、R
 
 `invoke(lifecycle, execute)` 组合 begin、执行与等待、succeed/fail。begin 失败不执行工作；succeed 登记失败不重新进入 fail。工作失败且失败登记也失败时，AggregateError 保留两个异常。
 
-Runtime 可以不接 Recorder。接入时，工作完成先更新 Context，再登记记录；登记异常不改写已发生的工作结果。query/run.ts 只将完整登记的工作失败作为观测结果返回。当前没有登记补偿或进程恢复。
+Runtime 可以不接 Recorder。接入时，工作完成先更新 Context，再登记记录；登记异常不改写已发生的工作结果。observer/observe.ts 只将完整登记的工作失败作为观测结果返回。当前没有登记补偿或进程恢复。
 
 ## 事实引用与观测
 
@@ -116,12 +116,12 @@ pnpm check
 
 ## 怎样观察
 
-- 当前输入与历史在左侧编辑；可载入“询问城市 → 上海”样例。
+- 左侧只读展示服务端已接纳消息；可编辑待追加消息草稿并填写当前输入。“询问城市 → 上海”样例也是待追加内容，不替换已有消息。
 - 时序图按实际事件从上向下展开。实线是调用，虚线是返回，红色虚线是异常传播；激活条表示尚未结束的调用。
 - 纵向是事件顺序，不是等比时间轴；每个事件显示时间偏移，返回显示耗时。
 - 点击箭头查看当时 IO、错误和对应源码。源码来自当前文件，不是历史代码快照。
 - 成功返回 answer/unknown/needs-info 表示输出被接纳，不保证用户问题已解决。
-- “将本轮加入历史”使用本页提交内容与回答继续提问；刷新页面不保留历史和观测。
+- “继续输入”只清空输入框。消息已经由服务端保存，刷新页面会重新读取；本页时序列表仍是本页接收的记录，尚未提供服务端记录列表查询。
 
 容量检查发生在完整模型请求装载后。当前以请求 UTF-8 字节数加余量估算输入容量，再加预留输出 token；不是精确 tokenizer，也不保证供应商一定接纳。超限直接失败，不静默截断、修复或重试。
 
@@ -130,9 +130,10 @@ pnpm check
 ```text
 src/server/
   execution/execution.ts     Execution.call 与抽象工作组合
-  query/execution.ts         QueryExecution：三个 Operation 的组合
-  query/run.ts               请求环境装配与观测响应
-  query/input.ts             请求接纳
+  observer/environment.ts    请求前的环境初始化
+  observer/accept.ts         向已有 Transcript 接纳本次输入
+  observer/execution.ts      ObserverExecution：复用三个固定 Operation
+  observer/observe.ts        本次调用的观测订阅与响应
   transcript/                原始消息、固定引用与展示读取
   context/                   Execution / Operation / Attempt 运行上下文
   invocation/                通用调用流程与 lifecycle 契约

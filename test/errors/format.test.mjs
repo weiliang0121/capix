@@ -1,10 +1,10 @@
-import { acceptQuery } from '../../dist/server/query/input.js';
+import { createInput } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RuntimeError } from '../../dist/server/errors/error.js';
 import { RuntimeErrorHelper } from '../../dist/server/errors/helper.js';
 import { snapshotValue } from '../../dist/server/records/value/snapshot.js';
-import { runQuery } from '../../dist/server/query/run.js';
+import { observeFixture } from '../fixtures/observer.mjs';
 import { validateSnapshot } from '../../dist/shared/execution/project.js';
 
 function recordable(value) {
@@ -127,7 +127,7 @@ test('unrecordable error detail and aggregates close the query execution with di
   const input = { query: 'test', history: [] };
   const work = new RuntimeError('WORK', 'failed', { fn: () => {}, map: new Map([['x', 1]]) });
   for (const failure of [work, new AggregateError([work, new TypeError('registration')], 'combined', { cause: work })]) {
-    const facts = await runQuery(acceptQuery(input), settings, {
+    const facts = await observeFixture(createInput(input), settings, {
       async invoke() {
         throw failure;
       },

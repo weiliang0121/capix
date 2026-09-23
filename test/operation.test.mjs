@@ -1,4 +1,4 @@
-import { acceptQuery } from '../dist/server/query/input.js';
+import { createInput } from './fixtures/observer.mjs';
 import { selectionInput } from '../dist/server/operations/history/input.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -56,16 +56,16 @@ test('selection acceptance separates invalid shape from missing references and o
     ],
   };
   const value = { historyIndexes: [1, 0] };
-  assert.deepEqual(selectionOutputContract.accept(value, selectionInput(acceptQuery(input))), { historyIndexes: [0, 1] });
+  assert.deepEqual(selectionOutputContract.accept(value, selectionInput(createInput(input))), { historyIndexes: [0, 1] });
   assert.deepEqual(value.historyIndexes, [1, 0]);
   for (const historyIndexes of [[0, 0], [-1], [0.5], [Number.MAX_SAFE_INTEGER + 1]]) {
     assert.throws(
-      () => selectionOutputContract.accept({ historyIndexes }, selectionInput(acceptQuery(input))),
+      () => selectionOutputContract.accept({ historyIndexes }, selectionInput(createInput(input))),
       (error) => error.code === 'OUTPUT_SHAPE',
     );
   }
   assert.throws(
-    () => selectionOutputContract.accept({ historyIndexes: [2] }, selectionInput(acceptQuery(input))),
+    () => selectionOutputContract.accept({ historyIndexes: [2] }, selectionInput(createInput(input))),
     (error) => error.code === 'INDEX_OUT_OF_RANGE',
   );
 });
@@ -119,13 +119,13 @@ test('one selection operation can overlap calls without mixing their history bou
       return new Promise((resolve) => pending.set(query, resolve));
     },
   };
-  const op = createSelectHistory(runtime, { settings, provider, signal: new AbortController().signal });
+  const op = createSelectHistory(runtime, { provider });
   const first = { query: 'one', history: [{ role: 'user', content: 'a' }] };
   const second = { query: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
   const original = structuredClone([first, second]);
-  const short = call(op, selectionInput(acceptQuery(first)));
+  const short = call(op, selectionInput(createInput(first)));
   const shortFailure = assert.rejects(short, (error) => error.code === 'INDEX_OUT_OF_RANGE');
-  const long = call(op, selectionInput(acceptQuery(second)));
+  const long = call(op, selectionInput(createInput(second)));
   while (pending.size < 2) await new Promise((resolve) => setImmediate(resolve));
   pending.get('two')(raw('{"historyIndexes":[1]}'));
   assert.deepEqual(await long, { historyIndexes: [1] });
@@ -136,7 +136,7 @@ test('one selection operation can overlap calls without mixing their history bou
 });
 
 test('assembly operation consumes explicit sources and needs no recorder', async () => {
-  const query = acceptQuery({
+  const query = createInput({
     query: 'x',
     history: [
       { role: 'user', content: 'kept' },

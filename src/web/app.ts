@@ -1,6 +1,6 @@
 import { projectExecution } from '../shared/execution/project.js';
 import { MessageDraft } from './messages/draft.js';
-import type { Trace, TraceNode, TraceMessage, QueryRequest } from '../shared/types.js';
+import type { Trace, TraceNode, TraceMessage, ExecutionRequest, Message } from '../shared/types.js';
 import { renderSequence } from './sequence/view.js';
 
 function el<T extends HTMLElement>(id: string): T {
@@ -25,6 +25,7 @@ let codeTab = false;
 let sourceRequest = 0;
 let sourceCache = new Map<string, string>();
 const archive: Trace[] = [];
+let acceptedMessages: readonly Message[] = [];
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   node.className = className;
@@ -47,15 +48,14 @@ function renderHistory() {
   const preview = el('history-preview');
   preview.replaceChildren();
   try {
-    const items = readMessageDraft().snapshot();
+    const items = acceptedMessages;
     el('history-count').textContent = `${items.length} 条`;
-    if (!items.length) preview.append(element('p', 'empty-small', '暂无前文。也可以载入“询问城市 → 上海”的澄清样例。'));
+    if (!items.length) preview.append(element('p', 'empty-small', '环境尚无消息。提交后会保留在服务端 Transcript 中。'));
     items.forEach((message, index) => {
       const row = element('div', `message ${message.role}`);
       row.append(element('span', 'role', `[${index}] ${message.role === 'user' ? 'USER' : 'ASSISTANT'}`), element('span', '', message.content));
       preview.append(row);
     });
-    notice();
   } catch (error) {
     el('history-count').textContent = '格式有误';
     notice((error as Error).message);
@@ -116,7 +116,7 @@ function renderArchive() {
   for (const item of [...archive].reverse()) {
     const button = element('button', `archive-item${item.id === trace?.id ? ' active' : ''}`);
     button.disabled = busy;
-    button.append(element('span', '', item.request?.query ?? item.id), element('span', '', item.status === 'succeeded' ? '完成' : '失败'));
+    button.append(element('span', '', item.request?.messages.at(-1)?.content ?? item.id), element('span', '', item.status === 'succeeded' ? '完成' : '失败'));
     button.addEventListener('click', () => {
       trace = item;
       selected = item.nodes.find((n) => n.status === 'failed')?.id ?? trace.id;
@@ -151,13 +151,14 @@ function remember(record: Trace) {
   else archive[index] = record;
   if (archive.length > 12) archive.shift();
 }
-async function execute(payload: QueryRequest & { contextBudget: number }) {
+async function execute(payload: ExecutionRequest & { contextBudget: number }) {
   busy = true;
   notice();
   trace = undefined;
   selected = '';
   render();
   let received = false;
+  let accepted = false;
   try {
     const response = await fetch('/api/run', {
       method: 'POST',
@@ -168,6 +169,8 @@ async function execute(payload: QueryRequest & { contextBudget: number }) {
       const data = await response.json();
       throw new Error(data.error || `HTTP ${response.status}`);
     }
+    accepted = true;
+    historyEditor.value = '[]';
     if (!response.body) throw new Error('服务未返回记录流。');
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -177,7 +180,7 @@ async function execute(payload: QueryRequest & { contextBudget: number }) {
       const item = JSON.parse(line) as TraceMessage;
       if (item.type !== 'trace') return;
       trace = projectExecution(item.trace);
-      trace.request = { query: payload.query, history: payload.history };
+      trace.request = { messages: payload.messages };
       received = true;
       if (trace.status !== 'running') {
         selected = trace.nodes.find((n) => n.status === 'failed')?.id ?? trace.id;
@@ -204,6 +207,13 @@ async function execute(payload: QueryRequest & { contextBudget: number }) {
   } catch (error) {
     notice((error as Error).message);
   } finally {
+    if (accepted) {
+      try {
+        await loadTranscript();
+      } catch (error) {
+        notice((error as Error).message);
+      }
+    }
     busy = false;
     render();
   }
@@ -213,7 +223,7 @@ el('run').addEventListener('click', () => {
     if (!query.value.trim()) throw new Error('请先填写当前输入。');
     const contextBudget = Number(budget.value);
     if (!Number.isSafeInteger(contextBudget) || contextBudget < 256 || contextBudget > 1000000) throw new Error('容量预算需要是 256–1000000 的整数。');
-    void execute({ query: query.value, history: readMessageDraft().snapshot(), contextBudget });
+    void execute({ messages: [...readMessageDraft().snapshot(), { role: 'user', content: query.value }], contextBudget });
   } catch (error) {
     notice((error as Error).message);
   }
@@ -228,18 +238,14 @@ el('sample').addEventListener('click', () => {
     2,
   );
   query.value = '上海';
-  renderHistory();
+  el<HTMLDetailsElement>('history-editor').open = true;
+  notice('样例将在下一次调用时追加，不替换已有消息。');
 });
 historyEditor.addEventListener('change', renderHistory);
 el('continue').addEventListener('click', () => {
-  if (!trace?.result || !trace.request) return;
-  const draft = new MessageDraft(trace.request.history);
-  draft.append({ role: 'user', content: trace.request.query }, { role: 'assistant', content: trace.result.content });
-  historyEditor.value = JSON.stringify(draft.snapshot(), null, 2);
   query.value = '';
-  renderHistory();
   query.focus();
-  notice('已加入本轮问答；填写下一条输入后运行。');
+  notice('消息已由服务端保留；填写下一条输入即可。');
 });
 el('inspect-close').addEventListener('click', () => inspector.close());
 let lastDiagramWidth = 0;
@@ -259,6 +265,13 @@ function toggleCode(value: boolean) {
   el('detail-code').hidden = !value;
   renderDetail();
 }
+async function loadTranscript() {
+  const response = await fetch('/api/transcript');
+  if (!response.ok) throw new Error('无法读取当前环境消息。');
+  const data = await response.json();
+  acceptedMessages = new MessageDraft(data.messages).snapshot();
+  renderHistory();
+}
 async function init() {
   renderHistory();
   render();
@@ -266,6 +279,7 @@ async function init() {
     const response = await fetch('/api/config');
     if (!response.ok) throw new Error('无法读取服务配置。');
     const config = await response.json();
+    await loadTranscript();
     configured = config.configured;
     budget.value = String(config.contextBudget);
     el('connection').textContent = `${config.model} · ${configured ? '已配置 Key' : '待配置 Key'}`;

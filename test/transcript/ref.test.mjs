@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { acceptQuery } from '../../dist/server/query/input.js';
+import { createInput } from '../fixtures/observer.mjs';
 import { ExecutionRecord } from '../../dist/server/records/execution/record.js';
 import { snapshotValue } from '../../dist/server/records/value/snapshot.js';
 import { observeTranscript } from '../../dist/server/transcript/observe.js';
 import { selectionInput } from '../../dist/server/operations/history/input.js';
 import { selectionOutputContract } from '../../dist/server/operations/history/output.js';
-import { runQuery } from '../../dist/server/query/run.js';
+import { observeFixture } from '../fixtures/observer.mjs';
 import { projectExecution, validateSnapshot } from '../../dist/shared/execution/project.js';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -14,7 +14,7 @@ const reply = (value) => ({ id: 'fixture', model: 'test', content: JSON.stringif
 
 test('query and history range keep their position and content as Transcript grows', () => {
   const original = { query: '她负责什么', history: [{ role: 'user', content: '林岚负责海盐项目' }] };
-  const query = acceptQuery(original),
+  const query = createInput(original),
     input = selectionInput(query);
   original.query = 'changed';
   original.history[0].content = 'changed';
@@ -39,10 +39,10 @@ test('query and history range keep their position and content as Transcript grow
 });
 
 test('query execution records keep immutable fact references while browser content is resolved at observation time', async () => {
-  const query = acceptQuery({ query: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] });
+  const query = createInput({ query: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] });
   const requests = [],
     snapshots = [];
-  const facts = await runQuery(
+  const facts = await observeFixture(
     query,
     settings,
     {
@@ -84,7 +84,7 @@ test('query execution records keep immutable fact references while browser conte
 });
 
 test('record snapshots copy ordinary values but retain immutable message and range references', () => {
-  const query = acceptQuery({ query: 'query', history: [{ role: 'assistant', content: 'prior' }] });
+  const query = createInput({ query: 'query', history: [{ role: 'assistant', content: 'prior' }] });
   const input = selectionInput(query);
   const mutable = { input, items: [1] };
   const recorded = snapshotValue(mutable);

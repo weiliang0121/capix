@@ -19,6 +19,7 @@ type InvocationRecord = ExecutionRecord | OperationRecord | AttemptRecord;
 
 /** Maps live invocation facts to records. Does not execute work or change any Context. */
 export class RuntimeRecorder {
+  readonly #listeners = new Set<(snapshot: RuntimeSnapshot) => void>();
   readonly #contexts = new RecordIndex<InvocationRecord>((record) => record.contextId);
   readonly #events = new Map<string, ExecutionEvents>();
 
@@ -29,6 +30,13 @@ export class RuntimeRecorder {
     private readonly clock = new Clock(),
     private readonly changed: (snapshot: RuntimeSnapshot) => void = () => {},
   ) {}
+
+  subscribe(listener: (snapshot: RuntimeSnapshot) => void): () => void {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  }
 
   beginExecution(context: ExecutionContext): void {
     this.requireUnrecorded(context);
@@ -135,10 +143,19 @@ export class RuntimeRecorder {
 
   private event(executionId: string, callId: string, type: RecordEvent['type']): void {
     appendRecordEvent(this.events(executionId), this.clock, callId, type);
+    let snapshot: RuntimeSnapshot;
     try {
-      this.changed(this.snapshotRecord(executionId));
+      snapshot = this.snapshotRecord(executionId);
     } catch {
       console.error('运行记录发布失败；已有记录仍保存在当前 RecordBook。');
+      return;
+    }
+    for (const listener of [this.changed, ...this.#listeners]) {
+      try {
+        listener(snapshot);
+      } catch {
+        console.error('运行记录发布失败；已有记录仍保存在当前 RecordBook。');
+      }
     }
   }
 }

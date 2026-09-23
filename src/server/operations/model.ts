@@ -1,13 +1,12 @@
 import type { ModelOutput, ModelRequest, ModelSettings, Purpose } from '../../shared/types.js';
 import { RuntimeError } from '../errors/error.js';
 import { Operation, type OperationDefinition } from './operation.js';
+import type { ExecutionContext } from '../context/execution.js';
 import type { Runtime } from '../runtime/runtime.js';
 import type { ModelProvider } from '../provider.js';
 
 export interface ModelDependencies {
-  readonly settings: ModelSettings;
   readonly provider: ModelProvider;
-  readonly signal: AbortSignal;
 }
 
 /** Static output description paired with acceptance against the operation's input. */
@@ -32,14 +31,15 @@ export class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput
     super(runtime, model);
   }
 
-  before(input: I): ModelRequest {
-    const request = loadRequest(this.model.prepare(input), this.model.task, this.model.output.schema, this.dependencies.settings);
-    checkCapacity(request, this.dependencies.settings);
+  before(input: I, execution: ExecutionContext): ModelRequest {
+    const request = loadRequest(this.model.prepare(input), this.model.task, this.model.output.schema, execution.settings);
+    checkCapacity(request, execution.settings);
     return request;
   }
 
-  commit(request: ModelRequest): Promise<ModelOutput> {
-    const { settings, provider, signal } = this.dependencies;
+  commit(request: ModelRequest, execution: ExecutionContext): Promise<ModelOutput> {
+    const { settings, signal } = execution;
+    const { provider } = this.dependencies;
     return provider.invoke(request, this.model.purpose, AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]));
   }
 

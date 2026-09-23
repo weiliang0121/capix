@@ -22,22 +22,22 @@ export function assembleContext(input: SelectionInput, selection: Selection) {
     messages: Object.freeze(selection.historyIndexes.map((index) => input.historyRange.ref(index))),
   });
 }
-export interface AnswerInput {
+export interface GenerationInput {
   readonly query: MessageRef;
   readonly messages: readonly MessageRef[];
 }
 
-export class AssembleContext extends Operation<AssemblyInput, AssemblyInput, AnswerInput, AnswerInput> {
+export class AssembleContext extends Operation<AssemblyInput, AssemblyInput, GenerationInput, GenerationInput> {
   constructor(runtime: Runtime) {
     super(runtime, assembleContextDefinition);
   }
   before(input: AssemblyInput): AssemblyInput {
     return input;
   }
-  commit({ original, selection }: AssemblyInput): AnswerInput {
+  commit({ original, selection }: AssemblyInput): GenerationInput {
     return assembleContext(original, selection);
   }
-  after(output: AnswerInput): AnswerInput {
+  after(output: GenerationInput): GenerationInput {
     return output;
   }
 }

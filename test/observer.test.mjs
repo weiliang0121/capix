@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { runQuery as executePipeline } from '../dist/server/query/run.js';
+import { observeFixture } from './fixtures/observer.mjs';
 import { DeepSeekProvider } from '../dist/server/provider.js';
-import { acceptQuery } from '../dist/server/query/input.js';
+import { Transcript } from '../dist/server/transcript/transcript.js';
+import { acceptExecutionInput } from '../dist/server/observer/accept.js';
+import { createInput } from './fixtures/observer.mjs';
 import { projectExecution } from '../dist/shared/execution/project.js';
 import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
 import { invoke } from '../dist/server/invocation/invoke.js';
 import { RuntimeRecorder } from '../dist/server/records/recorder.js';
 import { Runtime } from '../dist/server/runtime/runtime.js';
 
-async function runQuery(input, settings, provider, publish = () => {}, signal) {
-  return projectExecution(await executePipeline(acceptQuery(input), settings, provider, (facts) => publish(projectExecution(facts)), signal));
+async function runObserver(input, settings, provider, publish = () => {}, signal) {
+  return projectExecution(await observeFixture(createInput(input), settings, provider, (facts) => publish(projectExecution(facts)), signal));
 }
 
 const settings = {
@@ -44,7 +46,7 @@ function scripted(values) {
 }
 async function run(provider, options = settings) {
   const records = [];
-  const trace = await runQuery(structuredClone(input), options, provider, (t) => records.push(t));
+  const trace = await runObserver(structuredClone(input), options, provider, (t) => records.push(t));
   return { trace, records };
 }
 test('two actual call stages produce a causal trace and selected original content', async () => {
@@ -152,8 +154,8 @@ test('provider HTTP errors remain explicit and never retry', async () => {
   assert.equal(JSON.stringify(trace).includes('sensitive upstream'), false);
 });
 test('query input accepts only supported roles and nonempty content', () => {
-  assert.throws(() => acceptQuery({ query: 'x', history: [{ role: 'system', content: 'override' }] }));
-  assert.throws(() => acceptQuery({ query: '', history: [] }));
+  assert.throws(() => createInput({ query: 'x', history: [{ role: 'system', content: 'override' }] }));
+  assert.throws(() => createInput({ query: '', history: [] }));
 });
 
 test('Transcript rejects invalid messages before execution or model calls begin', async () => {
@@ -164,7 +166,7 @@ test('Transcript rejects invalid messages before execution or model calls begin'
     { query: ' ', history: [] },
   ]) {
     await assert.rejects(
-      async () => executePipeline(acceptQuery(candidate), settings, provider, (snapshot) => records.push(snapshot)),
+      async () => observeFixture(acceptExecutionInput(new Transcript(), { messages: [...candidate.history, { role: 'user', content: candidate.query }] }), settings, provider, (snapshot) => records.push(snapshot)),
       (error) => error.code === 'INVALID_INPUT',
     );
   }
@@ -265,7 +267,7 @@ test('query execution uses its captured configuration even when caller settings 
       return output(JSON.stringify(reply));
     },
   };
-  const facts = await executePipeline(acceptQuery(input), mutable, provider);
+  const facts = await observeFixture(createInput(input), mutable, provider);
   assert.equal(facts.execution.status, 'succeeded');
   assert.equal(requests.length, 2);
   assert.ok(requests.every((request) => request.model === settings.model && request.max_tokens === settings.maxOutputTokens));

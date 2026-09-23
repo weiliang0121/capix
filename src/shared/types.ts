@@ -4,13 +4,9 @@ import type { RuntimeErrorValue } from './errors.js';
 import type { RecordEvent, RuntimeSnapshot } from './records.js';
 export type Purpose = 'selection' | 'answer';
 export type NodeStatus = 'running' | 'passed' | 'failed';
-export interface QueryRequest {
-  query: string;
-  history: Message[];
-}
-export interface Answer {
-  kind: 'answer' | 'unknown' | 'needs-info';
-  content: string;
+import type { GenerationOutput } from './operations/generation.js';
+export interface ExecutionRequest {
+  messages: Message[];
 }
 export interface Selection {
   historyIndexes: number[];
@@ -85,11 +81,11 @@ export interface Trace {
   startedAt: string;
   durationMs: number;
   status: 'running' | 'succeeded' | 'failed';
-  request?: QueryRequest;
+  request?: ExecutionRequest;
   settings: ModelSettings;
   nodes: TraceNode[];
   callSequence: CallSequence;
-  result?: Answer;
+  result?: GenerationOutput;
   error?: RuntimeErrorValue;
 }
 export type TraceMessage = {

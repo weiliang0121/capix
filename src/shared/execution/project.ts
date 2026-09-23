@@ -1,5 +1,6 @@
 import type { RuntimeSnapshot, OperationRecord, OperationValue } from '../records.js';
-import type { Answer, CallSpan, ModelSettings, ParticipantId, Trace } from '../types.js';
+import type { GenerationOutput } from '../operations/generation.js';
+import type { CallSpan, ModelSettings, ParticipantId, Trace } from '../types.js';
 
 /** Reject inconsistent identities, ownership and boundary facts before projecting them. */
 export function validateSnapshot(value: unknown): asserts value is RuntimeSnapshot {
@@ -164,7 +165,7 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
         },
       ],
     },
-    ...(root.status === 'passed' ? { result: root.output as Answer } : {}),
+    ...(root.status === 'passed' ? { result: root.output as GenerationOutput } : {}),
     ...(root.error ? { error: root.error } : {}),
   };
 }

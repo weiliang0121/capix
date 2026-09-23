@@ -24,9 +24,9 @@ export abstract class Operation<I, P, R, O> {
     this.definition = Object.freeze({ ...definition });
   }
 
-  abstract before(input: I): Result<P>;
-  abstract commit(prepared: P): Result<R>;
-  abstract after(raw: R, input: I): Result<O>;
+  abstract before(input: I, execution: ExecutionContext): Result<P>;
+  abstract commit(prepared: P, execution: ExecutionContext): Result<R>;
+  abstract after(raw: R, input: I, execution: ExecutionContext): Result<O>;
 
   call(execution: ExecutionContext, input: I, parent?: OperationContext): Promise<O> {
     return invoke(
@@ -43,15 +43,15 @@ export abstract class Operation<I, P, R, O> {
         input,
         parent,
       ),
-      (context) => this.execute(context),
+      (context) => this.execute(context, execution),
     );
   }
 
-  private async execute(context: OperationContext<I, O>): Promise<O> {
+  private async execute(context: OperationContext<I, O>, execution: ExecutionContext): Promise<O> {
     const input = context.input;
-    const prepared = await this.phase(context, 'before', input, (value) => this.before(value));
-    const raw = await this.phase(context, 'commit', prepared, (value) => this.commit(value));
-    return this.phase(context, 'after', { raw, input }, (value) => this.after(value.raw, value.input));
+    const prepared = await this.phase(context, 'before', input, (value) => this.before(value, execution));
+    const raw = await this.phase(context, 'commit', prepared, (value) => this.commit(value, execution));
+    return this.phase(context, 'after', { raw, input }, (value) => this.after(value.raw, value.input, execution));
   }
 
   private phase<V, T>(context: OperationContext, phase: 'before' | 'commit' | 'after', input: V, execute: (value: V) => Result<T>): Promise<T> {
