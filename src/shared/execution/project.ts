@@ -149,7 +149,7 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
     settings: execution.value.settings as ModelSettings,
     nodes: calls.map((call) => ({
       ...call,
-      group: call.operation?.startsWith('selection') ? 'selection' : call.operation?.startsWith('answer') ? 'answer' : 'flow',
+      group: call.operation?.startsWith('selection') ? 'selection' : call.operation?.startsWith('answer') ? 'answer' : call.operation?.startsWith('memory') ? 'memory' : 'flow',
     })),
     callSequence: {
       version: 1,

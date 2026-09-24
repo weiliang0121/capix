@@ -1,6 +1,6 @@
 # CAPiX Observer
 
-独立的 TypeScript 运行链路实验：运行两次模型调用，观察真实的输入、调用、返回和异常。
+独立的 TypeScript 运行链路实验：运行三次模型调用，观察真实的输入、调用、返回和异常。
 
 观测用于理解当前系统。没有文件导入、导出或重放，也没有为离线文件设计的版本兼容、独立消息来源、恢复对象。
 
@@ -9,7 +9,7 @@
 ```text
 initializeObserver(provider, transcript?)
   → Transcript / Book / Index / Clock / Recorder / Runtime
-  → ObserverExecution（固定 selection / assembly / generation 实例）
+  → ObserverExecution（固定 selection / assembly / generation / extraction 实例；MemoryCollection）
 
 外部 ExecutionRequest { messages }
   → acceptExecutionInput：向已有 Transcript 追加一批新消息
@@ -17,7 +17,9 @@ initializeObserver(provider, transcript?)
   → selection.call → selectionOutput
   → assembly.call → assemblyOutput
   → generation.call → generationOutput
-  → 追加 assistant 消息 → Execution.output
+  → 追加 assistant 消息
+  → extraction.call → 接纳变更 → MemoryHelper 创建/更新 → MemoryRecord 登记
+  → generationOutput → Execution.output
 ```
 
 Transcript 只增不改删，包含第一条和当前消息。接纳时检查角色及非空正文，复制冻结每条消息；批量追加先全部检查，保留原文。get/current 返回同一不可变消息，snapshot(end) 只复制前缀数组。current(role) 是该角色最新消息，不表示问答配对。
@@ -30,11 +32,11 @@ Transcript 只增不改删，包含第一条和当前消息。接纳时检查角
 
 ## 操作、运行与记录
 
-`Operation<I,BeforeOutput,CommitOutput,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。ModelOperation 是公共模型 BCA 的抽象父类；SelectHistory 和 GenerateAnswer 子类固化任务说明、输入组织与输出契约。AssembleContext 直接继承 Operation。名称、说明和源码位置属于类自身，构造仅传 Runtime、Provider 等依赖，不传定义对象。实例不保存当前输入、上下文或最近结果。
+`Operation<I,BeforeOutput,CommitOutput,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。ModelOperation 是公共模型 BCA 的抽象父类；SelectHistory、GenerateAnswer 和 ExtractMemory 子类固化任务说明、输入组织与输出契约。AssembleContext 直接继承 Operation。名称、说明和源码位置属于类自身，构造仅传 Runtime、Provider 等依赖，不传定义对象。实例不保存当前输入、上下文或最近结果。
 
 BCA 统一为阶段 input 与对应 IO 类型的 AttemptContext；before 输出传给 commit，commit 输出直接传给 after，不组合 `{ raw, input }`。需要操作原始输入时通过 Runtime.getOperationContext 查询，执行配置与消息范围通过 getExecutionContext 查询。阶段内部辅助函数不创建上下文；不引入权限控制。
 
-`Execution<I,O>` 是抽象类，call 建立 ExecutionContext 并调用具体 execute。ObserverExecution 用顺序代码组合三个 Operation，返回 generationOutput；它不创建 Recorder、Book 或 HTTP 响应。构造时装配三个固定操作；BCA 显式接收自己的 AttemptContext，通过 Runtime.getExecutionContext 取得执行配置和取消信号。实例不保存本次调用状态。
+`Execution<I,O>` 是抽象类，call 建立 ExecutionContext 并调用具体 execute。ObserverExecution 用顺序代码组合四个 Operation，返回 generationOutput；它不创建 Recorder、Book 或 HTTP 响应。构造时装配四个固定操作；BCA 显式接收自己的 AttemptContext，通过 Runtime.getExecutionContext 取得执行配置和取消信号。实例不保存本次调用状态。
 
 ```ts
 const environment = initializeObserver(provider); // 请求到来前
@@ -94,7 +96,7 @@ RuntimeRecord<T>：id + value
 
 operationInstanceId 指向可复用的 Operation 实例；OperationRecord.id 和 OperationContext.id 各自标识一次调用。Context 直接引用上层 Context；Record 归属 ID 指向 Record。三种记录自身 ID 与 Context ID 不同，顶层 contextId 关联对应运行实例。状态在具体记录顶层，基类不规定状态。
 
-完整成功链路为 1 条 Execution、3 条 Operation、9 条 Attempt、26 个 call/return/throw 边界事件。没有发生的阶段不创建记录。Attempt 失败不自动更改父操作状态，异常按实际调用链传播；After 拒绝时保留 Commit 原始返回，没有接纳输出。
+完整成功链路为 1 条 Execution、4 条 Operation、12 条 Attempt、34 个 call/return/throw 边界事件。没有发生的阶段不创建记录。Attempt 失败不自动更改父操作状态，异常按实际调用链传播；After 拒绝时保留 Commit 原始返回，没有接纳输出。
 
 EventRecord 继承 RuntimeRecord，自己的 id 与 callId 不同：callId 指向被描述的 E/O/A 调用记录。EventRecordHelper 负责创建和查询，Book 保存原记录，eventIndex 按执行 ID 查询，不另保存事件数组。sequence 为执行内顺序；occurredAt 为现实时间，offsetMs 使用单调时钟，现实时间回拨不改变时序。RuntimeRecorder 仅保留单调计时起点。事件记录没有 Context 或运行状态，不承担推进或消息传递；validateSnapshot 检查记录身份、归属与边界一致性。
 
@@ -113,7 +115,7 @@ pnpm dev
 
 打开 http://127.0.0.1:4317 。服务只监听本机；Key 只用于服务端模型请求，不进入观测数据。源码或配置变更后重新运行 pnpm dev。默认模型为 deepseek-flash，可通过 DEEPSEEK_MODEL 配置。
 
-正式链路每次成功运行包含两次真实模型调用，包括空历史时的选择调用。模型使用 JSON Output、非思考、非流式返回；观测通过 NDJSON 即时发布。
+正式链路每次成功运行包含三次真实模型调用，包括空历史时的选择调用。模型使用 JSON Output、非思考、非流式返回；观测通过 NDJSON 即时发布。
 
 ```sh
 pnpm check
@@ -130,7 +132,7 @@ pnpm check
 - 成功返回 answer/unknown/needs-info 表示输出被接纳，不保证用户问题已解决。
 - “继续输入”只清空输入框。消息已经由服务端保存，刷新页面会重新读取；本页时序列表仍是本页接收的记录，尚未提供服务端记录列表查询。
 
-容量检查发生在完整模型请求装载后。当前以请求 UTF-8 字节数加余量估算输入容量，再加预留输出 token；不是精确 tokenizer，也不保证供应商一定接纳。历史选择本身超限直接失败。选择结果要求模型按相关性与必要性从高到低返回索引；这是模型指导，不保证排序质量。生成请求按该顺序纳入完整消息，遇到第一条放不下的就停止，不跳过长消息凑容量；第一条就放不下则失败。保留的前缀在最终请求里恢复原始时间顺序。当前输入和固定请求内容不裁剪，不生成摘要、不额外调用模型、不自动修复或重试。生成 before 的输入保留候选顺序，输出记录最终请求，可以对照检查实际采用了哪些历史。
+容量检查发生在完整模型请求装载后。当前以请求 UTF-8 字节数加余量估算输入容量，再加预留输出 token；不是精确 tokenizer，也不保证供应商一定接纳。历史选择本身超限直接失败。选择结果要求模型按相关性与必要性从高到低返回索引；这是模型指导，不保证排序质量。生成请求按该顺序纳入完整消息，遇到第一条放不下的就停止，不跳过长消息凑容量；第一条就放不下则失败。保留的前缀在最终请求里恢复原始时间顺序。当前输入和固定请求内容不裁剪，容量处理不生成摘要、不额外调用模型、不自动修复或重试。生成 before 的输入保留候选顺序，输出记录最终请求，可以对照检查实际采用了哪些历史。
 
 ## 目录
 
@@ -139,9 +141,10 @@ src/server/
   execution/execution.ts     Execution.call 与抽象工作组合
   observer/environment.ts    请求前的环境初始化
   observer/accept.ts         向已有 Transcript 接纳本次输入
-  observer/execution.ts      ObserverExecution：复用三个固定 Operation
+  observer/execution.ts      ObserverExecution：复用四个固定 Operation
   observer/observe.ts        本次调用的观测订阅与响应
   transcript/                原始消息、固定引用与展示读取
+  memory/                    记忆体、集合与原文关系投影
   context/                   Execution / Operation / Attempt 运行上下文
   invocation/                通用调用流程与 lifecycle 契约
   operations/                Operation.call/BCA、ModelOperation、具体操作
@@ -162,4 +165,14 @@ src/web/                     工作台、消息编辑与时序图
 
 无生产运行依赖。尚未实现数据库、TRS、工具执行、调度、重试、恢复或持久化队列；不为这些未来功能预先增加当前运行链路之外的对象。
 
-筛选结果仅包含所选原文索引，保存在操作上下文与记录中，不写入消息列表。Transcript 仅保留接纳的 user/assistant 消息与正式生成的回答。Jev 筛选、使用计数及热区装载为后续增量，当前未接入。
+筛选结果仅包含所选原文索引，保存在操作上下文与记录中，不写入消息列表。Transcript 仅保留接纳的 user/assistant 消息与正式生成的回答。Jev 筛选与热区装载尚未接入。消息关联计数保留，但不参与模型输入。
+
+历史选择热区：消息按原始索引横向排列，颜色表示累计被选次数；选择执行可查看当次输入及选中范围，点击消息可查看原文和选择它的调用。数据由当前进程已有筛选操作记录推导，刷新后仍可查看；进程退出即丢失。只统计已接纳的筛选结果，后续回答失败仍计入，不表示回答实际使用或判断正确。次数不传给筛选或生成模型；候选范围仍为全部可见历史，计数不引起额外模型调用。
+
+## 回答后的记忆提取
+
+第三次模型调用返回零到四项创建或更新提议，每项明确目标、变化说明、依据与变更后完整内容。MemoryHelper 先检查整批再落实；MemoryCollection 保存持续身份的 Memory，更新不新建身份。每次落实产生独立 MemoryRecord，继承 RuntimeRecord，关联 memoryId、executionId、operationId，保存本次变化说明和结果快照。
+
+页面直接读取这些记录显示变化，点击记忆体可以查看当前理解、历次变化及调用关联。下一次提取只读取当前记忆体与原文依据，不发送历史记录；选择与生成暂不使用记忆。
+
+提取失败会让整体执行失败，已经生成的回答仍保留。记录登记失败不会伪装成事实已回滚；尚无事务、补偿、重试或持久化。全量记忆与依据超预算明确失败。详情见 [记忆体与记忆记录](docs/memory.md)。

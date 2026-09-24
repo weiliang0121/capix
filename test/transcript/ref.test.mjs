@@ -43,8 +43,9 @@ test('only the execution record holds the range; calls consume selected content 
     input,
     settings,
     {
-      async invoke(request) {
+      async invoke(request, purpose) {
         requests.push(request);
+        if (purpose === 'memory') return reply({ memories: [] });
         if (requests.length === 1) {
           transcript.append({ role: 'user', content: 'later unrelated message' });
           return reply({ historyIndexes: [0] });
@@ -58,9 +59,9 @@ test('only the execution record holds the range; calls consume selected content 
     },
   );
   assert.equal(facts.execution.status, 'succeeded');
-  assert.equal(facts.operations.length, 3);
-  assert.equal(facts.attempts.length, 9);
-  assert.equal(facts.events.length, 26);
+  assert.equal(facts.operations.length, 4);
+  assert.equal(facts.attempts.length, 12);
+  assert.equal(facts.events.length, 34);
   assert.deepEqual(facts.execution.value.input, input);
   assert.notEqual(facts.execution.value.input, input);
   assert.equal(facts.execution.value.transcriptRange.end, 2);

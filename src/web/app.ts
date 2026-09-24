@@ -1,4 +1,8 @@
 import { projectExecution } from '../shared/execution/project.js';
+import { MemoryView } from './memory/view.js';
+import { SelectionView } from './selection/view.js';
+import { ExecutionNavigation } from './execution/navigation.js';
+import type { ExecutionObservation } from '../shared/observation/execution.js';
 import { MessageDraft } from './messages/draft.js';
 import type { Trace, TraceNode, TraceMessage, ExecutionRequest, Message } from '../shared/types.js';
 import { renderSequence } from './sequence/view.js';
@@ -10,13 +14,43 @@ const messageInput = el<HTMLTextAreaElement>('messageInput');
 const historyEditor = el<HTMLTextAreaElement>('history');
 const budget = el<HTMLInputElement>('budget');
 const diagram = el('sequence');
+const memoryView = new MemoryView(el('memory-view'));
+const selectionView = new SelectionView(el('selection-heat'), selectObservation);
+const executionNavigation = new ExecutionNavigation(el('qa-navigation'), selectObservation);
+function syncObservation(id: string) {
+  executionNavigation.selectExecution(id);
+  memoryView.selectExecution(id);
+  selectionView.selectExecution(id);
+}
+let observationRequest = 0;
+async function selectObservation(id: string) {
+  if (busy) return;
+  const ticket = ++observationRequest;
+  syncObservation(id);
+  inspector.close();
+  selected = '';
+  trace = undefined;
+  render();
+  if (!id) return;
+  try {
+    const response = await fetch(`/api/execution?id=${encodeURIComponent(id)}`);
+    if (!response.ok) throw new Error('无法读取这一轮的调用记录。');
+    const snapshot = await response.json();
+    if (ticket !== observationRequest) return;
+    trace = projectExecution(snapshot);
+    selected = trace.nodes.find((node) => node.status === 'failed')?.id ?? trace.id;
+    render();
+  } catch (error) {
+    if (ticket === observationRequest) notice((error as Error).message);
+  }
+}
 const inspector = el<HTMLDialogElement>('inspect-dialog');
 const statusLabels = {
   running: '进行中',
   passed: '通过',
   failed: '失败',
 };
-const groupLabels = { flow: '流程', selection: '前文选择', answer: '回答生成' };
+const groupLabels = { flow: '流程', selection: '前文选择', answer: '回答生成', memory: '记忆提取' };
 let trace: Trace | undefined;
 let selected = '';
 let busy = false;
@@ -24,7 +58,6 @@ let configured = false;
 let codeTab = false;
 let sourceRequest = 0;
 let sourceCache = new Map<string, string>();
-const archive: Trace[] = [];
 let acceptedMessages: readonly Message[] = [];
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -111,50 +144,25 @@ async function renderCode(node?: TraceNode) {
     if (ticket === sourceRequest) el('source-code').textContent = (error as Error).message;
   }
 }
-function renderArchive() {
-  const list = el('archive-list');
-  list.replaceChildren();
-  el('archive-count').textContent = String(archive.length);
-  for (const item of [...archive].reverse()) {
-    const button = element('button', `archive-item${item.id === trace?.id ? ' active' : ''}`);
-    button.disabled = busy;
-    button.append(element('span', '', item.request?.messages.at(-1)?.content ?? item.id), element('span', '', item.status === 'succeeded' ? '完成' : '失败'));
-    button.addEventListener('click', () => {
-      trace = item;
-      selected = item.nodes.find((n) => n.status === 'failed')?.id ?? trace.id;
-      render();
-    });
-    list.append(button);
-  }
-}
 function render() {
+  el('qa-navigation').inert = busy;
+  el('selection-heat').inert = busy;
   el<HTMLButtonElement>('run').disabled = busy || !configured;
   el<HTMLButtonElement>('sample').disabled = busy;
-  el<HTMLButtonElement>('continue').disabled = busy;
   el('trace-status').textContent = !trace ? '尚未运行' : trace.status === 'running' ? '运行中' : trace.status === 'succeeded' ? '处理完成' : '已停止';
   el('trace-id').textContent = trace ? `${trace.id.slice(0, 8)} · ${new Date(trace.startedAt).toLocaleTimeString()}` : '等待第一条真实记录';
   el('trace-duration').textContent = trace ? ms(trace.durationMs) : '—';
   const outcome = el('outcome');
   outcome.className = trace?.error ? 'outcome error' : 'outcome';
   outcome.textContent = trace?.error ? `${trace.error.code} · ${trace.error.message}` : trace?.result ? `返回 ${trace.result.kind} · 处理链完成不等于问题已解决；可查看实际返回内容。` : trace ? '正在执行；记录在每个处理边界实时更新。' : '每个节点都会保留当时的输入、输出与停止原因。';
-  el('answer-box').hidden = !trace?.result;
-  if (trace?.result) {
-    el('answer-kind').textContent = trace.result.kind;
-    el('answer-text').textContent = trace.result.content;
-  }
+  const generated = trace?.facts.operations.some((operation) => operation.operation === 'answer' && operation.status === 'succeeded');
+  if (trace?.error && generated) outcome.textContent += ' 回答已生成并保留；后续处理失败，记忆未必新增。';
   renderDiagram();
   renderDetail();
-
-  renderArchive();
-}
-function remember(record: Trace) {
-  const index = archive.findIndex((t) => t.id === record.id);
-  if (index < 0) archive.push(record);
-  else archive[index] = record;
-  if (archive.length > 12) archive.shift();
 }
 async function execute(payload: ExecutionRequest & { contextBudget: number }) {
   busy = true;
+  observationRequest++;
   notice();
   trace = undefined;
   selected = '';
@@ -183,10 +191,11 @@ async function execute(payload: ExecutionRequest & { contextBudget: number }) {
       if (item.type !== 'trace') return;
       trace = projectExecution(item.trace);
       trace.request = { messages: payload.messages };
+      if (!received) syncObservation(trace.id);
       received = true;
       if (trace.status !== 'running') {
         selected = trace.nodes.find((n) => n.status === 'failed')?.id ?? trace.id;
-        remember(trace);
+        syncObservation(trace.id);
       }
       render();
     };
@@ -212,6 +221,8 @@ async function execute(payload: ExecutionRequest & { contextBudget: number }) {
     if (accepted) {
       try {
         await loadTranscript();
+        await loadSelection();
+        await loadMemory();
       } catch (error) {
         notice((error as Error).message);
       }
@@ -244,11 +255,6 @@ el('sample').addEventListener('click', () => {
   notice('样例将在下一次调用时追加，不替换已有消息。');
 });
 historyEditor.addEventListener('change', renderHistory);
-el('continue').addEventListener('click', () => {
-  messageInput.value = '';
-  messageInput.focus();
-  notice('消息已由服务端保留；填写下一条输入即可。');
-});
 el('inspect-close').addEventListener('click', () => inspector.close());
 let lastDiagramWidth = 0;
 new ResizeObserver(() => {
@@ -274,6 +280,21 @@ async function loadTranscript() {
   acceptedMessages = new MessageDraft(data.messages).snapshot();
   renderHistory();
 }
+async function loadMemory() {
+  const response = await fetch('/api/memory');
+  if (!response.ok) throw new Error('无法读取记忆体。');
+  const data = await response.json();
+  memoryView.update(data);
+  selectionView.updateMemory(data);
+}
+async function loadSelection() {
+  const response = await fetch('/api/executions');
+  if (!response.ok) throw new Error('无法读取选择热区。');
+  const data: ExecutionObservation = await response.json();
+  selectionView.update(data);
+  executionNavigation.update(data);
+  return data;
+}
 async function init() {
   renderHistory();
   render();
@@ -282,6 +303,9 @@ async function init() {
     if (!response.ok) throw new Error('无法读取服务配置。');
     const config = await response.json();
     await loadTranscript();
+    const observations = await loadSelection();
+    await loadMemory();
+    await selectObservation(observations.executions.at(-1)?.id ?? '');
     configured = config.configured;
     budget.value = String(config.contextBudget);
     el('connection').textContent = `${config.model} · ${configured ? '已配置 Key' : '待配置 Key'}`;

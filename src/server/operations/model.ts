@@ -17,7 +17,7 @@ export interface ModelOutputContract<I, O> {
 /** Common model invocation stages; concrete operations own their purpose and contracts. */
 export abstract class ModelOperation<I, O> extends Operation<I, ModelRequest, ModelOutput, O> {
   protected readonly remote = true;
-  protected readonly phaseSource = 'src/server/operations/model.ts';
+  protected readonly phaseSource: string = 'src/server/operations/model.ts';
   protected abstract readonly purpose: Purpose;
   protected abstract readonly task: string;
   protected abstract readonly output: ModelOutputContract<I, O>;

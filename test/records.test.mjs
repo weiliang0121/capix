@@ -23,7 +23,7 @@ const output = (content) => ({
   usage: null,
 });
 async function execute(answer = '{"kind":"answer","content":"海盐项目"}') {
-  const responses = [output('{"historyIndexes":[0]}'), output(answer)];
+  const responses = [output('{"historyIndexes":[0]}'), output(answer), output('{"memories":[]}')];
   return observeFixture(createInput(input), settings, {
     async invoke() {
       return responses.shift();
@@ -248,8 +248,8 @@ test('Observer execution observes execution, operations and boundaries from the 
   const facts = await execute();
   validateSnapshot(facts);
   assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations']);
-  assert.equal(facts.operations.length, 3);
-  assert.equal(facts.attempts.length, 9);
+  assert.equal(facts.operations.length, 4);
+  assert.equal(facts.attempts.length, 12);
   for (const operation of facts.operations) {
     assert.equal(Object.hasOwn(operation, 'phase'), false);
     const attempts = facts.attempts.filter((attempt) => attempt.operationId === operation.id);
@@ -276,8 +276,8 @@ test('Observer execution observes execution, operations and boundaries from the 
     assert.equal('outputId' in op, false);
   }
   const view = projectExecution(facts);
-  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'operation').length, 3);
-  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'attempt').length, 9);
+  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'operation').length, 4);
+  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'attempt').length, 12);
   assert.deepEqual(view.result, { kind: 'answer', content: '海盐项目' });
 });
 

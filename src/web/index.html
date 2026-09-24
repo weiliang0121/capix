@@ -19,7 +19,9 @@
           <h1>让每一次推进，都有迹可循。</h1>
           <p>沿着实际调用向下阅读：谁发起、谁执行、何时返回，以及异常如何传回。</p>
         </div>
-        <div class="intro-meta"><span>01 / RELEVANCE</span><span>02 / RESPONSE</span></div>
+        <div class="intro-meta">
+          <span>01 / RELEVANCE</span><span>02 / RESPONSE<br />03 / MEMORY</span>
+        </div>
       </section>
       <div class="workspace">
         <aside class="composer">
@@ -39,23 +41,11 @@
           <button id="run" class="primary" type="button">运行真实链路 <span>↗</span></button>
           <p id="key-note" class="key-note" hidden>在项目 .env 中设置 DEEPSEEK_API_KEY 并重启服务。Key 只留在服务端。</p>
           <p id="notice" role="status" aria-live="polite"></p>
-          <section id="answer-box" class="answer-box" hidden>
-            <div class="section-title">
-              <h3>返回给用户</h3>
-              <span id="answer-kind" class="pill"></span>
-            </div>
-            <p id="answer-text"></p>
-            <button id="continue" class="text-button" type="button">继续输入 →</button>
-          </section>
-          <div class="archive">
-            <div class="section-title">
-              <h3>本页调用记录</h3>
-              <span id="archive-count">0</span>
-            </div>
-            <div id="archive-list"></div>
-          </div>
         </aside>
         <section class="observer" aria-label="运行观测">
+          <nav id="qa-navigation" class="qa-navigation" aria-label="交流观测切换"></nav>
+          <section id="selection-heat" class="selection-heat" aria-label="QA 次序与交流详情"></section>
+          <section id="memory-view" class="memory-view" aria-label="本轮记忆体"></section>
           <div class="observer-header">
             <div>
               <p class="eyebrow">CALL SEQUENCE</p>
@@ -103,7 +93,7 @@
       </div>
       <footer>
         CAPiX Observer
-        <span>运行记录 ≠ 模型推理过程 · 消息与记录保留在服务端内存；本页显示调用记录</span>
+        <span>运行记录 ≠ 模型推理过程 · 消息与记录保留在服务端内存；按 QA 展示调用记录</span>
       </footer>
     </main>
   </body>

@@ -13,9 +13,10 @@ test('one initialized world preserves messages and records while reusing its exe
   const provider = {
     async invoke(request, purpose, signal) {
       requests.push({ request, signal });
+      if (purpose === 'memory') return raw({ memories: [] });
       const input = JSON.parse(request.messages[1].content);
       if (input.message.content === 'failure' && purpose === 'selection') throw new Error('expected failure');
-      return raw(purpose === 'selection' ? { historyIndexes: input.history.map((message) => message.index) } : { kind: 'answer', content: `reply ${input.message.content}` });
+      return raw(purpose === 'memory' ? { memories: [] } : purpose === 'selection' ? { historyIndexes: input.history.map((message) => message.index) } : { kind: 'answer', content: `reply ${input.message.content}` });
     },
   };
   const transcript = new Transcript([{ role: 'user', content: 'initial' }]);
@@ -23,7 +24,7 @@ test('one initialized world preserves messages and records while reusing its exe
   assert.equal(environment.transcript, transcript);
   assert.equal([...environment.book.values()].length, 0);
   assert.equal(requests.length, 0);
-  const operationIds = ['selection', 'assembly', 'generation'].map((name) => environment.execution[name].id);
+  const operationIds = ['selection', 'assembly', 'generation', 'extraction'].map((name) => environment.execution[name].id);
   const snapshots = [],
     streamed = [];
   for (const [index, text] of ['first', 'failure', 'last'].entries()) {
@@ -42,10 +43,10 @@ test('one initialized world preserves messages and records while reusing its exe
   );
   assert.deepEqual(
     requests.map(({ request }) => request.model),
-    ['0', '0', '1', '2', '2'],
+    ['0', '0', '0', '1', '2', '2', '2'],
   );
   assert.deepEqual(
-    JSON.parse(requests[3].request.messages[1].content).history.map((message) => message.content),
+    JSON.parse(requests[4].request.messages[1].content).history.map((message) => message.content),
     ['initial', 'first', 'reply first', 'failure'],
   );
   assert.deepEqual(
@@ -72,7 +73,7 @@ test('one initialized world preserves messages and records while reusing its exe
   );
   assert.deepEqual(
     streamed.map((values) => values.length),
-    [26, 8, 26],
+    [34, 8, 34],
   );
 });
 
@@ -112,7 +113,7 @@ test('a cancelled call does not leave its signal on the reusable model operation
     async invoke(request, purpose, signal) {
       signals.push(signal);
       signal.throwIfAborted();
-      return raw(purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' });
+      return raw(purpose === 'memory' ? { memories: [] } : purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' });
     },
   });
   const cancelled = new AbortController();
@@ -124,7 +125,7 @@ test('a cancelled call does not leave its signal on the reusable model operation
   }
   assert.deepEqual(
     signals.map((signal) => signal.aborted),
-    [true, false, false],
+    [true, false, false, false],
   );
 });
 
@@ -139,7 +140,7 @@ test('configuration updates and Transcript appends take effect only in the next 
         configuration.model = 'B';
         environment.transcript.append({ role: 'user', content: 'arrived during first call' });
       }
-      return raw(purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' });
+      return raw(purpose === 'memory' ? { memories: [] } : purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' });
     },
   });
   const snapshots = [];
@@ -150,7 +151,7 @@ test('configuration updates and Transcript appends take effect only in the next 
   }
   assert.deepEqual(
     requests.map((request) => request.model),
-    ['A', 'A', 'B', 'B'],
+    ['A', 'A', 'A', 'B', 'B', 'B'],
   );
   assert.deepEqual(
     snapshots.map((snapshot) => snapshot.execution.value.settings.model),
@@ -161,7 +162,7 @@ test('configuration updates and Transcript appends take effect only in the next 
     [1, 4],
   );
   assert.equal(JSON.parse(requests[0].messages[1].content).history.length, 0);
-  assert.equal(JSON.parse(requests[2].messages[1].content).history.length, 3);
+  assert.equal(JSON.parse(requests[3].messages[1].content).history.length, 3);
   for (const snapshot of snapshots) {
     assert.ok(snapshot.operations.every((record) => record.executionId === snapshot.execution.id));
     assert.ok([...snapshot.operations, ...snapshot.attempts].every((record) => !Object.hasOwn(record.value, 'settings') && !Object.hasOwn(record.value, 'transcriptRange')));

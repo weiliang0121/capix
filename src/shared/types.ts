@@ -2,7 +2,7 @@ import type { Message } from './transcript/message.js';
 export type { Message } from './transcript/message.js';
 import type { RuntimeErrorValue } from './errors.js';
 import type { EventRecord, RuntimeSnapshot } from './records.js';
-export type Purpose = 'selection' | 'answer';
+export type Purpose = 'selection' | 'answer' | 'memory';
 export type NodeStatus = 'running' | 'passed' | 'failed';
 import type { GenerationOutput } from './operations/generation.js';
 export interface ExecutionRequest {

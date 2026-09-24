@@ -72,29 +72,24 @@ test('empty selection can fit exactly; fixed request content and output reserve 
   assert.equal(requests.length, 0);
 });
 
-test('the observed execution preserves model ranking and records the actual capacity-limited generation request', async () => {
-  const full = await generate(input);
-  const budget = required(withHistory(full, [0, 2])) - 1;
+test('the observed execution preserves ranking, records actual requests and accounts for full selection request capacity', async () => {
   const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
   const current = createInput({ content: message.content, history });
   const requests = [];
-  const facts = await observeFixture(
-    current,
-    { ...settings, contextBudget: budget },
-    {
-      async invoke(request, purpose) {
-        requests.push(request);
-        if (purpose === 'selection') {
-          assert.match(request.messages[0].content, /从高到低/);
-          return output({ historyIndexes: [2, 0, 1] });
-        }
-        return output({ kind: 'answer', content: '完成' });
-      },
+  const facts = await observeFixture(current, settings, {
+    async invoke(request, purpose) {
+      requests.push(request);
+      if (purpose === 'memory') return output({ memories: [] });
+      if (purpose === 'selection') {
+        assert.match(request.messages[0].content, /从高到低/);
+        return output({ historyIndexes: [2, 0, 1] });
+      }
+      return output({ kind: 'answer', content: '完成' });
     },
-  );
+  });
   assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
-  assert.equal(requests.length, 2);
-  assert.equal(facts.operations.length, 3);
+  assert.equal(requests.length, 3);
+  assert.equal(facts.operations.length, 4);
   assert.deepEqual(facts.operations[0].value.output.historyIndexes, [2, 0, 1]);
   const generation = facts.operations.find((record) => record.operation === 'answer');
   assert.deepEqual(
@@ -105,6 +100,20 @@ test('the observed execution preserves model ranking and records the actual capa
   assert.deepEqual(before.value.output, requests[1]);
   assert.deepEqual(
     JSON.parse(requests[1].messages[1].content).history.map((item) => item.index),
-    [2],
+    [0, 1, 2],
   );
+  assert.ok(JSON.parse(requests[0].messages[1].content).history.every((item) => !('selectionCount' in item)));
+  const rejected = await observeFixture(
+    createInput({ content: message.content, history }),
+    { ...settings, contextBudget: required(requests[0]) - 1 },
+    {
+      async invoke() {
+        assert.fail('Oversized selection request must not invoke the model');
+      },
+    },
+  );
+  assert.equal(rejected.execution.status, 'failed');
+  assert.equal(rejected.execution.value.error.code, 'CAPACITY_EXCEEDED');
+  assert.equal(rejected.execution.value.error.detail.required, required(requests[0]));
+  assert.equal(rejected.operations.length, 1);
 });

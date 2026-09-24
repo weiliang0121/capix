@@ -8,6 +8,11 @@ import { acceptExecutionInput } from './observer/accept.js';
 import { initializeObserver } from './observer/environment.js';
 import { RuntimeError } from './errors/error.js';
 import { DeepSeekProvider } from './provider.js';
+import { observeMemory } from './memory/observe.js';
+import { observeSelection } from './observer/selection.js';
+import { inspectExecutions } from './observer/inspect.js';
+import { ExecutionRecordHelper } from './records/execution/helper.js';
+import { ExecutionRecord } from './records/execution/record.js';
 import { observeExecution } from './observer/observe.js';
 import { validateSettings } from './settings.js';
 
@@ -26,7 +31,18 @@ const port = Number(process.env.PORT || 4317);
 if (!Number.isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 const allowedSources = new Set([
+  'memory/memory.ts',
+  'memory/collection.ts',
+  'memory/change.ts',
+  'memory/helper.ts',
+  'records/memory/record.ts',
+  'records/memory/helper.ts',
+  'memory/observe.ts',
+  'operations/memory/extract.ts',
+  'operations/memory/input.ts',
+  'operations/memory/output.ts',
   'observer/environment.ts',
+  'observer/selection.ts',
   'observer/execution.ts',
   'observer/observe.ts',
   'execution/execution.ts',
@@ -67,6 +83,7 @@ const allowedSources = new Set([
   'operations/model/request.ts',
   'operations/model/capacity.ts',
   'operations/history/select.ts',
+  'operations/history/usage.ts',
   'operations/context/assemble.ts',
   'operations/answer/generate.ts',
   'observer/accept.ts',
@@ -79,12 +96,12 @@ const allowedSources = new Set([
   'provider.ts',
 ]);
 
-function json(res: ServerResponse, status: number, body: unknown) {
+function json(res: ServerResponse, status: number, body: unknown, replacer?: (key: string, value: unknown) => unknown) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
   });
-  res.end(JSON.stringify(body));
+  res.end(JSON.stringify(body, replacer));
 }
 async function body(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -106,6 +123,14 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
   if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured: Boolean(key) });
+  if (req.method === 'GET' && url.pathname === '/api/memory') return json(res, 200, observeMemory(observer.execution.memories, observer.transcript, observer.book));
+  if (req.method === 'GET' && url.pathname === '/api/executions') return json(res, 200, inspectExecutions(observer.book, observer.transcript, observer.execution));
+  if (req.method === 'GET' && url.pathname === '/api/execution') {
+    const id = url.searchParams.get('id') || '';
+    if (!(observer.book.get(id) instanceof ExecutionRecord)) return json(res, 404, { error: '未找到执行记录。' });
+    return json(res, 200, ExecutionRecordHelper.snapshot(observer.book, observer.operationIndex, observer.attemptIndex, id, observer.eventIndex), observeTranscript);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/selection') return json(res, 200, observeSelection(observer.book, observer.transcript, observer.execution.selection.id));
   if (req.method === 'GET' && url.pathname === '/api/transcript') return json(res, 200, { messages: observer.transcript.snapshot() });
   if (req.method === 'GET' && url.pathname === '/api/source') {
     const name = url.searchParams.get('file') || '';
@@ -148,6 +173,9 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     '/app.js': [resolve(root, 'web/app.js'), 'text/javascript; charset=utf-8'],
     '/shared/execution/project.js': [resolve(root, 'shared/execution/project.js'), 'text/javascript; charset=utf-8'],
     '/messages/draft.js': [resolve(root, 'web/messages/draft.js'), 'text/javascript; charset=utf-8'],
+    '/execution/navigation.js': [resolve(root, 'web/execution/navigation.js'), 'text/javascript; charset=utf-8'],
+    '/memory/view.js': [resolve(root, 'web/memory/view.js'), 'text/javascript; charset=utf-8'],
+    '/selection/view.js': [resolve(root, 'web/selection/view.js'), 'text/javascript; charset=utf-8'],
     '/sequence/view.js': [resolve(root, 'web/sequence/view.js'), 'text/javascript; charset=utf-8'],
     '/app.js.map': [resolve(root, 'web/app.js.map'), 'application/json'],
     '/style.css': [resolve(project, 'src/web/style.css'), 'text/css; charset=utf-8'],

@@ -9,3 +9,6 @@ export { RecordBook } from './container/book.js';
 export { RecordIndex } from './container/index.js';
 export { EventRecord, type EventDefinition } from './event/record.js';
 export { EventRecordHelper } from './event/helper.js';
+
+export { MemoryRecord } from './memory/record.js';
+export { MemoryRecordHelper } from './memory/helper.js';

@@ -39,7 +39,7 @@ function scripted(values) {
     calls,
     async invoke(request, purpose) {
       calls.push({ request, purpose });
-      const value = values.shift();
+      const value = purpose === 'memory' ? output('{"memories":[]}') : values.shift();
       if (!value) throw new Error('Unexpected model call');
       return value;
     },
@@ -50,17 +50,17 @@ async function run(provider, options = settings) {
   const trace = await runObserver(structuredClone(input), options, provider, (t) => records.push(t));
   return { trace, records };
 }
-test('two actual call stages produce a causal trace and selected original content', async () => {
+test('three actual model stages produce a causal trace and selected original content', async () => {
   const provider = scripted([output('{"historyIndexes":[1,0]}'), output(JSON.stringify(reply))]);
   const { trace, records } = await run(provider);
   assert.equal(trace.status, 'succeeded');
   assert.deepEqual(trace.result, reply);
-  assert.equal(provider.calls.length, 2);
+  assert.equal(provider.calls.length, 3);
   assert.deepEqual(
     JSON.parse(provider.calls[1].request.messages[1].content).history.map((m) => m.index),
     [0, 1],
   );
-  assert.equal(trace.nodes.length, 13);
+  assert.equal(trace.nodes.length, 17);
   assert.equal(
     trace.nodes.some((node) => node.operation === 'input'),
     false,
@@ -129,7 +129,7 @@ test('DeepSeek request uses JSON mode; transport secret is absent from observati
       choices: [
         {
           message: {
-            content: sent.length === 1 ? '{"historyIndexes":[0,1]}' : JSON.stringify(reply),
+            content: sent.length === 1 ? '{"historyIndexes":[0,1]}' : sent.length === 2 ? JSON.stringify(reply) : '{"memories":[]}',
           },
           finish_reason: 'stop',
         },
@@ -139,7 +139,7 @@ test('DeepSeek request uses JSON mode; transport secret is absent from observati
   });
   const { trace, records } = await run(provider);
   assert.equal(trace.status, 'succeeded');
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
   assert.equal(JSON.stringify(records).includes('test-secret-do-not-log'), false);
   assert.equal(trace.nodes.find((n) => n.operation === 'selection.commit').output.usage.totalTokens, 15);
 });
@@ -178,8 +178,8 @@ test('Transcript rejects invalid messages before execution or model calls begin'
 test('BCA sequence records nested call and return boundaries rather than adjacent stage edges', async () => {
   const { trace } = await run(scripted([output('{"historyIndexes":[0,1]}'), output(JSON.stringify(reply))]));
   const { calls, events } = trace.callSequence;
-  assert.equal(calls.length, 13);
-  assert.equal(events.length, 26);
+  assert.equal(calls.length, 17);
+  assert.equal(events.length, 34);
   const active = new Set();
   let previousTime = -1;
   events.forEach((event, index) => {
@@ -248,8 +248,9 @@ test('Observer execution uses its captured configuration even when caller settin
   const mutable = { ...settings },
     requests = [];
   const provider = {
-    async invoke(request) {
+    async invoke(request, purpose) {
       requests.push(request);
+      if (purpose === 'memory') return output('{"memories":[]}');
       if (requests.length === 1) {
         mutable.model = 'changed';
         mutable.contextBudget = 1;
@@ -261,7 +262,7 @@ test('Observer execution uses its captured configuration even when caller settin
   };
   const facts = await observeFixture(createInput(input), mutable, provider);
   assert.equal(facts.execution.status, 'succeeded');
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, 3);
   assert.ok(requests.every((request) => request.model === settings.model && request.max_tokens === settings.maxOutputTokens));
   assert.deepEqual(facts.execution.value.settings, settings);
 });

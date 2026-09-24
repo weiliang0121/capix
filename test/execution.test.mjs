@@ -57,7 +57,7 @@ test('ObserverExecution returns answers without a recorder and uses the configur
   const provider = {
     async invoke(request, purpose) {
       requests.push(request);
-      return { id: 'test', model: request.model, content: JSON.stringify(purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' }), finishReason: 'stop', usage: null };
+      return { id: 'test', model: request.model, content: JSON.stringify(purpose === 'memory' ? { memories: [] } : purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' }), finishReason: 'stop', usage: null };
     },
   };
   const execution = new ObserverExecution(new Runtime(), provider);
@@ -69,6 +69,6 @@ test('ObserverExecution returns answers without a recorder and uses the configur
   }
   assert.deepEqual(
     requests.map((request) => request.model),
-    ['one', 'one', 'two', 'two'],
+    ['one', 'one', 'one', 'two', 'two', 'two'],
   );
 });
