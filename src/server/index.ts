@@ -64,6 +64,8 @@ const allowedSources = new Set([
   'records/container/index.ts',
   'records/index.ts',
   'operations/model.ts',
+  'operations/model/request.ts',
+  'operations/model/capacity.ts',
   'operations/history/select.ts',
   'operations/context/assemble.ts',
   'operations/answer/generate.ts',

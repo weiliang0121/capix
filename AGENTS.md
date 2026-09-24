@@ -60,3 +60,5 @@
 - BCA 统一为阶段 input 与对应 IO 类型的 AttemptContext；before 输出传给 commit，commit 输出直接传给 after，不组合 `{ raw, input }`。需要操作原始输入时通过 Runtime.getOperationContext 查询，执行配置与消息范围通过 getExecutionContext 查询。阶段内部辅助函数不创建上下文；不引入权限控制。
 
 - 历史选择要求模型按相关性与必要性从高到低输出索引；本地校验引用合法性，不宣称可验证排序质量。组装保留优先级与完整原文。GenerateAnswer 在请求装载时按优先级纳入完整消息，遇到首条超限即停止，不跳过长消息凑容量；第一条就超限则失败。选定前缀在最终请求中按原始索引升序呈现，不改变 Transcript。当前输入、系统提示、Schema 与输出预留不能裁剪。候选请求与最终检查共用 operations/model/capacity.ts 的完整请求 UTF-8 字节估算，非精确 tokenizer；不增加摘要、额外模型调用或策略框架。选择操作本身仍装载全部可见历史，超限直接失败。现有生成 before 的 input/output 分别记录裁剪前候选与实际请求，不另存一份裁剪观测记录。
+
+- 内部筛选结果只作为操作 IO 与运行记录保存，不自动追加为 Transcript 消息。Transcript 只接纳 user/assistant 原始消息；筛选不生成 summary，不建立摘要到原文的替换链路。后续方向为 Jev 筛选与使用计数，接入、计数归属和热区装载尚未实现；不因这次撤销增加兼容或迁移层。
