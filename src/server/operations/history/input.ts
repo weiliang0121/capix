@@ -1,5 +1,11 @@
 import type { ExecutionContext } from '../../context/execution.js';
 import type { Message } from '../../../shared/transcript/message.js';
+import type { Memory } from '../../memory/memory.js';
+
+export interface SelectionInput {
+  readonly message: Readonly<Message>;
+  readonly memories: readonly ReturnType<Memory['toJSON']>[];
+}
 
 /** Messages visible before the current input, within this execution's fixed range. */
 export function historyMessages(execution: ExecutionContext): readonly { index: number; message: Readonly<Message> }[] {

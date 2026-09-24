@@ -29,7 +29,7 @@ test('input is a plain immutable message; the execution range fixes visibility a
   for (const index of [2, -1, 0.5]) assert.throws(() => context.transcriptRange.read(index), RangeError);
   for (const index of [1, 2])
     assert.throws(
-      () => selectionOutputContract.accept({ historyIndexes: [index] }, input, context),
+      () => selectionOutputContract.accept({ historyIndexes: [index] }, { message: input, memories: [] }, context),
       (error) => error.code === 'INDEX_OUT_OF_RANGE',
     );
 });
@@ -74,7 +74,7 @@ test('only the execution record holds the range; calls consume selected content 
   const assembled = facts.operations.find((record) => record.operation === 'assemble').value.output;
   assert.deepEqual(assembled.message, input);
   assert.deepEqual(assembled.selectedMessages, [{ index: 0, message: transcript.get(0) }]);
-  assert.deepEqual(JSON.parse(requests[1].messages[1].content), { message: input, history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });
+  assert.deepEqual(JSON.parse(requests[1].messages[1].content), { message: input, memories: [], history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });
   const browser = JSON.parse(JSON.stringify(facts, observeTranscript));
   validateSnapshot(browser);
   assert.deepEqual(browser.execution.value.input, input);

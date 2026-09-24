@@ -19,7 +19,7 @@ export class ExecutionContext<I = unknown, O = unknown> extends RuntimeContext<I
     // ModelSettings has scalar fields. One independent configuration is used for the whole execution.
     this.settings = Object.freeze({ ...options.settings });
     this.signal = options.signal ?? new AbortController().signal;
-    this.transcriptRange = options.transcript ? new TranscriptRangeRef(options.transcript, 0, options.transcript.length) : undefined;
+    this.transcriptRange = options.transcript ? new TranscriptRangeRef(options.transcript, options.transcript.activeStart, options.transcript.length) : undefined;
     Object.freeze(this);
   }
 }

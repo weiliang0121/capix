@@ -11,7 +11,7 @@ import { selectionOutputContract } from '../dist/server/operations/history/outpu
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
 const runtime = new Runtime();
-const call = (operation, input) => invoke(runtime.execution({ input, settings, transcript: transcriptFor(input) }), (context) => operation.call(context, input));
+const call = (operation, input, operationInput = input) => invoke(runtime.execution({ input, settings, transcript: transcriptFor(input) }), (context) => operation.call(context, operationInput));
 const raw = (content) => ({
   id: 'test',
   model: 'test',
@@ -56,18 +56,19 @@ test('selection acceptance separates invalid shape from missing references and p
   const message = createInput(input);
   const execution = contextFor(message);
   const value = { historyIndexes: [1, 0] };
-  const accepted = selectionOutputContract.accept(value, message, execution);
+  const selectionInput = { message, memories: [] };
+  const accepted = selectionOutputContract.accept(value, selectionInput, execution);
   assert.deepEqual(accepted, { historyIndexes: [1, 0] });
   assert.notEqual(accepted.historyIndexes, value.historyIndexes);
   assert.deepEqual(value.historyIndexes, [1, 0]);
   for (const historyIndexes of [[0, 0], [-1], [0.5], [Number.MAX_SAFE_INTEGER + 1]]) {
     assert.throws(
-      () => selectionOutputContract.accept({ historyIndexes }, message, execution),
+      () => selectionOutputContract.accept({ historyIndexes }, selectionInput, execution),
       (error) => error.code === 'OUTPUT_SHAPE',
     );
   }
   assert.throws(
-    () => selectionOutputContract.accept({ historyIndexes: [2] }, message, execution),
+    () => selectionOutputContract.accept({ historyIndexes: [2] }, selectionInput, execution),
     (error) => error.code === 'INDEX_OUT_OF_RANGE',
   );
 });
@@ -131,9 +132,11 @@ test('one selection operation can overlap calls without mixing their history bou
   const first = { content: 'one', history: [{ role: 'user', content: 'a' }] };
   const second = { content: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
   const original = structuredClone([first, second]);
-  const short = call(op, createInput(first));
+  const firstMessage = createInput(first);
+  const short = call(op, firstMessage, { message: firstMessage, memories: [] });
   const shortFailure = assert.rejects(short, (error) => error.code === 'INDEX_OUT_OF_RANGE');
-  const long = call(op, createInput(second));
+  const secondMessage = createInput(second);
+  const long = call(op, secondMessage, { message: secondMessage, memories: [] });
   while (pending.size < 2) await new Promise((resolve) => setImmediate(resolve));
   pending.get('two')(raw('{"historyIndexes":[1]}'));
   assert.deepEqual(await long, { historyIndexes: [1] });

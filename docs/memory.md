@@ -1,5 +1,18 @@
 # 记忆体与记忆记录
 
+## 当前串行运行链路
+
+```text
+M(n-1) + Q(n) + H → SelectHistory → S(n)
+M(n-1) + Q(n) + S(n) → GenerateAnswer → A(n)
+M(n-1) + Q(n) + A(n) + 可见原文 → ExtractMemory → M(n)
+M(n)              → 下一轮 SelectHistory
+```
+
+H 只有当前段内此前的原始用户/助手消息，不含记忆。ObserverExecution.execute 在每轮开始取得 previousMemories（当前 Transcript 下 Memory.toJSON 的正文快照），用于筛选、回答和提取。记忆正文已有不可变语义，后续 Memory.update 不会改写这次捕获的内容。回答可以依据记忆有限继承旧段理解；提取的可见原文只有本轮 QA 和当前段筛选原文，不沿来源读取旧段。成功落实的更新在下一次执行开始读取，不从记录中恢复或查询运行输入。
+
+SelectHistory 输出仍只是当前段的原文索引。其 OperationRecord 输入明确显示 message/memories；before 输出保存实际发给模型的 message/memories/history。历史与记忆均计入容量检查；下一轮开始前必要时切换消息段，详见 [消息分段](transcript.md)。不移除记忆，记忆本身超限仍失败。模型的理解与索引选择质量不由 Schema 保证。
+
 ## 两种对象
 
 Memory 是当前可消费的理解。它有持续身份及原文归属；正文更新保持同一个实例和 ID。内部当前内容为不可变值，通过 update 一次替换，不允许外部零散改写。
@@ -38,7 +51,7 @@ MemoryRecord extends RuntimeRecord<{
 ```text
 选择 → 组装 → 生成 → 追加正式 assistant 消息
                          ↓
-当前记忆 + 其原文依据 + 本轮QA + 筛选候选原文
+当前记忆 + 本轮QA + 当前段筛选候选原文
                          ↓
 ExtractMemory.before → commit(模型) → after
                                      ├─ 解析与整批接纳
@@ -66,9 +79,13 @@ ExtractMemory.before → commit(模型) → after
 }
 ```
 
-创建使用 action=create、memoryId=null；无需变化则返回空数组。最多四项。更新必须引用当前可见、同 Transcript 的记忆 ID，同批不能重复更新一个目标。本次依据至少包含一条本轮消息，完整内容依据必须包含本次依据；所有索引都在提取输入中。Schema 在提示词中声明，并有对应本地检查，不是供应商强制 Schema 输出。
+创建使用 action=create、memoryId=null；无需变化则返回空数组。最多四项。更新必须引用当前可见、同 Transcript 的记忆 ID，同批不能重复更新一个目标。本次依据至少包含一条本轮消息，完整内容依据必须包含本次依据。本次依据必须是可见原文；更新的 result.sourceIndexes 还可以保留该目标记忆的已有来源，不借用其他记忆的未加载来源。Schema 在提示词中声明，并有对应本地检查，不是供应商强制 Schema 输出。
 
-提取请求只装载当前记忆内容及来源，不消费 MemoryRecord。原文仍只增不改删。筛选候选是提取可用证据，不宣称全部用于回答。更新完整正文仍可能遗漏条件或错误理解；结构校验不证明变化说明与语义正确。
+接纳先检查候选结构、目标与引用合法性，以及原始候选是否重复更新同一 ID。若 update 的 result 与本轮旧记忆的 topic/content/sourceIndexes 完全相同（索引顺序也相同），将其作为无操作过滤，不要求它额外引用本轮消息，不修改 Memory 或新增 MemoryRecord。是否无变化不依据 change 的文字，不做语义相似判断；正文、主题或来源发生变化时仍必须提供本轮依据。未知引用、正文依据不包含变化依据等错误不能借无操作绕过。剩余变更整批检查通过后才落实，仍不接受部分有效批次。
+
+模型原始候选保留在 commit 的返回记录；after 与操作最终输出只保留实际接纳的变更。因此可以核对哪些候选被过滤，不新增跳过事件或记录层级。未增加错误反馈、自动重试或多次 attempt 执行。
+
+提取请求装载当前记忆内容及来源索引，不沿引用加载来源原文，不消费 MemoryRecord。原文仍只增不改删。筛选候选是提取可用证据，不宣称全部用于回答。更新完整正文仍可能遗漏条件或错误理解；结构校验不证明变化说明与语义正确。
 
 ## 归属与边界
 

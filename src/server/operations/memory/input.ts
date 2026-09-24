@@ -9,9 +9,9 @@ export interface MemoryInput {
 }
 
 /** Selected evidence is available to extraction; it is not a claim of actual generation use. */
-export function prepareMemoryInput(range: TranscriptRangeRef, response: MessageRef, selected: GenerationInput['selectedMessages'], memories: readonly Memory[]): MemoryInput {
-  const indexes = new Set([...selected.map((item) => item.index), ...memories.flatMap((memory) => memory.sourceIndexes), range.end - 1]);
+export function prepareMemoryInput(range: TranscriptRangeRef, response: MessageRef, selected: GenerationInput['selectedMessages'], memories: MemoryInput['memories']): MemoryInput {
+  const indexes = new Set([...selected.map((item) => item.index), range.end - 1]);
   const messages = [...indexes].sort((a, b) => a - b).map((index) => ({ index, message: range.read(index) }));
   messages.push({ index: response.index, message: response.read() });
-  return { currentIndexes: [range.end - 1, response.index], messages, memories: memories.map((memory) => memory.toJSON()) };
+  return { currentIndexes: [range.end - 1, response.index], messages, memories };
 }

@@ -267,7 +267,7 @@ test('Observer execution observes execution, operations and boundaries from the 
   const assemble = facts.operations.find((op) => op.operation === 'assemble');
   const answer = facts.operations.find((op) => op.operation === 'answer');
   assert.deepEqual(assemble.value.input, select.value.output);
-  assert.deepEqual(answer.value.input, assemble.value.output);
+  assert.deepEqual(answer.value.input, { ...assemble.value.output, memories: [] });
   assert.deepEqual(facts.execution.value.output, answer.value.output);
   for (const op of facts.operations) {
     assert.equal(op.executionId, facts.execution.id);

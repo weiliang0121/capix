@@ -32,11 +32,16 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
       requests.push({ request, purpose });
       const input = JSON.parse(request.messages[1].content);
       if (purpose === 'selection') {
-        assert.ok(!('memories' in input));
+        if (round === 0) assert.deepEqual(input.memories, []);
+        else {
+          assert.equal(input.memories.length, 2);
+          assert.equal(input.memories.find((memory) => memory.topic === '聚餐').content, round === 1 ? '用户聚餐预算200元。' : '用户聚餐预算150元。');
+        }
+        assert.ok(input.history.every((message) => Object.keys(message).sort().join() === 'content,index,role'));
         return raw({ historyIndexes: input.history.map((item) => item.index) });
       }
       if (purpose === 'answer') {
-        assert.ok(!('memories' in input));
+        assert.equal(input.memories.length, round === 0 ? 0 : 2);
         return raw({ kind: 'answer', content: '已了解你的安排。' });
       }
       assert.equal(environment.transcript.current('assistant').content, '已了解你的安排。');
@@ -68,6 +73,14 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
     );
   }
   assert.equal(requests.length, 9);
+  for (let index = 0; index < requests.length; index += 3) {
+    const selection = JSON.parse(requests[index].request.messages[1].content);
+    const extraction = JSON.parse(requests[index + 2].request.messages[1].content);
+    assert.deepEqual(selection.memories, extraction.memories);
+  }
+  assert.deepEqual(first.operations[0].value.input.memories, []);
+  assert.equal(second.operations[0].value.input.memories[0].content, '用户聚餐预算200元。');
+  assert.equal(third.operations[0].value.input.memories[0].content, '用户聚餐预算150元。');
   assert.equal(environment.execution.memories.get(memory.id), memory);
   assert.equal(environment.execution.memories.values(environment.transcript).length, 2);
   assert.equal(memory.content, '用户聚餐预算150元。');
@@ -112,7 +125,7 @@ test('the output contract rejects invalid targets, evidence, duplicate updates a
     [{ topic: '旧格式', content: '150', sourceIndexes: [2], relations: [] }, 'OUTPUT_SHAPE'],
   ]) {
     assert.throws(
-      () => memoryOutputContract.accept({ memories: [valid, candidate] }, input),
+      () => memoryOutputContract.accept({ memories: [candidate] }, input),
       (error) => error.code === code,
     );
   }
@@ -154,9 +167,13 @@ test('failed extraction leaves current memory and its records unchanged and keep
 
 test('memory updates work without records and cannot cross Transcript boundaries or partially apply invalid batches', async () => {
   const inputs = [];
+  const selectionInputs = [];
   const execution = new ObserverExecution(new Runtime(), {
     async invoke(request, purpose) {
-      if (purpose === 'selection') return raw({ historyIndexes: [] });
+      if (purpose === 'selection') {
+        selectionInputs.push(JSON.parse(request.messages[1].content));
+        return raw({ historyIndexes: [] });
+      }
       if (purpose === 'answer') return raw({ kind: 'answer', content: '了解' });
       const input = JSON.parse(request.messages[1].content);
       inputs.push(input);
@@ -175,6 +192,10 @@ test('memory updates work without records and cannot cross Transcript boundaries
   assert.equal(memory.content, '2');
   await execution.call(b.current('user'), { settings, transcript: b });
   assert.equal(inputs[2].memories.length, 0);
+  assert.deepEqual(
+    selectionInputs.map((input) => input.memories.length),
+    [0, 1, 0],
+  );
   assert.equal(execution.memories.values(b).length, 1);
   const collection = new MemoryCollection();
   const other = collection.add(new Memory(a, content('原本', '150', [0])));
@@ -223,4 +244,20 @@ test('memory capacity overflow stops postprocessing without truncating evidence 
   assert.equal(facts.operations.at(-1).value.error.code, 'CAPACITY_EXCEEDED');
   assert.equal(environment.transcript.length, 2);
   assert.equal(environment.execution.memories.values(environment.transcript).length, 0);
+});
+
+test('selection capacity includes previous memories and rejects overflow before any provider call', async () => {
+  const environment = initializeObserver({
+    async invoke() {
+      assert.fail('oversized selection must not call provider');
+    },
+  });
+  environment.transcript.append({ role: 'user', content: '旧条件' }, { role: 'assistant', content: '已了解' });
+  const memory = environment.execution.memories.add(new Memory(environment.transcript, content('大量理解', '历史条件。'.repeat(10000), [0])));
+  const facts = await run(environment, '继续', { ...settings, contextBudget: 2000 });
+  assert.equal(facts.execution.status, 'failed');
+  assert.equal(facts.operations.length, 1);
+  assert.equal(facts.operations[0].value.error.code, 'CAPACITY_EXCEEDED');
+  assert.equal(facts.operations[0].value.input.memories[0].content, memory.content);
+  assert.equal(environment.transcript.length, 3);
 });

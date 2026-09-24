@@ -1,9 +1,10 @@
-import { MessageRef } from './ref.js';
+import { MessageRef, TranscriptRangeRef } from './ref.js';
 import type { Message } from '../../shared/types.js';
 
 /** Original accepted messages, including the current input; independent of execution records. */
 export class Transcript {
   readonly #messages: Readonly<Message>[] = [];
+  readonly #starts: number[] = [0];
 
   constructor(messages: readonly Message[] = []) {
     if (!Array.isArray(messages)) throw new TypeError('消息集合必须是数组。');
@@ -12,6 +13,20 @@ export class Transcript {
 
   get length(): number {
     return this.#messages.length;
+  }
+
+  get activeStart(): number {
+    return this.#starts.at(-1)!;
+  }
+
+  /** Segment boundaries share immutable messages and preserve absolute indexes. */
+  segments(): readonly TranscriptRangeRef[] {
+    return this.#starts.map((start, index) => new TranscriptRangeRef(this, start, this.#starts[index + 1] ?? this.length));
+  }
+
+  startSegment(start: number): void {
+    if (!Number.isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
+    this.#starts.push(start);
   }
 
   append(...messages: readonly Message[]): void {

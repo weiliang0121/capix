@@ -14,17 +14,20 @@ initializeObserver(provider, transcript?)
 外部 ExecutionRequest { messages }
   → acceptExecutionInput：向已有 Transcript 追加一批新消息
   → 最后一条只读 user Message → Execution.input
-  → selection.call → selectionOutput
+  → 读取本轮开始时的 previousMemories
+  → selection.call({ message: input, memories: previousMemories }) → selectionOutput
   → assembly.call → assemblyOutput
   → generation.call → generationOutput
   → 追加 assistant 消息
-  → extraction.call → 接纳变更 → MemoryHelper 创建/更新 → MemoryRecord 登记
+  → extraction.call（previousMemories + 当前 QA + 可见原文）
+  → 接纳变更 → MemoryHelper 创建/更新 → MemoryRecord 登记
+  → 更新后的记忆供下一轮 selection 使用
   → generationOutput → Execution.output
 ```
 
 Transcript 只增不改删，包含第一条和当前消息。接纳时检查角色及非空正文，复制冻结每条消息；批量追加先全部检查，保留原文。get/current 返回同一不可变消息，snapshot(end) 只复制前缀数组。current(role) 是该角色最新消息，不表示问答配对。
 
-本次 input 只有 role/content。ExecutionContext 在开始时固定 settings 的不可变取值与 TranscriptRangeRef [0,end)，范围包含本次输入；历史选择排除末条。外层修改配置或追加消息不会改变进行中的执行，下一次执行才捕获新的配置与范围。模型操作从所属 ExecutionContext 读取配置；消息只在需要时从固定范围读取。
+本次 input 只有 role/content。ExecutionContext 在开始时固定 settings 的不可变取值与 TranscriptRangeRef [activeStart,end)，范围包含本次输入；历史选择排除末条。外层修改配置或追加消息不会改变进行中的执行，下一次执行才捕获新的配置与范围。模型操作从所属 ExecutionContext 读取配置；消息只在需要时从固定范围读取。
 
 服务启动时初始化一个本地 Observer 环境，Transcript 可以为空，也可以传入已经装载的实例；初始化不产生 Context、Record 或模型调用。环境、消息与记录跨请求保留，进程退出后消失。当前不提供多环境路由、持久化、清空或恢复接口。
 
@@ -132,7 +135,7 @@ pnpm check
 - 成功返回 answer/unknown/needs-info 表示输出被接纳，不保证用户问题已解决。
 - “继续输入”只清空输入框。消息已经由服务端保存，刷新页面会重新读取；本页时序列表仍是本页接收的记录，尚未提供服务端记录列表查询。
 
-容量检查发生在完整模型请求装载后。当前以请求 UTF-8 字节数加余量估算输入容量，再加预留输出 token；不是精确 tokenizer，也不保证供应商一定接纳。历史选择本身超限直接失败。选择结果要求模型按相关性与必要性从高到低返回索引；这是模型指导，不保证排序质量。生成请求按该顺序纳入完整消息，遇到第一条放不下的就停止，不跳过长消息凑容量；第一条就放不下则失败。保留的前缀在最终请求里恢复原始时间顺序。当前输入和固定请求内容不裁剪，容量处理不生成摘要、不额外调用模型、不自动修复或重试。生成 before 的输入保留候选顺序，输出记录最终请求，可以对照检查实际采用了哪些历史。
+容量检查发生在完整模型请求装载后。当前以请求 UTF-8 字节数加余量估算输入容量，再加预留输出 token；不是精确 tokenizer，也不保证供应商一定接纳。历史选择超限时，在下一轮开始前切换当前消息段；旧段保留，优先保留最近两轮完整 QA，预算不足降为一轮、零轮；消息对象和绝对索引不变。当前输入加记忆本身超限仍失败。选择结果要求模型按相关性与必要性从高到低返回索引；这是模型指导，不保证排序质量。生成请求按该顺序纳入完整消息，遇到第一条放不下的就停止，不跳过长消息凑容量；第一条就放不下则失败。保留的前缀在最终请求里恢复原始时间顺序。当前输入和固定请求内容不裁剪，容量处理不生成摘要、不额外调用模型、不自动修复或重试。生成 before 的输入保留候选顺序，输出记录最终请求，可以对照检查实际采用了哪些历史。
 
 ## 目录
 
@@ -173,6 +176,10 @@ src/web/                     工作台、消息编辑与时序图
 
 第三次模型调用返回零到四项创建或更新提议，每项明确目标、变化说明、依据与变更后完整内容。MemoryHelper 先检查整批再落实；MemoryCollection 保存持续身份的 Memory，更新不新建身份。每次落实产生独立 MemoryRecord，继承 RuntimeRecord，关联 memoryId、executionId、operationId，保存本次变化说明和结果快照。
 
-页面直接读取这些记录显示变化，点击记忆体可以查看当前理解、历次变化及调用关联。下一次提取只读取当前记忆体与原文依据，不发送历史记录；选择与生成暂不使用记忆。
+页面直接读取这些记录显示变化，点击记忆体可以查看当前理解、历次变化及调用关联。每轮开始从当前 Transcript 的 MemoryCollection 取得 previousMemories 的正文快照，筛选、回答和本轮提取使用同一份旧记忆。筛选输入为 message + memories，原始 history 从执行固定范围读取；记忆不插入 Transcript，计数不发送给模型。生成接收 message + 选中原文 + previousMemories；提取接收 previousMemories + 本轮 QA + 当前段筛选原文，不沿来源加载旧段，落实后下一轮筛选读取更新后的记忆。三次实际模型请求都由原有 AttemptRecord 记录，不读取 MemoryRecord 推进。
 
-提取失败会让整体执行失败，已经生成的回答仍保留。记录登记失败不会伪装成事实已回滚；尚无事务、补偿、重试或持久化。全量记忆与依据超预算明确失败。详情见 [记忆体与记忆记录](docs/memory.md)。
+可在配置密钥后执行 `pnpm build` 和 `node --env-file-if-exists=.env test/live/memory.mjs` 检查三轮真实 QA。该检查直接调用产品的 ObserverExecution，不替换操作、提示词或流程；输出记录到本地 traces/memoryLoop（可用第一个参数指定新目录），失败停止，不修复或重试。不随普通测试访问模型。
+
+门店与培训交叉变更的 16 轮串行场景：`node --env-file-if-exists=.env test/live/memory.mjs traces/memoryContinuity test/live/scenarios/continuity.json`。场景文件仅提供用户消息和事后参考，参考不发送给模型；测试仍调用同一产品执行，逐轮核对记忆进入筛选及提取的实际请求。
+
+提取失败会让整体执行失败，已经生成的回答仍保留。记录登记失败不会伪装成事实已回滚；尚无事务、补偿、重试或持久化。记忆本身或当前消息超预算仍明确失败。分段与有限继承见 [消息分段](docs/transcript.md)。详情见 [记忆体与记忆记录](docs/memory.md)。
