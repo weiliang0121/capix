@@ -6,7 +6,7 @@ import { snapshotValue } from '../value/snapshot.js';
 
 export type AttemptDefinition = Omit<AttemptData, 'id' | 'value' | 'status'>;
 
-/** Records one phase invocation. Its owner supplies execution and operation instance identity. */
+/** Records one named action invocation. Its owner supplies execution and operation instance identity. */
 export class AttemptRecord extends RuntimeRecord<AttemptValue> implements AttemptData {
   #status: AttemptData['status'] = 'running';
   get status(): AttemptData['status'] {
@@ -14,7 +14,8 @@ export class AttemptRecord extends RuntimeRecord<AttemptValue> implements Attemp
   }
   readonly contextId: string;
   readonly operationId: string;
-  readonly phase: AttemptData['phase'];
+  readonly name: string;
+  readonly label: string;
   readonly source: string;
   readonly caller: string;
   readonly callee: string;
@@ -23,7 +24,8 @@ export class AttemptRecord extends RuntimeRecord<AttemptValue> implements Attemp
     super(snapshotValue({ input }));
     this.contextId = definition.contextId;
     this.operationId = definition.operationId;
-    this.phase = definition.phase;
+    this.name = definition.name;
+    this.label = definition.label;
     this.source = definition.source;
     this.caller = definition.caller;
     this.callee = definition.callee;
@@ -50,7 +52,7 @@ export class AttemptRecord extends RuntimeRecord<AttemptValue> implements Attemp
     return {
       ...super.toJSON(),
       status: this.status,
-      ...pick(this, ['contextId', 'operationId', 'phase', 'source', 'caller', 'callee']),
+      ...pick(this, ['contextId', 'operationId', 'name', 'label', 'source', 'caller', 'callee']),
     };
   }
 }

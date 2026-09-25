@@ -1,35 +1,63 @@
 import { sortBy } from 'es-toolkit/array';
-import type { ModelRequest } from '../../../shared/types.js';
+import type { ModelRequest, Selection } from '../../../shared/types.js';
 import type { ExecutionContext } from '../../context/execution.js';
-import { checkCapacity, estimateCapacity } from '../model/capacity.js';
+import { checkCapacity, estimateCapacity } from '../../model/capacity.js';
 import type { GenerationOutput } from '../../../shared/operations/generation.js';
 import { answerOutputContract } from './output.js';
-import type { GenerationInput as AssembledInput } from '../context/assemble.js';
-import { ModelOperation } from '../model.js';
+import { AssembleContext, type AssembledContext } from '../../attempt/context/assemble.js';
+import { Operation } from '../operation.js';
+import { PrepareModelRequest } from '../../attempt/model/prepare.js';
+import { InvokeModel } from '../../attempt/model/invoke.js';
+import { AcceptModelOutput } from '../../attempt/model/accept.js';
+import type { Runtime } from '../../runtime/runtime.js';
+import type { ModelProvider } from '../../provider.js';
+import type { OperationContext } from '../../context/operation.js';
+import { loadRequest } from '../../model/request.js';
 import type { Memory } from '../../memory/memory.js';
 
-export interface GenerationInput extends AssembledInput {
+export interface GenerationInput {
+  readonly selection: Selection;
   readonly memories: readonly ReturnType<Memory['toJSON']>[];
 }
 
-export class GenerateAnswer extends ModelOperation<GenerationInput, GenerationOutput> {
+export class GenerateAnswer extends Operation<GenerationInput, GenerationOutput> {
   readonly name = 'answer';
   readonly label = '生成回答';
   readonly source = 'src/server/operations/answer/generate.ts · GenerateAnswer';
   protected readonly purpose = 'answer';
   protected readonly output = answerOutputContract;
-  protected readonly task = `根据当前 message、所选 history 和 memories，用中文完成用户本次请求。history 仅包含当前消息段的所选原文，memories 是跨段保留的理解；旧原文可能已不在本次上下文中，可以依据记忆继续交流，但记忆不是已验证事实。当前明确的补充和纠正优先；记忆未保留的必要细节不要补造。
-判断原文的适用对象、场景和时效，不把一次选择泛化成永久偏好，也不把一个人的条件转移给另一个人。结合原文语境处理补充、例外与纠正，区分建议、推测、确认和已经发生的事情；重复表达不构成独立证据。明确的纠正应修正对应认识；不能消解的冲突或会影响答案的缺失信息需要如实说明或有针对性地澄清，不为凑成完整答案而补造。
-回答应直接服务当前请求，已有足够依据时正常完成，不额外索要已经明确的信息。kind 只能是 answer（能够回答）、unknown（缺乏知识或实际能力）、needs-info（需要用户补充信息）。content 是实际给用户的非空文字。三种结果都直接返回，不执行工具；本服务没有联网检索、实时天气或工具调用能力，不得编造实时数据。示例 JSON：{"kind":"needs-info","content":"你想查询哪个城市？"}`;
+  protected readonly task = `结合当前 message、所选 history 和已有 memories，用中文直接完成用户本次请求。history 是当前消息段的部分原文；memories 是可用于延续交流的已有理解，旧段原文可能不可见。依据足够时正常回答，缺失的细节不要补造。
+按信息的对象、适用条件和时效判断依据，当前明确的补充与纠正优先；记忆和助手先前的回答都不自动成为已验证事实。保留尚未消解的冲突与不确定性，不把建议当作确认、局部条件当作普遍偏好。
+kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少用户可补充的必要信息，content 给出具体澄清问题；unknown 为缺乏知识或实际能力，content 如实说明。content 是直接呈现给用户的正文。当前服务没有联网检索、实时数据或工具执行能力，不声称已完成外部操作。`;
 
-  protected createRequest(input: GenerationInput, execution: ExecutionContext): ModelRequest {
-    const selectedMessages: GenerationInput['selectedMessages'][number][] = [];
-    let request = super.createRequest({ ...input, selectedMessages }, execution);
+  readonly assemble: AssembleContext;
+  readonly prepareRequest: PrepareModelRequest<AssembledContext & { memories: GenerationInput['memories'] }>;
+  readonly invokeModel: InvokeModel;
+  readonly acceptOutput: AcceptModelOutput<GenerationInput, GenerationOutput>;
+
+  constructor(runtime: Runtime, provider: ModelProvider) {
+    super(runtime);
+    this.assemble = new AssembleContext(runtime);
+    this.prepareRequest = new PrepareModelRequest(runtime, (input, execution) => this.createRequest(input, execution));
+    this.invokeModel = new InvokeModel(runtime, provider, this.purpose);
+    this.acceptOutput = new AcceptModelOutput(runtime, this.output);
+  }
+
+  protected async execute(context: OperationContext<GenerationInput, GenerationOutput>): Promise<GenerationOutput> {
+    const assembled = await this.assemble.call(context, context.input.selection);
+    const request = await this.prepareRequest.call(context, { ...assembled, memories: context.input.memories });
+    const output = await this.invokeModel.call(context, request);
+    return this.acceptOutput.call(context, output);
+  }
+
+  protected createRequest(input: AssembledContext & { memories: GenerationInput['memories'] }, execution: ExecutionContext): ModelRequest {
+    const selectedMessages: AssembledContext['selectedMessages'][number][] = [];
+    let request = this.loadRequest({ ...input, selectedMessages }, execution);
     checkCapacity(request, execution.settings);
 
     for (const selected of input.selectedMessages) {
       selectedMessages.push(selected);
-      const candidate = super.createRequest({ ...input, selectedMessages }, execution);
+      const candidate = this.loadRequest({ ...input, selectedMessages }, execution);
       if (!estimateCapacity(candidate, execution.settings).fits) {
         // Never replace a higher-priority message with smaller, lower-priority ones.
         if (selectedMessages.length === 1) checkCapacity(candidate, execution.settings);
@@ -40,7 +68,11 @@ export class GenerateAnswer extends ModelOperation<GenerationInput, GenerationOu
     return request;
   }
 
-  protected prepare(input: GenerationInput) {
+  private loadRequest(input: AssembledContext & { memories: GenerationInput['memories'] }, execution: ExecutionContext): ModelRequest {
+    return loadRequest(this.prepare(input), this.task, this.output.schema, execution.settings);
+  }
+
+  private prepare(input: AssembledContext & { memories: GenerationInput['memories'] }) {
     return { message: input.message, memories: input.memories, history: sortBy(input.selectedMessages, ['index']).map(({ index, message }) => ({ index, ...message })) };
   }
 }

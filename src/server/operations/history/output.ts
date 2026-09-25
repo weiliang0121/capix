@@ -3,8 +3,8 @@ import type { Selection } from '../../../shared/types.js';
 import type { SelectionInput } from './input.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import { RuntimeError } from '../../errors/error.js';
-import { modelIndexesSchema } from '../model/schema.js';
-import type { ModelOutputContract } from '../model.js';
+import { modelIndexesSchema } from '../../model/schema.js';
+import type { ModelOutputContract } from '../../model/contract.js';
 
 const selectionSchema = z.strictObject({ historyIndexes: modelIndexesSchema() }) satisfies z.ZodType<Selection>;
 

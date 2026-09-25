@@ -1,5 +1,5 @@
-import type { ModelRequest, ModelSettings } from '../../../shared/types.js';
-import { RuntimeError } from '../../errors/error.js';
+import type { ModelRequest, ModelSettings } from '../../shared/types.js';
+import { RuntimeError } from '../errors/error.js';
 
 export function estimateCapacity(request: ModelRequest, settings: ModelSettings) {
   const inputBytes = Buffer.byteLength(JSON.stringify(request), 'utf8');

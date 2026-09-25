@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Transcript } from '../../dist/server/transcript/transcript.js';
 import { Runtime } from '../../dist/server/runtime/runtime.js';
 import { invoke } from '../../dist/server/invocation/invoke.js';
 import { GenerateAnswer } from '../../dist/server/operations/answer/generate.js';
-import { estimateCapacity } from '../../dist/server/operations/model/capacity.js';
+import { estimateCapacity } from '../../dist/server/model/capacity.js';
 import { createInput, observeFixture } from '../fixtures/observer.mjs';
 
 const settings = { model: 'test', contextBudget: 100000, maxOutputTokens: 256, timeoutMs: 10000 };
@@ -26,7 +27,10 @@ async function generate(input, contextBudget = settings.contextBudget, requests 
       return output({ kind: 'answer', content: '完成' });
     },
   });
-  await invoke(runtime.execution({ input: input.message, settings: { ...settings, contextBudget } }), (context) => operation.call(context, input));
+  const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
+  const transcript = new Transcript([...history, input.message]);
+  const selection = { historyIndexes: input.selectedMessages.map((item) => item.index) };
+  await invoke(runtime.execution({ input: transcript.current('user'), transcript, settings: { ...settings, contextBudget } }), (context) => operation.call(context, { selection, memories: [] }));
   return requests[0];
 }
 
@@ -89,15 +93,12 @@ test('the observed execution preserves ranking, records actual requests and acco
   });
   assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
   assert.equal(requests.length, 3);
-  assert.equal(facts.operations.length, 4);
+  assert.equal(facts.operations.length, 3);
   assert.deepEqual(facts.operations[0].value.output.historyIndexes, [2, 0, 1]);
   const generation = facts.operations.find((record) => record.operation === 'answer');
-  assert.deepEqual(
-    generation.value.input.selectedMessages.map((item) => item.index),
-    [2, 0, 1],
-  );
-  const before = facts.attempts.find((record) => record.operationId === generation.id && record.phase === 'before');
-  assert.deepEqual(before.value.output, requests[1]);
+  assert.deepEqual(generation.value.input.selection.historyIndexes, [2, 0, 1]);
+  const prepared = facts.attempts.find((record) => record.operationId === generation.id && record.name === 'prepareModelRequest');
+  assert.deepEqual(prepared.value.output, requests[1]);
   assert.deepEqual(
     JSON.parse(requests[1].messages[1].content).history.map((item) => item.index),
     [0, 1, 2],

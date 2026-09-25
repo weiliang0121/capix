@@ -66,13 +66,13 @@ test('three actual model stages produce a causal trace and selected original con
     JSON.parse(provider.calls[1].request.messages[1].content).history.map((m) => m.index),
     [0, 1],
   );
-  assert.equal(trace.nodes.length, 17);
+  assert.equal(trace.nodes.length, 15);
   assert.equal(
     trace.nodes.some((node) => node.operation === 'input'),
     false,
   );
   assert.ok(trace.nodes.every((n) => n.status === 'passed' && n.durationMs >= 0));
-  assert.ok(records.some((t) => t.nodes.find((n) => n.operation === 'selection.commit')?.status === 'running'));
+  assert.ok(records.some((t) => t.nodes.find((n) => n.operation === 'selection.invokeModel')?.status === 'running'));
   assert.equal(records[0].nodes[0].status, 'running');
   const original = records[0].facts.execution.value.input;
   assert.equal(trace.facts.execution.value.input, original);
@@ -86,9 +86,9 @@ test('invalid indexes halt before assembly and second call', async () => {
   const { trace } = await run(provider);
   assert.equal(trace.error.code, 'INDEX_OUT_OF_RANGE');
   assert.equal(provider.calls.length, 1);
-  assert.equal(trace.nodes.find((n) => n.operation === 'selection.after').status, 'failed');
+  assert.equal(trace.nodes.find((n) => n.operation === 'selection.acceptModelOutput').status, 'failed');
   assert.equal(
-    trace.nodes.find((n) => n.operation === 'answer.commit'),
+    trace.nodes.find((n) => n.operation === 'answer.invokeModel'),
     undefined,
   );
 });
@@ -97,17 +97,17 @@ test('capacity failure prevents all model calls and preserves capacity evidence'
   const { trace } = await run(provider, { ...settings, contextBudget: 256 });
   assert.equal(trace.error.code, 'CAPACITY_EXCEEDED');
   assert.equal(provider.calls.length, 0);
-  const capacity = trace.nodes.find((n) => n.operation === 'selection.before');
+  const capacity = trace.nodes.find((n) => n.operation === 'selection.prepareModelRequest');
   assert.equal(Object.hasOwn(capacity, 'output'), false);
   assert.equal(capacity.error.detail.fits, false);
   assert.equal(capacity.error.detail.exact, false);
 });
 test('malformed, duplicate and truncated results fail at the corresponding boundary', async () => {
   for (const [raw, finish, code, stage] of [
-    ['not-json', 'stop', 'INVALID_JSON', 'after'],
-    ['{"historyIndexes":[0,0]}', 'stop', 'OUTPUT_SHAPE', 'after'],
-    ['{"historyIndexes":[]}', 'length', 'INCOMPLETE_OUTPUT', 'after'],
-    ['', 'stop', 'EMPTY_OUTPUT', 'after'],
+    ['not-json', 'stop', 'INVALID_JSON', 'acceptModelOutput'],
+    ['{"historyIndexes":[0,0]}', 'stop', 'OUTPUT_SHAPE', 'acceptModelOutput'],
+    ['{"historyIndexes":[]}', 'length', 'INCOMPLETE_OUTPUT', 'acceptModelOutput'],
+    ['', 'stop', 'EMPTY_OUTPUT', 'acceptModelOutput'],
   ]) {
     const { trace } = await run(scripted([output(raw, finish)]));
     assert.equal(trace.error.code, code);
@@ -118,10 +118,10 @@ test('answer classification is validated but does not invent task success', asyn
   const provider = scripted([output('{"historyIndexes":[]}'), output('{"kind":"tool","content":"x"}')]);
   const { trace } = await run(provider);
   assert.equal(trace.error.code, 'OUTPUT_SHAPE');
-  const after = trace.nodes.find((n) => n.operation === 'answer.after');
-  assert.equal(after.status, 'failed');
-  assert.deepEqual(after.error.detail.issues[0].path, ['kind']);
-  assert.deepEqual(JSON.parse(JSON.stringify(trace)).error.detail.issues, after.error.detail.issues);
+  const accepted = trace.nodes.find((n) => n.operation === 'answer.acceptModelOutput');
+  assert.equal(accepted.status, 'failed');
+  assert.deepEqual(accepted.error.detail.issues[0].path, ['kind']);
+  assert.deepEqual(JSON.parse(JSON.stringify(trace)).error.detail.issues, accepted.error.detail.issues);
   assert.equal(provider.calls.length, 2);
   assert.equal(trace.result, undefined);
 });
@@ -152,7 +152,7 @@ test('DeepSeek request uses JSON mode; transport secret is absent from observati
   assert.equal(trace.status, 'succeeded');
   assert.equal(sent.length, 3);
   assert.equal(JSON.stringify(records).includes('test-secret-do-not-log'), false);
-  assert.equal(trace.nodes.find((n) => n.operation === 'selection.commit').output.usage.totalTokens, 15);
+  assert.equal(trace.nodes.find((n) => n.operation === 'selection.invokeModel').output.usage.totalTokens, 15);
 });
 test('provider HTTP errors remain explicit and never retry', async () => {
   let calls = 0;
@@ -186,11 +186,11 @@ test('Transcript rejects invalid messages before execution or model calls begin'
   assert.equal(records.length, 0);
 });
 
-test('BCA sequence records nested call and return boundaries rather than adjacent stage edges', async () => {
+test('Named action sequence records nested call and return boundaries rather than adjacent stage edges', async () => {
   const { trace } = await run(scripted([output('{"historyIndexes":[0,1]}'), output(JSON.stringify(reply))]));
   const { calls, events } = trace.callSequence;
-  assert.equal(calls.length, 17);
-  assert.equal(events.length, 34);
+  assert.equal(calls.length, 15);
+  assert.equal(events.length, 30);
   const active = new Set();
   let previousTime = -1;
   events.forEach((event, index) => {
@@ -208,7 +208,7 @@ test('BCA sequence records nested call and return boundaries rather than adjacen
     }
   });
   assert.equal(active.size, 0);
-  const invoke = calls.find((c) => c.operation === 'selection.commit');
+  const invoke = calls.find((c) => c.operation === 'selection.invokeModel');
   assert.equal(invoke.parentId, calls.find((c) => c.operation === 'selection').id);
   assert.equal(invoke.caller, 'operation');
   assert.equal(invoke.callee, 'provider');
@@ -222,7 +222,7 @@ test('failure propagates through calls, is caught by Observer execution, and nev
   const { calls, events } = trace.callSequence;
   assert.deepEqual(
     events.filter((e) => e.value.type === 'throw').map((e) => calls.find((c) => c.id === e.callId).operation),
-    ['selection.after', 'selection', 'execution'],
+    ['selection.acceptModelOutput', 'selection', 'execution'],
   );
   assert.equal(events.at(-1).callId, calls.find((c) => c.operation === 'execution').id);
   assert.equal(events.at(-1).value.type, 'throw');

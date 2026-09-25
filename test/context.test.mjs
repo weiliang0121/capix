@@ -43,24 +43,24 @@ test('Context keeps live refs, separates undefined outcomes, and fixes execution
   assert.deepEqual(failed.state, { status: 'failed', error: undefined });
 });
 
-test('Operation executes full BCA without records and preserves non-JSON intermediate and output refs', async () => {
+test('Operation executes named actions without records and preserves non-JSON intermediate and output refs', async () => {
   const runtime = new Runtime(),
     seen = [],
     input = new Map([['content', 'hello']]);
   const fn = () => input.get('content');
   const node = new TestOperation(runtime, {
-    before(value) {
-      seen.push('before');
+    load(value) {
+      seen.push('load');
       assert.equal(value, input);
       return fn;
     },
-    commit(value) {
-      seen.push('commit');
+    transform(value) {
+      seen.push('transform');
       assert.equal(value, fn);
       return new Set([value()]);
     },
-    after(value, context) {
-      seen.push('after');
+    accept(value, context) {
+      seen.push('accept');
       assert.equal(runtime.getOperationContext(context).input, input);
       assert.equal(context.input, value);
       return value;
@@ -71,7 +71,7 @@ test('Operation executes full BCA without records and preserves non-JSON interme
     execution = context;
     return node.call(context, context.input);
   });
-  assert.deepEqual(seen, ['before', 'commit', 'after']);
+  assert.deepEqual(seen, ['load', 'transform', 'accept']);
   assert.ok(result instanceof Set);
   assert.equal(execution.state.output, result);
   assert.equal(runtime.recorder, undefined);
@@ -160,7 +160,7 @@ test('Parent Context references remain readable after completion without registr
     reader = new Runtime();
   let attempt, child, execution;
   const operation = new TestOperation(runtime, {
-    before(input, context) {
+    readParent(input, context) {
       attempt = context;
       assert.equal(runtime.getExecutionContext(context), execution);
       assert.equal(runtime.getOperationContext(context), context.operationContext);
@@ -168,8 +168,8 @@ test('Parent Context references remain readable after completion without registr
       assert.equal(Object.hasOwn(context, 'settings'), false);
       return input;
     },
-    commit: (input) => input,
-    after: (input) => input,
+    transform: (input) => input,
+    accept: (input) => input,
   });
   await invoke(runtime.execution({ input: 'root', settings: {} }), (root) => {
     execution = root;

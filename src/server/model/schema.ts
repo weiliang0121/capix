@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { nonBlankStringPattern } from '../../value/string.js';
-import { hasUniqueItems } from '../../value/array.js';
+import { nonBlankStringPattern } from '../value/string.js';
+import { hasUniqueItems } from '../value/array.js';
 
 /** Keep original text; the pattern also advertises the nonblank rule to the model. */
 export const modelTextSchema = z.string().min(1).regex(nonBlankStringPattern, '文本不能只有空白字符。');

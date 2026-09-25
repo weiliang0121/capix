@@ -1,0 +1,42 @@
+import { Attempt } from '../attempt.js';
+import type { AttemptContext } from '../../context/attempt.js';
+import type { Runtime } from '../../runtime/runtime.js';
+import type { ModelOutput } from '../../../shared/types.js';
+import type { ModelOutputContract } from '../../model/contract.js';
+import { RuntimeError } from '../../errors/error.js';
+import { isNonBlankString } from '../../value/string.js';
+
+export class AcceptModelOutput<I, O> extends Attempt<ModelOutput, O> {
+  readonly name = 'acceptModelOutput';
+  readonly label = '接纳模型结果';
+  readonly source = 'src/server/attempt/model/accept.ts · AcceptModelOutput';
+  readonly callee = 'processing';
+
+  constructor(
+    runtime: Runtime,
+    private readonly contract: ModelOutputContract<I, O>,
+  ) {
+    super(runtime);
+  }
+
+  protected execute(context: AttemptContext<ModelOutput, O>): O {
+    checkCompletion(context.input);
+    const value = parseContent(context.input.content);
+    const operation = this.runtime.getOperationContext(context);
+    const execution = this.runtime.getExecutionContext(context);
+    return this.contract.accept(value, operation.input as I, execution);
+  }
+}
+
+function checkCompletion(output: ModelOutput): void {
+  if (output.finishReason !== 'stop') throw new RuntimeError('INCOMPLETE_OUTPUT', `模型未正常结束：${output.finishReason}。原始返回保留，未作为完整结果接纳。`);
+}
+
+function parseContent(content: string): unknown {
+  if (!isNonBlankString(content)) throw new RuntimeError('EMPTY_OUTPUT', '模型返回了空内容。');
+  try {
+    return JSON.parse(content);
+  } catch {
+    throw new RuntimeError('INVALID_JSON', '模型返回不是完整的 JSON；未自动修复或重试。');
+  }
+}

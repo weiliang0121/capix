@@ -5,7 +5,7 @@ import { TestOperation } from './fixtures/operation.mjs';
 import { Runtime } from '../dist/server/runtime/runtime.js';
 import { invoke } from '../dist/server/invocation/invoke.js';
 import { SelectHistory } from '../dist/server/operations/history/select.js';
-import { AssembleContext } from '../dist/server/operations/context/assemble.js';
+import { AssembleContext } from '../dist/server/attempt/context/assemble.js';
 import { answerOutputContract } from '../dist/server/operations/answer/output.js';
 import { selectionOutputContract } from '../dist/server/operations/history/output.js';
 
@@ -132,50 +132,47 @@ test('selection schema preserves empty results, ranked indexes and detailed stri
   );
 });
 
-test('BCA passes values by reference, awaits each boundary, and resolves original input from the owning operation', async () => {
+test('Named actions pass values by reference, await each boundary, and resolve original input from the owning operation', async () => {
   const input = { content: 'x' },
-    beforeOutput = { request: 'y' },
+    loadedOutput = { request: 'y' },
     result = { raw: 'z' };
   const order = [];
   const op = {
-    async before(value, context) {
+    async load(value, context) {
       assert.equal(context.input, value);
-      assert.equal(context.phase, 'before');
       assert.equal(value, input);
-      order.push('before');
-      return beforeOutput;
+      order.push('load');
+      return loadedOutput;
     },
-    async commit(value, context) {
+    async transform(value, context) {
       assert.equal(context.input, value);
-      assert.equal(context.phase, 'commit');
-      assert.equal(value, beforeOutput);
-      order.push('commit');
+      assert.equal(value, loadedOutput);
+      order.push('transform');
       return result;
     },
-    after(value, context) {
+    accept(value, context) {
       assert.equal(context.input, value);
-      assert.equal(context.phase, 'after');
       assert.equal(value, result);
       assert.equal(runtime.getOperationContext(context).input, input);
-      order.push('after');
+      order.push('accept');
       return 'accepted';
     },
   };
   assert.equal(await call(new TestOperation(runtime, op), input), 'accepted');
-  assert.deepEqual(order, ['before', 'commit', 'after']);
+  assert.deepEqual(order, ['load', 'transform', 'accept']);
 });
 
-test('failure at any BCA phase stops later phases and preserves the thrown error', async () => {
-  for (const boundary of ['before', 'commit', 'after']) {
+test('failure at any action stops later actions and preserves the thrown error', async () => {
+  for (const boundary of ['load', 'transform', 'accept']) {
     const order = [],
       failure = new Error(boundary);
-    const phase = (name) => (value) => {
+    const action = (name) => (value) => {
       order.push(name);
       if (name === boundary) throw failure;
       return value;
     };
-    await assert.rejects(call(new TestOperation(runtime, { before: phase('before'), commit: phase('commit'), after: phase('after') }), {}), (error) => error === failure);
-    assert.deepEqual(order, ['before', 'commit', 'after'].slice(0, ['before', 'commit', 'after'].indexOf(boundary) + 1));
+    await assert.rejects(call(new TestOperation(runtime, { load: action('load'), transform: action('transform'), accept: action('accept') }), {}), (error) => error === failure);
+    assert.deepEqual(order, ['load', 'transform', 'accept'].slice(0, ['load', 'transform', 'accept'].indexOf(boundary) + 1));
   }
 });
 
@@ -205,7 +202,7 @@ test('one selection operation can overlap calls without mixing their history bou
   assert.equal(Object.hasOwn(op, 'context'), false);
 });
 
-test('assembly operation consumes explicit sources and needs no recorder', async () => {
+test('assembly attempt consumes explicit sources and needs no recorder', async () => {
   const message = createInput({
     content: 'x',
     history: [
@@ -214,9 +211,8 @@ test('assembly operation consumes explicit sources and needs no recorder', async
     ],
   });
   const input = { historyIndexes: [0] };
-  const operation = new AssembleContext(runtime);
-  assert.equal(operation.before(input), input);
-  const result = await invoke(runtime.execution({ input: message, settings, transcript: transcriptFor(message) }), (context) => operation.call(context, input));
+  const attempt = new AssembleContext(runtime);
+  const result = await invoke(runtime.execution({ input: message, settings, transcript: transcriptFor(message) }), (execution) => invoke(runtime.operation(execution, new TestOperation(runtime), input), (context) => attempt.call(context, input)));
   assert.equal(result.message, message);
   assert.equal(Object.hasOwn(result.selectedMessages[0], 'transcript'), false);
   assert.equal(result.selectedMessages[0].message, transcriptFor(message).get(0));

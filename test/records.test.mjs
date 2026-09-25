@@ -14,7 +14,7 @@ import { RuntimeError } from '../dist/server/errors/error.js';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const input = { content: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] };
-const echo = { before: identity, commit: identity, after: identity };
+const echo = { load: identity, transform: identity, accept: identity };
 const output = (content) => ({
   id: 'model',
   model: 'test',
@@ -179,13 +179,13 @@ test('one node overlaps calls within and across executions without mixing input 
     ready = resolve;
   });
   const node = new TestOperation(runtime, {
-    before: identity,
-    commit: (value) =>
+    load: identity,
+    transform: (value) =>
       new Promise((resolve) => {
         pending.set(value, resolve);
         if (pending.size === 3) ready();
       }),
-    after: (result, context) => ({ result, original: runtime.getOperationContext(context).input }),
+    accept: (result, context) => ({ result, original: runtime.getOperationContext(context).input }),
   });
   const first = node.call(a, 'a1'),
     second = node.call(b, 'b'),
@@ -248,26 +248,32 @@ test('Observer execution observes execution, operations and boundaries from the 
   const facts = await execute();
   validateSnapshot(facts);
   assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations']);
-  assert.equal(facts.operations.length, 4);
-  assert.equal(facts.attempts.length, 12);
+  assert.equal(facts.operations.length, 3);
+  assert.equal(facts.attempts.length, 11);
+  const expectedActions = {
+    selection: ['prepareModelRequest', 'invokeModel', 'acceptModelOutput'],
+    answer: ['assembleContext', 'prepareModelRequest', 'invokeModel', 'acceptModelOutput'],
+    memory: ['prepareModelRequest', 'invokeModel', 'acceptModelOutput', 'applyMemory'],
+  };
   for (const operation of facts.operations) {
-    assert.equal(Object.hasOwn(operation, 'phase'), false);
     const attempts = facts.attempts.filter((attempt) => attempt.operationId === operation.id);
     assert.deepEqual(
-      attempts.map((attempt) => attempt.phase),
-      ['before', 'commit', 'after'],
+      attempts.map((attempt) => attempt.name),
+      expectedActions[operation.operation],
     );
-    const [before, commit, after] = attempts;
-    assert.deepEqual(before.value.input, operation.value.input);
-    assert.deepEqual(commit.value.input, before.value.output);
-    assert.deepEqual(after.value.input, commit.value.output);
-    assert.deepEqual(operation.value.output, after.value.output);
+    const preparation = attempts.find((attempt) => attempt.name === 'prepareModelRequest');
+    const invocation = attempts.find((attempt) => attempt.name === 'invokeModel');
+    const acceptance = attempts.find((attempt) => attempt.name === 'acceptModelOutput');
+    assert.deepEqual(invocation.value.input, preparation.value.output);
+    assert.deepEqual(acceptance.value.input, invocation.value.output);
+    assert.deepEqual(operation.value.output, attempts.at(-1).value.output);
+    if (operation.operation === 'memory') assert.deepEqual(attempts.at(-1).value.input, acceptance.value.output);
   }
   const select = facts.operations.find((op) => op.operation === 'selection');
-  const assemble = facts.operations.find((op) => op.operation === 'assemble');
   const answer = facts.operations.find((op) => op.operation === 'answer');
-  assert.deepEqual(assemble.value.input, select.value.output);
-  assert.deepEqual(answer.value.input, { ...assemble.value.output, memories: [] });
+  const assembled = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'assembleContext');
+  assert.deepEqual(assembled.value.input, select.value.output);
+  assert.deepEqual(answer.value.input, { selection: select.value.output, memories: [] });
   assert.deepEqual(facts.execution.value.output, answer.value.output);
   for (const op of facts.operations) {
     assert.equal(op.executionId, facts.execution.id);
@@ -276,19 +282,19 @@ test('Observer execution observes execution, operations and boundaries from the 
     assert.equal('outputId' in op, false);
   }
   const view = projectExecution(facts);
-  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'operation').length, 4);
-  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'attempt').length, 12);
+  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'operation').length, 3);
+  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'attempt').length, 11);
   assert.deepEqual(view.result, { kind: 'answer', content: '海盐项目' });
 });
 
-test('After failure preserves raw output, records no accepted result, and propagates the original error', async () => {
+test('Acceptance failure preserves raw output, records no accepted result, and propagates the original error', async () => {
   const facts = await execute('broken-json');
   const answer = facts.operations.find((op) => op.operation === 'answer');
-  const commit = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.phase === 'commit');
-  const after = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.phase === 'after');
-  assert.equal(commit.value.output.content, 'broken-json');
-  assert.equal(after.value.input.content, 'broken-json');
-  assert.equal(after.value.output, undefined);
+  const invoked = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'invokeModel');
+  const accepted = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'acceptModelOutput');
+  assert.equal(invoked.value.output.content, 'broken-json');
+  assert.equal(accepted.value.input.content, 'broken-json');
+  assert.equal(accepted.value.output, undefined);
   assert.equal(answer.value.output, undefined);
   assert.equal(facts.execution.value.error.code, 'INVALID_JSON');
   assert.equal(projectExecution(facts).error.code, 'INVALID_JSON');
@@ -297,13 +303,13 @@ test('After failure preserves raw output, records no accepted result, and propag
     failure = new RuntimeError('TEST', 'test');
   const node = new TestOperation(runtime, {
     ...echo,
-    commit() {
+    transform() {
       throw failure;
     },
   });
   await assert.rejects(node.call(execution, input), (error) => error === failure);
   assert.equal(
-    runtime.recorder.snapshot(execution).attempts.some((attempt) => attempt.phase === 'after'),
+    runtime.recorder.snapshot(execution).attempts.some((attempt) => attempt.name === 'accept'),
     false,
   );
 });
@@ -356,10 +362,10 @@ test('missing or contradictory facts are rejected instead of repaired by the pro
       f.attempts[0].status = 'failed';
     },
     (f) => {
-      f.attempts[0].phase = 'unknown';
+      f.attempts[0].name = '';
     },
     (f) => {
-      f.operations[0].phase = 'before';
+      f.attempts[0].label = 123;
     },
     (f) => {
       const operationEnd = f.events.find((event) => event.callId === f.operations[0].id && event.value.type === 'return');

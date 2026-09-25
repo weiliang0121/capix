@@ -5,7 +5,7 @@ import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord, type AttemptDefinition } from './record.js';
 
-/** Attempt-specific operations. Index keys identify the owning operation, not its phase. */
+/** Attempt-specific operations. Index keys identify the owning operation, not the action name. */
 export class AttemptRecordHelper {
   static create(book: RecordBook, index: RecordIndex<AttemptRecord>, definition: AttemptDefinition, input: unknown): AttemptRecord {
     const operation = this.owner(book, definition.operationId);

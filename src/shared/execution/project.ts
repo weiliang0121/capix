@@ -23,7 +23,7 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
   acceptContextIdentity(f.execution);
   const actors = ['caller', 'execution', 'operation', 'processing', 'provider'];
   for (const op of f.operations) {
-    if (!op || typeof op.id !== 'string' || !op.id || bodies.has(op.id) || op.executionId !== executionId || typeof op.operationInstanceId !== 'string' || !op.operationInstanceId || typeof op.operation !== 'string' || typeof op.label !== 'string' || typeof op.source !== 'string' || !actors.includes(op.caller) || !actors.includes(op.callee) || (op.parentOperationId !== undefined && typeof op.parentOperationId !== 'string') || Object.hasOwn(op, 'phase')) return fail();
+    if (!op || typeof op.id !== 'string' || !op.id || bodies.has(op.id) || op.executionId !== executionId || typeof op.operationInstanceId !== 'string' || !op.operationInstanceId || typeof op.operation !== 'string' || typeof op.label !== 'string' || typeof op.source !== 'string' || !actors.includes(op.caller) || !actors.includes(op.callee) || (op.parentOperationId !== undefined && typeof op.parentOperationId !== 'string')) return fail();
     acceptContextIdentity(op);
     operations.set(op.id, op);
     parents.set(op.id, op.parentOperationId ?? executionId);
@@ -31,7 +31,7 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
     bodies.set(op.id, op.value);
   }
   for (const attempt of f.attempts) {
-    if (!attempt || typeof attempt.id !== 'string' || !attempt.id || bodies.has(attempt.id) || typeof attempt.operationId !== 'string' || !operations.has(attempt.operationId) || !['before', 'commit', 'after'].includes(attempt.phase) || typeof attempt.source !== 'string' || !actors.includes(attempt.caller) || !actors.includes(attempt.callee)) return fail();
+    if (!attempt || typeof attempt.id !== 'string' || !attempt.id || bodies.has(attempt.id) || typeof attempt.operationId !== 'string' || !operations.has(attempt.operationId) || typeof attempt.name !== 'string' || !attempt.name.trim() || typeof attempt.label !== 'string' || !attempt.label.trim() || typeof attempt.source !== 'string' || !actors.includes(attempt.caller) || !actors.includes(attempt.callee)) return fail();
     acceptContextIdentity(attempt);
     parents.set(attempt.id, attempt.operationId);
     statuses.set(attempt.id, attempt.status);
@@ -129,11 +129,11 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
         id: attempt.id,
         executionId: owner.executionId,
         operationInstanceId: owner.operationInstanceId,
-        operation: `${owner.operation}.${attempt.phase}`,
+        operation: `${owner.operation}.${attempt.name}`,
         parentId: owner.id,
         caller: attempt.caller as ParticipantId,
         callee: attempt.callee as ParticipantId,
-        label: attempt.phase,
+        label: attempt.label,
         source: attempt.source,
         ...result(attempt.id, attempt.value, attempt.status),
       };
@@ -158,8 +158,8 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
       participants: [
         { id: 'caller', label: '调用方', description: '运行入口' },
         { id: 'execution', label: 'Execution', description: '操作的显式组合' },
-        { id: 'operation', label: 'Operation', description: '一次操作 BCA 调用' },
-        { id: 'processing', label: '本地处理', description: 'BCA 本地处理' },
+        { id: 'operation', label: 'Operation', description: '具名动作的组合' },
+        { id: 'processing', label: '本地处理', description: 'Attempt 本地执行' },
         {
           id: 'provider',
           label: 'ModelProvider',

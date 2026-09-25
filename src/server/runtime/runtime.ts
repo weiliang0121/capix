@@ -2,7 +2,8 @@ import type { InvocationLifecycle } from '../invocation/lifecycle.js';
 import { RuntimeContext } from '../context/context.js';
 import { ExecutionContext, type ExecutionOptions } from '../context/execution.js';
 import { OperationContext } from '../context/operation.js';
-import { AttemptContext, type AttemptPhase } from '../context/attempt.js';
+import { AttemptContext } from '../context/attempt.js';
+import type { Attempt } from '../attempt/attempt.js';
 import type { Operation } from '../operations/operation.js';
 import type { RuntimeRecorder } from '../records/recorder.js';
 
@@ -21,7 +22,7 @@ export class Runtime {
     );
   }
 
-  operation<I, B, C, O>(execution: ExecutionContext, operation: Operation<I, B, C, O>, input: I, parent?: OperationContext): InvocationLifecycle<OperationContext<I, O>, O> {
+  operation<I, O>(execution: ExecutionContext, operation: Operation<I, O>, input: I, parent?: OperationContext): InvocationLifecycle<OperationContext<I, O>, O> {
     return this.lifecycle<I, O, OperationContext<I, O>>(
       () => {
         execution.requireRunning();
@@ -33,14 +34,14 @@ export class Runtime {
     );
   }
 
-  attempt<I, O>(operation: OperationContext, phase: AttemptPhase, input: I, source: string, callee: string): InvocationLifecycle<AttemptContext<I, O>, O> {
+  attempt<I, O>(operation: OperationContext, attempt: Attempt<I, O>, input: I): InvocationLifecycle<AttemptContext<I, O>, O> {
     return this.lifecycle<I, O, AttemptContext<I, O>>(
       () => {
         operation.executionContext.requireRunning();
-        return new AttemptContext<I, O>(operation, phase, input);
+        return new AttemptContext<I, O>(operation, input);
       },
       operation,
-      (context) => this.recorder?.beginAttempt(context, source, callee),
+      (context) => this.recorder?.beginAttempt(context, attempt),
     );
   }
 

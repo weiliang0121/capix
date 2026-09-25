@@ -1,4 +1,5 @@
 import { TestOperation } from '../fixtures/operation.mjs';
+import { TestAttempt } from '../fixtures/attempt.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { RuntimeRecorder } from '../../dist/server/records/recorder.js';
@@ -14,22 +15,23 @@ function setup() {
   const execution = executionLifecycle.begin();
   const operationLifecycle = runtime.operation(execution, new TestOperation(runtime), {});
   const operation = operationLifecycle.begin();
-  const definition = { phase: 'after', source: 'test', caller: 'operation', callee: 'processing' };
-  return { runtime, executionLifecycle, execution, operationLifecycle, operation, definition };
+  const definition = { name: 'acceptText', label: '接纳文本', source: 'test', caller: 'operation', callee: 'processing' };
+  const attempt = new TestAttempt(runtime, definition.name);
+  return { runtime, executionLifecycle, execution, operationLifecycle, operation, definition, attempt };
 }
 
-test('each phase invocation has its own attempt; an unsuccessful attempt does not end its operation', async () => {
-  const { runtime, executionLifecycle, execution, operationLifecycle, operation, definition } = setup();
+test('each named action invocation has its own attempt; an unsuccessful attempt does not end its operation', async () => {
+  const { runtime, executionLifecycle, execution, operationLifecycle, operation, attempt } = setup();
   const input = { text: 'original' };
   const failure = new Error('first processing failed');
   await assert.rejects(
-    invoke(runtime.attempt(operation, definition.phase, input, definition.source, definition.callee), () => {
+    invoke(runtime.attempt(operation, attempt, input), () => {
       throw failure;
     }),
     (error) => error === failure,
   );
   assert.equal(operation.status, 'running');
-  const secondLifecycle = runtime.attempt(operation, definition.phase, input, definition.source, definition.callee);
+  const secondLifecycle = runtime.attempt(operation, attempt, input);
   const second = secondLifecycle.begin();
   const secondRecord = runtime.recorder.record(second.id);
   assert.ok(secondRecord instanceof RuntimeRecord && secondRecord instanceof AttemptRecord);
@@ -56,7 +58,7 @@ test('each phase invocation has its own attempt; an unsuccessful attempt does no
   assert.equal(second.state.output.accepted, false);
   assert.equal(secondRecord.value.output.accepted, true);
   assert.throws(() => second.complete({}), /ended/);
-  assert.throws(() => runtime.attempt(operation, definition.phase, {}, definition.source, definition.callee).begin(), /ended/);
+  assert.throws(() => runtime.attempt(operation, attempt, {}).begin(), /ended/);
   const final = runtime.recorder.snapshot(execution);
   validateSnapshot(final);
   assert.deepEqual(

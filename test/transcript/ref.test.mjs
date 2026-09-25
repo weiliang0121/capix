@@ -59,9 +59,9 @@ test('only the execution record holds the range; calls consume selected content 
     },
   );
   assert.equal(facts.execution.status, 'succeeded');
-  assert.equal(facts.operations.length, 4);
-  assert.equal(facts.attempts.length, 12);
-  assert.equal(facts.events.length, 34);
+  assert.equal(facts.operations.length, 3);
+  assert.equal(facts.attempts.length, 11);
+  assert.equal(facts.events.length, 30);
   assert.deepEqual(facts.execution.value.input, input);
   assert.notEqual(facts.execution.value.input, input);
   assert.equal(facts.execution.value.transcriptRange.end, 2);
@@ -71,7 +71,7 @@ test('only the execution record holds the range; calls consume selected content 
     assert.equal(Object.hasOwn(record.value, 'transcriptRange'), false);
     assert.equal(Object.hasOwn(record.value, 'settings'), false);
   }
-  const assembled = facts.operations.find((record) => record.operation === 'assemble').value.output;
+  const assembled = facts.attempts.find((record) => record.name === 'assembleContext').value.output;
   assert.deepEqual(assembled.message, input);
   assert.deepEqual(assembled.selectedMessages, [{ index: 0, message: transcript.get(0) }]);
   assert.deepEqual(JSON.parse(requests[1].messages[1].content), { message: input, memories: [], history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });

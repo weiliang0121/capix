@@ -3,9 +3,9 @@ import { isEqual } from 'es-toolkit/predicate';
 import { z } from 'zod';
 import { RuntimeError } from '../../errors/error.js';
 import type { MemoryChange } from '../../memory/change.js';
-import type { ModelOutputContract } from '../model.js';
+import type { ModelOutputContract } from '../../model/contract.js';
 import type { MemoryInput } from './input.js';
-import { modelIndexesSchema, modelTextSchema } from '../model/schema.js';
+import { modelIndexesSchema, modelTextSchema } from '../../model/schema.js';
 import { hasUniqueItems } from '../../value/array.js';
 
 const indexesSchema = modelIndexesSchema(1);

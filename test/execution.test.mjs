@@ -17,12 +17,12 @@ test('one Execution and Operation can be called again after success and failure 
   const failure = new Error('work failed');
   const contexts = [];
   const operation = new TestOperation(runtime, {
-    before: (value) => value,
-    commit: (value) => {
+    load: (value) => value,
+    transform: (value) => {
       if (value.fail) throw failure;
       return value;
     },
-    after: (value) => value,
+    accept: (value) => value,
   });
   class EchoExecution extends Execution {
     execute(context) {

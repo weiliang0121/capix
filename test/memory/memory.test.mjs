@@ -69,7 +69,7 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
     assert.equal(facts.execution.status, 'succeeded');
     assert.deepEqual(
       facts.operations.map((item) => item.operation),
-      ['selection', 'assemble', 'answer', 'memory'],
+      ['selection', 'answer', 'memory'],
     );
   }
   assert.equal(requests.length, 9);
@@ -227,6 +227,37 @@ test('recording observes the actual changed fact; registration failure propagate
   const memory = execution.memories.values(transcript)[0];
   assert.equal(memory.content, '150');
   assert.equal(MemoryRecordHelper.find(book, memory.id).length, 0);
+  const operation = [...book.values()].find((record) => record.operation === 'memory');
+  const accepted = [...book.values()].find((record) => record.operationId === operation.id && record.name === 'acceptModelOutput');
+  const applied = [...book.values()].find((record) => record.operationId === operation.id && record.name === 'applyMemory');
+  assert.equal(accepted.status, 'succeeded');
+  assert.equal(accepted.value.output.memories.length, 1);
+  assert.equal(applied.status, 'failed');
+  assert.deepEqual(applied.value.input, accepted.value.output);
+});
+
+test('invalid memory output stops at acceptance without invoking application or losing the answer', async () => {
+  const environment = initializeObserver({
+    async invoke(_request, purpose) {
+      if (purpose === 'selection') return raw({ historyIndexes: [] });
+      if (purpose === 'answer') return raw({ kind: 'answer', content: '已收到' });
+      return raw({ memories: [{}] });
+    },
+  });
+  const snapshot = await run(environment, '记住这个安排');
+  const extraction = snapshot.operations.find((operation) => operation.operation === 'memory');
+  const attempts = snapshot.attempts.filter((attempt) => attempt.operationId === extraction.id);
+  assert.deepEqual(
+    attempts.map((attempt) => [attempt.name, attempt.status]),
+    [
+      ['prepareModelRequest', 'succeeded'],
+      ['invokeModel', 'succeeded'],
+      ['acceptModelOutput', 'failed'],
+    ],
+  );
+  assert.equal(extraction.value.error.code, 'OUTPUT_SHAPE');
+  assert.equal(environment.execution.memories.values(environment.transcript).length, 0);
+  assert.equal(environment.transcript.current('assistant').content, '已收到');
 });
 
 test('memory capacity overflow stops postprocessing without truncating evidence or inventing records', async () => {

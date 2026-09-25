@@ -70,8 +70,8 @@ test('a real change and an unchanged update complete together; only the change i
   const operation = facts.operations.find((item) => item.operation === 'memory');
   assert.equal(operation.value.output.memories.length, 1);
   assert.equal(operation.value.output.memories[0].result.content, '使用离线包');
-  const commit = facts.attempts.find((item) => item.operationId === operation.id && item.phase === 'commit');
-  assert.equal(JSON.parse(commit.value.output.content).memories.length, 2);
+  const invoked = facts.attempts.find((item) => item.operationId === operation.id && item.name === 'invokeModel');
+  assert.equal(JSON.parse(invoked.value.output.content).memories.length, 2);
   assert.equal(keyboard.snapshot(), keyboardContent);
   assert.equal(MemoryRecordHelper.find(environment.book, keyboard.id).length, 1);
   const rehearsal = environment.execution.memories.values(environment.transcript).find((memory) => memory.topic === '预演');

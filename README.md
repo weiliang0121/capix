@@ -9,15 +9,14 @@
 ```text
 initializeObserver(provider, transcript?)
   → Transcript / Book / Index / Clock / Recorder / Runtime
-  → ObserverExecution（固定 selection / assembly / generation / extraction 实例；MemoryCollection）
+  → ObserverExecution（固定 selection / generation / extraction 实例；MemoryCollection）
 
 外部 ExecutionRequest { messages }
   → acceptExecutionInput：向已有 Transcript 追加一批新消息
   → 最后一条只读 user Message → Execution.input
   → 读取本轮开始时的 previousMemories
   → selection.call({ message: input, memories: previousMemories }) → selectionOutput
-  → assembly.call → assemblyOutput
-  → generation.call → generationOutput
+  → generation.call（内部组合消息、准备请求、调用模型、接纳结果）→ generationOutput
   → 追加 assistant 消息
   → extraction.call（previousMemories + 当前 QA + 可见原文）
   → 接纳变更 → MemoryHelper 创建/更新 → MemoryRecord 登记
@@ -35,11 +34,21 @@ Transcript 只增不改删，包含第一条和当前消息。接纳时检查角
 
 ## 操作、运行与记录
 
-`Operation<I,BeforeOutput,CommitOutput,O>` 是抽象类，直接拥有 before/commit/after 和 call。call 建立 OperationContext，再顺序执行三个阶段；每个阶段产生独立 AttemptContext。ModelOperation 是公共模型 BCA 的抽象父类；SelectHistory、GenerateAnswer 和 ExtractMemory 子类固化任务说明、输入组织与输出契约。AssembleContext 直接继承 Operation。名称、说明和源码位置属于类自身，构造仅传 Runtime、Provider 等依赖，不传定义对象。实例不保存当前输入、上下文或最近结果。
+`Operation<I,O>` 提供统一 call 与抽象 execute。具体操作自行组合具名 Attempt，数量和顺序由工作决定。BCA 只用于分析这些动作，不再作为执行接口、阶段枚举或记录分类。
 
-BCA 统一为阶段 input 与对应 IO 类型的 AttemptContext；before 输出传给 commit，commit 输出直接传给 after，不组合 `{ raw, input }`。需要操作原始输入时通过 Runtime.getOperationContext 查询，执行配置与消息范围通过 getExecutionContext 查询。阶段内部辅助函数不创建上下文；不引入权限控制。
+`Attempt<I,O>` 是最底层抽象执行类，call 通过公共 invoke/Runtime 建立 AttemptContext，再调用具体 execute。实例定义 name/label/source/callee，持有稳定依赖；每次调用的输入、上下文、结果独立。内部只组合普通函数，不再细分执行层级。Operation 在构造时创建所需 Attempt 实例，跨调用复用；不建立统一的动作列表解释器或新的调度系统。
 
-`Execution<I,O>` 是抽象类，call 建立 ExecutionContext 并调用具体 execute。ObserverExecution 用顺序代码组合四个 Operation，返回 generationOutput；它不创建 Recorder、Book 或 HTTP 响应。构造时装配四个固定操作；BCA 显式接收自己的 AttemptContext，通过 Runtime.getExecutionContext 取得执行配置和取消信号。实例不保存本次调用状态。
+当前三个操作的真实组合：
+
+```text
+SelectHistory  → PrepareModelRequest → InvokeModel → AcceptModelOutput
+GenerateAnswer → AssembleContext → PrepareModelRequest → InvokeModel → AcceptModelOutput
+ExtractMemory  → PrepareModelRequest → InvokeModel → AcceptModelOutput → ApplyMemory
+```
+
+消息组装是生成回答内部的 Attempt。记忆接纳与落实是两个不同动作，因此合法结果已取得、但变更落实失败可以分别观察。模型请求容量、输出解析与检查仍由对应动作组合普通函数完成，不为每个函数创建执行对象。
+
+`Execution<I,O>` 的 call 建立 ExecutionContext 并调用具体 execute。ObserverExecution 持有筛选、生成和记忆三个 Operation，在生成成功后追加助手消息，然后执行记忆提取。实例不保存本次调用状态，操作原始输入、执行配置与消息范围仍通过上层 Context 引用取得。当前不增加接收处理框架、自动重试或恢复。
 
 ```ts
 const environment = initializeObserver(provider); // 请求到来前
@@ -54,20 +63,20 @@ const generationOutput = await environment.execution.call(input, {
 
 环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 用 Execution.call 的 started 回调取得 Context ID，在首条记录发布前绑定本次调用，按 contextId 筛选记录，结束时解除订阅。它不再通过 input 对象身份关联记录。
 
-记录创建发生在 Context 创建之后，工作执行之前。Recorder 在这个边界直接读取已有 Operation 实例的描述及现场父 Context；Attempt 的源码和参与者描述也在记录创建时提供。Context 不携带这些描述、不保存 declaration；记录固化信息后，完成/失败只依据 Context 登记结果。不新增长期的实例关联表。
+记录创建发生在 Context 创建之后，工作执行之前。Recorder 在这个边界直接读取已有 Operation 实例的描述及现场父 Context；Attempt 的源码和参与者描述也从现场执行实例读取。Context 不携带这些描述、不保存 declaration；记录固化信息后，完成/失败只依据 Context 登记结果。不新增长期的实例关联表。
 
 可调用实例与 Context 为 1:N；开启记录时，每个 E/O/A Context 对应一条同层 Record。复用 Operation 的 operationInstanceId 保持不变，每次调用的 Context ID 与 Record ID 独立产生。记录容器保留所有调用，而非被新请求替换。
 
-GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer 运行实体。浏览器消费同一契约，所以其数据声明位于 shared/operations/generation.ts。GenerationInput 使用 message 与 selectedMessages；模型装载中的 message 保留 role/content。
+GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer 运行实体。浏览器消费同一契约，所以其数据声明位于 shared/operations/generation.ts。GenerationInput 使用 selection 与 memories；内部 AssembleContext 产生 message 与 selectedMessages，模型装载中的 message 保留 role/content。
 
-回答输出在 operations/answer/output.ts 使用 Zod 配对生成 JSON Schema 与本地接纳检查。严格拒绝额外字段、非法分类和空白正文，不自动转换或修剪内容；接纳返回新普通对象。结构失败仍为 OUTPUT_SHAPE，detail.issues 保留字段路径与原因。共享 GenerationOutput 保持纯数据类型，通过 Schema 的类型约束检查兼容性，不从 shared 反向导入服务端。记忆提取在 operations/memory/output.ts 同样用 Schema 定义 create/update 的结构并推导 MemoryExtraction，保留来源去重和长度限制。结构接纳后继续检查目标、来源和无变化更新；这些语义规则独立于 Schema。历史筛选也使用 Zod，保留空结果和优先级，结构通过后再检查本轮索引范围。operations/model/schema.ts 复用文本与索引规则，非空白和去重要求同时进入提示 Schema 与本地检查。JSON 解析及执行重试不归 Zod。settings.ts 用 Zod 接纳配置，保持原有已知字段选取与数值边界。
+回答输出在 operations/answer/output.ts 使用 Zod 配对生成 JSON Schema 与本地接纳检查。严格拒绝额外字段、非法分类和空白正文，不自动转换或修剪内容；接纳返回新普通对象。结构失败仍为 OUTPUT_SHAPE，detail.issues 保留字段路径与原因。共享 GenerationOutput 保持纯数据类型，通过 Schema 的类型约束检查兼容性，不从 shared 反向导入服务端。记忆提取在 operations/memory/output.ts 同样用 Schema 定义 create/update 的结构并推导 MemoryExtraction，保留来源去重和长度限制。结构接纳后继续检查目标、来源和无变化更新；这些语义规则独立于 Schema。历史筛选也使用 Zod，保留空结果和优先级，结构通过后再检查本轮索引范围。model/schema.ts 复用文本与索引规则，非空白和去重要求同时进入提示 Schema 与本地检查。JSON 解析及执行重试不归 Zod。settings.ts 用 Zod 接纳配置，保持原有已知字段选取与数值边界。
 
 | 对象             | 职责                                                                            |
 | ---------------- | ------------------------------------------------------------------------------- |
 | RuntimeContext   | UUID、input 和 running/succeeded(output)/failed(error) 状态；持有真实 IO 与异常 |
 | ExecutionContext | 整次运行；固定配置浅快照、Transcript 范围与 AbortSignal 引用                    |
 | OperationContext | 一次操作调用；executionContext 引用和本次 IO/状态                               |
-| AttemptContext   | 一次阶段调用；operationContext 引用、phase 和本次 IO/状态                       |
+| AttemptContext   | 一次动作调用；operationContext 引用和本次 IO/状态                               |
 | Runtime          | 三层 lifecycle、直接父级检查与上下文读取                                        |
 | RuntimeRecorder  | Context→Record 映射、登记、事件与观测发布；不执行工作或改写 Context             |
 | RecordBook       | add/get/values，保存记录实例、拒绝重复 ID                                       |
@@ -95,13 +104,13 @@ ExecutionRecordHelper.snapshot 查询已有记录；HTTP observeTranscript 在�
 RuntimeRecord<T>：id + value
   ExecutionRecord：整次运行，contextId；value 中保存本次配置与消息范围
   OperationRecord：一次操作调用，contextId / executionId / operationInstanceId / parentOperationId?
-  AttemptRecord：一次阶段调用，contextId / operationId / phase
+  AttemptRecord：一次动作调用，contextId / operationId / name / label
   EventRecord：一次调用边界，executionId / callId / sequence / occurredAt / offsetMs；value.type
 ```
 
 operationInstanceId 指向可复用的 Operation 实例；OperationRecord.id 和 OperationContext.id 各自标识一次调用。Context 直接引用上层 Context；Record 归属 ID 指向 Record。三种记录自身 ID 与 Context ID 不同，顶层 contextId 关联对应运行实例。状态在具体记录顶层，基类不规定状态。
 
-完整成功链路为 1 条 Execution、4 条 Operation、12 条 Attempt、34 个 call/return/throw 边界事件。没有发生的阶段不创建记录。Attempt 失败不自动更改父操作状态，异常按实际调用链传播；After 拒绝时保留 Commit 原始返回，没有接纳输出。
+当前完整成功链路为 1 条 Execution、3 条 Operation、11 条 Attempt、30 个 call/return/throw 边界事件。数量来自实际组合，不是框架限制。没有执行的动作不创建记录；Attempt 失败不自动更改父操作状态，异常按实际调用链传播。接纳失败保留模型原始返回，落实失败保留已接纳结果，不假装运行事实回滚。
 
 EventRecord 继承 RuntimeRecord，自己的 id 与 callId 不同：callId 指向被描述的 E/O/A 调用记录。EventRecordHelper 负责创建和查询，Book 保存原记录，eventIndex 按执行 ID 查询，不另保存事件数组。sequence 为执行内顺序；occurredAt 为现实时间，offsetMs 使用单调时钟，现实时间回拨不改变时序。RuntimeRecorder 仅保留单调计时起点。事件记录没有 Context 或运行状态，不承担推进或消息传递；validateSnapshot 检查记录身份、归属与边界一致性。
 
@@ -137,7 +146,7 @@ pnpm check
 - 成功返回 answer/unknown/needs-info 表示输出被接纳，不保证用户问题已解决。
 - “继续输入”只清空输入框。消息已经由服务端保存，刷新页面会重新读取；本页时序列表仍是本页接收的记录，尚未提供服务端记录列表查询。
 
-容量检查发生在完整模型请求装载后。当前以请求 UTF-8 字节数加余量估算输入容量，再加预留输出 token；不是精确 tokenizer，也不保证供应商一定接纳。历史选择超限时，在下一轮开始前切换当前消息段；旧段保留，优先保留最近两轮完整 QA，预算不足降为一轮、零轮；消息对象和绝对索引不变。当前输入加记忆本身超限仍失败。选择结果要求模型按相关性与必要性从高到低返回索引；这是模型指导，不保证排序质量。生成请求按该顺序纳入完整消息，遇到第一条放不下的就停止，不跳过长消息凑容量；第一条就放不下则失败。保留的前缀在最终请求里恢复原始时间顺序。当前输入和固定请求内容不裁剪，容量处理不生成摘要、不额外调用模型、不自动修复或重试。生成 before 的输入保留候选顺序，输出记录最终请求，可以对照检查实际采用了哪些历史。
+容量检查发生在完整模型请求装载后。当前以请求 UTF-8 字节数加余量估算输入容量，再加预留输出 token；不是精确 tokenizer，也不保证供应商一定接纳。历史选择超限时，在下一轮开始前切换当前消息段；旧段保留，优先保留最近两轮完整 QA，预算不足降为一轮、零轮；消息对象和绝对索引不变。当前输入加记忆本身超限仍失败。选择结果要求模型按相关性与必要性从高到低返回索引；这是模型指导，不保证排序质量。生成请求按该顺序纳入完整消息，遇到第一条放不下的就停止，不跳过长消息凑容量；第一条就放不下则失败。保留的前缀在最终请求里恢复原始时间顺序。当前输入和固定请求内容不裁剪，容量处理不生成摘要、不额外调用模型、不自动修复或重试。生成 PrepareModelRequest 的输入保留候选顺序，输出记录最终请求，可以对照检查实际采用了哪些历史。
 
 ## 目录
 
@@ -146,13 +155,15 @@ src/server/
   execution/execution.ts     Execution.call 与抽象工作组合
   observer/environment.ts    请求前的环境初始化
   observer/accept.ts         向已有 Transcript 接纳本次输入
-  observer/execution.ts      ObserverExecution：复用四个固定 Operation
+  observer/execution.ts      ObserverExecution：复用三个具体 Operation
   observer/observe.ts        本次调用的观测订阅与响应
   transcript/                原始消息、固定引用与展示读取
   memory/                    记忆体、集合与原文关系投影
   context/                   Execution / Operation / Attempt 运行上下文
   invocation/                通用调用流程与 lifecycle 契约
-  operations/                Operation.call/BCA、ModelOperation、具体操作
+  attempt/                   Attempt.call/execute 及具名动作实现
+  model/                     模型契约、请求装载、容量与 Schema 辅助函数
+  operations/                Operation 与各个具体工作的动作组合
   runtime/                   调用生命周期与时钟
   records/                   容器、索引、E/O/A 与事件记录及配对操作、正文快照
   errors/                    异常及诊断格式化

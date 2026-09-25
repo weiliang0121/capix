@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import type { GenerationOutput } from '../../../shared/operations/generation.js';
 import { RuntimeError } from '../../errors/error.js';
-import type { GenerationInput } from '../context/assemble.js';
-import type { ModelOutputContract } from '../model.js';
-import { modelTextSchema } from '../model/schema.js';
+import type { GenerationInput } from './generate.js';
+import type { ModelOutputContract } from '../../model/contract.js';
+import { modelTextSchema } from '../../model/schema.js';
 
 const answerSchema = z.strictObject({
   kind: z.enum(['answer', 'unknown', 'needs-info']),

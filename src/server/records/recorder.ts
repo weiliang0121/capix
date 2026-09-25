@@ -1,5 +1,6 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import type { Operation } from '../operations/operation.js';
+import type { Attempt } from '../attempt/attempt.js';
 import type { RuntimeSnapshot, EventValue } from '../../shared/records.js';
 import type { RuntimeContext } from '../context/context.js';
 import type { ExecutionContext } from '../context/execution.js';
@@ -54,7 +55,7 @@ export class RuntimeRecorder {
     this.event(record.id, record.id, 'call');
   }
 
-  beginOperation<I, B, C, O>(context: OperationContext<I, O>, operation: Operation<I, B, C, O>, parentContext?: OperationContext): void {
+  beginOperation<I, O>(context: OperationContext<I, O>, operation: Operation<I, O>, parentContext?: OperationContext): void {
     this.requireUnrecorded(context);
     const execution = this.record(context.executionContext.id);
     if (!(execution instanceof ExecutionRecord)) throw new Error('Execution record does not exist');
@@ -80,11 +81,11 @@ export class RuntimeRecorder {
     this.event(execution.id, record.id, 'call');
   }
 
-  beginAttempt(context: AttemptContext, source: string, callee: string): void {
+  beginAttempt<I, O>(context: AttemptContext<I, O>, attempt: Attempt<I, O>): void {
     this.requireUnrecorded(context);
     const operation = this.record(context.operationContext.id);
     if (!(operation instanceof OperationRecord)) throw new Error('Operation record does not exist');
-    const record = AttemptRecordHelper.create(this.book, this.attemptIndex, { phase: context.phase, source, caller: 'operation', callee, contextId: context.id, operationId: operation.id }, context.input);
+    const record = AttemptRecordHelper.create(this.book, this.attemptIndex, { name: attempt.name, label: attempt.label, source: attempt.source, caller: 'operation', callee: attempt.callee, contextId: context.id, operationId: operation.id }, context.input);
     this.#contexts.add(record);
     this.event(operation.executionId, record.id, 'call');
   }

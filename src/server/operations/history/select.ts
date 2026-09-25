@@ -2,21 +2,44 @@ import type { ModelSettings, Selection } from '../../../shared/types.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import { historyMessages, type SelectionInput } from './input.js';
 import { selectionOutputContract } from './output.js';
-import { ModelOperation } from '../model.js';
-import { loadRequest } from '../model/request.js';
-import { estimateCapacity } from '../model/capacity.js';
+import { Operation } from '../operation.js';
+import { PrepareModelRequest } from '../../attempt/model/prepare.js';
+import { InvokeModel } from '../../attempt/model/invoke.js';
+import { AcceptModelOutput } from '../../attempt/model/accept.js';
+import type { Runtime } from '../../runtime/runtime.js';
+import type { ModelProvider } from '../../provider.js';
+import type { OperationContext } from '../../context/operation.js';
+import { loadRequest } from '../../model/request.js';
+import { estimateCapacity } from '../../model/capacity.js';
 import type { TranscriptRangeRef } from '../../transcript/ref.js';
 import { SelectionUsage } from './usage.js';
 
-export class SelectHistory extends ModelOperation<SelectionInput, Selection> {
+export class SelectHistory extends Operation<SelectionInput, Selection> {
   readonly usage = new SelectionUsage();
   readonly name = 'selection';
   readonly label = '选择历史';
   readonly source = 'src/server/operations/history/select.ts · SelectHistory';
   protected readonly purpose = 'selection';
   protected readonly output = selectionOutputContract;
-  protected readonly task = `为回答当前 message 选择充分且相关的历史依据。memories 提供已有理解，history 只提供当前消息段的原始交流，旧段可能已退出加载；结合两者，选择能够支持、补充或修正本次理解的原文。
-只返回 historyIndexes：来自 history、不重复，按相关性与必要性从高到低排列；无需历史时返回空数组。不回答用户问题。`;
+  protected readonly task = `结合 memories 中的已有理解和 history 中的可见原文，为回答当前 message 选择充分且相关的历史依据。关注指代、仍有效的条件，以及能补充或修正已有理解的信息；由你判断需要哪些原文，不只按关键词匹配。
+history 仅覆盖当前消息段，memories 可能保留旧段理解，但不保证正确，也不代表其来源原文可见。historyIndexes 只能选自 history，按相关性与必要性从高到低排列，不重复；无需原文时返回空数组。不生成回答。`;
+
+  readonly prepareRequest: PrepareModelRequest<SelectionInput>;
+  readonly invokeModel: InvokeModel;
+  readonly acceptOutput: AcceptModelOutput<SelectionInput, Selection>;
+
+  constructor(runtime: Runtime, provider: ModelProvider) {
+    super(runtime);
+    this.prepareRequest = new PrepareModelRequest(runtime, (input, execution) => loadRequest(this.prepare(input, execution), this.task, this.output.schema, execution.settings));
+    this.invokeModel = new InvokeModel(runtime, provider, this.purpose);
+    this.acceptOutput = new AcceptModelOutput(runtime, this.output);
+  }
+
+  protected async execute(context: OperationContext<SelectionInput, Selection>): Promise<Selection> {
+    const request = await this.prepareRequest.call(context, context.input);
+    const output = await this.invokeModel.call(context, request);
+    return this.acceptOutput.call(context, output);
+  }
 
   /** Uses the same payload, prompt and schema as the real selection request. */
   capacity(input: SelectionInput, range: TranscriptRangeRef, settings: ModelSettings) {

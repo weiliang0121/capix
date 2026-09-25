@@ -36,12 +36,13 @@ export interface AttemptValue<I = unknown, O = unknown> {
   output?: O;
   error?: RuntimeErrorValue;
 }
-/** One invocation of a declared phase, not a child operation or a complete BCA cycle. */
+/** One invocation of a named action owned by an operation. */
 export interface AttemptRecord<I = unknown, O = unknown> extends RuntimeRecord<AttemptValue<I, O>> {
   readonly contextId: string;
   readonly status: 'running' | 'succeeded' | 'failed';
   readonly operationId: string;
-  readonly phase: 'before' | 'commit' | 'after';
+  readonly name: string;
+  readonly label: string;
   readonly source: string;
   readonly caller: string;
   readonly callee: string;

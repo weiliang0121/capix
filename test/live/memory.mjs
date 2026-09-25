@@ -30,7 +30,7 @@ for (const content of messages) {
   console.log(JSON.stringify({ round: results.length, status: facts.execution.status, activeStart: environment.transcript.activeStart, memoryCountBefore: previousMemories.length, memoryCountAfter: currentMemories.length, output: facts.execution.value.output, error: facts.execution.value.error?.code }));
   assert.equal(facts.execution.status, 'succeeded', 'Keep the failed record and stop; no repair or retry');
   const operation = (name) => facts.operations.find((item) => item.operation === name);
-  const requestInput = (name) => JSON.parse(facts.attempts.find((item) => item.operationId === operation(name).id && item.phase === 'before').value.output.messages[1].content);
+  const requestInput = (name) => JSON.parse(facts.attempts.find((item) => item.operationId === operation(name).id && item.name === 'prepareModelRequest').value.output.messages[1].content);
   assert.deepEqual(operation('selection').value.input, { message: input, memories: previousMemories });
   assert.deepEqual(requestInput('selection').memories, previousMemories);
   assert.deepEqual(requestInput('memory').memories, previousMemories);

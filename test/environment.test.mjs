@@ -24,7 +24,7 @@ test('one initialized world preserves messages and records while reusing its exe
   assert.equal(environment.transcript, transcript);
   assert.equal([...environment.book.values()].length, 0);
   assert.equal(requests.length, 0);
-  const operationIds = ['selection', 'assembly', 'generation', 'extraction'].map((name) => environment.execution[name].id);
+  const operationIds = ['selection', 'generation', 'extraction'].map((name) => environment.execution[name].id);
   const snapshots = [],
     streamed = [];
   for (const [index, text] of ['first', 'failure', 'last'].entries()) {
@@ -73,7 +73,7 @@ test('one initialized world preserves messages and records while reusing its exe
   );
   assert.deepEqual(
     streamed.map((values) => values.length),
-    [34, 8, 34],
+    [30, 8, 30],
   );
 });
 

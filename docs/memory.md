@@ -11,7 +11,7 @@ M(n)              → 下一轮 SelectHistory
 
 H 只有当前段内此前的原始用户/助手消息，不含记忆。ObserverExecution.execute 在每轮开始取得 previousMemories（当前 Transcript 下 Memory.toJSON 的正文快照），用于筛选、回答和提取。记忆正文已有不可变语义，后续 Memory.update 不会改写这次捕获的内容。回答可以依据记忆有限继承旧段理解；提取的可见原文只有本轮 QA 和当前段筛选原文，不沿来源读取旧段。成功落实的更新在下一次执行开始读取，不从记录中恢复或查询运行输入。
 
-SelectHistory 输出仍只是当前段的原文索引。其 OperationRecord 输入明确显示 message/memories；before 输出保存实际发给模型的 message/memories/history。历史与记忆均计入容量检查；下一轮开始前必要时切换消息段，详见 [消息分段](transcript.md)。不移除记忆，记忆本身超限仍失败。模型的理解与索引选择质量不由 Schema 保证。
+SelectHistory 输出仍只是当前段的原文索引。其 OperationRecord 输入明确显示 message/memories；PrepareModelRequest 输出保存实际发给模型的 message/memories/history。历史与记忆均计入容量检查；下一轮开始前必要时切换消息段，详见 [消息分段](transcript.md)。不移除记忆，记忆本身超限仍失败。模型的理解与索引选择质量不由 Schema 保证。
 
 ## 两种对象
 
@@ -53,10 +53,13 @@ MemoryRecord extends RuntimeRecord<{
                          ↓
 当前记忆 + 本轮QA + 当前段筛选候选原文
                          ↓
-ExtractMemory.before → commit(模型) → after
-                                     ├─ 解析与整批接纳
-                                     ├─ MemoryHelper 创建/更新当前事实
-                                     └─ 每项落实后登记 MemoryRecord
+ExtractMemory
+  → PrepareModelRequest：准备请求并检查容量
+  → InvokeModel：调用模型，保留原始返回
+  → AcceptModelOutput：解析与整批接纳
+  → ApplyMemory
+      ├─ MemoryHelper 创建/更新当前事实
+      └─ 每项落实后登记 MemoryRecord
 ```
 
 输出示例：
@@ -83,7 +86,7 @@ ExtractMemory.before → commit(模型) → after
 
 接纳先检查候选结构、目标与引用合法性，以及原始候选是否重复更新同一 ID。若 update 的 result 与本轮旧记忆的 topic/content/sourceIndexes 完全相同（索引顺序也相同），将其作为无操作过滤，不要求它额外引用本轮消息，不修改 Memory 或新增 MemoryRecord。是否无变化不依据 change 的文字，不做语义相似判断；正文、主题或来源发生变化时仍必须提供本轮依据。未知引用、正文依据不包含变化依据等错误不能借无操作绕过。剩余变更整批检查通过后才落实，仍不接受部分有效批次。
 
-模型原始候选保留在 commit 的返回记录；after 与操作最终输出只保留实际接纳的变更。因此可以核对哪些候选被过滤，不新增跳过事件或记录层级。未增加错误反馈、自动重试或多次 attempt 执行。
+模型原始候选保留在 InvokeModel 的返回记录；AcceptModelOutput 保留实际接纳的变更，ApplyMemory 成功后返回这些变更作为操作最终输出。因此可以核对哪些候选被过滤，以及失败发生在接纳还是落实，不新增跳过事件。未增加错误反馈或自动重试。
 
 提取请求装载当前记忆内容及来源索引，不沿引用加载来源原文，不消费 MemoryRecord。原文仍只增不改删。筛选候选是提取可用证据，不宣称全部用于回答。更新完整正文仍可能遗漏条件或错误理解；结构校验不证明变化说明与语义正确。
 

@@ -171,17 +171,19 @@ test('record creation captures instance descriptions at begin without storing th
     },
   });
 
-  const attemptLifecycle = runtime.attempt(operation, 'before', 'phase input', 'test · before', 'processing');
+  const attemptInstance = instance.actions[0];
+  const attemptLifecycle = runtime.attempt(operation, attemptInstance, 'action input');
   const attempt = attemptLifecycle.begin();
   const attemptRecord = recorder.record(attempt.id);
-  assert.deepEqual(Object.keys(attempt).sort(), ['id', 'input', 'operationContext', 'phase']);
-  assert.equal(attemptRecord.phase, 'before');
-  assert.equal(attemptRecord.source, 'test · before');
+  assert.deepEqual(Object.keys(attempt).sort(), ['id', 'input', 'operationContext']);
+  assert.equal(attemptRecord.name, attemptInstance.name);
+  assert.equal(attemptRecord.label, attemptInstance.label);
+  assert.equal(attemptRecord.source, attemptInstance.source);
   assert.equal(attemptRecord.caller, 'operation');
   assert.equal(attemptRecord.callee, 'processing');
   assert.equal(runtime.getOperationContext(attempt), operation);
   assert.equal(runtime.getExecutionContext(attempt), execution);
-  attemptLifecycle.succeed(attempt, 'phase output');
+  attemptLifecycle.succeed(attempt, 'action output');
   operationLifecycle.succeed(operation, 'operation output');
   lifecycles.get(execution).succeed(execution, 'execution output');
   assert.equal(reads, 1);
