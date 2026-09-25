@@ -4,9 +4,10 @@
 
 ## 工程边界
 
-- 根 pnpm Workspace 下四个实际包：protocol、server/runtime、services/observer、apps/observer。包身份为 @capix-observer/protocol、runtime、service、app；跨包仅通过公开出口导入。protocol 无 Node/HTTP/UI 依赖；runtime 不依赖 service/app；app 只依赖 protocol，不读取服务端内部类型。详细接口见 docs/protocol.md。
+- 根 pnpm Workspace 下六个实际包：protocol、server/runtime、client/runtime、client/http、services/observer、apps/observer。包身份为 @capix-observer/protocol、runtime、client-runtime、client-http、service、app；跨包仅通过公开出口导入。protocol 无 Node/HTTP/UI 依赖；runtime 不依赖 service/app；client/runtime 只依赖 protocol 与通用工具，不依赖 React、服务端或应用；client/http 实现 ClientTransport，只通过公开出口依赖 client/runtime 的接口及 protocol；app 依赖 protocol、client-runtime 和 client-http，不读取服务端内部类型。详细接口见 docs/protocol.md。
 - 核心 EOA、Context、调用循环、Transcript、Memory 与记录保留在 server/runtime；具体筛选/回答/提取、模型请求/适配器、配置接纳与 HTTP 在 services/observer 组装。不为本次迁移提前重构运行语义或泛化现有 Context 配置。
-- apps/observer 使用 React + Vite + Tailwind 和按需引入的 shadcn/ui 源码组件。基础 UI 组件只放应用内部，定制图谱自行实现；不建空壳组件包/client runtime。协议只表达运行事实与记录，Trace、坐标、颜色、搜索和视口是应用内部投影。
+- apps/observer 使用 React + Vite + Tailwind 和按需引入的 shadcn/ui 源码组件。基础 UI 组件只放应用内部，定制图谱自行实现；不建空壳组件包。协议只表达运行事实与记录，Trace、坐标、颜色、搜索和视口是应用内部投影。
+- client/runtime 定义 ClientTransport 接口，持有现有查询、提交中的 pending/busy/runningId、已观测的消息/记忆/执行概览和按需快照缓存。client/http 通过 HttpTransport 基类处理 HTTP 请求、JSON 读取和状态错误；ObserverHttpTransport 继承基类并实现 ClientTransport，持有具体路径、Zod 响应接纳与 NDJSON 业务规则。基类不依赖 Observer 契约，不从 runtime 反向导出 HTTP 实现。响应错误保留状态、正文、服务端 code 与 cause；协议接纳、远端错误消息和本地交付异常分别表达，不自动重试。HTTP 接纳与首条执行记录是两个时点；接纳后追加消息，首条快照后关联执行 ID，流结束后刷新正式状态。App 使用订阅消费，不持有第二份服务端状态；App 内使用 zustand@5.0.15 的实例化 Store 持有草稿、预算表单、选中、搜索、密度、弹层与提示，应用动作协调提交与查看；不复制消息、记忆、概览或记录。connectAppStore 只应用默认轮次、运行中跟随与初始预算等呈现规则，挂载时订阅、卸载时解除。React 按字段订阅 Runtime 与 App Store；DOM、滚动测量、输入法状态和详情请求加载提示留在组件。不增加全局单例或状态持久化。仅抽离现有能力，不增加客户端 EOA、持久化、重连、重试、取消或恢复；服务端失败记录不等同于传输异常。详见 docs/client-runtime.md。
 - GET /api/executions 是轻量 ObserverOverview，首次绘图不能循环读取所有完整快照；详情按 execution.id 加载。NDJSON 使用 RunUpdate 的 snapshot/error，流结束不能自动等同于执行成功。不引入导入、导出、回放或持久化。
 - 问答导航固定块宽且独立横向滚动；主图每轮等宽并有最低阅读宽度，密度不改变导航。轮内 EOA 才按时间比例，轮间不作统一时间比例。搜索完整 Q/A 正文，输入只高亮，显式导航才定位。上下文行展示消息与记忆关联，避免重复全文。
 - 保留下面运行语义约定；文中未带包前缀的相对路径指各自所属包 src，具体操作与 observer 属于服务，核心类属于 runtime。
@@ -25,6 +26,7 @@
 - 记录装载、容量检查、调用、解析、校验的真实输入、输出和停止位置。
 - 保留输入契约、失败出口和必要测试；不要自动重试或静默截断。
 - 使用固定 Node/pnpm 与精确依赖版本；不推送、部署或发布。
+- 每条变量声明只声明一个变量；循环直接表达继续或结束条件，避免 `while (true)` 再依赖内部 break 退出。流读取以 reader 的 done 状态结束，异常和提前退出仍释放资源。
 - 格式偏好：不按 100 字符强制拆行。Prettier 使用 printWidth: 1000，近似不限制常规代码行宽；保留代码块等结构换行，不为满足窄行宽拆散函数签名和调用参数。
 - 通用数据操作采用 es-toolkit@1.52.0，按公开分类入口直接具名导入（es-toolkit/object、array、predicate 等）；后续遇到字段投影、排序、分组、去重、比较等需求先查已有能力，不再自建通用 Utils 类、转发层或内部工具库。不统一改写成链式或 fp 风格。基础类型判断只要库有同语义方法就统一使用，分类入口缺少的方法使用 compat 具名导入；简单展开、解构、原生 Map/Set 与领域类 instanceof 保留。
 - 服务端标准类型分类统一优先使用 es-toolkit/predicate（isString/isNumber/isBoolean/isNull/isUndefined/isSymbol/isDate/isMap/isSet/isError），覆盖错误转换、Provider、消息/记忆接纳和记录正文。错误固定字段表与类型一起定义，zipObject 组合读取结果；仍逐字段安全读取，允许继承的 name，捕获访问异常。isNativeError 保留跨 realm 的原生错误识别；领域类身份仍用 instanceof。null/undefined 判断使用 isNull/isUndefined，不混用严格相等判断；数组、非空对象、有限数和安全整数使用 compat 的 isArray/isObjectLike/isFinite/isSafeInteger。isObjectLike 的库声明仅返回 boolean，value/object.ts 保留同一库函数引用并补充类型谓词，不重写实现。bigint 与严格原型规则没有同语义方法，保留原生判断，不改变接纳范围。任意诊断对象的属性转换不直接使用会触发 getter 的 mapValues/pick，保留描述符读取和特殊字段处理。

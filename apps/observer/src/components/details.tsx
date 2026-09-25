@@ -1,9 +1,10 @@
+import type { Inspection } from '../state/store';
 import { useEffect, useState } from 'react';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 import { ArrowUpRight, ChevronLeft, FileCode2 } from 'lucide-react';
 import type { MemoryObservation, MemoryRecord, ObserverOverview, RuntimeSnapshot } from '@capix-observer/protocol';
-import { api } from '../api/client';
+import type { ClientRuntime } from '@capix-observer/client-runtime';
 import { projectExecution } from '../observation/project';
 import type { CallSpan, Trace } from '../observation/types';
 import { Badge } from './ui/badge';
@@ -134,20 +135,20 @@ function CallChildren({ trace, id, inspect }: { trace: Trace; id: string; inspec
     </div>
   );
 }
-function Source({ call }: { call: CallSpan }) {
+function Source({ call, runtime }: { call: CallSpan; runtime: ClientRuntime }) {
   const [text, setText] = useState('读取源码…');
   const path = call.source.split(' · ')[0]!;
   useEffect(() => {
     const controller = new AbortController();
     setText('读取源码…');
-    api
+    runtime
       .source(path, controller.signal)
       .then((source) => setText(source.content))
       .catch((error: Error) => {
         if (!controller.signal.aborted) setText(error.message);
       });
     return () => controller.abort();
-  }, [path]);
+  }, [path, runtime]);
   return (
     <section className="data-block">
       <h3>
@@ -201,11 +202,7 @@ function MemoryAtCall({ trace, call, memory }: { trace: Trace; call?: CallSpan; 
     </div>
   );
 }
-export interface Inspection {
-  executionId: string;
-  callId?: string;
-}
-export function InspectionDialog({ target, snapshot, loading, error, overview, memory, onClose, onInspect }: { target?: Inspection; snapshot?: RuntimeSnapshot; loading: boolean; error: string; overview: ObserverOverview; memory: MemoryObservation; onClose: () => void; onInspect: (id: string, call?: string) => void }) {
+export function InspectionDialog({ runtime, target, snapshot, loading, error, overview, memory, onClose, onInspect }: { runtime: ClientRuntime; target?: Inspection; snapshot?: RuntimeSnapshot; loading: boolean; error: string; overview: ObserverOverview; memory: MemoryObservation; onClose: () => void; onInspect: (id: string, call?: string) => void }) {
   const [tab, setTab] = useState('overview');
   useEffect(() => setTab('overview'), [target?.executionId, target?.callId]);
   const trace = snapshot ? projectExecution(snapshot) : undefined;
@@ -345,7 +342,7 @@ export function InspectionDialog({ target, snapshot, loading, error, overview, m
                 </TabsContent>
                 {call && (
                   <TabsContent value="source">
-                    <Source call={call} />
+                    <Source call={call} runtime={runtime} />
                   </TabsContent>
                 )}
               </div>

@@ -168,15 +168,17 @@ pnpm check
 ```text
 protocol/src/               跨端消息、记录、观测与 HTTP 契约
 server/runtime/src/         EOA、Context、调用循环、Transcript、Memory、记录与错误
+client/runtime/src/         Headless 客户端：接入接口、提交、查询、观测状态与快照缓存
+client/http/src/            HTTP 基类、Observer 业务子类、响应接纳与记录流校验
 services/observer/src/       当前场景、具体操作/意图、模型适配器与 HTTP 入口
 apps/observer/src/           React 界面、shadcn/ui 源码组件、图谱与详情投影
 docs/                       对象职责与协议说明
 test/                       运行、边界、HTTP 和前端纯逻辑测试
 ```
 
-服务与应用都依赖 `@capix-observer/protocol`；服务装配 `@capix-observer/runtime`。运行内核不依赖服务，前端不依赖服务端。跨包只使用公开出口。协议不包含 ModelRequest、Provider、Trace、像素布局、颜色或交互状态。具体接口、身份、时序和流式更新规则见 [跨端协议](docs/protocol.md)。
+服务、客户端 Runtime 与应用都依赖 `@capix-observer/protocol`；服务装配 `@capix-observer/runtime`，应用装配 `@capix-observer/client-runtime` 与 `@capix-observer/client-http`。HTTP 包依赖客户端 Runtime 的接入接口，客户端 Runtime 不依赖 HTTP 实现。运行内核不依赖服务，前端不依赖服务端。跨包只使用公开出口。协议不包含 ModelRequest、Provider、Trace、像素布局、颜色或交互状态。具体接口、身份、时序和流式更新规则见 [跨端协议](docs/protocol.md)。
 
-这次借鉴 CAPiX 的依赖方向与工程组织，不迁入 Graph/TRS，不创建空壳 client/runtime、公共 UI 包、调度与持久化能力。Observer 当前运行对象和场景语义保持不变。
+这次借鉴 CAPiX 的依赖方向与工程组织，不迁入 Graph/TRS，不创建公共 UI 包、调度与持久化能力。Observer 当前运行对象和场景语义保持不变。客户端 Runtime 从原 React 页面抽离现有能力；应用通过 Zustand Store 组织查看、编辑与提交交互，按字段直接订阅 Runtime，不复制观测正文。使用方式与职责见 [客户端 Runtime](docs/client-runtime.md)。
 
 通用数据操作优先使用 es-toolkit 的公开分类入口，直接具名导入，不额外建立工具转发层。当前已用于记录字段投影、消息排序/去重及记忆正文比较；服务端基础类型判断统一使用库的同语义函数，分类入口缺少的数组、对象范围、有限数和安全整数判断通过 compat 具名导入。简单展开、原生集合和领域类身份检查仍保留。pick 仅取自身字段，类 getter 显式读取；正文比较保持来源索引顺序。快照、引用保留、错误转换继续由对应概念负责，不默认套用深合并或深拷贝。浏览器模块由 Vite 统一构建，工具库仍通过公开入口使用。
 

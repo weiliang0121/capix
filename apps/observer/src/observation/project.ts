@@ -10,8 +10,8 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
   const starts = new Map(facts.events.filter((e) => e.value.type === 'call').map((e) => [e.callId, e]));
   const ends = new Map(facts.events.filter((e) => e.value.type !== 'call').map((e) => [e.callId, e]));
   const result = (id: string, body: OperationValue, status: OperationRecord['status']) => {
-    const start = starts.get(id)!,
-      end = ends.get(id);
+    const start = starts.get(id)!;
+    const end = ends.get(id);
     return {
       status: status === 'succeeded' ? ('passed' as const) : status,
       offsetMs: start.offsetMs,

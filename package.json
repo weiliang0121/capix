@@ -26,6 +26,8 @@
     "@capix-observer/protocol": "workspace:*",
     "@capix-observer/runtime": "workspace:*",
     "@capix-observer/service": "workspace:*",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@capix-observer/client-runtime": "workspace:*",
+    "@capix-observer/client-http": "workspace:*"
   }
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { request } from 'node:http';
 import { test } from 'node:test';
+import { ObserverHttpTransport } from '@capix-observer/client-http';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { createObserverServer, initializeObserver } from '@capix-observer/service';
 
@@ -148,4 +149,35 @@ test('transport validates origin, input and source boundary before accepting wor
   });
   assert.equal(blocked, 403);
   assert.deepEqual(await get('/api/config'), { ...settings, configured: false });
+});
+
+test('Observer HTTP subclass consumes the current service without changing its protocol', async (t) => {
+  const { base } = await setup(t);
+  const client = new ObserverHttpTransport(base);
+  assert.deepEqual(await client.config(), { ...settings, configured: false });
+  assert.deepEqual(await client.overview(), { messages: [], executions: [] });
+  let accepted = false;
+  const received = [];
+  await client.run(
+    { messages: [{ role: 'user', content: '测试输入' }] },
+    (snapshot) => {
+      assert.equal(accepted, true);
+      received.push(snapshot);
+    },
+    () => {
+      accepted = true;
+    },
+  );
+  const last = received.at(-1);
+  assert.equal(last.execution.status, 'succeeded');
+  assert.ok(received.length > 1);
+  assert.deepEqual(await client.execution(last.execution.id), last);
+  assert.equal((await client.overview()).executions[0].response.content, '测试回答');
+  assert.deepEqual(
+    (await client.transcript()).messages.map((item) => item.role),
+    ['user', 'assistant'],
+  );
+  assert.deepEqual(await client.memory(), { items: [] });
+  const path = last.operations[0].source.split(' · ')[0];
+  assert.match((await client.source(path)).content, /class SelectHistory/);
 });

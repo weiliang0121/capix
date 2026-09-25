@@ -4,7 +4,7 @@
 
 `@capix-observer/protocol` 是唯一跨端依赖。只公开可序列化数据、记录引用解析与完整性校验；不包含运行实体、HTTP 实现、模型供应商格式或图谱投影。所有跨包导入使用公开出口。
 
-`@capix-observer/runtime` 持有 EOA、Context、Invocation、RecordBook、Transcript 与 Memory 等现有运行对象，不依赖服务或应用。`services/observer` 装配当前筛选、回答、提取场景及模型适配器。`apps/observer` 负责 React 界面与前端投影，不导入服务端。
+`@capix-observer/runtime` 持有 EOA、Context、Invocation、RecordBook、Transcript 与 Memory 等现有运行对象，不依赖服务或应用。`services/observer` 装配当前筛选、回答、提取场景及模型适配器。`client/runtime` 通过 protocol 读取和提交，保存本地提交状态与已观测数据，不依赖 React 或服务端。`client/http` 的 HttpTransport 基类处理 HTTP，ObserverHttpTransport 子类通过公开接口实现 ClientTransport，接纳具体响应与 NDJSON 消息，客户端 Runtime 不反向依赖它。`apps/observer` 装配客户端 Runtime 与 HTTP 实现，负责 React 界面与前端投影，不导入服务端。此次抽离不改变 HTTP 契约，见 [客户端 Runtime](client-runtime.md)。
 
 ## HTTP
 

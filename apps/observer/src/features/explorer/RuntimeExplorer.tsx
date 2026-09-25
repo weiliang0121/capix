@@ -8,6 +8,7 @@ import { axisWidth, defaultColumnWidth, densityScroll, formatDuration, layoutCol
 import type { CallGeometry } from './layout';
 import { searchExecutions } from './search';
 import './explorer.css';
+import { useAppStore } from '../../state/react';
 
 const qaName = (index: number) => `QA ${String(index + 1).padStart(2, '0')}`;
 const roleNames = { user: '用户', assistant: '助手' };
@@ -105,9 +106,12 @@ function InvocationNode({ item, columnWidth, onInspect }: { item: CallGeometry; 
 }
 
 export function RuntimeExplorer({ overview, selectedId, onSelect, onInspect }: ExplorerProps) {
-  const [search, setSearch] = useState('');
-  const [matchCursor, setMatchCursor] = useState(-1);
-  const [columnWidth, setColumnWidth] = useState(defaultColumnWidth);
+  const search = useAppStore((state) => state.search);
+  const setSearch = useAppStore((state) => state.setSearch);
+  const matchCursor = useAppStore((state) => state.matchCursor);
+  const setMatchCursor = useAppStore((state) => state.setMatchCursor);
+  const columnWidth = useAppStore((state) => state.columnWidth);
+  const setColumnWidth = useAppStore((state) => state.setColumnWidth);
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const viewport = useRef<HTMLDivElement>(null);
   const navigation = useRef<HTMLDivElement>(null);
@@ -165,7 +169,7 @@ export function RuntimeExplorer({ overview, selectedId, onSelect, onInspect }: E
       }
       setColumnWidth(next.columnWidth);
     },
-    [ids, layout],
+    [ids, layout, setColumnWidth],
   );
 
   useLayoutEffect(() => {
@@ -246,7 +250,6 @@ export function RuntimeExplorer({ overview, selectedId, onSelect, onInspect }: E
             value={search}
             onChange={(event) => {
               setSearch(event.target.value);
-              setMatchCursor(-1);
             }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {

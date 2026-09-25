@@ -8,6 +8,12 @@ importers:
 
   .:
     devDependencies:
+      '@capix-observer/client-http':
+        specifier: workspace:*
+        version: link:client/http
+      '@capix-observer/client-runtime':
+        specifier: workspace:*
+        version: link:client/runtime
       '@capix-observer/protocol':
         specifier: workspace:*
         version: link:protocol
@@ -32,6 +38,12 @@ importers:
 
   apps/observer:
     dependencies:
+      '@capix-observer/client-http':
+        specifier: workspace:*
+        version: link:../../client/http
+      '@capix-observer/client-runtime':
+        specifier: workspace:*
+        version: link:../../client/runtime
       '@capix-observer/protocol':
         specifier: workspace:*
         version: link:../../protocol
@@ -59,6 +71,9 @@ importers:
       tailwind-merge:
         specifier: 3.7.0
         version: 3.7.0
+      zustand:
+        specifier: 5.0.15
+        version: 5.0.15(@types/react@19.3.0)(react@19.3.0)
     devDependencies:
       '@tailwindcss/vite':
         specifier: 4.3.3
@@ -81,6 +96,30 @@ importers:
       vite:
         specifier: 8.3.1
         version: 8.3.1(@types/node@22.19.11)(jiti@2.7.0)
+
+  client/http:
+    dependencies:
+      '@capix-observer/client-runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@capix-observer/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+
+  client/runtime:
+    dependencies:
+      '@capix-observer/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
 
   protocol: {}
 
@@ -1439,6 +1478,24 @@ packages:
   zod@4.6.5:
     resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
+  zustand@5.0.15:
+    resolution: {integrity: sha512-MpSEjRiBkA9crSYeOUH32rJC7SVqAbm0Fqcqge/bUi2PPoLcBWKOsG+C8mevmpr8TwXHBVkChbbJiyvkE+i/3A==}
+    engines: {node: '>=12.20.0'}
+    peerDependencies:
+      '@types/react': '>=18.0.0'
+      immer: '>=9.0.6'
+      react: '>=18.0.0'
+      use-sync-external-store: '>=1.2.0'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      immer:
+        optional: true
+      react:
+        optional: true
+      use-sync-external-store:
+        optional: true
+
 snapshots:
 
   '@floating-ui/core@1.8.0':
@@ -2681,3 +2738,8 @@ snapshots:
       jiti: 2.7.0
 
   zod@4.6.5: {}
+
+  zustand@5.0.15(@types/react@19.3.0)(react@19.3.0):
+    optionalDependencies:
+      '@types/react': 19.3.0
+      react: 19.3.0

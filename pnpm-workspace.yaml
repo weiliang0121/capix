@@ -1,5 +1,6 @@
 packages:
   - protocol
   - server/*
+  - client/*
   - services/*
   - apps/*

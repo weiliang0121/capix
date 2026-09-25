@@ -1,17 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { updateOverview } from '../../apps/observer/.test-dist/observation/live.js';
-import { consumeRunStream } from '../../apps/observer/.test-dist/api/client.js';
+import { ClientRuntime } from '@capix-observer/client-runtime';
+import { ObserverHttpTransport } from '@capix-observer/client-http';
+import { snapshot, transport } from './fixtures.mjs';
 
-function snapshot(status = 'succeeded', id = 'execution-1') {
-  const failed = status === 'failed';
-  return {
-    execution: { id, contextId: `context-${id}`, status, value: { startedAt: '2026-09-25T00:00:00.000Z', settings: {}, input: { role: 'user', content: '你好，查看北京' }, processes: [], ...(status === 'running' ? {} : failed ? { error: { code: 'TEST', message: '测试失败' } } : { output: { kind: 'answer', content: '这是中文回答' } }) } },
-    operations: [],
-    attempts: [],
-    events: [{ id: `call-${id}`, executionId: id, callId: id, sequence: 1, occurredAt: '2026-09-25T00:00:00.000Z', offsetMs: 0, value: { type: 'call' } }, ...(status === 'running' ? [] : [{ id: `end-${id}`, executionId: id, callId: id, sequence: 2, occurredAt: '2026-09-25T00:00:00.010Z', offsetMs: 10, value: { type: failed ? 'throw' : 'return' } }])],
-  };
-}
+const consumeRunStream = (body, accept) => new ObserverHttpTransport('', async () => new Response(body)).run({ messages: [] }, accept, () => {});
+
 function stream(text, chunkSize = 7) {
   const bytes = new TextEncoder().encode(text);
   let cursor = 0;
@@ -66,11 +60,25 @@ test('run stream rejects malformed records and execution identity changes', asyn
   );
 });
 
-test('live overview separates the last recorded process from an unfinished invocation duration', () => {
+test('live overview separates the last recorded process from an unfinished invocation duration', async () => {
   const live = snapshot('running');
   live.execution.value.transcriptRange = { start: 0, end: 1, messages: [{ role: 'user', content: '你好，查看北京' }] };
   live.execution.value.processes = [{ sequence: 1, round: 1, occurredAt: '2026-09-25T00:00:00.025Z', offsetMs: 25, stage: 'execute', type: 'start', input: {} }];
-  const overview = updateOverview({ executions: [], messages: [] }, live);
+  const runtime = new ClientRuntime(
+    transport({
+      run: async (_request, accept, accepted) => {
+        accepted();
+        accept(live);
+      },
+    }),
+  );
+  await runtime.initialize();
+  let overview;
+  const unsubscribe = runtime.subscribe(() => {
+    if (runtime.getSnapshot().runningId && runtime.getSnapshot().busy && runtime.getSnapshot().overview.executions.length) overview = runtime.getSnapshot().overview;
+  });
+  await runtime.submit({ messages: [live.execution.value.input] });
+  unsubscribe();
   assert.equal(overview.executions[0].observedOffsetMs, 25);
   assert.equal(overview.executions[0].durationMs, undefined);
   assert.equal(overview.executions[0].calls[0].durationMs, undefined);

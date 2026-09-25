@@ -9,7 +9,9 @@ const packages = [
   { path: 'protocol', allowed: [] },
   { path: 'server/runtime', allowed: ['@capix-observer/protocol'] },
   { path: 'services/observer', allowed: ['@capix-observer/protocol', '@capix-observer/runtime'] },
-  { path: 'apps/observer', allowed: ['@capix-observer/protocol'] },
+  { path: 'client/runtime', allowed: ['@capix-observer/protocol'] },
+  { path: 'client/http', allowed: ['@capix-observer/protocol', '@capix-observer/client-runtime'] },
+  { path: 'apps/observer', allowed: ['@capix-observer/protocol', '@capix-observer/client-runtime', '@capix-observer/client-http'] },
 ];
 async function sources(directory) {
   const files = await readdir(directory, { withFileTypes: true });
@@ -36,7 +38,7 @@ test('workspace production imports follow one-way public package boundaries', as
         const specifier = match[2];
         if (specifier.startsWith('@capix-observer/')) assert.ok(pkg.allowed.includes(specifier), `${relative(root, file)} must use an allowed public package export: ${specifier}`);
         if (specifier.startsWith('.')) assert.ok(!relative(dir, resolve(dirname(file), specifier)).startsWith('..'), `${relative(root, file)} crosses a package boundary: ${specifier}`);
-        if (pkg.path === 'protocol') assert.ok(!specifier.startsWith('node:') && !['react', 'express', 'radix-ui'].includes(specifier), `protocol cannot depend on ${specifier}`);
+        if (pkg.path === 'protocol' || pkg.path.startsWith('client/')) assert.ok(!specifier.startsWith('node:') && !['react', 'express', 'radix-ui'].includes(specifier), `${pkg.path} cannot depend on ${specifier}`);
       }
     }
   }

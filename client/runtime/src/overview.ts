@@ -1,17 +1,25 @@
-import { readOutput, type ObserverOverview, type RuntimeSnapshot } from '@capix-observer/protocol';
+import { readOutput, validateSnapshot, type InvocationSummary, type ObserverOverview, type RuntimeSnapshot } from '@capix-observer/protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
-import { projectExecution } from './project.js';
 
 function object(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {};
 }
 /** Live snapshots are projected locally; list loading never fetches all detail records. */
 export function updateOverview(previous: ObserverOverview, snapshot: RuntimeSnapshot): ObserverOverview {
-  const trace = projectExecution(snapshot);
-  const existing = previous.executions.find((item) => item.id === trace.id);
-  const observedOffsetMs = Math.max(trace.durationMs, ...[snapshot.execution, ...snapshot.operations, ...snapshot.attempts].map((record) => record.value.processes.at(-1)?.offsetMs ?? 0));
-  const durationMs = trace.callSequence.calls.find((call) => call.recordType === 'execution')?.durationMs;
+  validateSnapshot(snapshot);
+  const starts = new Map(snapshot.events.filter((event) => event.value.type === 'call').map((event) => [event.callId, event]));
+  const ends = new Map(snapshot.events.filter((event) => event.value.type !== 'call').map((event) => [event.callId, event]));
+  const records = [snapshot.execution, ...snapshot.operations, ...snapshot.attempts];
+  const calls: InvocationSummary[] = [{ ...snapshot.execution, recordType: 'execution' as const, name: 'execution', label: 'Execution.call', source: 'server/runtime/src/execution/execution.ts · Execution.call' }, ...snapshot.operations.map((record) => ({ ...record, recordType: 'operation' as const, name: record.operation, parentId: record.parentOperationId ?? record.executionId })), ...snapshot.attempts.map((record) => ({ ...record, recordType: 'attempt' as const, parentId: record.operationId }))].map((record) => {
+    const start = starts.get(record.id)!;
+    const end = ends.get(record.id);
+    return { id: record.id, contextId: record.contextId, recordType: record.recordType, ...('parentId' in record ? { parentId: record.parentId } : {}), name: record.name, label: record.label, source: record.source, status: record.status, offsetMs: start.offsetMs, ...(end ? { durationMs: end.offsetMs - start.offsetMs } : {}) };
+  });
+  calls.sort((a, b) => starts.get(a.id)!.sequence - starts.get(b.id)!.sequence);
+  const existing = previous.executions.find((item) => item.id === snapshot.execution.id);
+  const observedOffsetMs = Math.max(snapshot.events.at(-1)?.offsetMs ?? 0, ...records.map((record) => record.value.processes.at(-1)?.offsetMs ?? 0));
+  const durationMs = calls.find((call) => call.recordType === 'execution')?.durationMs;
   const range = object(snapshot.execution.value.transcriptRange);
   const input = object(snapshot.execution.value.input);
   const inputIndex = isNumber(range.end) ? range.end - 1 : previous.messages.length;
@@ -20,13 +28,13 @@ export function updateOverview(previous: ObserverOverview, snapshot: RuntimeSnap
   const responseValue = response ? object(readOutput(response.value)) : {};
   const memoryInput = object(selections[0]?.value.input).memories;
   const item: ObserverOverview['executions'][number] = {
-    id: trace.id,
-    startedAt: trace.startedAt,
-    status: trace.status,
+    id: snapshot.execution.id,
+    startedAt: snapshot.execution.value.startedAt,
+    status: snapshot.execution.status,
     observedOffsetMs,
     ...(durationMs === undefined ? {} : { durationMs }),
     inputIndex,
-    calls: trace.callSequence.calls.map((call) => ({ id: call.id, contextId: call.contextId, recordType: call.recordType, parentId: call.parentId, name: snapshot.attempts.find((attempt) => attempt.id === call.id)?.name ?? call.operation ?? 'execution', label: call.label, source: call.source, status: call.status === 'passed' ? 'succeeded' : call.status, offsetMs: call.offsetMs, ...(call.durationMs === undefined ? {} : { durationMs: call.durationMs }) })),
+    calls,
     selections: selections.map((operation) => {
       const indexes = operation.status === 'succeeded' ? object(readOutput(operation.value)).historyIndexes : undefined;
       return { operationId: operation.id, status: operation.status, ...(isArray(indexes) && indexes.every(isNumber) ? { indexes } : {}) };
