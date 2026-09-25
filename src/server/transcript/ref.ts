@@ -1,3 +1,4 @@
+import { isSafeInteger } from 'es-toolkit/compat';
 import type { Transcript } from './transcript.js';
 
 /** Stable position in one append-only Transcript. */
@@ -6,7 +7,7 @@ export class MessageRef {
     readonly transcript: Transcript,
     readonly index: number,
   ) {
-    if (!Number.isSafeInteger(index) || index < 0 || !transcript.get(index)) throw new RangeError('Message index does not exist');
+    if (!isSafeInteger(index) || index < 0 || !transcript.get(index)) throw new RangeError('Message index does not exist');
     Object.freeze(this);
   }
 
@@ -22,7 +23,7 @@ export class TranscriptRangeRef {
     readonly start: number,
     readonly end: number,
   ) {
-    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || end > transcript.length) throw new RangeError('Transcript range does not exist');
+    if (!isSafeInteger(start) || !isSafeInteger(end) || start < 0 || end < start || end > transcript.length) throw new RangeError('Transcript range does not exist');
     Object.freeze(this);
   }
 
@@ -36,7 +37,7 @@ export class TranscriptRangeRef {
   }
 
   read(index: number) {
-    if (!Number.isSafeInteger(index) || index < this.start || index >= this.end) throw new RangeError('Message is outside the fixed history range');
+    if (!isSafeInteger(index) || index < this.start || index >= this.end) throw new RangeError('Message is outside the fixed history range');
     return this.transcript.get(index)!;
   }
 

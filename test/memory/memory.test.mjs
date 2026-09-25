@@ -116,7 +116,7 @@ test('the output contract rejects invalid targets, evidence, duplicate updates a
   const valid = change(content('聚餐', '150', [0, 2]), '200改150', [2], 'old');
   for (const [candidate, code] of [
     [{ ...valid, memoryId: 'foreign' }, 'MEMORY_TARGET'],
-    [{ ...valid, action: 'create' }, 'MEMORY_TARGET'],
+    [{ ...valid, action: 'create' }, 'OUTPUT_SHAPE'],
     [{ ...valid, sourceIndexes: [0] }, 'MEMORY_SOURCE'],
     [{ ...valid, sourceIndexes: [99] }, 'MEMORY_SOURCE'],
     [{ ...valid, result: content('聚餐', '150', [0]) }, 'MEMORY_SOURCE'],

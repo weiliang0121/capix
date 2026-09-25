@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { isNonBlankString } from '../value/string.js';
+import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
 import type { MemoryContent } from '../../shared/memory.js';
 import type { Transcript } from '../transcript/transcript.js';
 
@@ -38,7 +40,7 @@ export class Memory {
   }
 
   static prepare(transcript: Transcript, content: MemoryContent): MemoryContent {
-    if (typeof content.topic !== 'string' || !content.topic.trim() || typeof content.content !== 'string' || !content.content.trim() || !Array.isArray(content.sourceIndexes) || !content.sourceIndexes.length || new Set(content.sourceIndexes).size !== content.sourceIndexes.length) throw new TypeError('Memory requires topic, content and unique source indexes');
+    if (!isNonBlankString(content.topic) || !isNonBlankString(content.content) || !isNonEmptyArray(content.sourceIndexes) || !hasUniqueItems(content.sourceIndexes)) throw new TypeError('Memory requires topic, content and unique source indexes');
     for (const index of content.sourceIndexes) transcript.ref(index);
     return Object.freeze({ topic: content.topic, content: content.content, sourceIndexes: Object.freeze([...content.sourceIndexes]) });
   }

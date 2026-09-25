@@ -38,6 +38,15 @@ test('only exact unchanged updates are skipped, after validating their shape, ta
   assert.deepEqual(input.memories, [previous]);
 });
 
+test('unchanged detection compares content only and keeps source order significant', () => {
+  const memories = [{ ...previous, sourceIndexes: [0, 2] }];
+  const ordered = { ...unchanged, sourceIndexes: [2], result: { ...unchanged.result, sourceIndexes: [0, 2] } };
+  const reordered = { ...ordered, result: { ...ordered.result, sourceIndexes: [2, 0] } };
+  assert.deepEqual(memoryOutputContract.accept({ memories: [ordered] }, { ...input, memories }), { memories: [] });
+  assert.deepEqual(memoryOutputContract.accept({ memories: [reordered] }, { ...input, memories }), { memories: [reordered] });
+  assert.deepEqual(memories[0].sourceIndexes, [0, 2]);
+});
+
 test('a real change and an unchanged update complete together; only the change is applied and recorded', async () => {
   let round = 0;
   const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });

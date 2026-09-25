@@ -1,30 +1,20 @@
+import { z } from 'zod';
 import type { GenerationOutput } from '../../../shared/operations/generation.js';
 import { RuntimeError } from '../../errors/error.js';
-import { hasExactKeys, isObject } from '../../value/object.js';
 import type { GenerationInput } from '../context/assemble.js';
 import type { ModelOutputContract } from '../model.js';
+import { modelTextSchema } from '../model/schema.js';
 
-const answerKinds = ['answer', 'unknown', 'needs-info'] as const;
+const answerSchema = z.strictObject({
+  kind: z.enum(['answer', 'unknown', 'needs-info']),
+  content: modelTextSchema,
+}) satisfies z.ZodType<GenerationOutput>;
 
 export const answerOutputContract = {
-  schema: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['kind', 'content'],
-    properties: {
-      kind: { enum: answerKinds },
-      content: { type: 'string', minLength: 1 },
-    },
-  },
+  schema: z.toJSONSchema(answerSchema),
   accept(value: unknown): GenerationOutput {
-    checkAnswer(value);
-    return value;
+    const result = answerSchema.safeParse(value);
+    if (!result.success) throw new RuntimeError('OUTPUT_SHAPE', '回答必须仅包含合法的 kind 和非空 content。', { issues: result.error.issues });
+    return result.data;
   },
 } as const satisfies ModelOutputContract<GenerationInput, GenerationOutput>;
-
-function checkAnswer(value: unknown): asserts value is GenerationOutput {
-  // Local acceptance rejects whitespace-only content without rewriting the original text.
-  if (!isObject(value) || !hasExactKeys(value, ['kind', 'content']) || !answerKinds.some((kind) => kind === value.kind) || typeof value.content !== 'string' || !value.content.trim()) {
-    throw new RuntimeError('OUTPUT_SHAPE', '回答必须仅包含合法的 kind 和非空 content。');
-  }
-}

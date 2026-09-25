@@ -42,7 +42,36 @@ test('answer acceptance rejects coerced kinds and preserves accepted text', () =
     (error) => error.code === 'OUTPUT_SHAPE',
   );
   const answer = { kind: 'answer', content: '  original text  ' };
-  assert.equal(answerOutputContract.accept(answer), answer);
+  const accepted = answerOutputContract.accept(answer);
+  assert.deepEqual(accepted, answer);
+  assert.notEqual(accepted, answer);
+  accepted.content = 'changed';
+  assert.equal(answer.content, '  original text  ');
+});
+
+test('answer contract keeps strict model schema and reports invalid output paths', () => {
+  const schema = answerOutputContract.schema;
+  assert.equal(schema.type, 'object');
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(schema.required, ['kind', 'content']);
+  assert.deepEqual(schema.properties.kind.enum, ['answer', 'unknown', 'needs-info']);
+  assert.equal(schema.properties.content.type, 'string');
+  assert.equal(schema.properties.content.minLength, 1);
+  assert.equal(new RegExp(schema.properties.content.pattern).test(' \t\n '), false);
+  assert.equal(new RegExp(schema.properties.content.pattern).test('  正文  '), true);
+  for (const kind of schema.properties.kind.enum) assert.deepEqual(answerOutputContract.accept({ kind, content: 'ok' }), { kind, content: 'ok' });
+  for (const value of [{ kind: 'answer' }, { kind: 'answer', content: null }, { kind: 'answer', content: '' }, { kind: 'answer', content: '\n\t ' }]) {
+    assert.throws(
+      () => answerOutputContract.accept(value),
+      (error) => error.code === 'OUTPUT_SHAPE' && error.detail.issues.some((issue) => issue.path.join('.') === 'content'),
+    );
+  }
+  const extra = { kind: 'answer', content: 'ok', additionalProperties: false };
+  assert.throws(
+    () => answerOutputContract.accept(extra),
+    (error) => error.code === 'OUTPUT_SHAPE' && error.detail.issues.some((issue) => issue.code === 'unrecognized_keys' && issue.keys.includes('additionalProperties')),
+  );
+  assert.equal(extra.additionalProperties, false);
 });
 
 test('selection acceptance separates invalid shape from missing references and preserves priority in a copy', () => {
@@ -69,6 +98,36 @@ test('selection acceptance separates invalid shape from missing references and p
   }
   assert.throws(
     () => selectionOutputContract.accept({ historyIndexes: [2] }, selectionInput, execution),
+    (error) => error.code === 'INDEX_OUT_OF_RANGE',
+  );
+});
+
+test('selection schema preserves empty results, ranked indexes and detailed strict-shape failures', () => {
+  const message = createInput({
+    content: '继续',
+    history: [
+      { role: 'user', content: '前文' },
+      { role: 'assistant', content: '回答' },
+    ],
+  });
+  const execution = contextFor(message);
+  const input = { message, memories: [] };
+  const accept = (value) => selectionOutputContract.accept(value, input, execution);
+  assert.deepEqual(accept({ historyIndexes: [] }), { historyIndexes: [] });
+  for (const value of [{}, { historyIndexes: null }, { historyIndexes: ['0'] }, { historyIndexes: [NaN] }, { historyIndexes: [Infinity] }, { historyIndexes: [0, 0] }, { historyIndexes: [], extra: true }]) {
+    assert.throws(
+      () => accept(value),
+      (error) => error.code === 'OUTPUT_SHAPE' && error.detail.issues.length > 0,
+    );
+  }
+  const schema = selectionOutputContract.schema;
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(schema.required, ['historyIndexes']);
+  assert.equal(schema.properties.historyIndexes.uniqueItems, true);
+  assert.equal(schema.properties.historyIndexes.items.minimum, 0);
+  assert.equal(schema.properties.historyIndexes.items.maximum, Number.MAX_SAFE_INTEGER);
+  assert.throws(
+    () => accept({ historyIndexes: [execution.transcriptRange.end - 1] }),
     (error) => error.code === 'INDEX_OUT_OF_RANGE',
   );
 });

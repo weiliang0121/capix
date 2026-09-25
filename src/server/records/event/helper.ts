@@ -1,3 +1,5 @@
+import { isUndefined } from 'es-toolkit/predicate';
+import { isFinite } from 'es-toolkit/compat';
 import type { EventValue } from '../../../shared/records.js';
 import type { Clock } from '../../runtime/clock.js';
 import type { RecordBook } from '../container/book.js';
@@ -16,7 +18,7 @@ export class EventRecordHelper {
     if (call.status !== expectedStatus) throw new Error('Event does not match the invocation record state');
     const previous = this.last(book, index, executionId);
     const offsetMs = clock.tick() - start;
-    if (!Number.isFinite(offsetMs) || offsetMs < (previous?.offsetMs ?? 0)) throw new Error('Invalid event time');
+    if (!isFinite(offsetMs) || offsetMs < (previous?.offsetMs ?? 0)) throw new Error('Invalid event time');
     const record = new EventRecord({ executionId, callId, sequence: (previous?.sequence ?? 0) + 1, occurredAt: clock.now(), offsetMs }, { type });
     index.add(record);
     try {
@@ -41,7 +43,7 @@ export class EventRecordHelper {
   static last(book: RecordBook, index: RecordIndex<EventRecord>, executionId: string): EventRecord | undefined {
     this.requireExecution(book, executionId);
     const id = index.get(executionId).at(-1);
-    return id === undefined ? undefined : this.indexed(book, id, executionId);
+    return isUndefined(id) ? undefined : this.indexed(book, id, executionId);
   }
 
   private static indexed(book: RecordBook, id: string, executionId: string): EventRecord {

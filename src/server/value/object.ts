@@ -1,8 +1,9 @@
+import { isArray, isObjectLike as toolkitIsObjectLike } from 'es-toolkit/compat';
+
+/** The library checks non-null objects, but its declaration only returns boolean. */
+export const isObjectLike = toolkitIsObjectLike as (value: unknown) => value is object;
+
 /** Object-shaped value, not necessarily a plain object. */
 export function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-export function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+  return isObjectLike(value) && !isArray(value);
 }

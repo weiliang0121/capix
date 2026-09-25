@@ -1,3 +1,4 @@
+import { sortBy } from 'es-toolkit/array';
 import type { ModelRequest } from '../../../shared/types.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import { checkCapacity, estimateCapacity } from '../model/capacity.js';
@@ -40,6 +41,6 @@ export class GenerateAnswer extends ModelOperation<GenerationInput, GenerationOu
   }
 
   protected prepare(input: GenerationInput) {
-    return { message: input.message, memories: input.memories, history: [...input.selectedMessages].sort((a, b) => a.index - b.index).map(({ index, message }) => ({ index, ...message })) };
+    return { message: input.message, memories: input.memories, history: sortBy(input.selectedMessages, ['index']).map(({ index, message }) => ({ index, ...message })) };
   }
 }

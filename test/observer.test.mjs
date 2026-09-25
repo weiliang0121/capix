@@ -11,6 +11,9 @@ import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
 import { invoke } from '../dist/server/invocation/invoke.js';
 import { RuntimeRecorder } from '../dist/server/records/recorder.js';
 import { Runtime } from '../dist/server/runtime/runtime.js';
+import { answerOutputContract } from '../dist/server/operations/answer/output.js';
+import { selectionOutputContract } from '../dist/server/operations/history/output.js';
+import { memoryOutputContract } from '../dist/server/operations/memory/output.js';
 
 async function runObserver(input, settings, provider, publish = () => {}, signal) {
   return projectExecution(await observeFixture(createInput(input), settings, provider, (facts) => publish(projectExecution(facts)), signal));
@@ -56,6 +59,9 @@ test('three actual model stages produce a causal trace and selected original con
   assert.equal(trace.status, 'succeeded');
   assert.deepEqual(trace.result, reply);
   assert.equal(provider.calls.length, 3);
+  for (const [index, contract] of [selectionOutputContract, answerOutputContract, memoryOutputContract].entries()) {
+    assert.ok(provider.calls[index].request.messages[0].content.includes(JSON.stringify(contract.schema)));
+  }
   assert.deepEqual(
     JSON.parse(provider.calls[1].request.messages[1].content).history.map((m) => m.index),
     [0, 1],
@@ -109,9 +115,14 @@ test('malformed, duplicate and truncated results fail at the corresponding bound
   }
 });
 test('answer classification is validated but does not invent task success', async () => {
-  const { trace } = await run(scripted([output('{"historyIndexes":[]}'), output('{"kind":"tool","content":"x"}')]));
+  const provider = scripted([output('{"historyIndexes":[]}'), output('{"kind":"tool","content":"x"}')]);
+  const { trace } = await run(provider);
   assert.equal(trace.error.code, 'OUTPUT_SHAPE');
-  assert.equal(trace.nodes.find((n) => n.operation === 'answer.after').status, 'failed');
+  const after = trace.nodes.find((n) => n.operation === 'answer.after');
+  assert.equal(after.status, 'failed');
+  assert.deepEqual(after.error.detail.issues[0].path, ['kind']);
+  assert.deepEqual(JSON.parse(JSON.stringify(trace)).error.detail.issues, after.error.detail.issues);
+  assert.equal(provider.calls.length, 2);
   assert.equal(trace.result, undefined);
 });
 test('DeepSeek request uses JSON mode; transport secret is absent from observations', async () => {

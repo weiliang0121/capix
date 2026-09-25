@@ -1,3 +1,4 @@
+import { pick } from 'es-toolkit/object';
 import type { EventRecord as EventData, EventValue } from '../../../shared/records.js';
 import { RuntimeRecord } from '../record.js';
 
@@ -22,6 +23,6 @@ export class EventRecord extends RuntimeRecord<EventValue> implements EventData 
   }
 
   override toJSON(): EventData {
-    return { ...super.toJSON(), executionId: this.executionId, callId: this.callId, sequence: this.sequence, occurredAt: this.occurredAt, offsetMs: this.offsetMs };
+    return { ...super.toJSON(), ...pick(this, ['executionId', 'callId', 'sequence', 'occurredAt', 'offsetMs']) };
   }
 }

@@ -1,3 +1,4 @@
+import { pick } from 'es-toolkit/object';
 import type { RuntimeErrorValue } from '../../../shared/errors.js';
 import type { OperationRecord as OperationData, OperationValue } from '../../../shared/records.js';
 import { RuntimeRecord } from '../record.js';
@@ -48,15 +49,8 @@ export class OperationRecord extends RuntimeRecord<OperationValue> implements Op
     return {
       ...super.toJSON(),
       status: this.status,
-      contextId: this.contextId,
-      executionId: this.executionId,
-      operationInstanceId: this.operationInstanceId,
+      ...pick(this, ['contextId', 'executionId', 'operationInstanceId', 'operation', 'label', 'source', 'caller', 'callee']),
       ...(this.parentOperationId ? { parentOperationId: this.parentOperationId } : {}),
-      operation: this.operation,
-      label: this.label,
-      source: this.source,
-      caller: this.caller,
-      callee: this.callee,
     };
   }
 }

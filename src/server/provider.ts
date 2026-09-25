@@ -1,3 +1,5 @@
+import { isArray, isFinite } from 'es-toolkit/compat';
+import { isString } from 'es-toolkit/predicate';
 import type { ModelOutput, ModelRequest, Purpose } from '../shared/types.js';
 import { isObject } from './value/object.js';
 import { RuntimeError } from './errors/error.js';
@@ -33,17 +35,17 @@ export class DeepSeekProvider implements ModelProvider {
     } catch {
       throw new RuntimeError('PROVIDER_ENVELOPE', 'DeepSeek HTTP 响应不是 JSON。');
     }
-    if (!isObject(body) || !Array.isArray(body.choices) || !isObject(body.choices[0])) throw new RuntimeError('PROVIDER_ENVELOPE', 'DeepSeek 响应缺少 choices。');
+    if (!isObject(body) || !isArray(body.choices) || !isObject(body.choices[0])) throw new RuntimeError('PROVIDER_ENVELOPE', 'DeepSeek 响应缺少 choices。');
     const choice = body.choices[0];
     const message = isObject(choice.message) ? choice.message : {};
     const usage = isObject(body.usage) ? body.usage : null;
     return {
-      id: typeof body.id === 'string' ? body.id : '',
-      model: typeof body.model === 'string' ? body.model : request.model,
-      content: typeof message.content === 'string' ? message.content : '',
-      finishReason: typeof choice.finish_reason === 'string' ? choice.finish_reason : 'unknown',
+      id: isString(body.id) ? body.id : '',
+      model: isString(body.model) ? body.model : request.model,
+      content: isString(message.content) ? message.content : '',
+      finishReason: isString(choice.finish_reason) ? choice.finish_reason : 'unknown',
       usage:
-        usage && [usage.prompt_tokens, usage.completion_tokens, usage.total_tokens].every((n) => typeof n === 'number' && Number.isFinite(n))
+        usage && [usage.prompt_tokens, usage.completion_tokens, usage.total_tokens].every(isFinite)
           ? {
               promptTokens: usage.prompt_tokens as number,
               completionTokens: usage.completion_tokens as number,

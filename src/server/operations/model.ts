@@ -7,6 +7,7 @@ import type { AttemptContext } from '../context/attempt.js';
 import type { ExecutionContext } from '../context/execution.js';
 import type { Runtime } from '../runtime/runtime.js';
 import type { ModelProvider } from '../provider.js';
+import { isNonBlankString } from '../value/string.js';
 
 /** Static output description paired with acceptance against the operation's input. */
 export interface ModelOutputContract<I, O> {
@@ -61,7 +62,7 @@ function checkCompletion(output: ModelOutput): void {
 }
 
 function parseContent(content: string): unknown {
-  if (!content.trim()) throw new RuntimeError('EMPTY_OUTPUT', '模型返回了空内容。');
+  if (!isNonBlankString(content)) throw new RuntimeError('EMPTY_OUTPUT', '模型返回了空内容。');
   try {
     return JSON.parse(content);
   } catch {

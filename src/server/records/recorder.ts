@@ -1,3 +1,4 @@
+import { isUndefined } from 'es-toolkit/predicate';
 import type { Operation } from '../operations/operation.js';
 import type { RuntimeSnapshot, EventValue } from '../../shared/records.js';
 import type { RuntimeContext } from '../context/context.js';
@@ -146,7 +147,7 @@ export class RuntimeRecorder {
 
   private event(executionId: string, callId: string, type: EventValue['type']): void {
     const start = this.#starts.get(executionId);
-    if (start === undefined) throw new Error('Execution recording clock does not exist');
+    if (isUndefined(start)) throw new Error('Execution recording clock does not exist');
     EventRecordHelper.create(this.book, this.eventIndex, this.clock, start, executionId, callId, type);
     let snapshot: RuntimeSnapshot;
     try {

@@ -1,3 +1,4 @@
+import { uniq } from 'es-toolkit/array';
 import type { GenerationInput } from '../context/assemble.js';
 import type { Memory } from '../../memory/memory.js';
 import type { TranscriptRangeRef, MessageRef } from '../../transcript/ref.js';
@@ -10,8 +11,8 @@ export interface MemoryInput {
 
 /** Selected evidence is available to extraction; it is not a claim of actual generation use. */
 export function prepareMemoryInput(range: TranscriptRangeRef, response: MessageRef, selected: GenerationInput['selectedMessages'], memories: MemoryInput['memories']): MemoryInput {
-  const indexes = new Set([...selected.map((item) => item.index), range.end - 1]);
-  const messages = [...indexes].sort((a, b) => a - b).map((index) => ({ index, message: range.read(index) }));
+  const indexes = uniq([...selected.map((item) => item.index), range.end - 1]);
+  const messages = indexes.sort((a, b) => a - b).map((index) => ({ index, message: range.read(index) }));
   messages.push({ index: response.index, message: response.read() });
   return { currentIndexes: [range.end - 1, response.index], messages, memories };
 }

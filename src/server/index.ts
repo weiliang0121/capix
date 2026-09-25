@@ -1,3 +1,5 @@
+import { isUndefined } from 'es-toolkit/predicate';
+import { isSafeInteger } from 'es-toolkit/compat';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -28,7 +30,7 @@ const key = process.env.DEEPSEEK_API_KEY?.trim() || '';
 const observer = initializeObserver(new DeepSeekProvider(key));
 let executing = false;
 const port = Number(process.env.PORT || 4317);
-if (!Number.isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
+if (!isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 const allowedSources = new Set([
   'memory/memory.ts',
@@ -144,7 +146,7 @@ async function handle(req: IncomingMessage, res: ServerResponse) {
     if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' });
     const data = await body(req);
     if (!isObject(data)) throw new RuntimeError('INVALID_INPUT', '无效请求。');
-    const runSettings = validateSettings({ ...settings, ...(data.contextBudget === undefined ? {} : { contextBudget: data.contextBudget }) });
+    const runSettings = validateSettings({ ...settings, ...(isUndefined(data.contextBudget) ? {} : { contextBudget: data.contextBudget }) });
     if (executing) return json(res, 409, { error: '当前环境正在执行，请等待本次调用结束。' });
     const input = acceptExecutionInput(observer.transcript, data);
     executing = true;

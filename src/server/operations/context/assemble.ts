@@ -1,3 +1,4 @@
+import { isSafeInteger } from 'es-toolkit/compat';
 import type { Selection } from '../../../shared/types.js';
 import type { Message } from '../../../shared/transcript/message.js';
 import type { ExecutionContext } from '../../context/execution.js';
@@ -13,7 +14,7 @@ export function assembleContext(execution: ExecutionContext, selection: Selectio
   const range = execution.transcriptRange;
   if (!range || range.length === 0) throw new Error('Execution Transcript range is required');
   const selectedMessages = selection.historyIndexes.map((index) => {
-    if (!Number.isSafeInteger(index) || index < range.start || index >= range.end - 1) throw new RangeError('Selected message is outside the execution history');
+    if (!isSafeInteger(index) || index < range.start || index >= range.end - 1) throw new RangeError('Selected message is outside the execution history');
     return Object.freeze({ index, message: range.read(index) });
   });
   return Object.freeze({ message: execution.input as Readonly<Message>, selectedMessages: Object.freeze(selectedMessages) });

@@ -1,3 +1,4 @@
+import { isUndefined } from 'es-toolkit/predicate';
 import type { RuntimeRecord } from '../../../shared/records.js';
 
 /** Derived lookup data only. Call add again to index a record's changed key. */
@@ -27,7 +28,7 @@ export class RecordIndex<R extends RuntimeRecord<unknown>> {
 
   remove(recordId: string): boolean {
     const key = this.#keyById.get(recordId);
-    if (key === undefined) return false;
+    if (isUndefined(key)) return false;
     const ids = this.#idsByKey.get(key)!;
     ids.delete(recordId);
     if (ids.size === 0) this.#idsByKey.delete(key);

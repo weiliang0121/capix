@@ -1,6 +1,7 @@
 import { createInput } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
 import { RuntimeError } from '../../dist/server/errors/error.js';
 import { RuntimeErrorHelper } from '../../dist/server/errors/helper.js';
 import { snapshotValue } from '../../dist/server/records/value/snapshot.js';
@@ -30,6 +31,50 @@ test('runtime and native errors retain diagnostics and cause without changing th
   assert.deepEqual(value.detail.nested, [1]);
   const native = Object.assign(new Error('socket closed'), { code: 'ECONNRESET' });
   assert.equal(RuntimeErrorHelper.format(native).code, 'ECONNRESET');
+});
+
+test('cross-realm errors retain diagnostics at the root and inside detail', () => {
+  const foreign = runInNewContext('new TypeError("foreign failure")');
+  assert.equal(foreign instanceof Error, false);
+  const value = recordable(RuntimeErrorHelper.format(foreign));
+  assert.equal(value.name, 'TypeError');
+  assert.equal(value.message, 'foreign failure');
+  const nested = recordable(RuntimeErrorHelper.format(new RuntimeError('OUTER', 'outer', { foreign })));
+  assert.equal(nested.detail.foreign.name, 'TypeError');
+  assert.equal(nested.detail.foreign.message, 'foreign failure');
+});
+
+test('diagnostic predicates do not coerce boxed fields or evaluate type tags and detail accessors', () => {
+  const error = new Error('original');
+  error.code = new String('BAD_CODE');
+  error.message = new String('boxed message');
+  let accessed = 0;
+  const detail = { number: 0, boolean: false, nil: null, symbol: Symbol('tag') };
+  Object.defineProperty(detail, Symbol.toStringTag, {
+    get() {
+      accessed++;
+      throw new Error('must not run');
+    },
+  });
+  Object.defineProperty(detail, '__proto__', { enumerable: true, value: 'ordinary field' });
+  Object.defineProperty(detail, 'accessor', {
+    enumerable: true,
+    get() {
+      accessed++;
+      throw new Error('must not run');
+    },
+  });
+  error.detail = detail;
+  const value = recordable(RuntimeErrorHelper.format(error));
+  assert.equal(value.code, 'INTERNAL_ERROR');
+  assert.equal(value.message, 'Error message unavailable');
+  assert.equal(value.detail.number, 0);
+  assert.equal(value.detail.boolean, false);
+  assert.equal(value.detail.nil, null);
+  assert.equal(value.detail.symbol, '[Symbol: tag]');
+  assert.equal(value.detail.__proto__, 'ordinary field');
+  assert.equal(value.detail.accessor, '[Accessor not evaluated]');
+  assert.equal(accessed, 0);
 });
 
 test('aggregate errors keep member order and cause, including nested aggregates', () => {

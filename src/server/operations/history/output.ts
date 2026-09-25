@@ -1,35 +1,25 @@
+import { z } from 'zod';
 import type { Selection } from '../../../shared/types.js';
 import type { SelectionInput } from './input.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import { RuntimeError } from '../../errors/error.js';
-import { hasExactKeys, isObject } from '../../value/object.js';
+import { modelIndexesSchema } from '../model/schema.js';
 import type { ModelOutputContract } from '../model.js';
 
-/** The advertised shape and its local acceptance rules belong to the same operation. */
+const selectionSchema = z.strictObject({ historyIndexes: modelIndexesSchema() }) satisfies z.ZodType<Selection>;
+
+/** Static structure is checked before references against this execution's history. */
 export const selectionOutputContract = {
-  schema: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['historyIndexes'],
-    properties: {
-      historyIndexes: { type: 'array', uniqueItems: true, items: { type: 'integer', minimum: 0 } },
-    },
-  },
+  schema: z.toJSONSchema(selectionSchema),
   accept(value: unknown, _input: SelectionInput, execution: ExecutionContext): Selection {
-    checkSelection(value);
+    const parsed = selectionSchema.safeParse(value);
+    if (!parsed.success) throw new RuntimeError('OUTPUT_SHAPE', '选择结果必须是仅含 historyIndexes 的对象，索引为不重复的非负整数。', { issues: parsed.error.issues });
     const range = execution.transcriptRange;
     if (!range) throw new Error('Execution Transcript range is required');
-    checkHistoryReferences(value, range.start, range.end - 1);
-    return { historyIndexes: [...value.historyIndexes] };
+    checkHistoryReferences(parsed.data, range.start, range.end - 1);
+    return parsed.data;
   },
 } as const satisfies ModelOutputContract<SelectionInput, Selection>;
-
-function checkSelection(value: unknown): asserts value is Selection {
-  // Local acceptance also requires safe integers; bounds depend on this invocation's history.
-  if (!isObject(value) || !hasExactKeys(value, ['historyIndexes']) || !Array.isArray(value.historyIndexes) || !value.historyIndexes.every((n) => Number.isSafeInteger(n) && n >= 0) || new Set(value.historyIndexes).size !== value.historyIndexes.length) {
-    throw new RuntimeError('OUTPUT_SHAPE', '选择结果必须是仅含 historyIndexes 的对象，索引为不重复的非负整数。');
-  }
-}
 
 function checkHistoryReferences(value: Selection, start: number, end: number): void {
   const invalid = value.historyIndexes.filter((index) => index < start || index >= end);

@@ -1,3 +1,4 @@
+import { pick } from 'es-toolkit/object';
 import type { RuntimeErrorValue } from '../../../shared/errors.js';
 import type { AttemptRecord as AttemptData, AttemptValue } from '../../../shared/records.js';
 import { RuntimeRecord } from '../record.js';
@@ -49,12 +50,7 @@ export class AttemptRecord extends RuntimeRecord<AttemptValue> implements Attemp
     return {
       ...super.toJSON(),
       status: this.status,
-      contextId: this.contextId,
-      operationId: this.operationId,
-      phase: this.phase,
-      source: this.source,
-      caller: this.caller,
-      callee: this.callee,
+      ...pick(this, ['contextId', 'operationId', 'phase', 'source', 'caller', 'callee']),
     };
   }
 }

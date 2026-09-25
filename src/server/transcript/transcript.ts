@@ -1,3 +1,6 @@
+import { isArray, isSafeInteger } from 'es-toolkit/compat';
+import { isNonBlankString } from '../value/string.js';
+import { isObject } from '../value/object.js';
 import { MessageRef, TranscriptRangeRef } from './ref.js';
 import type { Message } from '../../shared/types.js';
 
@@ -7,7 +10,7 @@ export class Transcript {
   readonly #starts: number[] = [0];
 
   constructor(messages: readonly Message[] = []) {
-    if (!Array.isArray(messages)) throw new TypeError('消息集合必须是数组。');
+    if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     this.append(...messages);
   }
 
@@ -25,7 +28,7 @@ export class Transcript {
   }
 
   startSegment(start: number): void {
-    if (!Number.isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
+    if (!isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
     this.#starts.push(start);
   }
 
@@ -50,15 +53,15 @@ export class Transcript {
   }
 
   snapshot(end = this.length): readonly Readonly<Message>[] {
-    if (!Number.isSafeInteger(end) || end < 0 || end > this.length) throw new RangeError('Transcript boundary does not exist');
+    if (!isSafeInteger(end) || end < 0 || end > this.length) throw new RangeError('Transcript boundary does not exist');
     return this.#messages.slice(0, end);
   }
 
   private static accept(value: unknown): Readonly<Message> {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new TypeError('消息必须是包含 role 和 content 的对象。');
-    const message = value as Record<string, unknown>;
+    if (!isObject(value)) throw new TypeError('消息必须是包含 role 和 content 的对象。');
+    const message = value;
     if (message.role !== 'user' && message.role !== 'assistant') throw new TypeError('消息角色必须是 user 或 assistant。');
-    if (typeof message.content !== 'string' || !message.content.trim()) throw new TypeError('消息内容必须是非空字符串。');
+    if (!isNonBlankString(message.content)) throw new TypeError('消息内容必须是非空字符串。');
     return Object.freeze({ role: message.role, content: message.content });
   }
 }
