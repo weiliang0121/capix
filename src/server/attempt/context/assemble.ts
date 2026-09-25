@@ -19,7 +19,7 @@ export class AssembleContext extends Attempt<Selection, AssembledContext> {
     const execution = this.runtime.getExecutionContext(context);
     const range = execution.transcriptRange;
     if (!range || range.length === 0) throw new Error('Execution Transcript range is required');
-    const selectedMessages = context.input.historyIndexes.map((index) => {
+    const selectedMessages = context.currentInput.historyIndexes.map((index) => {
       if (!isSafeInteger(index) || index < range.start || index >= range.end - 1) throw new RangeError('Selected message is outside the execution history');
       return Object.freeze({ index, message: range.read(index) });
     });

@@ -25,7 +25,7 @@ export class MemoryView {
     const records = this.data.items.flatMap((memory) => memory.records).filter((record) => record.executionId === this.executionId);
     const header = element('div', 'section-title');
     header.append(element('h2', '', this.executionId ? '本轮记忆体' : '当前记忆总览'), element('span', 'pill', this.executionId ? `${records.length} 条变化` : `${this.data.items.length} 个当前理解`));
-    const note = element('p', 'panel-note', this.executionId ? '展示本轮登记的变化及当时的内容快照。' : '跨轮保留的当前理解 · 记忆暂不参与回答');
+    const note = element('p', 'panel-note', this.executionId ? '展示本轮登记的变化及当时的内容快照。' : '跨轮保留的当前理解 · 用于后续筛选与回答');
     const grid = element('div', 'memory-grid');
     if (this.executionId) {
       for (const record of records) grid.append(this.changeCard(record));

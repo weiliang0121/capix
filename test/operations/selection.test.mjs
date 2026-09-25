@@ -1,3 +1,4 @@
+import { readOutput } from '../../dist/shared/records/invocation.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver } from '../../dist/server/observer/environment.js';
@@ -35,7 +36,7 @@ for (const fails of [false, true]) {
     const facts = await observeExecution(environment.execution, environment.recorder, input, { settings, transcript: environment.transcript });
     const selection = facts.operations.find((operation) => operation.operation === 'selection');
     assert.equal(selection.status, 'succeeded');
-    assert.deepEqual(selection.value.output, { historyIndexes: [1, 0] });
+    assert.deepEqual(readOutput(selection.value), { historyIndexes: [1, 0] });
     assert.equal(requests.length, fails ? 2 : 3);
     assert.equal(facts.execution.status, fails ? 'failed' : 'succeeded');
     assert.equal(facts.execution.value.transcriptRange.end, 3);

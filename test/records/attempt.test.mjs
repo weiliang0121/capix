@@ -1,3 +1,4 @@
+import { readOutput } from '../../dist/shared/records/invocation.js';
 import { TestOperation } from '../fixtures/operation.mjs';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 import assert from 'node:assert/strict';
@@ -56,7 +57,7 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   executionLifecycle.succeed(execution, output);
   output.accepted = false;
   assert.equal(second.state.output.accepted, false);
-  assert.equal(secondRecord.value.output.accepted, true);
+  assert.equal(readOutput(secondRecord.value).accepted, true);
   assert.throws(() => second.complete({}), /ended/);
   assert.throws(() => runtime.attempt(operation, attempt, {}).begin(), /ended/);
   const final = runtime.recorder.snapshot(execution);

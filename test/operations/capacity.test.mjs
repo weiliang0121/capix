@@ -1,3 +1,4 @@
+import { readOutput } from '../../dist/shared/records/invocation.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Transcript } from '../../dist/server/transcript/transcript.js';
@@ -94,11 +95,11 @@ test('the observed execution preserves ranking, records actual requests and acco
   assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
   assert.equal(requests.length, 3);
   assert.equal(facts.operations.length, 3);
-  assert.deepEqual(facts.operations[0].value.output.historyIndexes, [2, 0, 1]);
+  assert.deepEqual(readOutput(facts.operations[0].value).historyIndexes, [2, 0, 1]);
   const generation = facts.operations.find((record) => record.operation === 'answer');
   assert.deepEqual(generation.value.input.selection.historyIndexes, [2, 0, 1]);
   const prepared = facts.attempts.find((record) => record.operationId === generation.id && record.name === 'prepareModelRequest');
-  assert.deepEqual(prepared.value.output, requests[1]);
+  assert.deepEqual(readOutput(prepared.value), requests[1]);
   assert.deepEqual(
     JSON.parse(requests[1].messages[1].content).history.map((item) => item.index),
     [0, 1, 2],

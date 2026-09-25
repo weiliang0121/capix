@@ -5,9 +5,15 @@ export interface RuntimeRecord<T = unknown> {
   readonly id: string;
   readonly value: T;
 }
+/** Append-only entries inside one invocation record; no independent record identity. */
+export type ProcessRecord = Readonly<{ sequence: number; round: number; occurredAt: string; offsetMs: number } & ({ stage: 'execute'; type: 'start'; input: unknown } | { stage: 'execute' | 'receive'; type: 'return'; output: unknown } | { stage: 'receive'; type: 'return'; resultOf: number } | { stage: 'execute' | 'receive'; type: 'throw'; error: RuntimeErrorValue } | { stage: 'receive'; type: 'continue'; input: unknown; reason: string } | { stage: 'control'; type: 'stop'; error: RuntimeErrorValue })>;
+
 export interface OperationValue<I = unknown, O = unknown> {
+  readonly processes: readonly ProcessRecord[];
   input: I;
   output?: O;
+  /** Local process sequence containing the final frozen output; mutually exclusive with output. */
+  resultOf?: number;
   error?: RuntimeErrorValue;
 }
 export interface ExecutionValue<I = unknown, O = unknown> extends OperationValue<I, O> {
@@ -31,11 +37,7 @@ export interface OperationRecord<I = unknown, O = unknown> extends RuntimeRecord
   readonly caller: string;
   readonly callee: string;
 }
-export interface AttemptValue<I = unknown, O = unknown> {
-  input: I;
-  output?: O;
-  error?: RuntimeErrorValue;
-}
+export interface AttemptValue<I = unknown, O = unknown> extends OperationValue<I, O> {}
 /** One invocation of a named action owned by an operation. */
 export interface AttemptRecord<I = unknown, O = unknown> extends RuntimeRecord<AttemptValue<I, O>> {
   readonly contextId: string;

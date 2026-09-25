@@ -1,15 +1,10 @@
 import { pick } from 'es-toolkit/object';
-import type { RuntimeErrorValue } from '../../../shared/errors.js';
 import type { OperationRecord as OperationData, OperationValue } from '../../../shared/records.js';
-import { RuntimeRecord } from '../record.js';
+import { InvocationRecord } from '../invocation/record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
 export type OperationRecordDefinition = Omit<OperationData, 'id' | 'value' | 'status'>;
-export class OperationRecord extends RuntimeRecord<OperationValue> implements OperationData {
-  #status: OperationData['status'] = 'running';
-  get status(): OperationData['status'] {
-    return this.#status;
-  }
+export class OperationRecord extends InvocationRecord<OperationValue> implements OperationData {
   readonly contextId: string;
   readonly executionId: string;
   readonly operationInstanceId: string;
@@ -20,7 +15,7 @@ export class OperationRecord extends RuntimeRecord<OperationValue> implements Op
   readonly caller: string;
   readonly callee: string;
   constructor(definition: OperationRecordDefinition, input: unknown) {
-    super(snapshotValue({ input }));
+    super(snapshotValue({ input, processes: [] }));
     this.contextId = definition.contextId;
     this.executionId = definition.executionId;
     this.operationInstanceId = definition.operationInstanceId;
@@ -31,19 +26,6 @@ export class OperationRecord extends RuntimeRecord<OperationValue> implements Op
     this.caller = definition.caller;
     this.callee = definition.callee;
     Object.freeze(this);
-  }
-  private requireRunning() {
-    if (this.#status !== 'running') throw new Error('Record has already ended');
-  }
-  complete(output: unknown) {
-    this.requireRunning();
-    this.replaceValue(Object.freeze({ ...this.value, output: snapshotValue(output) }));
-    this.#status = 'succeeded';
-  }
-  fail(error: RuntimeErrorValue) {
-    this.requireRunning();
-    this.replaceValue(Object.freeze({ ...this.value, error: snapshotValue(error) }));
-    this.#status = 'failed';
   }
   override toJSON(): OperationData {
     return {

@@ -1,3 +1,4 @@
+import { readOutput } from '../../dist/shared/records/invocation.js';
 // Optional real-provider check. Uses the product execution unchanged; not part of the offline test suite.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -27,10 +28,10 @@ for (const content of messages) {
   const segments = environment.transcript.segments().map(({ start, end }) => ({ start, end }));
   results.push({ previousMemories, facts, currentMemories, segments });
   await writeFile(resolve(directory, 'results.json'), JSON.stringify(results, observeTranscript, 2));
-  console.log(JSON.stringify({ round: results.length, status: facts.execution.status, activeStart: environment.transcript.activeStart, memoryCountBefore: previousMemories.length, memoryCountAfter: currentMemories.length, output: facts.execution.value.output, error: facts.execution.value.error?.code }));
+  console.log(JSON.stringify({ round: results.length, status: facts.execution.status, activeStart: environment.transcript.activeStart, memoryCountBefore: previousMemories.length, memoryCountAfter: currentMemories.length, output: readOutput(facts.execution.value), error: facts.execution.value.error?.code }));
   assert.equal(facts.execution.status, 'succeeded', 'Keep the failed record and stop; no repair or retry');
   const operation = (name) => facts.operations.find((item) => item.operation === name);
-  const requestInput = (name) => JSON.parse(facts.attempts.find((item) => item.operationId === operation(name).id && item.name === 'prepareModelRequest').value.output.messages[1].content);
+  const requestInput = (name) => JSON.parse(readOutput(facts.attempts.find((item) => item.operationId === operation(name).id && item.name === 'prepareModelRequest').value).messages[1].content);
   assert.deepEqual(operation('selection').value.input, { message: input, memories: previousMemories });
   assert.deepEqual(requestInput('selection').memories, previousMemories);
   assert.deepEqual(requestInput('memory').memories, previousMemories);
@@ -41,7 +42,7 @@ for (const content of messages) {
   assert.deepEqual(requestInput('answer').memories, previousMemories);
   assert.deepEqual(
     requestInput('answer').history.map((item) => item.index),
-    [...operation('selection').value.output.historyIndexes].sort((a, b) => a - b),
+    [...readOutput(operation('selection').value).historyIndexes].sort((a, b) => a - b),
   );
   assert.equal(environment.transcript.length, results.length * 2);
 }

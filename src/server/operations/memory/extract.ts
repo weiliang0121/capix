@@ -40,7 +40,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
   }
 
   protected async execute(context: OperationContext<MemoryInput, MemoryExtraction>): Promise<MemoryExtraction> {
-    const request = await this.prepareRequest.call(context, context.input);
+    const request = await this.prepareRequest.call(context, context.currentInput);
     const output = await this.invokeModel.call(context, request);
     const accepted = await this.acceptOutput.call(context, output);
     return this.applyMemory.call(context, accepted);

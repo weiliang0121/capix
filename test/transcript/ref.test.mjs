@@ -1,3 +1,4 @@
+import { readOutput } from '../../dist/shared/records/invocation.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createInput, contextFor, transcriptFor, observeFixture } from '../fixtures/observer.mjs';
@@ -71,7 +72,7 @@ test('only the execution record holds the range; calls consume selected content 
     assert.equal(Object.hasOwn(record.value, 'transcriptRange'), false);
     assert.equal(Object.hasOwn(record.value, 'settings'), false);
   }
-  const assembled = facts.attempts.find((record) => record.name === 'assembleContext').value.output;
+  const assembled = readOutput(facts.attempts.find((record) => record.name === 'assembleContext').value);
   assert.deepEqual(assembled.message, input);
   assert.deepEqual(assembled.selectedMessages, [{ index: 0, message: transcript.get(0) }]);
   assert.deepEqual(JSON.parse(requests[1].messages[1].content), { message: input, memories: [], history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });

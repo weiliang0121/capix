@@ -211,7 +211,8 @@ test('Named action sequence records nested call and return boundaries rather tha
   const invoke = calls.find((c) => c.operation === 'selection.invokeModel');
   assert.equal(invoke.parentId, calls.find((c) => c.operation === 'selection').id);
   assert.equal(invoke.caller, 'operation');
-  assert.equal(invoke.callee, 'provider');
+  assert.equal(invoke.callee, 'attempt');
+  assert.equal(invoke.target, 'provider');
   const firstEnd = events.find((e) => e.callId === calls.find((c) => c.operation === 'selection').id && e.value.type === 'return');
   const secondStart = events.find((e) => e.callId === calls.find((c) => c.operation === 'answer').id && e.value.type === 'call');
   assert.ok(firstEnd.sequence < secondStart.sequence);

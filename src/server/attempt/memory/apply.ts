@@ -24,7 +24,7 @@ export class ApplyMemory extends Attempt<MemoryExtraction, MemoryExtraction> {
     const operation = this.runtime.getOperationContext(context);
     const transcript = operation.executionContext.transcriptRange!.transcript;
     const recorder = this.runtime.recorder;
-    MemoryHelper.apply(this.memories, transcript, context.input.memories, recorder ? (memory, change) => MemoryRecordHelper.capture(recorder, operation, memory, change) : undefined);
-    return context.input;
+    MemoryHelper.apply(this.memories, transcript, context.currentInput.memories, recorder ? (memory, change) => MemoryRecordHelper.capture(recorder, operation, memory, change) : undefined);
+    return context.currentInput;
   }
 }

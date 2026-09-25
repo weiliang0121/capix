@@ -20,11 +20,11 @@ export class AcceptModelOutput<I, O> extends Attempt<ModelOutput, O> {
   }
 
   protected execute(context: AttemptContext<ModelOutput, O>): O {
-    checkCompletion(context.input);
-    const value = parseContent(context.input.content);
+    checkCompletion(context.currentInput);
+    const value = parseContent(context.currentInput.content);
     const operation = this.runtime.getOperationContext(context);
     const execution = this.runtime.getExecutionContext(context);
-    return this.contract.accept(value, operation.input as I, execution);
+    return this.contract.accept(value, operation.currentInput as I, execution);
   }
 }
 

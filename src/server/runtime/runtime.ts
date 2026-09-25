@@ -6,6 +6,8 @@ import { AttemptContext } from '../context/attempt.js';
 import type { Attempt } from '../attempt/attempt.js';
 import type { Operation } from '../operations/operation.js';
 import type { RuntimeRecorder } from '../records/recorder.js';
+import { cycle, type InvocationWork } from '../invocation/cycle.js';
+import { writeRecord } from '../records/error.js';
 
 /** Coordinates invocation boundaries; Contexts directly hold their required parent references. */
 export class Runtime {
@@ -45,6 +47,11 @@ export class Runtime {
     );
   }
 
+  run<I, O, C extends ExecutionContext<I, O> | OperationContext<I, O> | AttemptContext<I, O>>(context: C, work: InvocationWork<C, I, O>): Promise<O> {
+    const execution = this.getExecutionContext(context);
+    return cycle(context, work, execution.signal, (process) => writeRecord(() => this.recorder?.process(context, process)));
+  }
+
   /** Read existing Context references; no registration or record lookup is required. */
   getExecutionContext(context: ExecutionContext | OperationContext | AttemptContext): ExecutionContext {
     if (context instanceof ExecutionContext) return context;
@@ -62,7 +69,7 @@ export class Runtime {
         parent?.requireRunning();
         const context = create();
         try {
-          recordStart(context);
+          writeRecord(() => recordStart(context));
         } catch (error) {
           context.fail(error);
           throw error;
@@ -71,11 +78,11 @@ export class Runtime {
       },
       succeed: (context, output) => {
         context.complete(output);
-        this.recorder?.finish(context);
+        writeRecord(() => this.recorder?.finish(context));
       },
       fail: (context, error) => {
         context.fail(error);
-        this.recorder?.finish(context);
+        writeRecord(() => this.recorder?.finish(context));
       },
     };
   }

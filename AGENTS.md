@@ -2,6 +2,9 @@
 
 这是独立的运行链路实验，不依赖或修改 CAPiX Runtime。
 
+- Web 字号统一为 10/12/14/16px，页面与弹层主标题可用 20px；通过 CSS 字号变量复用，窄屏不再引入额外字号。
+- Web 使用黑灰深色主题；EOA 仅以宽度表达耗时，节点使用统一底色。消息累计被选次数通过数字和局部短条展示，不使用整块热度填色。失败、运行中、选中以文字 tag 表达，不用彩色节点描边覆盖数值含义。图中节点不设置原生 title 提示，正文通过点击详情查看；保留 aria-label 与键盘可访问性。
+
 - Transcript 是原始交流内容的持有者，位于 server/transcript/transcript.ts，包含当前输入。提供 append/current(role)/get/ref/length/snapshot，只增不改删。写入时检查并复制冻结每条消息；get/current 返回同一不可变消息，snapshot(end) 只复制固定前缀数组。批量追加先全部检查再写入，不截断或改写原文。按角色 current 表示最新消息，不表示问答配对。MessageRef 用 Transcript 实例和绝对 index 定位消息，TranscriptRangeRef 表达固定的 [start,end)；读取不受后续追加影响。不继承 RuntimeRecord、不依赖 Book，不增加全局 Transcript ID、多环境仓库或持久化。
 - Observer 的 Execution.input 是接纳后的只读 Message（role/content），不带 MessageRef、Transcript 或集合入口。ExecutionContext.transcriptRange 为进入执行时固定的 TranscriptRangeRef [activeStart,end)，包含本次输入；历史选择排除末条输入，执行期间追加内容不扩大范围。ExecutionContext.settings 固定本次配置的不可变浅快照，三次模型调用使用同一份；外部更新仅在下一次执行捕获。GenerationOutput 只是生成操作的 IO 契约。
 
@@ -25,14 +28,14 @@
 - 回答输出契约使用 zod@4.6.5 的 strictObject，同时生成 JSON Schema 与执行 safeParse；非空白 regex 同时进入提示 Schema 与本地检查，不改写正文。拒绝未知字段，不使用 coerce、default 或 trim 转换掩盖契约错误。成功返回新普通对象，失败映射为现有 RuntimeError(OUTPUT_SHAPE)，detail.issues 保留字段路径及原因。GenerationOutput 保持跨端纯数据声明，Schema 通过 ZodType 类型约束检查兼容性；不让 shared 反向依赖服务端。记忆提取也使用 Zod：create/update 判别联合、严格正文、长度和非空白、非负安全整数与来源去重；uniqueItems 元数据与去重 refine 配对，MemoryExtraction 从 Schema 推导。目标 ID 的格式/动作组合错误为 OUTPUT_SHAPE，合法 ID 不存在或批内重复更新为 MEMORY_TARGET；来源范围/包含关系为 MEMORY_SOURCE。解析成功后再检查语义、过滤无变化、检查本轮依据，最后才落实变更；不重复复制已解析正文。历史筛选同样用 Zod 严格接纳，再检查本轮 Transcript 范围，保留优先级顺序与空结果；移除手写 Schema 和多余数组复制。model/schema.ts 仅复用模型输出的非空白文本和唯一索引规则，不建立校验管理器。settings.ts 用 Zod 接纳配置，保持只选取已知字段和原有数值边界，错误仍为 INVALID_SETTINGS；配置可忽略额外字段与模型输出严格拒绝额外字段的规则分开。不把动态引用、无变化过滤、运行实体或恢复策略塞进 Schema，不重复解析 Context、Transcript 或记录图。
 
 - Operation<I,O> 为抽象执行类，持有 Runtime 和稳定实例 ID，提供 call 与特化 execute。具体操作直接组织具名 Attempt，没有固定数量、阶段枚举或阶段模板。SelectHistory 组织 PrepareModelRequest → InvokeModel → AcceptModelOutput；GenerateAnswer 先调用 AssembleContext 再组织这三个动作；ExtractMemory 在接纳后继续 ApplyMemory。ObserverExecution 持有 selection/generation/extraction 三个操作。输入、状态、结果只在每次调用的 Context 中。任务提示、请求构造和输出契约由具体操作定义，通用动作通过组合复用。
-- Attempt<I,O> 为 attempt/attempt.ts 的抽象执行类，提供 call 和特化 execute，沿用 invoke/InvocationLifecycle。具体类位于 attempt/model、attempt/context、attempt/memory，name/label/source/callee 由类自身声明；它们持有稳定依赖，不持有本次输入、Context 或结果。Operation 构造时创建所需实例，后续调用复用。每次 call 创建独立 AttemptContext，开启记录时对应独立 AttemptRecord。Attempt 是 E/O/A 最底层执行边界，只接受 OperationContext 作为父上下文；内部函数不建立子 Attempt 或第四层执行实体/Context/Record。本轮不实现接收处理框架、自动重试、恢复或调度，保持原有异常传播。
+- Attempt<I,O> 为 attempt/attempt.ts 的抽象执行类，提供 call 和特化 execute，沿用 invoke/InvocationLifecycle。具体类位于 attempt/model、attempt/context、attempt/memory，name/label/source/callee 由类自身声明；它们持有稳定依赖，不持有本次输入、Context 或结果。Operation 构造时创建所需实例，后续调用复用。每次 call 创建独立 AttemptContext，开启记录时对应独立 AttemptRecord。Attempt 是 E/O/A 最底层执行边界，只接受 OperationContext 作为父上下文；内部函数不建立子 Attempt 或第四层执行实体/Context/Record。三层调用已接入 execute/receive 本地处理；当前具体业务仍默认一轮，不自动重发模型请求，不实现恢复或调度。
 - Execution<I,O> 为抽象类，call 通过公共 invoke/Runtime 建立 ExecutionContext，再调用具体 execute。ObserverExecution 是实验场景的固定流程实现，构造时持有 selection/generation/extraction 三个 Operation。操作构造依赖不再含 settings/signal；每个动作显式接收自己的 AttemptContext，使用 Runtime.getExecutionContext 取得所属执行的配置与信号，实例不保存 currentContext。不引入动态规划、Task、启动器、Pipeline 类或调度器。OperationRecordDefinition 仅用于记录创建。运行顺序为创建 Context → 创建 Record → 执行工作；beginOperation 直接读取现场 Operation 实例与父 Context，beginAttempt 从现场 Attempt 实例读取动作名称、标签、源码与参与者描述，创建记录时固化这些信息。不在 Context 保存 declaration，不增加实例关联表；完成/失败只根据 Context 找对应记录更新结果。
 - `RuntimeRecord<T>` 只有 id/value。ExecutionRecord、OperationRecord 和 AttemptRecord 具有顶层只读状态 running/succeeded/failed，基类不增加状态。操作关系 executionId/operationInstanceId/parentOperationId 位于顶层；每次调用有独立操作 ID。输入输出为记录正文，不可变消息引用保留实例，不为每个中间值生成 Record。
 - 一次 Operation.call 创建一条 OperationRecord，每次实际 Attempt.call 创建一条 AttemptRecord。AttemptRecord 继承 RuntimeRecord，顶层 operationId/name/label/source/caller/callee，正文 input/output/error；name 为动作名称字符串，不限于固定阶段集合。动作描述创建记录时从实例固化，Context 不携带描述。parentOperationId 仅用于真正的嵌套操作。AttemptRecordHelper 与 record.ts 配对，显式接收 Book 和按 operationId 装配的 RecordIndex。OperationRecord 结束前拒绝运行中的 AttemptRecord。一次 Attempt 失败不自动结束父操作；父操作仍按实际调用链处理异常。相同动作可以被显式调用多次，每次有独立 Context 和 Record；不自动重试。EventRecord.callId 可指向三类记录，投影使用 recordType 区分并展示动作名称与标签。
 - `RecordBook` 仅提供 add/get/values，保存原记录引用、拒绝重复 ID。Book 不认识记录种类、索引、时钟、状态转换、事件、通知或导出。不得把特化流程重新放回 Book。
 - `ExecutionRecordHelper`、`OperationRecordHelper`、`AttemptRecordHelper` 是各子记录的配对静态操作，显式接收 Book、索引等参数，组合创建、登记、关系查询、检查及结果写入。记录按概念分组，execution/record.ts 与 execution/helper.ts 配对，operation/record.ts 与 operation/helper.ts 配对，避免跨概念循环导入。实例 complete/fail 只负责正文与自身状态的原子顺序更新；跨对象归属和子操作检查位于配对操作，RuntimeRecorder 使用配对入口。
 - `RecordIndex<R>` 是通用 selector → string key → IDs 实现；add 显式登记或重新索引、get 返回 ID 副本、remove 使用旧 key 清理。不持有正文、不调用 Book、不自动监听，不创建索引子类。当前由 observer/environment.ts 装配按 operation.executionId、attempt.operationId 的索引并传给 RuntimeRecorder/配对操作；查询和结束检查使用索引，不遍历 Book。状态索引暂不增加。
-- 具体记录在输入、输出及错误边界复制冻结普通正文，保留不可变消息引用；正文成功写入后才切换状态，拒绝重复结束。保留当前不支持 undefined、循环引用、Map、函数等正文的限制。基类不施加冻结策略，执行过程普通值不被修改。
+- 具体调用记录通过 InvocationRecord 共用状态、终态登记与内部 processes 追加；RuntimeRecord 基类仍只有 id/value。具体记录在输入、输出及错误边界复制冻结普通正文，保留不可变消息引用；正文成功写入后才切换状态，拒绝重复结束。保留当前不支持 undefined、循环引用、Map、函数等正文的限制。基类不施加冻结策略，执行过程普通值不被修改。
 - records/value/snapshot.ts 只组合 copyContent → assertRecordContent → freezeContent；check.ts 承担记录正文类型及循环检查，freeze.ts 只冻结已检查的普通内容。保持先复制再检查的语义，不把正文类型策略混入冻结机制，不将业务契约检查放入快照函数。机制暂留 records/value/，不建立全局工具框架。
 - `Clock` 通过 now() 提供现实时间、tick() 提供单调时间，由装配处传给 RuntimeRecorder；ExecutionRecordHelper.create 使用 now() 写 startedAt，EventRecordHelper 使用 now() 写 occurredAt、tick() 计算执行内偏移；单调计时起点仅由 RuntimeRecorder 按执行记录 ID 保存，序号取已登记事件记录，不维护事件正文副本。测试可以注入 Clock 子类，不默认引入定时器或后台循环。
 - 调用边界记录统一为 records/event/record.ts 的 EventRecord，继承 RuntimeRecord<EventValue>，value.type 为 call/return/throw。id 是事件记录自身的 UUID；executionId/callId 指向执行及被描述的 E/O/A Record，sequence/occurredAt/offsetMs 是顶层只读元数据。它没有 Context、运行状态或执行能力。EventRecordHelper 配对负责创建、归属检查、登记及按执行查询；RecordBook 统一持有正文，eventIndex 只存 ID。删除 runtime/events.ts 和 ExecutionEvents 数组，不保存第二份事件记录。
@@ -70,7 +73,7 @@
 
 - 内部筛选结果只作为操作 IO 与运行记录保存，不自动追加为 Transcript 消息。Transcript 只接纳 user/assistant 原始消息；筛选不生成 summary，不建立摘要到原文的替换链路。后续方向为 Jev 筛选与使用计数，Jev 接入和热区装载尚未实现；不因这次撤销增加兼容或迁移层。
 
-- 热区是已有记录的只读投影：observer/selection.ts 从指定 Transcript 的 ExecutionRecord 与指定筛选实例的 OperationRecord 推导每条消息被选次数及每次选择的索引。只计算成功筛选的已接纳 output，一次选择每个索引 +1；后续生成失败不撤销次数，失败/未结束的筛选不计入。空选择保留为空结果。计数不等于实际生成采用或回答正确，不写入 Transcript、不存第二份计数记录。GET /api/selection 按需从当前进程全部记录重算；web/selection/view.ts 提供累计颜色、按执行高亮及消息原文/调用来源，刷新可重新查询。未增加持久化、衰减、热区候选策略或模型调用。
+- 热区是已有记录的只读投影：observer/selection.ts 从指定 Transcript 的 ExecutionRecord 与指定筛选实例的 OperationRecord 推导每条消息被选次数及每次选择的索引。只计算成功筛选的已接纳 output，一次选择每个索引 +1；后续生成失败不撤销次数，失败/未结束的筛选不计入。空选择保留为空结果。计数不等于实际生成采用或回答正确，不写入 Transcript、不存第二份计数记录。GET /api/selection 按需从当前进程全部记录重算；web/sequence/view.ts 在调用图顶层提供累计颜色、按执行高亮及 QA 原文/调用入口，刷新可重新查询。未增加持久化、衰减、热区候选策略或模型调用。
 
 - 消息关联计数由 operations/history/usage.ts 的 SelectionUsage 保留，用不可变 Message 实例作为 WeakMap 键，不在 Message 加字段，不读取 RecordBook。SelectHistory 实例持有 usage；ObserverExecution 在 selection.call 成功返回后按所选原始消息各累计一次，再进入组装/生成。后续失败不撤销次数；无 Recorder 时同样生效。计数不传给筛选或生成模型，提示词不解释或使用计数，不改变候选范围、索引排序或容量截断策略。观测累计次数仍从筛选记录推导；没有记录的独立运行不在热图中体现。新选择实例从零开始，不从旧记录恢复计数，不增加持久化、热切换或迁移。回答后的记忆提取按下述独立小闭环实现。
 
@@ -83,8 +86,17 @@
 - 下一次提取发送当前记忆体及来源索引，不沿引用加载旧原文，不读取历史 MemoryRecord，不把记录混进运行输入。MemoryInput 还包括本轮消息、正式回答和筛选候选原文；候选不宣称全部用于生成。每轮开始由 ObserverExecution 读取当前 Transcript 的 Memory.toJSON 正文快照 previousMemories；SelectionInput 显式包含 message/memories，SelectHistory 的目标导向短提示词及实际请求使用这些记忆和原始 history。生成使用当前 message、选中原文和同一份 previousMemories，允许有限继承旧段理解。prepareMemoryInput 接收同一份 previousMemories（不重新读取更新中的实例），提取完成后更新 MemoryCollection，下一轮筛选读取新的记忆。记忆不插入 Transcript，不从 MemoryRecord 消费；全部内容纳入现有容量检查，整个请求超预算直接失败，不裁剪或压缩。
 - GET /api/memory 只读投影当前记忆体和 Book 中已有 MemoryRecord，页面直接展示每次登记的变化说明、依据、结果快照和执行/操作记录 ID。MemoryRecord 不虚构 Context 或调用事件，不加入 E/O/A 时序节点；实际落实发生在提取操作的 ApplyMemory，沿该操作记录可以追踪。详细结构见 docs/memory.md。本轮不增加记忆层级分类或记忆之间的关系协议，不实现召回、持久化或恢复。
 
-- QA 仅是执行观测视角：三行用户/助手/记忆体按执行对齐，单一 QA 选择同时控制 IO 详情、MemoryRecord 和调用时序。inspectExecutions 从既有操作读取回答，提取输入中的 currentIndexes 定位原消息；不按相邻索引或文本配对。失败轮保留空位；历史 QA 读当时的记忆记录快照。查询接口不创建记录，不引入 QA 运行实体、持久化或重放。
+- QA 仅是执行观测视角：消息热区与 E/O/A 四层按真实时间对齐，用户/助手各占 E 区间的一半；单一 QA 选择联动弹层中的 IO、MemoryRecord 和调用详情。inspectExecutions 从既有操作读取回答，提取输入中的 currentIndexes 定位原消息；不按相邻索引或文本配对。失败轮保留空位；历史 QA 读当时的记忆记录快照。查询接口不创建记录，不引入 QA 运行实体、持久化或重放。
 
 - 记忆提取以准确、可延续、修正过时认识、保留有效条件与不确定性、减少无意义重复为目标。理解的划分、粒度和综合方式由模型判断，不预设主题分类或抽象层级，不禁止基于已有记忆形成更综合的理解。保持现有 create/update 输出 Schema、ID 与原文索引校验；不把当前操作集合的局限当作知识组织原则。不承诺模型一定收敛到最优划分。
 
 - Transcript 分段使用稳定绝对索引的边界，activeStart 指向当前段，segments() 返回历段。消息仍只有一份，不复制正文、不删除旧段。ObserverExecution.call 在创建本轮 Context 前，若完整筛选请求超限、仅当前输入和记忆可以容纳，则优先从最近两轮完整 QA 的起点开启新段，预算不足降为一轮、零轮；只调整边界，不复制消息。observer/segment.ts 仅从本次输入向前识别紧邻的 user/assistant 对，遇到不完整或非交替内容停止，不跨缺口或旧段补齐。旧 Context/Record 范围不变。提取只加载本轮 QA 与当前段选中原文；更新 result 可保留该目标记忆已有的旧来源，本次变化依据必须来自可见原文并包含本轮消息。不开后台压缩，不额外调用模型。详见 docs/transcript.md。
+
+- E/O/A 的 call 先通过 invoke 建立一次调用生命周期，再由 Runtime.run 驱动 execute/receive。默认 receive 原样返回成功结果或传播原错误；具体类可覆写 receive，自行定义分支。context.continueWith(nextInput, reason) 明确要求下一轮，不提供通用业务策略枚举。maxRounds 默认 1，仅允许 1 或 2，包含首次执行；具体类明确设为 2 才能进行第二轮。未开启的模型调用、筛选、生成与记忆操作不自动重试。
+- 同一次本地循环复用一个 Context 和一个调用 Record。Context.input 保留初始引用，currentInput 是当前轮输入；progress 只保留 round/phase/当前输入与本轮 execute 结果，不维护历史，不复制 IO。现有具体 execute 消费 currentInput，接纳契约读取所属操作的 currentInput。继续操作不复活已结束的子 Context，子调用仍每次创建独立 Context/Record。
+- 调用记录 value.processes 按顺序追加内部过程条目：execute start/return/throw、receive return/throw/continue、control stop。每项包含记录内 sequence、round、occurredAt 与执行内 offsetMs，以及相应输入、结果、错误或继续原因；没有独立 ID、RecordBook 条目或跨过程索引。正文登记时复制冻结，旧 value/数组快照不随后续追加变化。过程不是第四层执行实体，EventRecord 仍只描述整个调用的 call/return/throw。页面在同一调用详情内展开 processes，不生成额外时序调用节点。
+- 每轮开始检查执行取消信号。达到轮次上限、无效继续原因或接收处理自身异常，明确停止并记录原因；限制不依赖模型判断。接收直接传播本轮原错误时保留原错误。记录失败以 RecordingError 保留 cause，绕过本地恢复，不重做工作；工作/处理失败与其登记失败同时存在时保留 AggregateError。调用终态登记仍是 Context 先结束、Record 后登记，登记失败不回滚事实。进程内过程记录失败时保留已有条目与 Context.progress，不承诺补偿。现有模型单次超时不变，未增加通用抢占、总时限、外部结果查询、幂等、迟到响应处理或持久化恢复。
+
+- 单条调用记录内复用成功结果：execute.return 保存正文快照；框架默认 receive.return 用 resultOf 引用同轮紧邻 execute.return 的 sequence，最终成功结果引用最后一次 receive 接纳的正文。引用只指本记录内直接持有 output 的条目，不形成链、不跨记录或轮次。自定义 receive 即使返回同一对象也保存独立快照，避免原地修改被漏记；不按对象身份或内容哈希去重。shared/records/invocation.ts 的 readOutput 按需解析最终结果，观测投影才展开，不在快照序列化时重新填充 output。直接调用生命周期/记录辅助方法而没有过程时仍登记独立 output；输入和错误正文暂不复用。
+
+- 调用图的 E/O/A 在 QA 内按共同耗时比例定位，QA 间隔固定 24px，轮首标注实际开始时间及相对首轮时间，不以等待时长占宽度。底部等宽 QA 摘要导航直接投影用户原文、状态、耗时与记忆变更数，点击定位对应轮次，高亮主图可见轮次，不生成模型摘要、不保留比例视口拖拽；纵向滚轮缩放、横向平移，缩放锚定鼠标所处 QA 局部位置，聚焦只调整视口。左侧统一显示问答、消息、执行、操作、意图、摘要，摘要导航与图内标签共用列宽；顶部问答固定。执行、操作、意图按内容保留紧凑行高，剩余高度分配给消息行，行内块及正文顶部对齐；消息热度层不表达调用耗时。Attempt 的 processing/provider 描述为 target 提示，不替代 Attempt 层，不伪造额外 Provider 调用、记录或计时。弹层展示既有 IO、内部过程、上下文记录、记忆变化及当前源码，不创建观测专属运行记录。

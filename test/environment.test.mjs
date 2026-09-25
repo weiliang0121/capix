@@ -73,7 +73,7 @@ test('one initialized world preserves messages and records while reusing its exe
   );
   assert.deepEqual(
     streamed.map((values) => values.length),
-    [30, 8, 30],
+    snapshots.map((snapshot) => snapshot.events.length + [snapshot.execution, ...snapshot.operations, ...snapshot.attempts].reduce((count, record) => count + record.value.processes.length, 0)),
   );
 });
 
@@ -125,7 +125,7 @@ test('a cancelled call does not leave its signal on the reusable model operation
   }
   assert.deepEqual(
     signals.map((signal) => signal.aborted),
-    [true, false, false, false],
+    [false, false, false],
   );
 });
 

@@ -13,7 +13,7 @@ import { ExecutionRecord } from './record.js';
 
 /** Execution-specific recording operations. All managed objects are explicit arguments. */
 export class ExecutionRecordHelper {
-  static create(book: RecordBook, clock: Clock, contextId: string, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error'>): ExecutionRecord {
+  static create(book: RecordBook, clock: Clock, contextId: string, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error' | 'processes' | 'resultOf'>): ExecutionRecord {
     return book.add(new ExecutionRecord(contextId, { ...value, startedAt: clock.now() }));
   }
 
@@ -23,9 +23,9 @@ export class ExecutionRecordHelper {
     return record;
   }
 
-  static complete(book: RecordBook, index: RecordIndex<OperationRecord>, id: string, output: unknown): void {
+  static complete(book: RecordBook, index: RecordIndex<OperationRecord>, id: string, output: unknown, resultOf?: number): void {
     const record = this.prepareFinish(book, index, id);
-    record.complete(output);
+    record.complete(output, resultOf);
   }
 
   static fail(book: RecordBook, index: RecordIndex<OperationRecord>, id: string, error: RuntimeErrorValue): void {

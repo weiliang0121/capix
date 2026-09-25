@@ -119,7 +119,9 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
     }),
     (error) => {
       assert.ok(error instanceof AggregateError);
-      assert.deepEqual(error.errors, [failure, registration]);
+      assert.equal(error.errors[0], failure);
+      assert.equal(error.errors[1].code, 'RECORDING_FAILED');
+      assert.equal(error.errors[1].cause, registration);
       assert.equal(error.cause, failure);
       return true;
     },
@@ -146,10 +148,10 @@ test('Failed begin prevents work without changing the parent Context', async (t)
       entered = true;
       return {};
     }),
-    (error) => error === failure,
+    (error) => error.code === 'RECORDING_FAILED' && error.cause === failure,
   );
   assert.equal(entered, false);
-  assert.equal(child.state.error, failure);
+  assert.equal(child.state.error.cause, failure);
   root.succeed(execution, {});
   assert.equal(execution.status, 'succeeded');
   assert.equal(records.hasOutcome(execution), true);

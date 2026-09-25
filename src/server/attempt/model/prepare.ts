@@ -21,7 +21,7 @@ export class PrepareModelRequest<I> extends Attempt<I, ModelRequest> {
 
   protected execute(context: AttemptContext<I, ModelRequest>): ModelRequest {
     const execution = this.runtime.getExecutionContext(context);
-    const request = this.createRequest(context.input, execution);
+    const request = this.createRequest(context.currentInput, execution);
     checkCapacity(request, execution.settings);
     return request;
   }

@@ -1,3 +1,4 @@
+import { readOutput } from '../../dist/shared/records/invocation.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver } from '../../dist/server/observer/environment.js';
@@ -231,9 +232,9 @@ test('recording observes the actual changed fact; registration failure propagate
   const accepted = [...book.values()].find((record) => record.operationId === operation.id && record.name === 'acceptModelOutput');
   const applied = [...book.values()].find((record) => record.operationId === operation.id && record.name === 'applyMemory');
   assert.equal(accepted.status, 'succeeded');
-  assert.equal(accepted.value.output.memories.length, 1);
+  assert.equal(readOutput(accepted.value).memories.length, 1);
   assert.equal(applied.status, 'failed');
-  assert.deepEqual(applied.value.input, accepted.value.output);
+  assert.deepEqual(applied.value.input, readOutput(accepted.value));
 });
 
 test('invalid memory output stops at acceptance without invoking application or losing the answer', async () => {

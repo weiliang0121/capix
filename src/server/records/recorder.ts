@@ -19,6 +19,8 @@ import { OperationRecordHelper } from './operation/helper.js';
 import { AttemptRecord } from './attempt/record.js';
 import { AttemptRecordHelper } from './attempt/helper.js';
 
+import type { InvocationProcess } from '../invocation/cycle.js';
+
 type InvocationRecord = ExecutionRecord | OperationRecord | AttemptRecord;
 
 /** Maps live invocation facts to records. Does not execute work or change any Context. */
@@ -90,12 +92,30 @@ export class RuntimeRecorder {
     this.event(operation.executionId, record.id, 'call');
   }
 
+  process(context: RuntimeContext, process: InvocationProcess): void {
+    const record = this.record(context.id);
+    const executionId = this.executionId(record);
+    const start = this.#starts.get(executionId);
+    if (isUndefined(start)) throw new Error('Execution recording clock does not exist');
+    let body;
+    if ('reuse' in process) {
+      const source = record.value.processes.at(-1);
+      if (!source || source.stage !== 'execute' || source.type !== 'return' || source.round !== context.progress.round) throw new Error('Default receive must follow its execution result');
+      body = { stage: 'receive' as const, type: 'return' as const, resultOf: source.sequence };
+    } else body = 'error' in process ? { ...process, error: RuntimeErrorHelper.format(process.error) } : process;
+    record.append({ ...body, sequence: record.value.processes.length + 1, round: context.progress.round, occurredAt: this.clock.now(), offsetMs: this.clock.tick() - start });
+    this.publish(executionId);
+  }
+
   finish(context: RuntimeContext): void {
     const state = context.state;
     if (state.status === 'running') throw new Error('Context has no terminal outcome to record');
     const record = this.record(context.id);
-    if (state.status === 'succeeded') this.writeOutput(record, state.output);
-    else this.writeError(record, state.error);
+    if (state.status === 'succeeded') {
+      const last = record.value.processes.at(-1);
+      const resultOf = last?.stage === 'receive' && last.type === 'return' ? ('resultOf' in last ? last.resultOf : last.sequence) : undefined;
+      this.writeOutput(record, state.output, resultOf);
+    } else this.writeError(record, state.error);
     this.event(this.executionId(record), record.id, state.status === 'succeeded' ? 'return' : 'throw');
   }
 
@@ -123,10 +143,10 @@ export class RuntimeRecorder {
     if (this.#contexts.get(context.id).length) throw new Error('Context is already recorded');
   }
 
-  private writeOutput(record: InvocationRecord, output: unknown): void {
-    if (record instanceof ExecutionRecord) ExecutionRecordHelper.complete(this.book, this.operationIndex, record.id, output);
-    else if (record instanceof OperationRecord) OperationRecordHelper.complete(this.book, this.operationIndex, this.attemptIndex, record.id, output);
-    else AttemptRecordHelper.complete(this.book, record.id, output);
+  private writeOutput(record: InvocationRecord, output: unknown, resultOf?: number): void {
+    if (record instanceof ExecutionRecord) ExecutionRecordHelper.complete(this.book, this.operationIndex, record.id, output, resultOf);
+    else if (record instanceof OperationRecord) OperationRecordHelper.complete(this.book, this.operationIndex, this.attemptIndex, record.id, output, resultOf);
+    else AttemptRecordHelper.complete(this.book, record.id, output, resultOf);
   }
 
   private writeError(record: InvocationRecord, error: unknown): void {
@@ -150,6 +170,10 @@ export class RuntimeRecorder {
     const start = this.#starts.get(executionId);
     if (isUndefined(start)) throw new Error('Execution recording clock does not exist');
     EventRecordHelper.create(this.book, this.eventIndex, this.clock, start, executionId, callId, type);
+    this.publish(executionId);
+  }
+
+  private publish(executionId: string): void {
     let snapshot: RuntimeSnapshot;
     try {
       snapshot = this.snapshotRecord(executionId);

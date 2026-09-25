@@ -27,7 +27,7 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
   }
 
   override call(input: Readonly<Message>, options: ExecutionOptions, started?: (context: ExecutionContext<Readonly<Message>, GenerationOutput>) => void): Promise<GenerationOutput> {
-    this.prepareSegment(input, options);
+    if (!options.signal?.aborted) this.prepareSegment(input, options);
     return super.call(input, options, started);
   }
 
@@ -45,7 +45,7 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
   protected async execute(context: ExecutionContext<Readonly<Message>, GenerationOutput>): Promise<GenerationOutput> {
     const range = context.transcriptRange!;
     const previousMemories = this.memories.values(range.transcript).map((memory) => memory.toJSON());
-    const selectionInput = { message: context.input, memories: previousMemories };
+    const selectionInput = { message: context.currentInput, memories: previousMemories };
     const selectionOutput = await this.selection.call(context, selectionInput);
     this.selection.usage.add(selectionOutput.historyIndexes.map((index) => context.transcriptRange!.read(index)));
     const generationOutput = await this.generation.call(context, { selection: selectionOutput, memories: previousMemories });

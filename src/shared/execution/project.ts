@@ -1,6 +1,7 @@
+import { hasOutput, outputProcess, readOutput } from '../records/invocation.js';
 import type { RuntimeSnapshot, OperationRecord, OperationValue } from '../records.js';
 import type { GenerationOutput } from '../operations/generation.js';
-import type { CallSpan, ModelSettings, ParticipantId, Trace } from '../types.js';
+import type { CallSpan, ModelSettings, Trace } from '../types.js';
 
 /** Reject inconsistent identities, ownership and boundary facts before projecting them. */
 export function validateSnapshot(value: unknown): asserts value is RuntimeSnapshot {
@@ -42,7 +43,37 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
     if (!['running', 'succeeded', 'failed'].includes(status)) return fail();
   }
   for (const body of bodies.values()) {
-    if (!body || typeof body !== 'object' || !Object.hasOwn(body, 'input') || (Object.hasOwn(body, 'output') && Object.hasOwn(body, 'error')) || (Object.hasOwn(body, 'error') && (!body.error || typeof body.error.code !== 'string' || typeof body.error.message !== 'string'))) return fail();
+    if (!body || !Array.isArray(body.processes) || typeof body !== 'object' || !Object.hasOwn(body, 'input') || (hasOutput(body) && Object.hasOwn(body, 'error')) || (Object.hasOwn(body, 'output') && Object.hasOwn(body, 'resultOf')) || (Object.hasOwn(body, 'error') && (!body.error || typeof body.error.code !== 'string' || typeof body.error.message !== 'string'))) return fail();
+  }
+  for (const body of bodies.values()) {
+    let previousRound = 0,
+      previousTime = 0;
+    for (const [index, process] of body.processes.entries()) {
+      if (!process || process.sequence !== index + 1 || !Number.isInteger(process.round) || process.round < previousRound || process.round > 2 || !Number.isFinite(process.offsetMs) || process.offsetMs < previousTime || typeof process.occurredAt !== 'string') return fail();
+      const valid = process.stage === 'execute' ? ['start', 'return', 'throw'] : process.stage === 'receive' ? ['return', 'throw', 'continue'] : process.stage === 'control' ? ['stop'] : [];
+      if (!valid.includes(process.type) || (process.round === 0 && process.stage !== 'control')) return fail();
+      if ((process.type === 'start' || process.type === 'continue') && !Object.hasOwn(process, 'input')) return fail();
+      if (process.type === 'return' && Object.hasOwn(process, 'output') === Object.hasOwn(process, 'resultOf')) return fail();
+      if ('resultOf' in process) {
+        try {
+          const target = outputProcess(body, process.resultOf, process.sequence);
+          if (process.stage !== 'receive' || target.stage !== 'execute' || target.round !== process.round || target.sequence !== process.sequence - 1) return fail();
+        } catch {
+          return fail();
+        }
+      }
+      if ((process.type === 'throw' || process.type === 'stop') && (!process.error || typeof process.error.code !== 'string' || typeof process.error.message !== 'string')) return fail();
+      if (process.type === 'continue' && (typeof process.reason !== 'string' || !process.reason.trim())) return fail();
+      previousRound = process.round;
+      previousTime = process.offsetMs;
+    }
+    if (Object.hasOwn(body, 'resultOf')) {
+      try {
+        readOutput(body);
+      } catch {
+        return fail();
+      }
+    }
   }
   for (const op of operations.values()) {
     if (op.parentOperationId !== undefined && !operations.has(op.parentOperationId)) return fail();
@@ -63,14 +94,14 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
       active.add(event.callId);
     } else {
       const body = bodies.get(event.callId)!;
-      if (!['return', 'throw'].includes(event.value.type) || !active.has(event.callId) || [...active].some((id) => id !== event.callId && (event.callId === executionId || parents.get(id) === event.callId)) || !Object.hasOwn(body, event.value.type === 'return' ? 'output' : 'error') || statuses.get(event.callId) !== (event.value.type === 'return' ? 'succeeded' : 'failed')) return fail();
+      if (!['return', 'throw'].includes(event.value.type) || !active.has(event.callId) || [...active].some((id) => id !== event.callId && (event.callId === executionId || parents.get(id) === event.callId)) || !(event.value.type === 'return' ? hasOutput(body) : Object.hasOwn(body, 'error')) || statuses.get(event.callId) !== (event.value.type === 'return' ? 'succeeded' : 'failed')) return fail();
       active.delete(event.callId);
       ended.add(event.callId);
     }
   }
   if (entered.size !== bodies.size) return fail();
   for (const [id, body] of bodies) {
-    if (!ended.has(id) && (statuses.get(id) !== 'running' || Object.hasOwn(body, 'output') || Object.hasOwn(body, 'error'))) return fail();
+    if (!ended.has(id) && (statuses.get(id) !== 'running' || hasOutput(body) || Object.hasOwn(body, 'error'))) return fail();
   }
 }
 
@@ -88,7 +119,8 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
       offsetMs: start.offsetMs,
       ...(end ? { durationMs: end.offsetMs - start.offsetMs } : {}),
       input: body.input,
-      ...(Object.hasOwn(body, 'output') ? { output: body.output } : {}),
+      processes: body.processes,
+      ...(hasOutput(body) ? { output: readOutput(body) } : {}),
       ...(body.error ? { error: body.error } : {}),
     };
   };
@@ -115,8 +147,8 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
       operationInstanceId: op.operationInstanceId,
       operation: op.operation,
       parentId: op.parentOperationId ?? op.executionId,
-      caller: op.caller as ParticipantId,
-      callee: op.callee as ParticipantId,
+      caller: op.parentOperationId ? ('operation' as const) : ('execution' as const),
+      callee: 'operation' as const,
       label: op.label,
       source: op.source,
       ...result(op.id, op.value, op.status),
@@ -131,8 +163,9 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
         operationInstanceId: owner.operationInstanceId,
         operation: `${owner.operation}.${attempt.name}`,
         parentId: owner.id,
-        caller: attempt.caller as ParticipantId,
-        callee: attempt.callee as ParticipantId,
+        caller: 'operation' as const,
+        callee: 'attempt' as const,
+        target: attempt.callee,
         label: attempt.label,
         source: attempt.source,
         ...result(attempt.id, attempt.value, attempt.status),
@@ -159,12 +192,7 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
         { id: 'caller', label: '调用方', description: '运行入口' },
         { id: 'execution', label: 'Execution', description: '操作的显式组合' },
         { id: 'operation', label: 'Operation', description: '具名动作的组合' },
-        { id: 'processing', label: '本地处理', description: 'Attempt 本地执行' },
-        {
-          id: 'provider',
-          label: 'ModelProvider',
-          description: '模型调用边界',
-        },
+        { id: 'attempt', label: 'Attempt', description: '具名动作的一次调用，本地处理或外部调用由动作自身实现' },
       ],
     },
     ...(root.status === 'passed' ? { result: root.output as GenerationOutput } : {}),

@@ -36,7 +36,7 @@ history 仅覆盖当前消息段，memories 可能保留旧段理解，但不保
   }
 
   protected async execute(context: OperationContext<SelectionInput, Selection>): Promise<Selection> {
-    const request = await this.prepareRequest.call(context, context.input);
+    const request = await this.prepareRequest.call(context, context.currentInput);
     const output = await this.invokeModel.call(context, request);
     return this.acceptOutput.call(context, output);
   }

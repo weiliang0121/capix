@@ -20,6 +20,6 @@ export class InvokeModel extends Attempt<ModelRequest, ModelOutput> {
 
   protected execute(context: AttemptContext<ModelRequest, ModelOutput>): Promise<ModelOutput> {
     const { settings, signal } = this.runtime.getExecutionContext(context);
-    return this.provider.invoke(context.input, this.purpose, AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]));
+    return this.provider.invoke(context.currentInput, this.purpose, AbortSignal.any([signal, AbortSignal.timeout(settings.timeoutMs)]));
   }
 }

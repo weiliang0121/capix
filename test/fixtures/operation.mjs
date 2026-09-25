@@ -13,7 +13,7 @@ export class TestOperation extends Operation {
   }
 
   async execute(context) {
-    let value = context.input;
+    let value = context.currentInput;
     for (const action of this.actions) value = await action.call(context, value);
     return value;
   }

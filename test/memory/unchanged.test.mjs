@@ -1,3 +1,4 @@
+import { readOutput } from '../../dist/shared/records/invocation.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { memoryOutputContract } from '../../dist/server/operations/memory/output.js';
@@ -68,10 +69,10 @@ test('a real change and an unchanged update complete together; only the change i
   const facts = await run('预演也改为离线包，键盘没变化。');
   assert.equal(facts.execution.status, 'succeeded');
   const operation = facts.operations.find((item) => item.operation === 'memory');
-  assert.equal(operation.value.output.memories.length, 1);
-  assert.equal(operation.value.output.memories[0].result.content, '使用离线包');
+  assert.equal(readOutput(operation.value).memories.length, 1);
+  assert.equal(readOutput(operation.value).memories[0].result.content, '使用离线包');
   const invoked = facts.attempts.find((item) => item.operationId === operation.id && item.name === 'invokeModel');
-  assert.equal(JSON.parse(invoked.value.output.content).memories.length, 2);
+  assert.equal(JSON.parse(readOutput(invoked.value).content).memories.length, 2);
   assert.equal(keyboard.snapshot(), keyboardContent);
   assert.equal(MemoryRecordHelper.find(environment.book, keyboard.id).length, 1);
   const rehearsal = environment.execution.memories.values(environment.transcript).find((memory) => memory.topic === '预演');

@@ -43,9 +43,9 @@ export class OperationRecordHelper {
     });
   }
 
-  static complete(book: RecordBook, index: RecordIndex<OperationRecord>, attempts: RecordIndex<AttemptRecord>, id: string, output: unknown): void {
+  static complete(book: RecordBook, index: RecordIndex<OperationRecord>, attempts: RecordIndex<AttemptRecord>, id: string, output: unknown, resultOf?: number): void {
     const record = this.prepareFinish(book, index, attempts, id);
-    record.complete(output);
+    record.complete(output, resultOf);
   }
 
   static fail(book: RecordBook, index: RecordIndex<OperationRecord>, attempts: RecordIndex<AttemptRecord>, id: string, error: RuntimeErrorValue): void {

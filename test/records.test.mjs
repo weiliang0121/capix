@@ -1,3 +1,4 @@
+import { readOutput } from '../dist/shared/records/invocation.js';
 import { createInput } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -91,8 +92,8 @@ test('Paired record operations create, find and write results independently of b
   OperationRecordHelper.complete(book, index, attempts, operation.id, result);
   ExecutionRecordHelper.complete(book, index, execution.id, result);
   result.nested.push('changed');
-  assert.deepEqual(operation.value.output, { nested: ['result'] });
-  assert.deepEqual(execution.value.output, { nested: ['result'] });
+  assert.deepEqual(readOutput(operation.value), { nested: ['result'] });
+  assert.deepEqual(readOutput(execution.value), { nested: ['result'] });
   const error = { code: 'TEST', message: 'failed', detail: { retry: false } };
   OperationRecordHelper.fail(book, index, attempts, foreign.id, error);
   ExecutionRecordHelper.fail(book, index, other.id, error);
@@ -163,8 +164,8 @@ test('construction does not execute; repeated calls share the callable identity,
   const past = runtime.recorder.snapshot(execution);
   complete(execution, value);
   value.x = 9;
-  assert.equal(runtime.recorder.snapshot(execution).execution.value.output.x, 1);
-  assert.equal(past.execution.value.output, undefined);
+  assert.equal(readOutput(runtime.recorder.snapshot(execution).execution.value).x, 1);
+  assert.equal(readOutput(past.execution.value), undefined);
   await assert.rejects(node.call(execution, value), /ended/);
 });
 
@@ -207,7 +208,7 @@ test('one node overlaps calls within and across executions without mixing input 
   assert.deepEqual(
     OperationRecordHelper.findByExecution(book, runtime.recorder.operationIndex, runtime.recorder.record(a.id).id)
 
-      .map((op) => op.value.output.original),
+      .map((op) => readOutput(op.value).original),
     ['a1', 'a2'],
   );
   assert.equal(OperationRecordHelper.findByExecution(book, runtime.recorder.operationIndex, runtime.recorder.record(b.id).id).length, 1);
@@ -250,6 +251,20 @@ test('Observer execution observes execution, operations and boundaries from the 
   assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations']);
   assert.equal(facts.operations.length, 3);
   assert.equal(facts.attempts.length, 11);
+  const sequence = projectExecution(facts).callSequence;
+  assert.deepEqual(
+    sequence.participants.map((p) => p.id),
+    ['caller', 'execution', 'operation', 'attempt'],
+  );
+  assert.equal(sequence.calls.length, 1 + facts.operations.length + facts.attempts.length);
+  assert.equal(sequence.events, facts.events);
+  for (const attempt of facts.attempts) {
+    const call = sequence.calls.find((c) => c.id === attempt.id);
+    assert.equal(call.caller, 'operation');
+    assert.equal(call.callee, 'attempt');
+    assert.equal(call.parentId, attempt.operationId);
+    assert.equal(call.target, attempt.callee);
+  }
   const expectedActions = {
     selection: ['prepareModelRequest', 'invokeModel', 'acceptModelOutput'],
     answer: ['assembleContext', 'prepareModelRequest', 'invokeModel', 'acceptModelOutput'],
@@ -264,17 +279,17 @@ test('Observer execution observes execution, operations and boundaries from the 
     const preparation = attempts.find((attempt) => attempt.name === 'prepareModelRequest');
     const invocation = attempts.find((attempt) => attempt.name === 'invokeModel');
     const acceptance = attempts.find((attempt) => attempt.name === 'acceptModelOutput');
-    assert.deepEqual(invocation.value.input, preparation.value.output);
-    assert.deepEqual(acceptance.value.input, invocation.value.output);
-    assert.deepEqual(operation.value.output, attempts.at(-1).value.output);
-    if (operation.operation === 'memory') assert.deepEqual(attempts.at(-1).value.input, acceptance.value.output);
+    assert.deepEqual(invocation.value.input, readOutput(preparation.value));
+    assert.deepEqual(acceptance.value.input, readOutput(invocation.value));
+    assert.deepEqual(readOutput(operation.value), readOutput(attempts.at(-1).value));
+    if (operation.operation === 'memory') assert.deepEqual(attempts.at(-1).value.input, readOutput(acceptance.value));
   }
   const select = facts.operations.find((op) => op.operation === 'selection');
   const answer = facts.operations.find((op) => op.operation === 'answer');
   const assembled = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'assembleContext');
-  assert.deepEqual(assembled.value.input, select.value.output);
-  assert.deepEqual(answer.value.input, { selection: select.value.output, memories: [] });
-  assert.deepEqual(facts.execution.value.output, answer.value.output);
+  assert.deepEqual(assembled.value.input, readOutput(select.value));
+  assert.deepEqual(answer.value.input, { selection: readOutput(select.value), memories: [] });
+  assert.deepEqual(readOutput(facts.execution.value), readOutput(answer.value));
   for (const op of facts.operations) {
     assert.equal(op.executionId, facts.execution.id);
     assert.equal(op.status, 'succeeded');
@@ -292,10 +307,10 @@ test('Acceptance failure preserves raw output, records no accepted result, and p
   const answer = facts.operations.find((op) => op.operation === 'answer');
   const invoked = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'invokeModel');
   const accepted = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'acceptModelOutput');
-  assert.equal(invoked.value.output.content, 'broken-json');
+  assert.equal(readOutput(invoked.value).content, 'broken-json');
   assert.equal(accepted.value.input.content, 'broken-json');
-  assert.equal(accepted.value.output, undefined);
-  assert.equal(answer.value.output, undefined);
+  assert.equal(readOutput(accepted.value), undefined);
+  assert.equal(readOutput(answer.value), undefined);
   assert.equal(facts.execution.value.error.code, 'INVALID_JSON');
   assert.equal(projectExecution(facts).error.code, 'INVALID_JSON');
   const runtime = createRuntime(),
@@ -408,7 +423,9 @@ test('publication failure does not change execution facts or operation output', 
   assert.equal(await node.call(execution, input), input);
   complete(execution, input);
   assert.equal(projectExecution(runtime.recorder.snapshot(execution)).status, 'succeeded');
-  assert.equal(log.mock.callCount(), 10);
+  const snapshot = runtime.recorder.snapshot(execution);
+  const processes = [snapshot.execution, ...snapshot.operations, ...snapshot.attempts].reduce((count, record) => count + record.value.processes.length, 0);
+  assert.equal(log.mock.callCount(), snapshot.events.length + processes);
 });
 
 test('Paired operations use the supplied index without scanning Book', (t) => {

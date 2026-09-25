@@ -3,98 +3,84 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CAPiX Observer · 运行链路实验</title>
+    <title>CAPiX Observer · 运行洞察</title>
     <link rel="stylesheet" href="/style.css" />
     <script type="module" src="/app.js"></script>
   </head>
   <body>
     <header class="topbar">
       <a class="brand" href="/" aria-label="CAPiX Observer 首页"><span class="brand-mark">◈</span> CAPiX <span>Observer</span></a>
-      <div class="top-meta"><span class="live-dot"></span><span id="connection">连接本地服务…</span><span class="version">实验 01</span></div>
+      <div class="top-meta"><span class="live-dot"></span><span id="connection">连接本地服务…</span></div>
     </header>
-    <main>
-      <section class="intro">
-        <div>
-          <p class="eyebrow">FROM INPUT TO EVIDENCE</p>
-          <h1>让每一次推进，都有迹可循。</h1>
-          <p>沿着实际调用向下阅读：谁发起、谁执行、何时返回，以及异常如何传回。</p>
-        </div>
-        <div class="intro-meta">
-          <span>01 / RELEVANCE</span><span>02 / RESPONSE<br />03 / MEMORY</span>
-        </div>
-      </section>
-      <div class="workspace">
-        <aside class="composer">
-          <div class="section-title">
-            <h2>输入工作台</h2>
-            <button id="sample" class="text-button" type="button">载入澄清样例 ↗</button>
+    <main class="workspace">
+      <section class="observer" aria-label="运行观测">
+        <header class="observer-header">
+          <div>
+            <p class="eyebrow">RUNTIME EXPLORER</p>
+            <h1>运行图谱 <span id="trace-status" class="pill">尚未运行</span></h1>
           </div>
-          <div class="history-head"><label for="history">已接纳消息</label><span id="history-count">0 条</span></div>
-          <div id="history-preview" class="history-preview"></div>
-          <details id="history-editor">
-            <summary>追加消息草稿 JSON</summary>
-            <textarea id="history" rows="8" spellcheck="false" aria-label="待追加消息 JSON">[]</textarea>
-          </details>
-          <label class="message-label" for="messageInput">当前输入</label><textarea id="messageInput" rows="3" placeholder="从一个问题开始…">天气怎么样？</textarea>
-          <div class="budget-row"><label for="budget">本地容量预算</label><input id="budget" type="number" min="256" max="1000000" value="32768" /></div>
-          <p class="field-note">完整请求按 UTF-8 字节保守估算，非精确 token 计数。</p>
-          <button id="run" class="primary" type="button">运行真实链路 <span>↗</span></button>
-          <p id="key-note" class="key-note" hidden>在项目 .env 中设置 DEEPSEEK_API_KEY 并重启服务。Key 只留在服务端。</p>
-          <p id="notice" role="status" aria-live="polite"></p>
-        </aside>
-        <section class="observer" aria-label="运行观测">
-          <nav id="qa-navigation" class="qa-navigation" aria-label="交流观测切换"></nav>
-          <section id="selection-heat" class="selection-heat" aria-label="QA 次序与交流详情"></section>
-          <section id="memory-view" class="memory-view" aria-label="本轮记忆体"></section>
-          <div class="observer-header">
-            <div>
-              <p class="eyebrow">CALL SEQUENCE</p>
-              <h2>调用时序 <span id="trace-status" class="pill">尚未运行</span></h2>
-            </div>
-          </div>
-          <div class="trace-meta"><span id="trace-id">等待第一条真实记录</span><span id="trace-duration">—</span></div>
-          <div class="sequence-legend"><span>实线 → 调用</span><span>虚线 ⇢ 返回</span><span class="legend-error">异常 ⇢ 逐层传回</span><span>纵向为事件顺序，非等比时间</span></div>
-          <div id="outcome" class="outcome" aria-live="polite">运行后展示真实调用，不预画未执行步骤。</div>
-          <div id="sequence" class="sequence-scroll" aria-label="真实调用时序图"></div>
-          <dialog id="inspect-dialog">
-            <section class="inspector">
-              <div class="detail-dialog-head">
-                <p id="detail-event"></p>
-                <button id="inspect-close" type="button" aria-label="关闭详情">关闭 ×</button>
-              </div>
-              <div class="section-title">
-                <h3 id="detail-title">节点详情</h3>
-                <span id="detail-status"></span>
-              </div>
-              <div id="detail-source" class="detail-source">点击链路节点，查看一次处理的证据。</div>
-              <div class="detail-tabs" role="tablist" aria-label="节点详情"><button id="tab-data" role="tab" aria-selected="true" aria-controls="detail-data" type="button">输入 / 输出</button><button id="tab-code" role="tab" aria-selected="false" aria-controls="detail-code" type="button">实际源码</button></div>
-              <div id="detail-data" role="tabpanel" aria-labelledby="tab-data">
-                <div class="data-grid">
-                  <div>
-                    <h4>INPUT</h4>
-                    <pre id="detail-input">尚无记录</pre>
-                    <div id="execution-context" hidden>
-                      <h4>EXECUTION CONTEXT</h4>
-                      <pre id="detail-context"></pre>
-                    </div>
-                  </div>
-                  <div>
-                    <h4>OUTPUT / ERROR</h4>
-                    <pre id="detail-output">尚无记录</pre>
-                  </div>
-                </div>
-              </div>
-              <div id="detail-code" role="tabpanel" aria-labelledby="tab-code" hidden>
-                <pre id="source-code"></pre>
-              </div>
-            </section>
-          </dialog>
+          <button id="memory-overview" type="button">记忆总览 <span id="memory-count">0</span></button>
+        </header>
+        <div class="graph-toolbar">
+          <label
+            >时间范围
+            <select id="time-range" aria-label="时间范围">
+              <option value="">全部 QA · 折叠间隔</option>
+            </select></label
+          >
+          <div class="zoom-controls"><button id="zoom-out" aria-label="缩小时间轴" type="button">−</button><output id="zoom-label">1×</output><button id="zoom-in" aria-label="放大时间轴" type="button">+</button><button id="fit" type="button">适应</button></div>
+        </div>
+        <div class="graph-legend"><span>宽度 · 调用耗时</span><span>消息次数 / 短条 · 累计被选</span><span class="status-tag failed">失败</span><span class="status-tag running">运行中</span><span class="status-tag chosen">已选</span><span class="legend-tail">点击问答 / 执行 / 操作 / 意图查看详情</span></div>
+        <div id="sequence" class="timeline-scroll" tabindex="0" aria-label="问答与调用分段时间图"></div>
+        <section class="qa-overview" hidden aria-label="QA 摘要导航">
+          <div class="lane-label"><strong>摘要</strong></div>
+          <nav id="qa-overview" class="qa-overview-track" aria-label="问答摘要，点击定位轮次，高亮表示主图可见范围"></nav>
         </section>
-      </div>
-      <footer>
-        CAPiX Observer
-        <span>运行记录 ≠ 模型推理过程 · 消息与记录保留在服务端内存；按 QA 展示调用记录</span>
-      </footer>
+        <footer class="graph-footer"><span id="graph-summary">等待第一条记录</span><span>轮内按耗时 · 轮间固定间隔</span></footer>
+        <div id="outcome" class="outcome" role="status">从右侧开始对话，观察一次运行如何展开。</div>
+      </section>
+      <aside class="chat-panel" aria-label="对话">
+        <header class="chat-header">
+          <div>
+            <p class="eyebrow">CONVERSATION</p>
+            <h2>对话</h2>
+          </div>
+          <span id="history-count" class="pill">0 条消息</span><button id="settings-open" type="button" aria-label="打开运行设置">设置</button>
+        </header>
+        <div id="history-preview" class="chat-messages" aria-label="消息列表" tabindex="0"></div>
+        <form id="composer" class="chat-composer">
+          <label for="messageInput" class="sr-only">输入消息</label><textarea id="messageInput" rows="3" placeholder="输入消息，继续这段对话…"></textarea>
+          <div class="composer-bottom"><span>Enter 发送 · Shift + Enter 换行</span><button id="run" class="primary" type="submit">发送 ↑</button></div>
+          <p id="notice" role="status" aria-live="polite"></p>
+          <p id="key-note" hidden>请在项目 .env 中配置 DeepSeek Key 并重启服务。</p>
+        </form>
+      </aside>
     </main>
+    <dialog id="inspect-dialog" aria-labelledby="detail-title">
+      <header class="dialog-header">
+        <div>
+          <p id="detail-kicker" class="eyebrow">INVOCATION</p>
+          <h2 id="detail-title">节点详情</h2>
+          <p id="detail-status" class="subtle detail-status"></p>
+        </div>
+        <button id="inspect-close" type="button" aria-label="关闭节点详情">关闭 ×</button>
+      </header>
+      <div id="detail-meta" class="detail-meta"></div>
+      <nav id="detail-tabs" class="detail-tabs" aria-label="详情分类"></nav>
+      <div id="detail-body" class="detail-body"></div>
+    </dialog>
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+      <header class="dialog-header">
+        <h2 id="settings-title">运行设置</h2>
+        <button id="settings-close" type="button">关闭 ×</button>
+      </header>
+      <label for="budget">本地容量预算</label><input id="budget" type="number" min="256" max="1000000" value="32768" />
+      <p class="subtle">按完整请求 UTF-8 字节保守估算，非精确 token 数。配置在下一次执行生效。</p>
+      <details>
+        <summary>追加历史草稿</summary>
+        <p class="subtle">下次发送时追加，不替换服务端已有消息。</p>
+        <textarea id="history" rows="6" aria-label="待追加消息 JSON">[]</textarea><button id="sample" type="button">载入澄清样例</button>
+      </details>
+    </dialog>
   </body>
 </html>

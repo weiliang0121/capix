@@ -1,3 +1,4 @@
+import { readOutput } from '../../shared/records/invocation.js';
 import type { SelectionObservation } from '../../shared/observation/selection.js';
 import type { Selection } from '../../shared/types.js';
 import type { RecordBook } from '../records/container/book.js';
@@ -21,7 +22,7 @@ export function observeSelection(book: RecordBook, transcript: Transcript, selec
     const execution = executions.get(record.executionId);
     if (!execution) continue;
     // This concrete operation's succeeded output has already passed its output contract.
-    const indexes = record.status === 'succeeded' ? [...(record.value.output as Selection).historyIndexes] : undefined;
+    const indexes = record.status === 'succeeded' ? [...(readOutput(record.value) as Selection).historyIndexes] : undefined;
     execution.selections.push({ operationId: record.id, status: record.status, ...(indexes ? { indexes } : {}) });
     for (const index of indexes ?? []) messages[index]!.count++;
   }

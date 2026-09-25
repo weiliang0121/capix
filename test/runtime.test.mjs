@@ -1,3 +1,4 @@
+import { readOutput } from '../dist/shared/records/invocation.js';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -47,7 +48,7 @@ test('Runtime passes live Contexts; records retain separate identities, relation
     childRecord = recorder.record(child.id);
   assert.equal(childRecord.parentOperationId, parentRecord.id);
   assert.equal(parentRecord.value.input.count, 0);
-  assert.equal(parentRecord.value.output.count, 1);
+  assert.equal(readOutput(parentRecord.value).count, 1);
   lifecycles.get(execution).succeed(execution, output);
   validateSnapshot(recorder.snapshot(execution));
 });

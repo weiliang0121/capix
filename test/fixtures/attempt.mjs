@@ -12,6 +12,6 @@ export class TestAttempt extends Attempt {
   }
 
   execute(context) {
-    return this.work(context.input, context);
+    return this.work(context.currentInput, context);
   }
 }

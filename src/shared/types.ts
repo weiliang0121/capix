@@ -1,7 +1,7 @@
 import type { Message } from './transcript/message.js';
 export type { Message } from './transcript/message.js';
 import type { RuntimeErrorValue } from './errors.js';
-import type { EventRecord, RuntimeSnapshot } from './records.js';
+import type { EventRecord, RuntimeSnapshot, ProcessRecord } from './records.js';
 export type Purpose = 'selection' | 'answer' | 'memory';
 export type NodeStatus = 'running' | 'passed' | 'failed';
 import type { GenerationOutput } from './operations/generation.js';
@@ -47,10 +47,11 @@ export interface TraceNode {
   offsetMs?: number;
   durationMs?: number;
   input?: unknown;
+  processes: readonly ProcessRecord[];
   output?: unknown;
   error?: RuntimeErrorValue;
 }
-export type ParticipantId = 'caller' | 'execution' | 'operation' | 'processing' | 'provider';
+export type ParticipantId = 'caller' | 'execution' | 'operation' | 'attempt';
 export interface CallSpan {
   recordType: 'execution' | 'operation' | 'attempt';
   contextId: string;
@@ -61,12 +62,15 @@ export interface CallSpan {
   parentId?: string;
   caller: ParticipantId;
   callee: ParticipantId;
+  /** Recorded work target; distinct from the E/O/A invocation lane. */
+  target?: string;
   label: string;
   source: string;
   status: 'running' | 'passed' | 'failed';
   offsetMs: number;
   durationMs?: number;
   input?: unknown;
+  processes: readonly ProcessRecord[];
   output?: unknown;
   error?: RuntimeErrorValue;
 }

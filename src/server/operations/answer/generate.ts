@@ -44,8 +44,8 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
   }
 
   protected async execute(context: OperationContext<GenerationInput, GenerationOutput>): Promise<GenerationOutput> {
-    const assembled = await this.assemble.call(context, context.input.selection);
-    const request = await this.prepareRequest.call(context, { ...assembled, memories: context.input.memories });
+    const assembled = await this.assemble.call(context, context.currentInput.selection);
+    const request = await this.prepareRequest.call(context, { ...assembled, memories: context.currentInput.memories });
     const output = await this.invokeModel.call(context, request);
     return this.acceptOutput.call(context, output);
   }

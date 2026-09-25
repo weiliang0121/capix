@@ -37,8 +37,8 @@ export class AttemptRecordHelper {
     });
   }
 
-  static complete(book: RecordBook, id: string, output: unknown): void {
-    this.get(book, id).complete(output);
+  static complete(book: RecordBook, id: string, output: unknown, resultOf?: number): void {
+    this.get(book, id).complete(output, resultOf);
   }
 
   static fail(book: RecordBook, id: string, error: RuntimeErrorValue): void {

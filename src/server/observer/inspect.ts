@@ -1,3 +1,4 @@
+import { readOutput } from '../../shared/records/invocation.js';
 import type { ExecutionObservation } from '../../shared/observation/execution.js';
 import type { GenerationOutput } from '../../shared/operations/generation.js';
 import type { MemoryInput } from '../operations/memory/input.js';
@@ -16,7 +17,7 @@ export function inspectExecutions(book: RecordBook, transcript: Transcript, inst
   for (const operation of operations) {
     const execution = byId.get(operation.executionId);
     if (!execution) continue;
-    if (operation.operationInstanceId === instance.generation.id && operation.status === 'succeeded') execution.response = { content: (operation.value.output as GenerationOutput).content };
+    if (operation.operationInstanceId === instance.generation.id && operation.status === 'succeeded') execution.response = { content: (readOutput(operation.value) as GenerationOutput).content };
     if (operation.operationInstanceId === instance.extraction.id) execution.memoryStatus = operation.status;
   }
   for (const operation of operations) {

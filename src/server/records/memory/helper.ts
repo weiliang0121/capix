@@ -1,3 +1,4 @@
+import { writeRecord } from '../error.js';
 import { pick } from 'es-toolkit/object';
 import type { MemoryRecordValue } from '../../../shared/records/memory.js';
 import type { OperationContext } from '../../context/operation.js';
@@ -19,8 +20,10 @@ export class MemoryRecordHelper {
   }
 
   static capture(recorder: RuntimeRecorder, context: OperationContext, memory: Memory, change: MemoryChange): MemoryRecord {
-    const operation = recorder.record(context.id);
-    return this.create(recorder.book, operation.id, memory.id, { ...pick(change, ['action', 'change', 'sourceIndexes']), result: memory.snapshot() });
+    return writeRecord(() => {
+      const operation = recorder.record(context.id);
+      return this.create(recorder.book, operation.id, memory.id, { ...pick(change, ['action', 'change', 'sourceIndexes']), result: memory.snapshot() });
+    });
   }
 
   /** RecordBook preserves actual registration order; no inferred diff or previous-record link. */
