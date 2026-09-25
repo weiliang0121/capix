@@ -1,12 +1,10 @@
-import { createInput } from '../fixtures/observer.mjs';
+import { createInput, observeFixture } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
-import { RuntimeError } from '../../dist/server/errors/error.js';
-import { RuntimeErrorHelper } from '../../dist/server/errors/helper.js';
-import { snapshotValue } from '../../dist/server/records/value/snapshot.js';
-import { observeFixture } from '../fixtures/observer.mjs';
-import { validateSnapshot } from '../../dist/shared/execution/project.js';
+import { RuntimeError, RuntimeErrorHelper, snapshotValue } from '@capix-observer/runtime';
+
+import { validateSnapshot } from '@capix-observer/protocol';
 
 function recordable(value) {
   const snapshot = snapshotValue(value);

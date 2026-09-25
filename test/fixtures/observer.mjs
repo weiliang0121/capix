@@ -1,8 +1,6 @@
-import { ExecutionContext } from '../../dist/server/context/execution.js';
-import { Transcript } from '../../dist/server/transcript/transcript.js';
-import { acceptExecutionInput } from '../../dist/server/observer/accept.js';
-import { initializeObserver } from '../../dist/server/observer/environment.js';
-import { observeExecution } from '../../dist/server/observer/observe.js';
+import { ExecutionContext, Transcript } from '@capix-observer/runtime';
+
+import { acceptExecutionInput, initializeObserver, observeExecution } from '@capix-observer/service';
 
 const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);

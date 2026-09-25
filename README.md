@@ -67,9 +67,9 @@ const generationOutput = await environment.execution.call(input, {
 
 可调用实例与 Context 为 1:N；开启记录时，每个 E/O/A Context 对应一条同层 Record。复用 Operation 的 operationInstanceId 保持不变，每次调用的 Context ID 与 Record ID 独立产生。记录容器保留所有调用，而非被新请求替换。
 
-GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer 运行实体。浏览器消费同一契约，所以其数据声明位于 shared/operations/generation.ts。GenerationInput 使用 selection 与 memories；内部 AssembleContext 产生 message 与 selectedMessages，模型装载中的 message 保留 role/content。
+GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer 运行实体。浏览器消费同一契约，所以其数据声明位于 protocol/src/generation.ts。GenerationInput 使用 selection 与 memories；内部 AssembleContext 产生 message 与 selectedMessages，模型装载中的 message 保留 role/content。
 
-回答输出在 operations/answer/output.ts 使用 Zod 配对生成 JSON Schema 与本地接纳检查。严格拒绝额外字段、非法分类和空白正文，不自动转换或修剪内容；接纳返回新普通对象。结构失败仍为 OUTPUT_SHAPE，detail.issues 保留字段路径与原因。共享 GenerationOutput 保持纯数据类型，通过 Schema 的类型约束检查兼容性，不从 shared 反向导入服务端。记忆提取在 operations/memory/output.ts 同样用 Schema 定义 create/update 的结构并推导 MemoryExtraction，保留来源去重和长度限制。结构接纳后继续检查目标、来源和无变化更新；这些语义规则独立于 Schema。历史筛选也使用 Zod，保留空结果和优先级，结构通过后再检查本轮索引范围。model/schema.ts 复用文本与索引规则，非空白和去重要求同时进入提示 Schema 与本地检查。JSON 解析及执行重试不归 Zod。settings.ts 用 Zod 接纳配置，保持原有已知字段选取与数值边界。
+回答输出在 operations/answer/output.ts 使用 Zod 配对生成 JSON Schema 与本地接纳检查。严格拒绝额外字段、非法分类和空白正文，不自动转换或修剪内容；接纳返回新普通对象。结构失败仍为 OUTPUT_SHAPE，detail.issues 保留字段路径与原因。共享 GenerationOutput 保持纯数据类型，通过 Schema 的类型约束检查兼容性，不从 protocol 反向导入服务端。记忆提取在 operations/memory/output.ts 同样用 Schema 定义 create/update 的结构并推导 MemoryExtraction，保留来源去重和长度限制。结构接纳后继续检查目标、来源和无变化更新；这些语义规则独立于 Schema。历史筛选也使用 Zod，保留空结果和优先级，结构通过后再检查本轮索引范围。model/schema.ts 复用文本与索引规则，非空白和去重要求同时进入提示 Schema 与本地检查。JSON 解析及执行重试不归 Zod。settings.ts 用 Zod 接纳配置，保持原有已知字段选取与数值边界。
 
 | 对象             | 职责                                                                      |
 | ---------------- | ------------------------------------------------------------------------- |
@@ -110,7 +110,7 @@ Runtime.getExecutionContext/getOperationContext 沿 AttemptContext.operationCont
 
 ExecutionRecordHelper.snapshot 查询已有记录；HTTP observeTranscript 在展示时展开执行范围为 start/end/messages。执行详情的 EXECUTION CONTEXT 展示配置与范围，输入区域单独显示本次消息。当前没有持久化、独立来源副本或恢复机制。
 
-浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。当前每个边界仍发送完整更新，消息正文可能在展示传输中重复，尚未实现增量传输或按需查询。
+浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。执行期间每个边界仍发送完整更新，尚未实现增量传输。首次加载使用轻量概览，完整快照与源码在打开详情时按需查询。
 
 ```text
 RuntimeRecord<T>：id + value
@@ -130,76 +130,63 @@ EventRecord 继承 RuntimeRecord，自己的 id 与 callId 不同：callId 指�
 
 ## 启动与检查
 
-工具链：Node **22.23.2**、pnpm **10.7.1**、TypeScript **6.0.3**。
+固定工具链：Node **22.23.2**、pnpm **10.7.1**、TypeScript **6.0.3**。一个根 Workspace、一个锁文件。
 
 ```sh
 pnpm install --frozen-lockfile
 cp .env.example .env
-# 在本机填写 DEEPSEEK_API_KEY。
-pnpm dev
+# 仅在本机填写 DEEPSEEK_API_KEY。
+pnpm build
+pnpm start
 ```
 
-打开 http://127.0.0.1:4317 。服务只监听本机；Key 只用于服务端模型请求，不进入观测数据。源码或配置变更后重新运行 pnpm dev。默认模型为 deepseek-flash，可通过 DEEPSEEK_MODEL 配置。
+默认打开 http://127.0.0.1:4317 。可以通过 PORT 指定其他端口。服务只监听本机，生产入口同时提供 Vite 构建产物与 API。Key 不进入配置响应或观测数据。进程退出后内存消息与记录丢失。
 
-正式链路每次成功运行包含三次真实模型调用，包括空历史时的选择调用。模型使用 JSON Output、非思考、非流式返回；观测通过 NDJSON 即时发布。
+开发界面：先在另一个终端运行 `PORT=4320 pnpm start`，再运行 `pnpm dev`；Vite 的 `/api` 代理默认指向 4320，可通过 `OBSERVER_API_ORIGIN` 修改。服务端源码更改后需重新构建和重启；Vite 自动更新前端。没有为开发增加进程恢复或数据导入。
 
 ```sh
 pnpm check
 ```
 
-测试命令只发现 test/**/*.test.mjs，不把辅助 fixture 当成测试。测试使用注入的模型返回和 HTTP 替身，覆盖真实链路、固定引用、失败截断、记录一致性及展示数据转换，不消费 API 额度。格式配置 printWidth 为 1000，不强制常规代码按 100 字符换行。
+检查包括各包构建/类型、现有运行链路测试、HTTP 契约、跨包依赖边界、图谱布局与搜索、格式。单元测试使用注入的返回，不访问模型。真实模型检查仍是显式运行的 `test/live/memory.mjs`。
 
 ## 怎样观察
 
-- 左侧运行图谱、右侧对话。对话独立滚动，输入器固定底部；容量配置与待追加消息草稿在设置中。
-- 横向按 QA 分段，纵向为消息热度、Execution、Operation、Attempt 四层。轮内 EOA 保持共同耗时比例，轮间采用固定 24px 间隔；每轮标注真实开始时间及相对首轮的时间，底部总跨度仍为真实跨度。
-- 每轮用户/助手消息各占该 Execution 区间的一半，不代表消息耗时。消息颜色表示累计被选次数；调用颜色表示同层相对耗时，失败和运行中另行标记。
-- 图内纵向滚轮缩放、横向滚轮平移，以鼠标位置为缩放锚点，按主方向判断并合并到动画帧。左侧层级标签与顶部 QA 固定；层级仍可用纵向滚动条或键盘查看。底部等宽 QA 摘要展示用户原文节选、状态、耗时与记忆变更数，点击定位轮次，高亮主图可见范围；不再重复缩小 EOA 图。耗时仅由宽度表达，消息选择次数使用数字与局部短条。聚焦单轮只调整视口，全局内容仍保留；极短调用保持真实宽度，可从父节点详情中进入。
-- 点击 QA/EOA 打开弹层，查看输入输出、内部执行/接收过程、记录捕获的上下文、当时传入的记忆与本轮变化、当前执行源码。记忆变化标在实际执行处，不虚构记忆调用层。
-- 刷新重新读取当前进程全部执行和消息。成功返回 answer/unknown/needs-info 表示输出被接纳，不保证用户问题已解决。进程退出后内存数据丢失。
+- 左侧运行图谱、右侧完整对话；对话独立滚动，输入器固定底部。
+- 文本搜索覆盖完整用户和助手正文，导航显示命中片段。输入只高亮，切换命中或点击导航时定位问答。
+- 紧凑问答导航有独立横向滚动，固定块宽。主图每轮等宽，有最低阅读宽度；调整密度只改变主图，不改变导航块大小。
+- 轮内执行、操作、意图按真实单调计时比例布局。不同轮不共享耗时宽度比例；轮间不存在被省略为零的真实等待时间含义。
+- 上下文行展示本轮关联的历史、可见记忆和记忆变更入口。选中历史不等于最终容量装载成功，可见记忆不代表模型实际使用；实际请求和依据通过详情核对。
+- 深灰背景，蓝色标识当前查看，状态以文字 tag 展示；操作类别使用稳定的淡色，意图沿用所属操作颜色。耗时不再映射颜色。
+- 点击节点打开详情，查看 IO、执行/接收过程、记录中的上下文、当轮记忆与变化、执行源码。完整快照按需读取，不为首次绘图预取所有正文。
+- 当前查看、主图可见范围和本轮引用是不同状态。导航与图谱状态留在前端，服务端只发布运行事实与记录。
 
 容量检查发生在完整模型请求装载后。当前以请求 UTF-8 字节数加余量估算输入容量，再加预留输出 token；不是精确 tokenizer，也不保证供应商一定接纳。历史选择超限时，在下一轮开始前切换当前消息段；旧段保留，优先保留最近两轮完整 QA，预算不足降为一轮、零轮；消息对象和绝对索引不变。当前输入加记忆本身超限仍失败。选择结果要求模型按相关性与必要性从高到低返回索引；这是模型指导，不保证排序质量。生成请求按该顺序纳入完整消息，遇到第一条放不下的就停止，不跳过长消息凑容量；第一条就放不下则失败。保留的前缀在最终请求里恢复原始时间顺序。当前输入和固定请求内容不裁剪，容量处理不生成摘要、不额外调用模型、不自动修复或重试。生成 PrepareModelRequest 的输入保留候选顺序，输出记录最终请求，可以对照检查实际采用了哪些历史。
 
-## 目录
+## 目录与依赖
 
 ```text
-src/server/
-  execution/execution.ts     Execution.call 与抽象工作组合
-  observer/environment.ts    请求前的环境初始化
-  observer/accept.ts         向已有 Transcript 接纳本次输入
-  observer/execution.ts      ObserverExecution：复用三个具体 Operation
-  observer/observe.ts        本次调用的观测订阅与响应
-  transcript/                原始消息、固定引用与展示读取
-  memory/                    记忆体、集合与原文关系投影
-  context/                   Execution / Operation / Attempt 运行上下文
-  invocation/                通用调用流程与 lifecycle 契约
-  attempt/                   Attempt.call/execute 及具名动作实现
-  model/                     模型契约、请求装载、容量与 Schema 辅助函数
-  operations/                Operation 与各个具体工作的动作组合
-  runtime/                   调用生命周期与时钟
-  records/                   容器、索引、E/O/A 与事件记录及配对操作、正文快照
-  errors/                    异常及诊断格式化
-  settings.ts                模型配置检查
-  provider.ts                DeepSeek HTTP 接入
-  index.ts                   本地 HTTP 与观测响应
-src/shared/
-  records.ts                 记录与观测数据形状
-  execution/project.ts       时序和详情投影
-  transcript/message.ts      消息契约
-  errors.ts                  诊断正文契约
-  types.ts                   请求、模型与视图契约
-src/web/                     工作台、消息编辑与时序图
+protocol/src/               跨端消息、记录、观测与 HTTP 契约
+server/runtime/src/         EOA、Context、调用循环、Transcript、Memory、记录与错误
+services/observer/src/       当前场景、具体操作/意图、模型适配器与 HTTP 入口
+apps/observer/src/           React 界面、shadcn/ui 源码组件、图谱与详情投影
+docs/                       对象职责与协议说明
+test/                       运行、边界、HTTP 和前端纯逻辑测试
 ```
 
-通用数据操作优先使用 es-toolkit 的公开分类入口，直接具名导入，不额外建立工具转发层。当前已用于记录字段投影、消息排序/去重及记忆正文比较；服务端基础类型判断统一使用库的同语义函数，分类入口缺少的数组、对象范围、有限数和安全整数判断通过 compat 具名导入。简单展开、原生集合和领域类身份检查仍保留。pick 仅取自身字段，类 getter 显式读取；正文比较保持来源索引顺序。快照、引用保留、错误转换继续由对应概念负责，不默认套用深合并或深拷贝。浏览器当前直接加载 tsc 输出，运行时工具库导入暂限 server，后续前端接入需统一处理模块解析。
+服务与应用都依赖 `@capix-observer/protocol`；服务装配 `@capix-observer/runtime`。运行内核不依赖服务，前端不依赖服务端。跨包只使用公开出口。协议不包含 ModelRequest、Provider、Trace、像素布局、颜色或交互状态。具体接口、身份、时序和流式更新规则见 [跨端协议](docs/protocol.md)。
+
+这次借鉴 CAPiX 的依赖方向与工程组织，不迁入 Graph/TRS，不创建空壳 client/runtime、公共 UI 包、调度与持久化能力。Observer 当前运行对象和场景语义保持不变。
+
+通用数据操作优先使用 es-toolkit 的公开分类入口，直接具名导入，不额外建立工具转发层。当前已用于记录字段投影、消息排序/去重及记忆正文比较；服务端基础类型判断统一使用库的同语义函数，分类入口缺少的数组、对象范围、有限数和安全整数判断通过 compat 具名导入。简单展开、原生集合和领域类身份检查仍保留。pick 仅取自身字段，类 getter 显式读取；正文比较保持来源索引顺序。快照、引用保留、错误转换继续由对应概念负责，不默认套用深合并或深拷贝。浏览器模块由 Vite 统一构建，工具库仍通过公开入口使用。
 
 服务端错误转换、Provider、Transcript、Memory 和记录正文使用同语义的标准类型谓词；错误字段由固定字段表和 zipObject 组织。跨 realm 原生错误仍用 Node 的 isNativeError，专用对象范围、循环检测、访问器隔离和转换预算保留原有规则。工具函数替换不改变错误代码、正文或身份语义。
 
-生产运行依赖为 zod@4.6.5（模型输出契约与配置接纳）和 es-toolkit@1.52.0（通用数据操作）。尚未实现数据库、TRS、工具执行、调度、模型自动重试、恢复或持久化队列；不为这些未来功能预先增加当前运行链路之外的对象。
+运行内核及场景使用 zod@4.6.5 和 es-toolkit@1.52.0；界面使用 React、Vite、Tailwind 与按需接入的 shadcn/ui 源码组件，精确版本见各包清单。尚未实现数据库、TRS、工具执行、调度、模型自动重试、恢复或持久化队列；不为这些未来功能预先增加当前运行链路之外的对象。
 
 筛选结果仅包含所选原文索引，保存在操作上下文与记录中，不写入消息列表。Transcript 仅保留接纳的 user/assistant 消息与正式生成的回答。Jev 筛选与热区装载尚未接入。消息关联计数保留，但不参与模型输入。
 
-历史选择热区：消息按 QA 配对展示于调用图顶层，颜色表示累计被选次数；选择执行高亮选中范围，点击查看该轮原文和调用。数据由当前进程已有筛选操作记录推导，刷新后仍可查看；进程退出即丢失。只统计已接纳的筛选结果，后续回答失败仍计入，不表示回答实际使用或判断正确。次数不传给筛选或生成模型；候选范围仍为全部可见历史，计数不引起额外模型调用。
+历史选择计数：在上下文关联与详情中展示累计被选次数，点击查看原文和调用。数据由当前进程已有筛选操作记录推导，刷新后仍可查看；进程退出即丢失。只统计已接纳的筛选结果，后续回答失败仍计入，不表示回答实际使用或判断正确。次数不传给筛选或生成模型；候选范围仍为全部可见历史，计数不引起额外模型调用。
 
 ## 回答后的记忆提取
 
@@ -221,4 +208,4 @@ processes[sequence=3] receive.return → resultOf: 2（默认透传）
 value.resultOf: 2                   → 最终采用该正文
 ```
 
-`resultOf` 是本条记录内的过程序号，只能指向直接保存正文的条目。自定义 receive 独立记录自己的结果，最终引用该结果；即使原地修改并返回同一对象，也保留执行与接收两个时刻的快照。前端投影与查询通过 `shared/records/invocation.ts` 的 `readOutput` 读取，快照中不重新展开。输入和错误正文保持现有记录方式，不做跨记录去重。
+`resultOf` 是本条记录内的过程序号，只能指向直接保存正文的条目。自定义 receive 独立记录自己的结果，最终引用该结果；即使原地修改并返回同一对象，也保留执行与接收两个时刻的快照。前端投影与查询通过 `protocol/src/records/invocation.ts` 的 `readOutput` 读取，快照中不重新展开。输入和错误正文保持现有记录方式，不做跨记录去重。

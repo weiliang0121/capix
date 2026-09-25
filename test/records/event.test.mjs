@@ -1,11 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeRecord, ExecutionRecordHelper, EventRecord, EventRecordHelper, RecordBook, RecordIndex } from '../../dist/server/records/index.js';
-import { Clock } from '../../dist/server/runtime/clock.js';
-import { RuntimeRecorder } from '../../dist/server/records/recorder.js';
-import { Runtime } from '../../dist/server/runtime/runtime.js';
-import { invoke } from '../../dist/server/invocation/invoke.js';
-import { validateSnapshot } from '../../dist/shared/execution/project.js';
+import { RuntimeRecord, ExecutionRecordHelper, EventRecord, EventRecordHelper, RecordBook, RecordIndex, Clock, RuntimeRecorder, Runtime, invoke } from '@capix-observer/runtime';
+
+import { validateSnapshot } from '@capix-observer/protocol';
 
 class ManualClock extends Clock {
   elapsed = 100;

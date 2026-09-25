@@ -1,17 +1,13 @@
-import { readOutput } from '../dist/shared/records/invocation.js';
-import { createInput } from './fixtures/observer.mjs';
+import { readOutput, validateSnapshot } from '@capix-observer/protocol';
+import { createInput, observeFixture } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { RuntimeRecorder } from '../dist/server/records/recorder.js';
+import { RuntimeRecorder, RuntimeRecord, ExecutionRecord, OperationRecord, RecordBook, RecordIndex, ExecutionRecordHelper, OperationRecordHelper, Clock, Runtime, identity, RuntimeError } from '@capix-observer/runtime';
 import { test } from 'node:test';
-import { RuntimeRecord, ExecutionRecord, OperationRecord, RecordBook, RecordIndex, ExecutionRecordHelper, OperationRecordHelper } from '../dist/server/records/index.js';
+
 import { TestOperation } from './fixtures/operation.mjs';
-import { Clock } from '../dist/server/runtime/clock.js';
-import { Runtime } from '../dist/server/runtime/runtime.js';
-import { identity } from '../dist/server/operations/operation.js';
-import { observeFixture } from './fixtures/observer.mjs';
-import { projectExecution, validateSnapshot } from '../dist/shared/execution/project.js';
-import { RuntimeError } from '../dist/server/errors/error.js';
+
+import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const input = { content: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] };

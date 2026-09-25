@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Execution } from '../dist/server/execution/execution.js';
-import { ObserverExecution } from '../dist/server/observer/execution.js';
-import { Runtime } from '../dist/server/runtime/runtime.js';
-import { RuntimeRecorder } from '../dist/server/records/recorder.js';
-import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
+import { Execution, Runtime, RuntimeRecorder, RecordBook, RecordIndex } from '@capix-observer/runtime';
+import { ObserverExecution } from '@capix-observer/service';
+
 import { TestOperation } from './fixtures/operation.mjs';
 import { createInput, transcriptFor } from './fixtures/observer.mjs';
 

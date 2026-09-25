@@ -1,12 +1,12 @@
-import { readOutput } from '../../dist/shared/records/invocation.js';
+import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createInput, contextFor, transcriptFor, observeFixture } from '../fixtures/observer.mjs';
-import { ExecutionRecord } from '../../dist/server/records/execution/record.js';
-import { snapshotValue } from '../../dist/server/records/value/snapshot.js';
-import { observeTranscript } from '../../dist/server/transcript/observe.js';
-import { selectionOutputContract } from '../../dist/server/operations/history/output.js';
-import { projectExecution, validateSnapshot } from '../../dist/shared/execution/project.js';
+import { ExecutionRecord, snapshotValue, observeTranscript } from '@capix-observer/runtime';
+
+import { selectionOutputContract } from '@capix-observer/service';
+
+import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const reply = (value) => ({ id: 'fixture', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });

@@ -1,12 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript } from '../../dist/server/transcript/transcript.js';
-import { ExecutionContext } from '../../dist/server/context/execution.js';
-import { initializeObserver } from '../../dist/server/observer/environment.js';
-import { acceptExecutionInput } from '../../dist/server/observer/accept.js';
-import { observeExecution } from '../../dist/server/observer/observe.js';
-import { Memory } from '../../dist/server/memory/memory.js';
-import { memoryOutputContract } from '../../dist/server/operations/memory/output.js';
+import { Transcript, ExecutionContext, Memory } from '@capix-observer/runtime';
+
+import { initializeObserver, acceptExecutionInput, observeExecution, memoryOutputContract } from '@capix-observer/service';
 
 const settings = { model: 'test', contextBudget: 16000, maxOutputTokens: 1536, timeoutMs: 1000 };
 const reply = (value) => ({ id: 'fixture', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -138,8 +134,8 @@ for (const retained of [2, 1, 0]) {
 }
 
 test('retention stops at incomplete messages and never pulls a pair back out of an archived segment', async () => {
-  const { segmentCandidates } = await import('../../dist/server/observer/segment.js');
-  const { TranscriptRangeRef } = await import('../../dist/server/transcript/ref.js');
+  const { segmentCandidates } = await import('@capix-observer/service');
+  const { TranscriptRangeRef } = await import('@capix-observer/runtime');
   const transcript = new Transcript([
     { role: 'user', content: 'old' },
     { role: 'assistant', content: 'old response' },

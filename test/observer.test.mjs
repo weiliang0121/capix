@@ -1,19 +1,11 @@
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { observeFixture } from './fixtures/observer.mjs';
-import { DeepSeekProvider } from '../dist/server/provider.js';
-import { Transcript } from '../dist/server/transcript/transcript.js';
-import { acceptExecutionInput } from '../dist/server/observer/accept.js';
-import { createInput } from './fixtures/observer.mjs';
-import { projectExecution } from '../dist/shared/execution/project.js';
-import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
-import { invoke } from '../dist/server/invocation/invoke.js';
-import { RuntimeRecorder } from '../dist/server/records/recorder.js';
-import { Runtime } from '../dist/server/runtime/runtime.js';
-import { answerOutputContract } from '../dist/server/operations/answer/output.js';
-import { selectionOutputContract } from '../dist/server/operations/history/output.js';
-import { memoryOutputContract } from '../dist/server/operations/memory/output.js';
+import { observeFixture, createInput } from './fixtures/observer.mjs';
+import { DeepSeekProvider, acceptExecutionInput, answerOutputContract, selectionOutputContract, memoryOutputContract } from '@capix-observer/service';
+import { Transcript, RecordBook, RecordIndex, invoke, RuntimeRecorder, Runtime } from '@capix-observer/runtime';
+
+import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
 
 async function runObserver(input, settings, provider, publish = () => {}, signal) {
   return projectExecution(await observeFixture(createInput(input), settings, provider, (facts) => publish(projectExecution(facts)), signal));

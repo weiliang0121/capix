@@ -2,12 +2,9 @@ import { createInput, contextFor, transcriptFor } from './fixtures/observer.mjs'
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
-import { Runtime } from '../dist/server/runtime/runtime.js';
-import { invoke } from '../dist/server/invocation/invoke.js';
-import { SelectHistory } from '../dist/server/operations/history/select.js';
-import { AssembleContext } from '../dist/server/attempt/context/assemble.js';
-import { answerOutputContract } from '../dist/server/operations/answer/output.js';
-import { selectionOutputContract } from '../dist/server/operations/history/output.js';
+import { Runtime, invoke } from '@capix-observer/runtime';
+
+import { SelectHistory, AssembleContext, answerOutputContract, selectionOutputContract } from '@capix-observer/service';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
 const runtime = new Runtime();

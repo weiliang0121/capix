@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RecordBook, RecordIndex, RuntimeRecord } from '../../dist/server/records/index.js';
+import { RecordBook, RecordIndex, RuntimeRecord } from '@capix-observer/runtime';
 
 test('Selectors index the same records by different keys without changing Book', () => {
   const book = new RecordBook();

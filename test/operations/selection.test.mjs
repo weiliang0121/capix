@@ -1,9 +1,7 @@
-import { readOutput } from '../../dist/shared/records/invocation.js';
+import { readOutput } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver } from '../../dist/server/observer/environment.js';
-import { acceptExecutionInput } from '../../dist/server/observer/accept.js';
-import { observeExecution } from '../../dist/server/observer/observe.js';
+import { initializeObserver, acceptExecutionInput, observeExecution } from '@capix-observer/service';
 
 const settings = { model: 'test', contextBudget: 100000, maxOutputTokens: 256, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -46,9 +44,9 @@ for (const fails of [false, true]) {
 }
 
 test('message counts accumulate independently and never enter model requests', async () => {
-  const { ObserverExecution } = await import('../../dist/server/observer/execution.js');
-  const { Runtime } = await import('../../dist/server/runtime/runtime.js');
-  const { Transcript } = await import('../../dist/server/transcript/transcript.js');
+  const { ObserverExecution } = await import('@capix-observer/service');
+  const { Runtime } = await import('@capix-observer/runtime');
+  const { Transcript } = await import('@capix-observer/runtime');
   const transcript = new Transcript([{ role: 'user', content: '我在北京' }]);
   const original = transcript.get(0);
   const requests = [];

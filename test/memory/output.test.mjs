@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { memoryOutputContract } from '../../dist/server/operations/memory/output.js';
-import { RuntimeErrorHelper } from '../../dist/server/errors/helper.js';
+import { memoryOutputContract } from '@capix-observer/service';
+import { RuntimeErrorHelper } from '@capix-observer/runtime';
 
 const input = { currentIndexes: [0, 1], messages: [0, 1].map((index) => ({ index, message: { role: 'user', content: '原文' } })), memories: [] };
 const candidate = { action: 'create', memoryId: null, change: '  建立理解  ', sourceIndexes: [0], result: { topic: '  预算  ', content: '  预算300  ', sourceIndexes: [0, 1] } };

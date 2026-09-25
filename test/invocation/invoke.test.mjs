@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { invoke } from '../../dist/server/invocation/invoke.js';
+import { invoke } from '@capix-observer/runtime';
 
 test('one lifecycle can overlap invocations without mixing handles or outputs', async () => {
   let next = 0;

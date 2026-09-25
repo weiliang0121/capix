@@ -1,4 +1,4 @@
-import { Operation } from '../../dist/server/operations/operation.js';
+import { Operation } from '@capix-observer/runtime';
 import { TestAttempt } from './attempt.mjs';
 
 // Variable-length composition used only by tests; production operations own their execute methods.

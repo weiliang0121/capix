@@ -1,15 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Attempt } from '../dist/server/attempt/attempt.js';
-import { AttemptContext } from '../dist/server/context/attempt.js';
-import { Runtime } from '../dist/server/runtime/runtime.js';
-import { RuntimeRecorder } from '../dist/server/records/recorder.js';
-import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
-import { invoke } from '../dist/server/invocation/invoke.js';
+import { Attempt, AttemptContext, Runtime, RuntimeRecorder, RecordBook, RecordIndex, invoke, Operation } from '@capix-observer/runtime';
+
 import { TestOperation } from './fixtures/operation.mjs';
-import { Operation } from '../dist/server/operations/operation.js';
+
 import { TestAttempt } from './fixtures/attempt.mjs';
-import { validateSnapshot } from '../dist/shared/execution/project.js';
+import { validateSnapshot } from '@capix-observer/protocol';
 
 function recordedRuntime() {
   return new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)));

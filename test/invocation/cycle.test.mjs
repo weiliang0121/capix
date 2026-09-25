@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Execution } from '../../dist/server/execution/execution.js';
-import { Operation } from '../../dist/server/operations/operation.js';
-import { Attempt } from '../../dist/server/attempt/attempt.js';
-import { Runtime } from '../../dist/server/runtime/runtime.js';
-import { RuntimeRecorder } from '../../dist/server/records/recorder.js';
-import { RecordBook, RecordIndex } from '../../dist/server/records/index.js';
-import { RuntimeError } from '../../dist/server/errors/error.js';
-import { validateSnapshot, projectExecution } from '../../dist/shared/execution/project.js';
+import { Execution, Operation, Attempt, Runtime, RuntimeRecorder, RecordBook, RecordIndex, RuntimeError } from '@capix-observer/runtime';
+
+import { validateSnapshot } from '@capix-observer/protocol';
+import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 import { TestOperation } from '../fixtures/operation.mjs';
 
 const settings = {};

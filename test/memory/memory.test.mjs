@@ -1,19 +1,9 @@
-import { readOutput } from '../../dist/shared/records/invocation.js';
+import { readOutput } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver } from '../../dist/server/observer/environment.js';
-import { acceptExecutionInput } from '../../dist/server/observer/accept.js';
-import { observeExecution } from '../../dist/server/observer/observe.js';
-import { observeMemory } from '../../dist/server/memory/observe.js';
-import { memoryOutputContract } from '../../dist/server/operations/memory/output.js';
-import { MemoryCollection } from '../../dist/server/memory/collection.js';
-import { MemoryHelper } from '../../dist/server/memory/helper.js';
-import { Memory } from '../../dist/server/memory/memory.js';
-import { MemoryRecord, MemoryRecordHelper, RecordBook, RuntimeRecord, RecordIndex } from '../../dist/server/records/index.js';
-import { RuntimeRecorder } from '../../dist/server/records/recorder.js';
-import { Transcript } from '../../dist/server/transcript/transcript.js';
-import { ObserverExecution } from '../../dist/server/observer/execution.js';
-import { Runtime } from '../../dist/server/runtime/runtime.js';
+import { initializeObserver, acceptExecutionInput, observeExecution, memoryOutputContract, ObserverExecution } from '@capix-observer/service';
+
+import { observeMemory, MemoryCollection, MemoryHelper, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, RuntimeRecord, RecordIndex, RuntimeRecorder, Transcript, Runtime } from '@capix-observer/runtime';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });

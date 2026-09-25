@@ -1,14 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Execution } from '../../dist/server/execution/execution.js';
-import { Operation } from '../../dist/server/operations/operation.js';
-import { Attempt } from '../../dist/server/attempt/attempt.js';
-import { Runtime } from '../../dist/server/runtime/runtime.js';
-import { RuntimeRecorder } from '../../dist/server/records/recorder.js';
-import { RecordBook, RecordIndex } from '../../dist/server/records/index.js';
-import { InvocationRecord } from '../../dist/server/records/invocation/record.js';
-import { hasOutput, readOutput } from '../../dist/shared/records/invocation.js';
-import { projectExecution, validateSnapshot } from '../../dist/shared/execution/project.js';
+import { Execution, Operation, Attempt, Runtime, RuntimeRecorder, RecordBook, RecordIndex, InvocationRecord } from '@capix-observer/runtime';
+
+import { hasOutput, readOutput, validateSnapshot } from '@capix-observer/protocol';
+
+import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 
 function fixture() {
   const recorder = new RuntimeRecorder(new RecordBook(), new RecordIndex((r) => r.executionId), new RecordIndex((r) => r.operationId), new RecordIndex((r) => r.executionId));

@@ -1,16 +1,10 @@
-import { readOutput } from '../dist/shared/records/invocation.js';
+import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { invoke } from '../dist/server/invocation/invoke.js';
-import { Clock } from '../dist/server/runtime/clock.js';
-import { Runtime } from '../dist/server/runtime/runtime.js';
-import { RuntimeRecorder } from '../dist/server/records/recorder.js';
-import { RecordBook, RecordIndex, OperationRecordHelper } from '../dist/server/records/index.js';
-import { RuntimeError } from '../dist/server/errors/error.js';
-import { ExecutionContext } from '../dist/server/context/execution.js';
-import { OperationContext } from '../dist/server/context/operation.js';
-import { validateSnapshot, projectExecution } from '../dist/shared/execution/project.js';
+import { invoke, Clock, Runtime, RuntimeRecorder, RecordBook, RecordIndex, OperationRecordHelper, RuntimeError, ExecutionContext, OperationContext } from '@capix-observer/runtime';
+
+import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
 
 const lifecycles = new WeakMap();
 const begin = (runtime) => {

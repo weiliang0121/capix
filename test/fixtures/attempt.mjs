@@ -1,4 +1,4 @@
-import { Attempt } from '../../dist/server/attempt/attempt.js';
+import { Attempt } from '@capix-observer/runtime';
 
 export class TestAttempt extends Attempt {
   source = 'test/fixtures/attempt.mjs · TestAttempt';

@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver } from '../dist/server/observer/environment.js';
-import { acceptExecutionInput } from '../dist/server/observer/accept.js';
-import { observeExecution } from '../dist/server/observer/observe.js';
-import { Transcript } from '../dist/server/transcript/transcript.js';
+import { initializeObserver, acceptExecutionInput, observeExecution } from '@capix-observer/service';
+
+import { Transcript } from '@capix-observer/runtime';
 
 const settings = { model: 'one', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'fixture', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });

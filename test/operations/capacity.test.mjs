@@ -1,11 +1,10 @@
-import { readOutput } from '../../dist/shared/records/invocation.js';
+import { readOutput } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript } from '../../dist/server/transcript/transcript.js';
-import { Runtime } from '../../dist/server/runtime/runtime.js';
-import { invoke } from '../../dist/server/invocation/invoke.js';
-import { GenerateAnswer } from '../../dist/server/operations/answer/generate.js';
-import { estimateCapacity } from '../../dist/server/model/capacity.js';
+import { Transcript, Runtime, invoke } from '@capix-observer/runtime';
+
+import { GenerateAnswer, estimateCapacity } from '@capix-observer/service';
+
 import { createInput, observeFixture } from '../fixtures/observer.mjs';
 
 const settings = { model: 'test', contextBudget: 100000, maxOutputTokens: 256, timeoutMs: 10000 };

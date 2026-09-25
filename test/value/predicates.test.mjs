@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { isNonBlankString } from '../../dist/server/value/string.js';
-import { isNonEmptyArray, hasUniqueItems } from '../../dist/server/value/array.js';
-import { modelTextSchema, modelIndexesSchema } from '../../dist/server/model/schema.js';
-import { Transcript } from '../../dist/server/transcript/transcript.js';
-import { Memory } from '../../dist/server/memory/memory.js';
+import { isNonBlankString, isNonEmptyArray, hasUniqueItems, Transcript, Memory } from '@capix-observer/runtime';
+
+import { modelTextSchema, modelIndexesSchema } from '@capix-observer/service';
 
 test('text predicates, model schema and message acceptance agree without normalizing text', () => {
   const cases = [

@@ -1,0 +1,54 @@
+import type { ModelSettings } from './settings.js';
+import type { Message } from './message.js';
+import type { RuntimeSnapshot, ExecutionRecord } from './records.js';
+import type { ExecutionObservation } from './observation/execution.js';
+import type { MemoryRecord } from './records/memory.js';
+
+export interface ExecutionRequest {
+  messages: Message[];
+  contextBudget?: number;
+}
+export interface ConfigurationResponse extends ModelSettings {
+  configured: boolean;
+}
+export interface TranscriptResponse {
+  messages: readonly Readonly<Message>[];
+}
+export interface SourceResponse {
+  path: string;
+  content: string;
+}
+export interface ErrorResponse {
+  error: string;
+  code?: string;
+}
+export type RunUpdate = { type: 'snapshot'; snapshot: RuntimeSnapshot } | { type: 'error'; error: string; code?: string };
+
+/** Timing facts only. No IO bodies, pixel layout, colors or UI selection state. */
+export interface InvocationSummary {
+  id: string;
+  contextId: string;
+  recordType: 'execution' | 'operation' | 'attempt';
+  parentId?: string;
+  name: string;
+  label: string;
+  source: string;
+  status: ExecutionRecord['status'];
+  offsetMs: number;
+  durationMs?: number;
+}
+type ObservedExecution = ExecutionObservation['executions'][number];
+export interface ExecutionSummary extends ObservedExecution {
+  durationMs?: number;
+  /** Last recorded monotonic offset; includes incomplete runs without inventing an end. */
+  observedOffsetMs: number;
+  calls: InvocationSummary[];
+  transcriptRange?: { start: number; end: number };
+  /** IDs present in this run's captured selection input. Not a claim of causal model use. */
+  availableMemoryIds: string[];
+  memoryChanges: { id: string; memoryId: string; operationId: string; action: MemoryRecord['value']['action']; change: string }[];
+}
+export interface ObserverOverview {
+  messages: ExecutionObservation['messages'];
+  executions: ExecutionSummary[];
+}

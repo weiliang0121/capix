@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeContext } from '../dist/server/context/context.js';
-import { ExecutionContext } from '../dist/server/context/execution.js';
-import { Transcript } from '../dist/server/transcript/transcript.js';
-import { Runtime } from '../dist/server/runtime/runtime.js';
-import { RuntimeRecorder } from '../dist/server/records/recorder.js';
-import { RecordBook, RecordIndex } from '../dist/server/records/index.js';
-import { invoke } from '../dist/server/invocation/invoke.js';
+import { RuntimeContext, ExecutionContext, Transcript, Runtime, RuntimeRecorder, RecordBook, RecordIndex, invoke } from '@capix-observer/runtime';
+
 import { TestOperation } from './fixtures/operation.mjs';
 
 const options = { input: {}, settings: {} };

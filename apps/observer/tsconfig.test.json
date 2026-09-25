@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": ".test-dist",
+    "declaration": false
+  },
+  "include": ["src/observation/**/*.ts", "src/features/explorer/layout.ts", "src/features/explorer/search.ts", "src/features/explorer/types.ts", "src/api/client.ts"]
+}

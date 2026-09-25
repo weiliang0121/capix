@@ -1,14 +1,12 @@
-import { readOutput } from '../../dist/shared/records/invocation.js';
+import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { TestOperation } from '../fixtures/operation.mjs';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { RuntimeRecorder } from '../../dist/server/records/recorder.js';
+import { RuntimeRecorder, invoke, Runtime, RuntimeRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, RecordBook, RecordIndex } from '@capix-observer/runtime';
 import { test } from 'node:test';
-import { invoke } from '../../dist/server/invocation/invoke.js';
-import { Runtime } from '../../dist/server/runtime/runtime.js';
-import { RuntimeRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, RecordBook, RecordIndex } from '../../dist/server/records/index.js';
-import { projectExecution, validateSnapshot } from '../../dist/shared/execution/project.js';
+
+import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 
 function setup() {
   const runtime = new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)));
