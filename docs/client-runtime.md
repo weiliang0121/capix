@@ -71,3 +71,13 @@ Observer 应用内部的 `src/state/store.ts` 使用 zustand@5.0.15 的 `createS
 `src/state/react.tsx` 提供应用 Store 的 selector 订阅、Runtime 字段订阅和执行快照缓存订阅。后两者通过 `useSyncExternalStore` 直接读取 Runtime，不建立第二份状态。调用方选择稳定字段引用或基础值，派生对象在组件内计算。图谱、对话内容、输入器、设置与详情分别订阅所需数据，草稿变化不再经过 App 根节点驱动图谱更新。详情查询仍在组件的 effect 中调用 Runtime，并在目标变化或关闭时清理 AbortSignal；记录缓存留在 Runtime。
 
 仅迁移现有应用能力，不增加 Store 持久化、跨页恢复、会话系统或客户端运行状态机。
+
+## 对话呈现
+
+应用内 `MessageContent` 使用 Streamdown 2.6.0 静态渲染助手完整回答，对话和问答详情复用；用户输入保持纯文本。支持 Markdown 列表、表格、链接和代码块，不执行消息中的 HTML，不补齐或动画播放正文。当前传输的是执行记录流，尚未提供回答 token 流。
+
+对话滚动由 use-stick-to-bottom 1.1.6 观察内容高度：底部跟随、上翻脱离、点击“回到最新”恢复；提交新输入时回到底部。滚动状态留在组件，不写入 Runtime 或 App Store。没有迁入旧工程的展示时钟、parts 队列、锚点补偿或业务组件。
+
+对话投影 `projectConversation` 合并 Transcript 消息与已观测的回答；未完成最终刷新时仍展示已有回答，不依赖 busy，不按正文相同判定重复，也不伪造消息索引。取得正式回答索引后直接复用正式消息。投影仅服务呈现，不写回 Transcript 或复制进入 Store。
+
+结束刷新将消息与执行关联一起接纳，记忆独立接纳；一组失败不会丢弃另一组成功结果。请求失败与刷新失败同时发生时通过 AggregateError 保留两者，单次失败保留原错误，最后释放本地 busy/pending，不重发请求。Markdown 图片仅显示说明与显式 HTTP(S) 链接，不自动加载外部资源，也不生成原生 title 提示。

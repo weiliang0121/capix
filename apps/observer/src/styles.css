@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@source '../node_modules/streamdown/dist/*.js';
 
 @theme inline {
   --color-background: var(--background);
@@ -173,11 +174,22 @@ summary:focus-visible {
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
 }
+.conversation-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 .conversation-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.conversation-content {
+  min-height: 100%;
   padding: 20px 18px;
 }
 .chat-empty {
@@ -423,7 +435,7 @@ details > summary {
     monospace;
   max-height: 560px;
 }
-.text-block p {
+.detail-message {
   background: #202020;
   border-radius: 8px;
   padding: 16px;
@@ -590,7 +602,7 @@ details > summary {
   .panel-heading {
     padding: 16px;
   }
-  .conversation-scroll {
+  .conversation-content {
     padding: 16px 14px;
   }
 }
@@ -634,4 +646,93 @@ details > summary {
     align-items: flex-start;
     gap: 4px;
   }
+}
+
+.conversation-latest {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 4px 16px #0008;
+  border: 1px solid var(--border);
+}
+.markdown-content {
+  min-width: 0;
+  white-space: normal;
+}
+.markdown-content > * + * {
+  margin-top: 14px;
+}
+.markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--foreground);
+  margin: 20px 0 10px;
+}
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+.markdown-content p {
+  margin-bottom: 0;
+}
+.markdown-content :is(ul, ol) {
+  padding-left: 22px;
+  list-style-position: outside;
+}
+.markdown-content ul {
+  list-style: disc;
+}
+.markdown-content ol {
+  list-style: decimal;
+}
+.markdown-content li + li {
+  margin-top: 6px;
+}
+.markdown-content li > p + p {
+  margin-top: 8px;
+}
+.markdown-content a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.markdown-content blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 14px;
+  color: var(--muted-foreground);
+}
+.markdown-content code {
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+.markdown-content :not(pre) > code {
+  background: #303030;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+.markdown-content pre {
+  overflow-x: auto;
+  white-space: pre;
+  font-size: var(--font-sm);
+  background: #101010;
+}
+.markdown-content [data-streamdown='code-block'] {
+  min-width: 0;
+  font-size: var(--font-sm);
+}
+.markdown-content table {
+  font-size: var(--font-sm);
+  border-collapse: collapse;
+}
+.markdown-content :is(th, td) {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+}
+.markdown-content th {
+  background: #242424;
+}
+.markdown-content hr {
+  border-color: var(--border);
+  margin-block: 18px;
 }

@@ -1,3 +1,4 @@
+import { MessageContent } from './message-content';
 import type { Inspection } from '../state/store';
 import { useEffect, useState } from 'react';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
@@ -32,11 +33,13 @@ export function DataBlock({ title, value }: { title: string; value: unknown }) {
     </section>
   );
 }
-function TextBlock({ title, content }: { title: string; content: string }) {
+function TextBlock({ title, content, markdown = false }: { title: string; content: string; markdown?: boolean }) {
   return (
     <section className="text-block">
       <h3>{title}</h3>
-      <p>{content}</p>
+      <div className="detail-message">
+        <MessageContent content={content} markdown={markdown} />
+      </div>
     </section>
   );
 }
@@ -293,7 +296,7 @@ export function InspectionDialog({ runtime, target, snapshot, loading, error, ov
                     <>
                       <div className="detail-grid">
                         <TextBlock title={`用户 · [${qa?.inputIndex ?? '—'}]`} content={String(input.content ?? '')} />
-                        <TextBlock title={`助手${qa?.response?.index === undefined ? '' : ` · [${qa.response.index}]`}`} content={answer} />
+                        <TextBlock markdown title={`助手${qa?.response?.index === undefined ? '' : ` · [${qa.response.index}]`}`} content={answer} />
                       </div>
                       {trace.error && <DataBlock title="执行失败" value={trace.error} />}
                       <section className="selection-detail">

@@ -44,8 +44,20 @@ export class ClientRuntime {
   }
 
   private async refresh(): Promise<void> {
-    const [overview, transcript, memory] = await Promise.all([this.transport.overview(), this.transport.transcript(), this.transport.memory()]);
-    this.update({ overview, messages: transcript.messages, memory });
+    // Message indexes and their execution associations reconcile together.
+    // Memory refresh failure must not discard a successfully reconciled conversation.
+    const [conversation, memory] = await Promise.allSettled([Promise.all([this.transport.overview(), this.transport.transcript()]), this.transport.memory()]);
+    let change: Partial<ClientState> = {};
+    const errors: unknown[] = [];
+    if (conversation.status === 'fulfilled') {
+      const [overview, transcript] = conversation.value;
+      change = { overview, messages: transcript.messages };
+    } else errors.push(conversation.reason);
+    if (memory.status === 'fulfilled') change = { ...change, memory: memory.value };
+    else errors.push(memory.reason);
+    this.update(change);
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, '对话与记忆刷新均失败。');
   }
 
   getExecution(id: string): RuntimeSnapshot | undefined {
@@ -74,6 +86,7 @@ export class ClientRuntime {
     const messages = request.messages.map((message) => ({ ...message }));
     this.update({ busy: true, runningId: '', pending: messages.at(-1)?.content ?? '' });
     let wasAccepted = false;
+    const errors: unknown[] = [];
     try {
       await this.transport.run(
         { ...request, messages },
@@ -87,12 +100,17 @@ export class ClientRuntime {
           accepted?.();
         },
       );
-    } finally {
-      try {
-        if (wasAccepted) await this.refresh();
-      } finally {
-        this.update({ busy: false, pending: '' });
-      }
+    } catch (error) {
+      errors.push(error);
     }
+    try {
+      if (wasAccepted) await this.refresh();
+    } catch (error) {
+      errors.push(error);
+    } finally {
+      this.update({ busy: false, pending: '' });
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) throw new AggregateError(errors, '请求处理与结束刷新均失败。', { cause: errors[0] });
   }
 }

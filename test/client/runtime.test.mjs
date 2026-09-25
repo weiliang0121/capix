@@ -163,6 +163,7 @@ test('refresh failure releases local submission state and keeps the terminal sna
   let reads = 0;
   const runtime = new ClientRuntime(
     transport({
+      transcript: async () => ({ messages: request().messages }),
       memory: async () => {
         if (++reads > 1) throw new Error('刷新失败');
         return { items: [] };
@@ -235,4 +236,80 @@ test('HTTP transport preserves endpoint paths, request body, acceptance order an
   assert.deepEqual(order, ['accepted', 'snapshot']);
   assert.equal(calls[1].url, 'http://observer.test/api/run');
   assert.deepEqual(JSON.parse(calls[1].init.body), request());
+});
+
+test('memory refresh failure still commits the refreshed conversation', async () => {
+  let finished = false;
+  const answer = { role: 'assistant', content: '已完成的回答' };
+  const runtime = new ClientRuntime(
+    transport({
+      transcript: async () => ({ messages: finished ? [...request().messages, answer] : [] }),
+      memory: async () => {
+        if (finished) throw new Error('记忆刷新失败');
+        return { items: [] };
+      },
+      run: async (_input, _observe, accepted) => {
+        accepted();
+        finished = true;
+      },
+    }),
+  );
+  await runtime.initialize();
+  await assert.rejects(runtime.submit(request()), /记忆刷新失败/);
+  assert.deepEqual(runtime.getSnapshot().messages.at(-1), answer);
+  assert.equal(runtime.getSnapshot().busy, false);
+});
+
+test('stream and refresh failures are both preserved without retry', async () => {
+  const streamError = new Error('记录流中断');
+  const refreshError = new Error('刷新失败');
+  let runs = 0;
+  const runtime = new ClientRuntime(
+    transport({
+      memory: async () => {
+        if (runs) throw refreshError;
+        return { items: [] };
+      },
+      run: async (_input, _observe, accepted) => {
+        runs++;
+        accepted();
+        throw streamError;
+      },
+    }),
+  );
+  await runtime.initialize();
+  await assert.rejects(runtime.submit(request()), (error) => {
+    assert.ok(error instanceof AggregateError);
+    assert.deepEqual(error.errors, [streamError, refreshError]);
+    assert.equal(error.cause, streamError);
+    return true;
+  });
+  assert.equal(runtime.getSnapshot().busy, false);
+  assert.equal(runs, 1);
+});
+
+test('failed conversation refresh retains observed association while memory can refresh', async () => {
+  let finished = false;
+  const observed = snapshot();
+  const runtime = new ClientRuntime(
+    transport({
+      overview: async () => {
+        if (finished) throw new Error('概览刷新失败');
+        return { messages: [], executions: [] };
+      },
+      transcript: async () => ({ messages: finished ? [{ role: 'user', content: '不能脱离关联单独替换' }] : [] }),
+      memory: async () => ({ items: finished ? [{ id: 'memory-1' }] : [] }),
+      run: async (_input, observe, accepted) => {
+        accepted();
+        observe(observed);
+        finished = true;
+      },
+    }),
+  );
+  await runtime.initialize();
+  await assert.rejects(runtime.submit(request()), /概览刷新失败/);
+  assert.equal(runtime.getSnapshot().overview.executions[0].id, observed.execution.id);
+  assert.deepEqual(runtime.getSnapshot().messages, request().messages);
+  assert.equal(runtime.getSnapshot().memory.items[0].id, 'memory-1');
+  assert.equal(runtime.getSnapshot().busy, false);
 });

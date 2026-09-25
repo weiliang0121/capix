@@ -3,7 +3,8 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": ".test-dist",
-    "declaration": false
+    "declaration": false,
+    "jsx": "react-jsx"
   },
-  "include": ["src/observation/**/*.ts", "src/features/explorer/layout.ts", "src/features/explorer/search.ts", "src/features/explorer/types.ts", "src/state/store.ts"]
+  "include": ["src/observation/**/*.ts", "src/features/explorer/layout.ts", "src/features/explorer/search.ts", "src/features/explorer/types.ts", "src/state/store.ts", "src/components/message-content.tsx"]
 }
