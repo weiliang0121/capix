@@ -1,6 +1,6 @@
 import type { Message, ObserverOverview } from '@capix-observer/protocol';
 
-interface ConversationMessage {
+export interface ConversationMessage {
   key: string;
   message: Readonly<Message>;
   index?: number;

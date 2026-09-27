@@ -1,8 +1,11 @@
 import type { ConfigurationResponse, ExecutionRequest, MemoryObservation, Message, ObserverOverview, RuntimeSnapshot } from '@capix-observer/protocol';
-import { updateOverview } from './overview.js';
 import type { ClientTransport } from './transport.js';
 
 export interface ClientState {
+  /** Received records, including on-demand reads; no application projection. */
+  readonly records: ReadonlyMap<string, RuntimeSnapshot>;
+  /** Stream observations not yet reconciled by a successful overview/transcript refresh. */
+  readonly updates: ReadonlyMap<string, RuntimeSnapshot>;
   readonly config?: ConfigurationResponse;
   readonly overview: ObserverOverview;
   readonly messages: readonly Readonly<Message>[];
@@ -14,9 +17,8 @@ export interface ClientState {
 
 /** Owns one client's submission and observed server state; presentation stays with the consumer. */
 export class ClientRuntime {
-  private state: ClientState = { overview: { messages: [], executions: [] }, messages: [], memory: { items: [] }, busy: false, pending: '', runningId: '' };
+  private state: ClientState = { records: new Map(), updates: new Map(), overview: { messages: [], executions: [] }, messages: [], memory: { items: [] }, busy: false, pending: '', runningId: '' };
   private readonly listeners = new Set<() => void>();
-  private readonly snapshots = new Map<string, RuntimeSnapshot>();
   private initialization?: Promise<void>;
 
   constructor(private readonly transport: ClientTransport) {}
@@ -51,7 +53,7 @@ export class ClientRuntime {
     const errors: unknown[] = [];
     if (conversation.status === 'fulfilled') {
       const [overview, transcript] = conversation.value;
-      change = { overview, messages: transcript.messages };
+      change = { overview, messages: transcript.messages, updates: new Map() };
     } else errors.push(conversation.reason);
     if (memory.status === 'fulfilled') change = { ...change, memory: memory.value };
     else errors.push(memory.reason);
@@ -61,18 +63,17 @@ export class ClientRuntime {
   }
 
   getExecution(id: string): RuntimeSnapshot | undefined {
-    return this.snapshots.get(id);
+    return this.state.records.get(id);
   }
 
   async loadExecution(id: string, signal?: AbortSignal): Promise<RuntimeSnapshot> {
-    const cached = this.snapshots.get(id);
+    const cached = this.state.records.get(id);
     if (cached && cached.execution.status !== 'running') return cached;
     const snapshot = await this.transport.execution(id, signal);
     // A stream update received during this read is already newer than the cached observation.
-    const current = this.snapshots.get(id);
+    const current = this.state.records.get(id);
     if (current && current !== cached) return current;
-    this.snapshots.set(id, snapshot);
-    this.update({});
+    this.update({ records: new Map(this.state.records).set(id, snapshot) });
     return snapshot;
   }
 
@@ -91,8 +92,7 @@ export class ClientRuntime {
       await this.transport.run(
         { ...request, messages },
         (snapshot) => {
-          this.snapshots.set(snapshot.execution.id, snapshot);
-          this.update({ runningId: snapshot.execution.id, overview: updateOverview(this.state.overview, snapshot) });
+          this.update({ runningId: snapshot.execution.id, records: new Map(this.state.records).set(snapshot.execution.id, snapshot), updates: new Map(this.state.updates).set(snapshot.execution.id, snapshot) });
         },
         () => {
           wasAccepted = true;

@@ -1,10 +1,9 @@
+import { defaultColumnWidth, maximumColumnWidth, minimumColumnWidth } from '../../state/preferences.js';
+export { defaultColumnWidth, maximumColumnWidth, minimumColumnWidth } from '../../state/preferences.js';
 import type { ExecutionSummary, InvocationSummary } from '@capix-observer/protocol';
 
 export const axisWidth = 92;
 export const columnGap = 20;
-export const minimumColumnWidth = 320;
-export const maximumColumnWidth = 960;
-export const defaultColumnWidth = 440;
 
 export interface ColumnLayout {
   width: number;

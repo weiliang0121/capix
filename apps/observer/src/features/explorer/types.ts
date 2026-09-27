@@ -1,7 +1,14 @@
-import type { ObserverOverview } from '@capix-observer/protocol';
+import type { RoundView, SearchMatch } from '../../state/data.js';
 export interface ExplorerProps {
-  overview: ObserverOverview;
+  rounds: readonly RoundView[];
+  matches: readonly SearchMatch[];
   selectedId: string;
+  search: string;
+  setSearch: (text: string) => void;
+  matchCursor: number;
+  setMatchCursor: (index: number) => void;
+  columnWidth: number;
+  setColumnWidth: (width: number) => void;
   onSelect: (id: string) => void;
   onInspect: (executionId: string, callId?: string) => void;
 }

@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ClientRuntime } from '@capix-observer/client-runtime';
 import { ObserverHttpTransport } from '@capix-observer/client-http';
-import { snapshot, transport } from './fixtures.mjs';
+import { snapshot } from './fixtures.mjs';
 
 const consumeRunStream = (body, accept) => new ObserverHttpTransport('', async () => new Response(body)).run({ messages: [] }, accept, () => {});
 
@@ -58,29 +57,4 @@ test('run stream rejects malformed records and execution identity changes', asyn
     consumeRunStream(stream(`${line(snapshot('running'))}\n${line(snapshot('succeeded', 'another'))}\n`), () => {}),
     /不同执行/,
   );
-});
-
-test('live overview separates the last recorded process from an unfinished invocation duration', async () => {
-  const live = snapshot('running');
-  live.execution.value.transcriptRange = { start: 0, end: 1, messages: [{ role: 'user', content: '你好，查看北京' }] };
-  live.execution.value.processes = [{ sequence: 1, round: 1, occurredAt: '2026-09-25T00:00:00.025Z', offsetMs: 25, stage: 'execute', type: 'start', input: {} }];
-  const runtime = new ClientRuntime(
-    transport({
-      run: async (_request, accept, accepted) => {
-        accepted();
-        accept(live);
-      },
-    }),
-  );
-  await runtime.initialize();
-  let overview;
-  const unsubscribe = runtime.subscribe(() => {
-    if (runtime.getSnapshot().runningId && runtime.getSnapshot().busy && runtime.getSnapshot().overview.executions.length) overview = runtime.getSnapshot().overview;
-  });
-  await runtime.submit({ messages: [live.execution.value.input] });
-  unsubscribe();
-  assert.equal(overview.executions[0].observedOffsetMs, 25);
-  assert.equal(overview.executions[0].durationMs, undefined);
-  assert.equal(overview.executions[0].calls[0].durationMs, undefined);
-  assert.equal(overview.messages[0].index, 0);
 });

@@ -1,0 +1,86 @@
+.message-text {
+  font-size: var(--font-md);
+  line-height: 1.85;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.markdown-content {
+  min-width: 0;
+  white-space: normal;
+}
+.markdown-content > * + * {
+  margin-top: 14px;
+}
+.markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--foreground);
+  margin: 20px 0 10px;
+}
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+.markdown-content p {
+  margin-bottom: 0;
+}
+.markdown-content :is(ul, ol) {
+  padding-left: 22px;
+  list-style-position: outside;
+}
+.markdown-content ul {
+  list-style: disc;
+}
+.markdown-content ol {
+  list-style: decimal;
+}
+.markdown-content li + li {
+  margin-top: 6px;
+}
+.markdown-content li > p + p {
+  margin-top: 8px;
+}
+.markdown-content a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.markdown-content blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 14px;
+  color: var(--muted-foreground);
+}
+.markdown-content code {
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+.markdown-content :not(pre) > code {
+  background: #303030;
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+.markdown-content pre {
+  overflow-x: auto;
+  white-space: pre;
+  font-size: var(--font-sm);
+  background: #101010;
+}
+.markdown-content [data-streamdown='code-block'] {
+  min-width: 0;
+  font-size: var(--font-sm);
+}
+.markdown-content table {
+  font-size: var(--font-sm);
+  border-collapse: collapse;
+}
+.markdown-content :is(th, td) {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+}
+.markdown-content th {
+  background: #242424;
+}
+.markdown-content hr {
+  border-color: var(--border);
+  margin-block: 18px;
+}

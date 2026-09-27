@@ -1,11 +1,13 @@
 import { Circle, Diamond } from 'lucide-react';
-import { useAppStore, useClientState } from './state/react';
+import { useAppStore } from './state/react';
 import { Button } from './components/ui/button';
-import { ConversationPanel, SettingsDialog } from './components/conversation';
-import { ExplorerPanel, ObservationDialogs } from './components/runtime-panels';
+import { ConversationPanel } from './features/conversation/ConversationPanel';
+import { SettingsDialog } from './features/settings/SettingsDialog';
+import { ExplorerPanel } from './features/explorer/ExplorerPanel';
+import { ObservationDialogs } from './features/inspection/ObservationDialogs';
 
 function Header() {
-  const config = useClientState((state) => state.config);
+  const config = useAppStore((state) => state.data.config);
   return (
     <header className="topbar">
       <div className="brand">

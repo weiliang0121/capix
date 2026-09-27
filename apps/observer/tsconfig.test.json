@@ -6,5 +6,5 @@
     "declaration": false,
     "jsx": "react-jsx"
   },
-  "include": ["src/observation/**/*.ts", "src/features/explorer/layout.ts", "src/features/explorer/search.ts", "src/features/explorer/types.ts", "src/state/store.ts", "src/components/message-content.tsx"]
+  "include": ["src/observation/**/*.ts", "src/features/explorer/layout.ts", "src/features/explorer/types.ts", "src/state/**/*.ts", "src/binding/**/*.ts", "src/components/message-content.tsx"]
 }

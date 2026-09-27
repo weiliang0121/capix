@@ -1,13 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientRuntime } from '@capix-observer/client-runtime';
-import { createAppStore, connectAppStore } from '../../apps/observer/.test-dist/state/store.js';
+import { createAppStore } from '../../apps/observer/.test-dist/state/store.js';
+import { connectAppStore } from '../../apps/observer/.test-dist/binding/application.js';
+import { submitDraft } from '../../apps/observer/.test-dist/binding/submit.js';
 import { deferred, snapshot, transport } from '../client/fixtures.mjs';
 
 test('app stores are isolated and inspecting a node updates selection and dialogs together', () => {
   const runtime = new ClientRuntime(transport());
-  const first = createAppStore(runtime);
-  const second = createAppStore(runtime);
+  const first = createAppStore();
+  const second = createAppStore();
   const observed = runtime.getSnapshot();
   first.getState().setMemoryOpen(true);
   const changes = [];
@@ -27,7 +29,7 @@ test('app stores are isolated and inspecting a node updates selection and dialog
 
 test('editing search resets its cursor without changing the selected round or runtime', () => {
   const runtime = new ClientRuntime(transport());
-  const store = createAppStore(runtime);
+  const store = createAppStore();
   store.getState().select('kept');
   store.getState().setMatchCursor(3);
   store.getState().setSearch('上海');
@@ -36,7 +38,7 @@ test('editing search resets its cursor without changing the selected round or ru
   assert.equal(runtime.getSnapshot().messages.length, 0);
 });
 
-test('submission keeps edits until acceptance, prevents concurrent sends and stores observations only in runtime', async () => {
+test('submission keeps edits until acceptance, prevents concurrent sends and leaves server observations in runtime until binding commits application data', async () => {
   const gate = deferred();
   let accept;
   let sent;
@@ -51,12 +53,12 @@ test('submission keeps edits until acceptance, prevents concurrent sends and sto
       },
     }),
   );
-  const store = createAppStore(runtime);
+  const store = createAppStore();
   await runtime.initialize();
   store.getState().setDraft('继续讨论');
   store.getState().setHistory('[{"role":"assistant","content":"已有回答"}]');
-  const operation = store.getState().submit();
-  await store.getState().submit();
+  const operation = submitDraft(store, runtime);
+  await submitDraft(store, runtime);
   assert.equal(calls, 1);
   assert.equal(store.getState().draft, '继续讨论');
   assert.deepEqual(sent.messages, [
@@ -81,10 +83,10 @@ test('rejected submission preserves edits and reports an application notice with
       },
     }),
   );
-  const store = createAppStore(runtime);
+  const store = createAppStore();
   await runtime.initialize();
   store.getState().setDraft('保留这条输入');
-  await store.getState().submit();
+  await submitDraft(store, runtime);
   assert.equal(store.getState().draft, '保留这条输入');
   assert.equal(store.getState().notice, 'HTTP 409');
   assert.deepEqual(runtime.getSnapshot().messages, []);
@@ -103,19 +105,19 @@ test('invalid form input never reaches the runtime submission and late acceptanc
       },
     }),
   );
-  const store = createAppStore(runtime);
+  const store = createAppStore();
   await runtime.initialize();
   store.getState().setDraft('原草稿');
   store.getState().setBudget('255');
-  await store.getState().submit();
+  await submitDraft(store, runtime);
   assert.match(store.getState().notice, /容量预算/);
   store.getState().setBudget('32768');
   store.getState().setHistory('[{"role":"system","content":"不能追加"}]');
-  await store.getState().submit();
+  await submitDraft(store, runtime);
   assert.match(store.getState().notice, /user \/ assistant/);
   assert.equal(calls, 0);
   store.getState().setHistory('[]');
-  const operation = store.getState().submit();
+  const operation = submitDraft(store, runtime);
   store.getState().setDraft('后续新草稿');
   store.getState().setHistory('[{"role":"user","content":"新编辑"}]');
   accept();
@@ -138,7 +140,7 @@ test('app connection follows streamed execution, retains edited budget on cache 
       },
     }),
   );
-  const store = createAppStore(runtime);
+  const store = createAppStore();
   const disconnect = connectAppStore(store, runtime);
   await runtime.initialize();
   assert.equal(store.getState().budget, '4096');
@@ -169,7 +171,7 @@ test('unmounted app ignores late initialization errors and reconnect uses the ex
       },
     }),
   );
-  const store = createAppStore(runtime);
+  const store = createAppStore();
   const disconnect = connectAppStore(store, runtime);
   disconnect();
   gate.reject(new Error('配置读取失败'));

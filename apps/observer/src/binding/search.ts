@@ -1,19 +1,12 @@
-import type { ObserverOverview } from '@capix-observer/protocol';
-
-export interface SearchMatch {
-  executionId: string;
-  role: 'user' | 'assistant';
-  snippet: string;
-}
+import type { RoundView, SearchMatch } from '../state/data.js';
 
 /** One match per QA; prefer the user input if both sides contain the search text. */
-export function searchExecutions(overview: ObserverOverview, search: string): SearchMatch[] {
+export function searchRounds(rounds: readonly RoundView[], search: string): SearchMatch[] {
   const term = search.trim().toLocaleLowerCase();
   if (!term) return [];
-  const messages = new Map(overview.messages.map((entry) => [entry.index, entry.message]));
-  return overview.executions.flatMap((execution) => {
+  return rounds.flatMap((execution) => {
     const candidates = [
-      { role: 'user' as const, content: messages.get(execution.inputIndex)?.content ?? '' },
+      { role: 'user' as const, content: execution.inputContent },
       { role: 'assistant' as const, content: execution.response?.content ?? '' },
     ];
     const found = candidates.find(({ content }) => content.toLocaleLowerCase().includes(term));

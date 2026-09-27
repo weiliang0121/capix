@@ -79,7 +79,7 @@ test('submission distinguishes pending input, HTTP acceptance, execution identit
   assert.equal(runtime.getSnapshot().runningId, '');
   callbacks.observe(snapshot('running'));
   assert.equal(runtime.getSnapshot().runningId, 'execution-1');
-  assert.equal(runtime.getSnapshot().overview.executions[0].status, 'running');
+  assert.equal(runtime.getSnapshot().updates.get('execution-1').execution.status, 'running');
   callbacks.observe(snapshot());
   gate.resolve();
   await operation;
@@ -308,7 +308,7 @@ test('failed conversation refresh retains observed association while memory can 
   );
   await runtime.initialize();
   await assert.rejects(runtime.submit(request()), /概览刷新失败/);
-  assert.equal(runtime.getSnapshot().overview.executions[0].id, observed.execution.id);
+  assert.equal(runtime.getSnapshot().updates.get(observed.execution.id).execution.id, observed.execution.id);
   assert.deepEqual(runtime.getSnapshot().messages, request().messages);
   assert.equal(runtime.getSnapshot().memory.items[0].id, 'memory-1');
   assert.equal(runtime.getSnapshot().busy, false);

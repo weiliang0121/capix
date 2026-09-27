@@ -1,128 +1,23 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { ExecutionSummary, InvocationSummary, ObserverOverview } from '@capix-observer/protocol';
+import type { InvocationSummary } from '@capix-observer/protocol';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import type { ExplorerProps } from './types';
 import { axisWidth, defaultColumnWidth, densityScroll, formatDuration, layoutColumns, layoutInvocations, maximumColumnWidth, minimumColumnWidth, visibleColumns, wheelIntent } from './layout';
-import type { CallGeometry } from './layout';
-import { searchExecutions } from './search';
 import './explorer.css';
-import { useAppStore } from '../../state/react';
 
-const qaName = (index: number) => `QA ${String(index + 1).padStart(2, '0')}`;
-const roleNames = { user: '用户', assistant: '助手' };
-const statusNames = { running: '运行中', succeeded: '完成', failed: '失败' };
-const laneNames = { execution: '执行', operation: '操作', attempt: '意图' };
-const laneHeight = 76;
+import { qaName, roleNames, statusNames, laneNames, laneHeight, Status, Highlight, ContextSummary, InvocationNode } from './nodes';
 
-function Status({ status }: { status: ExecutionSummary['status'] }) {
-  return (
-    <Badge variant="secondary" className={`explorer-status explorer-status-${status}`}>
-      {statusNames[status]}
-    </Badge>
-  );
-}
-
-function Highlight({ text, search }: { text: string; search: string }) {
-  const term = search.trim();
-  const index = term ? text.toLocaleLowerCase().indexOf(term.toLocaleLowerCase()) : -1;
-  if (index < 0) return <>{text}</>;
-  return (
-    <>
-      {text.slice(0, index)}
-      <mark>{text.slice(index, index + term.length)}</mark>
-      {text.slice(index + term.length)}
-    </>
-  );
-}
-
-function ContextSummary({ execution, overview, onInspect }: { execution: ExecutionSummary; overview: ObserverOverview; onInspect: () => void }) {
-  const input = overview.messages.find((entry) => entry.index === execution.inputIndex);
-  const indexes = [...new Set(execution.selections.flatMap((selection) => selection.indexes ?? []))];
-  const selectedMessages = indexes.slice(0, 3).map((index) => ({ index, entry: overview.messages.find((entry) => entry.index === index) }));
-  const complete = execution.selections.some((selection) => selection.status === 'succeeded');
-  return (
-    <button type="button" className="explorer-context" onClick={onInspect} aria-label={`查看本轮上下文：选中 ${indexes.length} 条历史，${execution.availableMemoryIds.length} 个可见记忆，${execution.memoryChanges.length} 项记忆变化`}>
-      <div className="explorer-context-message">
-        <span>
-          输入 #{execution.inputIndex} · 累计被选 {input?.count ?? 0} 次
-        </span>
-        <p>{input?.message.content ?? '输入记录不可用'}</p>
-      </div>
-      <div className="explorer-context-facts">
-        <span>
-          历史 <b>{complete ? `${indexes.length} 条选中` : '尚未选定'}</b>
-        </span>
-        <span>
-          记忆 <b>{execution.availableMemoryIds.length} 个可见</b>
-        </span>
-        <span>
-          回答 <b>{execution.response ? `${execution.response.content.length} 字符` : '尚无回答'}</b>
-        </span>
-        <span>
-          变化 <b>{execution.memoryChanges.length} 项</b>
-        </span>
-      </div>
-      {selectedMessages.length > 0 && (
-        <div className="explorer-evidence">
-          <span className="explorer-evidence-label">选中历史 · 按选择优先级</span>
-          {selectedMessages.map(({ index, entry }) => (
-            <div key={index} className="explorer-evidence-item">
-              <span className="explorer-evidence-meta">
-                #{index} · {entry ? roleNames[entry.message.role] : '消息'} · 被选 {entry?.count ?? 0} 次
-              </span>
-              <span className="explorer-evidence-text">{entry?.message.content ?? '原文不可用'}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="explorer-context-links">
-        <span>{indexes.length ? `查看全部 ${indexes.length} 条选中原文与记录` : '查看消息、上下文与记录'}</span>
-        <span aria-hidden="true">↗</span>
-      </div>
-    </button>
-  );
-}
-
-function InvocationNode({ item, columnWidth, onInspect }: { item: CallGeometry; columnWidth: number; onInspect: () => void }) {
-  const { call } = item;
-  const width = item.width * columnWidth;
-  const compact = width < 64;
-  const label = call.recordType === 'execution' ? '本轮执行' : call.label;
-  return (
-    <button type="button" className={`explorer-node explorer-family-${item.family}${compact ? ' explorer-node-compact' : ''}${call.status === 'running' ? ' explorer-node-running' : ''}`} style={{ left: `${item.left * 100}%`, width: `${item.width * 100}%`, top: item.lane * laneHeight + 10 }} aria-label={`${laneNames[call.recordType]}：${label}，${statusNames[call.status]}，${formatDuration(call.durationMs)}。查看调用详情`} onClick={onInspect}>
-      {!compact && (
-        <>
-          <span className="explorer-node-heading">
-            <strong>{label}</strong>
-            {call.status !== 'succeeded' && <Status status={call.status} />}
-          </span>
-          <span className="explorer-node-meta">{formatDuration(call.durationMs)}</span>
-        </>
-      )}
-    </button>
-  );
-}
-
-export function RuntimeExplorer({ overview, selectedId, onSelect, onInspect }: ExplorerProps) {
-  const search = useAppStore((state) => state.search);
-  const setSearch = useAppStore((state) => state.setSearch);
-  const matchCursor = useAppStore((state) => state.matchCursor);
-  const setMatchCursor = useAppStore((state) => state.setMatchCursor);
-  const columnWidth = useAppStore((state) => state.columnWidth);
-  const setColumnWidth = useAppStore((state) => state.setColumnWidth);
+export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSelect, onInspect, search, setSearch, matchCursor, setMatchCursor, columnWidth, setColumnWidth }: ExplorerProps) {
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const viewport = useRef<HTMLDivElement>(null);
   const navigation = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<number | undefined>(undefined);
-  const executions = overview.executions;
   const ids = useMemo(() => executions.map((execution) => execution.id), [executions]);
   const layout = useMemo(() => layoutColumns(ids, columnWidth), [ids, columnWidth]);
   const invocations = useMemo(() => executions.map(layoutInvocations), [executions]);
-  const matches = useMemo(() => searchExecutions(overview, search), [overview, search]);
   const matchById = useMemo(() => new Map(matches.map((match) => [match.executionId, match])), [matches]);
-  const messages = useMemo(() => new Map(overview.messages.map((entry) => [entry.index, entry.message])), [overview.messages]);
   const operationLanes = Math.max(1, ...invocations.map((item) => item.operationLanes));
   const attemptLanes = Math.max(1, ...invocations.map((item) => item.attemptLanes));
   const densityName = columnWidth < 380 ? '紧凑' : columnWidth > 640 ? '展开' : '标准';
@@ -299,7 +194,7 @@ export function RuntimeExplorer({ overview, selectedId, onSelect, onInspect }: E
             {executions.map((execution, index) => {
               const match = matchById.get(execution.id);
               return (
-                <button key={execution.id} type="button" className={`explorer-nav-card${selectedId === execution.id ? ' explorer-nav-current' : ''}${visibleIds.includes(execution.id) ? ' explorer-nav-visible' : ''}${match ? ' explorer-nav-match' : ''}`} data-execution-id={execution.id} aria-current={selectedId === execution.id ? 'true' : undefined} aria-label={`${qaName(index)}，${statusNames[execution.status]}，${messages.get(execution.inputIndex)?.content ?? '查看问答'}`} onClick={() => locate(execution.id)}>
+                <button key={execution.id} type="button" className={`explorer-nav-card${selectedId === execution.id ? ' explorer-nav-current' : ''}${visibleIds.includes(execution.id) ? ' explorer-nav-visible' : ''}${match ? ' explorer-nav-match' : ''}`} data-execution-id={execution.id} aria-current={selectedId === execution.id ? 'true' : undefined} aria-label={`${qaName(index)}，${statusNames[execution.status]}，${execution.inputContent}`} onClick={() => locate(execution.id)}>
                   <div className="explorer-nav-heading">
                     <strong>{qaName(index)}</strong>
                     {selectedId === execution.id && execution.status === 'succeeded' ? (
@@ -317,7 +212,7 @@ export function RuntimeExplorer({ overview, selectedId, onSelect, onInspect }: E
                         <Highlight text={match.snippet} search={search} />
                       </>
                     ) : (
-                      (messages.get(execution.inputIndex)?.content ?? '输入记录不可用')
+                      execution.inputContent
                     )}
                   </p>
                   <div className="explorer-nav-meta">
@@ -355,7 +250,7 @@ export function RuntimeExplorer({ overview, selectedId, onSelect, onInspect }: E
                 <div className="explorer-row-content" style={{ width: layout.width }}>
                   {layout.columns.map((column, index) => (
                     <div className="explorer-context-column" key={column.id} style={{ left: column.x, width: column.width }}>
-                      <ContextSummary execution={executions[index]!} overview={overview} onInspect={() => onInspect(column.id)} />
+                      <ContextSummary execution={executions[index]!} onInspect={() => onInspect(column.id)} />
                     </div>
                   ))}
                 </div>
