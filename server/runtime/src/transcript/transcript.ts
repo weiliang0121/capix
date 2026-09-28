@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import type { RuntimeRecorder } from '../records/recorder.js';
+import type { ChangeSource } from '../records/source.js';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import { isNonBlankString } from '../value/string.js';
 import { isObject } from '../value/object.js';
@@ -6,10 +9,13 @@ import type { Message } from '@capix-observer/protocol';
 
 /** Original accepted messages, including the current input; independent of execution records. */
 export class Transcript {
+  readonly id = randomUUID();
+  readonly #recorder?: RuntimeRecorder;
   readonly #messages: Readonly<Message>[] = [];
   readonly #starts: number[] = [0];
 
-  constructor(messages: readonly Message[] = []) {
+  constructor(messages: readonly Message[] = [], recorder?: RuntimeRecorder) {
+    this.#recorder = recorder;
     if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     this.append(...messages);
   }
@@ -27,15 +33,24 @@ export class Transcript {
     return this.#starts.map((start, index) => new TranscriptRangeRef(this, start, this.#starts[index + 1] ?? this.length));
   }
 
-  startSegment(start: number): void {
+  startSegment(start: number, source?: ChangeSource): void {
     if (!isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
+    const previousStart = this.activeStart;
     this.#starts.push(start);
+    this.#recorder?.transcriptChanged(this.id, { action: 'segment', previousStart, start, end: this.length }, source);
   }
 
   append(...messages: readonly Message[]): void {
+    this.appendFrom(messages);
+  }
+
+  appendFrom(messages: readonly Message[], source?: ChangeSource): void {
+    if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     // Check the whole batch before changing the transcript.
     const accepted = messages.map((message) => Transcript.accept(message));
+    const start = this.length;
     for (const message of accepted) this.#messages.push(message);
+    if (accepted.length) this.#recorder?.transcriptChanged(this.id, { action: 'append', start, messages: accepted }, source);
   }
 
   current(role: Message['role']): Readonly<Message> | undefined {

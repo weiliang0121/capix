@@ -123,7 +123,7 @@ test('failed memory postprocessing still exposes the completed answer and the ac
 
 test('failure before a complete execution record produces a terminal transport error, never silent success', async (t) => {
   const { run, observer } = await setup(t);
-  observer.execution.call = async () => {
+  observer.execution.prepare = () => {
     throw new Error('private diagnostic must not be an HTTP message');
   };
   const stream = await updates(await run());

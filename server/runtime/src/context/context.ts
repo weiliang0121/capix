@@ -4,7 +4,7 @@ import { Continuation, type InvocationResult } from '../invocation/result.js';
 export type ContextState<O> = Readonly<{ status: 'running' } | { status: 'succeeded'; output: O } | { status: 'failed'; error: unknown }>;
 
 /** Live invocation state. Values keep their identity; recording policy does not belong here. */
-export class RuntimeContext<I = unknown, O = unknown> {
+export class InvocationContext<I = unknown, O = unknown> {
   readonly id = randomUUID();
   #state: ContextState<O> = Object.freeze({ status: 'running' });
 

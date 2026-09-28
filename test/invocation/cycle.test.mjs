@@ -1,3 +1,4 @@
+import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Execution, Operation, Attempt, Runtime, RuntimeRecorder, RecordBook, RecordIndex, RuntimeError } from '@capix-observer/runtime';
@@ -9,8 +10,8 @@ import { TestOperation } from '../fixtures/operation.mjs';
 const settings = {};
 function fixture(recorded = true) {
   const recorder = recorded ? new RuntimeRecorder(new RecordBook(), new RecordIndex((r) => r.executionId), new RecordIndex((r) => r.operationId), new RecordIndex((r) => r.executionId)) : undefined;
-  const runtime = new Runtime(recorder);
-  const lifecycle = runtime.execution({ input: 'root', settings });
+  const runtime = new Runtime({ recorder: recorder });
+  const lifecycle = lifecycleFor(runtime).execution({ input: 'root', settings });
   const execution = lifecycle.begin();
   return { runtime, recorder, execution, lifecycle };
 }
@@ -103,7 +104,7 @@ test('execution, operation and attempt use the same paired entry/return protocol
     if (Base === Execution) output = await work.call(0, { settings });
     else if (Base === Operation) output = await work.call(execution, 0);
     else {
-      const parent = runtime.operation(execution, new TestOperation(runtime), 'parent').begin();
+      const parent = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), 'parent').begin();
       output = await work.call(parent, 0);
     }
     assert.equal(output, 20);
@@ -180,7 +181,7 @@ test('cancelled calls do not enter execute; cancellation between rounds keeps th
   for (const initiallyCancelled of [true, false]) {
     const { runtime, recorder } = fixture();
     const controller = new AbortController();
-    const execution = runtime.execution({ input: 'root', settings, signal: controller.signal }).begin();
+    const execution = lifecycleFor(runtime).execution({ input: 'root', settings, signal: controller.signal }).begin();
     const cause = new Error('cancel');
     class Repeat extends LocalOperation {
       maxRounds = 2;

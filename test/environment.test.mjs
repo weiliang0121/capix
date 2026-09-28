@@ -18,10 +18,10 @@ test('one initialized world preserves messages and records while reusing its exe
       return raw(purpose === 'memory' ? { memories: [] } : purpose === 'selection' ? { historyIndexes: input.history.map((message) => message.index) } : { kind: 'answer', content: `reply ${input.message.content}` });
     },
   };
-  const transcript = new Transcript([{ role: 'user', content: 'initial' }]);
-  const environment = initializeObserver(provider, transcript);
+  const environment = initializeObserver(provider, [{ role: 'user', content: 'initial' }]);
+  const transcript = environment.runtime.transcript;
   assert.equal(environment.transcript, transcript);
-  assert.equal([...environment.book.values()].length, 0);
+  assert.equal([...environment.book.values()].length, 1);
   assert.equal(requests.length, 0);
   const operationIds = ['selection', 'generation', 'extraction'].map((name) => environment.execution[name].id);
   const snapshots = [],
@@ -58,7 +58,7 @@ test('one initialized world preserves messages and records while reusing its exe
   );
   assert.equal(new Set(snapshots.map((snapshot) => snapshot.execution.id)).size, 3);
   const records = [...environment.book.values()];
-  assert.equal(new Set(records.filter((record) => 'contextId' in record).map((record) => record.contextId)).size, records.filter((record) => 'contextId' in record).length);
+  assert.equal(new Set(records.filter((record) => 'status' in record && 'contextId' in record).map((record) => record.contextId)).size, records.filter((record) => 'status' in record && 'contextId' in record).length);
   for (const snapshot of snapshots) {
     assert.ok(environment.book.get(snapshot.execution.id));
     assert.equal(snapshot.events[0].sequence, 1);
@@ -83,7 +83,7 @@ test('invalid submissions cannot replace an initialized Transcript or partially 
         throw new Error('must not invoke');
       },
     },
-    new Transcript([{ role: 'user', content: 'existing' }]),
+    new Transcript([{ role: 'user', content: 'existing' }]).snapshot(),
   );
   for (const messages of [
     [],
@@ -102,7 +102,7 @@ test('invalid submissions cannot replace an initialized Transcript or partially 
       (error) => error.code === 'INVALID_INPUT',
     );
     assert.equal(environment.transcript.length, 1);
-    assert.equal([...environment.book.values()].length, 0);
+    assert.equal([...environment.book.values()].length, 1);
   }
 });
 

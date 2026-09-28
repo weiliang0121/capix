@@ -25,8 +25,8 @@ export function ChangeCard({ record, onInspect }: { record: MemoryRecord; onInsp
           <p>完整依据：{record.value.result.sourceIndexes.map((index) => `[${index}]`).join(' ')}</p>
           <DataBlock title="记录关联" value={{ memoryId: record.memoryId, recordId: record.id, executionId: record.executionId, operationId: record.operationId }} />
         </details>
-        {onInspect && (
-          <Button variant="ghost" size="sm" onClick={() => onInspect(record.executionId, record.operationId)}>
+        {onInspect && record.executionId && (
+          <Button variant="ghost" size="sm" onClick={() => onInspect(record.executionId!, record.operationId)}>
             查看产生这次变化的操作 <ArrowUpRight />
           </Button>
         )}

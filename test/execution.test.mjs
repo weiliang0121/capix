@@ -11,7 +11,7 @@ const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, t
 test('one Execution and Operation can be called again after success and failure with fresh Contexts and records', async () => {
   const snapshots = [];
   const recorder = new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId), undefined, (snapshot) => snapshots.push(snapshot));
-  const runtime = new Runtime(recorder);
+  const runtime = new Runtime({ recorder: recorder });
   const failure = new Error('work failed');
   const contexts = [];
   const operation = new TestOperation(runtime, {
@@ -58,12 +58,14 @@ test('ObserverExecution returns answers without a recorder and uses the configur
       return { id: 'test', model: request.model, content: JSON.stringify(purpose === 'memory' ? { memories: [] } : purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' }), finishReason: 'stop', usage: null };
     },
   };
-  const execution = new ObserverExecution(new Runtime(), provider);
+  const runtime = new Runtime();
+  const execution = new ObserverExecution(runtime, provider);
   for (const model of ['one', 'two']) {
-    const message = createInput({ content: model, history: [] });
-    const answer = await execution.call(message, { settings: { ...settings, model }, transcript: transcriptFor(message) });
+    runtime.transcript.append({ role: 'user', content: model });
+    const message = runtime.transcript.current('user');
+    const answer = await execution.call(message, { settings: { ...settings, model }, transcript: runtime.transcript });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });
-    assert.equal(transcriptFor(message).current('assistant').content, 'done');
+    assert.equal(runtime.transcript.current('assistant').content, 'done');
   }
   assert.deepEqual(
     requests.map((request) => request.model),

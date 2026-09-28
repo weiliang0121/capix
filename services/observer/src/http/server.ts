@@ -26,7 +26,6 @@ export function createObserverServer(options: ObserverServerOptions) {
   const settings = validateSettings(options.settings);
   const project = options.projectDirectory ?? fileURLToPath(new URL('../../../../', import.meta.url));
   const assets = options.assetsDirectory ?? resolve(project, 'apps/observer/dist');
-  let executing = false;
   const server = createServer((req, res) => {
     void handle(req, res).catch((error) => {
       const body: ErrorResponse = error instanceof RuntimeError ? { error: error.message, code: error.code } : { error: '服务内部错误。', code: 'INTERNAL_ERROR' };
@@ -34,7 +33,7 @@ export function createObserverServer(options: ObserverServerOptions) {
         if (!res.destroyed) res.end(JSON.stringify({ type: 'error', ...body } satisfies RunUpdate) + '\n');
         return;
       }
-      json(res, error instanceof RuntimeError ? 400 : 500, body);
+      json(res, error instanceof RuntimeError ? (error.code === 'RUNTIME_BUSY' ? 409 : 400) : 500, body);
     });
   });
 
@@ -46,7 +45,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured } satisfies ConfigurationResponse);
-    if (req.method === 'GET' && url.pathname === '/api/memory') return json(res, 200, observeMemory(observer.execution.memories, observer.transcript, observer.book));
+    if (req.method === 'GET' && url.pathname === '/api/memory') return json(res, 200, observeMemory(observer.runtime.memories, observer.book));
     if (req.method === 'GET' && url.pathname === '/api/executions') return json(res, 200, observeOverview(observer));
     if (req.method === 'GET' && url.pathname === '/api/transcript') return json(res, 200, { messages: observer.transcript.snapshot() } satisfies TranscriptResponse);
     if (req.method === 'GET' && url.pathname === '/api/execution') {
@@ -64,31 +63,33 @@ export function createObserverServer(options: ObserverServerOptions) {
       const data = await readBody(req);
       if (!isObject(data)) throw new RuntimeError('INVALID_INPUT', '无效请求。');
       const runSettings = validateSettings({ ...settings, ...(isUndefined(data.contextBudget) ? {} : { contextBudget: data.contextBudget }) });
-      if (executing) return json(res, 409, { error: '当前环境正在执行，请等待本次调用结束。' } satisfies ErrorResponse);
-      const input = acceptExecutionInput(observer.transcript, data);
-      executing = true;
-      try {
-        res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
-        res.flushHeaders();
-        const controller = new AbortController();
-        res.on('close', () => {
-          if (!res.writableEnded) controller.abort();
-        });
-        let publicationError: unknown;
-        await observeExecution(observer.execution, observer.recorder, input, { settings: runSettings, signal: controller.signal, transcript: observer.transcript }, (snapshot) => {
+      const controller = new AbortController();
+      res.on('close', () => {
+        if (!res.writableEnded) controller.abort();
+      });
+      let publicationError: unknown;
+      await observeExecution(
+        observer.execution,
+        observer.recorder,
+        () => {
+          const input = acceptExecutionInput(observer.transcript, data);
+          res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+          res.flushHeaders();
+          return input;
+        },
+        { settings: runSettings, signal: controller.signal, transcript: observer.transcript },
+        (snapshot) => {
           if (res.destroyed || publicationError) return;
           try {
             res.write(JSON.stringify({ type: 'snapshot', snapshot } satisfies RunUpdate, observeTranscript) + '\n');
           } catch (error) {
             publicationError = error;
           }
-        });
-        // Recorder subscribers are isolated. Preserve a failed publication as a transport failure.
-        if (publicationError) throw publicationError;
-        res.end();
-      } finally {
-        executing = false;
-      }
+        },
+      );
+      // Recorder subscribers are isolated. Preserve a failed publication as a transport failure.
+      if (publicationError) throw publicationError;
+      res.end();
       return;
     }
     if (req.method === 'GET') return serveAsset(res, assets, url.pathname);

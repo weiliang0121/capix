@@ -48,7 +48,7 @@ test('only the execution record holds the range; calls consume selected content 
         requests.push(request);
         if (purpose === 'memory') return reply({ memories: [] });
         if (requests.length === 1) {
-          transcript.append({ role: 'user', content: 'later unrelated message' });
+          transcriptFor(input).append({ role: 'user', content: 'later unrelated message' });
           return reply({ historyIndexes: [0] });
         }
         return reply({ kind: 'answer', content: '她负责海盐项目' });
@@ -66,7 +66,7 @@ test('only the execution record holds the range; calls consume selected content 
   assert.deepEqual(facts.execution.value.input, input);
   assert.notEqual(facts.execution.value.input, input);
   assert.equal(facts.execution.value.transcriptRange.end, 2);
-  assert.equal(facts.execution.value.transcriptRange.transcript, transcript);
+  assert.equal(facts.execution.value.transcriptRange.transcript, transcriptFor(input));
   assert.ok(snapshots.every((snapshot) => snapshot.execution.value.transcriptRange === facts.execution.value.transcriptRange));
   for (const record of [...facts.operations, ...facts.attempts]) {
     assert.equal(Object.hasOwn(record.value, 'transcriptRange'), false);

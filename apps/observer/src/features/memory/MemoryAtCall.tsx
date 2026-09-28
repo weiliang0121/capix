@@ -8,7 +8,7 @@ export function MemoryAtCall({ incoming, changes }: CallMemory) {
         <h3 className="section-title">本次可见的记忆</h3>
         <p className="subtle">当时的操作输入快照；传入不等于模型采用。</p>
         <div className="memory-grid single">
-          {incoming.map((item, index) => (
+          {incoming.map((item) => (
             <Card className="memory-card" key={item.id}>
               <CardHeader>
                 <CardTitle>{item.topic}</CardTitle>

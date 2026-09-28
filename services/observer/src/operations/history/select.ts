@@ -13,10 +13,7 @@ import type { ModelProvider } from '../../provider.js';
 import { loadRequest } from '../../model/request.js';
 import { estimateCapacity } from '../../model/capacity.js';
 
-import { SelectionUsage } from './usage.js';
-
 export class SelectHistory extends Operation<SelectionInput, Selection> {
-  readonly usage = new SelectionUsage();
   readonly name = 'selection';
   readonly label = '选择历史';
   readonly source = 'services/observer/src/operations/history/select.ts · SelectHistory';

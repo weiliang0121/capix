@@ -4,6 +4,7 @@ export * from './errors.js';
 export * from './records.js';
 export * from './records/invocation.js';
 export * from './records/memory.js';
+export * from './records/transcript.js';
 export * from './records/validate.js';
 export * from './memory.js';
 export * from './generation.js';

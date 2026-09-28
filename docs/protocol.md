@@ -28,3 +28,7 @@ availableMemoryIds 来自本轮输入快照，只表示可见，不能宣称模�
 ## 前端分工接口
 
 `features/explorer/RuntimeExplorer.tsx` 默认/具名导出 RuntimeExplorer，props 在该目录 types.ts：overview: ObserverOverview，selectedId: string，onSelect(id): void，onInspect(executionId, callId?): void。图谱内部持有搜索、密度、滚动状态。外层只加载 overview 与详情，不预取所有快照。
+
+## 内容变化记录
+
+MemoryRecord 的 executionId/operationId 改为可选，contextId/callId 可选并标识实际来源调用；由运行外部直接接纳的记忆变化没有虚构调用归属。TranscriptRecord 表达追加或分段，包含 transcriptId、occurredAt 与可选调用来源。内容记录不加入 RuntimeSnapshot 的 EOA 节点列表，不新增增量协议或恢复行为。

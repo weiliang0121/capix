@@ -10,6 +10,8 @@ export interface MemoryRecordValue {
 
 export interface MemoryRecord extends RuntimeRecord<MemoryRecordValue> {
   readonly memoryId: string;
-  readonly executionId: string;
-  readonly operationId: string;
+  readonly contextId?: string;
+  readonly callId?: string;
+  readonly executionId?: string;
+  readonly operationId?: string;
 }

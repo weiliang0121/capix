@@ -1,6 +1,7 @@
+import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Attempt, AttemptContext, Runtime, RuntimeRecorder, RecordBook, RecordIndex, invoke, Operation } from '@capix-observer/runtime';
+import { Attempt, AttemptContext, Runtime, RuntimeRecorder, RecordBook, RecordIndex, Operation } from '@capix-observer/runtime';
 
 import { TestOperation } from './fixtures/operation.mjs';
 
@@ -8,7 +9,7 @@ import { TestAttempt } from './fixtures/attempt.mjs';
 import { validateSnapshot } from '@capix-observer/protocol';
 
 function recordedRuntime() {
-  return new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)));
+  return new Runtime({ recorder: new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)) });
 }
 
 test('one Attempt instance creates independent contexts per call and leaves parent work running after failure', async () => {
@@ -27,9 +28,9 @@ test('one Attempt instance creates independent contexts per call and leaves pare
     }
   }
   const attempt = new AcceptText(runtime);
-  const executionLifecycle = runtime.execution({ input: 'input', settings: {} });
+  const executionLifecycle = lifecycleFor(runtime).execution({ input: 'input', settings: {} });
   const execution = executionLifecycle.begin();
-  const operationLifecycle = runtime.operation(execution, new TestOperation(runtime), 'input');
+  const operationLifecycle = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), 'input');
   const operation = operationLifecycle.begin();
 
   await assert.rejects(attempt.call(operation, 'invalid'), (error) => error === failure);
@@ -77,7 +78,7 @@ test('Operation reuses its three Attempt instances while keeping call contexts a
   assert.equal(new Set(Object.values(attempts)).size, 3);
   const executions = [];
   for (const input of [1, 4]) {
-    const output = await invoke(runtime.execution({ input, settings: {} }), (context) => {
+    const output = await invoke(lifecycleFor(runtime).execution({ input, settings: {} }), (context) => {
       executions.push(context);
       return operation.call(context, input);
     });
@@ -114,7 +115,7 @@ test('Attempt works without a recorder and preserves non-JSON input and output i
   const input = new Map([['content', 'original']]);
   const operation = new TestOperation(runtime);
   const attempt = new Identity(runtime);
-  const output = await invoke(runtime.execution({ input, settings: {} }), (execution) => invoke(runtime.operation(execution, operation, input), (context) => attempt.call(context, input)));
+  const output = await invoke(lifecycleFor(runtime).execution({ input, settings: {} }), (execution) => invoke(lifecycleFor(runtime).operation(execution, operation, input), (context) => attempt.call(context, input)));
   assert.equal(output, input);
   assert.equal(contexts[0].input, input);
   assert.equal(contexts[0].state.output, input);
@@ -126,7 +127,7 @@ test('operations can organize any number of named actions without a fixed stage 
     const names = Array.from({ length: count }, (_, index) => `action${index}`);
     const operation = new TestOperation(runtime, Object.fromEntries(names.map((name) => [name, (value) => [...value, name]])));
     let context;
-    const output = await invoke(runtime.execution({ input: [], settings: {} }), (execution) => {
+    const output = await invoke(lifecycleFor(runtime).execution({ input: [], settings: {} }), (execution) => {
       context = execution;
       return operation.call(execution, []);
     });
@@ -156,7 +157,7 @@ test('the operation owns branching and can explicitly call the same action twice
   const operation = new Increment(runtime);
   for (const input of [0, 2]) {
     let context;
-    const output = await invoke(runtime.execution({ input, settings: {} }), (execution) => {
+    const output = await invoke(lifecycleFor(runtime).execution({ input, settings: {} }), (execution) => {
       context = execution;
       return operation.call(execution, input);
     });

@@ -1,6 +1,7 @@
+import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeContext, ExecutionContext, Transcript, Runtime, RuntimeRecorder, RecordBook, RecordIndex, invoke } from '@capix-observer/runtime';
+import { InvocationContext, ExecutionContext, Transcript, Runtime, RuntimeRecorder, RecordBook, RecordIndex } from '@capix-observer/runtime';
 
 import { TestOperation } from './fixtures/operation.mjs';
 
@@ -33,7 +34,7 @@ test('Context keeps live refs, separates undefined outcomes, and fixes execution
     context.state.status = 'failed';
   }, TypeError);
   assert.throws(() => context.fail('later'), /ended/);
-  const failed = new RuntimeContext(undefined);
+  const failed = new InvocationContext(undefined);
   failed.fail(undefined);
   assert.deepEqual(failed.state, { status: 'failed', error: undefined });
 });
@@ -62,7 +63,7 @@ test('Operation executes named actions without records and preserves non-JSON in
     },
   });
   let execution;
-  const result = await invoke(runtime.execution({ ...options, input }), (context) => {
+  const result = await invoke(lifecycleFor(runtime).execution({ ...options, input }), (context) => {
     execution = context;
     return node.call(context, context.input);
   });
@@ -72,35 +73,36 @@ test('Operation executes named actions without records and preserves non-JSON in
   assert.equal(runtime.recorder, undefined);
 });
 
-test('Record failure after work success preserves the live result and does not rerun work', async () => {
+test('Unrecordable execute result stops acceptance without rerunning work', async () => {
   const records = recorder(),
-    runtime = new Runtime(records),
-    root = runtime.execution(options),
+    runtime = new Runtime({ recorder: records }),
+    root = lifecycleFor(runtime).execution(options),
     execution = root.begin();
   let context,
     count = 0;
   const result = new Map([['value', 1]]);
   await assert.rejects(
-    invoke(runtime.operation(execution, new TestOperation(runtime), {}), (current) => {
+    invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {}), (current) => {
       context = current;
       count++;
       return result;
     }),
   );
   assert.equal(count, 1);
-  assert.equal(context.status, 'succeeded');
-  assert.equal(context.state.output, result);
-  assert.equal(records.record(context.id).status, 'running');
-  assert.equal(records.snapshot(execution).events.filter((event) => event.callId === records.record(context.id).id).length, 1);
-  // The child Context is finished. Recording still rejects its unfinished child record.
-  assert.throws(() => root.succeed(execution, {}), /active operations/);
+  assert.equal(context.status, 'failed');
+  assert.equal(context.progress.result.output, result);
+  assert.equal(records.record(context.id).status, 'failed');
+  assert.equal(records.record(context.id).value.error.code, 'RECORDING_FAILED');
+  assert.equal(records.snapshot(execution).events.filter((event) => event.callId === records.record(context.id).id).length, 2);
+  // The failed child is fully recorded; the parent remains responsible for its own outcome.
+  root.succeed(execution, {});
   assert.equal(execution.status, 'succeeded');
-  assert.equal(records.hasOutcome(execution), false);
+  assert.equal(records.snapshot(execution).execution.status, 'succeeded');
 });
 
 test('Work and failure-registration errors remain distinct; Context keeps the original thrown value', async (t) => {
   const records = recorder(),
-    runtime = new Runtime(records);
+    runtime = new Runtime({ recorder: records });
   const failure = { reason: 'work failed' },
     registration = new Error('record unavailable');
   t.mock.method(records, 'finish', () => {
@@ -108,7 +110,7 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
   });
   let execution;
   await assert.rejects(
-    invoke(runtime.execution(options), (context) => {
+    invoke(lifecycleFor(runtime).execution(options), (context) => {
       execution = context;
       throw failure;
     }),
@@ -128,8 +130,8 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
 
 test('Failed begin prevents work without changing the parent Context', async (t) => {
   const records = recorder(),
-    runtime = new Runtime(records),
-    root = runtime.execution(options),
+    runtime = new Runtime({ recorder: records }),
+    root = lifecycleFor(runtime).execution(options),
     execution = root.begin();
   const failure = new Error('cannot record start');
   let child,
@@ -139,7 +141,7 @@ test('Failed begin prevents work without changing the parent Context', async (t)
     throw failure;
   });
   await assert.rejects(
-    invoke(runtime.operation(execution, new TestOperation(runtime), {}), () => {
+    invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {}), () => {
       entered = true;
       return {};
     }),
@@ -149,7 +151,8 @@ test('Failed begin prevents work without changing the parent Context', async (t)
   assert.equal(child.state.error.cause, failure);
   root.succeed(execution, {});
   assert.equal(execution.status, 'succeeded');
-  assert.equal(records.hasOutcome(execution), true);
+  assert.equal(records.snapshot(execution).execution.status, 'succeeded');
+  assert.equal(records.snapshot(execution).events.at(-1).value.type, 'return');
 });
 
 test('Parent Context references remain readable after completion without registration or records', async () => {
@@ -168,9 +171,9 @@ test('Parent Context references remain readable after completion without registr
     transform: (input) => input,
     accept: (input) => input,
   });
-  await invoke(runtime.execution({ input: 'root', settings: {} }), (root) => {
+  await invoke(lifecycleFor(runtime).execution({ input: 'root', settings: {} }), (root) => {
     execution = root;
-    return invoke(runtime.operation(root, new TestOperation(runtime), 'nested'), (parent) => {
+    return invoke(lifecycleFor(runtime).operation(root, new TestOperation(runtime), 'nested'), (parent) => {
       child = parent;
       return operation.call(root, 'work', parent);
     });

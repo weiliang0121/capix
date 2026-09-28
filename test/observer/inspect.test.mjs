@@ -21,7 +21,7 @@ test('QA projection preserves missing answers and binds repeated answers to actu
     new Transcript([
       { role: 'user', content: '导入原文' },
       { role: 'assistant', content: '相同的回答' },
-    ]),
+    ]).snapshot(),
   );
   const run = async () => observeExecution(environment.execution, environment.recorder, acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: '相同的输入' }] }), { settings, transcript: environment.transcript });
   const failed = await run();
@@ -30,7 +30,7 @@ test('QA projection preserves missing answers and binds repeated answers to actu
   failure = 'memory';
   const afterFailure = await run();
   const before = [...environment.book.values()];
-  const observation = inspectExecutions(environment.book, environment.transcript, environment.execution);
+  const observation = inspectExecutions(environment.book, environment.transcript);
   assert.equal(observation.executions.length, 3);
   assert.deepEqual(
     observation.executions.map((item) => item.inputIndex),

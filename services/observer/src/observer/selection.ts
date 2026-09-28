@@ -4,7 +4,7 @@ import type { Selection } from '../model/types.js';
 import { type RecordBook, ExecutionRecord, OperationRecord, TranscriptRangeRef, type Transcript } from '@capix-observer/runtime';
 
 /** Recompute heat from accepted selection outcomes; never mutate messages or drive loading. */
-export function observeSelection(book: RecordBook, transcript: Transcript, selectionInstanceId: string): SelectionObservation {
+export function observeSelection(book: RecordBook, transcript: Transcript): SelectionObservation {
   const messages = transcript.snapshot().map((message, index) => ({ index, message, count: 0 }));
   const executions = new Map<string, SelectionObservation['executions'][number]>();
   for (const record of book.values()) {
@@ -14,7 +14,7 @@ export function observeSelection(book: RecordBook, transcript: Transcript, selec
     executions.set(record.id, { id: record.id, startedAt: record.value.startedAt, status: record.status, inputIndex: range.end - 1, selections: [] });
   }
   for (const record of book.values()) {
-    if (!(record instanceof OperationRecord) || record.operationInstanceId !== selectionInstanceId) continue;
+    if (!(record instanceof OperationRecord) || record.operation !== 'selection') continue;
     const execution = executions.get(record.executionId);
     if (!execution) continue;
     // This concrete operation's succeeded output has already passed its output contract.

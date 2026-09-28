@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { isNonBlankString, isNonEmptyArray, hasUniqueItems, Transcript, Memory } from '@capix-observer/runtime';
+import { isNonBlankString, isNonEmptyArray, hasUniqueItems, Transcript, Memory, Memories } from '@capix-observer/runtime';
 
 import { modelTextSchema, modelIndexesSchema } from '@capix-observer/service';
 
@@ -45,14 +45,16 @@ test('array presence and uniqueness are separate rules; validation preserves ord
 test('memory validation leaves source existence to Transcript and preserves content on rejection', () => {
   const transcript = new Transcript([{ role: 'user', content: '依据' }]);
   const content = { topic: '  主题 ', content: ' 内容\n', sourceIndexes: [0] };
-  const memory = new Memory(transcript, content);
+  const memories = new Memories(transcript);
+  const [memory] = memories.apply([{ action: 'create', memoryId: null, change: '创建', sourceIndexes: [0], result: content }]);
+  const update = (result) => memories.apply([{ action: 'update', memoryId: memory.id, change: '更新', sourceIndexes: [0], result }]);
   const snapshot = memory.snapshot();
   assert.equal(memory.topic, content.topic);
   assert.equal(memory.content, content.content);
   for (const invalid of [{ topic: ' \u3000' }, { content: new String('text') }, { sourceIndexes: [] }, { sourceIndexes: [0, 0] }, { sourceIndexes: { length: 1 } }]) {
-    assert.throws(() => memory.update({ ...content, ...invalid }), TypeError);
+    assert.throws(() => update({ ...content, ...invalid }), TypeError);
     assert.equal(memory.snapshot(), snapshot);
   }
-  assert.throws(() => memory.update({ ...content, sourceIndexes: [99] }), RangeError);
+  assert.throws(() => update({ ...content, sourceIndexes: [99] }), RangeError);
   assert.equal(memory.snapshot(), snapshot);
 });

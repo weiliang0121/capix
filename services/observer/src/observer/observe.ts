@@ -1,10 +1,11 @@
+import { isFunction } from 'es-toolkit/predicate';
 import type { Message, RuntimeSnapshot } from '@capix-observer/protocol';
 import type { ExecutionOptions, RuntimeRecorder } from '@capix-observer/runtime';
 
 import type { ObserverExecution } from './execution.js';
 
 /** Observe one invocation by Context identity, independent of its input value. */
-export async function observeExecution(execution: ObserverExecution, recorder: RuntimeRecorder, input: Readonly<Message>, options: ExecutionOptions, publish: (snapshot: RuntimeSnapshot) => void = () => {}): Promise<RuntimeSnapshot> {
+export async function observeExecution(execution: ObserverExecution, recorder: RuntimeRecorder, input: Readonly<Message> | (() => Readonly<Message>), options: ExecutionOptions, publish: (snapshot: RuntimeSnapshot) => void = () => {}): Promise<RuntimeSnapshot> {
   let contextId: string | undefined;
   let latest: RuntimeSnapshot | undefined;
   const unsubscribe = recorder.subscribe((snapshot) => {
@@ -14,7 +15,7 @@ export async function observeExecution(execution: ObserverExecution, recorder: R
   });
   try {
     try {
-      await execution.call(input, options, (context) => {
+      await execution.submit(isFunction(input) ? input : () => input, options, (context) => {
         contextId = context.id;
       });
     } catch (error) {

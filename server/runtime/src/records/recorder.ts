@@ -1,8 +1,13 @@
+import type { MemoryRecordValue, TranscriptChange } from '@capix-observer/protocol';
+import type { ChangeSource } from './source.js';
+import { MemoryRecord } from './memory/record.js';
+import { TranscriptRecord } from './transcript/record.js';
+import { writeRecord } from './error.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import type { Operation } from '../operations/operation.js';
 import type { Attempt } from '../attempt/attempt.js';
 import type { RuntimeSnapshot, EventValue } from '@capix-observer/protocol';
-import type { RuntimeContext } from '../context/context.js';
+import type { InvocationContext } from '../context/context.js';
 import type { ExecutionContext } from '../context/execution.js';
 import type { OperationContext } from '../context/operation.js';
 import type { AttemptContext } from '../context/attempt.js';
@@ -43,6 +48,26 @@ export class RuntimeRecorder {
     return () => {
       this.#listeners.delete(listener);
     };
+  }
+
+  memoryChanged(memoryId: string, value: MemoryRecordValue, source?: ChangeSource): void {
+    writeRecord(() => {
+      const origin = this.origin(source);
+      this.book.add(new MemoryRecord(memoryId, origin?.executionId, origin?.operationId, value, source?.contextId, origin?.callId));
+    });
+  }
+
+  transcriptChanged(transcriptId: string, value: TranscriptChange, source?: ChangeSource): void {
+    writeRecord(() => {
+      const origin = this.origin(source);
+      this.book.add(new TranscriptRecord(transcriptId, this.clock.now(), value, source?.contextId, origin?.callId, origin?.executionId));
+    });
+  }
+
+  private origin(source?: ChangeSource) {
+    if (!source) return undefined;
+    const record = this.record(source.contextId);
+    return { callId: record.id, executionId: this.executionId(record), operationId: record instanceof AttemptRecord ? record.operationId : record instanceof OperationRecord ? record.id : undefined };
   }
 
   beginExecution(context: ExecutionContext): void {
@@ -92,7 +117,7 @@ export class RuntimeRecorder {
     this.event(operation.executionId, record.id, 'call');
   }
 
-  process(context: RuntimeContext, process: InvocationProcess): void {
+  process(context: InvocationContext, process: InvocationProcess): void {
     const record = this.record(context.id);
     const executionId = this.executionId(record);
     const start = this.#starts.get(executionId);
@@ -107,7 +132,7 @@ export class RuntimeRecorder {
     this.publish(executionId);
   }
 
-  finish(context: RuntimeContext): void {
+  finish(context: InvocationContext): void {
     const state = context.state;
     if (state.status === 'running') throw new Error('Context has no terminal outcome to record');
     const record = this.record(context.id);
@@ -126,20 +151,13 @@ export class RuntimeRecorder {
     return record;
   }
 
-  /** Checks recording completion only; callers must inspect the Context for the work outcome. */
-  hasOutcome(context: ExecutionContext): boolean {
-    const record = this.record(context.id);
-    const last = EventRecordHelper.last(this.book, this.eventIndex, record.id);
-    return record.status !== 'running' && last?.callId === record.id && last.value.type === (record.status === 'succeeded' ? 'return' : 'throw');
-  }
-
   snapshot(context: ExecutionContext): RuntimeSnapshot {
     const record = this.record(context.id);
     if (!(record instanceof ExecutionRecord)) throw new Error('Execution record does not exist');
     return this.snapshotRecord(record.id);
   }
 
-  private requireUnrecorded(context: RuntimeContext): void {
+  private requireUnrecorded(context: InvocationContext): void {
     if (this.#contexts.get(context.id).length) throw new Error('Context is already recorded');
   }
 

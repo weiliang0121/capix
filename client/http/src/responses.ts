@@ -9,7 +9,7 @@ const status = z.enum(['running', 'succeeded', 'failed']);
 const message = z.object({ role: z.enum(['user', 'assistant']), content: z.string() });
 const action = z.enum(['create', 'update']);
 const content = z.object({ topic: z.string(), content: z.string(), sourceIndexes: z.array(index) });
-const memoryRecord = z.object({ id, memoryId: id, executionId: id, operationId: id, value: z.object({ action, change: z.string(), sourceIndexes: z.array(index), result: content }) });
+const memoryRecord = z.object({ id, memoryId: id, contextId: id.optional(), callId: id.optional(), executionId: id.optional(), operationId: id.optional(), value: z.object({ action, change: z.string(), sourceIndexes: z.array(index), result: content }) });
 
 export const configurationResponse = z.object({ configured: z.boolean(), model: z.string(), contextBudget: index, maxOutputTokens: index, timeoutMs: index }) satisfies z.ZodType<ConfigurationResponse>;
 export const transcriptResponse = z.object({ messages: z.array(message) }) satisfies z.ZodType<TranscriptResponse>;
@@ -31,7 +31,7 @@ export const overviewResponse = z.object({
       calls: z.array(z.object({ id, contextId: id, recordType: z.enum(['execution', 'operation', 'attempt']), parentId: id.optional(), name: z.string(), label: z.string(), source: z.string(), status, offsetMs: time, durationMs: time.optional() })),
       transcriptRange: z.object({ start: index, end: index }).optional(),
       availableMemoryIds: z.array(id),
-      memoryChanges: z.array(z.object({ id, memoryId: id, operationId: id, action, change: z.string() })),
+      memoryChanges: z.array(z.object({ id, memoryId: id, operationId: id.optional(), action, change: z.string() })),
     }),
   ),
 }) satisfies z.ZodType<ObserverOverview>;

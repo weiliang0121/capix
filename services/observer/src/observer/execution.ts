@@ -1,4 +1,4 @@
-import { Execution, type ExecutionContext, type ExecutionOptions, type Runtime, MemoryCollection, TranscriptRangeRef } from '@capix-observer/runtime';
+import { Execution, type ExecutionContext, type ExecutionOptions, type Runtime, TranscriptRangeRef } from '@capix-observer/runtime';
 
 import type { Message, GenerationOutput } from '@capix-observer/protocol';
 
@@ -17,25 +17,23 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
   readonly selection: SelectHistory;
   readonly generation: GenerateAnswer;
   readonly extraction: ExtractMemory;
-  readonly memories = new MemoryCollection();
 
   constructor(runtime: Runtime, provider: ModelProvider) {
     super(runtime);
     this.selection = new SelectHistory(runtime, provider);
     this.generation = new GenerateAnswer(runtime, provider);
-    this.extraction = new ExtractMemory(runtime, provider, this.memories);
+    this.extraction = new ExtractMemory(runtime, provider, this.runtime.memories);
   }
 
-  override call(input: Readonly<Message>, options: ExecutionOptions, started?: (context: ExecutionContext<Readonly<Message>, GenerationOutput>) => void): Promise<GenerationOutput> {
+  protected override prepare(input: Readonly<Message>, options: ExecutionOptions): void {
     if (!options.signal?.aborted) this.prepareSegment(input, options);
-    return super.call(input, options, started);
   }
 
   private prepareSegment(message: Readonly<Message>, options: ExecutionOptions): void {
-    const transcript = options.transcript;
+    const transcript = this.runtime.transcript;
     if (!transcript || transcript.get(transcript.length - 1) !== message) return;
     const range = new TranscriptRangeRef(transcript, transcript.activeStart, transcript.length);
-    const input = { message, memories: this.memories.values(transcript).map((memory) => memory.toJSON()) };
+    const input = { message, memories: this.runtime.memories.snapshot() };
     if (range.length <= 1 || this.selection.capacity(input, range, options.settings).fits) return;
     const next = segmentCandidates(range).find((candidate) => this.selection.capacity(input, candidate, options.settings).fits);
     // Do not accumulate empty segments when memory/current input alone cannot fit.
@@ -44,13 +42,13 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
 
   protected async execute(context: ExecutionContext<Readonly<Message>, GenerationOutput>): Promise<GenerationOutput> {
     const range = context.transcriptRange!;
-    const previousMemories = this.memories.values(range.transcript).map((memory) => memory.toJSON());
+    const previousMemories = this.runtime.memories.snapshot();
     const selectionInput = { message: context.currentInput, memories: previousMemories };
     const selectionOutput = await this.selection.call(context, selectionInput);
-    this.selection.usage.add(selectionOutput.historyIndexes.map((index) => context.transcriptRange!.read(index)));
+    this.runtime.selectionUsage.add(selectionOutput.historyIndexes.map((index) => context.transcriptRange!.read(index)));
     const generationOutput = await this.generation.call(context, { selection: selectionOutput, memories: previousMemories });
     const responseIndex = range.transcript.length;
-    range.transcript.append({ role: 'assistant', content: generationOutput.content });
+    range.transcript.appendFrom([{ role: 'assistant', content: generationOutput.content }], { contextId: context.id });
     const extractionInput = prepareMemoryInput(range, range.transcript.ref(responseIndex), selectionOutput.historyIndexes, previousMemories);
     await this.extraction.call(context, extractionInput);
     return generationOutput;

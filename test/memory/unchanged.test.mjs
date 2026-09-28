@@ -62,7 +62,7 @@ test('a real change and an unchanged update complete together; only the change i
   const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
   const run = (content) => observeExecution(environment.execution, environment.recorder, acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] }), { settings, transcript: environment.transcript });
   await run('内部预演可用链接，键盘预算300。');
-  const keyboard = environment.execution.memories.values(environment.transcript).find((memory) => memory.topic === '键盘');
+  const keyboard = environment.runtime.memories.values().find((memory) => memory.topic === '键盘');
   const keyboardContent = keyboard.snapshot();
   const facts = await run('预演也改为离线包，键盘没变化。');
   assert.equal(facts.execution.status, 'succeeded');
@@ -73,7 +73,7 @@ test('a real change and an unchanged update complete together; only the change i
   assert.equal(JSON.parse(readOutput(invoked.value).content).memories.length, 2);
   assert.equal(keyboard.snapshot(), keyboardContent);
   assert.equal(MemoryRecordHelper.find(environment.book, keyboard.id).length, 1);
-  const rehearsal = environment.execution.memories.values(environment.transcript).find((memory) => memory.topic === '预演');
+  const rehearsal = environment.runtime.memories.values().find((memory) => memory.topic === '预演');
   assert.equal(rehearsal.content, '使用离线包');
   assert.equal(MemoryRecordHelper.find(environment.book, rehearsal.id).length, 2);
 });

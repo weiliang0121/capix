@@ -1,6 +1,6 @@
-import { invoke } from '../invocation/invoke.js';
+import { Invocation } from '../invocation/invocation.js';
 import { receiveResult, type Continuation, type InvocationResult } from '../invocation/result.js';
-import type { AttemptContext } from '../context/attempt.js';
+import { AttemptContext } from '../context/attempt.js';
 import type { OperationContext } from '../context/operation.js';
 import type { Runtime } from '../runtime/runtime.js';
 
@@ -20,7 +20,19 @@ export abstract class Attempt<I, O> {
   }
 
   call(operation: OperationContext, input: I): Promise<O> {
-    return invoke(this.runtime.attempt(operation, this, input), (context) => this.runtime.run(context, { execute: (current) => this.execute(current), receive: this.receive === Attempt.prototype.receive ? undefined : (current, result) => this.receive(current, result), maxRounds: this.maxRounds }));
+    const recorder = this.runtime.recorder;
+    return new Invocation<I, O, AttemptContext<I, O>>(
+      () => {
+        operation.requireRunning();
+        operation.executionContext.requireRunning();
+        if (operation.executionContext.runtime && operation.executionContext.runtime !== this.runtime) throw new Error('Call belongs to another Runtime');
+        return new AttemptContext<I, O>(operation, input);
+      },
+      { execute: (context) => this.execute(context), receive: this.receive === Attempt.prototype.receive ? undefined : (context, result) => this.receive(context, result), maxRounds: this.maxRounds },
+      operation.executionContext.signal,
+      recorder,
+      (context) => recorder?.beginAttempt(context, this),
+    ).run();
   }
 
   protected abstract execute(context: AttemptContext<I, O>): O | Promise<O>;

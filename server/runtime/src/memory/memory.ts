@@ -4,39 +4,36 @@ import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
 import type { MemoryContent } from '@capix-observer/protocol';
 import type { Transcript } from '../transcript/transcript.js';
 
+const contents = new WeakMap<Memory, MemoryContent>();
+
 /** A continuing understanding. Its identity survives changes to its content. */
 export class Memory {
   readonly id: string = randomUUID();
-  #content: MemoryContent;
 
   constructor(
     readonly transcript: Transcript,
     content: MemoryContent,
   ) {
-    this.#content = Memory.prepare(transcript, content);
+    contents.set(this, Memory.prepare(transcript, content));
     Object.freeze(this);
   }
 
   get topic(): string {
-    return this.#content.topic;
+    return contents.get(this)!.topic;
   }
   get content(): string {
-    return this.#content.content;
+    return contents.get(this)!.content;
   }
   get sourceIndexes(): readonly number[] {
-    return this.#content.sourceIndexes;
-  }
-
-  update(content: MemoryContent): void {
-    this.#content = Memory.prepare(this.transcript, content);
+    return contents.get(this)!.sourceIndexes;
   }
 
   snapshot(): MemoryContent {
-    return this.#content;
+    return contents.get(this)!;
   }
 
   toJSON() {
-    return { id: this.id, ...this.#content };
+    return { id: this.id, ...contents.get(this)! };
   }
 
   static prepare(transcript: Transcript, content: MemoryContent): MemoryContent {
@@ -44,4 +41,9 @@ export class Memory {
     for (const index of content.sourceIndexes) transcript.ref(index);
     return Object.freeze({ topic: content.topic, content: content.content, sourceIndexes: Object.freeze([...content.sourceIndexes]) });
   }
+}
+
+/** Package-private write path used only after Memories has validated the complete batch. */
+export function updateMemory(memory: Memory, content: MemoryContent): void {
+  contents.set(memory, Memory.prepare(memory.transcript, content));
 }

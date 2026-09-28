@@ -10,7 +10,7 @@ type Invocation = ExecutionRecord | OperationRecord | AttemptRecord;
 
 /** Read list/timing facts directly: opening the explorer does not load every invocation body. */
 export function observeOverview(observer: Observer): ObserverOverview {
-  const observation = inspectExecutions(observer.book, observer.transcript, observer.execution);
+  const observation = inspectExecutions(observer.book, observer.transcript);
   const records = [...observer.book.values()];
   const operations = records.filter((record): record is OperationRecord => record instanceof OperationRecord);
   const attempts = records.filter((record): record is AttemptRecord => record instanceof AttemptRecord);
@@ -43,7 +43,7 @@ export function observeOverview(observer: Observer): ObserverOverview {
     if (!(record instanceof ExecutionRecord)) throw new Error('Observed execution record does not exist');
     const ownOperations = operations.filter((operation) => operation.executionId === record.id);
     const operationIds = new Set<string>(ownOperations.map((operation) => operation.id));
-    const selection = ownOperations.find((operation) => operation.operationInstanceId === observer.execution.selection.id);
+    const selection = ownOperations.find((operation) => operation.operation === 'selection');
     const captured = selection?.value.input as SelectionInput | undefined;
     const range = record.value.transcriptRange;
     const call = summarize(record);

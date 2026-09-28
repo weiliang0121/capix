@@ -58,7 +58,7 @@ ExtractMemory
   → InvokeModel：调用模型，保留原始返回
   → AcceptModelOutput：解析与整批接纳
   → ApplyMemory
-      ├─ MemoryHelper 创建/更新当前事实
+      ├─ Memories.apply 创建/更新并记录当前事实
       └─ 每项落实后登记 MemoryRecord
 ```
 
@@ -92,11 +92,11 @@ ExtractMemory
 
 ## 归属与边界
 
-- MemoryCollection 只持有实例，提供 add/get/values。
-- MemoryHelper 组合运行事实的创建和更新；可传入落实后的通知，不依赖记录体系。
-- MemoryRecordHelper 组合记录创建与归属查询，利用已有 Recorder 的 Context→Record 映射，关联实际执行和操作记录 ID。RecordBook 保持通用。
+- Runtime 持有 Memories；它绑定一个 Transcript，提供 get/values/snapshot/apply，统一审查、落实并记录正式变化。对外没有 add 或 Memory.update 旁路。
+- ApplyMemory 提交已接纳提案及调用来源，不再自行修改内容或补写记录。
+- 共享 Recorder 由环境装配，Memories 持有其引用。变更可独立于调用发生；实际来自调用时保留 contextId/callId/executionId/operationId，来源链接不用于内容合法性判断。MemoryRecordHelper 只负责查询。
 - MemoryRecord 保存在同一个 Book；按 memoryId 过滤，沿登记顺序返回。本轮不另加索引或排序元数据。
-- E/O/A 记录继续记录提取输入、模型原始返回和接纳候选；MemoryRecord 保存具体记忆体已落实的变化，二者不是重复对象。MemoryRecord 无 Context、调用状态或虚构事件。
+- E/O/A 记录继续记录提取输入、模型原始返回和接纳候选；MemoryRecord 保存具体记忆体已落实的变化，二者不是重复对象。MemoryRecord 不持有调用 Context 实例、调用状态或虚构事件。
 - GET /api/memory 返回当前事实和变化记录的只读投影。页面展示记录正文、依据、结果快照、执行与操作 ID，不做差异推断。
 
 无 Recorder 时事实照常变化，不产生记录。接纳及批次预检查失败不改变记忆。登记异常发生在事实变更之后，异常传播、保留真实已发生变更，不虚构回滚；尚无事务或恢复。已经生成的回答同样不会被删除。请求超预算直接失败，不自动裁剪、重试或压缩。
@@ -114,3 +114,5 @@ GET /api/executions 从已有记录投影轮次、消息关联及选择结果，
 ## 提取目标与表达边界
 
 提取目标是维护准确、可延续的理解：吸收有效信息，修正过时认识，保留有效条件与不确定性，减少无意义重复。如何划分、采用什么粒度、是否综合已有理解由模型判断，不预设主题分类或抽象层级，也不为“记忆之记忆”增加一种实体。现有结构和索引校验保留；create/update 是当前可落实的操作范围，不是对模型知识组织方式的要求。当前尚无退役、删除或合并旧记忆的操作，不宣称结果一定达到最优收敛。
+
+运行与内容生命周期的完整边界见 [runtime-boundaries.md](runtime-boundaries.md)。

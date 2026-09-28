@@ -1,7 +1,8 @@
+import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import { readOutput } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript, Runtime, invoke } from '@capix-observer/runtime';
+import { Transcript, Runtime } from '@capix-observer/runtime';
 
 import { GenerateAnswer, estimateCapacity } from '@capix-observer/service';
 
@@ -30,7 +31,7 @@ async function generate(input, contextBudget = settings.contextBudget, requests 
   const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
   const transcript = new Transcript([...history, input.message]);
   const selection = { historyIndexes: input.selectedMessages.map((item) => item.index) };
-  await invoke(runtime.execution({ input: transcript.current('user'), transcript, settings: { ...settings, contextBudget } }), (context) => operation.call(context, { selection, memories: [] }));
+  await invoke(lifecycleFor(runtime).execution({ input: transcript.current('user'), transcript, settings: { ...settings, contextBudget } }), (context) => operation.call(context, { selection, memories: [] }));
   return requests[0];
 }
 

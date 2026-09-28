@@ -1,4 +1,4 @@
-import type { RuntimeContext } from '../context/context.js';
+import type { InvocationContext } from '../context/context.js';
 import { Continuation, receiveResult, type InvocationResult } from './result.js';
 import { InvocationStopped, mustStop } from './stop.js';
 import { isNonBlankString } from '../value/string.js';
@@ -14,7 +14,7 @@ export interface InvocationWork<C, I, O> {
 }
 
 /** Local control only; each receiver owns the meaning of its branches. */
-export async function cycle<I, O, C extends RuntimeContext<I, O>>(context: C, work: InvocationWork<C, I, O>, signal: AbortSignal, record: RecordProcess): Promise<O> {
+export async function cycle<I, O, C extends InvocationContext<I, O>>(context: C, work: InvocationWork<C, I, O>, signal: AbortSignal, record: RecordProcess): Promise<O> {
   let input = context.input;
   try {
     requireRoundLimit(work.maxRounds);
@@ -34,7 +34,7 @@ export async function cycle<I, O, C extends RuntimeContext<I, O>>(context: C, wo
   }
 }
 
-async function execute<I, O, C extends RuntimeContext<I, O>>(context: C, work: InvocationWork<C, I, O>['execute'], record: RecordProcess): Promise<InvocationResult<O>> {
+async function execute<I, O, C extends InvocationContext<I, O>>(context: C, work: InvocationWork<C, I, O>['execute'], record: RecordProcess): Promise<InvocationResult<O>> {
   record({ stage: 'execute', type: 'start', input: context.currentInput });
   let result: InvocationResult<O>;
   try {
@@ -49,7 +49,7 @@ async function execute<I, O, C extends RuntimeContext<I, O>>(context: C, work: I
   return result;
 }
 
-async function receive<I, O, C extends RuntimeContext<I, O>>(context: C, result: InvocationResult<O>, work: InvocationWork<C, I, O>['receive'], record: RecordProcess): Promise<O | Continuation<I>> {
+async function receive<I, O, C extends InvocationContext<I, O>>(context: C, result: InvocationResult<O>, work: InvocationWork<C, I, O>['receive'], record: RecordProcess): Promise<O | Continuation<I>> {
   let received: O | Continuation<I>;
   try {
     received = work ? await work(context, result) : receiveResult(result);

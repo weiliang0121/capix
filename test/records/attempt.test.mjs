@@ -1,18 +1,19 @@
+import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { TestOperation } from '../fixtures/operation.mjs';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { RuntimeRecorder, invoke, Runtime, RuntimeRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, RecordBook, RecordIndex } from '@capix-observer/runtime';
+import { RuntimeRecorder, Runtime, RuntimeRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, RecordBook, RecordIndex } from '@capix-observer/runtime';
 import { test } from 'node:test';
 
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 
 function setup() {
-  const runtime = new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)));
-  const executionLifecycle = runtime.execution({ input: {}, settings: {} });
+  const runtime = new Runtime({ recorder: new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)) });
+  const executionLifecycle = lifecycleFor(runtime).execution({ input: {}, settings: {} });
   const execution = executionLifecycle.begin();
-  const operationLifecycle = runtime.operation(execution, new TestOperation(runtime), {});
+  const operationLifecycle = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {});
   const operation = operationLifecycle.begin();
   const definition = { name: 'acceptText', label: '接纳文本', source: 'test', caller: 'operation', callee: 'processing' };
   const attempt = new TestAttempt(runtime, definition.name);
@@ -24,13 +25,13 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   const input = { text: 'original' };
   const failure = new Error('first processing failed');
   await assert.rejects(
-    invoke(runtime.attempt(operation, attempt, input), () => {
+    invoke(lifecycleFor(runtime).attempt(operation, attempt, input), () => {
       throw failure;
     }),
     (error) => error === failure,
   );
   assert.equal(operation.status, 'running');
-  const secondLifecycle = runtime.attempt(operation, attempt, input);
+  const secondLifecycle = lifecycleFor(runtime).attempt(operation, attempt, input);
   const second = secondLifecycle.begin();
   const secondRecord = runtime.recorder.record(second.id);
   assert.ok(secondRecord instanceof RuntimeRecord && secondRecord instanceof AttemptRecord);
@@ -57,7 +58,7 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   assert.equal(second.state.output.accepted, false);
   assert.equal(readOutput(secondRecord.value).accepted, true);
   assert.throws(() => second.complete({}), /ended/);
-  assert.throws(() => runtime.attempt(operation, attempt, {}).begin(), /ended/);
+  assert.throws(() => lifecycleFor(runtime).attempt(operation, attempt, {}).begin(), /ended/);
   const final = runtime.recorder.snapshot(execution);
   validateSnapshot(final);
   assert.deepEqual(
@@ -81,7 +82,7 @@ test('attempt ownership uses operation index and rejects missing or incorrectly 
   });
   assert.deepEqual(AttemptRecordHelper.findByOperation(runtime.recorder.book, runtime.recorder.attemptIndex, operationRecord.id), [attempt]);
   assert.throws(() => AttemptRecordHelper.get(runtime.recorder.book, operationRecord.id), /Attempt does not exist/);
-  const other = runtime.operation(execution, new TestOperation(runtime), {}).begin();
+  const other = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {}).begin();
   const otherRecord = runtime.recorder.record(other.id);
   const wrongIndex = new RecordIndex(() => otherRecord.id);
   wrongIndex.add(attempt);

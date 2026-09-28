@@ -7,15 +7,17 @@ import { snapshotValue } from '../value/snapshot.js';
 export class MemoryRecord extends RuntimeRecord<MemoryRecordValue> implements MemoryRecordData {
   constructor(
     readonly memoryId: string,
-    readonly executionId: string,
-    readonly operationId: string,
+    readonly executionId: string | undefined,
+    readonly operationId: string | undefined,
     value: MemoryRecordValue,
+    readonly contextId?: string,
+    readonly callId?: string,
   ) {
     super(snapshotValue(value));
     Object.freeze(this);
   }
 
   override toJSON(): MemoryRecordData {
-    return { ...super.toJSON(), ...pick(this, ['memoryId', 'executionId', 'operationId']) };
+    return { ...super.toJSON(), ...pick(this, ['memoryId', 'executionId', 'operationId', 'contextId', 'callId']) };
   }
 }

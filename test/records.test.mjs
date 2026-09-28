@@ -1,8 +1,9 @@
+import { lifecycleFor } from './fixtures/lifecycle.mjs';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { createInput, observeFixture } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { RuntimeRecorder, RuntimeRecord, ExecutionRecord, OperationRecord, RecordBook, RecordIndex, ExecutionRecordHelper, OperationRecordHelper, Clock, Runtime, identity, RuntimeError } from '@capix-observer/runtime';
+import { RuntimeRecorder, RuntimeRecord, ExecutionRecord, OperationRecord, RecordBook, RecordIndex, ExecutionRecordHelper, OperationRecordHelper, Clock, Runtime, RuntimeError } from '@capix-observer/runtime';
 import { test } from 'node:test';
 
 import { TestOperation } from './fixtures/operation.mjs';
@@ -11,6 +12,7 @@ import { projectExecution } from '../apps/observer/.test-dist/observation/projec
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const input = { content: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] };
+const identity = (value) => value;
 const echo = { load: identity, transform: identity, accept: identity };
 const output = (content) => ({
   id: 'model',
@@ -27,10 +29,10 @@ async function execute(answer = '{"kind":"answer","content":"海盐项目"}') {
     },
   });
 }
-const createRuntime = (publish) => new Runtime(new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId), new Clock(), publish));
+const createRuntime = (publish) => new Runtime({ recorder: new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId), new Clock(), publish) });
 const lifecycles = new WeakMap();
 const begin = (runtime, value = input) => {
-  const lifecycle = runtime.execution({ input: value, settings });
+  const lifecycle = lifecycleFor(runtime).execution({ input: value, settings });
   const context = lifecycle.begin();
   lifecycles.set(context, lifecycle);
   return context;

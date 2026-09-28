@@ -1,3 +1,4 @@
+import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Execution, Operation, Attempt, Runtime, RuntimeRecorder, RecordBook, RecordIndex, InvocationRecord } from '@capix-observer/runtime';
@@ -8,7 +9,7 @@ import { projectExecution } from '../../apps/observer/.test-dist/observation/pro
 
 function fixture() {
   const recorder = new RuntimeRecorder(new RecordBook(), new RecordIndex((r) => r.executionId), new RecordIndex((r) => r.operationId), new RecordIndex((r) => r.executionId));
-  return { recorder, runtime: new Runtime(recorder) };
+  return { recorder, runtime: new Runtime({ recorder: recorder }) };
 }
 class LocalOperation extends Operation {
   name = 'local';
@@ -98,7 +99,7 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
 test('custom receivers preserve a distinct snapshot even when mutating and returning the same object', async () => {
   for (const mutate of [false, true]) {
     const { runtime, recorder } = fixture();
-    const lifecycle = runtime.execution({ input: null, settings: {} });
+    const lifecycle = lifecycleFor(runtime).execution({ input: null, settings: {} });
     const context = lifecycle.begin();
     class Custom extends LocalOperation {
       receive(_context, result) {
@@ -150,7 +151,7 @@ test('the final result adopts only the last accepted round and retains earlier r
 
 test('observation rejects corrupted compact references rather than silently losing output', async () => {
   const { runtime, recorder } = fixture();
-  const lifecycle = runtime.execution({ input: null, settings: {} });
+  const lifecycle = lifecycleFor(runtime).execution({ input: null, settings: {} });
   const context = lifecycle.begin();
   const result = await new LocalOperation(runtime).call(context, 'value');
   lifecycle.succeed(context, result);

@@ -1,4 +1,4 @@
-import { Operation, type Runtime, type OperationContext, type MemoryCollection } from '@capix-observer/runtime';
+import { Operation, type Runtime, type OperationContext, type Memories } from '@capix-observer/runtime';
 import { PrepareModelRequest } from '../../attempt/model/prepare.js';
 import { InvokeModel } from '../../attempt/model/invoke.js';
 import { AcceptModelOutput } from '../../attempt/model/accept.js';
@@ -27,7 +27,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
   readonly acceptOutput: AcceptModelOutput<MemoryInput, MemoryExtraction>;
   readonly applyMemory: ApplyMemory;
 
-  constructor(runtime: Runtime, provider: ModelProvider, memories: MemoryCollection) {
+  constructor(runtime: Runtime, provider: ModelProvider, memories: Memories) {
     super(runtime);
     this.prepareRequest = new PrepareModelRequest(runtime, (input, execution) => loadRequest(this.prepare(input), this.task, this.output.schema, execution.settings));
     this.invokeModel = new InvokeModel(runtime, provider, this.purpose);

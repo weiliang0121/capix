@@ -46,7 +46,7 @@ export interface ExecutionSummary extends ObservedExecution {
   transcriptRange?: { start: number; end: number };
   /** IDs present in this run's captured selection input. Not a claim of causal model use. */
   availableMemoryIds: string[];
-  memoryChanges: { id: string; memoryId: string; operationId: string; action: MemoryRecord['value']['action']; change: string }[];
+  memoryChanges: { id: string; memoryId: string; operationId?: string; action: MemoryRecord['value']['action']; change: string }[];
 }
 export interface ObserverOverview {
   messages: ExecutionObservation['messages'];

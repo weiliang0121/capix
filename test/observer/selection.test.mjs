@@ -24,9 +24,9 @@ test('heat counts accepted selection calls, not attempts, execution success or o
     new Transcript([
       { role: 'user', content: '春芽在南楼。' },
       { role: 'assistant', content: '已了解。' },
-    ]),
+    ]).snapshot(),
   );
-  const project = () => observeSelection(environment.book, environment.transcript, environment.execution.selection.id);
+  const project = () => observeSelection(environment.book, environment.transcript);
   const run = async (content) => {
     const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] });
     return observeExecution(environment.execution, environment.recorder, input, { settings, transcript: environment.transcript });
@@ -80,25 +80,18 @@ test('heat counts accepted selection calls, not attempts, execution success or o
   assert.equal(project().messages[0].count, 2);
 });
 
-test('heat isolates Transcript identity and the concrete selection operation instance', async () => {
+test('execution rejects a foreign Transcript and does not mutate either running scope', async () => {
   const environment = initializeObserver({
-    async invoke(_request, purpose) {
-      if (purpose === 'memory') return raw({ memories: [] });
-      return raw(purpose === 'selection' ? { historyIndexes: [0] } : { kind: 'answer', content: '回复' });
+    invoke() {
+      assert.fail('must not invoke');
     },
   });
   const other = new Transcript([
     { role: 'user', content: '另一份消息' },
     { role: 'user', content: '继续' },
   ]);
-  await observeExecution(environment.execution, environment.recorder, other.current('user'), { settings, transcript: other });
-  assert.deepEqual(observeSelection(environment.book, environment.transcript, environment.execution.selection.id), { messages: [], executions: [] });
-  assert.deepEqual(
-    observeSelection(environment.book, other, 'another-operation').messages.map((item) => item.count),
-    [0, 0, 0],
-  );
-  assert.deepEqual(
-    observeSelection(environment.book, other, environment.execution.selection.id).messages.map((item) => item.count),
-    [1, 0, 0],
-  );
+  await assert.rejects(observeExecution(environment.execution, environment.recorder, other.current('user'), { settings, transcript: other }), /another Runtime/);
+  assert.deepEqual(observeSelection(environment.book, environment.transcript), { messages: [], executions: [] });
+  assert.equal(other.length, 2);
+  assert.equal(environment.runtime.running, false);
 });

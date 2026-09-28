@@ -1,9 +1,10 @@
+import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { observeFixture, createInput } from './fixtures/observer.mjs';
 import { DeepSeekProvider, acceptExecutionInput, answerOutputContract, selectionOutputContract, memoryOutputContract } from '@capix-observer/service';
-import { Transcript, RecordBook, RecordIndex, invoke, RuntimeRecorder, Runtime } from '@capix-observer/runtime';
+import { Transcript, RecordBook, RecordIndex, RuntimeRecorder, Runtime } from '@capix-observer/runtime';
 
 import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
 
@@ -225,8 +226,8 @@ test('failure propagates through calls, is caught by Observer execution, and nev
 
 test('sequence ordering follows completion when calls overlap', async () => {
   const book = new RecordBook();
-  const runtime = new Runtime(new RuntimeRecorder(book, new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)));
-  const execution = runtime.execution({ input, settings }).begin();
+  const runtime = new Runtime({ recorder: new RuntimeRecorder(book, new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId)) });
+  const execution = lifecycleFor(runtime).execution({ input, settings }).begin();
   const resolvers = [];
   class FirstOperation extends TestOperation {
     name = 'a';
@@ -234,7 +235,7 @@ test('sequence ordering follows completion when calls overlap', async () => {
   class SecondOperation extends TestOperation {
     name = 'b';
   }
-  const start = (operation) => invoke(runtime.operation(execution, operation, input), () => new Promise((resolve) => resolvers.push(resolve)));
+  const start = (operation) => invoke(lifecycleFor(runtime).operation(execution, operation, input), () => new Promise((resolve) => resolvers.push(resolve)));
   const first = start(new FirstOperation(runtime)),
     second = start(new SecondOperation(runtime));
   resolvers[1]('second');

@@ -60,7 +60,7 @@ test('capacity opens a new segment; all three model calls use memory without rel
   });
   environment.transcript.append({ role: 'user', content: '培训周五15点。' + '原始说明。'.repeat(6000) }, { role: 'assistant', content: '收到。' });
   const original = environment.transcript.ref(0);
-  const memory = environment.execution.memories.add(new Memory(environment.transcript, { topic: '培训', content: '培训周五15点。', sourceIndexes: [0] }));
+  const memory = environment.runtime.memories.apply([{ action: 'create', memoryId: null, change: '接纳初始记忆', sourceIndexes: [0], result: { topic: '培训', content: '培训周五15点。', sourceIndexes: [0] } }])[0];
   const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: '培训几点？' }] });
   const facts = await observeExecution(environment.execution, environment.recorder, input, { settings, transcript: environment.transcript });
   assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));

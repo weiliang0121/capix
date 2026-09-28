@@ -1,6 +1,7 @@
+import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeRecord, ExecutionRecordHelper, EventRecord, EventRecordHelper, RecordBook, RecordIndex, Clock, RuntimeRecorder, Runtime, invoke } from '@capix-observer/runtime';
+import { RuntimeRecord, ExecutionRecordHelper, EventRecord, EventRecordHelper, RecordBook, RecordIndex, Clock, RuntimeRecorder, Runtime } from '@capix-observer/runtime';
 
 import { validateSnapshot } from '@capix-observer/protocol';
 
@@ -20,9 +21,9 @@ test('event records share the Book, have their own IDs, and snapshots read the e
     events = new RecordIndex((record) => record.executionId),
     clock = new ManualClock();
   const recorder = new RuntimeRecorder(book, new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), events, clock);
-  const runtime = new Runtime(recorder);
+  const runtime = new Runtime({ recorder: recorder });
   let firstContext, during;
-  await invoke(runtime.execution({ input: 'first', settings: {} }), (context) => {
+  await invoke(lifecycleFor(runtime).execution({ input: 'first', settings: {} }), (context) => {
     firstContext = context;
     during = recorder.snapshot(context);
     clock.elapsed = 125;
@@ -51,7 +52,7 @@ test('event records share the Book, have their own IDs, and snapshots read the e
       record.value.type = 'throw';
     }, TypeError);
   }
-  const second = runtime.execution({ input: 'second', settings: {} }).begin();
+  const second = lifecycleFor(runtime).execution({ input: 'second', settings: {} }).begin();
   const secondSnapshot = recorder.snapshot(second);
   assert.deepEqual(
     secondSnapshot.events.map((event) => event.sequence),

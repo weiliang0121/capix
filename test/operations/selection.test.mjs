@@ -47,12 +47,13 @@ test('message counts accumulate independently and never enter model requests', a
   const { ObserverExecution } = await import('@capix-observer/service');
   const { Runtime } = await import('@capix-observer/runtime');
   const { Transcript } = await import('@capix-observer/runtime');
-  const transcript = new Transcript([{ role: 'user', content: '我在北京' }]);
+  const runtime = new Runtime({ messages: [{ role: 'user', content: '我在北京' }] });
+  const transcript = runtime.transcript;
   const original = transcript.get(0);
   const requests = [];
   let indexes = [0];
   let fails = false;
-  const execution = new ObserverExecution(new Runtime(), {
+  const execution = new ObserverExecution(runtime, {
     async invoke(request, purpose) {
       const loaded = JSON.parse(request.messages[1].content);
       assert.doesNotMatch(JSON.stringify(request), /selectionCount/);
@@ -74,20 +75,20 @@ test('message counts accumulate independently and never enter model requests', a
   };
   await run();
   assert.equal(requests.length, 1);
-  assert.equal(execution.selection.usage.get(original), 1);
+  assert.equal(runtime.selectionUsage.get(original), 1);
   fails = true;
   await assert.rejects(run(), /generation failed/);
   assert.equal(requests.length, 2);
-  assert.equal(execution.selection.usage.get(original), 2);
+  assert.equal(runtime.selectionUsage.get(original), 2);
   fails = false;
   indexes = [0, 0];
   await assert.rejects(run());
-  assert.equal(execution.selection.usage.get(original), 2);
+  assert.equal(runtime.selectionUsage.get(original), 2);
   indexes = [];
   await run();
   assert.equal(requests.length, 4);
-  assert.equal(execution.selection.usage.get(original), 2);
+  assert.equal(runtime.selectionUsage.get(original), 2);
   assert.deepEqual(original, { role: 'user', content: '我在北京' });
   assert.equal(transcript.get(0), original);
-  assert.equal(execution.selection.usage.get(Object.freeze({ ...original })), 0);
+  assert.equal(runtime.selectionUsage.get(Object.freeze({ ...original })), 0);
 });
