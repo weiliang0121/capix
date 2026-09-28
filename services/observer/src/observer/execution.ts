@@ -48,7 +48,7 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
     this.runtime.selectionUsage.add(selectionOutput.historyIndexes.map((index) => context.transcriptRange!.read(index)));
     const generationOutput = await this.generation.call(context, { selection: selectionOutput, memories: previousMemories });
     const responseIndex = range.transcript.length;
-    range.transcript.appendFrom([{ role: 'assistant', content: generationOutput.content }], { contextId: context.id });
+    range.transcript.appendFrom([{ role: 'assistant', content: generationOutput.content }], this.runtime.recording?.source(context));
     const extractionInput = prepareMemoryInput(range, range.transcript.ref(responseIndex), selectionOutput.historyIndexes, previousMemories);
     await this.extraction.call(context, extractionInput);
     return generationOutput;

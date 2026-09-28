@@ -1,5 +1,5 @@
 import type { InvocationContext } from '../context/context.js';
-import type { RuntimeRecorder } from '../records/recorder.js';
+import type { InvocationRecording } from './recording.js';
 import { writeRecord } from '../records/error.js';
 import { cycle, type InvocationWork } from './cycle.js';
 
@@ -12,8 +12,8 @@ export class Invocation<I, O, C extends InvocationContext<I, O>> {
     private readonly prepare: () => C,
     private readonly work: InvocationWork<C, I, O>,
     private readonly signal: AbortSignal,
-    private readonly recorder?: RuntimeRecorder,
-    private readonly register: (context: C) => void = () => {},
+    private readonly recording?: InvocationRecording<C>,
+    private readonly started?: (context: C) => void,
   ) {}
 
   get context(): C | undefined {
@@ -26,7 +26,10 @@ export class Invocation<I, O, C extends InvocationContext<I, O>> {
     const context = this.prepare();
     this.#context = context;
     try {
-      writeRecord(() => this.register(context));
+      writeRecord(() => {
+        this.started?.(context);
+        this.recording?.begin(context);
+      });
     } catch (error) {
       context.fail(error);
       throw error;
@@ -34,11 +37,11 @@ export class Invocation<I, O, C extends InvocationContext<I, O>> {
 
     let output: O;
     try {
-      output = await cycle(context, this.work, this.signal, (process) => writeRecord(() => this.recorder?.process(context, process)));
+      output = await cycle(context, this.work, this.signal, (process) => writeRecord(() => this.recording?.process(context, process)));
     } catch (error) {
       context.fail(error);
       try {
-        writeRecord(() => this.recorder?.finish(context));
+        writeRecord(() => this.recording?.finish(context));
       } catch (registrationError) {
         throw new AggregateError([error, registrationError], 'Work failed and failure registration also failed', { cause: error });
       }
@@ -46,7 +49,7 @@ export class Invocation<I, O, C extends InvocationContext<I, O>> {
     }
     // Registration failure after success must not fail or repeat the completed work.
     context.complete(output);
-    writeRecord(() => this.recorder?.finish(context));
+    writeRecord(() => this.recording?.finish(context));
     return output;
   }
 }

@@ -94,7 +94,7 @@ ExtractMemory
 
 - Runtime 持有 Memories；它绑定一个 Transcript，提供 get/values/snapshot/apply，统一审查、落实并记录正式变化。对外没有 add 或 Memory.update 旁路。
 - ApplyMemory 提交已接纳提案及调用来源，不再自行修改内容或补写记录。
-- 共享 Recorder 由环境装配，Memories 持有其引用。变更可独立于调用发生；实际来自调用时保留 contextId/callId/executionId/operationId，来源链接不用于内容合法性判断。MemoryRecordHelper 只负责查询。
+- 共享 Recorder 由环境装配，Memories 持有其引用。变更可独立于调用发生；实际来自调用时保留 contextId/callId/executionId/operationId，来源链接不用于内容合法性判断。MemoryRecordHelper 负责构造记录与查询；Memories 使用通用 Recorder.add 登记，来源由调用侧预先解析。
 - MemoryRecord 保存在同一个 Book；按 memoryId 过滤，沿登记顺序返回。本轮不另加索引或排序元数据。
 - E/O/A 记录继续记录提取输入、模型原始返回和接纳候选；MemoryRecord 保存具体记忆体已落实的变化，二者不是重复对象。MemoryRecord 不持有调用 Context 实例、调用状态或虚构事件。
 - GET /api/memory 返回当前事实和变化记录的只读投影。页面展示记录正文、依据、结果快照、执行与操作 ID，不做差异推断。

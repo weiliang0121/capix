@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver, acceptExecutionInput, observeExecution, memoryOutputContract, ObserverExecution } from '@capix-observer/service';
 
-import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, RuntimeRecord, RecordIndex, RuntimeRecorder, Transcript, Runtime } from '@capix-observer/runtime';
+import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, RuntimeRecord, RuntimeRecorder, Transcript, Runtime } from '@capix-observer/runtime';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -12,7 +12,7 @@ const change = (result, explanation, indexes = result.sourceIndexes, memoryId = 
 
 async function run(environment, message, options = settings) {
   const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: message }] });
-  return observeExecution(environment.execution, environment.recorder, input, { settings: options, transcript: environment.transcript });
+  return observeExecution(environment.execution, environment.recording, input, { settings: options, transcript: environment.transcript });
 }
 
 test('updates preserve Memory identity while immutable MemoryRecords describe each applied change and its actual operation', async () => {
@@ -181,7 +181,7 @@ test('recording observes the actual changed fact; registration failure propagate
     }
   }
   const book = new RejectMemoryBook();
-  const recorder = new RuntimeRecorder(book, new RecordIndex((r) => r.executionId), new RecordIndex((r) => r.operationId), new RecordIndex((r) => r.executionId));
+  const recorder = new RuntimeRecorder(book);
   const runtime = new Runtime({ recorder, messages: [{ role: 'user', content: '预算150' }] });
   const execution = new ObserverExecution(runtime, {
     async invoke(_request, purpose) {

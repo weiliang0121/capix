@@ -1,10 +1,11 @@
+import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, Runtime, Execution, Operation, Attempt, RecordBook, RecordIndex, RuntimeRecorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix-observer/runtime';
+import { Invocation, InvocationContext, Runtime, Execution, Operation, Attempt, RecordBook, RuntimeRecorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix-observer/runtime';
 import { initializeObserver, ObserverExecution, observeExecution, observeOverview, acceptExecutionInput } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
-const createRecorder = (book = new RecordBook()) => new RuntimeRecorder(book, new RecordIndex((r) => r.executionId), new RecordIndex((r) => r.operationId), new RecordIndex((r) => r.executionId));
+const createRecorder = (book = new RecordBook()) => new RuntimeRecorder(book);
 const proposed = (content = '北京', memoryId = null) => ({ action: memoryId ? 'update' : 'create', memoryId, change: '确认地点', sourceIndexes: [0], result: { topic: '地点', content, sourceIndexes: [0] } });
 const raw = (value) => ({ id: 'fixture', model: 'fixture', finishReason: 'stop', usage: null, content: JSON.stringify(value) });
 
@@ -157,7 +158,7 @@ test('replacing execution behaviors retains messages, memories, counts and the c
     },
   };
   const environment = initializeObserver(provider);
-  const run = async (execution, text) => observeExecution(execution, environment.recorder, () => acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: text }] }), { settings });
+  const run = async (execution, text) => observeExecution(execution, environment.recording, () => acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: text }] }), { settings });
   const first = await run(environment.execution, '我在北京');
   const memory = environment.runtime.memories.values()[0];
   environment.execution = new ObserverExecution(environment.runtime, provider);
@@ -210,7 +211,7 @@ test('EOA rejects cross-Runtime contexts independently of the recording layer', 
 
 test('Invocation distinguishes successful work from failed result registration without retrying', async (t) => {
   const recorder = createRecorder();
-  t.mock.method(recorder, 'finish', () => {
+  t.mock.method(ExecutionRecordHelper, 'complete', () => {
     throw new Error('cannot register result');
   });
   const runtime = new Runtime({ recorder });
@@ -231,7 +232,7 @@ test('Invocation distinguishes successful work from failed result registration w
 
 test('Invocation start registration failure prevents work and releases the Runtime', async (t) => {
   const recorder = createRecorder();
-  t.mock.method(recorder, 'beginExecution', () => {
+  t.mock.method(ExecutionRecordHelper, 'create', () => {
     throw new Error('cannot begin record');
   });
   const runtime = new Runtime({ recorder });
@@ -257,7 +258,7 @@ test('Invocation preserves both work and failure-registration errors without rep
   const recorder = createRecorder();
   const failure = new Error('work failed');
   const registration = new Error('cannot register failure');
-  t.mock.method(recorder, 'finish', () => {
+  t.mock.method(ExecutionRecordHelper, 'fail', () => {
     throw registration;
   });
   const runtime = new Runtime({ recorder });

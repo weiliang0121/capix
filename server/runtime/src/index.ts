@@ -29,3 +29,8 @@ export * from './invocation/invocation.js';
 export type { ChangeSource } from './records/source.js';
 export { TranscriptRecord } from './records/transcript/record.js';
 export * from './records/error.js';
+
+export type { InvocationRecording } from './invocation/recording.js';
+export { InvocationRecordHelper } from './records/invocation/helper.js';
+export { InvocationRecordIndex, type CallRecord } from './records/invocation/index.js';
+export { TranscriptRecordHelper } from './records/transcript/helper.js';

@@ -1,3 +1,5 @@
+import { subscribeExecutions } from '@capix-observer/service';
+import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { TestOperation } from './fixtures/operation.mjs';
@@ -14,7 +16,7 @@ const begin = (runtime) => {
   lifecycles.set(context, lifecycle);
   return context;
 };
-const createRecorder = (clock = new Clock(), publish) => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId), clock, publish);
+const createRecorder = (clock = new Clock()) => new RuntimeRecorder(new RecordBook(), clock);
 
 test('Runtime passes live Contexts; records retain separate identities, relations and snapshots', async () => {
   const recorder = createRecorder(),
@@ -28,8 +30,8 @@ test('Runtime passes live Contexts; records retain separate identities, relation
     assert.ok(context instanceof OperationContext);
     assert.equal(context.input, input);
     assert.equal(context.executionContext, execution);
-    assert.notEqual(recorder.record(context.id).id, context.id);
-    assert.equal(recorder.record(context.id).value.input.count, 0);
+    assert.notEqual(runtime.recording.get(context.id).id, context.id);
+    assert.equal(runtime.recording.get(context.id).value.input.count, 0);
     context.input.count++;
     return invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), context.input, context), (nested) => {
       child = nested;
@@ -39,13 +41,13 @@ test('Runtime passes live Contexts; records retain separate identities, relation
   assert.equal(output, input);
   assert.equal(parent.state.output, input);
   assert.equal(Object.hasOwn(child, 'parentOperationId'), false);
-  const parentRecord = recorder.record(parent.id),
-    childRecord = recorder.record(child.id);
+  const parentRecord = runtime.recording.get(parent.id),
+    childRecord = runtime.recording.get(child.id);
   assert.equal(childRecord.parentOperationId, parentRecord.id);
   assert.equal(parentRecord.value.input.count, 0);
   assert.equal(readOutput(parentRecord.value).count, 1);
   lifecycles.get(execution).succeed(execution, output);
-  validateSnapshot(recorder.snapshot(execution));
+  validateSnapshot(ExecutionRecordHelper.observe(runtime.recording, execution));
 });
 
 test('Runtime rejects ended or mismatched parent Contexts and preserves original work failures', async () => {
@@ -67,7 +69,7 @@ test('Runtime rejects ended or mismatched parent Contexts and preserves original
   const otherParent = new OperationContext(otherExecution, {});
   assert.throws(() => lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {}, otherParent).begin(), /another execution/);
   lifecycles.get(otherExecution).succeed(otherExecution, {});
-  assert.equal(OperationRecordHelper.findByExecution(recorder.book, recorder.operationIndex, recorder.record(execution.id).id).length, 0);
+  assert.equal(OperationRecordHelper.findByExecution(recorder.book, runtime.invocationRecordIndex, runtime.recording.get(execution.id).id).length, 0);
   const failure = new RuntimeError('TEST_ERROR', 'test failure');
   let failed;
   await assert.rejects(
@@ -78,10 +80,10 @@ test('Runtime rejects ended or mismatched parent Contexts and preserves original
     (error) => error === failure,
   );
   assert.equal(failed.state.error, failure);
-  assert.notEqual(recorder.record(failed.id).value.error, failure);
-  assert.equal(recorder.record(failed.id).value.error.code, 'TEST_ERROR');
+  assert.notEqual(runtime.recording.get(failed.id).value.error, failure);
+  assert.equal(runtime.recording.get(failed.id).value.error.code, 'TEST_ERROR');
   lifecycles.get(execution).fail(execution, failure);
-  validateSnapshot(recorder.snapshot(execution));
+  validateSnapshot(ExecutionRecordHelper.observe(runtime.recording, execution));
 });
 
 test('Injected Clock measures recording boundaries without becoming live Context state', async () => {
@@ -97,13 +99,14 @@ test('Injected Clock measures recording boundaries without becoming live Context
   }
   const clock = new ManualClock(),
     published = [];
-  const recorder = createRecorder(clock, (snapshot) => {
+  const recorder = createRecorder(clock);
+  const runtime = new Runtime({ recorder });
+  subscribeExecutions(runtime.recording, (snapshot) => {
     validateSnapshot(snapshot);
     published.push(snapshot);
   });
-  const runtime = new Runtime({ recorder: recorder }),
-    execution = begin(runtime);
-  assert.equal(recorder.record(execution.id).value.startedAt, clock.wall);
+  const execution = begin(runtime);
+  assert.equal(runtime.recording.get(execution.id).value.startedAt, clock.wall);
   clock.elapsed = 110;
   let resolve;
   const pending = invoke(
@@ -113,7 +116,7 @@ test('Injected Clock measures recording boundaries without becoming live Context
         resolve = done;
       }),
   );
-  const during = recorder.snapshot(execution);
+  const during = ExecutionRecordHelper.observe(runtime.recording, execution);
   validateSnapshot(during);
   clock.wall = '2026-09-20T01:00:00.000Z';
   clock.elapsed = 135;
@@ -121,7 +124,7 @@ test('Injected Clock measures recording boundaries without becoming live Context
   const output = await pending;
   clock.elapsed = 150;
   lifecycles.get(execution).succeed(execution, output);
-  const facts = recorder.snapshot(execution);
+  const facts = ExecutionRecordHelper.observe(runtime.recording, execution);
   assert.equal(execution.status, 'succeeded');
   assert.equal(facts.execution.status, 'succeeded');
   assert.deepEqual(
@@ -154,7 +157,7 @@ test('record creation captures instance descriptions at begin without storing th
   const operationLifecycle = lifecycleFor(runtime).operation(execution, instance, 'operation input');
   assert.equal(reads, 0);
   const operation = operationLifecycle.begin();
-  const operationRecord = recorder.record(operation.id);
+  const operationRecord = runtime.recording.get(operation.id);
   assert.equal(reads, 1);
   assert.deepEqual(Object.keys(operation).sort(), ['executionContext', 'id', 'input']);
   assert.equal(operationRecord.operationInstanceId, instance.id);
@@ -170,7 +173,7 @@ test('record creation captures instance descriptions at begin without storing th
   const attemptInstance = instance.actions[0];
   const attemptLifecycle = lifecycleFor(runtime).attempt(operation, attemptInstance, 'action input');
   const attempt = attemptLifecycle.begin();
-  const attemptRecord = recorder.record(attempt.id);
+  const attemptRecord = runtime.recording.get(attempt.id);
   assert.deepEqual(Object.keys(attempt).sort(), ['id', 'input', 'operationContext']);
   assert.equal(attemptRecord.name, attemptInstance.name);
   assert.equal(attemptRecord.label, attemptInstance.label);
@@ -184,5 +187,5 @@ test('record creation captures instance descriptions at begin without storing th
   lifecycles.get(execution).succeed(execution, 'execution output');
   assert.equal(reads, 1);
   assert.equal(operationRecord.label, 'initial label');
-  validateSnapshot(recorder.snapshot(execution));
+  validateSnapshot(ExecutionRecordHelper.observe(runtime.recording, execution));
 });

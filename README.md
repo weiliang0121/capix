@@ -58,7 +58,7 @@ const generationOutput = await environment.execution.submit(() => acceptExecutio
 
 环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 用 Execution.submit 的 started 回调取得 Context ID，在首条记录发布前绑定本次调用，按 contextId 筛选记录，结束时解除订阅。它不再通过 input 对象身份关联记录。
 
-记录创建发生在 Context 创建之后，工作执行之前。Recorder 在这个边界直接读取已有 Operation 实例的描述及现场父 Context；Attempt 的源码和参与者描述也从现场执行实例读取。Context 不携带这些描述、不保存 declaration；记录固化信息后，完成/失败只依据 Context 登记结果。不新增长期的实例关联表。
+记录创建发生在 Context 创建之后，工作执行之前。对应记录 Helper 在这个边界直接读取已有 Operation 实例的描述及现场父 Context；Attempt 的源码和参与者描述也从现场执行实例读取。Context 不携带这些描述、不保存 declaration；记录固化信息后，完成/失败只依据 Context 登记结果。不新增长期的实例关联表。
 
 可调用实例与 Context 为 1:N；开启记录时，每个 E/O/A Context 对应一条同层 Record。复用 Operation 的 operationInstanceId 保持不变，每次调用的 Context ID 与 Record ID 独立产生。记录容器保留所有调用，而非被新请求替换。
 
@@ -75,7 +75,7 @@ GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer �
 | Runtime               | 持续消息与记忆、顶层运行占用和上下文读取                                  |
 | Invocation            | 单次调用的现场、execute/receive 循环和调用记录生命周期                    |
 | Transcript / Memories | 各自内容的审查、变更与变更记录登记                                        |
-| RuntimeRecorder       | Context→Record 映射、登记、事件与观测发布；不执行工作或改写 Context       |
+| RuntimeRecorder       | 通用 add/update/subscribe、登记错误隔离；不解释记录种类或生成快照         |
 | RecordBook            | add/get/values，保存记录实例、拒绝重复 ID                                 |
 | RecordIndex           | selector→key→IDs；显式登记、查询和移除                                    |
 | 各 RecordHelper       | 对应记录的创建、关系检查、登记与结果写入                                  |
@@ -93,7 +93,7 @@ maxRounds 默认 1，具体类可设为 2，均包含首次执行；不接受更
 
 同一调用内 Context 身份不变：input 是初始引用，currentInput 是当前轮输入，progress 表达当前轮次、执行/接收位置及 execute 结果。continueWith 不重置初始输入，不改写已结束的子调用。运行可不接 Recorder，处理分支不依赖记录。
 
-一条调用记录的 value.processes 按序追加执行、接收和停止事实，不为内部条目生成 ID 或独立记录。正文登记时复制冻结，保留每次输入、结果、接收决定与继续/退出原因。E/O/A Record 共用 InvocationRecord 的追加和终态方法，Book 仍只管理记录。RuntimeRecorder 在追加后发布已有快照，调用详情可展开完整过程；call/return/throw 时序事件的含义与数量不变。
+一条调用记录的 value.processes 按序追加执行、接收和停止事实，不为内部条目生成 ID 或独立记录。正文登记时复制冻结，保留每次输入、结果、接收决定与继续/退出原因。E/O/A Record 共用 InvocationRecord 的追加和终态方法，Book 仍只管理记录。RuntimeRecorder 在追加后通知记录变化，Observer 订阅侧组织执行快照，调用详情可展开完整过程；call/return/throw 时序事件的含义与数量不变。
 
 记录失败通过 RecordingError 保留原始 cause，并阻止父层把它当成可重做的工作错误；错误和错误登记同时失败则保留两个原因。记录失败不撤销已经发生的运行事实，也不补造未登记的条目。
 
@@ -121,7 +121,7 @@ operationInstanceId 指向可复用的 Operation 实例；OperationRecord.id 和
 
 当前完整成功链路为 1 条 Execution、3 条 Operation、11 条 Attempt、30 个 call/return/throw 边界事件。数量来自实际组合，不是框架限制。没有执行的动作不创建记录；Attempt 失败不自动更改父操作状态，异常按实际调用链传播。接纳失败保留模型原始返回，落实失败保留已接纳结果，不假装运行事实回滚。
 
-EventRecord 继承 RuntimeRecord，自己的 id 与 callId 不同：callId 指向被描述的 E/O/A 调用记录。EventRecordHelper 负责创建和查询，Book 保存原记录，eventIndex 按执行 ID 查询，不另保存事件数组。sequence 为执行内顺序；occurredAt 为现实时间，offsetMs 使用单调时钟，现实时间回拨不改变时序。RuntimeRecorder 仅保留单调计时起点。事件记录没有 Context 或运行状态，不承担推进或消息传递；validateSnapshot 检查记录身份、归属与边界一致性。
+EventRecord 继承 RuntimeRecord，自己的 id 与 callId 不同：callId 指向被描述的 E/O/A 调用记录。EventRecordHelper 负责创建和查询，Book 保存原记录，eventIndex 按执行 ID 查询，不另保存事件数组。sequence 为执行内顺序；occurredAt 为现实时间，offsetMs 使用单调时钟，现实时间回拨不改变时序。Runtime.invocationRecordIndex 维护调用关联查询；Runtime.recording 在调用记录过程中保存单调计时起点，终态边界登记后释放。事件记录没有 Context 或运行状态，不承担推进或消息传递；validateSnapshot 检查记录身份、归属与边界一致性。
 
 错误内嵌在 value.error。RuntimeErrorHelper.format 保留名称、code/message、堆栈、cause 与复合 errors；不可记录的诊断内容转为明确标记，不执行 detail 的 getter/toJSON。ErrorTraversal 管理一次格式化的预算与递归路径。没有独立错误记录或异常还原功能。
 
@@ -210,3 +210,5 @@ value.resultOf: 2                   → 最终采用该正文
 `resultOf` 是本条记录内的过程序号，只能指向直接保存正文的条目。自定义 receive 独立记录自己的结果，最终引用该结果；即使原地修改并返回同一对象，也保留执行与接收两个时刻的快照。前端投影与查询通过 `protocol/src/records/invocation.ts` 的 `readOutput` 读取，快照中不重新展开。输入和错误正文保持现有记录方式，不做跨记录去重。
 
 运行实例、调用通道与内容变化的当前职责见 [运行边界](docs/runtime-boundaries.md)。Runtime 的消息与记忆跨执行保留；Invocation 统一调用过程；内容对象自己审查、落实并记录变化。Recorder 由环境装配，不属于某个调用的生命周期。
+
+记录机制、类型特化与观察发布的分离见 [记录边界](docs/recording.md)。

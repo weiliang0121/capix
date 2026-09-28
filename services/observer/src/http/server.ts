@@ -51,7 +51,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     if (req.method === 'GET' && url.pathname === '/api/execution') {
       const id = url.searchParams.get('id') || '';
       if (!(observer.book.get(id) instanceof ExecutionRecord)) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
-      return json(res, 200, ExecutionRecordHelper.snapshot(observer.book, observer.operationIndex, observer.attemptIndex, id, observer.eventIndex), observeTranscript);
+      return json(res, 200, ExecutionRecordHelper.snapshot(observer.book, observer.recording.index, id), observeTranscript);
     }
     if (req.method === 'GET' && url.pathname === '/api/source') {
       const path = url.searchParams.get('file') || '';
@@ -70,7 +70,7 @@ export function createObserverServer(options: ObserverServerOptions) {
       let publicationError: unknown;
       await observeExecution(
         observer.execution,
-        observer.recorder,
+        observer.recording,
         () => {
           const input = acceptExecutionInput(observer.transcript, data);
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });

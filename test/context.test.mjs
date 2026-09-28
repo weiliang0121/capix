@@ -1,12 +1,14 @@
+import { OperationRecordHelper } from '@capix-observer/runtime';
+import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationContext, ExecutionContext, Transcript, Runtime, RuntimeRecorder, RecordBook, RecordIndex } from '@capix-observer/runtime';
+import { InvocationContext, ExecutionContext, Transcript, Runtime, RuntimeRecorder, RecordBook } from '@capix-observer/runtime';
 
 import { TestOperation } from './fixtures/operation.mjs';
 
 const options = { input: {}, settings: {} };
-const recorder = () => new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId));
+const recorder = () => new RuntimeRecorder(new RecordBook());
 
 test('Context keeps live refs, separates undefined outcomes, and fixes execution configuration and Transcript visibility', () => {
   const input = { text: 'hello' },
@@ -91,13 +93,13 @@ test('Unrecordable execute result stops acceptance without rerunning work', asyn
   assert.equal(count, 1);
   assert.equal(context.status, 'failed');
   assert.equal(context.progress.result.output, result);
-  assert.equal(records.record(context.id).status, 'failed');
-  assert.equal(records.record(context.id).value.error.code, 'RECORDING_FAILED');
-  assert.equal(records.snapshot(execution).events.filter((event) => event.callId === records.record(context.id).id).length, 2);
+  assert.equal(runtime.recording.get(context.id).status, 'failed');
+  assert.equal(runtime.recording.get(context.id).value.error.code, 'RECORDING_FAILED');
+  assert.equal(ExecutionRecordHelper.observe(runtime.recording, execution).events.filter((event) => event.callId === runtime.recording.get(context.id).id).length, 2);
   // The failed child is fully recorded; the parent remains responsible for its own outcome.
   root.succeed(execution, {});
   assert.equal(execution.status, 'succeeded');
-  assert.equal(records.snapshot(execution).execution.status, 'succeeded');
+  assert.equal(ExecutionRecordHelper.observe(runtime.recording, execution).execution.status, 'succeeded');
 });
 
 test('Work and failure-registration errors remain distinct; Context keeps the original thrown value', async (t) => {
@@ -105,7 +107,7 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
     runtime = new Runtime({ recorder: records });
   const failure = { reason: 'work failed' },
     registration = new Error('record unavailable');
-  t.mock.method(records, 'finish', () => {
+  t.mock.method(ExecutionRecordHelper, 'fail', () => {
     throw registration;
   });
   let execution;
@@ -125,7 +127,7 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
   );
   assert.equal(execution.status, 'failed');
   assert.equal(execution.state.error, failure);
-  assert.equal(records.record(execution.id).status, 'running');
+  assert.equal(runtime.recording.get(execution.id).status, 'running');
 });
 
 test('Failed begin prevents work without changing the parent Context', async (t) => {
@@ -136,10 +138,14 @@ test('Failed begin prevents work without changing the parent Context', async (t)
   const failure = new Error('cannot record start');
   let child,
     entered = false;
-  t.mock.method(records, 'beginOperation', (context) => {
-    child = context;
-    throw failure;
-  });
+  const recording = OperationRecordHelper.recording;
+  t.mock.method(OperationRecordHelper, 'recording', (...args) => ({
+    ...recording.call(OperationRecordHelper, ...args),
+    begin(context) {
+      child = context;
+      throw failure;
+    },
+  }));
   await assert.rejects(
     invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {}), () => {
       entered = true;
@@ -151,8 +157,8 @@ test('Failed begin prevents work without changing the parent Context', async (t)
   assert.equal(child.state.error.cause, failure);
   root.succeed(execution, {});
   assert.equal(execution.status, 'succeeded');
-  assert.equal(records.snapshot(execution).execution.status, 'succeeded');
-  assert.equal(records.snapshot(execution).events.at(-1).value.type, 'return');
+  assert.equal(ExecutionRecordHelper.observe(runtime.recording, execution).execution.status, 'succeeded');
+  assert.equal(ExecutionRecordHelper.observe(runtime.recording, execution).events.at(-1).value.type, 'return');
 });
 
 test('Parent Context references remain readable after completion without registration or records', async () => {

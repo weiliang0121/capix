@@ -29,7 +29,7 @@ test('one initialized world preserves messages and records while reusing its exe
   for (const [index, text] of ['first', 'failure', 'last'].entries()) {
     const input = acceptExecutionInput(transcript, { messages: [{ role: 'user', content: text }] });
     const published = [];
-    snapshots.push(await observeExecution(environment.execution, environment.recorder, input, { settings: { ...settings, model: String(index) }, transcript }, (snapshot) => published.push(snapshot)));
+    snapshots.push(await observeExecution(environment.execution, environment.recording, input, { settings: { ...settings, model: String(index) }, transcript }, (snapshot) => published.push(snapshot)));
     streamed.push(published);
   }
   assert.deepEqual(
@@ -119,7 +119,7 @@ test('a cancelled call does not leave its signal on the reusable model operation
   cancelled.abort(new Error('cancel first call'));
   for (const signal of [cancelled.signal, new AbortController().signal]) {
     const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: 'input' }] });
-    const snapshot = await observeExecution(environment.execution, environment.recorder, input, { settings, signal, transcript: environment.transcript });
+    const snapshot = await observeExecution(environment.execution, environment.recording, input, { settings, signal, transcript: environment.transcript });
     assert.equal(snapshot.execution.status, signal.aborted ? 'failed' : 'succeeded');
   }
   assert.deepEqual(
@@ -146,7 +146,7 @@ test('configuration updates and Transcript appends take effect only in the next 
   for (const content of ['first', 'next']) {
     const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] });
     assert.equal(Object.hasOwn(input, 'transcript'), false);
-    snapshots.push(await observeExecution(environment.execution, environment.recorder, input, { settings: configuration, transcript: environment.transcript }));
+    snapshots.push(await observeExecution(environment.execution, environment.recording, input, { settings: configuration, transcript: environment.transcript }));
   }
   assert.deepEqual(
     requests.map((request) => request.model),

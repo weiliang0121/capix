@@ -18,7 +18,7 @@ async function recordedRound() {
   const snapshots = [];
   const environment = initializeObserver({ invoke: async (_request, purpose) => raw(purpose === 'selection' ? { historyIndexes: [0, 1] } : purpose === 'answer' ? { kind: 'answer', content: '上海周末行程。' } : { memories: [{ action: 'create', memoryId: null, change: '确认目的地', sourceIndexes: [2], result: { topic: '旅行', content: '周末去上海', sourceIndexes: [2] } }] }) }, new Transcript(history).snapshot());
   const input = acceptExecutionInput(environment.transcript, request);
-  const final = await observeExecution(environment.execution, environment.recorder, input, { settings, transcript: environment.transcript }, (value) => snapshots.push(value));
+  const final = await observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript }, (value) => snapshots.push(value));
   return { snapshots, final, overview: observeOverview(environment), messages: environment.transcript.snapshot(), memory: observeMemory(environment.runtime.memories, environment.book) };
 }
 

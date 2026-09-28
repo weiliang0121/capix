@@ -60,7 +60,7 @@ test('a real change and an unchanged update complete together; only the change i
     },
   });
   const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
-  const run = (content) => observeExecution(environment.execution, environment.recorder, acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] }), { settings, transcript: environment.transcript });
+  const run = (content) => observeExecution(environment.execution, environment.recording, acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] }), { settings, transcript: environment.transcript });
   await run('内部预演可用链接，键盘预算300。');
   const keyboard = environment.runtime.memories.values().find((memory) => memory.topic === '键盘');
   const keyboardContent = keyboard.snapshot();

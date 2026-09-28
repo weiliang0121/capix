@@ -20,7 +20,7 @@ export class ApplyMemory extends Attempt<MemoryExtraction, MemoryExtraction> {
     context.requireRunning();
     context.operationContext.requireRunning();
     context.operationContext.executionContext.requireRunning();
-    this.memories.apply(context.currentInput.memories, { contextId: context.id });
+    this.memories.apply(context.currentInput.memories, this.runtime.recording?.source(context));
     return context.currentInput;
   }
 }

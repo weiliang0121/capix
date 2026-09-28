@@ -31,7 +31,7 @@ for (const fails of [false, true]) {
       ],
     });
     const messagesBefore = environment.transcript.snapshot();
-    const facts = await observeExecution(environment.execution, environment.recorder, input, { settings, transcript: environment.transcript });
+    const facts = await observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript });
     const selection = facts.operations.find((operation) => operation.operation === 'selection');
     assert.equal(selection.status, 'succeeded');
     assert.deepEqual(readOutput(selection.value), { historyIndexes: [1, 0] });

@@ -1,9 +1,9 @@
-import { isUndefined } from 'es-toolkit/predicate';
+import type { RuntimeRecorder } from '../recorder.js';
 import { isFinite } from 'es-toolkit/compat';
 import type { EventValue } from '@capix-observer/protocol';
 import type { Clock } from '../../runtime/clock.js';
 import type { RecordBook } from '../container/book.js';
-import type { RecordIndex } from '../container/index.js';
+import type { InvocationRecordIndex } from '../invocation/index.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord } from '../attempt/record.js';
@@ -11,7 +11,8 @@ import { EventRecord } from './record.js';
 
 /** Call-boundary recording; Book and the execution index remain generic containers. */
 export class EventRecordHelper {
-  static create(book: RecordBook, index: RecordIndex<EventRecord>, clock: Clock, start: number, executionId: string, callId: string, type: EventValue['type']): EventRecord {
+  static create(recorder: RuntimeRecorder, index: InvocationRecordIndex, clock: Clock, start: number, executionId: string, callId: string, type: EventValue['type']): EventRecord {
+    const book = recorder.book;
     this.requireExecution(book, executionId);
     const call = this.requireCall(book, executionId, callId);
     const expectedStatus = type === 'call' ? 'running' : type === 'return' ? 'succeeded' : 'failed';
@@ -20,13 +21,7 @@ export class EventRecordHelper {
     const offsetMs = clock.tick() - start;
     if (!isFinite(offsetMs) || offsetMs < (previous?.offsetMs ?? 0)) throw new Error('Invalid event time');
     const record = new EventRecord({ executionId, callId, sequence: (previous?.sequence ?? 0) + 1, occurredAt: clock.now(), offsetMs }, { type });
-    index.add(record);
-    try {
-      return book.add(record);
-    } catch (error) {
-      index.remove(record.id);
-      throw error;
-    }
+    return recorder.add(record, [index]);
   }
 
   static get(book: RecordBook, id: string): EventRecord {
@@ -35,21 +30,14 @@ export class EventRecordHelper {
     return record;
   }
 
-  static findByExecution(book: RecordBook, index: RecordIndex<EventRecord>, executionId: string): readonly EventRecord[] {
+  static findByExecution(book: RecordBook, index: InvocationRecordIndex, executionId: string): readonly EventRecord[] {
     this.requireExecution(book, executionId);
-    return index.get(executionId).map((id) => this.indexed(book, id, executionId));
+    return index.eventsOf(executionId);
   }
 
-  static last(book: RecordBook, index: RecordIndex<EventRecord>, executionId: string): EventRecord | undefined {
+  static last(book: RecordBook, index: InvocationRecordIndex, executionId: string): EventRecord | undefined {
     this.requireExecution(book, executionId);
-    const id = index.get(executionId).at(-1);
-    return isUndefined(id) ? undefined : this.indexed(book, id, executionId);
-  }
-
-  private static indexed(book: RecordBook, id: string, executionId: string): EventRecord {
-    const record = this.get(book, id);
-    if (record.executionId !== executionId) throw new Error('Event index contains another execution');
-    return record;
+    return index.lastEventOf(executionId);
   }
 
   private static requireExecution(book: RecordBook, id: string): void {

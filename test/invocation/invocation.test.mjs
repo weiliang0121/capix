@@ -51,6 +51,7 @@ test('sync and async work failures keep their identity and finish their context 
   ]) {
     const finished = [];
     const recorder = {
+      begin() {},
       process() {},
       finish(context) {
         finished.push(context);
@@ -67,6 +68,7 @@ test('successful invocation keeps its outcome when terminal registration throws'
   const failure = new Error('cannot finish record');
   let finishes = 0;
   const recorder = {
+    begin() {},
     process() {},
     finish() {
       finishes++;

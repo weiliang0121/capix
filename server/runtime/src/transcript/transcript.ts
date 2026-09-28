@@ -1,3 +1,5 @@
+import { TranscriptRecordHelper } from '../records/transcript/helper.js';
+import { writeRecord } from '../records/error.js';
 import { randomUUID } from 'node:crypto';
 import type { RuntimeRecorder } from '../records/recorder.js';
 import type { ChangeSource } from '../records/source.js';
@@ -37,7 +39,8 @@ export class Transcript {
     if (!isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
     const previousStart = this.activeStart;
     this.#starts.push(start);
-    this.#recorder?.transcriptChanged(this.id, { action: 'segment', previousStart, start, end: this.length }, source);
+    const recorder = this.#recorder;
+    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(this.id, { action: 'segment', previousStart, start, end: this.length }, recorder.clock, source)));
   }
 
   append(...messages: readonly Message[]): void {
@@ -50,7 +53,8 @@ export class Transcript {
     const accepted = messages.map((message) => Transcript.accept(message));
     const start = this.length;
     for (const message of accepted) this.#messages.push(message);
-    if (accepted.length) this.#recorder?.transcriptChanged(this.id, { action: 'append', start, messages: accepted }, source);
+    const recorder = this.#recorder;
+    if (accepted.length && recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(this.id, { action: 'append', start, messages: accepted }, recorder.clock, source)));
   }
 
   current(role: Message['role']): Readonly<Message> | undefined {

@@ -1,15 +1,11 @@
-import { Invocation, writeRecord, ExecutionContext, OperationContext, AttemptContext } from '@capix-observer/runtime';
+import { Invocation, writeRecord, ExecutionContext, OperationContext, AttemptContext, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
 
-// Explicit low-level fixture for recorder tests; production E/O/A create their own Invocations.
+// Manual context boundaries for record tests; actual work always uses production Invocation.
 export function lifecycleFor(runtime) {
-  const recorder = runtime.recorder;
+  const recording = runtime.recording;
   return {
     execution(request) {
-      return invocationLifecycle(
-        () => new ExecutionContext(request.input, request),
-        recorder,
-        (context) => recorder?.beginExecution(context),
-      );
+      return invocationLifecycle(() => new ExecutionContext(request.input, request), recording ? ExecutionRecordHelper.recording(recording) : undefined);
     },
     operation(execution, operation, input, parent) {
       return invocationLifecycle(
@@ -19,8 +15,7 @@ export function lifecycleFor(runtime) {
           if (parent && parent.executionContext !== execution) throw new Error('Parent operation belongs to another execution');
           return new OperationContext(execution, input);
         },
-        recorder,
-        (context) => recorder?.beginOperation(context, operation, parent),
+        recording ? OperationRecordHelper.recording(recording, operation, parent) : undefined,
       );
     },
     attempt(operation, attempt, input) {
@@ -30,22 +25,20 @@ export function lifecycleFor(runtime) {
           operation.executionContext.requireRunning();
           return new AttemptContext(operation, input);
         },
-        recorder,
-        (context) => recorder?.beginAttempt(context, attempt),
+        recording ? AttemptRecordHelper.recording(recording, attempt) : undefined,
       );
     },
   };
 }
 
-function invocationLifecycle(prepare, recorder, register) {
+function invocationLifecycle(prepare, recording) {
   return {
     prepare,
-    recorder,
-    register,
+    recording,
     begin() {
       const context = prepare();
       try {
-        writeRecord(() => register(context));
+        writeRecord(() => recording?.begin(context));
       } catch (error) {
         context.fail(error);
         throw error;
@@ -54,16 +47,15 @@ function invocationLifecycle(prepare, recorder, register) {
     },
     succeed(context, output) {
       context.complete(output);
-      writeRecord(() => recorder?.finish(context));
+      writeRecord(() => recording?.finish(context));
     },
     fail(context, error) {
       context.fail(error);
-      writeRecord(() => recorder?.finish(context));
+      writeRecord(() => recording?.finish(context));
     },
   };
 }
 
-// Tests that execute work use the production Invocation, including its process records.
 export function invoke(lifecycle, execute) {
-  return new Invocation(lifecycle.prepare, { execute, maxRounds: 1 }, new AbortController().signal, lifecycle.recorder, lifecycle.register).run();
+  return new Invocation(lifecycle.prepare, { execute, maxRounds: 1 }, new AbortController().signal, lifecycle.recording).run();
 }

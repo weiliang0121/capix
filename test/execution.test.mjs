@@ -1,6 +1,8 @@
+import { subscribeExecutions } from '@capix-observer/service';
+import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Execution, Runtime, RuntimeRecorder, RecordBook, RecordIndex } from '@capix-observer/runtime';
+import { Execution, Runtime, RuntimeRecorder, RecordBook } from '@capix-observer/runtime';
 import { ObserverExecution } from '@capix-observer/service';
 
 import { TestOperation } from './fixtures/operation.mjs';
@@ -10,8 +12,9 @@ const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, t
 
 test('one Execution and Operation can be called again after success and failure with fresh Contexts and records', async () => {
   const snapshots = [];
-  const recorder = new RuntimeRecorder(new RecordBook(), new RecordIndex((record) => record.executionId), new RecordIndex((record) => record.operationId), new RecordIndex((record) => record.executionId), undefined, (snapshot) => snapshots.push(snapshot));
+  const recorder = new RuntimeRecorder(new RecordBook(), undefined);
   const runtime = new Runtime({ recorder: recorder });
+  subscribeExecutions(runtime.recording, (snapshot) => snapshots.push(snapshot));
   const failure = new Error('work failed');
   const contexts = [];
   const operation = new TestOperation(runtime, {
@@ -40,7 +43,7 @@ test('one Execution and Operation can be called again after success and failure 
     contexts.map((context) => context.status),
     ['succeeded', 'failed', 'succeeded'],
   );
-  const records = contexts.map((context) => recorder.snapshot(context));
+  const records = contexts.map((context) => ExecutionRecordHelper.observe(runtime.recording, context));
   assert.equal(new Set(records.map((snapshot) => snapshot.execution.id)).size, 3);
   assert.equal(new Set(records.map((snapshot) => snapshot.operations[0].id)).size, 3);
   assert.ok(records.every((snapshot) => snapshot.operations[0].operationInstanceId === operation.id));

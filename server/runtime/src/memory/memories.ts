@@ -1,3 +1,5 @@
+import { MemoryRecordHelper } from '../records/memory/helper.js';
+import { writeRecord } from '../records/error.js';
 import { isEqual, isNull } from 'es-toolkit/predicate';
 import { Memory, updateMemory } from './memory.js';
 import type { MemoryChange } from './change.js';
@@ -51,7 +53,8 @@ export class Memories {
       if (previous) updateMemory(memory, result);
       else this.#items.set(memory.id, memory);
       applied.push(memory);
-      this.recorder?.memoryChanged(memory.id, { action: change.action, change: change.change, sourceIndexes: change.sourceIndexes, result: memory.snapshot() }, source);
+      const recorder = this.recorder;
+      if (recorder) writeRecord(() => recorder.add(MemoryRecordHelper.create(memory.id, { action: change.action, change: change.change, sourceIndexes: change.sourceIndexes, result: memory.snapshot() }, source)));
     }
     return applied;
   }

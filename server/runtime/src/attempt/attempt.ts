@@ -1,3 +1,4 @@
+import { AttemptRecordHelper } from '../records/attempt/helper.js';
 import { Invocation } from '../invocation/invocation.js';
 import { receiveResult, type Continuation, type InvocationResult } from '../invocation/result.js';
 import { AttemptContext } from '../context/attempt.js';
@@ -20,7 +21,7 @@ export abstract class Attempt<I, O> {
   }
 
   call(operation: OperationContext, input: I): Promise<O> {
-    const recorder = this.runtime.recorder;
+    const recording = this.runtime.recording ? AttemptRecordHelper.recording(this.runtime.recording, this) : undefined;
     return new Invocation<I, O, AttemptContext<I, O>>(
       () => {
         operation.requireRunning();
@@ -30,8 +31,7 @@ export abstract class Attempt<I, O> {
       },
       { execute: (context) => this.execute(context), receive: this.receive === Attempt.prototype.receive ? undefined : (context, result) => this.receive(context, result), maxRounds: this.maxRounds },
       operation.executionContext.signal,
-      recorder,
-      (context) => recorder?.beginAttempt(context, this),
+      recording,
     ).run();
   }
 

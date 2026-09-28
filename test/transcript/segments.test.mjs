@@ -62,7 +62,7 @@ test('capacity opens a new segment; all three model calls use memory without rel
   const original = environment.transcript.ref(0);
   const memory = environment.runtime.memories.apply([{ action: 'create', memoryId: null, change: '接纳初始记忆', sourceIndexes: [0], result: { topic: '培训', content: '培训周五15点。', sourceIndexes: [0] } }])[0];
   const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: '培训几点？' }] });
-  const facts = await observeExecution(environment.execution, environment.recorder, input, { settings, transcript: environment.transcript });
+  const facts = await observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript });
   assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
   assert.equal(facts.execution.value.transcriptRange.start, 2);
   assert.equal(environment.transcript.activeStart, 2);
@@ -115,7 +115,7 @@ for (const retained of [2, 1, 0]) {
     const originals = environment.transcript.snapshot();
     const oldContext = new ExecutionContext(originals[4], { settings, transcript: environment.transcript });
     const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: '继续刚才那个' }] });
-    const facts = await observeExecution(environment.execution, environment.recorder, input, { settings, transcript: environment.transcript });
+    const facts = await observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript });
     assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
     const start = 6 - retained * 2;
     assert.equal(facts.execution.value.transcriptRange.start, start);

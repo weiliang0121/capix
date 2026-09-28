@@ -29,7 +29,7 @@ test('heat counts accepted selection calls, not attempts, execution success or o
   const project = () => observeSelection(environment.book, environment.transcript);
   const run = async (content) => {
     const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] });
-    return observeExecution(environment.execution, environment.recorder, input, { settings, transcript: environment.transcript });
+    return observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript });
   };
   assert.deepEqual(
     project().messages.map((item) => item.count),
@@ -90,7 +90,7 @@ test('execution rejects a foreign Transcript and does not mutate either running 
     { role: 'user', content: '另一份消息' },
     { role: 'user', content: '继续' },
   ]);
-  await assert.rejects(observeExecution(environment.execution, environment.recorder, other.current('user'), { settings, transcript: other }), /another Runtime/);
+  await assert.rejects(observeExecution(environment.execution, environment.recording, other.current('user'), { settings, transcript: other }), /another Runtime/);
   assert.deepEqual(observeSelection(environment.book, environment.transcript), { messages: [], executions: [] });
   assert.equal(other.length, 2);
   assert.equal(environment.runtime.running, false);

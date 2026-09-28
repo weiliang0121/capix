@@ -1,14 +1,16 @@
+import { subscribeExecutions } from '@capix-observer/service';
+import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Execution, Operation, Attempt, Runtime, RuntimeRecorder, RecordBook, RecordIndex, InvocationRecord } from '@capix-observer/runtime';
+import { Execution, Operation, Attempt, Runtime, RuntimeRecorder, RecordBook, InvocationRecord } from '@capix-observer/runtime';
 
 import { hasOutput, readOutput, validateSnapshot } from '@capix-observer/protocol';
 
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 
 function fixture() {
-  const recorder = new RuntimeRecorder(new RecordBook(), new RecordIndex((r) => r.executionId), new RecordIndex((r) => r.operationId), new RecordIndex((r) => r.executionId));
+  const recorder = new RuntimeRecorder(new RecordBook());
   return { recorder, runtime: new Runtime({ recorder: recorder }) };
 }
 class LocalOperation extends Operation {
@@ -53,7 +55,7 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
   }
   let context;
   const publications = [];
-  recorder.subscribe((snapshot) => {
+  subscribeExecutions(runtime.recording, (snapshot) => {
     validateSnapshot(snapshot);
     publications.push(snapshot);
   });
@@ -63,7 +65,7 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
     }),
     payload,
   );
-  const snapshot = recorder.snapshot(context);
+  const snapshot = ExecutionRecordHelper.observe(runtime.recording, context);
   const records = [snapshot.execution, ...snapshot.operations, ...snapshot.attempts];
   assert.equal(records.length, 3);
   assert.equal(snapshot.events.length, 6);
@@ -110,7 +112,7 @@ test('custom receivers preserve a distinct snapshot even when mutating and retur
     const input = { content: 'original' };
     const result = await new Custom(runtime).call(context, input);
     lifecycle.succeed(context, result);
-    const snapshot = recorder.snapshot(context);
+    const snapshot = ExecutionRecordHelper.observe(runtime.recording, context);
     validateSnapshot(snapshot);
     const value = snapshot.operations[0].value;
     assert.equal(value.processes[1].output.content, 'original');
@@ -155,7 +157,7 @@ test('observation rejects corrupted compact references rather than silently losi
   const context = lifecycle.begin();
   const result = await new LocalOperation(runtime).call(context, 'value');
   lifecycle.succeed(context, result);
-  const snapshot = JSON.parse(JSON.stringify(recorder.snapshot(context)));
+  const snapshot = JSON.parse(JSON.stringify(ExecutionRecordHelper.observe(runtime.recording, context)));
   for (const corrupt of [
     (v) => {
       v.resultOf = 1;

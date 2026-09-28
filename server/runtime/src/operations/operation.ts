@@ -1,3 +1,4 @@
+import { OperationRecordHelper } from '../records/operation/helper.js';
 import { randomUUID } from 'node:crypto';
 import { Invocation } from '../invocation/invocation.js';
 import { receiveResult, type Continuation, type InvocationResult } from '../invocation/result.js';
@@ -21,7 +22,7 @@ export abstract class Operation<I, O> {
   }
 
   call(execution: ExecutionContext, input: I, parent?: OperationContext): Promise<O> {
-    const recorder = this.runtime.recorder;
+    const recording = this.runtime.recording ? OperationRecordHelper.recording(this.runtime.recording, this, parent) : undefined;
     return new Invocation<I, O, OperationContext<I, O>>(
       () => {
         execution.requireRunning();
@@ -34,8 +35,7 @@ export abstract class Operation<I, O> {
       },
       { execute: (context) => this.execute(context), receive: this.receive === Operation.prototype.receive ? undefined : (context, result) => this.receive(context, result), maxRounds: this.maxRounds },
       execution.signal,
-      recorder,
-      (context) => recorder?.beginOperation(context, this, parent),
+      recording,
     ).run();
   }
 

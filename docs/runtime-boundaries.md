@@ -4,7 +4,7 @@ Runtime 持有持续运行信息：Transcript、Memories，以及消息选择累
 
 ## 装配与持有
 
-环境初始化一个 RuntimeRecorder 和 RecordBook、索引、Clock，再创建 Runtime 和具体 E/O/A 实例。Runtime 接受 recorder 引用，不创建或关闭记录环境；Transcript、Memories 和每个 Invocation 使用同一个 Recorder。无 Recorder 时，内容与调用仍正常工作。
+环境初始化一个 RuntimeRecorder 和 RecordBook、Clock，再创建 Runtime 和具体 E/O/A 实例。Runtime 接受 recorder 引用，为自身调用建立索引范围，不创建或关闭 Recorder；Transcript、Memories 和 Invocation 的记录接线使用同一个 Recorder。无 Recorder 时，内容与调用仍正常工作。
 
 `new Runtime({ recorder?, messages? })` 创建独立 Transcript 和 Memories。messages 是待接纳的初始原始消息，经过正常 append 并产生内容记录，不是历史快照导入。initializeObserver 同样接受消息数组，不再接受或转移已有 Transcript 实例。环境的 transcript 属性只是 runtime.transcript 的同一引用。
 
@@ -12,7 +12,7 @@ Runtime.run 只负责顶层运行占用：忙时拒绝，不排队；finally 释
 
 ## 调用对象
 
-E/O/A 是可复用行为实例，不保存本次调用的状态。它们各自检查父调用关系，构造 Invocation，不经 Runtime 的 E/O/A 工厂。
+E/O/A 是可复用行为实例，不保存本次调用的状态。它们各自检查父调用关系，构造 Invocation，并从对应记录 Helper 取得 InvocationRecording 函数接线，不经 Runtime 的 E/O/A 工厂。
 
 Invocation 构造时不建立调用现场、不写记录；run 只允许一次。它保存创建后的 Context 引用，负责开始登记、execute/receive 局部循环、终态和错误登记。循环中的轮数、输入与状态只存放在 InvocationContext，不复制到 Invocation。ExecutionContext、OperationContext、AttemptContext 是调用现场的特化，不是实例生命周期信息容器。
 
@@ -26,7 +26,7 @@ Transcript.append / appendFrom 审查整批消息后追加；startSegment 检查
 
 Memories 绑定一个 Transcript，提供 get/values/snapshot/apply。apply 检查完整批次的动作、目标、解释、唯一依据、来源存在性与包含关系，才落实内容。无变化更新不登记。模型提案的可见范围与本轮证据约束仍归提取输出契约。当前记忆体对外只读，无 add 或公开 update 旁路；包内更新保留 Memory 实例与 ID，替换冻结正文。
 
-ApplyMemory 只检查现场并提交提案和因果身份，不自行创建 Memory 或补写记录。Memories 在实际变化发生后调用 Recorder。MemoryRecord 保留变化解释和结果正文，关联执行、操作及实际调用；无调用的变更也能记录，不伪造 executionId/operationId。记录链接在 Recorder 中解析，不用记录状态裁决记忆变更是否允许。MemoryRecordHelper 只保留查询职责。
+ApplyMemory 只检查现场并提交提案和因果身份，不自行创建 Memory 或补写记录。Memories 在实际变化发生后调用 Recorder。MemoryRecord 保留变化解释和结果正文，关联执行、操作及实际调用；无调用的变更也能记录，不伪造 executionId/operationId。记录链接在调用侧通过 InvocationRecordHelper.source 解析，再传递给内容对象；不用记录状态裁决记忆变更是否允许。MemoryRecordHelper 构造记录并提供查询，Memories 通过通用 Recorder.add 登记。
 
 提案返回、提案接纳、内容落实是不同事实：提案与接纳结果在调用 IO 中，已落实变化才进入内容记录。登记错误发生时保留已经改变的内容，不虚构回滚或自动重做。批次预检查失败不部分落实；登记期间失败仍可能留下已经落实的批次前缀，当前不承诺事务。
 
@@ -37,3 +37,5 @@ ApplyMemory 只检查现场并提交提案和因果身份，不自行创建 Memo
 Observer 按实际操作角色查询历史，不依赖当前行为实例 ID 来过滤旧执行。OperationRecord 仍保留真实 operationInstanceId。更换行为实例不会丢失历史回答、选择计数或记忆关联。
 
 本轮没有 Thread/TRSA、插件注册、通用上下文容器、调度队列、导入恢复或新重试机制。后续快照与增量设计从消息变化、记忆变化和调用记录变化分别出发。
+
+记录机制的进一步分离见 [记录边界](recording.md)。

@@ -1,3 +1,5 @@
+import { InvocationRecordIndex } from '../records/invocation/index.js';
+import { InvocationRecordHelper } from '../records/invocation/helper.js';
 import type { Message } from '@capix-observer/protocol';
 import type { ExecutionContext } from '../context/execution.js';
 import type { OperationContext } from '../context/operation.js';
@@ -14,10 +16,16 @@ export class Runtime {
   readonly memories: Memories;
   readonly selectionUsage = new SelectionUsage();
   readonly recorder?: RuntimeRecorder;
+  readonly invocationRecordIndex?: InvocationRecordIndex;
+  readonly recording?: InvocationRecordHelper;
   #running = false;
 
   constructor(options: { recorder?: RuntimeRecorder; messages?: readonly Message[] } = {}) {
     this.recorder = options.recorder;
+    if (options.recorder) {
+      this.invocationRecordIndex = new InvocationRecordIndex(options.recorder.book);
+      this.recording = new InvocationRecordHelper(options.recorder, this.invocationRecordIndex);
+    }
     this.transcript = new Transcript(options.messages, options.recorder);
     this.memories = new Memories(this.transcript, options.recorder);
   }
