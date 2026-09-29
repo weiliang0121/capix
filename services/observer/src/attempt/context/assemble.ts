@@ -15,7 +15,7 @@ export class AssembleContext extends Attempt<Selection, AssembledContext> {
   readonly callee = 'processing';
 
   protected execute(context: AttemptContext<Selection, AssembledContext>): AssembledContext {
-    const execution = this.runtime.getExecutionContext(context);
+    const execution = context.operationContext.executionContext;
     const range = execution.transcriptRange;
     if (!range || range.length === 0) throw new Error('Execution Transcript range is required');
     const selectedMessages = context.currentInput.historyIndexes.map((index) => {

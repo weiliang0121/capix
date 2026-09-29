@@ -56,6 +56,6 @@ function invocationLifecycle(prepare, recording) {
   };
 }
 
-export function invoke(lifecycle, execute) {
-  return new Invocation(lifecycle.prepare, { execute, maxRounds: 1 }, new AbortController().signal, lifecycle.recording).run();
+export async function invoke(lifecycle, execute) {
+  return new Invocation({ context: lifecycle.prepare(), work: { execute, maxRounds: 1 }, signal: new AbortController().signal, recording: lifecycle.recording }).run();
 }

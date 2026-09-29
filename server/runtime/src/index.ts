@@ -34,3 +34,12 @@ export type { InvocationRecording } from './invocation/recording.js';
 export { InvocationRecordHelper } from './records/invocation/helper.js';
 export { InvocationRecordIndex, type CallRecord } from './records/invocation/index.js';
 export { TranscriptRecordHelper } from './records/transcript/helper.js';
+
+export * from './context/execution/builder.js';
+export * from './invocation/execution/builder.js';
+export * from './context/operation/builder.js';
+export * from './invocation/operation/builder.js';
+export * from './context/attempt/builder.js';
+export * from './invocation/attempt/builder.js';
+
+export * from './invocation/behavior.js';

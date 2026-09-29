@@ -31,7 +31,7 @@ test('one Execution and Operation can be called again after success and failure 
       return operation.call(context, context.input);
     }
   }
-  const execution = new EchoExecution(runtime);
+  const execution = new EchoExecution(runtime.executionInvocations);
   const first = { value: 'first' },
     last = { value: 'last' };
   assert.equal(snapshots.length, 0);

@@ -15,19 +15,15 @@ class Echo extends Execution {
   }
 }
 
-test('Invocation creates its context only on run, rejects concurrent reuse, and does not own shared Recorder lifetime', async () => {
-  let prepared = 0;
+test('Invocation consumes an established context and rejects concurrent reuse', async () => {
   let executions = 0;
   let release;
   const pending = new Promise((resolve) => {
     release = resolve;
   });
-  const invocation = new Invocation(
-    () => {
-      prepared++;
-      return new InvocationContext('input');
-    },
-    {
+  const invocation = new Invocation({
+    context: new InvocationContext('input'),
+    work: {
       maxRounds: 1,
       async execute(context) {
         executions++;
@@ -35,16 +31,15 @@ test('Invocation creates its context only on run, rejects concurrent reuse, and 
         return context.currentInput;
       },
     },
-    new AbortController().signal,
-  );
-  assert.equal(invocation.context, undefined);
-  assert.equal(prepared, 0);
+    signal: new AbortController().signal,
+  });
+  assert.equal(invocation.context.input, 'input');
+  assert.equal(invocation.context.progress.round, 0);
   const result = invocation.run();
   await assert.rejects(invocation.run(), /already started/);
   release();
   assert.equal(await result, 'input');
   assert.equal(invocation.context.status, 'succeeded');
-  assert.equal(prepared, 1);
   assert.equal(executions, 1);
   await assert.rejects(invocation.run(), /already started/);
 });
@@ -61,10 +56,10 @@ test('Runtime reserves before input acceptance across different E instances and 
       return 'done';
     }
   }
-  const first = new Wait(runtime).call('first', { settings });
+  const first = new Wait(runtime.executionInvocations).call('first', { settings });
   let accepted = false;
   await assert.rejects(
-    new Echo(runtime).submit(
+    new Echo(runtime.executionInvocations).submit(
       () => {
         accepted = true;
         runtime.transcript.append({ role: 'user', content: 'must not append' });
@@ -79,7 +74,7 @@ test('Runtime reserves before input acceptance across different E instances and 
   release();
   await first;
   await assert.rejects(
-    new Echo(runtime).submit(
+    new Echo(runtime.executionInvocations).submit(
       () => {
         throw new Error('invalid input');
       },
@@ -88,7 +83,7 @@ test('Runtime reserves before input acceptance across different E instances and 
     /invalid input/,
   );
   assert.equal(runtime.running, false);
-  assert.equal(await new Echo(runtime).call('next', { settings }), 'next');
+  assert.equal(await new Echo(runtime.executionInvocations).call('next', { settings }), 'next');
 });
 
 test('Transcript validates full batches, records changes once, and keeps old evidence stable across segmentation', () => {
@@ -196,17 +191,17 @@ test('EOA rejects cross-Runtime contexts independently of the recording layer', 
     label = 'work';
     source = 'test';
     async execute(context) {
-      await assert.rejects(new Leaf(b).call(context, 'input'), /another Runtime/);
+      await assert.rejects(new Leaf(b.attemptInvocations).call(context, 'input'), /another Runtime/);
       return 'done';
     }
   }
   class Root extends Execution {
     async execute(context) {
-      await assert.rejects(new Work(b).call(context, 'input'), /another Runtime/);
-      return new Work(a).call(context, 'input');
+      await assert.rejects(new Work(b.operationInvocations).call(context, 'input'), /another Runtime/);
+      return new Work(a.operationInvocations).call(context, 'input');
     }
   }
-  assert.equal(await new Root(a).call('input', { settings }), 'done');
+  assert.equal(await new Root(a.executionInvocations).call('input', { settings }), 'done');
 });
 
 test('Invocation distinguishes successful work from failed result registration without retrying', async (t) => {
@@ -224,7 +219,7 @@ test('Invocation distinguishes successful work from failed result registration w
       return 'completed';
     }
   }
-  await assert.rejects(new NonRecordable(runtime).call('input', { settings }), (error) => error.code === 'RECORDING_FAILED');
+  await assert.rejects(new NonRecordable(runtime.executionInvocations).call('input', { settings }), (error) => error.code === 'RECORDING_FAILED');
   assert.equal(context.status, 'succeeded');
   assert.equal(count, 1);
   assert.equal(runtime.running, false);
@@ -244,7 +239,7 @@ test('Invocation start registration failure prevents work and releases the Runti
     }
   }
   await assert.rejects(
-    new Work(runtime).call('input', { settings }, (current) => {
+    new Work(runtime.executionInvocations).call('input', { settings }, (current) => {
       context = current;
     }),
     (error) => error.code === 'RECORDING_FAILED',
@@ -269,7 +264,7 @@ test('Invocation preserves both work and failure-registration errors without rep
       throw failure;
     }
   }
-  await assert.rejects(new Work(runtime).call('input', { settings }), (error) => {
+  await assert.rejects(new Work(runtime.executionInvocations).call('input', { settings }), (error) => {
     assert.ok(error instanceof AggregateError);
     assert.equal(error.cause, failure);
     assert.equal(error.errors[0], failure);

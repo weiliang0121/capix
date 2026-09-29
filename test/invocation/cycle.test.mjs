@@ -48,7 +48,7 @@ test('local two-round handling keeps one context and one record with immutable p
       return result.output.value < 2 ? context.continueWith(result.output, '补足到二') : result.output;
     }
   }
-  const operation = new Advance(runtime),
+  const operation = new Advance(runtime.operationInvocations),
     input = { value: 0 };
   const output = await operation.call(execution, input);
   assert.deepEqual(output, { value: 2 });
@@ -84,7 +84,7 @@ test('local two-round handling keeps one context and one record with immutable p
   assert.equal(projectExecution(snapshot).nodes.find((n) => n.id === record.id).processes, record.value.processes);
 });
 
-test('execution, operation and attempt use the same paired entry/return protocol', async () => {
+test('EOA binds inherited execute and receive methods to each behavior instance', async () => {
   for (const Base of [Execution, Operation, Attempt]) {
     const { runtime, recorder, execution } = fixture();
     class Local extends Base {
@@ -94,15 +94,19 @@ test('execution, operation and attempt use the same paired entry/return protocol
       callee = 'processing';
       maxRounds = 2;
       contexts = [];
+      multiplier = 10;
+      receptions = 0;
       execute(context) {
         this.contexts.push(context);
         return context.currentInput + 1;
       }
       receive(context, result) {
-        return result.output < 2 ? context.continueWith(result.output, '继续累加') : result.output * 10;
+        this.receptions++;
+        return result.output < 2 ? context.continueWith(result.output, '继续累加') : result.output * this.multiplier;
       }
     }
-    const work = new Local(runtime);
+    class Inherited extends Local {}
+    const work = new Inherited(Base === Execution ? runtime.executionInvocations : Base === Operation ? runtime.operationInvocations : runtime.attemptInvocations);
     let output;
     if (Base === Execution) output = await work.call(0, { settings });
     else if (Base === Operation) output = await work.call(execution, 0);
@@ -111,6 +115,7 @@ test('execution, operation and attempt use the same paired entry/return protocol
       output = await work.call(parent, 0);
     }
     assert.equal(output, 20);
+    assert.equal(work.receptions, 2);
     assert.equal(work.contexts[0], work.contexts[1]);
     assert.equal(runtime.recording.get(work.contexts[0].id).value.processes.at(-1).output, 20);
   }
@@ -125,7 +130,7 @@ test('unhandled failure executes once and keeps the original error', async () =>
       throw failure;
     }
   }
-  const work = new Fail(runtime);
+  const work = new Fail(runtime.operationInvocations);
   await assert.rejects(work.call(execution, 0), (error) => error === failure);
   assert.equal(work.contexts.length, 1);
   const record = runtime.recording.get(work.contexts[0].id);
@@ -145,7 +150,7 @@ test('default limit is one total round and explicit local handling is capped at 
         return context.continueWith(result.output, '仍未满足要求');
       }
     }
-    const work = new Repeat(runtime);
+    const work = new Repeat(runtime.operationInvocations);
     await assert.rejects(work.call(execution, 0), (e) => e.code === 'LOCAL_ROUND_LIMIT');
     assert.equal(work.contexts.length, limit);
     const context = work.contexts[0],
@@ -164,7 +169,7 @@ test('invalid limits and empty continuation reasons stop explicitly', async () =
     class Invalid extends LocalOperation {
       maxRounds = limit;
     }
-    const work = new Invalid(runtime);
+    const work = new Invalid(runtime.operationInvocations);
     await assert.rejects(work.call(execution, 0), (e) => e.code === 'INVALID_ROUND_LIMIT');
     assert.equal(work.contexts.length, 0);
   }
@@ -175,7 +180,7 @@ test('invalid limits and empty continuation reasons stop explicitly', async () =
       return context.continueWith(result.output, ' ');
     }
   }
-  const work = new InvalidReason(runtime);
+  const work = new InvalidReason(runtime.operationInvocations);
   await assert.rejects(work.call(execution, 0), (e) => e.code === 'INVALID_CONTINUATION');
   assert.equal(work.contexts.length, 1);
 });
@@ -194,7 +199,7 @@ test('cancelled calls do not enter execute; cancellation between rounds keeps th
       }
     }
     if (initiallyCancelled) controller.abort(cause);
-    const work = new Repeat(runtime);
+    const work = new Repeat(runtime.operationInvocations);
     await assert.rejects(work.call(execution, 0), (e) => e.code === 'INVOCATION_CANCELLED' && e.cause === cause);
     assert.equal(work.contexts.length, initiallyCancelled ? 0 : 1);
     const record = ExecutionRecordHelper.observe(runtime.recording, execution).operations[0];
@@ -212,7 +217,7 @@ test('receiver exceptions stop locally and retain the execution result and recei
       throw failure;
     }
   }
-  const work = new Broken(runtime);
+  const work = new Broken(runtime.operationInvocations);
   await assert.rejects(work.call(execution, 0), (e) => e.code === 'RECEIVE_FAILED' && e.cause === failure);
   assert.equal(work.contexts.length, 1);
   assert.equal(work.contexts[0].progress.result.output, 1);
@@ -233,7 +238,7 @@ test('a parent may handle a failed child without rewriting the failed child invo
       return context.currentInput;
     }
   }
-  const child = new Child(runtime);
+  const child = new Child(runtime.attemptInvocations);
   class Parent extends LocalOperation {
     maxRounds = 2;
     execute(context) {
@@ -245,7 +250,7 @@ test('a parent may handle a failed child without rewriting the failed child invo
       return result.output;
     }
   }
-  const work = new Parent(runtime);
+  const work = new Parent(runtime.operationInvocations);
   assert.equal(await work.call(execution, 0), 1);
   lifecycle.succeed(execution, 1);
   const snapshot = ExecutionRecordHelper.observe(runtime.recording, execution);
@@ -274,7 +279,7 @@ test('record failure bypasses local recovery and prevents repeating successful w
       return context.continueWith(0, 'retry');
     }
   }
-  const work = new Repeat(runtime);
+  const work = new Repeat(runtime.operationInvocations);
   await assert.rejects(work.call(execution, 0), (e) => e.code === 'RECORDING_FAILED' && e.cause === failure);
   assert.equal(work.contexts.length, 1);
   assert.equal(received, 0);
@@ -295,7 +300,7 @@ test('work failure and failed process registration preserve both errors', async 
       throw failure;
     }
   }
-  await assert.rejects(new Fail(runtime).call(execution, 0), (e) => e instanceof AggregateError && e.errors[0] === failure && e.errors[1].cause === registration);
+  await assert.rejects(new Fail(runtime.operationInvocations).call(execution, 0), (e) => e instanceof AggregateError && e.errors[0] === failure && e.errors[1].cause === registration);
 });
 
 test('no recorder is required by local handling; live input/output keep their identities', async () => {
@@ -312,7 +317,7 @@ test('no recorder is required by local handling; live input/output keep their id
       return result.output === initial ? context.continueWith(next, 'next') : result.output;
     }
   }
-  const work = new Local(runtime);
+  const work = new Local(runtime.operationInvocations);
   assert.equal(await work.call(execution, initial), next);
   assert.equal(work.contexts[0].input, initial);
   assert.equal(work.contexts[0].currentInput, next);
@@ -337,7 +342,7 @@ test('child recording failures cannot be converted into parent retries', async (
       return 'done';
     }
   }
-  const child = new Child(runtime);
+  const child = new Child(runtime.attemptInvocations);
   class Parent extends LocalOperation {
     maxRounds = 2;
     execute(context) {
@@ -348,7 +353,7 @@ test('child recording failures cannot be converted into parent retries', async (
       return context.continueWith(0, 'retry');
     }
   }
-  await assert.rejects(new Parent(runtime).call(execution, 0), (e) => e.code === 'RECORDING_FAILED');
+  await assert.rejects(new Parent(runtime.operationInvocations).call(execution, 0), (e) => e.code === 'RECORDING_FAILED');
   assert.equal(effects, 1);
   assert.equal(receptions, 0);
 });
@@ -363,7 +368,7 @@ test('process publication is live during receive and does not create standalone 
       });
     }
   }
-  const work = new Waiting(runtime),
+  const work = new Waiting(runtime.operationInvocations),
     pending = work.call(execution, 0);
   while (!resume) await new Promise((resolve) => setImmediate(resolve));
   const snapshot = ExecutionRecordHelper.observe(runtime.recording, execution),
@@ -393,5 +398,5 @@ test('a cyclic aggregate remains a work error rather than recursing in control c
       throw failure;
     }
   }
-  await assert.rejects(new Fail(runtime).call(execution, 0), (error) => error === failure);
+  await assert.rejects(new Fail(runtime.operationInvocations).call(execution, 0), (error) => error === failure);
 });

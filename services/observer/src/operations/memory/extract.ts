@@ -28,11 +28,12 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
   readonly applyMemory: ApplyMemory;
 
   constructor(runtime: Runtime, provider: ModelProvider, memories: Memories) {
-    super(runtime);
-    this.prepareRequest = new PrepareModelRequest(runtime, (input, execution) => loadRequest(this.prepare(input), this.task, this.output.schema, execution.settings));
-    this.invokeModel = new InvokeModel(runtime, provider, this.purpose);
-    this.acceptOutput = new AcceptModelOutput(runtime, this.output);
-    this.applyMemory = new ApplyMemory(runtime, memories);
+    super(runtime.operationInvocations);
+    this.prepareRequest = new PrepareModelRequest(runtime.attemptInvocations, (input, execution) => loadRequest(this.prepare(input), this.task, this.output.schema, execution.settings));
+    this.invokeModel = new InvokeModel(runtime.attemptInvocations, provider, this.purpose);
+    this.acceptOutput = new AcceptModelOutput(runtime.attemptInvocations, this.output);
+    const recording = runtime.recording;
+    this.applyMemory = new ApplyMemory(runtime.attemptInvocations, memories, (context) => recording?.source(context));
   }
 
   protected prepare(input: MemoryInput) {

@@ -1,3 +1,9 @@
+import { ExecutionContextBuilder } from '../context/execution/builder.js';
+import { ExecutionInvocationBuilder } from '../invocation/execution/builder.js';
+import { OperationContextBuilder } from '../context/operation/builder.js';
+import { OperationInvocationBuilder } from '../invocation/operation/builder.js';
+import { AttemptContextBuilder } from '../context/attempt/builder.js';
+import { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
 import { InvocationRecordIndex } from '../records/invocation/index.js';
 import { InvocationRecordHelper } from '../records/invocation/helper.js';
 import type { Message } from '@capix-observer/protocol';
@@ -18,6 +24,9 @@ export class Runtime {
   readonly recorder?: RuntimeRecorder;
   readonly invocationRecordIndex?: InvocationRecordIndex;
   readonly recording?: InvocationRecordHelper;
+  readonly executionInvocations: ExecutionInvocationBuilder;
+  readonly operationInvocations: OperationInvocationBuilder;
+  readonly attemptInvocations: AttemptInvocationBuilder;
   #running = false;
 
   constructor(options: { recorder?: RuntimeRecorder; messages?: readonly Message[] } = {}) {
@@ -28,6 +37,12 @@ export class Runtime {
     }
     this.transcript = new Transcript(options.messages, options.recorder);
     this.memories = new Memories(this.transcript, options.recorder);
+    const executions = new ExecutionContextBuilder(this.transcript);
+    const operations = new OperationContextBuilder(executions);
+    const attempts = new AttemptContextBuilder(operations);
+    this.executionInvocations = new ExecutionInvocationBuilder(executions, { run: (work) => this.run(work), recording: this.recording });
+    this.operationInvocations = new OperationInvocationBuilder(operations, this.recording);
+    this.attemptInvocations = new AttemptInvocationBuilder(attempts, this.recording);
   }
 
   get running(): boolean {

@@ -8,17 +8,33 @@ Runtime 持有持续运行信息：Transcript、Memories，以及消息选择累
 
 `new Runtime({ recorder?, messages? })` 创建独立 Transcript 和 Memories。messages 是待接纳的初始原始消息，经过正常 append 并产生内容记录，不是历史快照导入。initializeObserver 同样接受消息数组，不再接受或转移已有 Transcript 实例。环境的 transcript 属性只是 runtime.transcript 的同一引用。
 
-Runtime.run 只负责顶层运行占用：忙时拒绝，不排队；finally 释放。Execution.call 把已有输入交给 submit，submit 在占用之后执行同步接纳函数，再建立 Invocation。HTTP 使用延迟接纳，因此拒绝并发请求时既不追加消息，也不发送成功响应。直接通过不同 E 实例调用同一个 Runtime，同样受约束。
+Runtime.run 只负责顶层运行占用：忙时拒绝，不排队；finally 释放。Execution.call 把已有输入交给 submit，委托 ExecutionInvocationBuilder 在占用之后执行同步接纳函数，再建立 Context 和 Invocation。HTTP 使用延迟接纳，因此拒绝并发请求时既不追加消息，也不发送成功响应。直接通过不同 E 实例调用同一个 Runtime，同样受约束。
 
 ## 调用对象
 
-E/O/A 是可复用行为实例，不保存本次调用的状态。它们各自检查父调用关系，构造 Invocation，并从对应记录 Helper 取得 InvocationRecording 函数接线，不经 Runtime 的 E/O/A 工厂。
+E/O/A 是可复用行为实例，不保存本次调用状态，也不持有 Runtime。构造时分别注入 ExecutionInvocationBuilder、OperationInvocationBuilder、AttemptInvocationBuilder，call 仅交付输入、父级现场及 execute/receive 工作行为。具体 Observer 仍显式持有其业务需要的 Runtime，不能将这一轮误解为全部业务能力注入已经完成。
 
-Invocation 构造时不建立调用现场、不写记录；run 只允许一次。它保存创建后的 Context 引用，负责开始登记、execute/receive 局部循环、终态和错误登记。循环中的轮数、输入与状态只存放在 InvocationContext，不复制到 Invocation。ExecutionContext、OperationContext、AttemptContext 是调用现场的特化，不是实例生命周期信息容器。
+Runtime 装配时创建三层 ContextBuilder 和 InvocationBuilder，跨调用复用。ExecutionContextBuilder 只持有 Transcript；OperationContextBuilder 通过 ExecutionContextBuilder 检查本次归属，AttemptContextBuilder 通过 OperationContextBuilder 检查直接父级。ExecutionContext 私有保存构造器身份，不再保存完整 Runtime；手工创建、未绑定构造器的 Context 仍保留原有直接使用方式，这不是权限或成员资格体系。O/A 的父级引用本轮保留，具体工作的信息投影及按需能力声明尚未全面迁移。
+
+各 InvocationBuilder 接受对应上下文构造器和所需记录能力；E 另接受 Runtime 让渡的 run 函数，先占用再接纳。构造器不保存本次输入、Context 或 signal。顶层每次创建或接收信号，O/A Context 绑定同一信号引用；取消改变信号状态，下次调用的新信号不覆盖旧 Context。构造器不通过方法分派 E/O/A，不引入无实际公共实现的构造器基类。
+
+Observer 的容量判断和切段策略留在 ObserverExecution.submit 的接纳回调中，仍在占用内、Context 固定范围前运行；核心 Execution 不再提供通用 prepare 钩子。请求组装、模型调用、契约接纳、记忆落实仍是工作本身。
+
+对应入口：
+
+| 工作入口                | 调用构造器                 | 上下文构造器            |
+| ----------------------- | -------------------------- | ----------------------- |
+| Execution.call / submit | ExecutionInvocationBuilder | ExecutionContextBuilder |
+| Operation.call          | OperationInvocationBuilder | OperationContextBuilder |
+| Attempt.call            | AttemptInvocationBuilder   | AttemptContextBuilder   |
+
+Invocation 接收已经建立的 Context、工作、信号、记录接线和可选入口检查，采用具名参数；构造时不写调用记录。run 只允许一次，并在开始登记前重新检查父级是否仍有效，避免建立后延迟运行穿过已结束的父级。它负责开始登记、execute/receive 局部循环、终态和错误登记。循环中的轮数、输入与状态只存放在 InvocationContext，不复制到 Invocation。ExecutionContext、OperationContext、AttemptContext 是调用现场的特化，不是实例生命周期信息容器。
+
+E/O/A 继承 InvocationBehavior，共享 execute 声明、可选 receive 声明、默认 maxRounds 和 work 绑定。work 在建立本次调用时生成，绑定当前实例并捕获轮次约束；不缓存本次 Context，也不额外创建行为实体。默认接收仅存在于公共调用循环：未声明 receive 时复用执行结果记录，声明后独立保存接收结果，不检查原型方法身份。
 
 具体 receive 决定分支；通用调用只落实继续或结束，保留一／两轮限制、取消检查、默认接收结果引用。局部循环复用同一 Context 和记录；子调用创建独立 Invocation。Attempt 不再细分运行层级。
 
-调用准备失败不产生虚构的运行记录。开始登记失败不执行工作；过程登记失败终止调用，不自动重试。Context 成功结束后，终态登记失败只传播登记异常，不把已完成的工作改判为失败。工作失败且失败登记再次失败时，AggregateError 同时保留两个错误。Runtime 的占用均会释放。
+调用建立失败不产生虚构的运行记录。Context 仍沿用原有 running 状态，progress.round=0 表示尚未进入工作；本轮不新增生命周期状态。开始登记失败不执行工作；过程登记失败终止调用，不自动重试。Context 成功结束后，终态登记失败只传播登记异常，不把已完成的工作改判为失败。工作失败且失败登记再次失败时，AggregateError 同时保留两个错误。Runtime 的占用均会释放。
 
 ## 内容的正式变化入口
 

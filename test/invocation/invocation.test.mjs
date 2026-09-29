@@ -6,7 +6,7 @@ const signal = () => new AbortController().signal;
 
 test('separate Invocations can overlap without mixing contexts or outputs', async () => {
   const pending = new Map();
-  const create = (input) => new Invocation(() => new InvocationContext(input), { maxRounds: 1, execute: (context) => new Promise((resolve) => pending.set(context.input, resolve)) }, signal());
+  const create = (input) => new Invocation({ context: new InvocationContext(input), work: { maxRounds: 1, execute: (context) => new Promise((resolve) => pending.set(context.input, resolve)) }, signal: signal() });
   const first = create('a');
   const second = create('b');
   const a = { answer: 'a' };
@@ -23,19 +23,12 @@ test('separate Invocations can overlap without mixing contexts or outputs', asyn
   assert.equal(second.context.state.output, b);
 });
 
-test('failed preparation creates no context or record and cannot reuse the Invocation', async () => {
-  const failure = new Error('prepare failed');
-  const invocation = new Invocation(
-    () => {
-      throw failure;
-    },
-    { maxRounds: 1, execute: () => assert.fail('must not run') },
-    signal(),
-    undefined,
-    () => assert.fail('must not register'),
-  );
-  await assert.rejects(invocation.run(), (error) => error === failure);
-  assert.equal(invocation.context, undefined);
+test('an ended context cannot start a new Invocation or write a start record', async () => {
+  const context = new InvocationContext('input');
+  context.complete('done');
+  const invocation = new Invocation({ context, work: { maxRounds: 1, execute: () => assert.fail('must not run') }, signal: signal(), recording: { begin: () => assert.fail('must not register') } });
+  await assert.rejects(invocation.run(), /ended/);
+  assert.equal(context.state.output, 'done');
   await assert.rejects(invocation.run(), /already started/);
 });
 
@@ -57,7 +50,7 @@ test('sync and async work failures keep their identity and finish their context 
         finished.push(context);
       },
     };
-    const invocation = new Invocation(() => new InvocationContext('input'), { execute, maxRounds: 1 }, signal(), recorder);
+    const invocation = new Invocation({ context: new InvocationContext('input'), work: { execute, maxRounds: 1 }, signal: signal(), recording: recorder });
     await assert.rejects(invocation.run(), (error) => error === failure);
     assert.equal(invocation.context.state.error, failure);
     assert.deepEqual(finished, [invocation.context]);
@@ -75,7 +68,7 @@ test('successful invocation keeps its outcome when terminal registration throws'
       throw failure;
     },
   };
-  const invocation = new Invocation(() => new InvocationContext('input'), { execute: () => 'output', maxRounds: 1 }, signal(), recorder);
+  const invocation = new Invocation({ context: new InvocationContext('input'), work: { execute: () => 'output', maxRounds: 1 }, signal: signal(), recording: recorder });
   await assert.rejects(invocation.run(), (error) => error.code === 'RECORDING_FAILED' && error.cause === failure);
   assert.deepEqual(invocation.context.state, { status: 'succeeded', output: 'output' });
   assert.equal(finishes, 1);

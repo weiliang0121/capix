@@ -42,13 +42,13 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
     }
   }
   class Processing extends LocalOperation {
-    work = new Work(runtime);
+    action = new Work(runtime.attemptInvocations);
     execute(context) {
-      return this.work.call(context, null);
+      return this.action.call(context, null);
     }
   }
   class Main extends Execution {
-    operation = new Processing(runtime);
+    operation = new Processing(runtime.operationInvocations);
     execute(context) {
       return this.operation.call(context, null);
     }
@@ -60,7 +60,7 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
     publications.push(snapshot);
   });
   assert.equal(
-    await new Main(runtime).call(null, { settings: {} }, (c) => {
+    await new Main(runtime.executionInvocations).call(null, { settings: {} }, (c) => {
       context = c;
     }),
     payload,
@@ -110,7 +110,7 @@ test('custom receivers preserve a distinct snapshot even when mutating and retur
       }
     }
     const input = { content: 'original' };
-    const result = await new Custom(runtime).call(context, input);
+    const result = await new Custom(runtime.operationInvocations).call(context, input);
     lifecycle.succeed(context, result);
     const snapshot = ExecutionRecordHelper.observe(runtime.recording, context);
     validateSnapshot(snapshot);
@@ -155,7 +155,7 @@ test('observation rejects corrupted compact references rather than silently losi
   const { runtime, recorder } = fixture();
   const lifecycle = lifecycleFor(runtime).execution({ input: null, settings: {} });
   const context = lifecycle.begin();
-  const result = await new LocalOperation(runtime).call(context, 'value');
+  const result = await new LocalOperation(runtime.operationInvocations).call(context, 'value');
   lifecycle.succeed(context, result);
   const snapshot = JSON.parse(JSON.stringify(ExecutionRecordHelper.observe(runtime.recording, context)));
   for (const corrupt of [

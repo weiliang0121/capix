@@ -5,13 +5,13 @@ export class TestAttempt extends Attempt {
   callee = 'processing';
 
   constructor(runtime, name, work = (input) => input) {
-    super(runtime);
+    super(runtime.attemptInvocations);
     this.name = name;
     this.label = name;
-    this.work = work;
+    this.action = work;
   }
 
   execute(context) {
-    return this.work(context.currentInput, context);
+    return this.action(context.currentInput, context);
   }
 }

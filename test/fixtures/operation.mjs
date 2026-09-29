@@ -8,7 +8,7 @@ export class TestOperation extends Operation {
   source = 'test/fixtures/operation.mjs · TestOperation';
 
   constructor(runtime, actions = { identity: (input) => input }) {
-    super(runtime);
+    super(runtime.operationInvocations);
     this.actions = Object.entries(actions).map(([name, work]) => new TestAttempt(runtime, name, work));
   }
 

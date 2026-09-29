@@ -35,11 +35,11 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
   readonly acceptOutput: AcceptModelOutput<GenerationInput, GenerationOutput>;
 
   constructor(runtime: Runtime, provider: ModelProvider) {
-    super(runtime);
-    this.assemble = new AssembleContext(runtime);
-    this.prepareRequest = new PrepareModelRequest(runtime, (input, execution) => this.createRequest(input, execution));
-    this.invokeModel = new InvokeModel(runtime, provider, this.purpose);
-    this.acceptOutput = new AcceptModelOutput(runtime, this.output);
+    super(runtime.operationInvocations);
+    this.assemble = new AssembleContext(runtime.attemptInvocations);
+    this.prepareRequest = new PrepareModelRequest(runtime.attemptInvocations, (input, execution) => this.createRequest(input, execution));
+    this.invokeModel = new InvokeModel(runtime.attemptInvocations, provider, this.purpose);
+    this.acceptOutput = new AcceptModelOutput(runtime.attemptInvocations, this.output);
   }
 
   protected async execute(context: OperationContext<GenerationInput, GenerationOutput>): Promise<GenerationOutput> {

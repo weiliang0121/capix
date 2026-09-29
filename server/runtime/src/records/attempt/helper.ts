@@ -1,7 +1,7 @@
 import type { AttemptContext } from '../../context/attempt.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 import { RuntimeErrorHelper } from '../../errors/helper.js';
-import type { Attempt } from '../../attempt/attempt.js';
+
 import type { RuntimeRecorder } from '../recorder.js';
 import type { RuntimeErrorValue } from '@capix-observer/protocol';
 import type { RecordBook } from '../container/book.js';
@@ -10,9 +10,16 @@ import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord, type AttemptDefinition } from './record.js';
 
+export interface AttemptDescription {
+  readonly name: string;
+  readonly label: string;
+  readonly source: string;
+  readonly callee: string;
+}
+
 /** Attempt-specific operations. Index keys identify the owning operation, not the action name. */
 export class AttemptRecordHelper {
-  static recording<I, O>(recording: InvocationRecordHelper, attempt: Attempt<I, O>) {
+  static recording<I, O>(recording: InvocationRecordHelper, attempt: AttemptDescription) {
     return recording.recording<AttemptContext<I, O>>(
       (context) => {
         const operation = recording.get(context.operationContext.id);

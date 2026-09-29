@@ -28,7 +28,7 @@ test('one Attempt instance creates independent contexts per call and leaves pare
       return context.input;
     }
   }
-  const attempt = new AcceptText(runtime);
+  const attempt = new AcceptText(runtime.attemptInvocations);
   const executionLifecycle = lifecycleFor(runtime).execution({ input: 'input', settings: {} });
   const execution = executionLifecycle.begin();
   const operationLifecycle = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), 'input');
@@ -115,7 +115,7 @@ test('Attempt works without a recorder and preserves non-JSON input and output i
   }
   const input = new Map([['content', 'original']]);
   const operation = new TestOperation(runtime);
-  const attempt = new Identity(runtime);
+  const attempt = new Identity(runtime.attemptInvocations);
   const output = await invoke(lifecycleFor(runtime).execution({ input, settings: {} }), (execution) => invoke(lifecycleFor(runtime).operation(execution, operation, input), (context) => attempt.call(context, input)));
   assert.equal(output, input);
   assert.equal(contexts[0].input, input);
@@ -155,7 +155,7 @@ test('the operation owns branching and can explicitly call the same action twice
       return output < 2 ? this.add.call(context, output) : output;
     }
   }
-  const operation = new Increment(runtime);
+  const operation = new Increment(runtime.operationInvocations);
   for (const input of [0, 2]) {
     let context;
     const output = await invoke(lifecycleFor(runtime).execution({ input, settings: {} }), (execution) => {

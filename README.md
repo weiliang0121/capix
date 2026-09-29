@@ -36,7 +36,7 @@ Transcript 只增不改删，包含第一条和当前消息。接纳时检查角
 
 `Operation<I,O>` 提供统一 call 与抽象 execute。具体操作自行组合具名 Attempt，数量和顺序由工作决定。BCA 只用于分析这些动作，不再作为执行接口、阶段枚举或记录分类。
 
-`Attempt<I,O>` 是最底层抽象执行类，call 通过独立 Invocation 建立 AttemptContext，再调用具体 execute。实例定义 name/label/source/callee，持有稳定依赖；每次调用的输入、上下文、结果独立。内部只组合普通函数，不再细分执行层级。Operation 在构造时创建所需 Attempt 实例，跨调用复用；不建立统一的动作列表解释器或新的调度系统。
+`Attempt<I,O>` 是最底层抽象执行类，call 委托复用的 AttemptInvocationBuilder，通过 AttemptContextBuilder 建立现场，再由独立 Invocation 调用具体 execute。实例定义 name/label/source/callee，持有稳定依赖；每次调用的输入、上下文、结果独立。内部只组合普通函数，不再细分执行层级。Operation 在构造时创建所需 Attempt 实例，跨调用复用；不建立统一的动作列表解释器或新的调度系统。
 
 当前三个操作的真实组合：
 
@@ -81,7 +81,7 @@ GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer �
 | 各 RecordHelper       | 对应记录的创建、关系检查、登记与结果写入                                  |
 | Clock                 | 现实时间 now() 与单调时间 tick()                                          |
 
-`Invocation.run()` 统一准备、开始登记、本地循环和终态登记。开始登记失败不执行工作；成功结果登记失败不重新进入工作失败处理。工作失败且失败登记也失败时，AggregateError 保留两个异常。EOA 主链统一通过 Invocation 执行，旧 invoke/InvocationLifecycle 已移除。
+对应的 InvocationBuilder / ContextBuilder 建立本次调用与现场，`Invocation.run()` 统一入口检查、开始登记、本地循环和终态登记。开始登记失败不执行工作；成功结果登记失败不重新进入工作失败处理。工作失败且失败登记也失败时，AggregateError 保留两个异常。EOA 主链统一通过 Invocation 执行，构造器由 Runtime 装配后持续复用；每次调用的信号与输入不保存到构造器。具体结构见 [调用与上下文构造](docs/runtime-boundaries.md)。
 
 Runtime 可以不接 Recorder。接入时，工作完成先更新 Context，再登记记录；登记异常不改写已发生的工作结果。observer/observe.ts 只将完整登记的工作失败作为观测结果返回。当前没有登记补偿或进程恢复。
 

@@ -27,10 +27,10 @@ history 仅覆盖当前消息段，memories 可能保留旧段理解，但不保
   readonly acceptOutput: AcceptModelOutput<SelectionInput, Selection>;
 
   constructor(runtime: Runtime, provider: ModelProvider) {
-    super(runtime);
-    this.prepareRequest = new PrepareModelRequest(runtime, (input, execution) => loadRequest(this.prepare(input, execution), this.task, this.output.schema, execution.settings));
-    this.invokeModel = new InvokeModel(runtime, provider, this.purpose);
-    this.acceptOutput = new AcceptModelOutput(runtime, this.output);
+    super(runtime.operationInvocations);
+    this.prepareRequest = new PrepareModelRequest(runtime.attemptInvocations, (input, execution) => loadRequest(this.prepare(input, execution), this.task, this.output.schema, execution.settings));
+    this.invokeModel = new InvokeModel(runtime.attemptInvocations, provider, this.purpose);
+    this.acceptOutput = new AcceptModelOutput(runtime.attemptInvocations, this.output);
   }
 
   protected async execute(context: OperationContext<SelectionInput, Selection>): Promise<Selection> {

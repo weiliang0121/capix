@@ -109,11 +109,11 @@ test('Observer projects only its own call scope even when two Runtimes share one
   }
   let first;
   let other;
-  await new Echo(a).call('one', { settings: {} }, (context) => {
+  await new Echo(a.executionInvocations).call('one', { settings: {} }, (context) => {
     first = context;
   });
   const count = views.length;
-  await new Echo(b).call('two', { settings: {} }, (context) => {
+  await new Echo(b.executionInvocations).call('two', { settings: {} }, (context) => {
     other = context;
   });
   assert.ok(count > 0);

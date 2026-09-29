@@ -209,7 +209,7 @@ test('assembly attempt consumes explicit sources and needs no recorder', async (
     ],
   });
   const input = { historyIndexes: [0] };
-  const attempt = new AssembleContext(runtime);
+  const attempt = new AssembleContext(runtime.attemptInvocations);
   const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message) }), (execution) => invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), input), (context) => attempt.call(context, input)));
   assert.equal(result.message, message);
   assert.equal(Object.hasOwn(result.selectedMessages[0], 'transcript'), false);

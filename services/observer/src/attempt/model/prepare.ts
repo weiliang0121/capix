@@ -1,4 +1,4 @@
-import { Attempt, type AttemptContext, type ExecutionContext, type Runtime } from '@capix-observer/runtime';
+import { Attempt, type AttemptContext, type ExecutionContext, type AttemptInvocationBuilder } from '@capix-observer/runtime';
 
 import type { ModelRequest } from '../../model/types.js';
 import { checkCapacity } from '../../model/capacity.js';
@@ -11,14 +11,14 @@ export class PrepareModelRequest<I> extends Attempt<I, ModelRequest> {
   readonly callee = 'processing';
 
   constructor(
-    runtime: Runtime,
+    invocations: AttemptInvocationBuilder,
     private readonly createRequest: (input: I, execution: ExecutionContext) => ModelRequest,
   ) {
-    super(runtime);
+    super(invocations);
   }
 
   protected execute(context: AttemptContext<I, ModelRequest>): ModelRequest {
-    const execution = this.runtime.getExecutionContext(context);
+    const execution = context.operationContext.executionContext;
     const request = this.createRequest(context.currentInput, execution);
     checkCapacity(request, execution.settings);
     return request;

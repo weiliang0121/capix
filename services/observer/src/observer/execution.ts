@@ -34,15 +34,26 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
   readonly generation: GenerateAnswer;
   readonly extraction: ExtractMemory;
 
-  constructor(runtime: Runtime, provider: ModelProvider) {
-    super(runtime);
+  constructor(
+    private readonly runtime: Runtime,
+    provider: ModelProvider,
+  ) {
+    super(runtime.executionInvocations);
     this.selection = new SelectHistory(runtime, provider);
     this.generation = new GenerateAnswer(runtime, provider);
     this.extraction = new ExtractMemory(runtime, provider, this.runtime.memories);
   }
 
-  protected override prepare(input: Readonly<Message>, options: ExecutionOptions): void {
-    if (!options.signal?.aborted) this.prepareSegment(input, options);
+  override submit(accept: () => Readonly<Message>, options: ExecutionOptions, started?: (context: ExecutionContext<Readonly<Message>, GenerationOutput>) => void): Promise<GenerationOutput> {
+    return super.submit(
+      () => {
+        const input = accept();
+        if (!options.signal?.aborted) this.prepareSegment(input, options);
+        return input;
+      },
+      options,
+      started,
+    );
   }
 
   private prepareSegment(message: Readonly<Message>, options: ExecutionOptions): void {

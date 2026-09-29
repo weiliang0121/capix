@@ -159,7 +159,7 @@ test('record creation captures instance descriptions at begin without storing th
   const operation = operationLifecycle.begin();
   const operationRecord = runtime.recording.get(operation.id);
   assert.equal(reads, 1);
-  assert.deepEqual(Object.keys(operation).sort(), ['executionContext', 'id', 'input']);
+  assert.deepEqual(Object.keys(operation).sort(), ['executionContext', 'id', 'input', 'signal']);
   assert.equal(operationRecord.operationInstanceId, instance.id);
   assert.equal(operationRecord.operation, instance.name);
   assert.equal(operationRecord.label, 'initial label');
@@ -174,7 +174,7 @@ test('record creation captures instance descriptions at begin without storing th
   const attemptLifecycle = lifecycleFor(runtime).attempt(operation, attemptInstance, 'action input');
   const attempt = attemptLifecycle.begin();
   const attemptRecord = runtime.recording.get(attempt.id);
-  assert.deepEqual(Object.keys(attempt).sort(), ['id', 'input', 'operationContext']);
+  assert.deepEqual(Object.keys(attempt).sort(), ['id', 'input', 'operationContext', 'signal']);
   assert.equal(attemptRecord.name, attemptInstance.name);
   assert.equal(attemptRecord.label, attemptInstance.label);
   assert.equal(attemptRecord.source, attemptInstance.source);
