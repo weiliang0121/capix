@@ -1,6 +1,6 @@
 import { Execution, type ExecutionContext, type ExecutionOptions, type Runtime, TranscriptRangeRef } from '@capix-observer/runtime';
 
-import type { Message, GenerationOutput } from '@capix-observer/protocol';
+import type { Message, GenerationOutput, ConversationUpdate } from '@capix-observer/protocol';
 
 import type { ModelProvider } from '../provider.js';
 
@@ -14,6 +14,22 @@ import { segmentCandidates } from './segment.js';
 
 /** The fixed composition used by this experiment, reusable across calls. */
 export class ObserverExecution extends Execution<Readonly<Message>, GenerationOutput> {
+  private readonly deliveries = new WeakMap<ExecutionContext<Readonly<Message>, GenerationOutput>, (update: ConversationUpdate) => void>();
+
+  async converse(accept: () => Readonly<Message>, options: ExecutionOptions, deliver: (update: ConversationUpdate) => void): Promise<void> {
+    let current: ExecutionContext<Readonly<Message>, GenerationOutput> | undefined;
+    try {
+      await this.submit(accept, options, (context) => {
+        current = context;
+        this.deliveries.set(context, deliver);
+        deliver({ type: 'started', contextId: context.id, inputIndex: context.transcriptRange!.end - 1 });
+      });
+      deliver({ type: 'completed', contextId: current!.id });
+    } finally {
+      if (current) this.deliveries.delete(current);
+    }
+  }
+
   readonly selection: SelectHistory;
   readonly generation: GenerateAnswer;
   readonly extraction: ExtractMemory;
@@ -49,6 +65,7 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
     const generationOutput = await this.generation.call(context, { selection: selectionOutput, memories: previousMemories });
     const responseIndex = range.transcript.length;
     range.transcript.appendFrom([{ role: 'assistant', content: generationOutput.content }], this.runtime.recording?.source(context));
+    this.deliveries.get(context)?.({ type: 'answer', contextId: context.id, index: responseIndex, output: generationOutput });
     const extractionInput = prepareMemoryInput(range, range.transcript.ref(responseIndex), selectionOutput.historyIndexes, previousMemories);
     await this.extraction.call(context, extractionInput);
     return generationOutput;

@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { request } from 'node:http';
 import { test } from 'node:test';
-import { ObserverHttpTransport } from '@capix-observer/client-http';
+import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
+import { ClientRuntime } from '@capix-observer/client-runtime';
+import { Runtime } from '@capix-observer/runtime';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
-import { createObserverServer, initializeObserver } from '@capix-observer/service';
+import { createObserverServer, initializeObserver, ObserverExecution, acceptExecutionInput } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -13,9 +15,9 @@ const provider = {
     return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'memory' ? { memories: [] } : { kind: 'answer', content: '测试回答' });
   },
 };
-async function setup(t, model = provider) {
+async function setup(t, model = provider, configured = false) {
   const observer = initializeObserver(model);
-  const server = createObserverServer({ observer, settings, configured: false });
+  const server = createObserverServer({ observer, settings, configured });
   assert.equal(server.listening, false, 'service construction must not start listening');
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -44,8 +46,13 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
   assert.equal(response.headers.get('content-type'), 'application/x-ndjson; charset=utf-8');
   const stream = await updates(response);
   assert.ok(stream.length > 1);
-  assert.ok(stream.every((item) => item.type === 'snapshot' && !('trace' in item)));
-  const snapshot = stream.at(-1).snapshot;
+  assert.deepEqual(
+    stream.map((item) => item.type),
+    ['started', 'answer', 'completed'],
+  );
+  assert.ok(stream.every((item) => !('snapshot' in item)));
+  const listed = await get('/api/executions');
+  const snapshot = await get('/api/execution?id=' + listed.executions[0].id);
   validateSnapshot(snapshot);
   assert.equal(snapshot.execution.status, 'succeeded');
   assert.equal(readOutput(snapshot.execution.value).content, '测试回答');
@@ -98,7 +105,7 @@ test('busy execution rejects another submission without adding messages or inven
     assert.equal(busy.status, 409);
     assert.equal(observer.transcript.length, 1);
     release();
-    assert.equal((await updates(first)).at(-1).snapshot.execution.status, 'succeeded');
+    assert.equal((await updates(first)).at(-1).type, 'completed');
   } finally {
     release();
   }
@@ -112,8 +119,11 @@ test('failed memory postprocessing still exposes the completed answer and the ac
     },
   });
   const stream = await updates(await run());
-  assert.equal(stream.at(-1).type, 'snapshot');
-  assert.equal(stream.at(-1).snapshot.execution.status, 'failed');
+  assert.deepEqual(
+    stream.map((item) => item.type),
+    ['started', 'answer', 'error'],
+  );
+  assert.equal(stream[1].output.content, '测试回答');
   const { executions } = await get('/api/executions');
   assert.equal(executions[0].status, 'failed');
   assert.equal(executions[0].memoryStatus, 'failed');
@@ -151,11 +161,12 @@ test('transport validates origin, input and source boundary before accepting wor
   assert.deepEqual(await get('/api/config'), { ...settings, configured: false });
 });
 
-test('Observer HTTP subclass consumes the current service without changing its protocol', async (t) => {
+test('separate HTTP subclasses deliver business content while records remain separately queryable', async (t) => {
   const { base } = await setup(t);
-  const client = new ObserverHttpTransport(base);
+  const client = new ConversationHttpTransport(base);
+  const observation = new ObservationHttpTransport(base);
   assert.deepEqual(await client.config(), { ...settings, configured: false });
-  assert.deepEqual(await client.overview(), { messages: [], executions: [] });
+  assert.deepEqual(await observation.overview(), { messages: [], executions: [] });
   let accepted = false;
   const received = [];
   await client.run(
@@ -168,16 +179,100 @@ test('Observer HTTP subclass consumes the current service without changing its p
       accepted = true;
     },
   );
-  const last = received.at(-1);
+  assert.deepEqual(
+    received.map((item) => item.type),
+    ['started', 'answer', 'completed'],
+  );
+  const overview = await observation.overview();
+  const last = await observation.execution(overview.executions[0].id);
   assert.equal(last.execution.status, 'succeeded');
-  assert.ok(received.length > 1);
-  assert.deepEqual(await client.execution(last.execution.id), last);
-  assert.equal((await client.overview()).executions[0].response.content, '测试回答');
+  assert.equal(last.execution.contextId, received[0].contextId);
+  assert.equal((await observation.overview()).executions[0].response.content, '测试回答');
   assert.deepEqual(
     (await client.transcript()).messages.map((item) => item.role),
     ['user', 'assistant'],
   );
-  assert.deepEqual(await client.memory(), { items: [] });
+  assert.deepEqual(await observation.memory(), { items: [] });
   const path = last.operations[0].source.split(' · ')[0];
-  assert.match((await client.source(path)).content, /class SelectHistory/);
+  assert.match((await observation.source(path)).content, /class SelectHistory/);
+});
+
+test('real HTTP headless client uses conversation only for two rounds without any observation requests', async (t) => {
+  const { base } = await setup(t, provider, true);
+  const paths = [];
+  const http = new ConversationHttpTransport(base, (url, init) => {
+    const path = new URL(url).pathname;
+    paths.push(path);
+    assert.ok(['/api/config', '/api/transcript', '/api/run'].includes(path), path);
+    return fetch(url, init);
+  });
+  const runtime = new ClientRuntime({ conversation: http });
+  await runtime.initialize();
+  await runtime.submit({ messages: [{ role: 'user', content: '第一问' }] });
+  await runtime.submit({ messages: [{ role: 'user', content: '第二问' }] });
+  assert.equal(runtime.getSnapshot().messages.length, 4);
+  assert.equal(runtime.getSnapshot().messages.at(-1).content, '测试回答');
+  assert.equal(paths.filter((path) => path === '/api/run').length, 2);
+  assert.equal(runtime.getSnapshot().observation.records.size, 0);
+});
+
+test('answer is delivered before memory finishes, and closing observation does not cancel the conversation', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  t.after(() => release());
+  const { base } = await setup(t, {
+    async invoke(request, purpose) {
+      if (purpose === 'memory') await gate;
+      return provider.invoke(request, purpose);
+    },
+  });
+  const controller = new AbortController();
+  const observationResponse = await fetch(base + '/api/observe', { signal: controller.signal });
+  assert.equal(observationResponse.status, 200);
+  const reader = observationResponse.body.getReader();
+  const client = new ConversationHttpTransport(base);
+  let answerReady;
+  const delivered = new Promise((resolve) => {
+    answerReady = resolve;
+  });
+  const received = [];
+  const run = client.run(
+    { messages: [{ role: 'user', content: '问题' }] },
+    (update) => {
+      received.push(update);
+      if (update.type === 'answer') answerReady();
+    },
+    () => {},
+  );
+  await delivered;
+  assert.deepEqual(
+    received.map((item) => item.type),
+    ['started', 'answer'],
+  );
+  const chunk = await reader.read();
+  assert.match(new TextDecoder().decode(chunk.value), /"type":"snapshot"/);
+  controller.abort();
+  await reader.cancel().catch(() => {});
+  release();
+  await run;
+  assert.equal(received.at(-1).type, 'completed');
+});
+
+test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
+  const runtime = new Runtime();
+  const execution = new ObserverExecution(runtime, provider);
+  const received = [];
+  await execution.converse(
+    () => acceptExecutionInput(runtime.transcript, { messages: [{ role: 'user', content: '问题' }] }),
+    { settings, transcript: runtime.transcript },
+    (update) => received.push(update),
+  );
+  assert.deepEqual(
+    received.map((item) => item.type),
+    ['started', 'answer', 'completed'],
+  );
+  assert.equal(runtime.recorder, undefined);
+  assert.equal(runtime.transcript.length, 2);
 });

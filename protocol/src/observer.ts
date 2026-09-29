@@ -1,28 +1,12 @@
-import type { ModelSettings } from './settings.js';
-import type { Message } from './message.js';
 import type { RuntimeSnapshot, ExecutionRecord } from './records.js';
 import type { ExecutionObservation } from './observation/execution.js';
 import type { MemoryRecord } from './records/memory.js';
 
-export interface ExecutionRequest {
-  messages: Message[];
-  contextBudget?: number;
-}
-export interface ConfigurationResponse extends ModelSettings {
-  configured: boolean;
-}
-export interface TranscriptResponse {
-  messages: readonly Readonly<Message>[];
-}
 export interface SourceResponse {
   path: string;
   content: string;
 }
-export interface ErrorResponse {
-  error: string;
-  code?: string;
-}
-export type RunUpdate = { type: 'snapshot'; snapshot: RuntimeSnapshot } | { type: 'error'; error: string; code?: string };
+export type ObservationUpdate = { type: 'snapshot'; snapshot: RuntimeSnapshot } | { type: 'error'; error: string; code?: string };
 
 /** Timing facts only. No IO bodies, pixel layout, colors or UI selection state. */
 export interface InvocationSummary {

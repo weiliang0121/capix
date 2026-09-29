@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ObserverHttpTransport } from '@capix-observer/client-http';
+import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
 import { snapshot } from './fixtures.mjs';
-
-const consumeRunStream = (body, accept) => new ObserverHttpTransport('', async () => new Response(body)).run({ messages: [] }, accept, () => {});
 
 function stream(text, chunkSize = 7) {
   const bytes = new TextEncoder().encode(text);
@@ -18,43 +16,61 @@ function stream(text, chunkSize = 7) {
     },
   });
 }
-const line = (value) => JSON.stringify({ type: 'snapshot', snapshot: value });
+const started = { type: 'started', contextId: 'context', inputIndex: 0 };
+const answer = { type: 'answer', contextId: 'context', index: 1, output: { kind: 'answer', content: '这是中文回答' } };
+const completed = { type: 'completed', contextId: 'context' };
+const lines = (...items) => items.map((item) => JSON.stringify(item)).join('\n');
+const consume = (text, accept = () => {}) => new ConversationHttpTransport('', async () => new Response(stream(text, 1))).run({ messages: [] }, accept, () => {});
 
-test('run stream joins UTF-8 byte and line boundaries and accepts a final line without newline', async () => {
+test('business stream joins UTF-8 and line boundaries without fetching any records', async () => {
   const received = [];
-  await consumeRunStream(stream(`${line(snapshot('running'))}\n${line(snapshot())}`, 1), (value) => received.push(value));
+  await consume(lines(started, answer, completed), (update) => received.push(update));
+  assert.deepEqual(received, [started, answer, completed]);
+});
+test('business stream requires explicit completion and keeps a delivered answer on premature EOF', async () => {
+  const received = [];
+  await assert.rejects(
+    consume(lines(started, answer), (update) => received.push(update)),
+    /提前结束/,
+  );
+  assert.deepEqual(received, [started, answer]);
+  await assert.rejects(consume(''), /提前结束/);
+});
+test('business stream distinguishes errors from completion, including errors after an answer', async () => {
+  const received = [];
+  await assert.rejects(
+    consume(lines(started, answer, { type: 'error', error: '后处理失败', code: 'POSTPROCESS' }), (update) => received.push(update)),
+    (error) => error.kind === 'remote' && error.code === 'POSTPROCESS',
+  );
+  assert.deepEqual(received, [started, answer]);
+});
+test('business stream rejects identity changes, duplicate answers, misplaced answers and terminal regression', async () => {
+  for (const [items, code] of [
+    [[answer], 'CONVERSATION_MISMATCH'],
+    [[started, { ...answer, contextId: 'other' }], 'CONVERSATION_MISMATCH'],
+    [[started, answer, answer], 'INVALID_UPDATE'],
+    [[started, started], 'INVALID_UPDATE'],
+    [[started, { ...answer, index: 5 }], 'INVALID_UPDATE'],
+    [[started, completed], 'MISSING_ANSWER'],
+    [[started, answer, completed, started], 'AFTER_TERMINAL'],
+  ])
+    await assert.rejects(consume(lines(...items)), (error) => error.code === code);
+  await assert.rejects(consume('{"type":"snapshot","snapshot":{}}'), /格式无效/);
+});
+test('observation stream accepts multiple executions independently and validates records', async () => {
+  const received = [];
+  const http = new ObservationHttpTransport('', async () => new Response(stream(lines({ type: 'snapshot', snapshot: snapshot() }, { type: 'snapshot', snapshot: snapshot('running', 'another') }))));
+  await assert.rejects(
+    http.observe((value) => received.push(value), new AbortController().signal),
+    /观测连接已结束/,
+  );
   assert.deepEqual(
-    received.map((value) => value.execution.status),
-    ['running', 'succeeded'],
+    received.map((value) => value.execution.id),
+    ['execution-1', 'another'],
   );
-  assert.equal(received[1].execution.value.output.content, '这是中文回答');
-});
-test('run stream refuses premature EOF instead of presenting a running call as complete', async () => {
+  const invalid = new ObservationHttpTransport('', async () => new Response('{"type":"snapshot","snapshot":{}}\n'));
   await assert.rejects(
-    consumeRunStream(stream(`${line(snapshot('running'))}\n`), () => {}),
-    /提前结束/,
-  );
-  await assert.rejects(
-    consumeRunStream(stream(''), () => {}),
-    /提前结束/,
-  );
-});
-test('run stream preserves a recorded work failure and surfaces transport failure separately', async () => {
-  const received = [];
-  await consumeRunStream(stream(line(snapshot('failed'))), (value) => received.push(value));
-  assert.equal(received[0].execution.value.error.code, 'TEST');
-  await assert.rejects(
-    consumeRunStream(stream(`${line(snapshot('running'))}\n${JSON.stringify({ type: 'error', error: '记录发布失败', code: 'INTERNAL_ERROR' })}\n`), () => {}),
-    /记录发布失败/,
-  );
-});
-test('run stream rejects malformed records and execution identity changes', async () => {
-  await assert.rejects(
-    consumeRunStream(stream('{"type":"snapshot","snapshot":{}}\n'), () => {}),
-    /格式无效/,
-  );
-  await assert.rejects(
-    consumeRunStream(stream(`${line(snapshot('running'))}\n${line(snapshot('succeeded', 'another'))}\n`), () => {}),
-    /不同执行/,
+    invalid.observe(() => {}, new AbortController().signal),
+    (error) => error.code === 'INVALID_SNAPSHOT',
   );
 });

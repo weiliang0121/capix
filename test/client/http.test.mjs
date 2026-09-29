@@ -1,11 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HttpTransport, ObserverHttpTransport, HttpError, ObserverTransportError } from '@capix-observer/client-http';
+import { HttpTransport, ConversationHttpTransport, ObservationHttpTransport, HttpError, ObserverTransportError } from '@capix-observer/client-http';
 import { snapshot } from './fixtures.mjs';
 
 const input = { messages: [{ role: 'user', content: '测试' }] };
-const line = (value) => JSON.stringify({ type: 'snapshot', snapshot: value });
-const jsonTransport = (value) => new ObserverHttpTransport('', async () => Response.json(value));
+const started = { type: 'started', contextId: 'context', inputIndex: 0 };
+const answer = { type: 'answer', contextId: 'context', index: 1, output: { kind: 'answer', content: '回答' } };
+const completed = { type: 'completed', contextId: 'context' };
+const line = (value) => JSON.stringify(value);
+const jsonConversation = (value) => new ConversationHttpTransport('', async () => Response.json(value));
+const jsonObservation = (value) => new ObservationHttpTransport('', async () => Response.json(value));
 
 test('HTTP base supports a different API without Observer endpoints or response types', async () => {
   class CatalogClient extends HttpTransport {
@@ -25,7 +29,7 @@ test('HTTP base supports a different API without Observer endpoints or response 
 
 test('HTTP failures retain status, method, URL and non-JSON body', async () => {
   for (const body of ['', '<html>Bad Gateway</html>']) {
-    const client = new ObserverHttpTransport('http://example.test', async () => new Response(body, { status: 502 }));
+    const client = new ObservationHttpTransport('http://example.test', async () => new Response(body, { status: 502 }));
     await assert.rejects(client.overview(), (error) => {
       assert.ok(error instanceof HttpError);
       assert.equal(error.phase, 'status');
@@ -40,7 +44,7 @@ test('HTTP failures retain status, method, URL and non-JSON body', async () => {
 test('Observer HTTP rejection retains server code and does not deliver acceptance or retry', async () => {
   let calls = 0;
   const body = { code: 'BUSY', error: '当前忙碌' };
-  const client = new ObserverHttpTransport('', async () => {
+  const client = new ConversationHttpTransport('', async () => {
     calls++;
     return Response.json(body, { status: 409 });
   });
@@ -64,7 +68,7 @@ test('Observer HTTP rejection retains server code and does not deliver acceptanc
 });
 
 test('invalid successful JSON is a decode failure with its response and cause preserved', async () => {
-  const client = new ObserverHttpTransport('', async () => new Response('not json'));
+  const client = new ConversationHttpTransport('', async () => new Response('not json'));
   await assert.rejects(client.config(), (error) => {
     assert.ok(error instanceof HttpError);
     assert.equal(error.phase, 'decode');
@@ -76,14 +80,15 @@ test('invalid successful JSON is a decode failure with its response and cause pr
 });
 
 test('all Observer queries reject malformed success bodies at the response boundary', async () => {
-  const client = jsonTransport({ unexpected: true });
-  for (const [method, args] of [
-    ['config', []],
-    ['overview', []],
-    ['transcript', []],
-    ['memory', []],
-    ['source', ['x.ts']],
-    ['execution', ['e']],
+  const conversation = jsonConversation({ unexpected: true });
+  const observation = jsonObservation({ unexpected: true });
+  for (const [client, method, args] of [
+    [conversation, 'config', []],
+    [conversation, 'transcript', []],
+    [observation, 'overview', []],
+    [observation, 'memory', []],
+    [observation, 'source', ['x.ts']],
+    [observation, 'execution', ['e']],
   ]) {
     await assert.rejects(client[method](...args), (error) => error instanceof ObserverTransportError && error.kind === 'contract', method);
   }
@@ -91,23 +96,23 @@ test('all Observer queries reject malformed success bodies at the response bound
 
 test('Observer queries accept declared fields without coercing malformed nested data', async () => {
   const config = { model: 'fixture', configured: true, contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 30000 };
-  assert.deepEqual(await jsonTransport(config).config(), config);
-  assert.deepEqual(await jsonTransport({ messages: input.messages }).transcript(), { messages: input.messages });
-  assert.deepEqual(await jsonTransport({ executions: [], messages: [] }).overview(), { executions: [], messages: [] });
-  assert.deepEqual(await jsonTransport({ items: [] }).memory(), { items: [] });
-  await assert.rejects(jsonTransport({ ...config, contextBudget: '32768' }).config(), /响应格式无效/);
-  await assert.rejects(jsonTransport({ messages: [{ role: 'system', content: 'invalid' }] }).transcript(), /响应格式无效/);
-  await assert.rejects(jsonTransport({ executions: [], messages: [{ index: -1, count: 0, message: input.messages[0] }] }).overview(), /响应格式无效/);
-  await assert.rejects(jsonTransport({ items: [{ id: 'm', topic: '主题', content: '内容', sources: [], records: [{ id: 'r' }] }] }).memory(), /响应格式无效/);
+  assert.deepEqual(await jsonConversation(config).config(), config);
+  assert.deepEqual(await jsonConversation({ messages: input.messages }).transcript(), { messages: input.messages });
+  assert.deepEqual(await jsonObservation({ executions: [], messages: [] }).overview(), { executions: [], messages: [] });
+  assert.deepEqual(await jsonObservation({ items: [] }).memory(), { items: [] });
+  await assert.rejects(jsonConversation({ ...config, contextBudget: '32768' }).config(), /响应格式无效/);
+  await assert.rejects(jsonConversation({ messages: [{ role: 'system', content: 'invalid' }] }).transcript(), /响应格式无效/);
+  await assert.rejects(jsonObservation({ executions: [], messages: [{ index: -1, count: 0, message: input.messages[0] }] }).overview(), /响应格式无效/);
+  await assert.rejects(jsonObservation({ items: [{ id: 'm', topic: '主题', content: '内容', sources: [], records: [{ id: 'r' }] }] }).memory(), /响应格式无效/);
 });
 
 test('record and source query responses must match the requested identity', async () => {
-  await assert.rejects(jsonTransport(snapshot()).execution('different'), (error) => error.code === 'EXECUTION_MISMATCH');
-  await assert.rejects(jsonTransport({ path: 'different.ts', content: 'source' }).source('requested.ts'), (error) => error.code === 'SOURCE_MISMATCH');
+  await assert.rejects(jsonObservation(snapshot()).execution('different'), (error) => error.code === 'EXECUTION_MISMATCH');
+  await assert.rejects(jsonObservation({ path: 'different.ts', content: 'source' }).source('requested.ts'), (error) => error.code === 'SOURCE_MISMATCH');
 });
 
 test('stream remote errors retain their server code', async () => {
-  const client = new ObserverHttpTransport('', async () => new Response(JSON.stringify({ type: 'error', error: '发布失败', code: 'PUBLICATION_ERROR' })));
+  const client = new ConversationHttpTransport('', async () => new Response(JSON.stringify({ type: 'error', error: '发布失败', code: 'PUBLICATION_ERROR' })));
   await assert.rejects(
     client.run(
       input,
@@ -120,7 +125,7 @@ test('stream remote errors retain their server code', async () => {
 
 test('malformed JSON and terminal regression are rejected before invalid delivery', async () => {
   let received = 0;
-  const client = new ObserverHttpTransport('', async () => new Response(`${line(snapshot())}\n${line(snapshot('running'))}\n`));
+  const client = new ConversationHttpTransport('', async () => new Response(`${line(started)}\n${line(answer)}\n${line(completed)}\n${line(started)}\n`));
   await assert.rejects(
     client.run(
       input,
@@ -131,8 +136,8 @@ test('malformed JSON and terminal regression are rejected before invalid deliver
     ),
     (error) => error.code === 'AFTER_TERMINAL',
   );
-  assert.equal(received, 1);
-  const malformed = new ObserverHttpTransport('', async () => new Response('{"type":'));
+  assert.equal(received, 3);
+  const malformed = new ConversationHttpTransport('', async () => new Response('{"type":'));
   await assert.rejects(
     malformed.run(
       input,
@@ -151,7 +156,7 @@ test('acceptance callback failure closes the unconsumed body and preserves its c
       cancelled = true;
     },
   });
-  const client = new ObserverHttpTransport('', async () => new Response(body));
+  const client = new ConversationHttpTransport('', async () => new Response(body));
   await assert.rejects(
     client.run(
       input,
@@ -166,18 +171,18 @@ test('acceptance callback failure closes the unconsumed body and preserves its c
   assert.equal(body.locked, false);
 });
 
-test('snapshot callback failure closes the active reader and is distinguishable from network failure', async () => {
+test('business callback failure closes the active reader and is distinguishable from network failure', async () => {
   let cancelled = false;
-  const cause = new Error('local snapshot failed');
+  const cause = new Error('local delivery failed');
   const body = new ReadableStream({
     start(controller) {
-      controller.enqueue(new TextEncoder().encode(line(snapshot('running')) + '\n'));
+      controller.enqueue(new TextEncoder().encode(line(started) + '\n'));
     },
     cancel() {
       cancelled = true;
     },
   });
-  const client = new ObserverHttpTransport('', async () => new Response(body));
+  const client = new ConversationHttpTransport('', async () => new Response(body));
   await assert.rejects(
     client.run(
       input,
@@ -191,7 +196,7 @@ test('snapshot callback failure closes the active reader and is distinguishable 
   assert.equal(cancelled, true);
   assert.equal(body.locked, false);
   const networkCause = new TypeError('network disconnected');
-  const broken = new ObserverHttpTransport(
+  const broken = new ConversationHttpTransport(
     '',
     async () =>
       new Response(

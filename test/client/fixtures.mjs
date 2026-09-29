@@ -16,6 +16,10 @@ export function transport(overrides = {}) {
     memory: async () => ({ items: [] }),
     execution: async (id) => snapshot('succeeded', id),
     source: async (path) => ({ path, content: 'fixture source' }),
+    observe: async (_accept, signal) => {
+      if (signal.aborted) return;
+      await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+    },
     run: async () => {
       throw new Error('Unexpected submission');
     },
@@ -30,4 +34,10 @@ export function deferred() {
     reject = no;
   });
   return { promise, resolve, reject };
+}
+
+export function deliverAnswer(receive, inputIndex = 0, contextId = 'context-execution-1', content = '这是中文回答') {
+  receive({ type: 'started', contextId, inputIndex });
+  receive({ type: 'answer', contextId, index: inputIndex + 1, output: { kind: 'answer', content } });
+  receive({ type: 'completed', contextId });
 }

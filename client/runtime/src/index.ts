@@ -1,2 +1,2 @@
-export { ClientRuntime, type ClientState } from './runtime.js';
-export type { ClientTransport } from './transport.js';
+export { ClientRuntime, type ClientRuntimeOptions, type ClientState, type ObservationState } from './runtime.js';
+export type { ConversationTransport, ObservationTransport } from './transport.js';

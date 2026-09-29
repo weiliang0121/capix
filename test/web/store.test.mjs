@@ -7,7 +7,7 @@ import { submitDraft } from '../../apps/observer/.test-dist/binding/submit.js';
 import { deferred, snapshot, transport } from '../client/fixtures.mjs';
 
 test('app stores are isolated and inspecting a node updates selection and dialogs together', () => {
-  const runtime = new ClientRuntime(transport());
+  const runtime = new ClientRuntime({ conversation: transport() });
   const first = createAppStore();
   const second = createAppStore();
   const observed = runtime.getSnapshot();
@@ -28,7 +28,7 @@ test('app stores are isolated and inspecting a node updates selection and dialog
 });
 
 test('editing search resets its cursor without changing the selected round or runtime', () => {
-  const runtime = new ClientRuntime(transport());
+  const runtime = new ClientRuntime({ conversation: transport() });
   const store = createAppStore();
   store.getState().select('kept');
   store.getState().setMatchCursor(3);
@@ -43,8 +43,8 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
   let accept;
   let sent;
   let calls = 0;
-  const runtime = new ClientRuntime(
-    transport({
+  const runtime = new ClientRuntime({
+    conversation: transport({
       run: async (request, observe, accepted) => {
         calls++;
         sent = request;
@@ -52,7 +52,7 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
         await gate.promise;
       },
     }),
-  );
+  });
   const store = createAppStore();
   await runtime.initialize();
   store.getState().setDraft('继续讨论');
@@ -76,13 +76,13 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
 });
 
 test('rejected submission preserves edits and reports an application notice without appending messages', async () => {
-  const runtime = new ClientRuntime(
-    transport({
+  const runtime = new ClientRuntime({
+    conversation: transport({
       run: async () => {
         throw new Error('HTTP 409');
       },
     }),
-  );
+  });
   const store = createAppStore();
   await runtime.initialize();
   store.getState().setDraft('保留这条输入');
@@ -96,15 +96,15 @@ test('invalid form input never reaches the runtime submission and late acceptanc
   let accept;
   let calls = 0;
   const gate = deferred();
-  const runtime = new ClientRuntime(
-    transport({
+  const runtime = new ClientRuntime({
+    conversation: transport({
       run: async (request, observe, accepted) => {
         calls++;
         accept = accepted;
         await gate.promise;
       },
     }),
-  );
+  });
   const store = createAppStore();
   await runtime.initialize();
   store.getState().setDraft('原草稿');
@@ -130,19 +130,23 @@ test('invalid form input never reaches the runtime submission and late acceptanc
 test('app connection follows streamed execution, retains edited budget on cache updates and cleans up', async () => {
   const gate = deferred();
   let observe;
-  const runtime = new ClientRuntime(
-    transport({
-      config: async () => ({ configured: true, contextBudget: 4096 }),
-      overview: async () => ({ messages: [], executions: [{ id: 'previous', startedAt: '2026-09-25T00:00:00.000Z', status: 'succeeded', inputIndex: 0, selections: [], calls: [], observedOffsetMs: 10, durationMs: 10, availableMemoryIds: [], memoryChanges: [] }] }),
-      run: async (request, next) => {
-        observe = next;
-        await gate.promise;
-      },
-    }),
-  );
+  const io = transport({
+    config: async () => ({ configured: true, contextBudget: 4096 }),
+    overview: async () => ({ messages: [], executions: [{ id: 'previous', startedAt: '2026-09-25T00:00:00.000Z', status: 'succeeded', inputIndex: 0, selections: [], calls: [], observedOffsetMs: 10, durationMs: 10, availableMemoryIds: [], memoryChanges: [] }] }),
+    observe: async (next, signal) => {
+      observe = next;
+      await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+    },
+    run: async (request, next) => {
+      next({ type: 'started', contextId: 'context-new', inputIndex: 0 });
+      await gate.promise;
+    },
+  });
+  const runtime = new ClientRuntime({ conversation: io, observation: io });
   const store = createAppStore();
   const disconnect = connectAppStore(store, runtime);
   await runtime.initialize();
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(store.getState().budget, '4096');
   assert.equal(store.getState().selectedId, 'previous');
   store.getState().setBudget('8192');
@@ -163,14 +167,14 @@ test('app connection follows streamed execution, retains edited budget on cache 
 test('unmounted app ignores late initialization errors and reconnect uses the existing initialization', async () => {
   const gate = deferred();
   let loads = 0;
-  const runtime = new ClientRuntime(
-    transport({
+  const runtime = new ClientRuntime({
+    conversation: transport({
       config: async () => {
         loads++;
         return gate.promise;
       },
     }),
-  );
+  });
   const store = createAppStore();
   const disconnect = connectAppStore(store, runtime);
   disconnect();

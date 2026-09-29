@@ -30,6 +30,6 @@ Memories 和 Transcript 决定是否允许变化、如何落实及何时记录�
 
 services/observer/src/observer/observe.ts 的 subscribeExecutions 订阅通用变化，再用 ExecutionRecordHelper.snapshot 组织现有 RuntimeSnapshot。仍在 call/return/throw 边界事件和运行中调用过程更新时发布；原始调用创建和终态更新不提前发布缺少边界事件的快照。
 
-消息、记忆变化也会通知通用订阅者，但不伪装成执行快照。当前 Observer 仍通过原有查询接口读取内容，不增加内容增量协议。共享 Recorder 时，订阅投影按各自 Runtime 的调用记录范围筛选。
+消息、记忆变化也会通知通用订阅者，但不伪装成执行快照。当前 Observer 仍通过独立查询接口读取记忆观测；对话由 ObserverExecution.converse 在回答追加后直接交付，不从记录读取回答。GET /api/observe 按需订阅本节快照，与 POST /api/run 业务交付分离，不增加观测增量协议。共享 Recorder 时，订阅投影按各自 Runtime 的调用记录范围筛选。
 
 本次没有新增 Recorder 子类、插件注册、持久化、补偿、重试或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。

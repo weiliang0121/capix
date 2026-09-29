@@ -1,6 +1,7 @@
+import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { z } from 'zod';
-import { validateSnapshot, type ConfigurationResponse, type MemoryObservation, type ObserverOverview, type RuntimeSnapshot, type SourceResponse, type TranscriptResponse } from '@capix-observer/protocol';
-import { ObserverTransportError } from './errors.js';
+import { validateSnapshot, type ConfigurationResponse, type ConversationUpdate, type MemoryObservation, type ObserverOverview, type RuntimeSnapshot, type SourceResponse, type TranscriptResponse } from '@capix-observer/protocol';
+import { HttpError, type HttpResponseInfo, ObserverTransportError } from './errors.js';
 
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const time = z.number().nonnegative();
@@ -51,4 +52,28 @@ export function acceptSnapshot(value: unknown, expectedId?: string): RuntimeSnap
   }
   if (expectedId && value.execution.id !== expectedId) throw new ObserverTransportError('contract', '返回了不同执行的记录。', 'EXECUTION_MISMATCH');
   return value;
+}
+
+export const conversationUpdate = z.discriminatedUnion('type', [z.object({ type: z.literal('started'), contextId: id, inputIndex: index }), z.object({ type: z.literal('answer'), contextId: id, index, output: z.object({ kind: z.enum(['answer', 'unknown', 'needs-info']), content: z.string() }) }), z.object({ type: z.literal('completed'), contextId: id }), z.object({ type: z.literal('error'), error: z.string(), code: z.string().optional() })]) satisfies z.ZodType<ConversationUpdate>;
+
+/** Both endpoints use the service error envelope; the HTTP base stays protocol-neutral. */
+export function responseStatusError(info: HttpResponseInfo, body: unknown): HttpError {
+  if (!isPlainObject(body)) return new HttpError(info, body, 'status');
+  return new HttpError(info, body, 'status', isString(body.error) ? body.error : undefined, isString(body.code) ? body.code : undefined);
+}
+
+export function parseLine(line: string): unknown {
+  try {
+    return JSON.parse(line);
+  } catch (cause) {
+    throw new ObserverTransportError('contract', '流 JSON 格式无效。', 'INVALID_JSON', { cause });
+  }
+}
+
+export function deliver(callback: () => void, name: string): void {
+  try {
+    callback();
+  } catch (cause) {
+    throw new ObserverTransportError('delivery', `${name}接收处理失败。`, 'DELIVERY_FAILED', { cause });
+  }
 }

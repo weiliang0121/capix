@@ -564,3 +564,11 @@
     padding-left: 12px;
   }
 }
+
+.observation-notice {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: var(--font-sm);
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+}

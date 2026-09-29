@@ -12,3 +12,4 @@ export * from './observation/selection.js';
 export * from './observation/execution.js';
 export * from './observation/memory.js';
 export * from './observer.js';
+export * from './conversation.js';

@@ -38,6 +38,8 @@ export interface ExecutionDetail {
 }
 export interface AppData {
   config?: ConfigurationResponse;
+  observationLoading: boolean;
+  observationError?: unknown;
   busy: boolean;
   pending: string;
   runningId: string;
@@ -49,7 +51,7 @@ export interface AppData {
   details: ReadonlyMap<string, ExecutionDetail>;
 }
 export function emptyAppData(): AppData {
-  return { busy: false, pending: '', runningId: '', conversation: [], messageCount: 0, progress: '', rounds: [], memory: { items: [] }, details: new Map() };
+  return { observationLoading: false, busy: false, pending: '', runningId: '', conversation: [], messageCount: 0, progress: '', rounds: [], memory: { items: [] }, details: new Map() };
 }
 
 export interface SearchMatch {

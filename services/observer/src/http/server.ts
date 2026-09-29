@@ -3,11 +3,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConfigurationResponse, ErrorResponse, ModelSettings, RunUpdate, SourceResponse, TranscriptResponse } from '@capix-observer/protocol';
+import type { ConfigurationResponse, ErrorResponse, ModelSettings, ConversationUpdate, ObservationUpdate, SourceResponse, TranscriptResponse } from '@capix-observer/protocol';
 import { ExecutionRecord, ExecutionRecordHelper, isObject, observeMemory, observeTranscript, RuntimeError } from '@capix-observer/runtime';
 import type { initializeObserver } from '../observer/environment.js';
 import { acceptExecutionInput } from '../observer/accept.js';
-import { observeExecution } from '../observer/observe.js';
+import { subscribeExecutions } from '../observer/observe.js';
 import { observeOverview } from '../observer/overview.js';
 import { validateSettings } from '../settings.js';
 import { allowedSources } from './source.js';
@@ -30,7 +30,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     void handle(req, res).catch((error) => {
       const body: ErrorResponse = error instanceof RuntimeError ? { error: error.message, code: error.code } : { error: '服务内部错误。', code: 'INTERNAL_ERROR' };
       if (res.headersSent) {
-        if (!res.destroyed) res.end(JSON.stringify({ type: 'error', ...body } satisfies RunUpdate) + '\n');
+        if (!res.destroyed) res.end(JSON.stringify({ type: 'error', ...body } satisfies ConversationUpdate) + '\n');
         return;
       }
       json(res, error instanceof RuntimeError ? (error.code === 'RUNTIME_BUSY' ? 409 : 400) : 500, body);
@@ -45,6 +45,20 @@ export function createObserverServer(options: ObserverServerOptions) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured } satisfies ConfigurationResponse);
+    if (req.method === 'GET' && url.pathname === '/api/observe') {
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+      const unsubscribe = subscribeExecutions(observer.recording, (snapshot) => {
+        if (res.destroyed) return;
+        try {
+          res.write(JSON.stringify({ type: 'snapshot', snapshot } satisfies ObservationUpdate, observeTranscript) + '\n');
+        } catch {
+          res.destroy();
+        }
+      });
+      res.on('close', unsubscribe);
+      res.flushHeaders();
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/memory') return json(res, 200, observeMemory(observer.runtime.memories, observer.book));
     if (req.method === 'GET' && url.pathname === '/api/executions') return json(res, 200, observeOverview(observer));
     if (req.method === 'GET' && url.pathname === '/api/transcript') return json(res, 200, { messages: observer.transcript.snapshot() } satisfies TranscriptResponse);
@@ -67,10 +81,8 @@ export function createObserverServer(options: ObserverServerOptions) {
       res.on('close', () => {
         if (!res.writableEnded) controller.abort();
       });
-      let publicationError: unknown;
-      await observeExecution(
-        observer.execution,
-        observer.recording,
+      let deliveryError: unknown;
+      await observer.execution.converse(
         () => {
           const input = acceptExecutionInput(observer.transcript, data);
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
@@ -78,17 +90,16 @@ export function createObserverServer(options: ObserverServerOptions) {
           return input;
         },
         { settings: runSettings, signal: controller.signal, transcript: observer.transcript },
-        (snapshot) => {
-          if (res.destroyed || publicationError) return;
+        (update) => {
+          if (res.destroyed || deliveryError) return;
           try {
-            res.write(JSON.stringify({ type: 'snapshot', snapshot } satisfies RunUpdate, observeTranscript) + '\n');
+            res.write(JSON.stringify(update) + '\n');
           } catch (error) {
-            publicationError = error;
+            deliveryError = error;
           }
         },
       );
-      // Recorder subscribers are isolated. Preserve a failed publication as a transport failure.
-      if (publicationError) throw publicationError;
+      if (deliveryError) throw deliveryError;
       res.end();
       return;
     }

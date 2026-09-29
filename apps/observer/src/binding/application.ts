@@ -41,11 +41,13 @@ export function connectAppStore(store: AppStore, runtime: ClientRuntime): () => 
     if (state.search !== previous.search) store.setState({ matches: searchRounds(state.data.rounds, state.search) });
   });
   receive();
+  const stopObservation = runtime.startObservation();
   void runtime.initialize().catch((error) => {
     if (active) store.getState().setNotice(errorMessage(error));
   });
   return () => {
     active = false;
+    stopObservation();
     unsubscribe();
     unsubscribeSearch();
   };

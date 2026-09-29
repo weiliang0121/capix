@@ -7,15 +7,14 @@ const assistant = { role: 'assistant', content: '回答' };
 const execution = { id: 'execution-1', inputIndex: 0, response: { content: assistant.content } };
 const overview = { messages: [], executions: [execution] };
 
-test('observed answer survives failed refresh and remains before a later input', () => {
+test('observation may add links but never creates a conversation answer', () => {
   const messages = [user, { role: 'user', content: '后续问题' }];
   const rows = projectConversation(messages, overview);
   assert.deepEqual(
     rows.map((row) => row.message.content),
-    ['问题', '回答', '后续问题'],
+    ['问题', '后续问题'],
   );
-  assert.equal(rows[1].executionId, 'execution-1');
-  assert.equal(rows[1].index, undefined);
+  assert.equal(rows[0].executionId, 'execution-1');
   assert.equal(messages.length, 2);
 });
 
@@ -35,8 +34,16 @@ test('formal message index reconciles observed answer without duplicate or text 
   assert.equal(rows[3].round, 2);
 });
 
-test('overview answer remains visible when its known message index is not loaded', () => {
+test('unloaded answers are not fabricated from observation records', () => {
   const rows = projectConversation([user], { ...overview, executions: [{ ...execution, response: { ...execution.response, index: 1 } }] });
-  assert.equal(rows.length, 2);
-  assert.equal(rows[1].index, 1);
+  assert.equal(rows.length, 1);
+});
+
+test('conversation content is complete without observation data', () => {
+  const rows = projectConversation([user, assistant], { messages: [], executions: [] });
+  assert.deepEqual(
+    rows.map((row) => row.message),
+    [user, assistant],
+  );
+  assert.ok(rows.every((row) => row.executionId === undefined));
 });

@@ -107,7 +107,7 @@ Runtime.getExecutionContext/getOperationContext 沿 AttemptContext.operationCont
 
 ExecutionRecordHelper.snapshot 查询已有记录；HTTP observeTranscript 在展示时展开执行范围为 start/end/messages。执行详情的 EXECUTION CONTEXT 展示配置与范围，输入区域单独显示本次消息。当前没有持久化、独立来源副本或恢复机制。
 
-浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。执行期间每个边界仍发送完整更新，尚未实现增量传输。首次加载使用轻量概览，完整快照与源码在打开详情时按需查询。
+浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。可选 GET /api/observe 在执行期间发送完整观测更新，尚未实现记录增量传输。POST /api/run 独立交付回答及处理状态，对话不依赖观测。首次加载使用轻量概览，完整快照与源码在打开详情时按需查询。
 
 ```text
 RuntimeRecord<T>：id + value
