@@ -15,7 +15,7 @@
 - GET `/api/memory` → MemoryObservation。记忆正文、来源与已生成的变更记录。
 - GET `/api/source?file=路径` → SourceResponse。路径为仓库相对源文件路径，服务端白名单验证。
 - POST `/api/run` 接受 ExecutionRequest；200 返回 NDJSON ConversationUpdate。started 携带 contextId/inputIndex，answer 携带 contextId/index/完整 GenerationOutput，completed 表示后处理也已完成，error 表示处理异常。回答在追加 Transcript 后立即交付，不等待记忆提取；没有记录订阅也能完整使用。
-- GET `/api/observe` 独立返回 NDJSON ObservationUpdate：snapshot 是某次执行的完整观测快照，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。可包含多轮执行；没有重放、增量合并、自动重连或跨查询一致性承诺。
+- GET `/api/observe` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接；序号缺口最多自动重建一次基线，不提供历史重放或跨查询一致性承诺。
 - HTTP 非 2xx 返回 ErrorResponse。忙碌时 409，拒绝追加消息；接纳/配置错误 400；内部错误 500。不改变现有运行失败的事实记录。
 
 ## 身份、顺序与时间
@@ -32,10 +32,20 @@ availableMemoryIds 来自本轮输入快照，只表示可见，不能宣称模�
 
 ## 内容变化记录
 
-MemoryRecord 的 executionId/operationId 改为可选，contextId/callId 可选并标识实际来源调用；由运行外部直接接纳的记忆变化没有虚构调用归属。TranscriptRecord 表达追加或分段，包含 transcriptId、occurredAt 与可选调用来源。内容记录不加入 RuntimeSnapshot 的 EOA 节点列表，不新增增量协议或恢复行为。
+MemoryRecord 的 executionId/operationId 改为可选，contextId/callId 可选并标识实际来源调用；由运行外部直接接纳的记忆变化没有虚构调用归属。TranscriptRecord 表达追加或分段，包含 transcriptId、revision、occurredAt 与可选调用来源。transcriptId/revision 将内容事件与其记录关联；MemoryRecord 使用 memoriesId/sequence。内容记录通过观测增量传输，但不加入 RuntimeSnapshot 的 EOA 节点列表。
 
 ## Runtime 根记录与通用命名
 
 BaseRecord 表达身份、直接 parentId 与正文；CompositeRecord 增加 childIds。RuntimeRecord 是具体根记录，value 当前只有 createdAt；InvocationValue 是 E/O/A 共用调用正文。Recorder 是服务端环境登记机制，不属于跨端协议。RuntimeContext 是运行现场，也不加入协议。
 
-执行记录的 parentId 现在指向 RuntimeRecord。当前 RuntimeSnapshot 仍为一次执行的 E/O/A/事件视图，不附带 Runtime 根正文；响应外的 parentId/childIds 引用不意味着已完整装载整棵树。此次不设计增量游标、持久化或恢复契约。
+执行记录的 parentId 现在指向 RuntimeRecord。当前 RuntimeSnapshot 仍为一次执行的 E/O/A/事件视图，不附带 Runtime 根正文；响应外的 parentId/childIds 引用不意味着已完整装载整棵树。观测基线另外携带 Runtime 根与活动执行的记录；已完成正文按需查询。交付游标与各来源顺序分开，不承诺持久化或业务恢复。
+
+## 变化与交付
+
+RuntimeChange 是已知来源的联合：TranscriptEvent、MemoryEvent、InvocationEvent、RecordChangeEvent。生产者仅依赖本类的 ChangeCapture<E>；联合类型用于装配与跨端接纳，不赋予公共捕获器业务分派职责。InvocationEvent 只包含身份、直接父级、进度和终态元数据；任意业务 IO 留在业务通道或记录中。
+
+RecordMutation 分为 added、process-appended、finished、replaced。added 携带新记录与直接父级新增引用；process-appended 不重复旧过程；finished 保持 resultOf 正文复用。replaced 是通用显式更新的后备形式，不是快照 diff。record entry 的 kind 由具体记录类声明。
+
+ObservationBaseline 的 sequence 是发送者已消费到的位置，另带 Transcript revision、Memories sequence 和 Recorder revision。ObservationDelta.changes 保留捕获顺序，整批交付不等于跨源事务。客户端先检查交付位置，再检查各来源顺序，整批成功才公开新状态。
+
+服务当前为一个环境装配一个发送者；多个连接共享发送范围，各自取得基线。HTTP 连接的待发数据与 writableLength 合计上限为 16 MiB，超限断开连接，不等待慢客户端拖住运行。捕获器不持有已交付历史，不支持游标重放、消费确认或持久化恢复。

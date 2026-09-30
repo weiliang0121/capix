@@ -13,3 +13,5 @@ export * from './observation/execution.js';
 export * from './observation/memory.js';
 export * from './observer.js';
 export * from './conversation.js';
+export * from './changes.js';
+export * from './observation/stream.js';

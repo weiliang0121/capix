@@ -29,8 +29,8 @@ export class AttemptRecordHelper {
       },
       (context, record, resultOf) => {
         const state = context.state;
-        if (state.status === 'succeeded') this.complete(recording.recorder.book, record.id, state.output, resultOf);
-        else if (state.status === 'failed') this.fail(recording.recorder.book, record.id, RuntimeErrorHelper.format(state.error));
+        if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);
+        else if (state.status === 'failed') this.fail(recording.recorder, record.id, RuntimeErrorHelper.format(state.error));
       },
     );
   }
@@ -56,12 +56,12 @@ export class AttemptRecordHelper {
     return recorder.tree.children(operationId).filter((record): record is AttemptRecord => record instanceof AttemptRecord);
   }
 
-  static complete(book: RecordBook, id: string, output: unknown, resultOf?: number): void {
-    this.get(book, id).complete(output, resultOf);
+  static complete(recorder: Recorder, id: string, output: unknown, resultOf?: number): void {
+    InvocationRecordHelper.finish(recorder, this.get(recorder.book, id), (record) => record.complete(output, resultOf));
   }
 
-  static fail(book: RecordBook, id: string, error: RuntimeErrorValue): void {
-    this.get(book, id).fail(error);
+  static fail(recorder: Recorder, id: string, error: RuntimeErrorValue): void {
+    InvocationRecordHelper.finish(recorder, this.get(recorder.book, id), (record) => record.fail(error));
   }
 
   private static owner(book: RecordBook, id: string): OperationRecord {

@@ -2,7 +2,7 @@ import { isFunction } from 'es-toolkit/predicate';
 import type { Message, RuntimeSnapshot } from '@capix-observer/protocol';
 import type { ExecutionOptions, InvocationRecordHelper } from '@capix-observer/runtime';
 
-import { EventRecord, ExecutionRecord, OperationRecord, AttemptRecord, ExecutionRecordHelper } from '@capix-observer/runtime';
+import { InvocationBoundaryRecord, ExecutionRecord, OperationRecord, AttemptRecord, ExecutionRecordHelper } from '@capix-observer/runtime';
 
 import type { ObserverExecution } from './execution.js';
 
@@ -34,7 +34,7 @@ export async function observeExecution(execution: ObserverExecution, recording: 
 export function subscribeExecutions(recording: InvocationRecordHelper, publish: (snapshot: RuntimeSnapshot) => void): () => void {
   return recording.recorder.subscribe((record, change) => {
     let executionId: string;
-    if (record instanceof EventRecord) executionId = record.executionId;
+    if (record instanceof InvocationBoundaryRecord) executionId = record.executionId;
     else if (change === 'update' && (record instanceof ExecutionRecord || record instanceof OperationRecord || record instanceof AttemptRecord) && record.status === 'running') executionId = recording.executionId(record);
     else return;
     // A shared Recorder may contain another Runtime's calls; this projection owns only this scope.

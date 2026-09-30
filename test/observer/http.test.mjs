@@ -252,7 +252,7 @@ test('answer is delivered before memory finishes, and closing observation does n
     ['started', 'answer'],
   );
   const chunk = await reader.read();
-  assert.match(new TextDecoder().decode(chunk.value), /"type":"snapshot"/);
+  assert.match(new TextDecoder().decode(chunk.value), /"type":"baseline"/);
   controller.abort();
   await reader.cancel().catch(() => {});
   release();

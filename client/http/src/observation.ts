@@ -1,9 +1,9 @@
 import type { ObservationTransport } from '@capix-observer/client-runtime';
-import type { RuntimeSnapshot } from '@capix-observer/protocol';
+import type { ObservationFrame } from '@capix-observer/protocol';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { HttpTransport } from './transport.js';
 import { ObserverTransportError } from './errors.js';
-import { acceptResponse, acceptSnapshot, overviewResponse, memoryResponse, sourceResponse, responseStatusError, parseLine, deliver } from './responses.js';
+import { acceptResponse, acceptSnapshot, acceptObservationFrame, overviewResponse, memoryResponse, sourceResponse, responseStatusError, parseLine, deliver } from './responses.js';
 import { readLines } from './stream.js';
 
 /** Observation queries and subscriptions, independent of conversation delivery. */
@@ -24,16 +24,15 @@ export class ObservationHttpTransport extends HttpTransport implements Observati
   async execution(id: string, signal?: AbortSignal) {
     return acceptSnapshot(await this.get(`/api/execution?id=${encodeURIComponent(id)}`, signal), id);
   }
-  async observe(accept: (snapshot: RuntimeSnapshot) => void, signal: AbortSignal): Promise<void> {
+  async observe(accept: (frame: ObservationFrame) => void, signal: AbortSignal): Promise<void> {
     const response = await this.send('/api/observe', { signal });
     if (!response.body) throw new ObserverTransportError('contract', '服务未返回记录流。', 'MISSING_STREAM');
     for await (const line of readLines(response.body)) {
       const update = parseLine(line);
       if (!isPlainObject(update)) throw new ObserverTransportError('contract', '记录流格式无效。', 'INVALID_UPDATE');
       if (update.type === 'error' && isString(update.error)) throw new ObserverTransportError('remote', update.error, isString(update.code) ? update.code : undefined);
-      if (update.type !== 'snapshot') throw new ObserverTransportError('contract', '未知的记录流消息。', 'INVALID_UPDATE');
-      const snapshot = acceptSnapshot(update.snapshot);
-      deliver(() => accept(snapshot), '执行快照');
+      const frame = acceptObservationFrame(update);
+      deliver(() => accept(frame), '观测变化');
     }
     if (!signal.aborted) throw new ObserverTransportError('contract', '观测连接已结束。', 'INCOMPLETE_STREAM');
   }

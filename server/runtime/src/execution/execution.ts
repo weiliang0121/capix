@@ -13,6 +13,6 @@ export abstract class Execution<I, O> extends InvocationBehavior<I, O, Execution
   }
 
   submit(accept: () => I, options: ExecutionOptions, started?: ExecutionStarted<I, O>): Promise<O> {
-    return this.invocations.submit(accept, options, this.work, started);
+    return this.invocations.submit(accept, { context: options, work: this.work, started });
   }
 }

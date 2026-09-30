@@ -1,3 +1,4 @@
+import type { InvocationChangeEmitter } from './changes.js';
 import type { CallRecord } from '../records/invocation/record.js';
 import type { ChangeSource } from '../records/source.js';
 import type { InvocationContext } from '../context/context.js';
@@ -15,6 +16,7 @@ export interface InvocationOptions<I, O, C extends InvocationContext<I, O>> {
   recording?: InvocationRecording<C>;
   started?: InvocationStarted<I, O, C>;
   validate?: () => void;
+  changes?: InvocationChangeEmitter;
 }
 
 /** A single-use structured call. Context, progress and records belong to this invocation, not the behavior instance. */
@@ -65,30 +67,35 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     try {
       this.options.validate?.();
       this.options.started?.(context, this);
+      this.options.changes?.publish({ kind: 'started' });
       writeRecord(() => {
         this.options.recording?.begin(context, (record) => this.bind(record));
         if (this.options.recording) this.requireRecord();
       });
     } catch (error) {
       context.fail(error);
+      try {
+        this.options.changes?.publish({ kind: 'finished', status: 'failed' });
+      } catch (captureError) {
+        throw new AggregateError([error, captureError], 'Call setup and its failure capture both failed', { cause: error });
+      }
       throw error;
     }
 
     let output: O;
     try {
-      output = await cycle(
-        context,
-        this.options.work,
-        this.options.signal,
-        (process) => {
+      output = await cycle(this, this.options.work, {
+        signal: this.options.signal,
+        onProcess: (process) => {
           const sequence = this.nextSequence();
+          this.options.changes?.publish({ kind: 'process', processSequence: sequence, round: context.progress.round, stage: process.stage, action: process.type });
           writeRecord(() => this.options.recording?.process(context, this.requireRecord(), process, sequence));
         },
-        this,
-      );
+      });
     } catch (error) {
       context.fail(error);
       try {
+        this.options.changes?.publish({ kind: 'finished', status: 'failed' });
         writeRecord(() => this.options.recording?.finish(context, this.requireRecord()));
       } catch (registrationError) {
         throw new AggregateError([error, registrationError], 'Work failed and failure registration also failed', { cause: error });
@@ -97,6 +104,7 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     }
     // Registration failure after success must not fail or repeat the completed work.
     context.complete(output);
+    this.options.changes?.publish({ kind: 'finished', status: 'succeeded' });
     writeRecord(() => this.options.recording?.finish(context, this.requireRecord()));
     return output;
   }

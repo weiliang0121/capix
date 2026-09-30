@@ -27,3 +27,21 @@ observer/segment.ts 只为当前串行对话提出候选范围。它从本次输
 单轮过大时整轮退出活动范围，不从中间截消息；当前输入自身过大仍失败。轮内工具调用、长任务的材料细分不在本次范围。
 
 Transcript 由 Runtime 持有，append/appendFrom/startSegment 在审查与落实后调用共享 Recorder。空追加、非法消息和无效分段不产生变化记录；记录失败保留已发生的内容变化。调用外接纳不虚构执行归属。
+
+## 变化事实与捕获
+
+Transcript 自身负责消息和段边界的接纳、落实，以及本地 revision。一次非空批量追加或有效切段推进一次 revision；消息 index 仍只定位正文。没有捕获器、没有 Recorder 时，revision 同样推进；它不是网络交付游标。
+
+`new Transcript(messages, { changes, recorder })` 在接纳初始消息前固定两个可选出口；`createRuntime({ messages, changes, recorder })` 负责相同装配。Transcript 的 changes 只要求 `ChangeCapture<TranscriptEvent>`；createRuntime 接受已知来源的联合 RuntimeChange。一个 `ChangeObserver<A | B>` 可以共享给只产生 A 和只产生 B 的来源，不要求每个对象独占捕获器。服务已将消息、记忆、调用及记录登记接入同一捕获器。
+
+```text
+整批接纳 → 固定事件正文 → 正式更新集合及 revision
+                          → 同步捕获 TranscriptEvent
+                          → 按需登记 TranscriptRecord
+```
+
+TranscriptEvent 固定 transcriptId、revision、occurredAt 与 change；messages-appended 保存 start 和已接纳的不可变消息，segment-started 保存 previousStart/start/end。事件及其正文、消息数组均冻结；消息正文复用 Transcript 已冻结的对象。事件不携带活的 Transcript 或调用记录，不从后来的状态反推。事件不虚构调用来源；既有 ChangeSource 用于对应 TranscriptRecord 的归属，记录同时保存 transcriptId/revision，与内容事件关联。
+
+ChangeObserver 只暂存尚未取走的事实。capture 不调用消费者；take 转移当前批次、返回冻结数组并清空待取集合。不同来源的事件按捕获顺序放在一个批次中，但批次不表示业务事务。来源负责正文不可变，观察者不解释或复制泛型正文。服务已默认装配并通过 wait/take 持续消费；wait 只唤醒异步消费，不在 capture 内运行消费者。缓冲不持有已取出历史，不承诺持久化、消费确认、失败重投或重放。慢网络连接的缓存上限由发送者处理。
+
+ChangeCapture 的实现契约是同步完整接纳或在接纳前抛错，不运行下游消费者、不重入来源。自定义实现须遵守此约定，接口不能替代实现保证。捕获失败包装为 ChangeCaptureError，保留已发生的不可变事件及 cause；集合与 revision 保持已落实状态，后续运行记录登记尚未执行。调用循环将该错误视为必须停止，避免通过重做工作重复追加。记录失败则保留已捕获事件；两者不构成事务。既有 snapshot(end) 的原文读取语义不变。同步基线与网络增量由服务组织，详见 [观测增量](observation-increments.md)。

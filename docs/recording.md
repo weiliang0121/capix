@@ -8,7 +8,7 @@ Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、�
 
 - add(record) 是正式登记入口。RecordRegistration 先通过 RecordTree 检查归属并准备新的 childIds，然后同步写入 Book、替换父级 childIds，全部成功后才通知。登记期间拒绝同一 Recorder 的重入写入。
 - 登记失败时恢复原 childIds，并清理本次 Book 写入，包括 Book 写入后抛错的情况。Book/关系的内部恢复不执行用户回调；不保留已无使用者的索引登记或回滚接口。
-- update(record, apply) 要求是 Book 中登记的同一实例，再执行特化更新。如何判断终态、复制正文和检查子记录由具体 Record / Helper 决定。
+- update(record, apply, describe?) 要求是 Book 中登记的同一实例，再执行特化更新。如何判断终态、复制正文和检查子记录由具体 Record / Helper 决定。
 - subscribe 接收 record、add/update 分类和 related 数组。子记录新增只发布一次 add，related 包含本次同步变更的直接父记录；不另外发布可能触发缺少边界事件快照的父记录 update。通知时记录与父子关系均已可见。原有两参数消费者可继续工作。通知不是历史快照，不承诺持久化或跨进程传输；有这些需求的消费者应另行捕获数据。
 - 写入失败统一为 RecordingError。通知发生在登记之后，每个订阅者独立隔离；观察失败不回滚登记，也不阻止其他订阅者。
 - Clock 仅作为共享时间来源。调用起点、执行内偏移和事件顺序都属于调用记录特化。
@@ -36,7 +36,7 @@ InvocationRecordHelper 复用过程格式、结果引用、错误转换和边界
 
 InvocationRecordIndex 及其 Context/Operation/Attempt/Event 映射已经移除。通用 RecordIndex 没有其他生产使用者，一并移除。调用绑定由 Invocation 持有，归属查询由 RecordTree 提供；RecordBook 仍是实际记录的唯一存储。正常构造每次建立独立 Context，不为旧索引的重复登记防御另建全局检查。
 
-Runtime.recording 持有原有 InvocationRecordHelper 的实例，持有所属 RuntimeRecord，使用共享 Recorder 组织调用记录，私有保存执行计时起点；执行终态边界登记后释放起点。Observer 通过 tree.root(executionId) 与 RuntimeRecord 的身份比较判断归属，不依赖 Context 索引或计时表。EventRecordHelper 继续负责事件序号、状态匹配与单调时间检查，不增加独立时序管理器。无 Recorder 时不创建这个辅助对象。
+Runtime.recording 持有原有 InvocationRecordHelper 的实例，持有所属 RuntimeRecord，使用共享 Recorder 组织调用记录，私有保存执行计时起点；执行终态边界登记后释放起点。Observer 通过 tree.root(executionId) 与 RuntimeRecord 的身份比较判断归属，不依赖 Context 索引或计时表。InvocationBoundaryRecordHelper 继续负责事件序号、状态匹配与单调时间检查，不增加独立时序管理器。无 Recorder 时不创建这个辅助对象。
 
 ## 内容记录与来源
 
@@ -44,15 +44,17 @@ Memories 和 Transcript 决定是否允许变化、如何落实及何时记录�
 
 调用侧通过 invocation.source 取得已经解析的 ChangeSource：contextId、callId、executionId，以及适用时的 operationId。内部由 InvocationRecordHelper.source(record) 解释已绑定记录；无 Recorder 时为 undefined，启用记录但尚未绑定时拒绝取得来源。集合不接收 Context 或 Invocation，不查询调用关系；通用 Recorder 同样不负责解析来源。来源是因果说明，不是权限凭据。调用外变化不伪造来源。
 
-## 观察发布
+## 变化捕获与观察发布
 
-services/observer/src/observer/observe.ts 的 subscribeExecutions 订阅通用变化，再用 ExecutionRecordHelper.snapshot 组织现有 RuntimeSnapshot。仍在 call/return/throw 边界事件和运行中调用过程更新时发布；原始调用创建和终态更新不提前发布缺少边界事件的快照。
+Recorder 正式登记或更新之后，固定 RecordChangeEvent 并交给可选捕获器，然后通知原有同步订阅者。自身 id/revision 表达该登记范围；kind 由记录类声明，Recorder 不按 E/O/A 分派。added 同时描述新记录与父级引用；过程只发送新增条目，finish 只发送终态与结果。通用 update 的 describe 可提供特化变化，省略时使用显式 replaced。没有比较两份快照。
 
-消息、记忆变化也会通知通用订阅者，但不伪装成执行快照。当前 Observer 仍通过独立查询接口读取记忆观测；对话由 ObserverExecution.converse 在回答追加后直接交付，不从记录读取回答。GET /api/observe 按需订阅本节快照，与 POST /api/run 业务交付分离，不增加观测增量协议。共享 Recorder 时，订阅投影按各自 Runtime 的调用记录范围筛选。
+Execution/Operation/Attempt 的 Helper 均通过 Recorder 更新，InvocationRecordHelper 统一过程与终态的描述。实例方法仍维护自身状态约束，正式运行更新不能绕过登记入口。Transcript 和 Memories 自己捕获内容事件，不依赖 Recorder 通知推导业务变化。
 
-本次没有新增 Recorder 子类、插件注册、持久化、业务补偿、重试或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。
+services/observer/src/observer/feed.ts 消费共享 ChangeObserver，发送一致基线及后续增量。旧 subscribeExecutions 保留为本地诊断与测试工具，基于同步登记通知组织执行快照；HTTP 观测不再使用它。
 
-快照序列化带出 parentId/childIds，但 RuntimeSnapshot 仍然只包含既有 E/O/A 和事件正文，Runtime 根记录暂不传输，内容记录通过各自接口取得；execution.parentId 及 childIds 中可能引用当前响应没有装载的记录，本响应不是完整树导出。此轮没有设计增量协议、消费游标或改变事件序号规则。
+RuntimeSnapshot 仍只包含既有 E/O/A 和调用边界正文，是按需查询及本地展示的执行视图，不是整棵记录树。观测基线另带 Runtime 根及活动执行记录，内容记录通过 record 增量传输。parentId/childIds 可以引用未装载的历史正文。对话由 ObserverExecution.converse 独立交付，不从记录生成回答。
+
+没有新增 Recorder 子类、插件注册、持久化、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。
 
 ## 局部顺序与索引迁移进度
 
@@ -60,4 +62,10 @@ Invocation 自行给现有内部过程赋予连续 sequence，传给 InvocationR
 
 Memories 持有自身 id 和正式变化 sequence；MemoryRecord 保存 memoriesId/sequence/memoryId，分别表达变化范围、位置和对象。无变化与预检查失败不占号，已落实变化不会因记录失败回收序号。消息继续使用原有绝对 index。均不作为传输游标。
 
-操作、意图的范围查询、父级结束检查、快照中的事件收集均使用 Recorder.tree；事件按执行内 sequence 显式排序。EventRecordHelper.last 从执行子树中取 sequence 最大的事件，用于下一序号与单调时间检查，不能取遍历末项；登记失败不占用事件序号。它每次遍历执行子树，暂不增加事件游标、缓存或时序管理者。调用索引及其登记接口已退出，见 [观测增量](observation-increments.md)。
+操作、意图的范围查询、父级结束检查、快照中的事件收集均使用 Recorder.tree；事件按执行内 sequence 显式排序。InvocationBoundaryRecordHelper.last 从执行子树中取 sequence 最大的事件，用于下一序号与单调时间检查，不能取遍历末项；登记失败不占用事件序号。它每次遍历执行子树，暂不增加事件游标、缓存或时序管理者。调用索引及其登记接口已退出，见 [观测增量](observation-increments.md)。
+
+## 调用记录与调用边界记录
+
+InvocationRecord 表达一次调用，ExecutionRecord、OperationRecord、AttemptRecord 是三个层级的特化，持续补充内部过程与最终结果。InvocationBoundaryRecord 表达一次 call/return/throw 边界，创建后不可变；InvocationBoundaryRecordHelper 管理原有执行内顺序与时间检查。旧 EventRecord 命名及 records/event 路径已移除。
+
+两者都是运行记录，不是系统变化通知。边界记录的登记产生记录变化事件，但不能为该通知再次自动生成边界记录。RuntimeSnapshot.events 暂保留现有线字段，元素类型已明确为 InvocationBoundaryRecord；这次类型命名调整不改变线上数据形状。

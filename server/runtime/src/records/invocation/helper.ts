@@ -1,6 +1,6 @@
 import type { RuntimeRecord } from '../runtime/record.js';
 import { isUndefined } from 'es-toolkit/predicate';
-import type { EventValue } from '@capix-observer/protocol';
+import type { InvocationBoundaryValue } from '@capix-observer/protocol';
 import type { InvocationContext } from '../../context/context.js';
 import type { InvocationProcess } from '../../invocation/cycle.js';
 import type { InvocationRecording } from '../../invocation/recording.js';
@@ -8,7 +8,7 @@ import { RuntimeErrorHelper } from '../../errors/helper.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord } from '../attempt/record.js';
-import { EventRecordHelper } from '../event/helper.js';
+import { InvocationBoundaryRecordHelper } from '../invocation-boundary/helper.js';
 import type { ChangeSource } from '../source.js';
 import type { CallRecord } from './record.js';
 import type { Recorder } from '../recorder.js';
@@ -28,7 +28,7 @@ export class InvocationRecordHelper {
         const record = create(context);
         bind(record);
         if (record instanceof ExecutionRecord) this.#starts.set(record.id, this.recorder.clock.tick());
-        this.event(record, 'call');
+        this.boundary(record, 'call');
       },
       process: (context, record, process, sequence) => this.process(context, record, process, sequence),
       source: (record) => this.source(record),
@@ -36,11 +36,15 @@ export class InvocationRecordHelper {
         if (context.status === 'running') throw new Error('Context has no terminal outcome to record');
         const last = record.value.processes.at(-1);
         const resultOf = last?.stage === 'receive' && last.type === 'return' ? ('resultOf' in last ? last.resultOf : last.sequence) : undefined;
-        this.recorder.update(record, (record) => finish(context, record, resultOf));
-        this.event(record, context.status === 'succeeded' ? 'return' : 'throw');
+        finish(context, record, resultOf);
+        this.boundary(record, context.status === 'succeeded' ? 'return' : 'throw');
         if (record instanceof ExecutionRecord) this.#starts.delete(record.id);
       },
     };
+  }
+
+  static finish(recorder: Recorder, record: CallRecord, apply: (record: CallRecord) => void): void {
+    recorder.update(record, apply, (record) => ({ kind: 'finished', id: record.id, status: record.status as 'succeeded' | 'failed', result: { ...(Object.hasOwn(record.value, 'output') ? { output: record.value.output } : {}), ...(Object.hasOwn(record.value, 'resultOf') ? { resultOf: record.value.resultOf } : {}), ...(record.value.error ? { error: record.value.error } : {}) } }));
   }
 
   source(record: CallRecord): ChangeSource {
@@ -63,12 +67,16 @@ export class InvocationRecordHelper {
       if (!source || source.stage !== 'execute' || source.type !== 'return' || source.round !== context.progress.round) throw new Error('Default receive must follow its execution result');
       body = { stage: 'receive' as const, type: 'return' as const, resultOf: source.sequence };
     } else body = 'error' in process ? { ...process, error: RuntimeErrorHelper.format(process.error) } : process;
-    this.recorder.update(record, (record) => record.append({ ...body, sequence, round: context.progress.round, occurredAt: this.recorder.clock.now(), offsetMs: this.recorder.clock.tick() - start }));
+    this.recorder.update(
+      record,
+      (record) => record.append({ ...body, sequence, round: context.progress.round, occurredAt: this.recorder.clock.now(), offsetMs: this.recorder.clock.tick() - start }),
+      (record) => ({ kind: 'process-appended', id: record.id, process: record.value.processes.at(-1)! }),
+    );
   }
 
-  private event(record: CallRecord, type: EventValue['type']): void {
+  private boundary(record: CallRecord, type: InvocationBoundaryValue['type']): void {
     const executionId = this.executionId(record);
-    EventRecordHelper.create(this.recorder, this.recorder.clock, this.start(executionId), executionId, record.id, type);
+    InvocationBoundaryRecordHelper.create(this.recorder, { start: this.start(executionId), executionId: executionId, callId: record.id }, type);
   }
 
   private start(executionId: string): number {

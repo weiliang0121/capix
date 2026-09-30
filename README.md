@@ -108,21 +108,21 @@ Runtime.getExecutionContext/getOperationContext 沿 AttemptContext.operationCont
 
 ExecutionRecordHelper.snapshot 查询已有记录；HTTP observeTranscript 在展示时展开执行范围为 start/end/messages。执行详情的 EXECUTION CONTEXT 展示配置与范围，输入区域单独显示本次消息。当前没有持久化、独立来源副本或恢复机制。
 
-浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。可选 GET /api/observe 在执行期间发送完整观测更新，尚未实现记录增量传输。POST /api/run 独立交付回答及处理状态，对话不依赖观测。首次加载使用轻量概览，完整快照与源码在打开详情时按需查询。
+浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。可选 GET /api/observe 首次发送一致基线，随后发送消息、记忆、调用进度及记录变化的明确增量；不通过快照比较推断。POST /api/run 独立交付回答及处理状态，对话不依赖观测。基线只预取活动执行记录，已完成详情与源码按需查询。接收端检查归属与顺序，缺口最多自动重建一次基线。详见 [观测增量](docs/observation-increments.md)。
 
 ```text
 BaseRecord<T>：id + value
   ExecutionRecord：整次运行，contextId；value 中保存本次配置与消息范围
   OperationRecord：一次操作调用，contextId / executionId / operationInstanceId / parentOperationId?
   AttemptRecord：一次动作调用，contextId / operationId / name / label
-  EventRecord：一次调用边界，executionId / callId / sequence / occurredAt / offsetMs；value.type
+  InvocationBoundaryRecord：一次调用边界，executionId / callId / sequence / occurredAt / offsetMs；value.type
 ```
 
 operationInstanceId 指向可复用的 Operation 实例；OperationRecord.id 和 OperationContext.id 各自标识一次调用。Context 直接引用上层 Context；Record 归属 ID 指向 Record。三种记录自身 ID 与 Context ID 不同，顶层 contextId 关联对应调用现场。状态在调用记录顶层，由 InvocationRecord 共用实现；BaseRecord 基类不规定状态。
 
 当前完整成功链路为 1 条 Execution、3 条 Operation、11 条 Attempt、30 个 call/return/throw 边界事件。数量来自实际组合，不是框架限制。没有执行的动作不创建记录；Attempt 失败不自动更改父操作状态，异常按实际调用链传播。接纳失败保留模型原始返回，落实失败保留已接纳结果，不假装运行事实回滚。
 
-EventRecord 继承 BaseRecord，自己的 id 与 callId 不同：callId 指向被描述的 E/O/A 调用记录。EventRecordHelper 负责创建和查询，Book 保存原记录，沿执行记录树查询，不另保存事件数组。sequence 为执行内顺序；occurredAt 为现实时间，offsetMs 使用单调时钟，现实时间回拨不改变时序。调用绑定归 Invocation，归属查询使用 RecordTree；Runtime.recording 在调用记录过程中保存单调计时起点，终态边界登记后释放。事件记录没有 Context 或运行状态，不承担推进或消息传递；validateSnapshot 检查记录身份、归属与边界一致性。
+InvocationBoundaryRecord 继承 BaseRecord，自己的 id 与 callId 不同：callId 指向被描述的 E/O/A 调用记录。InvocationBoundaryRecordHelper 负责创建和查询，Book 保存原记录，沿执行记录树查询，不另保存事件数组。sequence 为执行内顺序；occurredAt 为现实时间，offsetMs 使用单调时钟，现实时间回拨不改变时序。调用绑定归 Invocation，归属查询使用 RecordTree；Runtime.recording 在调用记录过程中保存单调计时起点，终态边界登记后释放。事件记录没有 Context 或运行状态，不承担推进或消息传递；validateSnapshot 检查记录身份、归属与边界一致性。
 
 错误内嵌在 value.error。RuntimeErrorHelper.format 保留名称、code/message、堆栈、cause 与复合 errors；不可记录的诊断内容转为明确标记，不执行 detail 的 getter/toJSON。ErrorTraversal 管理一次格式化的预算与递归路径。没有独立错误记录或异常还原功能。
 

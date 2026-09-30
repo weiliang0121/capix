@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { BaseRecord as RecordData } from '@capix-observer/protocol';
+import type { RecordKind, BaseRecord as RecordData } from '@capix-observer/protocol';
 
 /** Identity, direct ownership and body. Snapshot policy belongs to concrete records. */
 export abstract class BaseRecord<T> implements RecordData<T> {
+  readonly kind: RecordKind = 'custom';
   readonly id = randomUUID();
   #value: T;
   readonly #parentId?: string;

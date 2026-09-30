@@ -28,8 +28,20 @@ export function createObservationProjection() {
   let rounds: readonly RoundView[] = [];
   let details: AppData['details'] = new Map();
   return (state: ObservationState) => {
-    if (!previous || previous.overview !== state.overview || previous.updates !== state.updates) {
+    if (!previous || previous.overview !== state.overview || previous.updates !== state.updates || previous.memory !== state.memory || previous.transcriptRecords !== state.transcriptRecords) {
       overview = [...state.updates.values()].reduce(updateOverview, state.overview);
+      overview = {
+        ...overview,
+        executions: overview.executions.map((execution) => {
+          const answer = [...(state.transcriptRecords ?? [])].reverse().find((record) => record.executionId === execution.id && record.value.action === 'append' && record.value.messages.some((message) => message.role === 'assistant'));
+          const answerIndex = answer?.value.action === 'append' ? answer.value.start + answer.value.messages.findIndex((message) => message.role === 'assistant') : execution.response?.index;
+          const memoryChanges = state.memory.items
+            .flatMap((item) => item.records)
+            .filter((record) => record.executionId === execution.id)
+            .map((record) => ({ id: record.id, memoryId: record.memoryId, operationId: record.operationId, action: record.value.action, change: record.value.change }));
+          return { ...execution, memoryChanges, ...(execution.response && answerIndex !== undefined ? { response: { ...execution.response, index: answerIndex } } : {}) };
+        }),
+      };
       rounds = projectRounds(overview);
     }
     if (!previous || previous.records !== state.records || previous.memory !== state.memory) {

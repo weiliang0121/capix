@@ -4,13 +4,13 @@ import { Runtime, RuntimeContext, RuntimeRecord, RuntimeRecordHelper, Recorder, 
 import { subscribeExecutions } from '@capix-observer/service';
 
 const identity = { maxRounds: 1, execute: (context) => context.input };
-const call = (runtime, work = identity) => runtime.executionInvocations.create('input', { settings: {} }, work);
+const call = (runtime, work = identity) => runtime.executionInvocations.create('input', { context: { settings: {} }, work: work });
 
 test('Runtime construction retains an established context and record without registering a new scope', () => {
   const recorder = new Recorder(new RecordBook());
   const original = createRuntime({ recorder, messages: [{ role: 'user', content: 'hello' }] });
   const before = [...recorder.book.values()];
-  const runtime = new Runtime(original.context, { recorder, record: original.record });
+  const runtime = new Runtime(original.context, { recording: { recorder, record: original.record } });
   assert.ok(runtime.context instanceof RuntimeContext);
   assert.equal(runtime.context, original.context);
   assert.equal(runtime.context.transcript.get(0).content, 'hello');
@@ -20,9 +20,9 @@ test('Runtime construction retains an established context and record without reg
   assert.equal(runtime.record.status, undefined);
   assert.deepEqual(runtime.record.childIds, []);
   const otherRecorder = new Recorder(new RecordBook());
-  assert.throws(() => new Runtime(runtime.context, { recorder: otherRecorder, record: runtime.record }), /not registered/);
+  assert.throws(() => new Runtime(runtime.context, { recording: { recorder: otherRecorder, record: runtime.record } }), /not registered/);
   const unregistered = new RuntimeRecord({ createdAt: recorder.clock.now() });
-  assert.throws(() => new Runtime(runtime.context, { recorder, record: unregistered }), /not registered/);
+  assert.throws(() => new Runtime(runtime.context, { recording: { recorder, record: unregistered } }), /not registered/);
 });
 
 test('success and failure finish individual executions while the Runtime record retains their direct ownership', async () => {

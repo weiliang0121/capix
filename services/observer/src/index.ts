@@ -18,3 +18,4 @@ export * from './provider.js';
 export * from './settings.js';
 export * from './http/server.js';
 export * from './observer/overview.js';
+export * from './observer/feed.js';

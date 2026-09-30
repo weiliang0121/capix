@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientRuntime } from '@capix-observer/client-runtime';
-import { initializeObserver, acceptExecutionInput, observeExecution, observeOverview } from '@capix-observer/service';
+import { initializeObserver, acceptExecutionInput, observeExecution, observeOverview, ObservationFeed } from '@capix-observer/service';
 import { Transcript, observeMemory } from '@capix-observer/runtime';
 import { createApplication } from '../../apps/observer/.test-dist/binding/application.js';
 import { deferred, snapshot, transport, deliverAnswer } from '../client/fixtures.mjs';
@@ -20,9 +20,14 @@ const raw = (value) => ({ id: 'fixture', model: 'fixture', content: JSON.stringi
 async function recordedRound() {
   const snapshots = [];
   const environment = initializeObserver({ invoke: async (_request, purpose) => raw(purpose === 'selection' ? { historyIndexes: [0, 1] } : purpose === 'answer' ? { kind: 'answer', content: '上海周末行程。' } : { memories: [{ action: 'create', memoryId: null, change: '确认目的地', sourceIndexes: [2], result: { topic: '旅行', content: '周末去上海', sourceIndexes: [2] } }] }) }, new Transcript(history).snapshot());
+  const feed = new ObservationFeed(environment, environment.changes);
+  const frames = [];
+  feed.connect((frame) => frames.push(frame));
   const input = acceptExecutionInput(environment.transcript, request);
   const final = await observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript }, (value) => snapshots.push(value));
-  return { snapshots, final, overview: observeOverview(environment), messages: environment.transcript.snapshot(), memory: observeMemory(environment.runtime.context.memories, environment.book) };
+  await settle();
+  feed.close();
+  return { frames, snapshots, final, overview: observeOverview(environment), messages: environment.transcript.snapshot(), memory: observeMemory(environment.runtime.context.memories, environment.book) };
 }
 
 test('binding interprets live records, reconciles once, and keeps raw runtime separate from application models', async () => {
@@ -35,6 +40,7 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   let detailReads = 0;
   const runtime = withObservation(
     transport({
+      baseline: fixture.frames[0],
       overview: async () => (finished ? fixture.overview : { messages: history.map((message, index) => ({ index, message, count: 0 })), executions: [] }),
       transcript: async () => ({ messages: finished ? fixture.messages : history }),
       memory: async () => (finished ? fixture.memory : { items: [] }),
@@ -65,11 +71,11 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   assert.equal(app.store.getState().data.pending, request.messages[0].content);
   accept();
   deliverAnswer(deliver, 2, fixture.final.execution.contextId, '上海周末行程。');
-  for (const value of fixture.snapshots) observe(value);
+  for (const value of fixture.frames.slice(1)) observe(value);
   const id = fixture.final.execution.id;
   const data = app.store.getState().data;
   assert.equal(runtime.getSnapshot().observation.overview.executions.length, 0, 'runtime does not build live overview');
-  assert.equal(runtime.getSnapshot().observation.records.get(id), fixture.final);
+  assert.equal(runtime.getSnapshot().observation.records.get(id).execution.status, fixture.final.execution.status);
   assert.equal(data.rounds[0].context.selectedCount, 2);
   assert.deepEqual(
     data.rounds[0].context.selectedMessages.map((item) => item.entry.count),
@@ -83,7 +89,7 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   gate.resolve();
   await submitting;
   await settle();
-  assert.equal(runtime.getSnapshot().observation.updates.size, 0);
+  assert.equal(runtime.getSnapshot().observation.updates.size, 1);
   assert.equal(app.store.getState().data.conversation.length, 4, 'formal reconciliation does not duplicate the observed answer');
   assert.equal(app.store.getState().data.details.get(id).memory.changes.length, 1);
   assert.deepEqual(

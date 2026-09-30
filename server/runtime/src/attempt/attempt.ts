@@ -16,6 +16,6 @@ export abstract class Attempt<I, O> extends InvocationBehavior<I, O, AttemptCont
   }
 
   async call(parent: Invocation<unknown, unknown, OperationContext>, input: I): Promise<O> {
-    return this.invocations.create<I, O>(parent, input, this, this.work).run();
+    return this.invocations.create<I, O>(parent, { input: input, description: this, work: this.work }).run();
   }
 }

@@ -3,11 +3,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConfigurationResponse, ErrorResponse, ModelSettings, ConversationUpdate, ObservationUpdate, SourceResponse, TranscriptResponse } from '@capix-observer/protocol';
+import type { ConfigurationResponse, ErrorResponse, ModelSettings, ConversationUpdate, SourceResponse, TranscriptResponse } from '@capix-observer/protocol';
 import { ExecutionRecord, ExecutionRecordHelper, isObject, observeMemory, observeTranscript, RuntimeError } from '@capix-observer/runtime';
 import type { initializeObserver } from '../observer/environment.js';
 import { acceptExecutionInput } from '../observer/accept.js';
-import { subscribeExecutions } from '../observer/observe.js';
+import { ObservationFeed } from '../observer/feed.js';
+import { observationWriter } from './observation-writer.js';
 import { observeOverview } from '../observer/overview.js';
 import { validateSettings } from '../settings.js';
 import { allowedSources } from './source.js';
@@ -26,6 +27,7 @@ export function createObserverServer(options: ObserverServerOptions) {
   const settings = validateSettings(options.settings);
   const project = options.projectDirectory ?? fileURLToPath(new URL('../../../../', import.meta.url));
   const assets = options.assetsDirectory ?? resolve(project, 'apps/observer/dist');
+  const feed = new ObservationFeed(observer, observer.changes);
   const server = createServer((req, res) => {
     void handle(req, res).catch((error) => {
       const body: ErrorResponse = error instanceof RuntimeError ? { error: error.message, code: error.code } : { error: '服务内部错误。', code: 'INTERNAL_ERROR' };
@@ -47,10 +49,15 @@ export function createObserverServer(options: ObserverServerOptions) {
     if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured } satisfies ConfigurationResponse);
     if (req.method === 'GET' && url.pathname === '/api/observe') {
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
-      const unsubscribe = subscribeExecutions(observer.recording, (snapshot) => {
+      const write = observationWriter(res);
+      const unsubscribe = feed.connect((frame) => {
         if (res.destroyed) return;
         try {
-          res.write(JSON.stringify({ type: 'snapshot', snapshot } satisfies ObservationUpdate, observeTranscript) + '\n');
+          if (frame.type === 'error') {
+            res.end(JSON.stringify(frame) + '\n');
+            return;
+          }
+          write(frame);
         } catch {
           res.destroy();
         }
@@ -106,6 +113,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     if (req.method === 'GET') return serveAsset(res, assets, url.pathname);
     return json(res, 404, { error: 'Not found' } satisfies ErrorResponse);
   }
+  server.on('close', () => feed.close());
   return server;
 }
 

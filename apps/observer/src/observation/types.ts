@@ -1,4 +1,4 @@
-import type { RuntimeSnapshot, ProcessRecord, RuntimeErrorValue, EventRecord, ModelSettings, GenerationOutput } from '@capix-observer/protocol';
+import type { RuntimeSnapshot, ProcessRecord, RuntimeErrorValue, InvocationBoundaryRecord, ModelSettings, GenerationOutput } from '@capix-observer/protocol';
 export type Purpose = 'selection' | 'answer' | 'memory';
 export type NodeStatus = 'running' | 'passed' | 'failed';
 export interface TraceNode {
@@ -46,7 +46,7 @@ export interface CallSequence {
   version: 1;
   participants: { id: ParticipantId; label: string; description: string }[];
   calls: CallSpan[];
-  events: EventRecord[];
+  events: InvocationBoundaryRecord[];
 }
 export interface Trace {
   facts: RuntimeSnapshot;

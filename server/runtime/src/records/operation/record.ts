@@ -5,6 +5,7 @@ import { snapshotValue } from '../value/snapshot.js';
 
 export type OperationRecordDefinition = Omit<OperationData, 'id' | 'value' | 'status' | 'parentId' | 'childIds'>;
 export class OperationRecord extends InvocationRecord<InvocationValue> implements OperationData {
+  override readonly kind = 'operation' as const;
   readonly contextId: string;
   readonly executionId: string;
   readonly operationInstanceId: string;

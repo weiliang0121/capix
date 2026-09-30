@@ -3,6 +3,7 @@ import { InvocationRecord } from '../invocation/record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
 export class ExecutionRecord extends InvocationRecord<ExecutionValue> implements ExecutionData {
+  override readonly kind = 'execution' as const;
   constructor(
     readonly contextId: string,
     value: Omit<ExecutionValue, 'processes'>,

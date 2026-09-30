@@ -14,7 +14,7 @@ import { TestOperation } from '../fixtures/operation.mjs';
 const settings = {};
 function fixture(recorded = true) {
   const recorder = recorded ? new Recorder(new RecordBook()) : undefined;
-  const runtime = createRuntime({ recorder: recorder });
+  const runtime = createRuntime({ recorder });
   const lifecycle = lifecycleFor(runtime).execution({ input: 'root', settings });
   const execution = lifecycle.begin();
   return { runtime, recorder, execution, lifecycle };

@@ -1,4 +1,4 @@
-import type { RuntimeSnapshot, ExecutionRecord } from './records.js';
+import type { ExecutionRecord } from './records.js';
 import type { ExecutionObservation } from './observation/execution.js';
 import type { MemoryRecord } from './records/memory.js';
 
@@ -6,7 +6,7 @@ export interface SourceResponse {
   path: string;
   content: string;
 }
-export type ObservationUpdate = { type: 'snapshot'; snapshot: RuntimeSnapshot } | { type: 'error'; error: string; code?: string };
+export type { ObservationUpdate } from './observation/stream.js';
 
 /** Timing facts only. No IO bodies, pixel layout, colors or UI selection state. */
 export interface InvocationSummary {

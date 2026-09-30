@@ -1,17 +1,18 @@
 import { sortBy } from 'es-toolkit/array';
 import type { Recorder } from '../recorder.js';
 import { isFinite } from 'es-toolkit/compat';
-import type { EventValue } from '@capix-observer/protocol';
-import type { Clock } from '../../runtime/clock.js';
+import type { InvocationBoundaryValue } from '@capix-observer/protocol';
 import type { RecordBook } from '../container/book.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord } from '../attempt/record.js';
-import { EventRecord } from './record.js';
+import { InvocationBoundaryRecord } from './record.js';
 
 /** Call-boundary recording; Event order is resolved within the execution record tree. */
-export class EventRecordHelper {
-  static create(recorder: Recorder, clock: Clock, start: number, executionId: string, callId: string, type: EventValue['type']): EventRecord {
+export class InvocationBoundaryRecordHelper {
+  static create(recorder: Recorder, location: { start: number; executionId: string; callId: string }, type: InvocationBoundaryValue['type']): InvocationBoundaryRecord {
+    const { start, executionId, callId } = location;
+    const clock = recorder.clock;
     const book = recorder.book;
     this.requireExecution(book, executionId);
     const call = this.requireCall(book, executionId, callId);
@@ -20,29 +21,29 @@ export class EventRecordHelper {
     const previous = this.last(recorder, executionId);
     const offsetMs = clock.tick() - start;
     if (!isFinite(offsetMs) || offsetMs < (previous?.offsetMs ?? 0)) throw new Error('Invalid event time');
-    const record = new EventRecord({ executionId, callId, sequence: (previous?.sequence ?? 0) + 1, occurredAt: clock.now(), offsetMs }, { type });
+    const record = new InvocationBoundaryRecord({ executionId, callId, sequence: (previous?.sequence ?? 0) + 1, occurredAt: clock.now(), offsetMs }, { type });
     return recorder.add(record);
   }
 
-  static get(book: RecordBook, id: string): EventRecord {
+  static get(book: RecordBook, id: string): InvocationBoundaryRecord {
     const record = book.get(id);
-    if (!(record instanceof EventRecord)) throw new Error('Event record does not exist');
+    if (!(record instanceof InvocationBoundaryRecord)) throw new Error('Event record does not exist');
     return record;
   }
 
-  static findByExecution(recorder: Recorder, executionId: string): readonly EventRecord[] {
+  static findByExecution(recorder: Recorder, executionId: string): readonly InvocationBoundaryRecord[] {
     this.requireExecution(recorder.book, executionId);
     return sortBy(
-      recorder.tree.descendants(executionId).filter((record): record is EventRecord => record instanceof EventRecord),
+      recorder.tree.descendants(executionId).filter((record): record is InvocationBoundaryRecord => record instanceof InvocationBoundaryRecord),
       [(event) => event.sequence],
     );
   }
 
-  static last(recorder: Recorder, executionId: string): EventRecord | undefined {
+  static last(recorder: Recorder, executionId: string): InvocationBoundaryRecord | undefined {
     this.requireExecution(recorder.book, executionId);
-    let latest: EventRecord | undefined;
+    let latest: InvocationBoundaryRecord | undefined;
     for (const record of recorder.tree.descendants(executionId)) {
-      if (record instanceof EventRecord && (!latest || record.sequence > latest.sequence)) latest = record;
+      if (record instanceof InvocationBoundaryRecord && (!latest || record.sequence > latest.sequence)) latest = record;
     }
     return latest;
   }

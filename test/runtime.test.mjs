@@ -17,11 +17,11 @@ const begin = (runtime) => {
   lifecycles.set(context, lifecycle);
   return context;
 };
-const createRecorder = (clock = new Clock()) => new Recorder(new RecordBook(), clock);
+const createRecorder = (clock = new Clock()) => new Recorder(new RecordBook(), { clock });
 
 test('Runtime passes live Contexts; records retain separate identities, relations and snapshots', async () => {
   const recorder = createRecorder(),
-    runtime = createRuntime({ recorder: recorder }),
+    runtime = createRuntime({ recorder }),
     execution = begin(runtime);
   assert.ok(execution instanceof ExecutionContext);
   const input = { count: 0 };
@@ -53,7 +53,7 @@ test('Runtime passes live Contexts; records retain separate identities, relation
 
 test('Runtime rejects ended or mismatched parent Contexts and preserves original work failures', async () => {
   const recorder = createRecorder(),
-    runtime = createRuntime({ recorder: recorder }),
+    runtime = createRuntime({ recorder }),
     execution = begin(runtime);
   let entered = false;
   const ended = begin(runtime);
@@ -144,7 +144,7 @@ test('Injected Clock measures recording boundaries without becoming live Context
 
 test('record creation captures instance descriptions at begin without storing them in Context', () => {
   const recorder = createRecorder();
-  const runtime = createRuntime({ recorder: recorder });
+  const runtime = createRuntime({ recorder });
   const execution = begin(runtime);
   const instance = new TestOperation(runtime);
   let reads = 0;

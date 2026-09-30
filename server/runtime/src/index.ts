@@ -22,6 +22,10 @@ export * from './context/runtime.js';
 export * from './transcript/observe.js';
 export * from './transcript/ref.js';
 export * from './transcript/transcript.js';
+export type { TranscriptEvent } from './transcript/event.js';
+export * from './changes/capture.js';
+export * from './changes/observer.js';
+export * from './changes/error.js';
 export * from './value/array.js';
 export * from './value/object.js';
 export * from './value/string.js';
@@ -29,7 +33,7 @@ export type { InvocationResult, Continuation } from './invocation/result.js';
 
 export * from './invocation/invocation.js';
 export type { ChangeSource } from './records/source.js';
-export { TranscriptRecord } from './records/transcript/record.js';
+export { TranscriptRecord, type TranscriptDefinition } from './records/transcript/record.js';
 export * from './records/error.js';
 
 export type { InvocationRecording } from './invocation/recording.js';
@@ -45,3 +49,6 @@ export * from './context/attempt/builder.js';
 export * from './invocation/attempt/builder.js';
 
 export * from './invocation/behavior.js';
+
+export * from './invocation/changes.js';
+export type { InvocationCapabilities } from './invocation/capabilities.js';

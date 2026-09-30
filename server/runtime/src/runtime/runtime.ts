@@ -1,3 +1,5 @@
+import type { InvocationEvent } from '@capix-observer/protocol';
+import type { ChangeCapture } from '../changes/capture.js';
 import { ExecutionContextBuilder } from '../context/execution/builder.js';
 import { ExecutionInvocationBuilder } from '../invocation/execution/builder.js';
 import { OperationContextBuilder } from '../context/operation/builder.js';
@@ -13,6 +15,11 @@ import type { AttemptContext } from '../context/attempt.js';
 import type { Recorder } from '../records/recorder.js';
 import { RuntimeError } from '../errors/error.js';
 
+export interface RuntimeOptions {
+  recording?: { recorder: Recorder; record: RuntimeRecord };
+  changes?: ChangeCapture<InvocationEvent>;
+}
+
 /** Organizes work over an established data scope. Construction does not establish its record. */
 export class Runtime {
   readonly record?: RuntimeRecord;
@@ -25,8 +32,9 @@ export class Runtime {
 
   constructor(
     readonly context: RuntimeContext,
-    recording?: { recorder: Recorder; record: RuntimeRecord },
+    options: RuntimeOptions = {},
   ) {
+    const { recording, changes } = options;
     if (recording) {
       if (!(recording.record instanceof RuntimeRecord) || recording.recorder.book.get(recording.record.id) !== recording.record) throw new Error('Runtime record is not registered with this Recorder');
       this.recorder = recording.recorder;
@@ -36,9 +44,9 @@ export class Runtime {
     const executions = new ExecutionContextBuilder(context.transcript);
     const operations = new OperationContextBuilder(executions);
     const attempts = new AttemptContextBuilder(operations);
-    this.executionInvocations = new ExecutionInvocationBuilder(executions, { run: (work) => this.run(work), recording: this.recording });
-    this.operationInvocations = new OperationInvocationBuilder(operations, this.recording);
-    this.attemptInvocations = new AttemptInvocationBuilder(attempts, this.recording);
+    this.executionInvocations = new ExecutionInvocationBuilder(executions, { run: (work) => this.run(work), recording: this.recording, changes });
+    this.operationInvocations = new OperationInvocationBuilder(operations, { recording: this.recording, changes });
+    this.attemptInvocations = new AttemptInvocationBuilder(attempts, { recording: this.recording, changes });
   }
 
   get running(): boolean {

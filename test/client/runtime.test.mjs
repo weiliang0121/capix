@@ -194,14 +194,15 @@ test('stream observations and detail caching remain separate from business messa
   const runtime = new ClientRuntime({ conversation: io, observation: io });
   await runtime.initialize();
   const stop = runtime.startObservation();
+  await settle();
   const loading = runtime.loadExecution('execution-1');
   receive(snapshot('running'));
   const terminal = snapshot();
   receive(terminal);
   assert.equal(runtime.getSnapshot().messages.length, 0, 'records never create conversation messages');
   detail.resolve(snapshot('running'));
-  assert.equal(await loading, terminal);
-  assert.equal(await runtime.loadExecution('execution-1'), terminal);
+  assert.deepEqual(await loading, terminal);
+  assert.deepEqual(await runtime.loadExecution('execution-1'), terminal);
   assert.equal(reads, 1);
   await runtime.submit(request());
   assert.equal(runtime.getSnapshot().messages.length, 2);

@@ -1,3 +1,4 @@
+import { observeTranscript } from '@capix-observer/runtime';
 export function snapshot(status = 'succeeded', id = 'execution-1') {
   const failed = status === 'failed';
   return {
@@ -9,7 +10,7 @@ export function snapshot(status = 'succeeded', id = 'execution-1') {
 }
 
 export function transport(overrides = {}) {
-  return {
+  const io = {
     config: async () => ({ configured: true, model: 'fixture', contextBudget: 32768 }),
     overview: async () => ({ executions: [], messages: [] }),
     transcript: async () => ({ messages: [] }),
@@ -25,6 +26,36 @@ export function transport(overrides = {}) {
     },
     ...overrides,
   };
+  const watch = io.observe;
+  io.observe = async (accept, signal) => {
+    let ready = false;
+    const queued = [];
+    const emit = (value) => {
+      if (ready) accept(convert(value));
+      else queued.push(value);
+    };
+    let sequence = 0;
+    let revision = 0;
+    const convert = (value) => {
+      if (value.type) return value;
+      const entries = entriesOf(value);
+      return { type: 'delta', scopeId: 'fixture-scope', sequence: ++sequence, changes: entries.map((entry) => ({ type: 'record', recorderId: 'fixture-recorder', revision: ++revision, occurredAt: '2026-09-30T00:00:00Z', change: { kind: 'replaced', entry } })) };
+    };
+    const work = watch(emit, signal);
+    // Attach a rejection handler while the independently loaded baseline is pending.
+    const completion = work.then(
+      () => undefined,
+      (error) => error,
+    );
+    const initial = overrides.baseline ?? baseline({ overview: await io.overview(), memory: await io.memory() });
+    if (signal.aborted) return;
+    accept(initial);
+    ready = true;
+    for (const value of queued) accept(convert(value));
+    const error = await completion;
+    if (error) throw error;
+  };
+  return io;
 }
 export function deferred() {
   let resolve;
@@ -40,4 +71,12 @@ export function deliverAnswer(receive, inputIndex = 0, contextId = 'context-exec
   receive({ type: 'started', contextId, inputIndex });
   receive({ type: 'answer', contextId, index: inputIndex + 1, output: { kind: 'answer', content } });
   receive({ type: 'completed', contextId });
+}
+
+export function entriesOf(value) {
+  const snapshot = JSON.parse(JSON.stringify(value, observeTranscript));
+  return [{ kind: 'execution', data: snapshot.execution }, ...snapshot.operations.map((data) => ({ kind: 'operation', data })), ...snapshot.attempts.map((data) => ({ kind: 'attempt', data })), ...snapshot.events.map((data) => ({ kind: 'invocation-boundary', data }))];
+}
+export function baseline(options = {}) {
+  return { type: 'baseline', scopeId: 'fixture-scope', sequence: 0, overview: { messages: [], executions: [] }, memory: { items: [] }, transcript: { id: 'fixture-transcript', revision: 0, starts: [0] }, memories: { id: 'fixture-memories', sequence: 0 }, recorder: { id: 'fixture-recorder', revision: 0 }, entries: [], invocations: [], ...options };
 }

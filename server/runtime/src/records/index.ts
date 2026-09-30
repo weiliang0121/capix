@@ -9,10 +9,10 @@ export { OperationRecordHelper } from './operation/helper.js';
 export { AttemptRecord, type AttemptDefinition } from './attempt/record.js';
 export { AttemptRecordHelper } from './attempt/helper.js';
 export { RecordBook } from './container/book.js';
-export { EventRecord, type EventDefinition } from './event/record.js';
-export { EventRecordHelper } from './event/helper.js';
+export { InvocationBoundaryRecord, type InvocationBoundaryDefinition } from './invocation-boundary/record.js';
+export { InvocationBoundaryRecordHelper } from './invocation-boundary/helper.js';
 
-export { MemoryRecord } from './memory/record.js';
+export { MemoryRecord, type MemoryDefinition } from './memory/record.js';
 export { MemoryRecordHelper } from './memory/helper.js';
 
 export { RecordTree } from './tree.js';

@@ -8,7 +8,7 @@ const transcript = () => new Transcript([{ role: 'user', content: 'input' }]);
 
 test('Memories sequences actual changes across different memories and preserves scope identity on records', () => {
   const recorder = new Recorder(new RecordBook());
-  const memories = new Memories(transcript(), recorder);
+  const memories = new Memories(transcript(), { recorder });
   const [first, second] = memories.apply([create('one'), create('two')]);
   assert.equal(memories.sequence, 2);
   assert.deepEqual(memories.apply([update(first, 'one')]), []);
@@ -54,7 +54,7 @@ test('recording failure does not reuse a memory change position or undo the appl
     }
   }
   const book = new RejectingBook();
-  const memories = new Memories(transcript(), new Recorder(book));
+  const memories = new Memories(transcript(), { recorder: new Recorder(book) });
   assert.throws(() => memories.apply([create('one')]), /record rejected/);
   assert.equal(memories.values()[0].content, 'one');
   assert.equal(memories.sequence, 1);

@@ -12,7 +12,7 @@ import { projectExecution } from '../../apps/observer/.test-dist/observation/pro
 
 function fixture() {
   const recorder = new Recorder(new RecordBook());
-  return { recorder, runtime: createRuntime({ recorder: recorder }) };
+  return { recorder, runtime: createRuntime({ recorder }) };
 }
 class LocalOperation extends Operation {
   name = 'local';

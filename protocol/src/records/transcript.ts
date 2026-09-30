@@ -5,6 +5,8 @@ export type TranscriptChange = { readonly action: 'append'; readonly start: numb
 
 export interface TranscriptRecord extends BaseRecord<TranscriptChange> {
   readonly transcriptId: string;
+  /** The source change this evidence records. */
+  readonly revision: number;
   readonly occurredAt: string;
   readonly contextId?: string;
   readonly callId?: string;

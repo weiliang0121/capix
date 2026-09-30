@@ -60,21 +60,22 @@ export interface AttemptRecord<I = unknown, O = unknown> extends CompositeRecord
   readonly callee: string;
 }
 /** The recorded boundary; its content is independent of record identity and timing. */
-export interface EventValue {
+export interface InvocationBoundaryValue {
   readonly type: 'call' | 'return' | 'throw';
 }
-/** callId addresses the invocation record, while id identifies this event record. */
-export interface EventRecord extends BaseRecord<EventValue> {
+/** callId addresses the invocation record, while id identifies this invocation boundary record. */
+export interface InvocationBoundaryRecord extends BaseRecord<InvocationBoundaryValue> {
   readonly executionId: string;
   readonly callId: string;
   readonly sequence: number;
   readonly occurredAt: string;
   readonly offsetMs: number;
 }
-/** Current execution records and their boundary events for observation. */
+/** Current execution records and their invocation boundaries for observation. */
 export interface RuntimeSnapshot {
   execution: ExecutionRecord;
   operations: OperationRecord[];
   attempts: AttemptRecord[];
-  events: EventRecord[];
+  /** Existing wire field; these are invocation boundary records, not system change events. */
+  events: InvocationBoundaryRecord[];
 }

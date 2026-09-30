@@ -1,68 +1,68 @@
-# 观测增量：当前事实与下一步边界
+# 变化捕获与观测增量
 
-此文记录已实现的顺序基础和下一步分析，不代表已经上线增量协议。当前 /api/observe 仍发送完整 RuntimeSnapshot，对话交付仍走独立 ConversationUpdate。
+当前已经接通生产、捕获、发送、接收和应用绑定。观测不再以重复完整执行快照作为实时消息；初次加载或重新同步使用基线，后续直接发送生产者明确声明的变化。不在 service 比较两份快照，也不从运行记录反推所有业务变化。
 
-## 已有顺序事实
+## 生产者与出口
 
-| 范围                     | 正式位置               | 分配者                          | 当前边界                                                                              |
-| ------------------------ | ---------------------- | ------------------------------- | ------------------------------------------------------------------------------------- |
-| 一次调用的内部过程       | sequence               | Invocation                      | 从 1 开始，execute/receive/control 持续递增，重试不重置；记录接纳传入序号并检查连续性 |
-| 原始消息                 | index                  | Transcript                      | 绝对消息位置，分段不重新编号；段边界变化不能由 index 独自表达                         |
-| 一个记忆集合的正式变化   | memoriesId + sequence  | Memories                        | 每个集合具有独立身份；创建和更新共用变化顺序，memoryId 仍描述变化对象                 |
-| 当前执行内的调用边界事件 | executionId + sequence | EventRecordHelper               | 暂沿用原有执行范围序号与单调时间检查，尚未改为每层边界顺序                            |
-| 记录的直接归属           | parentId / childIds    | RecordTree + RecordRegistration | 树表达归属；遍历顺序不表达跨层发生顺序                                                |
+| 来源       | 正式变化                         | 局部顺序                                | 记录关系                                            |
+| ---------- | -------------------------------- | --------------------------------------- | --------------------------------------------------- |
+| Transcript | 新消息批次、段边界               | transcriptId + revision；index 定位消息 | TranscriptRecord 使用同一 revision                  |
+| Memories   | 创建、更新及完整结果             | memoriesId + sequence                   | MemoryRecord 使用同一 sequence                      |
+| Invocation | 开始、内部进度、结束             | contextId + sequence                    | 调用记录用 contextId 关联；进度保留 processSequence |
+| Recorder   | 新登记、过程追加、终态、显式替换 | recorderId + revision                   | 捕获记录自身的正式变化                              |
 
-Invocation 内部序号在没有 Recorder 时同样推进，过程登记失败不重用已经分配的位置。此轮仅给现有内部过程编号，没有额外插入子调用或内容变化的过程条目，因此尚不能仅靠这些局部序号还原完整跨范围顺序。
+内容来源先校验并固定事件正文，落实状态后同步捕获，再按需登记运行记录。内容和调用进度不依赖 Recorder。捕获失败保留已落实事实并停止当前调用重做；记录失败不能抹去已捕获的内容变化。整个业务流程并非事务。
 
-Memories 先检查整批语义，再在每项变化正式落实后递增。无变化、空批次及预检查失败不占号；记录失败不回滚内容或序号，所以记录可能存在空缺。集合即使绑定同一个 Transcript，也各有 memoriesId，避免多个实例的序号碰撞。按 memoryId 查询的记录序号通常不连续，因为同一集合中的其他记忆变化也占号。
+一次记录登记包含新记录及父级新增 childId；RecordRegistration 仍只保证 Book 与直接关系的同步登记。InvocationRecord 逐步补齐一次调用，InvocationBoundaryRecord 只表达进入、返回或抛错。两者登记后都可以产生 RecordChangeEvent，不能将变化通知再次自动登记成调用边界。
 
-上述序号均不是传输游标。不能把记忆记录中的空缺直接判定为丢包，也不能把不同调用的 sequence 混合成全局位置。offsetMs 仍沿用根执行计时基准，没有在本次改为局部时间坐标。
+## 共享捕获与发送
+
+```text
+Transcript ── TranscriptEvent ─┐
+Memories ──── MemoryEvent ─────┤
+Invocation ── InvocationEvent ├→ ChangeObserver<RuntimeChange>
+Recorder ──── RecordChangeEvent┘        │ wait / take
+                                      ↓
+                               ObservationFeed
+                                      │ baseline / delta
+                                      ↓
+                              ObservationReplica
+                                      │ 本地事实
+                                      ↓
+                              binding → Store → UI
+```
+
+各来源只持有 ChangeCapture<自己的事件>。共享 ChangeObserver 只保留捕获顺序；capture 不调用消费者，wait 唤醒异步消费，take 转移当前批次。一个环境由一个 ObservationFeed 消费，向多个订阅者交付。批次是消费边界，不是跨源事务；局部顺序不是网络游标。
+
+## 基线与交付位置
+
+ObservationFeed 为本次发送范围生成 scopeId，每个非空变化批次递增 sequence。connect 同步取走已有变化，再固定基线并登记订阅，中间没有 await；因此后续增量从基线位置继续。
+
+基线包含完整消息索引与执行简介、当前记忆及已有记忆记录、各来源游标、Runtime 根记录、活动执行记录和活动调用进度。已完成执行的详细 IO 与过程不预取，仍通过详情接口按需加载。根 childIds 可以引用尚未加载的记录，不代表关系丢失。
+
+后续 delta 仅包含新事实。调用过程追加只发送新条目，终态发送结果或 resultOf，新记录与父级引用一起发送。通用 Recorder.update 未给出特化描述时发送该记录的显式 replaced，正常调用过程使用特化增量。服务不解析动态业务正文来猜测变化。
+
+每个 HTTP 连接以 16 MiB 限制待发数据和流缓冲总量，过慢的连接断开；消费者异常不回写业务。捕获器不留已取走历史，交付序号不表示客户端已确认。当前没有持久化日志、ACK、任意游标重放或多 Runtime 路由。
+
+## 接收与展示
+
+客户端首帧必须是基线；之后检查 scopeId 与交付 sequence，重复交付忽略，缺口拒绝。每个来源也检查自己的顺序；在新结构中完成整批变更后才替换已接纳状态，失败不暴露半条父子关系。
+
+调用记录的状态更新与边界登记是两个事实，接收端保留暂未齐备的原始条目，边界齐备后才生成通过 validateSnapshot 的本地执行视图。业务对话仍只由独立 ConversationUpdate 和消息查询驱动，观测不会生成或重复追加回答。
+
+顺序异常最多自动重建一次基线，连续异常停止并提示；普通断线不无限重连，可显式刷新重新连接。旧连接回调、旧详情响应不得覆盖新范围。binding 负责从已观测事实组织轮次、来源与记忆关联，UI 几何与选择状态不进入 Runtime。
 
 ## 调用索引退出清单
 
-| 现有用途                               | 替代位置                                        | 状态                                                 |
-| -------------------------------------- | ----------------------------------------------- | ---------------------------------------------------- |
-| 执行范围内的操作查询                   | RecordTree.descendants + 类型筛选               | 已迁移                                               |
-| 操作下的意图查询                       | RecordTree.children + 类型筛选                  | 已迁移                                               |
-| 父级结束前的活动下级检查               | 上述树查询                                      | 已迁移                                               |
-| 快照的 E/O/A/事件收集                  | RecordTree，事件显式按 sequence 排序            | 已迁移                                               |
-| Context 到调用记录的反查               | 本次 Invocation 的记录绑定                      | 已迁移：过程、终态、子调用及内容来源直接使用绑定记录 |
-| Context 重复登记约束                   | 正常构造创建独立 Context；单次绑定归 Invocation | 旧防御约束随索引删除，不另建全局检查                 |
-| 共享 Recorder 中 Runtime 的执行归属    | RuntimeRecord + RecordTree.root                 | 已迁移：hasExecution 已删除                          |
-| 下一条事件序号与单调时间检查的前一事件 | 事件记录逻辑                                    | 已迁移：EventRecordHelper.last 查询执行子树          |
+| 现有用途                               | 替代位置                                        | 状态                                                     |
+| -------------------------------------- | ----------------------------------------------- | -------------------------------------------------------- |
+| 执行范围内的操作查询                   | RecordTree.descendants + 类型筛选               | 已迁移                                                   |
+| 操作下的意图查询                       | RecordTree.children + 类型筛选                  | 已迁移                                                   |
+| 父级结束前的活动下级检查               | 上述树查询                                      | 已迁移                                                   |
+| 快照的 E/O/A/事件收集                  | RecordTree，事件显式按 sequence 排序            | 已迁移                                                   |
+| Context 到调用记录的反查               | 本次 Invocation 的记录绑定                      | 已迁移：过程、终态、子调用及内容来源直接使用绑定记录     |
+| Context 重复登记约束                   | 正常构造创建独立 Context；单次绑定归 Invocation | 旧防御约束随索引删除，不另建全局检查                     |
+| 共享 Recorder 中 Runtime 的执行归属    | RuntimeRecord + RecordTree.root                 | 已迁移：hasExecution 已删除                              |
+| 下一条事件序号与单调时间检查的前一事件 | 事件记录逻辑                                    | 已迁移：InvocationBoundaryRecordHelper.last 查询执行子树 |
 
-InvocationRecordIndex、Runtime 持有字段、Helper 索引参数与登记接线已全部移除。RecordIndex 没有剩余生产使用者，其实现及专属测试一并删除；Recorder.add 仅接收记录，RecordRegistration 只同步提交 Book 与直接父级关系。前一事件由 EventRecordHelper.last 在执行子树中按最大 sequence 查找，事件序号和时间检查仍归事件记录逻辑。当前查找为执行子树的线性遍历，不预设新的顺序状态或交付游标。事件对象仍仅表达调用边界，本轮不扩展事件体系或增量传输。
-
-## 哪些变化可以直接生产增量
-
-| 已知事实             | 生产位置                          | 登记侧可直接保留的增量                                              |
-| -------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| 新记录及直接归属建立 | Recorder.add / RecordRegistration | 新记录正文 + 直接父级增加的 childId，视为一次登记提交               |
-| 一项调用内部过程     | InvocationRecordHelper.process    | recordId + 该过程条目；无需发送此前全部 processes                   |
-| 调用完成或失败       | 各层记录 finish                   | recordId + 终态及 output/resultOf/error；保留已有单记录正文复用规则 |
-| 消息追加             | Transcript.appendFrom             | transcriptId + start + 新增消息                                     |
-| 消息切段             | Transcript.startSegment           | transcriptId + previousStart/start/end                              |
-| 记忆创建或更新       | Memories.apply                    | memoriesId + sequence + memoryId + 已落实的结果与变化说明           |
-
-以上是事实分类，尚未确定网络消息的命名和包络。消息及记忆的业务状态更新与对应观测记录需要分开消费，不能把两个通道中描述同一变化的数据重复应用。
-
-当前 Recorder.subscribe 的 add 通知可提供新增记录及 related 父级；update 通知仍只有已修改记录。它们是同步的实例引用，不是不可变历史，也不是可排队的增量正文。下一步应在已知写入处交付明确变化描述，并在登记发布边界捕获可传输的不可变内容。不能在 service 比较两个快照，也不能将活对象引用放入异步发送队列后再读取。
-
-## 四层职责
-
-1. server runtime：生产明确变化，维护自身范围的顺序与关系；记录登记完成才发布观测变化。业务操作仍可独立于观测消费运行。
-2. service：按订阅范围组织快照及已提交变化，赋予交付位置；不推断模型业务正文或自造运行事实。
-3. client runtime：接纳快照和增量，维护服务端事实的本地投影及交付进度；拒绝不明确的基线或范围，不处理 UI 几何与组件状态。
-4. binding：从本地事实投影更新应用 Store；客户端重复收到一次交付不能重复追加展示条目。
-
-不按 E/O/A 类型把全部业务内容固定成传输字段。此次收敛的是确定的观测元数据、记录变化和关系，外部系统的业务正文仍由具体契约解释。
-
-## 下一步需要共同确定的最小接收闭环
-
-- 首次快照明确包含哪些实体与记录，以及它对应的交付位置。已有 RuntimeSnapshot 不包含全部内容记录，childIds 可能引用未装载的记录；缺少正文不自动等于断链或丢包。
-- 快照与订阅必须有一致的衔接点。不能先取快照、再开启订阅而忽略中间变化；应在发送者明确一个一致的快照位置和后续交付范围。
-- 每个交付范围具有身份与递增位置，避免断线或服务重启后把两个范围混合。该位置只表示交付顺序，不替代调用或记忆顺序。
-- 接收者维护最后落实的位置；重复交付、缺口、范围不一致分别有明确处理。缺口出现时先停止继续应用，初步可重新获取快照，不提前实现持久化日志和任意位置重放。
-- 一次记录登记的子记录新增与父级引用增加由接收者一起应用，再通知绑定层，避免前端短暂看到半条关系。
-
-本次未实现发送队列、交付游标、快照握手、客户端增量 reducer、重连或恢复；这些协议决策不通过新增一个全局顺序管理者代替。
+InvocationRecordIndex、Runtime 持有字段、Helper 索引参数与登记接线已全部移除。RecordIndex 没有剩余生产使用者，其实现及专属测试一并删除；Recorder.add 仅接收记录，RecordRegistration 只同步提交 Book 与直接父级关系。前一事件由 InvocationBoundaryRecordHelper.last 在执行子树中按最大 sequence 查找，事件序号和时间检查仍归事件记录逻辑。当前查找为执行子树的线性遍历，不预设新的顺序状态或交付游标。调用边界记录仍仅表达调用进入和退出；新的 Transcript 变化事件不复用这套记录。

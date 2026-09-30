@@ -17,6 +17,6 @@ export abstract class Operation<I, O> extends InvocationBehavior<I, O, Operation
   }
 
   async call(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, input: I): Promise<O> {
-    return this.invocations.create<I, O>(parent, input, this, this.work).run();
+    return this.invocations.create<I, O>(parent, { input: input, description: this, work: this.work }).run();
   }
 }

@@ -3,10 +3,9 @@ import type { ExecutionContext } from '../../context/execution.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 import { RuntimeErrorHelper } from '../../errors/helper.js';
 import type { Recorder } from '../recorder.js';
-import { EventRecordHelper } from '../event/helper.js';
+import { InvocationBoundaryRecordHelper } from '../invocation-boundary/helper.js';
 import type { RuntimeErrorValue, ExecutionValue, RuntimeSnapshot } from '@capix-observer/protocol';
 
-import type { Clock } from '../../runtime/clock.js';
 import type { RecordBook } from '../container/book.js';
 import { OperationRecordHelper } from '../operation/helper.js';
 import { AttemptRecordHelper } from '../attempt/helper.js';
@@ -16,7 +15,7 @@ import { ExecutionRecord } from './record.js';
 export class ExecutionRecordHelper {
   static recording<I, O>(recording: InvocationRecordHelper) {
     return recording.recording<ExecutionContext<I, O>>(
-      (context) => this.create(recording.recorder, recording.recorder.clock, context.id, { input: context.input, settings: context.settings, ...(context.transcriptRange ? { transcriptRange: context.transcriptRange } : {}) }, recording.root.id),
+      (context) => this.create(recording.recorder, { contextId: context.id, parentId: recording.root.id }, { input: context.input, settings: context.settings, ...(context.transcriptRange ? { transcriptRange: context.transcriptRange } : {}) }),
       (context, record, resultOf) => {
         const state = context.state;
         if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);
@@ -31,8 +30,8 @@ export class ExecutionRecordHelper {
     return this.snapshot(recording.recorder, record.id);
   }
 
-  static create(recorder: Recorder, clock: Clock, contextId: string, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error' | 'processes' | 'resultOf'>, parentId: string): ExecutionRecord {
-    return recorder.add(new ExecutionRecord(contextId, { ...value, startedAt: clock.now() }, parentId));
+  static create(recorder: Recorder, definition: { contextId: string; parentId: string }, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error' | 'processes' | 'resultOf'>): ExecutionRecord {
+    return recorder.add(new ExecutionRecord(definition.contextId, { ...value, startedAt: recorder.clock.now() }, definition.parentId));
   }
 
   static get(book: RecordBook, id: string): ExecutionRecord {
@@ -43,12 +42,12 @@ export class ExecutionRecordHelper {
 
   static complete(recorder: Recorder, id: string, output: unknown, resultOf?: number): void {
     const record = this.prepareFinish(recorder, id);
-    record.complete(output, resultOf);
+    InvocationRecordHelper.finish(recorder, record, (record) => record.complete(output, resultOf));
   }
 
   static fail(recorder: Recorder, id: string, error: RuntimeErrorValue): void {
     const record = this.prepareFinish(recorder, id);
-    record.fail(error);
+    InvocationRecordHelper.finish(recorder, record, (record) => record.fail(error));
   }
 
   private static prepareFinish(recorder: Recorder, id: string): ExecutionRecord {
@@ -64,7 +63,7 @@ export class ExecutionRecordHelper {
       execution: this.get(recorder.book, id).toJSON(),
       operations: operations.map((record) => record.toJSON()),
       attempts: operations.flatMap((operation) => AttemptRecordHelper.findByOperation(recorder, operation.id).map((record) => record.toJSON())),
-      events: EventRecordHelper.findByExecution(recorder, id).map((event) => event.toJSON()),
+      events: InvocationBoundaryRecordHelper.findByExecution(recorder, id).map((event) => event.toJSON()),
     };
   }
 }

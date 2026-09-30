@@ -8,7 +8,7 @@ Runtime 通过 RuntimeContext 持有持续运行信息：Transcript、Memories�
 
 `createRuntime({ recorder?, messages? })` 创建独立 Transcript、Memories 与 SelectionUsage，组成 RuntimeContext；开启记录时登记一条 RuntimeRecord，再构造 Runtime。messages 是待接纳的初始原始消息，经过正常 append 并产生内容记录，不是历史快照导入。initializeObserver 同样接受消息数组，不再接受或转移已有 Transcript 实例。环境的 transcript 属性只是 runtime.context.transcript 的同一引用。
 
-`new Runtime(context, { recorder, record })` 只接管显式传入的现场和已登记记录，不清空内容或创建新记录；这不是持久化恢复入口，也不提供多个活动实例共享同一现场时的协调。实例存活、数据范围持续和记录保留分别理解，构造与销毁实例不隐含数据范围的建立或结束。
+`new Runtime(context, { recording: { recorder, record }, changes })` 只接管显式传入的现场和已登记记录，不清空内容或创建新记录；这不是持久化恢复入口，也不提供多个活动实例共享同一现场时的协调。实例存活、数据范围持续和记录保留分别理解，构造与销毁实例不隐含数据范围的建立或结束。
 
 RuntimeRecord 继承 CompositeRecord，正文目前只有 createdAt，通过 childIds 关联其下的执行记录。它没有调用 IO、processes 或 running/succeeded/failed；某个 E 完成不会结束 R。RuntimeContext 保留内容对象引用，RuntimeRecord 不复制消息或记忆正文。此次不增加 Context ID、持久化、恢复、暂停或完成状态机。
 
@@ -63,3 +63,16 @@ Observer 按实际操作角色查询历史，不依赖当前行为实例 ID 来�
 本轮没有 Thread/TRSA、插件注册、通用上下文容器、调度队列、导入恢复或新重试机制。后续快照与增量设计从消息变化、记忆变化和调用记录变化分别出发。
 
 记录机制的进一步分离见 [记录边界](recording.md)。
+
+## 入口参数与变化出口
+
+入口按所处边界分类，不按统一参数数量改写：
+
+- Runtime(context, options)、Memories(transcript, options)、Recorder(book, options)：必需主体独立，可选稳定能力具名装配。Recorder 的 clock 是记录时间来源，记录 Helper 不再另传一份 Clock。
+- 三层 InvocationBuilder(contexts, capabilities)：上下文构造者与稳定调用能力分开；E 额外要求 run 占用入口，O/A 不获得它。
+- ExecutionInvocationBuilder.create(input, request) / submit(accept, request)：输入或接纳函数独立，request 分别声明 context、work、started。配置与信号属于当次 context 参数，Builder 不保存当前信号。
+- Operation/AttemptInvocationBuilder.create(parent, request)：直接父调用独立，request 包含 input、description、work。普通 Operation/Attempt.call(parent, input) 保持简短，不穿透传递记录或观测能力。
+- 记录构造保留 definition 与 value 的区分；definition 集中身份、局部位置及来源。Record Helper 的机制依赖（Recorder 或 Clock）放在独立参数中。
+- cycle(invocation, work, options)：调用对象、工作行为、循环控制与过程出口分开；Context 从 invocation 取得。onProcess 表达过程发生，不将循环与 Recorder 绑定。
+
+InvocationChangeEmitter 每次调用独立创建，保存固定身份和本地事件序号；负责时间戳及不可变事件正文，向装配好的 ChangeCapture 发布。Invocation 仍明确控制开始、过程与结束处的发布及登记顺序，并处理失败；没有通用插件列表或隐式生命周期分派。捕获失败不回滚事实、不自动重做，记录绑定仍属于 Invocation。

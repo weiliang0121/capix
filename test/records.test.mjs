@@ -33,7 +33,7 @@ async function execute(answer = '{"kind":"answer","content":"海盐项目"}') {
   });
 }
 const createRecordedRuntime = (publish) => {
-  const runtime = createRuntime({ recorder: new Recorder(new RecordBook(), new Clock()) });
+  const runtime = createRuntime({ recorder: new Recorder(new RecordBook(), { clock: new Clock() }) });
   if (publish) subscribeExecutions(runtime.recording, publish);
   return runtime;
 };
@@ -70,8 +70,8 @@ test('Paired record operations create, find and write results independently of b
   const book = new RecordBook();
   const clock = new Clock();
   const root = RuntimeRecordHelper.create(new Recorder(book));
-  const execution = ExecutionRecordHelper.create(new Recorder(book), clock, randomUUID(), { input, settings }, root.id);
-  const other = ExecutionRecordHelper.create(new Recorder(book), clock, randomUUID(), { input, settings }, root.id);
+  const execution = ExecutionRecordHelper.create(new Recorder(book), { contextId: randomUUID(), parentId: root.id }, { input, settings });
+  const other = ExecutionRecordHelper.create(new Recorder(book), { contextId: randomUUID(), parentId: root.id }, { input, settings });
   const def = {
     contextId: randomUUID(),
     executionId: execution.id,
@@ -112,7 +112,7 @@ test('BaseRecord is the base; execution and operation relations live outside the
   assert.equal(base.value, value); // Base shape does not impose a content policy.
   const runtime = createRecordedRuntime(),
     book = runtime.recorder.book,
-    execution = ExecutionRecordHelper.create(new Recorder(book), new Clock(), randomUUID(), { input: value, settings }, runtime.record.id);
+    execution = ExecutionRecordHelper.create(new Recorder(book), { contextId: randomUUID(), parentId: runtime.record.id }, { input: value, settings });
   const operation = OperationRecordHelper.create(
     new Recorder(book),
     {
@@ -141,10 +141,10 @@ test('BaseRecord is the base; execution and operation relations live outside the
     operation.executionId = 'other';
   }, TypeError);
   assert.equal(book.call, undefined); // Book has no work-execution entry point.
-  assert.throws(() => ExecutionRecordHelper.create(new Recorder(book), new Clock(), randomUUID(), { input: new Map(), settings }, runtime.record.id), /plain/);
+  assert.throws(() => ExecutionRecordHelper.create(new Recorder(book), { contextId: randomUUID(), parentId: runtime.record.id }, { input: new Map(), settings }), /plain/);
   const cycle = {};
   cycle.self = cycle;
-  assert.throws(() => ExecutionRecordHelper.create(new Recorder(book), new Clock(), randomUUID(), { input: cycle, settings }, runtime.record.id), /cyclic/);
+  assert.throws(() => ExecutionRecordHelper.create(new Recorder(book), { contextId: randomUUID(), parentId: runtime.record.id }, { input: cycle, settings }), /cyclic/);
 });
 
 test('construction does not execute; repeated calls share the callable identity, not the invocation identity', async () => {
@@ -220,8 +220,8 @@ test('one node overlaps calls within and across executions without mixing input 
 test('Paired operations reject foreign parents, duplicate endings and ending before children', () => {
   const runtime = createRecordedRuntime(),
     book = runtime.recorder.book,
-    a = ExecutionRecordHelper.create(new Recorder(book), new Clock(), randomUUID(), { input, settings }, runtime.record.id),
-    b = ExecutionRecordHelper.create(new Recorder(book), new Clock(), randomUUID(), { input, settings }, runtime.record.id);
+    a = ExecutionRecordHelper.create(new Recorder(book), { contextId: randomUUID(), parentId: runtime.record.id }, { input, settings }),
+    b = ExecutionRecordHelper.create(new Recorder(book), { contextId: randomUUID(), parentId: runtime.record.id }, { input, settings });
   const def = {
     contextId: randomUUID(),
     executionId: a.id,
@@ -434,7 +434,7 @@ test('publication failure does not change execution facts or operation output', 
 test('Paired operations use the record tree without scanning Book', (t) => {
   const book = new RecordBook();
   const root = RuntimeRecordHelper.create(new Recorder(book));
-  const execution = ExecutionRecordHelper.create(new Recorder(book), new Clock(), randomUUID(), { input, settings }, root.id);
+  const execution = ExecutionRecordHelper.create(new Recorder(book), { contextId: randomUUID(), parentId: root.id }, { input, settings });
   const record = OperationRecordHelper.create(
     new Recorder(book),
     {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
-import { snapshot } from './fixtures.mjs';
+import { snapshot, baseline, entriesOf } from './fixtures.mjs';
 
 function stream(text, chunkSize = 7) {
   const bytes = new TextEncoder().encode(text);
@@ -59,18 +59,18 @@ test('business stream rejects identity changes, duplicate answers, misplaced ans
 });
 test('observation stream accepts multiple executions independently and validates records', async () => {
   const received = [];
-  const http = new ObservationHttpTransport('', async () => new Response(stream(lines({ type: 'snapshot', snapshot: snapshot() }, { type: 'snapshot', snapshot: snapshot('running', 'another') }))));
+  const http = new ObservationHttpTransport('', async () => new Response(stream(lines(baseline({ entries: entriesOf(snapshot()) }), { type: 'delta', scopeId: 'fixture-scope', sequence: 1, changes: [{ type: 'record', recorderId: 'fixture-recorder', revision: 1, occurredAt: '2026-09-30T00:00:00Z', change: { kind: 'added', entry: entriesOf(snapshot('running', 'another'))[0] } }] }))));
   await assert.rejects(
     http.observe((value) => received.push(value), new AbortController().signal),
     /观测连接已结束/,
   );
   assert.deepEqual(
-    received.map((value) => value.execution.id),
+    received.map((value) => (value.type === 'baseline' ? value.entries[0].data.id : value.changes[0].change.entry.data.id)),
     ['execution-1', 'another'],
   );
   const invalid = new ObservationHttpTransport('', async () => new Response('{"type":"snapshot","snapshot":{}}\n'));
   await assert.rejects(
     invalid.observe(() => {}, new AbortController().signal),
-    (error) => error.code === 'INVALID_SNAPSHOT',
+    (error) => error.code === 'INVALID_RESPONSE',
   );
 });

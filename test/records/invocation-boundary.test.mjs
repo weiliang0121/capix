@@ -3,7 +3,7 @@ import { callFor } from '../fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BaseRecord, ExecutionRecordHelper, EventRecord, EventRecordHelper, RecordBook, Clock, Recorder, Runtime, createRuntime } from '@capix-observer/runtime';
+import { BaseRecord, ExecutionRecordHelper, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, RecordBook, Clock, Recorder, Runtime, createRuntime } from '@capix-observer/runtime';
 
 import { validateSnapshot } from '@capix-observer/protocol';
 
@@ -21,8 +21,8 @@ class ManualClock extends Clock {
 test('event records share the Book, have their own IDs, and snapshots read the execution tree', async () => {
   const book = new RecordBook(),
     clock = new ManualClock();
-  const recorder = new Recorder(book, clock);
-  const runtime = createRuntime({ recorder: recorder });
+  const recorder = new Recorder(book, { clock });
+  const runtime = createRuntime({ recorder });
   let firstContext, during;
   await invoke(lifecycleFor(runtime).execution({ input: 'first', settings: {} }), (context) => {
     firstContext = context;
@@ -45,7 +45,7 @@ test('event records share the Book, have their own IDs, and snapshots read the e
   );
   for (const event of first.events) {
     const record = book.get(event.id);
-    assert.ok(record instanceof EventRecord && record instanceof BaseRecord);
+    assert.ok(record instanceof InvocationBoundaryRecord && record instanceof BaseRecord);
     assert.equal(record.value, event.value);
     assert.equal(Object.hasOwn(record, 'contextId'), false);
     assert.equal('status' in record, false);
@@ -59,7 +59,7 @@ test('event records share the Book, have their own IDs, and snapshots read the e
     secondSnapshot.events.map((event) => event.sequence),
     [1],
   );
-  assert.equal(EventRecordHelper.findByExecution(new Recorder(book), first.execution.id).length, 2);
+  assert.equal(InvocationBoundaryRecordHelper.findByExecution(new Recorder(book), first.execution.id).length, 2);
   assert.equal(during.events.length, 1);
   const changed = structuredClone(first);
   changed.events[0].id = changed.events[1].id;
@@ -78,28 +78,29 @@ test('event helpers reject foreign/non-call targets and leave no event or sequen
   class FailingBook extends RecordBook {
     reject = false;
     add(record) {
-      if (this.reject && record instanceof EventRecord) throw new Error('registration failed');
+      if (this.reject && record instanceof InvocationBoundaryRecord) throw new Error('registration failed');
       return super.add(record);
     }
   }
   const book = new FailingBook(),
     clock = new ManualClock();
-  const root = RuntimeRecordHelper.create(new Recorder(book, clock));
-  const execution = ExecutionRecordHelper.create(new Recorder(book), clock, 'context-one', { input: {}, settings: {} }, root.id);
-  const other = ExecutionRecordHelper.create(new Recorder(book), clock, 'context-two', { input: {}, settings: {} }, root.id);
+  const recorder = new Recorder(book, { clock });
+  const root = RuntimeRecordHelper.create(recorder);
+  const execution = ExecutionRecordHelper.create(recorder, { contextId: 'context-one', parentId: root.id }, { input: {}, settings: {} });
+  const other = ExecutionRecordHelper.create(recorder, { contextId: 'context-two', parentId: root.id }, { input: {}, settings: {} });
   const arbitrary = book.add(new BaseRecord({ anything: true }));
   for (const target of [other.id, arbitrary.id, 'missing']) {
-    assert.throws(() => EventRecordHelper.create(new Recorder(book), clock, 100, execution.id, target, 'call'), /not an invocation/);
+    assert.throws(() => InvocationBoundaryRecordHelper.create(recorder, { start: 100, executionId: execution.id, callId: target }, 'call'), /not an invocation/);
   }
-  assert.throws(() => EventRecordHelper.create(new Recorder(book), clock, 100, execution.id, execution.id, 'return'), /state/);
-  assert.throws(() => EventRecordHelper.create(new Recorder(book), clock, 101, execution.id, execution.id, 'call'), /event time/);
+  assert.throws(() => InvocationBoundaryRecordHelper.create(recorder, { start: 100, executionId: execution.id, callId: execution.id }, 'return'), /state/);
+  assert.throws(() => InvocationBoundaryRecordHelper.create(recorder, { start: 101, executionId: execution.id, callId: execution.id }, 'call'), /event time/);
   book.reject = true;
-  assert.throws(() => EventRecordHelper.create(new Recorder(book), clock, 100, execution.id, execution.id, 'call'), /registration failed/);
-  assert.equal(EventRecordHelper.last(new Recorder(book), execution.id), undefined);
+  assert.throws(() => InvocationBoundaryRecordHelper.create(recorder, { start: 100, executionId: execution.id, callId: execution.id }, 'call'), /registration failed/);
+  assert.equal(InvocationBoundaryRecordHelper.last(recorder, execution.id), undefined);
   assert.deepEqual(execution.childIds, []);
   assert.equal([...book.values()].length, 4);
   book.reject = false;
-  const event = EventRecordHelper.create(new Recorder(book), clock, 100, execution.id, execution.id, 'call');
+  const event = InvocationBoundaryRecordHelper.create(recorder, { start: 100, executionId: execution.id, callId: execution.id }, 'call');
   assert.equal(event.sequence, 1);
   assert.deepEqual(execution.childIds, [event.id]);
 });
@@ -110,22 +111,22 @@ test('last event follows execution sequence across interleaved children, with fa
     reject = false;
     add(record) {
       const added = super.add(record);
-      if (this.reject && record instanceof EventRecord) throw new Error('failed after write');
+      if (this.reject && record instanceof InvocationBoundaryRecord) throw new Error('failed after write');
       return added;
     }
   }
   const book = new FailingBook();
   const clock = new ManualClock();
-  const recorder = new Recorder(book, clock);
+  const recorder = new Recorder(book, { clock });
   const root = RuntimeRecordHelper.create(recorder);
-  const execution = ExecutionRecordHelper.create(recorder, clock, 'e', { input: {}, settings: {} }, root.id);
+  const execution = ExecutionRecordHelper.create(recorder, { contextId: 'e', parentId: root.id }, { input: {}, settings: {} });
   const operation = (contextId) => OperationRecordHelper.create(recorder, { executionId: execution.id, contextId, operationInstanceId: 'work', operation: 'test', label: 'Test', source: 'test', caller: 'execution', callee: 'operation' }, {});
   const event = (record, type, elapsed) => {
     clock.elapsed = elapsed;
-    return EventRecordHelper.create(recorder, clock, 100, execution.id, record.id, type);
+    return InvocationBoundaryRecordHelper.create(recorder, { start: 100, executionId: execution.id, callId: record.id }, type);
   };
   t.mock.method(book, 'values', () => assert.fail('must not scan all records'));
-  assert.equal(EventRecordHelper.last(recorder, execution.id), undefined);
+  assert.equal(InvocationBoundaryRecordHelper.last(recorder, execution.id), undefined);
   event(execution, 'call', 100);
   const first = operation('o1');
   event(first, 'call', 101);
@@ -133,20 +134,20 @@ test('last event follows execution sequence across interleaved children, with fa
   event(attempt, 'call', 102);
   const second = operation('o2');
   const fourth = event(second, 'call', 103);
-  AttemptRecordHelper.complete(book, attempt.id, {});
+  AttemptRecordHelper.complete(recorder, attempt.id, {});
   event(attempt, 'return', 104);
   OperationRecordHelper.complete(recorder, first.id, {});
   const sixth = event(first, 'return', 105);
   assert.equal(recorder.tree.descendants(execution.id).at(-1), fourth);
-  assert.equal(EventRecordHelper.last(recorder, execution.id), sixth);
+  assert.equal(InvocationBoundaryRecordHelper.last(recorder, execution.id), sixth);
   OperationRecordHelper.complete(recorder, second.id, {});
   assert.throws(() => event(second, 'return', 104), /event time/);
-  assert.equal(EventRecordHelper.last(recorder, execution.id), sixth);
+  assert.equal(InvocationBoundaryRecordHelper.last(recorder, execution.id), sixth);
   const before = second.childIds;
   book.reject = true;
   assert.throws(() => event(second, 'return', 106), /failed after write/);
   assert.equal(second.childIds, before);
-  assert.equal(EventRecordHelper.last(recorder, execution.id), sixth);
+  assert.equal(InvocationBoundaryRecordHelper.last(recorder, execution.id), sixth);
   book.reject = false;
   assert.equal(event(second, 'return', 106).sequence, 7);
   ExecutionRecordHelper.complete(recorder, execution.id, {});

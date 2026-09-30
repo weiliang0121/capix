@@ -95,7 +95,7 @@ ExtractMemory
 - Runtime 持有 Memories；它绑定一个 Transcript，提供 get/values/snapshot/apply，统一审查、落实并记录正式变化。对外没有 add 或 Memory.update 旁路。
 - ApplyMemory 提交已接纳提案及调用来源，不再自行修改内容或补写记录。
 - 共享 Recorder 由环境装配，Memories 持有其引用。变更可独立于调用发生；实际来自调用时保留 contextId/callId/executionId/operationId，来源链接不用于内容合法性判断。MemoryRecordHelper 负责构造记录与查询；Memories 使用通用 Recorder.add 登记，来源由调用侧预先解析。
-- MemoryRecord 保存在同一个 Book；按 memoryId 过滤，沿登记顺序返回。本轮不另加索引或排序元数据。
+- MemoryRecord 保存在同一个 Book；按 memoryId 过滤，沿登记顺序返回。不另加索引；memoriesId/sequence 表达集合内正式变化顺序。
 - E/O/A 记录继续记录提取输入、模型原始返回和接纳候选；MemoryRecord 保存具体记忆体已落实的变化，二者不是重复对象。MemoryRecord 不持有调用 Context 实例、调用状态或虚构事件。
 - GET /api/memory 返回当前事实和变化记录的只读投影。页面展示记录正文、依据、结果快照、执行与操作 ID，不做差异推断。
 
@@ -116,3 +116,9 @@ GET /api/executions 从已有记录投影轮次、消息关联及选择结果，
 提取目标是维护准确、可延续的理解：吸收有效信息，修正过时认识，保留有效条件与不确定性，减少无意义重复。如何划分、采用什么粒度、是否综合已有理解由模型判断，不预设主题分类或抽象层级，也不为“记忆之记忆”增加一种实体。现有结构和索引校验保留；create/update 是当前可落实的操作范围，不是对模型知识组织方式的要求。当前尚无退役、删除或合并旧记忆的操作，不宣称结果一定达到最优收敛。
 
 运行与内容生命周期的完整边界见 [runtime-boundaries.md](runtime-boundaries.md)。
+
+## 变化捕获
+
+Memories 可注入 ChangeCapture<MemoryEvent>。整批语义检查完成后，每个有效变更先固定不可变事件，再落实内容并推进 sequence，捕获成功后按需登记 MemoryRecord。空批次、无变化和预检查失败不占序号；捕获或记录失败保留已经落实的项，停止处理剩余项，不声称跨项回滚。
+
+MemoryEvent 与 MemoryRecord 通过 memoriesId/sequence 对应；前者同步当前事实，后者提供变化依据及调用归属。客户端分别更新当前记忆与历史记录，不重复落实内容。无 Recorder 时仍可捕获变化，无捕获器时仍可正常使用记忆。网络交付规则见 [观测增量](observation-increments.md)。

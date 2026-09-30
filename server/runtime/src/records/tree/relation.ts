@@ -7,7 +7,7 @@ import { InvocationRecord } from '../invocation/record.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord } from '../attempt/record.js';
-import { EventRecord } from '../event/record.js';
+import { InvocationBoundaryRecord } from '../invocation-boundary/record.js';
 import { MemoryRecord } from '../memory/record.js';
 import { TranscriptRecord } from '../transcript/record.js';
 
@@ -20,7 +20,7 @@ export function checkRelation(record: BaseRecord<unknown>, parent: CompositeReco
     if (record.parentId !== (record.parentOperationId ?? record.executionId)) throw new Error('Inconsistent operation parent');
   }
   if (record instanceof AttemptRecord && (!(parent instanceof OperationRecord) || record.operationId !== parent.id)) throw new Error('Attempt requires an operation parent');
-  if (record instanceof EventRecord && !(parent instanceof InvocationRecord)) throw new Error('Event requires a call parent');
+  if (record instanceof InvocationBoundaryRecord && !(parent instanceof InvocationRecord)) throw new Error('Event requires a call parent');
   const content = record instanceof MemoryRecord || record instanceof TranscriptRecord;
   if (!parent) {
     if (content && (!isUndefined(record.callId) || !isUndefined(record.contextId) || !isUndefined(record.executionId) || (record instanceof MemoryRecord && !isUndefined(record.operationId)))) throw new Error('Content source requires a call parent');
@@ -37,10 +37,10 @@ export function checkRelation(record: BaseRecord<unknown>, parent: CompositeReco
     if (!isUndefined(current.parentId) && !book.get(current.parentId)) throw new Error('Record ancestor does not exist');
   }
   const execution = ancestors.find((ancestor) => ancestor instanceof ExecutionRecord);
-  if (record instanceof OperationRecord || record instanceof EventRecord || content) {
+  if (record instanceof OperationRecord || record instanceof InvocationBoundaryRecord || content) {
     if (!(execution instanceof ExecutionRecord) || record.executionId !== execution.id) throw new Error('Record belongs to another execution');
   }
-  if (record instanceof EventRecord) {
+  if (record instanceof InvocationBoundaryRecord) {
     const expected = record.value.type === 'call' ? 'running' : record.value.type === 'return' ? 'succeeded' : 'failed';
     if (!(parent instanceof InvocationRecord) || record.callId !== parent.id || parent.status !== expected) throw new Error('Event does not match the invocation record state');
     // Terminal evidence is recorded after the call has ended.

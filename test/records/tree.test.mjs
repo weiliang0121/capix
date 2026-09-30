@@ -1,7 +1,7 @@
 import { RuntimeRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RecordBook, Recorder, BaseRecord, ExecutionRecord, OperationRecord, AttemptRecord, EventRecord, MemoryRecord, TranscriptRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
+import { RecordBook, Recorder, BaseRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, MemoryRecord, TranscriptRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
 
 const operationDefinition = (executionId, contextId, parentOperationId) => ({ executionId, contextId, parentOperationId, operationInstanceId: 'instance', operation: 'test', label: 'Test', source: 'test', caller: 'execution', callee: 'operation' });
 const attemptDefinition = (operationId) => ({ operationId, contextId: 'attempt', name: 'apply', label: 'Apply', source: 'test', caller: 'operation', callee: 'processing' });
@@ -9,7 +9,7 @@ const memoryValue = { action: 'create', change: '新增约束', sourceIndexes: [
 function fixture(book = new RecordBook()) {
   const recorder = new Recorder(book);
   const root = RuntimeRecordHelper.create(recorder);
-  const execution = ExecutionRecordHelper.create(recorder, recorder.clock, 'execution', { input: {}, settings: {} }, root.id);
+  const execution = ExecutionRecordHelper.create(recorder, { contextId: 'execution', parentId: root.id }, { input: {}, settings: {} });
   return { recorder, root, execution };
 }
 
@@ -22,10 +22,10 @@ test('record tree retains direct ownership, immutable child snapshots and conten
   const operation = OperationRecordHelper.create(recorder, operationDefinition(execution.id, 'operation'), {});
   const nested = OperationRecordHelper.create(recorder, operationDefinition(execution.id, 'nested', operation.id), {});
   const attempt = AttemptRecordHelper.create(recorder, attemptDefinition(nested.id), {});
-  const event = recorder.add(new EventRecord({ executionId: execution.id, callId: attempt.id, sequence: 1, occurredAt: recorder.clock.now(), offsetMs: 0 }, { type: 'call' }));
-  const memory = recorder.add(new MemoryRecord('memory', 'transcript', 1, execution.id, nested.id, memoryValue, attempt.contextId, attempt.id));
-  const transcript = recorder.add(new TranscriptRecord('transcript', recorder.clock.now(), { action: 'append', start: 0, messages: [{ role: 'assistant', content: '好' }] }, execution.contextId, execution.id, execution.id));
-  const outside = recorder.add(new TranscriptRecord('transcript', recorder.clock.now(), { action: 'segment', previousStart: 0, start: 0, end: 1 }));
+  const event = recorder.add(new InvocationBoundaryRecord({ executionId: execution.id, callId: attempt.id, sequence: 1, occurredAt: recorder.clock.now(), offsetMs: 0 }, { type: 'call' }));
+  const memory = recorder.add(new MemoryRecord({ memoryId: 'memory', memoriesId: 'transcript', sequence: 1, source: { executionId: execution.id, operationId: nested.id, contextId: attempt.contextId, callId: attempt.id } }, memoryValue));
+  const transcript = recorder.add(new TranscriptRecord({ transcriptId: 'transcript', revision: 1, occurredAt: recorder.clock.now(), source: { contextId: execution.contextId, callId: execution.id, executionId: execution.id } }, { action: 'append', start: 0, messages: [{ role: 'assistant', content: '好' }] }));
+  const outside = recorder.add(new TranscriptRecord({ transcriptId: 'transcript', revision: 1, occurredAt: recorder.clock.now() }, { action: 'segment', previousStart: 0, start: 0, end: 1 }));
   assert.deepEqual(execution.childIds, [operation.id, transcript.id]);
   assert.deepEqual(operation.childIds, [nested.id]);
   assert.deepEqual(attempt.childIds, [event.id, memory.id]);
@@ -60,9 +60,9 @@ test('registration rejects dangling and wrong parents even when helpers are not 
   assert.throws(() => recorder.add(new BaseRecord({}, 'missing')), /does not exist/);
   assert.throws(() => recorder.add(new BaseRecord({}, leaf.id)), /cannot contain/);
   assert.throws(() => recorder.add(new OperationRecord(operationDefinition(other.id, 'bad', operation.id), {})), /another execution/);
-  assert.throws(() => recorder.add(new MemoryRecord('m', 'transcript', 1, execution.id, undefined, memoryValue, 'wrong-context', execution.id)), /does not match its call/);
-  assert.throws(() => recorder.add(new MemoryRecord('m', 'transcript', 1, other.id, undefined, memoryValue, execution.contextId, execution.id)), /another execution/);
-  assert.throws(() => recorder.add(new MemoryRecord('m', 'transcript', 1, execution.id, undefined, memoryValue)), /requires a call parent/);
+  assert.throws(() => recorder.add(new MemoryRecord({ memoryId: 'm', memoriesId: 'transcript', sequence: 1, source: { executionId: execution.id, operationId: undefined, contextId: 'wrong-context', callId: execution.id } }, memoryValue)), /does not match its call/);
+  assert.throws(() => recorder.add(new MemoryRecord({ memoryId: 'm', memoriesId: 'transcript', sequence: 1, source: { executionId: other.id, operationId: undefined, contextId: execution.contextId, callId: execution.id } }, memoryValue)), /another execution/);
+  assert.throws(() => recorder.add(new MemoryRecord({ memoryId: 'm', memoriesId: 'transcript', sequence: 1, source: { executionId: execution.id, operationId: undefined, contextId: undefined, callId: undefined } }, memoryValue)), /requires a call parent/);
   assert.throws(() => recorder.add(operation), /already exists/);
   assert.deepEqual(execution.childIds, [operation.id]);
 });
@@ -70,8 +70,8 @@ test('registration rejects dangling and wrong parents even when helpers are not 
 test('ended calls accept terminal evidence and sourced content, but cannot start new work', () => {
   const { recorder, execution } = fixture();
   execution.complete({});
-  const terminal = recorder.add(new EventRecord({ executionId: execution.id, callId: execution.id, sequence: 1, occurredAt: recorder.clock.now(), offsetMs: 0 }, { type: 'return' }));
-  const content = recorder.add(new MemoryRecord('m', 'transcript', 1, execution.id, undefined, memoryValue, execution.contextId, execution.id));
+  const terminal = recorder.add(new InvocationBoundaryRecord({ executionId: execution.id, callId: execution.id, sequence: 1, occurredAt: recorder.clock.now(), offsetMs: 0 }, { type: 'return' }));
+  const content = recorder.add(new MemoryRecord({ memoryId: 'm', memoriesId: 'transcript', sequence: 1, source: { executionId: execution.id, operationId: undefined, contextId: execution.contextId, callId: execution.id } }, memoryValue));
   assert.throws(() => recorder.add(new OperationRecord(operationDefinition(execution.id, 'late'), {})), /already ended/);
   assert.deepEqual(execution.childIds, [terminal.id, content.id]);
 });
@@ -132,13 +132,13 @@ test('scope queries and end checks follow the tree while event snapshots follow 
   const operation = OperationRecordHelper.create(recorder, operationDefinition(execution.id, 'operation'), {});
   const attempt = AttemptRecordHelper.create(recorder, attemptDefinition(operation.id), {});
   // Child traversal groups events by call, unlike their original occurrence sequence.
-  const boundary = (call, sequence, type) => recorder.add(new EventRecord({ executionId: execution.id, callId: call.id, sequence, occurredAt: recorder.clock.now(), offsetMs: sequence }, { type }));
+  const boundary = (call, sequence, type) => recorder.add(new InvocationBoundaryRecord({ executionId: execution.id, callId: call.id, sequence, occurredAt: recorder.clock.now(), offsetMs: sequence }, { type }));
   boundary(execution, 1, 'call');
   boundary(operation, 2, 'call');
   boundary(attempt, 3, 'call');
   assert.throws(() => ExecutionRecordHelper.complete(recorder, execution.id, {}), /active operations/);
   assert.throws(() => OperationRecordHelper.complete(recorder, operation.id, {}), /active attempts/);
-  AttemptRecordHelper.complete(recorder.book, attempt.id, {});
+  AttemptRecordHelper.complete(recorder, attempt.id, {});
   boundary(attempt, 4, 'return');
   OperationRecordHelper.complete(recorder, operation.id, {});
   boundary(operation, 5, 'return');

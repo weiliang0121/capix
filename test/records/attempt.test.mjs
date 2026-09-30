@@ -89,14 +89,14 @@ test('attempt ownership uses direct record ownership and rejects missing or inco
   assert.deepEqual(AttemptRecordHelper.findByOperation(runtime.recorder, otherRecord.id), []);
   const cycle = {};
   cycle.self = cycle;
-  assert.throws(() => AttemptRecordHelper.complete(runtime.recorder.book, attempt.id, cycle), /cyclic/);
+  assert.throws(() => AttemptRecordHelper.complete(runtime.recorder, attempt.id, cycle), /cyclic/);
   assert.equal(attempt.status, 'running');
   assert.equal(Object.hasOwn(attempt.value, 'output'), false);
   const error = { code: 'TEST', message: 'failure', detail: { value: 1 } };
-  AttemptRecordHelper.fail(runtime.recorder.book, attempt.id, error);
+  AttemptRecordHelper.fail(runtime.recorder, attempt.id, error);
   error.detail.value = 2;
   assert.equal(attempt.value.error.detail.value, 1);
-  assert.throws(() => AttemptRecordHelper.fail(runtime.recorder.book, attempt.id, error), /ended/);
+  assert.throws(() => AttemptRecordHelper.fail(runtime.recorder, attempt.id, error), /ended/);
 });
 
 test('failed attempt registration leaves no partial record or child reference', (t) => {

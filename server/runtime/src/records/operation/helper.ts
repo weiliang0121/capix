@@ -63,12 +63,12 @@ export class OperationRecordHelper {
 
   static complete(recorder: Recorder, id: string, output: unknown, resultOf?: number): void {
     const record = this.prepareFinish(recorder, id);
-    record.complete(output, resultOf);
+    InvocationRecordHelper.finish(recorder, record, (record) => record.complete(output, resultOf));
   }
 
   static fail(recorder: Recorder, id: string, error: RuntimeErrorValue): void {
     const record = this.prepareFinish(recorder, id);
-    record.fail(error);
+    InvocationRecordHelper.finish(recorder, record, (record) => record.fail(error));
   }
 
   private static prepareFinish(recorder: Recorder, id: string): OperationRecord {

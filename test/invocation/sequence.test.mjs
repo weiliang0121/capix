@@ -50,17 +50,16 @@ test('Invocation owns continuous local sequence across retries, independently of
 test('parallel invocations and nested calls keep separate local sequences', async () => {
   const runtime = createRuntime({ recorder: new Recorder(new RecordBook()) });
   let child;
-  const root = runtime.executionInvocations.create(
-    'input',
-    { settings: {} },
-    {
+  const root = runtime.executionInvocations.create('input', {
+    context: { settings: {} },
+    work: {
       maxRounds: 1,
       async execute(context, invocation) {
-        child = runtime.operationInvocations.create(invocation, 'child', { id: 'op', name: 'op', label: 'Op', source: 'test' }, retryWork);
+        child = runtime.operationInvocations.create(invocation, { input: 'child', description: { id: 'op', name: 'op', label: 'Op', source: 'test' }, work: retryWork });
         return child.run();
       },
     },
-  );
+  });
   const independent = new Invocation({ context: new InvocationContext('other'), signal: signal(), work: { maxRounds: 1, execute: (context) => context.input } });
   await Promise.all([root.run(), independent.run()]);
   assert.equal(root.sequence, 3);

@@ -8,22 +8,38 @@ import { isNonBlankString } from '../value/string.js';
 import { isObject } from '../value/object.js';
 import { MessageRef, TranscriptRangeRef } from './ref.js';
 import type { Message } from '@capix-observer/protocol';
+import type { ChangeCapture } from '../changes/capture.js';
+import { captureChange } from '../changes/publish.js';
+import { createTranscriptEvent, type TranscriptEvent } from './event.js';
+
+export interface TranscriptOptions {
+  recorder?: Recorder;
+  changes?: ChangeCapture<TranscriptEvent>;
+}
 
 /** Original accepted messages, including the current input; independent of execution records. */
 export class Transcript {
   readonly id = randomUUID();
   readonly #recorder?: Recorder;
+  readonly #changes?: ChangeCapture<TranscriptEvent>;
+  #revision = 0;
   readonly #messages: Readonly<Message>[] = [];
   readonly #starts: number[] = [0];
 
-  constructor(messages: readonly Message[] = [], recorder?: Recorder) {
-    this.#recorder = recorder;
+  constructor(messages: readonly Message[] = [], options: TranscriptOptions = {}) {
+    this.#recorder = options.recorder;
+    this.#changes = options.changes;
     if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     this.append(...messages);
   }
 
   get length(): number {
     return this.#messages.length;
+  }
+
+  /** Local order of completed append/segment changes, not a delivery cursor. */
+  get revision(): number {
+    return this.#revision;
   }
 
   get activeStart(): number {
@@ -38,9 +54,13 @@ export class Transcript {
   startSegment(start: number, source?: ChangeSource): void {
     if (!isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
     const previousStart = this.activeStart;
+    const end = this.length;
+    const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'segment-started', previousStart, start, end });
     this.#starts.push(start);
+    this.#revision = event.revision;
+    this.capture(event);
     const recorder = this.#recorder;
-    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(this.id, { action: 'segment', previousStart, start, end: this.length }, recorder.clock, source)));
+    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(recorder.clock, { transcriptId: this.id, revision: event.revision, source }, { action: 'segment', previousStart, start, end })));
   }
 
   append(...messages: readonly Message[]): void {
@@ -51,10 +71,18 @@ export class Transcript {
     if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     // Check the whole batch before changing the transcript.
     const accepted = messages.map((message) => Transcript.accept(message));
+    if (!accepted.length) return;
     const start = this.length;
+    const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'messages-appended', start, messages: accepted });
     for (const message of accepted) this.#messages.push(message);
+    this.#revision = event.revision;
+    this.capture(event);
     const recorder = this.#recorder;
-    if (accepted.length && recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(this.id, { action: 'append', start, messages: accepted }, recorder.clock, source)));
+    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(recorder.clock, { transcriptId: this.id, revision: event.revision, source }, { action: 'append', start, messages: accepted })));
+  }
+
+  private capture(event: TranscriptEvent): void {
+    captureChange(this.#changes, event);
   }
 
   current(role: Message['role']): Readonly<Message> | undefined {

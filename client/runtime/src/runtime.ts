@@ -1,5 +1,6 @@
-import type { ConfigurationResponse, ConversationUpdate, ExecutionRequest, MemoryObservation, Message, ObserverOverview, RuntimeSnapshot } from '@capix-observer/protocol';
+import type { ConfigurationResponse, ConversationUpdate, ExecutionRequest, MemoryObservation, Message, ObserverOverview, RuntimeSnapshot, InvocationEvent, TranscriptRecord } from '@capix-observer/protocol';
 import type { ConversationTransport, ObservationTransport } from './transport.js';
+import { ObservationReplica, ObservationSequenceError } from './observation.js';
 
 export interface ObservationState {
   readonly enabled: boolean;
@@ -9,6 +10,9 @@ export interface ObservationState {
   readonly updates: ReadonlyMap<string, RuntimeSnapshot>;
   readonly overview: ObserverOverview;
   readonly memory: MemoryObservation;
+  readonly cursor?: { scopeId: string; sequence: number };
+  readonly invocations?: ReadonlyMap<string, InvocationEvent>;
+  readonly transcriptRecords?: readonly TranscriptRecord[];
 }
 
 export interface ClientState {
@@ -40,7 +44,8 @@ export class ClientRuntime {
   private readonly listeners = new Set<() => void>();
   private initialization?: Promise<void>;
   private observationSession?: AbortController;
-  private observationRefresh = 0;
+  private observationOwner?: symbol;
+  private replica?: ObservationReplica;
 
   private readonly conversation: ConversationTransport;
   private readonly observation?: ObservationTransport;
@@ -84,49 +89,51 @@ export class ClientRuntime {
   /** Explicitly enable live observation. Stopping it never cancels conversation work. */
   startObservation(): () => void {
     if (!this.observation) return () => {};
-    this.observationSession?.abort();
-    const session = new AbortController();
-    this.observationSession = session;
-    this.updateObservation({ enabled: true, error: undefined });
-    void this.observation
-      .observe((snapshot) => {
-        if (session.signal.aborted) return;
-        const current = this.state.observation;
-        this.updateObservation({ records: new Map(current.records).set(snapshot.execution.id, snapshot), updates: new Map(current.updates).set(snapshot.execution.id, snapshot) });
-        if (snapshot.execution.status !== 'running') void this.refreshObservation();
-      }, session.signal)
-      .catch((error) => {
-        if (!session.signal.aborted) this.updateObservation({ error });
-      });
-    void this.refreshObservation();
+    const owner = Symbol('observation');
+    this.observationOwner = owner;
+    this.connectObservation(owner, true);
     return () => {
-      session.abort();
-      if (this.observationSession !== session) return;
+      if (this.observationOwner !== owner) return;
+      this.observationOwner = undefined;
+      this.observationSession?.abort();
       this.observationSession = undefined;
-      this.observationRefresh++;
       this.updateObservation({ enabled: false, loading: false });
     };
   }
 
+  private connectObservation(owner: symbol, resync: boolean): void {
+    if (!this.observation) return;
+    this.observationSession?.abort();
+    const session = new AbortController();
+    this.observationSession = session;
+    let ready = false;
+    this.updateObservation({ enabled: true, loading: true, error: undefined });
+    void this.observation
+      .observe((frame) => {
+        if (session.signal.aborted || this.observationOwner !== owner) return;
+        if (!ready && frame.type !== 'baseline') throw new ObservationSequenceError('观测连接缺少初始基线。');
+        if (ready && frame.type === 'baseline') throw new ObservationSequenceError('同一连接重复提供基线。');
+        const next = ObservationReplica.receive(ready ? this.replica : undefined, frame);
+        if (next === this.replica) return;
+        this.replica = next;
+        ready = true;
+        const records = frame.type === 'baseline' ? new Map(next.snapshots) : new Map([...this.state.observation.records, ...next.snapshots]);
+        this.updateObservation({ loading: false, overview: next.overview, memory: next.memory, records, updates: new Map(next.snapshots), cursor: { scopeId: next.scopeId, sequence: next.sequence }, invocations: next.invocations, transcriptRecords: next.transcriptRecords });
+      }, session.signal)
+      .catch((error) => {
+        if (session.signal.aborted || this.observationOwner !== owner) return;
+        // At most one automatic baseline retry. Other failures remain visible and can be refreshed explicitly.
+        if (resync && sequenceFailure(error)) {
+          this.connectObservation(owner, false);
+          return;
+        }
+        session.abort();
+        this.updateObservation({ loading: false, error });
+      });
+  }
+
   async refreshObservation(): Promise<void> {
-    const session = this.observationSession;
-    if (!this.observation || !session || session.signal.aborted) return;
-    const refresh = ++this.observationRefresh;
-    const pending = this.state.observation.updates;
-    this.updateObservation({ loading: true });
-    const [overview, memory] = await Promise.allSettled([this.observation.overview(), this.observation.memory()]);
-    if (session.signal.aborted || refresh !== this.observationRefresh) return;
-    let change: Partial<ObservationState> = { loading: false };
-    const errors: unknown[] = [];
-    if (overview.status === 'fulfilled') {
-      change = { ...change, overview: overview.value };
-      if (this.state.observation.updates === pending) change = { ...change, updates: new Map() };
-    } else errors.push(overview.reason);
-    if (memory.status === 'fulfilled') change = { ...change, memory: memory.value };
-    else errors.push(memory.reason);
-    // A successful query does not hide a disconnected observation stream.
-    if (errors.length) change = { ...change, error: errors.length === 1 ? errors[0] : new AggregateError(errors, '观测刷新失败。') };
-    this.updateObservation(change);
+    if (this.observationOwner) this.connectObservation(this.observationOwner, false);
   }
 
   getExecution(id: string): RuntimeSnapshot | undefined {
@@ -137,7 +144,9 @@ export class ClientRuntime {
     if (!this.observation) throw new Error('未接入观测能力。');
     const cached = this.getExecution(id);
     if (cached && cached.execution.status !== 'running') return cached;
+    const session = this.observationSession;
     const snapshot = await this.observation.execution(id, signal);
+    if (session !== this.observationSession) throw new Error('观测连接已更换，忽略旧详情响应。');
     const current = this.getExecution(id);
     if (current && current !== cached) return current;
     this.updateObservation({ records: new Map(this.state.observation.records).set(id, snapshot) });
@@ -188,12 +197,16 @@ export class ClientRuntime {
     } finally {
       this.update({ busy: false, pending: '' });
     }
-    // Observation refresh has its own failure channel and is never awaited by submission.
-    if (wasAccepted) void this.refreshObservation();
+    // Observation consumes its own stream; submission does not trigger observation queries.
+
     const error = errors.length > 1 ? new AggregateError(errors, '请求处理与消息刷新均失败。', { cause: errors[0] }) : errors[0];
     if (error) {
       this.update({ error });
       throw error;
     }
   }
+}
+
+function sequenceFailure(error: unknown): boolean {
+  return error instanceof ObservationSequenceError || (error instanceof Error && error.cause instanceof ObservationSequenceError);
 }

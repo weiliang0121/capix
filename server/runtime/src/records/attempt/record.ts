@@ -7,6 +7,7 @@ export type AttemptDefinition = Omit<AttemptData, 'id' | 'value' | 'status' | 'p
 
 /** Records one named action invocation. Its owner supplies execution and operation instance identity. */
 export class AttemptRecord extends InvocationRecord<AttemptValue> implements AttemptData {
+  override readonly kind = 'attempt' as const;
   readonly contextId: string;
   readonly operationId: string;
   readonly name: string;

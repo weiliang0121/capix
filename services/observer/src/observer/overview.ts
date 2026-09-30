@@ -1,6 +1,6 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import type { ExecutionSummary, InvocationSummary, ObserverOverview } from '@capix-observer/protocol';
-import { AttemptRecord, EventRecord, ExecutionRecord, MemoryRecord, OperationRecord, TranscriptRangeRef } from '@capix-observer/runtime';
+import { AttemptRecord, InvocationBoundaryRecord, ExecutionRecord, MemoryRecord, OperationRecord, TranscriptRangeRef } from '@capix-observer/runtime';
 import type { initializeObserver } from './environment.js';
 import { inspectExecutions } from './inspect.js';
 import type { SelectionInput } from '../operations/history/input.js';
@@ -24,7 +24,7 @@ export function observeOverview(observer: Observer): ObserverOverview {
       const operation = observer.book.get(record.operationId);
       if (operation instanceof OperationRecord) observedOffsets.set(operation.executionId, Math.max(observedOffsets.get(operation.executionId) ?? 0, record.value.processes.at(-1)?.offsetMs ?? 0));
     }
-    if (!(record instanceof EventRecord)) continue;
+    if (!(record instanceof InvocationBoundaryRecord)) continue;
     observedOffsets.set(record.executionId, Math.max(observedOffsets.get(record.executionId) ?? 0, record.offsetMs));
     const timing = boundaries.get(record.callId) ?? {};
     if (record.value.type === 'call') timing.start = record.offsetMs;

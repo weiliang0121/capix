@@ -13,8 +13,8 @@ const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, t
 
 test('one Execution and Operation can be called again after success and failure with fresh Contexts and records', async () => {
   const snapshots = [];
-  const recorder = new Recorder(new RecordBook(), undefined);
-  const runtime = createRuntime({ recorder: recorder });
+  const recorder = new Recorder(new RecordBook(), { clock: undefined });
+  const runtime = createRuntime({ recorder });
   subscribeExecutions(runtime.recording, (snapshot) => snapshots.push(snapshot));
   const failure = new Error('work failed');
   const contexts = [];

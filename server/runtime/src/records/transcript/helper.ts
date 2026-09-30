@@ -1,10 +1,9 @@
 import type { TranscriptChange } from '@capix-observer/protocol';
-import type { ChangeSource } from '../source.js';
 import type { Clock } from '../../runtime/clock.js';
-import { TranscriptRecord } from './record.js';
+import { TranscriptRecord, type TranscriptDefinition } from './record.js';
 
 export class TranscriptRecordHelper {
-  static create(transcriptId: string, value: TranscriptChange, clock: Clock, source?: ChangeSource): TranscriptRecord {
-    return new TranscriptRecord(transcriptId, clock.now(), value, source?.contextId, source?.callId, source?.executionId);
+  static create(clock: Clock, definition: Omit<TranscriptDefinition, 'occurredAt'>, value: TranscriptChange): TranscriptRecord {
+    return new TranscriptRecord({ ...definition, occurredAt: clock.now() }, value);
   }
 }

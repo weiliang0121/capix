@@ -38,25 +38,25 @@ const stopObservation = runtime.startObservation();
 stopObservation(); // 只关闭观测连接，不取消正在执行的对话。
 ```
 
-ObservationTransport 提供 overview、memory、execution、source、observe。仅传入此能力不会开始观测；startObservation 显式打开独立连接并加载概览、记忆，不预取全部详情。Observer 应用挂载时开启，卸载时关闭；未提供观测能力时此操作为空操作。
+ObservationTransport 提供 overview、memory、execution、source、observe。仅传入此能力不会开始观测；startObservation 显式打开独立连接，由首帧基线一起取得概览、记忆与来源游标，不并行查询多个接口拼接基线，不预取已完成执行的全部详情。Observer 应用挂载时开启，卸载时关闭；未提供观测能力时此操作为空操作。
 
-观测状态单独保存在 state.observation：enabled、loading、error、overview、memory、records、updates。观测初始化、订阅或刷新失败只影响这个范围，不拒绝对话初始化或提交，不写入对话错误提示。
+观测状态单独保存在 state.observation：enabled、loading、error、overview、memory、records、updates，以及 cursor、invocations、transcriptRecords。观测初始化、订阅或刷新失败只影响这个范围，不拒绝对话初始化或提交，不写入对话错误提示。
 
-records 保存收到的完整快照；updates 保存尚未由概览刷新接纳的流快照。观测仍采用完整执行快照，没有记录增量合并。终态快照触发观测刷新；业务请求结束也可触发观测刷新，但不等待它。概览刷新期间出现新快照时保留 updates；旧会话或旧刷新结果不得覆盖新观测。
+ObservationReplica 接纳 baseline/delta，保存不可变的本地事实及来源位置。delta 在新结构中整批落实，失败不部分修改已接纳状态。重复交付忽略；scopeId 或 sequence 缺口拒绝。记录新增与父级引用同步接纳，过程仅追加新条目。records/updates 是本地重建的执行快照与详情缓存，不是网络反复发送的全量；待调用记录与对应边界齐备后才向绑定层提供完整执行视图。业务提交结束不触发额外观测查询。
 
 loadExecution 按需读取，终态缓存直接复用；查询期间收到新流快照时保留新快照。详情不进入 updates，不用旧详情覆盖概览。source 保留按需源码查询，不承诺执行时源码归档。
 
-观测订阅不具备历史重放：初始与后续查询补齐当前视图，不承诺跨接口同版本原子快照。没有自动重连或补发。关闭观测不停止服务端记录；服务端登记失败的现有运行规则不变。
+同一连接只接受一个首帧基线；基线替换上一观测范围，不把不同会话的数据混合。顺序缺口最多自动重新连接一次并取得新基线，连续失败停止并展示错误。普通网络断开不无限重连；refreshObservation 显式建立新基线。旧连接的回调和详情响应不得覆盖新连接。没有历史重放、ACK 或业务重试；关闭观测不停止服务端记录。
 
 ## HTTP 包边界
 
 HttpTransport 基类只处理地址、HTTP 状态、JSON 读取和错误，不感知业务或记录。两个子类直接继承该基类，彼此不依赖、不包含对方的方法：
 
 - ConversationHttpTransport：config、transcript 查询，以及 POST /api/run 的接纳。ConversationUpdate 的 started / answer / completed / error；检查开始、身份、回答位置和结束顺序，不接受执行快照。
-- ObservationHttpTransport：overview、memory、execution、source 查询，以及 GET /api/observe 的接纳。ObservationUpdate 的 snapshot / error；可包含多次执行，连接结束不代表业务结束。
+- ObservationHttpTransport：overview、memory、execution、source 查询，以及 GET /api/observe 的接纳。ObservationUpdate 的 baseline / delta / error；可包含多次执行，连接结束不代表业务结束。
 - 普通查询：由 Zod 接纳配置、消息、概览、记忆和源码；记录详情由 validateSnapshot 接纳并核对请求 ID。
 
-readLines 仅处理字节解码与行拆分。接收回调同步执行，失败后关闭 reader；HttpError 保留 HTTP 响应，ObserverTransportError 区分 contract / remote / delivery，网络异常保留原异常。关闭业务请求仍沿用服务端 AbortSignal 行为；关闭观测请求只解除记录订阅。
+readLines 仅处理字节解码与行拆分。接收回调同步执行，失败后关闭 reader；HttpError 保留 HTTP 响应，ObserverTransportError 区分 contract / remote / delivery，网络异常保留原异常。关闭业务请求仍沿用服务端 AbortSignal 行为；关闭观测请求只解除观测交付。每个连接的发送缓存有上限，慢消费者被断开后需重新取得基线。
 
 ## 应用绑定与 Store
 

@@ -1,4 +1,4 @@
-import type { ConfigurationResponse, ConversationUpdate, ExecutionRequest, MemoryObservation, ObserverOverview, RuntimeSnapshot, SourceResponse, TranscriptResponse } from '@capix-observer/protocol';
+import type { ConfigurationResponse, ConversationUpdate, ExecutionRequest, MemoryObservation, ObserverOverview, RuntimeSnapshot, ObservationFrame, SourceResponse, TranscriptResponse } from '@capix-observer/protocol';
 
 export interface ConversationTransport {
   config(): Promise<ConfigurationResponse>;
@@ -11,5 +11,5 @@ export interface ObservationTransport {
   memory(): Promise<MemoryObservation>;
   source(path: string, signal?: AbortSignal): Promise<SourceResponse>;
   execution(id: string, signal?: AbortSignal): Promise<RuntimeSnapshot>;
-  observe(accept: (snapshot: RuntimeSnapshot) => void, signal: AbortSignal): Promise<void>;
+  observe(accept: (frame: ObservationFrame) => void, signal: AbortSignal): Promise<void>;
 }
