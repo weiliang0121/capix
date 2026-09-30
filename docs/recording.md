@@ -1,15 +1,15 @@
 # 记录机制与特化处理
 
-Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 Clock；保留索引 add/remove 接口。Recorder 本身不分派记录类型，具体关系规则位于 records/tree/relation.ts，不处理 Context、业务正文或 RuntimeSnapshot。
+Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 Clock。Recorder 本身不分派记录类型，具体关系规则位于 records/tree/relation.ts，不处理 Context、业务正文或 RuntimeSnapshot。
 
 通用基类使用 BaseRecord，树形记录共用 CompositeRecord；只有真正描述 Runtime 范围的类型使用 RuntimeRecord。通用登记入口由 RuntimeRecorder 改名 Recorder，EOA 共用正文由 OperationValue 改名 InvocationValue。RuntimeRecord 当前只保留创建时间与下级引用；不把记录登记、某次调用结束或实例释放等同于整个运行数据范围结束。
 
 ## 通用机制
 
-- add(record, indexes?) 是正式登记入口。RecordRegistration 先通过 RecordTree 检查归属并准备新的 childIds，然后同步登记已有索引、写入 Book、替换父级 childIds，全部成功后才通知。登记期间拒绝同一 Recorder 的重入写入。
-- 现有索引仍使用 add/remove，可能抛错，因此这里不是一个假定所有写入均不失败的提交阶段。失败时恢复原 childIds、清理本次 Book 写入，并反序清理所有已尝试的索引（包括写入后抛错的索引）；清理自身失败时用 AggregateError 保留原因，不声称已经恢复。内置索引 remove 与内部 Book/关系恢复不执行用户回调。
+- add(record) 是正式登记入口。RecordRegistration 先通过 RecordTree 检查归属并准备新的 childIds，然后同步写入 Book、替换父级 childIds，全部成功后才通知。登记期间拒绝同一 Recorder 的重入写入。
+- 登记失败时恢复原 childIds，并清理本次 Book 写入，包括 Book 写入后抛错的情况。Book/关系的内部恢复不执行用户回调；不保留已无使用者的索引登记或回滚接口。
 - update(record, apply) 要求是 Book 中登记的同一实例，再执行特化更新。如何判断终态、复制正文和检查子记录由具体 Record / Helper 决定。
-- subscribe 接收 record、add/update 分类和 related 数组。子记录新增只发布一次 add，related 包含本次同步变更的直接父记录；不另外发布可能触发缺少边界事件快照的父记录 update。通知时记录、父子关系及索引均已可见。原有两参数消费者可继续工作。通知不是历史快照，不承诺持久化或跨进程传输；有这些需求的消费者应另行捕获数据。
+- subscribe 接收 record、add/update 分类和 related 数组。子记录新增只发布一次 add，related 包含本次同步变更的直接父记录；不另外发布可能触发缺少边界事件快照的父记录 update。通知时记录与父子关系均已可见。原有两参数消费者可继续工作。通知不是历史快照，不承诺持久化或跨进程传输；有这些需求的消费者应另行捕获数据。
 - 写入失败统一为 RecordingError。通知发生在登记之后，每个订阅者独立隔离；观察失败不回滚登记，也不阻止其他订阅者。
 - Clock 仅作为共享时间来源。调用起点、执行内偏移和事件顺序都属于调用记录特化。
 
@@ -34,9 +34,9 @@ Invocation 持有本次 Context 和可选 Record 的临时运行关系。begin �
 
 InvocationRecordHelper 复用过程格式、结果引用、错误转换和边界事件逻辑，已移除 get(contextId)。调用级 InvocationRecording 是一组函数接线，没有独立 ID、状态机或执行能力。Invocation 仍统一处理本地循环、终态与记录异常。RecordBook 持久持有进程内历史记录；调用对象被释放不删除记录，也不承担历史查询。
 
-Runtime.invocationRecordIndex 持有 InvocationRecordIndex，内部封装 Context / Operation / Attempt / Event 的关联索引，只提供登记、移除和关联查询。它不创建或结束记录、不持有计时状态。本轮暂时保留，后续将归属查询、调用绑定和事件时序能力分别归位，全部替代后再移除；RecordTree 不接管这些非树职责。Recorder.add 在写入 Book 前登记索引，写入失败撤销本次关联，通知时关联与记录均已可见。RecordBook 仍是实际记录的唯一存储。
+InvocationRecordIndex 及其 Context/Operation/Attempt/Event 映射已经移除。通用 RecordIndex 没有其他生产使用者，一并移除。调用绑定由 Invocation 持有，归属查询由 RecordTree 提供；RecordBook 仍是实际记录的唯一存储。正常构造每次建立独立 Context，不为旧索引的重复登记防御另建全局检查。
 
-Runtime.recording 持有原有 InvocationRecordHelper 的实例，持有所属 RuntimeRecord，使用共享 Recorder 与上述索引组织调用记录，私有保存执行计时起点；执行终态边界登记后释放起点。Observer 通过 tree.root(executionId) 与 RuntimeRecord 的身份比较判断归属，不依赖 Context 索引或计时表。EventRecordHelper 继续负责事件序号、状态匹配与单调时间检查，不增加独立时序管理器。无 Recorder 时不创建这两个辅助对象。
+Runtime.recording 持有原有 InvocationRecordHelper 的实例，持有所属 RuntimeRecord，使用共享 Recorder 组织调用记录，私有保存执行计时起点；执行终态边界登记后释放起点。Observer 通过 tree.root(executionId) 与 RuntimeRecord 的身份比较判断归属，不依赖 Context 索引或计时表。EventRecordHelper 继续负责事件序号、状态匹配与单调时间检查，不增加独立时序管理器。无 Recorder 时不创建这个辅助对象。
 
 ## 内容记录与来源
 
@@ -60,4 +60,4 @@ Invocation 自行给现有内部过程赋予连续 sequence，传给 InvocationR
 
 Memories 持有自身 id 和正式变化 sequence；MemoryRecord 保存 memoriesId/sequence/memoryId，分别表达变化范围、位置和对象。无变化与预检查失败不占号，已落实变化不会因记录失败回收序号。消息继续使用原有绝对 index。均不作为传输游标。
 
-操作、意图的范围查询、父级结束检查、快照中的事件收集已迁移到 Recorder.tree；事件按已有执行内 sequence 显式排序，不能按树遍历顺序输出。运行中的 Context 反查已由 Invocation 绑定替代；Runtime 归属已由记录树查询替代，hasExecution 已删除。前一事件查询仍由 InvocationRecordIndex 支持，所以索引暂未删除。旧 Context 映射及其重复登记限制仍留在过渡实现中，但正常调用构造会建立独立 Context；它们不再作为必须另建全局机制才能退出索引的条件。完整退出清单及增量分析见 [观测增量](observation-increments.md)。
+操作、意图的范围查询、父级结束检查、快照中的事件收集均使用 Recorder.tree；事件按执行内 sequence 显式排序。EventRecordHelper.last 从执行子树中取 sequence 最大的事件，用于下一序号与单调时间检查，不能取遍历末项；登记失败不占用事件序号。它每次遍历执行子树，暂不增加事件游标、缓存或时序管理者。调用索引及其登记接口已退出，见 [观测增量](observation-increments.md)。

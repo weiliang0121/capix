@@ -1,28 +1,27 @@
 import { RuntimeRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RecordBook, Recorder, BaseRecord, ExecutionRecord, OperationRecord, AttemptRecord, EventRecord, MemoryRecord, TranscriptRecord, InvocationRecordIndex, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
+import { RecordBook, Recorder, BaseRecord, ExecutionRecord, OperationRecord, AttemptRecord, EventRecord, MemoryRecord, TranscriptRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
 
 const operationDefinition = (executionId, contextId, parentOperationId) => ({ executionId, contextId, parentOperationId, operationInstanceId: 'instance', operation: 'test', label: 'Test', source: 'test', caller: 'execution', callee: 'operation' });
 const attemptDefinition = (operationId) => ({ operationId, contextId: 'attempt', name: 'apply', label: 'Apply', source: 'test', caller: 'operation', callee: 'processing' });
 const memoryValue = { action: 'create', change: '新增约束', sourceIndexes: [0], result: { topic: '偏好', content: '步行', sourceIndexes: [0] } };
 function fixture(book = new RecordBook()) {
   const recorder = new Recorder(book);
-  const index = new InvocationRecordIndex(book);
   const root = RuntimeRecordHelper.create(recorder);
-  const execution = ExecutionRecordHelper.create(recorder, index, recorder.clock, 'execution', { input: {}, settings: {} }, root.id);
-  return { recorder, index, root, execution };
+  const execution = ExecutionRecordHelper.create(recorder, recorder.clock, 'execution', { input: {}, settings: {} }, root.id);
+  return { recorder, root, execution };
 }
 
 test('record tree retains direct ownership, immutable child snapshots and content subjects without scanning Book', (t) => {
-  const { recorder, index, execution } = fixture();
+  const { recorder, execution } = fixture();
   const old = execution.toJSON();
   t.mock.method(recorder.book, 'values', () => {
     throw new Error('Unexpected full scan');
   });
-  const operation = OperationRecordHelper.create(recorder, index, operationDefinition(execution.id, 'operation'), {});
-  const nested = OperationRecordHelper.create(recorder, index, operationDefinition(execution.id, 'nested', operation.id), {});
-  const attempt = AttemptRecordHelper.create(recorder, index, attemptDefinition(nested.id), {});
+  const operation = OperationRecordHelper.create(recorder, operationDefinition(execution.id, 'operation'), {});
+  const nested = OperationRecordHelper.create(recorder, operationDefinition(execution.id, 'nested', operation.id), {});
+  const attempt = AttemptRecordHelper.create(recorder, attemptDefinition(nested.id), {});
   const event = recorder.add(new EventRecord({ executionId: execution.id, callId: attempt.id, sequence: 1, occurredAt: recorder.clock.now(), offsetMs: 0 }, { type: 'call' }));
   const memory = recorder.add(new MemoryRecord('memory', 'transcript', 1, execution.id, nested.id, memoryValue, attempt.contextId, attempt.id));
   const transcript = recorder.add(new TranscriptRecord('transcript', recorder.clock.now(), { action: 'append', start: 0, messages: [{ role: 'assistant', content: '好' }] }, execution.contextId, execution.id, execution.id));
@@ -43,16 +42,16 @@ test('record tree retains direct ownership, immutable child snapshots and conten
 });
 
 test('registration publishes once, with the changed parent and all lookups already coherent', () => {
-  const { recorder, index, execution } = fixture();
+  const { recorder, execution } = fixture();
   const observed = [];
   recorder.subscribe((record, change, related) => {
-    observed.push({ record, change, related, children: recorder.tree.children(execution.id), indexed: index.findByContext(record.contextId) });
+    observed.push({ record, change, related, children: recorder.tree.children(execution.id), stored: recorder.book.get(record.id) });
   });
-  const operation = OperationRecordHelper.create(recorder, index, operationDefinition(execution.id, 'operation'), {});
-  assert.deepEqual(observed, [{ record: operation, change: 'add', related: [execution], children: [operation], indexed: operation }]);
+  const operation = OperationRecordHelper.create(recorder, operationDefinition(execution.id, 'operation'), {});
+  assert.deepEqual(observed, [{ record: operation, change: 'add', related: [execution], children: [operation], stored: operation }]);
 });
 
-test('registration rejects dangling and wrong parents even when helpers and indexes are not used', () => {
+test('registration rejects dangling and wrong parents even when helpers are not used', () => {
   const { recorder, execution } = fixture();
   const operation = recorder.add(new OperationRecord(operationDefinition(execution.id, 'operation'), {}));
   const leaf = recorder.add(new BaseRecord({}));
@@ -77,7 +76,7 @@ test('ended calls accept terminal evidence and sourced content, but cannot start
   assert.deepEqual(execution.childIds, [terminal.id, content.id]);
 });
 
-test('failed registration cleans partial indexes and Book writes without publishing or changing childIds', () => {
+test('failed registration cleans partial Book writes without publishing or changing childIds', () => {
   class FailingBook extends RecordBook {
     reject = false;
     add(record) {
@@ -87,50 +86,39 @@ test('failed registration cleans partial indexes and Book writes without publish
     }
   }
   const book = new FailingBook();
-  const { recorder, index, execution } = fixture(book);
+  const { recorder, execution } = fixture(book);
   const notifications = [];
   recorder.subscribe((record) => notifications.push(record));
   const before = execution.childIds;
   const operation = new OperationRecord(operationDefinition(execution.id, 'operation'), {});
   book.reject = true;
-  assert.throws(() => recorder.add(operation, [index]), /Book failed after write/);
+  assert.throws(() => recorder.add(operation), /Book failed after write/);
   assert.equal(book.get(operation.id), undefined);
-  assert.equal(index.findByContext(operation.contextId), undefined);
   assert.equal(execution.childIds, before);
   book.reject = false;
-  const partial = new Set();
-  const failingIndex = {
-    add(record) {
-      partial.add(record.id);
-      throw new Error('Index failed after write');
-    },
-    remove(id) {
-      partial.delete(id);
-    },
-  };
-  assert.throws(() => recorder.add(operation, [index, failingIndex]), /Index failed after write/);
-  assert.equal(partial.size, 0);
-  assert.equal(index.findByContext(operation.contextId), undefined);
-  assert.equal(execution.childIds, before);
   assert.deepEqual(notifications, []);
-  recorder.add(operation, [index]);
+  recorder.add(operation);
   assert.deepEqual(execution.childIds, [operation.id]);
   assert.deepEqual(notifications, [operation]);
 });
 
 test('registration prevents reentrant writes, while subscribers can register after the commit', () => {
-  const { recorder, execution } = fixture();
+  class ReentrantBook extends RecordBook {
+    onAdd;
+    add(record) {
+      this.onAdd?.();
+      return super.add(record);
+    }
+  }
+  const book = new ReentrantBook();
+  const { recorder, execution } = fixture(book);
   const operation = new OperationRecord(operationDefinition(execution.id, 'operation'), {});
   const extra = new BaseRecord({});
-  const index = {
-    add() {
-      recorder.add(extra);
-    },
-    remove() {},
-  };
-  assert.throws(() => recorder.add(operation, [index]), /cannot reenter/);
+  book.onAdd = () => recorder.add(extra);
+  assert.throws(() => recorder.add(operation), /cannot reenter/);
   assert.equal(recorder.book.get(extra.id), undefined);
   assert.deepEqual(execution.childIds, []);
+  book.onAdd = undefined;
   recorder.subscribe((record) => {
     if (record === operation) recorder.add(extra);
   });
@@ -139,15 +127,10 @@ test('registration prevents reentrant writes, while subscribers can register aft
   assert.deepEqual(execution.childIds, [operation.id]);
 });
 
-test('scope queries and end checks no longer depend on invocation association indexes', (t) => {
-  const { recorder, index, execution } = fixture();
-  for (const name of ['operationsOf', 'attemptsOf', 'eventsOf']) {
-    t.mock.method(index, name, () => {
-      throw new Error('Legacy scope query');
-    });
-  }
-  const operation = OperationRecordHelper.create(recorder, index, operationDefinition(execution.id, 'operation'), {});
-  const attempt = AttemptRecordHelper.create(recorder, index, attemptDefinition(operation.id), {});
+test('scope queries and end checks follow the tree while event snapshots follow sequence', () => {
+  const { recorder, execution } = fixture();
+  const operation = OperationRecordHelper.create(recorder, operationDefinition(execution.id, 'operation'), {});
+  const attempt = AttemptRecordHelper.create(recorder, attemptDefinition(operation.id), {});
   // Child traversal groups events by call, unlike their original occurrence sequence.
   const boundary = (call, sequence, type) => recorder.add(new EventRecord({ executionId: execution.id, callId: call.id, sequence, occurredAt: recorder.clock.now(), offsetMs: sequence }, { type }));
   boundary(execution, 1, 'call');

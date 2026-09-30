@@ -7,7 +7,6 @@ import { RuntimeErrorHelper } from '../../errors/helper.js';
 import type { Recorder } from '../recorder.js';
 import type { RuntimeErrorValue } from '@capix-observer/protocol';
 import type { RecordBook } from '../container/book.js';
-import type { InvocationRecordIndex } from '../invocation/index.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord, type AttemptDefinition } from './record.js';
@@ -26,7 +25,7 @@ export class AttemptRecordHelper {
       (context) => {
         const operation = parent.record;
         if (!(operation instanceof OperationRecord) || recording.recorder.book.get(operation.id) !== operation) throw new Error('Parent invocation record is not registered here');
-        return this.create(recording.recorder, recording.index, { name: attempt.name, label: attempt.label, source: attempt.source, caller: 'operation', callee: attempt.callee, contextId: context.id, operationId: operation.id }, context.input);
+        return this.create(recording.recorder, { name: attempt.name, label: attempt.label, source: attempt.source, caller: 'operation', callee: attempt.callee, contextId: context.id, operationId: operation.id }, context.input);
       },
       (context, record, resultOf) => {
         const state = context.state;
@@ -36,14 +35,14 @@ export class AttemptRecordHelper {
     );
   }
 
-  static create(recorder: Recorder, index: InvocationRecordIndex, definition: AttemptDefinition, input: unknown): AttemptRecord {
+  static create(recorder: Recorder, definition: AttemptDefinition, input: unknown): AttemptRecord {
     const book = recorder.book;
     const operation = this.owner(book, definition.operationId);
     const execution = book.get(operation.executionId);
     if (!(execution instanceof ExecutionRecord)) throw new Error('Execution does not exist');
     if (execution.status !== 'running' || operation.status !== 'running') throw new Error('Record has already ended');
     const record = new AttemptRecord(definition, input);
-    return recorder.add(record, [index]);
+    return recorder.add(record);
   }
 
   static get(book: RecordBook, id: string): AttemptRecord {

@@ -9,7 +9,6 @@ const identity = { maxRounds: 1, execute: (context) => context.currentInput };
 test('live nested calls and content sources use their bound records without Context lookup', async (t) => {
   const recorder = new Recorder(new RecordBook());
   const runtime = createRuntime({ recorder, messages: [{ role: 'user', content: 'Beijing' }] });
-  t.mock.method(runtime.recording.index, 'findByContext', () => assert.fail('live recording must not reverse-query Context'));
   let outer;
   let nested;
   let leaf;

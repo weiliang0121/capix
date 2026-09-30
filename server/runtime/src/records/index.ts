@@ -9,7 +9,6 @@ export { OperationRecordHelper } from './operation/helper.js';
 export { AttemptRecord, type AttemptDefinition } from './attempt/record.js';
 export { AttemptRecordHelper } from './attempt/helper.js';
 export { RecordBook } from './container/book.js';
-export { RecordIndex } from './container/index.js';
 export { EventRecord, type EventDefinition } from './event/record.js';
 export { EventRecordHelper } from './event/helper.js';
 

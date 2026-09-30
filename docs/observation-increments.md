@@ -27,11 +27,11 @@ Memories 先检查整批语义，再在每项变化正式落实后递增。无�
 | 父级结束前的活动下级检查               | 上述树查询                                      | 已迁移                                               |
 | 快照的 E/O/A/事件收集                  | RecordTree，事件显式按 sequence 排序            | 已迁移                                               |
 | Context 到调用记录的反查               | 本次 Invocation 的记录绑定                      | 已迁移：过程、终态、子调用及内容来源直接使用绑定记录 |
-| Context 重复登记约束                   | 正常构造创建独立 Context；单次绑定归 Invocation | 旧防御约束暂留，不作为必须迁移的退出条件             |
+| Context 重复登记约束                   | 正常构造创建独立 Context；单次绑定归 Invocation | 旧防御约束随索引删除，不另建全局检查                 |
 | 共享 Recorder 中 Runtime 的执行归属    | RuntimeRecord + RecordTree.root                 | 已迁移：hasExecution 已删除                          |
-| 下一条事件序号与单调时间检查的前一事件 | 事件记录逻辑                                    | 待迁移：仍使用 lastEventOf                           |
+| 下一条事件序号与单调时间检查的前一事件 | 事件记录逻辑                                    | 已迁移：EventRecordHelper.last 查询执行子树          |
 
-InvocationRecordIndex 暂时保留登记接线，实际尚待迁移的是 lastEventOf 支撑的事件序号及单调时间检查。运行记录链路已移除 InvocationRecordHelper.get 与 hasExecution；findByContext 和原范围查询方法已无生产调用，旧 Context 重复登记约束也不要求另建全局检查。事件能力归位且相关测试通过后，统一移除类、Runtime 持有、Helper 索引参数、登记接线及专属测试。通用 RecordIndex 是否保留由剩余真实使用者决定。不得将未完成能力改名后整体塞进 RecordTree，也不得让新的发送或接收逻辑依赖 InvocationRecordIndex。
+InvocationRecordIndex、Runtime 持有字段、Helper 索引参数与登记接线已全部移除。RecordIndex 没有剩余生产使用者，其实现及专属测试一并删除；Recorder.add 仅接收记录，RecordRegistration 只同步提交 Book 与直接父级关系。前一事件由 EventRecordHelper.last 在执行子树中按最大 sequence 查找，事件序号和时间检查仍归事件记录逻辑。当前查找为执行子树的线性遍历，不预设新的顺序状态或交付游标。事件对象仍仅表达调用边界，本轮不扩展事件体系或增量传输。
 
 ## 哪些变化可以直接生产增量
 

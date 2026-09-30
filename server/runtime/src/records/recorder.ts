@@ -2,7 +2,7 @@ import { Clock } from '../runtime/clock.js';
 import { RecordBook } from './container/book.js';
 import type { BaseRecord } from './record.js';
 import { RecordTree } from './tree.js';
-import { RecordRegistration, type RegistrationIndex } from './registration.js';
+import { RecordRegistration } from './registration.js';
 import { writeRecord } from './error.js';
 
 /** Shared registration mechanism. Record kinds, lifecycle rules and projections belong to callers. */
@@ -18,12 +18,12 @@ export class Recorder {
     this.tree = new RecordTree(book);
   }
 
-  add<R extends BaseRecord<unknown>>(record: R, indexes: readonly RegistrationIndex<NoInfer<R>>[] = []): R {
+  add<R extends BaseRecord<unknown>>(record: R): R {
     const related = writeRecord(() => {
       if (this.#registering) throw new Error('Record registration cannot reenter');
       this.#registering = true;
       try {
-        return new RecordRegistration(this.book, this.tree, record, indexes).commit();
+        return new RecordRegistration(this.book, this.tree, record).commit();
       } finally {
         this.#registering = false;
       }

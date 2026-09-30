@@ -3,7 +3,7 @@ import { callFor } from '../fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BaseRecord, ExecutionRecordHelper, EventRecord, EventRecordHelper, RecordBook, InvocationRecordIndex, Clock, Recorder, Runtime, createRuntime } from '@capix-observer/runtime';
+import { BaseRecord, ExecutionRecordHelper, EventRecord, EventRecordHelper, RecordBook, Clock, Recorder, Runtime, createRuntime } from '@capix-observer/runtime';
 
 import { validateSnapshot } from '@capix-observer/protocol';
 
@@ -18,7 +18,7 @@ class ManualClock extends Clock {
   }
 }
 
-test('event records share the Book, have their own IDs, and snapshots read the execution index', async () => {
+test('event records share the Book, have their own IDs, and snapshots read the execution tree', async () => {
   const book = new RecordBook(),
     clock = new ManualClock();
   const recorder = new Recorder(book, clock);
@@ -74,7 +74,7 @@ test('event records share the Book, have their own IDs, and snapshots read the e
   assert.equal([...book.values()].length, 6); // Two executions and three boundary records.
 });
 
-test('event helpers reject foreign/non-call targets and undo an index entry if Book registration fails', () => {
+test('event helpers reject foreign/non-call targets and leave no event or sequence advance if Book registration fails', () => {
   class FailingBook extends RecordBook {
     reject = false;
     add(record) {
@@ -83,19 +83,78 @@ test('event helpers reject foreign/non-call targets and undo an index entry if B
     }
   }
   const book = new FailingBook(),
-    index = new InvocationRecordIndex(book),
     clock = new ManualClock();
   const root = RuntimeRecordHelper.create(new Recorder(book, clock));
-  const execution = ExecutionRecordHelper.create(new Recorder(book), index, clock, 'context-one', { input: {}, settings: {} }, root.id);
-  const other = ExecutionRecordHelper.create(new Recorder(book), index, clock, 'context-two', { input: {}, settings: {} }, root.id);
+  const execution = ExecutionRecordHelper.create(new Recorder(book), clock, 'context-one', { input: {}, settings: {} }, root.id);
+  const other = ExecutionRecordHelper.create(new Recorder(book), clock, 'context-two', { input: {}, settings: {} }, root.id);
   const arbitrary = book.add(new BaseRecord({ anything: true }));
   for (const target of [other.id, arbitrary.id, 'missing']) {
-    assert.throws(() => EventRecordHelper.create(new Recorder(book), index, clock, 100, execution.id, target, 'call'), /not an invocation/);
+    assert.throws(() => EventRecordHelper.create(new Recorder(book), clock, 100, execution.id, target, 'call'), /not an invocation/);
   }
-  assert.throws(() => EventRecordHelper.create(new Recorder(book), index, clock, 100, execution.id, execution.id, 'return'), /state/);
-  assert.throws(() => EventRecordHelper.create(new Recorder(book), index, clock, 101, execution.id, execution.id, 'call'), /event time/);
+  assert.throws(() => EventRecordHelper.create(new Recorder(book), clock, 100, execution.id, execution.id, 'return'), /state/);
+  assert.throws(() => EventRecordHelper.create(new Recorder(book), clock, 101, execution.id, execution.id, 'call'), /event time/);
   book.reject = true;
-  assert.throws(() => EventRecordHelper.create(new Recorder(book), index, clock, 100, execution.id, execution.id, 'call'), /registration failed/);
-  assert.deepEqual(index.eventsOf(execution.id), []);
+  assert.throws(() => EventRecordHelper.create(new Recorder(book), clock, 100, execution.id, execution.id, 'call'), /registration failed/);
+  assert.equal(EventRecordHelper.last(new Recorder(book), execution.id), undefined);
+  assert.deepEqual(execution.childIds, []);
   assert.equal([...book.values()].length, 4);
+  book.reject = false;
+  const event = EventRecordHelper.create(new Recorder(book), clock, 100, execution.id, execution.id, 'call');
+  assert.equal(event.sequence, 1);
+  assert.deepEqual(execution.childIds, [event.id]);
+});
+
+test('last event follows execution sequence across interleaved children, with failed writes leaving sequence reusable', async (t) => {
+  const { OperationRecordHelper, AttemptRecordHelper } = await import('@capix-observer/runtime');
+  class FailingBook extends RecordBook {
+    reject = false;
+    add(record) {
+      const added = super.add(record);
+      if (this.reject && record instanceof EventRecord) throw new Error('failed after write');
+      return added;
+    }
+  }
+  const book = new FailingBook();
+  const clock = new ManualClock();
+  const recorder = new Recorder(book, clock);
+  const root = RuntimeRecordHelper.create(recorder);
+  const execution = ExecutionRecordHelper.create(recorder, clock, 'e', { input: {}, settings: {} }, root.id);
+  const operation = (contextId) => OperationRecordHelper.create(recorder, { executionId: execution.id, contextId, operationInstanceId: 'work', operation: 'test', label: 'Test', source: 'test', caller: 'execution', callee: 'operation' }, {});
+  const event = (record, type, elapsed) => {
+    clock.elapsed = elapsed;
+    return EventRecordHelper.create(recorder, clock, 100, execution.id, record.id, type);
+  };
+  t.mock.method(book, 'values', () => assert.fail('must not scan all records'));
+  assert.equal(EventRecordHelper.last(recorder, execution.id), undefined);
+  event(execution, 'call', 100);
+  const first = operation('o1');
+  event(first, 'call', 101);
+  const attempt = AttemptRecordHelper.create(recorder, { operationId: first.id, contextId: 'a1', name: 'test', label: 'Test', source: 'test', caller: 'operation', callee: 'processing' }, {});
+  event(attempt, 'call', 102);
+  const second = operation('o2');
+  const fourth = event(second, 'call', 103);
+  AttemptRecordHelper.complete(book, attempt.id, {});
+  event(attempt, 'return', 104);
+  OperationRecordHelper.complete(recorder, first.id, {});
+  const sixth = event(first, 'return', 105);
+  assert.equal(recorder.tree.descendants(execution.id).at(-1), fourth);
+  assert.equal(EventRecordHelper.last(recorder, execution.id), sixth);
+  OperationRecordHelper.complete(recorder, second.id, {});
+  assert.throws(() => event(second, 'return', 104), /event time/);
+  assert.equal(EventRecordHelper.last(recorder, execution.id), sixth);
+  const before = second.childIds;
+  book.reject = true;
+  assert.throws(() => event(second, 'return', 106), /failed after write/);
+  assert.equal(second.childIds, before);
+  assert.equal(EventRecordHelper.last(recorder, execution.id), sixth);
+  book.reject = false;
+  assert.equal(event(second, 'return', 106).sequence, 7);
+  ExecutionRecordHelper.complete(recorder, execution.id, {});
+  assert.equal(event(execution, 'return', 107).sequence, 8);
+  const snapshot = ExecutionRecordHelper.snapshot(recorder, execution.id);
+  assert.deepEqual(
+    snapshot.events.map((record) => record.sequence),
+    [1, 2, 3, 4, 5, 6, 7, 8],
+  );
+  validateSnapshot(snapshot);
 });

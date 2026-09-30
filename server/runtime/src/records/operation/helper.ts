@@ -7,7 +7,6 @@ import { RuntimeErrorHelper } from '../../errors/helper.js';
 import type { Recorder } from '../recorder.js';
 import type { RuntimeErrorValue } from '@capix-observer/protocol';
 import type { RecordBook } from '../container/book.js';
-import type { InvocationRecordIndex } from '../invocation/index.js';
 import { AttemptRecordHelper } from '../attempt/helper.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord, type OperationRecordDefinition } from './record.js';
@@ -27,7 +26,7 @@ export class OperationRecordHelper {
         const owner = parent.record;
         if (!(owner instanceof ExecutionRecord || owner instanceof OperationRecord) || recording.recorder.book.get(owner.id) !== owner) throw new Error('Parent invocation record is not registered here');
         const executionId = owner instanceof ExecutionRecord ? owner.id : owner.executionId;
-        return this.create(recording.recorder, recording.index, { operationInstanceId: operation.id, operation: operation.name, label: operation.label, source: operation.source, caller: owner instanceof OperationRecord ? 'operation' : 'execution', callee: 'operation', contextId: context.id, executionId, ...(owner instanceof OperationRecord ? { parentOperationId: owner.id } : {}) }, context.input);
+        return this.create(recording.recorder, { operationInstanceId: operation.id, operation: operation.name, label: operation.label, source: operation.source, caller: owner instanceof OperationRecord ? 'operation' : 'execution', callee: 'operation', contextId: context.id, executionId, ...(owner instanceof OperationRecord ? { parentOperationId: owner.id } : {}) }, context.input);
       },
       (context, record, resultOf) => {
         const state = context.state;
@@ -37,7 +36,7 @@ export class OperationRecordHelper {
     );
   }
 
-  static create(recorder: Recorder, index: InvocationRecordIndex, definition: OperationRecordDefinition, input: unknown): OperationRecord {
+  static create(recorder: Recorder, definition: OperationRecordDefinition, input: unknown): OperationRecord {
     const book = recorder.book;
     const execution = book.get(definition.executionId);
     if (!(execution instanceof ExecutionRecord)) throw new Error('Execution does not exist');
@@ -48,7 +47,7 @@ export class OperationRecordHelper {
       if (parent.status !== 'running') throw new Error('Record has already ended');
     }
     const record = new OperationRecord(definition, input);
-    return recorder.add(record, [index]);
+    return recorder.add(record);
   }
 
   static get(book: RecordBook, id: string): OperationRecord {

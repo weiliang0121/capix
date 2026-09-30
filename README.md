@@ -77,7 +77,6 @@ GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer �
 | Transcript / Memories | 各自内容的审查、变更与变更记录登记                                        |
 | Recorder              | 通用 add/update/subscribe、登记错误隔离；不解释记录种类或生成快照         |
 | RecordBook            | add/get/values，保存记录实例、拒绝重复 ID                                 |
-| RecordIndex           | selector→key→IDs；显式登记、查询和移除                                    |
 | 各 RecordHelper       | 对应记录的创建、关系检查、登记与结果写入                                  |
 | Clock                 | 现实时间 now() 与单调时间 tick()                                          |
 
@@ -123,7 +122,7 @@ operationInstanceId 指向可复用的 Operation 实例；OperationRecord.id 和
 
 当前完整成功链路为 1 条 Execution、3 条 Operation、11 条 Attempt、30 个 call/return/throw 边界事件。数量来自实际组合，不是框架限制。没有执行的动作不创建记录；Attempt 失败不自动更改父操作状态，异常按实际调用链传播。接纳失败保留模型原始返回，落实失败保留已接纳结果，不假装运行事实回滚。
 
-EventRecord 继承 BaseRecord，自己的 id 与 callId 不同：callId 指向被描述的 E/O/A 调用记录。EventRecordHelper 负责创建和查询，Book 保存原记录，eventIndex 按执行 ID 查询，不另保存事件数组。sequence 为执行内顺序；occurredAt 为现实时间，offsetMs 使用单调时钟，现实时间回拨不改变时序。Runtime.invocationRecordIndex 维护调用关联查询；Runtime.recording 在调用记录过程中保存单调计时起点，终态边界登记后释放。事件记录没有 Context 或运行状态，不承担推进或消息传递；validateSnapshot 检查记录身份、归属与边界一致性。
+EventRecord 继承 BaseRecord，自己的 id 与 callId 不同：callId 指向被描述的 E/O/A 调用记录。EventRecordHelper 负责创建和查询，Book 保存原记录，沿执行记录树查询，不另保存事件数组。sequence 为执行内顺序；occurredAt 为现实时间，offsetMs 使用单调时钟，现实时间回拨不改变时序。调用绑定归 Invocation，归属查询使用 RecordTree；Runtime.recording 在调用记录过程中保存单调计时起点，终态边界登记后释放。事件记录没有 Context 或运行状态，不承担推进或消息传递；validateSnapshot 检查记录身份、归属与边界一致性。
 
 错误内嵌在 value.error。RuntimeErrorHelper.format 保留名称、code/message、堆栈、cause 与复合 errors；不可记录的诊断内容转为明确标记，不执行 detail 的 getter/toJSON。ErrorTraversal 管理一次格式化的预算与递归路径。没有独立错误记录或异常还原功能。
 

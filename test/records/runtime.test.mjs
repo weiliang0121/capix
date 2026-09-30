@@ -59,7 +59,6 @@ test('shared Recorder observation resolves Runtime ownership through record link
   const recorder = new Recorder(new RecordBook());
   const first = createRuntime({ recorder });
   const second = createRuntime({ recorder });
-  for (const runtime of [first, second]) t.mock.method(runtime.recording.index, 'findByContext', () => assert.fail('Context reverse lookup'));
   t.mock.method(recorder.book, 'values', () => assert.fail('full Book scan'));
   const seen = [];
   const unsubscribe = subscribeExecutions(first.recording, (snapshot) => seen.push(snapshot.execution.id));

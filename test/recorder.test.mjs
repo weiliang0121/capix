@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, BaseRecord, RecordBook, RecordIndex, Execution, TranscriptRecord, MemoryRecord, ExecutionRecordHelper, createRuntime } from '@capix-observer/runtime';
+import { Recorder, BaseRecord, RecordBook, Execution, TranscriptRecord, MemoryRecord, ExecutionRecordHelper, createRuntime } from '@capix-observer/runtime';
 import { subscribeExecutions } from '@capix-observer/service';
 import { validateSnapshot } from '@capix-observer/protocol';
 
@@ -46,34 +46,6 @@ test('Recorder accepts an unrelated record kind, updates only its own instance a
   recorder.update(record, (record) => record.revise('final'));
   assert.equal(received.length, 2);
   assert.equal(record.value, 'final');
-});
-
-test('Recorder undoes registration indexes on index or Book failure and does not publish a failed write', () => {
-  class RejectBook extends RecordBook {
-    add() {
-      throw new Error('book rejected');
-    }
-  }
-  for (const rejectIndex of [true, false]) {
-    const book = rejectIndex ? new RecordBook() : new RejectBook();
-    const recorder = new Recorder(book);
-    const first = new RecordIndex(() => 'key');
-    const second = new RecordIndex(() => {
-      if (rejectIndex) throw new Error('index rejected');
-      return 'key';
-    });
-    const record = new CustomRecord(null);
-    let notifications = 0;
-    recorder.subscribe(() => notifications++);
-    assert.throws(
-      () => recorder.add(record, [first, second]),
-      (error) => error.code === 'RECORDING_FAILED',
-    );
-    assert.equal(book.get(record.id), undefined);
-    assert.deepEqual(first.get('key'), []);
-    assert.deepEqual(second.get('key'), []);
-    assert.equal(notifications, 0);
-  }
 });
 
 test('content notifications are visible to generic subscribers without manufacturing execution snapshots', () => {

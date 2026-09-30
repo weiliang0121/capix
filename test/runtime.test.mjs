@@ -6,7 +6,7 @@ import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Clock, Recorder, RecordBook, RecordIndex, OperationRecordHelper, RuntimeError, ExecutionContext, OperationContext, createRuntime } from '@capix-observer/runtime';
+import { Clock, Recorder, RecordBook, OperationRecordHelper, RuntimeError, ExecutionContext, OperationContext, createRuntime } from '@capix-observer/runtime';
 
 import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
 

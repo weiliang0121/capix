@@ -6,7 +6,7 @@ import { TestOperation } from '../fixtures/operation.mjs';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Recorder, BaseRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, RecordBook, InvocationRecordIndex, createRuntime } from '@capix-observer/runtime';
+import { Recorder, BaseRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, RecordBook, createRuntime } from '@capix-observer/runtime';
 import { test } from 'node:test';
 
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
@@ -71,14 +71,14 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   assert.equal(during.attempts[1].status, 'running');
 });
 
-test('attempt ownership uses operation index and rejects missing or incorrectly typed parents', (t) => {
+test('attempt ownership uses direct record ownership and rejects missing or incorrectly typed parents', (t) => {
   const { runtime, execution, operation, definition: declaration } = setup();
   const operationRecord = recordFor(operation);
   const definition = { ...declaration, contextId: randomUUID(), operationId: operationRecord.id };
   for (const operationId of ['missing', recordFor(execution).id]) {
-    assert.throws(() => AttemptRecordHelper.create(runtime.recorder, runtime.invocationRecordIndex, { ...definition, operationId }, {}), /Operation does not exist/);
+    assert.throws(() => AttemptRecordHelper.create(runtime.recorder, { ...definition, operationId }, {}), /Operation does not exist/);
   }
-  const attempt = AttemptRecordHelper.create(runtime.recorder, runtime.invocationRecordIndex, definition, {});
+  const attempt = AttemptRecordHelper.create(runtime.recorder, definition, {});
   t.mock.method(runtime.recorder.book, 'values', () => {
     throw new Error('Must not scan Book');
   });
@@ -99,31 +99,20 @@ test('attempt ownership uses operation index and rejects missing or incorrectly 
   assert.throws(() => AttemptRecordHelper.fail(runtime.recorder.book, attempt.id, error), /ended/);
 });
 
-test('failed attempt registration leaves no partial record or index entry', (t) => {
+test('failed attempt registration leaves no partial record or child reference', (t) => {
   const { runtime, operation, definition: declaration } = setup();
   const operationRecord = recordFor(operation);
   const definition = { ...declaration, contextId: randomUUID(), operationId: operationRecord.id };
-  const failure = new Error('index failed');
-  const rejectedIndex = new InvocationRecordIndex(runtime.recorder.book);
-  t.mock.method(rejectedIndex, 'add', () => {
+  const failure = new Error('book failed');
+  const originalSize = [...runtime.recorder.book.values()].length;
+  const before = operationRecord.childIds;
+  t.mock.method(runtime.recorder.book, 'add', () => {
     throw failure;
   });
-  const originalSize = [...runtime.recorder.book.values()].length;
   assert.throws(
-    () => AttemptRecordHelper.create(runtime.recorder, rejectedIndex, definition, {}),
+    () => AttemptRecordHelper.create(runtime.recorder, definition, {}),
     (error) => error.code === 'RECORDING_FAILED' && error.cause === failure,
   );
   assert.equal([...runtime.recorder.book.values()].length, originalSize);
-  assert.deepEqual(rejectedIndex.attemptsOf(operationRecord.id), []);
-  const rejectedBook = {
-    get: (id) => runtime.recorder.book.get(id),
-    add() {
-      throw failure;
-    },
-  };
-  assert.throws(
-    () => AttemptRecordHelper.create(new Recorder(rejectedBook), runtime.invocationRecordIndex, definition, {}),
-    (error) => error.code === 'RECORDING_FAILED' && error.cause === failure,
-  );
-  assert.deepEqual(runtime.invocationRecordIndex.attemptsOf(operationRecord.id), []);
+  assert.equal(operationRecord.childIds, before);
 });

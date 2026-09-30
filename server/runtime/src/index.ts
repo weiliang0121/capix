@@ -34,7 +34,6 @@ export * from './records/error.js';
 
 export type { InvocationRecording } from './invocation/recording.js';
 export { InvocationRecordHelper } from './records/invocation/helper.js';
-export { InvocationRecordIndex } from './records/invocation/index.js';
 export type { CallRecord } from './records/invocation/record.js';
 export { TranscriptRecordHelper } from './records/transcript/helper.js';
 

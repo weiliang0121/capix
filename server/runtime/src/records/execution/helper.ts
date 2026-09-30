@@ -8,7 +8,6 @@ import type { RuntimeErrorValue, ExecutionValue, RuntimeSnapshot } from '@capix-
 
 import type { Clock } from '../../runtime/clock.js';
 import type { RecordBook } from '../container/book.js';
-import type { InvocationRecordIndex } from '../invocation/index.js';
 import { OperationRecordHelper } from '../operation/helper.js';
 import { AttemptRecordHelper } from '../attempt/helper.js';
 import { ExecutionRecord } from './record.js';
@@ -17,7 +16,7 @@ import { ExecutionRecord } from './record.js';
 export class ExecutionRecordHelper {
   static recording<I, O>(recording: InvocationRecordHelper) {
     return recording.recording<ExecutionContext<I, O>>(
-      (context) => this.create(recording.recorder, recording.index, recording.recorder.clock, context.id, { input: context.input, settings: context.settings, ...(context.transcriptRange ? { transcriptRange: context.transcriptRange } : {}) }, recording.root.id),
+      (context) => this.create(recording.recorder, recording.recorder.clock, context.id, { input: context.input, settings: context.settings, ...(context.transcriptRange ? { transcriptRange: context.transcriptRange } : {}) }, recording.root.id),
       (context, record, resultOf) => {
         const state = context.state;
         if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);
@@ -32,8 +31,8 @@ export class ExecutionRecordHelper {
     return this.snapshot(recording.recorder, record.id);
   }
 
-  static create(recorder: Recorder, index: InvocationRecordIndex, clock: Clock, contextId: string, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error' | 'processes' | 'resultOf'>, parentId: string): ExecutionRecord {
-    return recorder.add(new ExecutionRecord(contextId, { ...value, startedAt: clock.now() }, parentId), [index]);
+  static create(recorder: Recorder, clock: Clock, contextId: string, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error' | 'processes' | 'resultOf'>, parentId: string): ExecutionRecord {
+    return recorder.add(new ExecutionRecord(contextId, { ...value, startedAt: clock.now() }, parentId));
   }
 
   static get(book: RecordBook, id: string): ExecutionRecord {

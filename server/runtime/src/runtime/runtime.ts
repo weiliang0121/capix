@@ -4,7 +4,6 @@ import { OperationContextBuilder } from '../context/operation/builder.js';
 import { OperationInvocationBuilder } from '../invocation/operation/builder.js';
 import { AttemptContextBuilder } from '../context/attempt/builder.js';
 import { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
-import { InvocationRecordIndex } from '../records/invocation/index.js';
 import { InvocationRecordHelper } from '../records/invocation/helper.js';
 import type { RuntimeContext } from '../context/runtime.js';
 import { RuntimeRecord } from '../records/runtime/record.js';
@@ -18,7 +17,6 @@ import { RuntimeError } from '../errors/error.js';
 export class Runtime {
   readonly record?: RuntimeRecord;
   readonly recorder?: Recorder;
-  readonly invocationRecordIndex?: InvocationRecordIndex;
   readonly recording?: InvocationRecordHelper;
   readonly executionInvocations: ExecutionInvocationBuilder;
   readonly operationInvocations: OperationInvocationBuilder;
@@ -33,8 +31,7 @@ export class Runtime {
       if (!(recording.record instanceof RuntimeRecord) || recording.recorder.book.get(recording.record.id) !== recording.record) throw new Error('Runtime record is not registered with this Recorder');
       this.recorder = recording.recorder;
       this.record = recording.record;
-      this.invocationRecordIndex = new InvocationRecordIndex(recording.recorder.book);
-      this.recording = new InvocationRecordHelper(recording.recorder, this.invocationRecordIndex, recording.record);
+      this.recording = new InvocationRecordHelper(recording.recorder, recording.record);
     }
     const executions = new ExecutionContextBuilder(context.transcript);
     const operations = new OperationContextBuilder(executions);

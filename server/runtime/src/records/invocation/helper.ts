@@ -10,7 +10,6 @@ import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord } from '../attempt/record.js';
 import { EventRecordHelper } from '../event/helper.js';
 import type { ChangeSource } from '../source.js';
-import type { InvocationRecordIndex } from './index.js';
 import type { CallRecord } from './record.js';
 import type { Recorder } from '../recorder.js';
 
@@ -20,7 +19,6 @@ export class InvocationRecordHelper {
 
   constructor(
     readonly recorder: Recorder,
-    readonly index: InvocationRecordIndex,
     readonly root: RuntimeRecord,
   ) {}
 
@@ -70,7 +68,7 @@ export class InvocationRecordHelper {
 
   private event(record: CallRecord, type: EventValue['type']): void {
     const executionId = this.executionId(record);
-    EventRecordHelper.create(this.recorder, this.index, this.recorder.clock, this.start(executionId), executionId, record.id, type);
+    EventRecordHelper.create(this.recorder, this.recorder.clock, this.start(executionId), executionId, record.id, type);
   }
 
   private start(executionId: string): number {

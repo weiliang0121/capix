@@ -4,25 +4,24 @@ import { isFinite } from 'es-toolkit/compat';
 import type { EventValue } from '@capix-observer/protocol';
 import type { Clock } from '../../runtime/clock.js';
 import type { RecordBook } from '../container/book.js';
-import type { InvocationRecordIndex } from '../invocation/index.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord } from '../attempt/record.js';
 import { EventRecord } from './record.js';
 
-/** Call-boundary recording; Book and the execution index remain generic containers. */
+/** Call-boundary recording; Event order is resolved within the execution record tree. */
 export class EventRecordHelper {
-  static create(recorder: Recorder, index: InvocationRecordIndex, clock: Clock, start: number, executionId: string, callId: string, type: EventValue['type']): EventRecord {
+  static create(recorder: Recorder, clock: Clock, start: number, executionId: string, callId: string, type: EventValue['type']): EventRecord {
     const book = recorder.book;
     this.requireExecution(book, executionId);
     const call = this.requireCall(book, executionId, callId);
     const expectedStatus = type === 'call' ? 'running' : type === 'return' ? 'succeeded' : 'failed';
     if (call.status !== expectedStatus) throw new Error('Event does not match the invocation record state');
-    const previous = this.last(book, index, executionId);
+    const previous = this.last(recorder, executionId);
     const offsetMs = clock.tick() - start;
     if (!isFinite(offsetMs) || offsetMs < (previous?.offsetMs ?? 0)) throw new Error('Invalid event time');
     const record = new EventRecord({ executionId, callId, sequence: (previous?.sequence ?? 0) + 1, occurredAt: clock.now(), offsetMs }, { type });
-    return recorder.add(record, [index]);
+    return recorder.add(record);
   }
 
   static get(book: RecordBook, id: string): EventRecord {
@@ -39,9 +38,13 @@ export class EventRecordHelper {
     );
   }
 
-  static last(book: RecordBook, index: InvocationRecordIndex, executionId: string): EventRecord | undefined {
-    this.requireExecution(book, executionId);
-    return index.lastEventOf(executionId);
+  static last(recorder: Recorder, executionId: string): EventRecord | undefined {
+    this.requireExecution(recorder.book, executionId);
+    let latest: EventRecord | undefined;
+    for (const record of recorder.tree.descendants(executionId)) {
+      if (record instanceof EventRecord && (!latest || record.sequence > latest.sequence)) latest = record;
+    }
+    return latest;
   }
 
   private static requireExecution(book: RecordBook, id: string): void {
