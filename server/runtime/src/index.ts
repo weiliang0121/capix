@@ -52,3 +52,7 @@ export * from './invocation/behavior.js';
 
 export * from './invocation/changes.js';
 export type { InvocationCapabilities } from './invocation/capabilities.js';
+
+export * from './invocation/children.js';
+export * from './invocation/relation.js';
+export * from './composition/sequence.js';

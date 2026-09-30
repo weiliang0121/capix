@@ -1,3 +1,4 @@
+import { Sequence } from '@capix-observer/runtime';
 import type { Invocation } from '@capix-observer/runtime';
 import type { ModelSettings } from '@capix-observer/protocol';
 import type { Selection } from '../../model/types.js';
@@ -23,6 +24,8 @@ export class SelectHistory extends Operation<SelectionInput, Selection> {
   protected readonly task = `结合 memories 中的已有理解和 history 中的可见原文，为回答当前 message 选择充分且相关的历史依据。关注指代、仍有效的条件，以及能补充或修正已有理解的信息；由你判断需要哪些原文，不只按关键词匹配。
 history 仅覆盖当前消息段，memories 可能保留旧段理解，但不保证正确，也不代表其来源原文可见。historyIndexes 只能选自 history，按相关性与必要性从高到低排列，不重复；无需原文时返回空数组。不生成回答。`;
 
+  private readonly composition;
+
   readonly prepareRequest: PrepareModelRequest<SelectionInput>;
   readonly invokeModel: InvokeModel;
   readonly acceptOutput: AcceptModelOutput<SelectionInput, Selection>;
@@ -32,12 +35,15 @@ history 仅覆盖当前消息段，memories 可能保留旧段理解，但不保
     this.prepareRequest = new PrepareModelRequest(runtime.attemptInvocations, (input, execution) => loadRequest(this.prepare(input, execution), this.task, this.output.schema, execution.settings));
     this.invokeModel = new InvokeModel(runtime.attemptInvocations, provider, this.purpose);
     this.acceptOutput = new AcceptModelOutput(runtime.attemptInvocations, this.output);
+    this.composition = new Sequence<SelectionInput, Invocation<unknown, unknown, OperationContext>>()
+      .step('request', { use: this.prepareRequest, input: ({ input }) => input })
+      .step('model', { use: this.invokeModel, input: ({ outputs }) => outputs.request })
+      .step('acceptance', { use: this.acceptOutput, input: ({ outputs }) => outputs.model });
   }
 
   protected async execute(context: OperationContext<SelectionInput, Selection>, invocation: Invocation<SelectionInput, Selection, OperationContext<SelectionInput, Selection>>): Promise<Selection> {
-    const request = await this.prepareRequest.call(invocation, context.currentInput);
-    const output = await this.invokeModel.call(invocation, request);
-    return this.acceptOutput.call(invocation, output);
+    const outputs = await this.composition.run(invocation, context.currentInput);
+    return outputs.acceptance;
   }
 
   /** Uses the same payload, prompt and schema as the real selection request. */

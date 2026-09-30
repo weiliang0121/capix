@@ -1,3 +1,5 @@
+import { InvocationChildren, type ParentInvocation } from './children.js';
+import type { InvocationRelation, InvocationRelationOptions } from './relation.js';
 import type { InvocationChangeEmitter } from './changes.js';
 import type { CallRecord } from '../records/invocation/record.js';
 import type { ChangeSource } from '../records/source.js';
@@ -11,6 +13,7 @@ export type InvocationStarted<I, O, C extends InvocationContext<I, O>> = (contex
 
 export interface InvocationOptions<I, O, C extends InvocationContext<I, O>> {
   context: C;
+  parent?: { invocation: ParentInvocation } & InvocationRelationOptions;
   work: InvocationWork<C, I, O>;
   signal: AbortSignal;
   recording?: InvocationRecording<C>;
@@ -24,6 +27,8 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   #started = false;
   #sequence = 0;
   #record?: CallRecord;
+  readonly children: InvocationChildren;
+  readonly #parentRelation?: InvocationRelation;
 
   get record(): CallRecord | undefined {
     return this.#record;
@@ -53,7 +58,10 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     return ++this.#sequence;
   }
 
-  constructor(private readonly options: InvocationOptions<I, O, C>) {}
+  constructor(private readonly options: InvocationOptions<I, O, C>) {
+    this.children = new InvocationChildren(options.context);
+    this.#parentRelation = options.parent?.invocation.children.attach(this, options.parent);
+  }
 
   get context(): C {
     return this.options.context;
@@ -62,6 +70,17 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   async run(): Promise<O> {
     if (this.#started) throw new Error('Invocation has already started');
     this.#started = true;
+    try {
+      const output = await this.execute();
+      this.#parentRelation?.returnedWith({ status: 'succeeded', output });
+      return output;
+    } catch (error) {
+      this.#parentRelation?.returnedWith({ status: 'failed', error });
+      throw error;
+    }
+  }
+
+  private async execute(): Promise<O> {
     const context = this.context;
     context.requireRunning();
     try {

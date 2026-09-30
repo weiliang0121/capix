@@ -1,3 +1,4 @@
+import { Sequence } from '@capix-observer/runtime';
 import type { Invocation } from '@capix-observer/runtime';
 import { sortBy } from 'es-toolkit/array';
 import type { ModelRequest, Selection } from '../../model/types.js';
@@ -30,6 +31,8 @@ export class GenerateAnswer extends Operation<GenerationInput, GenerationOutput>
 按信息的对象、适用条件和时效判断依据，当前明确的补充与纠正优先；记忆和助手先前的回答都不自动成为已验证事实。保留尚未消解的冲突与不确定性，不把建议当作确认、局部条件当作普遍偏好。
 kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少用户可补充的必要信息，content 给出具体澄清问题；unknown 为缺乏知识或实际能力，content 如实说明。content 是直接呈现给用户的正文。当前服务没有联网检索、实时数据或工具执行能力，不声称已完成外部操作。`;
 
+  private readonly composition;
+
   readonly assemble: AssembleContext;
   readonly prepareRequest: PrepareModelRequest<AssembledContext & { memories: GenerationInput['memories'] }>;
   readonly invokeModel: InvokeModel;
@@ -41,13 +44,16 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     this.prepareRequest = new PrepareModelRequest(runtime.attemptInvocations, (input, execution) => this.createRequest(input, execution));
     this.invokeModel = new InvokeModel(runtime.attemptInvocations, provider, this.purpose);
     this.acceptOutput = new AcceptModelOutput(runtime.attemptInvocations, this.output);
+    this.composition = new Sequence<GenerationInput, Invocation<unknown, unknown, OperationContext>>()
+      .step('context', { use: this.assemble, input: ({ input }) => input.selection })
+      .step('request', { use: this.prepareRequest, input: ({ input, outputs }) => ({ ...outputs.context, memories: input.memories }) })
+      .step('model', { use: this.invokeModel, input: ({ outputs }) => outputs.request })
+      .step('acceptance', { use: this.acceptOutput, input: ({ outputs }) => outputs.model });
   }
 
   protected async execute(context: OperationContext<GenerationInput, GenerationOutput>, invocation: Invocation<GenerationInput, GenerationOutput, OperationContext<GenerationInput, GenerationOutput>>): Promise<GenerationOutput> {
-    const assembled = await this.assemble.call(invocation, context.currentInput.selection);
-    const request = await this.prepareRequest.call(invocation, { ...assembled, memories: context.currentInput.memories });
-    const output = await this.invokeModel.call(invocation, request);
-    return this.acceptOutput.call(invocation, output);
+    const outputs = await this.composition.run(invocation, context.currentInput);
+    return outputs.acceptance;
   }
 
   protected createRequest(input: AssembledContext & { memories: GenerationInput['memories'] }, execution: ExecutionContext): ModelRequest {

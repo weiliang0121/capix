@@ -76,3 +76,15 @@ Observer 按实际操作角色查询历史，不依赖当前行为实例 ID 来�
 - cycle(invocation, work, options)：调用对象、工作行为、循环控制与过程出口分开；Context 从 invocation 取得。onProcess 表达过程发生，不将循环与 Recorder 绑定。
 
 InvocationChangeEmitter 每次调用独立创建，保存固定身份和本地事件序号；负责时间戳及不可变事件正文，向装配好的 ChangeCapture 发布。Invocation 仍明确控制开始、过程与结束处的发布及登记顺序，并处理失败；没有通用插件列表或隐式生命周期分派。捕获失败不回滚事实、不自动重做，记录绑定仍属于 Invocation。
+
+## 直接子调用与顺序组合
+
+父层对直接子调用的感知属于运行机制，不由 RecordTree 反向推导。Operation/Attempt 新增 create(parent,input,{key?})，对应 Builder 在创建 Invocation 时挂到 parent.children；call 保持 create 后 run。E→O、O→O、O→A 沿用原有 ContextBuilder 的层级与归属检查。A 不增加子执行层。
+
+每个父 Invocation 独立持有 InvocationChildren，集合中的 InvocationRelation 表达父子调用关系，不是新的调用实体，也不限定 E/O/A。关系关联实际子 Invocation、创建时父层 round、可选工作位置 key。父层能在子运行前看到它，运行状态读取子 Context，不复制另一份状态机。子 run 返回或抛错后保存 returned；父层接收以 pending → receiving → accepted(output) / failed(error) 单独表达。直接 call 没有声明父层接收动作，reception 保持 pending。调用结束后的登记异常可能使 Context 已成功而 returned 失败，这是不同边界的事实，不将它们合并。关系不进入可复用行为实例，也没有全局子调用索引。
+
+Sequence 是不可变的顺序组合定义。每个 step 有工作位置 key、use 子能力、input 构造与可选 accept。输入输出契约沿用子能力的 TypeScript 类型和已有业务接纳；只允许读取前项已接收的输出。accept 可返回父层接收后的值，后项使用这个值；子层原始结果仍由对应子调用保存。Sequence 不创建第四层 Context/Record。每次 run 只建立本次输出容器，父层持续持有实际子调用及接收结果；同一能力可用于不同位置，同一组合可跨调用复用。
+
+Observer 的选择计数、回答追加与交付属于父层接收，不隐藏在 input 构造中。三个操作内部也显式组合请求准备、模型调用、输出接纳等 A。契约失败后仍可从本次操作的直接子调用读取模型原始返回，无须查询记录；记忆失败仍保留生成子调用、父层已接收的回答及正式消息。
+
+第一版只按声明顺序运行，等待父层接收结束再创建下一项。输入准备失败不创建子调用；子调用或父层接收失败立即抛出，尚未运行的项仍只是定义，不补造调用。没有重试、恢复、取消补偿、并行或父层自动等待所有手工子调用等策略。运行关系暂不新增观测通知或线协议字段；现有记录与前端行为保持原边界。

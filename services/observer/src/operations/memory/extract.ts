@@ -1,3 +1,4 @@
+import { Sequence } from '@capix-observer/runtime';
 import type { Invocation } from '@capix-observer/runtime';
 import { Operation, type Runtime, type OperationContext, type Memories } from '@capix-observer/runtime';
 import { PrepareModelRequest } from '../../attempt/model/prepare.js';
@@ -23,6 +24,8 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
 只提交本轮有实质变化的记忆，最多四项；无变化返回空 memories。create 建立新记忆，memoryId 为 null；update 使用可见的已有 ID，同批不得重复更新同一 ID。change 说明本次变化，result 给出变更后完整的 topic、content 与 sourceIndexes，不是补丁；更新时保留仍有效的信息，不为表示保留而返回无变化的 update。
 每项 sourceIndexes 是本次变化依据，只能来自 messages，且至少包含一个 currentIndexes。result.sourceIndexes 支撑完整正文，必须包含本次变化依据；更新时还可沿用该目标记忆原有的来源索引，创建时只能引用可见原文。继承旧索引不表示本轮读取或验证了旧原文，不能据此补造细节。`;
 
+  private readonly composition;
+
   readonly prepareRequest: PrepareModelRequest<MemoryInput>;
   readonly invokeModel: InvokeModel;
   readonly acceptOutput: AcceptModelOutput<MemoryInput, MemoryExtraction>;
@@ -34,6 +37,11 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     this.invokeModel = new InvokeModel(runtime.attemptInvocations, provider, this.purpose);
     this.acceptOutput = new AcceptModelOutput(runtime.attemptInvocations, this.output);
     this.applyMemory = new ApplyMemory(runtime.attemptInvocations, memories);
+    this.composition = new Sequence<MemoryInput, Invocation<unknown, unknown, OperationContext>>()
+      .step('request', { use: this.prepareRequest, input: ({ input }) => input })
+      .step('model', { use: this.invokeModel, input: ({ outputs }) => outputs.request })
+      .step('acceptance', { use: this.acceptOutput, input: ({ outputs }) => outputs.model })
+      .step('application', { use: this.applyMemory, input: ({ outputs }) => outputs.acceptance });
   }
 
   protected prepare(input: MemoryInput) {
@@ -41,9 +49,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
   }
 
   protected async execute(context: OperationContext<MemoryInput, MemoryExtraction>, invocation: Invocation<MemoryInput, MemoryExtraction, OperationContext<MemoryInput, MemoryExtraction>>): Promise<MemoryExtraction> {
-    const request = await this.prepareRequest.call(invocation, context.currentInput);
-    const output = await this.invokeModel.call(invocation, request);
-    const accepted = await this.acceptOutput.call(invocation, output);
-    return this.applyMemory.call(invocation, accepted);
+    const outputs = await this.composition.run(invocation, context.currentInput);
+    return outputs.application;
   }
 }

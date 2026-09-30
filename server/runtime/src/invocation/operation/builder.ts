@@ -9,6 +9,7 @@ import { OperationRecordHelper, type OperationDescription } from '../../records/
 
 export interface OperationInvocationRequest<I, O> {
   input: I;
+  key?: string;
   description: OperationDescription;
   work: InvocationWork<OperationContext<I, O>, I, O>;
 }
@@ -26,6 +27,6 @@ export class OperationInvocationBuilder {
     const context = this.contexts.create<I, O>(execution, request.input, parentContext);
     const recording = this.capabilities.recording ? OperationRecordHelper.recording<I, O>(this.capabilities.recording, request.description, parent) : undefined;
     const changes = this.capabilities.changes ? new InvocationChangeEmitter({ contextId: context.id, level: 'operation', parentContextId: parent.context.id }, this.capabilities.changes) : undefined;
-    return new Invocation({ context, work: request.work, signal: context.signal, recording, changes, validate: () => this.contexts.check(execution, parentContext) });
+    return new Invocation({ parent: { invocation: parent, key: request.key }, context, work: request.work, signal: context.signal, recording, changes, validate: () => this.contexts.check(execution, parentContext) });
   }
 }

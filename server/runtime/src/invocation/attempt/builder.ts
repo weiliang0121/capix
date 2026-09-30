@@ -9,6 +9,7 @@ import { AttemptRecordHelper, type AttemptDescription } from '../../records/atte
 
 export interface AttemptInvocationRequest<I, O> {
   input: I;
+  key?: string;
   description: AttemptDescription;
   work: InvocationWork<AttemptContext<I, O>, I, O>;
 }
@@ -23,6 +24,6 @@ export class AttemptInvocationBuilder {
     const context = this.contexts.create<I, O>(parent.context, request.input);
     const recording = this.capabilities.recording ? AttemptRecordHelper.recording<I, O>(this.capabilities.recording, request.description, parent) : undefined;
     const changes = this.capabilities.changes ? new InvocationChangeEmitter({ contextId: context.id, level: 'attempt', parentContextId: parent.context.id }, this.capabilities.changes) : undefined;
-    return new Invocation({ context, work: request.work, signal: context.signal, recording, changes, validate: () => this.contexts.check(parent.context) });
+    return new Invocation({ parent: { invocation: parent, key: request.key }, context, work: request.work, signal: context.signal, recording, changes, validate: () => this.contexts.check(parent.context) });
   }
 }

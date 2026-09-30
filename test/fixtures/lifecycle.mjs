@@ -1,4 +1,4 @@
-import { Invocation, writeRecord, ExecutionContext, OperationContext, AttemptContext, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
+import { Invocation, InvocationChildren, writeRecord, ExecutionContext, OperationContext, AttemptContext, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
 
 // Test-only lookup for legacy manual-boundary fixtures, never part of the runtime.
 const calls = new WeakMap();
@@ -53,7 +53,7 @@ function invocationLifecycle(prepare, recording) {
     begin() {
       const context = prepare();
       try {
-        const invocation = rememberCall({ context, record: undefined });
+        const invocation = rememberCall({ context, children: new InvocationChildren(context), record: undefined });
         writeRecord(() =>
           recording?.begin(context, (record) => {
             invocation.record = record;
