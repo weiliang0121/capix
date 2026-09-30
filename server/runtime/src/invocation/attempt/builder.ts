@@ -12,9 +12,9 @@ export class AttemptInvocationBuilder {
     private readonly recording?: InvocationRecordHelper,
   ) {}
 
-  create<I, O>(operation: OperationContext, input: I, description: AttemptDescription, work: InvocationWork<AttemptContext<I, O>, I, O>): Invocation<I, O, AttemptContext<I, O>> {
-    const context = this.contexts.create<I, O>(operation, input);
-    const recording = this.recording ? AttemptRecordHelper.recording<I, O>(this.recording, description) : undefined;
-    return new Invocation({ context, work, signal: context.signal, recording, validate: () => this.contexts.check(operation) });
+  create<I, O>(parent: Invocation<unknown, unknown, OperationContext>, input: I, description: AttemptDescription, work: InvocationWork<AttemptContext<I, O>, I, O>): Invocation<I, O, AttemptContext<I, O>> {
+    const context = this.contexts.create<I, O>(parent.context, input);
+    const recording = this.recording ? AttemptRecordHelper.recording<I, O>(this.recording, description, parent) : undefined;
+    return new Invocation({ context, work, signal: context.signal, recording, validate: () => this.contexts.check(parent.context) });
   }
 }

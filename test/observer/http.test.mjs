@@ -4,7 +4,7 @@ import { request } from 'node:http';
 import { test } from 'node:test';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
 import { ClientRuntime } from '@capix-observer/client-runtime';
-import { Runtime } from '@capix-observer/runtime';
+import { Runtime, createRuntime } from '@capix-observer/runtime';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { createObserverServer, initializeObserver, ObserverExecution, acceptExecutionInput } from '@capix-observer/service';
 
@@ -147,7 +147,7 @@ test('transport validates origin, input and source boundary before accepting wor
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).code, 'INVALID_INPUT');
   assert.equal(observer.transcript.length, 0);
-  assert.equal([...observer.book.values()].length, 0);
+  assert.deepEqual([...observer.book.values()], [observer.runtime.record]);
   for (const path of ['.env', '../../.env', 'services/observer/src/../../../../.env']) assert.equal((await fetch(base + '/api/source?file=' + encodeURIComponent(path))).status, 404);
   const blocked = await new Promise((resolve, reject) => {
     const req = request(base + '/api/config', { headers: { Host: 'outside.example' } }, (res) => {
@@ -261,12 +261,12 @@ test('answer is delivered before memory finishes, and closing observation does n
 });
 
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
-  const runtime = new Runtime();
+  const runtime = createRuntime();
   const execution = new ObserverExecution(runtime, provider);
   const received = [];
   await execution.converse(
-    () => acceptExecutionInput(runtime.transcript, { messages: [{ role: 'user', content: '问题' }] }),
-    { settings, transcript: runtime.transcript },
+    () => acceptExecutionInput(runtime.context.transcript, { messages: [{ role: 'user', content: '问题' }] }),
+    { settings, transcript: runtime.context.transcript },
     (update) => received.push(update),
   );
   assert.deepEqual(
@@ -274,5 +274,5 @@ test('the concrete conversation can deliver without a Recorder or any execution 
     ['started', 'answer', 'completed'],
   );
   assert.equal(runtime.recorder, undefined);
-  assert.equal(runtime.transcript.length, 2);
+  assert.equal(runtime.context.transcript.length, 2);
 });

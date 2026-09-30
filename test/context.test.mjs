@@ -1,14 +1,15 @@
+import { callFor, recordFor } from './fixtures/lifecycle.mjs';
 import { OperationRecordHelper } from '@capix-observer/runtime';
 import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationContext, ExecutionContext, Transcript, Runtime, RuntimeRecorder, RecordBook } from '@capix-observer/runtime';
+import { InvocationContext, ExecutionContext, Transcript, Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
 
 import { TestOperation } from './fixtures/operation.mjs';
 
 const options = { input: {}, settings: {} };
-const recorder = () => new RuntimeRecorder(new RecordBook());
+const recorder = () => new Recorder(new RecordBook());
 
 test('Context keeps live refs, separates undefined outcomes, and fixes execution configuration and Transcript visibility', () => {
   const input = { text: 'hello' },
@@ -42,7 +43,7 @@ test('Context keeps live refs, separates undefined outcomes, and fixes execution
 });
 
 test('Operation executes named actions without records and preserves non-JSON intermediate and output refs', async () => {
-  const runtime = new Runtime(),
+  const runtime = createRuntime(),
     seen = [],
     input = new Map([['content', 'hello']]);
   const fn = () => input.get('content');
@@ -67,7 +68,7 @@ test('Operation executes named actions without records and preserves non-JSON in
   let execution;
   const result = await invoke(lifecycleFor(runtime).execution({ ...options, input }), (context) => {
     execution = context;
-    return node.call(context, context.input);
+    return node.call(callFor(context), context.input);
   });
   assert.deepEqual(seen, ['load', 'transform', 'accept']);
   assert.ok(result instanceof Set);
@@ -77,7 +78,7 @@ test('Operation executes named actions without records and preserves non-JSON in
 
 test('Unrecordable execute result stops acceptance without rerunning work', async () => {
   const records = recorder(),
-    runtime = new Runtime({ recorder: records }),
+    runtime = createRuntime({ recorder: records }),
     root = lifecycleFor(runtime).execution(options),
     execution = root.begin();
   let context,
@@ -93,18 +94,18 @@ test('Unrecordable execute result stops acceptance without rerunning work', asyn
   assert.equal(count, 1);
   assert.equal(context.status, 'failed');
   assert.equal(context.progress.result.output, result);
-  assert.equal(runtime.recording.get(context.id).status, 'failed');
-  assert.equal(runtime.recording.get(context.id).value.error.code, 'RECORDING_FAILED');
-  assert.equal(ExecutionRecordHelper.observe(runtime.recording, execution).events.filter((event) => event.callId === runtime.recording.get(context.id).id).length, 2);
+  assert.equal(recordFor(context).status, 'failed');
+  assert.equal(recordFor(context).value.error.code, 'RECORDING_FAILED');
+  assert.equal(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).events.filter((event) => event.callId === recordFor(context).id).length, 2);
   // The failed child is fully recorded; the parent remains responsible for its own outcome.
   root.succeed(execution, {});
   assert.equal(execution.status, 'succeeded');
-  assert.equal(ExecutionRecordHelper.observe(runtime.recording, execution).execution.status, 'succeeded');
+  assert.equal(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).execution.status, 'succeeded');
 });
 
 test('Work and failure-registration errors remain distinct; Context keeps the original thrown value', async (t) => {
   const records = recorder(),
-    runtime = new Runtime({ recorder: records });
+    runtime = createRuntime({ recorder: records });
   const failure = { reason: 'work failed' },
     registration = new Error('record unavailable');
   t.mock.method(ExecutionRecordHelper, 'fail', () => {
@@ -127,12 +128,12 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
   );
   assert.equal(execution.status, 'failed');
   assert.equal(execution.state.error, failure);
-  assert.equal(runtime.recording.get(execution.id).status, 'running');
+  assert.equal(recordFor(execution).status, 'running');
 });
 
 test('Failed begin prevents work without changing the parent Context', async (t) => {
   const records = recorder(),
-    runtime = new Runtime({ recorder: records }),
+    runtime = createRuntime({ recorder: records }),
     root = lifecycleFor(runtime).execution(options),
     execution = root.begin();
   const failure = new Error('cannot record start');
@@ -157,13 +158,13 @@ test('Failed begin prevents work without changing the parent Context', async (t)
   assert.equal(child.state.error.cause, failure);
   root.succeed(execution, {});
   assert.equal(execution.status, 'succeeded');
-  assert.equal(ExecutionRecordHelper.observe(runtime.recording, execution).execution.status, 'succeeded');
-  assert.equal(ExecutionRecordHelper.observe(runtime.recording, execution).events.at(-1).value.type, 'return');
+  assert.equal(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).execution.status, 'succeeded');
+  assert.equal(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).events.at(-1).value.type, 'return');
 });
 
 test('Parent Context references remain readable after completion without registration or records', async () => {
-  const runtime = new Runtime(),
-    reader = new Runtime();
+  const runtime = createRuntime(),
+    reader = createRuntime();
   let attempt, child, execution;
   const operation = new TestOperation(runtime, {
     readParent(input, context) {
@@ -181,7 +182,7 @@ test('Parent Context references remain readable after completion without registr
     execution = root;
     return invoke(lifecycleFor(runtime).operation(root, new TestOperation(runtime), 'nested'), (parent) => {
       child = parent;
-      return operation.call(root, 'work', parent);
+      return operation.call(callFor(parent), 'work');
     });
   });
   assert.equal(runtime.getExecutionContext(attempt), execution);

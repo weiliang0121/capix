@@ -27,10 +27,10 @@ Memory {
 }
 ```
 
-MemoryRecord 是本次已经落实的变化，继承 RuntimeRecord。记录自身有独立 ID，正文生成后不可改写。
+MemoryRecord 是本次已经落实的变化，继承 BaseRecord。记录自身有独立 ID，正文生成后不可改写。
 
 ```ts
-MemoryRecord extends RuntimeRecord<{
+MemoryRecord extends BaseRecord<{
   action: 'create' | 'update';
   change: string;                  // 本次明确发生了什么，不从两份正文推断
   sourceIndexes: readonly number[]; // 本次变化依据

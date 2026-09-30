@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver, acceptExecutionInput, observeExecution, memoryOutputContract, ObserverExecution } from '@capix-observer/service';
 
-import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, RuntimeRecord, RuntimeRecorder, Transcript, Runtime } from '@capix-observer/runtime';
+import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, Runtime, createRuntime } from '@capix-observer/runtime';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -51,7 +51,7 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
     },
   });
   const first = await run(environment, '聚餐预算200元，键盘预算300元。');
-  const memory = environment.runtime.memories.values()[0];
+  const memory = environment.runtime.context.memories.values()[0];
   const original = memory.snapshot();
   const firstRecord = MemoryRecordHelper.find(environment.book, memory.id)[0];
   const second = await run(environment, '聚餐改为150，键盘不变。');
@@ -72,14 +72,14 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
   assert.deepEqual(first.operations[0].value.input.memories, []);
   assert.equal(second.operations[0].value.input.memories[0].content, '用户聚餐预算200元。');
   assert.equal(third.operations[0].value.input.memories[0].content, '用户聚餐预算150元。');
-  assert.equal(environment.runtime.memories.get(memory.id), memory);
-  assert.equal(environment.runtime.memories.values().length, 2);
+  assert.equal(environment.runtime.context.memories.get(memory.id), memory);
+  assert.equal(environment.runtime.context.memories.values().length, 2);
   assert.equal(memory.content, '用户聚餐预算150元。');
   assert.equal(original.content, '用户聚餐预算200元。');
   assert.equal(firstRecord.value.result.content, original.content);
   const records = MemoryRecordHelper.find(environment.book, memory.id);
   assert.equal(records.length, 2);
-  assert.ok(records.every((record) => record instanceof MemoryRecord && record instanceof RuntimeRecord));
+  assert.ok(records.every((record) => record instanceof MemoryRecord && record instanceof BaseRecord));
   assert.notEqual(records[0].id, records[1].id);
   assert.notEqual(records[0].id, memory.id);
   assert.equal(records[1].memoryId, memory.id);
@@ -94,7 +94,7 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
   assert.throws(() => records[1].value.sourceIndexes.push(99), TypeError);
   assert.equal(environment.transcript.length, 6);
   assert.ok(environment.transcript.snapshot().every((message) => Object.keys(message).sort().join() === 'content,role'));
-  const observation = observeMemory(environment.runtime.memories, environment.book);
+  const observation = observeMemory(environment.runtime.context.memories, environment.book);
   assert.equal(observation.items.length, 2);
   assert.equal(observation.items[0].records.length, 2);
   assert.equal(observation.items[0].sources[0].message, environment.transcript.get(0));
@@ -144,7 +144,7 @@ test('failed extraction leaves current memory and its records unchanged and keep
     },
   });
   await run(environment, '预算200');
-  const memory = environment.runtime.memories.values()[0];
+  const memory = environment.runtime.context.memories.values()[0];
   invalid = true;
   const facts = await run(environment, '改成150');
   assert.equal(facts.execution.status, 'failed');
@@ -157,20 +157,20 @@ test('failed extraction leaves current memory and its records unchanged and keep
 });
 
 test('memory changes without records preserve identity, isolate scopes and reject complete invalid batches', () => {
-  const a = new Runtime({ messages: [{ role: 'user', content: '预算150' }] });
-  const b = new Runtime({ messages: [{ role: 'user', content: '预算300' }] });
-  const [memory] = a.memories.apply([change(content('预算', '150', [0]), '建立')]);
+  const a = createRuntime({ messages: [{ role: 'user', content: '预算150' }] });
+  const b = createRuntime({ messages: [{ role: 'user', content: '预算300' }] });
+  const [memory] = a.context.memories.apply([change(content('预算', '150', [0]), '建立')]);
   const original = memory.snapshot();
-  a.memories.apply([change(content('预算', '200', [0]), '调整', [0], memory.id)]);
-  assert.equal(a.memories.get(memory.id), memory);
+  a.context.memories.apply([change(content('预算', '200', [0]), '调整', [0], memory.id)]);
+  assert.equal(a.context.memories.get(memory.id), memory);
   assert.equal(original.content, '150');
   assert.equal(memory.content, '200');
-  assert.throws(() => b.memories.apply([change(content('合法', '300', [0]), '建立'), change(content('跨域', '200', [0]), '修改', [0], memory.id)]), /this Runtime/);
-  assert.equal(b.memories.values().length, 0);
-  assert.throws(() => a.memories.apply([change(content('预算', '400', [0]), '修改', [0], memory.id), change(content('坏来源', '300', [99]), '建立')]), RangeError);
+  assert.throws(() => b.context.memories.apply([change(content('合法', '300', [0]), '建立'), change(content('跨域', '200', [0]), '修改', [0], memory.id)]), /this Runtime/);
+  assert.equal(b.context.memories.values().length, 0);
+  assert.throws(() => a.context.memories.apply([change(content('预算', '400', [0]), '修改', [0], memory.id), change(content('坏来源', '300', [99]), '建立')]), RangeError);
   assert.equal(memory.content, '200');
   assert.equal(typeof memory.update, 'undefined');
-  assert.equal(typeof a.memories.add, 'undefined');
+  assert.equal(typeof a.context.memories.add, 'undefined');
 });
 
 test('recording observes the actual changed fact; registration failure propagates without pretending that mutation was rolled back', async () => {
@@ -181,8 +181,8 @@ test('recording observes the actual changed fact; registration failure propagate
     }
   }
   const book = new RejectMemoryBook();
-  const recorder = new RuntimeRecorder(book);
-  const runtime = new Runtime({ recorder, messages: [{ role: 'user', content: '预算150' }] });
+  const recorder = new Recorder(book);
+  const runtime = createRuntime({ recorder, messages: [{ role: 'user', content: '预算150' }] });
   const execution = new ObserverExecution(runtime, {
     async invoke(_request, purpose) {
       if (purpose === 'selection') return raw({ historyIndexes: [] });
@@ -190,9 +190,9 @@ test('recording observes the actual changed fact; registration failure propagate
       return raw({ memories: [change(content('预算', '150', [0]), '建立预算150')] });
     },
   });
-  const transcript = runtime.transcript;
+  const transcript = runtime.context.transcript;
   await assert.rejects(execution.call(transcript.current('user'), { settings, transcript }), /registration failed/);
-  const memory = runtime.memories.values()[0];
+  const memory = runtime.context.memories.values()[0];
   assert.equal(memory.content, '150');
   assert.equal(MemoryRecordHelper.find(book, memory.id).length, 0);
   const operation = [...book.values()].find((record) => record.operation === 'memory');
@@ -224,7 +224,7 @@ test('invalid memory output stops at acceptance without invoking application or 
     ],
   );
   assert.equal(extraction.value.error.code, 'OUTPUT_SHAPE');
-  assert.equal(environment.runtime.memories.values().length, 0);
+  assert.equal(environment.runtime.context.memories.values().length, 0);
   assert.equal(environment.transcript.current('assistant').content, '已收到');
 });
 
@@ -242,7 +242,7 @@ test('memory capacity overflow stops postprocessing without truncating evidence 
   assert.deepEqual(purposes, ['selection', 'answer']);
   assert.equal(facts.operations.at(-1).value.error.code, 'CAPACITY_EXCEEDED');
   assert.equal(environment.transcript.length, 2);
-  assert.equal(environment.runtime.memories.values().length, 0);
+  assert.equal(environment.runtime.context.memories.values().length, 0);
 });
 
 test('selection capacity includes previous memories and rejects overflow before any provider call', async () => {
@@ -252,7 +252,7 @@ test('selection capacity includes previous memories and rejects overflow before 
     },
   });
   environment.transcript.append({ role: 'user', content: '旧条件' }, { role: 'assistant', content: '已了解' });
-  const memory = environment.runtime.memories.apply([{ action: 'create', memoryId: null, change: '接纳初始记忆', sourceIndexes: [0], result: content('大量理解', '历史条件。'.repeat(10000), [0]) }])[0];
+  const memory = environment.runtime.context.memories.apply([{ action: 'create', memoryId: null, change: '接纳初始记忆', sourceIndexes: [0], result: content('大量理解', '历史条件。'.repeat(10000), [0]) }])[0];
   const facts = await run(environment, '继续', { ...settings, contextBudget: 2000 });
   assert.equal(facts.execution.status, 'failed');
   assert.equal(facts.operations.length, 1);

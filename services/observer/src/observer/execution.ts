@@ -1,3 +1,4 @@
+import type { Invocation, ExecutionStarted } from '@capix-observer/runtime';
 import { Execution, type ExecutionContext, type ExecutionOptions, type Runtime, TranscriptRangeRef } from '@capix-observer/runtime';
 
 import type { Message, GenerationOutput, ConversationUpdate } from '@capix-observer/protocol';
@@ -41,10 +42,10 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
     super(runtime.executionInvocations);
     this.selection = new SelectHistory(runtime, provider);
     this.generation = new GenerateAnswer(runtime, provider);
-    this.extraction = new ExtractMemory(runtime, provider, this.runtime.memories);
+    this.extraction = new ExtractMemory(runtime, provider, this.runtime.context.memories);
   }
 
-  override submit(accept: () => Readonly<Message>, options: ExecutionOptions, started?: (context: ExecutionContext<Readonly<Message>, GenerationOutput>) => void): Promise<GenerationOutput> {
+  override submit(accept: () => Readonly<Message>, options: ExecutionOptions, started?: ExecutionStarted<Readonly<Message>, GenerationOutput>): Promise<GenerationOutput> {
     return super.submit(
       () => {
         const input = accept();
@@ -57,28 +58,28 @@ export class ObserverExecution extends Execution<Readonly<Message>, GenerationOu
   }
 
   private prepareSegment(message: Readonly<Message>, options: ExecutionOptions): void {
-    const transcript = this.runtime.transcript;
+    const transcript = this.runtime.context.transcript;
     if (!transcript || transcript.get(transcript.length - 1) !== message) return;
     const range = new TranscriptRangeRef(transcript, transcript.activeStart, transcript.length);
-    const input = { message, memories: this.runtime.memories.snapshot() };
+    const input = { message, memories: this.runtime.context.memories.snapshot() };
     if (range.length <= 1 || this.selection.capacity(input, range, options.settings).fits) return;
     const next = segmentCandidates(range).find((candidate) => this.selection.capacity(input, candidate, options.settings).fits);
     // Do not accumulate empty segments when memory/current input alone cannot fit.
     if (next) transcript.startSegment(next.start);
   }
 
-  protected async execute(context: ExecutionContext<Readonly<Message>, GenerationOutput>): Promise<GenerationOutput> {
+  protected async execute(context: ExecutionContext<Readonly<Message>, GenerationOutput>, invocation: Invocation<Readonly<Message>, GenerationOutput, ExecutionContext<Readonly<Message>, GenerationOutput>>): Promise<GenerationOutput> {
     const range = context.transcriptRange!;
-    const previousMemories = this.runtime.memories.snapshot();
+    const previousMemories = this.runtime.context.memories.snapshot();
     const selectionInput = { message: context.currentInput, memories: previousMemories };
-    const selectionOutput = await this.selection.call(context, selectionInput);
-    this.runtime.selectionUsage.add(selectionOutput.historyIndexes.map((index) => context.transcriptRange!.read(index)));
-    const generationOutput = await this.generation.call(context, { selection: selectionOutput, memories: previousMemories });
+    const selectionOutput = await this.selection.call(invocation, selectionInput);
+    this.runtime.context.selectionUsage.add(selectionOutput.historyIndexes.map((index) => context.transcriptRange!.read(index)));
+    const generationOutput = await this.generation.call(invocation, { selection: selectionOutput, memories: previousMemories });
     const responseIndex = range.transcript.length;
-    range.transcript.appendFrom([{ role: 'assistant', content: generationOutput.content }], this.runtime.recording?.source(context));
+    range.transcript.appendFrom([{ role: 'assistant', content: generationOutput.content }], invocation.source);
     this.deliveries.get(context)?.({ type: 'answer', contextId: context.id, index: responseIndex, output: generationOutput });
     const extractionInput = prepareMemoryInput(range, range.transcript.ref(responseIndex), selectionOutput.historyIndexes, previousMemories);
-    await this.extraction.call(context, extractionInput);
+    await this.extraction.call(invocation, extractionInput);
     return generationOutput;
   }
 }

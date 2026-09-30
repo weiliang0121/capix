@@ -1,3 +1,4 @@
+import type { Invocation } from '@capix-observer/runtime';
 import type { ModelSettings } from '@capix-observer/protocol';
 import type { Selection } from '../../model/types.js';
 import { type ExecutionContext, Operation, type Runtime, type OperationContext, type TranscriptRangeRef } from '@capix-observer/runtime';
@@ -33,10 +34,10 @@ history 仅覆盖当前消息段，memories 可能保留旧段理解，但不保
     this.acceptOutput = new AcceptModelOutput(runtime.attemptInvocations, this.output);
   }
 
-  protected async execute(context: OperationContext<SelectionInput, Selection>): Promise<Selection> {
-    const request = await this.prepareRequest.call(context, context.currentInput);
-    const output = await this.invokeModel.call(context, request);
-    return this.acceptOutput.call(context, output);
+  protected async execute(context: OperationContext<SelectionInput, Selection>, invocation: Invocation<SelectionInput, Selection, OperationContext<SelectionInput, Selection>>): Promise<Selection> {
+    const request = await this.prepareRequest.call(invocation, context.currentInput);
+    const output = await this.invokeModel.call(invocation, request);
+    return this.acceptOutput.call(invocation, output);
   }
 
   /** Uses the same payload, prompt and schema as the real selection request. */

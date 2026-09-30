@@ -1,8 +1,9 @@
+import { callFor } from '../fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import { readOutput } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript, Runtime } from '@capix-observer/runtime';
+import { Transcript, Runtime, createRuntime } from '@capix-observer/runtime';
 
 import { GenerateAnswer, estimateCapacity } from '@capix-observer/service';
 
@@ -21,7 +22,7 @@ const withHistory = (request, indexes) => {
 };
 
 async function generate(input, contextBudget = settings.contextBudget, requests = []) {
-  const runtime = new Runtime();
+  const runtime = createRuntime();
   const operation = new GenerateAnswer(runtime, {
     async invoke(request) {
       requests.push(request);
@@ -31,7 +32,7 @@ async function generate(input, contextBudget = settings.contextBudget, requests 
   const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
   const transcript = new Transcript([...history, input.message]);
   const selection = { historyIndexes: input.selectedMessages.map((item) => item.index) };
-  await invoke(lifecycleFor(runtime).execution({ input: transcript.current('user'), transcript, settings: { ...settings, contextBudget } }), (context) => operation.call(context, { selection, memories: [] }));
+  await invoke(lifecycleFor(runtime).execution({ input: transcript.current('user'), transcript, settings: { ...settings, contextBudget } }), (context) => operation.call(callFor(context), { selection, memories: [] }));
   return requests[0];
 }
 

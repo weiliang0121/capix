@@ -1,3 +1,4 @@
+import type { RuntimeRecord } from '../runtime/record.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import type { EventValue } from '@capix-observer/protocol';
 import type { InvocationContext } from '../../context/context.js';
@@ -9,29 +10,32 @@ import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord } from '../attempt/record.js';
 import { EventRecordHelper } from '../event/helper.js';
 import type { ChangeSource } from '../source.js';
-import type { InvocationRecordIndex, CallRecord } from './index.js';
-import type { RuntimeRecorder } from '../recorder.js';
+import type { InvocationRecordIndex } from './index.js';
+import type { CallRecord } from './record.js';
+import type { Recorder } from '../recorder.js';
 
 /** Common call-record rules. It neither runs work nor publishes execution snapshots. */
 export class InvocationRecordHelper {
   readonly #starts = new Map<string, number>();
 
   constructor(
-    readonly recorder: RuntimeRecorder,
+    readonly recorder: Recorder,
     readonly index: InvocationRecordIndex,
+    readonly root: RuntimeRecord,
   ) {}
 
   recording<C extends InvocationContext>(create: (context: C) => CallRecord, finish: (context: C, record: CallRecord, resultOf?: number) => void): InvocationRecording<C> {
     return {
-      begin: (context) => {
+      begin: (context, bind) => {
         const record = create(context);
+        bind(record);
         if (record instanceof ExecutionRecord) this.#starts.set(record.id, this.recorder.clock.tick());
         this.event(record, 'call');
       },
-      process: (context, process) => this.process(context, process),
-      finish: (context) => {
+      process: (context, record, process, sequence) => this.process(context, record, process, sequence),
+      source: (record) => this.source(record),
+      finish: (context, record) => {
         if (context.status === 'running') throw new Error('Context has no terminal outcome to record');
-        const record = this.get(context.id);
         const last = record.value.processes.at(-1);
         const resultOf = last?.stage === 'receive' && last.type === 'return' ? ('resultOf' in last ? last.resultOf : last.sequence) : undefined;
         this.recorder.update(record, (record) => finish(context, record, resultOf));
@@ -41,15 +45,8 @@ export class InvocationRecordHelper {
     };
   }
 
-  get(contextId: string): CallRecord {
-    const record = this.index.findByContext(contextId);
-    if (!(record instanceof ExecutionRecord || record instanceof OperationRecord || record instanceof AttemptRecord)) throw new Error('Context record does not exist');
-    return record;
-  }
-
-  source(context: InvocationContext): ChangeSource {
-    const record = this.get(context.id);
-    return { contextId: context.id, callId: record.id, executionId: this.executionId(record), ...(record instanceof AttemptRecord ? { operationId: record.operationId } : record instanceof OperationRecord ? { operationId: record.id } : {}) };
+  source(record: CallRecord): ChangeSource {
+    return { contextId: record.contextId, callId: record.id, executionId: this.executionId(record), ...(record instanceof AttemptRecord ? { operationId: record.operationId } : record instanceof OperationRecord ? { operationId: record.id } : {}) };
   }
 
   executionId(record: CallRecord): string {
@@ -60,8 +57,7 @@ export class InvocationRecordHelper {
     return operation.executionId;
   }
 
-  private process(context: InvocationContext, process: InvocationProcess): void {
-    const record = this.get(context.id);
+  private process(context: InvocationContext, record: CallRecord, process: InvocationProcess, sequence: number): void {
     const start = this.start(this.executionId(record));
     let body;
     if ('reuse' in process) {
@@ -69,7 +65,7 @@ export class InvocationRecordHelper {
       if (!source || source.stage !== 'execute' || source.type !== 'return' || source.round !== context.progress.round) throw new Error('Default receive must follow its execution result');
       body = { stage: 'receive' as const, type: 'return' as const, resultOf: source.sequence };
     } else body = 'error' in process ? { ...process, error: RuntimeErrorHelper.format(process.error) } : process;
-    this.recorder.update(record, (record) => record.append({ ...body, sequence: record.value.processes.length + 1, round: context.progress.round, occurredAt: this.recorder.clock.now(), offsetMs: this.recorder.clock.tick() - start }));
+    this.recorder.update(record, (record) => record.append({ ...body, sequence, round: context.progress.round, occurredAt: this.recorder.clock.now(), offsetMs: this.recorder.clock.tick() - start }));
   }
 
   private event(record: CallRecord, type: EventValue['type']): void {

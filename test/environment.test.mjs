@@ -19,9 +19,9 @@ test('one initialized world preserves messages and records while reusing its exe
     },
   };
   const environment = initializeObserver(provider, [{ role: 'user', content: 'initial' }]);
-  const transcript = environment.runtime.transcript;
+  const transcript = environment.runtime.context.transcript;
   assert.equal(environment.transcript, transcript);
-  assert.equal([...environment.book.values()].length, 1);
+  assert.equal([...environment.book.values()].length, 2); // Initial transcript + Runtime scope.
   assert.equal(requests.length, 0);
   const operationIds = ['selection', 'generation', 'extraction'].map((name) => environment.execution[name].id);
   const snapshots = [],
@@ -102,7 +102,7 @@ test('invalid submissions cannot replace an initialized Transcript or partially 
       (error) => error.code === 'INVALID_INPUT',
     );
     assert.equal(environment.transcript.length, 1);
-    assert.equal([...environment.book.values()].length, 1);
+    assert.equal([...environment.book.values()].length, 2); // Initial transcript + Runtime scope.
   }
 });
 

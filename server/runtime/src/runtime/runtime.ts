@@ -6,22 +6,18 @@ import { AttemptContextBuilder } from '../context/attempt/builder.js';
 import { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
 import { InvocationRecordIndex } from '../records/invocation/index.js';
 import { InvocationRecordHelper } from '../records/invocation/helper.js';
-import type { Message } from '@capix-observer/protocol';
+import type { RuntimeContext } from '../context/runtime.js';
+import { RuntimeRecord } from '../records/runtime/record.js';
 import type { ExecutionContext } from '../context/execution.js';
 import type { OperationContext } from '../context/operation.js';
 import type { AttemptContext } from '../context/attempt.js';
-import type { RuntimeRecorder } from '../records/recorder.js';
-import { SelectionUsage } from '../transcript/usage.js';
-import { Transcript } from '../transcript/transcript.js';
-import { Memories } from '../memory/memories.js';
+import type { Recorder } from '../records/recorder.js';
 import { RuntimeError } from '../errors/error.js';
 
-/** A persistent in-memory running scope. Recording is an environment-owned dependency. */
+/** Organizes work over an established data scope. Construction does not establish its record. */
 export class Runtime {
-  readonly transcript: Transcript;
-  readonly memories: Memories;
-  readonly selectionUsage = new SelectionUsage();
-  readonly recorder?: RuntimeRecorder;
+  readonly record?: RuntimeRecord;
+  readonly recorder?: Recorder;
   readonly invocationRecordIndex?: InvocationRecordIndex;
   readonly recording?: InvocationRecordHelper;
   readonly executionInvocations: ExecutionInvocationBuilder;
@@ -29,15 +25,18 @@ export class Runtime {
   readonly attemptInvocations: AttemptInvocationBuilder;
   #running = false;
 
-  constructor(options: { recorder?: RuntimeRecorder; messages?: readonly Message[] } = {}) {
-    this.recorder = options.recorder;
-    if (options.recorder) {
-      this.invocationRecordIndex = new InvocationRecordIndex(options.recorder.book);
-      this.recording = new InvocationRecordHelper(options.recorder, this.invocationRecordIndex);
+  constructor(
+    readonly context: RuntimeContext,
+    recording?: { recorder: Recorder; record: RuntimeRecord },
+  ) {
+    if (recording) {
+      if (!(recording.record instanceof RuntimeRecord) || recording.recorder.book.get(recording.record.id) !== recording.record) throw new Error('Runtime record is not registered with this Recorder');
+      this.recorder = recording.recorder;
+      this.record = recording.record;
+      this.invocationRecordIndex = new InvocationRecordIndex(recording.recorder.book);
+      this.recording = new InvocationRecordHelper(recording.recorder, this.invocationRecordIndex, recording.record);
     }
-    this.transcript = new Transcript(options.messages, options.recorder);
-    this.memories = new Memories(this.transcript, options.recorder);
-    const executions = new ExecutionContextBuilder(this.transcript);
+    const executions = new ExecutionContextBuilder(context.transcript);
     const operations = new OperationContextBuilder(executions);
     const attempts = new AttemptContextBuilder(operations);
     this.executionInvocations = new ExecutionInvocationBuilder(executions, { run: (work) => this.run(work), recording: this.recording });

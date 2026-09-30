@@ -1,8 +1,10 @@
+import type { Invocation } from '../../invocation/invocation.js';
+import type { OperationContext } from '../../context/operation.js';
 import type { AttemptContext } from '../../context/attempt.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 import { RuntimeErrorHelper } from '../../errors/helper.js';
 
-import type { RuntimeRecorder } from '../recorder.js';
+import type { Recorder } from '../recorder.js';
 import type { RuntimeErrorValue } from '@capix-observer/protocol';
 import type { RecordBook } from '../container/book.js';
 import type { InvocationRecordIndex } from '../invocation/index.js';
@@ -17,13 +19,13 @@ export interface AttemptDescription {
   readonly callee: string;
 }
 
-/** Attempt-specific operations. Index keys identify the owning operation, not the action name. */
+/** Attempt recording; direct ownership queries follow the record tree. */
 export class AttemptRecordHelper {
-  static recording<I, O>(recording: InvocationRecordHelper, attempt: AttemptDescription) {
+  static recording<I, O>(recording: InvocationRecordHelper, attempt: AttemptDescription, parent: Invocation<unknown, unknown, OperationContext>) {
     return recording.recording<AttemptContext<I, O>>(
       (context) => {
-        const operation = recording.get(context.operationContext.id);
-        if (!(operation instanceof OperationRecord)) throw new Error('Operation record does not exist');
+        const operation = parent.record;
+        if (!(operation instanceof OperationRecord) || recording.recorder.book.get(operation.id) !== operation) throw new Error('Parent invocation record is not registered here');
         return this.create(recording.recorder, recording.index, { name: attempt.name, label: attempt.label, source: attempt.source, caller: 'operation', callee: attempt.callee, contextId: context.id, operationId: operation.id }, context.input);
       },
       (context, record, resultOf) => {
@@ -34,7 +36,7 @@ export class AttemptRecordHelper {
     );
   }
 
-  static create(recorder: RuntimeRecorder, index: InvocationRecordIndex, definition: AttemptDefinition, input: unknown): AttemptRecord {
+  static create(recorder: Recorder, index: InvocationRecordIndex, definition: AttemptDefinition, input: unknown): AttemptRecord {
     const book = recorder.book;
     const operation = this.owner(book, definition.operationId);
     const execution = book.get(operation.executionId);
@@ -50,9 +52,9 @@ export class AttemptRecordHelper {
     return record;
   }
 
-  static findByOperation(book: RecordBook, index: InvocationRecordIndex, operationId: string): readonly AttemptRecord[] {
-    this.owner(book, operationId);
-    return index.attemptsOf(operationId);
+  static findByOperation(recorder: Recorder, operationId: string): readonly AttemptRecord[] {
+    this.owner(recorder.book, operationId);
+    return recorder.tree.children(operationId).filter((record): record is AttemptRecord => record instanceof AttemptRecord);
   }
 
   static complete(book: RecordBook, id: string, output: unknown, resultOf?: number): void {

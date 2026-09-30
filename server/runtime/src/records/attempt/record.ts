@@ -3,7 +3,7 @@ import type { AttemptRecord as AttemptData, AttemptValue } from '@capix-observer
 import { InvocationRecord } from '../invocation/record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
-export type AttemptDefinition = Omit<AttemptData, 'id' | 'value' | 'status'>;
+export type AttemptDefinition = Omit<AttemptData, 'id' | 'value' | 'status' | 'parentId' | 'childIds'>;
 
 /** Records one named action invocation. Its owner supplies execution and operation instance identity. */
 export class AttemptRecord extends InvocationRecord<AttemptValue> implements AttemptData {
@@ -16,7 +16,7 @@ export class AttemptRecord extends InvocationRecord<AttemptValue> implements Att
   readonly callee: string;
 
   constructor(definition: AttemptDefinition, input: unknown) {
-    super(snapshotValue({ input, processes: [] }));
+    super(snapshotValue({ input, processes: [] }), definition.operationId);
     this.contextId = definition.contextId;
     this.operationId = definition.operationId;
     this.name = definition.name;

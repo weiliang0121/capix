@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runtime, RuntimeRecorder, RecordBook, Transcript } from '@capix-observer/runtime';
+import { Runtime, Recorder, RecordBook, Transcript, createRuntime } from '@capix-observer/runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const operation = { id: 'operation', name: 'work', label: 'Work', source: 'test' };
@@ -8,7 +8,7 @@ const attempt = { name: 'action', label: 'Action', source: 'test', callee: 'proc
 const identity = { maxRounds: 1, execute: (context) => context.currentInput };
 
 test('reused builders bind each invocation to its own signal, settings and input', async () => {
-  const runtime = new Runtime();
+  const runtime = createRuntime();
   const builders = [runtime.executionInvocations, runtime.operationInvocations, runtime.attemptInvocations];
   const firstController = new AbortController();
   const secondController = new AbortController();
@@ -16,10 +16,10 @@ test('reused builders bind each invocation to its own signal, settings and input
   const first = runtime.executionInvocations.create('first', { settings: mutableSettings, signal: firstController.signal }, identity);
   mutableSettings.model = 'next';
   const second = runtime.executionInvocations.create('second', { settings: mutableSettings, signal: secondController.signal }, identity);
-  const firstOperation = runtime.operationInvocations.create(first.context, 'first operation', operation, identity);
-  const secondOperation = runtime.operationInvocations.create(second.context, 'second operation', operation, identity);
-  const firstAttempt = runtime.attemptInvocations.create(firstOperation.context, 'first action', attempt, identity);
-  const secondAttempt = runtime.attemptInvocations.create(secondOperation.context, 'second action', attempt, identity);
+  const firstOperation = runtime.operationInvocations.create(first, 'first operation', operation, identity);
+  const secondOperation = runtime.operationInvocations.create(second, 'second operation', operation, identity);
+  const firstAttempt = runtime.attemptInvocations.create(firstOperation, 'first action', attempt, identity);
+  const secondAttempt = runtime.attemptInvocations.create(secondOperation, 'second action', attempt, identity);
   assert.equal(first.context.settings.model, 'fixture');
   assert.equal(second.context.settings.model, 'next');
   assert.equal(firstAttempt.context.signal, firstController.signal);
@@ -35,24 +35,24 @@ test('reused builders bind each invocation to its own signal, settings and input
 });
 
 test('construction writes no call records and rejects foreign contexts before starting work', () => {
-  const recorder = new RuntimeRecorder(new RecordBook());
-  const first = new Runtime({ recorder });
-  const second = new Runtime({ recorder });
+  const recorder = new Recorder(new RecordBook());
+  const first = createRuntime({ recorder });
+  const second = createRuntime({ recorder });
   const root = first.executionInvocations.create('input', { settings }, identity);
-  const child = first.operationInvocations.create(root.context, 'input', operation, identity);
-  assert.equal([...recorder.book.values()].length, 0);
-  assert.throws(() => second.operationInvocations.create(root.context, 'foreign', operation, identity), /another Runtime/);
-  assert.throws(() => second.attemptInvocations.create(child.context, 'foreign', attempt, identity), /another Runtime/);
-  assert.equal([...recorder.book.values()].length, 0);
+  const child = first.operationInvocations.create(root, 'input', operation, identity);
+  assert.deepEqual([...recorder.book.values()], [first.record, second.record]);
+  assert.throws(() => second.operationInvocations.create(root, 'foreign', operation, identity), /another Runtime/);
+  assert.throws(() => second.attemptInvocations.create(child, 'foreign', attempt, identity), /another Runtime/);
+  assert.deepEqual([...recorder.book.values()], [first.record, second.record]);
 });
 
 test('a constructed call rechecks its parent before entering work, including nested operations', async () => {
-  const runtime = new Runtime();
+  const runtime = createRuntime();
   const root = runtime.executionInvocations.create('root', { settings }, identity);
-  const parent = runtime.operationInvocations.create(root.context, 'parent', operation, identity);
+  const parent = runtime.operationInvocations.create(root, 'parent', operation, identity);
   const forbidden = { maxRounds: 1, execute: () => assert.fail('ended parent must prevent work') };
-  const leaf = runtime.attemptInvocations.create(parent.context, 'leaf', attempt, forbidden);
-  const nested = runtime.operationInvocations.create(root.context, 'nested', operation, forbidden, parent.context);
+  const leaf = runtime.attemptInvocations.create(parent, 'leaf', attempt, forbidden);
+  const nested = runtime.operationInvocations.create(parent, 'nested', operation, forbidden);
   parent.context.complete('done');
   await assert.rejects(leaf.run(), /ended/);
   await assert.rejects(nested.run(), /ended/);
@@ -62,8 +62,8 @@ test('a constructed call rechecks its parent before entering work, including nes
 });
 
 test('entry validates before accepting input and releases its reservation after construction failure', async () => {
-  const recorder = new RuntimeRecorder(new RecordBook());
-  const runtime = new Runtime({ recorder });
+  const recorder = new Recorder(new RecordBook());
+  const runtime = createRuntime({ recorder });
   await assert.rejects(
     runtime.executionInvocations.submit(() => assert.fail('must not accept'), { settings, transcript: new Transcript() }, identity),
     /another Runtime/,
@@ -82,9 +82,40 @@ test('entry validates before accepting input and releases its reservation after 
     /another Runtime/,
   );
   assert.equal(runtime.running, false);
-  assert.equal([...recorder.book.values()].length, 0);
+  assert.deepEqual([...recorder.book.values()], [runtime.record]);
   const root = runtime.executionInvocations.create('ready', { settings }, identity);
-  assert.equal([...recorder.book.values()].length, 0);
+  assert.deepEqual([...recorder.book.values()], [runtime.record]);
   assert.equal(await root.run(), 'ready');
-  assert.equal([...recorder.book.values()].length, 3);
+  assert.equal([...recorder.book.values()].length, 4); // Runtime + execution + two boundary events.
+});
+
+test('started failure preserves the original error, skips recording and work, and releases Runtime reservation', async () => {
+  for (const recorded of [false, true]) {
+    const recorder = recorded ? new Recorder(new RecordBook()) : undefined;
+    const runtime = createRuntime({ recorder });
+    const before = recorder ? [...recorder.book.values()] : [];
+    const failure = new Error('delivery setup failed');
+    let invocation;
+    await assert.rejects(
+      runtime.executionInvocations.submit(
+        () => 'input',
+        { settings: {} },
+        { maxRounds: 1, execute: () => assert.fail('must not execute') },
+        (context, current) => {
+          invocation = current;
+          assert.equal(runtime.running, true);
+          assert.equal(context, current.context);
+          throw failure;
+        },
+      ),
+      (error) => error === failure,
+    );
+    assert.equal(invocation.context.status, 'failed');
+    assert.equal(invocation.context.state.error, failure);
+    assert.equal(invocation.context.progress.round, 0);
+    assert.equal(invocation.record, undefined);
+    assert.equal(runtime.running, false);
+    if (recorder) assert.deepEqual([...recorder.book.values()], before);
+    assert.equal(await runtime.executionInvocations.submit(() => 'next', { settings: {} }, identity), 'next');
+  }
 });

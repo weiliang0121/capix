@@ -6,8 +6,9 @@ export class ExecutionRecord extends InvocationRecord<ExecutionValue> implements
   constructor(
     readonly contextId: string,
     value: Omit<ExecutionValue, 'processes'>,
+    parentId: string,
   ) {
-    super(snapshotValue({ ...value, processes: [] }));
+    super(snapshotValue({ ...value, processes: [] }), parentId);
     Object.freeze(this);
   }
   override toJSON(): ExecutionData {

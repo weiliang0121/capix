@@ -59,13 +59,13 @@ export function createObserverServer(options: ObserverServerOptions) {
       res.flushHeaders();
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/api/memory') return json(res, 200, observeMemory(observer.runtime.memories, observer.book));
+    if (req.method === 'GET' && url.pathname === '/api/memory') return json(res, 200, observeMemory(observer.runtime.context.memories, observer.book));
     if (req.method === 'GET' && url.pathname === '/api/executions') return json(res, 200, observeOverview(observer));
     if (req.method === 'GET' && url.pathname === '/api/transcript') return json(res, 200, { messages: observer.transcript.snapshot() } satisfies TranscriptResponse);
     if (req.method === 'GET' && url.pathname === '/api/execution') {
       const id = url.searchParams.get('id') || '';
       if (!(observer.book.get(id) instanceof ExecutionRecord)) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
-      return json(res, 200, ExecutionRecordHelper.snapshot(observer.book, observer.recording.index, id), observeTranscript);
+      return json(res, 200, ExecutionRecordHelper.snapshot(observer.recording.recorder, id), observeTranscript);
     }
     if (req.method === 'GET' && url.pathname === '/api/source') {
       const path = url.searchParams.get('file') || '';

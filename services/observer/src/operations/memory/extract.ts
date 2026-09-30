@@ -1,3 +1,4 @@
+import type { Invocation } from '@capix-observer/runtime';
 import { Operation, type Runtime, type OperationContext, type Memories } from '@capix-observer/runtime';
 import { PrepareModelRequest } from '../../attempt/model/prepare.js';
 import { InvokeModel } from '../../attempt/model/invoke.js';
@@ -32,18 +33,17 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     this.prepareRequest = new PrepareModelRequest(runtime.attemptInvocations, (input, execution) => loadRequest(this.prepare(input), this.task, this.output.schema, execution.settings));
     this.invokeModel = new InvokeModel(runtime.attemptInvocations, provider, this.purpose);
     this.acceptOutput = new AcceptModelOutput(runtime.attemptInvocations, this.output);
-    const recording = runtime.recording;
-    this.applyMemory = new ApplyMemory(runtime.attemptInvocations, memories, (context) => recording?.source(context));
+    this.applyMemory = new ApplyMemory(runtime.attemptInvocations, memories);
   }
 
   protected prepare(input: MemoryInput) {
     return { currentIndexes: input.currentIndexes, messages: input.messages.map(({ index, message }) => ({ index, role: message.role, content: message.content })), memories: input.memories };
   }
 
-  protected async execute(context: OperationContext<MemoryInput, MemoryExtraction>): Promise<MemoryExtraction> {
-    const request = await this.prepareRequest.call(context, context.currentInput);
-    const output = await this.invokeModel.call(context, request);
-    const accepted = await this.acceptOutput.call(context, output);
-    return this.applyMemory.call(context, accepted);
+  protected async execute(context: OperationContext<MemoryInput, MemoryExtraction>, invocation: Invocation<MemoryInput, MemoryExtraction, OperationContext<MemoryInput, MemoryExtraction>>): Promise<MemoryExtraction> {
+    const request = await this.prepareRequest.call(invocation, context.currentInput);
+    const output = await this.invokeModel.call(invocation, request);
+    const accepted = await this.acceptOutput.call(invocation, output);
+    return this.applyMemory.call(invocation, accepted);
   }
 }

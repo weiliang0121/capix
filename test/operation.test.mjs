@@ -1,15 +1,16 @@
+import { callFor } from './fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import { createInput, contextFor, transcriptFor } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
-import { Runtime } from '@capix-observer/runtime';
+import { Runtime, createRuntime } from '@capix-observer/runtime';
 
 import { SelectHistory, AssembleContext, answerOutputContract, selectionOutputContract } from '@capix-observer/service';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
-const runtime = new Runtime();
-const call = (operation, input, operationInput = input) => invoke(lifecycleFor(runtime).execution({ input, settings, transcript: transcriptFor(input) }), (context) => operation.call(context, operationInput));
+const runtime = createRuntime();
+const call = (operation, input, operationInput = input) => invoke(lifecycleFor(runtime).execution({ input, settings, transcript: transcriptFor(input) }), (context) => operation.call(callFor(context), operationInput));
 const raw = (content) => ({
   id: 'test',
   model: 'test',
@@ -210,7 +211,7 @@ test('assembly attempt consumes explicit sources and needs no recorder', async (
   });
   const input = { historyIndexes: [0] };
   const attempt = new AssembleContext(runtime.attemptInvocations);
-  const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message) }), (execution) => invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), input), (context) => attempt.call(context, input)));
+  const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message) }), (execution) => invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), input), (context) => attempt.call(callFor(context), input)));
   assert.equal(result.message, message);
   assert.equal(Object.hasOwn(result.selectedMessages[0], 'transcript'), false);
   assert.equal(result.selectedMessages[0].message, transcriptFor(message).get(0));

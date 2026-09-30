@@ -1,10 +1,12 @@
+import { RuntimeRecordHelper } from '@capix-observer/runtime';
+import { callFor, recordFor } from './fixtures/lifecycle.mjs';
 import { subscribeExecutions } from '@capix-observer/service';
 import { lifecycleFor } from './fixtures/lifecycle.mjs';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { createInput, observeFixture } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { RuntimeRecorder, RuntimeRecord, ExecutionRecord, OperationRecord, RecordBook, InvocationRecordIndex, ExecutionRecordHelper, OperationRecordHelper, Clock, Runtime, RuntimeError } from '@capix-observer/runtime';
+import { Recorder, BaseRecord, ExecutionRecord, OperationRecord, RecordBook, InvocationRecordIndex, ExecutionRecordHelper, OperationRecordHelper, Clock, RuntimeError, createRuntime } from '@capix-observer/runtime';
 import { test } from 'node:test';
 
 import { TestOperation } from './fixtures/operation.mjs';
@@ -30,8 +32,8 @@ async function execute(answer = '{"kind":"answer","content":"海盐项目"}') {
     },
   });
 }
-const createRuntime = (publish) => {
-  const runtime = new Runtime({ recorder: new RuntimeRecorder(new RecordBook(), new Clock()) });
+const createRecordedRuntime = (publish) => {
+  const runtime = createRuntime({ recorder: new Recorder(new RecordBook(), new Clock()) });
   if (publish) subscribeExecutions(runtime.recording, publish);
   return runtime;
 };
@@ -47,7 +49,7 @@ const complete = (context, output) => lifecycles.get(context).succeed(context, o
 test('Book stores any record by identity without creating invocation boundaries', () => {
   const book = new RecordBook();
   const value = { material: 'reference' };
-  const record = new RuntimeRecord(value);
+  const record = new BaseRecord(value);
   assert.deepEqual(Object.getOwnPropertyNames(RecordBook.prototype).sort(), ['add', 'constructor', 'get', 'values']);
   assert.equal('status' in record, false);
   assert.equal(book.add(record), record);
@@ -57,7 +59,7 @@ test('Book stores any record by identity without creating invocation boundaries'
   assert.deepEqual([...book.values()], [record]);
 
   assert.throws(() => book.add(record), /already exists/);
-  const conflict = new RuntimeRecord({ material: 'replacement' });
+  const conflict = new BaseRecord({ material: 'replacement' });
   Object.defineProperty(conflict, 'id', { value: record.id });
   assert.throws(() => book.add(conflict), /already exists/);
   assert.equal(book.get(record.id), record);
@@ -68,8 +70,9 @@ test('Paired record operations create, find and write results independently of b
   const book = new RecordBook();
   const clock = new Clock();
   const index = new InvocationRecordIndex(book);
-  const execution = ExecutionRecordHelper.create(new RuntimeRecorder(book), index, clock, randomUUID(), { input, settings });
-  const other = ExecutionRecordHelper.create(new RuntimeRecorder(book), index, clock, randomUUID(), { input, settings });
+  const root = RuntimeRecordHelper.create(new Recorder(book));
+  const execution = ExecutionRecordHelper.create(new Recorder(book), index, clock, randomUUID(), { input, settings }, root.id);
+  const other = ExecutionRecordHelper.create(new Recorder(book), index, clock, randomUUID(), { input, settings }, root.id);
   const def = {
     contextId: randomUUID(),
     executionId: execution.id,
@@ -80,39 +83,39 @@ test('Paired record operations create, find and write results independently of b
     caller: 'execution',
     callee: 'operation',
   };
-  const operation = OperationRecordHelper.create(new RuntimeRecorder(book), index, def, input);
-  const foreign = OperationRecordHelper.create(new RuntimeRecorder(book), index, { ...def, contextId: randomUUID(), executionId: other.id }, input);
-  book.add(new RuntimeRecord({ material: 'reference' }));
+  const operation = OperationRecordHelper.create(new Recorder(book), index, def, input);
+  const foreign = OperationRecordHelper.create(new Recorder(book), index, { ...def, contextId: randomUUID(), executionId: other.id }, input);
+  book.add(new BaseRecord({ material: 'reference' }));
   assert.equal(ExecutionRecordHelper.get(book, execution.id), execution);
   assert.equal(OperationRecordHelper.get(book, operation.id), operation);
-  assert.deepEqual(OperationRecordHelper.findByExecution(book, index, execution.id), [operation]);
-  assert.deepEqual(OperationRecordHelper.findByExecution(book, index, other.id), [foreign]);
+  assert.deepEqual(OperationRecordHelper.findByExecution(new Recorder(book), execution.id), [operation]);
+  assert.deepEqual(OperationRecordHelper.findByExecution(new Recorder(book), other.id), [foreign]);
   assert.throws(() => OperationRecordHelper.get(book, execution.id), /Operation does not exist/);
   assert.throws(() => ExecutionRecordHelper.get(book, operation.id), /Execution does not exist/);
-  assert.throws(() => OperationRecordHelper.findByExecution(book, index, 'missing'), /Execution does not exist/);
+  assert.throws(() => OperationRecordHelper.findByExecution(new Recorder(book), 'missing'), /Execution does not exist/);
   const result = { nested: ['result'] };
-  OperationRecordHelper.complete(book, index, operation.id, result);
-  ExecutionRecordHelper.complete(book, index, execution.id, result);
+  OperationRecordHelper.complete(new Recorder(book), operation.id, result);
+  ExecutionRecordHelper.complete(new Recorder(book), execution.id, result);
   result.nested.push('changed');
   assert.deepEqual(readOutput(operation.value), { nested: ['result'] });
   assert.deepEqual(readOutput(execution.value), { nested: ['result'] });
   const error = { code: 'TEST', message: 'failed', detail: { retry: false } };
-  OperationRecordHelper.fail(book, index, foreign.id, error);
-  ExecutionRecordHelper.fail(book, index, other.id, error);
+  OperationRecordHelper.fail(new Recorder(book), foreign.id, error);
+  ExecutionRecordHelper.fail(new Recorder(book), other.id, error);
   error.detail.retry = true;
   assert.equal(foreign.value.error.detail.retry, false);
   assert.equal(other.value.error.detail.retry, false);
 });
 
-test('RuntimeRecord is the base; execution and operation relations live outside their value', () => {
+test('BaseRecord is the base; execution and operation relations live outside their value', () => {
   const value = { nested: { items: ['a'] } };
-  const base = new RuntimeRecord(value);
+  const base = new BaseRecord(value);
   assert.equal(base.value, value); // Base shape does not impose a content policy.
-  const runtime = createRuntime(),
+  const runtime = createRecordedRuntime(),
     book = runtime.recorder.book,
-    execution = ExecutionRecordHelper.create(new RuntimeRecorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input: value, settings });
+    execution = ExecutionRecordHelper.create(new Recorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input: value, settings }, runtime.record.id);
   const operation = OperationRecordHelper.create(
-    new RuntimeRecorder(book),
+    new Recorder(book),
     runtime.invocationRecordIndex,
     {
       contextId: randomUUID(),
@@ -126,8 +129,8 @@ test('RuntimeRecord is the base; execution and operation relations live outside 
     },
     value,
   );
-  assert.ok(execution instanceof RuntimeRecord && execution instanceof ExecutionRecord);
-  assert.ok(operation instanceof RuntimeRecord && operation instanceof OperationRecord);
+  assert.ok(execution instanceof BaseRecord && execution instanceof ExecutionRecord);
+  assert.ok(operation instanceof BaseRecord && operation instanceof OperationRecord);
   assert.notEqual(operation.id, execution.id);
   assert.equal(operation.executionId, execution.id);
   assert.equal(operation.value.executionId, undefined);
@@ -140,39 +143,39 @@ test('RuntimeRecord is the base; execution and operation relations live outside 
     operation.executionId = 'other';
   }, TypeError);
   assert.equal(book.call, undefined); // Book has no work-execution entry point.
-  assert.throws(() => ExecutionRecordHelper.create(new RuntimeRecorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input: new Map(), settings }), /plain/);
+  assert.throws(() => ExecutionRecordHelper.create(new Recorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input: new Map(), settings }, runtime.record.id), /plain/);
   const cycle = {};
   cycle.self = cycle;
-  assert.throws(() => ExecutionRecordHelper.create(new RuntimeRecorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input: cycle, settings }), /cyclic/);
+  assert.throws(() => ExecutionRecordHelper.create(new Recorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input: cycle, settings }, runtime.record.id), /cyclic/);
 });
 
 test('construction does not execute; repeated calls share the callable identity, not the invocation identity', async () => {
-  const runtime = createRuntime();
+  const runtime = createRecordedRuntime();
   const book = runtime.recorder.book;
   const node = new TestOperation(runtime, echo);
   assert.equal(node.getRecords, undefined);
   assert.equal(node.exeId, undefined);
   const execution = begin(runtime);
-  assert.equal(OperationRecordHelper.findByExecution(book, runtime.invocationRecordIndex, runtime.recording.get(execution.id).id).length, 0);
+  assert.equal(OperationRecordHelper.findByExecution(new Recorder(book), recordFor(execution).id).length, 0);
   const value = { x: 1 };
-  assert.equal(await node.call(execution, value), value);
-  assert.equal(await node.call(execution, value), value);
-  const calls = OperationRecordHelper.findByExecution(book, runtime.invocationRecordIndex, runtime.recording.get(execution.id).id);
+  assert.equal(await node.call(callFor(execution), value), value);
+  assert.equal(await node.call(callFor(execution), value), value);
+  const calls = OperationRecordHelper.findByExecution(new Recorder(book), recordFor(execution).id);
   assert.equal(calls.length, 2);
   assert.notEqual(calls[0].id, calls[1].id);
-  assert.ok(calls.every((op) => op.operationInstanceId === node.id && op.executionId === runtime.recording.get(execution.id).id));
+  assert.ok(calls.every((op) => op.operationInstanceId === node.id && op.executionId === recordFor(execution).id));
   const secondNode = new TestOperation(runtime, echo);
   assert.notEqual(secondNode.id, node.id);
-  const past = ExecutionRecordHelper.observe(runtime.recording, execution);
+  const past = ExecutionRecordHelper.observe(runtime.recording, callFor(execution));
   complete(execution, value);
   value.x = 9;
-  assert.equal(readOutput(ExecutionRecordHelper.observe(runtime.recording, execution).execution.value).x, 1);
+  assert.equal(readOutput(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).execution.value).x, 1);
   assert.equal(readOutput(past.execution.value), undefined);
-  await assert.rejects(node.call(execution, value), /ended/);
+  await assert.rejects(node.call(callFor(execution), value), /ended/);
 });
 
 test('one node overlaps calls within and across executions without mixing input or record ownership', async () => {
-  const runtime = createRuntime(),
+  const runtime = createRecordedRuntime(),
     book = runtime.recorder.book,
     a = begin(runtime),
     b = begin(runtime);
@@ -190,9 +193,9 @@ test('one node overlaps calls within and across executions without mixing input 
       }),
     accept: (result, context) => ({ result, original: runtime.getOperationContext(context).input }),
   });
-  const first = node.call(a, 'a1'),
-    second = node.call(b, 'b'),
-    third = node.call(a, 'a2');
+  const first = node.call(callFor(a), 'a1'),
+    second = node.call(callFor(b), 'b'),
+    third = node.call(callFor(a), 'a2');
   await allStarted;
   pending.get('b')('B');
   assert.deepEqual(await second, { result: 'B', original: 'b' });
@@ -203,24 +206,24 @@ test('one node overlaps calls within and across executions without mixing input 
   assert.deepEqual(await first, { result: 'A1', original: 'a1' });
   complete(a, 'A');
   for (const execution of [a, b]) {
-    const facts = ExecutionRecordHelper.observe(runtime.recording, execution);
+    const facts = ExecutionRecordHelper.observe(runtime.recording, callFor(execution));
     validateSnapshot(facts);
-    assert.ok(facts.operations.every((op) => op.executionId === runtime.recording.get(execution.id).id && op.operationInstanceId === node.id));
+    assert.ok(facts.operations.every((op) => op.executionId === recordFor(execution).id && op.operationInstanceId === node.id));
   }
   assert.deepEqual(
-    OperationRecordHelper.findByExecution(book, runtime.invocationRecordIndex, runtime.recording.get(a.id).id)
+    OperationRecordHelper.findByExecution(new Recorder(book), recordFor(a).id)
 
       .map((op) => readOutput(op.value).original),
     ['a1', 'a2'],
   );
-  assert.equal(OperationRecordHelper.findByExecution(book, runtime.invocationRecordIndex, runtime.recording.get(b.id).id).length, 1);
+  assert.equal(OperationRecordHelper.findByExecution(new Recorder(book), recordFor(b).id).length, 1);
 });
 
 test('Paired operations reject foreign parents, duplicate endings and ending before children', () => {
-  const runtime = createRuntime(),
+  const runtime = createRecordedRuntime(),
     book = runtime.recorder.book,
-    a = ExecutionRecordHelper.create(new RuntimeRecorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input, settings }),
-    b = ExecutionRecordHelper.create(new RuntimeRecorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input, settings });
+    a = ExecutionRecordHelper.create(new Recorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input, settings }, runtime.record.id),
+    b = ExecutionRecordHelper.create(new Recorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input, settings }, runtime.record.id);
   const def = {
     contextId: randomUUID(),
     executionId: a.id,
@@ -231,17 +234,17 @@ test('Paired operations reject foreign parents, duplicate endings and ending bef
     caller: 'execution',
     callee: 'operation',
   };
-  const parent = OperationRecordHelper.create(new RuntimeRecorder(book), runtime.invocationRecordIndex, def, {});
-  assert.throws(() => OperationRecordHelper.create(new RuntimeRecorder(book), runtime.invocationRecordIndex, { ...def, executionId: b.id, parentOperationId: parent.id }, {}), /another execution/);
-  const child = OperationRecordHelper.create(new RuntimeRecorder(book), runtime.invocationRecordIndex, { ...def, contextId: randomUUID(), parentOperationId: parent.id }, {});
-  assert.throws(() => OperationRecordHelper.complete(book, runtime.invocationRecordIndex, parent.id, {}), /active operations/);
-  assert.throws(() => ExecutionRecordHelper.complete(book, runtime.invocationRecordIndex, a.id, {}), /active operations/);
-  OperationRecordHelper.complete(book, runtime.invocationRecordIndex, child.id, {});
-  OperationRecordHelper.complete(book, runtime.invocationRecordIndex, parent.id, {});
-  assert.throws(() => OperationRecordHelper.complete(book, runtime.invocationRecordIndex, parent.id, {}), /ended/);
-  assert.throws(() => OperationRecordHelper.complete(book, runtime.invocationRecordIndex, a.id, {}), /Operation does not exist/);
-  ExecutionRecordHelper.complete(book, runtime.invocationRecordIndex, a.id, {});
-  assert.throws(() => ExecutionRecordHelper.complete(book, runtime.invocationRecordIndex, a.id, {}), /ended/);
+  const parent = OperationRecordHelper.create(new Recorder(book), runtime.invocationRecordIndex, def, {});
+  assert.throws(() => OperationRecordHelper.create(new Recorder(book), runtime.invocationRecordIndex, { ...def, executionId: b.id, parentOperationId: parent.id }, {}), /another execution/);
+  const child = OperationRecordHelper.create(new Recorder(book), runtime.invocationRecordIndex, { ...def, contextId: randomUUID(), parentOperationId: parent.id }, {});
+  assert.throws(() => OperationRecordHelper.complete(new Recorder(book), parent.id, {}), /active operations/);
+  assert.throws(() => ExecutionRecordHelper.complete(new Recorder(book), a.id, {}), /active operations/);
+  OperationRecordHelper.complete(new Recorder(book), child.id, {});
+  OperationRecordHelper.complete(new Recorder(book), parent.id, {});
+  assert.throws(() => OperationRecordHelper.complete(new Recorder(book), parent.id, {}), /ended/);
+  assert.throws(() => OperationRecordHelper.complete(new Recorder(book), a.id, {}), /Operation does not exist/);
+  ExecutionRecordHelper.complete(new Recorder(book), a.id, {});
+  assert.throws(() => ExecutionRecordHelper.complete(new Recorder(book), a.id, {}), /ended/);
   assert.equal(a.status, 'succeeded');
   assert.equal(parent.status, 'succeeded');
   assert.equal(child.status, 'succeeded');
@@ -315,7 +318,7 @@ test('Acceptance failure preserves raw output, records no accepted result, and p
   assert.equal(readOutput(answer.value), undefined);
   assert.equal(facts.execution.value.error.code, 'INVALID_JSON');
   assert.equal(projectExecution(facts).error.code, 'INVALID_JSON');
-  const runtime = createRuntime(),
+  const runtime = createRecordedRuntime(),
     execution = begin(runtime),
     failure = new RuntimeError('TEST', 'test');
   const node = new TestOperation(runtime, {
@@ -324,9 +327,9 @@ test('Acceptance failure preserves raw output, records no accepted result, and p
       throw failure;
     },
   });
-  await assert.rejects(node.call(execution, input), (error) => error === failure);
+  await assert.rejects(node.call(callFor(execution), input), (error) => error === failure);
   assert.equal(
-    ExecutionRecordHelper.observe(runtime.recording, execution).attempts.some((attempt) => attempt.name === 'accept'),
+    ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).attempts.some((attempt) => attempt.name === 'accept'),
     false,
   );
 });
@@ -417,15 +420,15 @@ test('missing or contradictory facts are rejected instead of repaired by the pro
 
 test('publication failure does not change execution facts or operation output', async (t) => {
   const log = t.mock.method(console, 'error', () => {});
-  const runtime = createRuntime(() => {
+  const runtime = createRecordedRuntime(() => {
     throw new Error('viewer unavailable');
   });
   const execution = begin(runtime);
   const node = new TestOperation(runtime, echo);
-  assert.equal(await node.call(execution, input), input);
+  assert.equal(await node.call(callFor(execution), input), input);
   complete(execution, input);
-  assert.equal(projectExecution(ExecutionRecordHelper.observe(runtime.recording, execution)).status, 'succeeded');
-  const snapshot = ExecutionRecordHelper.observe(runtime.recording, execution);
+  assert.equal(projectExecution(ExecutionRecordHelper.observe(runtime.recording, callFor(execution))).status, 'succeeded');
+  const snapshot = ExecutionRecordHelper.observe(runtime.recording, callFor(execution));
   const processes = [snapshot.execution, ...snapshot.operations, ...snapshot.attempts].reduce((count, record) => count + record.value.processes.length, 0);
   assert.equal(log.mock.callCount(), snapshot.events.length + processes);
 });
@@ -433,9 +436,10 @@ test('publication failure does not change execution facts or operation output', 
 test('Paired operations use the supplied index without scanning Book', (t) => {
   const book = new RecordBook();
   const index = new InvocationRecordIndex(book);
-  const execution = ExecutionRecordHelper.create(new RuntimeRecorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input, settings });
+  const root = RuntimeRecordHelper.create(new Recorder(book));
+  const execution = ExecutionRecordHelper.create(new Recorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input, settings }, root.id);
   const record = OperationRecordHelper.create(
-    new RuntimeRecorder(book),
+    new Recorder(book),
     index,
     {
       contextId: randomUUID(),
@@ -452,28 +456,29 @@ test('Paired operations use the supplied index without scanning Book', (t) => {
   t.mock.method(book, 'values', () => {
     throw new Error('Unexpected full scan');
   });
-  assert.deepEqual(OperationRecordHelper.findByExecution(book, index, execution.id), [record]);
-  assert.throws(() => ExecutionRecordHelper.complete(book, index, execution.id, {}), /active operations/);
+  assert.deepEqual(OperationRecordHelper.findByExecution(new Recorder(book), execution.id), [record]);
+  assert.throws(() => ExecutionRecordHelper.complete(new Recorder(book), execution.id, {}), /active operations/);
   assert.equal(execution.status, 'running');
   assert.equal(Object.hasOwn(execution.value, 'output'), false);
   const cycle = {};
   cycle.self = cycle;
-  assert.throws(() => OperationRecordHelper.complete(book, index, record.id, cycle), /cyclic/);
+  assert.throws(() => OperationRecordHelper.complete(new Recorder(book), record.id, cycle), /cyclic/);
   assert.equal(record.status, 'running');
   assert.equal(Object.hasOwn(record.value, 'output'), false);
-  OperationRecordHelper.complete(book, index, record.id, {});
-  ExecutionRecordHelper.complete(book, index, execution.id, {});
+  OperationRecordHelper.complete(new Recorder(book), record.id, {});
+  ExecutionRecordHelper.complete(new Recorder(book), execution.id, {});
   assert.equal(record.status, 'succeeded');
   assert.equal(execution.status, 'succeeded');
   assert.throws(() => {
     record.status = 'running';
   }, TypeError);
-  assert.throws(() => OperationRecordHelper.fail(book, index, record.id, { code: 'x', message: 'x' }), /ended/);
+  assert.throws(() => OperationRecordHelper.fail(new Recorder(book), record.id, { code: 'x', message: 'x' }), /ended/);
 });
 
 test('Failed index registration does not register a partial operation', (t) => {
   const book = new RecordBook();
-  const execution = ExecutionRecordHelper.create(new RuntimeRecorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input, settings });
+  const root = RuntimeRecordHelper.create(new Recorder(book));
+  const execution = ExecutionRecordHelper.create(new Recorder(book), new InvocationRecordIndex(book), new Clock(), randomUUID(), { input, settings }, root.id);
   const failure = new Error('index rejected');
   const index = new InvocationRecordIndex(book);
   t.mock.method(index, 'add', () => {
@@ -482,7 +487,7 @@ test('Failed index registration does not register a partial operation', (t) => {
   assert.throws(
     () =>
       OperationRecordHelper.create(
-        new RuntimeRecorder(book),
+        new Recorder(book),
         index,
         {
           contextId: randomUUID(),
@@ -498,6 +503,6 @@ test('Failed index registration does not register a partial operation', (t) => {
       ),
     (error) => error.code === 'RECORDING_FAILED' && error.cause === failure,
   );
-  assert.deepEqual([...book.values()], [execution]);
+  assert.deepEqual([...book.values()], [root, execution]);
   assert.deepEqual(index.operationsOf(execution.id), []);
 });

@@ -1,5 +1,5 @@
 import { hasOutput, readOutput, validateSnapshot } from '@capix-observer/protocol';
-import type { RuntimeSnapshot, OperationRecord, OperationValue, GenerationOutput, ModelSettings } from '@capix-observer/protocol';
+import type { RuntimeSnapshot, OperationRecord, InvocationValue, GenerationOutput, ModelSettings } from '@capix-observer/protocol';
 import type { CallSpan, Trace } from './types.js';
 export { validateSnapshot } from '@capix-observer/protocol';
 
@@ -9,7 +9,7 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
   const execution = facts.execution;
   const starts = new Map(facts.events.filter((e) => e.value.type === 'call').map((e) => [e.callId, e]));
   const ends = new Map(facts.events.filter((e) => e.value.type !== 'call').map((e) => [e.callId, e]));
-  const result = (id: string, body: OperationValue, status: OperationRecord['status']) => {
+  const result = (id: string, body: InvocationValue, status: OperationRecord['status']) => {
     const start = starts.get(id)!;
     const end = ends.get(id);
     return {

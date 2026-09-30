@@ -1,5 +1,20 @@
 import { Invocation, writeRecord, ExecutionContext, OperationContext, AttemptContext, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
 
+// Test-only lookup for legacy manual-boundary fixtures, never part of the runtime.
+const calls = new WeakMap();
+export function rememberCall(invocation) {
+  calls.set(invocation.context, invocation);
+  return invocation;
+}
+export function callFor(context) {
+  const invocation = calls.get(context);
+  if (!invocation) throw new Error('Test fixture has not captured this invocation');
+  return invocation;
+}
+export function recordFor(context) {
+  return callFor(context).record;
+}
+
 // Manual context boundaries for record tests; actual work always uses production Invocation.
 export function lifecycleFor(runtime) {
   const recording = runtime.recording;
@@ -8,14 +23,14 @@ export function lifecycleFor(runtime) {
       return invocationLifecycle(() => new ExecutionContext(request.input, request), recording ? ExecutionRecordHelper.recording(recording) : undefined);
     },
     operation(execution, operation, input, parent) {
+      if (parent && parent.executionContext !== execution) throw new Error('Parent operation belongs to another execution');
       return invocationLifecycle(
         () => {
           execution.requireRunning();
           parent?.requireRunning();
-          if (parent && parent.executionContext !== execution) throw new Error('Parent operation belongs to another execution');
           return new OperationContext(execution, input);
         },
-        recording ? OperationRecordHelper.recording(recording, operation, parent) : undefined,
+        recording ? OperationRecordHelper.recording(recording, operation, callFor(parent ?? execution)) : undefined,
       );
     },
     attempt(operation, attempt, input) {
@@ -25,7 +40,7 @@ export function lifecycleFor(runtime) {
           operation.executionContext.requireRunning();
           return new AttemptContext(operation, input);
         },
-        recording ? AttemptRecordHelper.recording(recording, attempt) : undefined,
+        recording ? AttemptRecordHelper.recording(recording, attempt, callFor(operation)) : undefined,
       );
     },
   };
@@ -38,7 +53,12 @@ function invocationLifecycle(prepare, recording) {
     begin() {
       const context = prepare();
       try {
-        writeRecord(() => recording?.begin(context));
+        const invocation = rememberCall({ context, record: undefined });
+        writeRecord(() =>
+          recording?.begin(context, (record) => {
+            invocation.record = record;
+          }),
+        );
       } catch (error) {
         context.fail(error);
         throw error;
@@ -47,15 +67,15 @@ function invocationLifecycle(prepare, recording) {
     },
     succeed(context, output) {
       context.complete(output);
-      writeRecord(() => recording?.finish(context));
+      writeRecord(() => recording?.finish(context, recordFor(context)));
     },
     fail(context, error) {
       context.fail(error);
-      writeRecord(() => recording?.finish(context));
+      writeRecord(() => recording?.finish(context, recordFor(context)));
     },
   };
 }
 
 export async function invoke(lifecycle, execute) {
-  return new Invocation({ context: lifecycle.prepare(), work: { execute, maxRounds: 1 }, signal: new AbortController().signal, recording: lifecycle.recording }).run();
+  return rememberCall(new Invocation({ context: lifecycle.prepare(), work: { execute, maxRounds: 1 }, signal: new AbortController().signal, recording: lifecycle.recording })).run();
 }

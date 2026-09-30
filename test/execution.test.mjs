@@ -1,8 +1,9 @@
+import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
 import { subscribeExecutions } from '@capix-observer/service';
 import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Execution, Runtime, RuntimeRecorder, RecordBook } from '@capix-observer/runtime';
+import { Execution, Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
 import { ObserverExecution } from '@capix-observer/service';
 
 import { TestOperation } from './fixtures/operation.mjs';
@@ -12,8 +13,8 @@ const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, t
 
 test('one Execution and Operation can be called again after success and failure with fresh Contexts and records', async () => {
   const snapshots = [];
-  const recorder = new RuntimeRecorder(new RecordBook(), undefined);
-  const runtime = new Runtime({ recorder: recorder });
+  const recorder = new Recorder(new RecordBook(), undefined);
+  const runtime = createRuntime({ recorder: recorder });
   subscribeExecutions(runtime.recording, (snapshot) => snapshots.push(snapshot));
   const failure = new Error('work failed');
   const contexts = [];
@@ -26,9 +27,10 @@ test('one Execution and Operation can be called again after success and failure 
     accept: (value) => value,
   });
   class EchoExecution extends Execution {
-    execute(context) {
+    execute(context, invocation) {
+      rememberCall(invocation);
       contexts.push(context);
-      return operation.call(context, context.input);
+      return operation.call(invocation, context.input);
     }
   }
   const execution = new EchoExecution(runtime.executionInvocations);
@@ -43,7 +45,7 @@ test('one Execution and Operation can be called again after success and failure 
     contexts.map((context) => context.status),
     ['succeeded', 'failed', 'succeeded'],
   );
-  const records = contexts.map((context) => ExecutionRecordHelper.observe(runtime.recording, context));
+  const records = contexts.map((context) => ExecutionRecordHelper.observe(runtime.recording, callFor(context)));
   assert.equal(new Set(records.map((snapshot) => snapshot.execution.id)).size, 3);
   assert.equal(new Set(records.map((snapshot) => snapshot.operations[0].id)).size, 3);
   assert.ok(records.every((snapshot) => snapshot.operations[0].operationInstanceId === operation.id));
@@ -61,14 +63,14 @@ test('ObserverExecution returns answers without a recorder and uses the configur
       return { id: 'test', model: request.model, content: JSON.stringify(purpose === 'memory' ? { memories: [] } : purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' }), finishReason: 'stop', usage: null };
     },
   };
-  const runtime = new Runtime();
+  const runtime = createRuntime();
   const execution = new ObserverExecution(runtime, provider);
   for (const model of ['one', 'two']) {
-    runtime.transcript.append({ role: 'user', content: model });
-    const message = runtime.transcript.current('user');
-    const answer = await execution.call(message, { settings: { ...settings, model }, transcript: runtime.transcript });
+    runtime.context.transcript.append({ role: 'user', content: model });
+    const message = runtime.context.transcript.current('user');
+    const answer = await execution.call(message, { settings: { ...settings, model }, transcript: runtime.context.transcript });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });
-    assert.equal(runtime.transcript.current('assistant').content, 'done');
+    assert.equal(runtime.context.transcript.current('assistant').content, 'done');
   }
   assert.deepEqual(
     requests.map((request) => request.model),

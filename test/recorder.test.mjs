@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeRecorder, RuntimeRecord, RecordBook, RecordIndex, Runtime, Execution, TranscriptRecord, MemoryRecord, ExecutionRecordHelper } from '@capix-observer/runtime';
+import { Recorder, BaseRecord, RecordBook, RecordIndex, Execution, TranscriptRecord, MemoryRecord, ExecutionRecordHelper, createRuntime } from '@capix-observer/runtime';
 import { subscribeExecutions } from '@capix-observer/service';
 import { validateSnapshot } from '@capix-observer/protocol';
 
-class CustomRecord extends RuntimeRecord {
+class CustomRecord extends BaseRecord {
   revise(value) {
     this.replaceValue(value);
   }
 }
 
 test('Recorder accepts an unrelated record kind, updates only its own instance and isolates subscriber failures', (t) => {
-  const recorder = new RuntimeRecorder(new RecordBook());
+  const recorder = new Recorder(new RecordBook());
   const received = [];
   const errors = [];
   t.mock.method(console, 'error', (message) => errors.push(message));
@@ -56,7 +56,7 @@ test('Recorder undoes registration indexes on index or Book failure and does not
   }
   for (const rejectIndex of [true, false]) {
     const book = rejectIndex ? new RecordBook() : new RejectBook();
-    const recorder = new RuntimeRecorder(book);
+    const recorder = new Recorder(book);
     const first = new RecordIndex(() => 'key');
     const second = new RecordIndex(() => {
       if (rejectIndex) throw new Error('index rejected');
@@ -77,14 +77,14 @@ test('Recorder undoes registration indexes on index or Book failure and does not
 });
 
 test('content notifications are visible to generic subscribers without manufacturing execution snapshots', () => {
-  const recorder = new RuntimeRecorder(new RecordBook());
-  const runtime = new Runtime({ recorder });
+  const recorder = new Recorder(new RecordBook());
+  const runtime = createRuntime({ recorder });
   const changes = [];
   const snapshots = [];
   recorder.subscribe((record) => changes.push(record));
   const unsubscribe = subscribeExecutions(runtime.recording, (snapshot) => snapshots.push(snapshot));
-  runtime.transcript.append({ role: 'user', content: '北京' });
-  runtime.memories.apply([{ action: 'create', memoryId: null, change: '确认城市', sourceIndexes: [0], result: { topic: '地点', content: '北京', sourceIndexes: [0] } }]);
+  runtime.context.transcript.append({ role: 'user', content: '北京' });
+  runtime.context.memories.apply([{ action: 'create', memoryId: null, change: '确认城市', sourceIndexes: [0], result: { topic: '地点', content: '北京', sourceIndexes: [0] } }]);
   assert.equal(changes.length, 2);
   assert.ok(changes[0] instanceof TranscriptRecord);
   assert.ok(changes[1] instanceof MemoryRecord);
@@ -94,9 +94,9 @@ test('content notifications are visible to generic subscribers without manufactu
 });
 
 test('Observer projects only its own call scope even when two Runtimes share one Recorder', async () => {
-  const recorder = new RuntimeRecorder(new RecordBook());
-  const a = new Runtime({ recorder });
-  const b = new Runtime({ recorder });
+  const recorder = new Recorder(new RecordBook());
+  const a = createRuntime({ recorder });
+  const b = createRuntime({ recorder });
   const views = [];
   const unsubscribe = subscribeExecutions(a.recording, (snapshot) => {
     validateSnapshot(snapshot);
@@ -109,20 +109,20 @@ test('Observer projects only its own call scope even when two Runtimes share one
   }
   let first;
   let other;
-  await new Echo(a.executionInvocations).call('one', { settings: {} }, (context) => {
-    first = context;
+  await new Echo(a.executionInvocations).call('one', { settings: {} }, (context, invocation) => {
+    first = invocation;
   });
   const count = views.length;
-  await new Echo(b.executionInvocations).call('two', { settings: {} }, (context) => {
-    other = context;
+  await new Echo(b.executionInvocations).call('two', { settings: {} }, (context, invocation) => {
+    other = invocation;
   });
   assert.ok(count > 0);
   assert.equal(views.length, count);
   assert.equal(views.at(-1).execution.status, 'succeeded');
-  assert.throws(() => a.recording.get(other.id));
-  const source = a.recording.source(first);
+  assert.throws(() => ExecutionRecordHelper.observe(a.recording, other), /does not exist/);
+  const source = first.source;
   assert.equal(source.callId, ExecutionRecordHelper.observe(a.recording, first).execution.id);
-  a.transcript.appendFrom([{ role: 'assistant', content: '已完成' }], source);
+  a.context.transcript.appendFrom([{ role: 'assistant', content: '已完成' }], source);
   const appended = [...recorder.book.values()].at(-1);
   assert.equal(appended.callId, source.callId);
   assert.equal(appended.executionId, source.executionId);

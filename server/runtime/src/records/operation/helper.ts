@@ -1,8 +1,10 @@
+import type { Invocation } from '../../invocation/invocation.js';
+import type { ExecutionContext } from '../../context/execution.js';
 import type { OperationContext } from '../../context/operation.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 import { RuntimeErrorHelper } from '../../errors/helper.js';
 
-import type { RuntimeRecorder } from '../recorder.js';
+import type { Recorder } from '../recorder.js';
 import type { RuntimeErrorValue } from '@capix-observer/protocol';
 import type { RecordBook } from '../container/book.js';
 import type { InvocationRecordIndex } from '../invocation/index.js';
@@ -17,26 +19,25 @@ export interface OperationDescription {
   readonly source: string;
 }
 
-/** Operation-specific recording operations. Index keys here represent execution IDs. */
+/** Operation recording; scope queries and completion checks follow the record tree. */
 export class OperationRecordHelper {
-  static recording<I, O>(recording: InvocationRecordHelper, operation: OperationDescription, parentContext?: OperationContext) {
+  static recording<I, O>(recording: InvocationRecordHelper, operation: OperationDescription, parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>) {
     return recording.recording<OperationContext<I, O>>(
       (context) => {
-        const execution = recording.get(context.executionContext.id);
-        if (!(execution instanceof ExecutionRecord)) throw new Error('Execution record does not exist');
-        const parent = parentContext ? recording.get(parentContext.id) : undefined;
-        if (parent && !(parent instanceof OperationRecord)) throw new Error('Parent operation record does not exist');
-        return this.create(recording.recorder, recording.index, { operationInstanceId: operation.id, operation: operation.name, label: operation.label, source: operation.source, caller: parentContext ? 'operation' : 'execution', callee: 'operation', contextId: context.id, executionId: execution.id, ...(parent ? { parentOperationId: parent.id } : {}) }, context.input);
+        const owner = parent.record;
+        if (!(owner instanceof ExecutionRecord || owner instanceof OperationRecord) || recording.recorder.book.get(owner.id) !== owner) throw new Error('Parent invocation record is not registered here');
+        const executionId = owner instanceof ExecutionRecord ? owner.id : owner.executionId;
+        return this.create(recording.recorder, recording.index, { operationInstanceId: operation.id, operation: operation.name, label: operation.label, source: operation.source, caller: owner instanceof OperationRecord ? 'operation' : 'execution', callee: 'operation', contextId: context.id, executionId, ...(owner instanceof OperationRecord ? { parentOperationId: owner.id } : {}) }, context.input);
       },
       (context, record, resultOf) => {
         const state = context.state;
-        if (state.status === 'succeeded') this.complete(recording.recorder.book, recording.index, record.id, state.output, resultOf);
-        else if (state.status === 'failed') this.fail(recording.recorder.book, recording.index, record.id, RuntimeErrorHelper.format(state.error));
+        if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);
+        else if (state.status === 'failed') this.fail(recording.recorder, record.id, RuntimeErrorHelper.format(state.error));
       },
     );
   }
 
-  static create(recorder: RuntimeRecorder, index: InvocationRecordIndex, definition: OperationRecordDefinition, input: unknown): OperationRecord {
+  static create(recorder: Recorder, index: InvocationRecordIndex, definition: OperationRecordDefinition, input: unknown): OperationRecord {
     const book = recorder.book;
     const execution = book.get(definition.executionId);
     if (!(execution instanceof ExecutionRecord)) throw new Error('Execution does not exist');
@@ -56,26 +57,26 @@ export class OperationRecordHelper {
     return record;
   }
 
-  static findByExecution(book: RecordBook, index: InvocationRecordIndex, executionId: string): readonly OperationRecord[] {
-    if (!(book.get(executionId) instanceof ExecutionRecord)) throw new Error('Execution does not exist');
-    return index.operationsOf(executionId);
+  static findByExecution(recorder: Recorder, executionId: string): readonly OperationRecord[] {
+    if (!(recorder.book.get(executionId) instanceof ExecutionRecord)) throw new Error('Execution does not exist');
+    return recorder.tree.descendants(executionId).filter((record): record is OperationRecord => record instanceof OperationRecord);
   }
 
-  static complete(book: RecordBook, index: InvocationRecordIndex, id: string, output: unknown, resultOf?: number): void {
-    const record = this.prepareFinish(book, index, id);
+  static complete(recorder: Recorder, id: string, output: unknown, resultOf?: number): void {
+    const record = this.prepareFinish(recorder, id);
     record.complete(output, resultOf);
   }
 
-  static fail(book: RecordBook, index: InvocationRecordIndex, id: string, error: RuntimeErrorValue): void {
-    const record = this.prepareFinish(book, index, id);
+  static fail(recorder: Recorder, id: string, error: RuntimeErrorValue): void {
+    const record = this.prepareFinish(recorder, id);
     record.fail(error);
   }
 
-  private static prepareFinish(book: RecordBook, index: InvocationRecordIndex, id: string): OperationRecord {
-    const record = this.get(book, id);
+  private static prepareFinish(recorder: Recorder, id: string): OperationRecord {
+    const record = this.get(recorder.book, id);
     if (record.status !== 'running') throw new Error('Record has already ended');
-    if (this.findByExecution(book, index, record.executionId).some((op) => op.parentOperationId === id && op.status === 'running')) throw new Error('Cannot end a record with active operations');
-    if (AttemptRecordHelper.findByOperation(book, index, id).some((attempt) => attempt.status === 'running')) throw new Error('Cannot end a record with active attempts');
+    if (recorder.tree.children(id).some((op) => op instanceof OperationRecord && op.status === 'running')) throw new Error('Cannot end a record with active operations');
+    if (AttemptRecordHelper.findByOperation(recorder, id).some((attempt) => attempt.status === 'running')) throw new Error('Cannot end a record with active attempts');
     return record;
   }
 }

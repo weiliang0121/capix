@@ -1,4 +1,5 @@
-import type { RuntimeRecorder } from '../recorder.js';
+import { sortBy } from 'es-toolkit/array';
+import type { Recorder } from '../recorder.js';
 import { isFinite } from 'es-toolkit/compat';
 import type { EventValue } from '@capix-observer/protocol';
 import type { Clock } from '../../runtime/clock.js';
@@ -11,7 +12,7 @@ import { EventRecord } from './record.js';
 
 /** Call-boundary recording; Book and the execution index remain generic containers. */
 export class EventRecordHelper {
-  static create(recorder: RuntimeRecorder, index: InvocationRecordIndex, clock: Clock, start: number, executionId: string, callId: string, type: EventValue['type']): EventRecord {
+  static create(recorder: Recorder, index: InvocationRecordIndex, clock: Clock, start: number, executionId: string, callId: string, type: EventValue['type']): EventRecord {
     const book = recorder.book;
     this.requireExecution(book, executionId);
     const call = this.requireCall(book, executionId, callId);
@@ -30,9 +31,12 @@ export class EventRecordHelper {
     return record;
   }
 
-  static findByExecution(book: RecordBook, index: InvocationRecordIndex, executionId: string): readonly EventRecord[] {
-    this.requireExecution(book, executionId);
-    return index.eventsOf(executionId);
+  static findByExecution(recorder: Recorder, executionId: string): readonly EventRecord[] {
+    this.requireExecution(recorder.book, executionId);
+    return sortBy(
+      recorder.tree.descendants(executionId).filter((record): record is EventRecord => record instanceof EventRecord),
+      [(event) => event.sequence],
+    );
   }
 
   static last(book: RecordBook, index: InvocationRecordIndex, executionId: string): EventRecord | undefined {

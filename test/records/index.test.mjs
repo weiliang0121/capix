@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RecordBook, RecordIndex, RuntimeRecord } from '@capix-observer/runtime';
+import { RecordBook, RecordIndex, BaseRecord } from '@capix-observer/runtime';
 
 test('Selectors index the same records by different keys without changing Book', () => {
   const book = new RecordBook();
   const byGroup = new RecordIndex((record) => record.value.group);
   const byLabel = new RecordIndex((record) => record.value.label);
-  const a = book.add(new RuntimeRecord({ group: 'g1', label: 'x' }));
-  const b = book.add(new RuntimeRecord({ group: 'g1', label: 'y' }));
-  const c = book.add(new RuntimeRecord({ group: 'g2', label: 'x' }));
+  const a = book.add(new BaseRecord({ group: 'g1', label: 'x' }));
+  const b = book.add(new BaseRecord({ group: 'g1', label: 'y' }));
+  const c = book.add(new BaseRecord({ group: 'g2', label: 'x' }));
   for (const record of book.values()) {
     byGroup.add(record);
     byLabel.add(record);
@@ -31,7 +31,7 @@ test('Selectors index the same records by different keys without changing Book',
 });
 
 test('Explicit reindexing moves membership; remove uses the previously indexed key', () => {
-  const record = new RuntimeRecord({ key: '' });
+  const record = new BaseRecord({ key: '' });
   const index = new RecordIndex((item) => item.value.key);
   index.add(record);
   index.add(record);
@@ -57,7 +57,7 @@ test('A failed selector preserves existing memberships', () => {
     if (record.value.key === 'invalid') throw failure;
     return record.value.key;
   });
-  const record = new RuntimeRecord({ key: 'original' });
+  const record = new BaseRecord({ key: 'original' });
   index.add(record);
   record.value.key = 'invalid';
   assert.throws(

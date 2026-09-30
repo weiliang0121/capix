@@ -1,3 +1,4 @@
+import type { Invocation } from '../invocation/invocation.js';
 import { randomUUID } from 'node:crypto';
 import { InvocationBehavior } from '../invocation/behavior.js';
 import type { ExecutionContext } from '../context/execution.js';
@@ -15,7 +16,7 @@ export abstract class Operation<I, O> extends InvocationBehavior<I, O, Operation
     super();
   }
 
-  async call(execution: ExecutionContext, input: I, parent?: OperationContext): Promise<O> {
-    return this.invocations.create<I, O>(execution, input, this, this.work, parent).run();
+  async call(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, input: I): Promise<O> {
+    return this.invocations.create<I, O>(parent, input, this, this.work).run();
   }
 }

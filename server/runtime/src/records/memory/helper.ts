@@ -5,8 +5,8 @@ import { MemoryRecord } from './record.js';
 
 /** Record ownership is resolved here, never added to the live memory or its input. */
 export class MemoryRecordHelper {
-  static create(memoryId: string, value: MemoryRecordValue, source?: ChangeSource): MemoryRecord {
-    return new MemoryRecord(memoryId, source?.executionId, source?.operationId, value, source?.contextId, source?.callId);
+  static create(memoryId: string, memoriesId: string, sequence: number, value: MemoryRecordValue, source?: ChangeSource): MemoryRecord {
+    return new MemoryRecord(memoryId, memoriesId, sequence, source?.executionId, source?.operationId, value, source?.contextId, source?.callId);
   }
 
   /** RecordBook preserves actual registration order; no inferred diff or previous-record link. */

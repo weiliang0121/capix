@@ -1,3 +1,4 @@
+import type { Invocation } from '@capix-observer/runtime';
 import { sortBy } from 'es-toolkit/array';
 import type { ModelRequest, Selection } from '../../model/types.js';
 import { type ExecutionContext, Operation, type Runtime, type OperationContext, type Memory } from '@capix-observer/runtime';
@@ -42,11 +43,11 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     this.acceptOutput = new AcceptModelOutput(runtime.attemptInvocations, this.output);
   }
 
-  protected async execute(context: OperationContext<GenerationInput, GenerationOutput>): Promise<GenerationOutput> {
-    const assembled = await this.assemble.call(context, context.currentInput.selection);
-    const request = await this.prepareRequest.call(context, { ...assembled, memories: context.currentInput.memories });
-    const output = await this.invokeModel.call(context, request);
-    return this.acceptOutput.call(context, output);
+  protected async execute(context: OperationContext<GenerationInput, GenerationOutput>, invocation: Invocation<GenerationInput, GenerationOutput, OperationContext<GenerationInput, GenerationOutput>>): Promise<GenerationOutput> {
+    const assembled = await this.assemble.call(invocation, context.currentInput.selection);
+    const request = await this.prepareRequest.call(invocation, { ...assembled, memories: context.currentInput.memories });
+    const output = await this.invokeModel.call(invocation, request);
+    return this.acceptOutput.call(invocation, output);
   }
 
   protected createRequest(input: AssembledContext & { memories: GenerationInput['memories'] }, execution: ExecutionContext): ModelRequest {

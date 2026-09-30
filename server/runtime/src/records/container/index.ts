@@ -1,8 +1,8 @@
 import { isUndefined } from 'es-toolkit/predicate';
-import type { RuntimeRecord } from '@capix-observer/protocol';
+import type { BaseRecord } from '@capix-observer/protocol';
 
 /** Derived lookup data only. Call add again to index a record's changed key. */
-export class RecordIndex<R extends RuntimeRecord<unknown>> {
+export class RecordIndex<R extends BaseRecord<unknown>> {
   readonly #idsByKey = new Map<string, Set<string>>();
   readonly #keyById = new Map<string, string>();
 

@@ -5,7 +5,7 @@ import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord } from '../attempt/record.js';
 import { EventRecord } from '../event/record.js';
 
-export type CallRecord = ExecutionRecord | OperationRecord | AttemptRecord;
+import type { CallRecord } from './record.js';
 
 /** Derived call associations. Records belong to Book; lifecycle and timing belong to recording. */
 export class InvocationRecordIndex {
@@ -41,11 +41,6 @@ export class InvocationRecordIndex {
     const record = this.book.get(id);
     if (!(record instanceof ExecutionRecord || record instanceof OperationRecord || record instanceof AttemptRecord) || record.contextId !== contextId) throw new Error('Invalid context record index');
     return record;
-  }
-
-  hasExecution(executionId: string): boolean {
-    const record = this.book.get(executionId);
-    return record instanceof ExecutionRecord && this.findByContext(record.contextId) === record;
   }
 
   operationsOf(executionId: string): readonly OperationRecord[] {

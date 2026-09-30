@@ -1,3 +1,4 @@
+import { callFor } from './fixtures/lifecycle.mjs';
 import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import { TestOperation } from './fixtures/operation.mjs';
@@ -5,7 +6,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { observeFixture, createInput } from './fixtures/observer.mjs';
 import { DeepSeekProvider, acceptExecutionInput, answerOutputContract, selectionOutputContract, memoryOutputContract } from '@capix-observer/service';
-import { Transcript, RecordBook, RuntimeRecorder, Runtime } from '@capix-observer/runtime';
+import { Transcript, RecordBook, Recorder, Runtime, createRuntime } from '@capix-observer/runtime';
 
 import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
 
@@ -227,7 +228,7 @@ test('failure propagates through calls, is caught by Observer execution, and nev
 
 test('sequence ordering follows completion when calls overlap', async () => {
   const book = new RecordBook();
-  const runtime = new Runtime({ recorder: new RuntimeRecorder(book) });
+  const runtime = createRuntime({ recorder: new Recorder(book) });
   const execution = lifecycleFor(runtime).execution({ input, settings }).begin();
   const resolvers = [];
   class FirstOperation extends TestOperation {
@@ -243,7 +244,7 @@ test('sequence ordering follows completion when calls overlap', async () => {
   await second;
   resolvers[0]('first');
   await first;
-  const facts = ExecutionRecordHelper.observe(runtime.recording, execution);
+  const facts = ExecutionRecordHelper.observe(runtime.recording, callFor(execution));
   assert.deepEqual(
     facts.events.filter((e) => e.callId !== facts.execution.id).map((e) => `${e.value.type}:${facts.operations.find((op) => op.id === e.callId).operation}`),
     ['call:a', 'call:b', 'return:b', 'return:a'],

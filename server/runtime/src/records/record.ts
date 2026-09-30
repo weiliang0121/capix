@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import type { RuntimeRecord as RecordData } from '@capix-observer/protocol';
+import type { BaseRecord as RecordData } from '@capix-observer/protocol';
 
-/** Identity and body only. Snapshot policy belongs to concrete records. */
-export class RuntimeRecord<T> implements RecordData<T> {
+/** Identity, direct ownership and body. Snapshot policy belongs to concrete records. */
+export abstract class BaseRecord<T> implements RecordData<T> {
   readonly id = randomUUID();
   #value: T;
-  constructor(value: T) {
+  readonly #parentId?: string;
+  constructor(value: T, parentId?: string) {
+    this.#parentId = parentId;
     this.#value = value;
+  }
+  get parentId(): string | undefined {
+    return this.#parentId;
   }
   get value(): T {
     return this.#value;
@@ -15,6 +20,6 @@ export class RuntimeRecord<T> implements RecordData<T> {
     this.#value = value;
   }
   toJSON(): RecordData<T> {
-    return { id: this.id, value: this.value };
+    return { id: this.id, ...(this.parentId ? { parentId: this.parentId } : {}), value: this.value };
   }
 }

@@ -33,3 +33,9 @@ availableMemoryIds 来自本轮输入快照，只表示可见，不能宣称模�
 ## 内容变化记录
 
 MemoryRecord 的 executionId/operationId 改为可选，contextId/callId 可选并标识实际来源调用；由运行外部直接接纳的记忆变化没有虚构调用归属。TranscriptRecord 表达追加或分段，包含 transcriptId、occurredAt 与可选调用来源。内容记录不加入 RuntimeSnapshot 的 EOA 节点列表，不新增增量协议或恢复行为。
+
+## Runtime 根记录与通用命名
+
+BaseRecord 表达身份、直接 parentId 与正文；CompositeRecord 增加 childIds。RuntimeRecord 是具体根记录，value 当前只有 createdAt；InvocationValue 是 E/O/A 共用调用正文。Recorder 是服务端环境登记机制，不属于跨端协议。RuntimeContext 是运行现场，也不加入协议。
+
+执行记录的 parentId 现在指向 RuntimeRecord。当前 RuntimeSnapshot 仍为一次执行的 E/O/A/事件视图，不附带 Runtime 根正文；响应外的 parentId/childIds 引用不意味着已完整装载整棵树。此次不设计增量游标、持久化或恢复契约。

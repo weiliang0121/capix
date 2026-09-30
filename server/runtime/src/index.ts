@@ -17,6 +17,8 @@ export * from './records/recorder.js';
 export * from './records/value/snapshot.js';
 export * from './runtime/clock.js';
 export * from './runtime/runtime.js';
+export * from './runtime/create.js';
+export * from './context/runtime.js';
 export * from './transcript/observe.js';
 export * from './transcript/ref.js';
 export * from './transcript/transcript.js';
@@ -32,7 +34,8 @@ export * from './records/error.js';
 
 export type { InvocationRecording } from './invocation/recording.js';
 export { InvocationRecordHelper } from './records/invocation/helper.js';
-export { InvocationRecordIndex, type CallRecord } from './records/invocation/index.js';
+export { InvocationRecordIndex } from './records/invocation/index.js';
+export type { CallRecord } from './records/invocation/record.js';
 export { TranscriptRecordHelper } from './records/transcript/helper.js';
 
 export * from './context/execution/builder.js';

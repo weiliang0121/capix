@@ -1,20 +1,29 @@
+import { randomUUID } from 'node:crypto';
 import { MemoryRecordHelper } from '../records/memory/helper.js';
 import { writeRecord } from '../records/error.js';
 import { isEqual, isNull } from 'es-toolkit/predicate';
 import { Memory, updateMemory } from './memory.js';
 import type { MemoryChange } from './change.js';
 import type { Transcript } from '../transcript/transcript.js';
-import type { RuntimeRecorder } from '../records/recorder.js';
+import type { Recorder } from '../records/recorder.js';
 import type { ChangeSource } from '../records/source.js';
 import { isNonBlankString } from '../value/string.js';
 import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
 
 /** Current running memory. Every formal mutation is validated and recorded at this boundary. */
 export class Memories {
+  readonly id = randomUUID();
+  #sequence = 0;
+
+  /** Number of formal changes in this collection, independent of recording. */
+  get sequence(): number {
+    return this.#sequence;
+  }
+
   readonly #items = new Map<string, Memory>();
   constructor(
     readonly transcript: Transcript,
-    private readonly recorder?: RuntimeRecorder,
+    private readonly recorder?: Recorder,
   ) {}
 
   get(id: string): Memory | undefined {
@@ -52,9 +61,10 @@ export class Memories {
       const memory = previous ?? new Memory(this.transcript, result);
       if (previous) updateMemory(memory, result);
       else this.#items.set(memory.id, memory);
+      const sequence = ++this.#sequence;
       applied.push(memory);
       const recorder = this.recorder;
-      if (recorder) writeRecord(() => recorder.add(MemoryRecordHelper.create(memory.id, { action: change.action, change: change.change, sourceIndexes: change.sourceIndexes, result: memory.snapshot() }, source)));
+      if (recorder) writeRecord(() => recorder.add(MemoryRecordHelper.create(memory.id, this.id, sequence, { action: change.action, change: change.change, sourceIndexes: change.sourceIndexes, result: memory.snapshot() }, source)));
     }
     return applied;
   }

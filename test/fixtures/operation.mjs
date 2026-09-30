@@ -1,3 +1,4 @@
+import { callFor, rememberCall } from './lifecycle.mjs';
 import { Operation } from '@capix-observer/runtime';
 import { TestAttempt } from './attempt.mjs';
 
@@ -12,9 +13,10 @@ export class TestOperation extends Operation {
     this.actions = Object.entries(actions).map(([name, work]) => new TestAttempt(runtime, name, work));
   }
 
-  async execute(context) {
+  async execute(context, invocation) {
+    rememberCall(invocation);
     let value = context.currentInput;
-    for (const action of this.actions) value = await action.call(context, value);
+    for (const action of this.actions) value = await action.call(invocation, value);
     return value;
   }
 }

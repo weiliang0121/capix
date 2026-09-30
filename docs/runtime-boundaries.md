@@ -1,18 +1,22 @@
 # Runtime、调用和内容变化边界
 
-Runtime 持有持续运行信息：Transcript、Memories，以及消息选择累计观测值。它们跨多次 E 调用存在，不随 ObserverExecution 或 Operation 的重新实例化重置。运行记忆不是用户画像；当前不分短期／长期存储，不实现持久化或恢复。
+Runtime 通过 RuntimeContext 持有持续运行信息：Transcript、Memories，以及消息选择累计观测值。它们跨多次 E 调用存在，不随 ObserverExecution 或 Operation 的重新实例化重置。运行记忆不是用户画像；当前不分短期／长期存储，不实现持久化或恢复。
 
 ## 装配与持有
 
-环境初始化一个 RuntimeRecorder 和 RecordBook、Clock，再创建 Runtime 和具体 E/O/A 实例。Runtime 接受 recorder 引用，为自身调用建立索引范围，不创建或关闭 Recorder；Transcript、Memories 和 Invocation 的记录接线使用同一个 Recorder。无 Recorder 时，内容与调用仍正常工作。
+环境初始化一个 Recorder 和 RecordBook、Clock，再通过 createRuntime 建立新的数据范围并装配具体 E/O/A 实例。Runtime 接受已建立的 RuntimeContext 与可选的 recorder/record 配对，不创建或关闭 Recorder；Transcript、Memories 和 Invocation 的记录接线使用同一个 Recorder。无 Recorder 时，内容与调用仍正常工作。
 
-`new Runtime({ recorder?, messages? })` 创建独立 Transcript 和 Memories。messages 是待接纳的初始原始消息，经过正常 append 并产生内容记录，不是历史快照导入。initializeObserver 同样接受消息数组，不再接受或转移已有 Transcript 实例。环境的 transcript 属性只是 runtime.transcript 的同一引用。
+`createRuntime({ recorder?, messages? })` 创建独立 Transcript、Memories 与 SelectionUsage，组成 RuntimeContext；开启记录时登记一条 RuntimeRecord，再构造 Runtime。messages 是待接纳的初始原始消息，经过正常 append 并产生内容记录，不是历史快照导入。initializeObserver 同样接受消息数组，不再接受或转移已有 Transcript 实例。环境的 transcript 属性只是 runtime.context.transcript 的同一引用。
+
+`new Runtime(context, { recorder, record })` 只接管显式传入的现场和已登记记录，不清空内容或创建新记录；这不是持久化恢复入口，也不提供多个活动实例共享同一现场时的协调。实例存活、数据范围持续和记录保留分别理解，构造与销毁实例不隐含数据范围的建立或结束。
+
+RuntimeRecord 继承 CompositeRecord，正文目前只有 createdAt，通过 childIds 关联其下的执行记录。它没有调用 IO、processes 或 running/succeeded/failed；某个 E 完成不会结束 R。RuntimeContext 保留内容对象引用，RuntimeRecord 不复制消息或记忆正文。此次不增加 Context ID、持久化、恢复、暂停或完成状态机。
 
 Runtime.run 只负责顶层运行占用：忙时拒绝，不排队；finally 释放。Execution.call 把已有输入交给 submit，委托 ExecutionInvocationBuilder 在占用之后执行同步接纳函数，再建立 Context 和 Invocation。HTTP 使用延迟接纳，因此拒绝并发请求时既不追加消息，也不发送成功响应。直接通过不同 E 实例调用同一个 Runtime，同样受约束。
 
 ## 调用对象
 
-E/O/A 是可复用行为实例，不保存本次调用状态，也不持有 Runtime。构造时分别注入 ExecutionInvocationBuilder、OperationInvocationBuilder、AttemptInvocationBuilder，call 仅交付输入、父级现场及 execute/receive 工作行为。具体 Observer 仍显式持有其业务需要的 Runtime，不能将这一轮误解为全部业务能力注入已经完成。
+E/O/A 是可复用行为实例，不保存本次调用状态，也不持有 Runtime。构造时分别注入 ExecutionInvocationBuilder、OperationInvocationBuilder、AttemptInvocationBuilder，call 仅交付输入、父 Invocation 及 execute/receive 工作行为。具体 Observer 仍显式持有其业务需要的 Runtime，不能将这一轮误解为全部业务能力注入已经完成。
 
 Runtime 装配时创建三层 ContextBuilder 和 InvocationBuilder，跨调用复用。ExecutionContextBuilder 只持有 Transcript；OperationContextBuilder 通过 ExecutionContextBuilder 检查本次归属，AttemptContextBuilder 通过 OperationContextBuilder 检查直接父级。ExecutionContext 私有保存构造器身份，不再保存完整 Runtime；手工创建、未绑定构造器的 Context 仍保留原有直接使用方式，这不是权限或成员资格体系。O/A 的父级引用本轮保留，具体工作的信息投影及按需能力声明尚未全面迁移。
 
@@ -34,6 +38,10 @@ E/O/A 继承 InvocationBehavior，共享 execute 声明、可选 receive 声明�
 
 具体 receive 决定分支；通用调用只落实继续或结束，保留一／两轮限制、取消检查、默认接收结果引用。局部循环复用同一 Context 和记录；子调用创建独立 Invocation。Attempt 不再细分运行层级。
 
+execute(context, invocation) 与 receive(context, result, invocation) 显式取得本次调用；只使用现场的叶子逻辑可省略 Invocation 参数。Operation.call(parent, input) 接受 E 或 O 的 Invocation，Attempt.call(parent, input) 只接受 O 的 Invocation。嵌套操作直接传父操作调用，不再同时传根 Context 和父 Context。InvocationBuilder 将 parent.context 交给 ContextBuilder 检查和构造，将 parent 交给记录接线读取绑定记录；没有 Context → Invocation 的全局反查表。
+
+Invocation.record 在登记前为空，登记后固定指向本次调用记录；可选 started(context, invocation) 回调发生在登记之前，供调用方捕获调用对象，不保证此时已有记录。回调类型统一为 InvocationStarted，执行入口使用 ExecutionStarted 特化；它是同步接线，在调用有效性检查之后、登记之前执行。回调抛错保持原异常，停止登记与工作并释放顶层占用，不包装成 RecordingError。记录启用时，子调用开始登记要求父调用已登记。原有 Context 活动与 Runtime 归属检查仍保留；未记录的调用不需要伪造记录。
+
 调用建立失败不产生虚构的运行记录。Context 仍沿用原有 running 状态，progress.round=0 表示尚未进入工作；本轮不新增生命周期状态。开始登记失败不执行工作；过程登记失败终止调用，不自动重试。Context 成功结束后，终态登记失败只传播登记异常，不把已完成的工作改判为失败。工作失败且失败登记再次失败时，AggregateError 同时保留两个错误。Runtime 的占用均会释放。
 
 ## 内容的正式变化入口
@@ -42,7 +50,7 @@ Transcript.append / appendFrom 审查整批消息后追加；startSegment 检查
 
 Memories 绑定一个 Transcript，提供 get/values/snapshot/apply。apply 检查完整批次的动作、目标、解释、唯一依据、来源存在性与包含关系，才落实内容。无变化更新不登记。模型提案的可见范围与本轮证据约束仍归提取输出契约。当前记忆体对外只读，无 add 或公开 update 旁路；包内更新保留 Memory 实例与 ID，替换冻结正文。
 
-ApplyMemory 只检查现场并提交提案和因果身份，不自行创建 Memory 或补写记录。Memories 在实际变化发生后调用 Recorder。MemoryRecord 保留变化解释和结果正文，关联执行、操作及实际调用；无调用的变更也能记录，不伪造 executionId/operationId。记录链接在调用侧通过 InvocationRecordHelper.source 解析，再传递给内容对象；不用记录状态裁决记忆变更是否允许。MemoryRecordHelper 构造记录并提供查询，Memories 通过通用 Recorder.add 登记。
+ApplyMemory 只检查现场并提交提案和因果身份，不自行创建 Memory 或补写记录。Memories 在实际变化发生后调用 Recorder。MemoryRecord 保留变化解释和结果正文，关联执行、操作及实际调用；无调用的变更也能记录，不伪造 executionId/operationId。记录链接在调用侧从 invocation.source 取得，由记录接线解释本次绑定记录，再传递给内容对象；不用记录状态裁决记忆变更是否允许。MemoryRecordHelper 构造记录并提供查询，Memories 通过通用 Recorder.add 登记。
 
 提案返回、提案接纳、内容落实是不同事实：提案与接纳结果在调用 IO 中，已落实变化才进入内容记录。登记错误发生时保留已经改变的内容，不虚构回滚或自动重做。批次预检查失败不部分落实；登记期间失败仍可能留下已经落实的批次前缀，当前不承诺事务。
 

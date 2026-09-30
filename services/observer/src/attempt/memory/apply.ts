@@ -1,4 +1,5 @@
-import { Attempt, type AttemptContext, type AttemptInvocationBuilder, type Memories, type ChangeSource } from '@capix-observer/runtime';
+import type { Invocation } from '@capix-observer/runtime';
+import { Attempt, type AttemptContext, type AttemptInvocationBuilder, type Memories } from '@capix-observer/runtime';
 
 import type { MemoryExtraction } from '../../operations/memory/output.js';
 
@@ -12,16 +13,15 @@ export class ApplyMemory extends Attempt<MemoryExtraction, MemoryExtraction> {
   constructor(
     invocations: AttemptInvocationBuilder,
     private readonly memories: Memories,
-    private readonly changeSource?: (context: AttemptContext) => ChangeSource | undefined,
   ) {
     super(invocations);
   }
 
-  protected execute(context: AttemptContext<MemoryExtraction, MemoryExtraction>): MemoryExtraction {
+  protected execute(context: AttemptContext<MemoryExtraction, MemoryExtraction>, invocation: Invocation<MemoryExtraction, MemoryExtraction, AttemptContext<MemoryExtraction, MemoryExtraction>>): MemoryExtraction {
     context.requireRunning();
     context.operationContext.requireRunning();
     context.operationContext.executionContext.requireRunning();
-    this.memories.apply(context.currentInput.memories, this.changeSource?.(context));
+    this.memories.apply(context.currentInput.memories, invocation.source);
     return context.currentInput;
   }
 }

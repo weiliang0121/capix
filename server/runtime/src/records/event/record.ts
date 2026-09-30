@@ -1,11 +1,11 @@
 import { pick } from 'es-toolkit/object';
 import type { EventRecord as EventData, EventValue } from '@capix-observer/protocol';
-import { RuntimeRecord } from '../record.js';
+import { BaseRecord } from '../record.js';
 
-export type EventDefinition = Omit<EventData, 'id' | 'value'>;
+export type EventDefinition = Omit<EventData, 'id' | 'value' | 'parentId'>;
 
 /** An immutable boundary record. It has no live Context or running/ended state. */
-export class EventRecord extends RuntimeRecord<EventValue> implements EventData {
+export class EventRecord extends BaseRecord<EventValue> implements EventData {
   readonly executionId: string;
   readonly callId: string;
   readonly sequence: number;
@@ -13,7 +13,7 @@ export class EventRecord extends RuntimeRecord<EventValue> implements EventData 
   readonly offsetMs: number;
 
   constructor(definition: EventDefinition, value: EventValue) {
-    super(Object.freeze({ type: value.type }));
+    super(Object.freeze({ type: value.type }), definition.callId);
     this.executionId = definition.executionId;
     this.callId = definition.callId;
     this.sequence = definition.sequence;

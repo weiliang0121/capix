@@ -1,8 +1,8 @@
 import type { TranscriptChange, TranscriptRecord as RecordData } from '@capix-observer/protocol';
-import { RuntimeRecord } from '../record.js';
+import { BaseRecord } from '../record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
-export class TranscriptRecord extends RuntimeRecord<TranscriptChange> implements RecordData {
+export class TranscriptRecord extends BaseRecord<TranscriptChange> implements RecordData {
   constructor(
     readonly transcriptId: string,
     readonly occurredAt: string,
@@ -11,7 +11,7 @@ export class TranscriptRecord extends RuntimeRecord<TranscriptChange> implements
     readonly callId?: string,
     readonly executionId?: string,
   ) {
-    super(snapshotValue(value));
+    super(snapshotValue(value), callId);
     Object.freeze(this);
   }
   override toJSON(): RecordData {

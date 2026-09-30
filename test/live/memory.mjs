@@ -19,10 +19,10 @@ await writeFile(resolve(directory, 'scenario.json'), JSON.stringify({ ...scenari
 const results = [];
 for (const content of messages) {
   if (scenario.budgets?.[results.length]) settings.contextBudget = scenario.budgets[results.length];
-  const previousMemories = environment.runtime.memories.values().map((memory) => memory.toJSON());
+  const previousMemories = environment.runtime.context.memories.values().map((memory) => memory.toJSON());
   const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] });
   const facts = await observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript });
-  const currentMemories = environment.runtime.memories.values().map((memory) => memory.toJSON());
+  const currentMemories = environment.runtime.context.memories.values().map((memory) => memory.toJSON());
   const segments = environment.transcript.segments().map(({ start, end }) => ({ start, end }));
   results.push({ previousMemories, facts, currentMemories, segments });
   await writeFile(resolve(directory, 'results.json'), JSON.stringify(results, observeTranscript, 2));

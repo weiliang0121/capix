@@ -1,3 +1,4 @@
+import type { Invocation } from '../invocation/invocation.js';
 import { InvocationBehavior } from '../invocation/behavior.js';
 import type { AttemptContext } from '../context/attempt.js';
 import type { OperationContext } from '../context/operation.js';
@@ -14,7 +15,7 @@ export abstract class Attempt<I, O> extends InvocationBehavior<I, O, AttemptCont
     super();
   }
 
-  async call(operation: OperationContext, input: I): Promise<O> {
-    return this.invocations.create<I, O>(operation, input, this, this.work).run();
+  async call(parent: Invocation<unknown, unknown, OperationContext>, input: I): Promise<O> {
+    return this.invocations.create<I, O>(parent, input, this, this.work).run();
   }
 }

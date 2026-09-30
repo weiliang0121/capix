@@ -1,3 +1,4 @@
+import type { Invocation } from './invocation.js';
 import type { InvocationContext } from '../context/context.js';
 import { Continuation, receiveResult, type InvocationResult } from './result.js';
 import { InvocationStopped, mustStop } from './stop.js';
@@ -7,22 +8,22 @@ export type InvocationProcess = { stage: 'execute'; type: 'start'; input: unknow
 
 type RecordProcess = (process: InvocationProcess) => void;
 
-export interface InvocationWork<C, I, O> {
-  execute(context: C): O | Promise<O>;
-  receive?(context: C, result: InvocationResult<O>): O | Continuation<I> | Promise<O | Continuation<I>>;
+export interface InvocationWork<C extends InvocationContext<I, O>, I, O> {
+  execute(context: C, invocation: Invocation<I, O, C>): O | Promise<O>;
+  receive?(context: C, result: InvocationResult<O>, invocation: Invocation<I, O, C>): O | Continuation<I> | Promise<O | Continuation<I>>;
   maxRounds: 1 | 2;
 }
 
 /** Local control only; each receiver owns the meaning of its branches. */
-export async function cycle<I, O, C extends InvocationContext<I, O>>(context: C, work: InvocationWork<C, I, O>, signal: AbortSignal, record: RecordProcess): Promise<O> {
+export async function cycle<I, O, C extends InvocationContext<I, O>>(context: C, work: InvocationWork<C, I, O>, signal: AbortSignal, record: RecordProcess, invocation: Invocation<I, O, C>): Promise<O> {
   let input = context.input;
   try {
     requireRoundLimit(work.maxRounds);
     for (let round = 1; round <= work.maxRounds; round++) {
       requireNotCancelled(signal);
       context.startRound(round, input);
-      const result = await execute(context, work.execute, record);
-      const received = await receive(context, result, work.receive, record);
+      const result = await execute(context, work.execute, record, invocation);
+      const received = await receive(context, result, work.receive, record, invocation);
       if (!(received instanceof Continuation)) return received;
       if (round === work.maxRounds) throw new InvocationStopped('LOCAL_ROUND_LIMIT', '本地执行已达到轮次上限。', { maxRounds: work.maxRounds });
       input = received.input;
@@ -34,11 +35,11 @@ export async function cycle<I, O, C extends InvocationContext<I, O>>(context: C,
   }
 }
 
-async function execute<I, O, C extends InvocationContext<I, O>>(context: C, work: InvocationWork<C, I, O>['execute'], record: RecordProcess): Promise<InvocationResult<O>> {
+async function execute<I, O, C extends InvocationContext<I, O>>(context: C, work: InvocationWork<C, I, O>['execute'], record: RecordProcess, invocation: Invocation<I, O, C>): Promise<InvocationResult<O>> {
   record({ stage: 'execute', type: 'start', input: context.currentInput });
   let result: InvocationResult<O>;
   try {
-    result = { status: 'succeeded', output: await work(context) };
+    result = { status: 'succeeded', output: await work(context, invocation) };
   } catch (error) {
     result = { status: 'failed', error };
   }
@@ -49,10 +50,10 @@ async function execute<I, O, C extends InvocationContext<I, O>>(context: C, work
   return result;
 }
 
-async function receive<I, O, C extends InvocationContext<I, O>>(context: C, result: InvocationResult<O>, work: InvocationWork<C, I, O>['receive'], record: RecordProcess): Promise<O | Continuation<I>> {
+async function receive<I, O, C extends InvocationContext<I, O>>(context: C, result: InvocationResult<O>, work: InvocationWork<C, I, O>['receive'], record: RecordProcess, invocation: Invocation<I, O, C>): Promise<O | Continuation<I>> {
   let received: O | Continuation<I>;
   try {
-    received = work ? await work(context, result) : receiveResult(result);
+    received = work ? await work(context, result, invocation) : receiveResult(result);
   } catch (error) {
     recordFailure(record, 'receive', error);
     if ((result.status === 'failed' && Object.is(result.error, error)) || mustStop(error)) throw error;

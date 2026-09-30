@@ -95,7 +95,7 @@ test('record snapshots copy input/configuration values and retain the fixed rang
   transcriptFor(input).append({ role: 'user', content: 'later' });
   assert.equal(recorded.settings.model, 'test');
   assert.equal(recorded.transcriptRange.end, 2);
-  const record = new ExecutionRecord('context', { ...mutable, startedAt: 'now' });
+  const record = new ExecutionRecord('context', { ...mutable, startedAt: 'now' }, 'runtime-record');
   assert.equal(record.value.transcriptRange, context.transcriptRange);
   const circular = {};
   circular.self = circular;

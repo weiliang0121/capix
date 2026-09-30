@@ -10,7 +10,7 @@ const status = z.enum(['running', 'succeeded', 'failed']);
 const message = z.object({ role: z.enum(['user', 'assistant']), content: z.string() });
 const action = z.enum(['create', 'update']);
 const content = z.object({ topic: z.string(), content: z.string(), sourceIndexes: z.array(index) });
-const memoryRecord = z.object({ id, memoryId: id, contextId: id.optional(), callId: id.optional(), executionId: id.optional(), operationId: id.optional(), value: z.object({ action, change: z.string(), sourceIndexes: z.array(index), result: content }) });
+const memoryRecord = z.object({ id, parentId: id.optional(), memoryId: id, memoriesId: id, sequence: z.number().int().positive(), contextId: id.optional(), callId: id.optional(), executionId: id.optional(), operationId: id.optional(), value: z.object({ action, change: z.string(), sourceIndexes: z.array(index), result: content }) });
 
 export const configurationResponse = z.object({ configured: z.boolean(), model: z.string(), contextBudget: index, maxOutputTokens: index, timeoutMs: index }) satisfies z.ZodType<ConfigurationResponse>;
 export const transcriptResponse = z.object({ messages: z.array(message) }) satisfies z.ZodType<TranscriptResponse>;

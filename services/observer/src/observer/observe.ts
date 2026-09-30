@@ -38,7 +38,7 @@ export function subscribeExecutions(recording: InvocationRecordHelper, publish: 
     else if (change === 'update' && (record instanceof ExecutionRecord || record instanceof OperationRecord || record instanceof AttemptRecord) && record.status === 'running') executionId = recording.executionId(record);
     else return;
     // A shared Recorder may contain another Runtime's calls; this projection owns only this scope.
-    if (!recording.index.hasExecution(executionId)) return;
-    publish(ExecutionRecordHelper.snapshot(recording.recorder.book, recording.index, executionId));
+    if (recording.recorder.tree.root(executionId) !== recording.root) return;
+    publish(ExecutionRecordHelper.snapshot(recording.recorder, executionId));
   });
 }

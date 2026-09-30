@@ -1,55 +1,57 @@
 import { Clock } from '../runtime/clock.js';
 import { RecordBook } from './container/book.js';
-import type { RuntimeRecord } from './record.js';
+import type { BaseRecord } from './record.js';
+import { RecordTree } from './tree.js';
+import { RecordRegistration, type RegistrationIndex } from './registration.js';
 import { writeRecord } from './error.js';
 
 /** Shared registration mechanism. Record kinds, lifecycle rules and projections belong to callers. */
-export class RuntimeRecorder {
-  readonly #listeners = new Set<(record: RuntimeRecord<unknown>, change: 'add' | 'update') => void>();
+export class Recorder {
+  readonly tree: RecordTree;
+  #registering = false;
+  readonly #listeners = new Set<(record: BaseRecord<unknown>, change: 'add' | 'update', related: readonly BaseRecord<unknown>[]) => void>();
 
   constructor(
     readonly book: RecordBook,
     readonly clock = new Clock(),
-  ) {}
+  ) {
+    this.tree = new RecordTree(book);
+  }
 
-  add<R extends RuntimeRecord<unknown>>(record: R, indexes: readonly { add(record: NoInfer<R>): void; remove(recordId: string): void }[] = []): R {
-    writeRecord(() => {
-      if (this.book.get(record.id)) throw new Error('Record ID already exists');
-      const registered: (typeof indexes)[number][] = [];
+  add<R extends BaseRecord<unknown>>(record: R, indexes: readonly RegistrationIndex<NoInfer<R>>[] = []): R {
+    const related = writeRecord(() => {
+      if (this.#registering) throw new Error('Record registration cannot reenter');
+      this.#registering = true;
       try {
-        for (const index of indexes) {
-          index.add(record);
-          registered.push(index);
-        }
-        this.book.add(record);
-      } catch (error) {
-        for (const index of registered) index.remove(record.id);
-        throw error;
+        return new RecordRegistration(this.book, this.tree, record, indexes).commit();
+      } finally {
+        this.#registering = false;
       }
     });
-    this.notify(record, 'add');
+    this.notify(record, 'add', related);
     return record;
   }
 
-  update<R extends RuntimeRecord<unknown>>(record: R, apply: (record: R) => void): void {
+  update<R extends BaseRecord<unknown>>(record: R, apply: (record: R) => void): void {
     writeRecord(() => {
+      if (this.#registering) throw new Error('Record registration cannot reenter');
       if (this.book.get(record.id) !== record) throw new Error('Record is not registered with this Recorder');
       apply(record);
     });
     this.notify(record, 'update');
   }
 
-  subscribe(listener: (record: RuntimeRecord<unknown>, change: 'add' | 'update') => void): () => void {
+  subscribe(listener: (record: BaseRecord<unknown>, change: 'add' | 'update', related: readonly BaseRecord<unknown>[]) => void): () => void {
     this.#listeners.add(listener);
     return () => {
       this.#listeners.delete(listener);
     };
   }
 
-  private notify(record: RuntimeRecord<unknown>, change: 'add' | 'update'): void {
+  private notify(record: BaseRecord<unknown>, change: 'add' | 'update', related: readonly BaseRecord<unknown>[] = []): void {
     for (const listener of this.#listeners) {
       try {
-        listener(record, change);
+        listener(record, change, related);
       } catch {
         console.error('运行记录通知失败；已登记的事实保持不变。');
       }

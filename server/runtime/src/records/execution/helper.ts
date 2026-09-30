@@ -1,7 +1,8 @@
+import type { Invocation } from '../../invocation/invocation.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 import { RuntimeErrorHelper } from '../../errors/helper.js';
-import type { RuntimeRecorder } from '../recorder.js';
+import type { Recorder } from '../recorder.js';
 import { EventRecordHelper } from '../event/helper.js';
 import type { RuntimeErrorValue, ExecutionValue, RuntimeSnapshot } from '@capix-observer/protocol';
 
@@ -14,25 +15,25 @@ import { ExecutionRecord } from './record.js';
 
 /** Execution-specific recording operations. All managed objects are explicit arguments. */
 export class ExecutionRecordHelper {
-  static recording(recording: InvocationRecordHelper) {
-    return recording.recording<ExecutionContext>(
-      (context) => this.create(recording.recorder, recording.index, recording.recorder.clock, context.id, { input: context.input, settings: context.settings, ...(context.transcriptRange ? { transcriptRange: context.transcriptRange } : {}) }),
+  static recording<I, O>(recording: InvocationRecordHelper) {
+    return recording.recording<ExecutionContext<I, O>>(
+      (context) => this.create(recording.recorder, recording.index, recording.recorder.clock, context.id, { input: context.input, settings: context.settings, ...(context.transcriptRange ? { transcriptRange: context.transcriptRange } : {}) }, recording.root.id),
       (context, record, resultOf) => {
         const state = context.state;
-        if (state.status === 'succeeded') this.complete(recording.recorder.book, recording.index, record.id, state.output, resultOf);
-        else if (state.status === 'failed') this.fail(recording.recorder.book, recording.index, record.id, RuntimeErrorHelper.format(state.error));
+        if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);
+        else if (state.status === 'failed') this.fail(recording.recorder, record.id, RuntimeErrorHelper.format(state.error));
       },
     );
   }
 
-  static observe(recording: InvocationRecordHelper, context: ExecutionContext): RuntimeSnapshot {
-    const record = recording.get(context.id);
-    if (!(record instanceof ExecutionRecord)) throw new Error('Execution record does not exist');
-    return this.snapshot(recording.recorder.book, recording.index, record.id);
+  static observe(recording: InvocationRecordHelper, invocation: Invocation<unknown, unknown, ExecutionContext>): RuntimeSnapshot {
+    const record = invocation.record;
+    if (!(record instanceof ExecutionRecord) || recording.recorder.book.get(record.id) !== record || recording.recorder.tree.root(record.id) !== recording.root) throw new Error('Execution record does not exist');
+    return this.snapshot(recording.recorder, record.id);
   }
 
-  static create(recorder: RuntimeRecorder, index: InvocationRecordIndex, clock: Clock, contextId: string, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error' | 'processes' | 'resultOf'>): ExecutionRecord {
-    return recorder.add(new ExecutionRecord(contextId, { ...value, startedAt: clock.now() }), [index]);
+  static create(recorder: Recorder, index: InvocationRecordIndex, clock: Clock, contextId: string, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error' | 'processes' | 'resultOf'>, parentId: string): ExecutionRecord {
+    return recorder.add(new ExecutionRecord(contextId, { ...value, startedAt: clock.now() }, parentId), [index]);
   }
 
   static get(book: RecordBook, id: string): ExecutionRecord {
@@ -41,30 +42,30 @@ export class ExecutionRecordHelper {
     return record;
   }
 
-  static complete(book: RecordBook, index: InvocationRecordIndex, id: string, output: unknown, resultOf?: number): void {
-    const record = this.prepareFinish(book, index, id);
+  static complete(recorder: Recorder, id: string, output: unknown, resultOf?: number): void {
+    const record = this.prepareFinish(recorder, id);
     record.complete(output, resultOf);
   }
 
-  static fail(book: RecordBook, index: InvocationRecordIndex, id: string, error: RuntimeErrorValue): void {
-    const record = this.prepareFinish(book, index, id);
+  static fail(recorder: Recorder, id: string, error: RuntimeErrorValue): void {
+    const record = this.prepareFinish(recorder, id);
     record.fail(error);
   }
 
-  private static prepareFinish(book: RecordBook, index: InvocationRecordIndex, id: string): ExecutionRecord {
-    const record = this.get(book, id);
+  private static prepareFinish(recorder: Recorder, id: string): ExecutionRecord {
+    const record = this.get(recorder.book, id);
     if (record.status !== 'running') throw new Error('Record has already ended');
-    if (OperationRecordHelper.findByExecution(book, index, id).some((op) => op.status === 'running')) throw new Error('Cannot end a record with active operations');
+    if (OperationRecordHelper.findByExecution(recorder, id).some((op) => op.status === 'running')) throw new Error('Cannot end a record with active operations');
     return record;
   }
 
-  static snapshot(book: RecordBook, index: InvocationRecordIndex, id: string): RuntimeSnapshot {
-    const operations = OperationRecordHelper.findByExecution(book, index, id);
+  static snapshot(recorder: Recorder, id: string): RuntimeSnapshot {
+    const operations = OperationRecordHelper.findByExecution(recorder, id);
     return {
-      execution: this.get(book, id).toJSON(),
+      execution: this.get(recorder.book, id).toJSON(),
       operations: operations.map((record) => record.toJSON()),
-      attempts: operations.flatMap((operation) => AttemptRecordHelper.findByOperation(book, index, operation.id).map((record) => record.toJSON())),
-      events: EventRecordHelper.findByExecution(book, index, id).map((event) => event.toJSON()),
+      attempts: operations.flatMap((operation) => AttemptRecordHelper.findByOperation(recorder, operation.id).map((record) => record.toJSON())),
+      events: EventRecordHelper.findByExecution(recorder, id).map((event) => event.toJSON()),
     };
   }
 }

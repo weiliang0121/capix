@@ -1,12 +1,17 @@
-import { type OperationValue, type ProcessRecord, type RuntimeErrorValue, outputProcess, finalOutputProcess } from '@capix-observer/protocol';
+import type { ExecutionRecord } from '../execution/record.js';
+import type { OperationRecord } from '../operation/record.js';
+import type { AttemptRecord } from '../attempt/record.js';
+import { type InvocationValue, type ProcessRecord, type RuntimeErrorValue, outputProcess, finalOutputProcess } from '@capix-observer/protocol';
 
-import { RuntimeRecord } from '../record.js';
+import { CompositeRecord } from '../composite.js';
 
 import { isUndefined } from 'es-toolkit/predicate';
 import { snapshotValue } from '../value/snapshot.js';
 
+export type CallRecord = ExecutionRecord | OperationRecord | AttemptRecord;
+
 /** E/O/A share result registration and an internal append-only process history. */
-export class InvocationRecord<V extends OperationValue> extends RuntimeRecord<V> {
+export class InvocationRecord<V extends InvocationValue> extends CompositeRecord<V> {
   #status: 'running' | 'succeeded' | 'failed' = 'running';
   get status() {
     return this.#status;

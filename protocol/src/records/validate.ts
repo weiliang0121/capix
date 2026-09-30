@@ -1,5 +1,5 @@
 import { hasOutput, outputProcess, readOutput } from './invocation.js';
-import type { RuntimeSnapshot, OperationRecord, OperationValue } from '../records.js';
+import type { RuntimeSnapshot, OperationRecord, InvocationValue } from '../records.js';
 
 /** Reject inconsistent identities, ownership and boundary facts before projecting them. */
 export function validateSnapshot(value: unknown): asserts value is RuntimeSnapshot {
@@ -13,7 +13,7 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
   const operations = new Map<string, OperationRecord>();
   const parents = new Map<string, string>();
   const statuses = new Map([[executionId, f.execution.status]]);
-  const bodies = new Map<string, OperationValue>([[executionId, f.execution.value]]);
+  const bodies = new Map<string, InvocationValue>([[executionId, f.execution.value]]);
   const contextIds = new Set<string>();
   const acceptContextIdentity = (record: { id: string; contextId: string }) => {
     if (typeof record.contextId !== 'string' || !record.contextId || record.contextId === record.id || contextIds.has(record.contextId)) return fail();

@@ -1,7 +1,7 @@
 import { TranscriptRecordHelper } from '../records/transcript/helper.js';
 import { writeRecord } from '../records/error.js';
 import { randomUUID } from 'node:crypto';
-import type { RuntimeRecorder } from '../records/recorder.js';
+import type { Recorder } from '../records/recorder.js';
 import type { ChangeSource } from '../records/source.js';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import { isNonBlankString } from '../value/string.js';
@@ -12,11 +12,11 @@ import type { Message } from '@capix-observer/protocol';
 /** Original accepted messages, including the current input; independent of execution records. */
 export class Transcript {
   readonly id = randomUUID();
-  readonly #recorder?: RuntimeRecorder;
+  readonly #recorder?: Recorder;
   readonly #messages: Readonly<Message>[] = [];
   readonly #starts: number[] = [0];
 
-  constructor(messages: readonly Message[] = [], recorder?: RuntimeRecorder) {
+  constructor(messages: readonly Message[] = [], recorder?: Recorder) {
     this.#recorder = recorder;
     if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     this.append(...messages);
