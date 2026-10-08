@@ -9,7 +9,7 @@ import type { RuntimeErrorValue } from '@capix-observer/protocol';
 import type { RecordBook } from '../container/book.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
-import { AttemptRecord, type AttemptDefinition } from './record.js';
+import { AttemptRecord, type AttemptRecordDefinition } from './record.js';
 
 export interface AttemptDescription {
   readonly name: string;
@@ -35,7 +35,7 @@ export class AttemptRecordHelper {
     );
   }
 
-  static create(recorder: Recorder, definition: AttemptDefinition, input: unknown): AttemptRecord {
+  static create(recorder: Recorder, definition: AttemptRecordDefinition, input: unknown): AttemptRecord {
     const book = recorder.book;
     const operation = this.owner(book, definition.operationId);
     const execution = book.get(operation.executionId);

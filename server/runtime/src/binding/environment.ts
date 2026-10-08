@@ -1,0 +1,47 @@
+import { isFunction } from 'es-toolkit/predicate';
+import { OperationBinding } from './operation.js';
+import { AttemptBinding } from './attempt.js';
+import type { OperationInvocationBuilder } from '../invocation/operation/builder.js';
+import type { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
+import type { ResourceRequirements } from '../resource/bindings.js';
+import { checkResourceRequests, resourceRequests } from '../resource/bindings.js';
+import type { ChildDefinition } from '../definition/children.js';
+import { BoundChildren } from './children.js';
+import { Operation } from '../operations/operation.js';
+import { Attempt } from '../attempt/attempt.js';
+
+/** Runtime-owned construction capabilities, never passed to content definitions. */
+export class BindingEnvironment {
+  constructor(
+    private readonly operations: OperationInvocationBuilder,
+    private readonly attempts: AttemptInvocationBuilder,
+  ) {}
+  children(requires: ResourceRequirements, definitions: readonly ChildDefinition[], level: 'execution' | 'operation' | 'attempt'): BoundChildren {
+    this.check(requires, definitions, level, new Set());
+    return new BoundChildren(definitions, (definition) =>
+      definition.level === 'operation'
+        ? new OperationBinding(new Operation(this.operations), definition, this.children(definition.requires, definition.children, 'operation'))
+        : new AttemptBinding(
+            new Attempt(this.attempts),
+            definition,
+            new BoundChildren([], () => {
+              throw new Error('Attempts cannot have children');
+            }),
+          ),
+    );
+  }
+  private check(requires: ResourceRequirements, definitions: readonly ChildDefinition[], level: string, path: Set<ChildDefinition>): void {
+    for (const definition of definitions) {
+      if (!isFunction(definition.execute)) throw new Error('Child definition requires execute');
+      if (definition.level !== 'operation' && definition.level !== 'attempt') throw new Error('Invalid child definition level');
+      if (level === 'attempt' || (level === 'execution' && definition.level !== 'operation')) throw new Error('Invalid child definition level');
+      if (path.has(definition)) throw new Error('Cyclic child declaration');
+      checkResourceRequests(requires, resourceRequests(definition.requires));
+      if (definition.level === 'operation') {
+        path.add(definition);
+        this.check(definition.requires, definition.children, 'operation', path);
+        path.delete(definition);
+      }
+    }
+  }
+}

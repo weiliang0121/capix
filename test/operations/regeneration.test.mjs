@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ObserverInitializer, initializeObserver } from '@capix-observer/service';
+import { ObserverBinding, ObserverRuntimeDefinition, initializeObserver } from '@capix-observer/service';
 import { RuntimeError, createRuntime, AttemptRecord, InvocationRecord } from '@capix-observer/runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -26,7 +26,7 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
     ? initializeObserver(provider, messages)
     : (() => {
         const runtime = createRuntime({ messages });
-        return { runtime, transcript: runtime.context.transcript, execution: new ObserverInitializer(runtime, provider).execution.get() };
+        return { runtime, transcript: runtime.context.transcript, execution: new ObserverBinding(runtime, new ObserverRuntimeDefinition(provider)) };
       })();
   let invocation;
   return {
@@ -173,13 +173,13 @@ test('record failure cannot be classified as an output rejection or trigger a se
 
 test('regeneration entry enforces evidence, feedback and budget independently of parent choice', async (t) => {
   const f = fixture([output('bad'), output(JSON.stringify(answer))]);
-  const behavior = f.execution.operations.generation.get();
+  const behavior = f.execution.definition.executions.conversation.operations.generation;
   const receive = behavior.receive;
-  const capability = behavior.invokeModel.get().regeneration;
+  const capability = behavior.invokeModel.regeneration;
   assert.equal(capability.declaration.maxAdditionalCalls, 1);
   assert.deepEqual(capability.declaration.rejectionCodes, ['INVALID_JSON', 'EMPTY_OUTPUT', 'OUTPUT_SHAPE']);
   let checkedRounds = 0;
-  t.mock.method(behavior, 'receive', function (context, result, invocation) {
+  t.mock.method(behavior, 'receive', function (context, result, invocation, bindings) {
     const children = invocation.children.values();
     const evidence = { previous: children[2], rejection: children[3] };
     const count = children.length;
@@ -187,16 +187,16 @@ test('regeneration entry enforces evidence, feedback and budget independently of
       assert.equal(capability.allows(invocation, evidence), true);
       const invalid = { previous: children[1], rejection: children[3] };
       assert.equal(capability.allows(invocation, invalid), false);
-      assert.throws(() => capability.create(invocation, { request: f.calls[1].request, evidence: invalid }, { key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
+      assert.throws(() => bindings.entry(capability.entry).create(invocation, { request: f.calls[1].request, evidence: invalid }, { key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
       // The original request omits required error feedback, even with valid evidence.
-      assert.throws(() => capability.create(invocation, { request: f.calls[1].request, evidence }, { key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
+      assert.throws(() => bindings.entry(capability.entry).create(invocation, { request: f.calls[1].request, evidence }, { key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
     } else {
       assert.equal(capability.allows(invocation, evidence), false);
-      assert.throws(() => capability.create(invocation, { request: f.calls[2].request, evidence }, { key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
+      assert.throws(() => bindings.entry(capability.entry).create(invocation, { request: f.calls[2].request, evidence }, { key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
     }
     assert.equal(invocation.children.values().length, count);
     checkedRounds += 1;
-    return receive.call(this, context, result, invocation);
+    return receive.call(this, context, result, invocation, bindings);
   });
   assert.deepEqual(await f.run(), answer);
   assert.equal(checkedRounds, 2);
@@ -204,9 +204,9 @@ test('regeneration entry enforces evidence, feedback and budget independently of
 
 test('parent may decline an eligible regeneration without changing child capability', async (t) => {
   const f = fixture([output('bad')]);
-  t.mock.method(f.execution.operations.generation.get(), 'receive', function (_context, result, invocation) {
+  t.mock.method(f.execution.definition.executions.conversation.operations.generation, 'receive', function (_context, result, invocation) {
     const children = invocation.children.values();
-    assert.equal(this.invokeModel.get().regeneration.allows(invocation, { previous: children[2], rejection: children[3] }), true);
+    assert.equal(this.invokeModel.regeneration.allows(invocation, { previous: children[2], rejection: children[3] }), true);
     throw result.error;
   });
   await assert.rejects(f.run(), { code: 'INVALID_JSON' });

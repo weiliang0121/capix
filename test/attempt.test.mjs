@@ -1,9 +1,10 @@
+import { Attempt, Operation } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
 import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Attempt, AttemptContext, Recorder, RecordBook, Operation, createRuntime } from '@capix-observer/runtime';
+import { AttemptContext, Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
 
 import { TestOperation } from './fixtures/operation.mjs';
 

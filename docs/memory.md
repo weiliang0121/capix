@@ -9,7 +9,7 @@ M(n-1) + Q(n) + A(n) + 可见原文 → ExtractMemory → M(n)
 M(n)              → 下一轮 SelectHistory
 ```
 
-H 只有当前段内此前的原始用户/助手消息，不含记忆。ObserverExecution.execute 在每轮开始取得 previousMemories（当前 Transcript 下 Memory.toJSON 的正文快照），用于筛选、回答和提取。记忆正文已有不可变语义，后续 Memory.update 不会改写这次捕获的内容。回答可以依据记忆有限继承旧段理解；提取的可见原文只有本轮 QA 和当前段筛选原文，不沿来源读取旧段。成功落实的更新在下一次执行开始读取，不从记录中恢复或查询运行输入。
+H 只有当前段内此前的原始用户/助手消息，不含记忆。ObserverExecutionDefinition.execute 在每轮开始取得 previousMemories（当前 Transcript 下 Memory.toJSON 的正文快照），用于筛选、回答和提取。记忆正文已有不可变语义，后续 Memory.update 不会改写这次捕获的内容。回答可以依据记忆有限继承旧段理解；提取的可见原文只有本轮 QA 和当前段筛选原文，不沿来源读取旧段。成功落实的更新在下一次执行开始读取，不从记录中恢复或查询运行输入。
 
 SelectHistory 输出仍只是当前段的原文索引。其 OperationRecord 输入明确显示 message/memories；PrepareModelRequest 输出保存实际发给模型的 message/memories/history。历史与记忆均计入容量检查；下一轮开始前必要时切换消息段，详见 [消息分段](transcript.md)。不移除记忆，记忆本身超限仍失败。模型的理解与索引选择质量不由 Schema 保证。
 

@@ -1,6 +1,7 @@
+import { Operation } from '../fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, Operation, Invocation, OperationContext, createRuntime, Recorder, RecordBook } from '@capix-observer/runtime';
+import { Sequence, Invocation, OperationContext, createRuntime, Recorder, RecordBook } from '@capix-observer/runtime';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 
 class ComposedOperation extends Operation {

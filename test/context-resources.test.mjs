@@ -1,7 +1,9 @@
+import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
+import { Execution, Operation, Attempt } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, checkResourceRequests, Sequence, createRuntime, Execution, Operation, Attempt } from '@capix-observer/runtime';
-import { ObserverInitializer, GenerateAnswer } from '@capix-observer/service';
+import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, checkResourceRequests, Sequence, createRuntime } from '@capix-observer/runtime';
+import { ObserverBinding, ObserverRuntimeDefinition, GenerateAnswer } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 
@@ -16,7 +18,7 @@ function provider() {
 
 test('Observer narrows resources at each action and keeps prior execution references stable', async () => {
   const runtime = createRuntime({ messages: [{ role: 'user', content: '你好' }] });
-  const execution = new ObserverInitializer(runtime, provider()).execution.get();
+  const execution = new ObserverBinding(runtime, new ObserverRuntimeDefinition(provider()));
   const transcript = runtime.context.transcript;
   let first;
   await execution.call(transcript.current('user'), { settings }, (_context, invocation) => {
@@ -60,7 +62,7 @@ test('Observer narrows resources at each action and keeps prior execution refere
 
 test('nested operations cannot implicitly bypass their direct parent for execution resources', async () => {
   const runtime = createRuntime({ messages: [{ role: 'user', content: '你好' }] });
-  const generation = new GenerateAnswer(runtime);
+  const generation = bindChild(runtime, new GenerateAnswer());
   let wrapper;
   class NarrowOperation extends Operation {
     name = 'narrow';
@@ -288,7 +290,7 @@ test('model offer exposes only invocation while preserving provider method owner
     assert.equal(this, model);
     return invoke(...args);
   };
-  const execution = new ObserverInitializer(runtime, model).execution.get();
+  const execution = new ObserverBinding(runtime, new ObserverRuntimeDefinition(model));
   await execution.call(runtime.context.transcript.current('user'), { settings }, (context) => {
     const access = context.resources.values.model;
     assert.notEqual(access, model);

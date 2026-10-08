@@ -1,10 +1,11 @@
+import { Execution } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
 import { subscribeExecutions } from '@capix-observer/service';
 import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Execution, Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
-import { ObserverInitializer } from '@capix-observer/service';
+import { Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
+import { ObserverBinding, ObserverRuntimeDefinition } from '@capix-observer/service';
 
 import { TestOperation } from './fixtures/operation.mjs';
 import { createInput, transcriptFor } from './fixtures/observer.mjs';
@@ -55,7 +56,7 @@ test('one Execution and Operation can be called again after success and failure 
   );
 });
 
-test('ObserverInitializer returns answers without a recorder and uses the configuration of each call', async () => {
+test('ObserverBinding, ObserverRuntimeDefinition returns answers without a recorder and uses the configuration of each call', async () => {
   const requests = [];
   const provider = {
     async invoke(request, purpose) {
@@ -64,7 +65,7 @@ test('ObserverInitializer returns answers without a recorder and uses the config
     },
   };
   const runtime = createRuntime();
-  const execution = new ObserverInitializer(runtime, provider).execution.get();
+  const execution = new ObserverBinding(runtime, new ObserverRuntimeDefinition(provider));
   for (const model of ['one', 'two']) {
     runtime.context.transcript.append({ role: 'user', content: model });
     const message = runtime.context.transcript.current('user');

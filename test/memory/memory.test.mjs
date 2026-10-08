@@ -1,7 +1,7 @@
 import { readOutput } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver, acceptExecutionInput, observeExecution, memoryOutputContract, ObserverInitializer } from '@capix-observer/service';
+import { initializeObserver, acceptExecutionInput, observeExecution, memoryOutputContract, ObserverBinding, ObserverRuntimeDefinition } from '@capix-observer/service';
 
 import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, Runtime, createRuntime } from '@capix-observer/runtime';
 
@@ -183,13 +183,16 @@ test('recording observes the actual changed fact; registration failure propagate
   const book = new RejectMemoryBook();
   const recorder = new Recorder(book);
   const runtime = createRuntime({ recorder, messages: [{ role: 'user', content: '预算150' }] });
-  const execution = new ObserverInitializer(runtime, {
-    async invoke(_request, purpose) {
-      if (purpose === 'selection') return raw({ historyIndexes: [] });
-      if (purpose === 'answer') return raw({ kind: 'answer', content: '了解' });
-      return raw({ memories: [change(content('预算', '150', [0]), '建立预算150')] });
-    },
-  }).execution.get();
+  const execution = new ObserverBinding(
+    runtime,
+    new ObserverRuntimeDefinition({
+      async invoke(_request, purpose) {
+        if (purpose === 'selection') return raw({ historyIndexes: [] });
+        if (purpose === 'answer') return raw({ kind: 'answer', content: '了解' });
+        return raw({ memories: [change(content('预算', '150', [0]), '建立预算150')] });
+      },
+    }),
+  );
   const transcript = runtime.context.transcript;
   await assert.rejects(execution.call(transcript.current('user'), { settings, transcript }), /registration failed/);
   const memory = runtime.context.memories.values()[0];

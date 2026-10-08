@@ -1,3 +1,4 @@
+import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { callFor } from './fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import { createInput, sourceFor, contextFor, transcriptFor } from './fixtures/observer.mjs';
@@ -6,7 +7,7 @@ import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
 import { Runtime, createRuntime, TranscriptResource, bindResources } from '@capix-observer/runtime';
 
-import { ObserverResourceInitializer, SelectHistory, AssembleContext, answerOutputContract, selectionOutputContract } from '@capix-observer/service';
+import { SelectHistory, AssembleContext, answerOutputContract, selectionOutputContract } from '@capix-observer/service';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
 const runtime = createRuntime();
@@ -183,8 +184,8 @@ test('one selection operation can overlap calls without mixing their history bou
       return new Promise((resolve) => pending.set(message.content, resolve));
     },
   };
-  const op = new SelectHistory(runtime);
-  const resourceBinding = new ObserverResourceInitializer(runtime.context, () => provider).execution;
+  const op = bindChild(runtime, new SelectHistory());
+  const resourceBinding = resourceBindingFor(runtime, provider);
   const first = { content: 'one', history: [{ role: 'user', content: 'a' }] };
   const second = { content: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
   const original = structuredClone([first, second]);
@@ -211,7 +212,7 @@ test('assembly attempt consumes explicit sources and needs no recorder', async (
     ],
   });
   const input = { historyIndexes: [0] };
-  const attempt = new AssembleContext(runtime.attemptInvocations);
+  const attempt = bindChild(runtime, new AssembleContext());
   const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message), resourceBinding: bindResources({ history: TranscriptResource.fixedRange.request() }, [TranscriptResource.fixedRange.provide((parent) => parent.transcriptRange)]) }), (execution) =>
     runtime.operationInvocations
       .create(callFor(execution), {

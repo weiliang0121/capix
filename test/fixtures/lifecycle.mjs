@@ -1,3 +1,4 @@
+import { contextWithSource, captureSource } from './observer.mjs';
 import { Invocation, InvocationChildren, writeRecord, ExecutionContext, OperationContext, AttemptContext, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
 
 // Test-only lookup for legacy manual-boundary fixtures, never part of the runtime.
@@ -21,7 +22,7 @@ export function lifecycleFor(runtime) {
   const recording = runtime.recording;
   return {
     execution(request) {
-      return invocationLifecycle(() => new ExecutionContext(request.input, request, undefined, request.resourceBinding), recording ? ExecutionRecordHelper.recording(recording) : undefined);
+      return invocationLifecycle(() => contextWithSource(request.input, request), recording ? ExecutionRecordHelper.recording(recording, captureSource(request)) : undefined);
     },
     operation(execution, operation, input, parent) {
       if (parent && origins.get(parent) !== execution) throw new Error('Parent operation belongs to another execution');

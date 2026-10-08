@@ -1,18 +1,26 @@
-import { ExecutionContext, Transcript, ResourceBindings } from '@capix-observer/runtime';
+import { ExecutionContext, Transcript, TranscriptRangeRef, ResourceBindings, Initializer, bindResources, BindingEnvironment } from '@capix-observer/runtime';
 
-import { acceptExecutionInput, initializeObserver, observeExecution } from '@capix-observer/service';
+import { acceptExecutionInput, initializeObserver, observeExecution, observerExecutionRequests, observerProviders } from '@capix-observer/service';
 
 const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);
 const sources = new WeakMap();
+export function captureSource(options) {
+  return Object.freeze({ settings: Object.freeze({ ...options.settings }), ...(options.transcript ? { transcriptRange: new TranscriptRangeRef(options.transcript, options.transcript.activeStart, options.transcript.length) } : {}) });
+}
 export function contextWithSource(input, options) {
-  let source;
-  const context = new ExecutionContext(input, options, undefined, (value) => {
-    source = value;
-    return new ResourceBindings({});
-  });
+  const source = captureSource(options);
+  const context = new ExecutionContext(input, options, undefined, options.resourceBinding?.(source));
   sources.set(context, source);
   return context;
+}
+export function resourceBindingFor(runtime, provider) {
+  const model = new Initializer(() => provider);
+  const binding = bindResources(observerExecutionRequests, observerProviders);
+  return (source) => binding({ ...source, runtime: runtime.context, model, delivery: () => {} });
+}
+export function bindChild(runtime, definition) {
+  return new BindingEnvironment(runtime.operationInvocations, runtime.attemptInvocations).children(definition.requires, [definition], 'operation').get(definition);
 }
 // Construction metadata is captured only by this test fixture, not exposed by a work Context.
 export const sourceFor = (context) => sources.get(context);

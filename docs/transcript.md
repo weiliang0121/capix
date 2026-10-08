@@ -10,9 +10,9 @@ Transcript 保留全部原始 user/assistant 消息，用段边界区分当前�
         + 本轮 QA、当前段筛选原文 → 提取并更新记忆
 ```
 
-ObserverExecution.prepare 在 Runtime 占用内、创建执行 Context 前检查 SelectHistory 的完整请求预算。容量计算与实际筛选共用正文、提示词和 Schema，使用现有 UTF-8 字节保守估算。若当前段历史导致超限，而仅本次输入加记忆可以容纳，则优先保留本次输入之前最近两轮完整 QA，从所保留轮次的起点开启新段；仍放不下时依次降为一轮、零轮。只调整边界，不复制消息，也不生成额外摘要。
+ObserverBinding.submit 中的业务分段策略 在 Runtime 占用内、创建执行 Context 前检查 SelectHistory 的完整请求预算。容量计算与实际筛选共用正文、提示词和 Schema，使用现有 UTF-8 字节保守估算。若当前段历史导致超限，而仅本次输入加记忆可以容纳，则优先保留本次输入之前最近两轮完整 QA，从所保留轮次的起点开启新段；仍放不下时依次降为一轮、零轮。只调整边界，不复制消息，也不生成额外摘要。
 
-本轮 ExecutionContext 捕获切换后的 `[activeStart,end)`，执行中不再换段。新回答追加到当前段；旧 Context 和 Record 的范围引用不随切换改变。原始消息仍能通过绝对索引读取，热区与历史 QA 观测继续使用全部消息。已有时序详情中的执行范围会显示实际 start/end，分段由 Transcript 正式登记为 TranscriptRecord，不作为 EOA 调用节点。
+ObserverBinding 在本轮 Context 建立前捕获切换后的 `[activeStart,end)`，执行中不再换段。新回答追加到当前段；旧 Context 和 Record 的范围引用不随切换改变。原始消息仍能通过绝对索引读取，热区与历史 QA 观测继续使用全部消息。已有时序详情中的执行范围会显示实际 start/end，分段由 Transcript 正式登记为 TranscriptRecord，不作为 EOA 调用节点。
 
 筛选只能返回当前段候选索引。回答直接接收同一份旧记忆快照，因此即使旧原文退出候选集合，也能使用保留下来的理解。提取不再沿记忆来源加载旧原文；更新可以在 result.sourceIndexes 保留该目标记忆的原有来源，本次变更依据仍须来自当前可见原文并包含本轮消息。保留来源不代表重新验证原文。
 

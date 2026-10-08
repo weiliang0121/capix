@@ -1,3 +1,4 @@
+import { resourceBindingFor, bindChild } from '../fixtures/observer.mjs';
 import { callFor } from '../fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import { readOutput } from '@capix-observer/protocol';
@@ -5,7 +6,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Transcript, Runtime, createRuntime } from '@capix-observer/runtime';
 
-import { ObserverResourceInitializer, GenerateAnswer, estimateCapacity } from '@capix-observer/service';
+import { GenerateAnswer, estimateCapacity } from '@capix-observer/service';
 
 import { createInput, observeFixture } from '../fixtures/observer.mjs';
 
@@ -29,8 +30,8 @@ async function generate(input, contextBudget = settings.contextBudget, requests 
       return output({ kind: 'answer', content: '完成' });
     },
   };
-  const operation = new GenerateAnswer(runtime);
-  const resourceBinding = new ObserverResourceInitializer(runtime.context, () => provider).execution;
+  const operation = bindChild(runtime, new GenerateAnswer());
+  const resourceBinding = resourceBindingFor(runtime, provider);
   const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
   const transcript = new Transcript([...history, input.message]);
   const selection = { historyIndexes: input.selectedMessages.map((item) => item.index) };

@@ -1,3 +1,7 @@
+import type { DeclaredCall } from '../definition/signature.js';
+import { InvocationEntry } from '../definition/entry.js';
+import type { ChildDefinition } from '../definition/children.js';
+import type { ChildBindings } from '../binding/children.js';
 import { resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
 import type { ResourceRequest } from '../resource/offer.js';
 import type { ParentInvocation } from '../invocation/children.js';
@@ -11,13 +15,13 @@ export interface SequenceScope<S, P, R> {
 }
 
 export interface SequenceStep<S, P, R, I, O, A = O> {
-  readonly use: { readonly requires?: ResourceRequirements; create(parent: P, input: I, options?: InvocationRelationOptions): InvocationTarget<O> };
+  readonly use: DeclaredCall<P, I, O> | { readonly requires?: ResourceRequirements; create(parent: P, input: I, options?: InvocationRelationOptions): InvocationTarget<O> };
   readonly input: (scope: SequenceScope<S, P, R>) => I;
   /** Parent-owned work after successful delivery; its result is available to later steps. */
   readonly accept?: (scope: SequenceScope<S, P, R>, output: O) => A | Promise<A>;
 }
 
-type Entry<S, P> = Readonly<{ key: string; use: { readonly requires?: ResourceRequirements }; run(parent: P, input: S, outputs: Readonly<Record<string, unknown>>): Promise<unknown> }>;
+type Entry<S, P> = Readonly<{ key: string; use: { readonly requires?: ResourceRequirements }; run(parent: P, input: S, outputs: Readonly<Record<string, unknown>>, children?: ChildBindings): Promise<unknown> }>;
 
 /** An immutable, typed sequential composition. No scheduling, retry or recovery policy. */
 export class Sequence<S, P extends ParentInvocation, R = Record<never, never>> {
@@ -33,9 +37,10 @@ export class Sequence<S, P extends ParentInvocation, R = Record<never, never>> {
     const entry: Entry<S, P> = Object.freeze({
       key,
       use,
-      async run(parent: P, input: S, outputs: Readonly<Record<string, unknown>>) {
+      async run(parent: P, input: S, outputs: Readonly<Record<string, unknown>>, children?: ChildBindings) {
         const scope = Object.freeze({ parent, input, outputs: outputs as Readonly<R> });
-        const child = use.create(parent, prepare(scope), { key });
+        const target = 'create' in use ? use : resolveDeclared(use, children);
+        const child = target.create(parent, prepare(scope), { key });
         const relation = parent.children.get(child);
         const output = await child.run();
         parent.context.requireRunning();
@@ -54,13 +59,20 @@ export class Sequence<S, P extends ParentInvocation, R = Record<never, never>> {
     return Object.freeze(this.entries.flatMap(({ use }) => resourceRequests(use.requires ?? {})));
   }
 
-  async run(parent: P, input: S): Promise<Readonly<R>> {
+  async run(parent: P, input: S, children?: ChildBindings): Promise<Readonly<R>> {
     let outputs: Readonly<Record<string, unknown>> = Object.freeze({});
     for (const entry of this.entries) {
       parent.context.requireRunning();
-      const output = await entry.run(parent, input, outputs);
+      const output = await entry.run(parent, input, outputs, children);
       outputs = Object.freeze({ ...outputs, [entry.key]: output });
     }
     return outputs as Readonly<R>;
   }
+}
+
+/** Resolution is confined to the binding supplied for this parent invocation. */
+function resolveDeclared<P, I, O>(use: DeclaredCall<P, I, O>, children?: ChildBindings): { create(parent: P, input: I, options?: InvocationRelationOptions): InvocationTarget<O> } {
+  if (!children) throw new Error('Declared sequence requires its child binding');
+  const target = use instanceof InvocationEntry ? children.entry(use) : children.get(use as unknown as ChildDefinition);
+  return target as unknown as { create(parent: P, input: I, options?: InvocationRelationOptions): InvocationTarget<O> };
 }

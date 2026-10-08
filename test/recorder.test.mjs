@@ -1,6 +1,7 @@
+import { Execution } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, BaseRecord, RecordBook, Execution, TranscriptRecord, MemoryRecord, ExecutionRecordHelper, createRuntime } from '@capix-observer/runtime';
+import { Recorder, BaseRecord, RecordBook, TranscriptRecord, MemoryRecord, ExecutionRecordHelper, createRuntime } from '@capix-observer/runtime';
 import { subscribeExecutions } from '@capix-observer/service';
 import { validateSnapshot } from '@capix-observer/protocol';
 

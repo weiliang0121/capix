@@ -1,4 +1,4 @@
-import { executionSource } from '../../context/execution.js';
+import type { TranscriptRangeRef } from '../../transcript/ref.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
@@ -12,11 +12,17 @@ import { OperationRecordHelper } from '../operation/helper.js';
 import { AttemptRecordHelper } from '../attempt/helper.js';
 import { ExecutionRecord } from './record.js';
 
+/** Existing observation fields, provided explicitly by the application binding. */
+export interface ExecutionRecordMetadata {
+  readonly settings: unknown;
+  readonly transcriptRange?: TranscriptRangeRef;
+}
+
 /** Execution-specific recording operations. All managed objects are explicit arguments. */
 export class ExecutionRecordHelper {
-  static recording<I, O>(recording: InvocationRecordHelper) {
+  static recording<I, O>(recording: InvocationRecordHelper, metadata: ExecutionRecordMetadata = { settings: null }) {
     return recording.recording<ExecutionContext<I, O>>(
-      (context) => this.create(recording.recorder, { contextId: context.id, parentId: recording.root.id }, { input: context.input, settings: executionSource(context).settings, ...(executionSource(context).transcriptRange ? { transcriptRange: executionSource(context).transcriptRange } : {}) }),
+      (context) => this.create(recording.recorder, { contextId: context.id, parentId: recording.root.id }, { input: context.input, settings: metadata.settings, ...(metadata.transcriptRange ? { transcriptRange: metadata.transcriptRange } : {}) }),
       (context, record, resultOf) => {
         const state = context.state;
         if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);

@@ -1,4 +1,4 @@
-import { Attempt, type AttemptContext, type AttemptInvocationBuilder, RuntimeError, isNonBlankString } from '@capix-observer/runtime';
+import { AttemptDefinition, type AttemptContext, RuntimeError, isNonBlankString } from '@capix-observer/runtime';
 
 import type { ModelOutput } from '../../model/types.js';
 import type { ModelOutputContract } from '../../model/contract.js';
@@ -7,7 +7,7 @@ export interface ModelAcceptanceInput {
   readonly output: ModelOutput;
 }
 
-export class AcceptModelOutput<I extends ModelAcceptanceInput, O> extends Attempt<I, O> {
+export class AcceptModelOutput<I extends ModelAcceptanceInput, O> extends AttemptDefinition<I, O> {
   static readonly requires = Object.freeze({});
 
   readonly name = 'acceptModelOutput';
@@ -15,14 +15,11 @@ export class AcceptModelOutput<I extends ModelAcceptanceInput, O> extends Attemp
   readonly source = 'services/observer/src/attempt/model/accept.ts · AcceptModelOutput';
   readonly callee = 'processing';
 
-  constructor(
-    invocations: AttemptInvocationBuilder,
-    private readonly contract: ModelOutputContract<I, O>,
-  ) {
-    super(invocations);
+  constructor(private readonly contract: ModelOutputContract<I, O>) {
+    super();
   }
 
-  protected execute(context: AttemptContext<I, O>): O {
+  execute(context: AttemptContext<I, O>): O {
     checkCompletion(context.currentInput.output);
     const value = parseContent(context.currentInput.output.content);
     return this.contract.accept(value, context.currentInput);

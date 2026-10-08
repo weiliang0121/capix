@@ -1,3 +1,6 @@
+import { BindingEnvironment } from '../binding/environment.js';
+import { RuntimeBinding } from '../binding/runtime.js';
+import type { RuntimeDefinition, ExecutionDefinitions } from '../definition/runtime.js';
 import type { InvocationEvent } from '@capix-observer/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import { ExecutionContextBuilder } from '../context/execution/builder.js';
@@ -38,12 +41,16 @@ export class Runtime {
       this.record = recording.record;
       this.recording = new InvocationRecordHelper(recording.recorder, recording.record);
     }
-    const executions = new ExecutionContextBuilder(context.transcript);
+    const executions = new ExecutionContextBuilder();
     const operations = new OperationContextBuilder(executions);
     const attempts = new AttemptContextBuilder(operations);
     this.executionInvocations = new ExecutionInvocationBuilder(executions, { run: (work) => this.run(work), recording: this.recording, changes });
     this.operationInvocations = new OperationInvocationBuilder(operations, { recording: this.recording, changes });
     this.attemptInvocations = new AttemptInvocationBuilder(attempts, { recording: this.recording, changes });
+  }
+
+  bind<S, E extends ExecutionDefinitions>(definition: RuntimeDefinition<S, E>): RuntimeBinding<S, E> {
+    return new RuntimeBinding(definition, new BindingEnvironment(this.operationInvocations, this.attemptInvocations), this.executionInvocations);
   }
 
   get running(): boolean {

@@ -1,13 +1,13 @@
 import { isFunction } from 'es-toolkit/predicate';
 import type { Message, RuntimeSnapshot } from '@capix-observer/protocol';
-import type { ExecutionOptions, InvocationRecordHelper } from '@capix-observer/runtime';
+import type { InvocationRecordHelper } from '@capix-observer/runtime';
 
 import { InvocationBoundaryRecord, ExecutionRecord, OperationRecord, AttemptRecord, ExecutionRecordHelper } from '@capix-observer/runtime';
 
-import type { ObserverExecution } from './execution.js';
+import type { ObserverExecutionOptions, ObserverBinding } from './binding.js';
 
 /** Observe one invocation by Context identity, independent of its input value. */
-export async function observeExecution(execution: ObserverExecution, recording: InvocationRecordHelper, input: Readonly<Message> | (() => Readonly<Message>), options: ExecutionOptions, publish: (snapshot: RuntimeSnapshot) => void = () => {}): Promise<RuntimeSnapshot> {
+export async function observeExecution(execution: ObserverBinding, recording: InvocationRecordHelper, input: Readonly<Message> | (() => Readonly<Message>), options: ObserverExecutionOptions, publish: (snapshot: RuntimeSnapshot) => void = () => {}): Promise<RuntimeSnapshot> {
   let contextId: string | undefined;
   let latest: RuntimeSnapshot | undefined;
   const unsubscribe = subscribeExecutions(recording, (snapshot) => {

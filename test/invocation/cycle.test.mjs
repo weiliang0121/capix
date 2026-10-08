@@ -1,3 +1,4 @@
+import { Execution, Operation, Attempt } from '../fixtures/behavior.mjs';
 import { callFor, recordFor, rememberCall } from '../fixtures/lifecycle.mjs';
 import { InvocationRecord, AttemptRecord } from '@capix-observer/runtime';
 import { subscribeExecutions } from '@capix-observer/service';
@@ -5,7 +6,7 @@ import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Execution, Operation, Attempt, Runtime, Recorder, RecordBook, RuntimeError, createRuntime } from '@capix-observer/runtime';
+import { Runtime, Recorder, RecordBook, RuntimeError, createRuntime } from '@capix-observer/runtime';
 
 import { validateSnapshot } from '@capix-observer/protocol';
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';

@@ -1,9 +1,10 @@
+import { Execution, Operation, Attempt } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
 import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, Runtime, Execution, Operation, Attempt, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory, createRuntime } from '@capix-observer/runtime';
-import { initializeObserver, ObserverInitializer, observeExecution, observeOverview, acceptExecutionInput } from '@capix-observer/service';
+import { Invocation, InvocationContext, Runtime, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory, createRuntime } from '@capix-observer/runtime';
+import { initializeObserver, ObserverBinding, ObserverRuntimeDefinition, observeExecution, observeOverview, acceptExecutionInput } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const createRecorder = (book = new RecordBook()) => new Recorder(book);
@@ -159,7 +160,7 @@ test('replacing execution behaviors retains messages, memories, counts and the c
   const run = async (execution, text) => observeExecution(execution, environment.recording, () => acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: text }] }), { settings });
   const first = await run(environment.execution, '我在北京');
   const memory = environment.runtime.context.memories.values()[0];
-  environment.execution = new ObserverInitializer(environment.runtime, provider).execution.get();
+  environment.execution = new ObserverBinding(environment.runtime, new ObserverRuntimeDefinition(provider));
   const second = await run(environment.execution, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.runtime.context.memories.get(memory.id), memory);

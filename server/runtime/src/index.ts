@@ -1,7 +1,7 @@
 export * from './attempt/attempt.js';
 export * from './context/attempt.js';
 export * from './context/context.js';
-export { ExecutionContext, type ExecutionOptions, type ExecutionResourceSource } from './context/execution.js';
+export { ExecutionContext, type ExecutionOptions } from './context/execution.js';
 export * from './context/operation.js';
 export * from './errors/error.js';
 export * from './errors/helper.js';
@@ -48,8 +48,6 @@ export * from './invocation/operation/builder.js';
 export * from './context/attempt/builder.js';
 export * from './invocation/attempt/builder.js';
 
-export * from './invocation/behavior.js';
-
 export * from './invocation/changes.js';
 export type { InvocationCapabilities } from './invocation/capabilities.js';
 
@@ -64,4 +62,19 @@ export * from './memory/resource.js';
 export * from './transcript/usage-resource.js';
 
 export * from './initialization/initializer.js';
-export * from './initialization/behavior.js';
+
+export * from './definition/invocation.js';
+export * from './definition/execution.js';
+export * from './definition/operation.js';
+export * from './definition/attempt.js';
+export * from './definition/runtime.js';
+export * from './definition/children.js';
+export * from './definition/entry.js';
+export * from './binding/children.js';
+export * from './binding/environment.js';
+export * from './binding/runtime.js';
+
+export * from './binding/execution.js';
+
+export * from './binding/operation.js';
+export * from './binding/attempt.js';

@@ -1,3 +1,4 @@
+import { captureSource } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Runtime, Recorder, RecordBook, Transcript, ChangeObserver, createRuntime, bindResources, ResourceOffer } from '@capix-observer/runtime';
@@ -16,9 +17,9 @@ test('reused builders bind each invocation to its own signal, settings and input
   const configuration = new ResourceOffer('test.settings', (source) => source);
   const requires = { settings: configuration.request() };
   const resourceBinding = bindResources(requires, [configuration.provide((source) => source.settings)]);
-  const first = runtime.executionInvocations.create('first', { requires, resourceBinding, context: { settings: mutableSettings, signal: firstController.signal }, work: identity });
+  const first = runtime.executionInvocations.create('first', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: firstController.signal }, work: identity });
   mutableSettings.model = 'next';
-  const second = runtime.executionInvocations.create('second', { requires, resourceBinding, context: { settings: mutableSettings, signal: secondController.signal }, work: identity });
+  const second = runtime.executionInvocations.create('second', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: secondController.signal }, work: identity });
   const firstOperation = runtime.operationInvocations.create(first, { input: 'first operation', description: operation, work: identity });
   const secondOperation = runtime.operationInvocations.create(second, { input: 'second operation', description: operation, work: identity });
   const firstAttempt = runtime.attemptInvocations.create(firstOperation, { input: 'first action', description: attempt, work: identity });
@@ -68,7 +69,13 @@ test('entry validates before accepting input and releases its reservation after 
   const recorder = new Recorder(new RecordBook());
   const runtime = createRuntime({ recorder });
   await assert.rejects(
-    runtime.executionInvocations.submit(() => assert.fail('must not accept'), { context: { settings, transcript: new Transcript() }, work: identity }),
+    runtime.executionInvocations.submit(() => assert.fail('must not accept'), {
+      context: {},
+      validate: () => {
+        throw new Error('another Runtime');
+      },
+      work: identity,
+    }),
     /another Runtime/,
   );
   const options = { settings };
@@ -79,7 +86,13 @@ test('entry validates before accepting input and releases its reservation after 
         options.transcript = new Transcript();
         return 'input';
       },
-      { context: options, work: identity },
+      {
+        context: options,
+        validate: () => {
+          if (options.transcript) throw new Error('another Runtime');
+        },
+        work: identity,
+      },
     ),
     /another Runtime/,
   );

@@ -1,6 +1,6 @@
 # CAPiX Observer
 
-独立的 TypeScript 运行链路实验：运行三次模型调用，观察真实的输入、调用、返回和异常。
+独立的 TypeScript 运行链路实验：运行筛选、回答和记忆提取的模型调用，观察真实的输入、调用、返回和异常。
 
 观测用于理解当前系统。没有文件导入、导出或重放，也没有为离线文件设计的版本兼容、独立消息来源、恢复对象。
 
@@ -8,8 +8,9 @@
 
 ```text
 initializeObserver(provider, messages?)
-  → Transcript / Book / Index / Clock / Recorder / Runtime
-  → ObserverExecution（固定 selection / generation / extraction 实例）
+  → RuntimeContext / Book / Clock / Recorder / Runtime
+  → ObserverRuntimeDefinition（资源供应与 E/O/A 业务声明）
+  → ObserverBinding（绑定本 Runtime，O/A 结构按需建立）
 
 外部 ExecutionRequest { messages }
   → acceptExecutionInput：向已有 Transcript 追加一批新消息
@@ -26,7 +27,7 @@ initializeObserver(provider, messages?)
 
 Transcript 只增不改删，包含第一条和当前消息。接纳时检查角色及非空正文，复制冻结每条消息；批量追加先全部检查，保留原文。get/current 返回同一不可变消息，snapshot(end) 只复制前缀数组。current(role) 是该角色最新消息，不表示问答配对。
 
-本次 input 只有 role/content。ExecutionContext 在开始时固定 settings 的不可变取值与 TranscriptRangeRef [activeStart,end)，范围包含本次输入；历史选择排除末条。外层修改配置或追加消息不会改变进行中的执行，下一次执行才捕获新的配置与范围。模型操作从所属 ExecutionContext 读取配置；消息只在需要时从固定范围读取。
+本次 input 只有 role/content。ObserverBinding 在接纳与分段后捕获配置与 TranscriptRangeRef [activeStart,end)，范围包含本次输入；历史选择排除末条。每层通过声明的本层 resources.values 取得接口，不沿祖先 Context 取数。后续追加和配置变化不影响本次快照，核心 ExecutionContext 不保存服务来源。
 
 服务启动时初始化一个本地 Observer 环境，Runtime 创建并持有 Transcript、Memories 和消息选择计数。可以传入初始消息数组，按正常接纳产生内容记录；初始化不产生调用 Context 或模型调用。环境、消息与记录跨请求保留，进程退出后消失。当前不提供多环境路由、持久化、清空或恢复接口。
 
@@ -48,7 +49,7 @@ ExtractMemory  → PrepareModelRequest → InvokeModel → AcceptModelOutput →
 
 消息组装是生成回答内部的 Attempt。记忆接纳与落实是两个不同动作，因此合法结果已取得、但变更落实失败可以分别观察。模型请求容量、输出解析与检查仍由对应动作组合普通函数完成，不为每个函数创建执行对象。
 
-`Execution<I,O>` 的 call 建立 ExecutionContext 并调用具体 execute。ObserverExecution 持有筛选、生成和记忆三个 Operation，在生成成功后追加助手消息，然后执行记忆提取。实例不保存本次调用状态，操作原始输入、执行配置与消息范围仍通过上层 Context 引用取得。三层调用共享 execute/receive 接入，具体业务目前默认一轮；不自动重发模型请求或恢复。
+运行结构 Execution/Operation/Attempt 固定处理内核机制；具体业务实现对应 Definition，声明输入输出、资源、子层和 execute/receive。Binding 将定义与本环境结构接线。ObserverExecutionDefinition 仍按顺序筛选、生成、追加回答、提取记忆；仅回答生成在完整输出契约拒绝后允许一次追加模型调用。详见 [声明、绑定和结构](docs/runtime-boundaries.md#声明绑定和结构)。
 
 ```ts
 const environment = initializeObserver(provider); // 请求到来前
@@ -56,9 +57,9 @@ const environment = initializeObserver(provider); // 请求到来前
 const generationOutput = await environment.execution.submit(() => acceptExecutionInput(environment.transcript, request), { settings, signal }); // Runtime 先占用，再接纳输入；消息范围在调用开始时固定。
 ```
 
-环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 用 Execution.submit 的 started 回调取得 Context ID，在首条记录发布前绑定本次调用，按 contextId 筛选记录，结束时解除订阅。它不再通过 input 对象身份关联记录。
+环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 用 ObserverBinding.submit 的 started 回调取得 Context ID，在首条记录发布前绑定本次调用，按 contextId 筛选记录，结束时解除订阅。它不再通过 input 对象身份关联记录。
 
-记录创建发生在 Context 创建之后，工作执行之前。对应记录 Helper 在这个边界直接读取已有 Operation 实例的描述及现场父 Context；Attempt 的源码和参与者描述也从现场执行实例读取。Context 不携带这些描述、不保存 declaration；记录固化信息后，完成/失败只依据 Context 登记结果。不新增长期的实例关联表。
+记录创建发生在 Context 创建之后、工作执行之前。绑定提供声明中的描述和实际 Operation 实例 ID，记录接线读取父调用的绑定记录。Context 不携带描述或声明；完成/失败仍通过本次 Invocation 更新记录，不新增长期关联表。
 
 可调用实例与 Context 为 1:N；开启记录时，每个 E/O/A Context 对应一条同层 Record。复用 Operation 的 operationInstanceId 保持不变，每次调用的 Context ID 与 Record ID 独立产生。记录容器保留所有调用，而非被新请求替换。
 
@@ -69,10 +70,10 @@ GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer �
 | 对象                  | 职责                                                                      |
 | --------------------- | ------------------------------------------------------------------------- |
 | InvocationContext     | UUID、初始 input、当前轮 currentInput/progress 与终态；持有真实 IO 与异常 |
-| ExecutionContext      | 整次运行；固定配置浅快照、Transcript 范围与 AbortSignal 引用              |
-| OperationContext      | 一次操作调用；executionContext 引用和本次 IO/状态                         |
-| AttemptContext        | 一次动作调用；operationContext 引用和本次 IO/状态                         |
-| Runtime               | 持有既有运行现场与可选根记录、顶层运行占用和上下文读取                    |
+| ExecutionContext      | 本次 E 调用；信号、本层资源与私有构造归属                                 |
+| OperationContext      | 一次操作调用；私有父级、本层资源及 IO/状态                                |
+| AttemptContext        | 一次动作调用；私有父级、本层资源及 IO/状态                                |
+| Runtime               | 持有持续现场与根记录，提供运行占用和绑定入口                              |
 | Invocation            | 单次调用的现场、execute/receive 循环和调用记录生命周期                    |
 | Transcript / Memories | 各自内容的审查、变更与变更记录登记                                        |
 | Recorder              | 通用 add/update/subscribe、登记错误隔离；不解释记录种类或生成快照         |
@@ -90,7 +91,7 @@ Runtime 可以不接 Recorder。接入时，工作完成先更新 Context，再�
 
 三层调用采用同一结构：call → execute → receive → complete/fail。receive 接收本轮成功结果或失败，各具体类决定后续；默认返回成功结果或传播原错误。需要继续时显式返回 context.continueWith(nextInput, reason)。没有通用 retry/skip/fallback 策略表。
 
-maxRounds 默认 1，具体类可设为 2，均包含首次执行；不接受更大值。每轮开始检查取消。次数耗尽、无效继续原因、接收自身异常明确退出；登记失败不能触发本地恢复。原有模型单次超时仍有效，这不是通用的抢占或恢复机制。现有筛选、生成、记忆链路未开启重复执行。
+maxRounds 默认 1，具体类可设为 2，均包含首次执行；不接受更大值。每轮开始检查取消。次数耗尽、无效继续原因、接收自身异常明确退出；登记失败不能触发本地恢复。原有模型单次超时仍有效，这不是通用的抢占或恢复机制。筛选和记忆仍为一次；GenerateAnswer 在明确的模型输出拒绝条件下最多执行两轮，第二轮不重做筛选和上下文组装。
 
 同一调用内 Context 身份不变：input 是初始引用，currentInput 是当前轮输入，progress 表达当前轮次、执行/接收位置及 execute 结果。continueWith 不重置初始输入，不改写已结束的子调用。运行可不接 Recorder，处理分支不依赖记录。
 
@@ -104,7 +105,7 @@ maxRounds 默认 1，具体类可设为 2，均包含首次执行；不接受更
 
 普通过程数据在登记边界复制冻结，包括简单输入消息与实际模型请求。TranscriptRangeRef 是不可变范围引用，保持原实例，不遍历或复制整个 Transcript。历史选择从执行范围读取候选，组装操作输出选中的普通消息内容和索引，不把整个集合引用放回操作 IO。
 
-Runtime.getExecutionContext/getOperationContext 沿 AttemptContext.operationContext → OperationContext.executionContext 直接读取上层上下文，不需要登记表或 Record，调用完成后仍可读取。Runtime 不维护活动子调用集合，当前串行流程通过 await 保证结束顺序；手动提前结束父调用不受通用运行管理保护。父调用已结束、嵌套调用属于不同执行和重复结束仍直接检查。
+O/A 的父 Context 仅用于内部归属和活动检查，工作通过本层申请的资源访问配置与内容。Invocation.children 持有直接子调用及父层接收状态，Sequence 逐项执行并等待接收。父级已结束、跨 Runtime 现场和重复结束仍直接检查；不增加通用调度或权限体系。
 
 ExecutionRecordHelper.snapshot 查询已有记录；HTTP observeTranscript 在展示时展开执行范围为 start/end/messages。执行详情的 EXECUTION CONTEXT 展示配置与范围，输入区域单独显示本次消息。当前没有持久化、独立来源副本或恢复机制。
 
@@ -194,7 +195,7 @@ test/                       运行、边界、HTTP 和前端纯逻辑测试
 
 页面直接读取这些记录显示变化，点击记忆体可以查看当前理解、历次变化及调用关联。每轮开始从Runtime 的 Memories 取得 previousMemories 的正文快照，筛选、回答和本轮提取使用同一份旧记忆。筛选输入为 message + memories，原始 history 从执行固定范围读取；记忆不插入 Transcript，计数不发送给模型。生成接收 message + 选中原文 + previousMemories；提取接收 previousMemories + 本轮 QA + 当前段筛选原文，不沿来源加载旧段，落实后下一轮筛选读取更新后的记忆。三次实际模型请求都由原有 AttemptRecord 记录，不读取 MemoryRecord 推进。
 
-可在配置密钥后执行 `pnpm build` 和 `node --env-file-if-exists=.env test/live/memory.mjs` 检查三轮真实 QA。该检查直接调用产品的 ObserverExecution，不替换操作、提示词或流程；输出记录到本地 traces/memoryLoop（可用第一个参数指定新目录），失败停止，不修复或重试。不随普通测试访问模型。
+可在配置密钥后执行 `pnpm build` 和 `node --env-file-if-exists=.env test/live/memory.mjs` 检查三轮真实 QA。该检查直接调用产品的 ObserverBinding，不替换操作、提示词或流程；输出记录到本地 traces/memoryLoop（可用第一个参数指定新目录），失败停止，不修复或重试。不随普通测试访问模型。
 
 门店与培训交叉变更的 16 轮串行场景：`node --env-file-if-exists=.env test/live/memory.mjs traces/memoryContinuity test/live/scenarios/continuity.json`。场景文件仅提供用户消息和事后参考，参考不发送给模型；测试仍调用同一产品执行，逐轮核对记忆进入筛选及提取的实际请求。
 

@@ -1,12 +1,12 @@
-import { BehaviorInitializer } from '@capix-observer/runtime';
+import type { ChildBindings } from '@capix-observer/runtime';
 import { TranscriptResource } from '@capix-observer/runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ObserverResources, type ModelRequestResources } from '../../observer/resources.js';
-import { checkResourceRequests, Sequence } from '@capix-observer/runtime';
+import { Sequence } from '@capix-observer/runtime';
 import type { InvocationResult, Invocation } from '@capix-observer/runtime';
 import { sortBy } from 'es-toolkit/array';
 import type { ModelRequest, Selection } from '../../model/types.js';
-import { Operation, type Runtime, type OperationContext, type Memory } from '@capix-observer/runtime';
+import { OperationDefinition, type OperationContext, type Memory } from '@capix-observer/runtime';
 import { checkCapacity, estimateCapacity } from '../../model/capacity.js';
 import type { GenerationOutput } from '@capix-observer/protocol';
 import { answerOutputContract } from './output.js';
@@ -25,7 +25,7 @@ export interface GenerationInput {
   readonly memories: readonly ReturnType<Memory['toJSON']>[];
 }
 
-export class GenerateAnswer extends Operation<GenerationInput, GenerationOutput, ObserverResources> {
+export class GenerateAnswer extends OperationDefinition<GenerationInput, GenerationOutput, ObserverResources> {
   readonly name = 'answer';
   readonly label = '生成回答';
   readonly source = 'services/observer/src/operations/answer/generate.ts · GenerateAnswer';
@@ -37,47 +37,48 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
 
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), model: ModelResource.invoke.request() } as const);
   readonly requires = GenerateAnswer.requires;
-  protected override readonly maxRounds = 2;
+  override readonly maxRounds = 2;
+  readonly children;
   private readonly composition;
   private readonly regenerationComposition;
-  readonly prepareRegeneration: BehaviorInitializer<PrepareModelRequest<ModelRegenerationInput>>;
+  readonly prepareRegeneration: PrepareModelRequest<ModelRegenerationInput>;
 
-  readonly assemble: BehaviorInitializer<AssembleContext>;
-  readonly prepareRequest: BehaviorInitializer<PrepareModelRequest<AssembledContext & { memories: GenerationInput['memories'] }>>;
-  readonly invokeModel: BehaviorInitializer<InvokeModel>;
-  readonly acceptOutput: BehaviorInitializer<AcceptModelOutput<ModelAcceptanceInput, GenerationOutput>>;
+  readonly assemble: AssembleContext;
+  readonly prepareRequest: PrepareModelRequest<AssembledContext & { memories: GenerationInput['memories'] }>;
+  readonly invokeModel: InvokeModel;
+  readonly acceptOutput: AcceptModelOutput<ModelAcceptanceInput, GenerationOutput>;
 
-  constructor(runtime: Runtime) {
-    super(runtime.operationInvocations);
-    this.assemble = new BehaviorInitializer(AssembleContext.requires, () => new AssembleContext(runtime.attemptInvocations));
-    this.prepareRequest = new BehaviorInitializer(PrepareModelRequest.requires, () => new PrepareModelRequest(runtime.attemptInvocations, (input, resources) => this.createRequest(input, resources)));
-    this.invokeModel = new BehaviorInitializer(InvokeModel.requires, () => new InvokeModel(runtime.attemptInvocations, this.purpose));
-    this.acceptOutput = new BehaviorInitializer(AcceptModelOutput.requires, () => new AcceptModelOutput(runtime.attemptInvocations, this.output));
+  constructor() {
+    super();
+    this.assemble = new AssembleContext();
+    this.prepareRequest = new PrepareModelRequest((input, resources) => this.createRequest(input, resources));
+    this.invokeModel = new InvokeModel(this.purpose);
+    this.acceptOutput = new AcceptModelOutput(this.output);
     this.composition = new Sequence<GenerationInput, Invocation<unknown, unknown, OperationContext>>()
       .step('context', { use: this.assemble, input: ({ input }) => input.selection })
       .step('request', { use: this.prepareRequest, input: ({ input, outputs }) => ({ ...outputs.context, memories: input.memories }) })
       .step('model', { use: this.invokeModel, input: ({ outputs }) => outputs.request })
       .step('acceptance', { use: this.acceptOutput, input: ({ outputs }) => ({ output: outputs.model }) });
-    this.prepareRegeneration = new BehaviorInitializer(PrepareModelRequest.requires, () => new PrepareModelRequest(runtime.attemptInvocations, prepareRegenerationRequest));
+    this.prepareRegeneration = new PrepareModelRequest(prepareRegenerationRequest);
     this.regenerationComposition = new Sequence<ModelRegenerationEvidence, Invocation<unknown, unknown, OperationContext>>()
       .step('request', { use: this.prepareRegeneration, input: ({ parent, input }) => modelRegenerationInput(parent, input) })
-      .step('model', { use: { requires: InvokeModel.requires, create: (parent, input: { request: ModelRequest; evidence: ModelRegenerationEvidence }, options) => this.invokeModel.get().regeneration.create(parent, input, options) }, input: ({ input, outputs }) => ({ request: outputs.request, evidence: input }) })
+      .step('model', { use: this.invokeModel.regeneration.entry, input: ({ input, outputs }) => ({ request: outputs.request, evidence: input }) })
       .step('acceptance', { use: this.acceptOutput, input: ({ outputs }) => ({ output: outputs.model }) });
-    checkResourceRequests(this.requires, [...this.composition.requests, ...this.regenerationComposition.requests]);
+    this.children = Object.freeze([this.prepareRegeneration, this.assemble, this.prepareRequest, this.invokeModel, this.acceptOutput]);
   }
 
-  protected async execute(context: OperationContext<GenerationInput, GenerationOutput, ObserverResources>, invocation: Invocation<GenerationInput, GenerationOutput, OperationContext<GenerationInput, GenerationOutput, ObserverResources>>): Promise<GenerationOutput> {
-    if (context.progress.round === 1) return (await this.composition.run(invocation, context.currentInput)).acceptance;
+  async execute(context: OperationContext<GenerationInput, GenerationOutput, ObserverResources>, invocation: Invocation<GenerationInput, GenerationOutput, OperationContext<GenerationInput, GenerationOutput, ObserverResources>>, children: ChildBindings): Promise<GenerationOutput> {
+    if (context.progress.round === 1) return (await this.composition.run(invocation, context.currentInput, children)).acceptance;
     const evidence = this.regenerationEvidence(invocation);
     if (!evidence) throw new Error('Missing model regeneration evidence');
-    return (await this.regenerationComposition.run(invocation, evidence)).acceptance;
+    return (await this.regenerationComposition.run(invocation, evidence, children)).acceptance;
   }
 
-  protected receive(context: OperationContext<GenerationInput, GenerationOutput, ObserverResources>, result: InvocationResult<GenerationOutput>, invocation: Invocation<GenerationInput, GenerationOutput, OperationContext<GenerationInput, GenerationOutput, ObserverResources>>) {
+  receive(context: OperationContext<GenerationInput, GenerationOutput, ObserverResources>, result: InvocationResult<GenerationOutput>, invocation: Invocation<GenerationInput, GenerationOutput, OperationContext<GenerationInput, GenerationOutput, ObserverResources>>) {
     if (result.status === 'succeeded') return result.output;
     if (context.progress.round === 1) {
       const evidence = this.regenerationEvidence(invocation);
-      if (evidence?.rejection.returned?.status === 'failed' && evidence.rejection.returned.error === result.error && this.invokeModel.get().regeneration.allows(invocation, evidence)) {
+      if (evidence?.rejection.returned?.status === 'failed' && evidence.rejection.returned.error === result.error && this.invokeModel.regeneration.allows(invocation, evidence)) {
         return context.continueWith(context.currentInput, '完整模型返回未通过输出契约检查，按能力声明携带错误反馈再生成一次。');
       }
     }

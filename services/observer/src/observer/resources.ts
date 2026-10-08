@@ -1,5 +1,5 @@
-import { Initializer, bindResources, TranscriptResource, MemoryResource, SelectionUsageResource, type RuntimeContext, type ExecutionResourceSource, type ResourceProvider, type TranscriptRangeReader, type ResourceRequest } from '@capix-observer/runtime';
-import type { ModelSettings } from '@capix-observer/protocol';
+import { ResourceOffer, type Initializer, TranscriptResource, MemoryResource, SelectionUsageResource, type RuntimeContext, type ResourceProvider, type TranscriptRangeRef, type TranscriptRangeReader, type ResourceRequest } from '@capix-observer/runtime';
+import type { ConversationUpdate, ModelSettings } from '@capix-observer/protocol';
 import { ModelSettingsResource, ModelResource } from '../model/resources.js';
 import type { ModelProvider } from '../provider.js';
 
@@ -18,13 +18,16 @@ export interface ObserverResources extends ModelCallResources, HistoryResources 
 export interface MemoryWriteResources {
   readonly memoryWriter: Offered<typeof MemoryResource.apply>;
 }
+export const ConversationResource = Object.freeze({ delivery: new ResourceOffer('observer.delivery', (deliver: (update: ConversationUpdate) => void) => deliver) });
 export interface ObserverExecutionResources extends ObserverResources, MemoryWriteResources {
+  readonly delivery: (update: ConversationUpdate) => void;
   readonly memories: Offered<typeof MemoryResource.snapshot>;
   readonly messages: Offered<typeof TranscriptResource.append>;
   readonly selectionUsage: Offered<typeof SelectionUsageResource.record>;
 }
 
 export const observerExecutionRequests = Object.freeze({
+  delivery: ConversationResource.delivery.request(),
   settings: ModelSettingsResource.snapshot.request(),
   timeoutMs: ModelSettingsResource.timeout.request(),
   history: TranscriptResource.fixedRange.request(),
@@ -40,31 +43,27 @@ export const observerEntryRequests = Object.freeze({
   segmentation: TranscriptResource.segmentation.request(),
 });
 
-/** The only application assembly site that supplies underlying entities to published offers. */
-export class ObserverResourceInitializer {
+export interface ObserverResourceSource {
+  readonly settings: Readonly<ModelSettings>;
+  readonly transcriptRange?: TranscriptRangeRef;
+  readonly runtime: RuntimeContext;
   readonly model: Initializer<ModelProvider>;
-  readonly execution;
-  readonly entry;
-
-  constructor(context: RuntimeContext, createModel: () => ModelProvider) {
-    this.model = new Initializer(createModel);
-    const providers: readonly ResourceProvider<ExecutionResourceSource>[] = [
-      ModelSettingsResource.snapshot.provide((source: ExecutionResourceSource) => source.settings),
-      ModelSettingsResource.timeout.provide((source: ExecutionResourceSource) => source.settings),
-      TranscriptResource.fixedRange.provide((source: ExecutionResourceSource) => {
-        if (!source.transcriptRange) throw new Error('Execution Transcript range is required');
-        return source.transcriptRange;
-      }),
-      ModelResource.invoke.provide(() => this.model.get()),
-      MemoryResource.snapshot.provide(() => context.memories),
-      MemoryResource.apply.provide(() => context.memories),
-      TranscriptResource.append.provide(() => context.transcript),
-      TranscriptResource.segmentation.provide(() => context.transcript),
-      SelectionUsageResource.record.provide(() => context.selectionUsage),
-    ];
-    this.execution = bindResources<ExecutionResourceSource, ObserverExecutionResources>(observerExecutionRequests, providers);
-    this.entry = bindResources(observerEntryRequests, providers);
-  }
+  readonly delivery: (update: ConversationUpdate) => void;
 }
 
-export type ObserverResourceBindings = Pick<ObserverResourceInitializer, 'execution' | 'entry'>;
+/** Supply declarations contain no live Runtime or provider instance. */
+export const observerProviders: readonly ResourceProvider<ObserverResourceSource>[] = Object.freeze([
+  ModelSettingsResource.snapshot.provide((source: ObserverResourceSource) => source.settings),
+  ModelSettingsResource.timeout.provide((source: ObserverResourceSource) => source.settings),
+  TranscriptResource.fixedRange.provide((source: ObserverResourceSource) => {
+    if (!source.transcriptRange) throw new Error('Execution Transcript range is required');
+    return source.transcriptRange;
+  }),
+  ModelResource.invoke.provide((source: ObserverResourceSource) => source.model.get()),
+  MemoryResource.snapshot.provide((source: ObserverResourceSource) => source.runtime.memories),
+  MemoryResource.apply.provide((source: ObserverResourceSource) => source.runtime.memories),
+  TranscriptResource.append.provide((source: ObserverResourceSource) => source.runtime.transcript),
+  TranscriptResource.segmentation.provide((source: ObserverResourceSource) => source.runtime.transcript),
+  SelectionUsageResource.record.provide((source: ObserverResourceSource) => source.runtime.selectionUsage),
+  ConversationResource.delivery.provide((source: ObserverResourceSource) => source.delivery),
+]);

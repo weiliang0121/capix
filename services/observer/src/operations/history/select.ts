@@ -1,12 +1,12 @@
-import { BehaviorInitializer } from '@capix-observer/runtime';
+import type { ChildBindings } from '@capix-observer/runtime';
 import { TranscriptResource } from '@capix-observer/runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ObserverResources, type ModelRequestResources, type HistoryResources } from '../../observer/resources.js';
-import { checkResourceRequests, Sequence } from '@capix-observer/runtime';
+import { Sequence } from '@capix-observer/runtime';
 import type { Invocation } from '@capix-observer/runtime';
 import type { ModelSettings } from '@capix-observer/protocol';
 import type { Selection } from '../../model/types.js';
-import { Operation, type Runtime, type OperationContext, type TranscriptRangeReader } from '@capix-observer/runtime';
+import { OperationDefinition, type OperationContext, type TranscriptRangeReader } from '@capix-observer/runtime';
 import { historyMessages, type SelectionInput } from './input.js';
 import { selectionOutputContract, type SelectionBasis } from './output.js';
 
@@ -22,7 +22,7 @@ history 仅覆盖当前消息段，memories 可能保留旧段理解，但不保
 
 const selectionRequestResources = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request() });
 
-export class SelectHistory extends Operation<SelectionInput, Selection, ObserverResources> {
+export class SelectHistory extends OperationDefinition<SelectionInput, Selection, ObserverResources> {
   readonly name = 'selection';
   readonly label = '选择历史';
   readonly source = 'services/observer/src/operations/history/select.ts · SelectHistory';
@@ -31,17 +31,18 @@ export class SelectHistory extends Operation<SelectionInput, Selection, Observer
 
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), model: ModelResource.invoke.request() } as const);
   readonly requires = SelectHistory.requires;
+  readonly children;
   private readonly composition;
 
-  readonly prepareRequest: BehaviorInitializer<PrepareModelRequest<SelectionInput, ModelRequestResources & HistoryResources>>;
-  readonly invokeModel: BehaviorInitializer<InvokeModel>;
-  readonly acceptOutput: BehaviorInitializer<AcceptModelOutput<ModelAcceptanceInput & { basis: SelectionBasis }, Selection>>;
+  readonly prepareRequest: PrepareModelRequest<SelectionInput, ModelRequestResources & HistoryResources>;
+  readonly invokeModel: InvokeModel;
+  readonly acceptOutput: AcceptModelOutput<ModelAcceptanceInput & { basis: SelectionBasis }, Selection>;
 
-  constructor(runtime: Runtime) {
-    super(runtime.operationInvocations);
-    this.prepareRequest = new BehaviorInitializer(selectionRequestResources, () => new PrepareModelRequest<SelectionInput, ModelRequestResources & HistoryResources>(runtime.attemptInvocations, (input, resources) => loadRequest(selectionPayload(input, historyMessages(resources.history, input.message)), selectionTask, this.output.schema, resources.settings), selectionRequestResources));
-    this.invokeModel = new BehaviorInitializer(InvokeModel.requires, () => new InvokeModel(runtime.attemptInvocations, this.purpose));
-    this.acceptOutput = new BehaviorInitializer(AcceptModelOutput.requires, () => new AcceptModelOutput(runtime.attemptInvocations, { schema: this.output.schema, accept: (value, input: ModelAcceptanceInput & { basis: SelectionBasis }) => this.output.accept(value, input.basis) }));
+  constructor() {
+    super();
+    this.prepareRequest = new PrepareModelRequest<SelectionInput, ModelRequestResources & HistoryResources>((input, resources) => loadRequest(selectionPayload(input, historyMessages(resources.history, input.message)), selectionTask, this.output.schema, resources.settings), selectionRequestResources);
+    this.invokeModel = new InvokeModel(this.purpose);
+    this.acceptOutput = new AcceptModelOutput({ schema: this.output.schema, accept: (value, input: ModelAcceptanceInput & { basis: SelectionBasis }) => this.output.accept(value, input.basis) });
     this.composition = new Sequence<SelectionInput, Invocation<SelectionInput, Selection, OperationContext<SelectionInput, Selection, ObserverResources>>>()
       .step('request', { use: this.prepareRequest, input: ({ input }) => input })
       .step('model', { use: this.invokeModel, input: ({ outputs }) => outputs.request })
@@ -52,11 +53,11 @@ export class SelectHistory extends Operation<SelectionInput, Selection, Observer
           return { output: outputs.model, basis: { start: range.start, end: range.end - 1 } };
         },
       });
-    checkResourceRequests(this.requires, this.composition.requests);
+    this.children = Object.freeze([this.prepareRequest, this.invokeModel, this.acceptOutput]);
   }
 
-  protected async execute(context: OperationContext<SelectionInput, Selection, ObserverResources>, invocation: Invocation<SelectionInput, Selection, OperationContext<SelectionInput, Selection, ObserverResources>>): Promise<Selection> {
-    const outputs = await this.composition.run(invocation, context.currentInput);
+  async execute(context: OperationContext<SelectionInput, Selection, ObserverResources>, invocation: Invocation<SelectionInput, Selection, OperationContext<SelectionInput, Selection, ObserverResources>>, children: ChildBindings): Promise<Selection> {
+    const outputs = await this.composition.run(invocation, context.currentInput, children);
     return outputs.acceptance;
   }
 }

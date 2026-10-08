@@ -52,7 +52,7 @@ Execution/Operation/Attempt 的 Helper 均通过 Recorder 更新，InvocationRec
 
 services/observer/src/observer/feed.ts 消费共享 ChangeObserver，发送一致基线及后续增量。旧 subscribeExecutions 保留为本地诊断与测试工具，基于同步登记通知组织执行快照；HTTP 观测不再使用它。
 
-RuntimeSnapshot 仍只包含既有 E/O/A 和调用边界正文，是按需查询及本地展示的执行视图，不是整棵记录树。观测基线另带 Runtime 根及活动执行记录，内容记录通过 record 增量传输。parentId/childIds 可以引用未装载的历史正文。对话由 ObserverExecution.converse 独立交付，不从记录生成回答。
+RuntimeSnapshot 仍只包含既有 E/O/A 和调用边界正文，是按需查询及本地展示的执行视图，不是整棵记录树。观测基线另带 Runtime 根及活动执行记录，内容记录通过 record 增量传输。parentId/childIds 可以引用未装载的历史正文。对话由 ObserverBinding.converse 独立交付，不从记录生成回答。
 
 没有新增 Recorder 子类、插件注册、持久化、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。
 

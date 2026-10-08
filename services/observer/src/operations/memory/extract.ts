@@ -1,10 +1,10 @@
-import { BehaviorInitializer } from '@capix-observer/runtime';
+import type { ChildBindings } from '@capix-observer/runtime';
 import { MemoryResource } from '@capix-observer/runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ModelCallResources, type MemoryWriteResources } from '../../observer/resources.js';
-import { checkResourceRequests, Sequence } from '@capix-observer/runtime';
+import { Sequence } from '@capix-observer/runtime';
 import type { Invocation } from '@capix-observer/runtime';
-import { Operation, type Runtime, type OperationContext } from '@capix-observer/runtime';
+import { OperationDefinition, type OperationContext } from '@capix-observer/runtime';
 import { PrepareModelRequest } from '../../attempt/model/prepare.js';
 import { InvokeModel } from '../../attempt/model/invoke.js';
 import { AcceptModelOutput, type ModelAcceptanceInput } from '../../attempt/model/accept.js';
@@ -15,7 +15,7 @@ import type { MemoryInput } from './input.js';
 import { memoryOutputContract, type MemoryExtraction } from './output.js';
 import { loadRequest } from '../../model/request.js';
 
-export class ExtractMemory extends Operation<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources> {
+export class ExtractMemory extends OperationDefinition<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources> {
   readonly name = 'memory';
   readonly label = '提取记忆体';
   readonly source = 'services/observer/src/operations/memory/extract.ts · ExtractMemory';
@@ -28,33 +28,34 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
 
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), model: ModelResource.invoke.request(), memoryWriter: MemoryResource.apply.request() } as const);
   readonly requires = ExtractMemory.requires;
+  readonly children;
   private readonly composition;
 
-  readonly prepareRequest: BehaviorInitializer<PrepareModelRequest<MemoryInput>>;
-  readonly invokeModel: BehaviorInitializer<InvokeModel>;
-  readonly acceptOutput: BehaviorInitializer<AcceptModelOutput<ModelAcceptanceInput & { basis: MemoryInput }, MemoryExtraction>>;
-  readonly applyMemory: BehaviorInitializer<ApplyMemory>;
+  readonly prepareRequest: PrepareModelRequest<MemoryInput>;
+  readonly invokeModel: InvokeModel;
+  readonly acceptOutput: AcceptModelOutput<ModelAcceptanceInput & { basis: MemoryInput }, MemoryExtraction>;
+  readonly applyMemory: ApplyMemory;
 
-  constructor(runtime: Runtime) {
-    super(runtime.operationInvocations);
-    this.prepareRequest = new BehaviorInitializer(PrepareModelRequest.requires, () => new PrepareModelRequest(runtime.attemptInvocations, (input, resources) => loadRequest(this.prepare(input), this.task, this.output.schema, resources.settings)));
-    this.invokeModel = new BehaviorInitializer(InvokeModel.requires, () => new InvokeModel(runtime.attemptInvocations, this.purpose));
-    this.acceptOutput = new BehaviorInitializer(AcceptModelOutput.requires, () => new AcceptModelOutput(runtime.attemptInvocations, { schema: this.output.schema, accept: (value, input: ModelAcceptanceInput & { basis: MemoryInput }) => this.output.accept(value, input.basis) }));
-    this.applyMemory = new BehaviorInitializer(ApplyMemory.requires, () => new ApplyMemory(runtime.attemptInvocations));
+  constructor() {
+    super();
+    this.prepareRequest = new PrepareModelRequest((input, resources) => loadRequest(this.prepare(input), this.task, this.output.schema, resources.settings));
+    this.invokeModel = new InvokeModel(this.purpose);
+    this.acceptOutput = new AcceptModelOutput({ schema: this.output.schema, accept: (value, input: ModelAcceptanceInput & { basis: MemoryInput }) => this.output.accept(value, input.basis) });
+    this.applyMemory = new ApplyMemory();
     this.composition = new Sequence<MemoryInput, Invocation<unknown, unknown, OperationContext>>()
       .step('request', { use: this.prepareRequest, input: ({ input }) => input })
       .step('model', { use: this.invokeModel, input: ({ outputs }) => outputs.request })
       .step('acceptance', { use: this.acceptOutput, input: ({ input, outputs }) => ({ output: outputs.model, basis: input }) })
       .step('application', { use: this.applyMemory, input: ({ outputs }) => outputs.acceptance });
-    checkResourceRequests(this.requires, this.composition.requests);
+    this.children = Object.freeze([this.prepareRequest, this.invokeModel, this.acceptOutput, this.applyMemory]);
   }
 
   protected prepare(input: MemoryInput) {
     return { currentIndexes: input.currentIndexes, messages: input.messages.map(({ index, message }) => ({ index, role: message.role, content: message.content })), memories: input.memories };
   }
 
-  protected async execute(context: OperationContext<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>, invocation: Invocation<MemoryInput, MemoryExtraction, OperationContext<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>>): Promise<MemoryExtraction> {
-    const outputs = await this.composition.run(invocation, context.currentInput);
+  async execute(context: OperationContext<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>, invocation: Invocation<MemoryInput, MemoryExtraction, OperationContext<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>>, children: ChildBindings): Promise<MemoryExtraction> {
+    const outputs = await this.composition.run(invocation, context.currentInput, children);
     return outputs.application;
   }
 }

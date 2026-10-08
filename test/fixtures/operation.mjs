@@ -1,5 +1,5 @@
+import { Operation } from './behavior.mjs';
 import { callFor, rememberCall } from './lifecycle.mjs';
-import { Operation } from '@capix-observer/runtime';
 import { TestAttempt } from './attempt.mjs';
 
 // Variable-length composition used only by tests; production operations own their execute methods.

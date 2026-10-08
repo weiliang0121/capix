@@ -1,7 +1,8 @@
+import { captureSource, resourceBindingFor } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Initializer, BehaviorInitializer, ResourceOffer, bindResources, checkResourceRequests, Sequence, TranscriptResource, MemoryResource, createRuntime, Operation } from '@capix-observer/runtime';
-import { initializeObserver, acceptExecutionInput, ObserverResourceInitializer, ModelSettingsResource } from '@capix-observer/service';
+import { Initializer, ResourceOffer, bindResources, checkResourceRequests, Sequence, TranscriptResource, MemoryResource, createRuntime, OperationDefinition, ExecutionDefinition } from '@capix-observer/runtime';
+import { initializeObserver, acceptExecutionInput, ModelSettingsResource } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'fixture', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -25,37 +26,37 @@ test('unused operations and model providers stay uninitialized; used instances s
     if (fail) throw new Error('model unavailable');
     return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'answer' ? answer : { memories: [] });
   });
-  const init = env.initialization;
-  assert.equal(init.execution.get(), env.execution);
+  const definitions = env.definition.executions.conversation.operations;
+  const init = env.execution.execution.children;
   assert.equal(env.modelCreations(), 0);
-  assert.ok([init.selection, init.generation, init.extraction].every((item) => !item.initialized));
+  assert.ok(Object.values(definitions).every((item) => !init.initialized(item)));
   assert.equal([...env.book.values()].length, 1);
   await assert.rejects(run(env), /model unavailable/);
-  assert.equal(init.selection.initialized, true);
-  assert.equal(init.generation.initialized, false);
-  assert.equal(init.extraction.initialized, false);
-  const selection = init.selection.get();
-  assert.equal(selection.prepareRequest.initialized, true);
-  assert.equal(selection.invokeModel.initialized, true);
-  assert.equal(selection.acceptOutput.initialized, false);
+  assert.equal(init.initialized(definitions.selection), true);
+  assert.equal(init.initialized(definitions.generation), false);
+  assert.equal(init.initialized(definitions.extraction), false);
+  const selection = init.get(definitions.selection);
+  assert.equal(selection.children.initialized(selection.definition.prepareRequest), true);
+  assert.equal(selection.children.initialized(selection.definition.invokeModel), true);
+  assert.equal(selection.children.initialized(selection.definition.acceptOutput), false);
   fail = false;
   await run(env);
-  assert.equal(init.selection.get(), selection);
+  assert.equal(init.get(definitions.selection), selection);
   assert.equal(env.modelCreations(), 1);
-  assert.equal(init.generation.get().prepareRegeneration.initialized, false);
-  assert.equal(init.extraction.get().applyMemory.initialized, true);
+  assert.equal(init.get(definitions.generation).children.initialized(definitions.generation.prepareRegeneration), false);
+  assert.equal(init.get(definitions.extraction).children.initialized(definitions.extraction.applyMemory), true);
   assert.equal(env.transcript.current('assistant').content, answer.content);
 });
 
 test('capacity preparation and early rejection do not build later actions or a model provider', async () => {
   const env = environment(() => assert.fail('must not invoke'));
   await assert.rejects(run(env, { ...settings, contextBudget: 1 }), (error) => error.code === 'CAPACITY_EXCEEDED');
-  const selection = env.initialization.selection.get();
-  assert.equal(selection.prepareRequest.initialized, true);
-  assert.equal(selection.invokeModel.initialized, false);
-  assert.equal(selection.acceptOutput.initialized, false);
+  const selection = env.execution.execution.children.get(env.definition.executions.conversation.operations.selection);
+  assert.equal(selection.children.initialized(selection.definition.prepareRequest), true);
+  assert.equal(selection.children.initialized(selection.definition.invokeModel), false);
+  assert.equal(selection.children.initialized(selection.definition.acceptOutput), false);
   assert.equal(env.modelCreations(), 0);
-  assert.equal(env.initialization.generation.initialized, false);
+  assert.equal(env.execution.execution.children.initialized(env.definition.executions.conversation.operations.generation), false);
 });
 
 test('regeneration preparation is initialized only on the declared second-pass branch', async () => {
@@ -68,13 +69,13 @@ test('regeneration preparation is initialized only on the declared second-pass b
     return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'answer' ? answer : { memories: [] });
   });
   await run(env);
-  const generation = env.initialization.generation.get();
-  const model = generation.invokeModel.get();
-  assert.equal(generation.prepareRegeneration.initialized, false);
+  const generation = env.execution.execution.children.get(env.definition.executions.conversation.operations.generation);
+  const model = generation.children.get(generation.definition.invokeModel);
+  assert.equal(generation.children.initialized(generation.definition.prepareRegeneration), false);
   invalid = true;
   await run(env);
-  assert.equal(generation.prepareRegeneration.initialized, true);
-  assert.equal(generation.invokeModel.get(), model);
+  assert.equal(generation.children.initialized(generation.definition.prepareRegeneration), true);
+  assert.equal(generation.children.get(generation.definition.invokeModel), model);
   assert.equal(env.modelCreations(), 1);
 });
 
@@ -97,11 +98,10 @@ test('an initializer retains failure and rejects recursive creation without impl
   assert.throws(() => recursive.get(), /Recursive initialization/);
 });
 
-test('declarations are checked without construction, and factory mismatches cannot attach a child', () => {
+test('declarations are checked before resource access or invocation construction', () => {
   const runtime = createRuntime();
   const resource = new ResourceOffer('test.dependency', (value) => value);
-  let created = 0;
-  class Work extends Operation {
+  class Work extends OperationDefinition {
     name = 'test';
     label = 'test';
     source = 'test';
@@ -110,22 +110,25 @@ test('declarations are checked without construction, and factory mismatches cann
       assert.fail('must not execute');
     }
   }
-  const declared = new BehaviorInitializer({ value: resource.request() }, () => {
-    created++;
-    return new Work(runtime.operationInvocations);
+  class Root extends ExecutionDefinition {
+    children = [new Work()];
+    execute() {
+      assert.fail('must not execute');
+    }
+  }
+  let supplied = 0;
+  const binding = runtime.bind({
+    providers: [
+      resource.provide(() => {
+        supplied++;
+        return 'value';
+      }),
+    ],
+    executions: { root: new Root() },
   });
-  const sequence = new Sequence().step('work', { use: declared, input: () => null });
-  assert.throws(() => checkResourceRequests({}, sequence.requests), /not provided/);
-  assert.equal(created, 0);
-  const mismatch = new BehaviorInitializer({}, () => {
-    created++;
-    return new Work(runtime.operationInvocations);
-  });
-  const root = runtime.executionInvocations.create(null, { context: { settings }, work: { maxRounds: 1, execute: () => null } });
-  assert.throws(() => mismatch.create(root, null), /not provided/);
-  assert.throws(() => mismatch.create(root, null), /not provided/);
-  assert.equal(created, 1);
-  assert.equal(root.children.values().length, 0);
+  assert.throws(() => binding.execution('root', { capture: () => ({ source: null }) }), /not provided/);
+  assert.equal(supplied, 0);
+  assert.equal(runtime.running, false);
 });
 
 test('lazy resource values are shared down the declared branch, including initialization failure', () => {
@@ -169,15 +172,17 @@ test('lazy access never shifts the capture point of configuration, history or me
   const change = { action: 'create', memoryId: null, change: '确认时间', sourceIndexes: [0], result: { topic: '培训', content: '周五', sourceIndexes: [0] } };
   const memory = memories.apply([change])[0];
   let models = 0;
-  const resource = new ObserverResourceInitializer(runtime.context, () => {
-    models++;
-    return { invoke: () => assert.fail('unused') };
+  const resources = resourceBindingFor(runtime, {
+    invoke: () => {
+      models++;
+      assert.fail('unused');
+    },
   });
   const configuration = { ...settings };
   const root = runtime.executionInvocations.create(null, {
     context: { settings: configuration },
     requires: { settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), memories: MemoryResource.snapshot.request() },
-    resourceBinding: resource.execution,
+    establish: () => ({ resources: resources(captureSource({ settings: configuration, transcript })) }),
     work: { maxRounds: 1, execute: () => null },
   });
   configuration.model = 'later';
