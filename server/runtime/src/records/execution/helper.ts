@@ -1,3 +1,4 @@
+import { executionSource } from '../../context/execution.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
@@ -15,7 +16,7 @@ import { ExecutionRecord } from './record.js';
 export class ExecutionRecordHelper {
   static recording<I, O>(recording: InvocationRecordHelper) {
     return recording.recording<ExecutionContext<I, O>>(
-      (context) => this.create(recording.recorder, { contextId: context.id, parentId: recording.root.id }, { input: context.input, settings: context.settings, ...(context.transcriptRange ? { transcriptRange: context.transcriptRange } : {}) }),
+      (context) => this.create(recording.recorder, { contextId: context.id, parentId: recording.root.id }, { input: context.input, settings: executionSource(context).settings, ...(executionSource(context).transcriptRange ? { transcriptRange: executionSource(context).transcriptRange } : {}) }),
       (context, record, resultOf) => {
         const state = context.state;
         if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);

@@ -3,7 +3,13 @@ import { Attempt, type AttemptContext, type AttemptInvocationBuilder, RuntimeErr
 import type { ModelOutput } from '../../model/types.js';
 import type { ModelOutputContract } from '../../model/contract.js';
 
-export class AcceptModelOutput<I, O> extends Attempt<ModelOutput, O> {
+export interface ModelAcceptanceInput {
+  readonly output: ModelOutput;
+}
+
+export class AcceptModelOutput<I extends ModelAcceptanceInput, O> extends Attempt<I, O> {
+  static readonly requires = Object.freeze({});
+
   readonly name = 'acceptModelOutput';
   readonly label = '接纳模型结果';
   readonly source = 'services/observer/src/attempt/model/accept.ts · AcceptModelOutput';
@@ -16,12 +22,10 @@ export class AcceptModelOutput<I, O> extends Attempt<ModelOutput, O> {
     super(invocations);
   }
 
-  protected execute(context: AttemptContext<ModelOutput, O>): O {
-    checkCompletion(context.currentInput);
-    const value = parseContent(context.currentInput.content);
-    const operation = context.operationContext;
-    const execution = context.operationContext.executionContext;
-    return this.contract.accept(value, operation.currentInput as I, execution);
+  protected execute(context: AttemptContext<I, O>): O {
+    checkCompletion(context.currentInput.output);
+    const value = parseContent(context.currentInput.output.content);
+    return this.contract.accept(value, context.currentInput);
   }
 }
 
@@ -34,6 +38,6 @@ function parseContent(content: string): unknown {
   try {
     return JSON.parse(content);
   } catch {
-    throw new RuntimeError('INVALID_JSON', '模型返回不是完整的 JSON；未自动修复或重试。');
+    throw new RuntimeError('INVALID_JSON', '模型返回不是完整的 JSON；本次返回未被接纳。');
   }
 }

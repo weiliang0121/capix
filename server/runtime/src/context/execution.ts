@@ -3,6 +3,7 @@ import type { ModelSettings } from '@capix-observer/protocol';
 import { TranscriptRangeRef } from '../transcript/ref.js';
 import type { Transcript } from '../transcript/transcript.js';
 import { InvocationContext } from './context.js';
+import { ResourceBindings, type ResourceRequirements } from '../resource/bindings.js';
 
 export interface ExecutionOptions {
   settings: ModelSettings;
@@ -10,25 +11,37 @@ export interface ExecutionOptions {
   transcript?: Transcript;
 }
 
-export class ExecutionContext<I = unknown, O = unknown> extends InvocationContext<I, O> {
+/** Construction and recording metadata, never the work's resource interface. */
+export interface ExecutionResourceSource {
   readonly settings: Readonly<ModelSettings>;
-  readonly signal: AbortSignal;
   readonly transcriptRange?: TranscriptRangeRef;
+}
+const sources = new WeakMap<ExecutionContext, ExecutionResourceSource>();
+/** Internal recording access; not exported from the runtime package. */
+export function executionSource(context: ExecutionContext): ExecutionResourceSource {
+  return sources.get(context)!;
+}
 
-  constructor(
-    input: I,
-    options: ExecutionOptions,
-    private readonly owner?: ExecutionContextBuilder,
-  ) {
+export class ExecutionContext<I = unknown, O = unknown, R extends object = object> extends InvocationContext<I, O> {
+  readonly signal: AbortSignal;
+  readonly resources: ResourceBindings<R>;
+  readonly #owner?: ExecutionContextBuilder;
+
+  constructor(input: I, options: ExecutionOptions, owner?: ExecutionContextBuilder, bind?: (source: ExecutionResourceSource) => ResourceBindings<R>) {
     super(input);
-    // ModelSettings has scalar fields. One independent configuration is used for the whole execution.
-    this.settings = Object.freeze({ ...options.settings });
+    this.#owner = owner;
     this.signal = options.signal ?? new AbortController().signal;
-    this.transcriptRange = options.transcript ? new TranscriptRangeRef(options.transcript, options.transcript.activeStart, options.transcript.length) : undefined;
+    const source = Object.freeze({ settings: Object.freeze({ ...options.settings }), ...(options.transcript ? { transcriptRange: new TranscriptRangeRef(options.transcript, options.transcript.activeStart, options.transcript.length) } : {}) });
+    sources.set(this, source);
+    this.resources = bind ? bind(source) : new ResourceBindings({} as ResourceRequirements<R>);
     Object.freeze(this);
   }
 
   belongsTo(builder: ExecutionContextBuilder): boolean {
-    return !this.owner || this.owner === builder;
+    return !this.#owner || this.#owner === builder;
+  }
+
+  requireActive(): void {
+    this.requireRunning();
   }
 }

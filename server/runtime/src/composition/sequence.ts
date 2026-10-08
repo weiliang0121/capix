@@ -1,3 +1,5 @@
+import { resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
+import type { ResourceRequest } from '../resource/offer.js';
 import type { ParentInvocation } from '../invocation/children.js';
 import type { InvocationRelationOptions, InvocationTarget } from '../invocation/relation.js';
 import { isNonBlankString } from '../value/string.js';
@@ -9,13 +11,13 @@ export interface SequenceScope<S, P, R> {
 }
 
 export interface SequenceStep<S, P, R, I, O, A = O> {
-  readonly use: { create(parent: P, input: I, options?: InvocationRelationOptions): InvocationTarget<O> };
+  readonly use: { readonly requires?: ResourceRequirements; create(parent: P, input: I, options?: InvocationRelationOptions): InvocationTarget<O> };
   readonly input: (scope: SequenceScope<S, P, R>) => I;
   /** Parent-owned work after successful delivery; its result is available to later steps. */
   readonly accept?: (scope: SequenceScope<S, P, R>, output: O) => A | Promise<A>;
 }
 
-type Entry<S, P> = Readonly<{ key: string; run(parent: P, input: S, outputs: Readonly<Record<string, unknown>>): Promise<unknown> }>;
+type Entry<S, P> = Readonly<{ key: string; use: { readonly requires?: ResourceRequirements }; run(parent: P, input: S, outputs: Readonly<Record<string, unknown>>): Promise<unknown> }>;
 
 /** An immutable, typed sequential composition. No scheduling, retry or recovery policy. */
 export class Sequence<S, P extends ParentInvocation, R = Record<never, never>> {
@@ -30,6 +32,7 @@ export class Sequence<S, P extends ParentInvocation, R = Record<never, never>> {
     const { use, input: prepare, accept } = definition;
     const entry: Entry<S, P> = Object.freeze({
       key,
+      use,
       async run(parent: P, input: S, outputs: Readonly<Record<string, unknown>>) {
         const scope = Object.freeze({ parent, input, outputs: outputs as Readonly<R> });
         const child = use.create(parent, prepare(scope), { key });
@@ -40,6 +43,15 @@ export class Sequence<S, P extends ParentInvocation, R = Record<never, never>> {
       },
     });
     return new Sequence([...this.entries, entry]);
+  }
+
+  /** Read the same definitions that execute; no second dependency graph. */
+  get steps() {
+    return Object.freeze(this.entries.map(({ key, use }) => Object.freeze({ key, use })));
+  }
+
+  get requests(): readonly ResourceRequest<unknown>[] {
+    return Object.freeze(this.entries.flatMap(({ use }) => resourceRequests(use.requires ?? {})));
   }
 
   async run(parent: P, input: S): Promise<Readonly<R>> {

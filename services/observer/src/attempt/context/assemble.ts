@@ -1,3 +1,6 @@
+import { TranscriptResource } from '@capix-observer/runtime';
+import type { HistoryResources } from '../../observer/resources.js';
+import type { AttemptInvocationBuilder } from '@capix-observer/runtime';
 import { isSafeInteger } from 'es-toolkit/compat';
 import type { Selection } from '../../model/types.js';
 import type { Message } from '@capix-observer/protocol';
@@ -8,20 +11,25 @@ export interface AssembledContext {
   readonly selectedMessages: readonly { index: number; message: Readonly<Message> }[];
 }
 
-export class AssembleContext extends Attempt<Selection, AssembledContext> {
+export class AssembleContext extends Attempt<Selection, AssembledContext, HistoryResources> {
+  static readonly requires = Object.freeze({ history: TranscriptResource.fixedRange.request() });
+
   readonly name = 'assembleContext';
   readonly label = '组合消息';
   readonly source = 'services/observer/src/attempt/context/assemble.ts · AssembleContext';
   readonly callee = 'processing';
 
-  protected execute(context: AttemptContext<Selection, AssembledContext>): AssembledContext {
-    const execution = context.operationContext.executionContext;
-    const range = execution.transcriptRange;
+  constructor(invocations: AttemptInvocationBuilder) {
+    super(invocations, AssembleContext.requires);
+  }
+
+  protected execute(context: AttemptContext<Selection, AssembledContext, HistoryResources>): AssembledContext {
+    const range = context.resources.values.history;
     if (!range || range.length === 0) throw new Error('Execution Transcript range is required');
     const selectedMessages = context.currentInput.historyIndexes.map((index) => {
       if (!isSafeInteger(index) || index < range.start || index >= range.end - 1) throw new RangeError('Selected message is outside the execution history');
       return Object.freeze({ index, message: range.read(index) });
     });
-    return Object.freeze({ message: execution.input as Readonly<Message>, selectedMessages: Object.freeze(selectedMessages) });
+    return Object.freeze({ message: range.read(range.end - 1), selectedMessages: Object.freeze(selectedMessages) });
   }
 }

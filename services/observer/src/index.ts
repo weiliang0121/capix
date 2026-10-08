@@ -19,3 +19,7 @@ export * from './settings.js';
 export * from './http/server.js';
 export * from './observer/overview.js';
 export * from './observer/feed.js';
+export * from './model/resources.js';
+export { ObserverResourceInitializer } from './observer/resources.js';
+
+export { ObserverInitializer } from './observer/initializer.js';

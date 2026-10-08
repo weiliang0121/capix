@@ -25,10 +25,9 @@ const output = (content) => ({
   usage: null,
 });
 async function execute(answer = '{"kind":"answer","content":"海盐项目"}') {
-  const responses = [output('{"historyIndexes":[0]}'), output(answer), output('{"memories":[]}')];
   return observeFixture(createInput(input), settings, {
-    async invoke() {
-      return responses.shift();
+    async invoke(_request, purpose) {
+      return output(purpose === 'selection' ? '{"historyIndexes":[0]}' : purpose === 'answer' ? answer : '{"memories":[]}');
     },
   });
 }
@@ -186,10 +185,10 @@ test('one node overlaps calls within and across executions without mixing input 
     load: identity,
     transform: (value) =>
       new Promise((resolve) => {
-        pending.set(value, resolve);
+        pending.set(value, (result) => resolve({ result, original: value }));
         if (pending.size === 3) ready();
       }),
-    accept: (result, context) => ({ result, original: runtime.getOperationContext(context).input }),
+    accept: identity,
   });
   const first = node.call(callFor(a), 'a1'),
     second = node.call(callFor(b), 'b'),
@@ -283,7 +282,7 @@ test('Observer execution observes execution, operations and boundaries from the 
     const invocation = attempts.find((attempt) => attempt.name === 'invokeModel');
     const acceptance = attempts.find((attempt) => attempt.name === 'acceptModelOutput');
     assert.deepEqual(invocation.value.input, readOutput(preparation.value));
-    assert.deepEqual(acceptance.value.input, readOutput(invocation.value));
+    assert.deepEqual(acceptance.value.input.output, readOutput(invocation.value));
     assert.deepEqual(readOutput(operation.value), readOutput(attempts.at(-1).value));
     if (operation.operation === 'memory') assert.deepEqual(attempts.at(-1).value.input, readOutput(acceptance.value));
   }
@@ -311,14 +310,15 @@ test('Acceptance failure preserves raw output, records no accepted result, and p
   const invoked = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'invokeModel');
   const accepted = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'acceptModelOutput');
   assert.equal(readOutput(invoked.value).content, 'broken-json');
-  assert.equal(accepted.value.input.content, 'broken-json');
+  assert.equal(accepted.value.input.output.content, 'broken-json');
   assert.equal(readOutput(accepted.value), undefined);
   assert.equal(readOutput(answer.value), undefined);
   assert.equal(facts.execution.value.error.code, 'INVALID_JSON');
   assert.equal(projectExecution(facts).error.code, 'INVALID_JSON');
-  const runtime = createRecordedRuntime(),
-    execution = begin(runtime),
-    failure = new RuntimeError('TEST', 'test');
+  assert.equal(facts.attempts.filter((attempt) => attempt.operationId === answer.id && attempt.name === 'acceptModelOutput' && attempt.status === 'failed').length, 2);
+  const runtime = createRecordedRuntime();
+  const execution = begin(runtime);
+  const failure = new RuntimeError('TEST', 'test');
   const node = new TestOperation(runtime, {
     ...echo,
     transform() {

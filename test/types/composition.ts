@@ -1,4 +1,4 @@
-import { Sequence, type Operation, type Attempt, type Invocation, type ExecutionContext } from '@capix-observer/runtime';
+import { Sequence, BehaviorInitializer, type Operation, type Attempt, type Invocation, type ExecutionContext } from '@capix-observer/runtime';
 
 declare const length: Operation<string, number>;
 declare const format: Operation<number, string>;
@@ -23,3 +23,12 @@ new Sequence<string, typeof parent>().step('first', {
 sequence.step('length', { use: length, input: () => 'again' });
 // @ts-expect-error attempts cannot be direct children of an execution
 new Sequence<string, typeof parent>().step('leaf', { use: leaf, input: ({ input }) => input });
+
+const deferred = new BehaviorInitializer({}, () => length);
+const deferredResult: Promise<Readonly<{ length: number }>> = new Sequence<string, typeof parent>().step('length', { use: deferred, input: ({ input }) => input }).run(parent, 'hello');
+void deferredResult;
+// @ts-expect-error delayed construction preserves the concrete input type
+deferred.create(parent, 123);
+const deferredLeaf = new BehaviorInitializer({}, () => leaf);
+// @ts-expect-error delayed attempts still cannot be children of an execution
+new Sequence<string, typeof parent>().step('leaf', { use: deferredLeaf, input: ({ input }) => input });

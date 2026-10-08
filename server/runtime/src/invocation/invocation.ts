@@ -18,6 +18,7 @@ export interface InvocationOptions<I, O, C extends InvocationContext<I, O>> {
   signal: AbortSignal;
   recording?: InvocationRecording<C>;
   started?: InvocationStarted<I, O, C>;
+  /** Side-effect-free guard, checked at setup and before each execute/receive phase. */
   validate?: () => void;
   changes?: InvocationChangeEmitter;
 }
@@ -105,6 +106,7 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     try {
       output = await cycle(this, this.options.work, {
         signal: this.options.signal,
+        validate: this.options.validate,
         onProcess: (process) => {
           const sequence = this.nextSequence();
           this.options.changes?.publish({ kind: 'process', processSequence: sequence, round: context.progress.round, stage: process.stage, action: process.type });

@@ -1,7 +1,7 @@
-import { TranscriptRangeRef } from '@capix-observer/runtime';
+import { TranscriptRangeReader } from '@capix-observer/runtime';
 
 /** Retain up to two consecutive user/assistant pairs immediately before this input. */
-export function segmentCandidates(range: TranscriptRangeRef): readonly TranscriptRangeRef[] {
+export function segmentCandidates(range: TranscriptRangeReader): readonly TranscriptRangeReader[] {
   const starts = [range.end - 1];
   let start = range.end - 1;
   for (let count = 0; count < 2; count++) {
@@ -10,5 +10,5 @@ export function segmentCandidates(range: TranscriptRangeRef): readonly Transcrip
     starts.unshift(start);
   }
   // Never reopen archived messages or create another segment at the same boundary.
-  return starts.filter((candidate) => candidate > range.start).map((candidate) => new TranscriptRangeRef(range.transcript, candidate, range.end));
+  return starts.filter((candidate) => candidate > range.start).map((candidate) => range.slice(candidate));
 }

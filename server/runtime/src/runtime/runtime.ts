@@ -9,9 +9,6 @@ import { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
 import { InvocationRecordHelper } from '../records/invocation/helper.js';
 import type { RuntimeContext } from '../context/runtime.js';
 import { RuntimeRecord } from '../records/runtime/record.js';
-import type { ExecutionContext } from '../context/execution.js';
-import type { OperationContext } from '../context/operation.js';
-import type { AttemptContext } from '../context/attempt.js';
 import type { Recorder } from '../records/recorder.js';
 import { RuntimeError } from '../errors/error.js';
 
@@ -62,15 +59,5 @@ export class Runtime {
     } finally {
       this.#running = false;
     }
-  }
-
-  getExecutionContext(context: ExecutionContext | OperationContext | AttemptContext): ExecutionContext {
-    if ('operationContext' in context) return context.operationContext.executionContext;
-    if ('executionContext' in context) return context.executionContext;
-    return context;
-  }
-
-  getOperationContext(context: AttemptContext): OperationContext {
-    return context.operationContext;
   }
 }

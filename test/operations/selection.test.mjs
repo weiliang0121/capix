@@ -44,7 +44,7 @@ for (const fails of [false, true]) {
 }
 
 test('message counts accumulate independently and never enter model requests', async () => {
-  const { ObserverExecution } = await import('@capix-observer/service');
+  const { ObserverInitializer } = await import('@capix-observer/service');
   const { createRuntime } = await import('@capix-observer/runtime');
   const { Transcript } = await import('@capix-observer/runtime');
   const runtime = createRuntime({ messages: [{ role: 'user', content: '我在北京' }] });
@@ -53,7 +53,7 @@ test('message counts accumulate independently and never enter model requests', a
   const requests = [];
   let indexes = [0];
   let fails = false;
-  const execution = new ObserverExecution(runtime, {
+  const execution = new ObserverInitializer(runtime, {
     async invoke(request, purpose) {
       const loaded = JSON.parse(request.messages[1].content);
       assert.doesNotMatch(JSON.stringify(request), /selectionCount/);
@@ -68,7 +68,7 @@ test('message counts accumulate independently and never enter model requests', a
       if (fails) throw new Error('generation failed');
       return raw({ kind: 'answer', content: '测试回复' });
     },
-  });
+  }).execution.get();
   const run = async () => {
     transcript.append({ role: 'user', content: '继续' });
     return execution.call(transcript.current('user'), { settings, transcript });

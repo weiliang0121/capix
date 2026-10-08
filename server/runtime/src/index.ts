@@ -1,7 +1,7 @@
 export * from './attempt/attempt.js';
 export * from './context/attempt.js';
 export * from './context/context.js';
-export * from './context/execution.js';
+export { ExecutionContext, type ExecutionOptions, type ExecutionResourceSource } from './context/execution.js';
 export * from './context/operation.js';
 export * from './errors/error.js';
 export * from './errors/helper.js';
@@ -56,3 +56,12 @@ export type { InvocationCapabilities } from './invocation/capabilities.js';
 export * from './invocation/children.js';
 export * from './invocation/relation.js';
 export * from './composition/sequence.js';
+
+export { ResourceOffer, type ResourceRequest, type ResourceProvider } from './resource/offer.js';
+export * from './resource/bindings.js';
+export * from './transcript/resource.js';
+export * from './memory/resource.js';
+export * from './transcript/usage-resource.js';
+
+export * from './initialization/initializer.js';
+export * from './initialization/behavior.js';

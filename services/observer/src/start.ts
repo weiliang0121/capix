@@ -13,5 +13,5 @@ const settings = validateSettings({
 const key = process.env.DEEPSEEK_API_KEY?.trim() || '';
 const port = Number(process.env.PORT || 4317);
 if (!isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
-const server = createObserverServer({ observer: initializeObserver(new DeepSeekProvider(key)), settings, configured: Boolean(key) });
+const server = createObserverServer({ observer: initializeObserver(() => new DeepSeekProvider(key)), settings, configured: Boolean(key) });
 server.listen(port, '127.0.0.1', () => console.log(`CAPiX Observer · http://127.0.0.1:${port} · DeepSeek ${key ? 'configured' : 'key missing'}`));

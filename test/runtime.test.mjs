@@ -30,7 +30,8 @@ test('Runtime passes live Contexts; records retain separate identities, relation
     parent = context;
     assert.ok(context instanceof OperationContext);
     assert.equal(context.input, input);
-    assert.equal(context.executionContext, execution);
+    assert.equal(context.signal, execution.signal);
+    assert.equal(context.executionContext, undefined);
     assert.notEqual(recordFor(context).id, context.id);
     assert.equal(recordFor(context).value.input.count, 0);
     context.input.count++;
@@ -160,7 +161,7 @@ test('record creation captures instance descriptions at begin without storing th
   const operation = operationLifecycle.begin();
   const operationRecord = recordFor(operation);
   assert.equal(reads, 1);
-  assert.deepEqual(Object.keys(operation).sort(), ['executionContext', 'id', 'input', 'signal']);
+  assert.deepEqual(Object.keys(operation).sort(), ['id', 'input', 'resources', 'signal']);
   assert.equal(operationRecord.operationInstanceId, instance.id);
   assert.equal(operationRecord.operation, instance.name);
   assert.equal(operationRecord.label, 'initial label');
@@ -175,14 +176,14 @@ test('record creation captures instance descriptions at begin without storing th
   const attemptLifecycle = lifecycleFor(runtime).attempt(operation, attemptInstance, 'action input');
   const attempt = attemptLifecycle.begin();
   const attemptRecord = recordFor(attempt);
-  assert.deepEqual(Object.keys(attempt).sort(), ['id', 'input', 'operationContext', 'signal']);
+  assert.deepEqual(Object.keys(attempt).sort(), ['id', 'input', 'resources', 'signal']);
   assert.equal(attemptRecord.name, attemptInstance.name);
   assert.equal(attemptRecord.label, attemptInstance.label);
   assert.equal(attemptRecord.source, attemptInstance.source);
   assert.equal(attemptRecord.caller, 'operation');
   assert.equal(attemptRecord.callee, 'processing');
-  assert.equal(runtime.getOperationContext(attempt), operation);
-  assert.equal(runtime.getExecutionContext(attempt), execution);
+  assert.equal(attempt.operationContext, undefined);
+  attempt.requireActive();
   attemptLifecycle.succeed(attempt, 'action output');
   operationLifecycle.succeed(operation, 'operation output');
   lifecycles.get(execution).succeed(execution, 'execution output');

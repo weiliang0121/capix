@@ -1,7 +1,7 @@
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createInput, contextFor, transcriptFor, observeFixture } from '../fixtures/observer.mjs';
+import { createInput, sourceFor, contextFor, transcriptFor, observeFixture } from '../fixtures/observer.mjs';
 import { ExecutionRecord, snapshotValue, observeTranscript } from '@capix-observer/runtime';
 
 import { selectionOutputContract } from '@capix-observer/service';
@@ -21,16 +21,16 @@ test('input is a plain immutable message; the execution range fixes visibility a
   transcript.append({ role: 'user', content: 'later message' });
   assert.deepEqual(input, { role: 'user', content: '她负责什么' });
   assert.equal(Object.hasOwn(input, 'transcript'), false);
-  assert.equal(context.transcriptRange.end, 2);
-  assert.equal(context.transcriptRange.read(1), input);
-  assert.equal(context.transcriptRange.read(0).content, '林岚负责海盐项目');
+  assert.equal(sourceFor(context).transcriptRange.end, 2);
+  assert.equal(sourceFor(context).transcriptRange.read(1), input);
+  assert.equal(sourceFor(context).transcriptRange.read(0).content, '林岚负责海盐项目');
   assert.throws(() => {
     input.content = 'mutated';
   }, TypeError);
-  for (const index of [2, -1, 0.5]) assert.throws(() => context.transcriptRange.read(index), RangeError);
+  for (const index of [2, -1, 0.5]) assert.throws(() => sourceFor(context).transcriptRange.read(index), RangeError);
   for (const index of [1, 2])
     assert.throws(
-      () => selectionOutputContract.accept({ historyIndexes: [index] }, { message: input, memories: [] }, context),
+      () => selectionOutputContract.accept({ historyIndexes: [index] }, { start: sourceFor(context).transcriptRange.start, end: sourceFor(context).transcriptRange.end - 1 }),
       (error) => error.code === 'INDEX_OUT_OF_RANGE',
     );
 });
@@ -86,17 +86,17 @@ test('only the execution record holds the range; calls consume selected content 
 test('record snapshots copy input/configuration values and retain the fixed range reference', () => {
   const input = createInput({ content: 'current message', history: [{ role: 'assistant', content: 'prior' }] });
   const context = contextFor(input, settings);
-  const mutable = { input, settings: { ...settings }, transcriptRange: context.transcriptRange };
+  const mutable = { input, settings: { ...settings }, transcriptRange: sourceFor(context).transcriptRange };
   const recorded = snapshotValue(mutable);
   assert.notEqual(recorded.input, input);
   assert.notEqual(recorded.settings, mutable.settings);
-  assert.equal(recorded.transcriptRange, context.transcriptRange);
+  assert.equal(recorded.transcriptRange, sourceFor(context).transcriptRange);
   mutable.settings.model = 'changed';
   transcriptFor(input).append({ role: 'user', content: 'later' });
   assert.equal(recorded.settings.model, 'test');
   assert.equal(recorded.transcriptRange.end, 2);
   const record = new ExecutionRecord('context', { ...mutable, startedAt: 'now' }, 'runtime-record');
-  assert.equal(record.value.transcriptRange, context.transcriptRange);
+  assert.equal(record.value.transcriptRange, sourceFor(context).transcriptRange);
   const circular = {};
   circular.self = circular;
   assert.throws(() => snapshotValue(circular), /cyclic/);

@@ -1,7 +1,7 @@
+import type { ModelAcceptanceInput } from '../../attempt/model/accept.js';
 import { z } from 'zod';
 import type { GenerationOutput } from '@capix-observer/protocol';
 import { RuntimeError } from '@capix-observer/runtime';
-import type { GenerationInput } from './generate.js';
 import type { ModelOutputContract } from '../../model/contract.js';
 import { modelTextSchema } from '../../model/schema.js';
 
@@ -17,4 +17,4 @@ export const answerOutputContract = {
     if (!result.success) throw new RuntimeError('OUTPUT_SHAPE', '回答必须仅包含合法的 kind 和非空 content。', { issues: result.error.issues });
     return result.data;
   },
-} as const satisfies ModelOutputContract<GenerationInput, GenerationOutput>;
+} as const satisfies ModelOutputContract<ModelAcceptanceInput, GenerationOutput>;

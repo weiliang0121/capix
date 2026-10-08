@@ -1,3 +1,4 @@
+import { contextWithSource, sourceFor } from './fixtures/observer.mjs';
 import { callFor, recordFor } from './fixtures/lifecycle.mjs';
 import { OperationRecordHelper } from '@capix-observer/runtime';
 import { ExecutionRecordHelper } from '@capix-observer/runtime';
@@ -16,17 +17,17 @@ test('Context keeps live refs, separates undefined outcomes, and fixes execution
     settings = { model: 'original', temperature: 0 },
     transcript = new Transcript([]),
     controller = new AbortController();
-  const context = new ExecutionContext(input, { settings, transcript, signal: controller.signal });
+  const context = contextWithSource(input, { settings, transcript, signal: controller.signal });
   settings.model = 'changed';
-  assert.equal(context.settings.model, 'original');
-  assert.ok(Object.isFrozen(context.settings));
+  assert.equal(sourceFor(context).settings.model, 'original');
+  assert.ok(Object.isFrozen(sourceFor(context).settings));
   assert.equal(context.input, input);
-  assert.equal(context.transcriptRange.transcript, transcript);
-  assert.equal(context.transcriptRange.end, 0);
+  assert.equal(sourceFor(context).transcriptRange.transcript, transcript);
+  assert.equal(sourceFor(context).transcriptRange.end, 0);
   assert.equal(context.signal, controller.signal);
   transcript.append({ role: 'user', content: 'new' });
-  assert.equal(context.transcriptRange.end, 0);
-  assert.throws(() => context.transcriptRange.read(0), RangeError);
+  assert.equal(sourceFor(context).transcriptRange.end, 0);
+  assert.throws(() => sourceFor(context).transcriptRange.read(0), RangeError);
   controller.abort();
   assert.equal(context.signal.aborted, true);
   const initial = context.state;
@@ -60,7 +61,7 @@ test('Operation executes named actions without records and preserves non-JSON in
     },
     accept(value, context) {
       seen.push('accept');
-      assert.equal(runtime.getOperationContext(context).input, input);
+      assert.equal(context.operationContext, undefined);
       assert.equal(context.input, value);
       return value;
     },
@@ -162,32 +163,30 @@ test('Failed begin prevents work without changing the parent Context', async (t)
   assert.equal(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).events.at(-1).value.type, 'return');
 });
 
-test('Parent Context references remain readable after completion without registration or records', async () => {
-  const runtime = createRuntime(),
-    reader = createRuntime();
-  let attempt, child, execution;
+test('Contexts hide ancestor access while retaining lifecycle checks through nested parents', async () => {
+  const runtime = createRuntime();
+  let attempt;
+  let child;
   const operation = new TestOperation(runtime, {
-    readParent(input, context) {
+    readOwn(input, context) {
       attempt = context;
-      assert.equal(runtime.getExecutionContext(context), execution);
-      assert.equal(runtime.getOperationContext(context), context.operationContext);
-      assert.equal(runtime.getExecutionContext(runtime.getOperationContext(context)), execution);
-      assert.equal(Object.hasOwn(context, 'settings'), false);
+      assert.equal(context.operationContext, undefined);
+      assert.equal(context.executionContext, undefined);
+      assert.equal(context.settings, undefined);
+      context.requireActive();
       return input;
     },
-    transform: (input) => input,
-    accept: (input) => input,
   });
-  await invoke(lifecycleFor(runtime).execution({ input: 'root', settings: {} }), (root) => {
-    execution = root;
-    return invoke(lifecycleFor(runtime).operation(root, new TestOperation(runtime), 'nested'), (parent) => {
+  await invoke(lifecycleFor(runtime).execution({ input: 'root', settings: {} }), (root) =>
+    invoke(lifecycleFor(runtime).operation(root, new TestOperation(runtime), 'nested'), (parent) => {
       child = parent;
       return operation.call(callFor(parent), 'work');
-    });
-  });
-  assert.equal(runtime.getExecutionContext(attempt), execution);
-  assert.equal(runtime.getExecutionContext(child), execution);
-  assert.equal(reader.getExecutionContext(attempt), execution);
-  assert.equal(reader.getOperationContext(attempt), attempt.operationContext);
+    }),
+  );
+  assert.equal(runtime.getExecutionContext, undefined);
+  assert.equal(runtime.getOperationContext, undefined);
+  assert.equal(child.executionContext, undefined);
+  assert.throws(() => attempt.requireActive(), /ended/);
+  assert.throws(() => child.requireActive(), /ended/);
   assert.equal(runtime.recorder, undefined);
 });

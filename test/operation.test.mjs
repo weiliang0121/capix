@@ -1,16 +1,16 @@
 import { callFor } from './fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
-import { createInput, contextFor, transcriptFor } from './fixtures/observer.mjs';
+import { createInput, sourceFor, contextFor, transcriptFor } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
-import { Runtime, createRuntime } from '@capix-observer/runtime';
+import { Runtime, createRuntime, TranscriptResource, bindResources } from '@capix-observer/runtime';
 
-import { SelectHistory, AssembleContext, answerOutputContract, selectionOutputContract } from '@capix-observer/service';
+import { ObserverResourceInitializer, SelectHistory, AssembleContext, answerOutputContract, selectionOutputContract } from '@capix-observer/service';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
 const runtime = createRuntime();
-const call = (operation, input, operationInput = input) => invoke(lifecycleFor(runtime).execution({ input, settings, transcript: transcriptFor(input) }), (context) => operation.call(callFor(context), operationInput));
+const call = (operation, input, operationInput = input, resourceBinding) => invoke(lifecycleFor(runtime).execution({ input, settings, transcript: transcriptFor(input), resourceBinding }), (context) => operation.call(callFor(context), operationInput));
 const raw = (content) => ({
   id: 'test',
   model: 'test',
@@ -84,19 +84,19 @@ test('selection acceptance separates invalid shape from missing references and p
   const message = createInput(input);
   const execution = contextFor(message);
   const value = { historyIndexes: [1, 0] };
-  const selectionInput = { message, memories: [] };
-  const accepted = selectionOutputContract.accept(value, selectionInput, execution);
+  const basis = { start: sourceFor(execution).transcriptRange.start, end: sourceFor(execution).transcriptRange.end - 1 };
+  const accepted = selectionOutputContract.accept(value, basis);
   assert.deepEqual(accepted, { historyIndexes: [1, 0] });
   assert.notEqual(accepted.historyIndexes, value.historyIndexes);
   assert.deepEqual(value.historyIndexes, [1, 0]);
   for (const historyIndexes of [[0, 0], [-1], [0.5], [Number.MAX_SAFE_INTEGER + 1]]) {
     assert.throws(
-      () => selectionOutputContract.accept({ historyIndexes }, selectionInput, execution),
+      () => selectionOutputContract.accept({ historyIndexes }, basis),
       (error) => error.code === 'OUTPUT_SHAPE',
     );
   }
   assert.throws(
-    () => selectionOutputContract.accept({ historyIndexes: [2] }, selectionInput, execution),
+    () => selectionOutputContract.accept({ historyIndexes: [2] }, basis),
     (error) => error.code === 'INDEX_OUT_OF_RANGE',
   );
 });
@@ -110,8 +110,8 @@ test('selection schema preserves empty results, ranked indexes and detailed stri
     ],
   });
   const execution = contextFor(message);
-  const input = { message, memories: [] };
-  const accept = (value) => selectionOutputContract.accept(value, input, execution);
+  const basis = { start: sourceFor(execution).transcriptRange.start, end: sourceFor(execution).transcriptRange.end - 1 };
+  const accept = (value) => selectionOutputContract.accept(value, basis);
   assert.deepEqual(accept({ historyIndexes: [] }), { historyIndexes: [] });
   for (const value of [{}, { historyIndexes: null }, { historyIndexes: ['0'] }, { historyIndexes: [NaN] }, { historyIndexes: [Infinity] }, { historyIndexes: [0, 0] }, { historyIndexes: [], extra: true }]) {
     assert.throws(
@@ -126,12 +126,12 @@ test('selection schema preserves empty results, ranked indexes and detailed stri
   assert.equal(schema.properties.historyIndexes.items.minimum, 0);
   assert.equal(schema.properties.historyIndexes.items.maximum, Number.MAX_SAFE_INTEGER);
   assert.throws(
-    () => accept({ historyIndexes: [execution.transcriptRange.end - 1] }),
+    () => accept({ historyIndexes: [sourceFor(execution).transcriptRange.end - 1] }),
     (error) => error.code === 'INDEX_OUT_OF_RANGE',
   );
 });
 
-test('Named actions pass values by reference, await each boundary, and resolve original input from the owning operation', async () => {
+test('Named actions pass values by reference, await each boundary, without ancestor access', async () => {
   const input = { content: 'x' },
     loadedOutput = { request: 'y' },
     result = { raw: 'z' };
@@ -152,7 +152,7 @@ test('Named actions pass values by reference, await each boundary, and resolve o
     accept(value, context) {
       assert.equal(context.input, value);
       assert.equal(value, result);
-      assert.equal(runtime.getOperationContext(context).input, input);
+      assert.equal(context.operationContext, undefined);
       order.push('accept');
       return 'accepted';
     },
@@ -183,15 +183,16 @@ test('one selection operation can overlap calls without mixing their history bou
       return new Promise((resolve) => pending.set(message.content, resolve));
     },
   };
-  const op = new SelectHistory(runtime, provider);
+  const op = new SelectHistory(runtime);
+  const resourceBinding = new ObserverResourceInitializer(runtime.context, () => provider).execution;
   const first = { content: 'one', history: [{ role: 'user', content: 'a' }] };
   const second = { content: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
   const original = structuredClone([first, second]);
   const firstMessage = createInput(first);
-  const short = call(op, firstMessage, { message: firstMessage, memories: [] });
+  const short = call(op, firstMessage, { message: firstMessage, memories: [] }, resourceBinding);
   const shortFailure = assert.rejects(short, (error) => error.code === 'INDEX_OUT_OF_RANGE');
   const secondMessage = createInput(second);
-  const long = call(op, secondMessage, { message: secondMessage, memories: [] });
+  const long = call(op, secondMessage, { message: secondMessage, memories: [] }, resourceBinding);
   while (pending.size < 2) await new Promise((resolve) => setImmediate(resolve));
   pending.get('two')(raw('{"historyIndexes":[1]}'));
   assert.deepEqual(await long, { historyIndexes: [1] });
@@ -211,7 +212,16 @@ test('assembly attempt consumes explicit sources and needs no recorder', async (
   });
   const input = { historyIndexes: [0] };
   const attempt = new AssembleContext(runtime.attemptInvocations);
-  const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message) }), (execution) => invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), input), (context) => attempt.call(callFor(context), input)));
+  const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message), resourceBinding: bindResources({ history: TranscriptResource.fixedRange.request() }, [TranscriptResource.fixedRange.provide((parent) => parent.transcriptRange)]) }), (execution) =>
+    runtime.operationInvocations
+      .create(callFor(execution), {
+        input,
+        requires: { history: TranscriptResource.fixedRange.request() },
+        description: new TestOperation(runtime),
+        work: { maxRounds: 1, execute: (_context, invocation) => attempt.call(invocation, input) },
+      })
+      .run(),
+  );
   assert.equal(result.message, message);
   assert.equal(Object.hasOwn(result.selectedMessages[0], 'transcript'), false);
   assert.equal(result.selectedMessages[0].message, transcriptFor(message).get(0));

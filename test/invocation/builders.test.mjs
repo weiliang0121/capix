@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runtime, Recorder, RecordBook, Transcript, ChangeObserver, createRuntime } from '@capix-observer/runtime';
+import { Runtime, Recorder, RecordBook, Transcript, ChangeObserver, createRuntime, bindResources, ResourceOffer } from '@capix-observer/runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const operation = { id: 'operation', name: 'work', label: 'Work', source: 'test' };
@@ -13,15 +13,18 @@ test('reused builders bind each invocation to its own signal, settings and input
   const firstController = new AbortController();
   const secondController = new AbortController();
   const mutableSettings = { ...settings };
-  const first = runtime.executionInvocations.create('first', { context: { settings: mutableSettings, signal: firstController.signal }, work: identity });
+  const configuration = new ResourceOffer('test.settings', (source) => source);
+  const requires = { settings: configuration.request() };
+  const resourceBinding = bindResources(requires, [configuration.provide((source) => source.settings)]);
+  const first = runtime.executionInvocations.create('first', { requires, resourceBinding, context: { settings: mutableSettings, signal: firstController.signal }, work: identity });
   mutableSettings.model = 'next';
-  const second = runtime.executionInvocations.create('second', { context: { settings: mutableSettings, signal: secondController.signal }, work: identity });
+  const second = runtime.executionInvocations.create('second', { requires, resourceBinding, context: { settings: mutableSettings, signal: secondController.signal }, work: identity });
   const firstOperation = runtime.operationInvocations.create(first, { input: 'first operation', description: operation, work: identity });
   const secondOperation = runtime.operationInvocations.create(second, { input: 'second operation', description: operation, work: identity });
   const firstAttempt = runtime.attemptInvocations.create(firstOperation, { input: 'first action', description: attempt, work: identity });
   const secondAttempt = runtime.attemptInvocations.create(secondOperation, { input: 'second action', description: attempt, work: identity });
-  assert.equal(first.context.settings.model, 'fixture');
-  assert.equal(second.context.settings.model, 'next');
+  assert.equal(first.context.resources.values.settings.model, 'fixture');
+  assert.equal(second.context.resources.values.settings.model, 'next');
   assert.equal(firstAttempt.context.signal, firstController.signal);
   assert.equal(secondAttempt.context.signal, secondController.signal);
   assert.equal(first.context.runtime, undefined);
@@ -161,4 +164,33 @@ test('shared builder capabilities produce independent call event scopes across n
   assert.equal(child.parentContextId, root.context.id);
   assert.equal(leaf.parentContextId, child.contextId);
   assert.equal(scopes.get(later.context.id)[0].parentContextId, undefined);
+});
+
+test('a completed ancestor stops an awaiting child before receive without exposing parent contexts', async () => {
+  const runtime = createRuntime();
+  const root = runtime.executionInvocations.create('root', { context: { settings }, work: identity });
+  const parent = runtime.operationInvocations.create(root, { input: 'parent', description: operation, work: identity });
+  const nested = runtime.operationInvocations.create(parent, { input: 'nested', description: operation, work: identity });
+  let resume;
+  const leaf = runtime.attemptInvocations.create(nested, {
+    input: 'leaf',
+    description: attempt,
+    work: {
+      maxRounds: 1,
+      execute: () =>
+        new Promise((resolve) => {
+          resume = resolve;
+        }),
+      receive: () => assert.fail('an ended ancestor must prevent receive'),
+    },
+  });
+  const pending = leaf.run();
+  parent.context.complete('ended while leaf awaited');
+  resume('external result');
+  await assert.rejects(pending, /ended/);
+  assert.equal(leaf.context.status, 'failed');
+  assert.equal(leaf.context.progress.result.output, 'external result');
+  assert.equal(nested.context.status, 'running');
+  assert.equal(leaf.context.operationContext, undefined);
+  assert.throws(() => nested.context.requireActive(), /ended/);
 });

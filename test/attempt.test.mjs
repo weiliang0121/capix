@@ -39,7 +39,7 @@ test('one Attempt instance creates independent contexts per call and leaves pare
   await assert.rejects(attempt.call(callFor(operation), 'invalid'), (error) => error === failure);
   assert.equal(operation.status, 'running');
   assert.equal(await attempt.call(callFor(operation), 'accepted'), 'accepted');
-  assert.ok(contexts.every((context) => context instanceof AttemptContext && context.operationContext === operation));
+  assert.ok(contexts.every((context) => context instanceof AttemptContext && context.signal === operation.signal && context.operationContext === undefined));
   assert.notEqual(contexts[0].id, contexts[1].id);
   assert.equal(contexts[0].state.error, failure);
   assert.equal(contexts[1].state.output, 'accepted');

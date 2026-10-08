@@ -1,16 +1,24 @@
+import { ResourceBindings, type ResourceRequirements } from '../resource/bindings.js';
 import type { OperationContext } from './operation.js';
 import { InvocationContext } from './context.js';
 
-/** One named action invocation, independent of its source and observation description. */
-export class AttemptContext<I = unknown, O = unknown> extends InvocationContext<I, O> {
+export class AttemptContext<I = unknown, O = unknown, R extends object = object> extends InvocationContext<I, O> {
   readonly signal: AbortSignal;
+  readonly #parent: OperationContext;
 
   constructor(
-    readonly operationContext: OperationContext,
+    parent: OperationContext,
     input: I,
+    readonly resources: ResourceBindings<R> = new ResourceBindings({} as ResourceRequirements<R>),
   ) {
     super(input);
-    this.signal = operationContext.signal;
+    this.#parent = parent;
+    this.signal = parent.signal;
     Object.freeze(this);
+  }
+
+  requireActive(): void {
+    this.requireRunning();
+    this.#parent.requireActive();
   }
 }

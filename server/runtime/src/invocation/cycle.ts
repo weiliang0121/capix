@@ -11,6 +11,7 @@ type ProcessSink = (process: InvocationProcess) => void;
 export interface InvocationCycleOptions {
   signal: AbortSignal;
   onProcess: ProcessSink;
+  validate?: () => void;
 }
 
 export interface InvocationWork<C extends InvocationContext<I, O>, I, O> {
@@ -29,7 +30,9 @@ export async function cycle<I, O, C extends InvocationContext<I, O>>(invocation:
     for (let round = 1; round <= work.maxRounds; round++) {
       requireNotCancelled(signal);
       context.startRound(round, input);
+      options.validate?.();
       const result = await execute(context, work.execute, onProcess, invocation);
+      options.validate?.();
       const received = await receive(context, result, work.receive, onProcess, invocation);
       if (!(received instanceof Continuation)) return received;
       if (round === work.maxRounds) throw new InvocationStopped('LOCAL_ROUND_LIMIT', '本地执行已达到轮次上限。', { maxRounds: work.maxRounds });

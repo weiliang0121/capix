@@ -40,7 +40,8 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   assert.equal(secondRecord instanceof OperationRecord, false);
   assert.equal('executionId' in second, false);
   assert.equal('operationInstanceId' in second, false);
-  assert.equal(second.operationContext, operation);
+  assert.equal(second.signal, operation.signal);
+  assert.equal(second.operationContext, undefined);
   const during = ExecutionRecordHelper.observe(runtime.recording, callFor(execution));
   validateSnapshot(during);
   assert.equal(during.operations.length, 1);

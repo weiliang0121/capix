@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Transcript, Runtime, createRuntime } from '@capix-observer/runtime';
 
-import { GenerateAnswer, estimateCapacity } from '@capix-observer/service';
+import { ObserverResourceInitializer, GenerateAnswer, estimateCapacity } from '@capix-observer/service';
 
 import { createInput, observeFixture } from '../fixtures/observer.mjs';
 
@@ -23,16 +23,18 @@ const withHistory = (request, indexes) => {
 
 async function generate(input, contextBudget = settings.contextBudget, requests = []) {
   const runtime = createRuntime();
-  const operation = new GenerateAnswer(runtime, {
+  const provider = {
     async invoke(request) {
       requests.push(request);
       return output({ kind: 'answer', content: '完成' });
     },
-  });
+  };
+  const operation = new GenerateAnswer(runtime);
+  const resourceBinding = new ObserverResourceInitializer(runtime.context, () => provider).execution;
   const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
   const transcript = new Transcript([...history, input.message]);
   const selection = { historyIndexes: input.selectedMessages.map((item) => item.index) };
-  await invoke(lifecycleFor(runtime).execution({ input: transcript.current('user'), transcript, settings: { ...settings, contextBudget } }), (context) => operation.call(callFor(context), { selection, memories: [] }));
+  await invoke(lifecycleFor(runtime).execution({ input: transcript.current('user'), transcript, resourceBinding, settings: { ...settings, contextBudget } }), (context) => operation.call(callFor(context), { selection, memories: [] }));
   return requests[0];
 }
 

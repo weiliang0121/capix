@@ -2,6 +2,7 @@ import { Invocation, InvocationChildren, writeRecord, ExecutionContext, Operatio
 
 // Test-only lookup for legacy manual-boundary fixtures, never part of the runtime.
 const calls = new WeakMap();
+const origins = new WeakMap();
 export function rememberCall(invocation) {
   calls.set(invocation.context, invocation);
   return invocation;
@@ -20,15 +21,17 @@ export function lifecycleFor(runtime) {
   const recording = runtime.recording;
   return {
     execution(request) {
-      return invocationLifecycle(() => new ExecutionContext(request.input, request), recording ? ExecutionRecordHelper.recording(recording) : undefined);
+      return invocationLifecycle(() => new ExecutionContext(request.input, request, undefined, request.resourceBinding), recording ? ExecutionRecordHelper.recording(recording) : undefined);
     },
     operation(execution, operation, input, parent) {
-      if (parent && parent.executionContext !== execution) throw new Error('Parent operation belongs to another execution');
+      if (parent && origins.get(parent) !== execution) throw new Error('Parent operation belongs to another execution');
       return invocationLifecycle(
         () => {
           execution.requireRunning();
           parent?.requireRunning();
-          return new OperationContext(execution, input);
+          const context = new OperationContext(parent ?? execution, input);
+          origins.set(context, execution);
+          return context;
         },
         recording ? OperationRecordHelper.recording(recording, operation, callFor(parent ?? execution)) : undefined,
       );
@@ -36,8 +39,7 @@ export function lifecycleFor(runtime) {
     attempt(operation, attempt, input) {
       return invocationLifecycle(
         () => {
-          operation.requireRunning();
-          operation.executionContext.requireRunning();
+          operation.requireActive();
           return new AttemptContext(operation, input);
         },
         recording ? AttemptRecordHelper.recording(recording, attempt, callFor(operation)) : undefined,

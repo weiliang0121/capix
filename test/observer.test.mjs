@@ -110,14 +110,14 @@ test('malformed, duplicate and truncated results fail at the corresponding bound
   }
 });
 test('answer classification is validated but does not invent task success', async () => {
-  const provider = scripted([output('{"historyIndexes":[]}'), output('{"kind":"tool","content":"x"}')]);
+  const provider = scripted([output('{"historyIndexes":[]}'), output('{"kind":"tool","content":"x"}'), output('{"kind":"tool","content":"x"}')]);
   const { trace } = await run(provider);
   assert.equal(trace.error.code, 'OUTPUT_SHAPE');
   const accepted = trace.nodes.find((n) => n.operation === 'answer.acceptModelOutput');
   assert.equal(accepted.status, 'failed');
   assert.deepEqual(accepted.error.detail.issues[0].path, ['kind']);
   assert.deepEqual(JSON.parse(JSON.stringify(trace)).error.detail.issues, accepted.error.detail.issues);
-  assert.equal(provider.calls.length, 2);
+  assert.equal(provider.calls.length, 3);
   assert.equal(trace.result, undefined);
 });
 test('DeepSeek request uses JSON mode; transport secret is absent from observations', async () => {

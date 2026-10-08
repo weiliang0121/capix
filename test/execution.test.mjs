@@ -4,7 +4,7 @@ import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Execution, Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
-import { ObserverExecution } from '@capix-observer/service';
+import { ObserverInitializer } from '@capix-observer/service';
 
 import { TestOperation } from './fixtures/operation.mjs';
 import { createInput, transcriptFor } from './fixtures/observer.mjs';
@@ -55,7 +55,7 @@ test('one Execution and Operation can be called again after success and failure 
   );
 });
 
-test('ObserverExecution returns answers without a recorder and uses the configuration of each call', async () => {
+test('ObserverInitializer returns answers without a recorder and uses the configuration of each call', async () => {
   const requests = [];
   const provider = {
     async invoke(request, purpose) {
@@ -64,7 +64,7 @@ test('ObserverExecution returns answers without a recorder and uses the configur
     },
   };
   const runtime = createRuntime();
-  const execution = new ObserverExecution(runtime, provider);
+  const execution = new ObserverInitializer(runtime, provider).execution.get();
   for (const model of ['one', 'two']) {
     runtime.context.transcript.append({ role: 'user', content: model });
     const message = runtime.context.transcript.current('user');

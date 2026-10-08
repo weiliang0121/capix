@@ -6,7 +6,7 @@ import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-obse
 import { ClientRuntime } from '@capix-observer/client-runtime';
 import { Runtime, createRuntime } from '@capix-observer/runtime';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
-import { createObserverServer, initializeObserver, ObserverExecution, acceptExecutionInput } from '@capix-observer/service';
+import { createObserverServer, initializeObserver, ObserverInitializer, acceptExecutionInput } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -262,7 +262,7 @@ test('answer is delivered before memory finishes, and closing observation does n
 
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
   const runtime = createRuntime();
-  const execution = new ObserverExecution(runtime, provider);
+  const execution = new ObserverInitializer(runtime, provider).execution.get();
   const received = [];
   await execution.converse(
     () => acceptExecutionInput(runtime.context.transcript, { messages: [{ role: 'user', content: '问题' }] }),

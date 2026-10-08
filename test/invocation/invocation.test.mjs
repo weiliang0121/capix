@@ -111,7 +111,7 @@ test('started runs after validation and before registration and work with the sa
     },
   });
   assert.equal(await invocation.run(), 'done');
-  assert.deepEqual(order, ['validate', 'started', 'register', 'execute']);
+  assert.deepEqual(order, ['validate', 'started', 'register', 'validate', 'execute', 'validate']);
 });
 
 test('failed validation prevents started setup and record registration', async () => {

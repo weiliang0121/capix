@@ -1,3 +1,4 @@
+import { contextWithSource, sourceFor } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Transcript, ExecutionContext, Memory } from '@capix-observer/runtime';
@@ -12,11 +13,11 @@ test('segments preserve absolute identities and previously captured ranges', () 
     { role: 'user', content: 'old' },
     { role: 'assistant', content: 'response' },
   ]);
-  const old = new ExecutionContext(transcript.get(0), { settings, transcript });
+  const old = contextWithSource(transcript.get(0), { settings, transcript });
   const ref = transcript.ref(0);
   transcript.append({ role: 'user', content: 'new' });
   transcript.startSegment(2);
-  const next = new ExecutionContext(transcript.get(2), { settings, transcript });
+  const next = contextWithSource(transcript.get(2), { settings, transcript });
   assert.deepEqual(
     transcript.segments().map(({ start, end }) => [start, end]),
     [
@@ -24,14 +25,14 @@ test('segments preserve absolute identities and previously captured ranges', () 
       [2, 3],
     ],
   );
-  assert.equal(old.transcriptRange.start, 0);
-  assert.equal(old.transcriptRange.end, 2);
+  assert.equal(sourceFor(old).transcriptRange.start, 0);
+  assert.equal(sourceFor(old).transcriptRange.end, 2);
   assert.equal(ref.read(), transcript.get(0));
-  assert.equal(next.transcriptRange.start, 2);
-  assert.throws(() => next.transcriptRange.read(0), RangeError);
+  assert.equal(sourceFor(next).transcriptRange.start, 2);
+  assert.throws(() => sourceFor(next).transcriptRange.read(0), RangeError);
   assert.throws(() => transcript.startSegment(2), RangeError);
   transcript.append({ role: 'assistant', content: 'new response' });
-  assert.equal(next.transcriptRange.end, 3);
+  assert.equal(sourceFor(next).transcriptRange.end, 3);
   assert.equal(transcript.segments()[1].end, 4);
 });
 
@@ -113,7 +114,7 @@ for (const retained of [2, 1, 0]) {
     const large = 'large context '.repeat(5000);
     environment.transcript.append({ role: 'user', content: large }, { role: 'assistant', content: 'old' }, { role: 'user', content: retained < 2 ? large : 'previous input' }, { role: 'assistant', content: 'previous output' }, { role: 'user', content: retained < 1 ? large : 'recent input' }, { role: 'assistant', content: 'recent output' });
     const originals = environment.transcript.snapshot();
-    const oldContext = new ExecutionContext(originals[4], { settings, transcript: environment.transcript });
+    const oldContext = contextWithSource(originals[4], { settings, transcript: environment.transcript });
     const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: '继续刚才那个' }] });
     const facts = await observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript });
     assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
@@ -127,15 +128,15 @@ for (const retained of [2, 1, 0]) {
         [start, 8],
       ],
     );
-    assert.equal(oldContext.transcriptRange.start, 0);
-    assert.equal(oldContext.transcriptRange.end, 6);
+    assert.equal(sourceFor(oldContext).transcriptRange.start, 0);
+    assert.equal(sourceFor(oldContext).transcriptRange.end, 6);
     for (const [index, message] of originals.entries()) assert.equal(environment.transcript.get(index), message);
   });
 }
 
 test('retention stops at incomplete messages and never pulls a pair back out of an archived segment', async () => {
   const { segmentCandidates } = await import('@capix-observer/service');
-  const { TranscriptRangeRef } = await import('@capix-observer/runtime');
+  const { TranscriptRangeRef, TranscriptRangeReader } = await import('@capix-observer/runtime');
   const transcript = new Transcript([
     { role: 'user', content: 'old' },
     { role: 'assistant', content: 'old response' },
@@ -146,12 +147,12 @@ test('retention stops at incomplete messages and never pulls a pair back out of 
   ]);
   const range = new TranscriptRangeRef(transcript, 0, 6);
   assert.deepEqual(
-    segmentCandidates(range).map((candidate) => candidate.start),
+    segmentCandidates(new TranscriptRangeReader(range)).map((candidate) => candidate.start),
     [3, 5],
   );
   transcript.startSegment(4);
   assert.deepEqual(
-    segmentCandidates(new TranscriptRangeRef(transcript, 4, 6)).map((candidate) => candidate.start),
+    segmentCandidates(new TranscriptRangeReader(new TranscriptRangeRef(transcript, 4, 6))).map((candidate) => candidate.start),
     [5],
   );
 });
