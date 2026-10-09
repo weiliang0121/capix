@@ -1,20 +1,25 @@
+import { createRuntime } from './fixtures/runtime.mjs';
+import { lifecycleFor, callFor, recordFor } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, TranscriptRangeRef, Transcript, Memories, MemoryResource, ChangeObserver, Recorder, RecordBook, RuntimeRecordHelper, ExecutionRecordHelper, ResourceRecord, RecordingError, snapshotValue } from '@capix-observer/runtime';
+import { bindResources, ResourceOffer, TranscriptResource, TranscriptRangeRef, Transcript, Memories, MemoryResource, ChangeObserver, Recorder, RecordBook, ExecutionRecordHelper, ResourceRecord, snapshotValue } from '@capix-observer/runtime';
 
 function scope(recorder = new Recorder(new RecordBook()), contextId = 'call') {
-  const runtime = RuntimeRecordHelper.create(recorder);
-  const record = ExecutionRecordHelper.create(recorder, { contextId, parentId: runtime.id }, { input: null });
+  const runtime = createRuntime({ recorder });
+  const context = lifecycleFor(runtime).execution({ input: contextId }).begin();
+  const invocation = callFor(context);
+  const record = recordFor(context);
   return {
     recorder,
     record,
     owner: {
-      contextId,
+      contextId: context.id,
       validate: () => {
         if (record.status !== 'running') throw new Error('Call has ended');
       },
-      source: () => ({ contextId, callId: record.id, executionId: record.id }),
-      recording: { recorder, parentId: () => record.id },
+      observation: invocation.observation.resource,
+      transcript: invocation.observation.transcript,
+      memory: invocation.observation.memory,
     },
   };
 }
@@ -118,7 +123,7 @@ test('without recording, resource descriptors and operation summaries are not ev
   const fail = () => assert.fail('description must not run');
   const offer = new ResourceOffer('plain', (source, activity) => ({ sync: () => activity.runSync('sync', { input: fail, output: fail }, () => source), async: () => activity.runAsync('async', { input: fail, output: fail }, async () => source) }), 'binding', { describe: fail });
   const bound = bindResources({ value: offer.request() }, [offer.provide(() => 12)])(null);
-  bound.attach({ contextId: 'no-record', validate: () => {}, source: () => undefined });
+  bound.attach({ contextId: 'no-record', validate: () => {} });
   bound.start();
   assert.equal(bound.values.value.sync(), 12);
   assert.equal(await bound.values.value.async(), 12);
@@ -147,8 +152,8 @@ test('content origins exist with no recorder and child writer endpoints do not r
   const memories = new Memories(transcript, { changes });
   const bound = bindResources({ messages: TranscriptResource.append.request(), memory: MemoryResource.apply.request() }, [TranscriptResource.append.provide(() => transcript), MemoryResource.apply.provide(() => memories)])(null);
   const child = bound.select({ messages: TranscriptResource.append.request(), memory: MemoryResource.apply.request() });
-  bound.attach({ contextId: 'parent', validate: () => {}, source: () => undefined });
-  child.attach({ contextId: 'child', validate: () => {}, source: () => undefined });
+  bound.attach({ contextId: 'parent', validate: () => {} });
+  child.attach({ contextId: 'child', validate: () => {} });
   bound.start();
   child.start();
   bound.values.messages.append([{ role: 'user', content: 'parent' }]);
@@ -164,7 +169,7 @@ test('content origins exist with no recorder and child writer endpoints do not r
 
 test('resource access facts and content changes use the same call ownership without copying message bodies', () => {
   const { recorder, record, owner } = scope();
-  const transcript = new Transcript([], { recorder });
+  const transcript = new Transcript();
   const bound = bindResources({ messages: TranscriptResource.append.request() }, [TranscriptResource.append.provide(() => transcript)])(null);
   bound.attach(owner);
   bound.start();
@@ -203,8 +208,12 @@ for (const phase of ['started', 'returned', 'threw'])
       if (phase === 'threw') {
         assert.ok(error instanceof AggregateError);
         assert.equal(error.errors[0], cause);
-        assert.ok(error.errors[1] instanceof RecordingError);
-      } else assert.ok(error instanceof RecordingError);
+        assert.equal(error.errors[1].code, 'OBSERVATION_FAILED');
+        assert.equal(error.errors[1].cause.message, `reject ${phase}`);
+      } else {
+        assert.equal(error.code, 'OBSERVATION_FAILED');
+        assert.equal(error.cause.message, `reject ${phase}`);
+      }
       return true;
     });
     assert.equal(executions, phase === 'started' ? 0 : 1);
@@ -246,7 +255,6 @@ test('retained writer endpoint cannot mutate after a call ends even without reco
   let active = true;
   bound.attach({
     contextId: 'call',
-    source: () => undefined,
     validate: () => {
       if (!active) throw new Error('Call has ended');
     },

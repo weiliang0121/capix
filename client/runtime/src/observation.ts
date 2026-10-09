@@ -1,5 +1,5 @@
 import { isArray } from 'es-toolkit/compat';
-import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, RuntimeSnapshot, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceFact } from '@capix-observer/protocol';
+import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, RuntimeSnapshot, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceFact } from '@capix-observer/protocol';
 import { validateSnapshot } from '@capix-observer/protocol';
 
 export class ObservationSequenceError extends Error {}
@@ -113,10 +113,18 @@ function applyRecord(entries: Map<string, RecordEntry>, event: RecordChangeEvent
     return;
   }
   const entry = entries.get(change.id);
-  if (!entry || !['execution', 'operation', 'attempt'].includes(entry.kind)) throw new ObservationSequenceError('调用记录尚未装载。');
-  const data = entry.data as ExecutionRecord | OperationRecord | AttemptRecord;
+  if (!entry || !['runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) throw new ObservationSequenceError('调用记录尚未装载。');
+  const data = entry.data as RuntimeCallRecord | ExecutionRecord | OperationRecord | AttemptRecord;
   if (data.status !== 'running') throw new ObservationSequenceError('调用记录已经结束。');
-  if (change.kind === 'process-appended') {
+  if (change.kind === 'process-appended' || change.kind === 'relation-appended') {
+    const sequence = Math.max(data.value.processes.at(-1)?.eventSequence ?? 0, data.value.relationChanges.at(-1)?.eventSequence ?? 0);
+    const next = change.kind === 'process-appended' ? change.process.eventSequence : change.relation.eventSequence;
+    if (next <= sequence) throw new ObservationSequenceError('调用事实顺序没有前进。');
+  }
+  if (change.kind === 'relation-appended') {
+    if (change.relation.identity.parentContextId !== data.contextId) throw new ObservationSequenceError('调用关系不属于此父调用。');
+    entries.set(data.id, { ...entry, data: { ...data, value: { ...data.value, relationChanges: [...data.value.relationChanges, change.relation] } } });
+  } else if (change.kind === 'process-appended') {
     if (change.process.sequence !== data.value.processes.length + 1) throw new ObservationSequenceError('调用过程顺序不连续。');
     entries.set(data.id, { ...entry, data: { ...data, value: { ...data.value, processes: [...data.value.processes, change.process] } } });
   } else entries.set(data.id, { ...entry, data: { ...data, status: change.status, value: { ...data.value, ...change.result } } as ExecutionRecord });
@@ -139,7 +147,16 @@ function snapshots(entries: ReadonlyMap<string, RecordEntry>): ReadonlyMap<strin
     if ([execution, ...operations, ...attempts].some((record) => !events.some((event) => event.callId === record.id && event.value.type === 'call') || (record.status !== 'running' && !events.some((event) => event.callId === record.id && event.value.type === (record.status === 'succeeded' ? 'return' : 'throw'))))) continue;
     const callIds = new Set([execution.id, ...operations.map((record) => record.id), ...attempts.map((record) => record.id)]);
     const resources = values.filter((entry) => entry.kind === 'resource' && entry.data.parentId && callIds.has(entry.data.parentId)).map((entry) => entry.data as ResourceFact);
-    const snapshot = { execution, operations, attempts, events, resources };
+    const parent = execution.parentId ? entries.get(execution.parentId) : undefined;
+    if (!parent || parent.kind !== 'runtime-call') continue;
+    const runtimeCall = parent.data as RuntimeCallRecord;
+    const runtimeEvents = values
+      .filter((entry) => entry.kind === 'invocation-boundary' && (entry.data as InvocationBoundaryRecord).callId === runtimeCall.id)
+      .map((entry) => entry.data as InvocationBoundaryRecord)
+      .sort((a, b) => a.sequence - b.sequence);
+    if (!runtimeEvents.some((event) => event.value.type === 'call') || (runtimeCall.status !== 'running' && !runtimeEvents.some((event) => event.value.type === (runtimeCall.status === 'succeeded' ? 'return' : 'throw')))) continue;
+    resources.push(...values.filter((entry) => entry.kind === 'resource' && entry.data.parentId === runtimeCall.id).map((entry) => entry.data as ResourceFact));
+    const snapshot = { runtimeCall, runtimeEvents, execution, operations, attempts, events, resources };
     validateSnapshot(snapshot);
     result.set(execution.id, snapshot);
   }

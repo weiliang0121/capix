@@ -1,14 +1,13 @@
-import { createEnvironment } from '../fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindObserver, ObserverRuntimeDefinition, initializeObserver } from '@capix-observer/service';
-import { RuntimeError, createRuntime, AttemptRecord, InvocationRecord } from '@capix-observer/runtime';
+import { bindObserver, ObserverRuntimeDefinition } from '@capix-observer/service';
+import { RuntimeError, AttemptRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix-observer/runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const answer = { kind: 'answer', content: '修正后的回答' };
 const output = (content, finishReason = 'stop') => ({ id: 'fixture', model: 'fixture', content, finishReason, usage: null });
 
-function fixture(answers, { recorded = true, signal, configuration = settings, onCall } = {}) {
+function fixture(answers, { recorded = true, signal, configuration = settings, onCall, recordingFailure = 'isolate' } = {}) {
   const calls = [];
   const provider = {
     async invoke(request, purpose, callSignal) {
@@ -23,13 +22,13 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
     },
   };
   const messages = [{ role: 'user', content: '你好' }];
-  const environment = recorded
-    ? initializeObserver(provider)
-    : (() => {
-        const entities = createEnvironment();
-        const definition = new ObserverRuntimeDefinition();
-        return { ...entities, definition, runtime: bindObserver(definition, entities, provider) };
-      })();
+  const recorder = recorded ? new Recorder(new RecordBook()) : undefined;
+  const recording = recorder ? bindRecording(recorder, { failure: recordingFailure }) : undefined;
+  const transcript = new Transcript([], { observation: recording?.transcript });
+  const memories = new Memories(transcript, { observation: recording?.memory });
+  const entities = { transcript, memories, selectionUsage: new SelectionUsage() };
+  const definition = new ObserverRuntimeDefinition();
+  const environment = { ...entities, definition, recording, book: recorder?.book, runtime: bindObserver(definition, entities, provider, { observations: recording ? [recording] : undefined }) };
   let invocation;
   return {
     ...environment,
@@ -40,13 +39,17 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
     run: () =>
       environment.runtime.run(
         { messages },
-        { settings: configuration, signal },
         {
-          started: (_context, current) => {
-            invocation = current;
+          settings: configuration,
+          signal,
+          execution: {
+            started: (_context, current) => {
+              invocation = current;
+            },
           },
         },
       ),
+    recordFor: (call) => [...(environment.book?.values() ?? [])].find((record) => record.contextId === call.context.id),
     generation: () => invocation.children.values().find((child) => child.key === 'generation').invocation,
   };
 }
@@ -91,11 +94,11 @@ for (const [raw, code] of [
     assert.equal(rejected.returned.error.cause.code, code);
     assert.equal(rejected.invocation.view.failure.kind, 'exception');
     assert.equal(rejected.invocation.context.status, 'failed');
-    assert.equal(generation.record.value.processes.filter((process) => process.type === 'continue').length, 1);
-    assert.ok(generation.record.value.processes.some((process) => process.round === 2));
+    assert.equal(f.recordFor(generation).value.processes.filter((process) => process.type === 'continue').length, 1);
+    assert.ok(f.recordFor(generation).value.processes.some((process) => process.round === 2));
     const previous = generation.children.values()[2];
     assert.equal(previous.returned.output.content, raw);
-    assert.equal(previous.invocation.record.value.input.messages.length, original.messages.length);
+    assert.equal(f.recordFor(previous.invocation).value.input.messages.length, original.messages.length);
   });
 }
 
@@ -159,7 +162,7 @@ test('regeneration works without records and keeps per-call evidence isolated', 
   const f = fixture([output('bad'), output(JSON.stringify(answer)), output(JSON.stringify(answer))], { recorded: false });
   assert.deepEqual(await f.run(), answer);
   const first = f.generation();
-  assert.equal(first.record, undefined);
+  assert.equal(f.recordFor(first), undefined);
   f.transcript.append({ role: 'user', content: '继续' });
   assert.deepEqual(await f.run(), answer);
   assert.equal(f.generation().context.progress.round, 1);
@@ -173,7 +176,7 @@ test('record failure cannot be classified as an output rejection or trigger a se
     if (this instanceof AttemptRecord && this.name === 'acceptModelOutput' && process.type === 'throw') throw new Error('record failed');
     return append.call(this, process);
   });
-  const f = fixture([output('bad')]);
+  const f = fixture([output('bad')], { recordingFailure: 'propagate' });
   await assert.rejects(f.run(), (error) => error instanceof AggregateError);
   assert.deepEqual(
     f.calls.map((call) => call.purpose),

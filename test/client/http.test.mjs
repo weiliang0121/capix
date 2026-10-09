@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpTransport, ConversationHttpTransport, ObservationHttpTransport, HttpError, ObserverTransportError } from '@capix-observer/client-http';
-import { snapshot, transcriptSnapshot } from './fixtures.mjs';
+import { snapshot, transcriptSnapshot, baseline } from './fixtures.mjs';
 
 const input = { messages: [{ role: 'user', content: '测试' }] };
 const started = { type: 'started', contextId: 'context', transcriptId: 'fixture-transcript', inputIndex: 0 };
@@ -109,6 +109,14 @@ test('Observer queries accept declared fields without coercing malformed nested 
 test('record and source query responses must match the requested identity', async () => {
   await assert.rejects(jsonObservation(snapshot()).execution('different'), (error) => error.code === 'EXECUTION_MISMATCH');
   await assert.rejects(jsonObservation({ path: 'different.ts', content: 'source' }).source('requested.ts'), (error) => error.code === 'SOURCE_MISMATCH');
+});
+
+test('execution details require the actual parent R record and its independent boundaries', async () => {
+  for (const field of ['runtimeCall', 'runtimeEvents']) {
+    const incomplete = snapshot();
+    delete incomplete[field];
+    await assert.rejects(jsonObservation(incomplete).execution(incomplete.execution.id), (error) => error.code === 'INVALID_SNAPSHOT');
+  }
 });
 
 test('stream remote errors retain their server code', async () => {
@@ -245,4 +253,20 @@ test('conversation delivery cannot silently change transcript identity between s
     ),
     (error) => error.code === 'TRANSCRIPT_MISMATCH',
   );
+});
+
+test('observation delivery preserves E entry diagnostics and parent relationship failure evidence', async () => {
+  const occurredAt = '2026-10-09T00:00:00Z';
+  const error = { code: 'ENTRY_TEST', message: 'entry delivery failed' };
+  const invocation = { type: 'invocation', contextId: 'runtime-context', level: 'runtime', occurredAt };
+  const changes = ['accept', 'notification', 'admit', 'capture'].map((stage, index) => ({ ...invocation, sequence: index + 2, change: { kind: 'entry', target: 'execution', instanceId: 'execution-instance', key: 'main', stage, status: stage === 'notification' ? 'failed' : 'accepted', ...(stage === 'notification' ? { error } : {}) } }));
+  changes.push({ type: 'record', recorderId: 'fixture-recorder', revision: 1, occurredAt, change: { kind: 'relation-appended', id: 'runtime-call', relation: { identity: { parentContextId: 'runtime-context', childContextId: 'child-context', parentRound: 0 }, eventSequence: 6, occurredAt, offsetMs: 10, childId: 'child-call', change: { kind: 'failed', source: 'observation', error } } } });
+  const frames = [baseline({ invocations: [{ ...invocation, sequence: 1, change: { kind: 'started' } }] }), { type: 'delta', scopeId: 'fixture-scope', sequence: 1, changes }];
+  const received = [];
+  const client = new ObservationHttpTransport('', async () => new Response(frames.map(line).join('\n')));
+  await assert.rejects(
+    client.observe((frame) => received.push(frame), new AbortController().signal),
+    (error) => error.code === 'INCOMPLETE_STREAM',
+  );
+  assert.deepEqual(received, frames);
 });

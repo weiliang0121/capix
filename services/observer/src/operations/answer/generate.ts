@@ -1,3 +1,4 @@
+import { callRecording } from '@capix-observer/runtime';
 import { modelOutputRejected } from '../../model/rejection.js';
 import type { ChildBindings } from '@capix-observer/runtime';
 import { TranscriptResource } from '@capix-observer/runtime';
@@ -27,6 +28,7 @@ export interface GenerationInput {
 }
 
 export class GenerateAnswer extends OperationDefinition<GenerationInput, GenerationOutput, ObserverResources> {
+  readonly observation = [callRecording()];
   readonly name = 'answer';
   readonly label = '生成回答';
   readonly source = 'services/observer/src/operations/answer/generate.ts · GenerateAnswer';

@@ -1,27 +1,27 @@
 import { sortBy } from 'es-toolkit/array';
-import type { Recorder } from '../recorder.js';
 import { isFinite } from 'es-toolkit/compat';
 import type { InvocationBoundaryValue } from '@capix-observer/protocol';
+import type { Recorder } from '../recorder.js';
 import type { RecordBook } from '../container/book.js';
 import { ExecutionRecord } from '../execution/record.js';
-import { OperationRecord } from '../operation/record.js';
-import { AttemptRecord } from '../attempt/record.js';
+import { RuntimeCallRecord } from '../runtime-call/record.js';
+import { InvocationRecord } from '../invocation/record.js';
 import { InvocationBoundaryRecord } from './record.js';
 
-/** Call-boundary recording; Event order is resolved within the execution record tree. */
+/** R owns its timing range; an E subtree owns a separate range for its child calls. */
 export class InvocationBoundaryRecordHelper {
-  static create(recorder: Recorder, location: { start: number; executionId: string; callId: string }, type: InvocationBoundaryValue['type']): InvocationBoundaryRecord {
-    const { start, executionId, callId } = location;
-    const clock = recorder.clock;
-    const book = recorder.book;
-    this.requireExecution(book, executionId);
-    const call = this.requireCall(book, executionId, callId);
+  static create(recorder: Recorder, location: { start: number; scopeId?: string; executionId?: string; callId: string; occurredAt?: string; offsetMs?: number }, type: InvocationBoundaryValue['type']): InvocationBoundaryRecord {
+    const scopeId = location.scopeId ?? location.executionId ?? location.callId;
+    const scope = recorder.book.get(scopeId);
+    if (!(scope instanceof ExecutionRecord || scope instanceof RuntimeCallRecord)) throw new Error('Invocation timing scope does not exist');
+    const call = recorder.book.get(location.callId);
+    if (!(call instanceof InvocationRecord) || (call !== scope && !recorder.tree.descendants(scope.id).includes(call))) throw new Error('Boundary target is outside its timing scope');
     const expectedStatus = type === 'call' ? 'running' : type === 'return' ? 'succeeded' : 'failed';
-    if (call.status !== expectedStatus) throw new Error('Event does not match the invocation record state');
-    const previous = this.last(recorder, executionId);
-    const offsetMs = clock.tick() - start;
+    if (call.status !== expectedStatus) throw new Error('Boundary does not match the invocation work state');
+    const previous = this.last(recorder, scopeId);
+    const offsetMs = location.offsetMs ?? recorder.clock.tick() - location.start;
     if (!isFinite(offsetMs) || offsetMs < (previous?.offsetMs ?? 0)) throw new Error('Invalid event time');
-    const record = new InvocationBoundaryRecord({ executionId, callId, sequence: (previous?.sequence ?? 0) + 1, occurredAt: clock.now(), offsetMs }, { type });
+    const record = new InvocationBoundaryRecord({ scopeId, ...(scope instanceof ExecutionRecord ? { executionId: scope.id } : {}), callId: call.id, sequence: (previous?.sequence ?? 0) + 1, occurredAt: location.occurredAt ?? recorder.clock.now(), offsetMs }, { type });
     return recorder.add(record);
   }
 
@@ -32,34 +32,20 @@ export class InvocationBoundaryRecordHelper {
   }
 
   static findByExecution(recorder: Recorder, executionId: string): readonly InvocationBoundaryRecord[] {
-    this.requireExecution(recorder.book, executionId);
+    if (!(recorder.book.get(executionId) instanceof ExecutionRecord)) throw new Error('Execution does not exist');
+    return this.findByScope(recorder, executionId);
+  }
+
+  static findByScope(recorder: Recorder, scopeId: string): readonly InvocationBoundaryRecord[] {
+    const scope = recorder.book.get(scopeId);
+    if (!(scope instanceof ExecutionRecord || scope instanceof RuntimeCallRecord)) throw new Error('Invocation timing scope does not exist');
     return sortBy(
-      recorder.tree.descendants(executionId).filter((record): record is InvocationBoundaryRecord => record instanceof InvocationBoundaryRecord),
+      recorder.tree.descendants(scopeId).filter((record): record is InvocationBoundaryRecord => record instanceof InvocationBoundaryRecord && record.scopeId === scopeId),
       [(event) => event.sequence],
     );
   }
 
-  static last(recorder: Recorder, executionId: string): InvocationBoundaryRecord | undefined {
-    this.requireExecution(recorder.book, executionId);
-    let latest: InvocationBoundaryRecord | undefined;
-    for (const record of recorder.tree.descendants(executionId)) {
-      if (record instanceof InvocationBoundaryRecord && (!latest || record.sequence > latest.sequence)) latest = record;
-    }
-    return latest;
-  }
-
-  private static requireExecution(book: RecordBook, id: string): void {
-    if (!(book.get(id) instanceof ExecutionRecord)) throw new Error('Execution does not exist');
-  }
-
-  private static requireCall(book: RecordBook, executionId: string, callId: string): ExecutionRecord | OperationRecord | AttemptRecord {
-    const record = book.get(callId);
-    if (record instanceof ExecutionRecord && record.id === executionId) return record;
-    if (record instanceof OperationRecord && record.executionId === executionId) return record;
-    if (record instanceof AttemptRecord) {
-      const operation = book.get(record.operationId);
-      if (operation instanceof OperationRecord && operation.executionId === executionId) return record;
-    }
-    throw new Error('Event target is not an invocation in this execution');
+  static last(recorder: Recorder, scopeId: string): InvocationBoundaryRecord | undefined {
+    return this.findByScope(recorder, scopeId).at(-1);
   }
 }

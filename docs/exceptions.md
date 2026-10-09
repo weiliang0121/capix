@@ -1,6 +1,6 @@
 # 声明、异常处理与错误边界
 
-本轮将运行内容、异常处理和观测描述收敛为同一所属声明的三个平级部分。运行结构仍是 REOA，R 驱动唯一 E；不增加新的异常装配入口、R 调用实体或全局环境管理者。
+本轮将运行内容、异常处理和观测描述收敛为同一所属声明的三个平级部分。运行结构是 REOA，R 通过自身调用选择和接纳 E；各层复用同一声明与调用机制，不增加全局环境管理者。
 
 ## 声明与绑定
 
@@ -26,10 +26,12 @@ const definition = {
       return { kind: 'continue', input: context.currentInput, reason: '重新构造模型反馈请求' };
     },
   },
-  observation: {
-    input: (value) => describeInput(value),
-    output: (value) => describeOutput(value),
-  },
+  observation: [
+    callRecording({
+      input: (value) => describeInput(value),
+      output: (value) => describeOutput(value),
+    }),
+  ],
 };
 ```
 
@@ -47,7 +49,7 @@ const definition = {
 | 直接子调用交付已经确认的异常                         | 父层可以按 `accepts` 接纳；子层保留失败状态及异常身份 |
 | 未声明的异常、普通 throw、内核/绑定/调用边界错误     | 错误，不进入业务异常处理                              |
 | 处理器抛错、返回非法决定、处理器使用正式端点发生错误 | 错误，不递归进入处理器                                |
-| Record 或变化捕获失败                                | 严格错误，不重做已完成工作                            |
+| 变化捕获或显式 propagate 观测失败                    | 错误，不重做已完成工作；isolate 仅停用失败观察者      |
 | 异常到达没有消费者的 R 出口                          | `UNHANDLED_EXCEPTION` 错误，cause 保留原异常          |
 
 契约按对象身份匹配；相同名字不表示相同契约。异常事实保留运行中的值和 cause，正式记录再按自己的正文规则捕获，不用错误字符串推断处理资格。
@@ -66,7 +68,7 @@ const definition = {
 
 ## 观测
 
-观测描述是可选的记录投影，不改变运行输入输出或 Context 中的原值。未安装 Recorder 时，不执行 `observation.input/output`。安装后描述或登记失败保持严格失败。
+观测声明可将运行事实写入记录或其他载体，不改变运行输入输出。关闭观测安装时不兑现其依赖；安装后默认 isolate，可显式 propagate。记录 IO 描述由 callRecording 提供。服务采用 isolate，传播失败归属实际观测源，不递归进入业务异常处理。详见 [观测](observation.md)。
 
 内部过程保留 `execute`、`receive`（正常接纳）、`control`，新增 `handling`（异常处理）。处理器的进入、返回、继续、未处理及失败分别可见。最终输出可以引用本调用的 `receive.return` 或 `handling.return`，不复制正文或跨记录引用。失败正文和过程可携带 `failure` 分类事实；客户端增量、快照校验和详情读取使用同一契约。
 

@@ -4,7 +4,8 @@ import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import { readOutput } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript, Runtime, createRuntime } from '@capix-observer/runtime';
+import { Transcript, Runtime } from '@capix-observer/runtime';
+import { createRuntime } from '../fixtures/runtime.mjs';
 
 import { GenerateAnswer, estimateCapacity } from '@capix-observer/service';
 

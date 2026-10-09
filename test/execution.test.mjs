@@ -5,7 +5,8 @@ import { subscribeExecutions } from '@capix-observer/service';
 import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
+import { Recorder, RecordBook } from '@capix-observer/runtime';
+import { createRuntime, observeCall } from './fixtures/runtime.mjs';
 import { bindObserver, ObserverRuntimeDefinition } from '@capix-observer/service';
 
 import { TestOperation } from './fixtures/operation.mjs';
@@ -47,7 +48,7 @@ test('one Execution and Operation can be called again after success and failure 
     contexts.map((context) => context.status),
     ['succeeded', 'failed', 'succeeded'],
   );
-  const records = contexts.map((context) => ExecutionRecordHelper.observe(runtime.recording, callFor(context)));
+  const records = contexts.map((context) => observeCall(runtime.recording, callFor(context)));
   assert.equal(new Set(records.map((snapshot) => snapshot.execution.id)).size, 3);
   assert.equal(new Set(records.map((snapshot) => snapshot.operations[0].id)).size, 3);
   assert.ok(records.every((snapshot) => snapshot.operations[0].operationInstanceId === operation.id));

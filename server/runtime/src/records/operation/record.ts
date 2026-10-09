@@ -16,7 +16,7 @@ export class OperationRecord extends InvocationRecord<InvocationValue> implement
   readonly caller: string;
   readonly callee: string;
   constructor(definition: OperationRecordDefinition, input: unknown) {
-    super(snapshotValue({ input, processes: [] }), definition.parentOperationId ?? definition.executionId);
+    super(snapshotValue({ input, processes: [], relationChanges: [] }), definition.parentOperationId ?? definition.executionId);
     this.contextId = definition.contextId;
     this.executionId = definition.executionId;
     this.operationInstanceId = definition.operationInstanceId;

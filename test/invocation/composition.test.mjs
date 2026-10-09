@@ -1,7 +1,9 @@
+import { bindCallObservation, defineObservation, ResourceBindings } from '@capix-observer/runtime';
 import { Operation } from '../fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, Invocation, OperationContext, createRuntime, Recorder, RecordBook } from '@capix-observer/runtime';
+import { Sequence, Invocation, OperationContext, Recorder, RecordBook } from '@capix-observer/runtime';
+import { createRuntime } from '../fixtures/runtime.mjs';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 
 class ComposedOperation extends Operation {
@@ -175,20 +177,29 @@ test('a terminal reporting failure remains a failed delivery with a succeeded ch
         context: new OperationContext(parent.context, input),
         signal: parent.context.signal,
         work: { maxRounds: 1, execute: () => 'completed' },
-        recording: {
-          begin(context, bind) {
-            bind({ contextId: context.id });
+        observation: bindCallObservation(
+          {
+            identity: { level: 'operation', contextId: 'delivery-probe' },
+            resources: new ResourceBindings({}),
+            declarations: [
+              defineObservation(
+                {
+                  requires: {},
+                  observe(fact) {
+                    if (fact.kind === 'finished') throw error;
+                  },
+                },
+                { failure: 'propagate' },
+              ),
+            ],
           },
-          process() {},
-          finish() {
-            throw error;
-          },
-        },
+          [],
+        ),
       });
     },
   };
   const invocation = root(runtime, new Sequence().step('work', { use, input: () => null }));
-  await assert.rejects(invocation.run(), /finish record failed/);
+  await assert.rejects(invocation.run(), (observed) => observed.code === 'OBSERVATION_FAILED' && observed.cause === error);
   const child = invocation.children.values()[0];
   assert.equal(child.invocation.context.status, 'succeeded');
   assert.equal(child.invocation.context.state.output, 'completed');

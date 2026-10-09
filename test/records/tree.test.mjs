@@ -1,3 +1,4 @@
+import { createRecordScope } from '../fixtures/runtime.mjs';
 import { RuntimeRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -8,7 +9,7 @@ const attemptDefinition = (operationId) => ({ operationId, contextId: 'attempt',
 const memoryValue = { action: 'create', change: '新增约束', sourceIndexes: [0], result: { topic: '偏好', content: '步行', sourceIndexes: [0] } };
 function fixture(book = new RecordBook()) {
   const recorder = new Recorder(book);
-  const root = RuntimeRecordHelper.create(recorder);
+  const root = createRecordScope(recorder);
   const execution = ExecutionRecordHelper.create(recorder, { contextId: 'execution', parentId: root.id }, { input: {}, settings: {} });
   return { recorder, root, execution };
 }

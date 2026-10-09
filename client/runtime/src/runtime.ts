@@ -188,7 +188,7 @@ export class ClientRuntime {
       .catch((error) => {
         if (session.signal.aborted || this.observationOwner !== owner) return;
         // At most one automatic baseline retry. Other failures remain visible and can be refreshed explicitly.
-        if (resync && sequenceFailure(error)) {
+        if (resync && !sourceIncomplete(error) && sequenceFailure(error)) {
           this.connectObservation(owner, false);
           return;
         }
@@ -208,7 +208,7 @@ export class ClientRuntime {
   async loadExecution(id: string, signal?: AbortSignal): Promise<RuntimeSnapshot> {
     if (!this.observation) throw new Error('未接入观测能力。');
     const cached = this.getExecution(id);
-    if (cached && cached.execution.status !== 'running') return cached;
+    if (cached && cached.execution.status !== 'running' && cached.runtimeCall.status !== 'running') return cached;
     const session = this.observationSession;
     const snapshot = await this.observation.execution(id, signal);
     if (session !== this.observationSession) throw new Error('观测连接已更换，忽略旧详情响应。');
@@ -287,4 +287,8 @@ export class ClientRuntime {
 
 function sequenceFailure(error: unknown): boolean {
   return error instanceof ObservationSequenceError || (error instanceof Error && error.cause instanceof ObservationSequenceError);
+}
+
+function sourceIncomplete(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'SOURCE_INCOMPLETE';
 }

@@ -1,33 +1,31 @@
-import { TranscriptRecordHelper } from '../records/transcript/helper.js';
-import { writeRecord } from '../records/error.js';
+import { publishFact, type ChangeProvenance } from '../observation/publish.js';
+import type { EventConsumer } from '../observation/binding.js';
 import { randomUUID } from 'node:crypto';
-import type { Recorder } from '../records/recorder.js';
-import type { ContentProvenance } from '../records/source.js';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import { isNonBlankString } from '../value/string.js';
 import { isObject } from '../value/object.js';
 import { MessageRef, TranscriptRangeRef } from './ref.js';
 import type { Message } from '@capix-observer/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
-import { captureChange } from '../changes/publish.js';
 import { createTranscriptEvent, type TranscriptEvent } from './event.js';
 
 export interface TranscriptOptions {
-  recorder?: Recorder;
+  observation?: EventConsumer<TranscriptEvent>;
   changes?: ChangeCapture<TranscriptEvent>;
 }
 
 /** Original accepted messages, including the current input; independent of execution records. */
 export class Transcript {
   readonly id = randomUUID();
-  readonly #recorder?: Recorder;
+  readonly #observation?: EventConsumer<TranscriptEvent>;
+  #publishing = false;
   readonly #changes?: ChangeCapture<TranscriptEvent>;
   #revision = 0;
   readonly #messages: Readonly<Message>[] = [];
   readonly #starts: number[] = [0];
 
   constructor(messages: readonly Message[] = [], options: TranscriptOptions = {}) {
-    this.#recorder = options.recorder;
+    this.#observation = options.observation;
     this.#changes = options.changes;
     if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     this.append(...messages);
@@ -51,23 +49,23 @@ export class Transcript {
     return this.#starts.map((start, index) => new TranscriptRangeRef(this, start, this.#starts[index + 1] ?? this.length));
   }
 
-  startSegment(start: number, provenance: ContentProvenance = {}): void {
+  startSegment(start: number, provenance: ChangeProvenance<TranscriptEvent> = {}): void {
+    if (this.#publishing) throw new Error('Transcript change publication cannot reenter mutation');
     if (!isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
     const previousStart = this.activeStart;
     const end = this.length;
     const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'segment-started', previousStart, start, end }, provenance.origin);
     this.#starts.push(start);
     this.#revision = event.revision;
-    this.capture(event);
-    const recorder = this.#recorder;
-    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(recorder.clock, { transcriptId: this.id, revision: event.revision, source: provenance.source }, { action: 'segment', previousStart, start, end })));
+    this.capture(event, provenance.observation);
   }
 
   append(...messages: readonly Message[]): void {
     this.appendFrom(messages);
   }
 
-  appendFrom(messages: readonly Message[], provenance: ContentProvenance = {}): void {
+  appendFrom(messages: readonly Message[], provenance: ChangeProvenance<TranscriptEvent> = {}): void {
+    if (this.#publishing) throw new Error('Transcript change publication cannot reenter mutation');
     if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     // Check the whole batch before changing the transcript.
     const accepted = messages.map((message) => Transcript.accept(message));
@@ -76,13 +74,16 @@ export class Transcript {
     const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'messages-appended', start, messages: accepted }, provenance.origin);
     for (const message of accepted) this.#messages.push(message);
     this.#revision = event.revision;
-    this.capture(event);
-    const recorder = this.#recorder;
-    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(recorder.clock, { transcriptId: this.id, revision: event.revision, source: provenance.source }, { action: 'append', start, end: this.length })));
+    this.capture(event, provenance.observation);
   }
 
-  private capture(event: TranscriptEvent): void {
-    captureChange(this.#changes, event);
+  private capture(event: TranscriptEvent, observation = this.#observation): void {
+    this.#publishing = true;
+    try {
+      publishFact(event, this.#changes, observation);
+    } finally {
+      this.#publishing = false;
+    }
   }
 
   current(role: Message['role']): Readonly<Message> | undefined {

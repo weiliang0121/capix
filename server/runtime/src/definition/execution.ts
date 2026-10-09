@@ -2,6 +2,8 @@ import { InvocationDefinition } from './invocation.js';
 import type { ExecutionScope } from '../context/scope.js';
 import type { OperationDefinition } from './operation.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
+import type { invocationSignature } from './signature.js';
+import type { DefinitionParent } from './children.js';
 
 export interface ExecutionEntry<U, I, R extends object> {
   readonly requires: ResourceRequirements<R>;
@@ -10,6 +12,7 @@ export interface ExecutionEntry<U, I, R extends object> {
 }
 
 export abstract class ExecutionDefinition<I, O, R extends object = Record<string, never>, U = I, ER extends object = Record<string, never>, H extends object = Record<string, never>> extends InvocationDefinition<I, O, ExecutionScope<I, O, R>, R, H> {
+  declare readonly [invocationSignature]?: (parent: DefinitionParent<ExecutionDefinition<I, O, R, U, ER, H>>, input: U) => O;
   readonly level = 'execution' as const;
   readonly children: readonly OperationDefinition<any, any, any, any>[] = [];
   readonly entry?: ExecutionEntry<U, I, ER>;

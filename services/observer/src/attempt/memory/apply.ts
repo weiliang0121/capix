@@ -1,3 +1,4 @@
+import { callRecording } from '@capix-observer/runtime';
 import { MemoryResource } from '@capix-observer/runtime';
 import type { MemoryWriteResources } from '../../observer/resources.js';
 import { AttemptDefinition, type AttemptScope } from '@capix-observer/runtime';
@@ -6,6 +7,7 @@ import type { MemoryExtraction } from '../../operations/memory/output.js';
 
 /** Apply already accepted changes; record each change after it takes effect. */
 export class ApplyMemory extends AttemptDefinition<MemoryExtraction, MemoryExtraction, MemoryWriteResources> {
+  readonly observation = [callRecording()];
   static readonly requires = Object.freeze({ memoryWriter: MemoryResource.apply.request() });
 
   readonly name = 'applyMemory';

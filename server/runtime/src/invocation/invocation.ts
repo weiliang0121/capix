@@ -1,3 +1,6 @@
+import { isUndefined } from 'es-toolkit/predicate';
+import { RuntimeErrorHelper } from '../errors/helper.js';
+import { Clock } from '../runtime/clock.js';
 import { DeclaredException } from '../exception/contract.js';
 import { InvocationStopped } from './stop.js';
 import type { InvocationFailure, InvocationPhase } from './failure.js';
@@ -6,11 +9,11 @@ import type { InvocationView, ChildCall } from './view.js';
 import { InvocationChildren, type ParentInvocation } from './children.js';
 import type { InvocationRelation, InvocationRelationOptions } from './relation.js';
 import type { InvocationChangeEmitter } from './changes.js';
-import type { CallRecord } from '../records/invocation/record.js';
-import type { ChangeSource } from '../records/source.js';
 import type { InvocationContext } from '../context/context.js';
-import type { InvocationRecording } from './recording.js';
-import { writeRecord } from '../records/error.js';
+import type { BoundCallObservation } from '../observation/binding.js';
+import type { CallChange, CallFact, CallIdentity, CallDescription, RelationIdentity, RelationChange, EntryChange } from '../observation/facts.js';
+import { combineFaults } from '../observation/error.js';
+import { failureFact } from './failure.js';
 import { cycle, type InvocationWork } from './cycle.js';
 
 /** Synchronous setup after validation, before record registration and work. Throws stop the call unchanged. */
@@ -18,10 +21,13 @@ export type InvocationStarted<I, O, C extends InvocationContext<I, O>> = (contex
 
 export interface InvocationOptions<I, O, C extends InvocationContext<I, O>> {
   context: C;
+  clock?: Clock;
   parent?: { invocation: ParentInvocation } & InvocationRelationOptions;
   work: InvocationWork<C, I, O>;
   signal: AbortSignal;
-  recording?: InvocationRecording<C>;
+  observation?: BoundCallObservation;
+  identity?: CallIdentity;
+  description?: CallDescription;
   started?: InvocationStarted<I, O, C>;
   /** Side-effect-free guard, checked at setup and before each execute/receive phase. */
   validate?: () => void;
@@ -32,7 +38,9 @@ export interface InvocationOptions<I, O, C extends InvocationContext<I, O>> {
 export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I, O> = InvocationContext<I, O>> {
   #started = false;
   #sequence = 0;
-  #record?: CallRecord;
+  #eventSequence = 0;
+  #resourceSequence = 0;
+  readonly #clock: Clock;
   #fault?: InvocationFailure;
   #classified?: InvocationFailure;
   #failure?: InvocationFailure;
@@ -51,7 +59,12 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   }
 
   classify(error: unknown, phase: InvocationPhase, forceError = false): InvocationFailure {
-    if (this.#fault) return this.#fault;
+    if (this.#fault) {
+      // A structural report can add a second cause; retain it without allowing
+      // caught business code to replace an already-owned failure.
+      if (error instanceof AggregateError && (error.errors.includes(this.#fault.error) || error.cause === this.#fault.error)) this.#fault = Object.freeze({ ...this.#fault, error });
+      return this.#fault;
+    }
     if (!forceError && this.#classified && this.#classified.error === error) return this.#classified;
     const declared = !forceError && error instanceof DeclaredException;
     const delivered = this.children.values().some((relation) => relation.returned?.status === 'failed' && relation.returned.error === error && relation.returned.failure?.kind === 'exception');
@@ -68,24 +81,12 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   readonly callView: ChildCall<I, O, InvocationFactsOf<C>>;
   readonly #parentRelation?: InvocationRelation;
 
-  get record(): CallRecord | undefined {
-    return this.#record;
+  get observation(): BoundCallObservation | undefined {
+    return this.options.observation;
   }
 
-  get source(): ChangeSource | undefined {
-    if (!this.options.recording) return undefined;
-    return this.options.recording.source(this.requireRecord());
-  }
-
-  private bind(record: CallRecord): void {
-    if (this.#record) throw new Error('Invocation record is already bound');
-    if (record.contextId !== this.context.id) throw new Error('Invocation record belongs to another Context');
-    this.#record = record;
-  }
-
-  private requireRecord(): CallRecord {
-    if (!this.#record) throw new Error('Invocation record is not bound');
-    return this.#record;
+  nextResourceSequence(): number {
+    return ++this.#resourceSequence;
   }
 
   get sequence(): number {
@@ -97,12 +98,14 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   }
 
   constructor(private readonly options: InvocationOptions<I, O, C>) {
+    this.#clock = options.clock ?? new Clock();
     this.children = new InvocationChildren(
       options.context,
       (failure) => {
         if (failure.kind === 'error' && !this.#fault) this.#fault = failure;
       },
       () => this.requireHealthy(),
+      (relation, change) => this.publishRelation(relation, change),
     );
     this.origin = Object.freeze({ contextId: options.context.id });
     const context = invocationScope(options.context);
@@ -157,56 +160,80 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     }
   }
 
+  /** Internal parent-owned entry outlet, omitted from the business invocation view. */
+  publishEntry(change: EntryChange): void {
+    this.publish({ kind: 'entry', ...change });
+  }
+
+  private publishRelation(relation: RelationIdentity, change: RelationChange): unknown | undefined {
+    try {
+      this.publish({ kind: 'relation', relation, change });
+      return undefined;
+    } catch (error) {
+      // A child's failure is already owned by the parent before returned is published.
+      // Keep the additional observer failure here without changing the child's delivery.
+      const failure = change.kind === 'returned' && change.result.status === 'failed' && this.#fault && this.#fault.error !== error ? new AggregateError([this.#fault.error, error], 'Child return and parent observation both failed', { cause: this.#fault.error }) : error;
+      this.classify(failure, 'observation', true);
+      return failure;
+    }
+  }
+
+  private publish(change: CallChange): void {
+    const identity = this.options.identity ?? {
+      contextId: this.context.id,
+      level: ('level' in this.context ? this.context.level : 'attempt') as CallIdentity['level'],
+      ...(this.options.parent ? { parentContextId: this.options.parent.invocation.context.id } : {}),
+    };
+    const fact: CallFact = Object.freeze({ ...change, identity, description: this.options.description, eventSequence: ++this.#eventSequence, occurredAt: this.#clock.now(), monotonicTime: this.#clock.tick() });
+    const faults: unknown[] = [];
+    try {
+      let captured;
+      if (fact.kind === 'process') captured = { kind: 'process' as const, processSequence: fact.processSequence, round: fact.round, stage: fact.process.stage, action: fact.process.type };
+      else if (fact.kind === 'entry') captured = { kind: 'entry' as const, target: fact.target, instanceId: fact.instanceId, ...(fact.key ? { key: fact.key } : {}), stage: fact.stage, status: fact.status, ...(fact.status === 'failed' ? { error: RuntimeErrorHelper.format(fact.error) } : {}) };
+      else if (fact.kind === 'relation') captured = { kind: 'relation' as const, identity: fact.relation, phase: fact.change.kind, ...(fact.change.kind === 'returned' ? { status: fact.change.result.status, ...(fact.change.result.status === 'failed' && fact.change.result.failure ? { failure: failureFact(fact.change.result.failure) } : {}) } : {}) };
+      else if (fact.kind === 'finished') captured = { kind: 'finished' as const, status: fact.state.status === 'succeeded' ? ('succeeded' as const) : ('failed' as const) };
+      else captured = { kind: 'started' as const };
+      this.options.changes?.publish(captured, { sequence: fact.eventSequence, occurredAt: fact.occurredAt });
+    } catch (error) {
+      faults.push(error);
+    }
+    const observed = this.observation?.publish(fact);
+    if (!isUndefined(observed)) faults.push(observed);
+    const error = combineFaults(faults);
+    if (!isUndefined(error)) {
+      this.classify(error, 'observation', true);
+      throw error;
+    }
+  }
+
   private async execute(): Promise<O> {
     const context = this.context;
     context.requireRunning();
+    let output: O;
     try {
       this.options.parent?.invocation.children.requireHealthy();
       this.options.validate?.();
       this.options.started?.(context, this);
-      this.options.changes?.publish({ kind: 'started' });
-      writeRecord(() => {
-        this.options.recording?.begin(context, (record) => this.bind(record));
-        if (this.options.recording) this.requireRecord();
-      });
-    } catch (error) {
-      const failure = this.classify(error, 'setup', true);
-      context.fail(failure.error, failure);
-      try {
-        this.options.changes?.publish({ kind: 'finished', status: 'failed' });
-      } catch (captureError) {
-        throw new AggregateError([error, captureError], 'Call setup and its failure capture both failed', { cause: error });
-      }
-      throw error;
-    }
-
-    let output: O;
-    try {
+      this.publish({ kind: 'started', input: context.input });
       if ('resources' in context) (context.resources as { start(): void }).start();
       output = await cycle(this, this.options.work, {
         signal: this.options.signal,
         validate: this.options.validate,
-        onProcess: (process) => {
-          const sequence = this.nextSequence();
-          this.options.changes?.publish({ kind: 'process', processSequence: sequence, round: context.progress.round, stage: process.stage, action: process.type });
-          writeRecord(() => this.options.recording?.process(context, this.requireRecord(), process, sequence));
-        },
+        onProcess: (process) => this.publish({ kind: 'process', process, processSequence: this.nextSequence(), round: context.progress.round }),
       });
     } catch (error) {
-      const failure = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.phase, true);
+      const failure = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.round ? context.progress.phase : 'setup', true);
       context.fail(error, Object.freeze({ ...failure, error, ...(error instanceof AggregateError ? { kind: 'error' as const } : {}) }));
       try {
-        this.options.changes?.publish({ kind: 'finished', status: 'failed' });
-        writeRecord(() => this.options.recording?.finish(context, this.requireRecord()));
-      } catch (registrationError) {
-        throw new AggregateError([error, registrationError], 'Work failed and failure registration also failed', { cause: error });
+        this.publish({ kind: 'finished', state: context.state });
+      } catch (observed) {
+        throw new AggregateError([error, observed], 'Call failure and its observation both failed', { cause: error });
       }
       throw error;
     }
-    // Registration failure after success must not fail or repeat the completed work.
+    // Terminal observation may fail delivery, but never changes the committed work outcome.
     context.complete(output);
-    this.options.changes?.publish({ kind: 'finished', status: 'succeeded' });
-    writeRecord(() => this.options.recording?.finish(context, this.requireRecord()));
+    this.publish({ kind: 'finished', state: context.state });
     return output;
   }
 }

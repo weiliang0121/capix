@@ -24,9 +24,9 @@ test('one initialized world preserves messages and records while reusing its exe
   assert.equal(environment.transcript, transcript);
   assert.equal([...environment.book.values()].length, 2); // Initial transcript + Runtime scope.
   assert.equal(requests.length, 0);
-  assert.equal('transcript' in environment.runtime.context, false);
-  const snapshots = [],
-    streamed = [];
+  assert.equal(Object.hasOwn(environment.runtime, 'context'), false);
+  const snapshots = [];
+  const streamed = [];
   for (const [index, text] of ['first', 'failure', 'last'].entries()) {
     const input = { messages: [{ role: 'user', content: text }] };
     const published = [];
@@ -74,7 +74,7 @@ test('one initialized world preserves messages and records while reusing its exe
   );
   assert.deepEqual(
     streamed.map((values) => values.length),
-    snapshots.map((snapshot) => snapshot.events.length + [snapshot.execution, ...snapshot.operations, ...snapshot.attempts].reduce((count, record) => count + record.value.processes.length, 0)),
+    snapshots.map((snapshot) => snapshot.events.length + [snapshot.execution, ...snapshot.operations, ...snapshot.attempts].reduce((count, record) => count + record.value.processes.length + record.value.relationChanges.length, 0)),
   );
 });
 
@@ -121,8 +121,11 @@ test('a cancelled call does not leave its signal on the reusable model operation
   cancelled.abort(new Error('cancel first call'));
   for (const signal of [cancelled.signal, new AbortController().signal]) {
     const input = { messages: [{ role: 'user', content: 'input' }] };
-    const snapshot = await observeExecution(environment.runtime, environment.recording, input, { settings, signal, transcript: environment.transcript });
-    assert.equal(snapshot.execution.status, signal.aborted ? 'failed' : 'succeeded');
+    const completion = observeExecution(environment.runtime, environment.recording, input, { settings, signal, transcript: environment.transcript });
+    if (signal.aborted) {
+      await assert.rejects(completion, { code: 'INVOCATION_CANCELLED' });
+      assert.equal(environment.transcript.length, 0);
+    } else assert.equal((await completion).execution.status, 'succeeded');
   }
   assert.deepEqual(
     signals.map((signal) => signal.aborted),
@@ -131,8 +134,8 @@ test('a cancelled call does not leave its signal on the reusable model operation
 });
 
 test('configuration updates and Transcript appends take effect only in the next execution', async () => {
-  const configuration = { ...settings, model: 'A' },
-    requests = [];
+  const configuration = { ...settings, model: 'A' };
+  const requests = [];
   let environment;
   environment = initializeObserver({
     async invoke(request, purpose) {

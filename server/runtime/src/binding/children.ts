@@ -1,7 +1,7 @@
 import type { ParentInvocation } from '../invocation/children.js';
 import { Initializer } from '../initialization/initializer.js';
 import { InvocationEntry } from '../definition/entry.js';
-import type { ChildDefinition, DefinitionInput, DefinitionOutput, DefinitionParent, DefinitionContext } from '../definition/children.js';
+import type { ChildDefinition, DefinitionInput, DefinitionCallInput, DefinitionOutput, DefinitionParent, DefinitionContext } from '../definition/children.js';
 import type { Invocation } from '../invocation/invocation.js';
 import type { ChildCall, InvocationView } from '../invocation/view.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
@@ -11,14 +11,14 @@ interface StoredChild {
 }
 
 export interface BoundChild<D extends ChildDefinition> {
-  create(parent: DefinitionParent<D>, input: DefinitionInput<D>, options?: InvocationRelationOptions): ChildCall<DefinitionInput<D>, DefinitionOutput<D>, DefinitionContext<D>>;
+  create(parent: DefinitionParent<D>, input: DefinitionInput<D>, options?: InvocationRelationOptions): ChildCall<DefinitionCallInput<D>, DefinitionOutput<D>, DefinitionContext<D>>;
   call(parent: DefinitionParent<D>, input: DefinitionInput<D>): Promise<DefinitionOutput<D>>;
 }
 
 /** A business capability for this parent's declared children only. */
 export interface ChildBindings {
   get<D extends ChildDefinition>(definition: D): BoundChild<D>;
-  entry<D extends ChildDefinition, I>(entry: InvocationEntry<D, I>): { create(parent: DefinitionParent<D>, input: I, options?: InvocationRelationOptions): ChildCall<DefinitionInput<D>, DefinitionOutput<D>, DefinitionContext<D>> };
+  entry<D extends ChildDefinition, I>(entry: InvocationEntry<D, I>): { create(parent: DefinitionParent<D>, input: I, options?: InvocationRelationOptions): ChildCall<DefinitionCallInput<D>, DefinitionOutput<D>, DefinitionContext<D>> };
   accept<T>(child: InvocationView, work: () => T | Promise<T>): Promise<T>;
   requireActive(): void;
 }
@@ -83,7 +83,7 @@ export class BoundChildren {
               if (actual !== view) throw new Error('Child entry belongs to another parent invocation');
               requireActive();
               if (!this.#entries.has(entry.definition) || !allowed.has(entry.definition)) throw new Error('Child definition is not declared in this binding');
-              return create(entry.definition, actual, entry.accept(actual, input, options), options) as ChildCall<DefinitionInput<D>, DefinitionOutput<D>, DefinitionContext<D>>;
+              return create(entry.definition, actual, entry.accept(actual, input, options), options) as ChildCall<DefinitionCallInput<D>, DefinitionOutput<D>, DefinitionContext<D>>;
             }),
         }),
       accept: async <T>(child: InvocationView, work: () => T | Promise<T>) => {

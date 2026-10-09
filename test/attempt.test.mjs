@@ -4,7 +4,8 @@ import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AttemptContext, Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
+import { AttemptContext, Recorder, RecordBook, ExceptionContract } from '@capix-observer/runtime';
+import { createRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { TestOperation } from './fixtures/operation.mjs';
 
@@ -18,8 +19,10 @@ function recordedRuntime() {
 test('one Attempt instance creates independent contexts per call and leaves parent work running after failure', async () => {
   const runtime = recordedRuntime();
   const contexts = [];
-  const failure = new Error('rejected input');
+  const rejection = new ExceptionContract('REJECTED_INPUT');
+  const failure = rejection.create('rejected input', {});
   class AcceptText extends Attempt {
+    raises = [rejection];
     name = 'acceptText';
     label = '接纳文本';
     source = 'test/attempt.test.mjs · AcceptText';
@@ -44,7 +47,7 @@ test('one Attempt instance creates independent contexts per call and leaves pare
   assert.notEqual(contexts[0].id, contexts[1].id);
   assert.equal(contexts[0].state.error, failure);
   assert.equal(contexts[1].state.output, 'accepted');
-  const records = ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).attempts;
+  const records = observeCall(runtime.recording, callFor(execution)).attempts;
   assert.deepEqual(
     records.map((record) => record.status),
     ['failed', 'succeeded'],
@@ -92,7 +95,7 @@ test('Operation reuses its three Attempt instances while keeping call contexts a
   assert.equal(new Set(seen.map((context) => context.id)).size, 6);
   assert.ok(seen.every((context) => !Object.hasOwn(context, 'name')));
   for (const execution of executions) {
-    const snapshot = ExecutionRecordHelper.observe(runtime.recording, callFor(execution));
+    const snapshot = observeCall(runtime.recording, callFor(execution));
     assert.equal(snapshot.operations.length, 1);
     assert.equal(snapshot.attempts.length, 3);
     assert.deepEqual(
@@ -137,7 +140,7 @@ test('operations can organize any number of named actions without a fixed stage 
       return operation.call(callFor(execution), []);
     });
     assert.deepEqual(output, names);
-    const snapshot = ExecutionRecordHelper.observe(runtime.recording, callFor(context));
+    const snapshot = observeCall(runtime.recording, callFor(context));
     validateSnapshot(snapshot);
     assert.deepEqual(
       snapshot.attempts.map((attempt) => attempt.name),
@@ -168,7 +171,7 @@ test('the operation owns branching and can explicitly call the same action twice
       return operation.call(callFor(execution), input);
     });
     assert.equal(output, input === 0 ? 2 : 3);
-    const snapshot = ExecutionRecordHelper.observe(runtime.recording, callFor(context));
+    const snapshot = observeCall(runtime.recording, callFor(context));
     validateSnapshot(snapshot);
     assert.equal(snapshot.attempts.length, input === 0 ? 2 : 1);
     assert.ok(snapshot.attempts.every((attempt) => attempt.name === 'addOne' && attempt.operationId === snapshot.operations[0].id));

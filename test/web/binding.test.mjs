@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { ClientRuntime } from '@capix-observer/client-runtime';
 import { initializeObserver, observeExecution, observeOverview, ObservationFeed } from '@capix-observer/service';
 import { Transcript, observeMemory } from '@capix-observer/runtime';
+import { projectDetail } from '../../apps/observer/.test-dist/binding/details.js';
 import { createApplication } from '../../apps/observer/.test-dist/binding/application.js';
 import { client, deferred, snapshot, transport, deliverAnswer } from '../client/fixtures.mjs';
 
@@ -20,7 +21,7 @@ const raw = (value) => ({ id: 'fixture', model: 'fixture', content: JSON.stringi
 async function recordedRound() {
   const snapshots = [];
   const environment = initializeObserver({ invoke: async (_request, purpose) => raw(purpose === 'selection' ? { historyIndexes: [0, 1] } : purpose === 'answer' ? { kind: 'answer', content: '上海周末行程。' } : { memories: [{ action: 'create', memoryId: null, change: '确认目的地', sourceIndexes: [2], result: { topic: '旅行', content: '周末去上海', sourceIndexes: [2] } }] }) }, new Transcript(history).snapshot());
-  const feed = new ObservationFeed(environment, environment.changes);
+  const feed = new ObservationFeed(environment);
   const frames = [];
   feed.connect((frame) => frames.push(frame));
   const final = await observeExecution(environment.runtime, environment.recording, request, { settings }, (value) => snapshots.push(value));
@@ -168,7 +169,7 @@ test('live overview separates the last recorded process from an unfinished invoc
   const live = snapshot('running');
   live.resources.push({ id: 'range-bound', parentId: live.execution.id, access: 'transcript.fixedRange', supplyId: 'supply', sequence: 1, phase: 'bound', occurredAt: live.execution.value.startedAt, value: null });
   live.resources.push({ id: 'range', parentId: live.execution.id, access: 'transcript.fixedRange', supplyId: 'supply', sequence: 2, phase: 'available', occurredAt: live.execution.value.startedAt, value: { transcriptId: 'fixture-transcript', start: 0, end: 1 } });
-  live.execution.value.processes = [{ sequence: 1, round: 1, occurredAt: '2026-09-25T00:00:00.025Z', offsetMs: 25, stage: 'execute', type: 'start', input: {} }];
+  live.execution.value.processes = [{ sequence: 1, eventSequence: 2, round: 1, occurredAt: '2026-09-25T00:00:00.025Z', offsetMs: 25, stage: 'execute', type: 'start', input: {} }];
   let observe;
   const runtime = withObservation(
     transport({
@@ -224,4 +225,28 @@ test('binding supports a conversation-only runtime and never synthesizes respons
   assert.equal(app.store.getState().data.rounds.length, 0);
   assert.equal(app.store.getState().notice, '');
   disconnect();
+});
+
+test('detail keeps R acceptance separate from QA/E and exposes recorded relation entries', async () => {
+  const fixture = await recordedRound();
+  const detail = projectDetail(fixture.final, fixture.memory);
+  const parent = fixture.final.runtimeCall;
+  assert.ok(parent);
+  assert.equal(detail.calls.get(detail.id).parentId, parent.id);
+  const call = detail.calls.get(parent.id);
+  assert.equal(call.recordType, 'runtime');
+  assert.equal(call.status, 'passed');
+  assert.equal(call.children.length, 1);
+  assert.equal(call.children[0].id, detail.id);
+  assert.deepEqual(
+    call.relationEntries.map((entry) => entry.change.kind),
+    ['attached', 'returned', 'receiving', 'accepted'],
+  );
+  assert.equal(call.relationEntries.at(-1).childId, detail.id);
+  assert.equal(
+    detail.children.some((entry) => entry.id === parent.id),
+    false,
+    'R is a parent detail, not another QA lane',
+  );
+  assert.ok(call.durationMs >= 0);
 });

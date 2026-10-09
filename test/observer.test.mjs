@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { observeFixture, createInput, resourceFact } from './fixtures/observer.mjs';
 import { DeepSeekProvider, acceptExecutionInput, answerOutputContract, selectionOutputContract, memoryOutputContract } from '@capix-observer/service';
-import { Transcript, RecordBook, Recorder, Runtime, createRuntime } from '@capix-observer/runtime';
+import { Transcript, RecordBook, Recorder, Runtime } from '@capix-observer/runtime';
+import { createRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
 
@@ -256,7 +257,7 @@ test('sequence ordering follows completion when calls overlap', async () => {
   await second;
   resolvers[0]('first');
   await first;
-  const facts = ExecutionRecordHelper.observe(runtime.recording, callFor(execution));
+  const facts = observeCall(runtime.recording, callFor(execution));
   assert.deepEqual(
     facts.events.filter((e) => e.callId !== facts.execution.id).map((e) => `${e.value.type}:${facts.operations.find((op) => op.id === e.callId).operation}`),
     ['call:a', 'call:b', 'return:b', 'return:a'],

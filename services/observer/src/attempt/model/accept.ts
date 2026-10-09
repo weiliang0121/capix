@@ -1,3 +1,4 @@
+import { callRecording } from '@capix-observer/runtime';
 import { modelOutputRejected } from '../../model/rejection.js';
 import { AttemptDefinition, type AttemptScope, RuntimeError, isNonBlankString } from '@capix-observer/runtime';
 
@@ -9,6 +10,7 @@ export interface ModelAcceptanceInput {
 }
 
 export class AcceptModelOutput<I extends ModelAcceptanceInput, O> extends AttemptDefinition<I, O> {
+  readonly observation = [callRecording()];
   static readonly requires = Object.freeze({});
 
   readonly raises = [modelOutputRejected];

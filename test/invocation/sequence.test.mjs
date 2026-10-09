@@ -1,6 +1,8 @@
+import { observeCall } from '../fixtures/observation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, Recorder, RecordBook, ExceptionContract, createRuntime } from '@capix-observer/runtime';
+import { Invocation, InvocationContext, Recorder, RecordBook, ExceptionContract } from '@capix-observer/runtime';
+import { createRuntime } from '../fixtures/runtime.mjs';
 
 const signal = () => new AbortController().signal;
 const firstRound = new ExceptionContract('test.first-round');
@@ -25,15 +27,9 @@ test('Invocation owns continuous local sequence across retries, independently of
     context: new InvocationContext('first'),
     work: retryWork,
     signal: signal(),
-    recording: {
-      begin(context, bind) {
-        bind({ contextId: context.id });
-      },
-      finish() {},
-      process(context, record, process, sequence) {
-        seen.push({ round: context.progress.round, type: process.type, sequence });
-      },
-    },
+    observation: observeCall((fact) => {
+      if (fact.kind === 'process') seen.push({ round: fact.round, type: fact.process.type, sequence: fact.processSequence });
+    }),
   });
   const unrecorded = new Invocation({ context: new InvocationContext('first'), work: retryWork, signal: signal() });
   assert.equal(recorded.sequence, 0);
@@ -93,17 +89,11 @@ test('failed registration consumes its occurrence position and does not repeat w
         return 'answer';
       },
     },
-    recording: {
-      begin(context, bind) {
-        bind({ contextId: context.id });
-      },
-      finish() {},
-      process(_context, _record, _process, sequence) {
-        if (sequence === 2) throw new Error('cannot record result');
-      },
-    },
+    observation: observeCall((fact) => {
+      if (fact.kind === 'process' && fact.processSequence === 2) throw new Error('cannot record result');
+    }),
   });
-  await assert.rejects(invocation.run(), /cannot record result/);
+  await assert.rejects(invocation.run(), (error) => error.cause?.message === 'cannot record result');
   assert.equal(invocation.sequence, 2);
   assert.equal(calls, 1);
   await assert.rejects(invocation.run(), /already started/);

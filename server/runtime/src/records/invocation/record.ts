@@ -1,16 +1,17 @@
+import type { RuntimeCallRecord } from '../runtime-call/record.js';
 import type { ExecutionRecord } from '../execution/record.js';
 import type { OperationRecord } from '../operation/record.js';
 import type { AttemptRecord } from '../attempt/record.js';
-import { type InvocationValue, type ProcessRecord, type RuntimeErrorValue, type InvocationFailureFact, outputProcess, finalOutputProcess } from '@capix-observer/protocol';
+import { type InvocationValue, type ProcessRecord, type RelationChangeRecord, type RuntimeErrorValue, type InvocationFailureFact, outputProcess, finalOutputProcess } from '@capix-observer/protocol';
 
 import { CompositeRecord } from '../composite.js';
 
 import { isUndefined } from 'es-toolkit/predicate';
 import { snapshotValue } from '../value/snapshot.js';
 
-export type CallRecord = ExecutionRecord | OperationRecord | AttemptRecord;
+export type CallRecord = RuntimeCallRecord | ExecutionRecord | OperationRecord | AttemptRecord;
 
-/** E/O/A share result registration and an internal append-only process history. */
+/** R/E/O/A share result registration and an internal append-only process history. */
 export class InvocationRecord<V extends InvocationValue> extends CompositeRecord<V> {
   #status: 'running' | 'succeeded' | 'failed' = 'running';
   get status() {
@@ -31,6 +32,15 @@ export class InvocationRecord<V extends InvocationValue> extends CompositeRecord
     }
     const captured = snapshotValue(process);
     this.replaceValue(Object.freeze({ ...this.value, processes: Object.freeze([...this.value.processes, captured]) }));
+  }
+
+  appendRelation(relation: RelationChangeRecord): void {
+    this.requireRunning();
+    if (!Number.isSafeInteger(relation.eventSequence) || relation.eventSequence < 1) throw new Error('Relation fact requires an event sequence');
+    const last = this.value.relationChanges.at(-1);
+    if (last && relation.eventSequence <= last.eventSequence) throw new Error('Relation fact sequence must advance');
+    const captured = snapshotValue(relation);
+    this.replaceValue(Object.freeze({ ...this.value, relationChanges: Object.freeze([...this.value.relationChanges, captured]) }));
   }
 
   complete(output: unknown, resultOf?: number): void {

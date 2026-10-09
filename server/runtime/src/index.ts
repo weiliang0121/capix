@@ -35,7 +35,6 @@ export type { ChangeSource } from './records/source.js';
 export { TranscriptRecord, type TranscriptDefinition } from './records/transcript/record.js';
 export * from './records/error.js';
 
-export type { InvocationRecording } from './invocation/recording.js';
 export { InvocationRecordHelper } from './records/invocation/helper.js';
 export type { CallRecord } from './records/invocation/record.js';
 export { TranscriptRecordHelper } from './records/transcript/helper.js';
@@ -77,9 +76,17 @@ export * from './context/scope.js';
 export * from './invocation/view.js';
 export { SelectionUsage } from './transcript/usage.js';
 export { ResourceActivity, type ResourceOperation, type ResourceOwner } from './resource/activity.js';
-export type { ContentProvenance } from './records/source.js';
 
 export * from './exception/contract.js';
 export type { InvocationResolution } from './invocation/result.js';
 export type { InvocationFailure, InvocationPhase } from './invocation/failure.js';
-export type { InvocationObservation } from './invocation/recording.js';
+
+export * from './observation/facts.js';
+export * from './observation/definition.js';
+export * from './observation/binding.js';
+export * from './observation/error.js';
+export * from './observation/publish.js';
+export * from './context/runtime/builder.js';
+export * from './invocation/runtime/builder.js';
+
+export * from './invocation/description.js';

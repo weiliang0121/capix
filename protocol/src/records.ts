@@ -1,5 +1,7 @@
 import type { InvocationFailureFact, RuntimeErrorValue } from './errors.js';
 import type { ResourceFact } from './records/resource.js';
+import type { InvocationRelationIdentity } from './invocation.js';
+export { invocationProcessStages, invocationProcessActions } from './invocation.js';
 
 /** Common record shape; concrete records define their own relations and body. */
 export interface BaseRecord<T = unknown> {
@@ -16,20 +18,39 @@ export interface RuntimeValue {
 }
 export interface RuntimeRecord extends CompositeRecord<RuntimeValue> {}
 
-export const invocationProcessStages = ['execute', 'receive', 'handling', 'control'] as const;
-export const invocationProcessActions = ['start', 'return', 'throw', 'continue', 'unhandled', 'stop'] as const;
-
 /** Append-only entries inside one invocation record; no independent record identity. */
-export type ProcessRecord = Readonly<{ sequence: number; round: number; occurredAt: string; offsetMs: number } & ({ stage: 'execute'; type: 'start'; input: unknown } | { stage: 'execute' | 'receive' | 'handling'; type: 'return'; output: unknown } | { stage: 'receive'; type: 'return'; resultOf: number } | { stage: 'execute' | 'receive' | 'handling'; type: 'throw'; error: RuntimeErrorValue; failure?: InvocationFailureFact } | { stage: 'receive' | 'handling'; type: 'continue'; input: unknown; reason: string } | { stage: 'handling'; type: 'start' | 'unhandled'; error: RuntimeErrorValue; failure?: InvocationFailureFact } | { stage: 'control'; type: 'stop'; error: RuntimeErrorValue; failure?: InvocationFailureFact })>;
+export type ProcessRecord = Readonly<{ sequence: number; eventSequence: number; round: number; occurredAt: string; offsetMs: number } & ({ stage: 'execute'; type: 'start'; input: unknown } | { stage: 'execute' | 'receive' | 'handling'; type: 'return'; output: unknown } | { stage: 'receive'; type: 'return'; resultOf: number } | { stage: 'execute' | 'receive' | 'handling'; type: 'throw'; error: RuntimeErrorValue; failure?: InvocationFailureFact } | { stage: 'receive' | 'handling'; type: 'continue'; input: unknown; reason: string } | { stage: 'handling'; type: 'start' | 'unhandled'; error: RuntimeErrorValue; failure?: InvocationFailureFact } | { stage: 'control'; type: 'stop'; error: RuntimeErrorValue; failure?: InvocationFailureFact })>;
 
+export type RecordedInvocationResult = Readonly<{ status: 'succeeded'; output: unknown } | { status: 'failed'; error: RuntimeErrorValue; failure?: InvocationFailureFact }>;
+export type RecordedRelationChange = Readonly<{ kind: 'attached' } | { kind: 'returned'; result: RecordedInvocationResult } | { kind: 'receiving' } | { kind: 'accepted'; output: unknown } | { kind: 'failed'; source: 'work' | 'observation'; error: RuntimeErrorValue; failure?: InvocationFailureFact }>;
+/** Parent-owned relation history; separate from its own execution/acceptance processes. */
+export interface RelationChangeRecord {
+  readonly identity: InvocationRelationIdentity;
+  readonly eventSequence: number;
+  readonly occurredAt: string;
+  readonly offsetMs: number;
+  /** Present once this local child has actually started and acquired a record. */
+  readonly childId?: string;
+  readonly change: RecordedRelationChange;
+}
 export interface InvocationValue<I = unknown, O = unknown> {
   readonly processes: readonly ProcessRecord[];
+  readonly relationChanges: readonly RelationChangeRecord[];
   input: I;
   output?: O;
   /** Local process sequence containing the final frozen output; mutually exclusive with output. */
   resultOf?: number;
   error?: RuntimeErrorValue;
   failure?: InvocationFailureFact;
+}
+/** One R invocation, distinct from the enduring Runtime instance record. */
+export interface RuntimeCallValue<I = unknown, O = unknown> extends InvocationValue<I, O> {
+  readonly startedAt: string;
+}
+export interface RuntimeCallRecord<I = unknown, O = unknown> extends CompositeRecord<RuntimeCallValue<I, O>> {
+  readonly contextId: string;
+  readonly runtimeInstanceId: string;
+  readonly status: 'running' | 'succeeded' | 'failed';
 }
 export interface ExecutionValue<I = unknown, O = unknown> extends InvocationValue<I, O> {
   startedAt: string;
@@ -65,10 +86,14 @@ export interface AttemptRecord<I = unknown, O = unknown> extends CompositeRecord
 /** The recorded boundary; its content is independent of record identity and timing. */
 export interface InvocationBoundaryValue {
   readonly type: 'call' | 'return' | 'throw';
+  /** Describes the call's work outcome, not its eventual delivery to a parent. */
+  readonly scope: 'work';
 }
 /** callId addresses the invocation record, while id identifies this invocation boundary record. */
 export interface InvocationBoundaryRecord extends BaseRecord<InvocationBoundaryValue> {
-  readonly executionId: string;
+  /** R has its own timing range; E descendants share their execution range. */
+  readonly scopeId: string;
+  readonly executionId?: string;
   readonly callId: string;
   readonly sequence: number;
   readonly occurredAt: string;
@@ -76,6 +101,8 @@ export interface InvocationBoundaryRecord extends BaseRecord<InvocationBoundaryV
 }
 /** Current execution records and their invocation boundaries for observation. */
 export interface RuntimeSnapshot {
+  runtimeCall: RuntimeCallRecord;
+  runtimeEvents: InvocationBoundaryRecord[];
   execution: ExecutionRecord;
   operations: OperationRecord[];
   attempts: AttemptRecord[];

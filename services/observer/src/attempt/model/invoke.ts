@@ -1,3 +1,4 @@
+import { callRecording } from '@capix-observer/runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../observer/resources.js';
 import { InvocationEntry, AttemptDefinition, type AttemptScope, RuntimeError } from '@capix-observer/runtime';
@@ -9,6 +10,7 @@ import { checkCapacity } from '../../model/capacity.js';
 import type { ModelRequest, ModelOutput, Purpose } from '../../model/types.js';
 
 export class InvokeModel extends AttemptDefinition<ModelRequest, ModelOutput, ModelCallResources> {
+  readonly observation = [callRecording()];
   static readonly requires = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), model: ModelResource.invoke.request() });
 
   readonly run = { requires: InvokeModel.requires, execute: this.execute.bind(this) };

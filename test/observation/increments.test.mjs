@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { ChangeObserver, createRuntime, Recorder, RecordBook, ExecutionRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix-observer/runtime';
+import { ChangeObserver, assembleRuntime, RuntimeDefinition, ExecutionDefinition, callRecording, bindRecording, Recorder, RecordBook, ExecutionRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix-observer/runtime';
 import { initializeObserver, ObservationFeed, acceptExecutionInput, createObserverServer } from '@capix-observer/service';
 import { ObservationReplica, ObservationSequenceError, ClientRuntime } from '@capix-observer/client-runtime';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
+import { baseline } from '../client/fixtures.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 2048, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'fixture', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -36,25 +37,42 @@ async function run(environment, content) {
   await environment.runtime.run({ messages: [{ role: 'user', content }] }, { settings });
 }
 
+function executionRuntime(execute, { changes, recording, accept, parentAccept } = {}) {
+  class E extends ExecutionDefinition {
+    observation = recording ? [callRecording()] : undefined;
+    run = { requires: {}, execute, ...(accept ? { accept } : {}) };
+  }
+  const execution = new E();
+  class R extends RuntimeDefinition {
+    children = [execution];
+    observation = recording ? [callRecording()] : undefined;
+    run = {
+      requires: {},
+      execute: async (context, invocation, children) => {
+        const child = children.get(execution).create(invocation, context.currentInput, { key: 'test' });
+        const output = await child.run();
+        return children.accept(child, () => (parentAccept ? parentAccept(output) : output));
+      },
+    };
+  }
+  return assembleRuntime(new R(), { changes, observations: recording ? [recording] : [], providers: [], source: { entry: () => ({}), capture: () => ({}) } });
+}
+
 test('all live sources remain observable without Recorder and do not serialize arbitrary invocation IO', async () => {
   const changes = new ChangeObserver();
-  const runtime = createRuntime({ changes });
   const transcript = new Transcript([{ role: 'user', content: 'evidence' }], { changes });
   const memories = new Memories(transcript, { changes });
   const opaque = new Map([['external', () => {}]]);
-  const invocation = runtime.executionInvocations.create(opaque, {
-    context: { settings: {} },
-    work: {
-      maxRounds: 1,
-      execute() {
-        const [memory] = memories.apply([memoryChange('one')]);
-        memories.apply([memoryChange('two', memory.id)]);
-        transcript.append({ role: 'assistant', content: 'answer' });
-        return opaque;
-      },
+  const runtime = executionRuntime(
+    () => {
+      const [memory] = memories.apply([memoryChange('one')]);
+      memories.apply([memoryChange('two', memory.id)]);
+      transcript.append({ role: 'assistant', content: 'answer' });
+      return opaque;
     },
-  });
-  assert.equal(await invocation.run(), opaque);
+    { changes },
+  );
+  assert.equal(await runtime.run(opaque, {}), opaque);
   const events = changes.take();
   assert.equal(
     events.some((event) => event.type === 'record'),
@@ -67,7 +85,7 @@ test('all live sources remain observable without Recorder and do not serialize a
       [2, 'update', 'two'],
     ],
   );
-  const calls = events.filter((event) => event.type === 'invocation');
+  const calls = events.filter((event) => event.type === 'invocation' && event.level === 'execution');
   assert.equal(calls[0].change.kind, 'started');
   assert.deepEqual(
     calls.map((event) => event.sequence),
@@ -80,19 +98,20 @@ test('all live sources remain observable without Recorder and do not serialize a
 test('record registration captures its child and parent reference together; process deltas contain only the new entry', async () => {
   const changes = new ChangeObserver();
   const recorder = new Recorder(new RecordBook(), { clock: undefined, changes });
-  const runtime = createRuntime({ recorder, changes });
+  const recording = bindRecording(recorder);
+  const runtime = executionRuntime(() => 'output', { recording, changes });
   const initial = changes.take()[0];
-  const invocation = runtime.executionInvocations.create('input', { context: { settings: {} }, work: { maxRounds: 1, execute: () => 'output' } });
-  await invocation.run();
+  await runtime.run('input', {});
   const events = changes.take().filter((event) => event.type === 'record');
   const added = events.find((event) => event.change.kind === 'added' && event.change.entry.kind === 'execution');
-  assert.deepEqual(added.change.parent, { id: runtime.record.id, childId: invocation.record.id });
+  const parent = events.find((event) => event.change.kind === 'added' && event.change.entry.kind === 'runtime-call');
+  assert.deepEqual(added.change.parent, { id: parent.change.entry.data.id, childId: added.change.entry.data.id });
   assert.deepEqual(initial.change.entry.data.childIds, [], 'old parent snapshot remains fixed');
   assert.deepEqual(added.change.entry.data.value.processes, [], 'registration did not mutate into the final record');
-  const process = events.filter((event) => event.change.kind === 'process-appended');
+  const process = events.filter((event) => event.change.kind === 'process-appended' && event.change.id === added.change.entry.data.id);
   assert.equal(process.length, 3);
   assert.ok(process.every((event) => !('entry' in event.change) && !('processes' in event.change)));
-  assert.equal(events.find((event) => event.change.kind === 'finished').change.result.resultOf, 2);
+  assert.equal(events.find((event) => event.change.kind === 'finished' && event.change.id === added.change.entry.data.id).change.result.resultOf, 2);
   assert.deepEqual(
     events.map((event) => event.revision),
     events.map((_, index) => index + 2),
@@ -101,7 +120,7 @@ test('record registration captures its child and parent reference together; proc
 
 test('multi-round observation deltas reconstruct records and content locations exactly; completed execution bodies stay out of reconnect baseline', async () => {
   const environment = fixture();
-  const feed = new ObservationFeed(environment, environment.changes);
+  const feed = new ObservationFeed(environment);
   const frames = [];
   let replica;
   let failure;
@@ -151,7 +170,7 @@ test('multi-round observation deltas reconstruct records and content locations e
 
 test('receiver rejects gaps, foreign scopes and invalid batches without partially applying their facts', () => {
   const environment = fixture();
-  const feed = new ObservationFeed(environment, environment.changes);
+  const feed = new ObservationFeed(environment);
   let frame;
   feed.connect((value) => {
     frame ??= value;
@@ -175,7 +194,7 @@ test('receiver rejects gaps, foreign scopes and invalid batches without partiall
 
 test('consumer exceptions are isolated and a pending initial append is represented once by the baseline', async () => {
   const environment = fixture([{ role: 'user', content: 'initial' }]);
-  const feed = new ObservationFeed(environment, environment.changes);
+  const feed = new ObservationFeed(environment);
   feed.connect(() => {
     throw new Error('consumer failed');
   });
@@ -197,7 +216,6 @@ test('consumer exceptions are isolated and a pending initial append is represent
 test('memory capture failure keeps the applied fact but never proceeds to the next item', () => {
   const transcript = new Transcript([{ role: 'user', content: 'evidence' }]);
   const memories = new Memories(transcript, {
-    recorder: undefined,
     changes: {
       capture() {
         throw new Error('capture failed');
@@ -268,11 +286,10 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
   assert.equal(runtime.getSnapshot().observation.memory.items[0].content, 'memory 4');
   assert.deepEqual(requests, ['/api/observe']);
   const oldScope = runtime.getSnapshot().observation.cursor.scopeId;
-  const oldSequence = runtime.getSnapshot().observation.cursor.sequence;
   await runtime.refreshObservation();
   await until(() => !runtime.getSnapshot().observation.loading);
-  assert.equal(runtime.getSnapshot().observation.cursor.scopeId, oldScope);
-  assert.equal(runtime.getSnapshot().observation.cursor.sequence, oldSequence);
+  assert.notEqual(runtime.getSnapshot().observation.cursor.scopeId, oldScope);
+  assert.equal(runtime.getSnapshot().observation.cursor.sequence, 0, 'new connection has its own delivery order');
   assert.equal(runtime.getSnapshot().observation.overview.executions.length, 4);
   assert.equal(runtime.getSnapshot().observation.records.size, 0, 'finished details remain lazy after reconnect');
   const id = runtime.getSnapshot().observation.overview.executions[0].id;
@@ -305,7 +322,7 @@ test('large entity baseline preserves full message text while observation carrie
 
 test('client performs one bounded baseline retry on a sequence gap and ignores the old session', async () => {
   const environment = fixture();
-  const feed = new ObservationFeed(environment, environment.changes);
+  const feed = new ObservationFeed(environment);
   let initial;
   feed.connect((frame) => {
     initial ??= frame;
@@ -364,14 +381,15 @@ test('repeated sequence failure stops after one retry instead of looping forever
 
 test('joining during an active call seeds local source positions and continues through terminal deltas', async () => {
   const environment = fixture();
-  const feed = new ObservationFeed(environment, environment.changes);
+  const feed = new ObservationFeed(environment);
   let release;
   const pending = new Promise((resolve) => {
     release = resolve;
   });
-  const invocation = environment.runtime.executionInvocations.create('input', { context: { settings }, work: { maxRounds: 1, execute: () => pending } });
-  const running = invocation.run();
+  const runtime = executionRuntime(() => pending, { recording: environment.recording, changes: environment.changes });
+  const running = runtime.run('input', {});
   await settle();
+  const record = [...environment.book.values()].find((record) => record.kind === 'execution');
   let replica;
   let failure;
   const stop = feed.connect((frame) => {
@@ -383,18 +401,123 @@ test('joining during an active call seeds local source positions and continues t
   });
   try {
     assert.equal(failure, undefined);
-    assert.equal(replica.snapshots.get(invocation.record.id).execution.status, 'running');
-    assert.ok(replica.invocations.get(invocation.context.id).sequence > 1);
+    assert.equal(replica.snapshots.get(record.id).execution.status, 'running');
+    assert.ok(replica.invocations.get(record.contextId).sequence > 1);
     release('output');
     await running;
     await settle();
     assert.equal(failure, undefined);
-    assert.deepEqual(replica.snapshots.get(invocation.record.id), wire(ExecutionRecordHelper.snapshot(environment.recorder, invocation.record.id)));
-    assert.equal(replica.invocations.get(invocation.context.id).change.status, 'succeeded');
+    assert.deepEqual(replica.snapshots.get(record.id), wire(ExecutionRecordHelper.snapshot(environment.recorder, record.id)));
+    assert.equal(replica.invocations.get(record.contextId).change.status, 'succeeded');
   } finally {
     release('output');
     await running;
     stop();
     feed.close();
   }
+});
+
+test('reconnecting while R accepts a completed E preserves the child and the parent receiving relation', async () => {
+  const environment = fixture();
+  const feed = new ObservationFeed(environment);
+  let release;
+  const accepted = new Promise((resolve) => {
+    release = resolve;
+  });
+  const runtime = executionRuntime(() => 'child output', { recording: environment.recording, changes: environment.changes, parentAccept: () => accepted });
+  const pending = runtime.run('input', {});
+  await settle();
+  const execution = [...environment.book.values()].find((record) => record.kind === 'execution');
+  let replica;
+  let failure;
+  const stop = feed.connect((frame) => {
+    try {
+      replica = ObservationReplica.receive(replica, frame);
+    } catch (error) {
+      failure = error;
+    }
+  });
+  try {
+    assert.equal(failure, undefined);
+    const snapshot = replica.snapshots.get(execution.id);
+    assert.equal(snapshot.execution.status, 'succeeded');
+    assert.equal(snapshot.runtimeCall.status, 'running');
+    assert.equal(snapshot.runtimeCall.value.relationChanges.at(-1).change.kind, 'receiving');
+    assert.equal(snapshot.runtimeCall.value.relationChanges.at(-1).childId, execution.id);
+    release('accepted output');
+    assert.equal(await pending, 'accepted output');
+    await settle();
+    assert.equal(failure, undefined);
+    assert.deepEqual(replica.snapshots.get(execution.id), wire(ExecutionRecordHelper.snapshot(environment.recorder, execution.id)));
+    assert.equal(replica.snapshots.get(execution.id).runtimeCall.value.relationChanges.at(-1).change.kind, 'accepted');
+  } finally {
+    release('accepted output');
+    await pending;
+    stop();
+    feed.close();
+    environment.consumer.close();
+  }
+});
+
+test('actual recording failure terminates HTTP observation, rejects later healthy queries, and leaves transcript synchronization intact', async (t) => {
+  const environment = fixture();
+  const base = await serve(t, environment);
+  const transcript = new ConversationHttpTransport(base);
+  const observation = new ObservationHttpTransport(base);
+  const runtime = new ClientRuntime({ conversation: transcript, transcripts: transcript, observation });
+  const stop = runtime.startObservation();
+  t.after(() => {
+    stop();
+    runtime.stopTranscript();
+    environment.consumer.close();
+  });
+  await runtime.initialize();
+  await until(() => !runtime.getSnapshot().observation.loading);
+  const original = environment.recorder.add.bind(environment.recorder);
+  environment.recorder.add = (record) => {
+    if (record.kind === 'transcript') throw new Error('record storage unavailable');
+    return original(record);
+  };
+  environment.transcript.append({ role: 'user', content: 'a fact despite record failure' });
+  await until(() => runtime.getSnapshot().observation.error?.code === 'SOURCE_INCOMPLETE');
+  await until(() => runtime.getSnapshot().messages.length === 1);
+  assert.equal(runtime.getSnapshot().messages[0].content, 'a fact despite record failure');
+  const result = await fetch(`${base}/api/executions`);
+  assert.equal(result.status, 500);
+  assert.equal((await result.json()).code, 'SOURCE_INCOMPLETE');
+  await assert.rejects(observation.overview(), (error) => error.code === 'SOURCE_INCOMPLETE');
+  let nextBaseline = false;
+  await assert.rejects(
+    observation.observe(() => {
+      nextBaseline = true;
+    }, new AbortController().signal),
+    (error) => error.code === 'SOURCE_INCOMPLETE',
+  );
+  assert.equal(nextBaseline, false);
+  assert.equal((await transcript.transcript()).messages.length, 1);
+});
+
+test('individual record changes retain partial R terminal facts until the separate R boundary arrives', async () => {
+  const changes = new ChangeObserver();
+  const recorder = new Recorder(new RecordBook(), { changes });
+  const recording = bindRecording(recorder);
+  const initial = changes.take();
+  let replica = ObservationReplica.receive(undefined, baseline({ recorder: { id: recorder.id, revision: recorder.revision }, entries: initial.filter((event) => event.type === 'record').map((event) => event.change.entry) }));
+  const runtime = executionRuntime(() => 'output', { changes, recording });
+  await runtime.run('input', {});
+  const events = changes.take();
+  let sequence = 0;
+  let sawPendingBoundary = false;
+  for (const event of events) {
+    replica = ObservationReplica.receive(replica, { type: 'delta', scopeId: replica.scopeId, sequence: ++sequence, changes: [event] });
+    if (event.type === 'record' && event.change.kind === 'finished' && replica.entries.get(event.change.id)?.kind === 'runtime-call') {
+      sawPendingBoundary = true;
+      assert.equal(replica.entries.get(event.change.id).data.status, 'succeeded');
+      assert.equal(replica.snapshots.size, 0, 'raw R terminal is retained without publishing an incomplete execution view');
+    }
+  }
+  assert.equal(sawPendingBoundary, true);
+  assert.equal(replica.snapshots.size, 1);
+  const snapshot = [...replica.snapshots.values()][0];
+  assert.deepEqual(snapshot, wire(ExecutionRecordHelper.snapshot(recorder, snapshot.execution.id)));
 });

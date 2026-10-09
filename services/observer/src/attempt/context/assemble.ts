@@ -1,3 +1,4 @@
+import { callRecording } from '@capix-observer/runtime';
 import { TranscriptResource } from '@capix-observer/runtime';
 import type { HistoryResources } from '../../observer/resources.js';
 import { isSafeInteger } from 'es-toolkit/compat';
@@ -11,6 +12,7 @@ export interface AssembledContext {
 }
 
 export class AssembleContext extends AttemptDefinition<Selection, AssembledContext, HistoryResources> {
+  readonly observation = [callRecording()];
   static readonly requires = Object.freeze({ history: TranscriptResource.fixedRange.request() });
 
   readonly name = 'assembleContext';

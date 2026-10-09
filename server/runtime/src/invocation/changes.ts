@@ -20,8 +20,8 @@ export class InvocationChangeEmitter {
     this.identity = Object.freeze({ ...identity });
   }
 
-  publish(change: InvocationEvent['change']): void {
-    const sequence = ++this.#sequence;
-    captureChange(this.target, Object.freeze({ type: 'invocation', ...this.identity, sequence, occurredAt: new Date().toISOString(), change: Object.freeze({ ...change }) }));
+  publish(change: InvocationEvent['change'], order?: { sequence: number; occurredAt: string }): void {
+    const sequence = order?.sequence ?? ++this.#sequence;
+    captureChange(this.target, Object.freeze({ type: 'invocation', ...this.identity, sequence, occurredAt: order?.occurredAt ?? new Date().toISOString(), change: Object.freeze({ ...change }) }));
   }
 }

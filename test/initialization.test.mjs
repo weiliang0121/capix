@@ -1,3 +1,4 @@
+import { runtimeDefinition } from './fixtures/declarations.mjs';
 import { captureSource, resourceBindingFor } from './fixtures/observer.mjs';
 import { createEnvironment } from './fixtures/environment.mjs';
 import assert from 'node:assert/strict';
@@ -117,18 +118,15 @@ test('declarations are checked before resource access or invocation construction
   let supplied = 0;
   assert.throws(
     () =>
-      assembleRuntime(
-        { execution: new Root() },
-        {
-          providers: [
-            resource.provide(() => {
-              supplied++;
-              return 'value';
-            }),
-          ],
-          source: { entry: () => null, capture: () => null },
-        },
-      ),
+      assembleRuntime(runtimeDefinition(new Root()), {
+        providers: [
+          resource.provide(() => {
+            supplied++;
+            return 'value';
+          }),
+        ],
+        source: { entry: () => null, capture: () => null },
+      }),
     /not provided/,
   );
   assert.equal(supplied, 0);

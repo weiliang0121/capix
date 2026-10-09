@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { FileCode2 } from 'lucide-react';
 import { useAppCommands } from '../../state/react';
 import type { CallSpan } from '../../observation/types';
-export function Source({ call }: { call: CallSpan }) {
+export function Source({ call }: { call: Pick<CallSpan, 'source'> }) {
   const { source: loadSource } = useAppCommands();
   const [text, setText] = useState('读取源码…');
   const path = call.source.split(' · ')[0]!;

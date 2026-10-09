@@ -1,31 +1,27 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runtime, RuntimeContext, RuntimeRecord, RuntimeRecordHelper, Recorder, RecordBook, ExecutionRecord, ExecutionRecordHelper, createRuntime } from '@capix-observer/runtime';
+import { Runtime, RuntimeRecord, RuntimeCallRecord, bindRecording, Recorder, RecordBook, ExecutionRecord } from '@capix-observer/runtime';
 import { subscribeExecutions } from '@capix-observer/service';
+import { createRuntime, createRecordScope, observeCall } from '../fixtures/runtime.mjs';
 
 const identity = { maxRounds: 1, execute: (context) => context.input };
-const call = (runtime, work = identity) => runtime.executionInvocations.create('input', { context: { settings: {} }, work: work });
+const call = (runtime, work = identity) => runtime.executionInvocations.create('input', { context: {}, work });
 
-test('Runtime construction retains an established context and record without registering a new scope', () => {
+test('record installation owns the long-lived result while Runtime owns no record or call Context', () => {
   const recorder = new Recorder(new RecordBook());
-  const original = createRuntime({ recorder });
-  const before = [...recorder.book.values()];
-  const runtime = new Runtime(original.context, { recording: { recorder, record: original.record } });
-  assert.ok(runtime.context instanceof RuntimeContext);
-  assert.equal(runtime.context, original.context);
-  assert.equal(runtime.context.transcript, undefined);
-  assert.equal(runtime.record, original.record);
-  assert.deepEqual([...recorder.book.values()], before);
-  assert.deepEqual(Object.keys(runtime.record.value), ['createdAt']);
-  assert.equal(runtime.record.status, undefined);
-  assert.deepEqual(runtime.record.childIds, []);
-  const otherRecorder = new Recorder(new RecordBook());
-  assert.throws(() => new Runtime(runtime.context, { recording: { recorder: otherRecorder, record: runtime.record } }), /not registered/);
-  const unregistered = new RuntimeRecord({ createdAt: recorder.clock.now() });
-  assert.throws(() => new Runtime(runtime.context, { recording: { recorder, record: unregistered } }), /not registered/);
+  const recording = bindRecording(recorder);
+  const runtime = new Runtime({ observations: [recording] });
+  assert.equal(runtime.context, undefined);
+  assert.equal(runtime.record, undefined);
+  assert.equal(runtime.recorder, undefined);
+  assert.ok(recording.root instanceof RuntimeRecord);
+  assert.equal(recording.root.status, undefined);
+  assert.deepEqual(recording.root.childIds, []);
+  assert.deepEqual(Object.keys(recording.root.value), ['createdAt']);
+  assert.deepEqual([...recorder.book.values()], [recording.root]);
 });
 
-test('success and failure finish individual executions while the Runtime record retains their direct ownership', async () => {
+test('each Runtime call owns its E while success and failure leave the shared instance open', async () => {
   const recorder = new Recorder(new RecordBook());
   const runtime = createRuntime({ recorder });
   const original = runtime.record.toJSON();
@@ -42,20 +38,28 @@ test('success and failure finish individual executions while the Runtime record 
   const third = call(runtime);
   await third.run();
   assert.deepEqual(original.childIds, []);
-  assert.deepEqual(runtime.record.childIds, [first.record.id, second.record.id, third.record.id]);
+  const parents = [first, second, third].map((invocation) => recorder.book.get(invocation.record.parentId));
+  assert.ok(parents.every((record) => record instanceof RuntimeCallRecord));
+  assert.deepEqual(
+    runtime.record.childIds,
+    parents.map((record) => record.id),
+  );
+  assert.deepEqual(
+    parents.map((record) => record.status),
+    ['succeeded', 'failed', 'succeeded'],
+  );
   assert.deepEqual(
     [first, second, third].map((item) => item.record.status),
     ['succeeded', 'failed', 'succeeded'],
   );
   assert.equal(runtime.record.status, undefined);
-  assert.deepEqual(Object.keys(runtime.record.value), ['createdAt']);
-  for (const item of [first, second, third]) {
-    assert.equal(item.record.parentId, runtime.record.id);
-    for (const descendant of recorder.tree.descendants(item.record.id)) assert.equal(recorder.tree.root(descendant.id), runtime.record);
+  for (const invocation of [first, second, third]) {
+    assert.equal(recorder.tree.root(invocation.record.id), runtime.record);
+    for (const descendant of recorder.tree.descendants(invocation.record.id)) assert.equal(recorder.tree.root(descendant.id), runtime.record);
   }
 });
 
-test('shared Recorder observation resolves Runtime ownership through record links without Context lookup or Book scans', async (t) => {
+test('shared Recorder ownership follows record links rather than Context lookup or Book scans', async (t) => {
   const recorder = new Recorder(new RecordBook());
   const first = createRuntime({ recorder });
   const second = createRuntime({ recorder });
@@ -69,14 +73,14 @@ test('shared Recorder observation resolves Runtime ownership through record link
     await b.run();
     assert.ok(seen.length > 0);
     assert.ok(seen.every((id) => id === a.record.id));
-    assert.throws(() => ExecutionRecordHelper.observe(first.recording, b), /does not exist/);
-    assert.equal(ExecutionRecordHelper.observe(first.recording, a).execution.id, a.record.id);
+    assert.throws(() => observeCall(first.recording, b), /does not exist/);
+    assert.equal(observeCall(first.recording, a).execution.id, a.record.id);
   } finally {
     unsubscribe();
   }
 });
 
-test('execution registration requires a Runtime parent and failed registration leaves that parent intact', () => {
+test('execution requires its Runtime call parent and failed registration leaves that parent intact', () => {
   class FailingBook extends RecordBook {
     reject = false;
     add(record) {
@@ -87,26 +91,26 @@ test('execution registration requires a Runtime parent and failed registration l
   }
   const book = new FailingBook();
   const recorder = new Recorder(book);
-  const root = RuntimeRecordHelper.create(recorder);
-  const value = { input: {}, settings: {}, startedAt: recorder.clock.now() };
-  assert.throws(() => recorder.add(new ExecutionRecord('context', value)), /Runtime parent/);
-  const record = new ExecutionRecord('context', value, root.id);
-  const previous = root.childIds;
+  const parent = createRecordScope(recorder);
+  const value = { input: {}, startedAt: recorder.clock.now() };
+  assert.throws(() => recorder.add(new ExecutionRecord('context', value)), /Runtime call parent/);
+  assert.throws(() => recorder.add(new ExecutionRecord('context', value, parent.parentId)), /Runtime call parent/);
+  const record = new ExecutionRecord('context', value, parent.id);
+  const previous = parent.childIds;
   book.reject = true;
   assert.throws(() => recorder.add(record), /registration failed/);
-  assert.equal(root.childIds, previous);
+  assert.equal(parent.childIds, previous);
   assert.equal(book.get(record.id), undefined);
   book.reject = false;
   recorder.add(record);
-  assert.deepEqual(root.childIds, [record.id]);
-  assert.throws(() => recorder.add(new ExecutionRecord('other', value, record.id)), /Runtime parent/);
+  assert.deepEqual(parent.childIds, [...previous, record.id]);
 });
 
-test('Runtime context and execution remain usable without recording', async () => {
+test('Runtime and its E remain usable without installing recording', async () => {
   const runtime = createRuntime();
-  assert.ok(runtime.context instanceof RuntimeContext);
   assert.equal(runtime.record, undefined);
-  assert.equal(runtime.recorder, undefined);
-  assert.equal(runtime.context.transcript, undefined);
-  assert.equal(await call(runtime).run(), 'input');
+  assert.equal(runtime.context, undefined);
+  const invocation = call(runtime);
+  assert.equal(await invocation.run(), 'input');
+  assert.equal(invocation.record, undefined);
 });

@@ -20,7 +20,7 @@ export const MemoryResource = Object.freeze({
       Object.freeze({
         apply(changes: readonly MemoryChange[]): void {
           const startSequence = memories.sequence;
-          activity.runSync('apply', { input: () => ({ count: changes.length }), output: (result) => ({ memoriesId: memories.id, startSequence, endSequence: memories.sequence, memoryIds: result.map((memory) => memory.id) }) }, () => memories.apply(changes, { origin: activity.origin, source: activity.source() }));
+          activity.runSync('apply', { input: () => ({ count: changes.length }), output: (result) => ({ memoriesId: memories.id, startSequence, endSequence: memories.sequence, memoryIds: result.map((memory) => memory.id) }) }, () => memories.apply(changes, { origin: activity.origin, observation: activity.memoryObservation }));
         },
       }),
     'access',

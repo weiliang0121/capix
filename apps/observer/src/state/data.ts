@@ -1,4 +1,4 @@
-import type { ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceFact, ProcessRecord } from '@capix-observer/protocol';
+import type { ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceFact, ProcessRecord, RelationChangeRecord } from '@capix-observer/protocol';
 import type { ConversationMessage } from '../observation/conversation.js';
 import type { CallSpan } from '../observation/types.js';
 
@@ -19,7 +19,12 @@ export interface CallMemory {
   incoming: { id: string; topic: string; content: string; sourceIndexes: number[] }[];
   changes: MemoryRecord[];
 }
-export interface CallDetail extends CallSpan {
+export interface CallDetail extends Omit<CallSpan, 'recordType' | 'caller' | 'callee'> {
+  recordType: CallSpan['recordType'] | 'runtime';
+  caller: CallSpan['caller'] | 'runtime';
+  callee: CallSpan['callee'] | 'runtime';
+  startedAt?: string;
+  relationEntries: readonly RelationChangeRecord[];
   children: CallSpan[];
   memory: CallMemory;
   resources: readonly ResourceFact[];

@@ -8,9 +8,9 @@ const sources = new WeakMap();
 export function captureSource(options) {
   return Object.freeze({ settings: Object.freeze({ ...options.settings }), ...(options.transcript ? { transcriptRange: new TranscriptRangeRef(options.transcript, options.transcript.activeStart, options.transcript.length) } : {}) });
 }
-export function contextWithSource(input, options) {
+export function contextWithSource(input, options, parent) {
   const source = captureSource(options);
-  const context = new ExecutionContext(input, options, undefined, options.resourceBinding?.(source));
+  const context = new ExecutionContext(input, options, undefined, options.resourceBinding?.(source), parent);
   sources.set(context, source);
   return context;
 }
@@ -22,14 +22,15 @@ export function resourceBindingFor(runtime, provider, provided) {
     const transcript = source.transcriptRange?.transcript ?? new Transcript();
     let entities = provided ?? worlds.get(transcript);
     if (!entities) {
-      entities = { transcript, memories: new Memories(transcript, { recorder: runtime.recorder }), selectionUsage: new SelectionUsage() };
+      entities = { transcript, memories: new Memories(transcript, { observation: runtime.recording?.memory }), selectionUsage: new SelectionUsage() };
       worlds.set(transcript, entities);
     }
     return binding({ ...source, ...entities, model, delivery: () => {} });
   };
 }
 export function bindChild(runtime, definition) {
-  return new BindingEnvironment(runtime.operationInvocations, runtime.attemptInvocations).children(definitionResources(definition), [definition], 'operation').get(definition);
+  const environment = new BindingEnvironment(runtime.executionInvocations, runtime.operationInvocations, runtime.attemptInvocations, runtime.recording?.provides);
+  return environment.children(environment.resources(definition), [definition], 'operation').get(definition);
 }
 // Construction metadata is captured only by this test fixture, not exposed by a work Context.
 export const sourceFor = (context) => sources.get(context);

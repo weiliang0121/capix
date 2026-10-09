@@ -19,13 +19,13 @@ export class Operation<I, O, R extends object = object> {
     private readonly invocations: OperationInvocationBuilder,
     readonly definition: OperationDefinition<I, O, R, any>,
     readonly children: BoundChildren,
+    private readonly requires: ResourceRequirements<R> = definitionResources(definition) as ResourceRequirements<R>,
   ) {
     this.work = bindInvocationWork(definition, children);
   }
   create(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, input: I, options: InvocationRelationOptions = {}) {
     const { name, label, source } = this.definition;
-    const requires = definitionResources(this.definition) as ResourceRequirements<R>;
-    return this.invocations.create<I, O, R>(parent, { input, requires, initial: this.definition.run.requires, observation: this.definition.observation, description: { id: this.id, name, label, source }, work: this.work, key: options.key });
+    return this.invocations.create<I, O, R>(parent, { input, requires: this.requires, initial: this.definition.run.requires, observation: this.definition.observation, description: { id: this.id, name, label, source }, work: this.work, key: options.key });
   }
   call(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, input: I): Promise<O> {
     return this.create(parent, input).run();

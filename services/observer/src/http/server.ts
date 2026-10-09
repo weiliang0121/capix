@@ -8,6 +8,7 @@ import { ExecutionRecord, ExecutionRecordHelper, isObject, observeMemory, Runtim
 import type { initializeObserver } from '../observer/environment.js';
 import { transcriptSnapshot } from '../observer/transcript/feed.js';
 import { ObservationFeed } from '../observer/feed.js';
+import { SourceIncomplete } from '../observer/record-source.js';
 import { observationWriter } from './observation-writer.js';
 import { observeOverview } from '../observer/overview.js';
 import { validateSettings } from '../settings.js';
@@ -27,10 +28,10 @@ export function createObserverServer(options: ObserverServerOptions) {
   const settings = validateSettings(options.settings);
   const project = options.projectDirectory ?? fileURLToPath(new URL('../../../../', import.meta.url));
   const assets = options.assetsDirectory ?? resolve(project, 'apps/observer/dist');
-  const feed = new ObservationFeed(observer, observer.changes);
+  const feed = new ObservationFeed(observer);
   const server = createServer((req, res) => {
     void handle(req, res).catch((error) => {
-      const body: ErrorResponse = error instanceof RuntimeError ? { error: error.message, code: error.code } : { error: '服务内部错误。', code: 'INTERNAL_ERROR' };
+      const body: ErrorResponse = error instanceof RuntimeError || error instanceof SourceIncomplete ? { error: error.message, code: error.code } : { error: '服务内部错误。', code: 'INTERNAL_ERROR' };
       if (res.headersSent) {
         if (!res.destroyed) res.end(JSON.stringify({ type: 'error', ...body } satisfies ConversationUpdate) + '\n');
         return;
@@ -48,13 +49,14 @@ export function createObserverServer(options: ObserverServerOptions) {
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured } satisfies ConfigurationResponse);
     if (req.method === 'GET' && url.pathname === '/api/observe') {
+      observer.recordSource.assertComplete();
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
       const write = observationWriter(res);
       const unsubscribe = feed.connect((frame) => {
         if (res.destroyed) return;
         try {
           if (frame.type === 'error') {
-            res.end(JSON.stringify(frame) + '\n');
+            write.end(frame);
             return;
           }
           write(frame);
@@ -66,8 +68,14 @@ export function createObserverServer(options: ObserverServerOptions) {
       res.flushHeaders();
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/api/memory') return json(res, 200, observeMemory(observer.memories, observer.book));
-    if (req.method === 'GET' && url.pathname === '/api/executions') return json(res, 200, observeOverview(observer));
+    if (req.method === 'GET' && url.pathname === '/api/memory') {
+      observer.recordSource.assertComplete();
+      return json(res, 200, observeMemory(observer.memories, observer.book));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/executions') {
+      observer.recordSource.assertComplete();
+      return json(res, 200, observeOverview(observer));
+    }
     if (req.method === 'GET' && (url.pathname === '/api/transcript' || url.pathname === '/api/transcript/observe')) {
       const id = url.searchParams.get('id');
       if (id && id !== observer.transcript.id) return json(res, 404, { error: '未找到消息集合。' } satisfies ErrorResponse);
@@ -82,6 +90,7 @@ export function createObserverServer(options: ObserverServerOptions) {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/execution') {
+      observer.recordSource.assertComplete();
       const id = url.searchParams.get('id') || '';
       if (!(observer.book.get(id) instanceof ExecutionRecord)) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
       return json(res, 200, ExecutionRecordHelper.snapshot(observer.recording.recorder, id));
@@ -110,10 +119,11 @@ export function createObserverServer(options: ObserverServerOptions) {
         }
       };
       let contextId: string | undefined;
-      await observer.runtime.run(
-        data,
-        { settings: runSettings, signal: controller.signal, deliver },
-        {
+      await observer.runtime.run(data, {
+        settings: runSettings,
+        signal: controller.signal,
+        deliver,
+        execution: {
           accepted: () => {
             res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
             res.flushHeaders();
@@ -123,7 +133,7 @@ export function createObserverServer(options: ObserverServerOptions) {
             deliver({ type: 'started', transcriptId: observer.transcript.id, contextId, inputIndex: observer.transcript.length - 1 });
           },
         },
-      );
+      });
       deliver({ type: 'completed', contextId: contextId! });
       if (deliveryError) throw deliveryError;
       res.end();

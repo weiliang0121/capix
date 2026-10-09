@@ -3,10 +3,12 @@ import type { InvocationView } from '../invocation/view.js';
 import type { Continuation, InvocationResolution } from '../invocation/result.js';
 import type { ResourceRequest } from '../resource/offer.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
+import { resourceRequests } from '../resource/bindings.js';
 import type { ChildBindings } from '../binding/children.js';
 import type { ChildDefinition } from './children.js';
 import type { ExceptionContract, DeclaredException } from '../exception/contract.js';
-import type { InvocationObservation } from '../invocation/recording.js';
+import type { ObservationDeclaration } from '../observation/definition.js';
+import type { CallFact } from '../observation/facts.js';
 
 export interface InvocationRunDefinition<I, O, C extends InvocationScope<I, O>, R extends object> {
   readonly requires: ResourceRequirements<R>;
@@ -30,13 +32,29 @@ export abstract class InvocationDefinition<I, O, C extends InvocationScope<I, O>
   readonly raises: readonly ExceptionContract<any>[] = [];
   abstract readonly run: InvocationRunDefinition<I, O, C, R>;
   readonly exceptions?: InvocationExceptionDefinition<I, O, ScopeResources<C, H>, H>;
-  readonly observation?: InvocationObservation<I, O>;
+  readonly observation?: readonly ObservationDeclaration<CallFact>[];
 }
 
 /** Supply coverage is shared internally, while each declaration receives only its own named view. */
-export function definitionResources(definition: { readonly run: { readonly requires: ResourceRequirements }; readonly exceptions?: { readonly requires: ResourceRequirements } }): ResourceRequirements {
+export function definitionResources(definition: { readonly run: { readonly requires: ResourceRequirements }; readonly exceptions?: { readonly requires: ResourceRequirements }; readonly observation?: readonly ObservationDeclaration<CallFact>[] }, localObservationResources?: ResourceRequirements): ResourceRequirements {
   const requires: Record<string, ResourceRequest<unknown>> = {};
+  const localOffers = new Set(resourceRequests(localObservationResources ?? {}).map((request) => request.offer));
   for (const [name, request] of Object.entries(definition.run.requires)) requires[`run.${name}`] = request;
   for (const [name, request] of Object.entries(definition.exceptions?.requires ?? {})) requires[`exceptions.${name}`] = request;
+  for (const [index, declaration] of (localObservationResources ? (definition.observation ?? []) : []).entries()) {
+    for (const [name, request] of Object.entries(declaration.requires)) {
+      if (!localOffers.has(request.offer)) requires[`observation.${index}.${name}`] = request;
+    }
+  }
   return Object.freeze(requires);
+}
+
+/** Installed observation supply is excluded only from observation's external requirements. */
+export function observationResources(installations?: readonly { readonly provides?: ResourceRequirements }[]): ResourceRequirements | undefined {
+  if (!installations) return undefined;
+  const provided: Record<string, ResourceRequest<unknown>> = {};
+  for (const [index, installation] of installations.entries()) {
+    for (const [name, request] of Object.entries(installation.provides ?? {})) provided[`${index}.${name}`] = request;
+  }
+  return Object.freeze(provided);
 }

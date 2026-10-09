@@ -1,7 +1,8 @@
 import { createEnvironment } from '../fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, Recorder, RecordBook, ExecutionRecord, ExecutionRecordHelper, InvocationBoundaryRecordHelper, TranscriptRecord, MemoryRecord, createRuntime } from '@capix-observer/runtime';
+import { Recorder, RecordBook, ExecutionRecordHelper, InvocationBoundaryRecordHelper, TranscriptRecord, MemoryRecord, bindRecording, callRecording, ResourceBindings } from '@capix-observer/runtime';
+import { createRuntime } from '../fixtures/runtime.mjs';
 
 const operation = { id: 'work', name: 'work', label: 'Work', source: 'test' };
 const attempt = { name: 'apply', label: 'Apply', source: 'test', callee: 'processing' };
@@ -38,7 +39,7 @@ test('live nested calls and content sources use their bound records without Cont
                         maxRounds: 1,
                         execute(context, invocation) {
                           assert.equal(invocation.context, context);
-                          memories.apply([{ action: 'create', memoryId: null, change: 'location', sourceIndexes: [0], result: { topic: 'location', content: 'Beijing', sourceIndexes: [0] } }], { origin: invocation.origin, source: invocation.source });
+                          memories.apply([{ action: 'create', memoryId: null, change: 'location', sourceIndexes: [0], result: { topic: 'location', content: 'Beijing', sourceIndexes: [0] } }], { origin: invocation.origin, observation: invocation.observation.memory });
                           return 'done';
                         },
                         accept(context, output, invocation) {
@@ -57,7 +58,7 @@ test('live nested calls and content sources use their bound records without Cont
           },
         });
         const output = await outer.run();
-        transcript.appendFrom([{ role: 'assistant', content: output }], { origin: invocation.origin, source: invocation.source });
+        transcript.appendFrom([{ role: 'assistant', content: output }], { origin: invocation.origin, observation: invocation.observation.transcript });
         return output;
       },
     },
@@ -110,29 +111,22 @@ test('one reused work behavior keeps separate bindings during overlapping child 
   assert.equal(await root.run(), 'done');
 });
 
-test('binding rejects a foreign Context, duplicate binding and missing binding before executing work', async () => {
-  for (const mode of ['foreign', 'duplicate', 'missing']) {
-    const context = new InvocationContext('input');
-    const first = new ExecutionRecord(context.id, { input: 'input', settings: {}, startedAt: new Date().toISOString() }, 'runtime-record');
-    const invocation = new Invocation({
-      context,
-      signal: new AbortController().signal,
-      work: { maxRounds: 1, execute: () => assert.fail('invalid binding must prevent work') },
-      recording: {
-        begin(context, bind) {
-          if (mode === 'missing') return;
-          if (mode === 'foreign') bind(new ExecutionRecord('other-context', first.value, 'runtime-record'));
-          else {
-            bind(first);
-            bind(first);
-          }
-        },
-      },
-    });
-    const expected = mode === 'foreign' ? /another Context/ : mode === 'duplicate' ? /already bound/ : /not bound/;
-    await assert.rejects(invocation.run(), (error) => error.code === 'RECORDING_FAILED' && expected.test(error.cause.message));
-    assert.equal(invocation.record, mode === 'duplicate' ? first : undefined);
-    assert.equal(context.status, 'failed');
+test('the recording preset rejects foreign facts, repeated starts and an unstarted recording parent', () => {
+  for (const mode of ['foreign', 'duplicate', 'missing-parent']) {
+    const recorder = new Recorder(new RecordBook());
+    const installation = bindRecording(recorder);
+    const declarations = [callRecording()];
+    const resources = new ResourceBindings({});
+    const parent = installation.bindCall({ identity: { level: 'runtime', contextId: 'parent' }, description: { id: 'runtime' }, resources, declarations });
+    const scope = mode === 'missing-parent' ? installation.bindCall({ identity: { level: 'execution', contextId: 'child', parentContextId: 'parent' }, resources, declarations }, parent) : parent;
+    const observe = declarations[0].bind(scope.resources);
+    const fact = { kind: 'started', input: null, identity: scope.setup.identity, eventSequence: 1, occurredAt: new Date().toISOString(), monotonicTime: 0 };
+    if (mode === 'duplicate') observe(fact);
+    const expected = mode === 'foreign' ? /another local observation/ : mode === 'duplicate' ? /only start once/ : /has not started/;
+    assert.throws(() => observe(mode === 'foreign' ? { ...fact, identity: { ...fact.identity, contextId: 'foreign' } } : fact), expected);
+    assert.equal(scope.available(), false);
+    assert.equal(Boolean(scope.record), mode === 'duplicate');
+    if (scope.record) assert.equal(recorder.book.get(scope.record.id), scope.record);
   }
 });
 
@@ -141,21 +135,23 @@ test('a recorded child cannot start before its parent has registered its call', 
   const runtime = createRuntime({ recorder });
   const root = runtime.executionInvocations.create('root', { context: { settings: {} }, work: identity });
   const child = runtime.operationInvocations.create(root, { input: 'child', description: operation, work: identity });
-  await assert.rejects(child.run(), /Parent invocation record is not registered here/);
+  await assert.rejects(child.run(), (error) => error.code === 'OBSERVATION_FAILED' && /has not started/.test(error.cause.message));
   assert.equal(root.record, undefined);
   assert.equal(child.record, undefined);
-  assert.deepEqual([...recorder.book.values()], [runtime.record]);
+  assert.equal([...recorder.book.values()].filter((record) => record.kind === 'execution' || record.kind === 'operation').length, 0);
   assert.equal(root.context.status, 'running');
 });
 
 test('binding survives a subsequent call-event registration failure without pretending the record disappeared', async (t) => {
   const recorder = new Recorder(new RecordBook());
   const runtime = createRuntime({ recorder });
-  t.mock.method(InvocationBoundaryRecordHelper, 'create', () => {
-    throw new Error('event registration failed');
-  });
   const invocation = runtime.executionInvocations.create('input', { context: { settings: {} }, work: { maxRounds: 1, execute: () => assert.fail('must not execute') } });
-  await assert.rejects(invocation.run(), /event registration failed/);
+  const create = InvocationBoundaryRecordHelper.create;
+  t.mock.method(InvocationBoundaryRecordHelper, 'create', (...args) => {
+    if (args[1].callId === invocation.record?.id) throw new Error('event registration failed');
+    return create(...args);
+  });
+  await assert.rejects(invocation.run(), (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'event registration failed');
   assert.equal(invocation.context.status, 'failed');
   assert.equal(invocation.record, recorder.book.get(invocation.record.id));
   assert.equal(invocation.record.contextId, invocation.context.id);

@@ -5,7 +5,8 @@ import { request } from 'node:http';
 import { test } from 'node:test';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
 import { ClientRuntime } from '@capix-observer/client-runtime';
-import { Runtime, createRuntime } from '@capix-observer/runtime';
+import { Runtime } from '@capix-observer/runtime';
+import { createRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { createObserverServer, initializeObserver, bindObserver, ObserverRuntimeDefinition, acceptExecutionInput } from '@capix-observer/service';
 
@@ -149,7 +150,14 @@ test('transport validates origin, input and source boundary before accepting wor
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).code, 'INVALID_INPUT');
   assert.equal(observer.transcript.length, 0);
-  assert.deepEqual([...observer.book.values()], [observer.runtime.record]);
+  assert.equal(
+    [...observer.book.values()].some((record) => record.kind === 'execution'),
+    false,
+    'rejected E input creates no QA',
+  );
+  const failedRuntime = [...observer.book.values()].find((record) => record.kind === 'runtime-call');
+  assert.equal(failedRuntime.status, 'failed', 'R records the rejected child admission');
+  assert.equal(observer.recording.root.childIds.includes(failedRuntime.id), true);
   for (const path of ['.env', '../../.env', 'services/observer/src/../../../../.env']) assert.equal((await fetch(base + '/api/source?file=' + encodeURIComponent(path))).status, 404);
   const blocked = await new Promise((resolve, reject) => {
     const req = request(base + '/api/config', { headers: { Host: 'outside.example' } }, (res) => {

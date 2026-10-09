@@ -1,4 +1,6 @@
-import type { InvocationObservation } from '../recording.js';
+import type { ObservationDeclaration } from '../../observation/definition.js';
+import type { CallFact } from '../../observation/facts.js';
+import { bindCallObservation } from '../../observation/binding.js';
 import { attachInvocationResources } from '../resources.js';
 import { type ResourceRequirements } from '../../resource/bindings.js';
 import type { InvocationCapabilities } from '../capabilities.js';
@@ -8,13 +10,13 @@ import type { InvocationWork } from '../cycle.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import type { OperationContext } from '../../context/operation.js';
 import type { OperationContextBuilder } from '../../context/operation/builder.js';
-import { OperationRecordHelper, type OperationDescription } from '../../records/operation/helper.js';
+import type { OperationDescription } from '../description.js';
 
 export interface OperationInvocationRequest<I, O, R extends object = object> {
   input: I;
   requires?: ResourceRequirements<R>;
   initial?: ResourceRequirements;
-  observation?: InvocationObservation<I, O>;
+  observation?: readonly ObservationDeclaration<CallFact>[];
   key?: string;
   description: OperationDescription;
   work: InvocationWork<OperationContext<I, O, R>, I, O>;
@@ -32,10 +34,11 @@ export class OperationInvocationBuilder {
     const requires = request.requires ?? ({} as ResourceRequirements<R>);
     const resources = owner.resources.select(requires, request.initial);
     const context = this.contexts.create<I, O, R>(owner, request.input, resources);
-    const recording = this.capabilities.recording ? OperationRecordHelper.recording<I, O>(this.capabilities.recording, request.description, parent, request.observation) : undefined;
+    const identity = { contextId: context.id, level: 'operation' as const, parentContextId: parent.context.id };
+    const observation = bindCallObservation({ identity, description: request.description, declarations: request.observation, resources: context.resources }, this.capabilities.observations, parent.observation);
     const changes = this.capabilities.changes ? new InvocationChangeEmitter({ contextId: context.id, level: 'operation', parentContextId: parent.context.id }, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<I, O, OperationContext<I, O, R>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, signal: context.signal, recording, changes, validate: () => this.contexts.check(owner) });
-    attachInvocationResources(invocation, context.resources, this.capabilities.recording);
+    const invocation = new Invocation<I, O, OperationContext<I, O, R>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, changes, validate: () => this.contexts.check(owner) });
+    attachInvocationResources(invocation, context.resources);
     return invocation;
   }
 }

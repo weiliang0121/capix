@@ -1,3 +1,4 @@
+import { callRecording } from '@capix-observer/runtime';
 import { ModelSettingsResource } from '../../model/resources.js';
 import type { ResourceRequirements } from '@capix-observer/runtime';
 import type { ModelRequestResources } from '../../observer/resources.js';
@@ -8,6 +9,7 @@ import { checkCapacity } from '../../model/capacity.js';
 
 /** Build the operation-specific request and verify capacity before sending it. */
 export class PrepareModelRequest<I, R extends ModelRequestResources = ModelRequestResources> extends AttemptDefinition<I, ModelRequest, R> {
+  readonly observation = [callRecording()];
   readonly run;
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request() });
 

@@ -1,3 +1,4 @@
+import { callRecording } from '@capix-observer/runtime';
 import { ExecutionDefinition, Sequence, type InvocationView, type ExecutionScope, type ChildBindings } from '@capix-observer/runtime';
 import type { Message, GenerationOutput } from '@capix-observer/protocol';
 import { observerExecutionRequests, observerEntryRequests, type ObserverExecutionResources, type ObserverEntryResources } from './resources.js';
@@ -19,6 +20,7 @@ type ConversationInput = { message: Readonly<Message>; memories: MemoryInput['me
 
 /** The fixed composition used by this experiment, reusable across calls. */
 export class ObserverExecutionDefinition extends ExecutionDefinition<Readonly<Message>, GenerationOutput, ObserverExecutionResources, unknown, ObserverEntryResources> {
+  readonly observation = [callRecording()];
   readonly run;
   readonly entry = {
     requires: observerEntryRequests,

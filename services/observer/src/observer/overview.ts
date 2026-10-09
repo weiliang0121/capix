@@ -25,7 +25,7 @@ export function observeOverview(observer: Observer): ObserverOverview {
       const operation = observer.book.get(record.operationId);
       if (operation instanceof OperationRecord) observedOffsets.set(operation.executionId, Math.max(observedOffsets.get(operation.executionId) ?? 0, record.value.processes.at(-1)?.offsetMs ?? 0));
     }
-    if (!(record instanceof InvocationBoundaryRecord)) continue;
+    if (!(record instanceof InvocationBoundaryRecord) || !record.executionId) continue;
     observedOffsets.set(record.executionId, Math.max(observedOffsets.get(record.executionId) ?? 0, record.offsetMs));
     const timing = boundaries.get(record.callId) ?? {};
     if (record.value.type === 'call') timing.start = record.offsetMs;

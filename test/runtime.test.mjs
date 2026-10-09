@@ -6,7 +6,8 @@ import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Clock, Recorder, RecordBook, OperationRecordHelper, RuntimeError, ExecutionContext, OperationContext, createRuntime } from '@capix-observer/runtime';
+import { Clock, Recorder, RecordBook, OperationRecordHelper, RuntimeError, ExecutionContext, OperationContext } from '@capix-observer/runtime';
+import { createRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
 
@@ -49,7 +50,7 @@ test('Runtime passes live Contexts; records retain separate identities, relation
   assert.equal(parentRecord.value.input.count, 0);
   assert.equal(readOutput(parentRecord.value).count, 1);
   lifecycles.get(execution).succeed(execution, output);
-  validateSnapshot(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)));
+  validateSnapshot(observeCall(runtime.recording, callFor(execution)));
 });
 
 test('Runtime rejects ended or mismatched parent Contexts and preserves original work failures', async () => {
@@ -85,7 +86,7 @@ test('Runtime rejects ended or mismatched parent Contexts and preserves original
   assert.notEqual(recordFor(failed).value.error, failure);
   assert.equal(recordFor(failed).value.error.code, 'TEST_ERROR');
   lifecycles.get(execution).fail(execution, failure);
-  validateSnapshot(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)));
+  validateSnapshot(observeCall(runtime.recording, callFor(execution)));
 });
 
 test('Injected Clock measures recording boundaries without becoming live Context state', async () => {
@@ -118,7 +119,7 @@ test('Injected Clock measures recording boundaries without becoming live Context
         resolve = done;
       }),
   );
-  const during = ExecutionRecordHelper.observe(runtime.recording, callFor(execution));
+  const during = observeCall(runtime.recording, callFor(execution));
   validateSnapshot(during);
   clock.wall = '2026-09-20T01:00:00.000Z';
   clock.elapsed = 135;
@@ -126,7 +127,7 @@ test('Injected Clock measures recording boundaries without becoming live Context
   const output = await pending;
   clock.elapsed = 150;
   lifecycles.get(execution).succeed(execution, output);
-  const facts = ExecutionRecordHelper.observe(runtime.recording, callFor(execution));
+  const facts = observeCall(runtime.recording, callFor(execution));
   assert.equal(execution.status, 'succeeded');
   assert.equal(facts.execution.status, 'succeeded');
   assert.deepEqual(
@@ -138,7 +139,7 @@ test('Injected Clock measures recording boundaries without becoming live Context
     ['call', 'call', 'return', 'return'],
   );
   assert.equal(during.operations[0].status, 'running');
-  assert.equal(published.length, 7); // Four boundaries plus execute start/return and receive return.
+  assert.equal(published.length, 9); // Boundaries, processes and the parent's child attachment/return facts.
   assert.equal(projectExecution(facts).callSequence.calls[1].durationMs, 25);
   assert.equal(projectExecution(facts).durationMs, 50);
 });
@@ -189,5 +190,5 @@ test('record creation captures instance descriptions at begin without storing th
   lifecycles.get(execution).succeed(execution, 'execution output');
   assert.equal(reads, 1);
   assert.equal(operationRecord.label, 'initial label');
-  validateSnapshot(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)));
+  validateSnapshot(observeCall(runtime.recording, callFor(execution)));
 });

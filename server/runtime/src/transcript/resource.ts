@@ -57,7 +57,7 @@ export const TranscriptResource = Object.freeze({
         append(messages: readonly Message[]) {
           return activity.runSync('append', { input: () => ({ count: messages.length }), output: (result) => ({ transcriptId: transcript.id, indexes: result.map((item) => item.index), revision: transcript.revision }) }, () => {
             const start = transcript.length;
-            transcript.appendFrom(messages, { origin: activity.origin, source: activity.source() });
+            transcript.appendFrom(messages, { origin: activity.origin, observation: activity.transcriptObservation });
             return Object.freeze(messages.map((_, offset) => Object.freeze({ index: start + offset, message: transcript.get(start + offset)! })));
           });
         },
@@ -70,7 +70,7 @@ export const TranscriptResource = Object.freeze({
     (transcript: Transcript, activity) =>
       Object.freeze({
         current: () => activity.runSync('current', { output: (reader) => reader.locate() }, () => new TranscriptRangeReader(new TranscriptRangeRef(transcript, transcript.activeStart, transcript.length), activity)),
-        start: (index: number) => activity.runSync('start', { input: () => ({ start: index }), output: () => ({ transcriptId: transcript.id, start: transcript.activeStart, end: transcript.length, revision: transcript.revision }) }, () => transcript.startSegment(index, { origin: activity.origin, source: activity.source() })),
+        start: (index: number) => activity.runSync('start', { input: () => ({ start: index }), output: () => ({ transcriptId: transcript.id, start: transcript.activeStart, end: transcript.length, revision: transcript.revision }) }, () => transcript.startSegment(index, { origin: activity.origin, observation: activity.transcriptObservation })),
       }),
     'access',
     { describe: (transcript) => ({ transcriptId: transcript.id }) },

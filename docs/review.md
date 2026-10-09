@@ -4,6 +4,8 @@
 
 2026-10-08，基线提交 `d3b2544`：`refactor: separate runtime declarations bindings and execution structures`。
 
+本次观测迭代已进一步统一 R 调用与观测出口，下方保留历史分析；最新结构以 [观测方案](observation.md)、[运行边界](runtime-boundaries.md) 为准。
+
 本次检查从独立实体创建、资源供给、REOA 声明与绑定，沿调用、上下文、记录检查到服务观测出口及客户端消费点。三个独立只读审查分别覆盖实体与资源、结构与装配、运行端点与观测影响。下方问题审查保留为改造前基线；2026-10-09 已按确认方案实施，当前 API 以 AGENTS.md、runtime-boundaries.md 和代码为准。
 
 结论：业务声明与资源访问已经有基础，主要错位集中在上游装配、业务可见端点以及记录／观测接线。改造按职责调整这些接缝，保留已有执行、记录和变化机制。
@@ -16,7 +18,7 @@
 - 具体业务复杂度主要在 A，O/E 组合业务；R 当前对应一个 E，不引入 R 业务工作流或具名多 E 路由。
 - 可复用的运行节点、本次 Invocation、Context、Record 是不同对象；建立节点、建立本次现场、开始并登记记录是不同时间点。
 
-## 已落地的边界（2026-10-09）
+## 上轮已落地的边界（2026-10-09，观测迭代前）
 
 - 环境独立创建 Transcript、Memories、SelectionUsage、模型初始化器、Recorder 与变化捕获；RContext 只持有占用。`bindObserver` / `assembleRuntime` 产出唯一 `R.run(request, options, callbacks)` 业务入口。
 - E 的 `entry.requires/accept/admit` 说明提交契约，固定机制保持占用、检查、接纳、HTTP accepted、分段、资源捕获、Context/Invocation、started、记录、工作顺序。入口端点只在接纳窗口内有效。

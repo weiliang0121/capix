@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Memories, Transcript, Recorder, RecordBook, MemoryRecord, observeMemory } from '@capix-observer/runtime';
+import { Memories, Transcript, Recorder, RecordBook, MemoryRecord, observeMemory, bindRecording, ChangeObserver } from '@capix-observer/runtime';
 
 const create = (text) => ({ action: 'create', memoryId: null, change: 'create', sourceIndexes: [0], result: { topic: 'topic', content: text, sourceIndexes: [0] } });
 const update = (memory, text) => ({ ...create(text), action: 'update', memoryId: memory.id });
@@ -8,7 +8,8 @@ const transcript = () => new Transcript([{ role: 'user', content: 'input' }]);
 
 test('Memories sequences actual changes across different memories and preserves scope identity on records', () => {
   const recorder = new Recorder(new RecordBook());
-  const memories = new Memories(transcript(), { recorder });
+  const recording = bindRecording(recorder);
+  const memories = new Memories(transcript(), { observation: recording.memory });
   const [first, second] = memories.apply([create('one'), create('two')]);
   assert.equal(memories.sequence, 2);
   assert.deepEqual(memories.apply([update(first, 'one')]), []);
@@ -16,7 +17,7 @@ test('Memories sequences actual changes across different memories and preserves 
   assert.throws(() => memories.apply([create('three'), update({ id: 'missing' }, 'bad')]), /does not exist/);
   assert.equal(memories.sequence, 2);
   memories.apply([update(first, 'changed')]);
-  const records = [...recorder.book.values()];
+  const records = [...recorder.book.values()].filter((record) => record instanceof MemoryRecord);
   assert.deepEqual(
     records.map((record) => record.sequence),
     [1, 2, 3],
@@ -54,12 +55,24 @@ test('recording failure does not reuse a memory change position or undo the appl
     }
   }
   const book = new RejectingBook();
-  const memories = new Memories(transcript(), { recorder: new Recorder(book) });
-  assert.throws(() => memories.apply([create('one')]), /record rejected/);
+  const faults = [];
+  const changes = new ChangeObserver();
+  const recording = bindRecording(new Recorder(book), { failure: 'propagate', invalidate: (error) => faults.push(error) });
+  const memories = new Memories(transcript(), { observation: recording.memory, changes });
+  assert.throws(
+    () => memories.apply([create('one')]),
+    (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'record rejected',
+  );
   assert.equal(memories.values()[0].content, 'one');
   assert.equal(memories.sequence, 1);
   book.reject = false;
   memories.apply([update(memories.values()[0], 'two')]);
   assert.equal(memories.sequence, 2);
-  assert.equal([...book.values()][0].sequence, 2);
+  // The entity keeps producing facts; the failed observation consumer stays disabled.
+  assert.deepEqual(
+    changes.take().map((event) => event.sequence),
+    [1, 2],
+  );
+  assert.equal([...book.values()].filter((record) => record instanceof MemoryRecord).length, 0);
+  assert.equal(faults.length, 1);
 });

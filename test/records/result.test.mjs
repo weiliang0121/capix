@@ -5,7 +5,8 @@ import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, InvocationRecord, createRuntime } from '@capix-observer/runtime';
+import { Recorder, RecordBook, InvocationRecord } from '@capix-observer/runtime';
+import { createRuntime, observeCall } from '../fixtures/runtime.mjs';
 
 import { hasOutput, readOutput, validateSnapshot } from '@capix-observer/protocol';
 
@@ -24,9 +25,9 @@ class LocalOperation extends Operation {
     return context.currentInput;
   }
 }
-const entry = (sequence, stage, type, body, round = 1) => ({ sequence, round, stage, type, occurredAt: '2026-09-25T00:00:00.000Z', offsetMs: sequence, ...body });
+const entry = (sequence, stage, type, body, round = 1) => ({ sequence, eventSequence: sequence, round, stage, type, occurredAt: '2026-09-25T00:00:00.000Z', offsetMs: sequence, ...body });
 const captured = () => {
-  const record = new InvocationRecord({ input: null, processes: [] });
+  const record = new InvocationRecord({ input: null, processes: [], relationChanges: [] });
   record.append(entry(1, 'execute', 'start', { input: null }));
   record.append(entry(2, 'execute', 'return', { output: { content: 'original' } }));
   return record;
@@ -70,7 +71,7 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
     }),
     payload,
   );
-  const snapshot = ExecutionRecordHelper.observe(runtime.recording, callFor(context));
+  const snapshot = observeCall(runtime.recording, callFor(context));
   const records = [snapshot.execution, ...snapshot.operations, ...snapshot.attempts];
   assert.equal(records.length, 3);
   assert.equal(snapshot.events.length, 6);
@@ -100,7 +101,7 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
     value.output = output;
     delete value.resultOf;
   }
-  assert.ok(Buffer.byteLength(serialized) < Buffer.byteLength(JSON.stringify(expanded)) * 0.5);
+  assert.ok(Buffer.byteLength(JSON.stringify(snapshot.attempts[0].value)) < Buffer.byteLength(JSON.stringify(expanded.attempts[0].value)) * 0.5);
 });
 
 test('custom acceptors preserve a distinct snapshot even when mutating and returning the same object', async () => {
@@ -117,7 +118,7 @@ test('custom acceptors preserve a distinct snapshot even when mutating and retur
     const input = { content: 'original' };
     const result = await new Custom(runtime.operationInvocations).call(callFor(context), input);
     lifecycle.succeed(context, result);
-    const snapshot = ExecutionRecordHelper.observe(runtime.recording, callFor(context));
+    const snapshot = observeCall(runtime.recording, callFor(context));
     validateSnapshot(snapshot);
     const value = snapshot.operations[0].value;
     assert.equal(value.processes[1].output.content, 'original');
@@ -162,7 +163,7 @@ test('observation rejects corrupted compact references rather than silently losi
   const context = lifecycle.begin();
   const result = await new LocalOperation(runtime.operationInvocations).call(callFor(context), 'value');
   lifecycle.succeed(context, result);
-  const snapshot = JSON.parse(JSON.stringify(ExecutionRecordHelper.observe(runtime.recording, callFor(context))));
+  const snapshot = JSON.parse(JSON.stringify(observeCall(runtime.recording, callFor(context))));
   for (const corrupt of [
     (v) => {
       v.resultOf = 1;

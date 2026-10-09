@@ -1,93 +1,86 @@
 import { randomUUID } from 'node:crypto';
-import type { ObservationBaseline, ObservationFrame, ObservationUpdate, RuntimeChange, InvocationEvent, ObservationChange, TranscriptUpdate } from '@capix-observer/protocol';
-import { ChangeObserver, ExecutionRecord, observeMemory, snapshotValue } from '@capix-observer/runtime';
+import type { ObservationBaseline, ObservationFrame, ObservationUpdate, RuntimeChange, ObservationChange, TranscriptUpdate, RecordEntry, ExecutionRecord, RuntimeCallRecord } from '@capix-observer/protocol';
+import { observeMemory, snapshotValue } from '@capix-observer/runtime';
 import type { initializeObserver } from './environment.js';
 import { observeOverview } from './overview.js';
-import { TranscriptFeed } from './transcript/feed.js';
+import { bindDelivery } from '../observation/delivery.js';
 
 type Environment = ReturnType<typeof initializeObserver>;
-/** Consumption/delivery boundary. Producers never invoke these listeners. */
+/** Each connection consumes an atomic source opening; delivery never runs in a producer. */
 export class ObservationFeed {
-  readonly scopeId = randomUUID();
-  #sequence = 0;
-  readonly #listeners = new Set<(frame: ObservationUpdate) => void>();
-  readonly #invocations = new Map<string, InvocationEvent>();
-  readonly #controller = new AbortController();
-  readonly #transcripts: TranscriptFeed;
-  constructor(
-    private readonly observer: Environment,
-    private readonly changes: ChangeObserver<RuntimeChange>,
-  ) {
-    this.#transcripts = new TranscriptFeed(observer.transcript);
-    void this.pump();
-  }
-
-  private async pump(): Promise<void> {
-    while (!this.#controller.signal.aborted) {
-      await this.changes.wait(this.#controller.signal);
-      if (!this.#controller.signal.aborted) this.flush();
-    }
-  }
-
-  /** Synchronous drain before a baseline establishes one unambiguous handoff point. */
-  private flush(): void {
-    const changes = this.changes.take();
-    if (!changes.length) return;
-    for (const change of changes) if (change.type === 'transcript') this.#transcripts.publish(change);
-    for (const change of changes)
-      if (change.type === 'invocation') {
-        if (change.change.kind === 'finished') this.#invocations.delete(change.contextId);
-        else this.#invocations.set(change.contextId, change);
-      }
-    const sequence = ++this.#sequence;
-    try {
-      const frame = wire({ type: 'delta', scopeId: this.scopeId, sequence, changes: changes.map(observationChange) } satisfies ObservationFrame);
-      for (const listener of this.#listeners) this.deliver(listener, frame);
-    } catch {
-      for (const listener of this.#listeners) this.deliver(listener, { type: 'error', code: 'OBSERVATION_ENCODING', error: '观测变化编码失败，需要重新建立基线。' });
-    }
-  }
+  readonly #connections = new Set<() => void>();
+  constructor(private readonly observer: Environment) {}
 
   connect(listener: (frame: ObservationUpdate) => void): () => void {
-    this.flush();
-    const { runtime, recorder, transcript, book, memories } = this.observer;
-    const entries = [...book.values()]
-      .filter((record) => record === runtime.record || (record instanceof ExecutionRecord && record.status === 'running'))
-      .flatMap((record) => (record === runtime.record ? [record] : [record, ...recorder.tree.descendants(record.id)]))
-      .map((record) => ({ kind: record.kind, data: record.toJSON() }));
-    const baseline: ObservationBaseline = { type: 'baseline', scopeId: this.scopeId, sequence: this.#sequence, overview: observeOverview(this.observer), memory: observeMemory(memories, book), transcript: { id: transcript.id, revision: transcript.revision, starts: transcript.segments().map((segment) => segment.start) }, memories: { id: memories.id, sequence: memories.sequence }, recorder: { id: recorder.id, revision: recorder.revision }, entries, invocations: [...this.#invocations.values()] };
-    // No await between snapshot capture and registration; callback receives already fixed wire data.
-    const frame = wire(baseline);
-    this.#listeners.add(listener);
-    this.deliver(listener, frame);
-    return () => {
-      this.#listeners.delete(listener);
-    };
+    const { consumer, recordSource, recording, transcript, book, memories } = this.observer;
+    const scopeId = randomUUID();
+    let sequence = 0;
+    const delivery = bindDelivery<readonly RecordEntry[], RuntimeChange, ObservationUpdate>(recordSource, {
+      attach: (sink) => {
+        const position = consumer.position;
+        this.#connections.add(sink.close);
+        return consumer.subscribe((change, current) => {
+          if (current > position && change.type !== 'record') sink.enqueue(change);
+        });
+      },
+      closed: (connection) => {
+        this.#connections.delete(connection.close);
+      },
+      baseline: (source) => {
+        const baseline: ObservationBaseline = {
+          type: 'baseline',
+          scopeId,
+          sequence,
+          overview: observeOverview(this.observer),
+          memory: observeMemory(memories, book),
+          transcript: { id: transcript.id, revision: transcript.revision, starts: transcript.segments().map((segment) => segment.start) },
+          memories: { id: memories.id, sequence: memories.sequence },
+          recorder: { id: source.sourceId, revision: source.revision },
+          entries: activeEntries(source.value, recording.root.id),
+          invocations: [...consumer.invocations],
+        };
+        return wire(baseline);
+      },
+      delta: (changes) => wire({ type: 'delta', scopeId, sequence: ++sequence, changes: changes.map(observationChange) } satisfies ObservationFrame),
+      incomplete: (error) => ({ type: 'error', code: error.code, error: error.message }),
+      error: () => ({ type: 'error', code: 'OBSERVATION_ENCODING', error: '观测变化编码失败。' }),
+      send: listener,
+    });
+    return delivery.close;
   }
 
   connectTranscript(listener: (frame: TranscriptUpdate) => void): () => void {
-    this.flush();
-    return this.#transcripts.connect(listener);
+    this.observer.consumer.flush();
+    const unsubscribe = this.observer.transcripts.connect(listener);
+    const close = () => {
+      unsubscribe();
+      this.#connections.delete(close);
+    };
+    this.#connections.add(close);
+    return close;
   }
+  close(): void {
+    for (const close of [...this.#connections]) close();
+  }
+}
 
-  private deliver(listener: (frame: ObservationUpdate) => void, frame: ObservationUpdate): void {
-    try {
-      listener(frame);
-    } catch {
-      this.#listeners.delete(listener);
+/** A running R can be receiving a finished E: retain that whole local subtree until R finishes. */
+function activeEntries(entries: readonly RecordEntry[], rootId?: string): RecordEntry[] {
+  const selected = new Set(entries.filter((entry) => entry.data.id === rootId || ((entry.kind === 'runtime-call' || entry.kind === 'execution') && (entry.data as RuntimeCallRecord | ExecutionRecord).status === 'running')).map((entry) => entry.data.id));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const entry of entries) {
+      if (selected.has(entry.data.id) || !entry.data.parentId || entry.data.parentId === rootId || !selected.has(entry.data.parentId)) continue;
+      selected.add(entry.data.id);
+      changed = true;
     }
   }
-
-  close(): void {
-    this.#controller.abort();
-    this.#listeners.clear();
-    this.#transcripts.close();
-  }
+  return entries.filter((entry) => selected.has(entry.data.id));
 }
 function wire<T>(value: T): T {
   return snapshotValue(JSON.parse(JSON.stringify(value))) as T;
 }
-
 function observationChange(event: RuntimeChange): ObservationChange {
   if (event.type !== 'transcript' || event.change.kind !== 'messages-appended') return event as ObservationChange;
   return { ...event, change: { kind: 'messages-appended', start: event.change.start, end: event.change.start + event.change.messages.length } };

@@ -14,6 +14,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
   const [tab, setTab] = useState('overview');
   useEffect(() => setTab('overview'), [target?.executionId, target?.callId]);
   const call = target?.callId ? detail?.calls.get(target.callId) : undefined;
+  const runtimeCall = detail?.calls.get(detail.calls.get(detail.id)?.parentId ?? '');
   const answer = qa?.response?.content ?? detail?.answer ?? '本轮尚无已记录的回答。';
   return (
     <Dialog
@@ -25,7 +26,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
       <DialogContent className="inspector-dialog">
         <DialogHeader>
           <div className="eyebrow">
-            问答 {String(number).padStart(2, '0')} {call ? ` / ${call.recordType === 'execution' ? '执行' : call.recordType === 'operation' ? '操作' : '意图'}` : ''}
+            问答 {String(number).padStart(2, '0')} {call ? ` / ${call.recordType === 'runtime' ? '运行调用' : call.recordType === 'execution' ? '执行' : call.recordType === 'operation' ? '操作' : '意图'}` : ''}
           </div>
           <DialogTitle>{call?.label ?? '这一轮交流'}</DialogTitle>
           <DialogDescription asChild>
@@ -34,7 +35,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                 <>
                   <Status value={call?.status ?? detail.status} />
                   <span>
-                    {duration(call ? call.durationMs : qa?.durationMs)} · {new Date(detail.startedAt).toLocaleString()}
+                    {duration(call ? call.durationMs : qa?.durationMs)} · {new Date(call?.startedAt ?? detail.startedAt).toLocaleString()}
                   </span>
                 </>
               ) : (
@@ -68,9 +69,10 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
               <TabsList>
                 <TabsTrigger value="overview">{call ? '输入 / 输出' : '交流 / 调用'}</TabsTrigger>
                 {call && <TabsTrigger value="process">内部过程</TabsTrigger>}
+                {call && <TabsTrigger value="relations">子调用接纳</TabsTrigger>}
                 <TabsTrigger value="context">上下文</TabsTrigger>
                 <TabsTrigger value="memory">记忆</TabsTrigger>
-                {call && <TabsTrigger value="source">执行源码</TabsTrigger>}
+                {call?.source && <TabsTrigger value="source">执行源码</TabsTrigger>}
               </TabsList>
               <div className="dialog-scroll">
                 <TabsContent value="overview">
@@ -110,6 +112,11 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                       <Button variant="outline" onClick={() => onInspect(detail.id, detail.id)}>
                         查看完整执行 <ArrowUpRight />
                       </Button>
+                      {runtimeCall && (
+                        <Button variant="ghost" onClick={() => onInspect(detail.id, runtimeCall.id)}>
+                          查看所属运行调用 · {statusLabels[runtimeCall.status]} <ArrowUpRight />
+                        </Button>
+                      )}
                       <CallChildren children={detail.children} executionId={detail.id} inspect={onInspect} />
                     </>
                   )}
@@ -134,13 +141,39 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                     {!call.processes.length && <p className="empty-note">没有内部过程条目。</p>}
                   </TabsContent>
                 )}
+                {call && (
+                  <TabsContent value="relations">
+                    <p className="subtle">由当前父调用记录：子调用返回与父层接纳是两个独立阶段。</p>
+                    {call.relationEntries.map((entry) => (
+                      <details className="process-entry" key={entry.eventSequence}>
+                        <summary>
+                          <span>
+                            #{entry.eventSequence} · {entry.identity.key ?? '子调用'} · {relationLabels[entry.change.kind]}
+                          </span>
+                          <span>
+                            父调用第 {entry.identity.parentRound} 轮 · +{duration(entry.offsetMs)}
+                          </span>
+                        </summary>
+                        <DataBlock title="关系记录" value={entry} />
+                        {entry.childId && detail.calls.has(entry.childId) && (
+                          <Button variant="ghost" size="sm" onClick={() => onInspect(detail.id, entry.childId)}>
+                            查看子调用 <ArrowUpRight />
+                          </Button>
+                        )}
+                      </details>
+                    ))}
+                    {!call.relationEntries.length && <p className="empty-note">没有子调用关系条目。</p>}
+                  </TabsContent>
+                )}
                 <TabsContent value="context">
                   <p className="subtle">记录捕获的上下文，不是运行中 Context 的实时副本。</p>
                   <DataBlock title="调用关联" value={{ contextId: call?.contextId ?? detail.contextId, executionRecordId: detail.id, parentRecordId: call?.parentId, operationInstanceId: call?.operationInstanceId }} />
-                  <div className="detail-grid">
-                    <DataBlock title="本次配置快照" value={detail.settings} />
-                    <DataBlock title="固定消息范围" value={detail.transcriptRange} />
-                  </div>
+                  {call?.recordType !== 'runtime' && (
+                    <div className="detail-grid">
+                      <DataBlock title="本次配置快照" value={detail.settings} />
+                      <DataBlock title="固定消息范围" value={detail.transcriptRange} />
+                    </div>
+                  )}
                   <section>
                     <h3>资源运行事实</h3>
                     {(call?.resources ?? detail.resources).map((fact) => (
@@ -152,7 +185,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                 <TabsContent value="memory">
                   <MemoryAtCall {...(call?.memory ?? detail.memory)} />
                 </TabsContent>
-                {call && (
+                {call?.source && (
                   <TabsContent value="source">
                     <Source call={call} />
                   </TabsContent>
@@ -165,3 +198,5 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
     </Dialog>
   );
 }
+
+const relationLabels = { attached: '已建立', returned: '子调用已返回', receiving: '父层接纳中', accepted: '父层已接纳', failed: '父层接纳失败' };

@@ -1,3 +1,5 @@
+import type { RelationChange } from '../observation/facts.js';
+import { combineFaults } from '../observation/error.js';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationRelationView, InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
@@ -27,6 +29,7 @@ export class InvocationRelation {
     readonly round: number,
     readonly key?: string,
     private readonly failed?: (failure: InvocationFailure) => void,
+    private readonly observe?: (change: RelationChange) => unknown | undefined,
   ) {
     const relation = this;
     this.view = Object.freeze({
@@ -57,19 +60,31 @@ export class InvocationRelation {
     if (this.#returned) throw new Error('Child invocation has already returned');
     this.#returned = Object.freeze(result);
     if (result.status === 'failed' && result.failure) this.failed?.(result.failure);
+    this.observe?.({ kind: 'returned', result: this.#returned });
   }
 
   async accept<T>(work: () => T | Promise<T>): Promise<T> {
     if (this.#returned?.status !== 'succeeded') throw new Error('Child invocation has not returned successfully');
     if (this.#reception.status !== 'pending') throw new Error('Child result has already entered acceptance');
     this.#reception = Object.freeze({ status: 'receiving' });
+    const observed = this.observe?.({ kind: 'receiving' });
+    if (observed !== undefined) {
+      this.#reception = Object.freeze({ status: 'failed', error: observed });
+      const failed = this.observe?.({ kind: 'failed', error: observed, source: 'observation' });
+      throw combineFaults([observed, ...(failed !== undefined ? [failed] : [])]);
+    }
+    let output: T;
     try {
-      const output = await work();
-      this.#reception = Object.freeze({ status: 'accepted', output });
-      return output;
+      output = await work();
     } catch (error) {
       this.#reception = Object.freeze({ status: 'failed', error });
+      const failed = this.observe?.({ kind: 'failed', error, source: 'work' });
+      if (failed !== undefined) throw new AggregateError([error, failed], 'Child acceptance and observation both failed', { cause: error });
       throw error;
     }
+    this.#reception = Object.freeze({ status: 'accepted', output });
+    const accepted = this.observe?.({ kind: 'accepted', output });
+    if (accepted !== undefined) throw accepted;
+    return output;
   }
 }

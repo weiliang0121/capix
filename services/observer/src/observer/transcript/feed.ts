@@ -8,14 +8,14 @@ export function transcriptSnapshot(transcript: Transcript): TranscriptSnapshot {
 
 /** Entity delivery is independent from record subscriptions and contains no invocation data. */
 export class TranscriptFeed {
-  readonly #listeners = new Set<(frame: TranscriptUpdate) => void>();
+  readonly #listeners = new Map<(frame: TranscriptUpdate) => void, number>();
 
   constructor(private readonly transcript: Transcript) {}
 
   connect(listener: (frame: TranscriptUpdate) => void): () => void {
     const snapshot = transcriptSnapshot(this.transcript);
     // The consumer drains source changes before connecting. No await separates capture and registration.
-    this.#listeners.add(listener);
+    this.#listeners.set(listener, snapshot.revision);
     this.deliver(listener, { type: 'baseline', snapshot });
     return () => {
       this.#listeners.delete(listener);
@@ -24,7 +24,11 @@ export class TranscriptFeed {
 
   publish(event: TranscriptEvent): void {
     if (event.transcriptId !== this.transcript.id) return;
-    for (const listener of this.#listeners) this.deliver(listener, { type: 'delta', event });
+    for (const [listener, revision] of this.#listeners) {
+      if (event.revision <= revision) continue;
+      this.#listeners.set(listener, event.revision);
+      this.deliver(listener, { type: 'delta', event });
+    }
   }
 
   private deliver(listener: (frame: TranscriptUpdate) => void, frame: TranscriptUpdate): void {

@@ -24,3 +24,6 @@ export * from './observer/resources.js';
 
 export * from './observer/definition.js';
 export * from './observer/binding.js';
+
+export * from './observer/changes.js';
+export * from './observer/record-source.js';

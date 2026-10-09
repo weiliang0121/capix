@@ -1,7 +1,8 @@
 import { captureSource } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runtime, Recorder, RecordBook, Transcript, ChangeObserver, createRuntime, bindResources, ResourceOffer } from '@capix-observer/runtime';
+import { Recorder, RecordBook, ChangeObserver, bindResources, ResourceOffer, ResourceBindings } from '@capix-observer/runtime';
+import { createRuntime } from '../fixtures/runtime.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const operation = { id: 'operation', name: 'work', label: 'Work', source: 'test' };
@@ -64,10 +65,10 @@ test('construction writes no call records and rejects foreign contexts before st
   const second = createRuntime({ recorder });
   const root = first.executionInvocations.create('input', { context: { settings }, work: identity });
   const child = first.operationInvocations.create(root, { input: 'input', description: operation, work: identity });
-  assert.deepEqual([...recorder.book.values()], [first.record, second.record]);
+  assert.equal([...recorder.book.values()].filter((record) => ['execution', 'operation', 'attempt'].includes(record.kind)).length, 0);
   assert.throws(() => second.operationInvocations.create(root, { input: 'foreign', description: operation, work: identity }), /another Runtime/);
   assert.throws(() => second.attemptInvocations.create(child, { input: 'foreign', description: attempt, work: identity }), /another Runtime/);
-  assert.deepEqual([...recorder.book.values()], [first.record, second.record]);
+  assert.equal([...recorder.book.values()].filter((record) => ['execution', 'operation', 'attempt'].includes(record.kind)).length, 0);
 });
 
 test('a constructed call rechecks its parent before entering work, including nested operations', async () => {
@@ -85,50 +86,38 @@ test('a constructed call rechecks its parent before entering work, including nes
   assert.equal(root.context.status, 'running');
 });
 
-test('entry validates before accepting input and releases its reservation after construction failure', async () => {
+test('execution construction validates before capturing resources or starting child work', async () => {
   const recorder = new Recorder(new RecordBook());
   const runtime = createRuntime({ recorder });
-  await assert.rejects(
-    runtime.executionInvocations.submit(() => assert.fail('must not accept'), {
-      context: {},
-      validate: () => {
-        throw new Error('another Runtime');
-      },
-      work: identity,
-    }),
-    /another Runtime/,
-  );
-  const options = { settings };
-  await assert.rejects(
-    runtime.executionInvocations.submit(
-      () => {
-        // Conditions may change during external input acceptance; creation checks them again.
-        options.transcript = new Transcript();
-        return 'input';
-      },
-      {
-        context: options,
-        validate: () => {
-          if (options.transcript) throw new Error('another Runtime');
+  const failure = new Error('construction rejected');
+  let captures = 0;
+  assert.throws(
+    () =>
+      runtime.executionInvocations.create('input', {
+        context: {},
+        validate() {
+          throw failure;
         },
-        work: identity,
-      },
-    ),
-    /another Runtime/,
+        establish() {
+          captures++;
+          return { resources: new ResourceBindings({}) };
+        },
+        work: { maxRounds: 1, execute: () => assert.fail('must not execute') },
+      }),
+    (error) => error === failure,
   );
-  assert.equal(runtime.running, false);
-  assert.deepEqual([...recorder.book.values()], [runtime.record]);
-  const root = runtime.executionInvocations.create('ready', { context: { settings }, work: identity });
-  assert.deepEqual([...recorder.book.values()], [runtime.record]);
-  assert.equal(await root.run(), 'ready');
-  assert.equal([...recorder.book.values()].length, 4); // Runtime + execution + two boundary events.
+  assert.equal(captures, 0);
+  assert.equal([...recorder.book.values()].filter((record) => record.kind === 'execution').length, 0);
+  const ready = runtime.executionInvocations.create('ready', { context: {}, work: identity });
+  assert.equal(ready.record, undefined);
+  assert.equal(await ready.run(), 'ready');
+  assert.equal(ready.record.status, 'succeeded');
 });
 
-test('started failure preserves the original error, skips recording and work, and releases Runtime reservation', async () => {
+test('started failure preserves the original error and skips the child record and work', async () => {
   for (const recorded of [false, true]) {
     const recorder = recorded ? new Recorder(new RecordBook()) : undefined;
     const runtime = createRuntime({ recorder });
-    const before = recorder ? [...recorder.book.values()] : [];
     const failure = new Error('delivery setup failed');
     let invocation;
     await assert.rejects(
@@ -137,7 +126,6 @@ test('started failure preserves the original error, skips recording and work, an
         work: { maxRounds: 1, execute: () => assert.fail('must not execute') },
         started: (context, current) => {
           invocation = current;
-          assert.equal(runtime.running, true);
           assert.equal(context, current.context);
           throw failure;
         },
@@ -149,7 +137,7 @@ test('started failure preserves the original error, skips recording and work, an
     assert.equal(invocation.context.progress.round, 0);
     assert.equal(invocation.record, undefined);
     assert.equal(runtime.running, false);
-    if (recorder) assert.deepEqual([...recorder.book.values()], before);
+    if (recorder) assert.equal([...recorder.book.values()].filter((record) => record.kind === 'execution').length, 0);
     assert.equal(await runtime.executionInvocations.submit(() => 'next', { context: { settings: {} }, work: identity }), 'next');
   }
 });
@@ -182,11 +170,11 @@ test('shared builder capabilities produce independent call event scopes across n
   assert.equal(await later.run(), 'later');
   const events = changes.take().filter((event) => event.type === 'invocation');
   const scopes = Map.groupBy(events, (event) => event.contextId);
-  assert.equal(scopes.size, 4);
+  assert.equal(scopes.size, 6); // Two R calls and their E/O/A descendants.
   for (const values of scopes.values()) {
     assert.deepEqual(
       values.map((event) => event.sequence),
-      [1, 2, 3, 4, 5],
+      Array.from({ length: values.length }, (_, index) => index + 1),
     );
     assert.equal(values[0].change.kind, 'started');
     assert.equal(values.at(-1).change.status, 'succeeded');
@@ -196,7 +184,9 @@ test('shared builder capabilities produce independent call event scopes across n
   const leaf = events.find((event) => event.level === 'attempt');
   assert.equal(child.parentContextId, root.context.id);
   assert.equal(leaf.parentContextId, child.contextId);
-  assert.equal(scopes.get(later.context.id)[0].parentContextId, undefined);
+  const laterParent = scopes.get(later.context.id)[0].parentContextId;
+  assert.equal(scopes.get(laterParent)[0].level, 'runtime');
+  assert.notEqual(laterParent, scopes.get(root.context.id)[0].parentContextId);
 });
 
 test('a completed ancestor stops an awaiting child before acceptance without exposing parent contexts', async () => {

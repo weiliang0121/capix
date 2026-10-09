@@ -6,10 +6,10 @@ export class ExecutionRecord extends InvocationRecord<ExecutionValue> implements
   override readonly kind = 'execution' as const;
   constructor(
     readonly contextId: string,
-    value: Omit<ExecutionValue, 'processes'>,
+    value: Omit<ExecutionValue, 'processes' | 'relationChanges'>,
     parentId: string,
   ) {
-    super(snapshotValue({ ...value, processes: [] }), parentId);
+    super(snapshotValue({ ...value, processes: [], relationChanges: [] }), parentId);
     Object.freeze(this);
   }
   override toJSON(): ExecutionData {

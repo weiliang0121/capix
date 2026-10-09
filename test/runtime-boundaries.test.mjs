@@ -1,10 +1,11 @@
 import { createEnvironment } from './fixtures/environment.mjs';
 import { Execution, Operation, Attempt } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
-import { ExecutionRecordHelper } from '@capix-observer/runtime';
+import { InvocationRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, Runtime, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory, createRuntime } from '@capix-observer/runtime';
+import { Invocation, InvocationContext, Runtime, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix-observer/runtime';
+import { createRuntime } from './fixtures/runtime.mjs';
 import { initializeObserver, bindObserver, ObserverRuntimeDefinition, observeExecution, observeOverview, acceptExecutionInput } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -49,29 +50,19 @@ test('Invocation consumes an established context and rejects concurrent reuse', 
   await assert.rejects(invocation.run(), /already started/);
 });
 
-test('Runtime reserves before input acceptance across different E instances and always releases after failure', async () => {
+test('Runtime reservation blocks other entry work and always releases after failure', async () => {
   const { runtime, transcript } = createEnvironment();
   let release;
   const pending = new Promise((resolve) => {
     release = resolve;
   });
-  class Wait extends Execution {
-    async execute() {
-      await pending;
-      return 'done';
-    }
-  }
-  const first = new Wait(runtime.executionInvocations).call('first', { settings });
+  const first = runtime.reserve(() => pending);
   let accepted = false;
   await assert.rejects(
-    new Echo(runtime.executionInvocations).submit(
-      () => {
-        accepted = true;
-        transcript.append({ role: 'user', content: 'must not append' });
-        return 'next';
-      },
-      { settings },
-    ),
+    runtime.reserve(() => {
+      accepted = true;
+      transcript.append({ role: 'user', content: 'must not append' });
+    }),
     (error) => error.code === 'RUNTIME_BUSY',
   );
   assert.equal(accepted, false);
@@ -79,16 +70,13 @@ test('Runtime reserves before input acceptance across different E instances and 
   release();
   await first;
   await assert.rejects(
-    new Echo(runtime.executionInvocations).submit(
-      () => {
-        throw new Error('invalid input');
-      },
-      { settings },
-    ),
+    runtime.reserve(() => {
+      throw new Error('invalid input');
+    }),
     /invalid input/,
   );
   assert.equal(runtime.running, false);
-  assert.equal(await new Echo(runtime.executionInvocations).call('next', { settings }), 'next');
+  assert.equal(await runtime.reserve(() => 'next'), 'next');
 });
 
 test('Transcript validates full batches, records changes once, and keeps old evidence stable across segmentation', () => {
@@ -142,7 +130,7 @@ test('content registration failure preserves the applied fact and does not prete
   const { transcript } = createEnvironment({ recorder: createRecorder(new Reject()) });
   assert.throws(
     () => transcript.append({ role: 'user', content: 'accepted' }),
-    (error) => error.code === 'RECORDING_FAILED',
+    (error) => error.code === 'OBSERVATION_FAILED',
   );
   assert.equal(transcript.current('user').content, 'accepted');
 });
@@ -157,10 +145,10 @@ test('new R assemblies share independently owned entities without absorbing thei
     },
   };
   const environment = initializeObserver(provider);
-  const run = async (runtime, text) => observeExecution(runtime, runtime.recording, { messages: [{ role: 'user', content: text }] }, { settings });
+  const run = async (runtime, text) => observeExecution(runtime, environment.recording, { messages: [{ role: 'user', content: text }] }, { settings });
   const first = await run(environment.runtime, '我在北京');
   const memory = environment.memories.values()[0];
-  const next = bindObserver(new ObserverRuntimeDefinition(), environment, provider, { recorder: environment.recorder, changes: environment.changes });
+  const next = bindObserver(new ObserverRuntimeDefinition(), environment, provider, { observations: [environment.recording], changes: environment.changes });
   const second = await run(next, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.memories.get(memory.id), memory);
@@ -212,8 +200,10 @@ test('EOA rejects cross-Runtime contexts independently of the recording layer', 
 
 test('Invocation distinguishes successful work from failed result registration without retrying', async (t) => {
   const recorder = createRecorder();
-  t.mock.method(ExecutionRecordHelper, 'complete', () => {
-    throw new Error('cannot register result');
+  const finish = InvocationRecordHelper.finish;
+  t.mock.method(InvocationRecordHelper, 'finish', (...args) => {
+    if (args[1].kind === 'execution') throw new Error('cannot register result');
+    return finish(...args);
   });
   const runtime = createRuntime({ recorder });
   let count = 0;
@@ -225,7 +215,7 @@ test('Invocation distinguishes successful work from failed result registration w
       return 'completed';
     }
   }
-  await assert.rejects(new NonRecordable(runtime.executionInvocations).call('input', { settings }), (error) => error.code === 'RECORDING_FAILED');
+  await assert.rejects(new NonRecordable(runtime.executionInvocations).call('input', { settings }), (error) => error.code === 'OBSERVATION_FAILED');
   assert.equal(context.status, 'succeeded');
   assert.equal(count, 1);
   assert.equal(runtime.running, false);
@@ -233,8 +223,10 @@ test('Invocation distinguishes successful work from failed result registration w
 
 test('Invocation start registration failure prevents work and releases the Runtime', async (t) => {
   const recorder = createRecorder();
-  t.mock.method(ExecutionRecordHelper, 'create', () => {
-    throw new Error('cannot begin record');
+  const add = recorder.add.bind(recorder);
+  t.mock.method(recorder, 'add', (record) => {
+    if (record.kind === 'execution') throw new Error('cannot begin record');
+    return add(record);
   });
   const runtime = createRuntime({ recorder });
   let context;
@@ -248,7 +240,7 @@ test('Invocation start registration failure prevents work and releases the Runti
     new Work(runtime.executionInvocations).call('input', { settings }, (current) => {
       context = current;
     }),
-    (error) => error.code === 'RECORDING_FAILED',
+    (error) => error.code === 'OBSERVATION_FAILED',
   );
   assert.equal(executions, 0);
   assert.equal(context.status, 'failed');
@@ -259,8 +251,10 @@ test('Invocation preserves both work and failure-registration errors without rep
   const recorder = createRecorder();
   const failure = new Error('work failed');
   const registration = new Error('cannot register failure');
-  t.mock.method(ExecutionRecordHelper, 'fail', () => {
-    throw registration;
+  const finish = InvocationRecordHelper.finish;
+  t.mock.method(InvocationRecordHelper, 'finish', (...args) => {
+    if (args[1].kind === 'execution') throw registration;
+    return finish(...args);
   });
   const runtime = createRuntime({ recorder });
   let context;
@@ -291,7 +285,7 @@ test('memory registration failure preserves the applied batch prefix and does no
   const { memories } = createEnvironment({ recorder: createRecorder(new Reject()), messages: [{ role: 'user', content: '地点' }] });
   assert.throws(
     () => memories.apply([proposed('北京'), proposed('上海')]),
-    (error) => error.code === 'RECORDING_FAILED',
+    (error) => error.code === 'OBSERVATION_FAILED',
   );
   assert.deepEqual(
     memories.values().map((memory) => memory.content),

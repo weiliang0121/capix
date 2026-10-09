@@ -17,7 +17,7 @@ export class AttemptRecord extends InvocationRecord<AttemptValue> implements Att
   readonly callee: string;
 
   constructor(definition: AttemptRecordDefinition, input: unknown) {
-    super(snapshotValue({ input, processes: [] }), definition.operationId);
+    super(snapshotValue({ input, processes: [], relationChanges: [] }), definition.operationId);
     this.contextId = definition.contextId;
     this.operationId = definition.operationId;
     this.name = definition.name;

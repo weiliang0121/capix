@@ -23,10 +23,12 @@ async function execute(failAt) {
   try {
     await environment.runtime.run(
       { messages: [{ role: 'user', content: '你好' }] },
-      { settings },
       {
-        started: (_context, current) => {
-          invocation = current;
+        settings,
+        execution: {
+          started: (_context, current) => {
+            invocation = current;
+          },
         },
       },
     );

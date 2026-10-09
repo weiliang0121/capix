@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ResourceActivity, ResourceSession, type ResourceOwner } from './activity.js';
 import { Initializer } from '../initialization/initializer.js';
-import { type ResourceRequest, type ResourceProvider, type ResourceValue } from './offer.js';
+import { ResourceRequest, type ResourceProvider, type ResourceValue } from './offer.js';
 
 export type ResourceRequirements<R extends object = object> = { readonly [K in keyof R]: ResourceRequest<R[K]> };
 
@@ -94,6 +94,24 @@ export class ResourceBindings<R extends object = object> {
     return new ResourceBindings(requires, this.#entries, initial);
   }
 
+  /** Combine supply captures for a distinct declaration, without exposing another declaration's endpoints. */
+  supplement(others: readonly ResourceBindings[]): ResourceBindings {
+    const entries = [...this.#entries];
+    for (const other of others) {
+      for (const entry of other.#entries) {
+        const previous = entries.find((candidate) => candidate.offer === entry.offer);
+        if (previous && previous !== entry) throw new Error(`Ambiguous resource supply: ${entry.offer.name}`);
+        if (!previous) entries.push(entry);
+      }
+    }
+    const requests = Object.fromEntries(entries.map((entry, index) => [String(index), new ResourceRequest(entry.offer)]));
+    return new ResourceBindings(requests, entries);
+  }
+
+  provides(request: ResourceRequest<unknown>): boolean {
+    return this.#entries.some((entry) => entry.offer === request.offer);
+  }
+
   private session(phase: string): ResourceSession {
     let session = this.#scopes.get(phase);
     if (!session) {
@@ -123,20 +141,24 @@ export class ResourceBindings<R extends object = object> {
         value = entry.expose(captured, activity);
       } catch (error) {
         this.#session.error(error);
-        activity.unavailable(error);
+        try {
+          activity.unavailable(error);
+        } catch (observation) {
+          throw new AggregateError([error, observation], 'Resource construction and observation both failed', { cause: error });
+        }
         throw error;
       }
       if (!this.#available.has(entry)) {
-        activity.available(() => entry.describe(captured));
         this.#available.add(entry);
+        activity.available(() => entry.describe(captured));
       }
       return value;
     });
     const local = { activity, endpoint };
     locals.set(entry, local);
     if (this.#started && !this.#bound.has(entry)) {
-      activity.bound();
       this.#bound.add(entry);
+      activity.bound();
     }
     return local;
   }

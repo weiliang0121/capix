@@ -61,13 +61,13 @@ test('business stream rejects identity changes, duplicate answers, misplaced ans
 });
 test('observation stream accepts multiple executions independently and validates records', async () => {
   const received = [];
-  const http = new ObservationHttpTransport('', async () => new Response(stream(lines(baseline({ entries: entriesOf(snapshot()) }), { type: 'delta', scopeId: 'fixture-scope', sequence: 1, changes: [{ type: 'record', recorderId: 'fixture-recorder', revision: 1, occurredAt: '2026-09-30T00:00:00Z', change: { kind: 'added', entry: entriesOf(snapshot('running', 'another'))[0] } }] }))));
+  const http = new ObservationHttpTransport('', async () => new Response(stream(lines(baseline({ entries: entriesOf(snapshot()) }), { type: 'delta', scopeId: 'fixture-scope', sequence: 1, changes: entriesOf(snapshot('running', 'another')).map((entry, index) => ({ type: 'record', recorderId: 'fixture-recorder', revision: index + 1, occurredAt: '2026-09-30T00:00:00Z', change: { kind: 'added', entry } })) }))));
   await assert.rejects(
     http.observe((value) => received.push(value), new AbortController().signal),
     /观测连接已结束/,
   );
   assert.deepEqual(
-    received.map((value) => (value.type === 'baseline' ? value.entries[0].data.id : value.changes[0].change.entry.data.id)),
+    received.map((value) => (value.type === 'baseline' ? value.entries.find((entry) => entry.kind === 'execution').data.id : value.changes.find((event) => event.change.entry.kind === 'execution').change.entry.data.id)),
     ['execution-1', 'another'],
   );
   const invalid = new ObservationHttpTransport('', async () => new Response('{"type":"snapshot","snapshot":{}}\n'));

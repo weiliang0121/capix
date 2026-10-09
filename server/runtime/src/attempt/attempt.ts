@@ -17,11 +17,12 @@ export class Attempt<I, O, R extends object = object> {
     private readonly invocations: AttemptInvocationBuilder,
     readonly definition: AttemptDefinition<I, O, R, any>,
     children: BoundChildren,
+    private readonly requires: ResourceRequirements<R> = definitionResources(definition) as ResourceRequirements<R>,
   ) {
     this.work = bindInvocationWork(definition, children);
   }
   create(parent: Invocation<unknown, unknown, OperationContext>, input: I, options: InvocationRelationOptions = {}) {
-    return this.invocations.create<I, O, R>(parent, { input, requires: definitionResources(this.definition) as ResourceRequirements<R>, initial: this.definition.run.requires, observation: this.definition.observation, description: this.definition, work: this.work, key: options.key });
+    return this.invocations.create<I, O, R>(parent, { input, requires: this.requires, initial: this.definition.run.requires, observation: this.definition.observation, description: this.definition, work: this.work, key: options.key });
   }
   call(parent: Invocation<unknown, unknown, OperationContext>, input: I): Promise<O> {
     return this.create(parent, input).run();

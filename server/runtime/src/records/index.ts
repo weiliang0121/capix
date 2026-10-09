@@ -18,3 +18,7 @@ export { MemoryRecordHelper } from './memory/helper.js';
 export { RecordTree } from './tree.js';
 
 export { ResourceRecord, type ResourceFactDefinition } from './resource/record.js';
+
+export { RuntimeCallRecord } from './runtime-call/record.js';
+
+export * from './observation.js';

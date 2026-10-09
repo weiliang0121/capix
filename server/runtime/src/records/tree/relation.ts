@@ -2,6 +2,7 @@ import { isUndefined } from 'es-toolkit/predicate';
 import type { RecordBook } from '../container/book.js';
 import type { BaseRecord } from '../record.js';
 import { CompositeRecord } from '../composite.js';
+import { RuntimeCallRecord } from '../runtime-call/record.js';
 import { RuntimeRecord } from '../runtime/record.js';
 import { InvocationRecord } from '../invocation/record.js';
 import { ExecutionRecord } from '../execution/record.js';
@@ -15,7 +16,8 @@ import { ResourceRecord } from '../resource/record.js';
 /** Existing record kinds' ownership rules; no storage, indexing or publication. */
 export function checkRelation(record: BaseRecord<unknown>, parent: CompositeRecord<unknown> | undefined, book: RecordBook): void {
   if (record instanceof RuntimeRecord && parent) throw new Error('Runtime must be a root record');
-  if (record instanceof ExecutionRecord && !(parent instanceof RuntimeRecord)) throw new Error('Execution requires a Runtime parent');
+  if (record instanceof RuntimeCallRecord && !(parent instanceof RuntimeRecord)) throw new Error('Runtime call requires a Runtime instance parent');
+  if (record instanceof ExecutionRecord && !(parent instanceof RuntimeCallRecord)) throw new Error('Execution requires a Runtime call parent');
   if (record instanceof OperationRecord) {
     if (!(parent instanceof ExecutionRecord || parent instanceof OperationRecord)) throw new Error('Operation requires an execution or operation parent');
     if (record.parentId !== (record.parentOperationId ?? record.executionId)) throw new Error('Inconsistent operation parent');
@@ -41,7 +43,7 @@ export function checkRelation(record: BaseRecord<unknown>, parent: CompositeReco
   }
   const execution = ancestors.find((ancestor) => ancestor instanceof ExecutionRecord);
   if (record instanceof OperationRecord || record instanceof InvocationBoundaryRecord || content) {
-    if (!(execution instanceof ExecutionRecord) || record.executionId !== execution.id) throw new Error('Record belongs to another execution');
+    if (record.executionId !== execution?.id) throw new Error('Record belongs to another execution');
   }
   if (record instanceof InvocationBoundaryRecord) {
     const expected = record.value.type === 'call' ? 'running' : record.value.type === 'return' ? 'succeeded' : 'failed';

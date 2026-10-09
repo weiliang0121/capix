@@ -26,4 +26,10 @@ export interface ObservationDelta {
   readonly changes: readonly ObservationChange[];
 }
 export type ObservationFrame = ObservationBaseline | ObservationDelta;
-export type ObservationUpdate = ObservationFrame | { type: 'error'; error: string; code?: string };
+export interface ObservationSourceIncomplete {
+  readonly type: 'error';
+  readonly code: 'SOURCE_INCOMPLETE';
+  readonly sourceId: string;
+  readonly error: string;
+}
+export type ObservationUpdate = ObservationFrame | ObservationSourceIncomplete | { type: 'error'; error: string; code?: string };

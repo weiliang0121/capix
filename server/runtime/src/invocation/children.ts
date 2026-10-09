@@ -1,3 +1,4 @@
+import type { RelationChange, RelationIdentity } from '../observation/facts.js';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
@@ -18,6 +19,7 @@ export class InvocationChildren {
     private readonly context: InvocationContext,
     private readonly failed?: (failure: InvocationFailure) => void,
     private readonly validate?: () => void,
+    private readonly observe?: (identity: RelationIdentity, change: RelationChange) => unknown | undefined,
   ) {
     this.view = Object.freeze({
       get: (invocation: InvocationView) => {
@@ -45,8 +47,11 @@ export class InvocationChildren {
     this.context.requireRunning();
     this.requireHealthy();
     if (this.#items.has(invocation)) throw new Error('Child invocation is already attached');
-    const relation = new InvocationRelation(invocation, this.context.progress.round, options.key, this.failed);
+    const identity = Object.freeze({ parentContextId: this.context.id, childContextId: invocation.context.id, parentRound: this.context.progress.round, ...(options.key ? { key: options.key } : {}) });
+    const relation = new InvocationRelation(invocation, this.context.progress.round, options.key, this.failed, (change) => this.observe?.(identity, change));
     this.#items.set(invocation, relation);
+    this.observe?.(identity, { kind: 'attached' });
+    this.requireHealthy();
     return relation;
   }
 

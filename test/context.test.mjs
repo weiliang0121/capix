@@ -1,11 +1,11 @@
 import { contextWithSource, sourceFor } from './fixtures/observer.mjs';
 import { callFor, recordFor } from './fixtures/lifecycle.mjs';
-import { OperationRecordHelper } from '@capix-observer/runtime';
-import { ExecutionRecordHelper } from '@capix-observer/runtime';
+import { InvocationRecordHelper, OperationRecord } from '@capix-observer/runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationContext, ExecutionContext, Transcript, Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
+import { InvocationContext, ExecutionContext, Transcript, Recorder, RecordBook } from '@capix-observer/runtime';
+import { createRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { TestOperation } from './fixtures/operation.mjs';
 
@@ -77,13 +77,13 @@ test('Operation executes named actions without records and preserves non-JSON in
   assert.equal(runtime.recorder, undefined);
 });
 
-test('Unrecordable execute result stops acceptance without rerunning work', async () => {
-  const records = recorder(),
-    runtime = createRuntime({ recorder: records }),
-    root = lifecycleFor(runtime).execution(options),
-    execution = root.begin();
-  let context,
-    count = 0;
+test('an unrecordable execute result stops strict delivery and leaves the damaged recording incomplete', async () => {
+  const records = recorder();
+  const runtime = createRuntime({ recorder: records });
+  const root = lifecycleFor(runtime).execution(options);
+  const execution = root.begin();
+  let context;
+  let count = 0;
   const result = new Map([['value', 1]]);
   await assert.rejects(
     invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {}), (current) => {
@@ -91,17 +91,21 @@ test('Unrecordable execute result stops acceptance without rerunning work', asyn
       count++;
       return result;
     }),
+    (error) => error.code === 'OBSERVATION_FAILED' && error.cause.code === 'RECORDING_FAILED',
   );
   assert.equal(count, 1);
   assert.equal(context.status, 'failed');
   assert.equal(context.progress.result.output, result);
-  assert.equal(recordFor(context).status, 'failed');
-  assert.equal(recordFor(context).value.error.code, 'RECORDING_FAILED');
-  assert.equal(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).events.filter((event) => event.callId === recordFor(context).id).length, 2);
-  // The failed child is fully recorded; the parent remains responsible for its own outcome.
-  root.succeed(execution, {});
-  assert.equal(execution.status, 'succeeded');
-  assert.equal(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).execution.status, 'succeeded');
+  // The disabled writer cannot invent a complete failure record after losing a fact.
+  assert.equal(recordFor(context).status, 'running');
+  assert.equal(recordFor(context).value.error, undefined);
+  assert.equal(observeCall(runtime.recording, callFor(execution)).events.filter((event) => event.callId === recordFor(context).id).length, 1);
+  assert.throws(
+    () => callFor(execution).requireHealthy(),
+    (error) => error === context.state.error,
+  );
+  root.fail(execution, context.state.error);
+  assert.equal(execution.status, 'failed');
 });
 
 test('Work and failure-registration errors remain distinct; Context keeps the original thrown value', async (t) => {
@@ -109,8 +113,10 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
     runtime = createRuntime({ recorder: records });
   const failure = { reason: 'work failed' },
     registration = new Error('record unavailable');
-  t.mock.method(ExecutionRecordHelper, 'fail', () => {
-    throw registration;
+  const finish = InvocationRecordHelper.finish;
+  t.mock.method(InvocationRecordHelper, 'finish', (...args) => {
+    if (args[1].kind === 'execution') throw registration;
+    return finish(...args);
   });
   let execution;
   await assert.rejects(
@@ -121,7 +127,7 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
     (error) => {
       assert.ok(error instanceof AggregateError);
       assert.equal(error.errors[0], failure);
-      assert.equal(error.errors[1].code, 'RECORDING_FAILED');
+      assert.equal(error.errors[1].code, 'OBSERVATION_FAILED');
       assert.equal(error.errors[1].cause, registration);
       assert.equal(error.cause, failure);
       return true;
@@ -132,35 +138,36 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
   assert.equal(recordFor(execution).status, 'running');
 });
 
-test('Failed begin prevents work without changing the parent Context', async (t) => {
-  const records = recorder(),
-    runtime = createRuntime({ recorder: records }),
-    root = lifecycleFor(runtime).execution(options),
-    execution = root.begin();
+test('a strict start-observation failure prevents child work and is visible to its parent', async (t) => {
+  const records = recorder();
+  const runtime = createRuntime({ recorder: records });
+  const root = lifecycleFor(runtime).execution(options);
+  const execution = root.begin();
   const failure = new Error('cannot record start');
-  let child,
-    entered = false;
-  const recording = OperationRecordHelper.recording;
-  t.mock.method(OperationRecordHelper, 'recording', (...args) => ({
-    ...recording.call(OperationRecordHelper, ...args),
-    begin(context) {
-      child = context;
-      throw failure;
-    },
-  }));
+  let entered = false;
+  const add = records.add.bind(records);
+  t.mock.method(records, 'add', (record) => {
+    if (record instanceof OperationRecord) throw failure;
+    return add(record);
+  });
   await assert.rejects(
     invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {}), () => {
       entered = true;
       return {};
     }),
-    (error) => error.code === 'RECORDING_FAILED' && error.cause === failure,
+    (error) => error.code === 'OBSERVATION_FAILED' && error.cause === failure,
   );
   assert.equal(entered, false);
-  assert.equal(child.state.error.cause, failure);
-  root.succeed(execution, {});
-  assert.equal(execution.status, 'succeeded');
-  assert.equal(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).execution.status, 'succeeded');
-  assert.equal(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).events.at(-1).value.type, 'return');
+  const relation = callFor(execution).children.values()[0];
+  assert.equal(relation.invocation.context.state.error.cause, failure);
+  assert.equal(relation.returned.status, 'failed');
+  assert.equal(execution.status, 'running');
+  assert.throws(
+    () => callFor(execution).requireHealthy(),
+    (error) => error === relation.returned.error,
+  );
+  root.fail(execution, relation.returned.error);
+  assert.equal(observeCall(runtime.recording, callFor(execution)).execution.status, 'failed');
 });
 
 test('Contexts hide ancestor access while retaining lifecycle checks through nested parents', async () => {

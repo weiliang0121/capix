@@ -1,3 +1,4 @@
+import { callRecording } from '@capix-observer/runtime';
 import type { ChildBindings } from '@capix-observer/runtime';
 import { TranscriptResource } from '@capix-observer/runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
@@ -23,6 +24,7 @@ history 仅覆盖当前消息段，memories 可能保留旧段理解，但不保
 const selectionRequestResources = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request() });
 
 export class SelectHistory extends OperationDefinition<SelectionInput, Selection, ObserverResources> {
+  readonly observation = [callRecording()];
   readonly name = 'selection';
   readonly label = '选择历史';
   readonly source = 'services/observer/src/operations/history/select.ts · SelectHistory';

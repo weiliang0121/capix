@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver, acceptExecutionInput, observeExecution, memoryOutputContract, bindObserver, ObserverRuntimeDefinition } from '@capix-observer/service';
 
-import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, SelectionUsage } from '@capix-observer/runtime';
+import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, SelectionUsage, bindRecording } from '@capix-observer/runtime';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -181,8 +181,9 @@ test('recording observes the actual changed fact; registration failure propagate
   }
   const book = new RejectMemoryBook();
   const recorder = new Recorder(book);
-  const transcript = new Transcript([], { recorder });
-  const memories = new Memories(transcript, { recorder });
+  const recording = bindRecording(recorder, { failure: 'propagate' });
+  const transcript = new Transcript([], { observation: recording.transcript });
+  const memories = new Memories(transcript, { observation: recording.memory });
   const execution = bindObserver(
     new ObserverRuntimeDefinition(),
     { transcript, memories, selectionUsage: new SelectionUsage() },
@@ -193,9 +194,9 @@ test('recording observes the actual changed fact; registration failure propagate
         return raw({ memories: [change(content('预算', '150', [0]), '建立预算150')] });
       },
     },
-    { recorder },
+    { observations: [recording] },
   );
-  await assert.rejects(execution.run({ messages: [{ role: 'user', content: '预算150' }] }, { settings }), /registration failed/);
+  await assert.rejects(execution.run({ messages: [{ role: 'user', content: '预算150' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'memory record registration failed');
   const memory = memories.values()[0];
   assert.equal(memory.content, '150');
   assert.equal(MemoryRecordHelper.find(book, memory.id).length, 0);
@@ -204,7 +205,10 @@ test('recording observes the actual changed fact; registration failure propagate
   const applied = [...book.values()].find((record) => record.operationId === operation.id && record.name === 'applyMemory');
   assert.equal(accepted.status, 'succeeded');
   assert.equal(readOutput(accepted.value).memories.length, 1);
-  assert.equal(applied.status, 'failed');
+  assert.equal(applied.status, 'running'); // The observer lost a fact and cannot finish this record.
+  const returned = operation.value.relationChanges.find((entry) => entry.childId === applied.id && entry.change.kind === 'returned');
+  assert.equal(returned.change.result.status, 'failed');
+  assert.equal(returned.change.result.failure.kind, 'error');
   assert.deepEqual(applied.value.input, readOutput(accepted.value));
 });
 

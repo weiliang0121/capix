@@ -1,4 +1,4 @@
-import { Sequence, InvocationEntry, type OperationDefinition, type AttemptDefinition, type InvocationView, type ExecutionScope, type OperationScope, type ChildBindings, assembleRuntime, type ExecutionDefinition } from '@capix-observer/runtime';
+import { Sequence, InvocationEntry, type OperationDefinition, type AttemptDefinition, type InvocationView, type ExecutionScope, type OperationScope, type ChildBindings, assembleRuntime, type ExecutionDefinition, type RuntimeDefinition, type RuntimeScope } from '@capix-observer/runtime';
 
 declare const length: OperationDefinition<string, number>;
 declare const format: OperationDefinition<number, string>;
@@ -50,13 +50,34 @@ const objectDefinition: OperationDefinition<string, number> = {
 const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string, typeof parent>().step('length', { use: objectDefinition, input: ({ input }) => input }).run(parent, 'hello', bindings);
 void objectOutput;
 declare const execution: ExecutionDefinition<string, number>;
-const runtime = assembleRuntime({ execution }, { providers: [], source: { entry: () => null, capture: (_input: string, _options: { signal?: AbortSignal }) => null } });
+declare const runtimeParent: InvocationView<unknown, unknown, RuntimeScope>;
+const runtimeDefinition: RuntimeDefinition<string, number> = {
+  level: 'runtime',
+  children: [execution],
+  maxRounds: 1,
+  raises: [],
+  run: {
+    requires: {},
+    async execute(context, invocation, children) {
+      const child = children.get(execution).create(invocation, context.currentInput);
+      const output = await child.run();
+      return children.accept(child, () => output);
+    },
+  },
+};
+const runtime = assembleRuntime(runtimeDefinition, { providers: [], source: { entry: () => null, capture: (_input, _options: { signal?: AbortSignal }) => null } });
 const rootOutput: Promise<number> = runtime.run('input', {});
 void rootOutput;
-// @ts-expect-error E input remains typed through R binding
+// @ts-expect-error R input retains its own declared contract
 runtime.run(42, {});
 // @ts-expect-error R cannot register A as an E
-assembleRuntime({ execution: leaf }, { providers: [], source: { entry: () => null, capture: () => null } });
+assembleRuntime({ ...runtimeDefinition, children: [leaf] }, { providers: [], source: { entry: () => null, capture: () => null } });
+// @ts-expect-error R cannot call O directly
+bindings.get(length).create(runtimeParent, 'input');
+// @ts-expect-error E cannot be a direct child of O
+bindings.get(execution).create(operation, 'input');
+// @ts-expect-error E entry input retains its concrete type
+bindings.get(execution).create(runtimeParent, 42);
 // @ts-expect-error content cannot mutate its lifecycle
 parent.context.complete('done');
 // @ts-expect-error child relations do not publish reception mutation
@@ -104,3 +125,24 @@ void composedResult;
 const childFacts = bindings.get(leaf).create(operation, 'input');
 // @ts-expect-error child call facts do not grant its resources to the parent
 childFacts.context.resources;
+
+import { defineObservation, type CallFact, type RuntimeFact, type ObservationDefinition, type ObservationDeclaration } from '@capix-observer/runtime';
+const counter = new ResourceOffer('counter', (value: { increment(): void }) => value);
+const callProbe: ObservationDeclaration<CallFact> = defineObservation<CallFact, { counter: { increment(): void } }>({
+  requires: { counter: counter.request() },
+  observe(fact, ports) {
+    if (fact.kind === 'started') ports.counter.increment();
+    // @ts-expect-error an observer receives only its requested resource aliases
+    ports.history;
+    return undefined;
+  },
+});
+// @ts-expect-error structure facts and per-call facts are different observation contracts
+const structureProbe: ObservationDeclaration<RuntimeFact> = callProbe;
+const asynchronousProbe: ObservationDefinition<CallFact, Record<string, never>> = {
+  requires: {},
+  // @ts-expect-error asynchronous observation cannot retain the synchronous resource window
+  observe: async () => undefined,
+};
+void structureProbe;
+void asynchronousProbe;

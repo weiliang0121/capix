@@ -1,12 +1,20 @@
 import { ClientRuntime } from '@capix-observer/client-runtime';
 export function snapshot(status = 'succeeded', id = 'execution-1') {
   const failed = status === 'failed';
+  const runtimeId = `runtime-call-${id}`;
+  const startedAt = '2026-09-25T00:00:00.000Z';
+  const endedAt = '2026-09-25T00:00:00.010Z';
+  const result = status === 'running' ? {} : failed ? { error: { code: 'TEST', message: '测试失败' } } : { output: { kind: 'answer', content: '这是中文回答' } };
+  const runtimeEvents = [{ id: `call-${runtimeId}`, parentId: runtimeId, scopeId: runtimeId, callId: runtimeId, sequence: 1, occurredAt: startedAt, offsetMs: 0, value: { type: 'call', scope: 'work' } }, ...(status === 'running' ? [] : [{ id: `end-${runtimeId}`, parentId: runtimeId, scopeId: runtimeId, callId: runtimeId, sequence: 2, occurredAt: endedAt, offsetMs: 12, value: { type: failed ? 'throw' : 'return', scope: 'work' } }])];
+  const events = [{ id: `call-${id}`, parentId: id, scopeId: id, executionId: id, callId: id, sequence: 1, occurredAt: startedAt, offsetMs: 0, value: { type: 'call', scope: 'work' } }, ...(status === 'running' ? [] : [{ id: `end-${id}`, parentId: id, scopeId: id, executionId: id, callId: id, sequence: 2, occurredAt: endedAt, offsetMs: 10, value: { type: failed ? 'throw' : 'return', scope: 'work' } }])];
   return {
-    execution: { id, contextId: `context-${id}`, status, value: { startedAt: '2026-09-25T00:00:00.000Z', settings: {}, input: { role: 'user', content: '你好，查看北京' }, processes: [], ...(status === 'running' ? {} : failed ? { error: { code: 'TEST', message: '测试失败' } } : { output: { kind: 'answer', content: '这是中文回答' } }) } },
+    runtimeCall: { id: runtimeId, parentId: 'runtime-root', contextId: `context-${runtimeId}`, runtimeInstanceId: 'runtime-instance', status, childIds: [runtimeEvents[0].id, id, ...runtimeEvents.slice(1).map((event) => event.id)], value: { startedAt, input: null, processes: [], relationChanges: [], ...result } },
+    runtimeEvents,
+    execution: { id, parentId: runtimeId, contextId: `context-${id}`, status, childIds: events.map((event) => event.id), value: { startedAt, input: { role: 'user', content: '你好，查看北京' }, processes: [], relationChanges: [], ...result } },
     operations: [],
     attempts: [],
     resources: [],
-    events: [{ id: `call-${id}`, executionId: id, callId: id, sequence: 1, occurredAt: '2026-09-25T00:00:00.000Z', offsetMs: 0, value: { type: 'call' } }, ...(status === 'running' ? [] : [{ id: `end-${id}`, executionId: id, callId: id, sequence: 2, occurredAt: '2026-09-25T00:00:00.010Z', offsetMs: 10, value: { type: failed ? 'throw' : 'return' } }])],
+    events,
   };
 }
 
@@ -114,7 +122,7 @@ export function deliverAnswer(receive, inputIndex = 0, contextId = 'context-exec
 
 export function entriesOf(value) {
   const snapshot = JSON.parse(JSON.stringify(value));
-  return [{ kind: 'execution', data: snapshot.execution }, ...snapshot.operations.map((data) => ({ kind: 'operation', data })), ...snapshot.attempts.map((data) => ({ kind: 'attempt', data })), ...snapshot.events.map((data) => ({ kind: 'invocation-boundary', data })), ...snapshot.resources.map((data) => ({ kind: 'resource', data }))];
+  return [{ kind: 'runtime-call', data: snapshot.runtimeCall }, ...snapshot.runtimeEvents.map((data) => ({ kind: 'invocation-boundary', data })), { kind: 'execution', data: snapshot.execution }, ...snapshot.operations.map((data) => ({ kind: 'operation', data })), ...snapshot.attempts.map((data) => ({ kind: 'attempt', data })), ...snapshot.events.map((data) => ({ kind: 'invocation-boundary', data })), ...snapshot.resources.map((data) => ({ kind: 'resource', data }))];
 }
 export function baseline(options = {}) {
   return { type: 'baseline', scopeId: 'fixture-scope', sequence: 0, overview: { transcriptId: 'fixture-transcript', messages: [], executions: [] }, memory: { items: [] }, transcript: { id: 'fixture-transcript', revision: 0, starts: [0] }, memories: { id: 'fixture-memories', sequence: 0 }, recorder: { id: 'fixture-recorder', revision: 0 }, entries: [], invocations: [], ...options };

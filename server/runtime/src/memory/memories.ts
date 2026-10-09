@@ -1,20 +1,17 @@
+import { publishFact, type ChangeProvenance } from '../observation/publish.js';
+import type { EventConsumer } from '../observation/binding.js';
 import type { MemoryEvent } from '@capix-observer/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
-import { captureChange } from '../changes/publish.js';
 import { randomUUID } from 'node:crypto';
-import { MemoryRecordHelper } from '../records/memory/helper.js';
-import { writeRecord } from '../records/error.js';
 import { isEqual, isNull } from 'es-toolkit/predicate';
 import { Memory, updateMemory } from './memory.js';
 import type { MemoryChange } from './change.js';
 import type { Transcript } from '../transcript/transcript.js';
-import type { Recorder } from '../records/recorder.js';
-import type { ContentProvenance } from '../records/source.js';
 import { isNonBlankString } from '../value/string.js';
 import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
 
 export interface MemoriesOptions {
-  recorder?: Recorder;
+  observation?: EventConsumer<MemoryEvent>;
   changes?: ChangeCapture<MemoryEvent>;
 }
 
@@ -22,6 +19,7 @@ export interface MemoriesOptions {
 export class Memories {
   readonly id = randomUUID();
   #sequence = 0;
+  #publishing = false;
 
   /** Number of formal changes in this collection, independent of recording. */
   get sequence(): number {
@@ -29,13 +27,13 @@ export class Memories {
   }
 
   readonly #items = new Map<string, Memory>();
-  private readonly recorder?: Recorder;
+  private readonly observation?: EventConsumer<MemoryEvent>;
   private readonly changes?: ChangeCapture<MemoryEvent>;
   constructor(
     readonly transcript: Transcript,
     options: MemoriesOptions = {},
   ) {
-    this.recorder = options.recorder;
+    this.observation = options.observation;
     this.changes = options.changes;
   }
 
@@ -49,7 +47,8 @@ export class Memories {
     return this.values().map((memory) => memory.toJSON());
   }
 
-  apply(changes: readonly MemoryChange[], provenance: ContentProvenance = {}): readonly Memory[] {
+  apply(changes: readonly MemoryChange[], provenance: ChangeProvenance<MemoryEvent> = {}): readonly Memory[] {
+    if (this.#publishing) throw new Error('Memory change publication cannot reenter mutation');
     const targets = new Set<string>();
     // The complete batch is checked before the first mutation. Recording failure does not roll back facts.
     const prepared = changes.map((change) => {
@@ -75,11 +74,14 @@ export class Memories {
       const event: MemoryEvent = Object.freeze({ type: 'memory', memoriesId: this.id, sequence: this.#sequence + 1, occurredAt: new Date().toISOString(), ...(provenance.origin ? { origin: Object.freeze({ ...provenance.origin }) } : {}), change: Object.freeze({ action: change.action, memoryId: memory.id, explanation: change.change, sourceIndexes: Object.freeze([...change.sourceIndexes]), result }) });
       if (previous) updateMemory(memory, result);
       else this.#items.set(memory.id, memory);
-      const sequence = ++this.#sequence;
+      ++this.#sequence;
       applied.push(memory);
-      captureChange(this.changes, event);
-      const recorder = this.recorder;
-      if (recorder) writeRecord(() => recorder.add(MemoryRecordHelper.create({ memoryId: memory.id, memoriesId: this.id, sequence: sequence, source: provenance.source }, { action: change.action, change: change.change, sourceIndexes: change.sourceIndexes, result: memory.snapshot() })));
+      this.#publishing = true;
+      try {
+        publishFact(event, this.changes, provenance.observation ?? this.observation);
+      } finally {
+        this.#publishing = false;
+      }
     }
     return applied;
   }

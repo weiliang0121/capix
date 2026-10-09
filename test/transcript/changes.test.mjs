@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeObserver, ChangeCaptureError, Transcript, TranscriptRecord, RecordBook, Recorder, RecordingError, createRuntime } from '@capix-observer/runtime';
+import { ChangeObserver, ChangeCaptureError, Transcript, TranscriptRecord, RecordBook, Recorder, bindRecording } from '@capix-observer/runtime';
+import { createRuntime } from '../fixtures/runtime.mjs';
 
 const message = (content) => ({ role: 'user', content });
 
@@ -70,13 +71,18 @@ test('empty and rejected changes do not advance revision; unobserved transcripts
 
 test('record registration failure does not undo an already captured transcript fact', () => {
   class RejectingBook extends RecordBook {
-    add() {
-      throw new Error('record unavailable');
+    add(record) {
+      if (record instanceof TranscriptRecord) throw new Error('record unavailable');
+      return super.add(record);
     }
   }
   const changes = new ChangeObserver();
-  const transcript = new Transcript([], { changes, recorder: new Recorder(new RejectingBook()) });
-  assert.throws(() => transcript.append(message('committed')), RecordingError);
+  const recording = bindRecording(new Recorder(new RejectingBook()), { failure: 'propagate' });
+  const transcript = new Transcript([], { changes, observation: recording.transcript });
+  assert.throws(
+    () => transcript.append(message('committed')),
+    (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'record unavailable',
+  );
   assert.equal(transcript.length, 1);
   assert.equal(transcript.revision, 1);
   assert.equal(changes.take()[0].change.messages[0].content, 'committed');
@@ -119,7 +125,7 @@ test('capture failure reports committed facts and stops the local invocation ins
     },
   };
   const runtime = createRuntime({ recorder, changes });
-  const transcript = new Transcript([], { recorder, changes });
+  const transcript = new Transcript([], { observation: runtime.recording.transcript, changes });
   let calls = 0;
   let receives = 0;
   const invocation = runtime.executionInvocations.create('input', {
@@ -147,15 +153,16 @@ test('capture failure reports committed facts and stops the local invocation ins
   assert.equal(receives, 0);
   assert.equal(transcript.length, 1);
   assert.equal(transcript.revision, 1);
-  assert.equal([...recorder.book.values()].filter((record) => record instanceof TranscriptRecord).length, 0);
+  assert.equal([...recorder.book.values()].filter((record) => record instanceof TranscriptRecord).length, 1); // One outlet failure does not suppress the other consumer.
 });
 
 test('capturing and recording are separate outlets and capture runs after mutation', () => {
   const changes = new ChangeObserver();
   const recorder = new Recorder(new RecordBook());
+  const recording = bindRecording(recorder);
   let transcript;
   transcript = new Transcript([], {
-    recorder,
+    observation: recording.transcript,
     changes: {
       capture(event) {
         assert.equal(transcript.revision, event.revision);
@@ -173,7 +180,7 @@ test('capturing and recording are separate outlets and capture runs after mutati
     [1, 1],
     [2, 2],
   ]);
-  const records = [...recorder.book.values()];
+  const records = [...recorder.book.values()].filter((record) => record instanceof TranscriptRecord);
   assert.equal(records.length, 2);
   assert.ok(records.every((record) => record instanceof TranscriptRecord));
 });

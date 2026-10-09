@@ -5,7 +5,8 @@ import { createInput, sourceFor, contextFor, transcriptFor } from './fixtures/ob
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
-import { Runtime, createRuntime, TranscriptResource, bindResources } from '@capix-observer/runtime';
+import { Runtime, TranscriptResource, bindResources } from '@capix-observer/runtime';
+import { createRuntime } from './fixtures/runtime.mjs';
 
 import { SelectHistory, AssembleContext, answerOutputContract, selectionOutputContract } from '@capix-observer/service';
 
@@ -178,10 +179,16 @@ test('failure at any action stops later actions and preserves the thrown error',
 
 test('one selection operation can overlap calls without mixing their history bounds', async () => {
   const pending = new Map();
+  let ready;
+  const submitted = new Promise((resolve) => {
+    ready = resolve;
+  });
   const provider = {
     invoke(request) {
       const { message } = JSON.parse(request.messages[1].content);
-      return new Promise((resolve) => pending.set(message.content, resolve));
+      const response = new Promise((resolve) => pending.set(message.content, resolve));
+      if (pending.size === 2) ready();
+      return response;
     },
   };
   const op = bindChild(runtime, new SelectHistory());
@@ -191,14 +198,15 @@ test('one selection operation can overlap calls without mixing their history bou
   const original = structuredClone([first, second]);
   const firstMessage = createInput(first);
   const short = call(op, firstMessage, { message: firstMessage, memories: [] }, resourceBinding);
-  const shortFailure = assert.rejects(short, (error) => error.code === 'INDEX_OUT_OF_RANGE');
   const secondMessage = createInput(second);
   const long = call(op, secondMessage, { message: secondMessage, memories: [] }, resourceBinding);
-  while (pending.size < 2) await new Promise((resolve) => setImmediate(resolve));
+  // Surface premature failures instead of spinning forever if setup stops before the provider.
+  const prematurelyCompleted = () => assert.fail('Both model requests must be pending before responses are supplied');
+  await Promise.race([submitted, short.then(prematurelyCompleted), long.then(prematurelyCompleted)]);
   pending.get('two')(raw('{"historyIndexes":[1]}'));
   assert.deepEqual(await long, { historyIndexes: [1] });
   pending.get('one')(raw('{"historyIndexes":[1]}'));
-  await shortFailure;
+  await assert.rejects(short, (error) => error.code === 'INDEX_OUT_OF_RANGE');
   assert.deepEqual([first, second], original);
   assert.equal(Object.hasOwn(op, 'context'), false);
 });

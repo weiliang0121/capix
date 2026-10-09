@@ -4,7 +4,7 @@
 
 `@capix-observer/protocol` 是唯一跨端依赖。只公开可序列化数据、记录引用解析与完整性校验；不包含运行实体、HTTP 实现、模型供应商格式或图谱投影。所有跨包导入使用公开出口。
 
-`@capix-observer/runtime` 持有 EOA、Context、Invocation、RecordBook、Transcript 与 Memory 等现有运行对象，不依赖服务或应用。`services/observer` 装配当前筛选、回答、提取场景及模型适配器。`client/runtime` 通过 protocol 读取和提交，保存本地提交状态与已观测数据，不依赖 React 或服务端。`client/http` 的 HttpTransport 基类处理 HTTP，ConversationHttpTransport 与 ObservationHttpTransport 两个子类分别通过公开接口实现 ConversationTransport 与 ObservationTransport，接纳具体响应与 NDJSON 消息，客户端 Runtime 不反向依赖它。`apps/observer` 装配客户端 Runtime 与 HTTP 实现，负责 React 界面与前端投影，不导入服务端。对话交付与观测分别接入，见 [客户端 Runtime](client-runtime.md)。
+`@capix-observer/runtime` 持有 REOA、Context、Invocation、RecordBook、Transcript 与 Memory 等现有运行对象，不依赖服务或应用。`services/observer` 装配当前筛选、回答、提取场景及模型适配器。`client/runtime` 通过 protocol 读取和提交，保存本地提交状态与已观测数据，不依赖 React 或服务端。`client/http` 的 HttpTransport 基类处理 HTTP，ConversationHttpTransport 与 ObservationHttpTransport 两个子类分别通过公开接口实现 ConversationTransport 与 ObservationTransport，接纳具体响应与 NDJSON 消息，客户端 Runtime 不反向依赖它。`apps/observer` 装配客户端 Runtime 与 HTTP 实现，负责 React 界面与前端投影，不导入服务端。对话交付与观测分别接入，见 [客户端 Runtime](client-runtime.md)。
 
 ## HTTP
 
@@ -15,21 +15,21 @@
 - GET `/api/execution?id=记录ID` → RuntimeSnapshot。仅在打开详情时请求；返回当前完整记录。
 - GET `/api/memory` → MemoryObservation。记忆正文、来源与已生成的变更记录。
 - GET `/api/source?file=路径` → SourceResponse。路径为仓库相对源文件路径，服务端白名单验证。
-- POST `/api/run` 接受 ExecutionRequest；200 返回 NDJSON ConversationUpdate。started 携带 transcriptId/contextId/inputIndex，answer 携带 transcriptId/contextId/index/完整 GenerationOutput，completed 表示后处理也已完成，error 表示本次处理失败，不表示已交付回答被撤销。回答在追加 Transcript 后立即交付，不等待记忆提取；没有记录订阅也能完整使用。
-- GET `/api/observe` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接；序号缺口最多自动重建一次基线，不提供历史重放或跨查询一致性承诺。
-- HTTP 非 2xx 返回 ErrorResponse。忙碌时 409，拒绝追加消息；接纳/配置错误 400；内部错误 500。不改变现有运行失败的事实记录。
+- POST `/api/run` 接受 ExecutionRequest；200 返回 NDJSON ConversationUpdate。started 携带 transcriptId/contextId/inputIndex，answer 携带 transcriptId/contextId/index/完整 GenerationOutput，completed 仅在 R.run 返回后发送，表示 E 后处理和 R 对 E 的接纳均已完成，error 表示本次处理失败，不表示已交付回答被撤销。回答在追加 Transcript 后立即交付，不等待记忆提取；没有记录订阅也能完整使用。
+- GET `/api/observe` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接，每个连接都有独立 scopeId，首帧 sequence 为 0。序号缺口最多自动重建一次基线；SOURCE_INCOMPLETE 是记录来源已缺失事实的终止控制，不自动重试，也不能通过重连同一来源补救。不提供历史重放或跨查询一致性承诺。
+- HTTP 非 2xx 返回 ErrorResponse。忙碌时 409，拒绝追加消息；接纳/配置错误 400；内部错误 500。记录来源失效后，观测流及 executions/execution/memory 查询明确返回 SOURCE_INCOMPLETE；实体查询与订阅不依赖记录完整性。不改变现有运行失败的事实记录。
 
 ## 身份、顺序与时间
 
 业务流的 contextId 来自调用现场，即使不启用 Recorder 也存在；观测记录通过 contextId 与业务关联，对话不需要先查询记录。Record.id、Context.id 和运行实例 ID 互不替代。executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
 
-执行列表按实际登记顺序。边界事件 sequence 与单调 offsetMs 是执行内部时序依据；occurredAt/startedAt 是展示用墙钟。未结束调用没有 durationMs；不得补造耗时。跨 QA 只有先后关系，前端使用等宽列，轮内才按计时比例布局。
+执行列表按实际登记顺序。边界事件 scopeId 确定计时范围，sequence 与单调 offsetMs 是范围内部时序依据；R 调用和每个 E 分别计时，EOA 共用 E 范围。occurredAt/startedAt 是展示用墙钟。未结束调用没有 durationMs；不得补造耗时。跨 QA 只有先后关系，前端使用等宽列，轮内才按计时比例布局。
 
 availableMemoryIds 来自本轮输入快照，只表示可见，不能宣称模型实际采用。selections 是选择操作结果；容量裁剪后的最终原文与候选有区别，详情必须以实际请求记录为准。response 即使后处理失败也可以存在。
 
 ## 异常处理过程与失败分类
 
-ProcessRecord 的 stage 包含 execute、receive、handling、control。receive 仅表示正常结果接纳，handling 表示异常声明的 start/return/continue/unhandled/throw；继续仍属于同一次调用，不新增执行层次。InvocationEvent 的过程 stage/action 与记录契约对应，不携带任意业务 IO。
+ProcessRecord 的 stage 包含 execute、receive、handling、control。receive 仅表示正常结果接纳，handling 表示异常声明的 start/return/continue/unhandled/throw；继续仍属于同一次调用，不新增执行层次。InvocationEvent 的过程 stage/action 与记录契约对应，不携带任意业务 IO。过程条目的 sequence 仅用于过程及 resultOf 引用，eventSequence 则与同调用的关系事实对照先后。
 
 InvocationFailureFact 表达 kind(exception/error)、phase(setup/execute/receive/handling/control/observation)、contextId，以及仅异常适用的 contract。调用失败正文、过程和相应增量可携带这组解释事实；错误正文仍由 RuntimeErrorValue 表达。contract 是服务端契约名称的说明，跨端字符串不赋予处理、重试或恢复资格。
 
@@ -45,23 +45,27 @@ MemoryRecord 的 executionId/operationId 改为可选，contextId/callId 可选�
 
 ## Runtime 根记录与通用命名
 
-BaseRecord 表达身份、直接 parentId 与正文；CompositeRecord 增加 childIds。RuntimeRecord 是具体根记录，value 当前只有 createdAt；InvocationValue 是 E/O/A 共用调用正文。Recorder 是服务端环境登记机制，不属于跨端协议。RuntimeContext 是运行现场，也不加入协议。
+BaseRecord 表达身份、直接 parentId 与正文；CompositeRecord 增加 childIds。RuntimeRecord 是具体根记录，value 当前只有 createdAt；RuntimeCallRecord 表达单次 R 调用，InvocationValue 是 R/E/O/A 共用调用正文，分别保留 processes 与 relationChanges。Recorder 是服务端环境登记机制，不属于跨端协议。RuntimeContext 是运行现场，也不加入协议。
 
-执行记录的 parentId 现在指向 RuntimeRecord。当前 RuntimeSnapshot 为一次执行的 E/O/A/调用边界/资源事实视图，不附带 Runtime 根正文；响应外的 parentId/childIds 引用不意味着已完整装载整棵树。观测基线另外携带 Runtime 根与活动执行的记录；已完成正文按需查询。交付游标与各来源顺序分开，不承诺持久化或业务恢复。
+记录树为 RuntimeRecord → RuntimeCallRecord → ExecutionRecord → OperationRecord → AttemptRecord，其他记录依自己的产生位置挂接。每层直接 parentId 指向对应父记录，不因下游查询方便把全量祖先身份塞进基类。
+
+RuntimeSnapshot 仍以一个 E 为查询范围，包含其 E/O/A、边界与资源事实；同时包含必填父层 runtimeCall、runtimeEvents 及 R 直属资源事实，不附带 Runtime 根正文或 R 的其他 E 子树。runtimeCall/runtimeEvents 缺失的旧快照不再接纳；runtimeEvents 仅包含 R 自身的边界，不能混入 E 的 events。响应外的 parentId/childIds 引用不意味着已完整装载整棵树。观测基线携带 Runtime 根与活动 R 的局部子树；E 已完成但 R 仍在接纳时，该 E 子树继续保留。其余已完成正文按需查询，R 不作为新 QA 计数。
+
+relationChanges 保留父层真实发生的 attached、returned、receiving、accepted、failed，含父子 Context、父轮次、可选 key/子记录 ID 和 eventSequence。returned 是子层结果，accepted 才是父层完成接纳；failed.source 区分接纳工作与观测故障，不能从 E 成功推断 R 成功。交付游标与各来源顺序分开，不承诺持久化或业务恢复。
 
 ## 变化与交付
 
-RuntimeChange 是已知来源的联合：TranscriptEvent、MemoryEvent、InvocationEvent、RecordChangeEvent。生产者仅依赖本类的 ChangeCapture<E>；联合类型用于装配与跨端接纳，不赋予公共捕获器业务分派职责。InvocationEvent 只包含身份、直接父级、进度和终态元数据；任意业务 IO 留在业务通道或记录中。
+RuntimeChange 是已知来源的联合：TranscriptEvent、MemoryEvent、InvocationEvent、RecordChangeEvent。生产者仅依赖本类的 ChangeCapture<E>；联合类型用于装配与跨端接纳，不赋予公共捕获器业务分派职责。InvocationEvent 只包含身份、直接父级、进度、子关系、入口阶段和终态元数据；E 尚未建立时，所属父调用可发布 entry，标明目标实例、accept/notification/admit/capture 阶段及结果，不伪造 E Context 或记录。任意业务 IO 留在业务通道或记录中。
 
-RecordMutation 分为 added、process-appended、finished、replaced。added 携带新记录与直接父级新增引用；process-appended 不重复旧过程；finished 保持 resultOf 正文复用。replaced 是通用显式更新的后备形式，不是快照 diff。record entry 的 kind 由具体记录类声明。
+RecordMutation 分为 added、process-appended、relation-appended、finished、replaced。added 携带新记录与直接父级新增引用；process-appended 与 relation-appended 分别只携带本次新增过程或关系条目；finished 保持 resultOf 正文复用。replaced 是通用显式更新的后备形式，不是快照 diff。record entry 的 kind 由具体记录类声明。
 
-ObservationBaseline 的 sequence 是发送者已消费到的位置，另带 Transcript revision、Memories sequence 和 Recorder revision。ObservationDelta 使用 ObservationChange：原文 append 转为 start/end 通知，原文正文只走实体通道；其余确定性变化保持原契约。ObservationDelta.changes 保留捕获顺序，整批交付不等于跨源事务。客户端先检查交付位置，再检查各来源顺序，整批成功才公开新状态。
+ObservationBaseline 的 sequence 固定为本连接的 0，另带独立的 Transcript revision、Memories sequence 和 Recorder revision。后续非空批次递增连接 sequence。ObservationDelta 使用 ObservationChange：原文 append 转为 start/end 通知，原文正文只走实体通道；其余确定性变化保持原契约。ObservationDelta.changes 保留捕获顺序，整批交付不等于跨源事务。客户端先检查交付位置，再检查各来源顺序，整批成功才公开新状态。
 
-服务当前为一个环境装配一个发送者；多个连接共享发送范围，各自取得基线。HTTP 连接的待发数据与 writableLength 合计上限为 16 MiB，超限断开连接，不等待慢客户端拖住运行。捕获器不持有已交付历史，不支持游标重放、消费确认或持久化恢复。
+服务环境只由一个 ChangeConsumer 排空变化捕获器，记录来源与消息实体出口共享消费结果。RecordSource 在事实产生前建立，并经 open({ change, incomplete }) 固定基线和来源水位；每条连接有独立交付范围，重连更换 scopeId，不重置来源 revision。失效来源永久拒绝新基线，发送层丢弃尚未发送的普通批次，等待连接可写后发送 SOURCE_INCOMPLETE 并结束；不会撤回已经交给网络的字节。HTTP 连接的待发数据与 writableLength 合计上限为 16 MiB，超限断开连接，不等待慢客户端拖住运行。捕获器不持有已交付历史，不支持游标重放、消费确认或持久化恢复。
 
 ## 资源事实与实体同步
 
-`RuntimeSnapshot.resources` 为 ResourceFact 数组。每条事实具有自身 id、直接 parentId（E/O/A 调用记录）、access、supplyId、sequence、occurredAt、phase 和由资源契约定义的 value。sequence 在所属调用的资源事实范围内递增；bound 先于 available/unavailable，started 与 returned/threw 以 interactionId 配对。运行与异常处理阶段的端点共享此序列，同一供给的 bound/available 不因阶段切换重复发送。资源顺序、调用过程 sequence、实体 revision 和发送者 sequence 各有边界，不互相替代。
+`RuntimeSnapshot.resources` 为 ResourceFact 数组。每条事实具有自身 id、直接 parentId（R/E/O/A 调用记录）、access、supplyId、sequence、occurredAt、phase 和由资源契约定义的 value。sequence 在所属调用的资源事实范围内递增；bound 先于 available/unavailable，started 与 returned/threw 以 interactionId 配对。运行与异常处理阶段的端点共享此序列，同一供给的 bound/available 不因阶段切换重复发送。资源顺序、调用过程 sequence、实体 revision 和发送者 sequence 各有边界，不互相替代。
 
 静态申请/供给不产生记录。调用内资源端点兑现及方法执行才产生事实。描述函数不会在关闭记录时运行；供给失败与已完成工作后的记录失败保持不同证据，不把后者重新解释成业务失败。
 

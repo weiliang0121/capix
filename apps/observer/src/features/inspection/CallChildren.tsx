@@ -8,7 +8,7 @@ export function CallChildren({ children, executionId, inspect }: { children: rea
       {children.map((call) => (
         <Button key={call.id} variant="outline" className="child-call" onClick={() => inspect(executionId, call.id)}>
           <span>
-            {call.recordType === 'attempt' ? '意图' : '操作'} · {call.label}
+            {call.recordType === 'execution' ? '执行' : call.recordType === 'attempt' ? '意图' : '操作'} · {call.label}
           </span>
           <span className="inline-meta">
             <Status value={call.status} />

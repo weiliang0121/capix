@@ -1,19 +1,10 @@
-import { RuntimeContext } from '../context/runtime.js';
-import type { Recorder } from '../records/recorder.js';
-import { RuntimeRecordHelper } from '../records/runtime/helper.js';
-import { Runtime, type RuntimeEntry } from './runtime.js';
-import type { ChangeCapture } from '../changes/capture.js';
-import type { InvocationEvent } from '@capix-observer/protocol';
-import type { ExecutionOptions } from '../context/execution.js';
+import { Runtime, type RuntimeBinding } from './runtime.js';
+import type { InvocationCapabilities } from '../invocation/capabilities.js';
+import type { RuntimeCallOptions } from '../context/runtime.js';
 
-export interface RuntimeCreationOptions {
-  recorder?: Recorder;
-  changes?: ChangeCapture<InvocationEvent>;
-}
+export interface RuntimeCreationOptions extends InvocationCapabilities {}
 
-/** Establish only R's context and optional record; content entities are assembled independently. */
-export function createRuntime<I = unknown, O = unknown, P extends ExecutionOptions = ExecutionOptions>(options: RuntimeCreationOptions = {}, assemble?: (runtime: Runtime<I, O, P>) => RuntimeEntry<I, O, P>): Runtime<I, O, P> {
-  const context = new RuntimeContext();
-  const recording = options.recorder ? { recorder: options.recorder, record: RuntimeRecordHelper.create(options.recorder) } : undefined;
-  return new Runtime(context, { recording, changes: options.changes }, assemble);
+/** Establish the reusable R structure; each run creates its own call state. */
+export function createRuntime<I = unknown, O = unknown, P extends RuntimeCallOptions = RuntimeCallOptions, R extends object = object>(options: RuntimeCreationOptions = {}, assemble?: (runtime: Runtime<I, O, P, R>) => RuntimeBinding<I, O, P, R>): Runtime<I, O, P, R> {
+  return new Runtime(options, assemble);
 }

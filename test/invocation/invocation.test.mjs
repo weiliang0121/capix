@@ -1,3 +1,4 @@
+import { observeCall } from '../fixtures/observation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Invocation, InvocationContext } from '@capix-observer/runtime';
@@ -26,7 +27,14 @@ test('separate Invocations can overlap without mixing contexts or outputs', asyn
 test('an ended context cannot start a new Invocation or write a start record', async () => {
   const context = new InvocationContext('input');
   context.complete('done');
-  const invocation = new Invocation({ context, work: { maxRounds: 1, execute: () => assert.fail('must not run') }, signal: signal(), recording: { begin: () => assert.fail('must not register') } });
+  const invocation = new Invocation({
+    context,
+    work: { maxRounds: 1, execute: () => assert.fail('must not run') },
+    signal: signal(),
+    observation: observeCall((fact) => {
+      if (fact.kind === 'started') assert.fail('must not observe start');
+    }),
+  });
   await assert.rejects(invocation.run(), /ended/);
   assert.equal(context.state.output, 'done');
   await assert.rejects(invocation.run(), /already started/);
@@ -43,37 +51,27 @@ test('sync and async work failures keep their identity and finish their context 
     },
   ]) {
     const finished = [];
-    const recorder = {
-      begin(context, bind) {
-        bind({ contextId: context.id });
-      },
-      process() {},
-      finish(context) {
-        finished.push(context);
-      },
-    };
-    const invocation = new Invocation({ context: new InvocationContext('input'), work: { execute, maxRounds: 1 }, signal: signal(), recording: recorder });
+    const observation = observeCall((fact) => {
+      if (fact.kind === 'finished') finished.push(fact.state);
+    });
+    const invocation = new Invocation({ context: new InvocationContext('input'), work: { execute, maxRounds: 1 }, signal: signal(), observation });
     await assert.rejects(invocation.run(), (error) => error === failure);
     assert.equal(invocation.context.state.error, failure);
-    assert.deepEqual(finished, [invocation.context]);
+    assert.deepEqual(finished, [invocation.context.state]);
   }
 });
 
 test('successful invocation keeps its outcome when terminal registration throws', async () => {
   const failure = new Error('cannot finish record');
   let finishes = 0;
-  const recorder = {
-    begin(context, bind) {
-      bind({ contextId: context.id });
-    },
-    process() {},
-    finish() {
+  const observation = observeCall((fact) => {
+    if (fact.kind === 'finished') {
       finishes++;
       throw failure;
-    },
-  };
-  const invocation = new Invocation({ context: new InvocationContext('input'), work: { execute: () => 'output', maxRounds: 1 }, signal: signal(), recording: recorder });
-  await assert.rejects(invocation.run(), (error) => error.code === 'RECORDING_FAILED' && error.cause === failure);
+    }
+  });
+  const invocation = new Invocation({ context: new InvocationContext('input'), work: { execute: () => 'output', maxRounds: 1 }, signal: signal(), observation });
+  await assert.rejects(invocation.run(), (error) => error.code === 'OBSERVATION_FAILED' && error.cause === failure);
   assert.deepEqual(invocation.context.state, { status: 'succeeded', output: 'output' });
   assert.equal(finishes, 1);
 });
@@ -94,14 +92,9 @@ test('started runs after validation and before registration and work with the sa
       assert.equal(current.progress.round, 0);
       order.push('started');
     },
-    recording: {
-      begin(current, bind) {
-        order.push('register');
-        bind({ contextId: current.id });
-      },
-      process() {},
-      finish() {},
-    },
+    observation: observeCall((fact) => {
+      if (fact.kind === 'started') order.push('register');
+    }),
     work: {
       maxRounds: 1,
       execute() {
@@ -123,7 +116,9 @@ test('failed validation prevents started setup and record registration', async (
       throw failure;
     },
     started: () => assert.fail('must not set up'),
-    recording: { begin: () => assert.fail('must not register') },
+    observation: observeCall((fact) => {
+      if (fact.kind === 'started') assert.fail('must not observe start');
+    }),
     work: { maxRounds: 1, execute: () => assert.fail('must not execute') },
   });
   await assert.rejects(invocation.run(), (error) => error === failure);

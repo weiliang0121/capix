@@ -1,12 +1,16 @@
+import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, ExecutionDefinition, OperationDefinition, InvocationEntry, ResourceOffer, Recorder, RecordBook, assembleRuntime, ExecutionRecordHelper } from '@capix-observer/runtime';
+import { ExceptionContract, ExecutionDefinition, OperationDefinition, InvocationEntry, ResourceOffer, Recorder, RecordBook, assembleRuntime, ExecutionRecordHelper, bindRecording, callRecording } from '@capix-observer/runtime';
 import { validateSnapshot, readOutput } from '@capix-observer/protocol';
 
 const rejected = new ExceptionContract('test.rejected');
 
 function assemble(execution, providers = [], recorder) {
-  return assembleRuntime({ execution }, { providers, recorder, source: { entry: () => null, capture: () => null } });
+  const definition = runtimeDefinition(execution);
+  const observations = recorder ? [bindRecording(recorder, { failure: 'propagate' })] : undefined;
+  if (observations) recordDefinitions(definition);
+  return assembleRuntime(definition, { providers, observations, source: { entry: () => null, capture: () => null, callbacks: (_definition, options) => options.execution } });
 }
 
 test('peer declarations share fixed supplies but have separate aliases and phase endpoints', async () => {
@@ -58,20 +62,18 @@ test('peer declarations share fixed supplies but have separate aliases and phase
     recorder,
   );
   assert.equal(
-    await runtime.run(
-      1,
-      {},
-      {
+    await runtime.run(1, {
+      execution: {
         started: (_context, invocation) => {
           call = invocation;
         },
       },
-    ),
+    }),
     2,
   );
   assert.equal(captures, 1);
   assert.equal(late, 1);
-  const snapshot = ExecutionRecordHelper.observe(runtime.recording, call);
+  const snapshot = ExecutionRecordHelper.snapshot(recorder, recordedCall(recorder, call).id);
   validateSnapshot(snapshot);
   assert.equal(snapshot.resources.filter((fact) => fact.access === 'test.shared' && fact.phase === 'bound').length, 1);
   assert.equal(snapshot.resources.filter((fact) => fact.access === 'test.shared' && fact.phase === 'available').length, 1);
@@ -213,34 +215,38 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
         return output;
       },
     };
-    observation = {
-      input(value) {
-        descriptions++;
-        return { public: value.public };
-      },
-      output(value) {
-        descriptions++;
-        return { public: value.public };
-      },
-    };
+    observation = [
+      callRecording(
+        {
+          input(value) {
+            descriptions++;
+            return { public: value.public };
+          },
+          output(value) {
+            descriptions++;
+            return { public: value.public };
+          },
+        },
+        { failure: 'propagate' },
+      ),
+    ];
   }
   assert.equal(await assemble(new Main()).run(input, {}), output);
   assert.equal(descriptions, 0);
-  const runtime = assemble(new Main(), [], new Recorder(new RecordBook()));
+  const recorder = new Recorder(new RecordBook());
+  const runtime = assemble(new Main(), [], recorder);
   assert.equal(
-    await runtime.run(
-      input,
-      {},
-      {
+    await runtime.run(input, {
+      execution: {
         started: (_context, invocation) => {
           call = invocation;
         },
       },
-    ),
+    }),
     output,
   );
   assert.equal(call.context.state.output, output);
-  const snapshot = ExecutionRecordHelper.observe(runtime.recording, call);
+  const snapshot = ExecutionRecordHelper.snapshot(recorder, recordedCall(recorder, call).id);
   validateSnapshot(snapshot);
   assert.deepEqual(snapshot.execution.value.input, { public: 2 });
   assert.deepEqual(readOutput(snapshot.execution.value), { public: 3 });
@@ -320,15 +326,13 @@ test('handler resource failure exits as an error without repeating work or handl
     }),
   ]);
   await assert.rejects(
-    runtime.run(
-      null,
-      {},
-      {
+    runtime.run(null, {
+      execution: {
         started: (_context, invocation) => {
           call = invocation;
         },
       },
-    ),
+    }),
     (error) => error === failure,
   );
   assert.deepEqual([executions, handlings, acquisition], [1, 1, 1]);
@@ -368,5 +372,29 @@ for (const position of ['capture', 'expose']) {
     ]);
     await assert.rejects(runtime.run(null, {}), (error) => error.cause === failure);
     assert.equal(handled, 0);
+  });
+}
+
+for (const gap of ['runtime', 'execution']) {
+  test(`recording declarations reject a static ${gap} parent gap`, () => {
+    class Child extends OperationDefinition {
+      name = 'child';
+      label = 'child';
+      source = 'test';
+      run = { requires: {}, execute: () => 'done' };
+      observation = [callRecording()];
+    }
+    const child = new Child();
+    class Main extends ExecutionDefinition {
+      children = [child];
+      run = { requires: {}, execute: () => 'done' };
+      observation = gap === 'runtime' ? [callRecording()] : undefined;
+    }
+    const execution = new Main();
+    const definition = runtimeDefinition(execution);
+    if (gap === 'execution') definition.observation = [callRecording()];
+    const installation = bindRecording(new Recorder(new RecordBook()));
+    assert.throws(() => assembleRuntime(definition, { observations: [installation], providers: [], source: { entry: () => null, capture: () => null } }), /recording declaration on its direct parent/);
+    assert.doesNotThrow(() => assembleRuntime(definition, { providers: [], source: { entry: () => null, capture: () => null } }));
   });
 }

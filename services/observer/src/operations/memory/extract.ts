@@ -1,3 +1,4 @@
+import { callRecording } from '@capix-observer/runtime';
 import type { ChildBindings } from '@capix-observer/runtime';
 import { MemoryResource } from '@capix-observer/runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
@@ -16,6 +17,7 @@ import { memoryOutputContract, type MemoryExtraction } from './output.js';
 import { loadRequest } from '../../model/request.js';
 
 export class ExtractMemory extends OperationDefinition<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources> {
+  readonly observation = [callRecording()];
   readonly name = 'memory';
   readonly label = '提取记忆体';
   readonly source = 'services/observer/src/operations/memory/extract.ts · ExtractMemory';

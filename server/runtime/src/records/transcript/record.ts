@@ -29,6 +29,6 @@ export class TranscriptRecord extends BaseRecord<TranscriptChange> implements Re
     Object.freeze(this);
   }
   override toJSON(): RecordData {
-    return { ...super.toJSON(), transcriptId: this.transcriptId, revision: this.revision, occurredAt: this.occurredAt, ...(this.contextId ? { contextId: this.contextId, callId: this.callId, executionId: this.executionId } : {}) };
+    return { ...super.toJSON(), transcriptId: this.transcriptId, revision: this.revision, occurredAt: this.occurredAt, ...(this.contextId ? { contextId: this.contextId, callId: this.callId } : {}), ...(this.executionId ? { executionId: this.executionId } : {}) };
   }
 }

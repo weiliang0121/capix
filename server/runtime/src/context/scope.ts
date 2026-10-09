@@ -20,6 +20,9 @@ interface ResourceScope<I, O, R extends object> extends InvocationScope<I, O> {
 export interface ExecutionScope<I = unknown, O = unknown, R extends object = object> extends ResourceScope<I, O, R> {
   readonly level: 'execution';
 }
+export interface RuntimeScope<I = unknown, O = unknown, R extends object = object> extends ResourceScope<I, O, R> {
+  readonly level: 'runtime';
+}
 export interface OperationScope<I = unknown, O = unknown, R extends object = object> extends ResourceScope<I, O, R> {
   readonly level: 'operation';
 }
@@ -27,7 +30,7 @@ export interface AttemptScope<I = unknown, O = unknown, R extends object = objec
   readonly level: 'attempt';
 }
 
-export type ScopeOf<C extends InvocationContext<any, any>> = C extends InvocationContext<infer I, infer O> & { readonly resources: ResourceBindings<infer R>; readonly signal: AbortSignal; readonly level: infer L } ? (L extends 'execution' ? ExecutionScope<I, O, R> : L extends 'operation' ? OperationScope<I, O, R> : AttemptScope<I, O, R>) : C extends InvocationContext<infer I, infer O> ? InvocationScope<I, O> : never;
+export type ScopeOf<C extends InvocationContext<any, any>> = C extends InvocationContext<infer I, infer O> & { readonly resources: ResourceBindings<infer R>; readonly signal: AbortSignal; readonly level: infer L } ? (L extends 'runtime' ? RuntimeScope<I, O, R> : L extends 'execution' ? ExecutionScope<I, O, R> : L extends 'operation' ? OperationScope<I, O, R> : AttemptScope<I, O, R>) : C extends InvocationContext<infer I, infer O> ? InvocationScope<I, O> : never;
 
 export type ScopeResources<C extends InvocationScope<any, any>, R extends object> = Omit<C, 'resources'> & { readonly resources: { readonly values: Readonly<R> } };
 

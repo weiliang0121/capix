@@ -3,7 +3,8 @@ import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { Execution, Operation, Attempt } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence, createRuntime } from '@capix-observer/runtime';
+import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence } from '@capix-observer/runtime';
+import { createRuntime } from './fixtures/runtime.mjs';
 import { bindObserver, ObserverRuntimeDefinition, GenerateAnswer } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -34,10 +35,12 @@ test('Observer narrows resources at each action, captures fixed values and expir
   let first;
   await runtime.run(
     { messages: [{ role: 'user', content: '你好' }] },
-    { settings },
     {
-      started: (_context, invocation) => {
-        first = invocation;
+      settings,
+      execution: {
+        started: (_context, invocation) => {
+          first = invocation;
+        },
       },
     },
   );
@@ -211,23 +214,24 @@ test('fixed-range offer delivers only bounded immutable message access, without 
   assert.ok(Object.isFrozen(entries[0].message));
 });
 
-test('root requests must be fulfilled before started, recording or business work', async () => {
+test('E requests fail before E attachment, recording or work while the parent R records the rejected construction', async () => {
   const { Recorder, RecordBook } = await import('@capix-observer/runtime');
   const recorder = new Recorder(new RecordBook());
   const runtime = createRuntime({ recorder });
-  const before = [...recorder.book.values()];
   class Entry extends Execution {
     requires = { history: TranscriptResource.fixedRange.request() };
     execute() {
       assert.fail('must not execute');
     }
   }
-  await assert.rejects(
-    new Entry(runtime.executionInvocations).call(null, { settings }, () => assert.fail('must not start')),
-    /Unfulfilled resource request: transcript.fixedRange/,
-  );
+  assert.throws(() => new Entry(runtime.executionInvocations).call(null, { settings }, () => assert.fail('must not start')), /Unfulfilled resource request: transcript.fixedRange/);
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(runtime.running, false);
-  assert.deepEqual([...recorder.book.values()], before);
+  const entries = [...recorder.book.values()];
+  assert.equal(entries.filter((entry) => entry.kind === 'execution').length, 0);
+  const parent = entries.find((entry) => entry.kind === 'runtime-call');
+  assert.equal(parent.status, 'failed');
+  assert.match(parent.value.error.message, /Unfulfilled resource request/);
 });
 
 test('message and memory access preserves entity validation, change publication and fixed snapshots', async () => {
