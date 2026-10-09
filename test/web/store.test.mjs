@@ -4,10 +4,10 @@ import { ClientRuntime } from '@capix-observer/client-runtime';
 import { createAppStore } from '../../apps/observer/.test-dist/state/store.js';
 import { connectAppStore } from '../../apps/observer/.test-dist/binding/application.js';
 import { submitDraft } from '../../apps/observer/.test-dist/binding/submit.js';
-import { deferred, snapshot, transport } from '../client/fixtures.mjs';
+import { client, deferred, snapshot, transport } from '../client/fixtures.mjs';
 
 test('app stores are isolated and inspecting a node updates selection and dialogs together', () => {
-  const runtime = new ClientRuntime({ conversation: transport() });
+  const runtime = client({ conversation: transport() });
   const first = createAppStore();
   const second = createAppStore();
   const observed = runtime.getSnapshot();
@@ -28,7 +28,7 @@ test('app stores are isolated and inspecting a node updates selection and dialog
 });
 
 test('editing search resets its cursor without changing the selected round or runtime', () => {
-  const runtime = new ClientRuntime({ conversation: transport() });
+  const runtime = client({ conversation: transport() });
   const store = createAppStore();
   store.getState().select('kept');
   store.getState().setMatchCursor(3);
@@ -43,7 +43,7 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
   let accept;
   let sent;
   let calls = 0;
-  const runtime = new ClientRuntime({
+  const runtime = client({
     conversation: transport({
       run: async (request, observe, accepted) => {
         calls++;
@@ -76,7 +76,7 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
 });
 
 test('rejected submission preserves edits and reports an application notice without appending messages', async () => {
-  const runtime = new ClientRuntime({
+  const runtime = client({
     conversation: transport({
       run: async () => {
         throw new Error('HTTP 409');
@@ -96,7 +96,7 @@ test('invalid form input never reaches the runtime submission and late acceptanc
   let accept;
   let calls = 0;
   const gate = deferred();
-  const runtime = new ClientRuntime({
+  const runtime = client({
     conversation: transport({
       run: async (request, observe, accepted) => {
         calls++;
@@ -142,7 +142,7 @@ test('app connection follows streamed execution, retains edited budget on cache 
       await gate.promise;
     },
   });
-  const runtime = new ClientRuntime({ conversation: io, observation: io });
+  const runtime = client({ conversation: io, observation: io });
   const store = createAppStore();
   const disconnect = connectAppStore(store, runtime);
   await runtime.initialize();
@@ -164,10 +164,10 @@ test('app connection follows streamed execution, retains edited budget on cache 
   await operation;
 });
 
-test('unmounted app ignores late initialization errors and reconnect uses the existing initialization', async () => {
+test('unmounted app ignores late initialization errors and reconnect establishes a new subscription', async () => {
   const gate = deferred();
   let loads = 0;
-  const runtime = new ClientRuntime({
+  const runtime = client({
     conversation: transport({
       config: async () => {
         loads++;
@@ -184,6 +184,6 @@ test('unmounted app ignores late initialization errors and reconnect uses the ex
   const reconnect = connectAppStore(store, runtime);
   await runtime.initialize().catch(() => {});
   assert.equal(store.getState().notice, '配置读取失败');
-  assert.equal(loads, 1);
+  assert.equal(loads, 2);
   reconnect();
 });

@@ -3,6 +3,7 @@ import type { ObserverOverview } from '@capix-observer/protocol';
 import { projectConversation } from '../observation/conversation.js';
 import { emptyAppData } from '../state/data.js';
 import type { AppData } from '../state/data.js';
+import { errorMessage } from '../lib/errors.js';
 import { createObservationProjection } from './observation.js';
 
 /** Business content is authoritative; observation only adds optional links and inspector views. */
@@ -12,8 +13,9 @@ export function createDataProjection() {
   let previousOverview: ObserverOverview | undefined;
   let data: AppData = emptyAppData();
   return (state: ClientState): AppData => {
-    const observation = projectObservation(state.observation);
+    const observation = projectObservation(state.observation, state.transcripts);
     const conversationChanged = previous?.messages !== state.messages || previousOverview !== observation.overview;
+    const transcriptError = state.transcriptId ? state.transcripts.get(state.transcriptId)?.error : undefined;
     const current = observation.overview.executions.find((item) => item.calls.some((call) => call.recordType === 'execution' && call.contextId === state.contextId));
     data = {
       config: state.config,
@@ -22,7 +24,8 @@ export function createDataProjection() {
       runningId: current?.id ?? '',
       observationLoading: observation.loading,
       observationError: observation.error,
-      conversation: conversationChanged ? projectConversation(state.messages, observation.overview) : data.conversation,
+      conversationError: transcriptError ? errorMessage(transcriptError) : undefined,
+      conversation: conversationChanged ? projectConversation(state.messages, observation.overview, state.transcriptId) : data.conversation,
       messageCount: state.messages.length,
       progress: state.busy ? (state.answered ? '回答已交付，正在完成后续处理…' : '正在处理…') : '',
       rounds: observation.rounds,

@@ -1,61 +1,82 @@
 import type { Transcript } from './transcript.js';
-import type { Message } from '@capix-observer/protocol';
-import type { ChangeSource } from '../records/source.js';
+import type { Message, TranscriptRangeLocator } from '@capix-observer/protocol';
 import { ResourceOffer } from '../resource/offer.js';
+import type { ResourceActivity } from '../resource/activity.js';
 import { TranscriptRangeRef } from './ref.js';
 
-/** Fixed membership over immutable messages; the source and its mutation methods remain private. */
+/** Fixed message membership; endpoints retain private entity access, records only retain locators. */
 export class TranscriptRangeReader {
   readonly #range: TranscriptRangeRef;
+  readonly #activity?: ResourceActivity;
   readonly start: number;
   readonly end: number;
+  readonly transcriptId: string;
+  readonly revision: number;
 
-  constructor(range: TranscriptRangeRef) {
+  constructor(range: TranscriptRangeRef, activity?: ResourceActivity, revision = range.transcript.revision) {
     this.#range = range;
+    this.#activity = activity;
     this.start = range.start;
     this.end = range.end;
+    this.transcriptId = range.transcript.id;
+    this.revision = revision;
     Object.freeze(this);
   }
-
   get length(): number {
     return this.end - this.start;
   }
-
+  locate(): TranscriptRangeLocator {
+    return Object.freeze({ transcriptId: this.transcriptId, start: this.start, end: this.end, revision: this.revision });
+  }
   read(index: number) {
-    return this.#range.read(index);
+    const read = () => this.#range.read(index);
+    return this.#activity ? this.#activity.runSync('read', { input: () => ({ transcriptId: this.transcriptId, index }), output: () => ({ transcriptId: this.transcriptId, index }) }, read) : read();
   }
-
   slice(start: number, end = this.end): TranscriptRangeReader {
+    this.#activity?.validate();
     if (start < this.start || end > this.end) throw new RangeError('Requested range exceeds available messages');
-    return new TranscriptRangeReader(new TranscriptRangeRef(this.#range.transcript, start, end));
+    return new TranscriptRangeReader(new TranscriptRangeRef(this.#range.transcript, start, end), this.#activity, this.revision);
   }
-
   entries() {
-    return Object.freeze(
-      Array.from({ length: this.length }, (_, offset) => {
-        const index = this.start + offset;
-        return Object.freeze({ index, message: this.read(index) });
-      }),
-    );
+    const read = () =>
+      Object.freeze(
+        Array.from({ length: this.length }, (_, offset) => {
+          const index = this.start + offset;
+          return Object.freeze({ index, message: this.#range.read(index) });
+        }),
+      );
+    return this.#activity ? this.#activity.runSync('entries', { input: () => this.locate(), output: () => this.locate() }, read) : read();
   }
 }
 
-/** Published by the message resource, independent of E/O/A and the application's history alias. */
 export const TranscriptResource = Object.freeze({
-  append: new ResourceOffer('transcript.append', (transcript: Transcript) =>
-    Object.freeze({
-      append(messages: readonly Message[], source?: ChangeSource) {
-        const start = transcript.length;
-        transcript.appendFrom(messages, source);
-        return Object.freeze(messages.map((_, offset) => Object.freeze({ index: start + offset, message: transcript.get(start + offset)! })));
-      },
-    }),
+  append: new ResourceOffer(
+    'transcript.append',
+    (transcript: Transcript, activity) =>
+      Object.freeze({
+        append(messages: readonly Message[]) {
+          return activity.runSync('append', { input: () => ({ count: messages.length }), output: (result) => ({ transcriptId: transcript.id, indexes: result.map((item) => item.index), revision: transcript.revision }) }, () => {
+            const start = transcript.length;
+            transcript.appendFrom(messages, { origin: activity.origin, source: activity.source() });
+            return Object.freeze(messages.map((_, offset) => Object.freeze({ index: start + offset, message: transcript.get(start + offset)! })));
+          });
+        },
+      }),
+    'access',
+    { describe: (transcript) => ({ transcriptId: transcript.id }) },
   ),
-  segmentation: new ResourceOffer('transcript.segmentation', (transcript: Transcript) =>
-    Object.freeze({
-      current: () => new TranscriptRangeReader(new TranscriptRangeRef(transcript, transcript.activeStart, transcript.length)),
-      start: (index: number) => transcript.startSegment(index),
-    }),
+  segmentation: new ResourceOffer(
+    'transcript.segmentation',
+    (transcript: Transcript, activity) =>
+      Object.freeze({
+        current: () => activity.runSync('current', { output: (reader) => reader.locate() }, () => new TranscriptRangeReader(new TranscriptRangeRef(transcript, transcript.activeStart, transcript.length), activity)),
+        start: (index: number) => activity.runSync('start', { input: () => ({ start: index }), output: () => ({ transcriptId: transcript.id, start: transcript.activeStart, end: transcript.length, revision: transcript.revision }) }, () => transcript.startSegment(index, { origin: activity.origin, source: activity.source() })),
+      }),
+    'access',
+    { describe: (transcript) => ({ transcriptId: transcript.id }) },
   ),
-  fixedRange: new ResourceOffer('transcript.fixedRange', (range: TranscriptRangeRef) => new TranscriptRangeReader(range), 'binding'),
+  fixedRange: new ResourceOffer<TranscriptRangeRef, TranscriptRangeReader, { range: TranscriptRangeRef; revision: number }>('transcript.fixedRange', (captured: { range: TranscriptRangeRef; revision: number }, activity) => new TranscriptRangeReader(captured.range, activity, captured.revision), 'binding', {
+    capture: (range) => ({ range, revision: range.transcript.revision }),
+    describe: ({ range, revision }: { range: TranscriptRangeRef; revision: number }) => ({ transcriptId: range.transcript.id, start: range.start, end: range.end, revision }),
+  }),
 });

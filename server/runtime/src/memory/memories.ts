@@ -9,7 +9,7 @@ import { Memory, updateMemory } from './memory.js';
 import type { MemoryChange } from './change.js';
 import type { Transcript } from '../transcript/transcript.js';
 import type { Recorder } from '../records/recorder.js';
-import type { ChangeSource } from '../records/source.js';
+import type { ContentProvenance } from '../records/source.js';
 import { isNonBlankString } from '../value/string.js';
 import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
 
@@ -49,7 +49,7 @@ export class Memories {
     return this.values().map((memory) => memory.toJSON());
   }
 
-  apply(changes: readonly MemoryChange[], source?: ChangeSource): readonly Memory[] {
+  apply(changes: readonly MemoryChange[], provenance: ContentProvenance = {}): readonly Memory[] {
     const targets = new Set<string>();
     // The complete batch is checked before the first mutation. Recording failure does not roll back facts.
     const prepared = changes.map((change) => {
@@ -72,14 +72,14 @@ export class Memories {
     for (const { change, result, memory: previous } of prepared) {
       if (previous && isEqual(previous.snapshot(), result)) continue;
       const memory = previous ?? new Memory(this.transcript, result);
-      const event: MemoryEvent = Object.freeze({ type: 'memory', memoriesId: this.id, sequence: this.#sequence + 1, occurredAt: new Date().toISOString(), change: Object.freeze({ action: change.action, memoryId: memory.id, explanation: change.change, sourceIndexes: Object.freeze([...change.sourceIndexes]), result }) });
+      const event: MemoryEvent = Object.freeze({ type: 'memory', memoriesId: this.id, sequence: this.#sequence + 1, occurredAt: new Date().toISOString(), ...(provenance.origin ? { origin: Object.freeze({ ...provenance.origin }) } : {}), change: Object.freeze({ action: change.action, memoryId: memory.id, explanation: change.change, sourceIndexes: Object.freeze([...change.sourceIndexes]), result }) });
       if (previous) updateMemory(memory, result);
       else this.#items.set(memory.id, memory);
       const sequence = ++this.#sequence;
       applied.push(memory);
       captureChange(this.changes, event);
       const recorder = this.recorder;
-      if (recorder) writeRecord(() => recorder.add(MemoryRecordHelper.create({ memoryId: memory.id, memoriesId: this.id, sequence: sequence, source }, { action: change.action, change: change.change, sourceIndexes: change.sourceIndexes, result: memory.snapshot() })));
+      if (recorder) writeRecord(() => recorder.add(MemoryRecordHelper.create({ memoryId: memory.id, memoriesId: this.id, sequence: sequence, source: provenance.source }, { action: change.action, change: change.change, sourceIndexes: change.sourceIndexes, result: memory.snapshot() })));
     }
     return applied;
   }

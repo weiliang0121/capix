@@ -1,3 +1,4 @@
+import { createEnvironment } from '../fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Invocation, InvocationContext, Recorder, RecordBook, ExecutionRecord, ExecutionRecordHelper, InvocationBoundaryRecordHelper, TranscriptRecord, MemoryRecord, createRuntime } from '@capix-observer/runtime';
@@ -8,7 +9,7 @@ const identity = { maxRounds: 1, execute: (context) => context.currentInput };
 
 test('live nested calls and content sources use their bound records without Context lookup', async (t) => {
   const recorder = new Recorder(new RecordBook());
-  const runtime = createRuntime({ recorder, messages: [{ role: 'user', content: 'Beijing' }] });
+  const { runtime, transcript, memories } = createEnvironment({ recorder, messages: [{ role: 'user', content: 'Beijing' }] });
   let outer;
   let nested;
   let leaf;
@@ -37,7 +38,7 @@ test('live nested calls and content sources use their bound records without Cont
                         maxRounds: 1,
                         execute(context, invocation) {
                           assert.equal(invocation.context, context);
-                          runtime.context.memories.apply([{ action: 'create', memoryId: null, change: 'location', sourceIndexes: [0], result: { topic: 'location', content: 'Beijing', sourceIndexes: [0] } }], invocation.source);
+                          memories.apply([{ action: 'create', memoryId: null, change: 'location', sourceIndexes: [0], result: { topic: 'location', content: 'Beijing', sourceIndexes: [0] } }], { origin: invocation.origin, source: invocation.source });
                           return 'done';
                         },
                         receive(context, result, invocation) {
@@ -56,7 +57,7 @@ test('live nested calls and content sources use their bound records without Cont
           },
         });
         const output = await outer.run();
-        runtime.context.transcript.appendFrom([{ role: 'assistant', content: output }], invocation.source);
+        transcript.appendFrom([{ role: 'assistant', content: output }], { origin: invocation.origin, source: invocation.source });
         return output;
       },
     },

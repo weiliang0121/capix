@@ -7,7 +7,7 @@ const message = (content) => ({ role: 'user', content });
 test('a shared observer receives source-local revisions in capture order and transfers separate batches', () => {
   const changes = new ChangeObserver();
   const first = new Transcript([message('initial')], { changes });
-  const second = createRuntime({ changes, messages: [message('other')] }).context.transcript;
+  const second = new Transcript([message('other')], { changes });
   first.append(message('next'));
   first.startSegment(1);
   assert.equal(changes.size, 4);
@@ -113,14 +113,13 @@ test('failed segment capture preserves the new boundary and later changes keep a
 test('capture failure reports committed facts and stops the local invocation instead of repeating work', async () => {
   const cause = new Error('capture unavailable');
   const recorder = new Recorder(new RecordBook());
-  const runtime = createRuntime({
-    recorder,
-    changes: {
-      capture: (event) => {
-        if (event.type === 'transcript') throw cause;
-      },
+  const changes = {
+    capture: (event) => {
+      if (event.type === 'transcript') throw cause;
     },
-  });
+  };
+  const runtime = createRuntime({ recorder, changes });
+  const transcript = new Transcript([], { recorder, changes });
   let calls = 0;
   let receives = 0;
   const invocation = runtime.executionInvocations.create('input', {
@@ -129,7 +128,7 @@ test('capture failure reports committed facts and stops the local invocation ins
       maxRounds: 2,
       execute() {
         calls++;
-        runtime.context.transcript.append(message('committed'));
+        transcript.append(message('committed'));
       },
       receive(context) {
         receives++;
@@ -146,8 +145,8 @@ test('capture failure reports committed facts and stops the local invocation ins
   });
   assert.equal(calls, 1);
   assert.equal(receives, 0);
-  assert.equal(runtime.context.transcript.length, 1);
-  assert.equal(runtime.context.transcript.revision, 1);
+  assert.equal(transcript.length, 1);
+  assert.equal(transcript.revision, 1);
   assert.equal([...recorder.book.values()].filter((record) => record instanceof TranscriptRecord).length, 0);
 });
 

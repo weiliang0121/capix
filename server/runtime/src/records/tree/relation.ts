@@ -10,6 +10,7 @@ import { AttemptRecord } from '../attempt/record.js';
 import { InvocationBoundaryRecord } from '../invocation-boundary/record.js';
 import { MemoryRecord } from '../memory/record.js';
 import { TranscriptRecord } from '../transcript/record.js';
+import { ResourceRecord } from '../resource/record.js';
 
 /** Existing record kinds' ownership rules; no storage, indexing or publication. */
 export function checkRelation(record: BaseRecord<unknown>, parent: CompositeRecord<unknown> | undefined, book: RecordBook): void {
@@ -21,6 +22,8 @@ export function checkRelation(record: BaseRecord<unknown>, parent: CompositeReco
   }
   if (record instanceof AttemptRecord && (!(parent instanceof OperationRecord) || record.operationId !== parent.id)) throw new Error('Attempt requires an operation parent');
   if (record instanceof InvocationBoundaryRecord && !(parent instanceof InvocationRecord)) throw new Error('Event requires a call parent');
+  if (record instanceof ResourceRecord && !(parent instanceof InvocationRecord || parent instanceof RuntimeRecord)) throw new Error('Resource fact requires a runtime or invocation parent');
+  if (record instanceof ResourceRecord && parent instanceof InvocationRecord && parent.status !== 'running') throw new Error('Resource access owner has ended');
   const content = record instanceof MemoryRecord || record instanceof TranscriptRecord;
   if (!parent) {
     if (content && (!isUndefined(record.callId) || !isUndefined(record.contextId) || !isUndefined(record.executionId) || (record instanceof MemoryRecord && !isUndefined(record.operationId)))) throw new Error('Content source requires a call parent');

@@ -1,5 +1,6 @@
 import { ArrowUpRight } from 'lucide-react';
-import type { MemoryObservation, MemoryRecord } from '@capix-observer/protocol';
+import type { MemoryRecord } from '@capix-observer/protocol';
+import type { MemoryView } from '../../state/data';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -34,7 +35,7 @@ export function ChangeCard({ record, onInspect }: { record: MemoryRecord; onInsp
     </Card>
   );
 }
-export function MemoryDialog({ open, onOpenChange, memory, onInspect }: { open: boolean; onOpenChange: (open: boolean) => void; memory: MemoryObservation; onInspect: (id: string, call?: string) => void }) {
+export function MemoryDialog({ open, onOpenChange, memory, onInspect, onLoadTranscript }: { open: boolean; onOpenChange: (open: boolean) => void; memory: MemoryView; onLoadTranscript: (id: string) => void; onInspect: (id: string, call?: string) => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="inspector-dialog">
@@ -60,9 +61,14 @@ export function MemoryDialog({ open, onOpenChange, memory, onInspect }: { open: 
                     {item.sources.map((source) => (
                       <blockquote key={source.index}>
                         <span>
-                          [{source.index}] {source.message.role === 'user' ? '用户' : '助手'}
+                          [{source.index}] {source.message ? (source.message.role === 'user' ? '用户' : '助手') : source.transcriptId.slice(0, 8)}
                         </span>
-                        {source.message.content}
+                        {source.message?.content ?? (source.state === 'loading' ? '正在加载原文…' : source.state === 'missing' ? '原文位置不存在。' : (source.error ?? '原文尚未加载。'))}
+                        {(source.state === 'unloaded' || source.state === 'error') && (
+                          <Button variant="ghost" size="sm" onClick={() => onLoadTranscript(source.transcriptId)}>
+                            加载原文
+                          </Button>
+                        )}
                       </blockquote>
                     ))}
                   </details>

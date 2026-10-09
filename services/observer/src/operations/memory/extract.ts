@@ -3,8 +3,8 @@ import { MemoryResource } from '@capix-observer/runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ModelCallResources, type MemoryWriteResources } from '../../observer/resources.js';
 import { Sequence } from '@capix-observer/runtime';
-import type { Invocation } from '@capix-observer/runtime';
-import { OperationDefinition, type OperationContext } from '@capix-observer/runtime';
+import type { InvocationView } from '@capix-observer/runtime';
+import { OperationDefinition, type OperationScope } from '@capix-observer/runtime';
 import { PrepareModelRequest } from '../../attempt/model/prepare.js';
 import { InvokeModel } from '../../attempt/model/invoke.js';
 import { AcceptModelOutput, type ModelAcceptanceInput } from '../../attempt/model/accept.js';
@@ -42,7 +42,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     this.invokeModel = new InvokeModel(this.purpose);
     this.acceptOutput = new AcceptModelOutput({ schema: this.output.schema, accept: (value, input: ModelAcceptanceInput & { basis: MemoryInput }) => this.output.accept(value, input.basis) });
     this.applyMemory = new ApplyMemory();
-    this.composition = new Sequence<MemoryInput, Invocation<unknown, unknown, OperationContext>>()
+    this.composition = new Sequence<MemoryInput, InvocationView<unknown, unknown, OperationScope>>()
       .step('request', { use: this.prepareRequest, input: ({ input }) => input })
       .step('model', { use: this.invokeModel, input: ({ outputs }) => outputs.request })
       .step('acceptance', { use: this.acceptOutput, input: ({ input, outputs }) => ({ output: outputs.model, basis: input }) })
@@ -54,7 +54,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     return { currentIndexes: input.currentIndexes, messages: input.messages.map(({ index, message }) => ({ index, role: message.role, content: message.content })), memories: input.memories };
   }
 
-  async execute(context: OperationContext<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>, invocation: Invocation<MemoryInput, MemoryExtraction, OperationContext<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>>, children: ChildBindings): Promise<MemoryExtraction> {
+  async execute(context: OperationScope<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>, invocation: InvocationView<MemoryInput, MemoryExtraction, OperationScope<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>>, children: ChildBindings): Promise<MemoryExtraction> {
     const outputs = await this.composition.run(invocation, context.currentInput, children);
     return outputs.application;
   }

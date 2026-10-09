@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientRuntime } from '@capix-observer/client-runtime';
-import { initializeObserver, acceptExecutionInput, observeExecution, observeOverview, ObservationFeed } from '@capix-observer/service';
+import { initializeObserver, observeExecution, observeOverview, ObservationFeed } from '@capix-observer/service';
 import { Transcript, observeMemory } from '@capix-observer/runtime';
 import { createApplication } from '../../apps/observer/.test-dist/binding/application.js';
-import { deferred, snapshot, transport, deliverAnswer } from '../client/fixtures.mjs';
+import { client, deferred, snapshot, transport, deliverAnswer } from '../client/fixtures.mjs';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-const withObservation = (io) => new ClientRuntime({ conversation: io, observation: io });
+const withObservation = (io) => client({ conversation: io, observation: io });
 
 const request = { messages: [{ role: 'user', content: '上海，周末去' }] };
 const history = [
@@ -23,11 +23,10 @@ async function recordedRound() {
   const feed = new ObservationFeed(environment, environment.changes);
   const frames = [];
   feed.connect((frame) => frames.push(frame));
-  const input = acceptExecutionInput(environment.transcript, request);
-  const final = await observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript }, (value) => snapshots.push(value));
+  const final = await observeExecution(environment.runtime, environment.recording, request, { settings }, (value) => snapshots.push(value));
   await settle();
   feed.close();
-  return { frames, snapshots, final, overview: observeOverview(environment), messages: environment.transcript.snapshot(), memory: observeMemory(environment.runtime.context.memories, environment.book) };
+  return { transcriptId: environment.transcript.id, frames, snapshots, final, overview: observeOverview(environment), messages: environment.transcript.snapshot(), memory: observeMemory(environment.memories, environment.book) };
 }
 
 test('binding interprets live records, reconciles once, and keeps raw runtime separate from application models', async () => {
@@ -42,7 +41,7 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
     transport({
       baseline: fixture.frames[0],
       overview: async () => (finished ? fixture.overview : { messages: history.map((message, index) => ({ index, message, count: 0 })), executions: [] }),
-      transcript: async () => ({ messages: finished ? fixture.messages : history }),
+      transcript: async () => ({ id: fixture.transcriptId, revision: finished ? 3 : 1, start: 0, end: finished ? fixture.messages.length : history.length, starts: [0], messages: finished ? fixture.messages : history }),
       memory: async () => (finished ? fixture.memory : { items: [] }),
       execution: async () => {
         detailReads++;
@@ -86,6 +85,11 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   const answer = [...data.details.get(id).calls.values()].find((call) => call.operation === 'answer');
   assert.equal(answer.children.length, 4);
   assert.equal(answer.output.content, '上海周末行程。');
+  assert.ok(data.details.get(id).resources.length > 0);
+  assert.equal(data.details.get(id).settings.model, 'fixture');
+  assert.equal(data.details.get(id).transcriptRange.transcriptId, fixture.transcriptId);
+  assert.equal('settings' in fixture.final.execution.value, false);
+  assert.equal('messages' in data.details.get(id).transcriptRange, false);
   gate.resolve();
   await submitting;
   await settle();
@@ -114,7 +118,7 @@ test('binding remount retains business messages despite unavailable observation'
       if (finished) throw new Error('概览刷新失败');
       return { messages: [], executions: [] };
     },
-    transcript: async () => ({ messages: finished ? fixture.messages : history }),
+    transcript: async () => ({ id: fixture.transcriptId, revision: finished ? 3 : 1, start: 0, end: finished ? fixture.messages.length : history.length, starts: [0], messages: finished ? fixture.messages : history }),
     execution: async () => fixture.final,
     run: async (_request, receive, accepted) => {
       accepted();
@@ -145,7 +149,7 @@ test('binding remount retains business messages despite unavailable observation'
 test('loading old detail records does not replace a fresh server overview or repeat selection counts', async () => {
   const fixture = await recordedRound();
   const id = fixture.final.execution.id;
-  const runtime = withObservation(transport({ overview: async () => fixture.overview, transcript: async () => ({ messages: fixture.messages }), memory: async () => fixture.memory, execution: async () => fixture.final }));
+  const runtime = withObservation(transport({ overview: async () => fixture.overview, transcript: async () => ({ id: fixture.transcriptId, revision: 3, start: 0, end: fixture.messages.length, starts: [0], messages: fixture.messages }), memory: async () => fixture.memory, execution: async () => fixture.final }));
   const app = createApplication(runtime);
   const disconnect = app.connect();
   await runtime.initialize();
@@ -162,7 +166,8 @@ test('loading old detail records does not replace a fresh server overview or rep
 
 test('live overview separates the last recorded process from an unfinished invocation duration', async () => {
   const live = snapshot('running');
-  live.execution.value.transcriptRange = { start: 0, end: 1, messages: [{ role: 'user', content: '你好，查看北京' }] };
+  live.resources.push({ id: 'range-bound', parentId: live.execution.id, access: 'transcript.fixedRange', supplyId: 'supply', sequence: 1, phase: 'bound', occurredAt: live.execution.value.startedAt, value: null });
+  live.resources.push({ id: 'range', parentId: live.execution.id, access: 'transcript.fixedRange', supplyId: 'supply', sequence: 2, phase: 'available', occurredAt: live.execution.value.startedAt, value: { transcriptId: 'fixture-transcript', start: 0, end: 1 } });
   live.execution.value.processes = [{ sequence: 1, round: 1, occurredAt: '2026-09-25T00:00:00.025Z', offsetMs: 25, stage: 'execute', type: 'start', input: {} }];
   let observe;
   const runtime = withObservation(
@@ -182,6 +187,7 @@ test('live overview separates the last recorded process from an unfinished invoc
   await settle();
   const app = createApplication(runtime);
   const disconnect = app.connect();
+  await settle();
   let overview;
   const unsubscribe = app.store.subscribe(({ data }) => {
     if (data.runningId && data.busy && data.rounds.length) overview = data;
@@ -197,7 +203,7 @@ test('live overview separates the last recorded process from an unfinished invoc
 
 test('binding supports a conversation-only runtime and never synthesizes responses from execution records', async () => {
   const messages = [...history];
-  const runtime = new ClientRuntime({
+  const runtime = client({
     conversation: transport({
       transcript: async () => ({ messages: [...messages] }),
       run: async (request, receive, accepted) => {

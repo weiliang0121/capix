@@ -1,6 +1,7 @@
 import type { MemoryObservation, RuntimeSnapshot } from '@capix-observer/protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
+import { executionResources } from './resources.js';
 import { projectExecution } from '../observation/project.js';
 import type { CallSpan } from '../observation/types.js';
 import type { CallMemory, ExecutionDetail } from '../state/data.js';
@@ -22,13 +23,13 @@ export function projectDetail(snapshot: RuntimeSnapshot, memory: MemoryObservati
     startedAt: trace.startedAt,
     status: trace.status,
     contextId: snapshot.execution.contextId,
-    settings: snapshot.execution.value.settings,
-    transcriptRange: snapshot.execution.value.transcriptRange,
+    ...executionResources(snapshot),
+    resources: snapshot.resources,
     inputContent: String(input.content ?? ''),
     answer: isString(response) ? response : isPlainObject(response) && isString(response.content) ? response.content : '本轮尚无已记录的回答。',
     error: trace.error,
     children: calls.filter((call) => call.parentId === trace.id),
     memory: memoryAt(),
-    calls: new Map(calls.map((call) => [call.id, { ...call, children: calls.filter((child) => child.parentId === call.id), memory: memoryAt(call), localRounds: Math.max(0, ...call.processes.map((process) => process.round)), processEntries: call.processes.map((record) => ({ record, ...('resultOf' in record ? { reused: call.processes.find((item) => item.sequence === record.resultOf) } : {}) })) }])),
+    calls: new Map(calls.map((call) => [call.id, { ...call, resources: snapshot.resources.filter((fact) => fact.parentId === call.id), children: calls.filter((child) => child.parentId === call.id), memory: memoryAt(call), localRounds: Math.max(0, ...call.processes.map((process) => process.round)), processEntries: call.processes.map((record) => ({ record, ...('resultOf' in record ? { reused: call.processes.find((item) => item.sequence === record.resultOf) } : {}) })) }])),
   };
 }

@@ -3,6 +3,8 @@ import { isString } from 'es-toolkit/predicate';
 import type { ModelOutput, ModelRequest, Purpose } from './model/types.js';
 import { isObject, RuntimeError } from '@capix-observer/runtime';
 
+export type ModelInitialization = ModelProvider | (() => ModelProvider);
+
 export interface ModelProvider {
   invoke(request: ModelRequest, purpose: Purpose, signal: AbortSignal): Promise<ModelOutput>;
 }

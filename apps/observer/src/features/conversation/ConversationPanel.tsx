@@ -10,6 +10,7 @@ export function ConversationPanel() {
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const conversation = useAppStore((state) => state.data.conversation);
   const pending = useAppStore((state) => state.data.pending);
+  const conversationError = useAppStore((state) => state.data.conversationError);
   const progress = useAppStore((state) => state.data.progress);
   const busy = useAppStore((state) => state.data.busy);
   const config = useAppStore((state) => state.data.config);
@@ -17,7 +18,7 @@ export function ConversationPanel() {
   const inspect = useAppStore((state) => state.inspect);
   const draft = useAppStore((state) => state.draft);
   const setDraft = useAppStore((state) => state.setDraft);
-  const { submit } = useAppCommands();
+  const { submit, reconnectConversation } = useAppCommands();
   return (
     <aside className="conversation-panel">
       <header className="panel-heading">
@@ -32,6 +33,20 @@ export function ConversationPanel() {
           <Settings2 />
         </Button>
       </header>
+      {conversationError && (
+        <div className="notice" role="alert">
+          消息同步失败：{conversationError}{' '}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              void reconnectConversation();
+            }}
+          >
+            重新连接
+          </Button>
+        </div>
+      )}
       <ChatMessages rows={conversation} pending={pending} progress={progress} selectedId={selectedId} onInspect={inspect} />
       <Composer configured={config?.configured ?? false} loaded={Boolean(config)} busy={busy} draft={draft} onDraft={setDraft} onSubmit={submit} />
     </aside>

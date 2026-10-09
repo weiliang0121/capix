@@ -1,20 +1,19 @@
-import type { Message } from '@capix-observer/protocol';
 import { RuntimeContext } from '../context/runtime.js';
-import { Transcript } from '../transcript/transcript.js';
-import { Memories } from '../memory/memories.js';
-import { SelectionUsage } from '../transcript/usage.js';
 import type { Recorder } from '../records/recorder.js';
 import { RuntimeRecordHelper } from '../records/runtime/helper.js';
-import { Runtime } from './runtime.js';
+import { Runtime, type RuntimeEntry } from './runtime.js';
 import type { ChangeCapture } from '../changes/capture.js';
-import type { RuntimeChange } from '@capix-observer/protocol';
+import type { InvocationEvent } from '@capix-observer/protocol';
+import type { ExecutionOptions } from '../context/execution.js';
 
-/** Assemble a new data scope; this is not an import or recovery entry point. */
-export function createRuntime(options: { recorder?: Recorder; messages?: readonly Message[]; changes?: ChangeCapture<RuntimeChange> } = {}): Runtime {
-  const transcript = new Transcript(options.messages, { recorder: options.recorder, changes: options.changes });
-  const memories = new Memories(transcript, { recorder: options.recorder, changes: options.changes });
-  const context = new RuntimeContext(transcript, memories, new SelectionUsage());
-  if (!options.recorder) return new Runtime(context, { changes: options.changes });
-  const record = RuntimeRecordHelper.create(options.recorder);
-  return new Runtime(context, { recording: { recorder: options.recorder, record }, changes: options.changes });
+export interface RuntimeCreationOptions {
+  recorder?: Recorder;
+  changes?: ChangeCapture<InvocationEvent>;
+}
+
+/** Establish only R's context and optional record; content entities are assembled independently. */
+export function createRuntime<I = unknown, O = unknown, P extends ExecutionOptions = ExecutionOptions>(options: RuntimeCreationOptions = {}, assemble?: (runtime: Runtime<I, O, P>) => RuntimeEntry<I, O, P>): Runtime<I, O, P> {
+  const context = new RuntimeContext();
+  const recording = options.recorder ? { recorder: options.recorder, record: RuntimeRecordHelper.create(options.recorder) } : undefined;
+  return new Runtime(context, { recording, changes: options.changes }, assemble);
 }

@@ -1,8 +1,7 @@
 import type { ServerResponse } from 'node:http';
-import type { ObservationUpdate } from '@capix-observer/protocol';
 
 /** Per-connection buffering is a sender concern; slow consumers never block the runtime. */
-export function observationWriter(response: ServerResponse): (frame: ObservationUpdate) => void {
+export function observationWriter<T>(response: ServerResponse): (frame: T) => void {
   const queue: string[] = [];
   let queuedBytes = 0;
   let blocked = false;

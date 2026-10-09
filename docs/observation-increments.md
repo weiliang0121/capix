@@ -15,6 +15,8 @@
 
 一次记录登记包含新记录及父级新增 childId；RecordRegistration 仍只保证 Book 与直接关系的同步登记。InvocationRecord 逐步补齐一次调用，InvocationBoundaryRecord 只表达进入、返回或抛错。两者登记后都可以产生 RecordChangeEvent，不能将变化通知再次自动登记成调用边界。
 
+ResourceFact 描述本次调用实际绑定、取得或调用资源的事实，直接归属于相应 E/O/A 记录，也通过 Recorder 的变化出口交付。内容实体仍自己产生 TranscriptEvent / MemoryEvent；资源访问记录不能替代内容变化事件。内容事件可保留 origin.contextId，无 Recorder 时也有运行来源。
+
 ## 共享捕获与发送
 
 ```text
@@ -24,15 +26,15 @@ Invocation ── InvocationEvent ├→ ChangeObserver<RuntimeChange>
 Recorder ──── RecordChangeEvent┘        │ wait / take
                                       ↓
                                ObservationFeed
-                                      │ baseline / delta
-                                      ↓
-                              ObservationReplica
-                                      │ 本地事实
-                                      ↓
-                              binding → Store → UI
+                                  ├─ 观测 baseline / delta → ObservationReplica
+                                  └─ TranscriptFeed → 实体 baseline / delta → TranscriptReplica
+                                                                            │
+                                      binding 组合记录定位符与实体正文 → Store → UI
 ```
 
 各来源只持有 ChangeCapture<自己的事件>。共享 ChangeObserver 只保留捕获顺序；capture 不调用消费者，wait 唤醒异步消费，take 转移当前批次。一个环境由一个 ObservationFeed 消费，向多个订阅者交付。批次是消费边界，不是跨源事务；局部顺序不是网络游标。
+
+捕获器只有一个消费入口，发送时按契约分流。消息实体通道交付原文与 revision；观测通道只交付 transcriptId、消息索引/计数和追加范围，不再附带整份消息正文。两类客户端订阅互相独立，关闭记录观测不停止对话实体同步。受控消息接口仅开放服务显式安装的 Transcript，UID 不等于任意实体访问权限。
 
 ## 基线与交付位置
 
@@ -48,7 +50,7 @@ ObservationFeed 为本次发送范围生成 scopeId，每个非空变化批次�
 
 客户端首帧必须是基线；之后检查 scopeId 与交付 sequence，重复交付忽略，缺口拒绝。每个来源也检查自己的顺序；在新结构中完成整批变更后才替换已接纳状态，失败不暴露半条父子关系。
 
-调用记录的状态更新与边界登记是两个事实，接收端保留暂未齐备的原始条目，边界齐备后才生成通过 validateSnapshot 的本地执行视图。业务对话仍只由独立 ConversationUpdate 和消息查询驱动，观测不会生成或重复追加回答。
+调用记录的状态更新与边界登记是两个事实，接收端保留暂未齐备的原始条目，边界齐备后才生成通过 validateSnapshot 的本地执行视图。ConversationUpdate 交付提交状态与回答身份，TranscriptReplica 保存独立查询/订阅所得的权威消息；两者核对实际消息位置与正文，不要求回答紧邻输入。观测和业务流都不会再次向消息副本追加回答。
 
 顺序异常最多自动重建一次基线，连续异常停止并提示；普通断线不无限重连，可显式刷新重新连接。旧连接回调、旧详情响应不得覆盖新范围。binding 负责从已观测事实组织轮次、来源与记忆关联，UI 几何与选择状态不进入 Runtime。
 

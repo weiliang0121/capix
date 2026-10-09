@@ -1,4 +1,5 @@
 import type { RuntimeErrorValue } from './errors.js';
+import type { ResourceFact } from './records/resource.js';
 
 /** Common record shape; concrete records define their own relations and body. */
 export interface BaseRecord<T = unknown> {
@@ -27,8 +28,6 @@ export interface InvocationValue<I = unknown, O = unknown> {
   error?: RuntimeErrorValue;
 }
 export interface ExecutionValue<I = unknown, O = unknown> extends InvocationValue<I, O> {
-  settings: unknown;
-  transcriptRange?: unknown;
   startedAt: string;
 }
 export interface ExecutionRecord<I = unknown, O = unknown> extends CompositeRecord<ExecutionValue<I, O>> {
@@ -78,4 +77,5 @@ export interface RuntimeSnapshot {
   attempts: AttemptRecord[];
   /** Existing wire field; these are invocation boundary records, not system change events. */
   events: InvocationBoundaryRecord[];
+  resources: ResourceFact[];
 }

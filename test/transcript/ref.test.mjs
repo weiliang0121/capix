@@ -2,7 +2,7 @@ import { readOutput, validateSnapshot } from '@capix-observer/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createInput, sourceFor, contextFor, transcriptFor, observeFixture } from '../fixtures/observer.mjs';
-import { ExecutionRecord, snapshotValue, observeTranscript } from '@capix-observer/runtime';
+import { ExecutionRecord, snapshotValue } from '@capix-observer/runtime';
 
 import { selectionOutputContract } from '@capix-observer/service';
 
@@ -35,7 +35,7 @@ test('input is a plain immutable message; the execution range fixes visibility a
     );
 });
 
-test('only the execution record holds the range; calls consume selected content and ignore later appends', async () => {
+test('resource facts hold plain range locators; calls consume selected content and ignore later appends', async () => {
   const input = createInput({ content: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] });
   const transcript = transcriptFor(input),
     requests = [],
@@ -65,9 +65,11 @@ test('only the execution record holds the range; calls consume selected content 
   assert.equal(facts.events.length, 30);
   assert.deepEqual(facts.execution.value.input, input);
   assert.notEqual(facts.execution.value.input, input);
-  assert.equal(facts.execution.value.transcriptRange.end, 2);
-  assert.equal(facts.execution.value.transcriptRange.transcript, transcriptFor(input));
-  assert.ok(snapshots.every((snapshot) => snapshot.execution.value.transcriptRange === facts.execution.value.transcriptRange));
+  const rangeFact = facts.resources.find((fact) => fact.parentId === facts.execution.id && fact.access === 'transcript.fixedRange' && fact.phase === 'available');
+  assert.equal(rangeFact.value.end, 2);
+  assert.equal(rangeFact.value.transcriptId, transcriptFor(input).id);
+  assert.equal(rangeFact.value.transcript, undefined);
+  assert.ok(snapshots.filter((snapshot) => snapshot.resources.some((fact) => fact.id === rangeFact.id)).every((snapshot) => snapshot.resources.find((fact) => fact.id === rangeFact.id).value.end === 2));
   for (const record of [...facts.operations, ...facts.attempts]) {
     assert.equal(Object.hasOwn(record.value, 'transcriptRange'), false);
     assert.equal(Object.hasOwn(record.value, 'settings'), false);
@@ -76,27 +78,30 @@ test('only the execution record holds the range; calls consume selected content 
   assert.deepEqual(assembled.message, input);
   assert.deepEqual(assembled.selectedMessages, [{ index: 0, message: transcript.get(0) }]);
   assert.deepEqual(JSON.parse(requests[1].messages[1].content), { message: input, memories: [], history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });
-  const browser = JSON.parse(JSON.stringify(facts, observeTranscript));
+  const browser = JSON.parse(JSON.stringify(facts));
   validateSnapshot(browser);
   assert.deepEqual(browser.execution.value.input, input);
-  assert.equal(browser.execution.value.transcriptRange.messages.length, 2);
+  assert.equal(browser.resources.find((fact) => fact.id === rangeFact.id).value.end, 2);
+  assert.equal(browser.resources.find((fact) => fact.id === rangeFact.id).value.messages, undefined);
   assert.equal(projectExecution(browser).result.content, '她负责海盐项目');
 });
 
-test('record snapshots copy input/configuration values and retain the fixed range reference', () => {
+test('record snapshots copy plain locators and reject live range references', () => {
   const input = createInput({ content: 'current message', history: [{ role: 'assistant', content: 'prior' }] });
   const context = contextFor(input, settings);
-  const mutable = { input, settings: { ...settings }, transcriptRange: sourceFor(context).transcriptRange };
+  const transcript = transcriptFor(input);
+  const mutable = { input, settings: { ...settings }, history: { transcriptId: transcript.id, start: 0, end: 2 } };
   const recorded = snapshotValue(mutable);
   assert.notEqual(recorded.input, input);
   assert.notEqual(recorded.settings, mutable.settings);
-  assert.equal(recorded.transcriptRange, sourceFor(context).transcriptRange);
+  assert.notEqual(recorded.history, mutable.history);
   mutable.settings.model = 'changed';
-  transcriptFor(input).append({ role: 'user', content: 'later' });
+  transcript.append({ role: 'user', content: 'later' });
   assert.equal(recorded.settings.model, 'test');
-  assert.equal(recorded.transcriptRange.end, 2);
-  const record = new ExecutionRecord('context', { ...mutable, startedAt: 'now' }, 'runtime-record');
-  assert.equal(record.value.transcriptRange, sourceFor(context).transcriptRange);
+  assert.equal(recorded.history.end, 2);
+  assert.throws(() => snapshotValue(sourceFor(context).transcriptRange), /plain/);
+  const record = new ExecutionRecord('context', { input, startedAt: 'now' }, 'runtime-record');
+  assert.equal(record.value.transcriptRange, undefined);
   const circular = {};
   circular.self = circular;
   assert.throws(() => snapshotValue(circular), /cyclic/);

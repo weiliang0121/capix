@@ -1,4 +1,4 @@
-import type { Message } from '../message.js';
+import type { MessageLocator } from '../transcript.js';
 import type { MemoryRecord } from '../records/memory.js';
 
 export interface MemoryObservation {
@@ -6,7 +6,7 @@ export interface MemoryObservation {
     id: string;
     topic: string;
     content: string;
-    sources: readonly { index: number; message: Readonly<Message> }[];
+    sources: readonly MessageLocator[];
     records: readonly MemoryRecord[];
   }[];
 }

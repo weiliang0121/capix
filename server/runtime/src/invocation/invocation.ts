@@ -1,3 +1,5 @@
+import { invocationScope, type ScopeOf } from '../context/scope.js';
+import type { InvocationView, ChildCall } from './view.js';
 import { InvocationChildren, type ParentInvocation } from './children.js';
 import type { InvocationRelation, InvocationRelationOptions } from './relation.js';
 import type { InvocationChangeEmitter } from './changes.js';
@@ -29,6 +31,9 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   #sequence = 0;
   #record?: CallRecord;
   readonly children: InvocationChildren;
+  readonly origin: Readonly<{ contextId: string }>;
+  readonly view: InvocationView<I, O, ScopeOf<C>>;
+  readonly callView: ChildCall<I, O, ScopeOf<C>>;
   readonly #parentRelation?: InvocationRelation;
 
   get record(): CallRecord | undefined {
@@ -61,6 +66,26 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
 
   constructor(private readonly options: InvocationOptions<I, O, C>) {
     this.children = new InvocationChildren(options.context);
+    this.origin = Object.freeze({ contextId: options.context.id });
+    const context = invocationScope(options.context);
+    const invocation = this;
+    this.view = Object.freeze({
+      context,
+      origin: this.origin,
+      get sequence() {
+        return invocation.sequence;
+      },
+      children: this.children.view,
+    });
+    this.callView = Object.freeze({
+      context,
+      origin: this.origin,
+      get sequence() {
+        return invocation.sequence;
+      },
+      children: this.children.view,
+      run: () => this.run(),
+    });
     this.#parentRelation = options.parent?.invocation.children.attach(this, options.parent);
   }
 
@@ -104,6 +129,7 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
 
     let output: O;
     try {
+      if ('resources' in context) (context.resources as { start(): void }).start();
       output = await cycle(this, this.options.work, {
         signal: this.options.signal,
         validate: this.options.validate,

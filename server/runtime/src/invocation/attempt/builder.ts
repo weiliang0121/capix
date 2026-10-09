@@ -1,3 +1,4 @@
+import { attachInvocationResources } from '../resources.js';
 import type { ResourceRequirements } from '../../resource/bindings.js';
 import type { InvocationCapabilities } from '../capabilities.js';
 import { InvocationChangeEmitter } from '../changes.js';
@@ -27,6 +28,8 @@ export class AttemptInvocationBuilder {
     const context = this.contexts.create<I, O, R>(parent.context, request.input, parent.context.resources.select(request.requires ?? ({} as ResourceRequirements<R>)));
     const recording = this.capabilities.recording ? AttemptRecordHelper.recording<I, O>(this.capabilities.recording, request.description, parent) : undefined;
     const changes = this.capabilities.changes ? new InvocationChangeEmitter({ contextId: context.id, level: 'attempt', parentContextId: parent.context.id }, this.capabilities.changes) : undefined;
-    return new Invocation<I, O, AttemptContext<I, O, R>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, signal: context.signal, recording, changes, validate: () => this.contexts.check(parent.context) });
+    const invocation = new Invocation<I, O, AttemptContext<I, O, R>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, signal: context.signal, recording, changes, validate: () => this.contexts.check(parent.context) });
+    attachInvocationResources(invocation, context.resources, this.capabilities.recording);
+    return invocation;
   }
 }

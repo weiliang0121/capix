@@ -2,24 +2,28 @@
 
 独立的 TypeScript 运行链路实验：运行筛选、回答和记忆提取的模型调用，观察真实的输入、调用、返回和异常。
 
-观测用于理解当前系统。没有文件导入、导出或重放，也没有为离线文件设计的版本兼容、独立消息来源、恢复对象。
+观测用于理解当前系统。没有文件导入、导出或重放，也没有为离线文件设计的版本兼容或恢复对象。消息实体有独立身份与同步入口，记录不内嵌原文全集。
 
 ## 当前链路
 
 ```text
 initializeObserver(provider, messages?)
-  → RuntimeContext / Book / Clock / Recorder / Runtime
-  → ObserverRuntimeDefinition（资源供应与 E/O/A 业务声明）
-  → ObserverBinding（绑定本 Runtime，O/A 结构按需建立）
+  → 独立 Transcript / Memories / SelectionUsage / Book / Clock / Recorder
+  → ObserverRuntimeDefinition（单一 E 及其 O/A 业务声明）
+  → bindObserver（资源供应与来源捕获）→ 已装配 R
+  → O/A 结构在实际使用时建立
 
 外部 ExecutionRequest { messages }
-  → acceptExecutionInput：向已有 Transcript 追加一批新消息
+  → R.run：占用并检查配置
+  → E.entry.accept：通过正式消息资源接纳新消息
+  → accepted 通知 → E.entry.admit：按预算分段
+  → 固定本次资源 → Context / Invocation / 可选记录
   → 最后一条只读 user Message → Execution.input
   → 读取本轮开始时的 previousMemories
-  → selection.call({ message: input, memories: previousMemories }) → selectionOutput
-  → generation.call（内部组合消息、准备请求、调用模型、接纳结果）→ generationOutput
+  → Sequence 调用 selection({ message: input, memories: previousMemories }) → selectionOutput
+  → Sequence 调用 generation（内部组合消息、准备请求、调用模型、接纳结果）→ generationOutput
   → 追加 assistant 消息
-  → extraction.call（previousMemories + 当前 QA + 可见原文）
+  → Sequence 调用 extraction（previousMemories + 当前 QA + 可见原文）
   → 接纳变更 → Memories.apply 创建/更新并登记 MemoryRecord
   → 更新后的记忆供下一轮 selection 使用
   → generationOutput → Execution.output
@@ -27,17 +31,17 @@ initializeObserver(provider, messages?)
 
 Transcript 只增不改删，包含第一条和当前消息。接纳时检查角色及非空正文，复制冻结每条消息；批量追加先全部检查，保留原文。get/current 返回同一不可变消息，snapshot(end) 只复制前缀数组。current(role) 是该角色最新消息，不表示问答配对。
 
-本次 input 只有 role/content。ObserverBinding 在接纳与分段后捕获配置与 TranscriptRangeRef [activeStart,end)，范围包含本次输入；历史选择排除末条。每层通过声明的本层 resources.values 取得接口，不沿祖先 Context 取数。后续追加和配置变化不影响本次快照，核心 ExecutionContext 不保存服务来源。
+本次 input 只有 role/content。bindObserver 在接纳与分段后捕获配置与 TranscriptRangeRef [activeStart,end)，范围包含本次输入；历史选择排除末条。每层通过声明的本层 resources.values 取得接口，不沿祖先 Context 取数。后续追加和配置变化不影响本次快照，核心 ExecutionContext 不保存服务来源。
 
-服务启动时初始化一个本地 Observer 环境，Runtime 创建并持有 Transcript、Memories 和消息选择计数。可以传入初始消息数组，按正常接纳产生内容记录；初始化不产生调用 Context 或模型调用。环境、消息与记录跨请求保留，进程退出后消失。当前不提供多环境路由、持久化、清空或恢复接口。
+服务启动时初始化一个本地 Observer 环境，环境独立创建 Transcript、Memories 和消息选择计数，R 绑定正式资源访问。可以传入初始消息数组，按正常接纳产生内容记录；初始化不产生调用 Context 或模型调用。环境、消息与记录跨请求保留，进程退出后消失。当前不提供多环境路由、持久化、清空或恢复接口。
 
-请求只提交 1–501 条新消息，最后一条必须是 user；批量接纳失败不写入任何条目。HTTP 入口先检查本次配置，再接纳消息；当前仅接受串行调用，正在执行时拒绝新调用且不追加消息。已接纳消息不会因执行失败被删除。前端只编辑待追加草稿，已有消息从服务端读取，不再重发全部历史。
+请求只提交 1–501 条新消息，最后一条必须是 user；批量接纳失败不写入任何条目。HTTP 将请求交给 R.run；R 占用后由绑定检查配置、E entry 接纳，accepted 回调在分段和调用建立之前确认接纳。当前仅接受串行调用，忙时拒绝且不追加消息。已接纳消息不会因执行失败被删除。前端只编辑待追加草稿，已有消息从服务端读取，不再重发全部历史。
 
 ## 操作、运行与记录
 
-`Operation<I,O>` 提供统一 call 与抽象 execute。具体操作自行组合具名 Attempt，数量和顺序由工作决定。BCA 只用于分析这些动作，不再作为执行接口、阶段枚举或记录分类。
+Execution、Operation、Attempt 是固定运行结构。具体业务实现对应 Definition，声明资源、直接子项及 execute/receive，不继承运行结构，也不持有运行实体或调用构造器。绑定把声明接到结构上；每个实际调用另外建立 Context、Invocation 和可选记录。
 
-`Attempt<I,O>` 是最底层抽象执行类，call 委托复用的 AttemptInvocationBuilder，通过 AttemptContextBuilder 建立现场，再由独立 Invocation 调用具体 execute。实例定义 name/label/source/callee，持有稳定依赖；每次调用的输入、上下文、结果独立。内部只组合普通函数，不再细分执行层级。Operation 在构造时创建所需 Attempt 实例，跨调用复用；不建立统一的动作列表解释器或新的调度系统。
+O/A 结构按所在父绑定位置惰性建立，未走到的分支不创建结构或调用模型；已使用结构跨调用复用。业务拿到实际冻结的 Scope、InvocationView 和 ChildBindings，不能通过 Context 或子关系取得 Recorder、Record、原实体或生命周期修改方法。A 是最底层结构，不再细分执行层级。BCA 仍仅用于分析，不形成新的接口或调度系统。
 
 当前三个操作的真实组合：
 
@@ -54,12 +58,12 @@ ExtractMemory  → PrepareModelRequest → InvokeModel → AcceptModelOutput →
 ```ts
 const environment = initializeObserver(provider); // 请求到来前
 
-const generationOutput = await environment.execution.submit(() => acceptExecutionInput(environment.transcript, request), { settings, signal }); // Runtime 先占用，再接纳输入；消息范围在调用开始时固定。
+const generationOutput = await environment.runtime.run(request, { settings, signal }); // Runtime 先占用，再接纳输入；消息范围在调用开始时固定。
 ```
 
-环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 用 ObserverBinding.submit 的 started 回调取得 Context ID，在首条记录发布前绑定本次调用，按 contextId 筛选记录，结束时解除订阅。它不再通过 input 对象身份关联记录。
+环境初始化、请求接纳、执行组合和观测响应分别位于 observer/environment.ts、accept.ts、execution.ts、observe.ts。observeExecution 用 R.run 的 started 回调取得 Context ID，在首条记录发布前绑定本次调用，按 contextId 筛选记录，结束时解除订阅。它不再通过 input 对象身份关联记录。
 
-记录创建发生在 Context 创建之后、工作执行之前。绑定提供声明中的描述和实际 Operation 实例 ID，记录接线读取父调用的绑定记录。Context 不携带描述或声明；完成/失败仍通过本次 Invocation 更新记录，不新增长期关联表。
+调用记录在 Context 建立之后、工作之前创建；资源事实在本次调用记录建立后登记。绑定提供声明中的描述和实际 Operation 实例 ID，记录接线读取父调用的绑定记录。Context 不携带描述或声明；完成/失败仍通过本次 Invocation 更新记录，不新增长期关联表。
 
 可调用实例与 Context 为 1:N；开启记录时，每个 E/O/A Context 对应一条同层 Record。复用 Operation 的 operationInstanceId 保持不变，每次调用的 Context ID 与 Record ID 独立产生。记录容器保留所有调用，而非被新请求替换。
 
@@ -73,7 +77,7 @@ GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer �
 | ExecutionContext      | 本次 E 调用；信号、本层资源与私有构造归属                                 |
 | OperationContext      | 一次操作调用；私有父级、本层资源及 IO/状态                                |
 | AttemptContext        | 一次动作调用；私有父级、本层资源及 IO/状态                                |
-| Runtime               | 持有持续现场与根记录，提供运行占用和绑定入口                              |
+| Runtime               | 持有占用现场与根记录，提供已装配的单一业务运行入口                        |
 | Invocation            | 单次调用的现场、execute/receive 循环和调用记录生命周期                    |
 | Transcript / Memories | 各自内容的审查、变更与变更记录登记                                        |
 | Recorder              | 通用 add/update/subscribe、登记错误隔离；不解释记录种类或生成快照         |
@@ -83,13 +87,13 @@ GenerationOutput 只表达生成操作的输出契约，不是独立的 Answer �
 
 对应的 InvocationBuilder / ContextBuilder 建立本次调用与现场，`Invocation.run()` 统一入口检查、开始登记、本地循环和终态登记。开始登记失败不执行工作；成功结果登记失败不重新进入工作失败处理。工作失败且失败登记也失败时，AggregateError 保留两个异常。EOA 主链统一通过 Invocation 执行，构造器由 Runtime 装配后持续复用；每次调用的信号与输入不保存到构造器。具体结构见 [调用与上下文构造](docs/runtime-boundaries.md)。
 
-RuntimeContext 持有 Transcript、Memories 与 SelectionUsage；RuntimeRecord 只保留建立时间和直接执行引用。createRuntime 创建新范围，Runtime 构造器接管已有对象。记录关系为 Runtime → Execution → Operation → Attempt；实例存活与数据范围生命周期分别理解，不以一次执行完成结束 Runtime。
+RuntimeContext 只持有运行占用，环境独立持有 Transcript、Memories 与 SelectionUsage；RuntimeRecord 只保留建立时间和直接执行引用。createRuntime 只建立 R 的现场和可选记录，不创建内容实体；assembleRuntime 落实唯一 E 与资源绑定。记录关系为 Runtime → Execution → Operation → Attempt；实例存活与数据范围生命周期分别理解，不以一次执行完成结束 Runtime。
 
 Runtime 可以不接 Recorder。接入时，工作完成先更新 Context，再登记记录；登记异常不改写已发生的工作结果。observer/observe.ts 只将完整登记的工作失败作为观测结果返回。当前没有登记补偿或进程恢复。
 
 ## 本地执行与接收
 
-三层调用采用同一结构：call → execute → receive → complete/fail。receive 接收本轮成功结果或失败，各具体类决定后续；默认返回成功结果或传播原错误。需要继续时显式返回 context.continueWith(nextInput, reason)。没有通用 retry/skip/fallback 策略表。
+三层调用采用同一结构：建立 Invocation → execute → receive → complete/fail。receive 接收本轮成功结果或失败，由具体声明决定后续；默认返回成功结果或传播原错误。需要继续时显式返回 context.continueWith(nextInput, reason)。没有通用 retry/skip/fallback 策略表。
 
 maxRounds 默认 1，具体类可设为 2，均包含首次执行；不接受更大值。每轮开始检查取消。次数耗尽、无效继续原因、接收自身异常明确退出；登记失败不能触发本地恢复。原有模型单次超时仍有效，这不是通用的抢占或恢复机制。筛选和记忆仍为一次；GenerateAnswer 在明确的模型输出拒绝条件下最多执行两轮，第二轮不重做筛选和上下文组装。
 
@@ -101,22 +105,30 @@ maxRounds 默认 1，具体类可设为 2，均包含首次执行；不接受更
 
 ## 事实引用与观测
 
-记录不要求自包含。ExecutionRecord 保存本次 settings 快照与固定 Transcript 范围引用；OperationRecord 通过 executionId 关联，AttemptRecord 通过 operationId 关联，不重复保存这两项。
+资源记录通过公开访问形式形成：通用部分管理归属、供给、阶段和顺序，资源模块决定具体正文。共享供给不共享本调用端点或来源；静态声明不产生运行记录，bound/available 与实际 read/invoke/apply 分别表达。无 Recorder 时业务仍能访问资源，内容变化仍可携带 contextId 来源。
 
-普通过程数据在登记边界复制冻结，包括简单输入消息与实际模型请求。TranscriptRangeRef 是不可变范围引用，保持原实例，不遍历或复制整个 Transcript。历史选择从执行范围读取候选，组装操作输出选中的普通消息内容和索引，不把整个集合引用放回操作 IO。
+消息当前对话在初始化时加载并持续同步，其他集合按 UID 显式加载；记录先到、原文未加载是正常状态。客户端接收层分别维护记录与消息副本，binding 按 UID/固定范围组合，组件不自行解算记录。快照与增量从同一连接接续，缺口明确重建基线，不积攒未加载实体的全部历史。
+
+记录不要求自包含。ExecutionRecord 保存通用调用事实；本次配置和固定 Transcript 定位范围由资源事实保存；OperationRecord 通过 executionId 关联，AttemptRecord 通过 operationId 关联，不重复保存这两项。
+
+普通过程数据在登记边界复制冻结，包括简单输入消息与实际模型请求。TranscriptRangeRef 只用于内部捕获；记录使用 transcriptId/start/end/revision 普通定位数据，不复制整个 Transcript。历史选择从执行范围读取候选，组装操作输出选中的普通消息内容和索引，不把整个集合引用放回操作 IO。
 
 O/A 的父 Context 仅用于内部归属和活动检查，工作通过本层申请的资源访问配置与内容。Invocation.children 持有直接子调用及父层接收状态，Sequence 逐项执行并等待接收。父级已结束、跨 Runtime 现场和重复结束仍直接检查；不增加通用调度或权限体系。
 
-ExecutionRecordHelper.snapshot 查询已有记录；HTTP observeTranscript 在展示时展开执行范围为 start/end/messages。执行详情的 EXECUTION CONTEXT 展示配置与范围，输入区域单独显示本次消息。当前没有持久化、独立来源副本或恢复机制。
+ExecutionRecordHelper.snapshot 查询已有记录；HTTP 不展开实体；客户端通过独立消息同步按 ID/范围组合正文。执行详情的 EXECUTION CONTEXT 展示配置与范围，输入区域单独显示本次消息。消息副本只在当前客户端内存中保持同步，不提供持久化或恢复运行。
 
-浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。可选 GET /api/observe 首次发送一致基线，随后发送消息、记忆、调用进度及记录变化的明确增量；不通过快照比较推断。POST /api/run 独立交付回答及处理状态，对话不依赖观测。基线只预取活动执行记录，已完成详情与源码按需查询。接收端检查归属与顺序，缺口最多自动重建一次基线。详见 [观测增量](docs/observation-increments.md)。
+浏览器据同一组记录投影时序与详情。记录状态、输入输出、错误是观察依据；耗时、CallSpan 和 TraceNode 是派生视图。可选 GET /api/observe 首次发送观测基线，随后发送记忆、调用进度及记录变化的明确增量；消息正文走独立 GET /api/transcript/observe，以集合 UID 与 revision 接纳基线和增量；不通过快照比较推断。POST /api/run 独立交付回答及处理状态，对话不依赖观测。基线只预取活动执行记录，已完成详情与源码按需查询。接收端检查归属与顺序，缺口最多自动重建一次基线。详见 [观测增量](docs/observation-increments.md)。
 
 ```text
-BaseRecord<T>：id + value
-  ExecutionRecord：整次运行，contextId；value 中保存本次配置与消息范围
+BaseRecord<T>：id + parentId + value
+  RuntimeRecord：R 范围创建事实和直接执行引用
+  ExecutionRecord：整次运行，contextId；value保存通用调用事实；资源事实通过parentId关联
   OperationRecord：一次操作调用，contextId / executionId / operationInstanceId / parentOperationId?
   AttemptRecord：一次动作调用，contextId / operationId / name / label
   InvocationBoundaryRecord：一次调用边界，executionId / callId / sequence / occurredAt / offsetMs；value.type
+  ResourceRecord：资源访问事实，parentId / access / supplyId / sequence / phase；资源定义正文
+  TranscriptRecord：消息集合变化，transcriptId / revision；范围与分段事实，不携带原文全集
+  MemoryRecord：已落实记忆变化，memoriesId / sequence / memoryId；解释与结果
 ```
 
 operationInstanceId 指向可复用的 Operation 实例；OperationRecord.id 和 OperationContext.id 各自标识一次调用。Context 直接引用上层 Context；Record 归属 ID 指向 Record。三种记录自身 ID 与 Context ID 不同，顶层 contextId 关联对应调用现场。状态在调用记录顶层，由 InvocationRecord 共用实现；BaseRecord 基类不规定状态。
@@ -166,9 +178,9 @@ pnpm check
 
 ```text
 protocol/src/               跨端消息、记录、观测与 HTTP 契约
-server/runtime/src/         EOA、Context、调用循环、Transcript、Memory、记录与错误
-client/runtime/src/         Headless 客户端：接入接口、提交、查询、观测状态与快照缓存
-client/http/src/            HTTP 基类、Observer 业务子类、响应接纳与记录流校验
+server/runtime/src/         REOA、声明与绑定、Context、调用、资源、内容实体及记录
+client/runtime/src/         Headless 客户端：提交、独立实体同步、观测接收与详情缓存
+client/http/src/            HTTP 基类、对话/观测传输、消息实体接口与流式接纳
 services/observer/src/       当前场景、具体操作/意图、模型适配器与 HTTP 入口
 apps/observer/src/           React 界面、shadcn/ui 源码组件、图谱与详情投影
 docs/                       对象职责与协议说明
@@ -179,7 +191,7 @@ test/                       运行、边界、HTTP 和前端纯逻辑测试
 
 这次借鉴 CAPiX 的依赖方向与工程组织，不迁入 Graph/TRS，不创建公共 UI 包、调度与持久化能力。Observer 当前运行对象和场景语义保持不变。客户端 Runtime 从原 React 页面抽离现有能力；应用由绑定层订阅 Runtime、整理观测数据并写入 Zustand Store；组件只消费 Store 与明确的 props，提交与查询通过绑定层命令进入 Runtime。使用方式与职责见 [客户端 Runtime](docs/client-runtime.md)。
 
-通用数据操作优先使用 es-toolkit 的公开分类入口，直接具名导入，不额外建立工具转发层。当前已用于记录字段投影、消息排序/去重及记忆正文比较；服务端基础类型判断统一使用库的同语义函数，分类入口缺少的数组、对象范围、有限数和安全整数判断通过 compat 具名导入。简单展开、原生集合和领域类身份检查仍保留。pick 仅取自身字段，类 getter 显式读取；正文比较保持来源索引顺序。快照、引用保留、错误转换继续由对应概念负责，不默认套用深合并或深拷贝。浏览器模块由 Vite 统一构建，工具库仍通过公开入口使用。
+通用数据操作优先使用 es-toolkit 的公开分类入口，直接具名导入，不额外建立工具转发层。当前已用于记录字段投影、消息排序/去重及记忆正文比较；服务端基础类型判断统一使用库的同语义函数，分类入口缺少的数组、对象范围、有限数和安全整数判断通过 compat 具名导入。简单展开、原生集合和领域类身份检查仍保留。pick 仅取自身字段，类 getter 显式读取；正文比较保持来源索引顺序。快照、实体定位、错误转换继续由对应概念负责，不默认套用深合并或深拷贝。浏览器模块由 Vite 统一构建，工具库仍通过公开入口使用。
 
 服务端错误转换、Provider、Transcript、Memory 和记录正文使用同语义的标准类型谓词；错误字段由固定字段表和 zipObject 组织。跨 realm 原生错误仍用 Node 的 isNativeError，专用对象范围、循环检测、访问器隔离和转换预算保留原有规则。工具函数替换不改变错误代码、正文或身份语义。
 
@@ -191,11 +203,11 @@ test/                       运行、边界、HTTP 和前端纯逻辑测试
 
 ## 回答后的记忆提取
 
-第三次模型调用返回零到四项创建或更新提议，每项明确目标、变化说明、依据与变更后完整内容。Memories.apply 先检查整批再落实；Runtime 持有的 Memories 保存持续身份的 Memory，更新不新建身份。每次落实产生独立 MemoryRecord，继承 BaseRecord，关联 memoryId、executionId、operationId，保存本次变化说明和结果快照。
+第三次模型调用返回零到四项创建或更新提议，每项明确目标、变化说明、依据与变更后完整内容。Memories.apply 先检查整批再落实；环境独立持有的 Memories 保存持续身份的 Memory，更新不新建身份。每次落实产生独立 MemoryRecord，继承 BaseRecord，关联 memoryId、executionId、operationId，保存本次变化说明和结果快照。
 
-页面直接读取这些记录显示变化，点击记忆体可以查看当前理解、历次变化及调用关联。每轮开始从Runtime 的 Memories 取得 previousMemories 的正文快照，筛选、回答和本轮提取使用同一份旧记忆。筛选输入为 message + memories，原始 history 从执行固定范围读取；记忆不插入 Transcript，计数不发送给模型。生成接收 message + 选中原文 + previousMemories；提取接收 previousMemories + 本轮 QA + 当前段筛选原文，不沿来源加载旧段，落实后下一轮筛选读取更新后的记忆。三次实际模型请求都由原有 AttemptRecord 记录，不读取 MemoryRecord 推进。
+页面直接读取这些记录显示变化，点击记忆体可以查看当前理解、历次变化及调用关联。每轮通过绑定的记忆快照资源取得 previousMemories，筛选、回答和本轮提取使用同一份旧记忆。筛选输入为 message + memories，原始 history 从执行固定范围读取；记忆不插入 Transcript，计数不发送给模型。生成接收 message + 选中原文 + previousMemories；提取接收 previousMemories + 本轮 QA + 当前段筛选原文，不沿来源加载旧段，落实后下一轮筛选读取更新后的记忆。三次实际模型请求都由原有 AttemptRecord 记录，不读取 MemoryRecord 推进。
 
-可在配置密钥后执行 `pnpm build` 和 `node --env-file-if-exists=.env test/live/memory.mjs` 检查三轮真实 QA。该检查直接调用产品的 ObserverBinding，不替换操作、提示词或流程；输出记录到本地 traces/memoryLoop（可用第一个参数指定新目录），失败停止，不修复或重试。不随普通测试访问模型。
+可在配置密钥后执行 `pnpm build` 和 `node --env-file-if-exists=.env test/live/memory.mjs` 检查三轮真实 QA。该检查使用产品装配并通过 R.run 提交请求，不替换操作、提示词或流程；输出记录到本地 traces/memoryLoop（可用第一个参数指定新目录），失败停止，不修复或重试。不随普通测试访问模型。
 
 门店与培训交叉变更的 16 轮串行场景：`node --env-file-if-exists=.env test/live/memory.mjs traces/memoryContinuity test/live/scenarios/continuity.json`。场景文件仅提供用户消息和事后参考，参考不发送给模型；测试仍调用同一产品执行，逐轮核对记忆进入筛选及提取的实际请求。
 
@@ -211,6 +223,6 @@ value.resultOf: 2                   → 最终采用该正文
 
 `resultOf` 是本条记录内的过程序号，只能指向直接保存正文的条目。自定义 receive 独立记录自己的结果，最终引用该结果；即使原地修改并返回同一对象，也保留执行与接收两个时刻的快照。前端投影与查询通过 `protocol/src/records/invocation.ts` 的 `readOutput` 读取，快照中不重新展开。输入和错误正文保持现有记录方式，不做跨记录去重。
 
-运行实例、调用通道与内容变化的当前职责见 [运行边界](docs/runtime-boundaries.md)。Runtime 的消息与记忆跨执行保留；Invocation 统一调用过程；内容对象自己审查、落实并记录变化。Recorder 由环境装配，不属于某个调用的生命周期。
+运行实例、调用通道与内容变化的当前职责见 [运行边界](docs/runtime-boundaries.md)。独立消息与记忆实体跨执行保留；Invocation 统一调用过程；内容对象自己审查、落实并记录变化。Recorder 由环境装配，不属于某个调用的生命周期。
 
 记录机制、类型特化与观察发布的分离见 [记录边界](docs/recording.md)。

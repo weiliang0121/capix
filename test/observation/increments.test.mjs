@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { ChangeObserver, createRuntime, Recorder, RecordBook, ExecutionRecordHelper, observeTranscript, Transcript, Memories, ChangeCaptureError } from '@capix-observer/runtime';
+import { ChangeObserver, createRuntime, Recorder, RecordBook, ExecutionRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix-observer/runtime';
 import { initializeObserver, ObservationFeed, acceptExecutionInput, createObserverServer } from '@capix-observer/service';
 import { ObservationReplica, ObservationSequenceError, ClientRuntime } from '@capix-observer/client-runtime';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
@@ -9,7 +9,7 @@ import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-obse
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 2048, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'fixture', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-const wire = (value) => JSON.parse(JSON.stringify(value, observeTranscript));
+const wire = (value) => JSON.parse(JSON.stringify(value));
 const memoryChange = (content, id = null, indexes = [0]) => ({ action: id ? 'update' : 'create', memoryId: id, change: 'new evidence', sourceIndexes: indexes, result: { topic: 'topic', content, sourceIndexes: indexes } });
 
 function fixture(messages = []) {
@@ -24,7 +24,7 @@ function fixture(messages = []) {
           return raw({ historyIndexes: round > 1 ? input.history.slice(0, 2).map((entry) => entry.index) : [] });
         }
         if (purpose === 'answer') return round === 3 ? { ...raw({}), content: 'invalid model output' } : raw({ kind: 'answer', content: `answer ${round}` });
-        const id = environment.runtime.context.memories.values()[0]?.id ?? null;
+        const id = environment.memories.values()[0]?.id ?? null;
         return raw({ memories: [memoryChange(`memory ${round}`, id, [environment.transcript.length - 2, environment.transcript.length - 1])] });
       },
     },
@@ -33,25 +33,23 @@ function fixture(messages = []) {
   return environment;
 }
 async function run(environment, content) {
-  await environment.execution.converse(
-    () => acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] }),
-    { settings, transcript: environment.transcript },
-    () => {},
-  );
+  await environment.runtime.run({ messages: [{ role: 'user', content }] }, { settings });
 }
 
 test('all live sources remain observable without Recorder and do not serialize arbitrary invocation IO', async () => {
   const changes = new ChangeObserver();
-  const runtime = createRuntime({ changes, messages: [{ role: 'user', content: 'evidence' }] });
+  const runtime = createRuntime({ changes });
+  const transcript = new Transcript([{ role: 'user', content: 'evidence' }], { changes });
+  const memories = new Memories(transcript, { changes });
   const opaque = new Map([['external', () => {}]]);
   const invocation = runtime.executionInvocations.create(opaque, {
     context: { settings: {} },
     work: {
       maxRounds: 1,
       execute() {
-        const [memory] = runtime.context.memories.apply([memoryChange('one')]);
-        runtime.context.memories.apply([memoryChange('two', memory.id)]);
-        runtime.context.transcript.append({ role: 'assistant', content: 'answer' });
+        const [memory] = memories.apply([memoryChange('one')]);
+        memories.apply([memoryChange('two', memory.id)]);
+        transcript.append({ role: 'assistant', content: 'answer' });
         return opaque;
       },
     },
@@ -101,7 +99,7 @@ test('record registration captures its child and parent reference together; proc
   );
 });
 
-test('multi-round deltas reconstruct records and content exactly; completed execution bodies stay out of reconnect baseline', async () => {
+test('multi-round observation deltas reconstruct records and content locations exactly; completed execution bodies stay out of reconnect baseline', async () => {
   const environment = fixture();
   const feed = new ObservationFeed(environment, environment.changes);
   const frames = [];
@@ -123,8 +121,8 @@ test('multi-round deltas reconstruct records and content exactly; completed exec
     await settle();
     assert.equal(failure, undefined);
     assert.deepEqual(
-      replica.overview.messages.map((entry) => entry.message),
-      environment.transcript.snapshot(),
+      replica.overview.messages.map((entry) => entry.index),
+      environment.transcript.snapshot().map((_, index) => index),
     );
     assert.equal(replica.memory.items.length, 1);
     assert.equal(replica.memory.items[0].content, 'memory 4');
@@ -159,7 +157,7 @@ test('receiver rejects gaps, foreign scopes and invalid batches without partiall
     frame ??= value;
   });
   const before = ObservationReplica.receive(undefined, frame);
-  const append = { type: 'transcript', transcriptId: frame.transcript.id, revision: frame.transcript.revision + 1, occurredAt: new Date().toISOString(), change: { kind: 'messages-appended', start: 0, messages: [{ role: 'user', content: 'new' }] } };
+  const append = { type: 'transcript', transcriptId: frame.transcript.id, revision: frame.transcript.revision + 1, occurredAt: new Date().toISOString(), change: { kind: 'messages-appended', start: 0, end: 1 } };
   const delta = { type: 'delta', scopeId: frame.scopeId, sequence: frame.sequence + 1, changes: [append] };
   try {
     assert.throws(() => ObservationReplica.receive(before, { ...delta, sequence: delta.sequence + 1 }), ObservationSequenceError);
@@ -241,7 +239,9 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
     requests.push(new URL(url).pathname);
     return fetch(url, init);
   });
-  const runtime = new ClientRuntime({ conversation: new ConversationHttpTransport(base), observation: observed });
+  const conversation = new ConversationHttpTransport(base);
+  const runtime = new ClientRuntime({ conversation, transcripts: conversation, observation: observed });
+  t.after(() => runtime.stopTranscript());
   const stop = runtime.startObservation();
   t.after(stop);
   await runtime.initialize();
@@ -267,22 +267,28 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
   assert.equal((await runtime.loadExecution(id)).execution.status, 'succeeded');
 });
 
-test('large initial baseline survives HTTP backpressure and preserves full message text', async (t) => {
+test('large entity baseline preserves full message text while observation carries only locations', async (t) => {
   const content = '中文'.repeat(50000);
   const base = await serve(t, fixture([{ role: 'user', content }]));
   const controller = new AbortController();
   t.after(() => controller.abort());
   let frame;
-  await new ObservationHttpTransport(base)
-    .observe((value) => {
-      frame = value;
-      controller.abort();
-    }, controller.signal)
+  await new ConversationHttpTransport(base)
+    .observeTranscript(
+      undefined,
+      (value) => {
+        frame = value;
+        controller.abort();
+      },
+      controller.signal,
+    )
     .catch((error) => {
       if (!controller.signal.aborted) throw error;
     });
   assert.equal(frame.type, 'baseline');
-  assert.equal(frame.overview.messages[0].message.content, content);
+  assert.equal(frame.snapshot.messages[0].content, content);
+  const overview = await new ObservationHttpTransport(base).overview();
+  assert.equal('message' in overview.messages[0], false);
 });
 
 test('client performs one bounded baseline retry on a sequence gap and ignores the old session', async () => {
@@ -297,6 +303,7 @@ test('client performs one bounded baseline retry on a sequence gap and ignores t
   let oldAccept;
   const runtime = new ClientRuntime({
     conversation: {},
+    transcripts: {},
     observation: {
       async observe(accept, signal) {
         connections++;
@@ -325,6 +332,7 @@ test('repeated sequence failure stops after one retry instead of looping forever
   let connections = 0;
   const runtime = new ClientRuntime({
     conversation: {},
+    transcripts: {},
     observation: {
       async observe(accept) {
         connections++;

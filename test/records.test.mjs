@@ -168,7 +168,7 @@ test('construction does not execute; repeated calls share the callable identity,
   value.x = 9;
   assert.equal(readOutput(ExecutionRecordHelper.observe(runtime.recording, callFor(execution)).execution.value).x, 1);
   assert.equal(readOutput(past.execution.value), undefined);
-  await assert.rejects(node.call(callFor(execution), value), /ended/);
+  await assert.rejects(async () => node.call(callFor(execution), value), /ended/);
 });
 
 test('one node overlaps calls within and across executions without mixing input or record ownership', async () => {
@@ -250,7 +250,7 @@ test('Paired operations reject foreign parents, duplicate endings and ending bef
 test('Observer execution observes execution, operations and boundaries from the same records', async () => {
   const facts = await execute();
   validateSnapshot(facts);
-  assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations']);
+  assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations', 'resources']);
   assert.equal(facts.operations.length, 3);
   assert.equal(facts.attempts.length, 11);
   const sequence = projectExecution(facts).callSequence;

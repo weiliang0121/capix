@@ -1,7 +1,7 @@
 import { ModelSettingsResource } from '../../model/resources.js';
 import type { ResourceRequirements } from '@capix-observer/runtime';
 import type { ModelRequestResources } from '../../observer/resources.js';
-import { AttemptDefinition, type AttemptContext } from '@capix-observer/runtime';
+import { AttemptDefinition, type AttemptScope } from '@capix-observer/runtime';
 
 import type { ModelRequest } from '../../model/types.js';
 import { checkCapacity } from '../../model/capacity.js';
@@ -24,7 +24,7 @@ export class PrepareModelRequest<I, R extends ModelRequestResources = ModelReque
     this.requires = requires;
   }
 
-  execute(context: AttemptContext<I, ModelRequest, R>): ModelRequest {
+  execute(context: AttemptScope<I, ModelRequest, R>): ModelRequest {
     const resources = context.resources.values;
     const request = this.createRequest(context.currentInput, resources);
     checkCapacity(request, resources.settings);

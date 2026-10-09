@@ -3,9 +3,12 @@ import type { MemoryContent } from './memory.js';
 import type { BaseRecord, ProcessRecord } from './records.js';
 import type { RuntimeErrorValue } from './errors.js';
 
-export type TranscriptEvent = Readonly<{ type: 'transcript'; transcriptId: string; revision: number; occurredAt: string; change: Readonly<{ kind: 'messages-appended'; start: number; messages: readonly Readonly<Message>[] }> | Readonly<{ kind: 'segment-started'; previousStart: number; start: number; end: number }> }>;
-export type MemoryEvent = Readonly<{ type: 'memory'; memoriesId: string; sequence: number; occurredAt: string; change: Readonly<{ action: 'create' | 'update'; memoryId: string; explanation: string; sourceIndexes: readonly number[]; result: MemoryContent }> }>;
-export type RecordKind = 'runtime' | 'execution' | 'operation' | 'attempt' | 'invocation-boundary' | 'transcript' | 'memory' | 'custom';
+export interface RuntimeOrigin {
+  readonly contextId: string;
+}
+export type TranscriptEvent = Readonly<{ type: 'transcript'; transcriptId: string; revision: number; occurredAt: string; origin?: RuntimeOrigin; change: Readonly<{ kind: 'messages-appended'; start: number; messages: readonly Readonly<Message>[] }> | Readonly<{ kind: 'segment-started'; previousStart: number; start: number; end: number }> }>;
+export type MemoryEvent = Readonly<{ type: 'memory'; memoriesId: string; sequence: number; occurredAt: string; origin?: RuntimeOrigin; change: Readonly<{ action: 'create' | 'update'; memoryId: string; explanation: string; sourceIndexes: readonly number[]; result: MemoryContent }> }>;
+export type RecordKind = 'runtime' | 'execution' | 'operation' | 'attempt' | 'invocation-boundary' | 'transcript' | 'memory' | 'resource' | 'custom';
 export interface RecordEntry {
   readonly kind: RecordKind;
   readonly data: BaseRecord;

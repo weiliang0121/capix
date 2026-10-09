@@ -8,7 +8,7 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
   };
   if (!value || typeof value !== 'object') return fail();
   const f = value as RuntimeSnapshot;
-  if (!f.execution || typeof f.execution.id !== 'string' || !f.execution.id || !f.execution.value || typeof f.execution.value.startedAt !== 'string' || !Object.hasOwn(f.execution.value, 'settings') || !Array.isArray(f.operations) || !Array.isArray(f.attempts) || !Array.isArray(f.events)) return fail();
+  if (!f.execution || typeof f.execution.id !== 'string' || !f.execution.id || !f.execution.value || typeof f.execution.value.startedAt !== 'string' || !Array.isArray(f.operations) || !Array.isArray(f.attempts) || !Array.isArray(f.events) || !Array.isArray(f.resources)) return fail();
   const executionId = f.execution.id;
   const operations = new Map<string, OperationRecord>();
   const parents = new Map<string, string>();
@@ -44,8 +44,8 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
     if (!body || !Array.isArray(body.processes) || typeof body !== 'object' || !Object.hasOwn(body, 'input') || (hasOutput(body) && Object.hasOwn(body, 'error')) || (Object.hasOwn(body, 'output') && Object.hasOwn(body, 'resultOf')) || (Object.hasOwn(body, 'error') && (!body.error || typeof body.error.code !== 'string' || typeof body.error.message !== 'string'))) return fail();
   }
   for (const body of bodies.values()) {
-    let previousRound = 0,
-      previousTime = 0;
+    let previousRound = 0;
+    let previousTime = 0;
     for (const [index, process] of body.processes.entries()) {
       if (!process || process.sequence !== index + 1 || !Number.isInteger(process.round) || process.round < previousRound || process.round > 2 || !Number.isFinite(process.offsetMs) || process.offsetMs < previousTime || typeof process.occurredAt !== 'string') return fail();
       const valid = process.stage === 'execute' ? ['start', 'return', 'throw'] : process.stage === 'receive' ? ['return', 'throw', 'continue'] : process.stage === 'control' ? ['stop'] : [];
@@ -76,9 +76,9 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
   for (const op of operations.values()) {
     if (op.parentOperationId !== undefined && !operations.has(op.parentOperationId)) return fail();
   }
-  const active = new Set<string>(),
-    entered = new Set<string>(),
-    ended = new Set<string>();
+  const active = new Set<string>();
+  const entered = new Set<string>();
+  const ended = new Set<string>();
   const eventIds = new Set<string>();
   let time = 0;
   for (const [i, event] of f.events.entries()) {
@@ -100,5 +100,29 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
   if (entered.size !== bodies.size) return fail();
   for (const [id, body] of bodies) {
     if (!ended.has(id) && (statuses.get(id) !== 'running' || hasOutput(body) || Object.hasOwn(body, 'error'))) return fail();
+  }
+  const resourceIds = new Set<string>();
+  const resourceSequences = new Map<string, number>();
+  const accesses = new Map<string, string>();
+  const interactions = new Map<string, string>();
+  for (const fact of f.resources) {
+    if (!fact || typeof fact.id !== 'string' || !fact.id || bodies.has(fact.id) || contextIds.has(fact.id) || eventIds.has(fact.id) || resourceIds.has(fact.id) || typeof fact.parentId !== 'string' || !bodies.has(fact.parentId) || typeof fact.access !== 'string' || !fact.access || typeof fact.supplyId !== 'string' || !fact.supplyId || typeof fact.occurredAt !== 'string' || !Number.isFinite(Date.parse(fact.occurredAt)) || !Object.hasOwn(fact, 'value')) return fail();
+    if (fact.sequence !== (resourceSequences.get(fact.parentId) ?? 0) + 1) return fail();
+    resourceSequences.set(fact.parentId, fact.sequence);
+    resourceIds.add(fact.id);
+    const accessKey = JSON.stringify([fact.parentId, fact.supplyId, fact.access]);
+    if (fact.phase === 'bound') {
+      if (accesses.has(accessKey) || fact.interactionId !== undefined) return fail();
+      accesses.set(accessKey, 'bound');
+    } else if (fact.phase === 'available' || fact.phase === 'unavailable') {
+      if (accesses.get(accessKey) !== 'bound' || fact.interactionId !== undefined) return fail();
+      accesses.set(accessKey, fact.phase);
+    } else if (fact.phase === 'started') {
+      if (accesses.get(accessKey) !== 'available' || typeof fact.interactionId !== 'string' || !fact.interactionId || interactions.has(fact.interactionId)) return fail();
+      interactions.set(fact.interactionId, accessKey);
+    } else if (fact.phase === 'returned' || fact.phase === 'threw') {
+      if (typeof fact.interactionId !== 'string' || interactions.get(fact.interactionId) !== accessKey) return fail();
+      interactions.delete(fact.interactionId);
+    } else return fail();
   }
 }

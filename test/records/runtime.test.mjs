@@ -8,12 +8,12 @@ const call = (runtime, work = identity) => runtime.executionInvocations.create('
 
 test('Runtime construction retains an established context and record without registering a new scope', () => {
   const recorder = new Recorder(new RecordBook());
-  const original = createRuntime({ recorder, messages: [{ role: 'user', content: 'hello' }] });
+  const original = createRuntime({ recorder });
   const before = [...recorder.book.values()];
   const runtime = new Runtime(original.context, { recording: { recorder, record: original.record } });
   assert.ok(runtime.context instanceof RuntimeContext);
   assert.equal(runtime.context, original.context);
-  assert.equal(runtime.context.transcript.get(0).content, 'hello');
+  assert.equal(runtime.context.transcript, undefined);
   assert.equal(runtime.record, original.record);
   assert.deepEqual([...recorder.book.values()], before);
   assert.deepEqual(Object.keys(runtime.record.value), ['createdAt']);
@@ -103,10 +103,10 @@ test('execution registration requires a Runtime parent and failed registration l
 });
 
 test('Runtime context and execution remain usable without recording', async () => {
-  const runtime = createRuntime({ messages: [{ role: 'user', content: 'hello' }] });
+  const runtime = createRuntime();
   assert.ok(runtime.context instanceof RuntimeContext);
   assert.equal(runtime.record, undefined);
   assert.equal(runtime.recorder, undefined);
-  assert.equal(runtime.context.transcript.length, 1);
+  assert.equal(runtime.context.transcript, undefined);
   assert.equal(await call(runtime).run(), 'input');
 });

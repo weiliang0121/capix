@@ -3,7 +3,7 @@ import type { HistoryResources } from '../../observer/resources.js';
 import { isSafeInteger } from 'es-toolkit/compat';
 import type { Selection } from '../../model/types.js';
 import type { Message } from '@capix-observer/protocol';
-import { type AttemptContext, AttemptDefinition } from '@capix-observer/runtime';
+import { type AttemptScope, AttemptDefinition } from '@capix-observer/runtime';
 
 export interface AssembledContext {
   readonly message: Readonly<Message>;
@@ -20,7 +20,7 @@ export class AssembleContext extends AttemptDefinition<Selection, AssembledConte
 
   readonly requires = AssembleContext.requires;
 
-  execute(context: AttemptContext<Selection, AssembledContext, HistoryResources>): AssembledContext {
+  execute(context: AttemptScope<Selection, AssembledContext, HistoryResources>): AssembledContext {
     const range = context.resources.values.history;
     if (!range || range.length === 0) throw new Error('Execution Transcript range is required');
     const selectedMessages = context.currentInput.historyIndexes.map((index) => {

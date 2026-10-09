@@ -1,13 +1,12 @@
-import { isFunction } from 'es-toolkit/predicate';
-import type { Message, RuntimeSnapshot } from '@capix-observer/protocol';
+import type { RuntimeSnapshot } from '@capix-observer/protocol';
 import type { InvocationRecordHelper } from '@capix-observer/runtime';
 
 import { InvocationBoundaryRecord, ExecutionRecord, OperationRecord, AttemptRecord, ExecutionRecordHelper } from '@capix-observer/runtime';
 
-import type { ObserverExecutionOptions, ObserverBinding } from './binding.js';
+import type { ObserverExecutionOptions, ObserverRuntime } from './binding.js';
 
 /** Observe one invocation by Context identity, independent of its input value. */
-export async function observeExecution(execution: ObserverBinding, recording: InvocationRecordHelper, input: Readonly<Message> | (() => Readonly<Message>), options: ObserverExecutionOptions, publish: (snapshot: RuntimeSnapshot) => void = () => {}): Promise<RuntimeSnapshot> {
+export async function observeExecution(runtime: ObserverRuntime, recording: InvocationRecordHelper, input: unknown, options: ObserverExecutionOptions, publish: (snapshot: RuntimeSnapshot) => void = () => {}): Promise<RuntimeSnapshot> {
   let contextId: string | undefined;
   let latest: RuntimeSnapshot | undefined;
   const unsubscribe = subscribeExecutions(recording, (snapshot) => {
@@ -17,8 +16,10 @@ export async function observeExecution(execution: ObserverBinding, recording: In
   });
   try {
     try {
-      await execution.submit(isFunction(input) ? input : () => input, options, (context) => {
-        contextId = context.id;
+      await runtime.run(input, options, {
+        started: (context) => {
+          contextId = context.id;
+        },
       });
     } catch (error) {
       if (latest?.execution.status !== 'failed' || latest.events.at(-1)?.callId !== latest.execution.id || latest.events.at(-1)?.value.type !== 'throw') throw error;

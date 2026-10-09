@@ -3,10 +3,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConfigurationResponse, ErrorResponse, ModelSettings, ConversationUpdate, SourceResponse, TranscriptResponse } from '@capix-observer/protocol';
-import { ExecutionRecord, ExecutionRecordHelper, isObject, observeMemory, observeTranscript, RuntimeError } from '@capix-observer/runtime';
+import type { ConfigurationResponse, ErrorResponse, ModelSettings, ConversationUpdate, SourceResponse } from '@capix-observer/protocol';
+import { ExecutionRecord, ExecutionRecordHelper, isObject, observeMemory, RuntimeError } from '@capix-observer/runtime';
 import type { initializeObserver } from '../observer/environment.js';
-import { acceptExecutionInput } from '../observer/accept.js';
+import { transcriptSnapshot } from '../observer/transcript/feed.js';
 import { ObservationFeed } from '../observer/feed.js';
 import { observationWriter } from './observation-writer.js';
 import { observeOverview } from '../observer/overview.js';
@@ -66,13 +66,25 @@ export function createObserverServer(options: ObserverServerOptions) {
       res.flushHeaders();
       return;
     }
-    if (req.method === 'GET' && url.pathname === '/api/memory') return json(res, 200, observeMemory(observer.runtime.context.memories, observer.book));
+    if (req.method === 'GET' && url.pathname === '/api/memory') return json(res, 200, observeMemory(observer.memories, observer.book));
     if (req.method === 'GET' && url.pathname === '/api/executions') return json(res, 200, observeOverview(observer));
-    if (req.method === 'GET' && url.pathname === '/api/transcript') return json(res, 200, { messages: observer.transcript.snapshot() } satisfies TranscriptResponse);
+    if (req.method === 'GET' && (url.pathname === '/api/transcript' || url.pathname === '/api/transcript/observe')) {
+      const id = url.searchParams.get('id');
+      if (id && id !== observer.transcript.id) return json(res, 404, { error: '未找到消息集合。' } satisfies ErrorResponse);
+      if (url.pathname === '/api/transcript') return json(res, 200, transcriptSnapshot(observer.transcript));
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+      const write = observationWriter(res);
+      const unsubscribe = feed.connectTranscript((frame) => {
+        if (!res.destroyed) write(frame);
+      });
+      res.on('close', unsubscribe);
+      res.flushHeaders();
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/execution') {
       const id = url.searchParams.get('id') || '';
       if (!(observer.book.get(id) instanceof ExecutionRecord)) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
-      return json(res, 200, ExecutionRecordHelper.snapshot(observer.recording.recorder, id), observeTranscript);
+      return json(res, 200, ExecutionRecordHelper.snapshot(observer.recording.recorder, id));
     }
     if (req.method === 'GET' && url.pathname === '/api/source') {
       const path = url.searchParams.get('file') || '';
@@ -89,23 +101,30 @@ export function createObserverServer(options: ObserverServerOptions) {
         if (!res.writableEnded) controller.abort();
       });
       let deliveryError: unknown;
-      await observer.execution.converse(
-        () => {
-          const input = acceptExecutionInput(observer.transcript, data);
-          res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
-          res.flushHeaders();
-          return input;
-        },
-        { settings: runSettings, signal: controller.signal, transcript: observer.transcript },
-        (update) => {
-          if (res.destroyed || deliveryError) return;
-          try {
-            res.write(JSON.stringify(update) + '\n');
-          } catch (error) {
-            deliveryError = error;
-          }
+      const deliver = (update: ConversationUpdate) => {
+        if (res.destroyed || deliveryError) return;
+        try {
+          res.write(JSON.stringify(update) + '\n');
+        } catch (error) {
+          deliveryError = error;
+        }
+      };
+      let contextId: string | undefined;
+      await observer.runtime.run(
+        data,
+        { settings: runSettings, signal: controller.signal, deliver },
+        {
+          accepted: () => {
+            res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+            res.flushHeaders();
+          },
+          started: (context) => {
+            contextId = context.id;
+            deliver({ type: 'started', transcriptId: observer.transcript.id, contextId, inputIndex: observer.transcript.length - 1 });
+          },
         },
       );
+      deliver({ type: 'completed', contextId: contextId! });
       if (deliveryError) throw deliveryError;
       res.end();
       return;

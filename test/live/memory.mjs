@@ -5,8 +5,6 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { DeepSeekProvider, initializeObserver, acceptExecutionInput, observeExecution } from '@capix-observer/service';
 
-import { observeTranscript } from '@capix-observer/runtime';
-
 const directory = resolve(process.argv[2] || 'traces/memoryLoop');
 await mkdir(directory);
 const environment = initializeObserver(new DeepSeekProvider(process.env.DEEPSEEK_API_KEY?.trim() || ''));
@@ -19,13 +17,13 @@ await writeFile(resolve(directory, 'scenario.json'), JSON.stringify({ ...scenari
 const results = [];
 for (const content of messages) {
   if (scenario.budgets?.[results.length]) settings.contextBudget = scenario.budgets[results.length];
-  const previousMemories = environment.runtime.context.memories.values().map((memory) => memory.toJSON());
-  const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] });
-  const facts = await observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript });
-  const currentMemories = environment.runtime.context.memories.values().map((memory) => memory.toJSON());
+  const previousMemories = environment.memories.values().map((memory) => memory.toJSON());
+  const input = { role: 'user', content };
+  const facts = await observeExecution(environment.runtime, environment.recording, { messages: [input] }, { settings, transcript: environment.transcript });
+  const currentMemories = environment.memories.values().map((memory) => memory.toJSON());
   const segments = environment.transcript.segments().map(({ start, end }) => ({ start, end }));
   results.push({ previousMemories, facts, currentMemories, segments });
-  await writeFile(resolve(directory, 'results.json'), JSON.stringify(results, observeTranscript, 2));
+  await writeFile(resolve(directory, 'results.json'), JSON.stringify(results, null, 2));
   console.log(JSON.stringify({ round: results.length, status: facts.execution.status, activeStart: environment.transcript.activeStart, memoryCountBefore: previousMemories.length, memoryCountAfter: currentMemories.length, output: readOutput(facts.execution.value), error: facts.execution.value.error?.code }));
   assert.equal(facts.execution.status, 'succeeded', 'Keep the failed record and stop; no repair or retry');
   const operation = (name) => facts.operations.find((item) => item.operation === name);
@@ -34,7 +32,7 @@ for (const content of messages) {
   assert.deepEqual(requestInput('selection').memories, previousMemories);
   assert.deepEqual(requestInput('memory').memories, previousMemories);
   assert.deepEqual(requestInput('selection').message, input);
-  const { start } = facts.execution.value.transcriptRange;
+  const { start } = facts.resources.find((fact) => fact.parentId === facts.execution.id && fact.access === 'transcript.fixedRange' && fact.phase === 'available').value;
   assert(requestInput('selection').history.every((item) => item.index >= start));
   assert(requestInput('memory').messages.every((item) => item.index >= start));
   assert.deepEqual(requestInput('answer').memories, previousMemories);

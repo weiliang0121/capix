@@ -1,6 +1,4 @@
 import { isFunction } from 'es-toolkit/predicate';
-import { OperationBinding } from './operation.js';
-import { AttemptBinding } from './attempt.js';
 import type { OperationInvocationBuilder } from '../invocation/operation/builder.js';
 import type { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
@@ -20,9 +18,9 @@ export class BindingEnvironment {
     this.check(requires, definitions, level, new Set());
     return new BoundChildren(definitions, (definition) =>
       definition.level === 'operation'
-        ? new OperationBinding(new Operation(this.operations), definition, this.children(definition.requires, definition.children, 'operation'))
-        : new AttemptBinding(
-            new Attempt(this.attempts),
+        ? new Operation(this.operations, definition, this.children(definition.requires, definition.children, 'operation'))
+        : new Attempt(
+            this.attempts,
             definition,
             new BoundChildren([], () => {
               throw new Error('Attempts cannot have children');

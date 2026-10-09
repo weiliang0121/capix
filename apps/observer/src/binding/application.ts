@@ -13,9 +13,14 @@ export function createApplication(runtime: ClientRuntime) {
     connect: () => connectAppStore(store, runtime),
     commands: {
       submit: () => submitDraft(store, runtime),
+      reconnectConversation: () =>
+        runtime.initialize().catch((error) => {
+          store.getState().setNotice(errorMessage(error));
+        }),
       loadExecution: async (id: string, signal?: AbortSignal): Promise<void> => {
         await runtime.loadExecution(id, signal);
       },
+      loadTranscript: (id: string) => runtime.loadTranscript(id),
       source: (path: string, signal?: AbortSignal) => runtime.source(path, signal),
     },
   };
@@ -48,6 +53,7 @@ export function connectAppStore(store: AppStore, runtime: ClientRuntime): () => 
   return () => {
     active = false;
     stopObservation();
+    runtime.stopTranscript();
     unsubscribe();
     unsubscribeSearch();
   };

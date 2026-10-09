@@ -1,4 +1,4 @@
-import type { ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, ObserverOverview, ProcessRecord } from '@capix-observer/protocol';
+import type { ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceFact, ProcessRecord } from '@capix-observer/protocol';
 import type { ConversationMessage } from '../observation/conversation.js';
 import type { CallSpan } from '../observation/types.js';
 
@@ -6,9 +6,12 @@ export interface RoundContext {
   inputCount: number;
   selectedCount: number;
   selectionComplete: boolean;
-  selectedMessages: { index: number; entry?: ObserverOverview['messages'][number] }[];
+  selectedMessages: { index: number; entry?: { index: number; count: number; message: Readonly<Message> } }[];
 }
-export interface RoundView extends ExecutionSummary {
+export interface RoundView extends Omit<ExecutionSummary, 'response'> {
+  transcriptId: string;
+  messagesLoaded: boolean;
+  response?: { index?: number; content?: string };
   inputContent: string;
   context: RoundContext;
 }
@@ -19,6 +22,7 @@ export interface CallMemory {
 export interface CallDetail extends CallSpan {
   children: CallSpan[];
   memory: CallMemory;
+  resources: readonly ResourceFact[];
   localRounds: number;
   processEntries: { record: ProcessRecord; reused?: ProcessRecord }[];
 }
@@ -27,6 +31,7 @@ export interface ExecutionDetail {
   startedAt: string;
   status: ExecutionSummary['status'];
   contextId: string;
+  resources: readonly ResourceFact[];
   settings: unknown;
   transcriptRange: unknown;
   inputContent: string;
@@ -40,6 +45,7 @@ export interface AppData {
   config?: ConfigurationResponse;
   observationLoading: boolean;
   observationError?: unknown;
+  conversationError?: string;
   busy: boolean;
   pending: string;
   runningId: string;
@@ -47,7 +53,7 @@ export interface AppData {
   messageCount: number;
   progress: string;
   rounds: readonly RoundView[];
-  memory: MemoryObservation;
+  memory: MemoryView;
   details: ReadonlyMap<string, ExecutionDetail>;
 }
 export function emptyAppData(): AppData {
@@ -58,4 +64,8 @@ export interface SearchMatch {
   executionId: string;
   role: 'user' | 'assistant';
   snippet: string;
+}
+
+export interface MemoryView {
+  items: (Omit<MemoryObservation['items'][number], 'sources'> & { sources: { transcriptId: string; index: number; message?: Readonly<Message>; state: 'loaded' | 'unloaded' | 'loading' | 'missing' | 'error'; error?: string }[] })[];
 }

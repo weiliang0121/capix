@@ -1,7 +1,6 @@
 import { isObjectLike } from '../../value/object.js';
 import { isArray, isFinite } from 'es-toolkit/compat';
 import { isBoolean, isNull, isString } from 'es-toolkit/predicate';
-import { MessageRef, TranscriptRangeRef } from '../../transcript/ref.js';
 
 /** Check record content policy without changing the value; this does not validate business contracts. */
 export function assertRecordContent(value: unknown): void {
@@ -9,7 +8,6 @@ export function assertRecordContent(value: unknown): void {
 }
 
 function checkContent(value: unknown, ancestors: Set<object>): void {
-  if (value instanceof MessageRef || value instanceof TranscriptRangeRef) return;
   if (isNull(value) || isString(value) || isBoolean(value)) return;
   if (isFinite(value)) return;
   if (!isObjectLike(value)) throw new TypeError('Unsupported record content');

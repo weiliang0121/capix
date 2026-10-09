@@ -1,44 +1,36 @@
-import { isFunction } from 'es-toolkit/predicate';
 import { Execution } from '../execution/execution.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
-import type { RuntimeDefinition, ExecutionDefinitions } from '../definition/runtime.js';
-import type { ExecutionInvocationBuilder } from '../invocation/execution/builder.js';
+import type { RuntimeDefinition } from '../definition/runtime.js';
 import type { ExecutionOptions } from '../context/execution.js';
-import type { ExecutionRecordMetadata } from '../records/execution/helper.js';
-import { bindResources } from '../resource/bindings.js';
-import type { BindingEnvironment } from './environment.js';
-import { ExecutionBinding } from './execution.js';
+import type { ResourceProvider } from '../resource/offer.js';
+import { bindResources, type ResourceRequirements } from '../resource/bindings.js';
+import { createRuntime, type RuntimeCreationOptions } from '../runtime/create.js';
 
-type Input<D> = D extends ExecutionDefinition<infer I, any, any> ? I : never;
-type BoundExecution<D, P extends ExecutionOptions> = D extends ExecutionDefinition<infer I, infer O, infer R> ? ExecutionBinding<I, O, R, P> : never;
-
-/** Capture is application binding logic, separate from the reusable business definition. */
-export interface ExecutionSource<I, P, S> {
+/** Application binding fixes values from independent supplies at explicit entry and call boundaries. */
+export interface ExecutionSource<I, U, P, S> {
   validate?(options: P): void;
-  capture(input: I, options: P): { source: S; record?: ExecutionRecordMetadata };
+  entry(input: U, options: P): S;
+  capture(input: I, options: P): S;
 }
 
-/** Bound to one Runtime; captures no current input, signal, or resource snapshot. */
-export class RuntimeBinding<S, E extends ExecutionDefinitions> {
-  constructor(
-    readonly definition: RuntimeDefinition<S, E>,
-    private readonly environment: BindingEnvironment,
-    private readonly invocations: ExecutionInvocationBuilder,
-  ) {}
-  execution<K extends keyof E, P extends ExecutionOptions>(key: K, source: ExecutionSource<Input<E[K]>, P, S>): BoundExecution<E[K], P> {
-    const definition = this.definition.executions[key];
-    if (!definition || definition.level !== 'execution' || !isFunction(definition.execute)) throw new Error('Execution is not declared in this runtime binding');
-    const children = this.environment.children(definition.requires, definition.children, 'execution');
-    const resources = bindResources(definition.requires, this.definition.providers);
-    return new ExecutionBinding(
-      new Execution(this.invocations),
-      definition,
-      children,
-      (input, options: P) => {
-        const captured = source.capture(input, options);
-        return { resources: resources(captured.source), record: captured.record };
-      },
-      source.validate?.bind(source),
-    ) as BoundExecution<E[K], P>;
-  }
+export interface RuntimeAssembly<I, U, P, S> extends RuntimeCreationOptions {
+  readonly providers: readonly ResourceProvider<S>[];
+  readonly source: ExecutionSource<I, U, P, S>;
+}
+
+/** The only assembly entry produces an R business endpoint; it does not create resource entities. */
+export function assembleRuntime<I, O, R extends object, U, ER extends object, P extends ExecutionOptions, S>(definition: RuntimeDefinition<ExecutionDefinition<I, O, R, U, ER>>, options: RuntimeAssembly<I, U, P, S>) {
+  const execution = definition.execution;
+  const source = options.source;
+  const executionResources = bindResources(execution.requires, options.providers);
+  const entryResources = bindResources(execution.entry?.requires ?? ({} as ResourceRequirements<ER>), options.providers);
+  return createRuntime<U, O, P>(
+    options,
+    (runtime) =>
+      new Execution(runtime.executionInvocations, execution, runtime.environment.children(execution.requires, execution.children, 'execution'), {
+        validate: source.validate?.bind(source),
+        entry: (input, parameters) => entryResources(source.entry(input, parameters)),
+        capture: (input, parameters) => executionResources(source.capture(input, parameters)),
+      }),
+  );
 }

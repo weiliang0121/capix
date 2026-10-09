@@ -1,9 +1,9 @@
 import type { invocationSignature } from './signature.js';
 import type { DefinitionParent } from './children.js';
 import { InvocationDefinition } from './invocation.js';
-import type { AttemptContext } from '../context/attempt.js';
+import type { AttemptScope } from '../context/scope.js';
 
-export abstract class AttemptDefinition<I, O, R extends object = Record<string, never>> extends InvocationDefinition<I, O, AttemptContext<I, O, R>, R> {
+export abstract class AttemptDefinition<I, O, R extends object = Record<string, never>> extends InvocationDefinition<I, O, AttemptScope<I, O, R>, R> {
   declare readonly [invocationSignature]?: (parent: DefinitionParent<AttemptDefinition<I, O, R>>, input: I) => O;
   readonly level = 'attempt' as const;
   abstract readonly name: string;

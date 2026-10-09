@@ -1,7 +1,8 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import type { ExecutionSummary, InvocationSummary, ObserverOverview } from '@capix-observer/protocol';
-import { AttemptRecord, InvocationBoundaryRecord, ExecutionRecord, MemoryRecord, OperationRecord, TranscriptRangeRef } from '@capix-observer/runtime';
+import { AttemptRecord, InvocationBoundaryRecord, ExecutionRecord, MemoryRecord, OperationRecord } from '@capix-observer/runtime';
 import type { initializeObserver } from './environment.js';
+import { executionTranscript } from './evidence.js';
 import { inspectExecutions } from './inspect.js';
 import type { SelectionInput } from '../operations/history/input.js';
 
@@ -34,7 +35,7 @@ export function observeOverview(observer: Observer): ObserverOverview {
   const summarize = (record: Invocation): InvocationSummary => {
     const timing = boundaries.get(record.id);
     const common = { id: record.id, contextId: record.contextId, status: record.status, offsetMs: timing?.start ?? 0, ...(!isUndefined(timing?.start) && !isUndefined(timing?.end) ? { durationMs: timing!.end! - timing!.start! } : {}) };
-    if (record instanceof ExecutionRecord) return { ...common, recordType: 'execution', name: 'execution', label: '执行', source: 'server/runtime/src/execution/execution.ts · Execution.call' };
+    if (record instanceof ExecutionRecord) return { ...common, recordType: 'execution', name: 'execution', label: '执行', source: 'server/runtime/src/execution/execution.ts · Execution.run' };
     if (record instanceof OperationRecord) return { ...common, recordType: 'operation', parentId: record.parentOperationId ?? record.executionId, name: record.operation, label: record.label, source: record.source };
     return { ...common, recordType: 'attempt', parentId: record.operationId, name: record.name, label: record.label, source: record.source };
   };
@@ -45,17 +46,17 @@ export function observeOverview(observer: Observer): ObserverOverview {
     const operationIds = new Set<string>(ownOperations.map((operation) => operation.id));
     const selection = ownOperations.find((operation) => operation.operation === 'selection');
     const captured = selection?.value.input as SelectionInput | undefined;
-    const range = record.value.transcriptRange;
+    const range = executionTranscript(observer.book, record.id);
     const call = summarize(record);
     return {
       ...execution,
       observedOffsetMs: observedOffsets.get(execution.id) ?? 0,
       ...(isUndefined(call.durationMs) ? {} : { durationMs: call.durationMs }),
       calls: [call, ...ownOperations.map(summarize), ...attempts.filter((attempt) => operationIds.has(attempt.operationId)).map(summarize)],
-      ...(range instanceof TranscriptRangeRef ? { transcriptRange: { start: range.start, end: range.end } } : {}),
+      ...(range ? { transcriptRange: range } : {}),
       availableMemoryIds: captured?.memories.map((memory) => memory.id) ?? [],
       memoryChanges: changes.filter((change) => change.executionId === execution.id).map((change) => ({ id: change.id, memoryId: change.memoryId, operationId: change.operationId, action: change.value.action, change: change.value.change })),
     };
   });
-  return { messages: observation.messages, executions };
+  return { transcriptId: observer.transcript.id, messages: observation.messages, executions };
 }

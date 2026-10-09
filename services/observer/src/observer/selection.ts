@@ -1,16 +1,17 @@
+import { executionTranscript } from './evidence.js';
 import { readOutput, type SelectionObservation } from '@capix-observer/protocol';
 
 import type { Selection } from '../model/types.js';
-import { type RecordBook, ExecutionRecord, OperationRecord, TranscriptRangeRef, type Transcript } from '@capix-observer/runtime';
+import { type RecordBook, ExecutionRecord, OperationRecord, type Transcript } from '@capix-observer/runtime';
 
 /** Recompute heat from accepted selection outcomes; never mutate messages or drive loading. */
 export function observeSelection(book: RecordBook, transcript: Transcript): SelectionObservation {
-  const messages = transcript.snapshot().map((message, index) => ({ index, message, count: 0 }));
+  const messages = transcript.snapshot().map((_message, index) => ({ index, count: 0 }));
   const executions = new Map<string, SelectionObservation['executions'][number]>();
   for (const record of book.values()) {
     if (!(record instanceof ExecutionRecord)) continue;
-    const range = record.value.transcriptRange;
-    if (!(range instanceof TranscriptRangeRef) || range.transcript !== transcript) continue;
+    const range = executionTranscript(book, record.id);
+    if (!range || range.transcriptId !== transcript.id) continue;
     executions.set(record.id, { id: record.id, startedAt: record.value.startedAt, status: record.status, inputIndex: range.end - 1, selections: [] });
   }
   for (const record of book.values()) {
@@ -22,5 +23,5 @@ export function observeSelection(book: RecordBook, transcript: Transcript): Sele
     execution.selections.push({ operationId: record.id, status: record.status, ...(indexes ? { indexes } : {}) });
     for (const index of indexes ?? []) messages[index]!.count++;
   }
-  return { messages, executions: [...executions.values()] };
+  return { transcriptId: transcript.id, messages, executions: [...executions.values()] };
 }

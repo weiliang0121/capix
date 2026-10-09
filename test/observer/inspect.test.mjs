@@ -23,7 +23,7 @@ test('QA projection preserves missing answers and binds repeated answers to actu
       { role: 'assistant', content: '相同的回答' },
     ]).snapshot(),
   );
-  const run = async () => observeExecution(environment.execution, environment.recording, acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: '相同的输入' }] }), { settings, transcript: environment.transcript });
+  const run = async () => observeExecution(environment.runtime, environment.recording, { messages: [{ role: 'user', content: '相同的输入' }] }, { settings, transcript: environment.transcript });
   const failed = await run();
   failure = '';
   const completed = await run();
@@ -39,9 +39,9 @@ test('QA projection preserves missing answers and binds repeated answers to actu
   assert.equal(observation.executions[0].id, failed.execution.id);
   assert.equal(observation.executions[0].response, undefined);
   assert.equal(observation.executions[1].id, completed.execution.id);
-  assert.deepEqual(observation.executions[1].response, { content: '相同的回答', index: 4 });
+  assert.deepEqual(observation.executions[1].response, { index: 4 });
   assert.equal(observation.executions[2].id, afterFailure.execution.id);
-  assert.deepEqual(observation.executions[2].response, { content: '相同的回答', index: 6 });
+  assert.deepEqual(observation.executions[2].response, { index: 6 });
   assert.equal(observation.executions[2].status, 'failed');
   assert.equal(observation.executions[2].memoryStatus, 'failed');
   assert.deepEqual([...environment.book.values()], before);

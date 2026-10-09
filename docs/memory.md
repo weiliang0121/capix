@@ -37,8 +37,8 @@ MemoryRecord extends BaseRecord<{
   result: MemoryContent;           // 落实之后的完整内容快照
 }> {
   memoryId: string;
-  executionId: string;             // ExecutionRecord.id
-  operationId: string;             // OperationRecord.id
+  executionId?: string;            // 有记录的调用来源：ExecutionRecord.id
+  operationId?: string;            // 有记录的调用来源：OperationRecord.id
 }
 ```
 
@@ -92,12 +92,12 @@ ExtractMemory
 
 ## 归属与边界
 
-- Runtime 持有 Memories；它绑定一个 Transcript，提供 get/values/snapshot/apply，统一审查、落实并记录正式变化。对外没有 add 或 Memory.update 旁路。
-- ApplyMemory 提交已接纳提案及调用来源，不再自行修改内容或补写记录。
-- 共享 Recorder 由环境装配，Memories 持有其引用。变更可独立于调用发生；实际来自调用时保留 contextId/callId/executionId/operationId，来源链接不用于内容合法性判断。MemoryRecordHelper 负责构造记录与查询；Memories 使用通用 Recorder.add 登记，来源由调用侧预先解析。
+- 环境独立建立 Memories；它绑定一个 Transcript，提供 get/values/snapshot/apply，统一审查、落实并记录正式变化。R 仅绑定其正式资源，不拥有实体生命周期。业务没有原集合引用或 Memory.update 旁路。
+- ApplyMemory 通过本层 memory.apply 资源提交已接纳提案，不传递记录来源、不自行修改内容或补写记录。资源绑定注入本次调用的来源。
+- 共享 Recorder 由环境装配，Memories 持有其引用。变更可独立于调用发生；有记录的调用来源保留 contextId/callId/executionId/operationId，无记录时内容事件仍可通过 origin.contextId 说明来源。来源链接不用于内容合法性判断。MemoryRecordHelper 负责构造记录与查询；Memories 使用通用 Recorder.add 登记，来源由内部资源绑定预先解析。
 - MemoryRecord 保存在同一个 Book；按 memoryId 过滤，沿登记顺序返回。不另加索引；memoriesId/sequence 表达集合内正式变化顺序。
 - E/O/A 记录继续记录提取输入、模型原始返回和接纳候选；MemoryRecord 保存具体记忆体已落实的变化，二者不是重复对象。MemoryRecord 不持有调用 Context 实例、调用状态或虚构事件。
-- GET /api/memory 返回当前事实和变化记录的只读投影。页面展示记录正文、依据、结果快照、执行与操作 ID，不做差异推断。
+- GET /api/memory 返回当前事实和变化记录的只读投影，原文依据使用 transcriptId/index 定位。客户端从独立消息副本组合原文，未加载时按需取得；页面展示记录正文、依据、结果快照、执行与操作 ID，不做差异推断。本轮保留 MemoryRecord 的不可变结果证据，不扩展记忆历史实体仓库。
 
 无 Recorder 时事实照常变化，不产生记录。接纳及批次预检查失败不改变记忆。登记异常发生在事实变更之后，异常传播、保留真实已发生变更，不虚构回滚；尚无事务或恢复。已经生成的回答同样不会被删除。请求超预算直接失败，不自动裁剪、重试或压缩。
 

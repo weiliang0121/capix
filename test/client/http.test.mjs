@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpTransport, ConversationHttpTransport, ObservationHttpTransport, HttpError, ObserverTransportError } from '@capix-observer/client-http';
-import { snapshot } from './fixtures.mjs';
+import { snapshot, transcriptSnapshot } from './fixtures.mjs';
 
 const input = { messages: [{ role: 'user', content: '测试' }] };
-const started = { type: 'started', contextId: 'context', inputIndex: 0 };
-const answer = { type: 'answer', contextId: 'context', index: 1, output: { kind: 'answer', content: '回答' } };
+const started = { type: 'started', contextId: 'context', transcriptId: 'fixture-transcript', inputIndex: 0 };
+const answer = { type: 'answer', contextId: 'context', transcriptId: 'fixture-transcript', index: 1, output: { kind: 'answer', content: '回答' } };
 const completed = { type: 'completed', contextId: 'context' };
 const line = (value) => JSON.stringify(value);
 const jsonConversation = (value) => new ConversationHttpTransport('', async () => Response.json(value));
@@ -97,8 +97,8 @@ test('all Observer queries reject malformed success bodies at the response bound
 test('Observer queries accept declared fields without coercing malformed nested data', async () => {
   const config = { model: 'fixture', configured: true, contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 30000 };
   assert.deepEqual(await jsonConversation(config).config(), config);
-  assert.deepEqual(await jsonConversation({ messages: input.messages }).transcript(), { messages: input.messages });
-  assert.deepEqual(await jsonObservation({ executions: [], messages: [] }).overview(), { executions: [], messages: [] });
+  assert.deepEqual(await jsonConversation(transcriptSnapshot(input.messages)).transcript(), transcriptSnapshot(input.messages));
+  assert.deepEqual(await jsonObservation({ transcriptId: 'fixture-transcript', executions: [], messages: [] }).overview(), { transcriptId: 'fixture-transcript', executions: [], messages: [] });
   assert.deepEqual(await jsonObservation({ items: [] }).memory(), { items: [] });
   await assert.rejects(jsonConversation({ ...config, contextBudget: '32768' }).config(), /响应格式无效/);
   await assert.rejects(jsonConversation({ messages: [{ role: 'system', content: 'invalid' }] }).transcript(), /响应格式无效/);
@@ -214,5 +214,35 @@ test('business callback failure closes the active reader and is distinguishable 
       () => {},
     ),
     (error) => error === networkCause,
+  );
+});
+
+test('entity queries validate the requested UID and entity streams preserve revisions and origin', async () => {
+  await assert.rejects(jsonConversation(transcriptSnapshot([], 'other')).transcript('requested'), (error) => error.code === 'TRANSCRIPT_MISMATCH');
+  const baseline = { type: 'baseline', snapshot: transcriptSnapshot([], 't', 0) };
+  const delta = { type: 'delta', event: { type: 'transcript', transcriptId: 't', revision: 1, occurredAt: '2026-10-09T00:00:00Z', origin: { contextId: 'context' }, change: { kind: 'messages-appended', start: 0, messages: input.messages } } };
+  let url;
+  const client = new ConversationHttpTransport('http://example.test', async (value) => {
+    url = value;
+    return new Response([baseline, delta].map(line).join('\n'));
+  });
+  const received = [];
+  await assert.rejects(
+    client.observeTranscript('t', (frame) => received.push(frame), new AbortController().signal),
+    (error) => error.code === 'INCOMPLETE_STREAM',
+  );
+  assert.equal(url, 'http://example.test/api/transcript/observe?id=t');
+  assert.deepEqual(received, [baseline, delta]);
+});
+
+test('conversation delivery cannot silently change transcript identity between started and answer', async () => {
+  const client = new ConversationHttpTransport('', async () => new Response([started, { ...answer, transcriptId: 'other' }].map(line).join('\n')));
+  await assert.rejects(
+    client.run(
+      input,
+      () => {},
+      () => {},
+    ),
+    (error) => error.code === 'TRANSCRIPT_MISMATCH',
   );
 });

@@ -1,4 +1,4 @@
-import { AttemptDefinition, type AttemptContext, RuntimeError, isNonBlankString } from '@capix-observer/runtime';
+import { AttemptDefinition, type AttemptScope, RuntimeError, isNonBlankString } from '@capix-observer/runtime';
 
 import type { ModelOutput } from '../../model/types.js';
 import type { ModelOutputContract } from '../../model/contract.js';
@@ -19,7 +19,7 @@ export class AcceptModelOutput<I extends ModelAcceptanceInput, O> extends Attemp
     super();
   }
 
-  execute(context: AttemptContext<I, O>): O {
+  execute(context: AttemptScope<I, O>): O {
     checkCompletion(context.currentInput.output);
     const value = parseContent(context.currentInput.output.content);
     return this.contract.accept(value, context.currentInput);

@@ -111,7 +111,7 @@ test('the observed execution preserves ranking, records actual requests and acco
   assert.ok(JSON.parse(requests[0].messages[1].content).history.every((item) => !('selectionCount' in item)));
   const rejected = await observeFixture(
     createInput({ content: message.content, history }),
-    { ...settings, contextBudget: 1 },
+    { ...settings, contextBudget: 256 },
     {
       async invoke() {
         assert.fail('Oversized selection request must not invoke the model');

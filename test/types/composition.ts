@@ -1,11 +1,11 @@
-import { Sequence, InvocationEntry, type OperationDefinition, type AttemptDefinition, type Invocation, type ExecutionContext, type OperationContext, type BoundChildren, type Runtime, type ExecutionDefinition } from '@capix-observer/runtime';
+import { Sequence, InvocationEntry, type OperationDefinition, type AttemptDefinition, type InvocationView, type ExecutionScope, type OperationScope, type ChildBindings, assembleRuntime, type ExecutionDefinition } from '@capix-observer/runtime';
 
 declare const length: OperationDefinition<string, number>;
 declare const format: OperationDefinition<number, string>;
 declare const leaf: AttemptDefinition<string, string>;
-declare const parent: Invocation<unknown, unknown, ExecutionContext>;
-declare const operation: Invocation<unknown, unknown, OperationContext>;
-declare const bindings: BoundChildren;
+declare const parent: InvocationView<unknown, unknown, ExecutionScope>;
+declare const operation: InvocationView<unknown, unknown, OperationScope>;
+declare const bindings: ChildBindings;
 
 const sequence = new Sequence<string, typeof parent>().step('length', { use: length, input: ({ input }) => input }).step('format', { use: format, input: ({ outputs }) => outputs.length, accept: (_scope, value) => ({ text: value }) });
 const result: Promise<Readonly<{ length: number; format: { text: string } }>> = sequence.run(parent, 'hello', bindings);
@@ -49,15 +49,15 @@ const objectDefinition: OperationDefinition<string, number> = {
 };
 const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string, typeof parent>().step('length', { use: objectDefinition, input: ({ input }) => input }).run(parent, 'hello', bindings);
 void objectOutput;
-declare const runtime: Runtime;
 declare const execution: ExecutionDefinition<string, number>;
-const root = runtime.bind({ providers: [], executions: { main: execution } });
-const entry = root.execution('main', { capture: (_input, _options: { signal?: AbortSignal }) => ({ source: null }) });
-const rootOutput: Promise<number> = entry.call('input', {});
+const runtime = assembleRuntime({ execution }, { providers: [], source: { entry: () => null, capture: (_input: string, _options: { signal?: AbortSignal }) => null } });
+const rootOutput: Promise<number> = runtime.run('input', {});
 void rootOutput;
-// @ts-expect-error only declared E names are available
-root.execution('other', { capture: () => ({ source: null }) });
 // @ts-expect-error E input remains typed through R binding
-entry.call(42, {});
+runtime.run(42, {});
 // @ts-expect-error R cannot register A as an E
-runtime.bind({ providers: [], executions: { wrong: leaf } });
+assembleRuntime({ execution: leaf }, { providers: [], source: { entry: () => null, capture: () => null } });
+// @ts-expect-error content cannot mutate its lifecycle
+parent.context.complete('done');
+// @ts-expect-error child relations do not publish reception mutation
+parent.children.values()[0].accept(() => null);

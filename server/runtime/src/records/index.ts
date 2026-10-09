@@ -16,3 +16,5 @@ export { MemoryRecord, type MemoryDefinition } from './memory/record.js';
 export { MemoryRecordHelper } from './memory/helper.js';
 
 export { RecordTree } from './tree.js';
+
+export { ResourceRecord, type ResourceFactDefinition } from './resource/record.js';

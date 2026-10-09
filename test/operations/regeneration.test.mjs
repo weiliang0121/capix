@@ -1,6 +1,7 @@
+import { createEnvironment } from '../fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ObserverBinding, ObserverRuntimeDefinition, initializeObserver } from '@capix-observer/service';
+import { bindObserver, ObserverRuntimeDefinition, initializeObserver } from '@capix-observer/service';
 import { RuntimeError, createRuntime, AttemptRecord, InvocationRecord } from '@capix-observer/runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -23,10 +24,11 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
   };
   const messages = [{ role: 'user', content: '你好' }];
   const environment = recorded
-    ? initializeObserver(provider, messages)
+    ? initializeObserver(provider)
     : (() => {
-        const runtime = createRuntime({ messages });
-        return { runtime, transcript: runtime.context.transcript, execution: new ObserverBinding(runtime, new ObserverRuntimeDefinition(provider)) };
+        const entities = createEnvironment();
+        const definition = new ObserverRuntimeDefinition();
+        return { ...entities, definition, runtime: bindObserver(definition, entities, provider) };
       })();
   let invocation;
   return {
@@ -36,9 +38,15 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
       return invocation;
     },
     run: () =>
-      environment.execution.call(environment.transcript.current('user'), { settings: configuration, transcript: environment.transcript, signal }, (_context, current) => {
-        invocation = current;
-      }),
+      environment.runtime.run(
+        { messages },
+        { settings: configuration, signal },
+        {
+          started: (_context, current) => {
+            invocation = current;
+          },
+        },
+      ),
     generation: () => invocation.children.values().find((child) => child.key === 'generation').invocation,
   };
 }
@@ -173,7 +181,7 @@ test('record failure cannot be classified as an output rejection or trigger a se
 
 test('regeneration entry enforces evidence, feedback and budget independently of parent choice', async (t) => {
   const f = fixture([output('bad'), output(JSON.stringify(answer))]);
-  const behavior = f.execution.definition.executions.conversation.operations.generation;
+  const behavior = f.definition.execution.operations.generation;
   const receive = behavior.receive;
   const capability = behavior.invokeModel.regeneration;
   assert.equal(capability.declaration.maxAdditionalCalls, 1);
@@ -204,7 +212,7 @@ test('regeneration entry enforces evidence, feedback and budget independently of
 
 test('parent may decline an eligible regeneration without changing child capability', async (t) => {
   const f = fixture([output('bad')]);
-  t.mock.method(f.execution.definition.executions.conversation.operations.generation, 'receive', function (_context, result, invocation) {
+  t.mock.method(f.definition.execution.operations.generation, 'receive', function (_context, result, invocation) {
     const children = invocation.children.values();
     assert.equal(this.invokeModel.regeneration.allows(invocation, { previous: children[2], rejection: children[3] }), true);
     throw result.error;

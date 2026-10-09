@@ -1,7 +1,6 @@
 import { MemoryResource } from '@capix-observer/runtime';
 import type { MemoryWriteResources } from '../../observer/resources.js';
-import type { Invocation } from '@capix-observer/runtime';
-import { AttemptDefinition, type AttemptContext } from '@capix-observer/runtime';
+import { AttemptDefinition, type AttemptScope } from '@capix-observer/runtime';
 
 import type { MemoryExtraction } from '../../operations/memory/output.js';
 
@@ -16,8 +15,8 @@ export class ApplyMemory extends AttemptDefinition<MemoryExtraction, MemoryExtra
 
   readonly requires = ApplyMemory.requires;
 
-  execute(context: AttemptContext<MemoryExtraction, MemoryExtraction, MemoryWriteResources>, invocation: Invocation<MemoryExtraction, MemoryExtraction, AttemptContext<MemoryExtraction, MemoryExtraction, MemoryWriteResources>>): MemoryExtraction {
-    context.resources.values.memoryWriter.apply(context.currentInput.memories, invocation.source);
+  execute(context: AttemptScope<MemoryExtraction, MemoryExtraction, MemoryWriteResources>): MemoryExtraction {
+    context.resources.values.memoryWriter.apply(context.currentInput.memories);
     return context.currentInput;
   }
 }

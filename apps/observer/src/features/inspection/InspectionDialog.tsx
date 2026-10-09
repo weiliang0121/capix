@@ -139,6 +139,13 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                     <DataBlock title="本次配置快照" value={detail.settings} />
                     <DataBlock title="固定消息范围" value={detail.transcriptRange} />
                   </div>
+                  <section>
+                    <h3>资源运行事实</h3>
+                    {(call?.resources ?? detail.resources).map((fact) => (
+                      <DataBlock key={fact.id} title={`${fact.access} · ${fact.phase} · #${fact.sequence}`} value={fact} />
+                    ))}
+                    {!(call?.resources ?? detail.resources).length && <p className="empty-note">本次没有资源事实记录。</p>}
+                  </section>
                 </TabsContent>
                 <TabsContent value="memory">
                   <MemoryAtCall {...(call?.memory ?? detail.memory)} />

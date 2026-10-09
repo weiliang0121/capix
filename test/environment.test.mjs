@@ -1,3 +1,4 @@
+import { resourceFact } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver, acceptExecutionInput, observeExecution } from '@capix-observer/service';
@@ -19,17 +20,17 @@ test('one initialized world preserves messages and records while reusing its exe
     },
   };
   const environment = initializeObserver(provider, [{ role: 'user', content: 'initial' }]);
-  const transcript = environment.runtime.context.transcript;
+  const transcript = environment.transcript;
   assert.equal(environment.transcript, transcript);
   assert.equal([...environment.book.values()].length, 2); // Initial transcript + Runtime scope.
   assert.equal(requests.length, 0);
-  assert.ok(['selection', 'generation', 'extraction'].every((name) => !environment.execution.execution.children.initialized(environment.definition.executions.conversation.operations[name])));
+  assert.equal('transcript' in environment.runtime.context, false);
   const snapshots = [],
     streamed = [];
   for (const [index, text] of ['first', 'failure', 'last'].entries()) {
-    const input = acceptExecutionInput(transcript, { messages: [{ role: 'user', content: text }] });
+    const input = { messages: [{ role: 'user', content: text }] };
     const published = [];
-    snapshots.push(await observeExecution(environment.execution, environment.recording, input, { settings: { ...settings, model: String(index) }, transcript }, (snapshot) => published.push(snapshot)));
+    snapshots.push(await observeExecution(environment.runtime, environment.recording, input, { settings: { ...settings, model: String(index) }, transcript }, (snapshot) => published.push(snapshot)));
     streamed.push(published);
   }
   assert.deepEqual(
@@ -48,7 +49,7 @@ test('one initialized world preserves messages and records while reusing its exe
     JSON.parse(requests[4].request.messages[1].content).history.map((message) => message.content),
     ['initial', 'first', 'reply first', 'failure'],
   );
-  const operationIds = ['selection', 'generation', 'extraction'].map((name) => environment.execution.execution.children.get(environment.definition.executions.conversation.operations[name]).id);
+  const operationIds = snapshots[0].operations.map((record) => record.operationInstanceId);
   assert.deepEqual(
     snapshots[0].operations.map((record) => record.operationInstanceId),
     operationIds,
@@ -65,7 +66,7 @@ test('one initialized world preserves messages and records while reusing its exe
     assert.equal(snapshot.events[0].sequence, 1);
     assert.equal(snapshot.events.at(-1).callId, snapshot.execution.id);
   }
-  assert.equal(snapshots[0].execution.value.transcriptRange.end, 2);
+  assert.equal(resourceFact(snapshots[0], 'transcript.fixedRange').end, 2);
   assert.equal(snapshots[0].execution.value.input.content, 'first');
   assert.deepEqual(
     streamed.map((values) => new Set(values.map((snapshot) => snapshot.execution.id)).size),
@@ -119,8 +120,8 @@ test('a cancelled call does not leave its signal on the reusable model operation
   const cancelled = new AbortController();
   cancelled.abort(new Error('cancel first call'));
   for (const signal of [cancelled.signal, new AbortController().signal]) {
-    const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: 'input' }] });
-    const snapshot = await observeExecution(environment.execution, environment.recording, input, { settings, signal, transcript: environment.transcript });
+    const input = { messages: [{ role: 'user', content: 'input' }] };
+    const snapshot = await observeExecution(environment.runtime, environment.recording, input, { settings, signal, transcript: environment.transcript });
     assert.equal(snapshot.execution.status, signal.aborted ? 'failed' : 'succeeded');
   }
   assert.deepEqual(
@@ -145,20 +146,20 @@ test('configuration updates and Transcript appends take effect only in the next 
   });
   const snapshots = [];
   for (const content of ['first', 'next']) {
-    const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] });
+    const input = { messages: [{ role: 'user', content }] };
     assert.equal(Object.hasOwn(input, 'transcript'), false);
-    snapshots.push(await observeExecution(environment.execution, environment.recording, input, { settings: configuration, transcript: environment.transcript }));
+    snapshots.push(await observeExecution(environment.runtime, environment.recording, input, { settings: configuration, transcript: environment.transcript }));
   }
   assert.deepEqual(
     requests.map((request) => request.model),
     ['A', 'A', 'A', 'B', 'B', 'B'],
   );
   assert.deepEqual(
-    snapshots.map((snapshot) => snapshot.execution.value.settings.model),
+    snapshots.map((snapshot) => resourceFact(snapshot, 'model-settings.snapshot').model),
     ['A', 'B'],
   );
   assert.deepEqual(
-    snapshots.map((snapshot) => snapshot.execution.value.transcriptRange.end),
+    snapshots.map((snapshot) => resourceFact(snapshot, 'transcript.fixedRange').end),
     [1, 4],
   );
   assert.equal(JSON.parse(requests[0].messages[1].content).history.length, 0);

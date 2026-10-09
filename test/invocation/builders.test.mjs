@@ -17,24 +17,41 @@ test('reused builders bind each invocation to its own signal, settings and input
   const configuration = new ResourceOffer('test.settings', (source) => source);
   const requires = { settings: configuration.request() };
   const resourceBinding = bindResources(requires, [configuration.provide((source) => source.settings)]);
-  const first = runtime.executionInvocations.create('first', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: firstController.signal }, work: identity });
+  const observed = [];
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  const inspect = {
+    maxRounds: 1,
+    execute: async (context) => {
+      observed.push(context.resources.values.settings.model);
+      await pending;
+      return context.currentInput;
+    },
+  };
+  const first = runtime.executionInvocations.create('first', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: firstController.signal }, work: inspect });
   mutableSettings.model = 'next';
-  const second = runtime.executionInvocations.create('second', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: secondController.signal }, work: identity });
+  const second = runtime.executionInvocations.create('second', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: secondController.signal }, work: inspect });
   const firstOperation = runtime.operationInvocations.create(first, { input: 'first operation', description: operation, work: identity });
   const secondOperation = runtime.operationInvocations.create(second, { input: 'second operation', description: operation, work: identity });
   const firstAttempt = runtime.attemptInvocations.create(firstOperation, { input: 'first action', description: attempt, work: identity });
   const secondAttempt = runtime.attemptInvocations.create(secondOperation, { input: 'second action', description: attempt, work: identity });
-  assert.equal(first.context.resources.values.settings.model, 'fixture');
-  assert.equal(second.context.resources.values.settings.model, 'next');
+  assert.throws(() => first.context.resources.values.settings, /started invocation/);
+  const firstRun = first.run();
+  const secondRun = second.run();
+  assert.deepEqual(observed, ['fixture', 'next']);
   assert.equal(firstAttempt.context.signal, firstController.signal);
   assert.equal(secondAttempt.context.signal, secondController.signal);
   assert.equal(first.context.runtime, undefined);
-  assert.equal(first.context.progress.round, 0);
+  assert.equal(first.context.progress.round, 1);
   const cause = new Error('first only');
   firstController.abort(cause);
   await assert.rejects(firstAttempt.run(), (error) => error.code === 'INVOCATION_CANCELLED' && error.cause === cause);
   assert.equal(await secondAttempt.run(), 'second action');
   assert.equal(secondController.signal.aborted, false);
+  release();
+  await Promise.all([firstRun, secondRun]);
   assert.deepEqual([runtime.executionInvocations, runtime.operationInvocations, runtime.attemptInvocations], builders);
 });
 

@@ -1,3 +1,4 @@
+import type { InvocationRelationView, InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationResult } from './result.js';
 
@@ -9,6 +10,7 @@ export interface InvocationRelationOptions {
 export interface InvocationTarget<O = unknown> {
   readonly context: InvocationContext<unknown, O>;
   run(): Promise<O>;
+  readonly view?: InvocationView;
 }
 
 export type InvocationRelationReception = Readonly<{ status: 'pending' } | { status: 'receiving' } | { status: 'accepted'; output: unknown } | { status: 'failed'; error: unknown }>;
@@ -16,13 +18,30 @@ export type InvocationRelationReception = Readonly<{ status: 'pending' } | { sta
 /** A direct parent-child relationship, not another invocation or E/O/A execution layer. */
 export class InvocationRelation {
   #returned?: InvocationResult<unknown>;
+  readonly view: InvocationRelationView;
   #reception: InvocationRelationReception = Object.freeze({ status: 'pending' });
 
   constructor(
     readonly invocation: InvocationTarget,
     readonly round: number,
     readonly key?: string,
-  ) {}
+  ) {
+    const relation = this;
+    this.view = Object.freeze({
+      get invocation() {
+        if (!invocation.view) throw new Error('Child invocation has no business view');
+        return invocation.view;
+      },
+      round,
+      key,
+      get returned() {
+        return relation.returned;
+      },
+      get reception() {
+        return relation.reception;
+      },
+    });
+  }
 
   get returned(): InvocationResult<unknown> | undefined {
     return this.#returned;

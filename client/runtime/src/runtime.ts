@@ -1,5 +1,6 @@
 import type { ConfigurationResponse, ConversationUpdate, ExecutionRequest, MemoryObservation, Message, ObserverOverview, RuntimeSnapshot, InvocationEvent, TranscriptRecord } from '@capix-observer/protocol';
-import type { ConversationTransport, ObservationTransport } from './transport.js';
+import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
+import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReplica, ObservationSequenceError } from './observation.js';
 
 export interface ObservationState {
@@ -18,6 +19,8 @@ export interface ObservationState {
 export interface ClientState {
   readonly config?: ConfigurationResponse;
   readonly messages: readonly Readonly<Message>[];
+  readonly transcriptId?: string;
+  readonly transcripts: ReadonlyMap<string, TranscriptState>;
   readonly busy: boolean;
   readonly pending: string;
   readonly contextId: string;
@@ -28,6 +31,7 @@ export interface ClientState {
 
 export interface ClientRuntimeOptions {
   readonly conversation: ConversationTransport;
+  readonly transcripts: TranscriptTransport;
   readonly observation?: ObservationTransport;
 }
 
@@ -35,11 +39,12 @@ export interface ClientRuntimeOptions {
 export class ClientRuntime {
   private state: ClientState = {
     messages: [],
+    transcripts: new Map(),
     busy: false,
     pending: '',
     contextId: '',
     answered: false,
-    observation: { enabled: false, loading: false, records: new Map(), updates: new Map(), overview: { messages: [], executions: [] }, memory: { items: [] } },
+    observation: { enabled: false, loading: false, records: new Map(), updates: new Map(), overview: { transcriptId: '', messages: [], executions: [] }, memory: { items: [] } },
   };
   private readonly listeners = new Set<() => void>();
   private initialization?: Promise<void>;
@@ -49,10 +54,15 @@ export class ClientRuntime {
 
   private readonly conversation: ConversationTransport;
   private readonly observation?: ObservationTransport;
+  private readonly transcripts: TranscriptReceiver;
 
   constructor(options: ClientRuntimeOptions) {
     this.conversation = options.conversation;
     this.observation = options.observation;
+    this.transcripts = new TranscriptReceiver(options.transcripts, (transcripts) => {
+      const current = this.state.transcriptId ? transcripts.get(this.state.transcriptId) : undefined;
+      this.update({ transcripts, ...(current?.snapshot ? { messages: current.snapshot.messages } : {}), ...(current?.error ? { error: current.error } : {}) });
+    });
   }
 
   readonly getSnapshot = (): ClientState => this.state;
@@ -65,7 +75,14 @@ export class ClientRuntime {
 
   private update(change: Partial<ClientState>) {
     this.state = { ...this.state, ...change };
-    for (const listener of this.listeners) listener();
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch {
+        // A consumer cannot reject already accepted source state or interrupt other subscribers.
+        this.listeners.delete(listener);
+      }
+    }
   }
 
   private updateObservation(change: Partial<ObservationState>) {
@@ -73,17 +90,31 @@ export class ClientRuntime {
   }
 
   initialize(): Promise<void> {
+    if (this.state.config && this.state.transcriptId && !this.state.transcripts.get(this.state.transcriptId)?.syncing) {
+      return (this.initialization = this.transcripts.watch(this.state.transcriptId).then(() => undefined));
+    }
     return (this.initialization ??= this.loadInitial());
   }
 
   private async loadInitial(): Promise<void> {
     try {
-      const [config, transcript] = await Promise.all([this.conversation.config(), this.conversation.transcript()]);
-      this.update({ config, messages: transcript.messages, error: undefined });
+      const [config, transcript] = await Promise.all([this.conversation.config(), this.transcripts.watch()]);
+      const current = this.state.transcripts.get(transcript.id)?.snapshot ?? transcript;
+      this.update({ config, transcriptId: current.id, messages: current.messages, error: undefined });
     } catch (error) {
-      this.update({ error });
+      if (!(error instanceof DOMException && error.name === 'AbortError')) this.update({ error });
       throw error;
     }
+  }
+
+  /** Load an entity only when needed, then keep its copy current until explicitly stopped. */
+  loadTranscript(id: string): Promise<import('@capix-observer/protocol').TranscriptSnapshot> {
+    return this.transcripts.watch(id);
+  }
+
+  stopTranscript(id?: string): void {
+    this.transcripts.stop(id);
+    if (!this.state.config && (!id || id === this.state.transcriptId)) this.initialization = undefined;
   }
 
   /** Explicitly enable live observation. Stopping it never cancels conversation work. */
@@ -160,10 +191,15 @@ export class ClientRuntime {
 
   private receive(update: ConversationUpdate): void {
     if (update.type === 'error') throw new Error(update.error);
-    if (update.type === 'started') this.update({ contextId: update.contextId });
+    if (update.type === 'started') {
+      if (update.transcriptId && update.transcriptId !== this.state.transcriptId) throw new Error('处理来源与当前消息集合不一致。');
+      this.update({ contextId: update.contextId });
+    }
     if (update.type === 'answer') {
-      if (update.index !== this.state.messages.length) throw new Error('回答消息位置与当前对话不一致，需要重新加载消息。');
-      this.update({ answered: true, messages: [...this.state.messages, { role: 'assistant', content: update.output.content }] });
+      if (update.transcriptId && update.transcriptId !== this.state.transcriptId) throw new Error('回答来源与当前消息集合不一致。');
+      const present = this.state.messages[update.index];
+      if (present && (present.role !== 'assistant' || present.content !== update.output.content)) throw new Error('回答与消息实体内容不一致。');
+      this.update({ answered: true });
     }
   }
 
@@ -173,14 +209,21 @@ export class ClientRuntime {
     const messages = request.messages.map((message) => ({ ...message }));
     this.update({ busy: true, contextId: '', answered: false, error: undefined, pending: messages.at(-1)?.content ?? '' });
     let wasAccepted = false;
+    let requiredEnd = this.state.messages.length + messages.length;
+    let delivered: Extract<ConversationUpdate, { type: 'answer' }> | undefined;
     const errors: unknown[] = [];
     try {
       await this.conversation.run(
         { ...request, messages },
-        (update) => this.receive(update),
+        (update) => {
+          if (update.type === 'started') requiredEnd = update.inputIndex + 1;
+          if (update.type === 'answer') requiredEnd = update.index + 1;
+          this.receive(update);
+          if (update.type === 'answer') delivered = update;
+        },
         () => {
           wasAccepted = true;
-          this.update({ messages: [...this.state.messages, ...messages], pending: '' });
+          this.update({ pending: '' });
           accepted?.();
         },
       );
@@ -188,9 +231,10 @@ export class ClientRuntime {
       errors.push(error);
     }
     try {
-      if (wasAccepted) {
-        const transcript = await this.conversation.transcript();
-        this.update({ messages: transcript.messages });
+      if (wasAccepted && (!this.state.transcriptId || !this.state.transcripts.get(this.state.transcriptId)?.syncing || this.state.messages.length < requiredEnd)) await this.transcripts.refresh(this.state.transcriptId);
+      if (delivered) {
+        const message = this.state.messages[delivered.index];
+        if (!message || message.role !== 'assistant' || message.content !== delivered.output.content) throw new Error('回答与消息实体内容不一致。');
       }
     } catch (error) {
       errors.push(error);

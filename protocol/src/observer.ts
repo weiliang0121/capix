@@ -1,6 +1,7 @@
 import type { ExecutionRecord } from './records.js';
 import type { ExecutionObservation } from './observation/execution.js';
 import type { MemoryRecord } from './records/memory.js';
+import type { TranscriptRangeLocator } from './transcript.js';
 
 export interface SourceResponse {
   path: string;
@@ -27,12 +28,13 @@ export interface ExecutionSummary extends ObservedExecution {
   /** Last recorded monotonic offset; includes incomplete runs without inventing an end. */
   observedOffsetMs: number;
   calls: InvocationSummary[];
-  transcriptRange?: { start: number; end: number };
+  transcriptRange?: TranscriptRangeLocator;
   /** IDs present in this run's captured selection input. Not a claim of causal model use. */
   availableMemoryIds: string[];
   memoryChanges: { id: string; memoryId: string; operationId?: string; action: MemoryRecord['value']['action']; change: string }[];
 }
 export interface ObserverOverview {
+  transcriptId: string;
   messages: ExecutionObservation['messages'];
   executions: ExecutionSummary[];
 }

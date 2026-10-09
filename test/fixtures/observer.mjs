@@ -1,4 +1,4 @@
-import { ExecutionContext, Transcript, TranscriptRangeRef, ResourceBindings, Initializer, bindResources, BindingEnvironment } from '@capix-observer/runtime';
+import { ExecutionContext, Transcript, TranscriptRangeRef, ResourceBindings, Initializer, bindResources, BindingEnvironment, Memories, SelectionUsage } from '@capix-observer/runtime';
 
 import { acceptExecutionInput, initializeObserver, observeExecution, observerExecutionRequests, observerProviders } from '@capix-observer/service';
 
@@ -14,10 +14,19 @@ export function contextWithSource(input, options) {
   sources.set(context, source);
   return context;
 }
-export function resourceBindingFor(runtime, provider) {
+export function resourceBindingFor(runtime, provider, provided) {
   const model = new Initializer(() => provider);
   const binding = bindResources(observerExecutionRequests, observerProviders);
-  return (source) => binding({ ...source, runtime: runtime.context, model, delivery: () => {} });
+  const worlds = new WeakMap();
+  return (source) => {
+    const transcript = source.transcriptRange?.transcript ?? new Transcript();
+    let entities = provided ?? worlds.get(transcript);
+    if (!entities) {
+      entities = { transcript, memories: new Memories(transcript, { recorder: runtime.recorder }), selectionUsage: new SelectionUsage() };
+      worlds.set(transcript, entities);
+    }
+    return binding({ ...source, ...entities, model, delivery: () => {} });
+  };
 }
 export function bindChild(runtime, definition) {
   return new BindingEnvironment(runtime.operationInvocations, runtime.attemptInvocations).children(definition.requires, [definition], 'operation').get(definition);
@@ -34,7 +43,11 @@ export function createInput({ content, history }) {
 }
 
 export function observeFixture(input, settings, provider, publish, signal) {
-  const environment = initializeObserver(provider, transcriptFor(input).snapshot());
+  const environment = initializeObserver(provider, transcriptFor(input).snapshot().slice(0, -1));
   transcripts.set(input, environment.transcript);
-  return observeExecution(environment.execution, environment.recording, environment.transcript.current('user'), { settings, signal, transcript: environment.transcript }, publish);
+  return observeExecution(environment.runtime, environment.recording, { messages: [input] }, { settings, signal }, publish);
+}
+
+export function resourceFact(snapshot, access) {
+  return snapshot.resources.find((fact) => fact.parentId === snapshot.execution.id && fact.access === access && fact.phase === 'available')?.value;
 }

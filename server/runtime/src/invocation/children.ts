@@ -1,3 +1,4 @@
+import type { InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
 import { InvocationRelation, type InvocationRelationOptions, type InvocationTarget } from './relation.js';
 
@@ -10,7 +11,17 @@ export interface ParentInvocation {
 export class InvocationChildren {
   readonly #items = new Map<InvocationTarget, InvocationRelation>();
 
-  constructor(private readonly context: InvocationContext) {}
+  readonly view: InvocationView['children'];
+  constructor(private readonly context: InvocationContext) {
+    this.view = Object.freeze({
+      get: (invocation: InvocationView) => {
+        const relation = this.values().find((item) => item.invocation.view === invocation || ('callView' in item.invocation && item.invocation.callView === invocation));
+        if (!relation) throw new Error('Invocation is not a direct child');
+        return relation.view;
+      },
+      values: () => Object.freeze(this.values().map((relation) => relation.view)),
+    });
+  }
 
   attach(invocation: InvocationTarget, options: InvocationRelationOptions = {}): InvocationRelation {
     this.context.requireRunning();

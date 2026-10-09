@@ -28,3 +28,14 @@ execution.settings;
 execution.transcriptRange;
 // @ts-expect-error ancestors are private lifecycle links
 operation.executionContext;
+
+interface MutableSource {
+  readonly current: number;
+}
+interface CapturedSource {
+  readonly fixed: number;
+}
+const captured = new ResourceOffer<MutableSource, number, CapturedSource>('captured', (value: CapturedSource) => value.fixed, 'binding', { capture: (source) => ({ fixed: source.current }), describe: (value: CapturedSource) => value });
+captured.provide(() => ({ current: 4 }));
+// @ts-expect-error capture does not erase the source declaration
+captured.provide(() => ({ fixed: 4 }));

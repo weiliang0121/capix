@@ -15,14 +15,20 @@ async function execute(failAt) {
         return { id: 'fixture', model: 'fixture', content, finishReason: 'stop', usage: null };
       },
     },
-    [{ role: 'user', content: '你好' }],
+    [],
   );
   let invocation;
   let error;
   try {
-    await environment.execution.call(environment.transcript.current('user'), { settings, transcript: environment.transcript }, (_context, current) => {
-      invocation = current;
-    });
+    await environment.runtime.run(
+      { messages: [{ role: 'user', content: '你好' }] },
+      { settings },
+      {
+        started: (_context, current) => {
+          invocation = current;
+        },
+      },
+    );
   } catch (failure) {
     error = failure;
   }

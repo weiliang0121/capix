@@ -1,6 +1,6 @@
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../observer/resources.js';
-import { InvocationEntry, AttemptDefinition, type AttemptContext, RuntimeError } from '@capix-observer/runtime';
+import { InvocationEntry, AttemptDefinition, type AttemptScope, RuntimeError } from '@capix-observer/runtime';
 
 import { allowsModelRegeneration, modelRegenerationDeclaration, modelRegenerationInput, prepareRegenerationRequest, type ModelParent, type ModelRegenerationEvidence } from '../../model/regeneration.js';
 import { isEqual } from 'es-toolkit/predicate';
@@ -33,7 +33,7 @@ export class InvokeModel extends AttemptDefinition<ModelRequest, ModelOutput, Mo
     super();
   }
 
-  execute(context: AttemptContext<ModelRequest, ModelOutput, ModelCallResources>): Promise<ModelOutput> {
+  execute(context: AttemptScope<ModelRequest, ModelOutput, ModelCallResources>): Promise<ModelOutput> {
     const { timeoutMs, settings, model } = context.resources.values;
     checkCapacity(context.currentInput, settings);
     return model.invoke(context.currentInput, this.purpose, AbortSignal.any([context.signal, AbortSignal.timeout(timeoutMs)]));

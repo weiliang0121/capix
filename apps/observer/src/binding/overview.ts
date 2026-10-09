@@ -1,5 +1,6 @@
 import { readOutput, validateSnapshot, type InvocationSummary, type ObserverOverview, type RuntimeSnapshot } from '@capix-observer/protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
+import { executionResources } from './resources.js';
 import { isArray } from 'es-toolkit/compat';
 
 function object(value: unknown): Record<string, unknown> {
@@ -20,9 +21,8 @@ export function updateOverview(previous: ObserverOverview, snapshot: RuntimeSnap
   const existing = previous.executions.find((item) => item.id === snapshot.execution.id);
   const observedOffsetMs = Math.max(snapshot.events.at(-1)?.offsetMs ?? 0, ...records.map((record) => record.value.processes.at(-1)?.offsetMs ?? 0));
   const durationMs = calls.find((call) => call.recordType === 'execution')?.durationMs;
-  const range = object(snapshot.execution.value.transcriptRange);
-  const input = object(snapshot.execution.value.input);
-  const inputIndex = isNumber(range.end) ? range.end - 1 : previous.messages.length;
+  const range = executionResources(snapshot).transcriptRange;
+  const inputIndex = range ? range.end - 1 : (existing?.inputIndex ?? previous.messages.length);
   const selections = snapshot.operations.filter((operation) => operation.operation === 'selection');
   const response = snapshot.operations.find((operation) => operation.operation === 'answer' && operation.status === 'succeeded');
   const responseValue = response ? object(readOutput(response.value)) : {};
@@ -41,12 +41,11 @@ export function updateOverview(previous: ObserverOverview, snapshot: RuntimeSnap
     }),
     availableMemoryIds: isArray(memoryInput) ? memoryInput.map((memory) => object(memory).id).filter(isString) : [],
     memoryChanges: existing?.memoryChanges ?? [],
-    ...(isNumber(range.start) && isNumber(range.end) ? { transcriptRange: { start: range.start, end: range.end } } : {}),
-    ...(isString(responseValue.content) ? { response: { content: responseValue.content, ...(existing?.response?.index === undefined ? {} : { index: existing.response.index }) } } : {}),
+    ...(range ? { transcriptRange: range } : {}),
+    ...(isString(responseValue.content) ? { response: { ...(existing?.response?.index === undefined ? {} : { index: existing.response.index }) } } : {}),
     ...(snapshot.operations.find((operation) => operation.operation === 'memory') ? { memoryStatus: snapshot.operations.find((operation) => operation.operation === 'memory')!.status } : {}),
   };
   const executions = existing ? previous.executions.map((value) => (value.id === item.id ? item : value)) : [...previous.executions, item];
   const messages = [...previous.messages];
-  if (!messages.some((message) => message.index === inputIndex) && isString(input.content) && (input.role === 'user' || input.role === 'assistant')) messages.push({ index: inputIndex, message: { role: input.role, content: input.content }, count: 0 });
-  return { executions, messages: messages.map((message) => ({ ...message, count: executions.reduce((count, execution) => count + execution.selections.filter((selection) => selection.indexes?.includes(message.index)).length, 0) })) };
+  return { transcriptId: range?.transcriptId ?? previous.transcriptId, executions, messages: messages.map((message) => ({ ...message, count: executions.reduce((count, execution) => count + execution.selections.filter((selection) => selection.indexes?.includes(message.index)).length, 0) })) };
 }

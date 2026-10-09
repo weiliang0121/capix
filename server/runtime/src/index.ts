@@ -19,7 +19,6 @@ export * from './runtime/clock.js';
 export * from './runtime/runtime.js';
 export * from './runtime/create.js';
 export * from './context/runtime.js';
-export * from './transcript/observe.js';
 export * from './transcript/ref.js';
 export * from './transcript/transcript.js';
 export type { TranscriptEvent } from './transcript/event.js';
@@ -74,7 +73,8 @@ export * from './binding/children.js';
 export * from './binding/environment.js';
 export * from './binding/runtime.js';
 
-export * from './binding/execution.js';
-
-export * from './binding/operation.js';
-export * from './binding/attempt.js';
+export * from './context/scope.js';
+export * from './invocation/view.js';
+export { SelectionUsage } from './transcript/usage.js';
+export { ResourceActivity, type ResourceOperation, type ResourceOwner } from './resource/activity.js';
+export type { ContentProvenance } from './records/source.js';

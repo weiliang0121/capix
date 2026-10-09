@@ -1,21 +1,29 @@
-import type { ObservationState } from '@capix-observer/client-runtime';
+import type { ObservationState, TranscriptState } from '@capix-observer/client-runtime';
 import type { ObserverOverview } from '@capix-observer/protocol';
-import type { AppData, RoundView } from '../state/data.js';
+import type { AppData, RoundView, MemoryView } from '../state/data.js';
 import { projectDetail } from './details.js';
+import { errorMessage } from '../lib/errors.js';
 import { updateOverview } from './overview.js';
 
-function projectRounds(overview: ObserverOverview): RoundView[] {
-  const messages = new Map(overview.messages.map((message) => [message.index, message]));
+function projectRounds(overview: ObserverOverview, transcripts: ReadonlyMap<string, TranscriptState>): RoundView[] {
+  const counts = new Map(overview.messages.map((message) => [message.index, message.count]));
   return overview.executions.map((execution) => {
     const indexes = [...new Set(execution.selections.flatMap((selection) => selection.indexes ?? []))];
+    const transcriptId = execution.transcriptRange?.transcriptId ?? overview.transcriptId;
+    const snapshot = transcripts.get(transcriptId)?.snapshot;
+    const messages = snapshot?.messages ?? [];
+    const answer = execution.response?.index === undefined ? undefined : messages[execution.response.index];
     return {
       ...execution,
-      inputContent: messages.get(execution.inputIndex)?.message.content ?? '输入记录不可用',
+      transcriptId,
+      messagesLoaded: Boolean(snapshot),
+      ...(execution.response ? { response: { ...execution.response, ...(answer ? { content: answer.content } : {}) } } : {}),
+      inputContent: messages[execution.inputIndex]?.content ?? (snapshot ? '输入消息不可用' : '消息尚未加载'),
       context: {
-        inputCount: messages.get(execution.inputIndex)?.count ?? 0,
+        inputCount: counts.get(execution.inputIndex) ?? 0,
         selectedCount: indexes.length,
         selectionComplete: execution.selections.some((selection) => selection.status === 'succeeded'),
-        selectedMessages: indexes.map((index) => ({ index, entry: messages.get(index) })),
+        selectedMessages: indexes.map((index) => ({ index, entry: messages[index] ? { index, count: counts.get(index) ?? 0, message: messages[index] } : undefined })),
       },
     };
   });
@@ -24,17 +32,27 @@ function projectRounds(overview: ObserverOverview): RoundView[] {
 /** Interpret records only for the optional observer. Never supplies conversation content. */
 export function createObservationProjection() {
   let previous: ObservationState | undefined;
-  let overview: ObserverOverview = { messages: [], executions: [] };
+  let overview: ObserverOverview = { transcriptId: '', messages: [], executions: [] };
+  let previousTranscripts: ReadonlyMap<string, TranscriptState> | undefined;
   let rounds: readonly RoundView[] = [];
   let details: AppData['details'] = new Map();
-  return (state: ObservationState) => {
-    if (!previous || previous.overview !== state.overview || previous.updates !== state.updates || previous.memory !== state.memory || previous.transcriptRecords !== state.transcriptRecords) {
+  return (state: ObservationState, transcripts: ReadonlyMap<string, TranscriptState>) => {
+    if (!previous || previous.overview !== state.overview || previous.updates !== state.updates || previous.memory !== state.memory || previous.transcriptRecords !== state.transcriptRecords || previousTranscripts !== transcripts) {
       overview = [...state.updates.values()].reduce(updateOverview, state.overview);
       overview = {
         ...overview,
         executions: overview.executions.map((execution) => {
-          const answer = [...(state.transcriptRecords ?? [])].reverse().find((record) => record.executionId === execution.id && record.value.action === 'append' && record.value.messages.some((message) => message.role === 'assistant'));
-          const answerIndex = answer?.value.action === 'append' ? answer.value.start + answer.value.messages.findIndex((message) => message.role === 'assistant') : execution.response?.index;
+          const answer = [...(state.transcriptRecords ?? [])].reverse().find(
+            (record) =>
+              record.executionId === execution.id &&
+              record.value.action === 'append' &&
+              transcripts
+                .get(record.transcriptId)
+                ?.snapshot?.messages.slice(record.value.start, record.value.end)
+                .some((message) => message.role === 'assistant'),
+          );
+          const answerMessages = answer ? transcripts.get(answer.transcriptId)?.snapshot?.messages : undefined;
+          const answerIndex = answer?.value.action === 'append' && answerMessages ? answer.value.start + answerMessages.slice(answer.value.start, answer.value.end).findIndex((message) => message.role === 'assistant') : execution.response?.index;
           const memoryChanges = state.memory.items
             .flatMap((item) => item.records)
             .filter((record) => record.executionId === execution.id)
@@ -42,7 +60,7 @@ export function createObservationProjection() {
           return { ...execution, memoryChanges, ...(execution.response && answerIndex !== undefined ? { response: { ...execution.response, index: answerIndex } } : {}) };
         }),
       };
-      rounds = projectRounds(overview);
+      rounds = projectRounds(overview, transcripts);
     }
     if (!previous || previous.records !== state.records || previous.memory !== state.memory) {
       const next = new Map(details);
@@ -52,6 +70,17 @@ export function createObservationProjection() {
       details = next;
     }
     previous = state;
-    return { overview, rounds, details, memory: state.memory, loading: state.loading, error: state.error };
+    previousTranscripts = transcripts;
+    const memory: MemoryView = {
+      items: state.memory.items.map((item) => ({
+        ...item,
+        sources: item.sources.map((source) => {
+          const entity = transcripts.get(source.transcriptId);
+          const message = entity?.snapshot?.messages[source.index];
+          return { ...source, ...(message ? { message } : {}), state: message ? 'loaded' : entity?.loading ? 'loading' : entity?.error ? 'error' : entity?.snapshot ? 'missing' : 'unloaded', ...(entity?.error ? { error: errorMessage(entity.error) } : {}) };
+        }),
+      })),
+    };
+    return { overview, rounds, details, memory, loading: state.loading, error: state.error };
   };
 }

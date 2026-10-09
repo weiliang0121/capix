@@ -48,7 +48,7 @@ export function ContextSummary({ execution, onInspect }: { execution: RoundView;
           记忆 <b>{execution.availableMemoryIds.length} 个可见</b>
         </span>
         <span>
-          回答 <b>{execution.response ? `${execution.response.content.length} 字符` : '尚无回答'}</b>
+          回答 <b>{execution.response ? (execution.response.content === undefined ? '尚未加载' : `${execution.response.content.length} 字符`) : '尚无回答'}</b>
         </span>
         <span>
           变化 <b>{execution.memoryChanges.length} 项</b>

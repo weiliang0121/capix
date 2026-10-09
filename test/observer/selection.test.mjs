@@ -28,8 +28,8 @@ test('heat counts accepted selection calls, not attempts, execution success or o
   );
   const project = () => observeSelection(environment.book, environment.transcript);
   const run = async (content) => {
-    const input = acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content }] });
-    return observeExecution(environment.execution, environment.recording, input, { settings, transcript: environment.transcript });
+    const input = { messages: [{ role: 'user', content }] };
+    return observeExecution(environment.runtime, environment.recording, input, { settings, transcript: environment.transcript });
   };
   assert.deepEqual(
     project().messages.map((item) => item.count),
@@ -73,7 +73,8 @@ test('heat counts accepted selection calls, not attempts, execution success or o
     view.messages.map((item) => item.count),
     [2, 1, 0, 0, 0, 0, 0, 0],
   );
-  assert.equal(view.messages[0].message, environment.transcript.get(0));
+  assert.equal(view.messages[0].message, undefined);
+  assert.equal(view.transcriptId, environment.transcript.id);
   view.executions[0].selections[0].indexes.push(99);
   view.messages[0].count = 500;
   assert.deepEqual(project().executions[0].selections[0].indexes, [1, 0]);
@@ -90,8 +91,8 @@ test('execution rejects a foreign Transcript and does not mutate either running 
     { role: 'user', content: '另一份消息' },
     { role: 'user', content: '继续' },
   ]);
-  await assert.rejects(observeExecution(environment.execution, environment.recording, other.current('user'), { settings, transcript: other }), /another Runtime/);
-  assert.deepEqual(observeSelection(environment.book, environment.transcript), { messages: [], executions: [] });
+  await assert.rejects(observeExecution(environment.runtime, environment.recording, other.current('user'), { settings, transcript: other }), { code: 'INVALID_INPUT' });
+  assert.deepEqual(observeSelection(environment.book, environment.transcript), { transcriptId: environment.transcript.id, messages: [], executions: [] });
   assert.equal(other.length, 2);
   assert.equal(environment.runtime.running, false);
 });

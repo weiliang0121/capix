@@ -1,13 +1,13 @@
 import { captureSource, resourceBindingFor } from './fixtures/observer.mjs';
+import { createEnvironment } from './fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Initializer, ResourceOffer, bindResources, checkResourceRequests, Sequence, TranscriptResource, MemoryResource, createRuntime, OperationDefinition, ExecutionDefinition } from '@capix-observer/runtime';
-import { initializeObserver, acceptExecutionInput, ModelSettingsResource } from '@capix-observer/service';
+import { Initializer, ResourceOffer, bindResources, TranscriptResource, MemoryResource, assembleRuntime, OperationDefinition, ExecutionDefinition, AttemptRecord, OperationRecord } from '@capix-observer/runtime';
+import { initializeObserver, ModelSettingsResource } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'fixture', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
 const answer = { kind: 'answer', content: '完成' };
-
 function environment(invoke) {
   let created = 0;
   const value = initializeObserver(() => {
@@ -16,52 +16,53 @@ function environment(invoke) {
   });
   return { ...value, modelCreations: () => created };
 }
-function run(environment, configuration = settings) {
-  return environment.execution.submit(() => acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: '你好' }] }), { settings: configuration });
+function run(env, configuration = settings) {
+  return env.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings: configuration });
 }
+const attempts = (env) => [...env.book.values()].filter((record) => record instanceof AttemptRecord);
+const operations = (env) => [...env.book.values()].filter((record) => record instanceof OperationRecord);
 
-test('unused operations and model providers stay uninitialized; used instances survive later calls', async () => {
+test('unused operations and model providers stay inactive; bound O identities survive later calls', async () => {
   let fail = true;
   const env = environment(async (_request, purpose) => {
     if (fail) throw new Error('model unavailable');
     return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'answer' ? answer : { memories: [] });
   });
-  const definitions = env.definition.executions.conversation.operations;
-  const init = env.execution.execution.children;
   assert.equal(env.modelCreations(), 0);
-  assert.ok(Object.values(definitions).every((item) => !init.initialized(item)));
-  assert.equal([...env.book.values()].length, 1);
+  assert.deepEqual(operations(env), []);
   await assert.rejects(run(env), /model unavailable/);
-  assert.equal(init.initialized(definitions.selection), true);
-  assert.equal(init.initialized(definitions.generation), false);
-  assert.equal(init.initialized(definitions.extraction), false);
-  const selection = init.get(definitions.selection);
-  assert.equal(selection.children.initialized(selection.definition.prepareRequest), true);
-  assert.equal(selection.children.initialized(selection.definition.invokeModel), true);
-  assert.equal(selection.children.initialized(selection.definition.acceptOutput), false);
+  const first = operations(env);
+  assert.equal(first.length, 1);
+  assert.equal(first[0].operation, 'selection');
+  assert.equal(
+    attempts(env).some((record) => record.name === 'acceptModelOutput'),
+    false,
+  );
   fail = false;
   await run(env);
-  assert.equal(init.get(definitions.selection), selection);
+  const selection = operations(env).filter((record) => record.operation === 'selection');
+  assert.equal(selection.length, 2);
+  assert.equal(selection[0].operationInstanceId, selection[1].operationInstanceId);
   assert.equal(env.modelCreations(), 1);
-  assert.equal(init.get(definitions.generation).children.initialized(definitions.generation.prepareRegeneration), false);
-  assert.equal(init.get(definitions.extraction).children.initialized(definitions.extraction.applyMemory), true);
   assert.equal(env.transcript.current('assistant').content, answer.content);
 });
 
-test('capacity preparation and early rejection do not build later actions or a model provider', async () => {
+test('capacity rejection does not invoke later actions or instantiate a model provider', async () => {
   const env = environment(() => assert.fail('must not invoke'));
-  await assert.rejects(run(env, { ...settings, contextBudget: 1 }), (error) => error.code === 'CAPACITY_EXCEEDED');
-  const selection = env.execution.execution.children.get(env.definition.executions.conversation.operations.selection);
-  assert.equal(selection.children.initialized(selection.definition.prepareRequest), true);
-  assert.equal(selection.children.initialized(selection.definition.invokeModel), false);
-  assert.equal(selection.children.initialized(selection.definition.acceptOutput), false);
+  await assert.rejects(run(env, { ...settings, contextBudget: 256, maxOutputTokens: 64 }), (error) => error.code === 'CAPACITY_EXCEEDED');
   assert.equal(env.modelCreations(), 0);
-  assert.equal(env.execution.execution.children.initialized(env.definition.executions.conversation.operations.generation), false);
+  assert.equal(operations(env).length, 1);
+  assert.equal(
+    attempts(env).some((record) => record.name === 'invokeModel'),
+    false,
+  );
 });
 
-test('regeneration preparation is initialized only on the declared second-pass branch', async () => {
+test('regeneration adds calls only on the explicitly declared second-pass branch', async () => {
   let invalid = false;
+  let calls = 0;
   const env = environment(async (_request, purpose) => {
+    if (purpose === 'answer') calls++;
     if (purpose === 'answer' && invalid) {
       invalid = false;
       return raw({ kind: 'unsupported', content: 'invalid' });
@@ -69,13 +70,10 @@ test('regeneration preparation is initialized only on the declared second-pass b
     return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'answer' ? answer : { memories: [] });
   });
   await run(env);
-  const generation = env.execution.execution.children.get(env.definition.executions.conversation.operations.generation);
-  const model = generation.children.get(generation.definition.invokeModel);
-  assert.equal(generation.children.initialized(generation.definition.prepareRegeneration), false);
+  assert.equal(calls, 1);
   invalid = true;
   await run(env);
-  assert.equal(generation.children.initialized(generation.definition.prepareRegeneration), true);
-  assert.equal(generation.children.get(generation.definition.invokeModel), model);
+  assert.equal(calls, 3);
   assert.equal(env.modelCreations(), 1);
 });
 
@@ -99,7 +97,6 @@ test('an initializer retains failure and rejects recursive creation without impl
 });
 
 test('declarations are checked before resource access or invocation construction', () => {
-  const runtime = createRuntime();
   const resource = new ResourceOffer('test.dependency', (value) => value);
   class Work extends OperationDefinition {
     name = 'test';
@@ -117,43 +114,51 @@ test('declarations are checked before resource access or invocation construction
     }
   }
   let supplied = 0;
-  const binding = runtime.bind({
-    providers: [
-      resource.provide(() => {
-        supplied++;
-        return 'value';
-      }),
-    ],
-    executions: { root: new Root() },
-  });
-  assert.throws(() => binding.execution('root', { capture: () => ({ source: null }) }), /not provided/);
+  assert.throws(
+    () =>
+      assembleRuntime(
+        { execution: new Root() },
+        {
+          providers: [
+            resource.provide(() => {
+              supplied++;
+              return 'value';
+            }),
+          ],
+          source: { entry: () => null, capture: () => null },
+        },
+      ),
+    /not provided/,
+  );
   assert.equal(supplied, 0);
-  assert.equal(runtime.running, false);
 });
 
-test('lazy resource values are shared down the declared branch, including initialization failure', () => {
+test('lazy resource supplies share capture including failure, while access endpoints are local', () => {
   let created = 0;
-  const resource = new ResourceOffer('test.lazy', (source) => {
-    created++;
-    return Object.freeze({ source });
+  const resource = new ResourceOffer('test.lazy', (captured) => captured, 'access', {
+    capture: (source) => {
+      created++;
+      return Object.freeze({ source });
+    },
   });
   const bind = bindResources({ resource: resource.request() }, [resource.provide((source) => source)]);
   const parent = bind('first');
   const child = parent.select({ alias: resource.request() });
   assert.equal(created, 0);
   assert.deepEqual(Object.keys(parent.values), ['resource']);
-  assert.equal(created, 0);
   assert.equal(child.values.alias, parent.values.resource);
   assert.equal(created, 1);
   assert.notEqual(bind('second').values.resource, child.values.alias);
   assert.equal(created, 2);
   let failed = 0;
   const failure = new Error('source unavailable');
-  const broken = new ResourceOffer('test.failed', () => {
-    failed++;
-    throw failure;
-  });
-  const pending = bindResources({ one: broken.request() }, [broken.provide(() => null)])(null);
+  const broken = new ResourceOffer('test.failed', (source) => source);
+  const pending = bindResources({ one: broken.request() }, [
+    broken.provide(() => {
+      failed++;
+      throw failure;
+    }),
+  ])(null);
   const narrower = pending.select({ two: broken.request() });
   assert.throws(
     () => pending.values.one,
@@ -166,31 +171,28 @@ test('lazy resource values are shared down the declared branch, including initia
   assert.equal(failed, 1);
 });
 
-test('lazy access never shifts the capture point of configuration, history or memory snapshots', () => {
-  const runtime = createRuntime({ messages: [{ role: 'user', content: '培训周五' }] });
-  const { transcript, memories } = runtime.context;
+test('lazy access never shifts the capture point of configuration, history or memory snapshots', async () => {
+  const { runtime, transcript, memories } = createEnvironment({ messages: [{ role: 'user', content: '培训周五' }] });
   const change = { action: 'create', memoryId: null, change: '确认时间', sourceIndexes: [0], result: { topic: '培训', content: '周五', sourceIndexes: [0] } };
   const memory = memories.apply([change])[0];
-  let models = 0;
-  const resources = resourceBindingFor(runtime, {
-    invoke: () => {
-      models++;
-      assert.fail('unused');
-    },
-  });
+  const resources = resourceBindingFor(runtime, { invoke: () => assert.fail('unused') }, { transcript, memories });
   const configuration = { ...settings };
   const root = runtime.executionInvocations.create(null, {
-    context: { settings: configuration },
+    context: {},
     requires: { settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), memories: MemoryResource.snapshot.request() },
     establish: () => ({ resources: resources(captureSource({ settings: configuration, transcript })) }),
-    work: { maxRounds: 1, execute: () => null },
+    work: {
+      maxRounds: 1,
+      execute: (context) => {
+        assert.equal(context.resources.values.settings.model, 'fixture');
+        assert.equal(context.resources.values.history.end, 1);
+        assert.equal(context.resources.values.memories[0].content, '周五');
+        return null;
+      },
+    },
   });
   configuration.model = 'later';
   transcript.append({ role: 'assistant', content: 'later' });
   memories.apply([{ ...change, action: 'update', memoryId: memory.id, result: { ...change.result, content: '周六' } }]);
-  const values = root.context.resources.values;
-  assert.equal(values.settings.model, 'fixture');
-  assert.equal(values.history.end, 1);
-  assert.equal(values.memories[0].content, '周五');
-  assert.equal(models, 0);
+  await root.run();
 });

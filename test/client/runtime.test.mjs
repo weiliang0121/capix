@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientRuntime } from '@capix-observer/client-runtime';
-import { deferred, snapshot, transport, deliverAnswer } from './fixtures.mjs';
+import { client, deferred, snapshot, transport, deliverAnswer } from './fixtures.mjs';
 
 const request = () => ({ messages: [{ role: 'user', content: '你好，查看北京' }], contextBudget: 32768 });
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -29,7 +29,7 @@ test('headless conversation initializes once and completes multiple rounds witho
     },
   });
   for (const key of ['overview', 'memory', 'execution', 'source', 'observe']) delete io[key];
-  const runtime = new ClientRuntime({ conversation: io });
+  const runtime = client({ conversation: io });
   let notifications = 0;
   const unsubscribe = runtime.subscribe(() => notifications++);
   const first = runtime.initialize();
@@ -56,7 +56,7 @@ test('observation is opt-in even when its transport is supplied', async () => {
       reads++;
       throw new Error('must not call');
     };
-  const runtime = new ClientRuntime({ conversation: io, observation: io });
+  const runtime = client({ conversation: io, observation: io });
   await runtime.initialize();
   await runtime.submit(request());
   assert.equal(reads, 0);
@@ -87,7 +87,7 @@ test('answer is delivered before postprocessing ends and an observation outage c
       throw new Error('观测连接中断');
     },
   });
-  const runtime = new ClientRuntime({ conversation: io, observation: io });
+  const runtime = client({ conversation: io, observation: io });
   const stop = runtime.startObservation();
   await runtime.initialize();
   const running = runtime.submit(request());
@@ -103,11 +103,11 @@ test('answer is delivered before postprocessing ends and an observation outage c
   assert.equal(runtime.getSnapshot().busy, false);
 });
 
-test('business postprocessing and message refresh failures retain the already delivered answer', async () => {
+test('postprocessing failure retains the independently synchronized answer without refreshing a healthy entity', async () => {
   let reads = 0;
   const postprocess = new Error('后处理失败');
   const refresh = new Error('消息刷新失败');
-  const runtime = new ClientRuntime({
+  const runtime = client({
     conversation: transport({
       transcript: async () => {
         if (reads++) throw refresh;
@@ -122,8 +122,7 @@ test('business postprocessing and message refresh failures retain the already de
   });
   await runtime.initialize();
   await assert.rejects(runtime.submit(request()), (error) => {
-    assert.deepEqual(error.errors, [postprocess, refresh]);
-    assert.equal(error.cause, postprocess);
+    assert.equal(error, postprocess);
     return true;
   });
   assert.equal(runtime.getSnapshot().messages.at(-1).content, '这是中文回答');
@@ -133,7 +132,7 @@ test('business postprocessing and message refresh failures retain the already de
 test('HTTP rejection does not append, refresh, notify acceptance or retry', async () => {
   let runs = 0;
   let reads = 0;
-  const runtime = new ClientRuntime({
+  const runtime = client({
     conversation: transport({
       transcript: async () => {
         reads++;
@@ -165,7 +164,7 @@ test('local busy guard rejects concurrent submissions and stopping observation d
       deliverAnswer(receive);
     },
   });
-  const runtime = new ClientRuntime({ conversation: io, observation: io });
+  const runtime = client({ conversation: io, observation: io });
   await runtime.initialize();
   const stop = runtime.startObservation();
   const running = runtime.submit(request());
@@ -191,7 +190,7 @@ test('stream observations and detail caching remain separate from business messa
       await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
     },
   });
-  const runtime = new ClientRuntime({ conversation: io, observation: io });
+  const runtime = client({ conversation: io, observation: io });
   await runtime.initialize();
   const stop = runtime.startObservation();
   await settle();
@@ -220,7 +219,7 @@ test('late observation loads and notifications from a disconnected session canno
       await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
     },
   });
-  const runtime = new ClientRuntime({ conversation: io, observation: io });
+  const runtime = client({ conversation: io, observation: io });
   const stop = runtime.startObservation();
   stop();
   const stopNew = runtime.startObservation();

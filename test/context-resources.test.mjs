@@ -1,9 +1,10 @@
+import { createEnvironment } from './fixtures/environment.mjs';
 import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { Execution, Operation, Attempt } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, checkResourceRequests, Sequence, createRuntime } from '@capix-observer/runtime';
-import { ObserverBinding, ObserverRuntimeDefinition, GenerateAnswer } from '@capix-observer/service';
+import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence, createRuntime } from '@capix-observer/runtime';
+import { bindObserver, ObserverRuntimeDefinition, GenerateAnswer } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 
@@ -16,52 +17,53 @@ function provider() {
   };
 }
 
-test('Observer narrows resources at each action and keeps prior execution references stable', async () => {
-  const runtime = createRuntime({ messages: [{ role: 'user', content: '你好' }] });
-  const execution = new ObserverBinding(runtime, new ObserverRuntimeDefinition(provider()));
-  const transcript = runtime.context.transcript;
+test('Observer narrows resources at each action, captures fixed values and expires live endpoints with the call', async () => {
+  const entities = createEnvironment();
+  const definition = new ObserverRuntimeDefinition();
+  const views = [];
+  const inspect = (current) => {
+    const execute = current.execute;
+    current.execute = function (context, ...args) {
+      views.push({ definition: current, resources: { ...context.resources.values } });
+      return execute.call(this, context, ...args);
+    };
+    for (const child of current.children ?? []) inspect(child);
+  };
+  inspect(definition.execution);
+  const runtime = bindObserver(definition, entities, provider());
   let first;
-  await execution.call(transcript.current('user'), { settings }, (_context, invocation) => {
-    first = invocation;
-  });
-  const operations = first.children.values().map((relation) => relation.invocation);
-  const selection = operations[0];
-  const generation = operations[1];
-  const extraction = operations[2];
-  assert.equal(selection.context.resources.values.history.read(0), first.context.resources.values.history.read(0));
-  assert.equal(selection.context.resources.values.history.transcript, undefined);
-  assert.equal(generation.context.resources.values.history.read(0), first.context.resources.values.history.read(0));
-  assert.deepEqual(selection.context.resources.values.settings, first.context.resources.values.settings);
-  assert.deepEqual(Object.keys(extraction.context.resources.values).sort(), ['memoryWriter', 'model', 'settings', 'timeoutMs']);
-  const selectionActions = selection.children.values().map((relation) => relation.invocation);
-  assert.deepEqual(Object.keys(selectionActions[0].context.resources.values).sort(), ['history', 'settings']);
-  assert.deepEqual(Object.keys(selectionActions[1].context.resources.values).sort(), ['model', 'settings', 'timeoutMs']);
-  assert.equal(selectionActions[1].context.resources.values.timeoutMs, 1000);
-  assert.deepEqual(selectionActions[2].context.resources.values, {});
-  assert.deepEqual(selectionActions[2].context.input.basis, { start: 0, end: 0 });
-  const generationActions = generation.children.values().map((relation) => relation.invocation);
-  assert.deepEqual(Object.keys(generationActions[0].context.resources.values), ['history']);
-  assert.deepEqual(Object.keys(generationActions[3].context.input), ['output']);
-  const extractionActions = extraction.children.values().map((relation) => relation.invocation);
-  assert.equal(extractionActions[2].context.input.basis, extraction.context.input);
-  assert.deepEqual(Object.keys(extractionActions[3].context.resources.values), ['memoryWriter']);
+  await runtime.run(
+    { messages: [{ role: 'user', content: '你好' }] },
+    { settings },
+    {
+      started: (_context, invocation) => {
+        first = invocation;
+      },
+    },
+  );
+  const firstViews = [...views];
+  const entry = firstViews[0].resources;
+  const selection = firstViews[1].resources;
+  assert.equal(entry.history.locate().end, 1);
+  assert.equal(selection.history.locate().end, 1);
+  assert.notEqual(entry.history, selection.history);
+  assert.equal(selection.history.transcript, undefined);
+  assert.equal(selection.settings, entry.settings);
+  assert.equal(selection.timeoutMs, 1000);
+  assert.throws(() => entry.history.read(0), /running|ended/i);
   assert.equal(first.record, undefined);
-
-  transcript.append({ role: 'user', content: '继续' });
-  let second;
-  await execution.call(transcript.current('user'), { settings: { ...settings, timeoutMs: 2000 } }, (_context, invocation) => {
-    second = invocation;
-  });
-  const next = second.children.values()[0].invocation.context.resources.values;
-  assert.equal(next.timeoutMs, 2000);
-  assert.equal(next.history.end, 3);
-  assert.equal(selection.context.resources.values.timeoutMs, 1000);
-  assert.equal(selection.context.resources.values.history.end, 1);
-  assert.notEqual(next.settings, selection.context.resources.values.settings);
+  assert.ok(first.children.values().length === 3);
+  views.length = 0;
+  await runtime.run({ messages: [{ role: 'user', content: '继续' }] }, { settings: { ...settings, timeoutMs: 2000 } });
+  assert.equal(views[0].resources.history.end, 3);
+  assert.equal(views[0].resources.timeoutMs, 2000);
+  assert.equal(entry.timeoutMs, 1000);
+  assert.equal(entry.history.end, 1);
+  assert.notEqual(views[0].resources.settings, entry.settings);
 });
 
 test('nested operations cannot implicitly bypass their direct parent for execution resources', async () => {
-  const runtime = createRuntime({ messages: [{ role: 'user', content: '你好' }] });
+  const runtime = createRuntime();
   const generation = bindChild(runtime, new GenerateAnswer());
   let wrapper;
   class NarrowOperation extends Operation {
@@ -122,7 +124,7 @@ test('requests select published offer identity, not a matching name or local ali
   assert.throws(() => bindResources({ history: unrelated.request() }, providers), /received 0/);
   const bound = bindResources({ history: offered.request() }, providers)({ text: 'hello' });
   const child = bound.select({ messages: offered.request() });
-  assert.equal(child.values.messages, bound.values.history);
+  assert.notEqual(child.values.messages, bound.values.history);
   assert.equal(child.values.messages.read(), 'hello');
   assert.throws(() => bound.select({ history: unrelated.request() }), /Unfulfilled resource request/);
 });
@@ -232,8 +234,7 @@ test('message and memory access preserves entity validation, change publication 
   const { MemoryResource, SelectionUsageResource, Recorder, RecordBook, ChangeObserver } = await import('@capix-observer/runtime');
   const recorder = new Recorder(new RecordBook());
   const changes = new ChangeObserver();
-  const runtime = createRuntime({ recorder, changes });
-  const { transcript, memories, selectionUsage } = runtime.context;
+  const { transcript, memories, selectionUsage } = createEnvironment({ recorder, changes });
   const bind = bindResources(
     {
       messages: TranscriptResource.append.request(),
@@ -283,15 +284,16 @@ test('message and memory access preserves entity validation, change publication 
 });
 
 test('model offer exposes only invocation while preserving provider method ownership', async () => {
-  const runtime = createRuntime({ messages: [{ role: 'user', content: '你好' }] });
+  const entities = createEnvironment();
   const model = { ...provider(), privateValue: 'provider-only' };
   const invoke = model.invoke;
   model.invoke = function (...args) {
     assert.equal(this, model);
     return invoke(...args);
   };
-  const execution = new ObserverBinding(runtime, new ObserverRuntimeDefinition(model));
-  await execution.call(runtime.context.transcript.current('user'), { settings }, (context) => {
+  const definition = new ObserverRuntimeDefinition();
+  const execute = definition.execution.execute;
+  definition.execution.execute = function (context, ...args) {
     const access = context.resources.values.model;
     assert.notEqual(access, model);
     assert.deepEqual(Object.keys(access), ['invoke']);
@@ -299,5 +301,8 @@ test('model offer exposes only invocation while preserving provider method owner
     assert.ok(Object.isFrozen(access));
     assert.equal(context.settings, undefined);
     assert.equal(context.transcriptRange, undefined);
-  });
+    return execute.call(this, context, ...args);
+  };
+  const runtime = bindObserver(definition, entities, model);
+  await runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
 });

@@ -1,4 +1,3 @@
-import type { TranscriptRangeRef } from '../../transcript/ref.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
@@ -11,18 +10,13 @@ import type { RecordBook } from '../container/book.js';
 import { OperationRecordHelper } from '../operation/helper.js';
 import { AttemptRecordHelper } from '../attempt/helper.js';
 import { ExecutionRecord } from './record.js';
-
-/** Existing observation fields, provided explicitly by the application binding. */
-export interface ExecutionRecordMetadata {
-  readonly settings: unknown;
-  readonly transcriptRange?: TranscriptRangeRef;
-}
+import { ResourceRecord } from '../resource/record.js';
 
 /** Execution-specific recording operations. All managed objects are explicit arguments. */
 export class ExecutionRecordHelper {
-  static recording<I, O>(recording: InvocationRecordHelper, metadata: ExecutionRecordMetadata = { settings: null }) {
+  static recording<I, O>(recording: InvocationRecordHelper) {
     return recording.recording<ExecutionContext<I, O>>(
-      (context) => this.create(recording.recorder, { contextId: context.id, parentId: recording.root.id }, { input: context.input, settings: metadata.settings, ...(metadata.transcriptRange ? { transcriptRange: metadata.transcriptRange } : {}) }),
+      (context) => this.create(recording.recorder, { contextId: context.id, parentId: recording.root.id }, { input: context.input }),
       (context, record, resultOf) => {
         const state = context.state;
         if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);
@@ -71,6 +65,10 @@ export class ExecutionRecordHelper {
       operations: operations.map((record) => record.toJSON()),
       attempts: operations.flatMap((operation) => AttemptRecordHelper.findByOperation(recorder, operation.id).map((record) => record.toJSON())),
       events: InvocationBoundaryRecordHelper.findByExecution(recorder, id).map((event) => event.toJSON()),
+      resources: recorder.tree
+        .descendants(id)
+        .filter((record): record is ResourceRecord => record instanceof ResourceRecord)
+        .map((record) => record.toJSON()),
     };
   }
 }

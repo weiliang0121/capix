@@ -1,12 +1,18 @@
-import type { Transcript } from '../transcript/transcript.js';
-import type { Memories } from '../memory/memories.js';
-import type { SelectionUsage } from '../transcript/usage.js';
+import { RuntimeError } from '../errors/error.js';
 
-/** Live contents of a Runtime data scope. Each owner still governs its own changes. */
+/** Runtime's live occupancy only. Referenced entities have independent owners. */
 export class RuntimeContext {
-  constructor(
-    readonly transcript: Transcript,
-    readonly memories: Memories,
-    readonly selectionUsage: SelectionUsage,
-  ) {}
+  #running = false;
+  get running(): boolean {
+    return this.#running;
+  }
+  async reserve<O>(work: () => O | Promise<O>): Promise<O> {
+    if (this.#running) throw new RuntimeError('RUNTIME_BUSY', '当前环境正在执行，请等待本次调用结束。');
+    this.#running = true;
+    try {
+      return await work();
+    } finally {
+      this.#running = false;
+    }
+  }
 }

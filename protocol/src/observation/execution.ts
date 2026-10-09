@@ -4,7 +4,7 @@ import type { OperationRecord } from '../records.js';
 /** A QA is a view of one execution, not another stored runtime entity. */
 export interface ExecutionObservation extends Omit<SelectionObservation, 'executions'> {
   executions: (SelectionObservation['executions'][number] & {
-    response?: { content: string; index?: number };
+    response?: { index?: number };
     memoryStatus?: OperationRecord['status'];
   })[];
 }

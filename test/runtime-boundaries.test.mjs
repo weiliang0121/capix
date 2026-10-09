@@ -1,10 +1,11 @@
+import { createEnvironment } from './fixtures/environment.mjs';
 import { Execution, Operation, Attempt } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
 import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Invocation, InvocationContext, Runtime, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory, createRuntime } from '@capix-observer/runtime';
-import { initializeObserver, ObserverBinding, ObserverRuntimeDefinition, observeExecution, observeOverview, acceptExecutionInput } from '@capix-observer/service';
+import { initializeObserver, bindObserver, ObserverRuntimeDefinition, observeExecution, observeOverview, acceptExecutionInput } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const createRecorder = (book = new RecordBook()) => new Recorder(book);
@@ -49,7 +50,7 @@ test('Invocation consumes an established context and rejects concurrent reuse', 
 });
 
 test('Runtime reserves before input acceptance across different E instances and always releases after failure', async () => {
-  const runtime = createRuntime();
+  const { runtime, transcript } = createEnvironment();
   let release;
   const pending = new Promise((resolve) => {
     release = resolve;
@@ -66,7 +67,7 @@ test('Runtime reserves before input acceptance across different E instances and 
     new Echo(runtime.executionInvocations).submit(
       () => {
         accepted = true;
-        runtime.context.transcript.append({ role: 'user', content: 'must not append' });
+        transcript.append({ role: 'user', content: 'must not append' });
         return 'next';
       },
       { settings },
@@ -74,7 +75,7 @@ test('Runtime reserves before input acceptance across different E instances and 
     (error) => error.code === 'RUNTIME_BUSY',
   );
   assert.equal(accepted, false);
-  assert.equal(runtime.context.transcript.length, 0);
+  assert.equal(transcript.length, 0);
   release();
   await first;
   await assert.rejects(
@@ -92,8 +93,7 @@ test('Runtime reserves before input acceptance across different E instances and 
 
 test('Transcript validates full batches, records changes once, and keeps old evidence stable across segmentation', () => {
   const recorder = createRecorder();
-  const runtime = createRuntime({ recorder });
-  const transcript = runtime.context.transcript;
+  const { transcript } = createEnvironment({ recorder });
   transcript.append({ role: 'user', content: 'one' }, { role: 'assistant', content: 'two' });
   const before = transcript.snapshot();
   assert.throws(() => transcript.append({ role: 'user', content: 'valid' }, { role: 'user', content: ' ' }));
@@ -103,33 +103,33 @@ test('Transcript validates full batches, records changes once, and keeps old evi
   assert.equal(records.length, 2);
   assert.ok(records.every((record) => record instanceof TranscriptRecord && record.transcriptId === transcript.id));
   assert.deepEqual(records[1].value, { action: 'segment', previousStart: 0, start: 1, end: 2 });
-  assert.equal(records[0].value.messages.length, 2);
+  assert.equal(records[0].value.end - records[0].value.start, 2);
   transcript.append({ role: 'user', content: 'three' });
   assert.equal(before.length, 2);
-  assert.equal(records[0].value.messages.length, 2);
+  assert.equal(records[0].value.end - records[0].value.start, 2);
   assert.equal(records[0].executionId, undefined);
 });
 
 test('Memories owns official mutation, records standalone changes, skips unchanged content and exposes no write bypass', () => {
   const recorder = createRecorder();
-  const runtime = createRuntime({ recorder, messages: [{ role: 'user', content: '北京' }] });
-  const [memory] = runtime.context.memories.apply([proposed()]);
+  const { memories } = createEnvironment({ recorder, messages: [{ role: 'user', content: '北京' }] });
+  const [memory] = memories.apply([proposed()]);
   const original = memory.snapshot();
   const changes = () => [...recorder.book.values()].filter((r) => r instanceof MemoryRecord);
   assert.equal(changes().length, 1);
   assert.equal(changes()[0].operationId, undefined);
-  assert.deepEqual(runtime.context.memories.apply([proposed('北京', memory.id)]), []);
+  assert.deepEqual(memories.apply([proposed('北京', memory.id)]), []);
   assert.equal(changes().length, 1);
-  assert.throws(() => runtime.context.memories.apply([proposed('上海', memory.id), proposed('广州', 'missing')]));
+  assert.throws(() => memories.apply([proposed('上海', memory.id), proposed('广州', 'missing')]));
   assert.equal(memory.content, '北京');
-  runtime.context.memories.apply([proposed('上海', memory.id)]);
-  assert.equal(runtime.context.memories.get(memory.id), memory);
+  memories.apply([proposed('上海', memory.id)]);
+  assert.equal(memories.get(memory.id), memory);
   assert.equal(original.content, '北京');
   assert.equal(changes().length, 2);
   assert.equal(typeof memory.update, 'undefined');
-  assert.equal(typeof runtime.context.memories.add, 'undefined');
+  assert.equal(typeof memories.add, 'undefined');
   assert.throws(() => memory.sourceIndexes.push(1));
-  assert.equal(observeMemory(runtime.context.memories, recorder.book).items[0].records.length, 2);
+  assert.equal(observeMemory(memories, recorder.book).items[0].records.length, 2);
 });
 
 test('content registration failure preserves the applied fact and does not pretend to roll it back', () => {
@@ -139,15 +139,15 @@ test('content registration failure preserves the applied fact and does not prete
       return super.add(record);
     }
   }
-  const runtime = createRuntime({ recorder: createRecorder(new Reject()) });
+  const { transcript } = createEnvironment({ recorder: createRecorder(new Reject()) });
   assert.throws(
-    () => runtime.context.transcript.append({ role: 'user', content: 'accepted' }),
+    () => transcript.append({ role: 'user', content: 'accepted' }),
     (error) => error.code === 'RECORDING_FAILED',
   );
-  assert.equal(runtime.context.transcript.current('user').content, 'accepted');
+  assert.equal(transcript.current('user').content, 'accepted');
 });
 
-test('replacing execution behaviors retains messages, memories, counts and the complete observed history', async () => {
+test('new R assemblies share independently owned entities without absorbing their lifetimes', async () => {
   const provider = {
     async invoke(request, purpose) {
       const input = JSON.parse(request.messages[1].content);
@@ -157,24 +157,24 @@ test('replacing execution behaviors retains messages, memories, counts and the c
     },
   };
   const environment = initializeObserver(provider);
-  const run = async (execution, text) => observeExecution(execution, environment.recording, () => acceptExecutionInput(environment.transcript, { messages: [{ role: 'user', content: text }] }), { settings });
-  const first = await run(environment.execution, '我在北京');
-  const memory = environment.runtime.context.memories.values()[0];
-  environment.execution = new ObserverBinding(environment.runtime, new ObserverRuntimeDefinition(provider));
-  const second = await run(environment.execution, '继续');
+  const run = async (runtime, text) => observeExecution(runtime, runtime.recording, { messages: [{ role: 'user', content: text }] }, { settings });
+  const first = await run(environment.runtime, '我在北京');
+  const memory = environment.memories.values()[0];
+  const next = bindObserver(new ObserverRuntimeDefinition(), environment, provider, { recorder: environment.recorder, changes: environment.changes });
+  const second = await run(next, '继续');
   assert.equal(second.execution.status, 'succeeded');
-  assert.equal(environment.runtime.context.memories.get(memory.id), memory);
-  assert.equal(environment.runtime.context.selectionUsage.get(environment.transcript.get(0)), 1);
+  assert.equal(environment.memories.get(memory.id), memory);
+  assert.equal(environment.selectionUsage.get(environment.transcript.get(0)), 1);
   assert.equal(second.operations[0].value.input.memories[0].id, memory.id);
   const observation = observeOverview(environment);
   assert.equal(observation.executions.length, 2);
-  assert.ok(observation.executions.every((execution) => execution.response?.content === '已了解'));
+  assert.equal(environment.transcript.current('assistant').content, '已了解');
   assert.equal(observation.messages[0].count, 1);
   const change = [...environment.book.values()].find((r) => r instanceof MemoryRecord);
   const apply = first.attempts.find((r) => r.name === 'applyMemory');
   assert.equal(change.callId, apply.id);
   assert.equal(change.contextId, apply.contextId);
-  const response = [...environment.book.values()].find((r) => r instanceof TranscriptRecord && r.value.action === 'append' && r.value.messages[0].role === 'assistant');
+  const response = [...environment.book.values()].find((r) => r instanceof TranscriptRecord && r.value.action === 'append' && environment.transcript.get(r.value.start)?.role === 'assistant');
   assert.equal(response.callId, first.execution.id);
 });
 
@@ -288,13 +288,13 @@ test('memory registration failure preserves the applied batch prefix and does no
       return super.add(record);
     }
   }
-  const runtime = createRuntime({ recorder: createRecorder(new Reject()), messages: [{ role: 'user', content: '地点' }] });
+  const { memories } = createEnvironment({ recorder: createRecorder(new Reject()), messages: [{ role: 'user', content: '地点' }] });
   assert.throws(
-    () => runtime.context.memories.apply([proposed('北京'), proposed('上海')]),
+    () => memories.apply([proposed('北京'), proposed('上海')]),
     (error) => error.code === 'RECORDING_FAILED',
   );
   assert.deepEqual(
-    runtime.context.memories.values().map((memory) => memory.content),
+    memories.values().map((memory) => memory.content),
     ['北京'],
   );
 });

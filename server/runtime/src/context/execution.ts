@@ -8,6 +8,9 @@ export interface ExecutionOptions {
 }
 
 export class ExecutionContext<I = unknown, O = unknown, R extends object = object> extends InvocationContext<I, O> {
+  get level(): 'execution' {
+    return 'execution';
+  }
   readonly signal: AbortSignal;
   readonly resources: ResourceBindings<R>;
   readonly #owner?: ExecutionContextBuilder;

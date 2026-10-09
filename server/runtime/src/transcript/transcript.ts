@@ -2,7 +2,7 @@ import { TranscriptRecordHelper } from '../records/transcript/helper.js';
 import { writeRecord } from '../records/error.js';
 import { randomUUID } from 'node:crypto';
 import type { Recorder } from '../records/recorder.js';
-import type { ChangeSource } from '../records/source.js';
+import type { ContentProvenance } from '../records/source.js';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import { isNonBlankString } from '../value/string.js';
 import { isObject } from '../value/object.js';
@@ -51,34 +51,34 @@ export class Transcript {
     return this.#starts.map((start, index) => new TranscriptRangeRef(this, start, this.#starts[index + 1] ?? this.length));
   }
 
-  startSegment(start: number, source?: ChangeSource): void {
+  startSegment(start: number, provenance: ContentProvenance = {}): void {
     if (!isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
     const previousStart = this.activeStart;
     const end = this.length;
-    const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'segment-started', previousStart, start, end });
+    const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'segment-started', previousStart, start, end }, provenance.origin);
     this.#starts.push(start);
     this.#revision = event.revision;
     this.capture(event);
     const recorder = this.#recorder;
-    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(recorder.clock, { transcriptId: this.id, revision: event.revision, source }, { action: 'segment', previousStart, start, end })));
+    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(recorder.clock, { transcriptId: this.id, revision: event.revision, source: provenance.source }, { action: 'segment', previousStart, start, end })));
   }
 
   append(...messages: readonly Message[]): void {
     this.appendFrom(messages);
   }
 
-  appendFrom(messages: readonly Message[], source?: ChangeSource): void {
+  appendFrom(messages: readonly Message[], provenance: ContentProvenance = {}): void {
     if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     // Check the whole batch before changing the transcript.
     const accepted = messages.map((message) => Transcript.accept(message));
     if (!accepted.length) return;
     const start = this.length;
-    const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'messages-appended', start, messages: accepted });
+    const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'messages-appended', start, messages: accepted }, provenance.origin);
     for (const message of accepted) this.#messages.push(message);
     this.#revision = event.revision;
     this.capture(event);
     const recorder = this.#recorder;
-    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(recorder.clock, { transcriptId: this.id, revision: event.revision, source }, { action: 'append', start, messages: accepted })));
+    if (recorder) writeRecord(() => recorder.add(TranscriptRecordHelper.create(recorder.clock, { transcriptId: this.id, revision: event.revision, source: provenance.source }, { action: 'append', start, end: this.length })));
   }
 
   private capture(event: TranscriptEvent): void {

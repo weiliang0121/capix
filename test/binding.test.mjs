@@ -1,11 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExecutionDefinition, OperationDefinition, AttemptDefinition, InvocationEntry, Sequence, ResourceOffer, createRuntime, Recorder, RecordBook } from '@capix-observer/runtime';
-import { ObserverBinding, ObserverRuntimeDefinition } from '@capix-observer/service';
+import { ExecutionDefinition, OperationDefinition, AttemptDefinition, InvocationEntry, Sequence, ResourceOffer, assembleRuntime, Recorder, RecordBook } from '@capix-observer/runtime';
 
-const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const resource = new ResourceOffer('test.value', (value) => value, 'binding');
-
 class Read extends AttemptDefinition {
   name = 'read';
   label = 'Read';
@@ -36,63 +33,69 @@ class Main extends ExecutionDefinition {
     return children.get(this.operation).call(invocation, context.currentInput);
   }
 }
-function bind(runtime, main, source) {
-  return runtime.bind({ providers: [resource.provide((value) => value)], executions: { main } }).execution('main', {
-    capture: () => ({ source: source() }),
-  });
+function bind(main, source, options = {}) {
+  return assembleRuntime({ execution: main }, { ...options, providers: [resource.provide((value) => value)], source: { entry: () => source(), capture: () => source() } });
 }
 
-test('the same REOA definitions bind to independent runtimes and preserve per-binding operation identity', async () => {
+test('definitions bind to independent R endpoints; node identity is stable and per-call state is separate', async () => {
   const definition = new Main();
-  const left = createRuntime({ recorder: new Recorder(new RecordBook()) });
-  const right = createRuntime({ recorder: new Recorder(new RecordBook()) });
   let value = 'left';
-  const first = bind(left, definition, () => value);
-  const second = bind(right, definition, () => 'right');
+  const first = bind(definition, () => value, { recorder: new Recorder(new RecordBook()) });
+  const second = bind(definition, () => 'right', { recorder: new Recorder(new RecordBook()) });
+  const calls = [];
+  const callbacks = { started: (_context, invocation) => calls.push(invocation) };
   assert.equal(definition.runtime, undefined);
   assert.equal(definition.operation.id, undefined);
-  assert.equal(definition.operation.call, undefined);
-  assert.equal(first.children.initialized(definition.operation), false);
-  const calls = [];
-  assert.equal(await first.call('one', {}, (_context, invocation) => calls.push(invocation)), 'one:left');
-  const firstIdentity = first.children.get(definition.operation).id;
+  assert.equal(first.context.transcript, undefined);
+  assert.equal(first.context.memories, undefined);
+  assert.equal(await first.run('one', {}, callbacks), 'one:left');
   value = 'next';
-  assert.equal(await first.call('two', {}, (_context, invocation) => calls.push(invocation)), 'two:next');
-  assert.equal(await second.call('three', {}), 'three:right');
-  assert.equal(first.children.get(definition.operation).id, firstIdentity);
-  assert.notEqual(second.children.get(definition.operation).id, firstIdentity);
-  assert.equal(calls[0].context.resources.values.value, 'left');
-  assert.equal(calls[1].context.resources.values.value, 'next');
+  assert.equal(await first.run('two', {}, callbacks), 'two:next');
+  assert.equal(await second.run('three', {}, callbacks), 'three:right');
+  const identity = (call) => call.children.values()[0].invocation.record.operationInstanceId;
+  assert.equal(identity(calls[0]), identity(calls[1]));
+  assert.notEqual(identity(calls[0]), identity(calls[2]));
   assert.notEqual(calls[0].context.id, calls[1].context.id);
-  assert.equal(calls[0].record.value.settings, null);
-  assert.equal(calls[0].record.parentId, left.record.id);
-  assert.equal(calls[0].children.values()[0].invocation.record.operationInstanceId, firstIdentity);
+  assert.equal(calls[0].record.parentId, first.record.id);
+  assert.equal(first.running, false);
 });
 
-test('definitions may be plain contract objects without inheriting a runtime class', async () => {
-  const child = {
-    level: 'operation',
-    name: 'length',
-    label: 'Length',
-    source: 'test',
-    requires: {},
-    children: [],
-    maxRounds: 1,
-    execute: (context) => context.currentInput.length,
+test('business views exclude state mutation, records, binding APIs and relation mutation', async () => {
+  const definition = new Main();
+  const original = definition.operation.execute;
+  definition.operation.execute = async function (context, invocation, children) {
+    assert.equal(context.complete, undefined);
+    assert.equal(context.fail, undefined);
+    assert.equal(context.startRound, undefined);
+    assert.equal(context.resources.select, undefined);
+    assert.equal(invocation.record, undefined);
+    assert.equal(invocation.source, undefined);
+    assert.equal(invocation.run, undefined);
+    assert.equal(invocation.children.attach, undefined);
+    assert.ok(Object.isFrozen(context));
+    const result = await original.call(this, context, invocation, children);
+    const relation = invocation.children.values()[0];
+    assert.equal(relation.accept, undefined);
+    assert.equal(relation.returnedWith, undefined);
+    assert.equal(relation.invocation.context.complete, undefined);
+    assert.equal(relation.invocation.record, undefined);
+    assert.equal(relation.invocation.run, undefined);
+    assert.equal(invocation.children.get(relation.invocation), relation);
+    assert.equal(relation.reception.status, 'accepted');
+    assert.equal(invocation.origin.contextId, context.id);
+    return result;
   };
-  const root = {
-    level: 'execution',
-    requires: {},
-    children: [child],
-    maxRounds: 1,
-    execute: (context, invocation, children) => children.get(child).call(invocation, context.currentInput),
-  };
-  const runtime = createRuntime();
-  const entry = runtime.bind({ providers: [], executions: { root } }).execution('root', { capture: () => ({ source: null }) });
-  assert.equal(await entry.call('hello', {}), 5);
+  assert.equal(await bind(definition, () => 'value').run('input', {}), 'input:value');
 });
 
-test('a call-scoped child entry cannot be reused against a different parent, even in the same runtime', async () => {
+test('plain definitions use the same fixed structures without class inheritance', async () => {
+  const child = { level: 'operation', name: 'length', label: 'Length', source: 'test', requires: {}, children: [], maxRounds: 1, execute: (context) => context.currentInput.length };
+  const execution = { level: 'execution', requires: {}, children: [child], maxRounds: 1, execute: (context, invocation, children) => children.get(child).call(invocation, context.currentInput) };
+  const runtime = assembleRuntime({ execution }, { providers: [], source: { entry: () => null, capture: () => null } });
+  assert.equal(await runtime.run('hello', {}), 5);
+});
+
+test('a call-scoped child entry cannot be transferred to another parent', async () => {
   const definition = new Main();
   let previous;
   let previousAlternative;
@@ -102,114 +105,155 @@ test('a call-scoped child entry cannot be reused against a different parent, eve
     accepted++;
     return input;
   });
-  let calls = 0;
   definition.execute = async function (context, invocation, children) {
     const child = children.get(this.operation);
     if (previous) {
-      const before = invocation.children.values().length;
-      await assert.rejects(previous.call(invocation, 'wrong'), /another parent invocation/);
+      assert.throws(() => previous.create(invocation, 'wrong'), /another parent invocation/);
       assert.throws(() => previousAlternative.create(invocation, 'wrong'), /another parent invocation/);
       assert.equal(accepted, 0);
-      assert.equal(invocation.children.values().length, before);
+      assert.equal(invocation.children.values().length, 0);
     }
     previous = child;
     previousAlternative = children.entry(alternative);
     previousInvocation = invocation;
-    calls++;
     return child.call(invocation, context.currentInput);
   };
-  const entry = bind(createRuntime(), definition, () => 'resource');
-  await entry.call('first', {});
-  await entry.call('second', {});
+  const runtime = bind(definition, () => 'resource');
+  await runtime.run('first', {});
+  await runtime.run('second', {});
   assert.throws(() => previousAlternative.create(previousInvocation, 'ended'), /already ended/);
   assert.equal(accepted, 0);
-  assert.equal(calls, 2);
 });
 
-test('undeclared definitions and alternative entries fail before application admission or child attachment', async () => {
+test('undeclared entries fail before admission and attachment', async () => {
   const definition = new Main();
   const unknown = new Work();
-  let accepted = 0;
+  let accepted = false;
   const alternative = new InvocationEntry(unknown, () => {
-    accepted++;
+    accepted = true;
     return 'wrong';
   });
-  definition.execute = async (_context, invocation, children) => {
+  definition.execute = (_context, invocation, children) => {
     assert.throws(() => children.get(unknown), /not declared/);
     assert.throws(() => children.entry(alternative).create(invocation, null), /not declared/);
     assert.equal(invocation.children.values().length, 0);
     return 'done';
   };
-  assert.equal(await bind(createRuntime(), definition, () => 'value').call(null, {}), 'done');
-  assert.equal(accepted, 0);
+  assert.equal(await bind(definition, () => 'value').run(null, {}), 'done');
+  assert.equal(accepted, false);
 });
 
-test('binding rejects E-to-A and cyclic declarations before runtime identities or providers are used', () => {
-  const runtime = createRuntime();
+test('assembly rejects invalid levels and cycles without activating resource providers', () => {
   const main = new Main();
   main.children = [new Read()];
-  assert.throws(() => bind(runtime, main, () => assert.fail('not yet')), /Invalid child definition level/);
+  assert.throws(() => bind(main, () => assert.fail('not yet')), /Invalid child definition level/);
   main.children = [main.operation];
   main.operation.children = [main.operation];
-  assert.throws(() => bind(runtime, main, () => assert.fail('not yet')), /Cyclic child declaration/);
+  assert.throws(() => bind(main, () => assert.fail('not yet')), /Cyclic child declaration/);
 });
 
-test('binding captures inside runtime reservation after acceptance and releases on capture failure', async () => {
-  const runtime = createRuntime();
-  const definition = new Main();
-  let accepted = false;
-  const failure = new Error('capture failed');
-  const entry = runtime.bind({ providers: [resource.provide((value) => value)], executions: { main: definition } }).execution('main', {
-    capture: (input) => {
-      assert.equal(runtime.running, true);
-      assert.equal(accepted, true);
-      assert.equal(input, 'input');
-      throw failure;
+test('E entry ordering is reserve, validate, accept, accepted, admit, capture, started, work', async () => {
+  const order = [];
+  const execution = new Main();
+  execution.entry = {
+    requires: {},
+    accept: (input) => {
+      order.push('accept');
+      return input;
     },
-  });
-  await assert.rejects(
-    entry.submit(() => {
-      accepted = true;
-      return 'input';
-    }, {}),
-    (error) => error === failure,
+    admit: () => order.push('admit'),
+  };
+  execution.execute = (context) => {
+    order.push('work');
+    return context.currentInput;
+  };
+  const runtime = assembleRuntime(
+    { execution },
+    {
+      providers: [resource.provide((value) => value)],
+      source: {
+        validate: () => {
+          assert.equal(runtime.running, true);
+          order.push('validate');
+        },
+        entry: () => 'value',
+        capture: () => {
+          order.push('capture');
+          return 'value';
+        },
+      },
+    },
   );
-  assert.equal(runtime.running, false);
-  assert.equal(entry.children.initialized(definition.operation), false);
+  await runtime.run('input', {}, { accepted: () => order.push('accepted'), started: () => order.push('started') });
+  assert.deepEqual(order, ['validate', 'accept', 'accepted', 'admit', 'capture', 'started', 'work']);
+  assert.equal(runtime.context.running, false);
 });
 
-test('one service definition can supply separate lazy model instances and independent conversation delivery', async () => {
-  let created = 0;
-  const definition = new ObserverRuntimeDefinition(() => {
-    const instance = ++created;
-    return { invoke: async (_request, purpose) => ({ id: String(instance), model: 'fixture', finishReason: 'stop', usage: null, content: JSON.stringify(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'memory' ? { memories: [] } : { kind: 'answer', content: `answer ${instance}` }) }) };
-  });
-  const first = new ObserverBinding(createRuntime(), definition);
-  const second = new ObserverBinding(createRuntime(), definition);
-  assert.equal(created, 0);
-  const delivered = [[], []];
-  await Promise.all(
-    [first, second].map((binding, index) =>
-      binding.converse(
-        () => {
-          binding.runtime.context.transcript.append({ role: 'user', content: 'hello' });
-          return binding.runtime.context.transcript.current('user');
+test('cancelled input is accepted but skips admit; capture failure releases R reservation', async () => {
+  const order = [];
+  const execution = new Main();
+  execution.entry = {
+    requires: {},
+    accept: (input) => {
+      order.push('accept');
+      return input;
+    },
+    admit: () => order.push('admit'),
+  };
+  const runtime = bind(execution, () => 'value');
+  await assert.rejects(runtime.run('input', { signal: AbortSignal.abort() }, { accepted: () => order.push('accepted') }), /取消/);
+  assert.deepEqual(order, ['accept', 'accepted']);
+  const failure = new Error('capture failed');
+  const broken = assembleRuntime(
+    { execution },
+    {
+      providers: [resource.provide((value) => value)],
+      source: {
+        entry: () => 'value',
+        capture: () => {
+          throw failure;
         },
-        { settings },
-        (value) => delivered[index].push(value),
-      ),
-    ),
+      },
+    },
   );
-  assert.equal(created, 2);
-  assert.deepEqual(
-    delivered.map((values) => values.map((value) => value.type)),
-    [
-      ['started', 'answer', 'completed'],
-      ['started', 'answer', 'completed'],
-    ],
-  );
-  assert.notEqual(delivered[0][0].contextId, delivered[1][0].contextId);
-  assert.notEqual(delivered[0][1].output.content, delivered[1][1].output.content);
-  assert.equal(first.runtime.context.transcript.length, 2);
-  assert.equal(second.runtime.context.transcript.length, 2);
+  await assert.rejects(broken.run('input', {}), (error) => error === failure);
+  assert.equal(broken.running, false);
+});
+
+test('entry endpoints expire before work and also expire when acceptance fails', async () => {
+  const access = new ResourceOffer('test.entry', (_source, activity) => ({ touch: () => activity.runSync('touch', {}, () => 'value') }));
+  for (const fails of [false, true]) {
+    let saved;
+    const main = new Main();
+    main.entry = {
+      requires: { access: access.request() },
+      accept(input, resources) {
+        saved = resources.access;
+        assert.equal(saved.touch(), 'value');
+        if (fails) throw new Error('entry failed');
+        return input;
+      },
+      admit() {
+        assert.equal(saved.touch(), 'value');
+      },
+    };
+    main.execute = () => 'done';
+    const runtime = assembleRuntime(
+      { execution: main },
+      {
+        providers: [access.provide(() => null), resource.provide(() => 'value')],
+        source: {
+          entry: () => null,
+          capture: () => {
+            assert.throws(() => saved.touch(), /entry access has ended/);
+            return null;
+          },
+        },
+      },
+    );
+    if (fails) await assert.rejects(runtime.run('input', {}), /entry failed/);
+    else assert.equal(await runtime.run('input', {}), 'done');
+    assert.throws(() => saved.touch(), /entry access has ended/);
+    assert.equal(runtime.running, false);
+  }
 });

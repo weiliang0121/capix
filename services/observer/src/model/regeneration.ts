@@ -1,12 +1,12 @@
-import { RuntimeError, isObject, type Invocation, type InvocationRelation, type OperationContext } from '@capix-observer/runtime';
+import { RuntimeError, isObject, type InvocationView, type InvocationRelationView, type OperationScope } from '@capix-observer/runtime';
 import type { ModelOutput, ModelRequest } from './types.js';
 
-export type ModelParent = Invocation<unknown, unknown, OperationContext>;
+export type ModelParent = InvocationView<unknown, unknown, OperationScope>;
 
 /** Live evidence from one parent's direct children; never serialized as model input. */
 export interface ModelRegenerationEvidence {
-  previous: InvocationRelation;
-  rejection: InvocationRelation;
+  previous: InvocationRelationView;
+  rejection: InvocationRelationView;
 }
 
 export interface ModelRegenerationInput {

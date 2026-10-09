@@ -11,7 +11,7 @@ export function ObservationDialogs() {
   const setMemoryOpen = useAppStore((state) => state.setMemoryOpen);
   const inspect = useAppStore((state) => state.inspect);
   const closeInspection = useAppStore((state) => state.closeInspection);
-  const { loadExecution } = useAppCommands();
+  const { loadExecution, loadTranscript } = useAppCommands();
   const detail = useAppStore((state) => (inspection ? state.data.details.get(inspection.executionId) : undefined));
   const number = rounds.findIndex((round) => round.id === inspection?.executionId) + 1;
   const qa = rounds[number - 1];
@@ -36,9 +36,27 @@ export function ObservationDialogs() {
       });
     return () => controller.abort();
   }, [loadExecution, inspection?.executionId]);
+  useEffect(() => {
+    if (!inspection || !qa?.transcriptId || qa.messagesLoaded) return;
+    let active = true;
+    void loadTranscript(qa.transcriptId).catch((error) => {
+      if (active) setDetailError(errorMessage(error));
+    });
+    return () => {
+      active = false;
+    };
+  }, [inspection?.executionId, qa?.transcriptId, qa?.messagesLoaded, loadTranscript]);
   return (
     <>
-      <MemoryDialog open={memoryOpen} onOpenChange={setMemoryOpen} memory={memory} onInspect={inspect} />
+      <MemoryDialog
+        onLoadTranscript={(id) => {
+          void loadTranscript(id).catch(() => undefined);
+        }}
+        open={memoryOpen}
+        onOpenChange={setMemoryOpen}
+        memory={memory}
+        onInspect={inspect}
+      />
       <InspectionDialog target={inspection} detail={detail} loading={detailLoading} error={detailError} qa={qa} number={number} onClose={closeInspection} onInspect={inspect} />
     </>
   );

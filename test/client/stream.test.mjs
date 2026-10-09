@@ -16,8 +16,8 @@ function stream(text, chunkSize = 7) {
     },
   });
 }
-const started = { type: 'started', contextId: 'context', inputIndex: 0 };
-const answer = { type: 'answer', contextId: 'context', index: 1, output: { kind: 'answer', content: '这是中文回答' } };
+const started = { type: 'started', contextId: 'context', transcriptId: 'fixture-transcript', inputIndex: 0 };
+const answer = { type: 'answer', contextId: 'context', transcriptId: 'fixture-transcript', index: 1, output: { kind: 'answer', content: '这是中文回答' } };
 const completed = { type: 'completed', contextId: 'context' };
 const lines = (...items) => items.map((item) => JSON.stringify(item)).join('\n');
 const consume = (text, accept = () => {}) => new ConversationHttpTransport('', async () => new Response(stream(text, 1))).run({ messages: [] }, accept, () => {});
@@ -50,7 +50,9 @@ test('business stream rejects identity changes, duplicate answers, misplaced ans
     [[started, { ...answer, contextId: 'other' }], 'CONVERSATION_MISMATCH'],
     [[started, answer, answer], 'INVALID_UPDATE'],
     [[started, started], 'INVALID_UPDATE'],
-    [[started, { ...answer, index: 5 }], 'INVALID_UPDATE'],
+    [[started, { ...answer, index: 0 }], 'INVALID_UPDATE'],
+    [[started, { ...answer, index: 1.5 }], 'INVALID_RESPONSE'],
+    [[started, { ...answer, index: Number.MAX_SAFE_INTEGER + 1 }], 'INVALID_RESPONSE'],
     [[started, completed], 'MISSING_ANSWER'],
     [[started, answer, completed, started], 'AFTER_TERMINAL'],
   ])
@@ -73,4 +75,11 @@ test('observation stream accepts multiple executions independently and validates
     invalid.observe(() => {}, new AbortController().signal),
     (error) => error.code === 'INVALID_RESPONSE',
   );
+});
+
+test('business stream accepts an answer after independently appended messages without assuming adjacency', async () => {
+  const later = { ...answer, index: 3 };
+  const received = [];
+  await consume(lines(started, later, completed), (update) => received.push(update));
+  assert.deepEqual(received, [started, later, completed]);
 });

@@ -15,3 +15,5 @@ export * from './observer.js';
 export * from './conversation.js';
 export * from './changes.js';
 export * from './observation/stream.js';
+export * from './transcript.js';
+export * from './records/resource.js';

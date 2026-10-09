@@ -1,3 +1,4 @@
+import { createEnvironment } from './fixtures/environment.mjs';
 import { Execution } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
 import { subscribeExecutions } from '@capix-observer/service';
@@ -5,7 +6,7 @@ import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
-import { ObserverBinding, ObserverRuntimeDefinition } from '@capix-observer/service';
+import { bindObserver, ObserverRuntimeDefinition } from '@capix-observer/service';
 
 import { TestOperation } from './fixtures/operation.mjs';
 import { createInput, transcriptFor } from './fixtures/observer.mjs';
@@ -56,7 +57,7 @@ test('one Execution and Operation can be called again after success and failure 
   );
 });
 
-test('ObserverBinding, ObserverRuntimeDefinition returns answers without a recorder and uses the configuration of each call', async () => {
+test('bindObserver, ObserverRuntimeDefinition returns answers without a recorder and uses the configuration of each call', async () => {
   const requests = [];
   const provider = {
     async invoke(request, purpose) {
@@ -64,14 +65,12 @@ test('ObserverBinding, ObserverRuntimeDefinition returns answers without a recor
       return { id: 'test', model: request.model, content: JSON.stringify(purpose === 'memory' ? { memories: [] } : purpose === 'selection' ? { historyIndexes: [] } : { kind: 'answer', content: 'done' }), finishReason: 'stop', usage: null };
     },
   };
-  const runtime = createRuntime();
-  const execution = new ObserverBinding(runtime, new ObserverRuntimeDefinition(provider));
+  const entities = createEnvironment();
+  const runtime = bindObserver(new ObserverRuntimeDefinition(), entities, provider);
   for (const model of ['one', 'two']) {
-    runtime.context.transcript.append({ role: 'user', content: model });
-    const message = runtime.context.transcript.current('user');
-    const answer = await execution.call(message, { settings: { ...settings, model }, transcript: runtime.context.transcript });
+    const answer = await runtime.run({ messages: [{ role: 'user', content: model }] }, { settings: { ...settings, model } });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });
-    assert.equal(runtime.context.transcript.current('assistant').content, 'done');
+    assert.equal(entities.transcript.current('assistant').content, 'done');
   }
   assert.deepEqual(
     requests.map((request) => request.model),

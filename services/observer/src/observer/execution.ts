@@ -1,12 +1,14 @@
-import { ExecutionDefinition, Sequence, type Invocation, type ExecutionContext, type ChildBindings } from '@capix-observer/runtime';
+import { ExecutionDefinition, Sequence, type InvocationView, type ExecutionScope, type ChildBindings } from '@capix-observer/runtime';
 import type { Message, GenerationOutput } from '@capix-observer/protocol';
-import { observerExecutionRequests, type ObserverExecutionResources } from './resources.js';
+import { observerExecutionRequests, observerEntryRequests, type ObserverExecutionResources, type ObserverEntryResources } from './resources.js';
 import { prepareMemoryInput, type MemoryInput } from '../operations/memory/input.js';
 import type { SelectHistory } from '../operations/history/select.js';
 import type { ExtractMemory } from '../operations/memory/extract.js';
+import { acceptMessages } from './accept.js';
+import { prepareObserverSegment } from './admission.js';
 import type { GenerateAnswer } from '../operations/answer/generate.js';
 
-type ObserverInvocation = Invocation<Readonly<Message>, GenerationOutput, ExecutionContext<Readonly<Message>, GenerationOutput, ObserverExecutionResources>>;
+type ObserverInvocation = InvocationView<Readonly<Message>, GenerationOutput, ExecutionScope<Readonly<Message>, GenerationOutput, ObserverExecutionResources>>;
 export interface ObserverOperations {
   readonly selection: SelectHistory;
   readonly generation: GenerateAnswer;
@@ -16,8 +18,13 @@ export interface ObserverOperations {
 type ConversationInput = { message: Readonly<Message>; memories: MemoryInput['memories'] };
 
 /** The fixed composition used by this experiment, reusable across calls. */
-export class ObserverExecutionDefinition extends ExecutionDefinition<Readonly<Message>, GenerationOutput, ObserverExecutionResources> {
+export class ObserverExecutionDefinition extends ExecutionDefinition<Readonly<Message>, GenerationOutput, ObserverExecutionResources, unknown, ObserverEntryResources> {
   readonly requires = observerExecutionRequests;
+  readonly entry = {
+    requires: observerEntryRequests,
+    accept: (input: unknown, resources: ObserverEntryResources) => acceptMessages(input, resources.messages.append),
+    admit: prepareObserverSegment,
+  };
   readonly children;
   private readonly composition;
 
@@ -38,9 +45,9 @@ export class ObserverExecutionDefinition extends ExecutionDefinition<Readonly<Me
         input: ({ input, outputs }) => ({ selection: outputs.selection, memories: input.memories }),
         accept: ({ parent }, answer) => {
           const context = parent.context;
-          const response = context.resources.values.messages.append([{ role: 'assistant', content: answer.content }], parent.source)[0]!;
+          const response = context.resources.values.messages.append([{ role: 'assistant', content: answer.content }])[0]!;
           const index = response.index;
-          context.resources.values.delivery({ type: 'answer', contextId: context.id, index, output: answer });
+          context.resources.values.delivery({ type: 'answer', transcriptId: context.resources.values.history.transcriptId, contextId: context.id, index, output: answer });
           return { answer, response };
         },
       })
@@ -50,7 +57,7 @@ export class ObserverExecutionDefinition extends ExecutionDefinition<Readonly<Me
       });
   }
 
-  async execute(context: ExecutionContext<Readonly<Message>, GenerationOutput, ObserverExecutionResources>, invocation: Invocation<Readonly<Message>, GenerationOutput, ExecutionContext<Readonly<Message>, GenerationOutput, ObserverExecutionResources>>, children: ChildBindings): Promise<GenerationOutput> {
+  async execute(context: ExecutionScope<Readonly<Message>, GenerationOutput, ObserverExecutionResources>, invocation: InvocationView<Readonly<Message>, GenerationOutput, ExecutionScope<Readonly<Message>, GenerationOutput, ObserverExecutionResources>>, children: ChildBindings): Promise<GenerationOutput> {
     const outputs = await this.composition.run(invocation, { message: context.currentInput, memories: context.resources.values.memories }, children);
     return outputs.generation.answer;
   }

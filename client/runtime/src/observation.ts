@@ -1,5 +1,5 @@
 import { isArray } from 'es-toolkit/compat';
-import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, RuntimeSnapshot, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord } from '@capix-observer/protocol';
+import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, RuntimeSnapshot, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceFact } from '@capix-observer/protocol';
 import { validateSnapshot } from '@capix-observer/protocol';
 
 export class ObservationSequenceError extends Error {}
@@ -50,8 +50,8 @@ export class ObservationReplica {
         if (event.transcriptId !== transcript.id || event.revision !== transcript.revision + 1) throw new ObservationSequenceError('消息变化顺序不连续。');
         const change = event.change;
         if (change.kind === 'messages-appended') {
-          if (change.start !== overview.messages.length) throw new ObservationSequenceError('消息追加位置不一致。');
-          overview = { ...overview, messages: [...overview.messages, ...change.messages.map((message, offset) => ({ index: change.start + offset, message, count: 0 }))] };
+          if (change.start !== overview.messages.length || change.end <= change.start) throw new ObservationSequenceError('消息追加位置不一致。');
+          overview = { ...overview, messages: [...overview.messages, ...Array.from({ length: change.end - change.start }, (_, offset) => ({ index: change.start + offset, count: 0 }))] };
         } else {
           if (change.previousStart !== transcript.starts.at(-1) || change.start <= change.previousStart || change.start >= change.end || change.end !== overview.messages.length) throw new ObservationSequenceError('消息段边界不一致。');
           transcript = { ...transcript, starts: [...transcript.starts, change.start] };
@@ -66,11 +66,7 @@ export class ObservationReplica {
           id: change.memoryId,
           topic: change.result.topic,
           content: change.result.content,
-          sources: change.result.sourceIndexes.map((index) => {
-            const message = overview.messages[index]?.message;
-            if (!message) throw new ObservationSequenceError('记忆来源消息不存在。');
-            return { index, message };
-          }),
+          sources: change.result.sourceIndexes.map((index) => ({ transcriptId: transcript.id, index })),
           records: old?.records ?? [],
         };
         memory = { items: old ? memory.items.map((value) => (value.id === item.id ? item : value)) : [...memory.items, item] };
@@ -141,7 +137,9 @@ function snapshots(entries: ReadonlyMap<string, RecordEntry>): ReadonlyMap<strin
       .sort((a, b) => a.sequence - b.sequence);
     // A record update and its boundary are separate formal facts; expose a call view when both exist.
     if ([execution, ...operations, ...attempts].some((record) => !events.some((event) => event.callId === record.id && event.value.type === 'call') || (record.status !== 'running' && !events.some((event) => event.callId === record.id && event.value.type === (record.status === 'succeeded' ? 'return' : 'throw'))))) continue;
-    const snapshot = { execution, operations, attempts, events };
+    const callIds = new Set([execution.id, ...operations.map((record) => record.id), ...attempts.map((record) => record.id)]);
+    const resources = values.filter((entry) => entry.kind === 'resource' && entry.data.parentId && callIds.has(entry.data.parentId)).map((entry) => entry.data as ResourceFact);
+    const snapshot = { execution, operations, attempts, events, resources };
     validateSnapshot(snapshot);
     result.set(execution.id, snapshot);
   }

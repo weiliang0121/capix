@@ -3,6 +3,9 @@ import type { OperationContext } from './operation.js';
 import { InvocationContext } from './context.js';
 
 export class AttemptContext<I = unknown, O = unknown, R extends object = object> extends InvocationContext<I, O> {
+  get level(): 'attempt' {
+    return 'attempt';
+  }
   readonly signal: AbortSignal;
   readonly #parent: OperationContext;
 

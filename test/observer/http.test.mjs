@@ -1,3 +1,4 @@
+import { createEnvironment } from '../fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { request } from 'node:http';
@@ -6,7 +7,7 @@ import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-obse
 import { ClientRuntime } from '@capix-observer/client-runtime';
 import { Runtime, createRuntime } from '@capix-observer/runtime';
 import { readOutput, validateSnapshot } from '@capix-observer/protocol';
-import { createObserverServer, initializeObserver, ObserverBinding, ObserverRuntimeDefinition, acceptExecutionInput } from '@capix-observer/service';
+import { createObserverServer, initializeObserver, bindObserver, ObserverRuntimeDefinition, acceptExecutionInput } from '@capix-observer/service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -59,14 +60,15 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
   const overview = await get('/api/executions');
   assert.equal(overview.executions.length, 1);
   assert.deepEqual(
-    overview.messages.map(({ message }) => message.role),
-    ['user', 'assistant'],
+    overview.messages.map(({ index }) => index),
+    [0, 1],
   );
+  assert.ok(overview.messages.every((item) => !('message' in item)));
   const execution = overview.executions[0];
   assert.equal(execution.calls.length, 1 + snapshot.operations.length + snapshot.attempts.length);
-  assert.deepEqual(execution.transcriptRange, { start: 0, end: 1 });
+  assert.deepEqual(execution.transcriptRange, { transcriptId: overview.transcriptId, start: 0, end: 1, revision: 1 });
   assert.deepEqual(execution.availableMemoryIds, []);
-  assert.deepEqual(execution.response, { index: 1, content: '测试回答' });
+  assert.deepEqual(execution.response, { index: 1 });
   for (const call of execution.calls) {
     assert.equal(call.status, 'succeeded');
     assert.ok(call.durationMs >= 0);
@@ -127,13 +129,13 @@ test('failed memory postprocessing still exposes the completed answer and the ac
   const { executions } = await get('/api/executions');
   assert.equal(executions[0].status, 'failed');
   assert.equal(executions[0].memoryStatus, 'failed');
-  assert.deepEqual(executions[0].response, { content: '测试回答', index: 1 });
+  assert.deepEqual(executions[0].response, { index: 1 });
   assert.equal(executions[0].calls.filter((call) => call.status === 'failed').length, 3);
 });
 
 test('failure before a complete execution record produces a terminal transport error, never silent success', async (t) => {
   const { run, observer } = await setup(t);
-  observer.definition.admit = () => {
+  observer.definition.execution.entry.admit = () => {
     throw new Error('private diagnostic must not be an HTTP message');
   };
   const stream = await updates(await run());
@@ -166,7 +168,7 @@ test('separate HTTP subclasses deliver business content while records remain sep
   const client = new ConversationHttpTransport(base);
   const observation = new ObservationHttpTransport(base);
   assert.deepEqual(await client.config(), { ...settings, configured: false });
-  assert.deepEqual(await observation.overview(), { messages: [], executions: [] });
+  assert.deepEqual(await observation.overview(), { transcriptId: (await client.transcript()).id, messages: [], executions: [] });
   let accepted = false;
   const received = [];
   await client.run(
@@ -187,7 +189,7 @@ test('separate HTTP subclasses deliver business content while records remain sep
   const last = await observation.execution(overview.executions[0].id);
   assert.equal(last.execution.status, 'succeeded');
   assert.equal(last.execution.contextId, received[0].contextId);
-  assert.equal((await observation.overview()).executions[0].response.content, '测试回答');
+  assert.equal((await observation.overview()).executions[0].response.index, 1);
   assert.deepEqual(
     (await client.transcript()).messages.map((item) => item.role),
     ['user', 'assistant'],
@@ -203,10 +205,11 @@ test('real HTTP headless client uses conversation only for two rounds without an
   const http = new ConversationHttpTransport(base, (url, init) => {
     const path = new URL(url).pathname;
     paths.push(path);
-    assert.ok(['/api/config', '/api/transcript', '/api/run'].includes(path), path);
+    assert.ok(['/api/config', '/api/transcript', '/api/transcript/observe', '/api/run'].includes(path), path);
     return fetch(url, init);
   });
-  const runtime = new ClientRuntime({ conversation: http });
+  const runtime = new ClientRuntime({ conversation: http, transcripts: http });
+  t.after(() => runtime.stopTranscript());
   await runtime.initialize();
   await runtime.submit({ messages: [{ role: 'user', content: '第一问' }] });
   await runtime.submit({ messages: [{ role: 'user', content: '第二问' }] });
@@ -261,18 +264,47 @@ test('answer is delivered before memory finishes, and closing observation does n
 });
 
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
-  const runtime = createRuntime();
-  const execution = new ObserverBinding(runtime, new ObserverRuntimeDefinition(provider));
+  const entities = createEnvironment();
+  const runtime = bindObserver(new ObserverRuntimeDefinition(), entities, provider);
   const received = [];
-  await execution.converse(
-    () => acceptExecutionInput(runtime.context.transcript, { messages: [{ role: 'user', content: '问题' }] }),
-    { settings, transcript: runtime.context.transcript },
-    (update) => received.push(update),
-  );
+  const output = await runtime.run({ messages: [{ role: 'user', content: '问题' }] }, { settings, deliver: (update) => received.push(update) });
+  assert.deepEqual(output, { kind: 'answer', content: '测试回答' });
   assert.deepEqual(
     received.map((item) => item.type),
-    ['started', 'answer', 'completed'],
+    ['answer'],
   );
+  assert.equal(received[0].transcriptId, entities.transcript.id);
   assert.equal(runtime.recorder, undefined);
-  assert.equal(runtime.context.transcript.length, 2);
+  assert.equal(entities.transcript.length, 2);
+});
+
+test('HTTP client accepts the real answer index after an independent entity append during execution', async (t) => {
+  let observer;
+  const { base, observer: environment } = await setup(
+    t,
+    {
+      async invoke(_request, purpose) {
+        if (purpose === 'answer') {
+          observer.transcript.append({ role: 'user', content: '运行期间独立追加' });
+        }
+        return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'memory' ? { memories: [] } : { kind: 'answer', content: '正式回答' });
+      },
+    },
+    true,
+  );
+  observer = environment;
+  const http = new ConversationHttpTransport(base);
+  const runtime = new ClientRuntime({ conversation: http, transcripts: http });
+  t.after(() => runtime.stopTranscript());
+  await runtime.initialize();
+  await runtime.submit({ messages: [{ role: 'user', content: '本次输入' }] });
+  assert.equal(runtime.getSnapshot().answered, true);
+  assert.deepEqual(
+    runtime.getSnapshot().messages.map((message) => message.content),
+    ['本次输入', '运行期间独立追加', '正式回答'],
+  );
+  assert.equal(runtime.getSnapshot().messages[2].role, 'assistant');
+  const overview = await new ObservationHttpTransport(base).overview();
+  assert.equal(overview.executions[0].inputIndex, 0);
+  assert.equal(overview.executions[0].response.index, 2);
 });

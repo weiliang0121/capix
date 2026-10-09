@@ -4,7 +4,7 @@ import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { observeFixture, createInput } from './fixtures/observer.mjs';
+import { observeFixture, createInput, resourceFact } from './fixtures/observer.mjs';
 import { DeepSeekProvider, acceptExecutionInput, answerOutputContract, selectionOutputContract, memoryOutputContract } from '@capix-observer/service';
 import { Transcript, RecordBook, Recorder, Runtime, createRuntime } from '@capix-observer/runtime';
 
@@ -271,5 +271,5 @@ test('Observer execution uses its captured configuration even when caller settin
   assert.equal(facts.execution.status, 'succeeded');
   assert.equal(requests.length, 3);
   assert.ok(requests.every((request) => request.model === settings.model && request.max_tokens === settings.maxOutputTokens));
-  assert.deepEqual(facts.execution.value.settings, settings);
+  assert.deepEqual(resourceFact(facts, 'model-settings.snapshot'), settings);
 });

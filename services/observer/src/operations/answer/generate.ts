@@ -3,10 +3,10 @@ import { TranscriptResource } from '@capix-observer/runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ObserverResources, type ModelRequestResources } from '../../observer/resources.js';
 import { Sequence } from '@capix-observer/runtime';
-import type { InvocationResult, Invocation } from '@capix-observer/runtime';
+import type { InvocationResult, InvocationView } from '@capix-observer/runtime';
 import { sortBy } from 'es-toolkit/array';
 import type { ModelRequest, Selection } from '../../model/types.js';
-import { OperationDefinition, type OperationContext, type Memory } from '@capix-observer/runtime';
+import { OperationDefinition, type OperationScope, type Memory } from '@capix-observer/runtime';
 import { checkCapacity, estimateCapacity } from '../../model/capacity.js';
 import type { GenerationOutput } from '@capix-observer/protocol';
 import { answerOutputContract } from './output.js';
@@ -54,27 +54,27 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     this.prepareRequest = new PrepareModelRequest((input, resources) => this.createRequest(input, resources));
     this.invokeModel = new InvokeModel(this.purpose);
     this.acceptOutput = new AcceptModelOutput(this.output);
-    this.composition = new Sequence<GenerationInput, Invocation<unknown, unknown, OperationContext>>()
+    this.composition = new Sequence<GenerationInput, InvocationView<unknown, unknown, OperationScope>>()
       .step('context', { use: this.assemble, input: ({ input }) => input.selection })
       .step('request', { use: this.prepareRequest, input: ({ input, outputs }) => ({ ...outputs.context, memories: input.memories }) })
       .step('model', { use: this.invokeModel, input: ({ outputs }) => outputs.request })
       .step('acceptance', { use: this.acceptOutput, input: ({ outputs }) => ({ output: outputs.model }) });
     this.prepareRegeneration = new PrepareModelRequest(prepareRegenerationRequest);
-    this.regenerationComposition = new Sequence<ModelRegenerationEvidence, Invocation<unknown, unknown, OperationContext>>()
+    this.regenerationComposition = new Sequence<ModelRegenerationEvidence, InvocationView<unknown, unknown, OperationScope>>()
       .step('request', { use: this.prepareRegeneration, input: ({ parent, input }) => modelRegenerationInput(parent, input) })
       .step('model', { use: this.invokeModel.regeneration.entry, input: ({ input, outputs }) => ({ request: outputs.request, evidence: input }) })
       .step('acceptance', { use: this.acceptOutput, input: ({ outputs }) => ({ output: outputs.model }) });
     this.children = Object.freeze([this.prepareRegeneration, this.assemble, this.prepareRequest, this.invokeModel, this.acceptOutput]);
   }
 
-  async execute(context: OperationContext<GenerationInput, GenerationOutput, ObserverResources>, invocation: Invocation<GenerationInput, GenerationOutput, OperationContext<GenerationInput, GenerationOutput, ObserverResources>>, children: ChildBindings): Promise<GenerationOutput> {
+  async execute(context: OperationScope<GenerationInput, GenerationOutput, ObserverResources>, invocation: InvocationView<GenerationInput, GenerationOutput, OperationScope<GenerationInput, GenerationOutput, ObserverResources>>, children: ChildBindings): Promise<GenerationOutput> {
     if (context.progress.round === 1) return (await this.composition.run(invocation, context.currentInput, children)).acceptance;
     const evidence = this.regenerationEvidence(invocation);
     if (!evidence) throw new Error('Missing model regeneration evidence');
     return (await this.regenerationComposition.run(invocation, evidence, children)).acceptance;
   }
 
-  receive(context: OperationContext<GenerationInput, GenerationOutput, ObserverResources>, result: InvocationResult<GenerationOutput>, invocation: Invocation<GenerationInput, GenerationOutput, OperationContext<GenerationInput, GenerationOutput, ObserverResources>>) {
+  receive(context: OperationScope<GenerationInput, GenerationOutput, ObserverResources>, result: InvocationResult<GenerationOutput>, invocation: InvocationView<GenerationInput, GenerationOutput, OperationScope<GenerationInput, GenerationOutput, ObserverResources>>) {
     if (result.status === 'succeeded') return result.output;
     if (context.progress.round === 1) {
       const evidence = this.regenerationEvidence(invocation);
@@ -85,7 +85,7 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     throw result.error;
   }
 
-  private regenerationEvidence(invocation: Invocation<GenerationInput, GenerationOutput, OperationContext<GenerationInput, GenerationOutput, ObserverResources>>): ModelRegenerationEvidence | undefined {
+  private regenerationEvidence(invocation: InvocationView<GenerationInput, GenerationOutput, OperationScope<GenerationInput, GenerationOutput, ObserverResources>>): ModelRegenerationEvidence | undefined {
     const children = invocation.children.values().filter((child) => child.round === 1);
     const previous = children.find((child) => child.key === 'model');
     const rejection = children.find((child) => child.key === 'acceptance');

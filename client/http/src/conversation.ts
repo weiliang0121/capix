@@ -1,19 +1,31 @@
-import type { ConversationTransport } from '@capix-observer/client-runtime';
-import type { ConversationUpdate, ExecutionRequest } from '@capix-observer/protocol';
+import type { ConversationTransport, TranscriptTransport } from '@capix-observer/client-runtime';
+import type { ConversationUpdate, ExecutionRequest, TranscriptFrame } from '@capix-observer/protocol';
 import { HttpTransport } from './transport.js';
 import { ObserverTransportError } from './errors.js';
-import { acceptResponse, configurationResponse, transcriptResponse, conversationUpdate, responseStatusError, parseLine, deliver } from './responses.js';
+import { acceptResponse, configurationResponse, transcriptResponse, transcriptUpdate, conversationUpdate, responseStatusError, parseLine, deliver } from './responses.js';
 import { readLines } from './stream.js';
 
 /** Conversation requests and delivery, independent of observation. */
-export class ConversationHttpTransport extends HttpTransport implements ConversationTransport {
+export class ConversationHttpTransport extends HttpTransport implements ConversationTransport, TranscriptTransport {
   protected override statusError = responseStatusError;
 
   async config() {
     return acceptResponse(configurationResponse, await this.get('/api/config'), '配置');
   }
-  async transcript() {
-    return acceptResponse(transcriptResponse, await this.get('/api/transcript'), '消息');
+  async transcript(id?: string, signal?: AbortSignal) {
+    const snapshot = acceptResponse(transcriptResponse, await this.get(`/api/transcript${id ? `?id=${encodeURIComponent(id)}` : ''}`, signal), '消息');
+    if (id && snapshot.id !== id) throw new ObserverTransportError('contract', '返回了不同的消息集合。', 'TRANSCRIPT_MISMATCH');
+    return snapshot;
+  }
+  async observeTranscript(id: string | undefined, accept: (frame: TranscriptFrame) => void, signal: AbortSignal): Promise<void> {
+    const response = await this.send(`/api/transcript/observe${id ? `?id=${encodeURIComponent(id)}` : ''}`, { signal });
+    if (!response.body) throw new ObserverTransportError('contract', '服务未返回消息流。', 'MISSING_STREAM');
+    for await (const line of readLines(response.body)) {
+      const frame = acceptResponse(transcriptUpdate, parseLine(line), '消息流');
+      if (frame.type === 'error') throw new ObserverTransportError('remote', frame.error, frame.code);
+      deliver(() => accept(frame), '消息变化');
+    }
+    if (!signal.aborted) throw new ObserverTransportError('contract', '消息同步连接已结束。', 'INCOMPLETE_STREAM');
   }
   async run(request: ExecutionRequest, accept: (update: ConversationUpdate) => void, accepted: () => void): Promise<void> {
     const response = await this.post('/api/run', request);
@@ -26,6 +38,7 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
     if (!response.body) throw new ObserverTransportError('contract', '服务未返回对话流。', 'MISSING_STREAM');
     let contextId: string | undefined;
     let inputIndex: number | undefined;
+    let transcriptId: string | undefined;
     let answered = false;
     let completed = false;
     for await (const line of readLines(response.body)) {
@@ -36,10 +49,12 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
         if (contextId) throw new ObserverTransportError('contract', '重复的处理开始通知。', 'INVALID_UPDATE');
         contextId = update.contextId;
         inputIndex = update.inputIndex;
+        transcriptId = update.transcriptId;
       } else {
         if (!contextId || update.contextId !== contextId) throw new ObserverTransportError('contract', '对话处理身份不一致。', 'CONVERSATION_MISMATCH');
         if (update.type === 'answer') {
-          if (answered || update.index !== inputIndex! + 1) throw new ObserverTransportError('contract', '回答重复或消息位置无效。', 'INVALID_UPDATE');
+          if (update.transcriptId !== transcriptId) throw new ObserverTransportError('contract', '回答消息集合与开始通知不一致。', 'TRANSCRIPT_MISMATCH');
+          if (answered || update.index <= inputIndex!) throw new ObserverTransportError('contract', '回答重复或消息位置无效。', 'INVALID_UPDATE');
           answered = true;
         } else {
           if (!answered) throw new ObserverTransportError('contract', '处理结束但未交付回答。', 'MISSING_ANSWER');

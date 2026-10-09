@@ -1,6 +1,10 @@
 import type { ObserverOverview } from '../observer.js';
 import type { MemoryObservation } from './memory.js';
-import type { RecordEntry, RuntimeChange, InvocationEvent } from '../changes.js';
+import type { RecordEntry, RuntimeChange, InvocationEvent, TranscriptEvent } from '../changes.js';
+
+/** Observation identifies content changes; entity subscriptions carry their bodies. */
+export type TranscriptNotice = Omit<TranscriptEvent, 'change'> & { readonly change: Readonly<{ kind: 'messages-appended'; start: number; end: number }> | Extract<TranscriptEvent['change'], { kind: 'segment-started' }> };
+export type ObservationChange = Exclude<RuntimeChange, TranscriptEvent> | TranscriptNotice;
 
 /** Baseline is lightweight for completed executions; only active record bodies are preloaded. */
 export interface ObservationBaseline {
@@ -19,7 +23,7 @@ export interface ObservationDelta {
   readonly type: 'delta';
   readonly scopeId: string;
   readonly sequence: number;
-  readonly changes: readonly RuntimeChange[];
+  readonly changes: readonly ObservationChange[];
 }
 export type ObservationFrame = ObservationBaseline | ObservationDelta;
 export type ObservationUpdate = ObservationFrame | { type: 'error'; error: string; code?: string };

@@ -1,6 +1,4 @@
 import { BindingEnvironment } from '../binding/environment.js';
-import { RuntimeBinding } from '../binding/runtime.js';
-import type { RuntimeDefinition, ExecutionDefinitions } from '../definition/runtime.js';
 import type { InvocationEvent } from '@capix-observer/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import { ExecutionContextBuilder } from '../context/execution/builder.js';
@@ -13,7 +11,8 @@ import { InvocationRecordHelper } from '../records/invocation/helper.js';
 import type { RuntimeContext } from '../context/runtime.js';
 import { RuntimeRecord } from '../records/runtime/record.js';
 import type { Recorder } from '../records/recorder.js';
-import { RuntimeError } from '../errors/error.js';
+import type { ExecutionOptions } from '../context/execution.js';
+import type { ExecutionCallbacks } from '../execution/execution.js';
 
 export interface RuntimeOptions {
   recording?: { recorder: Recorder; record: RuntimeRecord };
@@ -21,18 +20,20 @@ export interface RuntimeOptions {
 }
 
 /** Organizes work over an established data scope. Construction does not establish its record. */
-export class Runtime {
+export class Runtime<I = unknown, O = unknown, P extends ExecutionOptions = ExecutionOptions> {
   readonly record?: RuntimeRecord;
   readonly recorder?: Recorder;
   readonly recording?: InvocationRecordHelper;
   readonly executionInvocations: ExecutionInvocationBuilder;
   readonly operationInvocations: OperationInvocationBuilder;
   readonly attemptInvocations: AttemptInvocationBuilder;
-  #running = false;
+  private readonly entry?: RuntimeEntry<I, O, P>;
+  readonly environment: BindingEnvironment;
 
   constructor(
     readonly context: RuntimeContext,
     options: RuntimeOptions = {},
+    assemble?: (runtime: Runtime<I, O, P>) => RuntimeEntry<I, O, P>,
   ) {
     const { recording, changes } = options;
     if (recording) {
@@ -44,27 +45,28 @@ export class Runtime {
     const executions = new ExecutionContextBuilder();
     const operations = new OperationContextBuilder(executions);
     const attempts = new AttemptContextBuilder(operations);
-    this.executionInvocations = new ExecutionInvocationBuilder(executions, { run: (work) => this.run(work), recording: this.recording, changes });
+    this.executionInvocations = new ExecutionInvocationBuilder(executions, { run: (work) => this.reserve(work), recording: this.recording, changes });
     this.operationInvocations = new OperationInvocationBuilder(operations, { recording: this.recording, changes });
     this.attemptInvocations = new AttemptInvocationBuilder(attempts, { recording: this.recording, changes });
-  }
-
-  bind<S, E extends ExecutionDefinitions>(definition: RuntimeDefinition<S, E>): RuntimeBinding<S, E> {
-    return new RuntimeBinding(definition, new BindingEnvironment(this.operationInvocations, this.attemptInvocations), this.executionInvocations);
+    this.environment = new BindingEnvironment(this.operationInvocations, this.attemptInvocations);
+    this.entry = assemble?.(this);
   }
 
   get running(): boolean {
-    return this.#running;
+    return this.context.running;
   }
 
-  /** Reserve the scope before accepting input. No queue and no nested top-level execution. */
-  async run<O>(work: () => O | Promise<O>): Promise<O> {
-    if (this.#running) throw new RuntimeError('RUNTIME_BUSY', '当前环境正在执行，请等待本次调用结束。');
-    this.#running = true;
-    try {
-      return await work();
-    } finally {
-      this.#running = false;
-    }
+  /** Internal reservation; binding selects the sole business entry at assembly. */
+  reserve<T>(work: () => T | Promise<T>): Promise<T> {
+    return this.context.reserve(work);
   }
+
+  run(input: I, options: P, callbacks?: ExecutionCallbacks<any, O, any>): Promise<O> {
+    if (!this.entry) return Promise.reject(new Error('Runtime has no assembled execution'));
+    return this.reserve(() => this.entry!.run(input, options, callbacks));
+  }
+}
+
+export interface RuntimeEntry<I, O, P extends ExecutionOptions> {
+  run(input: I, options: P, callbacks?: ExecutionCallbacks<any, O, any>): Promise<O>;
 }

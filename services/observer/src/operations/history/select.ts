@@ -3,10 +3,10 @@ import { TranscriptResource } from '@capix-observer/runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ObserverResources, type ModelRequestResources, type HistoryResources } from '../../observer/resources.js';
 import { Sequence } from '@capix-observer/runtime';
-import type { Invocation } from '@capix-observer/runtime';
+import type { InvocationView } from '@capix-observer/runtime';
 import type { ModelSettings } from '@capix-observer/protocol';
 import type { Selection } from '../../model/types.js';
-import { OperationDefinition, type OperationContext, type TranscriptRangeReader } from '@capix-observer/runtime';
+import { OperationDefinition, type OperationScope, type TranscriptRangeReader } from '@capix-observer/runtime';
 import { historyMessages, type SelectionInput } from './input.js';
 import { selectionOutputContract, type SelectionBasis } from './output.js';
 
@@ -43,7 +43,7 @@ export class SelectHistory extends OperationDefinition<SelectionInput, Selection
     this.prepareRequest = new PrepareModelRequest<SelectionInput, ModelRequestResources & HistoryResources>((input, resources) => loadRequest(selectionPayload(input, historyMessages(resources.history, input.message)), selectionTask, this.output.schema, resources.settings), selectionRequestResources);
     this.invokeModel = new InvokeModel(this.purpose);
     this.acceptOutput = new AcceptModelOutput({ schema: this.output.schema, accept: (value, input: ModelAcceptanceInput & { basis: SelectionBasis }) => this.output.accept(value, input.basis) });
-    this.composition = new Sequence<SelectionInput, Invocation<SelectionInput, Selection, OperationContext<SelectionInput, Selection, ObserverResources>>>()
+    this.composition = new Sequence<SelectionInput, InvocationView<SelectionInput, Selection, OperationScope<SelectionInput, Selection, ObserverResources>>>()
       .step('request', { use: this.prepareRequest, input: ({ input }) => input })
       .step('model', { use: this.invokeModel, input: ({ outputs }) => outputs.request })
       .step('acceptance', {
@@ -56,7 +56,7 @@ export class SelectHistory extends OperationDefinition<SelectionInput, Selection
     this.children = Object.freeze([this.prepareRequest, this.invokeModel, this.acceptOutput]);
   }
 
-  async execute(context: OperationContext<SelectionInput, Selection, ObserverResources>, invocation: Invocation<SelectionInput, Selection, OperationContext<SelectionInput, Selection, ObserverResources>>, children: ChildBindings): Promise<Selection> {
+  async execute(context: OperationScope<SelectionInput, Selection, ObserverResources>, invocation: InvocationView<SelectionInput, Selection, OperationScope<SelectionInput, Selection, ObserverResources>>, children: ChildBindings): Promise<Selection> {
     const outputs = await this.composition.run(invocation, context.currentInput, children);
     return outputs.acceptance;
   }

@@ -1,7 +1,7 @@
 import { Execution } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, BaseRecord, RecordBook, TranscriptRecord, MemoryRecord, ExecutionRecordHelper, createRuntime } from '@capix-observer/runtime';
+import { Recorder, BaseRecord, RecordBook, TranscriptRecord, MemoryRecord, ExecutionRecordHelper, Transcript, Memories, createRuntime } from '@capix-observer/runtime';
 import { subscribeExecutions } from '@capix-observer/service';
 import { validateSnapshot } from '@capix-observer/protocol';
 
@@ -56,8 +56,10 @@ test('content notifications are visible to generic subscribers without manufactu
   const snapshots = [];
   recorder.subscribe((record) => changes.push(record));
   const unsubscribe = subscribeExecutions(runtime.recording, (snapshot) => snapshots.push(snapshot));
-  runtime.context.transcript.append({ role: 'user', content: '北京' });
-  runtime.context.memories.apply([{ action: 'create', memoryId: null, change: '确认城市', sourceIndexes: [0], result: { topic: '地点', content: '北京', sourceIndexes: [0] } }]);
+  const transcript = new Transcript([], { recorder });
+  const memories = new Memories(transcript, { recorder });
+  transcript.append({ role: 'user', content: '北京' });
+  memories.apply([{ action: 'create', memoryId: null, change: '确认城市', sourceIndexes: [0], result: { topic: '地点', content: '北京', sourceIndexes: [0] } }]);
   assert.equal(changes.length, 2);
   assert.ok(changes[0] instanceof TranscriptRecord);
   assert.ok(changes[1] instanceof MemoryRecord);
@@ -95,7 +97,7 @@ test('Observer projects only its own call scope even when two Runtimes share one
   assert.throws(() => ExecutionRecordHelper.observe(a.recording, other), /does not exist/);
   const source = first.source;
   assert.equal(source.callId, ExecutionRecordHelper.observe(a.recording, first).execution.id);
-  a.context.transcript.appendFrom([{ role: 'assistant', content: '已完成' }], source);
+  new Transcript([], { recorder }).appendFrom([{ role: 'assistant', content: '已完成' }], { source });
   const appended = [...recorder.book.values()].at(-1);
   assert.equal(appended.callId, source.callId);
   assert.equal(appended.executionId, source.executionId);

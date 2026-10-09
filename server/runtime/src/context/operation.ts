@@ -4,6 +4,9 @@ import type { ExecutionContextBuilder } from './execution/builder.js';
 import { InvocationContext } from './context.js';
 
 export class OperationContext<I = unknown, O = unknown, R extends object = object> extends InvocationContext<I, O> {
+  get level(): 'operation' {
+    return 'operation';
+  }
   readonly signal: AbortSignal;
   readonly #parent: ExecutionContext | OperationContext;
 
