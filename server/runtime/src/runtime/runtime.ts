@@ -1,3 +1,5 @@
+import { DeclaredException } from '../exception/contract.js';
+import { RuntimeError } from '../errors/error.js';
 import { BindingEnvironment } from '../binding/environment.js';
 import type { InvocationEvent } from '@capix-observer/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
@@ -61,9 +63,14 @@ export class Runtime<I = unknown, O = unknown, P extends ExecutionOptions = Exec
     return this.context.reserve(work);
   }
 
-  run(input: I, options: P, callbacks?: ExecutionCallbacks<any, O, any>): Promise<O> {
-    if (!this.entry) return Promise.reject(new Error('Runtime has no assembled execution'));
-    return this.reserve(() => this.entry!.run(input, options, callbacks));
+  async run(input: I, options: P, callbacks?: ExecutionCallbacks<any, O, any>): Promise<O> {
+    if (!this.entry) throw new Error('Runtime has no assembled execution');
+    try {
+      return await this.reserve(() => this.entry!.run(input, options, callbacks));
+    } catch (error) {
+      if (error instanceof DeclaredException) throw new RuntimeError('UNHANDLED_EXCEPTION', '运行异常未被接纳处理。', undefined, { cause: error });
+      throw error;
+    }
   }
 }
 

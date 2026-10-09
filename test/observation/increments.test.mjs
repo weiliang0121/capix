@@ -250,8 +250,20 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
     if (content === 'third') await assert.rejects(runtime.submit({ messages: [{ role: 'user', content }] }));
     else await runtime.submit({ messages: [{ role: 'user', content }] });
   }
-  await until(() => runtime.getSnapshot().observation.records.size === 4 && [...runtime.getSnapshot().observation.records.values()].every((snapshot) => snapshot.execution.status !== 'running'));
+  await until(() => {
+    const observation = runtime.getSnapshot().observation;
+    assert.equal(observation.error, undefined);
+    return observation.records.size === 4 && [...observation.records.values()].every((snapshot) => snapshot.execution.status !== 'running');
+  });
   assert.equal(runtime.getSnapshot().observation.error, undefined);
+  const failed = [...runtime.getSnapshot().observation.records.values()].find((snapshot) => snapshot.execution.status === 'failed');
+  assert.equal(failed.execution.value.failure.kind, 'exception');
+  const handling = failed.operations.find((operation) => operation.operation === 'answer').value.processes.filter((process) => process.stage === 'handling');
+  assert.deepEqual(
+    handling.map((process) => process.type),
+    ['start', 'continue', 'start', 'unhandled'],
+  );
+  assert.ok(handling.filter((process) => 'failure' in process).every((process) => process.failure.kind === 'exception'));
   assert.equal(runtime.getSnapshot().messages.length, 7);
   assert.equal(runtime.getSnapshot().observation.memory.items[0].content, 'memory 4');
   assert.deepEqual(requests, ['/api/observe']);

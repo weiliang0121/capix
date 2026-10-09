@@ -16,7 +16,7 @@ export function hasOutput(value: InvocationValue): boolean {
 /** The terminal result must be the last accepted result, never an earlier round. */
 export function finalOutputProcess(value: Pick<InvocationValue, 'processes'>, sequence: number): OutputProcess {
   const last = value.processes.at(-1);
-  if (!last || last.stage !== 'receive' || last.type !== 'return' || sequence !== ('resultOf' in last ? last.resultOf : last.sequence)) throw new Error('Final result must reference the last accepted output');
+  if (!last || (last.stage !== 'receive' && last.stage !== 'handling') || last.type !== 'return' || sequence !== ('resultOf' in last ? last.resultOf : last.sequence)) throw new Error('Final result must reference the last accepted output');
   return outputProcess(value, sequence);
 }
 

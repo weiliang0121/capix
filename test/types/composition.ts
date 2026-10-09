@@ -42,10 +42,10 @@ const objectDefinition: OperationDefinition<string, number> = {
   name: 'length',
   label: 'length',
   source: 'test',
-  requires: {},
   children: [],
   maxRounds: 1,
-  execute: (context) => context.currentInput.length,
+  raises: [],
+  run: { requires: {}, execute: (context) => context.currentInput.length },
 };
 const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string, typeof parent>().step('length', { use: objectDefinition, input: ({ input }) => input }).run(parent, 'hello', bindings);
 void objectOutput;
@@ -61,3 +61,46 @@ assembleRuntime({ execution: leaf }, { providers: [], source: { entry: () => nul
 parent.context.complete('done');
 // @ts-expect-error child relations do not publish reception mutation
 parent.children.values()[0].accept(() => null);
+
+import { ExceptionContract, ResourceOffer, type InvocationRunDefinition, type InvocationExceptionDefinition } from '@capix-observer/runtime';
+const issue = new ExceptionContract<{ reason: string }>('test.issue');
+const workValue = new ResourceOffer('work-value', (value: number) => value);
+const handlingValue = new ResourceOffer('handling-value', (value: string) => value);
+type WorkScope = OperationScope<string, string, { value: number }>;
+type HandlingScope = OperationScope<string, string, { repair: string }>;
+const run: InvocationRunDefinition<string, string, WorkScope, { value: number }> = {
+  requires: { value: workValue.request() },
+  execute(context) {
+    const value: number = context.resources.values.value;
+    // @ts-expect-error work does not acquire the handler's resource aliases
+    context.resources.values.repair;
+    return String(value);
+  },
+};
+const exceptions: InvocationExceptionDefinition<string, string, HandlingScope, { repair: string }> = {
+  requires: { repair: handlingValue.request() },
+  accepts: [issue],
+  handle(context) {
+    const repair: string = context.resources.values.repair;
+    // @ts-expect-error handling does not implicitly inherit work aliases
+    context.resources.values.value;
+    return { kind: 'return', output: repair };
+  },
+};
+const composed: OperationDefinition<string, string, { value: number }, { repair: string }> = {
+  level: 'operation',
+  name: 'typed',
+  label: 'typed',
+  source: 'test',
+  children: [],
+  maxRounds: 1,
+  raises: [issue],
+  run,
+  exceptions,
+};
+const composedResult: Promise<string> = bindings.get(composed).call(parent, 'input');
+void composedResult;
+
+const childFacts = bindings.get(leaf).create(operation, 'input');
+// @ts-expect-error child call facts do not grant its resources to the parent
+childFacts.context.resources;

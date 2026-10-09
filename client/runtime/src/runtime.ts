@@ -2,6 +2,7 @@ import type { ConfigurationResponse, ConversationUpdate, ExecutionRequest, Memor
 import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReplica, ObservationSequenceError } from './observation.js';
+import { InitializationAttempt, type ClientInitializationState } from './initialization.js';
 
 export interface ObservationState {
   readonly enabled: boolean;
@@ -17,6 +18,7 @@ export interface ObservationState {
 }
 
 export interface ClientState {
+  readonly initialization: ClientInitializationState;
   readonly config?: ConfigurationResponse;
   readonly messages: readonly Readonly<Message>[];
   readonly transcriptId?: string;
@@ -38,6 +40,7 @@ export interface ClientRuntimeOptions {
 /** Business delivery is independent of the optional observation capability. */
 export class ClientRuntime {
   private state: ClientState = {
+    initialization: { status: 'idle' },
     messages: [],
     transcripts: new Map(),
     busy: false,
@@ -47,7 +50,8 @@ export class ClientRuntime {
     observation: { enabled: false, loading: false, records: new Map(), updates: new Map(), overview: { transcriptId: '', messages: [], executions: [] }, memory: { items: [] } },
   };
   private readonly listeners = new Set<() => void>();
-  private initialization?: Promise<void>;
+  private initialization?: InitializationAttempt;
+  private initializationNumber = 0;
   private observationSession?: AbortController;
   private observationOwner?: symbol;
   private replica?: ObservationReplica;
@@ -90,21 +94,46 @@ export class ClientRuntime {
   }
 
   initialize(): Promise<void> {
-    if (this.state.config && this.state.transcriptId && !this.state.transcripts.get(this.state.transcriptId)?.syncing) {
-      return (this.initialization = this.transcripts.watch(this.state.transcriptId).then(() => undefined));
+    if (this.initialization?.running) return this.initialization.promise;
+    if (this.state.initialization.status === 'succeeded' && this.state.config && this.state.transcriptId && this.state.transcripts.get(this.state.transcriptId)?.syncing) return Promise.resolve();
+    const attempt = new InitializationAttempt(++this.initializationNumber);
+    this.initialization = attempt;
+    this.update({ initialization: attempt.snapshot, error: undefined });
+    if (attempt.running) {
+      void this.loadInitial(attempt).then(
+        () => {
+          if (!attempt.running) return;
+          attempt.complete();
+          this.update({ initialization: attempt.snapshot });
+        },
+        (error) => {
+          if (!attempt.running) return;
+          attempt.fail(error);
+          this.update({ initialization: attempt.snapshot, error });
+        },
+      );
     }
-    return (this.initialization ??= this.loadInitial());
+    return attempt.promise;
   }
 
-  private async loadInitial(): Promise<void> {
-    try {
-      const [config, transcript] = await Promise.all([this.conversation.config(), this.transcripts.watch()]);
-      const current = this.state.transcripts.get(transcript.id)?.snapshot ?? transcript;
-      this.update({ config, transcriptId: current.id, messages: current.messages, error: undefined });
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === 'AbortError')) this.update({ error });
-      throw error;
-    }
+  private async loadInitial(attempt: InitializationAttempt): Promise<void> {
+    await Promise.all([this.loadConfiguration(attempt), this.loadInitialTranscript(attempt)]);
+    if (!attempt.running) return;
+    const transcript = this.state.transcriptId ? this.state.transcripts.get(this.state.transcriptId) : undefined;
+    if (!transcript?.syncing) throw transcript?.error ?? new Error('初始化结束前消息同步已停止。');
+  }
+
+  private async loadConfiguration(attempt: InitializationAttempt): Promise<void> {
+    if (this.state.config) return;
+    const config = await this.conversation.config();
+    if (attempt.running) this.update({ config });
+  }
+
+  private async loadInitialTranscript(attempt: InitializationAttempt): Promise<void> {
+    const transcript = await this.transcripts.watch(this.state.transcriptId);
+    if (!attempt.running) return;
+    const current = this.state.transcripts.get(transcript.id)?.snapshot ?? transcript;
+    this.update({ transcriptId: current.id, messages: current.messages });
   }
 
   /** Load an entity only when needed, then keep its copy current until explicitly stopped. */
@@ -113,8 +142,13 @@ export class ClientRuntime {
   }
 
   stopTranscript(id?: string): void {
+    const attempt = this.initialization;
+    const stopsInitialization = attempt?.running && (!id || id === (this.state.transcriptId ?? this.transcripts.defaultId));
     this.transcripts.stop(id);
-    if (!this.state.config && (!id || id === this.state.transcriptId)) this.initialization = undefined;
+    if (stopsInitialization && attempt.running) {
+      attempt.stop();
+      this.update({ initialization: attempt.snapshot });
+    }
   }
 
   /** Explicitly enable live observation. Stopping it never cancels conversation work. */
@@ -205,7 +239,7 @@ export class ClientRuntime {
 
   async submit(request: ExecutionRequest, accepted?: () => void): Promise<void> {
     if (this.state.busy) throw new Error('当前请求仍在处理。');
-    if (!this.state.config?.configured) throw new Error('请先完成客户端初始化与服务端模型配置。');
+    if (this.state.initialization.status !== 'succeeded' || !this.state.config?.configured) throw new Error('请先完成客户端初始化与服务端模型配置。');
     const messages = request.messages.map((message) => ({ ...message }));
     this.update({ busy: true, contextId: '', answered: false, error: undefined, pending: messages.at(-1)?.content ?? '' });
     let wasAccepted = false;

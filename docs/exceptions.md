@@ -1,0 +1,79 @@
+# 声明、异常处理与错误边界
+
+本轮将运行内容、异常处理和观测描述收敛为同一所属声明的三个平级部分。运行结构仍是 REOA，R 驱动唯一 E；不增加新的异常装配入口、R 调用实体或全局环境管理者。
+
+## 声明与绑定
+
+```ts
+const definition = {
+  maxRounds: 2,
+  raises: [outputRejected],
+  run: {
+    requires: {/* 当前工作需要的正式资源访问 */},
+    uses: [model, acceptOutput],
+    execute(context, invocation, children) {
+      /* 本层工作及组合 */
+    },
+    accept(context, output, invocation, children) {
+      /* 可选的正常结果接纳 */
+    },
+  },
+  exceptions: {
+    requires: {/* 处理时需要的正式资源访问 */},
+    uses: [],
+    accepts: [outputRejected],
+    handle(context, exception, invocation, children) {
+      return { kind: 'continue', input: context.currentInput, reason: '重新构造模型反馈请求' };
+    },
+  },
+  observation: {
+    input: (value) => describeInput(value),
+    output: (value) => describeOutput(value),
+  },
+};
+```
+
+这是契约形态示例，不是可直接执行的服务声明。`run.execute`、`run.accept`、`exceptions.handle` 可以有业务复杂度；绑定只落实依赖、所属关系、阶段访问和结构接线。`run.accept` 只接收正常输出，原 `receive` 中混合的错误分支不再保留。
+
+静态装配检查正常工作与异常处理所需资源的总覆盖，但运行时分别提供各自的具名资源和子调用端点。`run.uses` 缺省沿用所属节点的子声明，`exceptions.uses` 缺省为空。相同资源供应可以共享固定捕获，两个阶段的活端点分别受当前阶段约束，保存旧端点也不能跨阶段使用。已有 `timing: binding` 供应仍按其契约固定创建时事实；`timing: access` 的异常专用供应在正常路径不兑现。
+
+子调用关系公开身份、输入、结果和进度等事实，不公开子层的资源端点。资源只从本层本阶段绑定的 Scope 进入业务。
+
+## 异常与错误
+
+| 情形                                                 | 分类与处理                                            |
+| ---------------------------------------------------- | ----------------------------------------------------- |
+| 工作产生所属 `raises` 契约创建的 `DeclaredException` | 异常，可进入匹配的 `exceptions.handle`                |
+| 直接子调用交付已经确认的异常                         | 父层可以按 `accepts` 接纳；子层保留失败状态及异常身份 |
+| 未声明的异常、普通 throw、内核/绑定/调用边界错误     | 错误，不进入业务异常处理                              |
+| 处理器抛错、返回非法决定、处理器使用正式端点发生错误 | 错误，不递归进入处理器                                |
+| Record 或变化捕获失败                                | 严格错误，不重做已完成工作                            |
+| 异常到达没有消费者的 R 出口                          | `UNHANDLED_EXCEPTION` 错误，cause 保留原异常          |
+
+契约按对象身份匹配；相同名字不表示相同契约。异常事实保留运行中的值和 cause，正式记录再按自己的正文规则捕获，不用错误字符串推断处理资格。
+
+处理器返回 `return`、`continue` 或 `unhandled`。`return` 明确提供本层输出；`continue` 仍受所属调用一轮或两轮的限制，并说明原因；`unhandled` 交还原异常。处理器可以使用声明过的业务资源及子调用，并非只能提出无副作用建议。
+
+错误结算只落实当前 Context 终态、调用返回以及可选记录/通知，不再调用业务处理器。结算路径自身损坏属于实现缺陷；当前固定边界保留原失败与登记失败的诊断，但不建立递归补救机制，不承诺进程崩溃后的保证。
+
+## 归属、状态与已产生的事实
+
+`Invocation.failure` 表示最终失败交付的类别、阶段、归属 Context 和原错误。它与 `Context.status` 分开：工作已经成功，但最终记录失败时，Context 仍成功，调用交付错误。父层不能把该错误当作成功结果。
+
+正式子调用、子入口接纳与资源端点的错误会归入所属调用。业务即使捕获该错误、返回正常值或换抛一个声明异常，结构仍按错误结束；同一调用的后续正式资源及子调用入口也被阻止。已经落实的消息、记忆或外部副作用不回滚。
+
+这只约束框架提供的端点，不声称能阻止任意 JavaScript 在 catch 后执行自己的代码。无 Recorder 时同样有调用关系、阶段约束和错误归属。
+
+## 观测
+
+观测描述是可选的记录投影，不改变运行输入输出或 Context 中的原值。未安装 Recorder 时，不执行 `observation.input/output`。安装后描述或登记失败保持严格失败。
+
+内部过程保留 `execute`、`receive`（正常接纳）、`control`，新增 `handling`（异常处理）。处理器的进入、返回、继续、未处理及失败分别可见。最终输出可以引用本调用的 `receive.return` 或 `handling.return`，不复制正文或跨记录引用。失败正文和过程可携带 `failure` 分类事实；客户端增量、快照校验和详情读取使用同一契约。
+
+## 已验证场景
+
+Observer 的模型输出接纳 A 只将确定的 JSON/空输出/输出形状拒绝生产为 `modelOutputRejected`。生成回答 O 的异常声明依据直接子调用证据，最多继续一次，保留原请求、模型返回和反馈。不重新筛选历史，不重复追加回答；超时、网络错误、取消、记录错误等保持失败。
+
+客户端初始化验证另一个职责场景：`InitializationAttempt` 持有本次初始化的状态与结束权，同次调用复用 Promise，失败后显式初始化产生新尝试。配置和消息集合分别保留已经成立的事实，停止或过期尝试不能迟到写回。此处没有声明过的业务异常，只有初始化错误，因此没有虚构异常处理器，也不依赖服务端 Invocation。它不改变服务端 `Initializer` 的同步失败缓存语义。
+
+本轮不增加自动补偿、通用重试、持久化恢复、外部幂等、跨进程调度、权限系统或高可用机制。

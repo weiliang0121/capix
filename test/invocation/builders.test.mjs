@@ -37,7 +37,9 @@ test('reused builders bind each invocation to its own signal, settings and input
   const secondOperation = runtime.operationInvocations.create(second, { input: 'second operation', description: operation, work: identity });
   const firstAttempt = runtime.attemptInvocations.create(firstOperation, { input: 'first action', description: attempt, work: identity });
   const secondAttempt = runtime.attemptInvocations.create(secondOperation, { input: 'second action', description: attempt, work: identity });
-  assert.throws(() => first.context.resources.values.settings, /started invocation/);
+  const unstarted = runtime.executionInvocations.create('unstarted', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings })) }), context: {}, work: identity });
+  assert.throws(() => unstarted.context.resources.values.settings, /started invocation/);
+  await assert.rejects(unstarted.run(), /started invocation/);
   const firstRun = first.run();
   const secondRun = second.run();
   assert.deepEqual(observed, ['fixture', 'next']);
@@ -51,7 +53,8 @@ test('reused builders bind each invocation to its own signal, settings and input
   assert.equal(await secondAttempt.run(), 'second action');
   assert.equal(secondController.signal.aborted, false);
   release();
-  await Promise.all([firstRun, secondRun]);
+  await assert.rejects(firstRun, (error) => error.code === 'INVOCATION_CANCELLED' && error.cause === cause);
+  assert.equal(await secondRun, 'second');
   assert.deepEqual([runtime.executionInvocations, runtime.operationInvocations, runtime.attemptInvocations], builders);
 });
 
@@ -196,7 +199,7 @@ test('shared builder capabilities produce independent call event scopes across n
   assert.equal(scopes.get(later.context.id)[0].parentContextId, undefined);
 });
 
-test('a completed ancestor stops an awaiting child before receive without exposing parent contexts', async () => {
+test('a completed ancestor stops an awaiting child before acceptance without exposing parent contexts', async () => {
   const runtime = createRuntime();
   const root = runtime.executionInvocations.create('root', { context: { settings }, work: identity });
   const parent = runtime.operationInvocations.create(root, { input: 'parent', description: operation, work: identity });
@@ -211,7 +214,7 @@ test('a completed ancestor stops an awaiting child before receive without exposi
         new Promise((resolve) => {
           resume = resolve;
         }),
-      receive: () => assert.fail('an ended ancestor must prevent receive'),
+      accept: () => assert.fail('an ended ancestor must prevent acceptance'),
     },
   });
   const pending = leaf.run();

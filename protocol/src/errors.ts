@@ -10,3 +10,11 @@ export interface RuntimeErrorValue {
   cause?: RuntimeErrorValue;
   errors?: RuntimeErrorValue[];
 }
+
+/** Scope and category of an unsuccessful invocation delivery; not a retry instruction. */
+export interface InvocationFailureFact {
+  readonly kind: 'exception' | 'error';
+  readonly phase: 'setup' | 'execute' | 'receive' | 'handling' | 'control' | 'observation';
+  readonly contextId: string;
+  readonly contract?: string;
+}

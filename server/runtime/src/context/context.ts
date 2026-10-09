@@ -1,14 +1,15 @@
+import type { InvocationFailure } from '../invocation/failure.js';
 import { randomUUID } from 'node:crypto';
 import { Continuation, type InvocationResult } from '../invocation/result.js';
 
-export type ContextState<O> = Readonly<{ status: 'running' } | { status: 'succeeded'; output: O } | { status: 'failed'; error: unknown }>;
+export type ContextState<O> = Readonly<{ status: 'running' } | { status: 'succeeded'; output: O } | { status: 'failed'; error: unknown; failure?: InvocationFailure }>;
 
 /** Live invocation state. Values keep their identity; recording policy does not belong here. */
 export class InvocationContext<I = unknown, O = unknown> {
   readonly id = randomUUID();
   #state: ContextState<O> = Object.freeze({ status: 'running' });
 
-  #progress: Readonly<{ round: number; input: I; phase: 'execute' | 'receive'; result?: InvocationResult<O> }>;
+  #progress: Readonly<{ round: number; input: I; phase: 'execute' | 'receive' | 'handling'; result?: InvocationResult<O> }>;
 
   constructor(readonly input: I) {
     this.#progress = Object.freeze({ round: 0, input, phase: 'execute' });
@@ -32,6 +33,11 @@ export class InvocationContext<I = unknown, O = unknown> {
     this.#progress = Object.freeze({ ...this.#progress, phase: 'receive', result: Object.freeze(result) });
   }
 
+  handling(): void {
+    this.requireRunning();
+    this.#progress = Object.freeze({ ...this.#progress, phase: 'handling' });
+  }
+
   continueWith(input: I, reason: string): Continuation<I> {
     this.requireRunning();
     return new Continuation(input, reason);
@@ -50,9 +56,9 @@ export class InvocationContext<I = unknown, O = unknown> {
     this.#state = Object.freeze({ status: 'succeeded', output });
   }
 
-  fail(error: unknown): void {
+  fail(error: unknown, failure?: InvocationFailure): void {
     this.requireRunning();
-    this.#state = Object.freeze({ status: 'failed', error });
+    this.#state = Object.freeze({ status: 'failed', error, ...(failure ? { failure } : {}) });
   }
 
   requireRunning(): void {

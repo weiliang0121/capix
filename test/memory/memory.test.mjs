@@ -209,11 +209,12 @@ test('recording observes the actual changed fact; registration failure propagate
 });
 
 test('invalid memory output stops at acceptance without invoking application or losing the answer', async () => {
+  const invalid = raw({ memories: [{}] });
   const environment = initializeObserver({
     async invoke(_request, purpose) {
       if (purpose === 'selection') return raw({ historyIndexes: [] });
       if (purpose === 'answer') return raw({ kind: 'answer', content: '已收到' });
-      return raw({ memories: [{}] });
+      return invalid;
     },
   });
   const snapshot = await run(environment, '记住这个安排');
@@ -227,7 +228,13 @@ test('invalid memory output stops at acceptance without invoking application or 
       ['acceptModelOutput', 'failed'],
     ],
   );
-  assert.equal(extraction.value.error.code, 'OUTPUT_SHAPE');
+  const rejection = extraction.value.error;
+  assert.equal(rejection.code, 'MODEL_OUTPUT_REJECTED');
+  assert.equal(rejection.cause.code, 'OUTPUT_SHAPE');
+  assert.ok(rejection.cause.detail.issues.length > 0);
+  assert.deepEqual(rejection.detail, { code: 'OUTPUT_SHAPE', output: invalid });
+  assert.deepEqual(rejection, attempts.at(-1).value.error);
+  assert.equal(extraction.value.failure.kind, 'exception');
   assert.equal(environment.memories.values().length, 0);
   assert.equal(environment.transcript.current('assistant').content, '已收到');
 });

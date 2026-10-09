@@ -8,7 +8,7 @@ class Read extends AttemptDefinition {
   label = 'Read';
   source = 'test';
   callee = 'test';
-  requires = { value: resource.request() };
+  run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
   execute(context) {
     return `${context.currentInput}:${context.resources.values.value}`;
   }
@@ -17,7 +17,7 @@ class Work extends OperationDefinition {
   name = 'work';
   label = 'Work';
   source = 'test';
-  requires = { value: resource.request() };
+  run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
   leaf = new Read();
   children = [this.leaf];
   sequence = new Sequence().step('read', { use: this.leaf, input: ({ input }) => input });
@@ -26,7 +26,7 @@ class Work extends OperationDefinition {
   }
 }
 class Main extends ExecutionDefinition {
-  requires = { value: resource.request() };
+  run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
   operation = new Work();
   children = [this.operation];
   execute(context, invocation, children) {
@@ -62,8 +62,8 @@ test('definitions bind to independent R endpoints; node identity is stable and p
 
 test('business views exclude state mutation, records, binding APIs and relation mutation', async () => {
   const definition = new Main();
-  const original = definition.operation.execute;
-  definition.operation.execute = async function (context, invocation, children) {
+  const original = definition.operation.run.execute;
+  definition.operation.run.execute = async function (context, invocation, children) {
     assert.equal(context.complete, undefined);
     assert.equal(context.fail, undefined);
     assert.equal(context.startRound, undefined);
@@ -78,6 +78,7 @@ test('business views exclude state mutation, records, binding APIs and relation 
     assert.equal(relation.accept, undefined);
     assert.equal(relation.returnedWith, undefined);
     assert.equal(relation.invocation.context.complete, undefined);
+    assert.equal(relation.invocation.context.resources, undefined);
     assert.equal(relation.invocation.record, undefined);
     assert.equal(relation.invocation.run, undefined);
     assert.equal(invocation.children.get(relation.invocation), relation);
@@ -89,8 +90,8 @@ test('business views exclude state mutation, records, binding APIs and relation 
 });
 
 test('plain definitions use the same fixed structures without class inheritance', async () => {
-  const child = { level: 'operation', name: 'length', label: 'Length', source: 'test', requires: {}, children: [], maxRounds: 1, execute: (context) => context.currentInput.length };
-  const execution = { level: 'execution', requires: {}, children: [child], maxRounds: 1, execute: (context, invocation, children) => children.get(child).call(invocation, context.currentInput) };
+  const child = { level: 'operation', name: 'length', label: 'Length', source: 'test', children: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (context) => context.currentInput.length } };
+  const execution = { level: 'execution', children: [child], maxRounds: 1, raises: [], run: { requires: {}, execute: (context, invocation, children) => children.get(child).call(invocation, context.currentInput) } };
   const runtime = assembleRuntime({ execution }, { providers: [], source: { entry: () => null, capture: () => null } });
   assert.equal(await runtime.run('hello', {}), 5);
 });
@@ -105,8 +106,8 @@ test('a call-scoped child entry cannot be transferred to another parent', async 
     accepted++;
     return input;
   });
-  definition.execute = async function (context, invocation, children) {
-    const child = children.get(this.operation);
+  definition.run.execute = async function (context, invocation, children) {
+    const child = children.get(definition.operation);
     if (previous) {
       assert.throws(() => previous.create(invocation, 'wrong'), /another parent invocation/);
       assert.throws(() => previousAlternative.create(invocation, 'wrong'), /another parent invocation/);
@@ -133,13 +134,13 @@ test('undeclared entries fail before admission and attachment', async () => {
     accepted = true;
     return 'wrong';
   });
-  definition.execute = (_context, invocation, children) => {
+  definition.run.execute = (_context, invocation, children) => {
     assert.throws(() => children.get(unknown), /not declared/);
     assert.throws(() => children.entry(alternative).create(invocation, null), /not declared/);
     assert.equal(invocation.children.values().length, 0);
     return 'done';
   };
-  assert.equal(await bind(definition, () => 'value').run(null, {}), 'done');
+  await assert.rejects(bind(definition, () => 'value').run(null, {}), /not declared/);
   assert.equal(accepted, false);
 });
 
@@ -163,7 +164,7 @@ test('E entry ordering is reserve, validate, accept, accepted, admit, capture, s
     },
     admit: () => order.push('admit'),
   };
-  execution.execute = (context) => {
+  execution.run.execute = (context) => {
     order.push('work');
     return context.currentInput;
   };
@@ -237,7 +238,7 @@ test('entry endpoints expire before work and also expire when acceptance fails',
         assert.equal(saved.touch(), 'value');
       },
     };
-    main.execute = () => 'done';
+    main.run.execute = () => 'done';
     const runtime = assembleRuntime(
       { execution: main },
       {

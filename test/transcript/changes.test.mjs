@@ -130,7 +130,7 @@ test('capture failure reports committed facts and stops the local invocation ins
         calls++;
         transcript.append(message('committed'));
       },
-      receive(context) {
+      accept(context) {
         receives++;
         return context.continueWith('retry', 'must not repeat the append');
       },

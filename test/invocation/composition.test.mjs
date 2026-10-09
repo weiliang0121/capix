@@ -97,7 +97,11 @@ test('child failure keeps accepted predecessors and prevents later child creatio
   await assert.rejects(invocation.run(), (value) => value === error);
   assert.equal(observed.children.values().length, 2);
   assert.equal(observed.children.values()[0].reception.status, 'accepted');
-  assert.deepEqual(observed.children.values()[1].returned, { status: 'failed', error });
+  const failed = observed.children.values()[1].returned;
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.error, error);
+  assert.equal(failed.failure.kind, 'error');
+  assert.equal(failed.failure.phase, 'execute');
   assert.equal(observed.children.values()[1].reception.status, 'pending');
 });
 

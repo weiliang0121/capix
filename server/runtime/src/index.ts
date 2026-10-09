@@ -78,3 +78,8 @@ export * from './invocation/view.js';
 export { SelectionUsage } from './transcript/usage.js';
 export { ResourceActivity, type ResourceOperation, type ResourceOwner } from './resource/activity.js';
 export type { ContentProvenance } from './records/source.js';
+
+export * from './exception/contract.js';
+export type { InvocationResolution } from './invocation/result.js';
+export type { InvocationFailure, InvocationPhase } from './invocation/failure.js';
+export type { InvocationObservation } from './invocation/recording.js';

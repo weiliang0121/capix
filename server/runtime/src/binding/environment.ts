@@ -1,3 +1,4 @@
+import { definitionResources } from '../definition/invocation.js';
 import { isFunction } from 'es-toolkit/predicate';
 import type { OperationInvocationBuilder } from '../invocation/operation/builder.js';
 import type { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
@@ -18,7 +19,7 @@ export class BindingEnvironment {
     this.check(requires, definitions, level, new Set());
     return new BoundChildren(definitions, (definition) =>
       definition.level === 'operation'
-        ? new Operation(this.operations, definition, this.children(definition.requires, definition.children, 'operation'))
+        ? new Operation(this.operations, definition, this.children(definitionResources(definition), definition.children, 'operation'))
         : new Attempt(
             this.attempts,
             definition,
@@ -30,14 +31,18 @@ export class BindingEnvironment {
   }
   private check(requires: ResourceRequirements, definitions: readonly ChildDefinition[], level: string, path: Set<ChildDefinition>): void {
     for (const definition of definitions) {
-      if (!isFunction(definition.execute)) throw new Error('Child definition requires execute');
+      if (!isFunction(definition.run?.execute)) throw new Error('Child definition requires execute');
       if (definition.level !== 'operation' && definition.level !== 'attempt') throw new Error('Invalid child definition level');
       if (level === 'attempt' || (level === 'execution' && definition.level !== 'operation')) throw new Error('Invalid child definition level');
       if (path.has(definition)) throw new Error('Cyclic child declaration');
-      checkResourceRequests(requires, resourceRequests(definition.requires));
+      checkResourceRequests(requires, resourceRequests(definitionResources(definition)));
+      const children = definition.level === 'operation' ? definition.children : [];
+      for (const child of [...(definition.run.uses ?? children), ...(definition.exceptions?.uses ?? [])]) {
+        if (!children.includes(child)) throw new Error('Declaration uses a child outside its owner');
+      }
       if (definition.level === 'operation') {
         path.add(definition);
-        this.check(definition.requires, definition.children, 'operation', path);
+        this.check(definitionResources(definition), definition.children, 'operation', path);
         path.delete(definition);
       }
     }

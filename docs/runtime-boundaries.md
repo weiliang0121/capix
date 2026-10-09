@@ -4,14 +4,16 @@
 
 ## 声明、绑定和结构
 
-| 层次 | 声明                                                            | 绑定职责                                                   | 固定结构                               |
-| ---- | --------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------- |
-| R    | RuntimeDefinition：唯一 E 声明                                  | assembleRuntime：供给检查、来源捕获及可选记录/变化能力装配 | Runtime：业务 run 入口、占用与构造能力 |
-| E    | ExecutionDefinition：entry、资源申请、O 声明及 execute/receive  | 本次入口资源、工作资源与子结构接线                         | Execution → ExecutionInvocationBuilder |
-| O    | OperationDefinition：描述、资源申请、O/A 声明及 execute/receive | 本位置的稳定结构身份、直接子入口与调用描述                 | Operation → OperationInvocationBuilder |
-| A    | AttemptDefinition：描述、资源申请及 execute/receive             | 本次叶子访问与调用描述                                     | Attempt → AttemptInvocationBuilder     |
+| 层次 | 声明                                                                 | 绑定职责                                                   | 固定结构                               |
+| ---- | -------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------- |
+| R    | RuntimeDefinition：唯一 E 声明                                       | assembleRuntime：供给检查、来源捕获及可选记录/变化能力装配 | Runtime：业务 run 入口、占用与构造能力 |
+| E    | ExecutionDefinition：entry、O 声明及平级 run/exceptions/observation  | 本次入口资源、工作资源与子结构接线                         | Execution → ExecutionInvocationBuilder |
+| O    | OperationDefinition：描述、O/A 声明及平级 run/exceptions/observation | 本位置的稳定结构身份、直接子入口与调用描述                 | Operation → OperationInvocationBuilder |
+| A    | AttemptDefinition：描述及平级 run/exceptions/observation             | 本次叶子访问与调用描述                                     | Attempt → AttemptInvocationBuilder     |
 
 声明由内核定义契约，服务提供具体内容，可使用类实例或满足契约的普通对象。声明不持有模型实例、Runtime、构造器、Recorder、原实体或本次调用状态。业务复杂度留在声明及组合中，绑定不执行 Sequence、不决定业务分支。
+
+`run` 声明 execute 与可选的正常输出 accept；`exceptions` 声明可接纳的异常契约、所需能力及处理内容；`observation` 可选地描述本层 IO。它们是所属声明中的平级部分，不是 run 引用的附属处理器。`raises` 与 `maxRounds` 是所属结构的交付与轮次约束。错误收敛由内核固定，不增加第四类可替换声明。详见 [异常与错误边界](exceptions.md)。
 
 绑定是职责，不要求每层有一个与结构功能重复的可调用包装类。原 RuntimeBinding、ExecutionBinding、OperationBinding、AttemptBinding 已删除；落实后的 E/O/A 结构持有声明、调用工作及惰性直接子结构。服务只把已装配 R 作为业务运行入口。
 
@@ -50,7 +52,8 @@ R 占用
   → 捕获工作配置、固定历史范围与其他供给
   → 建立 E Context / Invocation
   → started → 调用 started 变化 → 开始记录
-  → 启动本次资源事实 → execute / receive
+  → 启动运行阶段资源 → run.execute / run.accept
+  → 已声明的运行异常按契约进入 exceptions.handle
   → 终态、变化及记录 → 释放 R 占用
 ```
 
@@ -64,24 +67,24 @@ started 是绑定侧同步回调，在 Context 已建立、Record 尚未登记�
 
 R 装配三层 ContextBuilder 与 InvocationBuilder，跨调用复用；构造器不保存本次输入、信号或 Context。E 建立本次信号，O/A 保持同一信号引用。Context 私有保存直接父级或 E 构造器身份，供归属和活动检查使用，不向业务公开祖先取数入口。
 
-Invocation 是单次、只能运行一次的结构化调用。它持有实际 Context、可选调用 Record、内部过程顺序与直接子关系。构造不写调用记录；运行前、每轮 execute 前及 receive 前检查本层和父层活动。子调用在已有记录模式下要求父调用已经登记。
+Invocation 是单次、只能运行一次的结构化调用。它持有实际 Context、可选调用 Record、内部过程顺序与直接子关系。构造不写调用记录；运行前、每轮 execute、正常接纳和异常处理阶段检查本层和父层活动及正式错误状态。子调用在已有记录模式下要求父调用已经登记。
 
 业务声明实际收到的是冻结视图，不只是 TypeScript 的 Pick：
 
-- ExecutionScope、OperationScope、AttemptScope：本层 level、id、input/currentInput、progress、state/status、signal、resources.values 和 continueWith。
-- InvocationView：本次 context、origin.contextId、过程 sequence 及只读直接子关系。
+- ExecutionScope、OperationScope、AttemptScope：本层 level、id、input/currentInput、progress、state/status、signal、当前声明申请的 resources.values 和 continueWith。运行内容和异常内容分别取得自己的资源别名。
+- InvocationView：本次 context、origin.contextId、过程 sequence、最终交付 failure 及只读直接子关系。本层工作视图有阶段资源，子关系与 ChildCall 的 Context 只保留运行事实，不含子层资源端点。
 - InvocationRelationView：子调用视图、round、key、returned、reception，不提供 returnedWith/accept 或生命周期修改。
-- ChildBindings：本次父调用的已声明子入口，get/entry 创建窄 ChildCall；组合通过 accept 记录父层接收。
+- ChildBindings：本次父调用当前声明获准使用的子入口，get/entry 创建窄 ChildCall；组合通过 accept 记录父层接收。run.uses 缺省沿用所属子声明，exceptions.uses 缺省为空；二者都不能申请所属 children 之外的子项。
 
 视图不暴露 Recorder、Record、原实体、ResourceBindings.select/attach、Context.complete/fail/startRound，也不能通过子关系绕过边界。视图保持 live getters；运行 IO、错误与再次生成证据保留原对象身份，不通过 JSON 复制“隔离”。业务视图的 level 保持类型层级约束，A 仍只能作为 O 的直接子项。
 
 低层 Builder 与测试可以操作实际 Context/Invocation；这不使业务定义获得同样能力，也不是第三方代码沙箱或权限系统。资源实现中的实体引用只留在内部适配层。
 
-未声明 receive 时由公共循环默认接收，声明 receive 后独立记录接收结果；不检查原型方法等价。局部 continueWith 复用同一 Context 与记录，只允许现有一／两轮范围；子调用始终另建 Invocation、Context、Record。
+未声明 run.accept 时由公共循环直接接纳正常输出；声明后独立记录接纳结果。旧 receive 混合处理入口已移除，不检查原型方法等价。正常接纳的内部过程阶段仍名为 receive；异常处理使用 handling。局部继续复用同一 Context 与记录，只允许现有一／两轮范围；子调用始终另建 Invocation、Context、Record。
 
 ## 直接子调用、组合与有限再次生成
 
-BindingEnvironment 在装配时沿轻量声明检查 E→O、O→O/A、无环以及直接资源覆盖，不建立未使用的子结构，不访问实体或调用模型。BoundChildren 为每个直接声明保留 Initializer，首次实际创建子调用时建立该绑定位置的结构。同一位置复用稳定 O 身份，不同 R 或不同父位置独立。
+BindingEnvironment 在装配时沿轻量声明检查 E→O、O→O/A、无环、run/exceptions 的总资源覆盖及各自 uses 归属，不建立未使用的子结构，不访问实体或调用模型。BoundChildren 为每个直接声明保留 Initializer，首次实际创建子调用时建立该绑定位置的结构。同一位置复用稳定 O 身份，不同 R 或不同父位置独立。
 
 Initializer 只支持同步一次建立、递归检查、成功或失败缓存，没有重置、异步调度或统一释放。共享声明不承诺隔离应用自己保存的外部闭包；绑定后修改声明不是动态重配置能力。
 
@@ -89,9 +92,9 @@ InvocationChildren 是直接父子运行关系，与 Recorder 无关。关系记
 
 Sequence 是不可变顺序定义，step 包含 key、use、input 与可选 accept；类型只能读取前项已接收输出。每次 run 新建本次输出容器；输入构造失败不创建子调用，子调用或接收失败停止后续创建。组合没有第四层 Context、Record、调度器或自动重试。
 
-回答生成仍只有一个受限再次生成声明：完整模型返回因 INVALID_JSON、EMPTY_OUTPUT 或 OUTPUT_SHAPE 被拒绝时，GenerateAnswer.receive 可决定再生成一次。InvokeModel.regeneration 的 InvocationEntry 检查直接子归属、实际返回/接收状态、剩余次数及完整反馈请求。第一轮组装上下文、准备、调用、接纳；第二轮只准备反馈请求、调用、接纳。使用原始结果和错误身份，不从 Recorder 反查，也不把调用关系写入业务 IO。
+回答生成仍只有一个受限再次生成声明：AcceptModelOutput 对完整返回的 INVALID_JSON、EMPTY_OUTPUT 或 OUTPUT_SHAPE 拒绝生产正式 modelOutputRejected 异常，保留原始拒绝原因与模型返回。该 A 通过 raises 允许向父层交付；GenerateAnswer.exceptions 按契约身份与直接子调用证据决定是否继续一次。InvokeModel.regeneration 的 InvocationEntry 复查直接归属、实际返回/接收状态、次数及完整反馈请求。第一轮组装上下文、准备、调用、接纳；第二轮只准备反馈请求、调用、接纳。不从 Recorder 反查，也不把调用关系写入业务 IO。
 
-网络、超时、取消、非 stop 返回、记录/捕获失败，以及内容落实后的错误不进入该重试分支。回答仅在生成操作成功返回后由 E 的 accept 追加并交付一次；记忆后处理失败保留已交付回答。
+网络、超时、取消、非 stop 返回、记录/捕获失败，以及内容落实后的错误不进入该重试分支。回答仅在生成操作成功返回后由 E 内 Sequence 对应步骤的 accept 追加并交付一次；记忆后处理失败保留已交付回答。
 
 ## 资源供给、访问与事实
 
@@ -100,9 +103,9 @@ ResourceOffer 由资源所属模块公开来源、访问接口、binding/access 
 ResourceBindings 持有供给与本次端点：
 
 - capture 的结果或失败可由父子申请共享；配置、历史范围、记忆快照按 binding 时机固定，模型按 access 时机兑现。
-- 每次调用通过 select 得到本地端点及事实序列，再 attach 本次归属；不能共享包含父调用来源的 writer 闭包。
-- Invocation 记录建立后 start，记录本次 bound 和需要立即兑现的 available；惰性项目不会因为记录而提前建立。
-- 普通业务只使用 values；保存下来的正式实体方法仍检查本次调用及祖先活动性，调用结束不能继续读写实体。已经取得的纯数据快照不因此失效。
+- 每次调用通过 select 得到本地供给范围与事实会话，再 attach 本次归属；运行和异常阶段分别兑现受阶段约束的端点，共享本次资源顺序与固定捕获，不能共享包含父调用来源的 writer 闭包。
+- Invocation 记录建立后 start 只激活 run 请求；进入异常处理时才激活 exceptions 请求。相同调用内同一供给的 bound/available 不因阶段切换重复登记；惰性项目不会因为记录而提前建立。
+- 普通业务只使用本阶段的 values；保存下来的正式实体方法仍检查当前阶段、本次调用及祖先活动性。正式错误成立之后也不能继续读写实体或启动子调用。已经取得的纯数据快照不因此失效。
 - entry 使用独立短窗口 restrict，没有伪造调用身份，不混入工作资源的生命周期。
 
 业务访问端点自动附加运行来源及可选私有记录来源。来源不由业务每次写入时传递，也不依赖 Recorder 存在。Transcript、Memories 的正式变化仍由实体自己审查、落实、产生变化并登记内容记录。
@@ -120,11 +123,19 @@ ResourceBindings 持有供给与本次端点：
 
 E 记录不再认识 settings/transcriptRange。资源访问事实解释可见范围，选择 O 的结果解释实际选择，模型 A 的输入解释实际请求，不能互相替代。
 
+## 异常、错误与已成立事实
+
+ExceptionContract 按对象身份定义可处理异常。工作产生自身 raises 声明的异常，或直接子调用交付已经确认的异常，才能进入匹配的 exceptions.handle。A 没有本地处理器不等于立即变为错误；交付异常仍保留该 A 的失败状态。没有最终消费者的异常在 R.run 出口转为 UNHANDLED_EXCEPTION，cause 保留原异常。
+
+结构、绑定、调用机制和处理器自身错误不进入业务异常处理。正式端点将错误归入所属调用，业务 catch 不能抹掉该事实或换抛异常重新获得处理资格；错误之后的正式端点停止接纳。异常处理器返回 return/continue/unhandled，结构检查并落实；处理器本身抛错或返回非法结果按错误结束，不递归调用处理器。
+
+Invocation.failure 表达最终交付的 exception/error 分类、发生阶段、Context 归属及原因，独立于 Context.status。错误收敛保留已成立事实、结束相应调用并交付失败；收敛机制自身出错属于 bug，不再建立第二层处理链或故障恢复承诺。
+
 ## 记录失败与内容事实
 
 启用记录/捕获时保持严格失败。开始记录失败不执行工作；资源或过程记录失败停止本地工作，不触发模型再次生成。成功操作后的记录失败保持已经发生的成果，不把记录异常误记为原操作异常，不自动重做。原操作失败与失败登记又失败时用 AggregateError 同时保留原因。
 
-Invocation 的终态仍是 Context 先结束，再发布及登记；登记失败不回滚已完成 Context。Transcript 全批预检后追加，Memories 全批预检后逐项落实；登记期间失败可能留下已落实的批次前缀，不宣称事务。
+Invocation 的终态仍是 Context 先结束，再发布及登记；登记失败不回滚已完成 Context，成功状态与错误交付可以同时存在。observation.input/output 仅投影记录，不修改真实 IO；无 Recorder 时不执行描述函数，启用后描述失败保持严格错误。Transcript 全批预检后追加，Memories 全批预检后逐项落实；登记期间失败可能留下已落实的批次前缀，不宣称事务。
 
 TranscriptRecord 保存集合身份、追加或分段范围等事实，不携带消息全集。MemoryRecord 继续保留变更解释和结果，暂不建立通用历史版本仓库。资源访问事实和内容变化记录可以关联，二者不能重复声称发生了一次实体变化。
 

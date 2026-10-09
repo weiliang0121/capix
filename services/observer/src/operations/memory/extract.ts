@@ -27,7 +27,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
 每项 sourceIndexes 是本次变化依据，只能来自 messages，且至少包含一个 currentIndexes。result.sourceIndexes 支撑完整正文，必须包含本次变化依据；更新时还可沿用该目标记忆原有的来源索引，创建时只能引用可见原文。继承旧索引不表示本轮读取或验证了旧原文，不能据此补造细节。`;
 
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), model: ModelResource.invoke.request(), memoryWriter: MemoryResource.apply.request() } as const);
-  readonly requires = ExtractMemory.requires;
+  readonly run;
   readonly children;
   private readonly composition;
 
@@ -48,13 +48,14 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
       .step('acceptance', { use: this.acceptOutput, input: ({ input, outputs }) => ({ output: outputs.model, basis: input }) })
       .step('application', { use: this.applyMemory, input: ({ outputs }) => outputs.acceptance });
     this.children = Object.freeze([this.prepareRequest, this.invokeModel, this.acceptOutput, this.applyMemory]);
+    this.run = { requires: ExtractMemory.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
   protected prepare(input: MemoryInput) {
     return { currentIndexes: input.currentIndexes, messages: input.messages.map(({ index, message }) => ({ index, role: message.role, content: message.content })), memories: input.memories };
   }
 
-  async execute(context: OperationScope<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>, invocation: InvocationView<MemoryInput, MemoryExtraction, OperationScope<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>>, children: ChildBindings): Promise<MemoryExtraction> {
+  private async execute(context: OperationScope<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>, invocation: InvocationView<MemoryInput, MemoryExtraction, OperationScope<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>>, children: ChildBindings): Promise<MemoryExtraction> {
     const outputs = await this.composition.run(invocation, context.currentInput, children);
     return outputs.application;
   }

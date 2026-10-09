@@ -44,13 +44,14 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
     if (!body || !Array.isArray(body.processes) || typeof body !== 'object' || !Object.hasOwn(body, 'input') || (hasOutput(body) && Object.hasOwn(body, 'error')) || (Object.hasOwn(body, 'output') && Object.hasOwn(body, 'resultOf')) || (Object.hasOwn(body, 'error') && (!body.error || typeof body.error.code !== 'string' || typeof body.error.message !== 'string'))) return fail();
   }
   for (const body of bodies.values()) {
+    if (body.failure && (!Object.hasOwn(body, 'error') || !validFailure(body.failure))) return fail();
     let previousRound = 0;
     let previousTime = 0;
     for (const [index, process] of body.processes.entries()) {
       if (!process || process.sequence !== index + 1 || !Number.isInteger(process.round) || process.round < previousRound || process.round > 2 || !Number.isFinite(process.offsetMs) || process.offsetMs < previousTime || typeof process.occurredAt !== 'string') return fail();
-      const valid = process.stage === 'execute' ? ['start', 'return', 'throw'] : process.stage === 'receive' ? ['return', 'throw', 'continue'] : process.stage === 'control' ? ['stop'] : [];
+      const valid = process.stage === 'execute' ? ['start', 'return', 'throw'] : process.stage === 'receive' ? ['return', 'throw', 'continue'] : process.stage === 'handling' ? ['start', 'return', 'throw', 'continue', 'unhandled'] : process.stage === 'control' ? ['stop'] : [];
       if (!valid.includes(process.type) || (process.round === 0 && process.stage !== 'control')) return fail();
-      if ((process.type === 'start' || process.type === 'continue') && !Object.hasOwn(process, 'input')) return fail();
+      if (((process.stage === 'execute' && process.type === 'start') || process.type === 'continue') && !Object.hasOwn(process, 'input')) return fail();
       if (process.type === 'return' && Object.hasOwn(process, 'output') === Object.hasOwn(process, 'resultOf')) return fail();
       if ('resultOf' in process) {
         try {
@@ -60,8 +61,9 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
           return fail();
         }
       }
-      if ((process.type === 'throw' || process.type === 'stop') && (!process.error || typeof process.error.code !== 'string' || typeof process.error.message !== 'string')) return fail();
+      if ((process.type === 'throw' || process.type === 'stop' || (process.stage === 'handling' && (process.type === 'start' || process.type === 'unhandled'))) && (!process.error || typeof process.error.code !== 'string' || typeof process.error.message !== 'string')) return fail();
       if (process.type === 'continue' && (typeof process.reason !== 'string' || !process.reason.trim())) return fail();
+      if ('failure' in process && process.failure && !validFailure(process.failure)) return fail();
       previousRound = process.round;
       previousTime = process.offsetMs;
     }
@@ -125,4 +127,10 @@ export function validateSnapshot(value: unknown): asserts value is RuntimeSnapsh
       interactions.delete(fact.interactionId);
     } else return fail();
   }
+}
+
+function validFailure(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const f = value as Record<string, unknown>;
+  return (f.kind === 'exception' || f.kind === 'error') && typeof f.contextId === 'string' && f.contextId.length > 0 && ['setup', 'execute', 'receive', 'handling', 'control', 'observation'].includes(f.phase as string) && (f.contract === undefined || typeof f.contract === 'string');
 }

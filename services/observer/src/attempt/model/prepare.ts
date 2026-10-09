@@ -8,7 +8,7 @@ import { checkCapacity } from '../../model/capacity.js';
 
 /** Build the operation-specific request and verify capacity before sending it. */
 export class PrepareModelRequest<I, R extends ModelRequestResources = ModelRequestResources> extends AttemptDefinition<I, ModelRequest, R> {
-  readonly requires: ResourceRequirements<R>;
+  readonly run;
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request() });
 
   readonly name = 'prepareModelRequest';
@@ -21,10 +21,10 @@ export class PrepareModelRequest<I, R extends ModelRequestResources = ModelReque
     requires: ResourceRequirements<R> = PrepareModelRequest.requires as ResourceRequirements<R>,
   ) {
     super();
-    this.requires = requires;
+    this.run = { requires, execute: this.execute.bind(this) };
   }
 
-  execute(context: AttemptScope<I, ModelRequest, R>): ModelRequest {
+  private execute(context: AttemptScope<I, ModelRequest, R>): ModelRequest {
     const resources = context.resources.values;
     const request = this.createRequest(context.currentInput, resources);
     checkCapacity(request, resources.settings);

@@ -1,6 +1,9 @@
+import type { ResourceRequirements } from '../resource/bindings.js';
+import { definitionResources } from '../definition/invocation.js';
 import type { ExecutionInvocationBuilder, ExecutionStarted } from '../invocation/execution/builder.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
-import type { ExecutionOptions } from '../context/execution.js';
+import type { ExecutionContext, ExecutionOptions } from '../context/execution.js';
+import type { InvocationWork } from '../invocation/cycle.js';
 import type { BoundChildren } from '../binding/children.js';
 import type { ResourceBindings } from '../resource/bindings.js';
 import { bindInvocationWork } from '../binding/work.js';
@@ -17,10 +20,10 @@ export interface ExecutionAssembly<I, U, P, R extends object, ER extends object>
 
 /** Bound execution node. Runtime owns reservation; the node owns fixed entry ordering. */
 export class Execution<I, O, R extends object = object, U = I, ER extends object = object, P extends ExecutionOptions = ExecutionOptions> {
-  private readonly work;
+  private readonly work: InvocationWork<ExecutionContext<I, O, R>, I, O>;
   constructor(
     private readonly invocations: ExecutionInvocationBuilder,
-    readonly definition: ExecutionDefinition<I, O, R, U, ER>,
+    readonly definition: ExecutionDefinition<I, O, R, U, ER, any>,
     readonly children: BoundChildren,
     private readonly assembly: ExecutionAssembly<I, U, P, R, ER>,
   ) {
@@ -52,7 +55,9 @@ export class Execution<I, O, R extends object = object, U = I, ER extends object
     return this.invocations
       .create(accepted, {
         context: options,
-        requires: this.definition.requires,
+        requires: definitionResources(this.definition) as ResourceRequirements<R>,
+        initial: this.definition.run.requires,
+        observation: this.definition.observation,
         establish: () => ({ resources: bound }),
         work: this.work,
         started: callbacks.started,

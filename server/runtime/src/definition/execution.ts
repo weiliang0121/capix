@@ -9,8 +9,8 @@ export interface ExecutionEntry<U, I, R extends object> {
   admit?(input: I, resources: Readonly<R>): void;
 }
 
-export abstract class ExecutionDefinition<I, O, R extends object = Record<string, never>, U = I, ER extends object = Record<string, never>> extends InvocationDefinition<I, O, ExecutionScope<I, O, R>, R> {
+export abstract class ExecutionDefinition<I, O, R extends object = Record<string, never>, U = I, ER extends object = Record<string, never>, H extends object = Record<string, never>> extends InvocationDefinition<I, O, ExecutionScope<I, O, R>, R, H> {
   readonly level = 'execution' as const;
-  readonly children: readonly OperationDefinition<any, any, any>[] = [];
+  readonly children: readonly OperationDefinition<any, any, any, any>[] = [];
   readonly entry?: ExecutionEntry<U, I, ER>;
 }

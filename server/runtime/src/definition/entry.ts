@@ -10,7 +10,10 @@ export class InvocationEntry<D extends ChildDefinition, I> {
     readonly definition: D,
     readonly accept: (parent: DefinitionParent<D>, input: I, options: InvocationRelationOptions) => DefinitionInput<D>,
   ) {}
-  get requires() {
-    return this.definition.requires;
+  get run() {
+    return this.definition.run;
+  }
+  get exceptions() {
+    return this.definition.exceptions;
   }
 }

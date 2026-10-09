@@ -1,3 +1,6 @@
+import type { InvocationObservation } from '../../invocation/recording.js';
+import { failureFact } from '../../invocation/failure.js';
+import type { InvocationFailureFact } from '@capix-observer/protocol';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import type { OperationContext } from '../../context/operation.js';
@@ -20,19 +23,20 @@ export interface OperationDescription {
 
 /** Operation recording; scope queries and completion checks follow the record tree. */
 export class OperationRecordHelper {
-  static recording<I, O>(recording: InvocationRecordHelper, operation: OperationDescription, parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>) {
+  static recording<I, O>(recording: InvocationRecordHelper, operation: OperationDescription, parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, observation?: InvocationObservation<I, O>) {
     return recording.recording<OperationContext<I, O>>(
-      (context) => {
+      (context, input) => {
         const owner = parent.record;
         if (!(owner instanceof ExecutionRecord || owner instanceof OperationRecord) || recording.recorder.book.get(owner.id) !== owner) throw new Error('Parent invocation record is not registered here');
         const executionId = owner instanceof ExecutionRecord ? owner.id : owner.executionId;
-        return this.create(recording.recorder, { operationInstanceId: operation.id, operation: operation.name, label: operation.label, source: operation.source, caller: owner instanceof OperationRecord ? 'operation' : 'execution', callee: 'operation', contextId: context.id, executionId, ...(owner instanceof OperationRecord ? { parentOperationId: owner.id } : {}) }, context.input);
+        return this.create(recording.recorder, { operationInstanceId: operation.id, operation: operation.name, label: operation.label, source: operation.source, caller: owner instanceof OperationRecord ? 'operation' : 'execution', callee: 'operation', contextId: context.id, executionId, ...(owner instanceof OperationRecord ? { parentOperationId: owner.id } : {}) }, input);
       },
-      (context, record, resultOf) => {
+      (context, record, resultOf, output) => {
         const state = context.state;
-        if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);
-        else if (state.status === 'failed') this.fail(recording.recorder, record.id, RuntimeErrorHelper.format(state.error));
+        if (state.status === 'succeeded') this.complete(recording.recorder, record.id, output, resultOf);
+        else if (state.status === 'failed') this.fail(recording.recorder, record.id, RuntimeErrorHelper.format(state.error), state.failure ? failureFact(state.failure) : undefined);
       },
+      observation,
     );
   }
 
@@ -66,9 +70,9 @@ export class OperationRecordHelper {
     InvocationRecordHelper.finish(recorder, record, (record) => record.complete(output, resultOf));
   }
 
-  static fail(recorder: Recorder, id: string, error: RuntimeErrorValue): void {
+  static fail(recorder: Recorder, id: string, error: RuntimeErrorValue, failure?: InvocationFailureFact): void {
     const record = this.prepareFinish(recorder, id);
-    InvocationRecordHelper.finish(recorder, record, (record) => record.fail(error));
+    InvocationRecordHelper.finish(recorder, record, (record) => record.fail(error, failure));
   }
 
   private static prepareFinish(recorder: Recorder, id: string): OperationRecord {

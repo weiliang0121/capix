@@ -103,15 +103,15 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
   assert.ok(Buffer.byteLength(serialized) < Buffer.byteLength(JSON.stringify(expanded)) * 0.5);
 });
 
-test('custom receivers preserve a distinct snapshot even when mutating and returning the same object', async () => {
+test('custom acceptors preserve a distinct snapshot even when mutating and returning the same object', async () => {
   for (const mutate of [false, true]) {
     const { runtime, recorder } = fixture();
     const lifecycle = lifecycleFor(runtime).execution({ input: null, settings: {} });
     const context = lifecycle.begin();
     class Custom extends LocalOperation {
-      receive(_context, result) {
-        if (mutate) result.output.content = 'changed';
-        return result.output;
+      accept(_context, output) {
+        if (mutate) output.content = 'changed';
+        return output;
       }
     }
     const input = { content: 'original' };

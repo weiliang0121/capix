@@ -28,6 +28,7 @@ export function projectDetail(snapshot: RuntimeSnapshot, memory: MemoryObservati
     inputContent: String(input.content ?? ''),
     answer: isString(response) ? response : isPlainObject(response) && isString(response.content) ? response.content : '本轮尚无已记录的回答。',
     error: trace.error,
+    failure: trace.failure,
     children: calls.filter((call) => call.parentId === trace.id),
     memory: memoryAt(),
     calls: new Map(calls.map((call) => [call.id, { ...call, resources: snapshot.resources.filter((fact) => fact.parentId === call.id), children: calls.filter((child) => child.parentId === call.id), memory: memoryAt(call), localRounds: Math.max(0, ...call.processes.map((process) => process.round)), processEntries: call.processes.map((record) => ({ record, ...('resultOf' in record ? { reused: call.processes.find((item) => item.sequence === record.resultOf) } : {}) })) }])),

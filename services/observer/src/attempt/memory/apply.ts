@@ -13,9 +13,9 @@ export class ApplyMemory extends AttemptDefinition<MemoryExtraction, MemoryExtra
   readonly source = 'services/observer/src/attempt/memory/apply.ts · ApplyMemory';
   readonly callee = 'processing';
 
-  readonly requires = ApplyMemory.requires;
+  readonly run = { requires: ApplyMemory.requires, execute: this.execute.bind(this) };
 
-  execute(context: AttemptScope<MemoryExtraction, MemoryExtraction, MemoryWriteResources>): MemoryExtraction {
+  private execute(context: AttemptScope<MemoryExtraction, MemoryExtraction, MemoryWriteResources>): MemoryExtraction {
     context.resources.values.memoryWriter.apply(context.currentInput.memories);
     return context.currentInput;
   }

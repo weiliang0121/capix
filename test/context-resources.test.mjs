@@ -22,8 +22,8 @@ test('Observer narrows resources at each action, captures fixed values and expir
   const definition = new ObserverRuntimeDefinition();
   const views = [];
   const inspect = (current) => {
-    const execute = current.execute;
-    current.execute = function (context, ...args) {
+    const execute = current.run.execute;
+    current.run.execute = function (context, ...args) {
       views.push({ definition: current, resources: { ...context.resources.values } });
       return execute.call(this, context, ...args);
     };
@@ -292,8 +292,8 @@ test('model offer exposes only invocation while preserving provider method owner
     return invoke(...args);
   };
   const definition = new ObserverRuntimeDefinition();
-  const execute = definition.execution.execute;
-  definition.execution.execute = function (context, ...args) {
+  const execute = definition.execution.run.execute;
+  definition.execution.run.execute = function (context, ...args) {
     const access = context.resources.values.model;
     assert.notEqual(access, model);
     assert.deepEqual(Object.keys(access), ['invoke']);

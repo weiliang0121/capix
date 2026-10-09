@@ -19,7 +19,7 @@ type ConversationInput = { message: Readonly<Message>; memories: MemoryInput['me
 
 /** The fixed composition used by this experiment, reusable across calls. */
 export class ObserverExecutionDefinition extends ExecutionDefinition<Readonly<Message>, GenerationOutput, ObserverExecutionResources, unknown, ObserverEntryResources> {
-  readonly requires = observerExecutionRequests;
+  readonly run;
   readonly entry = {
     requires: observerEntryRequests,
     accept: (input: unknown, resources: ObserverEntryResources) => acceptMessages(input, resources.messages.append),
@@ -55,9 +55,10 @@ export class ObserverExecutionDefinition extends ExecutionDefinition<Readonly<Me
         use: operations.extraction,
         input: ({ parent, input, outputs }) => prepareMemoryInput(parent.context.resources.values.history, outputs.generation.response, outputs.selection.historyIndexes, input.memories),
       });
+    this.run = { requires: observerExecutionRequests, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  async execute(context: ExecutionScope<Readonly<Message>, GenerationOutput, ObserverExecutionResources>, invocation: InvocationView<Readonly<Message>, GenerationOutput, ExecutionScope<Readonly<Message>, GenerationOutput, ObserverExecutionResources>>, children: ChildBindings): Promise<GenerationOutput> {
+  private async execute(context: ExecutionScope<Readonly<Message>, GenerationOutput, ObserverExecutionResources>, invocation: InvocationView<Readonly<Message>, GenerationOutput, ExecutionScope<Readonly<Message>, GenerationOutput, ObserverExecutionResources>>, children: ChildBindings): Promise<GenerationOutput> {
     const outputs = await this.composition.run(invocation, { message: context.currentInput, memories: context.resources.values.memories }, children);
     return outputs.generation.answer;
   }

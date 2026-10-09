@@ -1,93 +1,125 @@
 import type { Invocation } from './invocation.js';
 import type { InvocationContext } from '../context/context.js';
-import { Continuation, receiveResult, type InvocationResult } from './result.js';
-import { InvocationStopped, mustStop } from './stop.js';
+import { Continuation, type InvocationResult, type InvocationResolution } from './result.js';
+import { InvocationStopped } from './stop.js';
+import { DeclaredException, type ExceptionContract } from '../exception/contract.js';
+import type { InvocationFailure } from './failure.js';
 import { isNonBlankString } from '../value/string.js';
+import { isObject } from '../value/object.js';
 
-export type InvocationProcess = { stage: 'execute'; type: 'start'; input: unknown } | { stage: 'execute' | 'receive'; type: 'return'; output: unknown } | { stage: 'receive'; type: 'return'; reuse: true } | { stage: 'execute' | 'receive'; type: 'throw'; error: unknown } | { stage: 'receive'; type: 'continue'; input: unknown; reason: string } | { stage: 'control'; type: 'stop'; error: unknown };
-
+export type InvocationProcess = { stage: 'execute'; type: 'start'; input: unknown } | { stage: 'execute' | 'receive' | 'handling'; type: 'return'; output: unknown } | { stage: 'receive'; type: 'return'; reuse: true } | { stage: 'execute' | 'receive' | 'handling'; type: 'throw'; error: unknown; failure?: InvocationFailure } | { stage: 'receive' | 'handling'; type: 'continue'; input: unknown; reason: string } | { stage: 'handling'; type: 'start' | 'unhandled'; error: unknown; failure?: InvocationFailure } | { stage: 'control'; type: 'stop'; error: unknown; failure?: InvocationFailure };
 type ProcessSink = (process: InvocationProcess) => void;
-
 export interface InvocationCycleOptions {
   signal: AbortSignal;
   onProcess: ProcessSink;
   validate?: () => void;
 }
-
 export interface InvocationWork<C extends InvocationContext<I, O>, I, O> {
   execute(context: C, invocation: Invocation<I, O, C>): O | Promise<O>;
-  receive?(context: C, result: InvocationResult<O>, invocation: Invocation<I, O, C>): O | Continuation<I> | Promise<O | Continuation<I>>;
+  accept?(context: C, output: O, invocation: Invocation<I, O, C>): O | Continuation<I> | Promise<O | Continuation<I>>;
+  raises?: readonly ExceptionContract<any>[];
+  exceptions?: {
+    accepts: readonly ExceptionContract<any>[];
+    handle(context: C, exception: DeclaredException, invocation: Invocation<I, O, C>): InvocationResolution<I, O> | Promise<InvocationResolution<I, O>>;
+  };
   maxRounds: 1 | 2;
 }
 
-/** Local control only; each receiver owns the meaning of its branches. */
+/** Structure decides when facets run; declarations only provide work and explicit handling decisions. */
 export async function cycle<I, O, C extends InvocationContext<I, O>>(invocation: Invocation<I, O, C>, work: InvocationWork<C, I, O>, options: InvocationCycleOptions): Promise<O> {
   const context = invocation.context;
   const { signal, onProcess } = options;
   let input = context.input;
   try {
-    requireRoundLimit(work.maxRounds);
+    if (work.maxRounds !== 1 && work.maxRounds !== 2) throw new InvocationStopped('INVALID_ROUND_LIMIT', '本地调用只允许一轮或两轮执行。');
     for (let round = 1; round <= work.maxRounds; round++) {
       requireNotCancelled(signal);
       context.startRound(round, input);
       options.validate?.();
-      const result = await execute(context, work.execute, onProcess, invocation);
+      invocation.requireHealthy();
+      onProcess({ stage: 'execute', type: 'start', input });
+      let result: InvocationResult<O>;
+      try {
+        const output = await work.execute(context, invocation);
+        invocation.requireHealthy();
+        result = { status: 'succeeded', output };
+      } catch (error) {
+        const failure = invocation.classify(error, 'execute');
+        result = { status: 'failed', error: failure.error, failure };
+      }
+      context.receiving(result);
+      if (result.status === 'succeeded') onProcess({ stage: 'execute', type: 'return', output: result.output });
+      else reportFailure(onProcess, 'execute', result.failure!);
       options.validate?.();
-      const received = await receive(context, result, work.receive, onProcess, invocation);
-      if (!(received instanceof Continuation)) return received;
+      requireNotCancelled(signal);
+      invocation.requireHealthy();
+      const accepted = result.status === 'failed' ? await handle(invocation, work, result.failure!, onProcess) : await accept(invocation, work, result.output, onProcess);
+      invocation.requireHealthy();
+      if (!(accepted instanceof Continuation)) return accepted;
       if (round === work.maxRounds) throw new InvocationStopped('LOCAL_ROUND_LIMIT', '本地执行已达到轮次上限。', { maxRounds: work.maxRounds });
-      input = received.input;
+      input = accepted.input;
     }
     throw new InvocationStopped('INTERNAL_ERROR', '调用没有产生结果。');
   } catch (error) {
-    if (error instanceof InvocationStopped) reportFailure(onProcess, 'control', error);
+    if (error instanceof InvocationStopped) reportFailure(onProcess, 'control', invocation.classify(error, 'control'));
     throw error;
   }
 }
 
-async function execute<I, O, C extends InvocationContext<I, O>>(context: C, work: InvocationWork<C, I, O>['execute'], onProcess: ProcessSink, invocation: Invocation<I, O, C>): Promise<InvocationResult<O>> {
-  onProcess({ stage: 'execute', type: 'start', input: context.currentInput });
-  let result: InvocationResult<O>;
+async function accept<I, O, C extends InvocationContext<I, O>>(invocation: Invocation<I, O, C>, work: InvocationWork<C, I, O>, output: O, onProcess: ProcessSink): Promise<O | Continuation<I>> {
+  let accepted: O | Continuation<I>;
   try {
-    result = { status: 'succeeded', output: await work(context, invocation) };
+    accepted = work.accept ? await work.accept(invocation.context, output, invocation) : output;
+    invocation.requireHealthy();
   } catch (error) {
-    result = { status: 'failed', error };
+    const failure = invocation.classify(error, 'receive');
+    reportFailure(onProcess, 'receive', failure);
+    return handle(invocation, work, failure, onProcess);
   }
-  context.receiving(result);
-  if (result.status === 'succeeded') onProcess({ stage: 'execute', type: 'return', output: result.output });
-  else reportFailure(onProcess, 'execute', result.error);
-  if (result.status === 'failed' && mustStop(result.error)) throw result.error;
-  return result;
+  if (accepted instanceof Continuation) reportContinuation(onProcess, 'receive', accepted);
+  else onProcess(work.accept ? { stage: 'receive', type: 'return', output: accepted } : { stage: 'receive', type: 'return', reuse: true });
+  return accepted;
 }
 
-async function receive<I, O, C extends InvocationContext<I, O>>(context: C, result: InvocationResult<O>, work: InvocationWork<C, I, O>['receive'], onProcess: ProcessSink, invocation: Invocation<I, O, C>): Promise<O | Continuation<I>> {
-  let received: O | Continuation<I>;
+async function handle<I, O, C extends InvocationContext<I, O>>(invocation: Invocation<I, O, C>, work: InvocationWork<C, I, O>, failure: InvocationFailure, onProcess: ProcessSink): Promise<O | Continuation<I>> {
+  const exception = failure.error;
+  if (failure.kind !== 'exception' || !(exception instanceof DeclaredException) || !work.exceptions?.accepts.includes(exception.contract)) throw exception;
+  const context = invocation.context;
+  context.handling();
+  onProcess({ stage: 'handling', type: 'start', error: exception, failure });
+  let resolution: InvocationResolution<I, O>;
   try {
-    received = work ? await work(context, result, invocation) : receiveResult(result);
+    resolution = await work.exceptions.handle(context, exception, invocation);
+    invocation.requireHealthy();
+    if (!isObject(resolution) || !['return', 'continue', 'unhandled'].includes(resolution.kind) || (resolution.kind === 'return' && !Object.hasOwn(resolution, 'output')) || (resolution.kind === 'continue' && (!Object.hasOwn(resolution, 'input') || !isNonBlankString(resolution.reason)))) throw new InvocationStopped('INVALID_EXCEPTION_RESOLUTION', '异常处理返回了无效的处理结果。');
   } catch (error) {
-    reportFailure(onProcess, 'receive', error);
-    if ((result.status === 'failed' && Object.is(result.error, error)) || mustStop(error)) throw error;
-    throw new InvocationStopped('RECEIVE_FAILED', '接收处理失败，停止本地调用。', undefined, { cause: error });
+    const handlerFailure = invocation.classify(error, 'handling', true);
+    reportFailure(onProcess, 'handling', handlerFailure);
+    throw handlerFailure.error;
   }
-  if (received instanceof Continuation) {
-    if (!isNonBlankString(received.reason)) throw new InvocationStopped('INVALID_CONTINUATION', '继续执行必须说明原因。');
-    onProcess({ stage: 'receive', type: 'continue', input: received.input, reason: received.reason });
-  } else onProcess(work ? { stage: 'receive', type: 'return', output: received } : { stage: 'receive', type: 'return', reuse: true });
-  return received;
+  if (resolution.kind === 'unhandled') {
+    onProcess({ stage: 'handling', type: 'unhandled', error: exception, failure });
+    throw exception;
+  }
+  if (resolution.kind === 'return') {
+    onProcess({ stage: 'handling', type: 'return', output: resolution.output });
+    return resolution.output;
+  }
+  const continuation = new Continuation(resolution.input, resolution.reason);
+  reportContinuation(onProcess, 'handling', continuation);
+  return continuation;
 }
-
-function requireRoundLimit(limit: number): void {
-  if (limit !== 1 && limit !== 2) throw new InvocationStopped('INVALID_ROUND_LIMIT', '本地调用只允许一轮或两轮执行。');
+function reportContinuation<I>(onProcess: ProcessSink, stage: 'receive' | 'handling', continuation: Continuation<I>): void {
+  if (!isNonBlankString(continuation.reason)) throw new InvocationStopped('INVALID_CONTINUATION', '继续执行必须说明原因。');
+  onProcess({ stage, type: 'continue', input: continuation.input, reason: continuation.reason });
 }
-
 function requireNotCancelled(signal: AbortSignal): void {
   if (signal.aborted) throw new InvocationStopped('INVOCATION_CANCELLED', '调用已取消，不再开始下一轮。', undefined, { cause: signal.reason });
 }
-
-function reportFailure(onProcess: ProcessSink, stage: 'execute' | 'receive' | 'control', error: unknown): void {
+function reportFailure(onProcess: ProcessSink, stage: 'execute' | 'receive' | 'handling' | 'control', failure: InvocationFailure): void {
   try {
-    onProcess(stage === 'control' ? { stage, type: 'stop', error } : { stage, type: 'throw', error });
+    onProcess(stage === 'control' ? { stage, type: 'stop', error: failure.error, failure } : { stage, type: 'throw', error: failure.error, failure });
   } catch (reportingError) {
-    throw new AggregateError([error, reportingError], 'Failure and its process reporting both failed', { cause: error });
+    throw new AggregateError([failure.error, reportingError], 'Failure and its process reporting both failed', { cause: failure.error });
   }
 }

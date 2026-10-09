@@ -1,3 +1,4 @@
+import { modelOutputRejected } from '../../model/rejection.js';
 import { AttemptDefinition, type AttemptScope, RuntimeError, isNonBlankString } from '@capix-observer/runtime';
 
 import type { ModelOutput } from '../../model/types.js';
@@ -10,6 +11,9 @@ export interface ModelAcceptanceInput {
 export class AcceptModelOutput<I extends ModelAcceptanceInput, O> extends AttemptDefinition<I, O> {
   static readonly requires = Object.freeze({});
 
+  readonly raises = [modelOutputRejected];
+  readonly run = { requires: AcceptModelOutput.requires, execute: this.execute.bind(this) };
+
   readonly name = 'acceptModelOutput';
   readonly label = '接纳模型结果';
   readonly source = 'services/observer/src/attempt/model/accept.ts · AcceptModelOutput';
@@ -19,10 +23,17 @@ export class AcceptModelOutput<I extends ModelAcceptanceInput, O> extends Attemp
     super();
   }
 
-  execute(context: AttemptScope<I, O>): O {
+  private execute(context: AttemptScope<I, O>): O {
     checkCompletion(context.currentInput.output);
-    const value = parseContent(context.currentInput.output.content);
-    return this.contract.accept(value, context.currentInput);
+    try {
+      const value = parseContent(context.currentInput.output.content);
+      return this.contract.accept(value, context.currentInput);
+    } catch (error) {
+      if (error instanceof RuntimeError && (error.code === 'INVALID_JSON' || error.code === 'EMPTY_OUTPUT' || error.code === 'OUTPUT_SHAPE')) {
+        throw modelOutputRejected.create(error.message, { code: error.code, output: context.currentInput.output }, { cause: error });
+      }
+      throw error;
+    }
   }
 }
 

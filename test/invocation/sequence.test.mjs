@@ -1,17 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, Recorder, RecordBook, createRuntime } from '@capix-observer/runtime';
+import { Invocation, InvocationContext, Recorder, RecordBook, ExceptionContract, createRuntime } from '@capix-observer/runtime';
 
 const signal = () => new AbortController().signal;
+const firstRound = new ExceptionContract('test.first-round');
 const retryWork = {
+  raises: [firstRound],
   maxRounds: 2,
   execute(context, invocation) {
-    if (context.progress.round === 1) throw new Error('first round');
+    if (context.progress.round === 1) throw firstRound.create('first round', {});
     return context.currentInput;
   },
-  receive(context, result) {
-    if (result.status === 'failed') return context.continueWith('next', 'try again');
-    return result.output;
+  exceptions: {
+    accepts: [firstRound],
+    handle() {
+      return { kind: 'continue', input: 'next', reason: 'try again' };
+    },
   },
 };
 
@@ -37,14 +41,14 @@ test('Invocation owns continuous local sequence across retries, independently of
   assert.equal(await unrecorded.run(), 'next');
   assert.deepEqual(
     seen.map((item) => item.sequence),
-    [1, 2, 3, 4, 5, 6],
+    [1, 2, 3, 4, 5, 6, 7],
   );
   assert.deepEqual(
     seen.map((item) => item.round),
-    [1, 1, 1, 2, 2, 2],
+    [1, 1, 1, 1, 2, 2, 2],
   );
-  assert.equal(recorded.sequence, 6);
-  assert.equal(unrecorded.sequence, 6);
+  assert.equal(recorded.sequence, 7);
+  assert.equal(unrecorded.sequence, 7);
 });
 
 test('parallel invocations and nested calls keep separate local sequences', async () => {
@@ -63,7 +67,7 @@ test('parallel invocations and nested calls keep separate local sequences', asyn
   const independent = new Invocation({ context: new InvocationContext('other'), signal: signal(), work: { maxRounds: 1, execute: (context) => context.input } });
   await Promise.all([root.run(), independent.run()]);
   assert.equal(root.sequence, 3);
-  assert.equal(child.sequence, 6);
+  assert.equal(child.sequence, 7);
   assert.equal(independent.sequence, 3);
   const rootRecord = root.record;
   const childRecord = child.record;
@@ -73,7 +77,7 @@ test('parallel invocations and nested calls keep separate local sequences', asyn
   );
   assert.deepEqual(
     childRecord.value.processes.map((item) => item.sequence),
-    [1, 2, 3, 4, 5, 6],
+    [1, 2, 3, 4, 5, 6, 7],
   );
 });
 

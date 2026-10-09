@@ -1,3 +1,4 @@
+import { definitionResources } from '../definition/invocation.js';
 import type { DeclaredCall } from '../definition/signature.js';
 import { InvocationEntry } from '../definition/entry.js';
 import type { ChildDefinition } from '../definition/children.js';
@@ -22,7 +23,7 @@ export interface SequenceStep<S, P, R, I, O, A = O> {
   readonly accept?: (scope: SequenceScope<S, P, R>, output: O) => A | Promise<A>;
 }
 
-type Entry<S, P> = Readonly<{ key: string; use: { readonly requires?: ResourceRequirements }; run(parent: P, input: S, outputs: Readonly<Record<string, unknown>>, children?: ChildBindings): Promise<unknown> }>;
+type Entry<S, P> = Readonly<{ key: string; use: { readonly requires?: ResourceRequirements; readonly run?: { readonly requires: ResourceRequirements }; readonly exceptions?: { readonly requires: ResourceRequirements } }; run(parent: P, input: S, outputs: Readonly<Record<string, unknown>>, children?: ChildBindings): Promise<unknown> }>;
 
 /** An immutable, typed sequential composition. No scheduling, retry or recovery policy. */
 export class Sequence<S, P extends ParentInvocation | InvocationView, R = Record<never, never>> {
@@ -62,7 +63,7 @@ export class Sequence<S, P extends ParentInvocation | InvocationView, R = Record
   }
 
   get requests(): readonly ResourceRequest<unknown>[] {
-    return Object.freeze(this.entries.flatMap(({ use }) => resourceRequests(use.requires ?? {})));
+    return Object.freeze(this.entries.flatMap(({ use }) => resourceRequests(use.run ? definitionResources({ run: use.run, exceptions: use.exceptions }) : (use.requires ?? {}))));
   }
 
   async run(parent: P, input: S, children?: ChildBindings): Promise<Readonly<R>> {

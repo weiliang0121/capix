@@ -1,7 +1,7 @@
 import type { ExecutionRecord } from '../execution/record.js';
 import type { OperationRecord } from '../operation/record.js';
 import type { AttemptRecord } from '../attempt/record.js';
-import { type InvocationValue, type ProcessRecord, type RuntimeErrorValue, outputProcess, finalOutputProcess } from '@capix-observer/protocol';
+import { type InvocationValue, type ProcessRecord, type RuntimeErrorValue, type InvocationFailureFact, outputProcess, finalOutputProcess } from '@capix-observer/protocol';
 
 import { CompositeRecord } from '../composite.js';
 
@@ -43,9 +43,9 @@ export class InvocationRecord<V extends InvocationValue> extends CompositeRecord
     this.#status = 'succeeded';
   }
 
-  fail(error: RuntimeErrorValue): void {
+  fail(error: RuntimeErrorValue, failure?: InvocationFailureFact): void {
     this.requireRunning();
-    this.replaceValue(Object.freeze({ ...this.value, error: snapshotValue(error) }));
+    this.replaceValue(Object.freeze({ ...this.value, error: snapshotValue(error), ...(failure ? { failure: snapshotValue(failure) } : {}) }));
     this.#status = 'failed';
   }
 }

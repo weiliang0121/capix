@@ -1,4 +1,4 @@
-/** An expected failure with an explicit code and optional detail. */
+/** Structured diagnostic. A code alone does not authorize business exception handling. */
 export class RuntimeError extends Error {
   constructor(
     readonly code: string,

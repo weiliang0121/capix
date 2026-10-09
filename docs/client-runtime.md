@@ -20,7 +20,11 @@ runtime.stopTranscript();
 
 ConversationTransport 只要求 config、run；TranscriptTransport 提供 transcript(id?, signal?) 查询与 observeTranscript(id, accept, signal) 订阅。transcripts 是必需接入：对话正文由消息实体副本提供，不从观测记录生成。
 
-initialize 并行取得配置和当前集合订阅的首帧基线。同实例合并重复初始化；配置慢于实体流时，最终采用已经接纳的最新消息副本，不能把首帧旧内容覆盖到新增量之上。初始化不会请求执行概览、记忆或记录详情。
+initialize 并行取得配置和当前集合订阅的首帧基线。同一次进行中的初始化返回同一 Promise；失败不会永久缓存 rejected Promise，之后显式 initialize 会建立新尝试，不自动重试。配置与实体各自成功时分别保留已经确认的内容，后续尝试复用配置和健康实体连接；不能因为保留了部分配置就提前允许 submit。配置慢于实体流时，最终采用已经接纳的最新消息副本，不能把首帧旧内容覆盖到新增量之上。初始化结束前再次确认实体同步仍然有效。初始化不会请求执行概览、记忆或记录详情。
+
+state.initialization 表达本次环境初始化的 idle、running、succeeded、failed 或 stopped；开始后携带本地 attempt 序号，failed 保留原错误。InitializationAttempt 只管理这个有限过程的状态与 Promise 结束权，不依赖服务端 Invocation，也不引入全局环境管理者。当前场景没有声明可恢复的业务异常，配置与同步失败直接结束本次尝试，不交给伪造的异常 handler。该状态只表示初始化结果，后续实体连接是否持续有效仍由 TranscriptState 表达。
+
+stopTranscript 停止当前集合或全部集合时，也结束正在进行的初始化；已确认的配置和消息副本保留。旧尝试随后返回的配置被忽略，停止的实体连接回调也不能写入，新 initialize 可以明确建立下一次尝试。这不等于取消服务端工作，也不改变服务端 Initializer 的一次构造及失败缓存规则。
 
 业务状态包含 messages、transcriptId、transcripts、busy、pending、contextId、answered 和 error。messages 只是当前集合已接纳 snapshot.messages 的便利引用；权威副本保存在按 UID 索引的 transcripts 中。
 

@@ -105,18 +105,30 @@ test('malformed, duplicate and truncated results fail at the corresponding bound
     ['', 'stop', 'EMPTY_OUTPUT', 'acceptModelOutput'],
   ]) {
     const { trace } = await run(scripted([output(raw, finish)]));
-    assert.equal(trace.error.code, code);
-    assert.equal(trace.nodes.find((n) => n.operation === `selection.${stage}`).status, 'failed');
+    const accepted = trace.nodes.find((n) => n.operation === `selection.${stage}`);
+    assert.equal(accepted.status, 'failed');
+    assert.deepEqual(trace.error, accepted.error);
+    if (code === 'INCOMPLETE_OUTPUT') {
+      assert.equal(trace.error.code, code);
+      assert.equal(trace.facts.execution.value.failure.kind, 'error');
+    } else {
+      assert.equal(trace.error.code, 'MODEL_OUTPUT_REJECTED');
+      assert.equal(trace.error.cause.code, code);
+      assert.deepEqual(trace.error.detail, { code, output: output(raw, finish) });
+      assert.equal(trace.facts.execution.value.failure.kind, 'exception');
+    }
   }
 });
 test('answer classification is validated but does not invent task success', async () => {
   const provider = scripted([output('{"historyIndexes":[]}'), output('{"kind":"tool","content":"x"}'), output('{"kind":"tool","content":"x"}')]);
   const { trace } = await run(provider);
-  assert.equal(trace.error.code, 'OUTPUT_SHAPE');
+  assert.equal(trace.error.code, 'MODEL_OUTPUT_REJECTED');
+  assert.equal(trace.error.cause.code, 'OUTPUT_SHAPE');
+  assert.deepEqual(trace.error.detail, { code: 'OUTPUT_SHAPE', output: output('{"kind":"tool","content":"x"}') });
   const accepted = trace.nodes.find((n) => n.operation === 'answer.acceptModelOutput');
   assert.equal(accepted.status, 'failed');
-  assert.deepEqual(accepted.error.detail.issues[0].path, ['kind']);
-  assert.deepEqual(JSON.parse(JSON.stringify(trace)).error.detail.issues, accepted.error.detail.issues);
+  assert.deepEqual(accepted.error.cause.detail.issues[0].path, ['kind']);
+  assert.deepEqual(JSON.parse(JSON.stringify(trace)).error.cause.detail.issues, accepted.error.cause.detail.issues);
   assert.equal(provider.calls.length, 3);
   assert.equal(trace.result, undefined);
 });

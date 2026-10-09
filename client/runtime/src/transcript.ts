@@ -54,6 +54,10 @@ export class TranscriptReceiver {
     private readonly changed: (states: ReadonlyMap<string, TranscriptState>) => void,
   ) {}
 
+  get defaultId(): string | undefined {
+    return this.sessions.get('')?.id;
+  }
+
   private publish(id: string, state: TranscriptState): void {
     this.states = new Map(this.states).set(id, state);
     this.changed(this.states);
@@ -93,6 +97,8 @@ export class TranscriptReceiver {
               this.replicas.set(session.id, next);
               this.publish(session.id, { snapshot: next.snapshot, loading: false, syncing: true });
             }
+            // Publication may stop this stream and synchronously establish its replacement.
+            if (controller.signal.aborted || this.sessions.get(key) !== session) return;
             const current = this.replicas.get(session.id)!.snapshot;
             // A default subscription and an explicit UID can start before either baseline arrives.
             // Once the default identity is known, keep one stream without rejecting its callers.

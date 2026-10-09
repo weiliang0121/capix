@@ -1,3 +1,6 @@
+import type { InvocationObservation } from '../../invocation/recording.js';
+import { failureFact } from '../../invocation/failure.js';
+import type { InvocationFailureFact } from '@capix-observer/protocol';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { ExecutionContext } from '../../context/execution.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
@@ -14,14 +17,15 @@ import { ResourceRecord } from '../resource/record.js';
 
 /** Execution-specific recording operations. All managed objects are explicit arguments. */
 export class ExecutionRecordHelper {
-  static recording<I, O>(recording: InvocationRecordHelper) {
+  static recording<I, O>(recording: InvocationRecordHelper, observation?: InvocationObservation<I, O>) {
     return recording.recording<ExecutionContext<I, O>>(
-      (context) => this.create(recording.recorder, { contextId: context.id, parentId: recording.root.id }, { input: context.input }),
-      (context, record, resultOf) => {
+      (context, input) => this.create(recording.recorder, { contextId: context.id, parentId: recording.root.id }, { input }),
+      (context, record, resultOf, output) => {
         const state = context.state;
-        if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);
-        else if (state.status === 'failed') this.fail(recording.recorder, record.id, RuntimeErrorHelper.format(state.error));
+        if (state.status === 'succeeded') this.complete(recording.recorder, record.id, output, resultOf);
+        else if (state.status === 'failed') this.fail(recording.recorder, record.id, RuntimeErrorHelper.format(state.error), state.failure ? failureFact(state.failure) : undefined);
       },
+      observation,
     );
   }
 
@@ -46,9 +50,9 @@ export class ExecutionRecordHelper {
     InvocationRecordHelper.finish(recorder, record, (record) => record.complete(output, resultOf));
   }
 
-  static fail(recorder: Recorder, id: string, error: RuntimeErrorValue): void {
+  static fail(recorder: Recorder, id: string, error: RuntimeErrorValue, failure?: InvocationFailureFact): void {
     const record = this.prepareFinish(recorder, id);
-    InvocationRecordHelper.finish(recorder, record, (record) => record.fail(error));
+    InvocationRecordHelper.finish(recorder, record, (record) => record.fail(error, failure));
   }
 
   private static prepareFinish(recorder: Recorder, id: string): ExecutionRecord {

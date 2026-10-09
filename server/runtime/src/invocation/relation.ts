@@ -1,3 +1,4 @@
+import type { InvocationFailure } from './failure.js';
 import type { InvocationRelationView, InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationResult } from './result.js';
@@ -25,6 +26,7 @@ export class InvocationRelation {
     readonly invocation: InvocationTarget,
     readonly round: number,
     readonly key?: string,
+    private readonly failed?: (failure: InvocationFailure) => void,
   ) {
     const relation = this;
     this.view = Object.freeze({
@@ -54,6 +56,7 @@ export class InvocationRelation {
   returnedWith(result: InvocationResult<unknown>): void {
     if (this.#returned) throw new Error('Child invocation has already returned');
     this.#returned = Object.freeze(result);
+    if (result.status === 'failed' && result.failure) this.failed?.(result.failure);
   }
 
   async accept<T>(work: () => T | Promise<T>): Promise<T> {

@@ -41,10 +41,10 @@ test('live nested calls and content sources use their bound records without Cont
                           memories.apply([{ action: 'create', memoryId: null, change: 'location', sourceIndexes: [0], result: { topic: 'location', content: 'Beijing', sourceIndexes: [0] } }], { origin: invocation.origin, source: invocation.source });
                           return 'done';
                         },
-                        receive(context, result, invocation) {
+                        accept(context, output, invocation) {
                           assert.equal(invocation, leaf);
                           assert.equal(invocation.context, context);
-                          return result.output;
+                          return output;
                         },
                       },
                     });

@@ -1,3 +1,6 @@
+import type { InvocationObservation } from '../../invocation/recording.js';
+import { failureFact } from '../../invocation/failure.js';
+import type { InvocationFailureFact } from '@capix-observer/protocol';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { OperationContext } from '../../context/operation.js';
 import type { AttemptContext } from '../../context/attempt.js';
@@ -20,18 +23,19 @@ export interface AttemptDescription {
 
 /** Attempt recording; direct ownership queries follow the record tree. */
 export class AttemptRecordHelper {
-  static recording<I, O>(recording: InvocationRecordHelper, attempt: AttemptDescription, parent: Invocation<unknown, unknown, OperationContext>) {
+  static recording<I, O>(recording: InvocationRecordHelper, attempt: AttemptDescription, parent: Invocation<unknown, unknown, OperationContext>, observation?: InvocationObservation<I, O>) {
     return recording.recording<AttemptContext<I, O>>(
-      (context) => {
+      (context, input) => {
         const operation = parent.record;
         if (!(operation instanceof OperationRecord) || recording.recorder.book.get(operation.id) !== operation) throw new Error('Parent invocation record is not registered here');
-        return this.create(recording.recorder, { name: attempt.name, label: attempt.label, source: attempt.source, caller: 'operation', callee: attempt.callee, contextId: context.id, operationId: operation.id }, context.input);
+        return this.create(recording.recorder, { name: attempt.name, label: attempt.label, source: attempt.source, caller: 'operation', callee: attempt.callee, contextId: context.id, operationId: operation.id }, input);
       },
-      (context, record, resultOf) => {
+      (context, record, resultOf, output) => {
         const state = context.state;
-        if (state.status === 'succeeded') this.complete(recording.recorder, record.id, state.output, resultOf);
-        else if (state.status === 'failed') this.fail(recording.recorder, record.id, RuntimeErrorHelper.format(state.error));
+        if (state.status === 'succeeded') this.complete(recording.recorder, record.id, output, resultOf);
+        else if (state.status === 'failed') this.fail(recording.recorder, record.id, RuntimeErrorHelper.format(state.error), state.failure ? failureFact(state.failure) : undefined);
       },
+      observation,
     );
   }
 
@@ -60,8 +64,8 @@ export class AttemptRecordHelper {
     InvocationRecordHelper.finish(recorder, this.get(recorder.book, id), (record) => record.complete(output, resultOf));
   }
 
-  static fail(recorder: Recorder, id: string, error: RuntimeErrorValue): void {
-    InvocationRecordHelper.finish(recorder, this.get(recorder.book, id), (record) => record.fail(error));
+  static fail(recorder: Recorder, id: string, error: RuntimeErrorValue, failure?: InvocationFailureFact): void {
+    InvocationRecordHelper.finish(recorder, this.get(recorder.book, id), (record) => record.fail(error, failure));
   }
 
   private static owner(book: RecordBook, id: string): OperationRecord {

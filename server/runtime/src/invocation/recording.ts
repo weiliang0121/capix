@@ -9,3 +9,9 @@ export interface InvocationRecording<C> {
   finish(context: C, record: CallRecord): void;
   source(record: CallRecord): ChangeSource;
 }
+
+/** Optional, record-only descriptions. They never replace values used by work. */
+export interface InvocationObservation<I = unknown, O = unknown> {
+  input?(input: I): unknown;
+  output?(output: O): unknown;
+}

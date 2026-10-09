@@ -1,3 +1,4 @@
+import type { InvocationFailure } from './failure.js';
 import type { InvocationScope } from '../context/scope.js';
 import type { InvocationResult } from './result.js';
 import type { InvocationRelationReception } from './relation.js';
@@ -14,6 +15,7 @@ export interface InvocationView<I = unknown, O = unknown, C extends InvocationSc
   readonly context: C;
   readonly origin: Readonly<{ contextId: string }>;
   readonly sequence: number;
+  readonly failure?: InvocationFailure;
   readonly children: {
     get(invocation: InvocationView): InvocationRelationView;
     values(): readonly InvocationRelationView[];

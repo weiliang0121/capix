@@ -11,7 +11,7 @@ import type { ModelRequest, ModelOutput, Purpose } from '../../model/types.js';
 export class InvokeModel extends AttemptDefinition<ModelRequest, ModelOutput, ModelCallResources> {
   static readonly requires = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), model: ModelResource.invoke.request() });
 
-  readonly requires = InvokeModel.requires;
+  readonly run = { requires: InvokeModel.requires, execute: this.execute.bind(this) };
 
   readonly name = 'invokeModel';
   readonly label = '调用模型';
@@ -20,7 +20,7 @@ export class InvokeModel extends AttemptDefinition<ModelRequest, ModelOutput, Mo
 
   readonly regeneration = Object.freeze({
     declaration: modelRegenerationDeclaration,
-    requires: this.requires,
+    requires: this.run.requires,
     allows: (parent: ModelParent, evidence: ModelRegenerationEvidence) => allowsModelRegeneration(parent, evidence),
     entry: new InvocationEntry<InvokeModel, { request: ModelRequest; evidence: ModelRegenerationEvidence }>(this, (parent: ModelParent, input: { request: ModelRequest; evidence: ModelRegenerationEvidence }, options) => {
       const evidence = modelRegenerationInput(parent, input.evidence);
@@ -33,7 +33,7 @@ export class InvokeModel extends AttemptDefinition<ModelRequest, ModelOutput, Mo
     super();
   }
 
-  execute(context: AttemptScope<ModelRequest, ModelOutput, ModelCallResources>): Promise<ModelOutput> {
+  private execute(context: AttemptScope<ModelRequest, ModelOutput, ModelCallResources>): Promise<ModelOutput> {
     const { timeoutMs, settings, model } = context.resources.values;
     checkCapacity(context.currentInput, settings);
     return model.invoke(context.currentInput, this.purpose, AbortSignal.any([context.signal, AbortSignal.timeout(timeoutMs)]));

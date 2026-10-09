@@ -34,44 +34,76 @@ export class BoundChildren {
     if (!entry) throw new Error('Child definition is not declared in this binding');
     return entry.get();
   }
+  checkUses(definitions: readonly ChildDefinition[]): void {
+    for (const definition of definitions) if (!this.#entries.has(definition)) throw new Error('Declaration uses a child outside its owner');
+  }
   initialized(definition: ChildDefinition): boolean {
     return this.#entries.get(definition)?.initialized ?? false;
   }
-  forInvocation(parent: ParentInvocation & { readonly view: InvocationView }): ChildBindings {
+  forInvocation(parent: ParentInvocation & { readonly view: InvocationView; reject(error: unknown, allowException?: boolean): void; requireHealthy(): void }, view: InvocationView = parent.view, uses?: readonly ChildDefinition[], validate?: () => void): ChildBindings {
     const calls = new Map<InvocationView, Invocation<any, any, any>>();
-    const requireActive = () => {
-      parent.context.requireRunning();
-      if ('requireActive' in parent.context) (parent.context as { requireActive(): void }).requireActive();
+    const allowed = new Set(uses ?? this.#entries.keys());
+    const protect = <T>(work: () => T): T => {
+      try {
+        return work();
+      } catch (error) {
+        parent.reject(error);
+        throw error;
+      }
     };
-    const create = (definition: ChildDefinition, actual: InvocationView, input: unknown, options?: InvocationRelationOptions) => {
-      if (actual !== parent.view) throw new Error('Child entry belongs to another parent invocation');
-      requireActive();
-      const invocation = this.get(definition).create(parent, input, options);
-      calls.set(invocation.callView, invocation);
-      return invocation.callView;
-    };
+    const requireActive = () =>
+      protect(() => {
+        validate?.();
+        parent.requireHealthy();
+        parent.context.requireRunning();
+        if ('requireActive' in parent.context) (parent.context as { requireActive(): void }).requireActive();
+      });
+    const create = (definition: ChildDefinition, actual: InvocationView, input: unknown, options?: InvocationRelationOptions) =>
+      protect(() => {
+        if (actual !== view) throw new Error('Child entry belongs to another parent invocation');
+        requireActive();
+        if (!allowed.has(definition)) throw new Error('Child definition is not declared for this phase');
+        const invocation = this.get(definition).create(parent, input, options);
+        calls.set(invocation.callView, invocation);
+        return invocation.callView;
+      });
     return Object.freeze({
-      get: <D extends ChildDefinition>(definition: D) => {
-        if (!this.#entries.has(definition)) throw new Error('Child definition is not declared in this binding');
-        return Object.freeze({
-          create: (actual: DefinitionParent<D>, input: DefinitionInput<D>, options?: InvocationRelationOptions) => create(definition, actual, input, options),
-          call: (actual: DefinitionParent<D>, input: DefinitionInput<D>) => create(definition, actual, input).run(),
-        }) as BoundChild<D>;
-      },
+      get: <D extends ChildDefinition>(definition: D) =>
+        protect(() => {
+          if (!this.#entries.has(definition) || !allowed.has(definition)) throw new Error('Child definition is not declared in this binding');
+          return Object.freeze({
+            create: (actual: DefinitionParent<D>, input: DefinitionInput<D>, options?: InvocationRelationOptions) => create(definition, actual, input, options),
+            call: (actual: DefinitionParent<D>, input: DefinitionInput<D>) => create(definition, actual, input).run(),
+          }) as BoundChild<D>;
+        }),
       entry: <D extends ChildDefinition, I>(entry: InvocationEntry<D, I>) =>
         Object.freeze({
-          create: (actual: DefinitionParent<D>, input: I, options: InvocationRelationOptions = {}) => {
-            if (actual !== parent.view) throw new Error('Child entry belongs to another parent invocation');
-            requireActive();
-            if (!this.#entries.has(entry.definition)) throw new Error('Child definition is not declared in this binding');
-            return create(entry.definition, actual, entry.accept(actual, input, options), options) as ChildCall<DefinitionInput<D>, DefinitionOutput<D>, DefinitionContext<D>>;
-          },
+          create: (actual: DefinitionParent<D>, input: I, options: InvocationRelationOptions = {}) =>
+            protect(() => {
+              if (actual !== view) throw new Error('Child entry belongs to another parent invocation');
+              requireActive();
+              if (!this.#entries.has(entry.definition) || !allowed.has(entry.definition)) throw new Error('Child definition is not declared in this binding');
+              return create(entry.definition, actual, entry.accept(actual, input, options), options) as ChildCall<DefinitionInput<D>, DefinitionOutput<D>, DefinitionContext<D>>;
+            }),
         }),
-      accept: <T>(child: InvocationView, work: () => T | Promise<T>) => {
-        requireActive();
-        const invocation = calls.get(child);
-        if (!invocation) throw new Error('Invocation is not a child created through this binding');
-        return parent.children.get(invocation).accept(work);
+      accept: async <T>(child: InvocationView, work: () => T | Promise<T>) => {
+        let rejected: { error: unknown } | undefined;
+        try {
+          requireActive();
+          const invocation = calls.get(child);
+          if (!invocation) throw new Error('Invocation is not a child created through this binding');
+          return await parent.children.get(invocation).accept(async () => {
+            try {
+              return await work();
+            } catch (error) {
+              rejected = { error };
+              throw error;
+            }
+          });
+        } catch (error) {
+          parent.reject(error, !!rejected && rejected.error === error);
+          throw error;
+        }
       },
       requireActive,
     });

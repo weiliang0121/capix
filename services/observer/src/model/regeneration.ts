@@ -1,7 +1,8 @@
-import { RuntimeError, isObject, type InvocationView, type InvocationRelationView, type OperationScope } from '@capix-observer/runtime';
+import { modelOutputRejected, type ModelOutputRejection } from './rejection.js';
+import { DeclaredException, RuntimeError, isObject, type InvocationView, type InvocationRelationView, type OperationScope } from '@capix-observer/runtime';
 import type { ModelOutput, ModelRequest } from './types.js';
 
-export type ModelParent = InvocationView<unknown, unknown, OperationScope>;
+export type ModelParent = InvocationView<unknown, unknown, Omit<OperationScope, 'resources'>>;
 
 /** Live evidence from one parent's direct children; never serialized as model input. */
 export interface ModelRegenerationEvidence {
@@ -34,9 +35,11 @@ export function allowsModelRegeneration(parent: ModelParent, evidence: ModelRege
   if (previous.returned?.status !== 'succeeded' || previous.invocation.context.status !== 'succeeded' || previous.reception.status !== 'accepted') return false;
   if (rejection.returned?.status !== 'failed' || rejection.invocation.context.status !== 'failed' || rejection.reception.status !== 'pending') return false;
   const error = rejection.returned.error;
-  if (!(error instanceof RuntimeError) || !modelRegenerationDeclaration.rejectionCodes.some((code) => code === error.code)) return false;
+  if (!(error instanceof DeclaredException) || error.contract !== modelOutputRejected) return false;
+  const rejected = error.facts as ModelOutputRejection;
+  if (!modelRegenerationDeclaration.rejectionCodes.some((code) => code === rejected.code)) return false;
   const acceptance = rejection.invocation.context.input;
-  if (!isObject(acceptance) || acceptance.output !== previous.returned.output) return false;
+  if (!isObject(acceptance) || acceptance.output !== previous.returned.output || rejected.output !== previous.returned.output) return false;
   // The evidence comes from the model/acceptance positions of this composition.
   const output = previous.returned.output;
   return isObject(output) && output.finishReason === 'stop';
@@ -47,8 +50,8 @@ export function modelRegenerationInput(parent: ModelParent, evidence: ModelRegen
   const result = evidence.previous.returned!;
   const rejection = evidence.rejection.returned!;
   if (result.status !== 'succeeded' || rejection.status !== 'failed') throw new Error('Regeneration evidence changed');
-  const error = rejection.error as RuntimeError;
-  return { request: evidence.previous.invocation.context.input as ModelRequest, output: result.output as ModelOutput, error: { code: error.code, message: error.message } };
+  const error = rejection.error as DeclaredException<ModelOutputRejection>;
+  return { request: evidence.previous.invocation.context.input as ModelRequest, output: result.output as ModelOutput, error: { code: error.facts.code, message: error.message } };
 }
 
 export function prepareRegenerationRequest(input: ModelRegenerationInput): ModelRequest {

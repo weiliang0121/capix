@@ -304,7 +304,7 @@ test('Observer execution observes execution, operations and boundaries from the 
   assert.deepEqual(view.result, { kind: 'answer', content: '海盐项目' });
 });
 
-test('Acceptance failure preserves raw output, records no accepted result, and propagates the original error', async () => {
+test('Acceptance rejection preserves raw output and its original cause without recording an accepted result', async () => {
   const facts = await execute('broken-json');
   const answer = facts.operations.find((op) => op.operation === 'answer');
   const invoked = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'invokeModel');
@@ -313,8 +313,14 @@ test('Acceptance failure preserves raw output, records no accepted result, and p
   assert.equal(accepted.value.input.output.content, 'broken-json');
   assert.equal(readOutput(accepted.value), undefined);
   assert.equal(readOutput(answer.value), undefined);
-  assert.equal(facts.execution.value.error.code, 'INVALID_JSON');
-  assert.equal(projectExecution(facts).error.code, 'INVALID_JSON');
+  const rejection = facts.execution.value.error;
+  assert.equal(rejection.code, 'MODEL_OUTPUT_REJECTED');
+  assert.equal(rejection.cause.code, 'INVALID_JSON');
+  assert.deepEqual(rejection.detail, { code: 'INVALID_JSON', output: readOutput(invoked.value) });
+  assert.deepEqual(projectExecution(facts).error, rejection);
+  assert.equal(facts.execution.value.failure.kind, 'exception');
+  assert.equal(accepted.value.error.cause.code, 'INVALID_JSON');
+  assert.deepEqual(accepted.value.error.detail, { code: 'INVALID_JSON', output: readOutput(invoked.value) });
   assert.equal(facts.attempts.filter((attempt) => attempt.operationId === answer.id && attempt.name === 'acceptModelOutput' && attempt.status === 'failed').length, 2);
   const runtime = createRecordedRuntime();
   const execution = begin(runtime);

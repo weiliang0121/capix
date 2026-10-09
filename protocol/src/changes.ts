@@ -1,7 +1,7 @@
 import type { Message } from './message.js';
 import type { MemoryContent } from './memory.js';
 import type { BaseRecord, ProcessRecord } from './records.js';
-import type { RuntimeErrorValue } from './errors.js';
+import type { RuntimeErrorValue, InvocationFailureFact } from './errors.js';
 
 export interface RuntimeOrigin {
   readonly contextId: string;
@@ -13,7 +13,7 @@ export interface RecordEntry {
   readonly kind: RecordKind;
   readonly data: BaseRecord;
 }
-export type RecordMutation = Readonly<{ kind: 'added'; entry: RecordEntry; parent?: Readonly<{ id: string; childId: string }> }> | Readonly<{ kind: 'process-appended'; id: string; process: ProcessRecord }> | Readonly<{ kind: 'finished'; id: string; status: 'succeeded' | 'failed'; result: Readonly<{ output?: unknown; resultOf?: number; error?: RuntimeErrorValue }> }> | Readonly<{ kind: 'replaced'; entry: RecordEntry }>;
+export type RecordMutation = Readonly<{ kind: 'added'; entry: RecordEntry; parent?: Readonly<{ id: string; childId: string }> }> | Readonly<{ kind: 'process-appended'; id: string; process: ProcessRecord }> | Readonly<{ kind: 'finished'; id: string; status: 'succeeded' | 'failed'; result: Readonly<{ output?: unknown; resultOf?: number; error?: RuntimeErrorValue; failure?: InvocationFailureFact }> }> | Readonly<{ kind: 'replaced'; entry: RecordEntry }>;
 export type RecordChangeEvent = Readonly<{ type: 'record'; recorderId: string; revision: number; occurredAt: string; change: RecordMutation }>;
 /** Live call progress metadata, independent of recording or arbitrary IO serialization. */
 export type InvocationEvent = Readonly<{ type: 'invocation'; contextId: string; parentContextId?: string; level: 'execution' | 'operation' | 'attempt'; sequence: number; occurredAt: string; change: Readonly<{ kind: 'started' }> | Readonly<{ kind: 'process'; processSequence: number; round: number; stage: ProcessRecord['stage']; action: ProcessRecord['type'] }> | Readonly<{ kind: 'finished'; status: 'succeeded' | 'failed' }> }>;

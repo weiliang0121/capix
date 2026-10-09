@@ -11,6 +11,7 @@ export interface ResourceOwner {
   readonly contextId: string;
   readonly source: () => ChangeSource | undefined;
   readonly validate: () => void;
+  readonly error?: (error: unknown, allowException?: boolean) => void;
   readonly recording?: { readonly recorder: Recorder; readonly parentId: () => string };
 }
 export interface ResourceOperation<T> {
@@ -24,15 +25,34 @@ export class ResourceSession {
   constructor(
     readonly owner?: ResourceOwner,
     private readonly restriction?: () => void,
+    private readonly parent?: ResourceSession,
   ) {}
+  scope(validate: () => void): ResourceSession {
+    return new ResourceSession(this.owner, validate, this);
+  }
+  error(error: unknown, allowException = false): void {
+    this.owner?.error?.(error, allowException);
+  }
   validate(): void {
-    this.restriction?.();
-    this.owner?.validate();
+    try {
+      if (this.parent) this.parent.validate();
+      else this.owner?.validate();
+      this.restriction?.();
+    } catch (error) {
+      this.error(error);
+      throw error;
+    }
   }
   record(access: string, supplyId: string, phase: ResourceFact['phase'], describe: () => unknown, interactionId?: string): void {
+    if (this.parent) return this.parent.record(access, supplyId, phase, describe, interactionId);
     const recording = this.owner?.recording;
     if (!recording) return;
-    writeRecord(() => recording.recorder.add(new ResourceRecord({ parentId: recording.parentId(), access, supplyId, sequence: ++this.#sequence, occurredAt: recording.recorder.clock.now(), phase, ...(interactionId ? { interactionId } : {}) }, describe())));
+    try {
+      writeRecord(() => recording.recorder.add(new ResourceRecord({ parentId: recording.parentId(), access, supplyId, sequence: ++this.#sequence, occurredAt: recording.recorder.clock.now(), phase, ...(interactionId ? { interactionId } : {}) }, describe())));
+    } catch (error) {
+      this.error(error);
+      throw error;
+    }
   }
 }
 
@@ -60,6 +80,7 @@ export class ResourceActivity {
     this.record('available', describe);
   }
   unavailable(error: unknown): void {
+    this.session.error(error);
     this.record('unavailable', () => ({ error: RuntimeErrorHelper.format(error) }));
   }
 
@@ -95,6 +116,7 @@ export class ResourceActivity {
   }
 
   private failed(action: string, interactionId: string, error: unknown): void {
+    this.session.error(error, true);
     try {
       this.record('threw', () => ({ action, error: RuntimeErrorHelper.format(error) }), interactionId);
     } catch (recordingError) {

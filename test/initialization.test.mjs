@@ -102,12 +102,13 @@ test('declarations are checked before resource access or invocation construction
     name = 'test';
     label = 'test';
     source = 'test';
-    requires = { value: resource.request() };
+    run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
     execute() {
       assert.fail('must not execute');
     }
   }
   class Root extends ExecutionDefinition {
+    run = { requires: {}, execute: this.execute.bind(this) };
     children = [new Work()];
     execute() {
       assert.fail('must not execute');

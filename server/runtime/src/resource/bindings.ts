@@ -9,74 +9,112 @@ export function resourceRequests<R extends object>(requires: ResourceRequirement
   return Object.keys(requires).map((name) => requires[name as keyof R]);
 }
 
-/** Shares captured supplies, but each call gets its own provenance-bound endpoint and fact sequence. */
+/** Supply captures survive phase changes; local endpoints do not cross declaration phases. */
 export class ResourceBindings<R extends object = object> {
   readonly values: Readonly<R>;
   readonly #entries: readonly ResourceValue[];
-  readonly #local = new Map<ResourceValue, { activity: ResourceActivity; endpoint: Initializer<unknown> }>();
+  readonly #initial: ResourceRequirements;
+  readonly #locals = new Map<string, Map<ResourceValue, { activity: ResourceActivity; endpoint: Initializer<unknown> }>>();
+  readonly #scopes = new Map<string, ResourceSession>();
+  readonly #bound = new Set<ResourceValue>();
+  readonly #available = new Set<ResourceValue>();
   #restriction?: () => void;
   #session = new ResourceSession(undefined, () => this.#restriction?.());
   #attached = false;
   #started = false;
+  #phase = 'run';
 
-  constructor(requires: ResourceRequirements<R>, available: readonly ResourceValue[] = []) {
+  constructor(requires: ResourceRequirements<R>, available: readonly ResourceValue[] = [], initial: ResourceRequirements = requires) {
     const entries: ResourceValue[] = [];
-    const values = {};
-    for (const name of Object.keys(requires)) {
-      const request = requires[name as keyof R];
+    for (const request of resourceRequests(requires)) {
       const entry = available.find((value) => value.offer === request.offer);
       if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
       if (!entries.includes(entry)) entries.push(entry);
+    }
+    this.#entries = Object.freeze(entries);
+    this.#initial = initial;
+    this.values = this.view(initial as ResourceRequirements<R>);
+  }
+
+  /** Each declaration receives a distinct, revocable named view, never this binding. */
+  view<T extends object>(requires: ResourceRequirements<T>, phase = 'run'): Readonly<T> {
+    const values = {};
+    for (const name of Object.keys(requires)) {
+      const request = requires[name as keyof T];
+      const entry = this.#entries.find((value) => value.offer === request.offer);
+      if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
       Object.defineProperty(values, name, {
         enumerable: true,
-        get: () =>
-          request.read([
-            {
-              offer: entry.offer,
-              get: () => {
-                this.#session.validate();
-                return this.local(entry).endpoint.get();
-              },
-            },
-          ]),
+        get: () => {
+          try {
+            this.session(phase).validate();
+            return request.read([{ offer: entry.offer, get: () => this.local(entry, phase).endpoint.get() }]);
+          } catch (error) {
+            this.#session.error(error);
+            throw error;
+          }
+        },
       });
     }
-    this.values = Object.freeze(values) as Readonly<R>;
-    this.#entries = Object.freeze(entries);
+    return Object.freeze(values) as Readonly<T>;
   }
 
   /** A construction window may end without creating an invocation or a fake origin. */
   restrict(validate: () => void): void {
-    if (this.#restriction || this.#attached || this.#started || this.#local.size) throw new Error('Resource access is already established');
+    if (this.#restriction || this.#attached || this.#started || this.#locals.size) throw new Error('Resource access is already established');
     this.#restriction = validate;
   }
 
   attach(owner: ResourceOwner): void {
-    if (this.#attached || this.#started || this.#local.size) throw new Error('Resource access is already established');
+    if (this.#attached || this.#started || this.#locals.size) throw new Error('Resource access is already established');
     this.#attached = true;
     this.#session = new ResourceSession(owner, () => this.#restriction?.());
+    this.#scopes.clear();
   }
 
-  /** Called after the owning invocation record exists. Static assembly and entry access never record. */
+  /** Start only the normal-work access; handler-only endpoints remain unrealized. */
   start(): void {
     if (this.#started) throw new Error('Resource access has already started');
     this.#started = true;
-    for (const entry of this.#entries) {
-      const local = this.local(entry);
-      local.activity.bound();
+    this.activate('run', this.#initial);
+  }
+
+  activate(phase: string, requires: ResourceRequirements): void {
+    if (!this.#started) throw new Error('Resource access requires a started invocation');
+    this.#phase = phase;
+    for (const request of resourceRequests(requires)) {
+      const entry = this.#entries.find((value) => value.offer === request.offer);
+      if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
+      const local = this.local(entry, phase);
       if (entry.timing === 'binding') local.endpoint.get();
     }
   }
 
-  select<T extends object>(requires: ResourceRequirements<T>): ResourceBindings<T> {
-    return new ResourceBindings(requires, this.#entries);
+  select<T extends object>(requires: ResourceRequirements<T>, initial: ResourceRequirements = requires): ResourceBindings<T> {
+    return new ResourceBindings(requires, this.#entries, initial);
   }
 
-  private local(entry: ResourceValue) {
+  private session(phase: string): ResourceSession {
+    let session = this.#scopes.get(phase);
+    if (!session) {
+      session = this.#session.scope(() => {
+        if (phase !== this.#phase) throw new Error('Resource access belongs to an inactive declaration phase');
+      });
+      this.#scopes.set(phase, session);
+    }
+    return session;
+  }
+
+  private local(entry: ResourceValue, phase: string) {
     if (this.#attached && !this.#started) throw new Error('Resource access requires a started invocation');
-    const existing = this.#local.get(entry);
+    let locals = this.#locals.get(phase);
+    if (!locals) {
+      locals = new Map();
+      this.#locals.set(phase, locals);
+    }
+    const existing = locals.get(entry);
     if (existing) return existing;
-    const activity = new ResourceActivity(this.#session, entry.offer.name, entry.supplyId);
+    const activity = new ResourceActivity(this.session(phase), entry.offer.name, entry.supplyId);
     const endpoint = new Initializer(() => {
       let captured: unknown;
       let value: unknown;
@@ -84,18 +122,22 @@ export class ResourceBindings<R extends object = object> {
         captured = entry.capture();
         value = entry.expose(captured, activity);
       } catch (error) {
-        try {
-          activity.unavailable(error);
-        } catch (recordingError) {
-          throw new AggregateError([error, recordingError], 'Resource acquisition and failure recording both failed', { cause: error });
-        }
+        this.#session.error(error);
+        activity.unavailable(error);
         throw error;
       }
-      activity.available(() => entry.describe(captured));
+      if (!this.#available.has(entry)) {
+        activity.available(() => entry.describe(captured));
+        this.#available.add(entry);
+      }
       return value;
     });
     const local = { activity, endpoint };
-    this.#local.set(entry, local);
+    locals.set(entry, local);
+    if (this.#started && !this.#bound.has(entry)) {
+      activity.bound();
+      this.#bound.add(entry);
+    }
     return local;
   }
 }

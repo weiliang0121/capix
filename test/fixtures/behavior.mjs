@@ -8,7 +8,9 @@ function work(owner) {
   return {
     maxRounds: owner.maxRounds ?? 1,
     execute: (context, invocation) => owner.execute(context, invocation),
-    ...(owner.receive ? { receive: (context, result, invocation) => owner.receive(context, result, invocation) } : {}),
+    raises: owner.raises,
+    exceptions: owner.exceptions,
+    ...(owner.accept ? { accept: (context, output, invocation) => owner.accept(context, output, invocation) } : {}),
   };
 }
 export class Execution {

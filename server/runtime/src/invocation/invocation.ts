@@ -1,4 +1,7 @@
-import { invocationScope, type ScopeOf } from '../context/scope.js';
+import { DeclaredException } from '../exception/contract.js';
+import { InvocationStopped } from './stop.js';
+import type { InvocationFailure, InvocationPhase } from './failure.js';
+import { invocationScope, type InvocationFactsOf } from '../context/scope.js';
 import type { InvocationView, ChildCall } from './view.js';
 import { InvocationChildren, type ParentInvocation } from './children.js';
 import type { InvocationRelation, InvocationRelationOptions } from './relation.js';
@@ -30,10 +33,39 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   #started = false;
   #sequence = 0;
   #record?: CallRecord;
+  #fault?: InvocationFailure;
+  #classified?: InvocationFailure;
+  #failure?: InvocationFailure;
+
+  get failure(): InvocationFailure | undefined {
+    return this.#failure;
+  }
+
+  /** Internal endpoint boundary. Once an error occurs, work cannot turn it into success. */
+  reject(error: unknown, allowException = false): void {
+    this.classify(error, this.context.progress.phase, !allowException);
+  }
+
+  requireHealthy(): void {
+    if (this.#fault) throw this.#fault.error;
+  }
+
+  classify(error: unknown, phase: InvocationPhase, forceError = false): InvocationFailure {
+    if (this.#fault) return this.#fault;
+    if (!forceError && this.#classified && this.#classified.error === error) return this.#classified;
+    const declared = !forceError && error instanceof DeclaredException;
+    const delivered = this.children.values().some((relation) => relation.returned?.status === 'failed' && relation.returned.error === error && relation.returned.failure?.kind === 'exception');
+    const allowed = declared && (this.options.work.raises?.includes(error.contract) || delivered);
+    const actual = forceError && error instanceof DeclaredException ? new InvocationStopped(phase === 'handling' ? 'EXCEPTION_HANDLER_FAILED' : 'INVOCATION_FAILED', '结构处理抛出的异常不能再次进入业务处理。', undefined, { cause: error }) : declared && !allowed ? new InvocationStopped('UNDECLARED_EXCEPTION', '工作产生了未声明的异常。', { contract: error.contract.name }, { cause: error }) : error;
+    const failure: InvocationFailure = Object.freeze({ kind: allowed ? 'exception' : 'error', phase, contextId: this.context.id, ...(allowed ? { contract: error.contract.name } : {}), error: actual });
+    this.#classified = failure;
+    if (failure.kind === 'error') this.#fault = failure;
+    return failure;
+  }
   readonly children: InvocationChildren;
   readonly origin: Readonly<{ contextId: string }>;
-  readonly view: InvocationView<I, O, ScopeOf<C>>;
-  readonly callView: ChildCall<I, O, ScopeOf<C>>;
+  readonly view: InvocationView<I, O, InvocationFactsOf<C>>;
+  readonly callView: ChildCall<I, O, InvocationFactsOf<C>>;
   readonly #parentRelation?: InvocationRelation;
 
   get record(): CallRecord | undefined {
@@ -65,7 +97,13 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   }
 
   constructor(private readonly options: InvocationOptions<I, O, C>) {
-    this.children = new InvocationChildren(options.context);
+    this.children = new InvocationChildren(
+      options.context,
+      (failure) => {
+        if (failure.kind === 'error' && !this.#fault) this.#fault = failure;
+      },
+      () => this.requireHealthy(),
+    );
     this.origin = Object.freeze({ contextId: options.context.id });
     const context = invocationScope(options.context);
     const invocation = this;
@@ -75,6 +113,9 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
       get sequence() {
         return invocation.sequence;
       },
+      get failure() {
+        return invocation.failure;
+      },
       children: this.children.view,
     });
     this.callView = Object.freeze({
@@ -82,6 +123,9 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
       origin: this.origin,
       get sequence() {
         return invocation.sequence;
+      },
+      get failure() {
+        return invocation.failure;
       },
       children: this.children.view,
       run: () => this.run(),
@@ -94,15 +138,22 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   }
 
   async run(): Promise<O> {
-    if (this.#started) throw new Error('Invocation has already started');
+    if (this.#started) {
+      const error = new Error('Invocation has already started');
+      this.options.parent?.invocation.children.reject(error);
+      throw error;
+    }
     this.#started = true;
     try {
       const output = await this.execute();
       this.#parentRelation?.returnedWith({ status: 'succeeded', output });
       return output;
     } catch (error) {
-      this.#parentRelation?.returnedWith({ status: 'failed', error });
-      throw error;
+      const classified = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, this.context.status === 'succeeded' ? 'observation' : this.context.progress.phase, true);
+      const delivered = error instanceof AggregateError ? error : classified.error;
+      this.#failure = Object.freeze({ ...classified, ...(error instanceof AggregateError ? { kind: 'error' as const } : {}), error: delivered });
+      this.#parentRelation?.returnedWith({ status: 'failed', error: delivered, failure: this.#failure });
+      throw delivered;
     }
   }
 
@@ -110,6 +161,7 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     const context = this.context;
     context.requireRunning();
     try {
+      this.options.parent?.invocation.children.requireHealthy();
       this.options.validate?.();
       this.options.started?.(context, this);
       this.options.changes?.publish({ kind: 'started' });
@@ -118,7 +170,8 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
         if (this.options.recording) this.requireRecord();
       });
     } catch (error) {
-      context.fail(error);
+      const failure = this.classify(error, 'setup', true);
+      context.fail(failure.error, failure);
       try {
         this.options.changes?.publish({ kind: 'finished', status: 'failed' });
       } catch (captureError) {
@@ -140,7 +193,8 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
         },
       });
     } catch (error) {
-      context.fail(error);
+      const failure = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.phase, true);
+      context.fail(error, Object.freeze({ ...failure, error, ...(error instanceof AggregateError ? { kind: 'error' as const } : {}) }));
       try {
         this.options.changes?.publish({ kind: 'finished', status: 'failed' });
         writeRecord(() => this.options.recording?.finish(context, this.requireRecord()));

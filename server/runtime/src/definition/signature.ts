@@ -4,5 +4,6 @@ import type { ResourceRequirements } from '../resource/bindings.js';
 export declare const invocationSignature: unique symbol;
 export interface DeclaredCall<P, I, O> {
   readonly [invocationSignature]?: (parent: P, input: I) => O;
-  readonly requires: ResourceRequirements;
+  readonly run: { readonly requires: ResourceRequirements };
+  readonly exceptions?: { readonly requires: ResourceRequirements };
 }

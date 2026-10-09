@@ -37,6 +37,7 @@ export interface ExecutionDetail {
   inputContent: string;
   answer: string;
   error?: CallSpan['error'];
+  failure?: CallSpan['failure'];
   calls: ReadonlyMap<string, CallDetail>;
   children: CallSpan[];
   memory: CallMemory;

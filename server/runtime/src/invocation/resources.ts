@@ -8,10 +8,12 @@ export function attachInvocationResources<I, O, C extends InvocationContext<I, O
   resources.attach({
     contextId: invocation.context.id,
     validate: () => {
+      invocation.requireHealthy();
       invocation.context.requireRunning();
       if ('requireActive' in invocation.context) (invocation.context as { requireActive(): void }).requireActive();
     },
     source: () => invocation.source,
+    error: (error, allowException) => invocation.reject(error, allowException),
     recording: recording
       ? {
           recorder: recording.recorder,

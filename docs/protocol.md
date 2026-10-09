@@ -15,17 +15,25 @@
 - GET `/api/execution?id=记录ID` → RuntimeSnapshot。仅在打开详情时请求；返回当前完整记录。
 - GET `/api/memory` → MemoryObservation。记忆正文、来源与已生成的变更记录。
 - GET `/api/source?file=路径` → SourceResponse。路径为仓库相对源文件路径，服务端白名单验证。
-- POST `/api/run` 接受 ExecutionRequest；200 返回 NDJSON ConversationUpdate。started 携带 transcriptId/contextId/inputIndex，answer 携带 transcriptId/contextId/index/完整 GenerationOutput，completed 表示后处理也已完成，error 表示处理异常。回答在追加 Transcript 后立即交付，不等待记忆提取；没有记录订阅也能完整使用。
+- POST `/api/run` 接受 ExecutionRequest；200 返回 NDJSON ConversationUpdate。started 携带 transcriptId/contextId/inputIndex，answer 携带 transcriptId/contextId/index/完整 GenerationOutput，completed 表示后处理也已完成，error 表示本次处理失败，不表示已交付回答被撤销。回答在追加 Transcript 后立即交付，不等待记忆提取；没有记录订阅也能完整使用。
 - GET `/api/observe` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接；序号缺口最多自动重建一次基线，不提供历史重放或跨查询一致性承诺。
 - HTTP 非 2xx 返回 ErrorResponse。忙碌时 409，拒绝追加消息；接纳/配置错误 400；内部错误 500。不改变现有运行失败的事实记录。
 
 ## 身份、顺序与时间
 
-业务流的 contextId 来自调用现场，即使不启用 Recorder 也存在；观测记录通过 contextId 与业务关联，对话不需要先查询记录。Record.id、Context.id 和运行实例 ID 互不替代。executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive return 正文，消费者使用 readOutput，不复制存储正文。
+业务流的 contextId 来自调用现场，即使不启用 Recorder 也存在；观测记录通过 contextId 与业务关联，对话不需要先查询记录。Record.id、Context.id 和运行实例 ID 互不替代。executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
 
 执行列表按实际登记顺序。边界事件 sequence 与单调 offsetMs 是执行内部时序依据；occurredAt/startedAt 是展示用墙钟。未结束调用没有 durationMs；不得补造耗时。跨 QA 只有先后关系，前端使用等宽列，轮内才按计时比例布局。
 
 availableMemoryIds 来自本轮输入快照，只表示可见，不能宣称模型实际采用。selections 是选择操作结果；容量裁剪后的最终原文与候选有区别，详情必须以实际请求记录为准。response 即使后处理失败也可以存在。
+
+## 异常处理过程与失败分类
+
+ProcessRecord 的 stage 包含 execute、receive、handling、control。receive 仅表示正常结果接纳，handling 表示异常声明的 start/return/continue/unhandled/throw；继续仍属于同一次调用，不新增执行层次。InvocationEvent 的过程 stage/action 与记录契约对应，不携带任意业务 IO。
+
+InvocationFailureFact 表达 kind(exception/error)、phase(setup/execute/receive/handling/control/observation)、contextId，以及仅异常适用的 contract。调用失败正文、过程和相应增量可携带这组解释事实；错误正文仍由 RuntimeErrorValue 表达。contract 是服务端契约名称的说明，跨端字符串不赋予处理、重试或恢复资格。
+
+Context 的业务完成状态与调用交付失败可能不同，例如工作成功之后终态记录失败。客户端不能因为最终失败就撤回消息实体中已经成立的回答，也不能把未知状态解读为尚未发生。业务流、记录流和消息实体同步保持各自职责，当前不新增通用恢复指令。
 
 ## 前端分工接口
 
@@ -53,7 +61,7 @@ ObservationBaseline 的 sequence 是发送者已消费到的位置，另带 Tran
 
 ## 资源事实与实体同步
 
-`RuntimeSnapshot.resources` 为 ResourceFact 数组。每条事实具有自身 id、直接 parentId（E/O/A 调用记录）、access、supplyId、sequence、occurredAt、phase 和由资源契约定义的 value。sequence 在所属调用的资源事实范围内递增；bound 先于 available/unavailable，started 与 returned/threw 以 interactionId 配对。资源顺序、调用过程 sequence、实体 revision 和发送者 sequence 各有边界，不互相替代。
+`RuntimeSnapshot.resources` 为 ResourceFact 数组。每条事实具有自身 id、直接 parentId（E/O/A 调用记录）、access、supplyId、sequence、occurredAt、phase 和由资源契约定义的 value。sequence 在所属调用的资源事实范围内递增；bound 先于 available/unavailable，started 与 returned/threw 以 interactionId 配对。运行与异常处理阶段的端点共享此序列，同一供给的 bound/available 不因阶段切换重复发送。资源顺序、调用过程 sequence、实体 revision 和发送者 sequence 各有边界，不互相替代。
 
 静态申请/供给不产生记录。调用内资源端点兑现及方法执行才产生事实。描述函数不会在关闭记录时运行；供给失败与已完成工作后的记录失败保持不同证据，不把后者重新解释成业务失败。
 

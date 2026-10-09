@@ -30,7 +30,7 @@ export class SelectHistory extends OperationDefinition<SelectionInput, Selection
   protected readonly output = selectionOutputContract;
 
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), model: ModelResource.invoke.request() } as const);
-  readonly requires = SelectHistory.requires;
+  readonly run;
   readonly children;
   private readonly composition;
 
@@ -54,9 +54,10 @@ export class SelectHistory extends OperationDefinition<SelectionInput, Selection
         },
       });
     this.children = Object.freeze([this.prepareRequest, this.invokeModel, this.acceptOutput]);
+    this.run = { requires: SelectHistory.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  async execute(context: OperationScope<SelectionInput, Selection, ObserverResources>, invocation: InvocationView<SelectionInput, Selection, OperationScope<SelectionInput, Selection, ObserverResources>>, children: ChildBindings): Promise<Selection> {
+  private async execute(context: OperationScope<SelectionInput, Selection, ObserverResources>, invocation: InvocationView<SelectionInput, Selection, OperationScope<SelectionInput, Selection, ObserverResources>>, children: ChildBindings): Promise<Selection> {
     const outputs = await this.composition.run(invocation, context.currentInput, children);
     return outputs.acceptance;
   }

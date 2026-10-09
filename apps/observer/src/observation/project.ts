@@ -20,6 +20,7 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
       processes: body.processes,
       ...(hasOutput(body) ? { output: readOutput(body) } : {}),
       ...(body.error ? { error: body.error } : {}),
+      ...(body.failure ? { failure: body.failure } : {}),
     };
   };
   const root: CallSpan = {
@@ -94,5 +95,6 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
     },
     ...(root.status === 'passed' ? { result: root.output as GenerationOutput } : {}),
     ...(root.error ? { error: root.error } : {}),
+    ...(root.failure ? { failure: root.failure } : {}),
   };
 }

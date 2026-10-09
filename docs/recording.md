@@ -29,15 +29,21 @@ RecordRegistration 只覆盖一次记录登记，既不包含整个 EOA 调用�
 
 ## 调用记录
 
-ExecutionRecordHelper、OperationRecordHelper、AttemptRecordHelper 分别组装本层的 InvocationRecording：begin、process、finish、source。创建时读取绑定提供的声明描述和父 Invocation 的记录，结束时使用原有子记录检查；Recorder 不做类型分派。
+ExecutionRecordHelper、OperationRecordHelper、AttemptRecordHelper 分别组装本层的 InvocationRecording：begin、process、finish、source。创建时读取绑定提供的声明描述和父 Invocation 的记录，结束时使用原有子记录检查；Recorder 不做类型分派。所属声明的 observation.input/output 经这组接线描述记录 IO，不改变 Context 中的值；未接入 Recorder 时描述函数完全不执行。
 
 Invocation 持有本次 Context 和可选 Record 的临时运行关系。begin 创建并登记记录后立即通过 bind 回调交给 Invocation，再登记 call 事件；绑定检查 contextId 一致且只允许一次。process、finish 显式接收这条记录，不再通过 Context ID 反查。即使后续边界事件登记失败，已成功登记的记录引用仍保留。Context 不增加 Record、Invocation 或反向注册表。
 
-InvocationRecordHelper 复用过程格式、结果引用、错误转换和边界事件逻辑，已移除 get(contextId)。调用级 InvocationRecording 是一组函数接线，没有独立 ID、状态机或执行能力。Invocation 仍统一处理本地循环、终态与记录异常。RecordBook 持有进程内历史记录；调用对象被释放不删除记录，也不承担历史查询。
+InvocationRecordHelper 复用过程格式、结果引用、错误转换和边界事件逻辑，已移除 get(contextId)。调用级 InvocationRecording 是一组函数接线，没有独立 ID、状态机或执行能力。Invocation 统一驱动 run.execute、正常 run.accept、匹配的 exceptions.handle 和终态；记录或描述错误绕过业务异常处理。RecordBook 持有进程内历史记录；调用对象被释放不删除记录，也不承担历史查询。
 
 InvocationRecordIndex 及其 Context/Operation/Attempt/Event 映射已经移除。通用 RecordIndex 没有其他生产使用者，一并移除。调用绑定由 Invocation 持有，归属查询由 RecordTree 提供；RecordBook 仍是实际记录的唯一存储。正常构造每次建立独立 Context，不为旧索引的重复登记防御另建全局检查。
 
 Runtime.recording 持有原有 InvocationRecordHelper 的实例，持有所属 RuntimeRecord，使用共享 Recorder 组织调用记录，私有保存执行计时起点；执行终态边界登记后释放起点。Observer 通过 tree.root(executionId) 与 RuntimeRecord 的身份比较判断归属，不依赖 Context 索引或计时表。InvocationBoundaryRecordHelper 继续负责事件序号、状态匹配与单调时间检查，不增加独立时序管理器。无 Recorder 时不创建这个辅助对象。
+
+调用过程使用 execute（工作）、receive（正常接纳）、handling（异常处理）和 control（结构停止）。handling 明确记录 start/return/continue/unhandled/throw，不为处理器新增 EOA 层次。每项仍只有记录内 sequence、round、occurredAt、offsetMs 和对应正文；failure 可表达 exception/error、阶段、所属 contextId 及适用时的 contract 名称。契约实例不进入协议，名称只供解释，不能在客户端恢复处理权限。
+
+默认正常接纳复用同轮 execute.return 的正文；自定义 run.accept 与 exceptions.handle 的成功返回各自捕获正文。最终 resultOf 只能指向本记录最后一次 receive.return 或 handling.return 接纳的直接输出；消费者使用 readOutput。不跨记录、不形成引用链，也不根据对象身份去重。
+
+Invocation.failure 是运行中的最终交付事实，不依赖记录存在。Context 已经成功但终态登记失败时保持成功 Context，调用仍向外抛错；不能为了填充失败记录覆盖既成状态，也不能虚构完整记录。错误收敛自身损坏按 bug 暴露，不增加递归处理或补偿机制。
 
 ## 内容记录与来源
 
@@ -51,17 +57,17 @@ TranscriptRecord 正文保存追加或分段范围，不重复原文。消息 UI
 
 ## 资源运行事实
 
-ResourceOffer 是资源模块公开的契约：来源捕获、正式访问端点、兑现时机及可记录描述。共享供给保存 capture 的结果或错误；每次调用有独立 ResourceBindings 端点、ResourceSession 和 ResourceActivity，不共享带父调用身份的闭包。配置与 Provider 分别描述数据与能力；Provider 实例、连接和函数不序列化进入记录。
+ResourceOffer 是资源模块公开的契约：来源捕获、正式访问端点、兑现时机及可记录描述。共享供给保存 capture 的结果或错误；每次调用有独立 ResourceBindings、ResourceSession 和 ResourceActivity。run/exceptions 端点分别受当前阶段约束，共享本次资源顺序与捕获供给；不共享带父调用身份的闭包。配置与 Provider 分别描述数据与能力；Provider 实例、连接和函数不序列化进入记录。
 
 ResourceRecord 使用同一 BaseRecord、Recorder 与记录树。公共字段为 parentId、access、supplyId、sequence、occurredAt、phase 及可选 interactionId，value 由资源定义并经通用快照规则留存。phase 区分 bound、available、unavailable、started、returned、threw；它们是运行事实，不给每个资源增加一套可推进状态机。
 
-静态 request/provide 不登记记录。调用记录 begin 后启动本次资源访问记录：bound 描述本次关联，available 描述兑现后的值或供应者；惰性资源没有实际访问就不创建 Provider。正式 read/entries/invoke/apply 等方法通过 ResourceActivity 的同步或异步操作边界登记，不把同步读取改成 Promise，不拦截每次属性读取。
+静态 request/provide 不登记记录。调用记录 begin 后激活 run 请求，进入异常处理时才激活 exceptions 请求：bound 描述本次关联，available 描述兑现后的值或供应者。相同供给在同一调用内不因阶段切换重复登记 bound/available；惰性资源没有实际访问就不创建 Provider。正式 read/entries/invoke/apply 等方法通过 ResourceActivity 的同步或异步操作边界登记，不把同步读取改成 Promise，不拦截每次属性读取。
 
 E 不再拥有 settings/transcriptRange 特化字段。配置资源记录固定参数，原文资源记录 transcriptId/start/end/revision；原文可见范围不表示实际模型上下文，选择结果及模型实际请求分别查看 O/A 的已有 IO。记忆写入的访问事实可按本调用与实体变化序号关联 MemoryRecord，不再另存第二份记忆变化正文。
 
 资源记录严格失败：开始登记失败不调用实体；操作成功后的返回登记失败只报记录异常，不误记为操作失败或重做操作；操作与失败登记同时失败保留 AggregateError。记录关闭时不生成描述正文，不影响正常业务或运行来源。资源事实自身的 sequence 属于本调用资源会话，不替代 Invocation 内部过程序号或传输游标。
 
-entry 访问只有 accept/admit 的短生命周期守卫，不存在 E Context/Record，因此不产生伪调用归属。该窗口结束后保存的入口端点同样不可继续访问实体。工作资源则在调用开始后可用，调用结束后失效。
+entry 访问只有 accept/admit 的短生命周期守卫，不存在 E Context/Record，因此不产生伪调用归属。该窗口结束后保存的入口端点同样不可继续访问实体。工作资源在调用开始后按当前阶段可用，阶段切换后旧阶段端点不可使用，调用结束后全部失效。资源捕获、暴露和生命周期检查属于绑定／结构边界，即使抛出 DeclaredException 也按错误处理；正式资源操作体的声明异常可按所属运行契约交付。
 
 ## 变化捕获与观察发布
 

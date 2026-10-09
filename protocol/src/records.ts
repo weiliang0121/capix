@@ -1,4 +1,4 @@
-import type { RuntimeErrorValue } from './errors.js';
+import type { InvocationFailureFact, RuntimeErrorValue } from './errors.js';
 import type { ResourceFact } from './records/resource.js';
 
 /** Common record shape; concrete records define their own relations and body. */
@@ -16,8 +16,11 @@ export interface RuntimeValue {
 }
 export interface RuntimeRecord extends CompositeRecord<RuntimeValue> {}
 
+export const invocationProcessStages = ['execute', 'receive', 'handling', 'control'] as const;
+export const invocationProcessActions = ['start', 'return', 'throw', 'continue', 'unhandled', 'stop'] as const;
+
 /** Append-only entries inside one invocation record; no independent record identity. */
-export type ProcessRecord = Readonly<{ sequence: number; round: number; occurredAt: string; offsetMs: number } & ({ stage: 'execute'; type: 'start'; input: unknown } | { stage: 'execute' | 'receive'; type: 'return'; output: unknown } | { stage: 'receive'; type: 'return'; resultOf: number } | { stage: 'execute' | 'receive'; type: 'throw'; error: RuntimeErrorValue } | { stage: 'receive'; type: 'continue'; input: unknown; reason: string } | { stage: 'control'; type: 'stop'; error: RuntimeErrorValue })>;
+export type ProcessRecord = Readonly<{ sequence: number; round: number; occurredAt: string; offsetMs: number } & ({ stage: 'execute'; type: 'start'; input: unknown } | { stage: 'execute' | 'receive' | 'handling'; type: 'return'; output: unknown } | { stage: 'receive'; type: 'return'; resultOf: number } | { stage: 'execute' | 'receive' | 'handling'; type: 'throw'; error: RuntimeErrorValue; failure?: InvocationFailureFact } | { stage: 'receive' | 'handling'; type: 'continue'; input: unknown; reason: string } | { stage: 'handling'; type: 'start' | 'unhandled'; error: RuntimeErrorValue; failure?: InvocationFailureFact } | { stage: 'control'; type: 'stop'; error: RuntimeErrorValue; failure?: InvocationFailureFact })>;
 
 export interface InvocationValue<I = unknown, O = unknown> {
   readonly processes: readonly ProcessRecord[];
@@ -26,6 +29,7 @@ export interface InvocationValue<I = unknown, O = unknown> {
   /** Local process sequence containing the final frozen output; mutually exclusive with output. */
   resultOf?: number;
   error?: RuntimeErrorValue;
+  failure?: InvocationFailureFact;
 }
 export interface ExecutionValue<I = unknown, O = unknown> extends InvocationValue<I, O> {
   startedAt: string;

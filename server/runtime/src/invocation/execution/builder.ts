@@ -1,3 +1,4 @@
+import type { InvocationObservation } from '../recording.js';
 import { attachInvocationResources } from '../resources.js';
 import { ResourceBindings, type ResourceRequirements } from '../../resource/bindings.js';
 import type { InvocationCapabilities } from '../capabilities.js';
@@ -22,6 +23,8 @@ export interface ExecutionEnvironment<R extends object> {
 export interface ExecutionInvocationRequest<I, O, R extends object = object> {
   context: ExecutionOptions;
   requires?: ResourceRequirements<R>;
+  initial?: ResourceRequirements;
+  observation?: InvocationObservation<I, O>;
   establish?: (input: I) => ExecutionEnvironment<R>;
   validate?: () => void;
   work: InvocationWork<ExecutionContext<I, O, R>, I, O>;
@@ -38,9 +41,9 @@ export class ExecutionInvocationBuilder {
   create<I, O, R extends object = object>(input: I, request: ExecutionInvocationRequest<I, O, R>): Invocation<I, O, ExecutionContext<I, O, R>> {
     request.validate?.();
     const environment = request.establish?.(input);
-    const resources = (environment?.resources ?? new ResourceBindings<R>({} as ResourceRequirements<R>)).select(request.requires ?? ({} as ResourceRequirements<R>));
+    const resources = (environment?.resources ?? new ResourceBindings<R>({} as ResourceRequirements<R>)).select(request.requires ?? ({} as ResourceRequirements<R>), request.initial);
     const context = this.contexts.create<I, O, R>(input, request.context, resources);
-    const recording = this.capabilities.recording ? ExecutionRecordHelper.recording<I, O>(this.capabilities.recording) : undefined;
+    const recording = this.capabilities.recording ? ExecutionRecordHelper.recording<I, O>(this.capabilities.recording, request.observation) : undefined;
     const changes = this.capabilities.changes ? new InvocationChangeEmitter({ contextId: context.id, level: 'execution' }, this.capabilities.changes) : undefined;
     const invocation = new Invocation<I, O, ExecutionContext<I, O, R>>({ context, work: request.work, signal: context.signal, recording, started: request.started, changes });
     attachInvocationResources(invocation, context.resources, this.capabilities.recording);

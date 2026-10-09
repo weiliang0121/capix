@@ -18,9 +18,9 @@ export class AssembleContext extends AttemptDefinition<Selection, AssembledConte
   readonly source = 'services/observer/src/attempt/context/assemble.ts · AssembleContext';
   readonly callee = 'processing';
 
-  readonly requires = AssembleContext.requires;
+  readonly run = { requires: AssembleContext.requires, execute: this.execute.bind(this) };
 
-  execute(context: AttemptScope<Selection, AssembledContext, HistoryResources>): AssembledContext {
+  private execute(context: AttemptScope<Selection, AssembledContext, HistoryResources>): AssembledContext {
     const range = context.resources.values.history;
     if (!range || range.length === 0) throw new Error('Execution Transcript range is required');
     const selectedMessages = context.currentInput.historyIndexes.map((index) => {

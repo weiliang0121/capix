@@ -84,6 +84,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                       <div className="detail-grid">
                         <DataBlock title="输入" value={call.input} />
                         <DataBlock title={call.error ? '失败原因' : '最终结果'} value={call.error ?? call.output} />
+                        {call.failure && <DataBlock title="失败归属" value={call.failure} />}
                       </div>
                       {call.parentId && (
                         <Button variant="ghost" size="sm" onClick={() => onInspect(detail.id, call.parentId)}>
@@ -99,6 +100,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                         <TextBlock markdown title={`助手${qa?.response?.index === undefined ? '' : ` · [${qa.response.index}]`}`} content={answer} />
                       </div>
                       {detail.error && <DataBlock title="执行失败" value={detail.error} />}
+                      {detail.failure && <DataBlock title="失败归属" value={detail.failure} />}
                       <section className="selection-detail">
                         <h3>本轮历史选择</h3>
                         {qa?.selections.map((selection) => (
@@ -114,7 +116,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                 </TabsContent>
                 {call && (
                   <TabsContent value="process">
-                    <p className="subtle">同一调用内的执行与接收。复用结果仍指向本条记录的原始过程。</p>
+                    <p className="subtle">同一调用内的执行、正常接纳与异常处理。handling 表示异常处理阶段，复用结果指向本条记录的原始过程。</p>
                     {call.processEntries.map(({ record: process, reused }) => (
                       <details className="process-entry" key={process.sequence}>
                         <summary>

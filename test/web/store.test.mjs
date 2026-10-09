@@ -184,6 +184,6 @@ test('unmounted app ignores late initialization errors and reconnect establishes
   const reconnect = connectAppStore(store, runtime);
   await runtime.initialize().catch(() => {});
   assert.equal(store.getState().notice, '配置读取失败');
-  assert.equal(loads, 2);
+  assert.equal(loads, 3, 'a failed explicit attempt is not reused when the app reconnects');
   reconnect();
 });

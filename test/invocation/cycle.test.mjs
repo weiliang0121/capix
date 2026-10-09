@@ -6,7 +6,7 @@ import { ExecutionRecordHelper } from '@capix-observer/runtime';
 import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runtime, Recorder, RecordBook, RuntimeError, createRuntime } from '@capix-observer/runtime';
+import { Runtime, Recorder, RecordBook, ExceptionContract, createRuntime } from '@capix-observer/runtime';
 
 import { validateSnapshot } from '@capix-observer/protocol';
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
@@ -47,9 +47,9 @@ test('local two-round handling keeps one context and one record with immutable p
       context.currentInput.value++;
       return { value: context.currentInput.value };
     }
-    receive(context, result) {
+    accept(context, output) {
       assert.equal(context.status, 'running');
-      return result.output.value < 2 ? context.continueWith(result.output, '补足到二') : result.output;
+      return output.value < 2 ? context.continueWith(output, '补足到二') : output;
     }
   }
   const operation = new Advance(runtime.operationInvocations),
@@ -88,7 +88,7 @@ test('local two-round handling keeps one context and one record with immutable p
   assert.equal(projectExecution(snapshot).nodes.find((n) => n.id === record.id).processes, record.value.processes);
 });
 
-test('EOA binds inherited execute and receive methods to each behavior instance', async () => {
+test('EOA binds inherited execute and acceptance methods to each behavior instance', async () => {
   for (const Base of [Execution, Operation, Attempt]) {
     const { runtime, recorder, execution } = fixture();
     class Local extends Base {
@@ -105,9 +105,9 @@ test('EOA binds inherited execute and receive methods to each behavior instance'
         this.contexts.push(context);
         return context.currentInput + 1;
       }
-      receive(context, result) {
+      accept(context, output) {
         this.receptions++;
-        return result.output < 2 ? context.continueWith(result.output, '继续累加') : result.output * this.multiplier;
+        return output < 2 ? context.continueWith(output, '继续累加') : output * this.multiplier;
       }
     }
     class Inherited extends Local {}
@@ -142,7 +142,7 @@ test('unhandled failure executes once and keeps the original error', async () =>
   const record = recordFor(work.contexts[0]);
   assert.deepEqual(
     record.value.processes.map((p) => p.type),
-    ['start', 'throw', 'throw'],
+    ['start', 'throw'],
   );
   assert.equal(work.contexts[0].state.error, failure);
 });
@@ -152,8 +152,8 @@ test('default limit is one total round and explicit local handling is capped at 
     const { runtime, recorder, execution } = fixture();
     class Repeat extends LocalOperation {
       maxRounds = limit;
-      receive(context, result) {
-        return context.continueWith(result.output, '仍未满足要求');
+      accept(context, output) {
+        return context.continueWith(output, '仍未满足要求');
       }
     }
     const work = new Repeat(runtime.operationInvocations);
@@ -182,8 +182,8 @@ test('invalid limits and empty continuation reasons stop explicitly', async () =
   const { runtime, execution } = fixture();
   class InvalidReason extends LocalOperation {
     maxRounds = 2;
-    receive(context, result) {
-      return context.continueWith(result.output, ' ');
+    accept(context, output) {
+      return context.continueWith(output, ' ');
     }
   }
   const work = new InvalidReason(runtime.operationInvocations);
@@ -199,9 +199,9 @@ test('cancelled calls do not enter execute; cancellation between rounds keeps th
     const cause = new Error('cancel');
     class Repeat extends LocalOperation {
       maxRounds = 2;
-      receive(context, result) {
+      accept(context, output) {
         controller.abort(cause);
-        return context.continueWith(result.output, '下一轮');
+        return context.continueWith(output, '下一轮');
       }
     }
     if (initiallyCancelled) controller.abort(cause);
@@ -214,34 +214,37 @@ test('cancelled calls do not enter execute; cancellation between rounds keeps th
   }
 });
 
-test('receiver exceptions stop locally and retain the execution result and receiver error', async () => {
+test('acceptance errors stop locally and retain the execution result and original error', async () => {
   const { runtime, recorder, execution } = fixture();
   const failure = new Error('receiver bug');
   class Broken extends LocalOperation {
     maxRounds = 2;
-    receive() {
+    accept() {
       throw failure;
     }
   }
   const work = new Broken(runtime.operationInvocations);
-  await assert.rejects(work.call(callFor(execution), 0), (e) => e.code === 'RECEIVE_FAILED' && e.cause === failure);
+  await assert.rejects(work.call(callFor(execution), 0), (error) => error === failure);
   assert.equal(work.contexts.length, 1);
   assert.equal(work.contexts[0].progress.result.output, 1);
   const record = recordFor(work.contexts[0]);
   assert.equal(record.value.processes[2].error.message, 'receiver bug');
-  assert.equal(record.value.processes.at(-1).error.code, 'RECEIVE_FAILED');
+  assert.equal(record.value.processes.at(-1).failure.kind, 'error');
+  assert.equal(record.value.processes.at(-1).failure.phase, 'receive');
 });
 
 test('a parent may handle a failed child without rewriting the failed child invocation', async () => {
   const { runtime, recorder, execution, lifecycle } = fixture();
+  const rejected = new ExceptionContract('test.child-rejected');
   class Child extends Attempt {
+    raises = [rejected];
     name = 'child';
     label = 'child';
     source = 'test';
     callee = 'processing';
     execute(context, invocation) {
       rememberCall(invocation);
-      if (context.currentInput === 0) throw new RuntimeError('REJECTED', 'zero');
+      if (context.currentInput === 0) throw rejected.create('zero', { input: 0 });
       return context.currentInput;
     }
   }
@@ -253,10 +256,12 @@ test('a parent may handle a failed child without rewriting the failed child invo
       this.contexts.push(context);
       return child.call(invocation, context.currentInput);
     }
-    receive(context, result) {
-      if (result.status === 'failed') return context.continueWith(1, '改正输入');
-      return result.output;
-    }
+    exceptions = {
+      accepts: [rejected],
+      handle() {
+        return { kind: 'continue', input: 1, reason: '改正输入' };
+      },
+    };
   }
   const work = new Parent(runtime.operationInvocations);
   assert.equal(await work.call(callFor(execution), 0), 1);
@@ -282,7 +287,7 @@ test('record failure bypasses local recovery and prevents repeating successful w
   let received = 0;
   class Repeat extends LocalOperation {
     maxRounds = 2;
-    receive(context, result) {
+    accept(context, output) {
       received++;
       return context.continueWith(0, 'retry');
     }
@@ -322,8 +327,8 @@ test('no recorder is required by local handling; live input/output keep their id
       this.contexts.push(context);
       return context.currentInput;
     }
-    receive(context, result) {
-      return result.output === initial ? context.continueWith(next, 'next') : result.output;
+    accept(context, output) {
+      return output === initial ? context.continueWith(next, 'next') : output;
     }
   }
   const work = new Local(runtime.operationInvocations);
@@ -358,7 +363,7 @@ test('child recording failures cannot be converted into parent retries', async (
       rememberCall(invocation);
       return child.call(invocation, 0);
     }
-    receive(context) {
+    accept(context) {
       receptions++;
       return context.continueWith(0, 'retry');
     }
@@ -368,13 +373,13 @@ test('child recording failures cannot be converted into parent retries', async (
   assert.equal(receptions, 0);
 });
 
-test('process publication is live during receive and does not create standalone records', async () => {
+test('process publication is live during acceptance and does not create standalone records', async () => {
   const { runtime, recorder, execution } = fixture();
   let resume;
   class Waiting extends LocalOperation {
-    receive(_context, result) {
+    accept(_context, output) {
       return new Promise((resolve) => {
-        resume = () => resolve(result.output);
+        resume = () => resolve(output);
       });
     }
   }
