@@ -1,5 +1,6 @@
-import type { ObservationDeclarationScope, ObservationInstallation } from '../observation/binding.js';
-import { definitionResources } from '../definition/invocation.js';
+import type { ObservationDeclarationScope } from '../definition/observation.js';
+import type { ObservationInstallation } from './observation.js';
+import { definitionResources } from './resources.js';
 import { isFunction } from 'es-toolkit/predicate';
 import type { OperationInvocationBuilder } from '../invocation/operation/builder.js';
 import type { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';

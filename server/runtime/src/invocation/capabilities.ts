@@ -1,7 +1,7 @@
 import type { Clock } from '../runtime/clock.js';
 import type { InvocationEvent } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
-import type { ObservationInstallation } from '../observation/binding.js';
+import type { ObservationInstallation } from '../binding/observation.js';
 
 /** Stable capabilities supplied at assembly, never threaded through business call arguments. */
 export interface InvocationCapabilities {

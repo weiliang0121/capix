@@ -1,4 +1,4 @@
-import { definitionResources, observationResources } from '../definition/invocation.js';
+import { definitionResources, observationResources } from './resources.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
 import type { RuntimeDefinition } from '../definition/runtime.js';
 import type { InvocationControls } from '../context/context.js';

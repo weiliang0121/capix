@@ -1,5 +1,5 @@
 import type { ResourceRequirements } from '../resource/bindings.js';
-import { definitionResources } from '../definition/invocation.js';
+import { definitionResources } from '../binding/resources.js';
 import { randomUUID } from 'node:crypto';
 import type { Invocation } from '../invocation/invocation.js';
 import type { ExecutionContext } from '../context/execution.js';

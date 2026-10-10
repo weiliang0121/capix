@@ -1,5 +1,5 @@
 import { publishFact, type ChangeProvenance } from '../observation/publish.js';
-import type { EventConsumer } from '../observation/binding.js';
+import type { EventConsumer } from '../observation/observer.js';
 import { randomUUID } from 'node:crypto';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import { isNonBlankString } from '../value/string.js';

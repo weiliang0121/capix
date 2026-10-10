@@ -2,7 +2,7 @@ import { isUndefined } from 'es-toolkit/predicate';
 import type { InvocationOrigin } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import { captureChange } from '../changes/publish.js';
-import type { EventConsumer } from './binding.js';
+import type { EventConsumer } from './observer.js';
 import { combineFaults } from './error.js';
 
 export interface ChangeProvenance<Event> {

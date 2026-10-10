@@ -6,11 +6,14 @@ export * from './definition/operation.js';
 export * from './definition/attempt.js';
 export * from './definition/children.js';
 export * from './definition/entry.js';
+export * from './definition/observation.js';
 export * from './exception/contract.js';
 export * from './composition/sequence.js';
 
 // Application assembly and independent resource supplies.
 export * from './binding/runtime.js';
+export * from './binding/observation.js';
+export * from './binding/resources.js';
 export { ResourceOffer, type ResourceRequest, type ResourceProvider } from './resource/offer.js';
 export * from './resource/bindings.js';
 export { ResourceActivity, type ResourceInteractionDescription, type ResourceOwner } from './resource/activity.js';
@@ -30,8 +33,8 @@ export * from './changes/buffer.js';
 export * from './changes/error.js';
 export * from './invocation/changes.js';
 export * from './observation/facts.js';
-export * from './observation/definition.js';
-export * from './observation/binding.js';
+export * from './observation/observer.js';
+export * from './observation/invocation.js';
 export * from './observation/error.js';
 export * from './observation/publish.js';
 

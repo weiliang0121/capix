@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Invocation, InvocationContext, InvocationChangeEmitter, ResourceBindings, ResourceOffer, bindResources, bindInvocationObservation, defineObservation, Transcript, createBoundRuntime } from '@capix/server-runtime';
 
-function call({ observe, failure, work, parent, declarations, resources, capture } = {}) {
+function call({ observe, failure, work, parent, declarations, resources, capture, installations = [] } = {}) {
   const context = new InvocationContext({ mutable: new Map() });
   const identity = { contextId: context.id, level: 'attempt', ...(parent ? { parentContextId: parent.context.id } : {}) };
-  return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { maxRounds: 1, execute: () => 'output', ...work }, observation: bindInvocationObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ requires: {}, observe: observe ?? (() => undefined) }, { failure })] }, [], parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
+  return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { maxRounds: 1, execute: () => 'output', ...work }, observation: bindInvocationObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ requires: {}, observe: observe ?? (() => undefined) }, { failure })] }, installations, parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
 }
 
 function observer(observe, failure) {
@@ -176,6 +176,160 @@ test('formal observation ports expire after each synchronous callback; asynchron
   assert.throws(() => retained.write(), /window has ended/);
   const asyncRun = call({ observe: async () => {}, failure: 'propagate' });
   await assert.rejects(asyncRun.run(), (error) => error.cause?.message === 'Observation must complete synchronously');
+});
+
+test('one observation declaration gives each call its own first start and synchronous resource window', async () => {
+  let exposed = 0;
+  const retained = new Map();
+  const observed = new Map();
+  const offer = new ResourceOffer(
+    'test.reused-observation',
+    (value, activity) => {
+      exposed++;
+      return {
+        read() {
+          activity.validate();
+          return value;
+        },
+      };
+    },
+    'binding',
+  );
+  const requires = { reader: offer.request() };
+  const resources = bindResources(requires, [offer.provide(() => 'shared supply')])(undefined);
+  const declaration = defineObservation(
+    {
+      requires,
+      observe(fact, ports) {
+        const contextId = fact.identity.contextId;
+        for (const [otherId, endpoint] of retained) {
+          if (otherId !== contextId) assert.throws(() => endpoint.read(), /window has ended/);
+        }
+        const previous = retained.get(contextId);
+        if (previous) assert.equal(ports.reader, previous);
+        retained.set(contextId, ports.reader);
+        observed.set(contextId, (observed.get(contextId) ?? 0) + 1);
+        assert.equal(ports.reader.read(), 'shared supply');
+      },
+    },
+    { failure: 'propagate' },
+  );
+  const first = call({ resources, declarations: [declaration] });
+  const second = call({ resources, declarations: [declaration] });
+  assert.equal(exposed, 0);
+  assert.deepEqual(await Promise.all([first.run(), second.run()]), ['output', 'output']);
+  assert.equal(exposed, 2);
+  assert.equal(observed.get(first.context.id), 5);
+  assert.equal(observed.get(second.context.id), 5);
+  assert.notEqual(retained.get(first.context.id), retained.get(second.context.id));
+  for (const endpoint of retained.values()) assert.throws(() => endpoint.read(), /window has ended/);
+});
+
+test('observation declaration fixes its requested resource aliases before binding', async () => {
+  const approved = new ResourceOffer('test.approved-observation', (value, activity) => ({
+    read() {
+      activity.validate();
+      return value;
+    },
+  }));
+  const replacement = new ResourceOffer('test.replacement-observation', () => assert.fail('replacement must not be exposed'));
+  const requires = { reader: approved.request() };
+  const request = requires.reader;
+  let retained;
+  let observed = 0;
+  const definition = {
+    requires,
+    observe(_fact, ports) {
+      retained = ports.reader;
+      observed++;
+      assert.equal(retained.read(), 'approved');
+      assert.deepEqual(Object.keys(ports), ['reader']);
+    },
+  };
+  const declaration = defineObservation(definition, { failure: 'propagate' });
+  requires.reader = replacement.request();
+  requires.extra = replacement.request();
+  definition.requires = { replacement: replacement.request() };
+  assert.ok(Object.isFrozen(declaration));
+  assert.ok(Object.isFrozen(declaration.requires));
+  assert.notEqual(declaration.requires, requires);
+  assert.deepEqual(declaration.requires, { reader: request });
+  const resources = bindResources({ approved: approved.request(), replacement: replacement.request() }, [approved.provide(() => 'approved'), replacement.provide(() => null)])(undefined);
+  assert.equal(await call({ resources, declarations: [declaration] }).run(), 'output');
+  assert.equal(observed, 5);
+  assert.throws(() => retained.read(), /window has ended/);
+});
+
+test('failed installed observation is skipped with its dependent declarations in children and recovers in a later root call', async () => {
+  const events = [];
+  const supplied = [];
+  const inherited = [];
+  let failNext = true;
+  const writer = new ResourceOffer('test.installed-observation-writer', (contextId, activity) => ({
+    write() {
+      activity.validate();
+      events.push(`${contextId}:dependent`);
+    },
+  }));
+  const installation = {
+    provides: { writer: writer.request() },
+    bindInvocation(setup) {
+      supplied.push(setup.identity.contextId);
+      return {
+        resources: bindResources(this.provides, [writer.provide(() => setup.identity.contextId)])(undefined),
+        observe(fact) {
+          if (fact.kind !== 'started') return;
+          events.push(`${fact.identity.contextId}:installed`);
+          if (failNext) {
+            failNext = false;
+            throw new Error('first root consumer failed');
+          }
+        },
+      };
+    },
+  };
+  const healthy = {
+    bindInvocation(setup, parent) {
+      inherited.push({ contextId: setup.identity.contextId, parent });
+      return {
+        observe(fact) {
+          if (fact.kind === 'started') events.push(`${fact.identity.contextId}:healthy`);
+        },
+      };
+    },
+  };
+  const declarations = [
+    defineObservation({
+      requires: { writer: writer.request() },
+      observe(fact, ports) {
+        if (fact.kind === 'started') ports.writer.write();
+      },
+    }),
+    observer((fact) => {
+      if (fact.kind === 'started') events.push(`${fact.identity.contextId}:independent`);
+    }),
+  ];
+  const installations = [installation, healthy];
+  let child;
+  const first = call({
+    declarations,
+    installations,
+    work: {
+      execute(_context, parent) {
+        child = call({ declarations, installations, parent });
+        return child.run();
+      },
+    },
+  });
+  assert.equal(await first.run(), 'output');
+  const next = call({ declarations, installations });
+  assert.equal(await next.run(), 'output');
+  assert.deepEqual(supplied, [first.context.id, next.context.id]);
+  assert.equal(inherited.length, 3);
+  assert.equal(inherited[0].parent, undefined);
+  assert.ok(inherited[1].parent);
+  assert.equal(inherited[2].parent, undefined);
+  assert.deepEqual(events, [`${first.context.id}:installed`, `${first.context.id}:healthy`, `${first.context.id}:independent`, `${child.context.id}:healthy`, `${child.context.id}:independent`, `${next.context.id}:installed`, `${next.context.id}:healthy`, `${next.context.id}:dependent`, `${next.context.id}:independent`]);
 });
 
 test('a committed Transcript fact reaches observation even when capture fails; reentrant writes are rejected', () => {

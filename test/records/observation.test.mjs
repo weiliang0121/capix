@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindRecording, invocationRecording, Recorder, RecordBook, ChangeBuffer, ResourceBindings, ExecutionRecordHelper, RuntimeCallRecord, defineObservation, InvocationRecordAccess } from '@capix/server-runtime';
+import { bindRecording, bindInvocationObservation, invocationRecording, Recorder, RecordBook, ChangeBuffer, ResourceBindings, ExecutionRecordHelper, RuntimeCallRecord, defineObservation, InvocationRecordAccess } from '@capix/server-runtime';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 
 function fixture(options) {
@@ -8,15 +8,16 @@ function fixture(options) {
   const recorder = new Recorder(new RecordBook(), { changes });
   const recording = bindRecording(recorder, options);
   const create = (level, contextId, parent, description = {}) => {
-    const declaration = invocationRecording();
+    const declaration = invocationRecording({}, { failure: 'propagate' });
     const setup = { identity: { level, contextId, ...(parent ? { parentContextId: parent.setup.identity.contextId } : {}) }, description, resources: new ResourceBindings({}), declarations: [declaration] };
     const call = recording.bindInvocation(setup, parent);
-    const observe = declaration.bind(call.resources);
+    const observation = bindInvocationObservation({ ...setup, resources: call.resources }, []);
     let eventSequence = 0;
     return {
       call,
       publish(change, time) {
-        observe({ ...change, identity: setup.identity, description, eventSequence: ++eventSequence, occurredAt: '2026-10-09T00:00:00.000Z', monotonicTime: time });
+        const failure = observation.publish({ ...change, identity: setup.identity, description, eventSequence: ++eventSequence, occurredAt: '2026-10-09T00:00:00.000Z', monotonicTime: time });
+        if (failure) throw failure;
       },
     };
   };
@@ -140,14 +141,18 @@ test('record installation supplies a scoped writer, not an automatic second call
   scope.observe(fact);
   assert.equal(scope.record, undefined);
   let writer;
-  const declaration = defineObservation({
-    requires: { writer: InvocationRecordAccess.request() },
-    observe(event, ports) {
-      writer = ports.writer;
-      writer.observe(event);
+  const declaration = defineObservation(
+    {
+      requires: { writer: InvocationRecordAccess.request() },
+      observe(event, ports) {
+        writer = ports.writer;
+        writer.observe(event);
+      },
     },
-  });
-  declaration.bind(scope.resources)(fact);
+    { failure: 'propagate' },
+  );
+  const observation = bindInvocationObservation({ ...scope.setup, resources: scope.resources, declarations: [declaration] }, []);
+  assert.equal(observation.publish(fact), undefined);
   assert.ok(scope.record);
   assert.throws(() => writer.observe(fact), /window has ended/);
 });

@@ -1,5 +1,5 @@
 import { publishFact, type ChangeProvenance } from '../observation/publish.js';
-import type { EventConsumer } from '../observation/binding.js';
+import type { EventConsumer } from '../observation/observer.js';
 import type { MemoryEvent } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import { randomUUID } from 'node:crypto';

@@ -1,6 +1,6 @@
-import type { ObservationDeclaration } from '../../observation/definition.js';
+import type { ObservationDeclaration } from '../../definition/observation.js';
 import type { InvocationFact } from '../../observation/facts.js';
-import { bindInvocationObservation } from '../../observation/binding.js';
+import { bindInvocationObservation } from '../../binding/observation.js';
 import { attachInvocationResources } from '../resources.js';
 import type { ResourceRequirements } from '../../resource/bindings.js';
 import type { InvocationCapabilities } from '../capabilities.js';

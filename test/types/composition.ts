@@ -134,11 +134,24 @@ const callProbe: ObservationDeclaration<InvocationFact> = defineObservation<Invo
     if (fact.kind === 'started') ports.counter.increment();
     // @ts-expect-error an observer receives only its requested resource aliases
     ports.history;
+    // @ts-expect-error observation ports are a readonly view of the requested resources
+    ports.counter = { increment() {} };
+    // @ts-expect-error invocation observations retain their fact contract
+    fact.runtimeId;
     return undefined;
   },
 });
 // @ts-expect-error structure facts and per-call facts are different observation contracts
 const structureProbe: ObservationDeclaration<RuntimeStructureFact> = callProbe;
+// @ts-expect-error declarations do not own per-invocation resource binding
+callProbe.bind;
+const wrongPortProbe: ObservationDefinition<InvocationFact, { counter: { increment(): void } }> = {
+  requires: {
+    // @ts-expect-error each requested resource must supply its declared port type
+    counter: workValue.request(),
+  },
+  observe: () => undefined,
+};
 const asynchronousProbe: ObservationDefinition<InvocationFact, Record<string, never>> = {
   requires: {},
   // @ts-expect-error asynchronous observation cannot retain the synchronous resource window
@@ -146,3 +159,4 @@ const asynchronousProbe: ObservationDefinition<InvocationFact, Record<string, ne
 };
 void structureProbe;
 void asynchronousProbe;
+void wrongPortProbe;

@@ -364,20 +364,19 @@ test('E entry failures cannot masquerade as a declared E work exception', async 
 
 test('omitted observation installation leaves declarations and their dependencies dormant', async () => {
   const onlyObservation = new ResourceOffer('test.observation-only', (value) => value);
-  let bound = 0;
+  let observed = 0;
   const execution = new TestExecutionDefinition(() => 'done');
   execution.observation = [
     {
       requires: { extra: onlyObservation.request() },
-      bind() {
-        bound++;
-        return () => undefined;
+      observe() {
+        observed++;
       },
     },
   ];
   const definition = new Main([execution], forward(execution));
   assert.equal(await assemble(definition).run(null, {}), 'done');
-  assert.equal(bound, 0);
+  assert.equal(observed, 0);
   assert.throws(() => assemble(definition, { observations: [] }), /Expected one resource provider/);
 });
 
@@ -387,7 +386,7 @@ test('an explicit empty observation installation enables resource-free declarati
   execution.observation = [
     {
       requires: {},
-      bind: () => (event) => {
+      observe(event) {
         events.push(event.kind);
       },
     },

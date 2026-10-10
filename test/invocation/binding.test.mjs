@@ -1,7 +1,7 @@
 import { createEnvironment } from '../fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, ExecutionRecordHelper, InvocationBoundaryRecordHelper, TranscriptRecord, MemoryRecord, bindRecording, invocationRecording, ResourceBindings } from '@capix/server-runtime';
+import { Recorder, RecordBook, ExecutionRecordHelper, InvocationBoundaryRecordHelper, TranscriptRecord, MemoryRecord, bindRecording, bindInvocationObservation, invocationRecording, ResourceBindings } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const operation = { id: 'work', name: 'work', label: 'Work', source: 'test' };
@@ -115,15 +115,17 @@ test('the recording preset rejects foreign facts, repeated starts and an unstart
   for (const mode of ['foreign', 'duplicate', 'missing-parent']) {
     const recorder = new Recorder(new RecordBook());
     const installation = bindRecording(recorder);
-    const declarations = [invocationRecording()];
+    const declarations = [invocationRecording({}, { failure: 'propagate' })];
     const resources = new ResourceBindings({});
     const parent = installation.bindInvocation({ identity: { level: 'runtime', contextId: 'parent' }, description: { id: 'runtime' }, resources, declarations });
     const scope = mode === 'missing-parent' ? installation.bindInvocation({ identity: { level: 'execution', contextId: 'child', parentContextId: 'parent' }, resources, declarations }, parent) : parent;
-    const observe = declarations[0].bind(scope.resources);
+    const observation = bindInvocationObservation({ ...scope.setup, resources: scope.resources }, []);
     const fact = { kind: 'started', input: null, identity: scope.setup.identity, eventSequence: 1, occurredAt: new Date().toISOString(), monotonicTime: 0 };
-    if (mode === 'duplicate') observe(fact);
+    if (mode === 'duplicate') assert.equal(observation.publish(fact), undefined);
     const expected = mode === 'foreign' ? /another local observation/ : mode === 'duplicate' ? /only start once/ : /has not started/;
-    assert.throws(() => observe(mode === 'foreign' ? { ...fact, identity: { ...fact.identity, contextId: 'foreign' } } : fact), expected);
+    const failure = observation.publish(mode === 'foreign' ? { ...fact, identity: { ...fact.identity, contextId: 'foreign' } } : fact);
+    assert.equal(failure.code, 'OBSERVATION_FAILED');
+    assert.match(failure.cause.message, expected);
     assert.equal(scope.available(), false);
     assert.equal(Boolean(scope.record), mode === 'duplicate');
     if (scope.record) assert.equal(recorder.book.get(scope.record.id), scope.record);

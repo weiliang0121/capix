@@ -1,10 +1,12 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import { pick } from 'es-toolkit/object';
 import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedInvocationResult, RecordedRelationChange, InvocationOrigin } from '@capix/protocol';
-import type { EventConsumer, InvocationObserver, InvocationObservationSetup, ObservationInstallation, ObservationDeclarationScope } from '../observation/binding.js';
+import type { EventConsumer, InvocationObserver } from '../observation/observer.js';
+import type { InvocationObservationSetup, ObservationInstallation } from '../binding/observation.js';
+import type { ObservationDeclarationScope } from '../definition/observation.js';
 import type { InvocationFact, ResourceObservation } from '../observation/facts.js';
 import { ObservationError } from '../observation/error.js';
-import { defineObservation } from '../observation/definition.js';
+import { defineObservation } from '../definition/observation.js';
 import { ResourceOffer } from '../resource/offer.js';
 import { bindResources, resourceRequests, type ResourceBindings } from '../resource/bindings.js';
 import { RuntimeErrorHelper } from '../errors/helper.js';

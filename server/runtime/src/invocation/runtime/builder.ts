@@ -5,9 +5,9 @@ import type { RuntimeContext, ExecutionBindingResolver } from '../../context/run
 import type { InvocationControls } from '../../context/context.js';
 import type { RuntimeContextBuilder } from '../../context/runtime/builder.js';
 import { ResourceBindings, type ResourceRequirements } from '../../resource/bindings.js';
-import type { ObservationDeclaration } from '../../observation/definition.js';
+import type { ObservationDeclaration } from '../../definition/observation.js';
 import type { InvocationFact } from '../../observation/facts.js';
-import { bindInvocationObservation } from '../../observation/binding.js';
+import { bindInvocationObservation } from '../../binding/observation.js';
 import { InvocationChangeEmitter } from '../changes.js';
 import { attachInvocationResources } from '../resources.js';
 

@@ -61,6 +61,8 @@ Transcript、Memories、SelectionUsage、模型供给由环境建立。ResourceO
 
 InvocationFact、ResourceObservation、RuntimeStructureFact 是内核提供的类型化观测事实。观察声明可同时写入多个结果，不要求都转换为记录。记录预设位于运行包的 `records/`，通过公开 `/recording` 入口提供；同包不意味着运行机制必须依赖它。
 
+`definition/observation.ts` 声明事实类型、资源申请与同步消费内容；`defineObservation` 固定资源申请，不持有调用状态。`binding/observation.ts` 持有 `ObservationInstallation` / `InvocationObservationSetup` 接线契约，连接安装、父调用和声明，为每次绑定建立独立的资源选择、首次激活与同步访问窗口；声明和安装的资源覆盖计算同属 `binding/`。`observation/` 保留事实契约、运行观察出口、单次消费者会话及发布与故障策略，不承担资源接线或记录解释。
+
 - `RecordingRootRecord`：一次 RecordingInstallation 的跨调用记录根，不承诺与一个 R 实例一一对应。
 - `RuntimeCallRecord`：一次 R 调用，带 Context 与结构实例身份。
 - `ResourceRecord`：已写入记录载体的资源访问；与实时 `ResourceObservation` 区分。

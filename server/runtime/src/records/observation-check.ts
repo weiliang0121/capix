@@ -1,4 +1,4 @@
-import type { ObservationDeclarationScope } from '../observation/binding.js';
+import type { ObservationDeclarationScope } from '../definition/observation.js';
 import type { ResourceIdentity } from '../resource/offer.js';
 import { resourceRequests } from '../resource/bindings.js';
 

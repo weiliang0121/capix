@@ -10,7 +10,7 @@ import { InvocationChildren, type ParentInvocation } from './children.js';
 import type { InvocationRelation, InvocationRelationOptions } from './relation.js';
 import type { InvocationChangeEmitter } from './changes.js';
 import type { InvocationContext } from '../context/context.js';
-import type { InvocationObservation } from '../observation/binding.js';
+import type { InvocationObservation } from '../observation/invocation.js';
 import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDescription, InvocationRelationIdentity, InvocationRelationChange, ExecutionEntryChange } from '../observation/facts.js';
 import { combineFaults } from '../observation/error.js';
 import { failureFact } from './failure.js';
@@ -34,7 +34,7 @@ export interface InvocationOptions<Input, Output, Context extends InvocationCont
   changes?: InvocationChangeEmitter;
 }
 
-/** A single-use structured call owns its Context and progress. Optional observation interprets its facts into records. */
+/** A single-use structured call owns its Context and progress. Optional observation consumes its typed facts without requiring a particular carrier. */
 export class Invocation<Input = unknown, Output = unknown, Context extends InvocationContext<Input, Output> = InvocationContext<Input, Output>> {
   #started = false;
   #sequence = 0;

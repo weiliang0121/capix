@@ -1,13 +1,14 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from './clock.js';
-import { bindRuntimeStructureObservation, type EventConsumer } from '../observation/binding.js';
+import { bindRuntimeStructureObservation } from '../binding/observation.js';
+import type { EventConsumer } from '../observation/observer.js';
 import type { RuntimeStructureFact } from '../observation/facts.js';
 import { randomUUID } from 'node:crypto';
 import { DeclaredException } from '../exception/contract.js';
 import { RuntimeError } from '../errors/error.js';
 import { BindingEnvironment } from '../binding/environment.js';
 import { bindInvocationWork } from '../binding/work.js';
-import { observationResources } from '../definition/invocation.js';
+import { observationResources } from '../binding/resources.js';
 import type { RuntimeDefinition } from '../definition/runtime.js';
 import type { BoundChildren } from '../binding/children.js';
 import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';

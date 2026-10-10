@@ -1,4 +1,4 @@
-import { definitionResources } from '../definition/invocation.js';
+import { definitionResources } from '../binding/resources.js';
 import type { DeclaredCall } from '../definition/signature.js';
 import { InvocationEntry } from '../definition/entry.js';
 import type { ChildDefinition } from '../definition/children.js';

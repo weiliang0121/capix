@@ -1,7 +1,7 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import { randomUUID } from 'node:crypto';
 import type { TranscriptEvent, MemoryEvent } from '@capix/protocol';
-import type { EventConsumer } from '../observation/binding.js';
+import type { EventConsumer } from '../observation/observer.js';
 import type { ResourceObservation } from '../observation/facts.js';
 import { RuntimeErrorHelper } from '../errors/helper.js';
 
