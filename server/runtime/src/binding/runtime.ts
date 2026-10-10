@@ -6,6 +6,8 @@ import type { ExecutionInvocationCallbacks } from '../execution/execution.js';
 import type { ResourceProvider } from '../resource/offer.js';
 import { bindResources, ResourceBindings, resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
 import { createBoundRuntime, type BoundRuntimeOptions } from '../runtime/create.js';
+import type { ProgressReceiver } from '../progress/channel.js';
+import type { InvocationProgress } from '../invocation/progress.js';
 
 type AnyExecutionDefinition = ExecutionDefinition<any, any, any, any, any, any>;
 
@@ -16,6 +18,7 @@ export interface RuntimeCallSource<Input, Options, Source> {
   entry(input: unknown, options: Options, definition: AnyExecutionDefinition): Source;
   capture(input: unknown, options: Options, definition: AnyExecutionDefinition): Source;
   callbacks?(definition: AnyExecutionDefinition, options: Options): ExecutionInvocationCallbacks<any, any, any> | undefined;
+  progress?(definition: AnyExecutionDefinition, options: Options): ProgressReceiver<InvocationProgress> | undefined;
 }
 
 /** Supplies and per-call capture functions used to bind one reusable RuntimeDefinition. */
@@ -54,6 +57,7 @@ export function assembleRuntime<Input, Output, Resources extends object, Options
           entry: (input) => resourceBindings.entry(source.entry(input, callOptions, executionDefinition)),
           capture: (input) => resourceBindings.capture(source.capture(input, callOptions, executionDefinition)),
           callbacks: source.callbacks?.(executionDefinition, callOptions),
+          progress: source.progress?.(executionDefinition, callOptions),
         };
       },
     }),

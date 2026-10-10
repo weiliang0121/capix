@@ -1,6 +1,6 @@
-import { ResourceOffer, type Initializer, type ResourceProvider, type ResourceRequest } from '@capix/server-runtime';
-import { TranscriptResource, MemoryResource, SelectionUsageResource, type Transcript, type Memories, type SelectionUsage, type TranscriptRangeRef, type TranscriptRangeReader } from '@capix/server-runtime/content';
-import type { ConversationUpdate, ModelSettings } from '@capix/protocol';
+import { type Initializer, type ResourceProvider, type ResourceRequest, type ProgressReceiver } from '@capix/server-runtime';
+import { TranscriptResource, MemoryResource, SelectionUsageResource, type Transcript, type Memories, type SelectionUsage, type TranscriptRangeRef, type TranscriptRangeReader, type TranscriptAppendProgress } from '@capix/server-runtime/content';
+import type { ModelSettings } from '@capix/protocol';
 import { ModelSettingsResource, ModelResource } from './model/resources.js';
 import type { ModelProvider } from './model/types.js';
 
@@ -19,16 +19,13 @@ export interface ConversationResources extends ModelCallResources, HistoryResour
 export interface MemoryWriteResources {
   readonly memoryWriter: Offered<typeof MemoryResource.apply>;
 }
-export const ConversationResource = Object.freeze({ delivery: new ResourceOffer('observer.delivery', (deliver: (update: ConversationUpdate) => void, activity) => (update: ConversationUpdate) => activity.runSync('deliver', { input: () => ({ type: update.type }), output: () => null }, () => deliver(update)), 'access', { describe: () => ({ channel: 'conversation' }) }) });
 export interface ConversationExecutionResources extends ConversationResources, MemoryWriteResources {
-  readonly delivery: (update: ConversationUpdate) => void;
   readonly memories: Offered<typeof MemoryResource.snapshot>;
   readonly messages: Offered<typeof TranscriptResource.append>;
   readonly selectionUsage: Offered<typeof SelectionUsageResource.record>;
 }
 
 export const conversationExecutionRequests = Object.freeze({
-  delivery: ConversationResource.delivery.request(),
   settings: ModelSettingsResource.snapshot.request(),
   timeoutMs: ModelSettingsResource.timeout.request(),
   history: TranscriptResource.fixedRange.request(),
@@ -49,10 +46,10 @@ export interface ConversationResourceSource {
   readonly settings: Readonly<ModelSettings>;
   readonly transcriptRange?: TranscriptRangeRef;
   readonly transcript: Transcript;
+  readonly messageProgress?: ProgressReceiver<TranscriptAppendProgress>;
   readonly memories: Memories;
   readonly selectionUsage: SelectionUsage;
   readonly model: Initializer<ModelProvider>;
-  readonly delivery: (update: ConversationUpdate) => void;
 }
 
 /** Supply declarations contain no live Runtime or provider instance. */
@@ -66,10 +63,9 @@ export const conversationProviders: readonly ResourceProvider<ConversationResour
   ModelResource.invoke.provide((source: ConversationResourceSource) => source.model.get()),
   MemoryResource.snapshot.provide((source: ConversationResourceSource) => source.memories),
   MemoryResource.apply.provide((source: ConversationResourceSource) => source.memories),
-  TranscriptResource.append.provide((source: ConversationResourceSource) => source.transcript),
+  TranscriptResource.append.provide((source: ConversationResourceSource) => ({ transcript: source.transcript, progress: source.messageProgress })),
   TranscriptResource.segmentation.provide((source: ConversationResourceSource) => source.transcript),
   SelectionUsageResource.record.provide((source: ConversationResourceSource) => source.selectionUsage),
-  ConversationResource.delivery.provide((source: ConversationResourceSource) => source.delivery),
 ]);
 
 export type ConversationEntryResources = { [Alias in keyof typeof conversationEntryRequests]: (typeof conversationEntryRequests)[Alias] extends ResourceRequest<infer Value> ? Value : never };

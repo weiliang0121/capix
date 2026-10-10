@@ -1,8 +1,8 @@
 import type { ConversationTransport, TranscriptTransport } from '@capix/client-runtime';
-import type { ConversationUpdate, ConversationRequest, TranscriptFrame } from '@capix/protocol';
+import type { ConversationSubmissionSnapshot, ConversationSubmissionRequest, TranscriptFrame } from '@capix/protocol';
 import { HttpTransport } from './transport.js';
-import { HttpTransportError } from './errors.js';
-import { acceptResponse, configurationResponse, transcriptResponse, transcriptUpdate, conversationUpdate, responseStatusError, parseLine, deliver } from './responses.js';
+import { HttpError, HttpTransportError } from './errors.js';
+import { acceptResponse, configurationResponse, transcriptResponse, transcriptUpdate, submissionResponse, responseStatusError, parseLine, deliver } from './responses.js';
 import { readLines } from './stream.js';
 
 /** Conversation requests and delivery, independent of observation. */
@@ -27,42 +27,43 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
     }
     if (!signal.aborted) throw new HttpTransportError('contract', '消息同步连接已结束。', 'INCOMPLETE_STREAM');
   }
-  async run(request: ConversationRequest, accept: (update: ConversationUpdate) => void, accepted: () => void): Promise<void> {
-    const response = await this.post('/api/run', request);
+  async submit(request: ConversationSubmissionRequest, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void> {
+    await this.feedback('/api/run', request.submissionId, receive, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal });
+  }
+
+  async follow(id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void> {
+    await this.feedback(`/api/submissions/${encodeURIComponent(id)}/follow`, id, receive, { signal });
+  }
+
+  async read(id: string, signal?: AbortSignal): Promise<ConversationSubmissionSnapshot> {
+    const value = await this.get(`/api/submissions/${encodeURIComponent(id)}`, signal);
+    return this.acceptSubmission(value, id);
+  }
+
+  private acceptSubmission(value: unknown, id: string): ConversationSubmissionSnapshot {
+    const snapshot = acceptResponse(submissionResponse, value, '提交');
+    if (snapshot.submissionId !== id) throw new HttpTransportError('contract', '提交反馈身份不一致。', 'SUBMISSION_MISMATCH');
+    return snapshot;
+  }
+
+  private async feedback(path: string, id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, init: RequestInit): Promise<void> {
+    let response: Response;
     try {
-      deliver(accepted, '接纳通知');
+      response = await this.send(path, init);
     } catch (error) {
-      await response.body?.cancel().catch(() => undefined);
-      throw error;
+      // A known rejection is a formal cumulative fact even when HTTP uses a non-2xx status.
+      if (!(error instanceof HttpError) || !submissionResponse.safeParse(error.body).success) throw error;
+      const snapshot = this.acceptSubmission(error.body, id);
+      deliver(() => receive(snapshot), '提交反馈');
+      if (!snapshot.result && snapshot.integrity.status !== 'incomplete') throw new HttpTransportError('contract', 'HTTP 请求已结束，提交结果仍未确认。', 'INCOMPLETE_STREAM');
+      return;
     }
-    if (!response.body) throw new HttpTransportError('contract', '服务未返回对话流。', 'MISSING_STREAM');
-    let contextId: string | undefined;
-    let inputIndex: number | undefined;
-    let transcriptId: string | undefined;
-    let answered = false;
-    let completed = false;
+    if (!response.body) throw new HttpTransportError('contract', '服务未返回提交反馈流。', 'MISSING_STREAM');
     for await (const line of readLines(response.body)) {
-      if (completed) throw new HttpTransportError('contract', '处理结束后又返回了内容。', 'AFTER_TERMINAL');
-      const update = acceptResponse(conversationUpdate, parseLine(line), '对话');
-      if (update.type === 'error') throw new HttpTransportError('remote', update.error, update.code);
-      if (update.type === 'started') {
-        if (contextId) throw new HttpTransportError('contract', '重复的处理开始通知。', 'INVALID_UPDATE');
-        contextId = update.contextId;
-        inputIndex = update.inputIndex;
-        transcriptId = update.transcriptId;
-      } else {
-        if (!contextId || update.contextId !== contextId) throw new HttpTransportError('contract', '对话处理身份不一致。', 'CONVERSATION_MISMATCH');
-        if (update.type === 'answer') {
-          if (update.transcriptId !== transcriptId) throw new HttpTransportError('contract', '回答消息集合与开始通知不一致。', 'TRANSCRIPT_MISMATCH');
-          if (answered || update.index <= inputIndex!) throw new HttpTransportError('contract', '回答重复或消息位置无效。', 'INVALID_UPDATE');
-          answered = true;
-        } else {
-          if (!answered) throw new HttpTransportError('contract', '处理结束但未交付回答。', 'MISSING_ANSWER');
-          completed = true;
-        }
-      }
-      deliver(() => accept(update), '对话内容');
+      const snapshot = this.acceptSubmission(parseLine(line), id);
+      deliver(() => receive(snapshot), '提交反馈');
+      if (snapshot.result || snapshot.integrity.status === 'incomplete') return;
     }
-    if (!completed) throw new HttpTransportError('contract', '对话流提前结束，尚未获得处理结果。', 'INCOMPLETE_STREAM');
+    if (!init.signal?.aborted) throw new HttpTransportError('contract', '提交反馈流提前结束，远端结果仍未确认。', 'INCOMPLETE_STREAM');
   }
 }

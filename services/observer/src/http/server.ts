@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConfigurationResponse, ErrorResponse, ModelSettings, ConversationUpdate, SourceResponse } from '@capix/protocol';
+import type { ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse } from '@capix/protocol';
 import { ExecutionRecord, ExecutionRecordHelper, observeMemory } from '@capix/server-runtime/recording';
 import { isObject, RuntimeError } from '@capix/server-runtime';
 import type { initializeObserver } from '../assembly/environment.js';
@@ -14,11 +14,14 @@ import { observationWriter } from './observation-writer.js';
 import { observeOverview } from '../observation/overview.js';
 import { validateSettings } from '../assembly/settings.js';
 import { allowedSources } from './source.js';
+import { createSubmissionStore, type SubmissionRetention } from '../conversation/submission.js';
+import { followSubmission } from './submission.js';
 
 export interface ObserverServerOptions {
   observer: ReturnType<typeof initializeObserver>;
   settings: ModelSettings;
   configured: boolean;
+  submissionRetention?: SubmissionRetention;
   projectDirectory?: string;
   assetsDirectory?: string;
 }
@@ -30,15 +33,16 @@ export function createObserverServer(options: ObserverServerOptions) {
   const project = options.projectDirectory ?? fileURLToPath(new URL('../../../../', import.meta.url));
   const assets = options.assetsDirectory ?? resolve(project, 'apps/observer/dist');
   const feed = new ObservationFeed(observer);
+  const submissions = createSubmissionStore(options.submissionRetention);
   const transcriptConnections = new Set<() => void>();
   const server = createServer((req, res) => {
     void handle(req, res).catch((error) => {
       const body: ErrorResponse = error instanceof RuntimeError || error instanceof SourceIncomplete ? { error: error.message, code: error.code } : { error: '服务内部错误。', code: 'INTERNAL_ERROR' };
       if (res.headersSent) {
-        if (!res.destroyed) res.end(JSON.stringify({ type: 'error', ...body } satisfies ConversationUpdate) + '\n');
+        if (!res.destroyed) res.destroy();
         return;
       }
-      json(res, error instanceof RuntimeError ? (error.code === 'RUNTIME_BUSY' ? 409 : 400) : 500, body);
+      if (!res.destroyed) json(res, error instanceof RuntimeError ? (error.code === 'RUNTIME_BUSY' || error.code === 'SUBMISSION_EXISTS' ? 409 : error.code === 'SUBMISSION_CAPACITY' ? 503 : 400) : 500, body);
     });
   });
 
@@ -108,43 +112,40 @@ export function createObserverServer(options: ObserverServerOptions) {
       if (!allowedSources.has(path)) return json(res, 404, { error: '未找到源码。' } satisfies ErrorResponse);
       return json(res, 200, { path, content: await readFile(resolve(project, path), 'utf8') } satisfies SourceResponse);
     }
+    const submissionPath = /^\/api\/submissions\/([a-zA-Z0-9_-]{1,128})(\/follow)?$/.exec(url.pathname);
+    if (req.method === 'GET' && submissionPath) {
+      const submission = submissions.get(submissionPath[1]!);
+      if (!submission) return json(res, 404, { code: 'SUBMISSION_UNAVAILABLE', error: '提交进展不可用；这不表示请求没有执行。' } satisfies ErrorResponse);
+      if (submissionPath[2]) return followSubmission(submission, res);
+      return json(res, 200, submission.snapshot);
+    }
     if (req.method === 'POST' && url.pathname === '/api/run') {
       if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' } satisfies ErrorResponse);
       const data = await readBody(req);
-      if (!isObject(data)) throw new RuntimeError('INVALID_INPUT', '无效请求。');
-      const runSettings = validateSettings({ ...settings, ...(isUndefined(data.contextBudget) ? {} : { contextBudget: data.contextBudget }) });
-      const controller = new AbortController();
-      res.on('close', () => {
-        if (!res.writableEnded) controller.abort();
-      });
-      let deliveryError: unknown;
-      const deliver = (update: ConversationUpdate) => {
-        if (res.destroyed || deliveryError) return;
-        try {
-          res.write(JSON.stringify(update) + '\n');
-        } catch (error) {
-          deliveryError = error;
-        }
-      };
-      let contextId: string | undefined;
-      await observer.runtime.run(data, {
-        settings: runSettings,
-        signal: controller.signal,
-        deliver,
-        executionCallbacks: {
-          accepted: () => {
-            res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
-            res.flushHeaders();
-          },
-          started: (context) => {
-            contextId = context.id;
-            deliver({ type: 'started', transcriptId: observer.transcript.id, contextId, inputIndex: observer.transcript.length - 1 });
-          },
-        },
-      });
-      deliver({ type: 'completed', contextId: contextId! });
-      if (deliveryError) throw deliveryError;
-      res.end();
+      if (!isObject(data) || typeof data.submissionId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(data.submissionId)) throw new RuntimeError('INVALID_INPUT', '无效提交身份。');
+      const submission = submissions.create(data.submissionId);
+      let runSettings: ModelSettings;
+      try {
+        if (!isObject(data.input)) throw new RuntimeError('INVALID_INPUT', '无效对话输入。');
+        runSettings = validateSettings({ ...settings, ...(isUndefined(data.input.contextBudget) ? {} : { contextBudget: data.input.contextBudget }) });
+      } catch (error) {
+        submission.reject(error);
+        return json(res, 400, submission.snapshot);
+      }
+      submission.start(() => observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress }));
+      // This controller only detaches the initial HTTP waiter; it is never passed to runtime.run.
+      const waiting = new AbortController();
+      const detachWaiting = () => waiting.abort();
+      res.once('close', detachWaiting);
+      let initial;
+      try {
+        initial = await submission.ready(waiting.signal);
+      } finally {
+        res.off('close', detachWaiting);
+      }
+      if (res.destroyed) return;
+      if (initial.result?.status === 'rejected') return json(res, initial.result.error.code === 'RUNTIME_BUSY' ? 409 : 400, initial);
+      followSubmission(submission, res);
       return;
     }
     if (req.method === 'GET') return serveAsset(res, assets, url.pathname);

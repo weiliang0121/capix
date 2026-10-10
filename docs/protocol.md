@@ -15,13 +15,20 @@
 - GET `/api/execution?id=记录ID` → ExecutionRecordSnapshot。仅在打开详情时请求；返回当前完整记录。
 - GET `/api/memory` → MemoryObservation。记忆正文、来源与已生成的变更记录。
 - GET `/api/source?file=路径` → SourceResponse。路径为仓库相对源文件路径，服务端白名单验证。
-- POST `/api/run` 接受 ConversationRequest；200 返回 NDJSON ConversationUpdate。started 携带 transcriptId/contextId/inputIndex，answer 携带 transcriptId/contextId/index/完整 GenerationOutput，completed 仅在 R.run 返回后发送，表示 E 后处理和 R 对 E 的接纳均已完成，error 表示本次处理失败，不表示已交付回答被撤销。回答在追加 Transcript 后立即交付，不等待记忆提取；没有记录订阅也能完整使用。
+- POST `/api/run` 接受 ConversationSubmissionRequest `{ submissionId, input: ConversationRequest }`。首次发送建立服务提交对象并启动运行，200 返回 NDJSON，每行是完整的 ConversationSubmissionSnapshot；输入已落实、任务已结束或投影失效时即可开始交付。客户端生成 submissionId，使首个响应丢失后仍可查询；该身份不提供幂等重提承诺。
+- GET `/api/submissions/:id` 返回当前累计提交投影；GET `/api/submissions/:id/follow` 同步衔接当前投影与后续变化。关闭任意反馈连接仅解除消费，不取消已启动的服务运行。终态或进展解释不完整时本次连接结束；后者仍可显式查询最终任务结果。
+- 提交投影包含 submissionId、revision、可选 input 范围、可选 answer 定位、executions Context 身份数组、可选 result 和 integrity。输入与回答来自实体正式写入点；executions 来自选定声明的调用现场；result 在 R.run 实际返回或抛错后形成。投影不包含原文、Record 或运行对象。
+- 明确的输入拒绝返回 400、忙碌拒绝返回 409，响应体可以是保留下来的提交投影，客户端应接纳其中的 rejected 事实。已经接纳输入后的失败通过累计投影表达，回答不会因后处理失败撤销。仅有网络状态码不能替代正式运行事实。
 - GET `/api/observe` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接，每个连接都有独立 scopeId，首帧 sequence 为 0。序号缺口最多自动重建一次基线；SOURCE_INCOMPLETE 是记录来源已缺失事实的终止控制，不自动重试，也不能通过重连同一来源补救。不提供历史重放或跨查询一致性承诺。
-- HTTP 非 2xx 返回 ErrorResponse。忙碌时 409，拒绝追加消息；接纳/配置错误 400；内部错误 500。记录来源失效后，观测流及 executions/execution/memory 查询明确返回 SOURCE_INCOMPLETE；实体查询与订阅不依赖记录完整性。不改变现有运行失败的事实记录。
+- 除上述正式提交拒绝外，HTTP 非 2xx 返回 ErrorResponse。无保留项时提交查询返回 404 / SUBMISSION_UNAVAILABLE，不能据此断言未执行；相同身份仍保留时 POST 返回 409 / SUBMISSION_EXISTS，不启动第二次工作。记录来源失效后，观测流及 executions/execution/memory 查询明确返回 SOURCE_INCOMPLETE；实体查询与订阅不依赖记录完整性。不改变现有运行失败的事实记录。
 
 ## 身份、顺序与时间
 
-业务流的 contextId 来自调用现场，即使不启用 Recorder 也存在；观测记录通过 contextId 与业务关联，对话不需要先查询记录。Record.id、Context.id 和运行实例 ID 互不替代。executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
+submissionId 是服务请求的关联身份，Context.id 是一次内核调用身份，Record.id 是可选观测载体身份，三者互不替代。一次提交可关联零个或多个 E；即使不启用 Recorder 也能取得消息落实和调用进展。投影 revision 仅表达该提交解释状态的变化，允许连接合并中间状态后交付更高修订；它不是调用顺序、消息 revision 或观测游标。累计事实不可回退，同修订必须等值。
+
+executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
+
+服务提交对象拥有运行任务与投影，连接只读取。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接最多保留一个待发最新投影，慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
 
 执行列表按实际登记顺序。边界事件 scopeId 确定计时范围，sequence 与单调 offsetMs 是范围内部时序依据；R 调用和每个 E 分别计时，EOA 共用 E 范围。occurredAt/startedAt 是展示用墙钟。未结束调用没有 durationMs；不得补造耗时。跨 QA 只有先后关系，前端使用等宽列，轮内才按计时比例布局。
 

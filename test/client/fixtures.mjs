@@ -33,8 +33,11 @@ export function transport(overrides = {}) {
       if (signal.aborted) return;
       await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
     },
-    run: async () => {
+    submit: async () => {
       throw new Error('Unexpected submission');
+    },
+    follow: async () => {
+      throw new Error('Unexpected follow');
     },
     ...overrides,
   };
@@ -60,19 +63,8 @@ export function transport(overrides = {}) {
     entity = { ...entity, revision: entity.revision + 1, end: start + messages.length, messages: [...entity.messages, ...messages] };
     for (const accept of transcriptListeners) accept({ type: 'delta', event: { type: 'transcript', transcriptId: entity.id, revision: entity.revision, occurredAt: '2026-10-09T00:00:00Z', change: { kind: 'messages-appended', start, messages } } });
   };
-  const run = io.run;
-  io.run = (request, receive, accepted) =>
-    run(
-      request,
-      (update) => {
-        if (update.type === 'answer') append([{ role: 'assistant', content: update.output.content }]);
-        receive(update.type === 'started' || update.type === 'answer' ? { ...update, transcriptId: entity.id } : update);
-      },
-      () => {
-        append(request.messages);
-        accepted();
-      },
-    );
+  io.appendMessages = append;
+  io.delivery = (request, receive) => submissionDelivery(request, receive, { append, transcript: () => entity });
   const watch = io.observe;
   io.observe = async (accept, signal) => {
     let ready = false;
@@ -114,10 +106,43 @@ export function deferred() {
   return { promise, resolve, reject };
 }
 
-export function deliverAnswer(receive, inputIndex = 0, contextId = 'context-execution-1', content = '这是中文回答') {
-  receive({ type: 'started', contextId, transcriptId: 'fixture-transcript', inputIndex });
-  receive({ type: 'answer', contextId, transcriptId: 'fixture-transcript', index: inputIndex + 1, output: { kind: 'answer', content } });
-  receive({ type: 'completed', contextId });
+export function submissionSnapshot(id, patch = {}) {
+  return { submissionId: id, revision: 0, executions: [], integrity: { status: 'complete' }, ...patch };
+}
+
+/** Explicit test producer of cumulative submission facts, independent of optional entity delivery. */
+export function submissionDelivery(request, receive, options = {}) {
+  let current = submissionSnapshot(request.submissionId);
+  const publish = (patch) => {
+    current = { ...current, ...patch, revision: current.revision + 1 };
+    receive(current);
+    return current;
+  };
+  return {
+    get snapshot() {
+      return current;
+    },
+    input(range) {
+      const entity = options.transcript?.() ?? transcriptSnapshot();
+      options.append?.(request.input.messages);
+      return publish({ input: range ?? { transcriptId: entity.id, start: entity.end, end: entity.end + request.input.messages.length } });
+    },
+    execution(contextId = 'context-execution-1') {
+      return publish({ executions: [...current.executions, { contextId }] });
+    },
+    answer(content = '这是中文回答', index) {
+      const entity = options.transcript?.();
+      const position = index ?? entity?.end ?? current.input.end;
+      options.append?.([{ role: 'assistant', content }]);
+      return publish({ answer: { transcriptId: current.input.transcriptId, index: position } });
+    },
+    complete() {
+      return publish({ result: { status: 'completed' } });
+    },
+    fail(code = 'TEST', message = '测试失败') {
+      return publish({ result: { status: 'failed', error: { code, message } } });
+    },
+  };
 }
 
 export function entriesOf(value) {

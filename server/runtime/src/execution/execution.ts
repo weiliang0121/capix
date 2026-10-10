@@ -12,6 +12,8 @@ import type { Invocation } from '../invocation/invocation.js';
 import type { RuntimeContext } from '../context/runtime.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
 import { attachInvocationResources } from '../invocation/resources.js';
+import type { ProgressReceiver } from '../progress/channel.js';
+import type { InvocationProgress } from '../invocation/progress.js';
 
 export interface ExecutionInvocationCallbacks<Input, Output, Resources extends object> {
   accepted?(input: Input): void;
@@ -21,6 +23,7 @@ export interface ExecutionInvocationBindings<Input, Output, Resources extends ob
   entry(input: EntryInput): ResourceBindings<EntryResources>;
   capture(input: Input): ResourceBindings<Resources>;
   readonly callbacks?: ExecutionInvocationCallbacks<Input, Output, Resources>;
+  readonly progress?: ProgressReceiver<InvocationProgress>;
 }
 
 /** Reusable E structure with fixed entry ordering; every accepted call creates its own ExecutionContext and Invocation. */
@@ -95,6 +98,7 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
       establish: () => ({ resources }),
       work: this.work,
       started: callbacks.started,
+      progress: bindings.progress,
     });
   }
 }

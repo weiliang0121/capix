@@ -58,10 +58,10 @@ services/observer/src/
 import { initializeObserver } from '@capix/observer-service/assembly';
 
 const environment = initializeObserver(provider);
-const output = await environment.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings, signal, deliver });
+const output = await environment.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings, signal, progress });
 ```
 
-上例的 provider、settings、signal、deliver 由宿主提供。使用者也可从 `/conversation` 组合已有 R/E/O/A 声明，或直接用 `@capix/server-runtime` 的声明与 `assembleRuntime` 建立自己的结构，不必使用 Observer 的装配。
+上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 R/E/O/A 声明，或直接用 `@capix/server-runtime` 的声明与 `assembleRuntime` 建立自己的结构，不必使用 Observer 的装配。
 
 回答在正式追加消息后交付，随后处理记忆。后处理失败保留已成立的回答。当前只有生成回答明确声明的、针对完整模型输出被拒绝的一次再次生成；没有通用自动重试、后台补偿、动态调度或持久化恢复。
 

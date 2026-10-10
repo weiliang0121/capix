@@ -1,3 +1,5 @@
+import type { ProgressReceiver } from '../../progress/channel.js';
+import type { InvocationProgress } from '../progress.js';
 import { Invocation, type InvocationStarted } from '../invocation.js';
 import type { InvocationWork } from '../cycle.js';
 import type { InvocationCapabilities } from '../capabilities.js';
@@ -12,6 +14,7 @@ import { InvocationChangeEmitter } from '../changes.js';
 import { attachInvocationResources } from '../resources.js';
 
 export interface RuntimeInvocationRequest<Input, Output, Resources extends object = object> {
+  readonly progress?: ProgressReceiver<InvocationProgress>;
   readonly controls: InvocationControls;
   readonly resources?: ResourceBindings<Resources>;
   readonly executionBindings?: ExecutionBindingResolver;
@@ -35,7 +38,7 @@ export class RuntimeInvocationBuilder {
     const identity = { contextId: context.id, level: 'runtime' as const };
     const observation = bindInvocationObservation({ identity, description: { id: this.runtimeId }, declarations: request.observation, resources }, this.capabilities.observations);
     const changes = this.capabilities.changes ? new InvocationChangeEmitter(identity, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<Input, Output, RuntimeContext<Input, Output, Resources>>({ context, work: request.work, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: { id: this.runtimeId }, changes, started: request.started });
+    const invocation = new Invocation<Input, Output, RuntimeContext<Input, Output, Resources>>({ context, work: request.work, progress: request.progress, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: { id: this.runtimeId }, changes, started: request.started });
     attachInvocationResources(invocation, resources);
     return invocation;
   }

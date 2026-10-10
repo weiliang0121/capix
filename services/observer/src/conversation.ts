@@ -27,3 +27,5 @@ export * from './conversation/operations/history/select.js';
 export * from './conversation/operations/memory/extract.js';
 export * from './conversation/operations/memory/input.js';
 export * from './conversation/operations/memory/output.js';
+export * from './conversation/progress.js';
+export * from './conversation/submission.js';

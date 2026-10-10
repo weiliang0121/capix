@@ -1,6 +1,6 @@
 # 客户端 Runtime
 
-ClientRuntime 分别持有业务交付状态、消息实体副本和可选观测状态，不依赖 React、HTTP 实现或服务端对象。client/runtime 公开 ConversationTransport、TranscriptTransport 和 ObservationTransport 三个契约；应用通过 conversation / transcripts / observation 具名参数接入。
+ClientRuntime 分别持有本次提交的已确认事实与反馈连接状态、消息实体副本和可选观测状态，不依赖 React、HTTP 实现或服务端对象。client/runtime 公开 ConversationTransport、TranscriptTransport 和 ObservationTransport 三个契约；应用通过 conversation / transcripts / observation 具名参数接入。
 
 接口分类不等于 HTTP 实例拆分。ConversationHttpTransport 同时实现业务交付和消息实体契约；ObservationHttpTransport 提供独立的观测接口，两者共用通用 HttpTransport。
 
@@ -18,7 +18,7 @@ await runtime.submit({ messages: [{ role: 'user', content: '你好' }] });
 runtime.stopTranscript();
 ```
 
-ConversationTransport 只要求 config、run；TranscriptTransport 提供 transcript(id?, signal?) 查询与 observeTranscript(id, accept, signal) 订阅。transcripts 是必需接入：对话正文由消息实体副本提供，不从观测记录生成。
+ConversationTransport 提供 config、submit、follow；TranscriptTransport 提供 transcript(id?, signal?) 查询与 observeTranscript(id, accept, signal) 订阅。transcripts 是必需接入：对话正文由消息实体副本提供，不从观测记录生成。
 
 initialize 并行取得配置和当前集合订阅的首帧基线。同一次进行中的初始化返回同一 Promise；失败不会永久缓存 rejected Promise，之后显式 initialize 会建立新尝试，不自动重试。配置与实体各自成功时分别保留已经确认的内容，后续尝试复用配置和健康实体连接；不能因为保留了部分配置就提前允许 submit。配置慢于实体流时，最终采用已经接纳的最新消息副本，不能把首帧旧内容覆盖到新增量之上。初始化结束前再次确认实体同步仍然有效。初始化不会请求执行概览、记忆或记录详情。
 
@@ -26,16 +26,17 @@ state.initialization 表达本次环境初始化的 idle、running、succeeded�
 
 stopTranscript 停止当前集合或全部集合时，也结束正在进行的初始化；已确认的配置和消息副本保留。旧尝试随后返回的配置被忽略，停止的实体连接回调也不能写入，新 initialize 可以明确建立下一次尝试。这不等于取消服务端工作，也不改变服务端 Initializer 的一次构造及失败缓存规则。
 
-业务状态包含 messages、transcriptId、transcripts、busy、pending、contextId、answered 和 error。messages 只是当前集合已接纳 snapshot.messages 的便利引用；权威副本保存在按 UID 索引的 transcripts 中。
+业务状态包含 messages、transcriptId、transcripts、submission 和初始化错误。messages 是当前集合已接纳 snapshot.messages 的便利引用；权威副本保存在按 UID 索引的 transcripts 中。submission 保存本地 id/pending、已确认的 remote 累计投影及 feedback 连接状态；busy/pending/contextId/answered 只从 submission 派生，不另外维护一套执行真相。
 
-1. submit 设置 busy/pending，本实例忙碌时拒绝重复提交，不排队。
-2. HTTP 接纳后清理 pending 并通知 accepted。接纳通知本身不追加消息；输入消息由独立实体流交付。HTTP 拒绝不追加、不刷新、不重试业务。
-3. started 提供本次 Context ID、消息集合 UID 与输入索引，不依赖 Record ID；answer 提供同集合回答索引和完整 GenerationOutput。执行期间实体允许独立追加，因此回答索引只要求晚于输入，不要求紧邻。
-4. answer 设置 answered 并检查集合身份；若该位置的实体内容已到达，也检查内容一致性。业务交付不再次追加回答，避免两个流的先后顺序导致重复；提交结束时再次核对实体中的正式回答，覆盖回答先到、实体后到的情况。消息流持续更新正文，answered 不代表所有后处理已结束。
-5. completed 表示 R 已接纳 E 结果并结束；error 表示业务失败。回答之后的记忆后处理失败不会清除已同步的回答。
-6. 请求结束时，已同步到所需索引且连接正常的副本不再全量查询。连接未工作或尚未到达本轮末尾时，补取实体基线；补取不能让已接纳版本回退。业务失败与补取同时失败时，通过 AggregateError 保留两者，然后释放 busy/pending。
+1. submit 为本次提交生成 submissionId，复制输入，仅调用一次 POST。正在跟踪且尚无 result 时拒绝新提交，不排队、不自动重发。
+2. remote.input 来自正式消息写入位置，首次确认才调用 accepted。HTTP 200、收到首帧或建立 E 都不等于输入已接纳。accepted 抛错只保存 notificationError，不停止接收或改写服务结果。
+3. remote.executions 保存服务选择关联的 E Context 身份，可以为空或多项；输入在 E Context 建立前也能正式落实。remote.answer 只指向已落实回答，正文来自独立实体同步，不从记录或提交反馈重复追加。
+4. remote.result 是服务任务 completed / failed / rejected。后处理失败保留已确认回答；completed 只表示任务返回，不凭空补造 input/answer。remote.integrity 说明服务进展解释是否完整，与任务结果分开。
+5. feedback 表示 connecting / following / ended / interrupted。断流、网络失败或投影不完整都不能证明服务执行失败；保留所有已确认事实。消息实体和观测同步失败各自保存在对应范围，不撤回提交结果。
+6. reconnectSubmission 只 follow 同一 submissionId，不重新发送输入。新连接接收当前累计投影，允许 revision 跳跃；忽略旧修订，同版本冲突、事实回退或更改必须拒绝。旧连接回调不能写入新连接状态。
+7. stopFollowing 只停反馈连接，releaseSubmission 明确结束本地跟踪并允许后续提交；两者都不是取消服务端运行。服务端未知、已淘汰或重启后丢失的 submissionId 仍表示结果无法确认，不能推断“没有执行”。
 
-本轮交付完整回答，不实现 token/part、业务重试、恢复或多会话 UI。消息实体同步和业务完成是不同事实。
+本轮只恢复反馈，不恢复执行。服务端保留是有界进程内状态，不提供幂等重提、持久化、离线重放或重启后的任务恢复。实体同步和可选观测有独立连接与接纳规则。
 
 ## 消息实体的按需加载与同步
 
@@ -75,7 +76,7 @@ ObservationTransport 提供 overview、memory、execution、source、observe。�
 
 Runtime 的本地 subscribe 消费者逐个通知；抛错的消费者被移除，不阻断其他订阅者、已接纳的实体变化或后续源同步。这个隔离仅位于下游通知边界，不吞掉协议、版本或副本校验错误。
 
-观测状态保存在 state.observation：enabled、loading、error、overview、memory、records、updates，以及 cursor、invocations、transcriptRecords。观测初始化或刷新失败只影响这个范围，不拒绝对话初始化或提交。
+观测状态保存在 state.observation：enabled、loading、error、overview、memory、records、updates，以及 cursor、invocationEvents、transcriptRecords。观测初始化或刷新失败只影响这个范围，不拒绝对话初始化或提交。
 
 ObservationReplica 在新结构中整批接纳 delta，失败不部分修改已接纳状态。重复交付忽略，范围和顺序缺口拒绝。记录新增与父级引用同步接纳；过程和父层接纳关系分别只追加新条目，并以 eventSequence 对照。资源事实作为独立 record entry 接收，按所属调用收集进 ExecutionRecordSnapshot.resources；待调用记录和对应边界齐备后提供执行视图。客户端不从资源事实反推实际业务状态。
 
@@ -87,7 +88,7 @@ loadExecution 按需查询，E 与其父 R 均结束时才复用终态缓存；�
 
 HttpTransport 只处理地址、HTTP 状态、JSON 读取和错误，不感知业务、实体或记录。
 
-- ConversationHttpTransport：config、POST /api/run、transcript 查询和 GET /api/transcript/observe。对话流检查开始、Context 与集合身份、回答位置和终态；实体流接纳 baseline/delta/error，不将断流当作业务完成。
+- ConversationHttpTransport：config、POST /api/run、GET /api/submissions/:id 与 /follow、transcript 查询和 GET /api/transcript/observe。提交响应逐行接纳 ConversationSubmissionSnapshot，HTTP 拒绝也可能携带正式投影；实体流接纳 baseline/delta/error，不将断流当作业务完成。
 - ObservationHttpTransport：overview、memory、execution、source 和 GET /api/observe。观测流可覆盖多次执行，结束不代表业务完成。
 - 普通响应由 Zod 接纳；记录详情由 validateExecutionRecordSnapshot 验证并核对请求身份；消息实体还由接收层检查范围与版本。
 
@@ -96,7 +97,7 @@ readLines 只负责 UTF-8 解码与行拆分。回调同步执行，失败后关
 ## 应用绑定与 Store
 
 - binding/application.ts 装配 Store 和命令，独立开启观测及对话初始化。卸载时分别停止观测和实体订阅；重新挂载恢复实体同步，保留已取得的配置与 UI 编辑。
-- binding/data.ts 组织业务消息与进度，并组合可选观测。对话正文只来自消息实体副本。
+- binding/data.ts 组织业务消息与进度，并组合可选观测；binding/submission.ts 将已确认事实和反馈状态转换成提示，提供重新同步和结束跟踪入口。对话正文只来自消息实体副本。
 - binding/observation.ts 按 UID/index 组合消息、上下文和记忆来源，明确区分未加载、加载中、缺失与错误；实体到达时即便记录未变化也重建对应读模型。
 - binding/resources.ts 解释应用约定的配置与历史范围资源事实；details.ts 为各调用组织资源事实列表，React 不解析原始 ExecutionRecordSnapshot。
 - projectConversation 仅给当前同一消息集合中的已有消息添加执行链接，不能用相同 index 跨集合猜测关联。

@@ -1,6 +1,6 @@
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { z } from 'zod';
-import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConfigurationResponse, type ConversationUpdate, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
+import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConfigurationResponse, type ConversationSubmissionSnapshot, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
 import { HttpError, type HttpResponseInfo, HttpTransportError } from './errors.js';
 
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -55,7 +55,16 @@ export function acceptSnapshot(value: unknown, expectedId?: string): ExecutionRe
   return value;
 }
 
-export const conversationUpdate = z.discriminatedUnion('type', [z.object({ type: z.literal('started'), contextId: id, transcriptId: id, inputIndex: index }), z.object({ type: z.literal('answer'), contextId: id, transcriptId: id, index, output: z.object({ kind: z.enum(['answer', 'unknown', 'needs-info']), content: z.string() }) }), z.object({ type: z.literal('completed'), contextId: id }), z.object({ type: z.literal('error'), error: z.string(), code: z.string().optional() })]) satisfies z.ZodType<ConversationUpdate>;
+const conversationFailure = z.object({ code: id, message: z.string() });
+export const submissionResponse = z.object({
+  submissionId: id,
+  revision: index,
+  input: z.object({ transcriptId: id, start: index, end: index, revision: index.optional() }).optional(),
+  answer: z.object({ transcriptId: id, index }).optional(),
+  executions: z.array(z.object({ contextId: id })),
+  result: z.discriminatedUnion('status', [z.object({ status: z.literal('completed') }), z.object({ status: z.literal('failed'), error: conversationFailure }), z.object({ status: z.literal('rejected'), error: conversationFailure })]).optional(),
+  integrity: z.discriminatedUnion('status', [z.object({ status: z.literal('complete') }), z.object({ status: z.literal('incomplete'), error: conversationFailure })]),
+}) satisfies z.ZodType<ConversationSubmissionSnapshot>;
 
 /** Both endpoints use the service error envelope; the HTTP base stays protocol-neutral. */
 export function responseStatusError(info: HttpResponseInfo, body: unknown): HttpError {

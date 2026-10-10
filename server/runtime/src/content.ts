@@ -1,6 +1,7 @@
 /** Independently owned conversation content and its declared resource access contracts. */
 export * from './transcript/ref.js';
 export * from './transcript/transcript.js';
+export * from './transcript/progress.js';
 export type { TranscriptEvent } from './transcript/event.js';
 export * from './transcript/resource.js';
 export { SelectionUsage } from './transcript/usage.js';

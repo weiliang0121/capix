@@ -5,6 +5,21 @@
   flex: 1;
   min-height: 0;
 }
+.submission-notice {
+  flex: none;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: var(--font-sm);
+}
+.submission-notice p {
+  margin: 0;
+}
+.submission-notice-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
 .conversation-scroll {
   flex: 1;
   min-height: 0;

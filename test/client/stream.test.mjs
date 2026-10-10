@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
-import { snapshot, baseline, entriesOf } from './fixtures.mjs';
+import { snapshot, baseline, entriesOf, submissionSnapshot } from './fixtures.mjs';
 
 function stream(text, chunkSize = 7) {
   const bytes = new TextEncoder().encode(text);
@@ -16,48 +16,41 @@ function stream(text, chunkSize = 7) {
     },
   });
 }
-const started = { type: 'started', contextId: 'context', transcriptId: 'fixture-transcript', inputIndex: 0 };
-const answer = { type: 'answer', contextId: 'context', transcriptId: 'fixture-transcript', index: 1, output: { kind: 'answer', content: '这是中文回答' } };
-const completed = { type: 'completed', contextId: 'context' };
+const input = { transcriptId: 't', start: 0, end: 1 };
+const first = submissionSnapshot('s', { revision: 1, input, executions: [{ contextId: 'e' }] });
+const answer = { ...first, revision: 3, answer: { transcriptId: 't', index: 3 } };
+const completed = { ...answer, revision: 4, result: { status: 'completed' } };
 const lines = (...items) => items.map((item) => JSON.stringify(item)).join('\n');
-const consume = (text, accept = () => {}) => new ConversationHttpTransport('', async () => new Response(stream(text, 1))).run({ messages: [] }, accept, () => {});
+const consume = (text, accept = () => {}) => new ConversationHttpTransport('', async () => new Response(stream(text, 1))).submit({ submissionId: 's', input: { messages: [] } }, accept, new AbortController().signal);
 
-test('business stream joins UTF-8 and line boundaries without fetching any records', async () => {
+test('cumulative feedback joins UTF-8 and line boundaries independently of record and entity streams', async () => {
+  const failed = { ...answer, revision: 4, result: { status: 'failed', error: { code: 'POSTPROCESS', message: '记忆处理失败' } } };
   const received = [];
-  await consume(lines(started, answer, completed), (update) => received.push(update));
-  assert.deepEqual(received, [started, answer, completed]);
+  await consume(lines(first, answer, failed), (update) => received.push(update));
+  assert.deepEqual(received, [first, answer, failed]);
 });
-test('business stream requires explicit completion and keeps a delivered answer on premature EOF', async () => {
+test('feedback requires a terminal fact and keeps delivered facts on premature EOF', async () => {
   const received = [];
   await assert.rejects(
-    consume(lines(started, answer), (update) => received.push(update)),
+    consume(lines(first, answer), (update) => received.push(update)),
     /提前结束/,
   );
-  assert.deepEqual(received, [started, answer]);
+  assert.deepEqual(received, [first, answer]);
   await assert.rejects(consume(''), /提前结束/);
 });
-test('business stream distinguishes errors from completion, including errors after an answer', async () => {
+test('feedback accepts revision jumps and nonadjacent answer locators', async () => {
   const received = [];
-  await assert.rejects(
-    consume(lines(started, answer, { type: 'error', error: '后处理失败', code: 'POSTPROCESS' }), (update) => received.push(update)),
-    (error) => error.kind === 'remote' && error.code === 'POSTPROCESS',
-  );
-  assert.deepEqual(received, [started, answer]);
+  await consume(lines(first, answer, completed), (update) => received.push(update));
+  assert.deepEqual(received, [first, answer, completed]);
 });
-test('business stream rejects identity changes, duplicate answers, misplaced answers and terminal regression', async () => {
-  for (const [items, code] of [
-    [[answer], 'CONVERSATION_MISMATCH'],
-    [[started, { ...answer, contextId: 'other' }], 'CONVERSATION_MISMATCH'],
-    [[started, answer, answer], 'INVALID_UPDATE'],
-    [[started, started], 'INVALID_UPDATE'],
-    [[started, { ...answer, index: 0 }], 'INVALID_UPDATE'],
-    [[started, { ...answer, index: 1.5 }], 'INVALID_RESPONSE'],
-    [[started, { ...answer, index: Number.MAX_SAFE_INTEGER + 1 }], 'INVALID_RESPONSE'],
-    [[started, completed], 'MISSING_ANSWER'],
-    [[started, answer, completed, started], 'AFTER_TERMINAL'],
-  ])
-    await assert.rejects(consume(lines(...items)), (error) => error.code === code);
-  await assert.rejects(consume('{"type":"snapshot","snapshot":{}}'), /格式无效/);
+test('feedback rejects mismatched identity and invalid numeric fields', async () => {
+  for (const value of [
+    { ...first, submissionId: 'other' },
+    { ...first, revision: 1.5 },
+    { ...first, answer: { transcriptId: 't', index: Number.MAX_SAFE_INTEGER + 1 } },
+  ]) {
+    await assert.rejects(consume(lines(value)), (error) => error.kind === 'contract');
+  }
 });
 test('observation stream accepts multiple executions independently and validates records', async () => {
   const received = [];
@@ -75,11 +68,4 @@ test('observation stream accepts multiple executions independently and validates
     invalid.observe(() => {}, new AbortController().signal),
     (error) => error.code === 'INVALID_RESPONSE',
   );
-});
-
-test('business stream accepts an answer after independently appended messages without assuming adjacency', async () => {
-  const later = { ...answer, index: 3 };
-  const received = [];
-  await consume(lines(started, later, completed), (update) => received.push(update));
-  assert.deepEqual(received, [started, later, completed]);
 });

@@ -1,23 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ClientRuntime } from '@capix/client-runtime';
-import { client, deferred, snapshot, transport, deliverAnswer } from './fixtures.mjs';
+import { client, deferred, snapshot, transport } from './fixtures.mjs';
 
 const request = () => ({ messages: [{ role: 'user', content: '你好，查看北京' }], contextBudget: 32768 });
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 function conversation(overrides = {}) {
-  const messages = [];
-  return transport({
-    transcript: async () => ({ messages: [...messages] }),
-    run: async (request, receive, accepted) => {
-      messages.push(...request.messages);
-      accepted();
-      deliverAnswer(receive, messages.length - 1);
-      messages.push({ role: 'assistant', content: '这是中文回答' });
+  const io = transport({
+    submit: async (request, receive) => {
+      const delivery = io.delivery(request, receive);
+      delivery.input();
+      delivery.execution();
+      delivery.answer();
+      delivery.complete();
     },
     ...overrides,
   });
+  return io;
 }
 
 test('headless conversation initializes once and completes multiple rounds without observation methods', async () => {
@@ -62,26 +61,16 @@ test('observation is opt-in even when its transport is supplied', async () => {
   assert.equal(reads, 0);
 });
 
-test('answer is delivered before postprocessing ends and an observation outage cannot reject submission', async () => {
+test('answer is visible before postprocessing and observation outages never alter submission facts', async () => {
   const gate = deferred();
-  const messages = [];
-  const io = transport({
-    transcript: async () => ({ messages: [...messages] }),
-    run: async (request, receive, accepted) => {
-      messages.push(...request.messages);
-      accepted();
-      receive({ type: 'started', contextId: 'context', inputIndex: 0 });
-      const output = { kind: 'answer', content: '已经回答' };
-      messages.push({ role: 'assistant', content: output.content });
-      receive({ type: 'answer', contextId: 'context', index: 1, output });
+  const io = conversation({
+    submit: async (request, receive) => {
+      const delivery = io.delivery(request, receive);
+      delivery.input();
+      delivery.execution();
+      delivery.answer('已经回答');
       await gate.promise;
-      receive({ type: 'completed', contextId: 'context' });
-    },
-    overview: async () => {
-      throw new Error('概览不可用');
-    },
-    memory: async () => {
-      throw new Error('记忆观测不可用');
+      delivery.fail('POSTPROCESS', '后处理失败');
     },
     observe: async () => {
       throw new Error('观测连接中断');
@@ -97,83 +86,13 @@ test('answer is delivered before postprocessing ends and an observation outage c
   assert.equal(runtime.getSnapshot().messages.at(-1).content, '已经回答');
   assert.ok(runtime.getSnapshot().observation.error);
   assert.equal(runtime.getSnapshot().error, undefined);
+  stop();
   gate.resolve();
   await running;
-  stop();
   assert.equal(runtime.getSnapshot().busy, false);
-});
-
-test('postprocessing failure retains the independently synchronized answer without refreshing a healthy entity', async () => {
-  let reads = 0;
-  const postprocess = new Error('后处理失败');
-  const refresh = new Error('消息刷新失败');
-  const runtime = client({
-    conversation: transport({
-      transcript: async () => {
-        if (reads++) throw refresh;
-        return { messages: [] };
-      },
-      run: async (_request, receive, accepted) => {
-        accepted();
-        deliverAnswer(receive);
-        throw postprocess;
-      },
-    }),
-  });
-  await runtime.initialize();
-  await assert.rejects(runtime.submit(request()), (error) => {
-    assert.equal(error, postprocess);
-    return true;
-  });
-  assert.equal(runtime.getSnapshot().messages.at(-1).content, '这是中文回答');
-  assert.equal(runtime.getSnapshot().busy, false);
-});
-
-test('HTTP rejection does not append, refresh, notify acceptance or retry', async () => {
-  let runs = 0;
-  let reads = 0;
-  const runtime = client({
-    conversation: transport({
-      transcript: async () => {
-        reads++;
-        return { messages: [] };
-      },
-      run: async () => {
-        runs++;
-        throw new Error('HTTP 409');
-      },
-    }),
-  });
-  await runtime.initialize();
-  await assert.rejects(
-    runtime.submit(request(), () => assert.fail('Not accepted')),
-    /409/,
-  );
-  assert.equal(runs, 1);
-  assert.equal(reads, 1);
-  assert.equal(runtime.getSnapshot().messages.length, 0);
-  assert.equal(runtime.getSnapshot().busy, false);
-});
-
-test('local busy guard rejects concurrent submissions and stopping observation does not cancel work', async () => {
-  const gate = deferred();
-  const io = conversation({
-    run: async (_request, receive, accepted) => {
-      accepted();
-      await gate.promise;
-      deliverAnswer(receive);
-    },
-  });
-  const runtime = client({ conversation: io, observation: io });
-  await runtime.initialize();
-  const stop = runtime.startObservation();
-  const running = runtime.submit(request());
-  await assert.rejects(runtime.submit(request()), /仍在处理/);
-  stop();
-  assert.equal(runtime.getSnapshot().busy, true);
-  gate.resolve();
-  await running;
-  assert.equal(runtime.getSnapshot().observation.enabled, false);
+  assert.equal(runtime.getSnapshot().submission.remote.result.status, 'failed');
+  assert.equal(runtime.getSnapshot().submission.remote.result.error.code, 'POSTPROCESS');
+  assert.equal(runtime.getSnapshot().messages.at(-1).content, '已经回答');
 });
 
 test('stream observations and detail caching remain separate from business message delivery', async () => {

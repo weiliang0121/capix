@@ -15,8 +15,10 @@ import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDe
 import { combineFaults } from '../observation/error.js';
 import { failureFact } from './failure.js';
 import { cycle, type InvocationWork } from './cycle.js';
+import { ProgressChannel, type ProgressReceiver } from '../progress/channel.js';
+import type { InvocationProgress } from './progress.js';
 
-/** Synchronous setup after validation, before record registration and work. Throws stop the call unchanged. */
+/** Synchronous setup after validation, before progress, observation and work. Throws stop the call unchanged. */
 export type InvocationStarted<Input, Output, Context extends InvocationContext<Input, Output>> = (context: Context, invocation: Invocation<Input, Output, Context>) => void;
 
 export interface InvocationOptions<Input, Output, Context extends InvocationContext<Input, Output>> {
@@ -29,6 +31,7 @@ export interface InvocationOptions<Input, Output, Context extends InvocationCont
   identity?: InvocationIdentity;
   description?: InvocationDescription;
   started?: InvocationStarted<Input, Output, Context>;
+  progress?: ProgressReceiver<InvocationProgress>;
   /** Side-effect-free guard, checked at setup and before each execute/receive phase. */
   validate?: () => void;
   changes?: InvocationChangeEmitter;
@@ -41,6 +44,8 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   #eventSequence = 0;
   #resourceSequence = 0;
   readonly #clock: Clock;
+  readonly #progress?: ProgressChannel<InvocationProgress>;
+  readonly #identity: InvocationIdentity;
   #fault?: InvocationFailure;
   #classified?: InvocationFailure;
   #failure?: InvocationFailure;
@@ -99,6 +104,8 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   constructor(private readonly options: InvocationOptions<Input, Output, Context>) {
     this.#clock = options.clock ?? new Clock();
+    this.#progress = options.progress ? new ProgressChannel(options.progress) : undefined;
+    this.#identity = Object.freeze(options.identity ? { ...options.identity } : { contextId: options.context.id, level: ('level' in options.context ? options.context.level : 'attempt') as InvocationIdentity['level'], ...(options.parent ? { parentContextId: options.parent.invocation.context.id } : {}) });
     this.children = new InvocationChildren(
       options.context,
       (failure) => {
@@ -179,11 +186,10 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   }
 
   private publish(change: InvocationChange): void {
-    const identity = this.options.identity ?? {
-      contextId: this.context.id,
-      level: ('level' in this.context ? this.context.level : 'attempt') as InvocationIdentity['level'],
-      ...(this.options.parent ? { parentContextId: this.options.parent.invocation.context.id } : {}),
-    };
+    const identity = this.#identity;
+    // A passive consumer sees the established fact even if strict observation fails next.
+    if (change.kind === 'started') this.#progress?.publish(Object.freeze({ kind: 'started', identity }));
+    if (change.kind === 'finished') this.#progress?.publish(Object.freeze({ kind: 'finished', identity, status: change.state.status === 'succeeded' ? 'succeeded' : 'failed' }));
     const fact: InvocationFact = Object.freeze({ ...change, identity, description: this.options.description, eventSequence: ++this.#eventSequence, occurredAt: this.#clock.now(), monotonicTime: this.#clock.tick() });
     const faults: unknown[] = [];
     try {

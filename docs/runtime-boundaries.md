@@ -25,10 +25,10 @@ const selectionUsage = new SelectionUsage();
 const definition = new ConversationRuntimeDefinition();
 const runtime = bindConversation(definition, { transcript, memories, selectionUsage }, provider, { observations: [recording], changes });
 
-await runtime.run({ messages: newMessages }, { settings, signal, deliver });
+await runtime.run({ messages: newMessages }, { settings, signal, progress });
 ```
 
-上面是服务装配示例。`bindConversation` 创建模型 Initializer 并供应原实体；模型与配置不是同一对象，配置是固定数据，模型供给是可兑现的调用能力。显式供应同一模型实例可以共享它，供应工厂则由各次装配建立自己的模型缓存。
+上面是服务装配示例。progress 是宿主为本次请求建立的 `ProgressChannel<ConversationProgress>`，输入、回答和调用映射共同使用它；任一来源消费失败后统一停用，下一次请求使用独立通道。`bindConversation` 创建模型 Initializer 并供应原实体；模型与配置不是同一对象，配置是固定数据，模型供给是可兑现的调用能力。显式供应同一模型实例可以共享它，供应工厂则由各次装配建立自己的模型缓存。
 
 `createBoundRuntime({ observations?, changes?, clock? })` 是低层结构入口，不建立消息、记忆或记录实体。`assembleRuntime` 将声明、独立供给及本次来源绑定到 R。省略 observations 时关闭调用观测；显式空数组启用声明但不附加预设；[recording] 提供记录预设的本调用端口。开启后缺资源是装配错误，局部供给只满足观测声明，不能泄漏给工作和异常处理。
 
@@ -47,13 +47,13 @@ R 占用
   → source.validate 检查入口参数
   → 建立 R Context / Invocation，开始 R 工作
   → 选择已声明 E，建立 entry 资源
-  → entry.accept 正式接纳输入
-  → accepted 通知（HTTP 在这里确认接纳）
+  → entry.accept 正式接纳输入，实体写入点发布被动提交进展
+  → accepted 建立回调（仍是严格绑定钩子）
   → 未取消时 entry.admit 执行分段策略
   → 关闭 entry 访问窗口
   → 捕获工作配置、固定历史范围与其他供给
   → 建立 E Context / Invocation
-  → started → 调用 started 变化 → 开始记录
+  → started 建立回调 → 被动 started 进展 → 调用 started 变化 → 开始记录
   → 启动运行阶段资源 → run.execute / run.accept
   → 已声明的运行异常按契约进入 exceptions.handle
   → E 终态 → R 收到真实返回并接纳 → R 终态及实际交付 → 释放占用
@@ -63,7 +63,17 @@ entry 只能得到自己申请的访问形式；其端点在 accept/admit 窗口
 
 配置与固定历史范围在 capture 时决定，运行和记录使用同一来源，不能到记录或投影阶段重新读取当前配置、当前集合长度。Context 建立之前失败明确返回，不伪造 E 记录。输入校验失败不部分追加；若内容已经落实、捕获或记录随后失败，不承诺回滚。
 
-started 是绑定侧同步回调，在 Context 已建立、Record 尚未登记时运行。它可以取得本次身份，但此时不能兑现工作资源。HTTP 的消息索引由入口或绑定已经确定的事实获得，不在 started 中读取历史端点。回调异常原样传播并释放 R 占用。
+started 是绑定侧同步回调，在 Context 已建立、Record 尚未登记时运行。它可以取得本次身份，但此时不能兑现工作资源。它属于建立机制，异常原样传播并释放 R 占用；服务反馈不使用这个严格钩子。消息索引由实体写入点获得，不在 started 中读取当前集合长度。
+
+## 被动运行进展与服务解释
+
+ProgressChannel 是本次绑定提供的窄同步出口，不依赖 Recorder 或 C/S 协议。InvocationProgress 只表达 started / finished 和不可变调用身份，finished 的 status 是 Context 事实，不保证随后的捕获、观测或最终调用交付成功。四层 Builder 可接入；服务通过 RuntimeCallSource.progress 按实际 E 声明选择关联对象。
+
+Transcript 的 append 在整批消息落实并更新 revision 后发布 TranscriptAppendProgress `{ transcriptId, start, end, revision }`，然后执行必要变化捕获及可选观测。资源供给可用 `{ transcript, progress }` 为入口写入和回答写入安装不同接收端；业务声明仍只取得正式 append 能力。无需 Record，也不能事后比较快照推断写入。
+
+进展接收失败停用对应出口并报告 failure；同步抛错、意外异步返回及失败报告错误均不得进入 Context、Invocation 或业务异常处理。它与必要 ChangeCapture 的严格职责、观测声明的可选 propagate 策略不同。进展是反馈依据，无法完整接收时由服务标记解释不完整；已成立事实不回滚，也不重做业务。
+
+Conversation 绑定选择哪些调用与实体写入属于本次请求，产生服务内部 ConversationProgress；ConversationSubmission 再解释成跨端累计投影。R.run 的实际返回/抛错决定服务任务结果，不能由 E finished、记录状态或网络连接结束代替。见 [跨端协议](protocol.md)。
 
 ## Context、Invocation 与业务视图
 
@@ -147,6 +157,6 @@ Transcript 全批预检后追加，Memories 全批预检后逐项落实。捕获
 
 消息实体通过独立受控端点获取与同步，记录中的 UID/范围在客户端绑定层与实体副本组合。未加载不等于空正文；已加载实体接续增量，快照与增量有明确接续点。可变记忆不能用最新正文冒充历史证据。详见 [协议](protocol.md) 与 [观测增量](observation-increments.md)。
 
-对话交付通过本次 delivery 资源，回答追加后、记忆后处理前交付；是否启用观测不决定对话能力。网络/UI 消费失败不回写业务结果。
+对话交付读取服务提交投影，独立消息流提供正文。回答追加后、记忆后处理前即可被确认；是否启用观测不决定对话能力。HTTP 连接结束不取消运行，投影消费和网络/UI 故障不回写业务结果。
 
 当前不增加 Thread/TRSA、持久化恢复、通用版本仓库、权限、插件注册、动态规划、跨进程重放或页面布局重做。记录和实体历史保留能力也不等同于未来持久化保证。

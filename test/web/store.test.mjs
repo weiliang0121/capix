@@ -4,7 +4,7 @@ import { ClientRuntime } from '@capix/client-runtime';
 import { createAppStore } from '../../apps/observer/.test-dist/state/store.js';
 import { connectAppStore } from '../../apps/observer/.test-dist/binding/application.js';
 import { submitDraft } from '../../apps/observer/.test-dist/binding/submit.js';
-import { client, deferred, snapshot, transport } from '../client/fixtures.mjs';
+import { client, deferred, snapshot, transport, submissionSnapshot, submissionDelivery } from '../client/fixtures.mjs';
 
 test('app stores are isolated and inspecting a node updates selection and dialogs together', () => {
   const runtime = client({ conversation: transport() });
@@ -43,16 +43,17 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
   let accept;
   let sent;
   let calls = 0;
-  const runtime = client({
-    conversation: transport({
-      run: async (request, observe, accepted) => {
-        calls++;
-        sent = request;
-        accept = accepted;
-        await gate.promise;
-      },
-    }),
+  const io = transport({
+    submit: async (request, receive) => {
+      calls++;
+      sent = request.input;
+      const delivery = io.delivery(request, receive);
+      accept = () => delivery.input();
+      await gate.promise;
+      delivery.complete();
+    },
   });
+  const runtime = client({ conversation: io });
   const store = createAppStore();
   await runtime.initialize();
   store.getState().setDraft('继续讨论');
@@ -75,12 +76,10 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
   await operation;
 });
 
-test('rejected submission preserves edits and reports an application notice without appending messages', async () => {
+test('rejected submission preserves edits and exposes remote rejection without appending messages', async () => {
   const runtime = client({
     conversation: transport({
-      run: async () => {
-        throw new Error('HTTP 409');
-      },
+      submit: async (request, receive) => receive(submissionSnapshot(request.submissionId, { revision: 1, result: { status: 'rejected', error: { code: 'RUNTIME_BUSY', message: '服务忙碌' } } })),
     }),
   });
   const store = createAppStore();
@@ -88,7 +87,9 @@ test('rejected submission preserves edits and reports an application notice with
   store.getState().setDraft('保留这条输入');
   await submitDraft(store, runtime);
   assert.equal(store.getState().draft, '保留这条输入');
-  assert.equal(store.getState().notice, 'HTTP 409');
+  assert.equal(store.getState().notice, '');
+  assert.equal(runtime.getSnapshot().submission.remote.result.status, 'rejected');
+  assert.equal(runtime.getSnapshot().busy, false);
   assert.deepEqual(runtime.getSnapshot().messages, []);
 });
 
@@ -98,10 +99,12 @@ test('invalid form input never reaches the runtime submission and late acceptanc
   const gate = deferred();
   const runtime = client({
     conversation: transport({
-      run: async (request, observe, accepted) => {
+      submit: async (request, receive) => {
         calls++;
-        accept = accepted;
+        const delivery = submissionDelivery(request, receive);
+        accept = () => delivery.input();
         await gate.promise;
+        delivery.complete();
       },
     }),
   });
@@ -137,9 +140,12 @@ test('app connection follows streamed execution, retains edited budget on cache 
       observe = next;
       await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
     },
-    run: async (request, next) => {
-      next({ type: 'started', contextId: 'context-new', inputIndex: 0 });
+    submit: async (request, next) => {
+      const delivery = io.delivery(request, next);
+      delivery.input();
+      delivery.execution('context-new');
       await gate.promise;
+      delivery.complete();
     },
   });
   const runtime = client({ conversation: io, observation: io });

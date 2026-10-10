@@ -52,8 +52,10 @@ export interface AppData {
   observationLoading: boolean;
   observationError?: unknown;
   conversationError?: string;
+  submissionNotice?: SubmissionNotice;
   busy: boolean;
   pending: string;
+  pendingLabel: string;
   runningId: string;
   conversation: readonly ConversationMessage[];
   messageCount: number;
@@ -62,8 +64,13 @@ export interface AppData {
   memory: MemoryView;
   details: ReadonlyMap<string, ExecutionDetail>;
 }
+export interface SubmissionNotice {
+  message: string;
+  reconnect: boolean;
+  release: boolean;
+}
 export function emptyAppData(): AppData {
-  return { observationLoading: false, busy: false, pending: '', runningId: '', conversation: [], messageCount: 0, progress: '', rounds: [], memory: { items: [] }, details: new Map() };
+  return { observationLoading: false, busy: false, pending: '', pendingLabel: '等待接纳', runningId: '', conversation: [], messageCount: 0, progress: '', rounds: [], memory: { items: [] }, details: new Map() };
 }
 
 export interface SearchMatch {

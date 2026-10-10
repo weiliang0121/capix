@@ -5,3 +5,5 @@ export type { ClientInitializationState } from './initialization.js';
 export * from './observation.js';
 
 export { TranscriptReplica, TranscriptSequenceError, type TranscriptState } from './transcript.js';
+
+export { ClientSubmission, SubmissionContractError, type ClientSubmissionState, type SubmissionFeedback } from './submission.js';

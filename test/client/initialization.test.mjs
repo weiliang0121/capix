@@ -11,7 +11,7 @@ const append = (revision, content) => ({ type: 'delta', event: { type: 'transcri
 
 function createClient(config, observeTranscript) {
   return new ClientRuntime({
-    conversation: { config, run: async () => assert.fail('initialization must not start business work') },
+    conversation: { config, submit: async () => assert.fail('initialization must not start business work') },
     transcripts: { transcript: async () => assert.fail('initialization uses an atomic stream baseline'), observeTranscript },
   });
 }

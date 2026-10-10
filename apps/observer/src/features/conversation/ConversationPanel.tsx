@@ -10,7 +10,9 @@ export function ConversationPanel() {
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const conversation = useAppStore((state) => state.data.conversation);
   const pending = useAppStore((state) => state.data.pending);
+  const pendingLabel = useAppStore((state) => state.data.pendingLabel);
   const conversationError = useAppStore((state) => state.data.conversationError);
+  const submissionNotice = useAppStore((state) => state.data.submissionNotice);
   const progress = useAppStore((state) => state.data.progress);
   const busy = useAppStore((state) => state.data.busy);
   const config = useAppStore((state) => state.data.config);
@@ -18,7 +20,7 @@ export function ConversationPanel() {
   const inspect = useAppStore((state) => state.inspect);
   const draft = useAppStore((state) => state.draft);
   const setDraft = useAppStore((state) => state.setDraft);
-  const { submit, reconnectConversation } = useAppCommands();
+  const { submit, reconnectConversation, reconnectSubmission, releaseSubmission } = useAppCommands();
   return (
     <aside className="conversation-panel">
       <header className="panel-heading">
@@ -47,7 +49,26 @@ export function ConversationPanel() {
           </Button>
         </div>
       )}
-      <ChatMessages rows={conversation} pending={pending} progress={progress} selectedId={selectedId} onInspect={inspect} />
+      {submissionNotice && (
+        <div className="submission-notice" role="status" aria-live="polite">
+          <p>{submissionNotice.message}</p>
+          {(submissionNotice.reconnect || submissionNotice.release) && (
+            <div className="submission-notice-actions">
+              {submissionNotice.reconnect && (
+                <Button variant="outline" size="sm" onClick={() => void reconnectSubmission()}>
+                  重新同步
+                </Button>
+              )}
+              {submissionNotice.release && (
+                <Button variant="ghost" size="sm" onClick={releaseSubmission}>
+                  结束跟踪
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      <ChatMessages rows={conversation} pending={pending} pendingLabel={pendingLabel} progress={progress} selectedId={selectedId} onInspect={inspect} />
       <Composer configured={config?.configured ?? false} loaded={Boolean(config)} busy={busy} draft={draft} onDraft={setDraft} onSubmit={submit} />
     </aside>
   );

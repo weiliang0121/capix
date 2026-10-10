@@ -5,7 +5,7 @@ import { initializeObserver, observeExecution, observeOverview, ObservationFeed 
 import { Transcript, observeMemory } from '@capix/server-runtime';
 import { projectDetail } from '../../apps/observer/.test-dist/binding/details.js';
 import { createApplication } from '../../apps/observer/.test-dist/binding/application.js';
-import { client, deferred, snapshot, transport, deliverAnswer } from '../client/fixtures.mjs';
+import { client, deferred, snapshot, transport, submissionDelivery } from '../client/fixtures.mjs';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const withObservation = (io) => client({ conversation: io, observation: io });
@@ -34,32 +34,29 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   const fixture = await recordedRound();
   const gate = deferred();
   let observe;
-  let deliver;
-  let accept;
+  let delivery;
   let finished = false;
   let detailReads = 0;
-  const runtime = withObservation(
-    transport({
-      baseline: fixture.frames[0],
-      overview: async () => (finished ? fixture.overview : { messages: history.map((message, index) => ({ index, message, count: 0 })), executions: [] }),
-      transcript: async () => ({ id: fixture.transcriptId, revision: finished ? 3 : 1, start: 0, end: finished ? fixture.messages.length : history.length, starts: [0], messages: finished ? fixture.messages : history }),
-      memory: async () => (finished ? fixture.memory : { items: [] }),
-      execution: async () => {
-        detailReads++;
-        return fixture.final;
-      },
-      observe: async (next, signal) => {
-        observe = next;
-        await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
-      },
-      run: async (_request, next, accepted) => {
-        deliver = next;
-        accept = accepted;
-        await gate.promise;
-        finished = true;
-      },
-    }),
-  );
+  const io = transport({
+    baseline: fixture.frames[0],
+    overview: async () => (finished ? fixture.overview : { messages: history.map((message, index) => ({ index, message, count: 0 })), executions: [] }),
+    transcript: async () => ({ id: fixture.transcriptId, revision: finished ? 3 : 1, start: 0, end: finished ? fixture.messages.length : history.length, starts: [0], messages: finished ? fixture.messages : history }),
+    memory: async () => (finished ? fixture.memory : { items: [] }),
+    execution: async () => {
+      detailReads++;
+      return fixture.final;
+    },
+    observe: async (next, signal) => {
+      observe = next;
+      await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+    },
+    submit: async (request, next) => {
+      delivery = io.delivery(request, next);
+      await gate.promise;
+      finished = true;
+    },
+  });
+  const runtime = withObservation(io);
   const app = createApplication(runtime);
   const disconnect = app.connect();
   await runtime.initialize();
@@ -69,8 +66,9 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   app.store.getState().setDraft(request.messages[0].content);
   const submitting = app.commands.submit();
   assert.equal(app.store.getState().data.pending, request.messages[0].content);
-  accept();
-  deliverAnswer(deliver, 2, fixture.final.execution.contextId, '上海周末行程。');
+  delivery.input();
+  delivery.execution(fixture.final.execution.contextId);
+  delivery.answer('上海周末行程。');
   for (const value of fixture.frames.slice(1)) observe(value);
   const id = fixture.final.execution.id;
   const data = app.store.getState().data;
@@ -91,6 +89,7 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   assert.equal(data.details.get(id).transcriptRange.transcriptId, fixture.transcriptId);
   assert.equal('settings' in fixture.final.execution.value, false);
   assert.equal('messages' in data.details.get(id).transcriptRange, false);
+  delivery.complete();
   gate.resolve();
   await submitting;
   await settle();
@@ -121,9 +120,12 @@ test('binding remount retains business messages despite unavailable observation'
     },
     transcript: async () => ({ id: fixture.transcriptId, revision: finished ? 3 : 1, start: 0, end: finished ? fixture.messages.length : history.length, starts: [0], messages: finished ? fixture.messages : history }),
     execution: async () => fixture.final,
-    run: async (_request, receive, accepted) => {
-      accepted();
-      deliverAnswer(receive, 2, fixture.final.execution.contextId, '上海周末行程。');
+    submit: async (request, receive) => {
+      const delivery = io.delivery(request, receive);
+      delivery.input();
+      delivery.execution(fixture.final.execution.contextId);
+      delivery.answer('上海周末行程。');
+      delivery.complete();
       finished = true;
     },
   });
@@ -177,9 +179,10 @@ test('live overview separates the last recorded process from an unfinished invoc
         observe = next;
         await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
       },
-      run: async (_request, receive, accepted) => {
-        accepted();
-        receive({ type: 'started', contextId: live.execution.contextId, inputIndex: 0 });
+      submit: async (request, receive) => {
+        const delivery = submissionDelivery(request, receive);
+        delivery.input();
+        delivery.execution(live.execution.contextId);
         observe(live);
       },
     }),
@@ -204,18 +207,18 @@ test('live overview separates the last recorded process from an unfinished invoc
 
 test('binding supports a conversation-only runtime and never synthesizes responses from execution records', async () => {
   const messages = [...history];
-  const runtime = client({
-    conversation: transport({
-      transcript: async () => ({ messages: [...messages] }),
-      run: async (request, receive, accepted) => {
-        messages.push(...request.messages);
-        accepted();
-        deliverAnswer(receive, messages.length - 1, 'business-context', '独立回答');
-        messages.push({ role: 'assistant', content: '独立回答' });
-      },
-      overview: async () => assert.fail('No observation reads'),
-    }),
+  const io = transport({
+    transcript: async () => ({ messages: [...messages] }),
+    submit: async (request, receive) => {
+      const delivery = io.delivery(request, receive);
+      delivery.input();
+      delivery.execution('business-context');
+      delivery.answer('独立回答');
+      delivery.complete();
+    },
+    overview: async () => assert.fail('No observation reads'),
   });
+  const runtime = client({ conversation: io });
   const app = createApplication(runtime);
   const disconnect = app.connect();
   await runtime.initialize();

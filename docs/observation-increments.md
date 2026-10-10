@@ -65,7 +65,7 @@ ChangeConsumer 的 position 仅用于同步打开时的本地交接水位，不�
 
 调用过程和关系历史分开追加，以同调用 eventSequence 对照先后。子层 returned 不等于父层 accepted，failed.source 区分接纳工作与观测故障。入口阶段元数据可由父调用描述尚未建立 E 的 accept/notification/admit/capture 结果，不凭空创建一个失败 QA。R 详情沿独立 runtimeEvents 计时；图谱仍以 E 为 QA，不把 R 计入轮数。
 
-记录状态更新与边界登记是两个事实。接收端保留暂未齐备的原始条目，边界齐备后才生成通过 validateExecutionRecordSnapshot 的本地执行视图。ConversationUpdate 交付提交状态与回答身份，completed 在 R.run 返回后产生；TranscriptReplica 保存独立查询/订阅所得的权威消息。两者核对实际消息位置与正文，不要求回答紧邻输入，也不再次向消息副本追加回答。
+记录状态更新与边界登记是两个事实。接收端保留暂未齐备的原始条目，边界齐备后才生成通过 validateExecutionRecordSnapshot 的本地执行视图。ConversationSubmissionSnapshot 交付本次提交的累计事实与完整性，result 在 R.run 实际返回/抛错后产生；TranscriptReplica 保存独立查询/订阅所得的权威消息。二者通过正式位置关联，不要求回答紧邻输入，不重复追加，也不要求提交反馈结束时实体已经追赶完成。
 
 顺序异常最多自动重建一次基线；连续异常停止并提示。SOURCE_INCOMPLETE 直接终止观测，不自动重连，显式重连同一失效来源也不能修复。普通断线不无限重连，可显式刷新健康来源。旧连接回调、旧详情响应不得覆盖新范围。binding 负责组织轮次、来源、父层接纳和记忆关联，UI 几何与选择状态不进入 Runtime。
 

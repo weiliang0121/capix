@@ -8,10 +8,16 @@ import { MessageRef, TranscriptRangeRef } from './ref.js';
 import type { Message } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import { createTranscriptEvent, type TranscriptEvent } from './event.js';
+import type { ProgressChannel } from '../progress/channel.js';
+import type { TranscriptAppendProgress } from './progress.js';
 
 export interface TranscriptOptions {
   observation?: EventConsumer<TranscriptEvent>;
   changes?: ChangeCapture<TranscriptEvent>;
+}
+
+export interface TranscriptAppendOptions extends ChangeProvenance<TranscriptEvent> {
+  readonly progress?: ProgressChannel<TranscriptAppendProgress>;
 }
 
 /** Original accepted messages, including the current input; independent of execution records. */
@@ -64,7 +70,7 @@ export class Transcript {
     this.appendFrom(messages);
   }
 
-  appendFrom(messages: readonly Message[], provenance: ChangeProvenance<TranscriptEvent> = {}): void {
+  appendFrom(messages: readonly Message[], provenance: TranscriptAppendOptions = {}): void {
     if (this.#publishing) throw new Error('Transcript change publication cannot reenter mutation');
     if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     // Check the whole batch before changing the transcript.
@@ -74,12 +80,13 @@ export class Transcript {
     const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'messages-appended', start, messages: accepted }, provenance.origin);
     for (const message of accepted) this.#messages.push(message);
     this.#revision = event.revision;
-    this.capture(event, provenance.observation);
+    this.capture(event, provenance.observation, provenance.progress);
   }
 
-  private capture(event: TranscriptEvent, observation = this.#observation): void {
+  private capture(event: TranscriptEvent, observation = this.#observation, progress?: ProgressChannel<TranscriptAppendProgress>): void {
     this.#publishing = true;
     try {
+      if (event.change.kind === 'messages-appended') progress?.publish(Object.freeze({ transcriptId: this.id, start: event.change.start, end: event.change.start + event.change.messages.length, revision: event.revision }));
       publishFact(event, this.#changes, observation);
     } finally {
       this.#publishing = false;

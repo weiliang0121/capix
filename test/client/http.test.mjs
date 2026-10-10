@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpTransport, ConversationHttpTransport, ObservationHttpTransport, HttpError, HttpTransportError } from '@capix/client-http';
-import { snapshot, transcriptSnapshot, baseline } from './fixtures.mjs';
+import { snapshot, transcriptSnapshot, baseline, submissionSnapshot } from './fixtures.mjs';
 
 const input = { messages: [{ role: 'user', content: '测试' }] };
-const started = { type: 'started', contextId: 'context', transcriptId: 'fixture-transcript', inputIndex: 0 };
-const answer = { type: 'answer', contextId: 'context', transcriptId: 'fixture-transcript', index: 1, output: { kind: 'answer', content: '回答' } };
-const completed = { type: 'completed', contextId: 'context' };
+const request = { submissionId: 'submission', input };
+const initial = submissionSnapshot('submission');
+const signal = () => new AbortController().signal;
 const line = (value) => JSON.stringify(value);
 const jsonConversation = (value) => new ConversationHttpTransport('', async () => Response.json(value));
 const jsonObservation = (value) => new ObservationHttpTransport('', async () => Response.json(value));
@@ -39,32 +39,6 @@ test('HTTP failures retain status, method, URL and non-JSON body', async () => {
       return true;
     });
   }
-});
-
-test('Observer HTTP rejection retains server code and does not deliver acceptance or retry', async () => {
-  let calls = 0;
-  const body = { code: 'BUSY', error: '当前忙碌' };
-  const client = new ConversationHttpTransport('', async () => {
-    calls++;
-    return Response.json(body, { status: 409 });
-  });
-  await assert.rejects(
-    client.run(
-      input,
-      () => assert.fail('No snapshot'),
-      () => assert.fail('Not accepted'),
-    ),
-    (error) => {
-      assert.ok(error instanceof HttpError);
-      assert.equal(error.response.status, 409);
-      assert.equal(error.response.method, 'POST');
-      assert.equal(error.code, 'BUSY');
-      assert.equal(error.message, '当前忙碌');
-      assert.deepEqual(error.body, body);
-      return true;
-    },
-  );
-  assert.equal(calls, 1);
 });
 
 test('invalid successful JSON is a decode failure with its response and cause preserved', async () => {
@@ -119,112 +93,6 @@ test('execution details require the actual parent R record and its independent b
   }
 });
 
-test('stream remote errors retain their server code', async () => {
-  const client = new ConversationHttpTransport('', async () => new Response(JSON.stringify({ type: 'error', error: '发布失败', code: 'PUBLICATION_ERROR' })));
-  await assert.rejects(
-    client.run(
-      input,
-      () => {},
-      () => {},
-    ),
-    (error) => error instanceof HttpTransportError && error.kind === 'remote' && error.code === 'PUBLICATION_ERROR',
-  );
-});
-
-test('malformed JSON and terminal regression are rejected before invalid delivery', async () => {
-  let received = 0;
-  const client = new ConversationHttpTransport('', async () => new Response(`${line(started)}\n${line(answer)}\n${line(completed)}\n${line(started)}\n`));
-  await assert.rejects(
-    client.run(
-      input,
-      () => {
-        received++;
-      },
-      () => {},
-    ),
-    (error) => error.code === 'AFTER_TERMINAL',
-  );
-  assert.equal(received, 3);
-  const malformed = new ConversationHttpTransport('', async () => new Response('{"type":'));
-  await assert.rejects(
-    malformed.run(
-      input,
-      () => {},
-      () => {},
-    ),
-    (error) => error.kind === 'contract' && error.code === 'INVALID_JSON' && error.cause instanceof SyntaxError,
-  );
-});
-
-test('acceptance callback failure closes the unconsumed body and preserves its cause', async () => {
-  let cancelled = false;
-  const cause = new Error('local acceptance failed');
-  const body = new ReadableStream({
-    cancel() {
-      cancelled = true;
-    },
-  });
-  const client = new ConversationHttpTransport('', async () => new Response(body));
-  await assert.rejects(
-    client.run(
-      input,
-      () => {},
-      () => {
-        throw cause;
-      },
-    ),
-    (error) => error.kind === 'delivery' && error.cause === cause,
-  );
-  assert.equal(cancelled, true);
-  assert.equal(body.locked, false);
-});
-
-test('business callback failure closes the active reader and is distinguishable from network failure', async () => {
-  let cancelled = false;
-  const cause = new Error('local delivery failed');
-  const body = new ReadableStream({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode(line(started) + '\n'));
-    },
-    cancel() {
-      cancelled = true;
-    },
-  });
-  const client = new ConversationHttpTransport('', async () => new Response(body));
-  await assert.rejects(
-    client.run(
-      input,
-      () => {
-        throw cause;
-      },
-      () => {},
-    ),
-    (error) => error.kind === 'delivery' && error.cause === cause,
-  );
-  assert.equal(cancelled, true);
-  assert.equal(body.locked, false);
-  const networkCause = new TypeError('network disconnected');
-  const broken = new ConversationHttpTransport(
-    '',
-    async () =>
-      new Response(
-        new ReadableStream({
-          start(controller) {
-            controller.error(networkCause);
-          },
-        }),
-      ),
-  );
-  await assert.rejects(
-    broken.run(
-      input,
-      () => {},
-      () => {},
-    ),
-    (error) => error === networkCause,
-  );
-});
-
 test('entity queries validate the requested UID and entity streams preserve revisions and origin', async () => {
   await assert.rejects(jsonConversation(transcriptSnapshot([], 'other')).transcript('requested'), (error) => error.code === 'TRANSCRIPT_MISMATCH');
   const baseline = { type: 'baseline', snapshot: transcriptSnapshot([], 't', 0) };
@@ -243,18 +111,6 @@ test('entity queries validate the requested UID and entity streams preserve revi
   assert.deepEqual(received, [baseline, delta]);
 });
 
-test('conversation delivery cannot silently change transcript identity between started and answer', async () => {
-  const client = new ConversationHttpTransport('', async () => new Response([started, { ...answer, transcriptId: 'other' }].map(line).join('\n')));
-  await assert.rejects(
-    client.run(
-      input,
-      () => {},
-      () => {},
-    ),
-    (error) => error.code === 'TRANSCRIPT_MISMATCH',
-  );
-});
-
 test('observation delivery preserves E entry diagnostics and parent relationship failure evidence', async () => {
   const occurredAt = '2026-10-09T00:00:00Z';
   const error = { code: 'ENTRY_TEST', message: 'entry delivery failed' };
@@ -269,4 +125,104 @@ test('observation delivery preserves E entry diagnostics and parent relationship
     (error) => error.code === 'INCOMPLETE_STREAM',
   );
   assert.deepEqual(received, frames);
+});
+
+test('HTTP known rejection is accepted as a formal snapshot without replaying submission', async () => {
+  let calls = 0;
+  const rejected = submissionSnapshot('submission', { revision: 1, result: { status: 'rejected', error: { code: 'BUSY', message: '当前忙碌' } } });
+  const io = new ConversationHttpTransport('', async (_url, init) => {
+    calls++;
+    assert.deepEqual(JSON.parse(init.body), request);
+    assert.equal(init.signal.aborted, false);
+    return Response.json(rejected, { status: 409 });
+  });
+  const values = [];
+  await io.submit(request, (value) => values.push(value), signal());
+  assert.deepEqual(values, [rejected]);
+  assert.equal(calls, 1);
+});
+
+test('unknown HTTP failures and unavailable follow preserve uncertainty and diagnosis', async () => {
+  const io = new ConversationHttpTransport('', async () => Response.json({ code: 'SUBMISSION_UNAVAILABLE', error: 'unavailable' }, { status: 404 }));
+  await assert.rejects(
+    io.follow('submission', () => assert.fail('No remote facts'), signal()),
+    (error) => error instanceof HttpError && error.code === 'SUBMISSION_UNAVAILABLE' && error.response.status === 404,
+  );
+  const other = new ConversationHttpTransport('', async () => Response.json(submissionSnapshot('foreign', { result: { status: 'rejected', error: { code: 'BUSY', message: 'busy' } } }), { status: 409 }));
+  await assert.rejects(
+    other.submit(request, () => assert.fail('foreign'), signal()),
+    (error) => error.code === 'SUBMISSION_MISMATCH',
+  );
+});
+
+test('follow and read use the same submission identity and never post again', async () => {
+  const terminal = submissionSnapshot('a/b', { revision: 8, result: { status: 'completed' } });
+  const requests = [];
+  const io = new ConversationHttpTransport('http://example.test', async (url, init) => {
+    requests.push([url, init.method ?? 'GET']);
+    return Response.json(terminal);
+  });
+  const values = [];
+  await io.follow('a/b', (value) => values.push(value), signal());
+  assert.deepEqual(await io.read('a/b'), terminal);
+  assert.deepEqual(values, [terminal]);
+  assert.deepEqual(requests, [
+    ['http://example.test/api/submissions/a%2Fb/follow', 'GET'],
+    ['http://example.test/api/submissions/a%2Fb', 'GET'],
+  ]);
+});
+
+test('malformed submission feedback is rejected before delivery', async () => {
+  for (const body of ['{"submissionId":', line({ ...initial, revision: 1.5 }), line({ ...initial, answer: { transcriptId: 't', index: -1 } })]) {
+    const io = new ConversationHttpTransport('', async () => new Response(body));
+    await assert.rejects(
+      io.submit(request, () => assert.fail('invalid'), signal()),
+      (error) => error.kind === 'contract',
+    );
+  }
+});
+
+test('feedback consumer failure closes the active reader and retains the cause', async () => {
+  let cancelled = false;
+  const cause = new Error('consumer');
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(line(initial) + '\n'));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const io = new ConversationHttpTransport('', async () => new Response(body));
+  await assert.rejects(
+    io.submit(
+      request,
+      () => {
+        throw cause;
+      },
+      signal(),
+    ),
+    (error) => error.kind === 'delivery' && error.cause === cause,
+  );
+  assert.equal(cancelled, true);
+  assert.equal(body.locked, false);
+});
+
+test('terminal snapshot ends feedback consumption without requiring socket EOF', async () => {
+  let cancelled = false;
+  const terminal = { ...initial, revision: 1, result: { status: 'completed' } };
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(line(terminal) + '\n'));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const io = new ConversationHttpTransport('', async () => new Response(body));
+  const values = [];
+  await io.submit(request, (value) => values.push(value), signal());
+  assert.deepEqual(values, [terminal]);
+  assert.equal(cancelled, true);
+  assert.equal(body.locked, false);
 });

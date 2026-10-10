@@ -1,17 +1,12 @@
-import type { InvocationLevel, InvocationRelationIdentity } from '@capix/protocol';
+import type { InvocationRelationIdentity } from '@capix/protocol';
+import type { InvocationIdentity } from '../invocation/identity.js';
 import type { ContextState } from '../context/context.js';
 import type { InvocationProcess } from '../invocation/cycle.js';
 import type { InvocationResult } from '../invocation/result.js';
 import type { InvocationFailure } from '../invocation/failure.js';
 
 export type { InvocationRelationIdentity } from '@capix/protocol';
-
-/** Identity of one invocation, independent of its reusable structure and any record. */
-export interface InvocationIdentity {
-  readonly contextId: string;
-  readonly level: InvocationLevel;
-  readonly parentContextId?: string;
-}
+export type { InvocationIdentity } from '../invocation/identity.js';
 
 export interface InvocationDescription {
   /** Stable bound-structure identity when supplied; not an invocation or record ID. */

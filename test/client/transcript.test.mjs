@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientRuntime, TranscriptReplica, TranscriptSequenceError } from '@capix/client-runtime';
-import { deferred, transcriptSnapshot } from './fixtures.mjs';
+import { deferred, transcriptSnapshot, submissionDelivery } from './fixtures.mjs';
 
 const message = (content, role = 'user') => ({ role, content });
 const appended = (id, revision, start, messages) => ({ type: 'delta', event: { type: 'transcript', transcriptId: id, revision, occurredAt: '2026-10-09T00:00:00Z', origin: { contextId: 'context' }, change: { kind: 'messages-appended', start, messages } } });
@@ -43,14 +43,15 @@ test('conversation and entity streams may arrive in either order without duplica
     transcripts,
     conversation: {
       config,
-      run: async (_request, accept, accepted) => {
+      submit: async (request, accept) => {
         emit(appended('t', 1, 0, [message('question')]));
-        accepted();
-        accept({ type: 'started', contextId: 'context', transcriptId: 't', inputIndex: 0 });
-        accept({ type: 'answer', contextId: 'context', transcriptId: 't', index: 1, output: { kind: 'answer', content: 'answer' } });
+        const delivery = submissionDelivery(request, accept);
+        delivery.input({ transcriptId: 't', start: 0, end: 1 });
+        delivery.execution('context');
+        delivery.answer();
         emit(appended('t', 2, 1, [message('answer', 'assistant')]));
         await gate.promise;
-        accept({ type: 'completed', contextId: 'context' });
+        delivery.complete();
       },
     },
   });
@@ -78,7 +79,7 @@ test('a missed revision rebuilds the baseline once; a second gap stays visible',
       accept(appended('t', connections === 1 ? 3 : 7, 0, [message('gap')]));
     },
   };
-  const runtime = new ClientRuntime({ transcripts, conversation: { config, run: async () => {} } });
+  const runtime = new ClientRuntime({ transcripts, conversation: { config, submit: async () => {} } });
   await runtime.initialize();
   await settle();
   await settle();
@@ -101,7 +102,7 @@ test('entities load on demand, keep independent copies, and resume from a new ba
       await wait(signal);
     },
   };
-  const runtime = new ClientRuntime({ transcripts, conversation: { config, run: async () => {} } });
+  const runtime = new ClientRuntime({ transcripts, conversation: { config, submit: async () => {} } });
   await runtime.initialize();
   assert.deepEqual(connections, ['current']);
   assert.equal(runtime.getSnapshot().transcripts.has('old'), false);
@@ -122,7 +123,7 @@ test('slow configuration initialization cannot overwrite newer entity deltas wit
   const configuration = deferred();
   let emit;
   const runtime = new ClientRuntime({
-    conversation: { config: () => configuration.promise, run: async () => {} },
+    conversation: { config: () => configuration.promise, submit: async () => {} },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
@@ -146,7 +147,7 @@ test('default and UID subscriptions converge after identity is known without abo
   const callbacks = new Map();
   const signals = new Map();
   const runtime = new ClientRuntime({
-    conversation: { config, run: async () => {} },
+    conversation: { config, submit: async () => {} },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (id = 'default', accept, signal) => {
@@ -173,7 +174,7 @@ test('default and UID subscriptions converge after identity is known without abo
 test('a network disconnect obtains one new baseline and never retries business execution', async () => {
   let connections = 0;
   const runtime = new ClientRuntime({
-    conversation: { config, run: async () => assert.fail('not a business retry') },
+    conversation: { config, submit: async () => assert.fail('not a business retry') },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
@@ -193,7 +194,7 @@ test('a network disconnect obtains one new baseline and never retries business e
 test('a throwing UI subscriber is detached without terminating entity sync or starving other consumers', async () => {
   let emit;
   const runtime = new ClientRuntime({
-    conversation: { config, run: async () => {} },
+    conversation: { config, submit: async () => {} },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
@@ -223,22 +224,21 @@ test('a throwing UI subscriber is detached without terminating entity sync or st
   runtime.stopTranscript();
 });
 
-test('an answer arriving before its entity is checked against the subsequently synchronized content', async () => {
+test('answer locators can precede their separately synchronized entity without inventing content', async () => {
   let emit;
   const runtime = new ClientRuntime({
     conversation: {
       config,
-      run: async (_request, accept, accepted) => {
-        emit(appended('t', 1, 0, [message('question')]));
-        accepted();
-        accept({ type: 'started', contextId: 'context', transcriptId: 't', inputIndex: 0 });
-        accept({ type: 'answer', contextId: 'context', transcriptId: 't', index: 1, output: { kind: 'answer', content: 'delivered answer' } });
-        emit(appended('t', 2, 1, [message('different entity content', 'assistant')]));
-        accept({ type: 'completed', contextId: 'context' });
+      submit: async (request, accept) => {
+        const delivery = submissionDelivery(request, accept);
+        delivery.input({ transcriptId: 't', start: 0, end: 1 });
+        delivery.execution('context');
+        delivery.answer();
+        delivery.complete();
       },
     },
     transcripts: {
-      transcript: async () => assert.fail('stream has arrived'),
+      transcript: async () => assert.fail('healthy stream needs no query'),
       observeTranscript: async (_id, accept, signal) => {
         emit = accept;
         accept({ type: 'baseline', snapshot: transcriptSnapshot([], 't', 0) });
@@ -247,7 +247,11 @@ test('an answer arriving before its entity is checked against the subsequently s
     },
   });
   await runtime.initialize();
-  await assert.rejects(runtime.submit({ messages: [message('question')] }), /回答与消息实体内容不一致/);
-  assert.equal(runtime.getSnapshot().messages[1].content, 'different entity content', 'business delivery never rewrites the entity');
+  await runtime.submit({ messages: [message('question')] });
+  assert.equal(runtime.getSnapshot().messages.length, 0);
+  assert.equal(runtime.getSnapshot().submission.remote.answer.index, 1);
+  emit(appended('t', 1, 0, [message('question'), message('independently delivered', 'assistant')]));
+  assert.equal(runtime.getSnapshot().messages[1].content, 'independently delivered');
+  assert.equal(runtime.getSnapshot().submission.remote.result.status, 'completed');
   runtime.stopTranscript();
 });

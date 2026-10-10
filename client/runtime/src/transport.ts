@@ -1,8 +1,9 @@
-import type { ConfigurationResponse, ConversationUpdate, ConversationRequest, MemoryObservation, ObserverOverview, ExecutionRecordSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@capix/protocol';
+import type { ConfigurationResponse, ConversationSubmissionSnapshot, ConversationSubmissionRequest, MemoryObservation, ObserverOverview, ExecutionRecordSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@capix/protocol';
 
 export interface ConversationTransport {
   config(): Promise<ConfigurationResponse>;
-  run(request: ConversationRequest, accept: (update: ConversationUpdate) => void, accepted: () => void): Promise<void>;
+  submit(request: ConversationSubmissionRequest, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void>;
+  follow(id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void>;
 }
 
 export interface ObservationTransport {

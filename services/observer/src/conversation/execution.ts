@@ -48,8 +48,6 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Readonl
         accept: ({ parent }, answer) => {
           const context = parent.context;
           const response = context.resources.values.messages.append([{ role: 'assistant', content: answer.content }])[0]!;
-          const index = response.index;
-          context.resources.values.delivery({ type: 'answer', transcriptId: context.resources.values.history.transcriptId, contextId: context.id, index, output: answer });
           return { answer, response };
         },
       })

@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUpRight, Diamond, LoaderCircle } from 'lucide-react';
 import type { ConversationMessage } from '../../observation/conversation';
 import { MessageContent } from '../../components/message-content';
 import { Button } from '../../components/ui/button';
-export function ChatMessages({ rows, pending, progress, selectedId, onInspect }: { rows: readonly ConversationMessage[]; pending: string; progress: string; selectedId: string; onInspect: (id: string) => void }) {
+export function ChatMessages({ rows, pending, pendingLabel, progress, selectedId, onInspect }: { rows: readonly ConversationMessage[]; pending: string; pendingLabel: string; progress: string; selectedId: string; onInspect: (id: string) => void }) {
   const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom({ initial: 'instant', resize: 'instant' });
   useEffect(() => {
     if (pending) void scrollToBottom('instant');
@@ -46,7 +46,7 @@ export function ChatMessages({ rows, pending, progress, selectedId, onInspect }:
           })}
           {pending && (
             <article className="chat-message user pending">
-              <div className="message-heading">发送中</div>
+              <div className="message-heading">{pendingLabel}</div>
               <MessageContent content={pending} />
             </article>
           )}

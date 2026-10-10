@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { request } from 'node:http';
 import { test } from 'node:test';
+import { randomUUID } from 'node:crypto';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
 import { ClientRuntime } from '@capix/client-runtime';
-import { BoundRuntime } from '@capix/server-runtime';
+import { BoundRuntime, ProgressChannel } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { createObserverServer, initializeObserver, bindConversation, ConversationRuntimeDefinition, acceptConversationInput } from '@capix/observer-service';
@@ -32,7 +33,7 @@ async function setup(t, model = provider, configured = false) {
   );
   const base = `http://127.0.0.1:${server.address().port}`;
   const get = (path) => fetch(base + path).then((response) => response.json());
-  const run = (content = '测试输入', options = {}) => fetch(base + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, ...options.headers }, body: JSON.stringify(options.body ?? { messages: [{ role: 'user', content }] }) });
+  const run = (content = '测试输入', options = {}) => fetch(base + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, ...options.headers }, body: JSON.stringify({ submissionId: options.id ?? randomUUID(), input: options.body ?? { messages: [{ role: 'user', content }] } }) });
   return { observer, server, base, get, run };
 }
 const updates = async (response) =>
@@ -48,10 +49,9 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
   assert.equal(response.headers.get('content-type'), 'application/x-ndjson; charset=utf-8');
   const stream = await updates(response);
   assert.ok(stream.length > 1);
-  assert.deepEqual(
-    stream.map((item) => item.type),
-    ['started', 'answer', 'completed'],
-  );
+  assert.ok(stream[0].input);
+  assert.equal(stream.at(-1).result.status, 'completed');
+  assert.equal(stream.at(-1).answer.index, 1);
   assert.ok(stream.every((item) => !('snapshot' in item)));
   const listed = await get('/api/executions');
   const snapshot = await get('/api/execution?id=' + listed.executions[0].id);
@@ -114,7 +114,7 @@ test('busy execution rejects another submission without adding messages or inven
     assert.equal(busy.status, 409);
     assert.equal(observer.transcript.length, 1);
     release();
-    assert.equal((await updates(first)).at(-1).type, 'completed');
+    assert.equal((await updates(first)).at(-1).result.status, 'completed');
   } finally {
     release();
   }
@@ -128,11 +128,9 @@ test('failed memory postprocessing still exposes the completed answer and the ac
     },
   });
   const stream = await updates(await run());
-  assert.deepEqual(
-    stream.map((item) => item.type),
-    ['started', 'answer', 'error'],
-  );
-  assert.equal(stream[1].output.content, '测试回答');
+  assert.equal(stream.at(-1).result.status, 'failed');
+  assert.equal(stream.at(-1).answer.index, 1);
+  assert.equal((await get('/api/transcript')).messages[1].content, '测试回答');
   const { executions } = await get('/api/executions');
   assert.equal(executions[0].status, 'failed');
   assert.equal(executions[0].memoryStatus, 'failed');
@@ -146,7 +144,10 @@ test('failure before a complete execution record produces a terminal transport e
     throw new Error('private diagnostic must not be an HTTP message');
   };
   const stream = await updates(await run());
-  assert.deepEqual(stream, [{ type: 'error', error: '服务内部错误。', code: 'INTERNAL_ERROR' }]);
+  assert.equal(stream.at(-1).input.end, 1);
+  assert.equal(stream.at(-1).result.status, 'failed');
+  assert.deepEqual(stream.at(-1).result.error, { code: 'INTERNAL_ERROR', message: '服务内部错误。' });
+  assert.deepEqual(stream.at(-1).executions, []);
 });
 
 test('transport validates origin, input and source boundary before accepting work', async (t) => {
@@ -154,7 +155,7 @@ test('transport validates origin, input and source boundary before accepting wor
   assert.equal((await run('invalid origin', { headers: { Origin: 'https://outside.example' } })).status, 403);
   const invalid = await run('', { body: { messages: [{ role: 'assistant', content: 'invalid final role' }] } });
   assert.equal(invalid.status, 400);
-  assert.equal((await invalid.json()).code, 'INVALID_INPUT');
+  assert.equal((await invalid.json()).result.error.code, 'INVALID_INPUT');
   assert.equal(observer.transcript.length, 0);
   assert.equal(
     [...observer.book.values()].some((record) => record.kind === 'execution'),
@@ -183,26 +184,20 @@ test('separate HTTP subclasses deliver business content while records remain sep
   const observation = new ObservationHttpTransport(base);
   assert.deepEqual(await client.config(), { ...settings, configured: false });
   assert.deepEqual(await observation.overview(), { transcriptId: (await client.transcript()).id, messages: [], executions: [] });
-  let accepted = false;
   const received = [];
-  await client.run(
-    { messages: [{ role: 'user', content: '测试输入' }] },
+  await client.submit(
+    { submissionId: randomUUID(), input: { messages: [{ role: 'user', content: '测试输入' }] } },
     (snapshot) => {
-      assert.equal(accepted, true);
       received.push(snapshot);
     },
-    () => {
-      accepted = true;
-    },
+    new AbortController().signal,
   );
-  assert.deepEqual(
-    received.map((item) => item.type),
-    ['started', 'answer', 'completed'],
-  );
+  assert.ok(received[0].input);
+  assert.equal(received.at(-1).result.status, 'completed');
   const overview = await observation.overview();
   const last = await observation.execution(overview.executions[0].id);
   assert.equal(last.execution.status, 'succeeded');
-  assert.equal(last.execution.contextId, received[0].contextId);
+  assert.equal(last.execution.contextId, received.at(-1).executions[0].contextId);
   assert.equal((await observation.overview()).executions[0].response.index, 1);
   assert.deepEqual(
     (await client.transcript()).messages.map((item) => item.role),
@@ -227,6 +222,7 @@ test('real HTTP headless client uses conversation only for two rounds without an
   await runtime.initialize();
   await runtime.submit({ messages: [{ role: 'user', content: '第一问' }] });
   await runtime.submit({ messages: [{ role: 'user', content: '第二问' }] });
+  await waitForClient(runtime, (state) => state.messages.length === 4);
   assert.equal(runtime.getSnapshot().messages.length, 4);
   assert.equal(runtime.getSnapshot().messages.at(-1).content, '测试回答');
   assert.equal(paths.filter((path) => path === '/api/run').length, 2);
@@ -255,39 +251,47 @@ test('answer is delivered before memory finishes, and closing observation does n
     answerReady = resolve;
   });
   const received = [];
-  const run = client.run(
-    { messages: [{ role: 'user', content: '问题' }] },
+  const run = client.submit(
+    { submissionId: randomUUID(), input: { messages: [{ role: 'user', content: '问题' }] } },
     (update) => {
       received.push(update);
-      if (update.type === 'answer') answerReady();
+      if (update.answer) answerReady();
     },
-    () => {},
+    new AbortController().signal,
   );
   await delivered;
-  assert.deepEqual(
-    received.map((item) => item.type),
-    ['started', 'answer'],
-  );
+  assert.ok(received.at(-1).answer);
+  assert.equal(received.at(-1).result, undefined);
   const chunk = await reader.read();
   assert.match(new TextDecoder().decode(chunk.value), /"type":"baseline"/);
   controller.abort();
   await reader.cancel().catch(() => {});
   release();
   await run;
-  assert.equal(received.at(-1).type, 'completed');
+  assert.equal(received.at(-1).result.status, 'completed');
 });
 
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
   const entities = createEnvironment();
   const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, provider);
   const received = [];
-  const output = await runtime.run({ messages: [{ role: 'user', content: '问题' }] }, { settings, deliver: (update) => received.push(update) });
+  const output = await runtime.run(
+    { messages: [{ role: 'user', content: '问题' }] },
+    {
+      settings,
+      progress: new ProgressChannel({
+        receive: (update) => {
+          received.push(update);
+        },
+      }),
+    },
+  );
   assert.deepEqual(output, { kind: 'answer', content: '测试回答' });
   assert.deepEqual(
-    received.map((item) => item.type),
-    ['answer'],
+    received.map((item) => item.kind),
+    ['input', 'execution', 'answer'],
   );
-  assert.equal(received[0].transcriptId, entities.transcript.id);
+  assert.equal(received[0].range.transcriptId, entities.transcript.id);
   assert.equal(runtime.recorder, undefined);
   assert.equal(entities.transcript.length, 2);
 });
@@ -313,6 +317,7 @@ test('HTTP client accepts the real answer index after an independent entity appe
   await runtime.initialize();
   await runtime.submit({ messages: [{ role: 'user', content: '本次输入' }] });
   assert.equal(runtime.getSnapshot().answered, true);
+  await waitForClient(runtime, (state) => state.messages.length === 3);
   assert.deepEqual(
     runtime.getSnapshot().messages.map((message) => message.content),
     ['本次输入', '运行期间独立追加', '正式回答'],
@@ -321,4 +326,105 @@ test('HTTP client accepts the real answer index after an independent entity appe
   const overview = await new ObservationHttpTransport(base).overview();
   assert.equal(overview.executions[0].inputIndex, 0);
   assert.equal(overview.executions[0].response.index, 2);
+});
+
+test('disconnecting submission delivery does not cancel work; reconnect reads the same task without a new model run', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const calls = [];
+  t.after(() => release());
+  const { base, run, get, observer } = await setup(t, {
+    async invoke(request, purpose) {
+      calls.push(purpose);
+      if (purpose === 'selection') await gate;
+      return provider.invoke(request, purpose);
+    },
+  });
+  const id = randomUUID();
+  const initial = await run('跨连接继续', { id });
+  await initial.body.cancel();
+  const pending = await get(`/api/submissions/${id}`);
+  assert.equal(pending.input.end, 1);
+  assert.equal(pending.result, undefined);
+  assert.equal(observer.transcript.length, 1);
+  const duplicate = await run('不得再次执行', { id });
+  assert.equal(duplicate.status, 409);
+  assert.equal((await duplicate.json()).code, 'SUBMISSION_EXISTS');
+  const following = await fetch(`${base}/api/submissions/${id}/follow`);
+  release();
+  const frames = await updates(following);
+  assert.equal(frames[0].submissionId, id);
+  assert.equal(frames.at(-1).result.status, 'completed');
+  assert.deepEqual(frames.at(-1).input, pending.input);
+  assert.equal(frames.at(-1).answer.index, 1);
+  assert.deepEqual(calls, ['selection', 'answer', 'memory']);
+  assert.deepEqual(await get(`/api/submissions/${id}`), frames.at(-1));
+  assert.equal(observer.transcript.length, 2);
+  const late = await updates(await fetch(`${base}/api/submissions/${id}/follow`));
+  assert.deepEqual(late, [frames.at(-1)]);
+});
+
+test('an unavailable submission is not reported as rejected or never executed', async (t) => {
+  const { base } = await setup(t);
+  const response = await fetch(`${base}/api/submissions/${randomUUID()}`);
+  assert.equal(response.status, 404);
+  const body = await response.json();
+  assert.equal(body.code, 'SUBMISSION_UNAVAILABLE');
+  assert.equal(body.result, undefined);
+});
+
+// Submission completion and entity synchronization are independent streams.
+function waitForClient(runtime, predicate) {
+  if (predicate(runtime.getSnapshot())) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const deadline = setTimeout(() => {
+      detach();
+      reject(new Error('Client entity synchronization did not catch up'));
+    }, 2000);
+    const detach = runtime.subscribe(() => {
+      if (!predicate(runtime.getSnapshot())) return;
+      clearTimeout(deadline);
+      detach();
+      resolve();
+    });
+  });
+}
+
+test('invalid settings with a valid submission ID are retained as explicit rejection before runtime entry', async (t) => {
+  let modelCalls = 0;
+  const { run, get, observer, base } = await setup(
+    t,
+    {
+      async invoke(request, purpose) {
+        modelCalls++;
+        return provider.invoke(request, purpose);
+      },
+    },
+    true,
+  );
+  const id = randomUUID();
+  const response = await run('invalid configuration', { id, body: { messages: [{ role: 'user', content: 'must not append' }], contextBudget: 0 } });
+  assert.equal(response.status, 400);
+  const rejected = await response.json();
+  assert.equal(rejected.submissionId, id);
+  assert.equal(rejected.result.status, 'rejected');
+  assert.equal(rejected.result.error.code, 'INVALID_SETTINGS');
+  assert.deepEqual(await get(`/api/submissions/${id}`), rejected);
+  assert.equal(observer.transcript.length, 0);
+  assert.equal(modelCalls, 0);
+  assert.equal(
+    [...observer.book.values()].some((record) => record.kind === 'runtime-call'),
+    false,
+  );
+  const transport = new ConversationHttpTransport(base);
+  const runtime = new ClientRuntime({ conversation: transport, transcripts: transport });
+  t.after(() => runtime.stopTranscript());
+  await runtime.initialize();
+  await runtime.submit({ messages: [{ role: 'user', content: 'bad' }], contextBudget: 0 });
+  assert.equal(runtime.getSnapshot().submission.remote.result.status, 'rejected');
+  assert.equal(runtime.getSnapshot().busy, false);
+  await runtime.submit({ messages: [{ role: 'user', content: 'normal' }] });
+  assert.equal(runtime.getSnapshot().submission.remote.result.status, 'completed');
 });

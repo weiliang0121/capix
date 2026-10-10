@@ -69,7 +69,7 @@ InvocationFact、ResourceObservation、RuntimeStructureFact 是内核提供的�
 - `ExecutionRecordSnapshot`：一次 E 的记录详情，带其父 R 调用及边界，不包含系统全部实体或所有 E。
 - `InvocationOrigin`：任意 REOA 层本次调用的来源身份，不是 R 实例身份。
 
-记录根的现有线协议判别仍为 `kind: 'runtime'`，本次只改代码名称，不改记录字段、判别值或关系规则。资源访问名 `observer.delivery` 同样保留既有正式身份；类和目录命名不意味着悄悄迁移数据协议。
+记录根的现有线协议判别仍为 `kind: 'runtime'`，本次只改代码名称，不改记录字段、判别值或关系规则。对话反馈现由服务提交投影解释内核被动进展，原 `observer.delivery` 业务资源已移除；这一调整属于明确的交付职责迁移，详见 [协议](protocol.md)。
 
 ## 变化捕获不等于观测载体
 

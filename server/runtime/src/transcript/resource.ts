@@ -1,8 +1,16 @@
-import type { Transcript } from './transcript.js';
+import { Transcript } from './transcript.js';
 import type { Message, TranscriptRangeLocator } from '@capix/protocol';
 import { ResourceOffer } from '../resource/offer.js';
 import type { ResourceActivity } from '../resource/activity.js';
 import { TranscriptRangeRef } from './ref.js';
+import { ProgressChannel, type ProgressReceiver } from '../progress/channel.js';
+import type { TranscriptAppendProgress } from './progress.js';
+
+/** Binding-local commit receiver; business only receives the append endpoint. */
+export interface TranscriptAppendSource {
+  readonly transcript: Transcript;
+  readonly progress?: ProgressReceiver<TranscriptAppendProgress>;
+}
 
 /** Fixed message membership; endpoints retain private entity access, records only retain locators. */
 export class TranscriptRangeReader {
@@ -52,18 +60,21 @@ export class TranscriptRangeReader {
 export const TranscriptResource = Object.freeze({
   append: new ResourceOffer(
     'transcript.append',
-    (transcript: Transcript, activity) =>
-      Object.freeze({
+    (source: Transcript | TranscriptAppendSource, activity) => {
+      const transcript = source instanceof Transcript ? source : source.transcript;
+      const progress = source instanceof Transcript || !source.progress ? undefined : new ProgressChannel(source.progress);
+      return Object.freeze({
         append(messages: readonly Message[]) {
           return activity.runSync('append', { input: () => ({ count: messages.length }), output: (result) => ({ transcriptId: transcript.id, indexes: result.map((item) => item.index), revision: transcript.revision }) }, () => {
             const start = transcript.length;
-            transcript.appendFrom(messages, { origin: activity.origin, observation: activity.transcriptObservation });
+            transcript.appendFrom(messages, { origin: activity.origin, observation: activity.transcriptObservation, progress });
             return Object.freeze(messages.map((_, offset) => Object.freeze({ index: start + offset, message: transcript.get(start + offset)! })));
           });
         },
-      }),
+      });
+    },
     'access',
-    { describe: (transcript) => ({ transcriptId: transcript.id }) },
+    { describe: (source) => ({ transcriptId: (source instanceof Transcript ? source : source.transcript).id }) },
   ),
   segmentation: new ResourceOffer(
     'transcript.segmentation',

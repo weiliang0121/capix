@@ -265,8 +265,9 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
   await runtime.initialize();
   await until(() => !runtime.getSnapshot().observation.loading);
   for (const content of ['first', 'second', 'third', 'fourth']) {
-    if (content === 'third') await assert.rejects(runtime.submit({ messages: [{ role: 'user', content }] }));
-    else await runtime.submit({ messages: [{ role: 'user', content }] });
+    await runtime.submit({ messages: [{ role: 'user', content }] });
+    assert.equal(runtime.getSnapshot().submission.remote.result.status, content === 'third' ? 'failed' : 'completed');
+    assert.equal(runtime.getSnapshot().submission.feedback.status, 'ended', 'a remote failure is a confirmed outcome, not a broken connection');
   }
   await until(() => {
     const observation = runtime.getSnapshot().observation;
@@ -282,7 +283,7 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
     ['start', 'continue', 'start', 'unhandled'],
   );
   assert.ok(handling.filter((process) => 'failure' in process).every((process) => process.failure.kind === 'exception'));
-  assert.equal(runtime.getSnapshot().messages.length, 7);
+  await until(() => runtime.getSnapshot().messages.length === 7);
   assert.equal(runtime.getSnapshot().observation.memory.items[0].content, 'memory 4');
   assert.deepEqual(requests, ['/api/observe']);
   const oldScope = runtime.getSnapshot().observation.cursor.scopeId;

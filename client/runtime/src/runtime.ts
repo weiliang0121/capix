@@ -1,7 +1,8 @@
-import type { ConfigurationResponse, ConversationUpdate, ConversationRequest, MemoryObservation, Message, ObserverOverview, ExecutionRecordSnapshot, InvocationEvent, TranscriptRecord } from '@capix/protocol';
+import type { ConfigurationResponse, ConversationRequest, ConversationSubmissionSnapshot, MemoryObservation, Message, ObserverOverview, ExecutionRecordSnapshot, InvocationEvent, TranscriptRecord } from '@capix/protocol';
 import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReplica, ObservationSequenceError } from './observation.js';
+import { ClientSubmission, SubmissionContractError, submissionFeedbackEnded, type ClientSubmissionState } from './submission.js';
 import { InitializationAttempt, type ClientInitializationState } from './initialization.js';
 
 export interface ObservationState {
@@ -23,6 +24,7 @@ export interface ClientState {
   readonly messages: readonly Readonly<Message>[];
   readonly transcriptId?: string;
   readonly transcripts: ReadonlyMap<string, TranscriptState>;
+  readonly submission?: ClientSubmissionState;
   readonly busy: boolean;
   readonly pending: string;
   readonly contextId: string;
@@ -55,6 +57,8 @@ export class ClientRuntime {
   private observationSession?: AbortController;
   private observationOwner?: symbol;
   private replica?: ObservationReplica;
+  private submission?: ClientSubmission;
+  private feedbackSession?: AbortController;
 
   private readonly conversation: ConversationTransport;
   private readonly observation?: ObservationTransport;
@@ -78,7 +82,9 @@ export class ClientRuntime {
   };
 
   private update(change: Partial<ClientState>) {
-    this.state = { ...this.state, ...change };
+    const next = { ...this.state, ...change };
+    const submission = next.submission;
+    this.state = { ...next, busy: Boolean(submission && !submission.remote?.result), pending: submission && !submission.remote?.input && !submission.remote?.result ? submission.pending : '', contextId: submission?.remote?.executions.at(-1)?.contextId ?? '', answered: Boolean(submission?.remote?.answer) };
     for (const listener of this.listeners) {
       try {
         listener();
@@ -223,64 +229,74 @@ export class ClientRuntime {
     return this.observation.source(path, signal);
   }
 
-  private receive(update: ConversationUpdate): void {
-    if (update.type === 'error') throw new Error(update.error);
-    if (update.type === 'started') {
-      if (update.transcriptId && update.transcriptId !== this.state.transcriptId) throw new Error('处理来源与当前消息集合不一致。');
-      this.update({ contextId: update.contextId });
-    }
-    if (update.type === 'answer') {
-      if (update.transcriptId && update.transcriptId !== this.state.transcriptId) throw new Error('回答来源与当前消息集合不一致。');
-      const present = this.state.messages[update.index];
-      if (present && (present.role !== 'assistant' || present.content !== update.output.content)) throw new Error('回答与消息实体内容不一致。');
-      this.update({ answered: true });
+  private updateSubmission(submission: ClientSubmission): void {
+    if (this.submission === submission) this.update({ submission: submission.snapshot });
+  }
+
+  /** Sends once. Interruption means feedback is unknown, not that server work failed. */
+  async submit(request: ConversationRequest, accepted?: () => undefined): Promise<void> {
+    if (this.submission && !this.submission.snapshot.remote?.result) throw new Error('当前提交尚未确认结束，请重新连接或明确结束跟踪。');
+    if (this.state.initialization.status !== 'succeeded' || !this.state.config?.configured) throw new Error('请先完成客户端初始化与服务端模型配置。');
+    const input = { ...request, messages: request.messages.map((message) => ({ ...message })) };
+    const submission = new ClientSubmission(input.messages.at(-1)?.content ?? '', accepted);
+    this.submission = submission;
+    this.update({ submission: submission.snapshot });
+    await this.connectSubmission(submission, (receive, signal) => this.conversation.submit({ submissionId: submission.id, input }, receive, signal));
+  }
+
+  /** Follow an existing identity only; never automatically resubmit its input. */
+  async reconnectSubmission(): Promise<void> {
+    const submission = this.submission;
+    if (!submission) throw new Error('没有可重新连接的提交。');
+    if (submission.snapshot.remote?.result) return;
+    await this.connectSubmission(submission, (receive, signal) => this.conversation.follow(submission.id, receive, signal));
+  }
+
+  stopFollowing(): void {
+    this.feedbackSession?.abort();
+    this.feedbackSession = undefined;
+    if (this.submission && this.submission.snapshot.feedback.status !== 'ended') {
+      this.submission.feedback({ status: 'ended' });
+      this.updateSubmission(this.submission);
     }
   }
 
-  async submit(request: ConversationRequest, accepted?: () => void): Promise<void> {
-    if (this.state.busy) throw new Error('当前请求仍在处理。');
-    if (this.state.initialization.status !== 'succeeded' || !this.state.config?.configured) throw new Error('请先完成客户端初始化与服务端模型配置。');
-    const messages = request.messages.map((message) => ({ ...message }));
-    this.update({ busy: true, contextId: '', answered: false, error: undefined, pending: messages.at(-1)?.content ?? '' });
-    let wasAccepted = false;
-    let requiredEnd = this.state.messages.length + messages.length;
-    let delivered: Extract<ConversationUpdate, { type: 'answer' }> | undefined;
-    const errors: unknown[] = [];
-    try {
-      await this.conversation.run(
-        { ...request, messages },
-        (update) => {
-          if (update.type === 'started') requiredEnd = update.inputIndex + 1;
-          if (update.type === 'answer') requiredEnd = update.index + 1;
-          this.receive(update);
-          if (update.type === 'answer') delivered = update;
-        },
-        () => {
-          wasAccepted = true;
-          this.update({ pending: '' });
-          accepted?.();
-        },
-      );
-    } catch (error) {
-      errors.push(error);
-    }
-    try {
-      if (wasAccepted && (!this.state.transcriptId || !this.state.transcripts.get(this.state.transcriptId)?.syncing || this.state.messages.length < requiredEnd)) await this.transcripts.refresh(this.state.transcriptId);
-      if (delivered) {
-        const message = this.state.messages[delivered.index];
-        if (!message || message.role !== 'assistant' || message.content !== delivered.output.content) throw new Error('回答与消息实体内容不一致。');
-      }
-    } catch (error) {
-      errors.push(error);
-    } finally {
-      this.update({ busy: false, pending: '' });
-    }
-    // Observation consumes its own stream; submission does not trigger observation queries.
+  /** Relinquish local tracking explicitly. It is not cancellation or proof of remote completion. */
+  releaseSubmission(): void {
+    this.feedbackSession?.abort();
+    this.feedbackSession = undefined;
+    this.submission = undefined;
+    this.update({ submission: undefined });
+  }
 
-    const error = errors.length > 1 ? new AggregateError(errors, '请求处理与消息刷新均失败。', { cause: errors[0] }) : errors[0];
-    if (error) {
-      this.update({ error });
-      throw error;
+  private async connectSubmission(submission: ClientSubmission, connect: (receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal) => Promise<void>): Promise<void> {
+    if (this.submission !== submission) return;
+    this.feedbackSession?.abort();
+    const session = new AbortController();
+    this.feedbackSession = session;
+    submission.feedback({ status: 'connecting' });
+    this.updateSubmission(submission);
+    const current = () => this.submission === submission && this.feedbackSession === session && !session.signal.aborted;
+    if (!current()) return;
+    try {
+      await connect((snapshot) => {
+        if (!current()) return;
+        if (snapshot.input && snapshot.input.transcriptId !== this.state.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
+        submission.receive(snapshot);
+        this.updateSubmission(submission);
+      }, session.signal);
+      if (!current()) return;
+      const remote = submission.snapshot.remote;
+      if (!remote || !submissionFeedbackEnded(remote)) throw new Error('提交反馈连接已结束，远端结果仍未确认。');
+      submission.feedback({ status: 'ended' });
+    } catch (error) {
+      if (!current()) return;
+      submission.feedback({ status: 'interrupted', error });
+    } finally {
+      if (current()) {
+        this.feedbackSession = undefined;
+        this.updateSubmission(submission);
+      }
     }
   }
 }

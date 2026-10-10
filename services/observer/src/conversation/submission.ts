@@ -1,0 +1,171 @@
+import type { ConversationFailure, ConversationSubmissionSnapshot } from '@capix/protocol';
+import { RuntimeError, ProgressChannel } from '@capix/server-runtime';
+import { ConversationInputError } from './accept.js';
+import type { ConversationProgress } from './progress.js';
+
+export function conversationFailure(error: unknown): ConversationFailure {
+  return Object.freeze(error instanceof RuntimeError ? { code: error.code, message: error.message } : { code: 'INTERNAL_ERROR', message: '服务内部错误。' });
+}
+
+/** One service request outlives individual connections. It neither owns messages nor schedules work. */
+export class ConversationSubmission {
+  private state: ConversationSubmissionSnapshot;
+  private readonly listeners = new Set<(snapshot: ConversationSubmissionSnapshot) => void>();
+  private notifying = false;
+  private started = false;
+  private completedAt: number | undefined;
+  private task: Promise<void> | undefined;
+  readonly progress = new ProgressChannel<ConversationProgress>({
+    receive: (fact): undefined => this.receive(fact),
+    failed: (error): undefined => this.invalidate(error),
+  });
+
+  constructor(readonly id: string) {
+    this.state = Object.freeze({ submissionId: id, revision: 0, executions: Object.freeze([]), integrity: Object.freeze({ status: 'complete' }) });
+  }
+
+  get snapshot(): ConversationSubmissionSnapshot {
+    return this.state;
+  }
+
+  get endedAt(): number | undefined {
+    return this.completedAt;
+  }
+
+  /** Always consumes task rejection. Delivery callers only read the resulting service facts. */
+  start(work: () => Promise<unknown>): void {
+    if (this.started || this.completedAt !== undefined) throw new Error('Submission has already started or ended');
+    this.started = true;
+    this.task = this.run(work);
+  }
+
+  /** Only service checks performed before runtime entry may produce this explicit refusal. */
+  reject(error: unknown): void {
+    if (this.started || this.completedAt !== undefined || this.state.revision !== 0) throw new Error('Cannot reject a submission after processing or progress');
+    this.completedAt = Date.now();
+    this.update({ result: Object.freeze({ status: 'rejected', error: conversationFailure(error) }) });
+  }
+
+  private async run(work: () => Promise<unknown>): Promise<void> {
+    try {
+      await work();
+      this.update({ result: Object.freeze({ status: 'completed' }) });
+    } catch (error) {
+      const rejected = this.state.integrity.status === 'complete' && !this.state.input && (error instanceof ConversationInputError || (error instanceof RuntimeError && error.code === 'RUNTIME_BUSY'));
+      this.update({ result: Object.freeze({ status: rejected ? 'rejected' : 'failed', error: conversationFailure(error) }) });
+    } finally {
+      this.completedAt = Date.now();
+    }
+  }
+
+  private receive(fact: ConversationProgress): undefined {
+    if (this.state.integrity.status === 'incomplete') return;
+    if (this.completedAt !== undefined) throw new Error('Progress arrived after service completion');
+    if (fact.kind === 'execution') {
+      if (this.state.executions.some((item) => item.contextId === fact.contextId)) return;
+      this.update({ executions: Object.freeze([...this.state.executions, Object.freeze({ contextId: fact.contextId })]) });
+      return;
+    }
+    if (fact.range.end <= fact.range.start) throw new Error('Committed message range must not be empty');
+    if (fact.kind === 'input') {
+      if (this.state.input) throw new Error('Conversation submission received more than one input commit');
+      this.update({ input: Object.freeze({ ...fact.range }) });
+      return;
+    }
+    if (!this.state.input || this.state.input.transcriptId !== fact.range.transcriptId || this.state.input.end > fact.range.start || fact.range.end !== fact.range.start + 1 || this.state.answer) throw new Error('Answer commit does not match the submitted input');
+    this.update({ answer: Object.freeze({ transcriptId: fact.range.transcriptId, index: fact.range.start }) });
+  }
+
+  private invalidate(_error: unknown): undefined {
+    if (this.state.integrity.status === 'incomplete') return;
+    this.update({ integrity: Object.freeze({ status: 'incomplete', error: Object.freeze({ code: 'SUBMISSION_INCOMPLETE', message: '本次提交的进展解释不完整；运行可能仍在继续。' }) }) });
+  }
+
+  private update(change: Partial<ConversationSubmissionSnapshot>): void {
+    this.state = Object.freeze({ ...this.state, ...change, revision: this.state.revision + 1 });
+    if (this.notifying) return;
+    this.notifying = true;
+    // Connection work never runs inside the producer's progress callback.
+    queueMicrotask(() => {
+      this.notifying = false;
+      for (const listener of [...this.listeners]) this.deliver(listener);
+    });
+  }
+
+  private deliver(listener: (snapshot: ConversationSubmissionSnapshot) => void): void {
+    try {
+      const result: unknown = listener(this.state);
+      if (result !== undefined) {
+        void Promise.resolve(result).catch(() => undefined);
+        this.listeners.delete(listener);
+      }
+    } catch {
+      this.listeners.delete(listener);
+    }
+  }
+
+  /** Register and read the baseline synchronously, so a connection cannot miss an intervening update. */
+  connect(listener: (snapshot: ConversationSubmissionSnapshot) => void): () => void {
+    this.listeners.add(listener);
+    this.deliver(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  async ready(signal?: AbortSignal): Promise<ConversationSubmissionSnapshot> {
+    const ready = (snapshot: ConversationSubmissionSnapshot) => !!snapshot.input || !!snapshot.result || snapshot.integrity.status === 'incomplete';
+    signal?.throwIfAborted();
+    if (ready(this.state)) return this.state;
+    return new Promise((resolve, reject) => {
+      const close = () => {
+        this.listeners.delete(listener);
+        signal?.removeEventListener('abort', aborted);
+      };
+      const aborted = () => {
+        close();
+        reject(signal!.reason);
+      };
+      const listener = (snapshot: ConversationSubmissionSnapshot) => {
+        if (!ready(snapshot)) return;
+        close();
+        resolve(snapshot);
+      };
+      this.listeners.add(listener);
+      signal?.addEventListener('abort', aborted, { once: true });
+    });
+  }
+}
+
+export interface SubmissionRetention {
+  readonly maxEntries?: number;
+  readonly ttlMs?: number;
+}
+
+/** Process-local feedback retention. Eviction never cancels or queues runtime work. */
+export function createSubmissionStore(options: SubmissionRetention = {}) {
+  const entries = new Map<string, ConversationSubmission>();
+  const maximum = options.maxEntries ?? 128;
+  const ttlMs = options.ttlMs ?? 5 * 60_000;
+  if (!Number.isSafeInteger(maximum) || maximum < 1 || !Number.isSafeInteger(ttlMs) || ttlMs < 1) throw new TypeError('Invalid submission retention');
+  const expire = () => {
+    const now = Date.now();
+    for (const [id, submission] of entries) if (submission.endedAt !== undefined && now - submission.endedAt >= ttlMs) entries.delete(id);
+  };
+  return {
+    get(id: string): ConversationSubmission | undefined {
+      expire();
+      return entries.get(id);
+    },
+    create(id: string): ConversationSubmission {
+      expire();
+      if (entries.has(id)) throw new RuntimeError('SUBMISSION_EXISTS', '该提交仍在保留范围内，请查询其进展。');
+      if (entries.size >= maximum) {
+        const oldest = [...entries.values()].filter((entry) => entry.endedAt !== undefined).sort((left, right) => left.endedAt! - right.endedAt!)[0];
+        if (oldest) entries.delete(oldest.id);
+      }
+      if (entries.size >= maximum) throw new RuntimeError('SUBMISSION_CAPACITY', '暂时无法保留新的提交进展，请稍后再试。');
+      const submission = new ConversationSubmission(id);
+      entries.set(id, submission);
+      return submission;
+    },
+  };
+}

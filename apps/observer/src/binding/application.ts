@@ -13,6 +13,14 @@ export function createApplication(runtime: ClientRuntime) {
     connect: () => connectAppStore(store, runtime),
     commands: {
       submit: () => submitDraft(store, runtime),
+      reconnectSubmission: () =>
+        runtime.reconnectSubmission().catch((error) => {
+          store.getState().setNotice(errorMessage(error));
+        }),
+      releaseSubmission: () => {
+        runtime.releaseSubmission();
+        store.getState().setNotice('已结束本地跟踪；服务端处理未被取消。');
+      },
       reconnectConversation: () =>
         runtime.initialize().catch((error) => {
           store.getState().setNotice(errorMessage(error));
