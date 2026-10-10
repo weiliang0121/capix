@@ -1,8 +1,23 @@
 # 客户端 Runtime
 
-ClientRuntime 分别持有本次提交的已确认事实与反馈连接状态、消息实体副本和可选观测状态，不依赖 React、HTTP 实现或服务端对象。client/runtime 公开 ConversationTransport、TranscriptTransport 和 ObservationTransport 三个契约；应用通过 conversation / transcripts / observation 具名参数接入。
+ClientRuntime 装配提交跟踪、消息同步与可选观测消费，协调它们的已接纳状态并发布快照，不依赖 React、HTTP 实现或服务端对象。client/runtime 公开 ConversationTransport、TranscriptTransport 和 ObservationTransport 三个契约；应用通过 conversation / transcripts / observation 具名参数接入。
 
 接口分类不等于 HTTP 实例拆分。ConversationHttpTransport 同时实现业务交付和消息实体契约；ObservationHttpTransport 提供独立的观测接口，两者共用通用 HttpTransport。
+
+## 内部职责归属
+
+| 对象                | 自己维护的范围                                           | 与 ClientRuntime 的接缝                                                                                   |
+| ------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| ClientSubmission    | 一笔提交的身份、累计事实、当前反馈连接及通知状态         | Runtime 选择 POST 或 follow，授予已初始化的 transcriptId；对象报告局部变化，Runtime 在发布后通知 accepted |
+| TranscriptReceiver  | 各消息集合的订阅、基线、副本和同步状态                   | 报告已接纳的集合状态；Runtime 协调初始化与当前对话正文                                                    |
+| ObservationReceiver | 可选观测连接、来源副本、详情缓存和旧响应隔离             | 报告完整 ObservationState；不取得 Runtime，也不操作提交或消息                                             |
+| ClientRuntime       | 初始化门控、当前提交选择、跨来源协调、公开快照与通知顺序 | 保持应用已有入口，不再直接维护各消费对象的连接控制器                                                      |
+
+ObservationReplica 只接纳观测基线与增量，连接生命周期在 observation/receiver.ts；两者按职责组织在 observation/ 下。Receiver 是包内实现，不增加应用装配入口。初始化要协调配置与消息，快照发布要协调多个来源，二者仍留在 Runtime；没有增加通用连接管理器、事件总线或调度框架。
+
+ClientSubmission.connect 接收连接函数和窄的 SubmissionReception（transcriptId、changed），不持有整个 Runtime 或 transport。它自行校验集合归属、隔离旧连接、解释反馈结束与断开；由 Runtime 决定何时允许新提交、重连或释放跟踪。stopFollowing 先完成本地状态转移再解除连接，由调用方协调这次停止的状态发布，避免停止过程重复通知。
+
+替换或释放跟踪时，先确定新的本地归属，再 abort 捕获的旧连接；abort 监听器可能同步重入，之后仍需核对当前身份。服务结果已经出现但反馈连接尚未结束时，新提交也会解除旧反馈连接。关闭交付始终不代表取消服务端业务。
 
 ## 只使用对话
 
@@ -103,7 +118,7 @@ Runtime 的本地 subscribe 消费者逐个通知；抛错的消费者被移除�
 
 ObservationReplica 在新结构中整批接纳 delta，失败不部分修改已接纳状态。重复交付忽略，范围和顺序缺口拒绝。记录新增与父级引用同步接纳；过程和父层接纳关系分别只追加新条目，并以 eventSequence 对照。资源事实作为独立 record entry 接收，按所属调用收集进 ExecutionRecordSnapshot.resources；待调用记录和对应边界齐备后提供执行视图。客户端不从资源事实反推实际业务状态。
 
-loadExecution 按需查询，E 与其父 R 均结束时才复用终态缓存；查询期间收到更新时保留新快照。详情不进入 updates，不用历史详情覆盖概览。source 保留按需源码查询，不承诺执行时源码归档。
+loadExecution 按需查询，E 与其父 R 均结束时才复用终态缓存；查询期间收到更新时保留新快照。ObservationReceiver 用本地连接代次检查详情响应：即使请求发起时未开启观测，中间开启又关闭，也不能让旧请求进入新范围。代次只标识本地交付生命周期，不是协议游标或业务版本。详情不进入 updates，不用历史详情覆盖概览。source 保留按需源码查询，不承诺执行时源码归档。
 
 观测连接仅接受一个首帧基线。顺序缺口最多自动取得一次新基线，连续失败明确报错；SOURCE_INCOMPLETE 则直接停止，不自动重连。普通断线不无限重连，refreshObservation 可显式重建健康来源的连接，不能修复已失效来源。旧连接回调和详情响应不得覆盖新连接。关闭观测不停止服务端记录。
 

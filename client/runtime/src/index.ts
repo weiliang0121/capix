@@ -1,11 +1,12 @@
-export { ClientRuntime, type ClientRuntimeOptions, type ClientState, type ObservationState } from './runtime.js';
+export { ClientRuntime, type ClientRuntimeOptions, type ClientState } from './runtime.js';
 export type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 export type { ClientInitializationState } from './initialization.js';
 
-export * from './observation.js';
+export { ObservationReplica, ObservationSequenceError } from './observation/replica.js';
+export type { ObservationState } from './observation/receiver.js';
 
 export { TranscriptReplica, TranscriptSequenceError, type TranscriptState } from './transcript.js';
 
-export { ClientSubmission, SubmissionContractError, type ClientSubmissionState, type SubmissionFeedback } from './submission.js';
+export { ClientSubmission, SubmissionContractError, type ClientSubmissionState, type SubmissionFeedback, type SubmissionReception } from './submission.js';
 
 export type { ContentAvailability } from './conversation.js';

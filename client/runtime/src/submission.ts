@@ -10,6 +10,11 @@ export interface ClientSubmissionState {
   readonly notificationError?: unknown;
 }
 
+export interface SubmissionReception {
+  readonly transcriptId: string;
+  readonly changed: () => void;
+}
+
 export class SubmissionContractError extends Error {}
 
 /** Local tracking of one submission. Connection state never invents a remote result. */
@@ -17,6 +22,7 @@ export class ClientSubmission {
   readonly id = globalThis.crypto.randomUUID();
   private state: ClientSubmissionState;
   private accepted = false;
+  private session?: AbortController;
 
   constructor(
     pending: string,
@@ -27,6 +33,47 @@ export class ClientSubmission {
 
   get snapshot(): ClientSubmissionState {
     return this.state;
+  }
+
+  /** Consume one feedback connection. Reconnection never submits business input itself. */
+  async connect(connect: (receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal) => Promise<void>, reception: SubmissionReception): Promise<void> {
+    const previous = this.session;
+    const session = new AbortController();
+    this.session = session;
+    this.feedback({ status: 'connecting' });
+    const current = () => this.session === session && !session.signal.aborted;
+    previous?.abort();
+    if (!current()) return;
+    reception.changed();
+    if (!current()) return;
+    try {
+      await connect((snapshot) => {
+        if (!current()) return;
+        if (snapshot.input && snapshot.input.transcriptId !== reception.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
+        this.receive(snapshot);
+        reception.changed();
+      }, session.signal);
+      if (!current()) return;
+      const remote = this.state.remote;
+      if (!remote || !submissionFeedbackEnded(remote)) throw new Error('提交反馈连接已结束，远端结果仍未确认。');
+      this.feedback({ status: 'ended' });
+    } catch (error) {
+      if (!current()) return;
+      this.feedback({ status: 'interrupted', error });
+    } finally {
+      if (current()) {
+        this.session = undefined;
+        reception.changed();
+      }
+    }
+  }
+
+  /** Stop local feedback only. The caller coordinates publication with its other state changes. */
+  stopFollowing(): void {
+    const session = this.session;
+    this.session = undefined;
+    if (this.state.feedback.status !== 'ended') this.feedback({ status: 'ended' });
+    session?.abort();
   }
 
   feedback(feedback: SubmissionFeedback): void {

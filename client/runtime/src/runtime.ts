@@ -1,23 +1,10 @@
-import type { ConfigurationResponse, ConversationRequest, ConversationSubmissionSnapshot, MemoryObservation, Message, ObserverOverview, ExecutionRecordSnapshot, InvocationEvent, TranscriptRecord } from '@capix/protocol';
+import type { ConfigurationResponse, ConversationRequest, ConversationSubmissionSnapshot, Message, ExecutionRecordSnapshot } from '@capix/protocol';
 import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 import { TranscriptReceiver, type TranscriptState } from './transcript.js';
-import { ObservationReplica, ObservationSequenceError } from './observation.js';
-import { ClientSubmission, SubmissionContractError, submissionFeedbackEnded, type ClientSubmissionState } from './submission.js';
+import { ObservationReceiver, type ObservationState } from './observation/receiver.js';
+import { ClientSubmission, type ClientSubmissionState } from './submission.js';
 import { InitializationAttempt, type ClientInitializationState } from './initialization.js';
 import { coordinateConversation, type ContentAvailability } from './conversation.js';
-
-export interface ObservationState {
-  readonly enabled: boolean;
-  readonly loading: boolean;
-  readonly error?: unknown;
-  readonly records: ReadonlyMap<string, ExecutionRecordSnapshot>;
-  readonly updates: ReadonlyMap<string, ExecutionRecordSnapshot>;
-  readonly overview: ObserverOverview;
-  readonly memory: MemoryObservation;
-  readonly cursor?: { scopeId: string; sequence: number };
-  readonly invocationEvents?: ReadonlyMap<string, InvocationEvent>;
-  readonly transcriptRecords?: readonly TranscriptRecord[];
-}
 
 export interface ClientState {
   readonly initialization: ClientInitializationState;
@@ -46,12 +33,8 @@ type ClientSources = Pick<ClientState, 'initialization' | 'config' | 'transcript
 
 /** Business delivery is independent of the optional observation capability. */
 export class ClientRuntime {
-  private sources: ClientSources = {
-    initialization: { status: 'idle' },
-    transcripts: new Map(),
-    observation: { enabled: false, loading: false, records: new Map(), updates: new Map(), overview: { transcriptId: '', messages: [], executions: [] }, memory: { items: [] } },
-  };
-  private state: ClientState = Object.freeze({ ...this.sources, ...coordinateConversation(this.sources) });
+  private sources: ClientSources;
+  private state: ClientState;
   private dirty = false;
   private scheduled = false;
   private publishing = false;
@@ -59,22 +42,22 @@ export class ClientRuntime {
   private readonly listeners = new Set<() => void>();
   private initialization?: InitializationAttempt;
   private initializationNumber = 0;
-  private observationSession?: AbortController;
-  private observationOwner?: symbol;
-  private replica?: ObservationReplica;
   private submission?: ClientSubmission;
-  private feedbackSession?: AbortController;
 
   private readonly conversation: ConversationTransport;
-  private readonly observation?: ObservationTransport;
+  private readonly observation: ObservationReceiver;
   private readonly transcripts: TranscriptReceiver;
 
   constructor(options: ClientRuntimeOptions) {
     this.conversation = options.conversation;
-    this.observation = options.observation;
+    this.observation = new ObservationReceiver(options.observation, (observation) => {
+      this.update({ observation });
+    });
     this.transcripts = new TranscriptReceiver(options.transcripts, (transcripts) => {
       this.update({ transcripts });
     });
+    this.sources = { initialization: { status: 'idle' }, transcripts: new Map(), observation: this.observation.snapshot };
+    this.state = Object.freeze({ ...this.sources, ...coordinateConversation(this.sources) });
   }
 
   readonly getSnapshot = (): ClientState => this.state;
@@ -122,10 +105,6 @@ export class ClientRuntime {
     } finally {
       this.publishing = false;
     }
-  }
-
-  private updateObservation(change: Partial<ObservationState>) {
-    this.update({ observation: { ...this.sources.observation, ...change } });
   }
 
   initialize(): Promise<void> {
@@ -192,78 +171,29 @@ export class ClientRuntime {
 
   /** Explicitly enable live observation. Stopping it never cancels conversation work. */
   startObservation(): () => void {
-    if (!this.observation) return () => {};
-    const owner = Symbol('observation');
-    this.observationOwner = owner;
-    this.connectObservation(owner, true);
-    return () => {
-      if (this.observationOwner !== owner) return;
-      this.observationOwner = undefined;
-      this.observationSession?.abort();
-      this.observationSession = undefined;
-      this.updateObservation({ enabled: false, loading: false });
-    };
-  }
-
-  private connectObservation(owner: symbol, resync: boolean): void {
-    if (!this.observation) return;
-    this.observationSession?.abort();
-    const session = new AbortController();
-    this.observationSession = session;
-    let ready = false;
-    this.updateObservation({ enabled: true, loading: true, error: undefined });
-    void this.observation
-      .observe((frame) => {
-        if (session.signal.aborted || this.observationOwner !== owner) return;
-        if (!ready && frame.type !== 'baseline') throw new ObservationSequenceError('观测连接缺少初始基线。');
-        if (ready && frame.type === 'baseline') throw new ObservationSequenceError('同一连接重复提供基线。');
-        const next = ObservationReplica.receive(ready ? this.replica : undefined, frame);
-        if (next === this.replica) return;
-        this.replica = next;
-        ready = true;
-        const records = frame.type === 'baseline' ? new Map(next.snapshots) : new Map([...this.sources.observation.records, ...next.snapshots]);
-        this.updateObservation({ loading: false, overview: next.overview, memory: next.memory, records, updates: new Map(next.snapshots), cursor: { scopeId: next.scopeId, sequence: next.sequence }, invocationEvents: next.invocationEvents, transcriptRecords: next.transcriptRecords });
-      }, session.signal)
-      .catch((error) => {
-        if (session.signal.aborted || this.observationOwner !== owner) return;
-        // At most one automatic baseline retry. Other failures remain visible and can be refreshed explicitly.
-        if (resync && !sourceIncomplete(error) && sequenceFailure(error)) {
-          this.connectObservation(owner, false);
-          return;
-        }
-        session.abort();
-        this.updateObservation({ loading: false, error });
-      });
+    return this.observation.start();
   }
 
   async refreshObservation(): Promise<void> {
-    if (this.observationOwner) this.connectObservation(this.observationOwner, false);
+    this.observation.refresh();
   }
 
   getExecution(id: string): ExecutionRecordSnapshot | undefined {
-    return this.sources.observation.records.get(id);
+    return this.observation.getExecution(id);
   }
 
-  async loadExecution(id: string, signal?: AbortSignal): Promise<ExecutionRecordSnapshot> {
-    if (!this.observation) throw new Error('未接入观测能力。');
-    const cached = this.getExecution(id);
-    if (cached && cached.execution.status !== 'running' && cached.runtimeCall.status !== 'running') return cached;
-    const session = this.observationSession;
-    const snapshot = await this.observation.execution(id, signal);
-    if (session !== this.observationSession) throw new Error('观测连接已更换，忽略旧详情响应。');
-    const current = this.getExecution(id);
-    if (current && current !== cached) return current;
-    this.updateObservation({ records: new Map(this.sources.observation.records).set(id, snapshot) });
-    return snapshot;
+  loadExecution(id: string, signal?: AbortSignal): Promise<ExecutionRecordSnapshot> {
+    return this.observation.loadExecution(id, signal);
   }
 
   source(path: string, signal?: AbortSignal) {
-    if (!this.observation) return Promise.reject(new Error('未接入观测能力。'));
     return this.observation.source(path, signal);
   }
 
   private updateSubmission(submission: ClientSubmission): void {
-    if (this.submission === submission) this.update({ submission: submission.snapshot });
+    if (this.submission !== submission) return;
+    if (submission.acceptancePending) this.acceptances.add(submission);
+    if (this.sources.submission !== submission.snapshot) this.update({ submission: submission.snapshot });
   }
 
   /** Sends once. Interruption means feedback is unknown, not that server work failed. */
@@ -273,8 +203,10 @@ export class ClientRuntime {
     if (this.sources.initialization.status !== 'succeeded' || !this.sources.config?.configured) throw new Error('请先完成客户端初始化与服务端模型配置。');
     const input = { ...request, messages: request.messages.map((message) => ({ ...message })) };
     const submission = new ClientSubmission(input.messages.at(-1)?.content ?? '', accepted);
+    const previous = this.submission;
     this.submission = submission;
     this.update({ submission: submission.snapshot });
+    previous?.stopFollowing();
     this.publish();
     await this.connectSubmission(submission, (receive, signal) => this.conversation.submit({ submissionId: submission.id, input }, receive, signal));
   }
@@ -293,11 +225,9 @@ export class ClientRuntime {
     const submission = this.submission;
     this.publish();
     if (this.submission !== submission) return;
-    this.feedbackSession?.abort();
-    this.feedbackSession = undefined;
-    if (this.submission && this.submission.snapshot.feedback.status !== 'ended') {
-      this.submission.feedback({ status: 'ended' });
-      this.updateSubmission(this.submission);
+    if (submission) {
+      submission.stopFollowing();
+      this.updateSubmission(submission);
     }
     this.publish();
   }
@@ -307,50 +237,16 @@ export class ClientRuntime {
     const submission = this.submission;
     this.publish();
     if (this.submission !== submission) return;
-    this.feedbackSession?.abort();
-    this.feedbackSession = undefined;
     this.submission = undefined;
     this.update({ submission: undefined });
+    submission?.stopFollowing();
     this.publish();
   }
 
   private async connectSubmission(submission: ClientSubmission, connect: (receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal) => Promise<void>): Promise<void> {
     if (this.submission !== submission) return;
-    this.feedbackSession?.abort();
-    const session = new AbortController();
-    this.feedbackSession = session;
-    submission.feedback({ status: 'connecting' });
-    this.updateSubmission(submission);
-    const current = () => this.submission === submission && this.feedbackSession === session && !session.signal.aborted;
-    if (!current()) return;
-    try {
-      await connect((snapshot) => {
-        if (!current()) return;
-        if (snapshot.input && snapshot.input.transcriptId !== this.sources.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
-        submission.receive(snapshot);
-        if (submission.acceptancePending) this.acceptances.add(submission);
-        this.updateSubmission(submission);
-      }, session.signal);
-      if (!current()) return;
-      const remote = submission.snapshot.remote;
-      if (!remote || !submissionFeedbackEnded(remote)) throw new Error('提交反馈连接已结束，远端结果仍未确认。');
-      submission.feedback({ status: 'ended' });
-    } catch (error) {
-      if (!current()) return;
-      submission.feedback({ status: 'interrupted', error });
-    } finally {
-      if (current()) {
-        this.feedbackSession = undefined;
-        this.updateSubmission(submission);
-      }
-    }
+    const transcriptId = this.sources.transcriptId;
+    if (!transcriptId) throw new Error('请先完成客户端消息集合初始化。');
+    await submission.connect(connect, { transcriptId, changed: () => this.updateSubmission(submission) });
   }
-}
-
-function sequenceFailure(error: unknown): boolean {
-  return error instanceof ObservationSequenceError || (error instanceof Error && error.cause instanceof ObservationSequenceError);
-}
-
-function sourceIncomplete(error: unknown): boolean {
-  return error instanceof Error && 'code' in error && error.code === 'SOURCE_INCOMPLETE';
 }

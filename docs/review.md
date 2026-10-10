@@ -191,7 +191,7 @@ RuntimeContext 的初步改造已确认：内容实体引用迁出后，仅接�
 
 ### 7. 实体独立不等于本轮支持任意跨 R 共享
 
-[ObservationFeed](../services/observer/src/observation/feed.ts) 已有独立 scopeId，基线分别标识 Transcript、Memories、Recorder；[客户端副本](../client/runtime/src/observation.ts) 区分交付顺序和来源顺序。因此环境装配迁移不要求重做快照／增量协议，也不要求业务流依赖记录。
+[ObservationFeed](../services/observer/src/observation/feed.ts) 已有独立 scopeId，基线分别标识 Transcript、Memories、Recorder；[客户端副本](../client/runtime/src/observation/replica.ts) 区分交付顺序和来源顺序。因此环境装配迁移不要求重做快照／增量协议，也不要求业务流依赖记录。
 
 但当前 feed 读取同 Book 内全部运行中的 E，selection 按 TranscriptRangeRef 归组，客户端要求 Recorder revision 连续。若多 R 共用来源，不能简单过滤其他 R 事件，否则会留下序号缺口。本轮保持“一套 Observer 环境明确选择一组来源”，不顺带支持任意共享环境、分域重放或多会话。
 
