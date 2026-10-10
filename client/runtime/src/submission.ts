@@ -20,9 +20,9 @@ export class ClientSubmission {
 
   constructor(
     pending: string,
-    private readonly notifyAccepted?: () => undefined,
+    private readonly notifyAccepted?: (submission: ClientSubmissionState) => undefined,
   ) {
-    this.state = { id: this.id, pending, feedback: { status: 'connecting' } };
+    this.state = Object.freeze({ id: this.id, pending, feedback: Object.freeze({ status: 'connecting' }) });
   }
 
   get snapshot(): ClientSubmissionState {
@@ -30,7 +30,7 @@ export class ClientSubmission {
   }
 
   feedback(feedback: SubmissionFeedback): void {
-    this.state = { ...this.state, feedback };
+    this.state = Object.freeze({ ...this.state, feedback: Object.freeze({ ...feedback }) });
   }
 
   receive(next: ConversationSubmissionSnapshot): void {
@@ -46,19 +46,26 @@ export class ClientSubmission {
       if ((previous.input && !isEqual(next.input, previous.input)) || (previous.answer && !isEqual(next.answer, previous.answer)) || (previous.result && !isEqual(next.result, previous.result)) || (previous.integrity.status === 'incomplete' && !isEqual(next.integrity, previous.integrity)) || previous.executions.some((execution, index) => !isEqual(execution, next.executions[index]))) throw new SubmissionContractError('提交反馈中的既有事实发生回退或改变。');
     }
     const remote = copySubmission(next);
-    this.state = { ...this.state, remote, feedback: { status: submissionFeedbackEnded(remote) ? 'ended' : 'following' } };
-    if (remote.input && !this.accepted) {
-      this.accepted = true;
-      try {
-        const returned: unknown = this.notifyAccepted?.();
-        if (returned !== undefined) {
-          // Notification is synchronous; an accidental Promise cannot escape as an unhandled rejection.
-          void Promise.resolve(returned).catch(() => undefined);
-          throw new TypeError('Acceptance notifications must return undefined synchronously');
-        }
-      } catch (notificationError) {
-        this.state = { ...this.state, notificationError };
+    this.state = Object.freeze({ ...this.state, remote, feedback: Object.freeze({ status: submissionFeedbackEnded(remote) ? 'ended' : 'following' }) });
+  }
+
+  get acceptancePending(): boolean {
+    return Boolean(this.state.remote?.input) && !this.accepted;
+  }
+
+  /** Once notification after publication; payload identifies even explicitly released tracking. */
+  publishAcceptance(snapshot: ClientSubmissionState): void {
+    if (snapshot.id !== this.id || !snapshot.remote?.input || this.accepted) return;
+    this.accepted = true;
+    try {
+      const returned: unknown = this.notifyAccepted?.(snapshot);
+      if (returned !== undefined) {
+        // Notification is synchronous; an accidental Promise cannot escape as an unhandled rejection.
+        void Promise.resolve(returned).catch(() => undefined);
+        throw new TypeError('Acceptance notifications must return undefined synchronously');
       }
+    } catch (notificationError) {
+      this.state = Object.freeze({ ...this.state, notificationError });
     }
   }
 }

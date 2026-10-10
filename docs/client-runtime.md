@@ -29,7 +29,7 @@ stopTranscript 停止当前集合或全部集合时，也结束正在进行的�
 业务状态包含 messages、transcriptId、transcripts、submission 和初始化错误。messages 是当前集合已接纳 snapshot.messages 的便利引用；权威副本保存在按 UID 索引的 transcripts 中。submission 保存本地 id/pending、已确认的 remote 累计投影及 feedback 连接状态；busy/pending/contextId/answered 只从 submission 派生，不另外维护一套执行真相。
 
 1. submit 为本次提交生成 submissionId，复制输入，仅调用一次 POST。正在跟踪且尚无 result 时拒绝新提交，不排队、不自动重发。
-2. remote.input 来自正式消息写入位置，首次确认才调用 accepted。HTTP 200、收到首帧或建立 E 都不等于输入已接纳。accepted 抛错只保存 notificationError，不停止接收或改写服务结果。
+2. remote.input 来自正式消息写入位置，首次确认后在公开状态发布阶段调用一次 accepted(submission)。HTTP 200、收到首帧或建立 E 都不等于输入已接纳。回调接收该提交的不可变快照，必须同步返回 undefined；抛错或意外返回 Promise 只保存 notificationError，不停止接收或改写服务结果。
 3. remote.executions 保存服务选择关联的 E Context 身份，可以为空或多项；输入在 E Context 建立前也能正式落实。remote.answer 只指向已落实回答，正文来自独立实体同步，不从记录或提交反馈重复追加。
 4. remote.result 是服务任务 completed / failed / rejected。后处理失败保留已确认回答；completed 只表示任务返回，不凭空补造 input/answer。remote.integrity 说明服务进展解释是否完整，与任务结果分开。
 5. feedback 表示 connecting / following / ended / interrupted。断流、网络失败或投影不完整都不能证明服务执行失败；保留所有已确认事实。消息实体和观测同步失败各自保存在对应范围，不撤回提交结果。
@@ -37,6 +37,29 @@ stopTranscript 停止当前集合或全部集合时，也结束正在进行的�
 7. stopFollowing 只停反馈连接，releaseSubmission 明确结束本地跟踪并允许后续提交；两者都不是取消服务端运行。服务端未知、已淘汰或重启后丢失的 submissionId 仍表示结果无法确认，不能推断“没有执行”。
 
 本轮只恢复反馈，不恢复执行。服务端保留是有界进程内状态，不提供幂等重提、持久化、离线重放或重启后的任务恢复。实体同步和可选观测有独立连接与接纳规则。
+
+## 接纳、协调与发布
+
+连接负责交付，消费建立在连接之上。TranscriptReplica 与 ClientSubmission 分别校验并接纳实体增量、提交累计事实；ClientRuntime 内部 sources 保存已接纳状态。coordinateConversation 只组合这些事实，提供当前消息和提交读模型，不请求数据、不制造执行结果，也不要求两条连接同时到达。
+
+inputAvailability / answerAvailability 独立表达引用对应的正文：
+
+| 值          | 含义                                 |
+| ----------- | ------------------------------------ |
+| unconfirmed | 尚未确认输入或回答定位               |
+| unloaded    | 已知定位，但本地没有对应消息集合基线 |
+| pending     | 已有基线，其范围还未覆盖定位         |
+| available   | 本地消息副本已包含所指正文           |
+
+当前提交必须属于初始化的消息集合，正常路径已有基线，因此常见的是 unconfirmed → pending / available。available 不代表连接仍健康；断线后已取得的内容依然可用。completed + pending 和 failed + available 都是有效组合。正文先到只更新消息，不凭正文反推本次提交的 answer 定位。
+
+每条增量仍即时、按顺序接纳；对外发布用微任务合并同批变化。getSnapshot 返回最近一次发布的稳定对象，发布前先整体替换，再逐个通知订阅者。内部占用、连接归属与详情竞争检查读取即时状态，不等待公开快照更新。已发布消息、分段数组和配置在接纳时复制，后续接收不修改旧快照；ReadonlyMap 是只读使用契约，不承诺对任意运行时强制修改提供代理拦截。
+
+本地初始化、提交身份建立、停止和结束跟踪在明确命令边界主动发布；订阅通知期间发生的重入操作只改变内部状态，下次发布生效，保证同批订阅者读取同一快照。初始化 Promise 结束后公开状态已更新。没有增加原始帧队列、业务事务或通用调度器。
+
+accepted 不再在网络接纳函数内调用。待通知提交独立保留到发布阶段，避免合并更新漏掉一次接纳通知。普通情况下回调对应当前公开提交；如果订阅者已在同批通知中明确释放或替换跟踪，回调参数仍标明原提交，不能通过 getSnapshot 猜测历史通知归属。回调产生的新状态和 notificationError 在下一批发布；回调失败不重新办理业务。
+
+消息同步错误留在 TranscriptState，初始化错误留在 ClientState.error，提交反馈错误留在 submission.feedback，可选观测错误留在 observation。它们不相互覆盖，也不撤销已经成立的服务结果。
 
 ## 消息实体的按需加载与同步
 
@@ -96,7 +119,7 @@ readLines 只负责 UTF-8 解码与行拆分。回调同步执行，失败后关
 
 ## 应用绑定与 Store
 
-- binding/application.ts 装配 Store 和命令，独立开启观测及对话初始化。卸载时分别停止观测和实体订阅；重新挂载恢复实体同步，保留已取得的配置与 UI 编辑。
+- binding/application.ts 装配 Store 和命令，独立开启观测及对话初始化。初次连接立即投影，后续 Runtime 通知合并到 requestAnimationFrame，执行时读取最新公开快照，完成投影后一次写入 Store；这与 Runtime 的接纳和微任务发布是不同边界。卸载取消待处理帧并分别停止观测和实体订阅；重新挂载恢复实体同步，保留已取得的配置与 UI 编辑。投影失败只显示本地提示，后续成功投影可继续更新。
 - binding/data.ts 组织业务消息与进度，并组合可选观测；binding/submission.ts 将已确认事实和反馈状态转换成提示，提供重新同步和结束跟踪入口。对话正文只来自消息实体副本。
 - binding/observation.ts 按 UID/index 组合消息、上下文和记忆来源，明确区分未加载、加载中、缺失与错误；实体到达时即便记录未变化也重建对应读模型。
 - binding/resources.ts 解释应用约定的配置与历史范围资源事实；details.ts 为各调用组织资源事实列表，React 不解析原始 ExecutionRecordSnapshot。

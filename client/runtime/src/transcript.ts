@@ -12,7 +12,7 @@ export class TranscriptReplica {
       const snapshot = frame.snapshot;
       if (expectedId && snapshot.id !== expectedId) throw new TranscriptSequenceError('返回了不同的消息集合。');
       if (!snapshot.id || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0 || snapshot.start !== 0 || snapshot.end !== snapshot.messages.length || !snapshot.starts.length || snapshot.starts[0] !== 0 || snapshot.starts.some((start, index) => !Number.isSafeInteger(start) || start < 0 || (index > 0 && start <= snapshot.starts[index - 1]!) || (start > 0 && start >= snapshot.end))) throw new TranscriptSequenceError('消息基线范围无效。');
-      return new TranscriptReplica(snapshot);
+      return new TranscriptReplica(Object.freeze({ ...snapshot, starts: Object.freeze([...snapshot.starts]), messages: Object.freeze(snapshot.messages.map((message) => Object.freeze({ ...message }))) }));
     }
     const event = frame.event;
     if (!previous || event.transcriptId !== previous.snapshot.id) throw new TranscriptSequenceError('消息集合不一致或缺少基线。');
@@ -22,10 +22,10 @@ export class TranscriptReplica {
     const change = event.change;
     if (change.kind === 'messages-appended') {
       if (change.start !== before.end || !change.messages.length) throw new TranscriptSequenceError('消息追加位置不一致。');
-      return new TranscriptReplica({ ...before, revision: event.revision, end: before.end + change.messages.length, messages: [...before.messages, ...change.messages] });
+      return new TranscriptReplica(Object.freeze({ ...before, revision: event.revision, end: before.end + change.messages.length, messages: Object.freeze([...before.messages, ...change.messages.map((message) => Object.freeze({ ...message }))]) }));
     }
     if (change.previousStart !== before.starts.at(-1) || change.start <= change.previousStart || change.start >= change.end || change.end !== before.end) throw new TranscriptSequenceError('消息段边界不一致。');
-    return new TranscriptReplica({ ...before, revision: event.revision, starts: [...before.starts, change.start] });
+    return new TranscriptReplica(Object.freeze({ ...before, revision: event.revision, starts: Object.freeze([...before.starts, change.start]) }));
   }
 }
 
@@ -59,7 +59,7 @@ export class TranscriptReceiver {
   }
 
   private publish(id: string, state: TranscriptState): void {
-    this.states = new Map(this.states).set(id, state);
+    this.states = new Map(this.states).set(id, Object.freeze(state));
     this.changed(this.states);
   }
 
@@ -135,8 +135,8 @@ export class TranscriptReceiver {
     if (previous && previous.snapshot.revision > snapshot.revision) return previous.snapshot;
     this.replicas.set(snapshot.id, next);
     const syncing = [...this.sessions.values()].some((session) => session.id === snapshot.id);
-    this.publish(snapshot.id, { snapshot, loading: false, syncing });
-    return snapshot;
+    this.publish(snapshot.id, { snapshot: next.snapshot, loading: false, syncing });
+    return next.snapshot;
   }
 
   stop(id?: string): void {

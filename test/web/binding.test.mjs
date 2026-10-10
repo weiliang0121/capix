@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { installFrames } from './frames.mjs';
 import { ClientRuntime } from '@capix/client-runtime';
 import { initializeObserver, observeExecution, observeOverview, ObservationFeed } from '@capix/observer-service';
 import { Transcript, observeMemory } from '@capix/server-runtime';
@@ -30,7 +31,8 @@ async function recordedRound() {
   return { transcriptId: environment.transcript.id, frames, snapshots, final, overview: observeOverview(environment), messages: environment.transcript.snapshot(), memory: observeMemory(environment.memories, environment.book) };
 }
 
-test('binding interprets live records, reconciles once, and keeps raw runtime separate from application models', async () => {
+test('binding interprets live records, reconciles once, and keeps raw runtime separate from application models', async (t) => {
+  const frames = installFrames(t);
   const fixture = await recordedRound();
   const gate = deferred();
   let observe;
@@ -60,16 +62,18 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   const app = createApplication(runtime);
   const disconnect = app.connect();
   await runtime.initialize();
-  await settle();
+  await frames.flush();
   assert.equal(detailReads, 0);
   app.store.getState().setSearch('上海');
   app.store.getState().setDraft(request.messages[0].content);
   const submitting = app.commands.submit();
+  await frames.flush();
   assert.equal(app.store.getState().data.pending, request.messages[0].content);
   delivery.input();
   delivery.execution(fixture.final.execution.contextId);
   delivery.answer('上海周末行程。');
   for (const value of fixture.frames.slice(1)) observe(value);
+  await frames.flush();
   const id = fixture.final.execution.id;
   const data = app.store.getState().data;
   assert.equal(runtime.getSnapshot().observation.overview.executions.length, 0, 'runtime does not build live overview');
@@ -92,7 +96,7 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   delivery.complete();
   gate.resolve();
   await submitting;
-  await settle();
+  await frames.flush();
   assert.equal(runtime.getSnapshot().observation.updates.size, 1);
   assert.equal(app.store.getState().data.conversation.length, 4, 'formal reconciliation does not duplicate the observed answer');
   assert.equal(app.store.getState().data.details.get(id).memory.changes.length, 1);
@@ -110,7 +114,8 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   disconnect();
 });
 
-test('binding remount retains business messages despite unavailable observation', async () => {
+test('binding remount retains business messages despite unavailable observation', async (t) => {
+  const frames = installFrames(t);
   const fixture = await recordedRound();
   let finished = false;
   const io = transport({
@@ -134,13 +139,14 @@ test('binding remount retains business messages despite unavailable observation'
   const disconnect = app.connect();
   await runtime.initialize();
   await app.commands.loadExecution(fixture.final.execution.id);
+  await frames.flush();
   app.store.getState().setBudget('8192');
   disconnect();
   const before = app.store.getState().data;
   await runtime.submit(request);
   assert.equal(app.store.getState().data, before);
   const reconnect = app.connect();
-  await settle();
+  await frames.flush();
   assert.equal(app.store.getState().budget, '8192');
   assert.equal(app.store.getState().data.conversation.at(-1).message.content, '上海周末行程。');
   assert.equal(app.store.getState().data.details.get(fixture.final.execution.id).answer, '上海周末行程。');
@@ -149,17 +155,19 @@ test('binding remount retains business messages despite unavailable observation'
   reconnect();
 });
 
-test('loading old detail records does not replace a fresh server overview or repeat selection counts', async () => {
+test('loading old detail records does not replace a fresh server overview or repeat selection counts', async (t) => {
+  const frames = installFrames(t);
   const fixture = await recordedRound();
   const id = fixture.final.execution.id;
   const runtime = withObservation(transport({ overview: async () => fixture.overview, transcript: async () => ({ id: fixture.transcriptId, revision: 3, start: 0, end: fixture.messages.length, starts: [0], messages: fixture.messages }), memory: async () => fixture.memory, execution: async () => fixture.final }));
   const app = createApplication(runtime);
   const disconnect = app.connect();
   await runtime.initialize();
-  await settle();
+  await frames.flush();
   const rounds = app.store.getState().data.rounds;
   const conversation = app.store.getState().data.conversation;
   await app.commands.loadExecution(id);
+  await frames.flush();
   assert.equal(app.store.getState().data.rounds, rounds);
   assert.equal(app.store.getState().data.conversation, conversation);
   assert.equal(app.store.getState().data.details.get(id).memory.changes.length, 1);
@@ -167,7 +175,8 @@ test('loading old detail records does not replace a fresh server overview or rep
   disconnect();
 });
 
-test('live overview separates the last recorded process from an unfinished invocation duration', async () => {
+test('live overview separates the last recorded process from an unfinished invocation duration', async (t) => {
+  const frames = installFrames(t);
   const live = snapshot('running');
   live.resources.push({ id: 'range-bound', parentId: live.execution.id, access: 'transcript.fixedRange', supplyId: 'supply', sequence: 1, phase: 'bound', occurredAt: live.execution.value.startedAt, value: null });
   live.resources.push({ id: 'range', parentId: live.execution.id, access: 'transcript.fixedRange', supplyId: 'supply', sequence: 2, phase: 'available', occurredAt: live.execution.value.startedAt, value: { transcriptId: 'fixture-transcript', start: 0, end: 1 } });
@@ -197,6 +206,7 @@ test('live overview separates the last recorded process from an unfinished invoc
     if (data.runningId && data.busy && data.rounds.length) overview = data;
   });
   await runtime.submit({ messages: [live.execution.value.input] });
+  await frames.flush();
   unsubscribe();
   disconnect();
   assert.equal(overview.rounds[0].observedOffsetMs, 25);
@@ -205,7 +215,8 @@ test('live overview separates the last recorded process from an unfinished invoc
   assert.equal(overview.rounds[0].inputIndex, 0);
 });
 
-test('binding supports a conversation-only runtime and never synthesizes responses from execution records', async () => {
+test('binding supports a conversation-only runtime and never synthesizes responses from execution records', async (t) => {
+  const frames = installFrames(t);
   const messages = [...history];
   const io = transport({
     transcript: async () => ({ messages: [...messages] }),
@@ -224,6 +235,7 @@ test('binding supports a conversation-only runtime and never synthesizes respons
   await runtime.initialize();
   app.store.getState().setDraft('继续');
   await app.commands.submit();
+  await frames.flush();
   assert.equal(app.store.getState().data.conversation.at(-1).message.content, '独立回答');
   assert.equal(app.store.getState().data.rounds.length, 0);
   assert.equal(app.store.getState().notice, '');

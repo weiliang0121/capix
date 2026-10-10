@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { installFrames } from './frames.mjs';
 import { ClientRuntime } from '@capix/client-runtime';
 import { createAppStore } from '../../apps/observer/.test-dist/state/store.js';
 import { connectAppStore } from '../../apps/observer/.test-dist/binding/application.js';
@@ -38,7 +39,8 @@ test('editing search resets its cursor without changing the selected round or ru
   assert.equal(runtime.getSnapshot().messages.length, 0);
 });
 
-test('submission keeps edits until acceptance, prevents concurrent sends and leaves server observations in runtime until binding commits application data', async () => {
+test('submission keeps edits until acceptance, prevents concurrent sends and leaves server observations in runtime until binding commits application data', async (t) => {
+  const frames = installFrames(t);
   const gate = deferred();
   let accept;
   let sent;
@@ -60,6 +62,7 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
   store.getState().setHistory('[{"role":"assistant","content":"已有回答"}]');
   const operation = submitDraft(store, runtime);
   await submitDraft(store, runtime);
+  await frames.flush();
   assert.equal(calls, 1);
   assert.equal(store.getState().draft, '继续讨论');
   assert.deepEqual(sent.messages, [
@@ -68,6 +71,7 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
   ]);
   assert.equal(runtime.getSnapshot().pending, '继续讨论');
   accept();
+  await frames.flush();
   assert.equal(store.getState().draft, '');
   assert.equal(store.getState().history, '[]');
   assert.equal(runtime.getSnapshot().messages.length, 2);
@@ -93,7 +97,8 @@ test('rejected submission preserves edits and exposes remote rejection without a
   assert.deepEqual(runtime.getSnapshot().messages, []);
 });
 
-test('invalid form input never reaches the runtime submission and late acceptance preserves newer edits', async () => {
+test('invalid form input never reaches the runtime submission and late acceptance preserves newer edits', async (t) => {
+  const frames = installFrames(t);
   let accept;
   let calls = 0;
   const gate = deferred();
@@ -124,13 +129,15 @@ test('invalid form input never reaches the runtime submission and late acceptanc
   store.getState().setDraft('后续新草稿');
   store.getState().setHistory('[{"role":"user","content":"新编辑"}]');
   accept();
+  await frames.flush();
   assert.equal(store.getState().draft, '后续新草稿');
   assert.match(store.getState().history, /新编辑/);
   gate.resolve();
   await operation;
 });
 
-test('app connection follows streamed execution, retains edited budget on cache updates and cleans up', async () => {
+test('app connection follows streamed execution, retains edited budget on cache updates and cleans up', async (t) => {
+  const frames = installFrames(t);
   const gate = deferred();
   let observe;
   const io = transport({
@@ -152,7 +159,7 @@ test('app connection follows streamed execution, retains edited budget on cache 
   const store = createAppStore();
   const disconnect = connectAppStore(store, runtime);
   await runtime.initialize();
-  await new Promise((resolve) => setImmediate(resolve));
+  await frames.flush();
   assert.equal(store.getState().budget, '4096');
   assert.equal(store.getState().selectedId, 'previous');
   store.getState().setBudget('8192');
@@ -160,6 +167,7 @@ test('app connection follows streamed execution, retains edited budget on cache 
   assert.equal(store.getState().budget, '8192');
   const operation = runtime.submit({ messages: [{ role: 'user', content: '开始' }] });
   observe(snapshot('running', 'new'));
+  await frames.flush();
   assert.equal(store.getState().selectedId, 'new');
   disconnect();
   store.getState().select('manual');
@@ -170,7 +178,8 @@ test('app connection follows streamed execution, retains edited budget on cache 
   await operation;
 });
 
-test('unmounted app ignores late initialization errors and reconnect establishes a new subscription', async () => {
+test('unmounted app ignores late initialization errors and reconnect establishes a new subscription', async (t) => {
+  installFrames(t);
   const gate = deferred();
   let loads = 0;
   const runtime = client({
@@ -192,4 +201,81 @@ test('unmounted app ignores late initialization errors and reconnect establishes
   assert.equal(store.getState().notice, '配置读取失败');
   assert.equal(loads, 3, 'a failed explicit attempt is not reused when the app reconnects');
   reconnect();
+});
+
+test('binding projects the initial state immediately and commits only the latest publication in one frame', async (t) => {
+  const frames = installFrames(t);
+  const initial = client({ conversation: transport() }).getSnapshot();
+  let observed = { ...initial, pending: '初始输入' };
+  let notify;
+  const runtime = {
+    getSnapshot: () => observed,
+    subscribe: (listener) => {
+      notify = listener;
+      return () => {};
+    },
+    initialize: async () => {},
+    startObservation: () => () => {},
+    stopTranscript: () => {},
+  };
+  const store = createAppStore();
+  let commits = 0;
+  store.subscribe(() => commits++);
+  const disconnect = connectAppStore(store, runtime);
+  assert.equal(store.getState().data.pending, '初始输入');
+  assert.equal(commits, 1);
+  observed = { ...initial, pending: '第一次更新' };
+  notify();
+  observed = { ...initial, pending: '第二次更新' };
+  notify();
+  assert.equal(commits, 1);
+  assert.equal(frames.pending, 1);
+  // Snapshot is read when the frame runs, not captured by the earlier notification.
+  observed = { ...initial, pending: '最终更新' };
+  await frames.flush();
+  assert.equal(store.getState().data.pending, '最终更新');
+  assert.equal(commits, 2);
+  notify();
+  assert.equal(frames.pending, 1);
+  disconnect();
+  assert.equal(frames.pending, 0);
+  notify();
+  await frames.flush();
+  assert.equal(commits, 2, 'queued and late notifications cannot write after cleanup');
+});
+
+test('projection failure stays in the binding and the next valid publication can still update', async (t) => {
+  const frames = installFrames(t);
+  const initial = client({ conversation: transport() }).getSnapshot();
+  let observed = initial;
+  let notify;
+  const runtime = {
+    getSnapshot: () => observed,
+    subscribe: (listener) => {
+      notify = listener;
+      return () => {};
+    },
+    initialize: async () => {},
+    startObservation: () => () => {},
+    stopTranscript: () => {},
+  };
+  const store = createAppStore();
+  const disconnect = connectAppStore(store, runtime);
+  const previous = store.getState().data;
+  observed = {
+    ...initial,
+    get observation() {
+      throw new Error('投影失败');
+    },
+  };
+  assert.doesNotThrow(() => notify(), 'a binding error cannot fail the delivery callback');
+  await frames.flush();
+  assert.equal(store.getState().data, previous);
+  assert.match(store.getState().notice, /界面数据更新失败.*投影失败/);
+  observed = { ...initial, pending: '继续接纳' };
+  notify();
+  await frames.flush();
+  assert.equal(store.getState().data.pending, '继续接纳');
+  assert.equal(store.getState().notice, '');
+  disconnect();
 });

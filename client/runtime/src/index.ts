@@ -7,3 +7,5 @@ export * from './observation.js';
 export { TranscriptReplica, TranscriptSequenceError, type TranscriptState } from './transcript.js';
 
 export { ClientSubmission, SubmissionContractError, type ClientSubmissionState, type SubmissionFeedback } from './submission.js';
+
+export type { ContentAvailability } from './conversation.js';

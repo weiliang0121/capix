@@ -42,6 +42,7 @@ test('failed configuration retains established entity synchronization and an exp
   await rejected;
   assert.deepEqual(runtime.getSnapshot().initialization, { status: 'failed', attempt: 1, error: failure });
   emit(append(1, 'received after failed initialization'));
+  await Promise.resolve();
   assert.equal(runtime.getSnapshot().messages.length, 1);
   assert.equal(runtime.getSnapshot().transcripts.get('current').syncing, true);
   const second = runtime.initialize();
@@ -224,7 +225,7 @@ test('stopping the default entity during its first baseline publication also inv
   await settle();
   assert.equal(runtime.getSnapshot().config, undefined);
   assert.equal(runtime.getSnapshot().transcripts.get('current').syncing, false);
-  assert.equal(stops, 2, 'both nested stops complete without a duplicated attempt transition');
+  assert.equal(stops, 1, 'the next publication exposes the stopped attempt and stopped synchronization together');
   const before = notifications;
   await runtime.initialize();
   assert.ok(notifications > before, 'the subscriber was not removed due to a reentrant stop error');
@@ -294,7 +295,7 @@ test('a replaced first-baseline callback cannot merge away the new initializatio
   runtime.stopTranscript();
 });
 
-test('an external stop and a synchronization subscriber can end the same pending attempt once', async () => {
+test('an external stop publishes attempt and synchronization closure together', async () => {
   const pendingConfig = deferred();
   const runtime = createClient(
     () => pendingConfig.promise,
@@ -315,7 +316,7 @@ test('an external stop and a synchronization subscriber can end the same pending
   });
   assert.doesNotThrow(() => runtime.stopTranscript('current'));
   await rejected;
-  assert.equal(nestedStops, 1);
+  assert.equal(nestedStops, 0, 'subscribers never see a running attempt paired with its already stopped stream');
   assert.equal(runtime.getSnapshot().initialization.status, 'stopped');
   pendingConfig.resolve(configuration('stale'));
   await settle();

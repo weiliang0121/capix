@@ -4,6 +4,7 @@ import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReplica, ObservationSequenceError } from './observation.js';
 import { ClientSubmission, SubmissionContractError, submissionFeedbackEnded, type ClientSubmissionState } from './submission.js';
 import { InitializationAttempt, type ClientInitializationState } from './initialization.js';
+import { coordinateConversation, type ContentAvailability } from './conversation.js';
 
 export interface ObservationState {
   readonly enabled: boolean;
@@ -29,6 +30,8 @@ export interface ClientState {
   readonly pending: string;
   readonly contextId: string;
   readonly answered: boolean;
+  readonly inputAvailability: ContentAvailability;
+  readonly answerAvailability: ContentAvailability;
   readonly error?: unknown;
   readonly observation: ObservationState;
 }
@@ -39,18 +42,20 @@ export interface ClientRuntimeOptions {
   readonly observation?: ObservationTransport;
 }
 
+type ClientSources = Pick<ClientState, 'initialization' | 'config' | 'transcriptId' | 'transcripts' | 'submission' | 'error' | 'observation'>;
+
 /** Business delivery is independent of the optional observation capability. */
 export class ClientRuntime {
-  private state: ClientState = {
+  private sources: ClientSources = {
     initialization: { status: 'idle' },
-    messages: [],
     transcripts: new Map(),
-    busy: false,
-    pending: '',
-    contextId: '',
-    answered: false,
     observation: { enabled: false, loading: false, records: new Map(), updates: new Map(), overview: { transcriptId: '', messages: [], executions: [] }, memory: { items: [] } },
   };
+  private state: ClientState = Object.freeze({ ...this.sources, ...coordinateConversation(this.sources) });
+  private dirty = false;
+  private scheduled = false;
+  private publishing = false;
+  private readonly acceptances = new Set<ClientSubmission>();
   private readonly listeners = new Set<() => void>();
   private initialization?: InitializationAttempt;
   private initializationNumber = 0;
@@ -68,8 +73,7 @@ export class ClientRuntime {
     this.conversation = options.conversation;
     this.observation = options.observation;
     this.transcripts = new TranscriptReceiver(options.transcripts, (transcripts) => {
-      const current = this.state.transcriptId ? transcripts.get(this.state.transcriptId) : undefined;
-      this.update({ transcripts, ...(current?.snapshot ? { messages: current.snapshot.messages } : {}), ...(current?.error ? { error: current.error } : {}) });
+      this.update({ transcripts });
     });
   }
 
@@ -81,41 +85,69 @@ export class ClientRuntime {
     };
   };
 
-  private update(change: Partial<ClientState>) {
-    const next = { ...this.state, ...change };
-    const submission = next.submission;
-    this.state = { ...next, busy: Boolean(submission && !submission.remote?.result), pending: submission && !submission.remote?.input && !submission.remote?.result ? submission.pending : '', contextId: submission?.remote?.executions.at(-1)?.contextId ?? '', answered: Boolean(submission?.remote?.answer) };
-    for (const listener of this.listeners) {
-      try {
-        listener();
-      } catch {
-        // A consumer cannot reject already accepted source state or interrupt other subscribers.
-        this.listeners.delete(listener);
+  private update(change: Partial<ClientSources>): void {
+    this.sources = { ...this.sources, ...change };
+    this.dirty = true;
+    if (this.scheduled) return;
+    this.scheduled = true;
+    queueMicrotask(() => {
+      this.scheduled = false;
+      this.publish();
+    });
+  }
+
+  /** Publish a coherent read model. Reentrant commands affect the next publication only. */
+  private publish(): void {
+    if (!this.dirty || this.publishing) return;
+    this.publishing = true;
+    this.dirty = false;
+    this.state = Object.freeze({ ...this.sources, ...coordinateConversation(this.sources) });
+    const acceptances = [...this.acceptances].map((submission) => ({ submission, snapshot: submission.snapshot }));
+    this.acceptances.clear();
+    const listeners = [...this.listeners];
+    try {
+      for (const listener of listeners) {
+        if (!this.listeners.has(listener)) continue;
+        try {
+          listener();
+        } catch {
+          // A consumer cannot reject source facts or interrupt other subscribers.
+          this.listeners.delete(listener);
+        }
       }
+      for (const { submission, snapshot } of acceptances) {
+        submission.publishAcceptance(snapshot);
+        if (submission.snapshot !== snapshot) this.updateSubmission(submission);
+      }
+    } finally {
+      this.publishing = false;
     }
   }
 
   private updateObservation(change: Partial<ObservationState>) {
-    this.update({ observation: { ...this.state.observation, ...change } });
+    this.update({ observation: { ...this.sources.observation, ...change } });
   }
 
   initialize(): Promise<void> {
     if (this.initialization?.running) return this.initialization.promise;
-    if (this.state.initialization.status === 'succeeded' && this.state.config && this.state.transcriptId && this.state.transcripts.get(this.state.transcriptId)?.syncing) return Promise.resolve();
+    if (this.sources.initialization.status === 'succeeded' && this.sources.config && this.sources.transcriptId && this.sources.transcripts.get(this.sources.transcriptId)?.syncing) return Promise.resolve();
     const attempt = new InitializationAttempt(++this.initializationNumber);
     this.initialization = attempt;
     this.update({ initialization: attempt.snapshot, error: undefined });
+    this.publish();
     if (attempt.running) {
       void this.loadInitial(attempt).then(
         () => {
           if (!attempt.running) return;
           attempt.complete();
           this.update({ initialization: attempt.snapshot });
+          this.publish();
         },
         (error) => {
           if (!attempt.running) return;
           attempt.fail(error);
           this.update({ initialization: attempt.snapshot, error });
+          this.publish();
         },
       );
     }
@@ -125,21 +157,21 @@ export class ClientRuntime {
   private async loadInitial(attempt: InitializationAttempt): Promise<void> {
     await Promise.all([this.loadConfiguration(attempt), this.loadInitialTranscript(attempt)]);
     if (!attempt.running) return;
-    const transcript = this.state.transcriptId ? this.state.transcripts.get(this.state.transcriptId) : undefined;
+    const transcript = this.sources.transcriptId ? this.sources.transcripts.get(this.sources.transcriptId) : undefined;
     if (!transcript?.syncing) throw transcript?.error ?? new Error('初始化结束前消息同步已停止。');
   }
 
   private async loadConfiguration(attempt: InitializationAttempt): Promise<void> {
-    if (this.state.config) return;
+    if (this.sources.config) return;
     const config = await this.conversation.config();
-    if (attempt.running) this.update({ config });
+    if (attempt.running) this.update({ config: Object.freeze({ ...config }) });
   }
 
   private async loadInitialTranscript(attempt: InitializationAttempt): Promise<void> {
-    const transcript = await this.transcripts.watch(this.state.transcriptId);
+    const transcript = await this.transcripts.watch(this.sources.transcriptId);
     if (!attempt.running) return;
-    const current = this.state.transcripts.get(transcript.id)?.snapshot ?? transcript;
-    this.update({ transcriptId: current.id, messages: current.messages });
+    const current = this.sources.transcripts.get(transcript.id)?.snapshot ?? transcript;
+    this.update({ transcriptId: current.id });
   }
 
   /** Load an entity only when needed, then keep its copy current until explicitly stopped. */
@@ -149,12 +181,13 @@ export class ClientRuntime {
 
   stopTranscript(id?: string): void {
     const attempt = this.initialization;
-    const stopsInitialization = attempt?.running && (!id || id === (this.state.transcriptId ?? this.transcripts.defaultId));
+    const stopsInitialization = attempt?.running && (!id || id === (this.sources.transcriptId ?? this.transcripts.defaultId));
     this.transcripts.stop(id);
     if (stopsInitialization && attempt.running) {
       attempt.stop();
       this.update({ initialization: attempt.snapshot });
     }
+    this.publish();
   }
 
   /** Explicitly enable live observation. Stopping it never cancels conversation work. */
@@ -188,7 +221,7 @@ export class ClientRuntime {
         if (next === this.replica) return;
         this.replica = next;
         ready = true;
-        const records = frame.type === 'baseline' ? new Map(next.snapshots) : new Map([...this.state.observation.records, ...next.snapshots]);
+        const records = frame.type === 'baseline' ? new Map(next.snapshots) : new Map([...this.sources.observation.records, ...next.snapshots]);
         this.updateObservation({ loading: false, overview: next.overview, memory: next.memory, records, updates: new Map(next.snapshots), cursor: { scopeId: next.scopeId, sequence: next.sequence }, invocationEvents: next.invocationEvents, transcriptRecords: next.transcriptRecords });
       }, session.signal)
       .catch((error) => {
@@ -208,7 +241,7 @@ export class ClientRuntime {
   }
 
   getExecution(id: string): ExecutionRecordSnapshot | undefined {
-    return this.state.observation.records.get(id);
+    return this.sources.observation.records.get(id);
   }
 
   async loadExecution(id: string, signal?: AbortSignal): Promise<ExecutionRecordSnapshot> {
@@ -220,7 +253,7 @@ export class ClientRuntime {
     if (session !== this.observationSession) throw new Error('观测连接已更换，忽略旧详情响应。');
     const current = this.getExecution(id);
     if (current && current !== cached) return current;
-    this.updateObservation({ records: new Map(this.state.observation.records).set(id, snapshot) });
+    this.updateObservation({ records: new Map(this.sources.observation.records).set(id, snapshot) });
     return snapshot;
   }
 
@@ -234,39 +267,51 @@ export class ClientRuntime {
   }
 
   /** Sends once. Interruption means feedback is unknown, not that server work failed. */
-  async submit(request: ConversationRequest, accepted?: () => undefined): Promise<void> {
+  async submit(request: ConversationRequest, accepted?: (submission: ClientSubmissionState) => undefined): Promise<void> {
+    this.publish();
     if (this.submission && !this.submission.snapshot.remote?.result) throw new Error('当前提交尚未确认结束，请重新连接或明确结束跟踪。');
-    if (this.state.initialization.status !== 'succeeded' || !this.state.config?.configured) throw new Error('请先完成客户端初始化与服务端模型配置。');
+    if (this.sources.initialization.status !== 'succeeded' || !this.sources.config?.configured) throw new Error('请先完成客户端初始化与服务端模型配置。');
     const input = { ...request, messages: request.messages.map((message) => ({ ...message })) };
     const submission = new ClientSubmission(input.messages.at(-1)?.content ?? '', accepted);
     this.submission = submission;
     this.update({ submission: submission.snapshot });
+    this.publish();
     await this.connectSubmission(submission, (receive, signal) => this.conversation.submit({ submissionId: submission.id, input }, receive, signal));
   }
 
   /** Follow an existing identity only; never automatically resubmit its input. */
   async reconnectSubmission(): Promise<void> {
     const submission = this.submission;
+    this.publish();
+    if (this.submission !== submission) return;
     if (!submission) throw new Error('没有可重新连接的提交。');
     if (submission.snapshot.remote?.result) return;
     await this.connectSubmission(submission, (receive, signal) => this.conversation.follow(submission.id, receive, signal));
   }
 
   stopFollowing(): void {
+    const submission = this.submission;
+    this.publish();
+    if (this.submission !== submission) return;
     this.feedbackSession?.abort();
     this.feedbackSession = undefined;
     if (this.submission && this.submission.snapshot.feedback.status !== 'ended') {
       this.submission.feedback({ status: 'ended' });
       this.updateSubmission(this.submission);
     }
+    this.publish();
   }
 
   /** Relinquish local tracking explicitly. It is not cancellation or proof of remote completion. */
   releaseSubmission(): void {
+    const submission = this.submission;
+    this.publish();
+    if (this.submission !== submission) return;
     this.feedbackSession?.abort();
     this.feedbackSession = undefined;
     this.submission = undefined;
     this.update({ submission: undefined });
+    this.publish();
   }
 
   private async connectSubmission(submission: ClientSubmission, connect: (receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal) => Promise<void>): Promise<void> {
@@ -281,8 +326,9 @@ export class ClientRuntime {
     try {
       await connect((snapshot) => {
         if (!current()) return;
-        if (snapshot.input && snapshot.input.transcriptId !== this.state.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
+        if (snapshot.input && snapshot.input.transcriptId !== this.sources.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
         submission.receive(snapshot);
+        if (submission.acceptancePending) this.acceptances.add(submission);
         this.updateSubmission(submission);
       }, session.signal);
       if (!current()) return;

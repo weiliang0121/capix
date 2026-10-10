@@ -35,21 +35,41 @@ export function createApplication(runtime: ClientRuntime) {
 }
 export type Application = ReturnType<typeof createApplication>;
 
-/** Receive -> interpret -> commit one application update. No React or DOM dependencies. */
+/** Project the latest published runtime state once per browser frame. */
 export function connectAppStore(store: AppStore, runtime: ClientRuntime): () => void {
   let active = true;
+  let frame: number | undefined;
+  let projectionNotice: string | undefined;
   const project = createDataProjection();
   const receive = () => {
-    const observed = runtime.getSnapshot();
-    const data = project(observed);
-    const change: Partial<AppState> = { data };
-    if (data.rounds !== store.getState().data.rounds) change.matches = searchRounds(data.rounds, store.getState().search);
-    if (observed.config && observed.config !== store.getState().data.config) change.budget = String(observed.config.contextBudget);
-    const selectedId = data.busy && data.runningId ? data.runningId : store.getState().selectedId || data.rounds.at(-1)?.id || '';
-    if (selectedId !== store.getState().selectedId) change.selectedId = selectedId;
+    if (!active) return;
+    let change: Partial<AppState>;
+    try {
+      const observed = runtime.getSnapshot();
+      const data = project(observed);
+      const current = store.getState();
+      change = { data };
+      if (data.rounds !== current.data.rounds) change.matches = searchRounds(data.rounds, current.search);
+      if (observed.config && observed.config !== current.data.config) change.budget = String(observed.config.contextBudget);
+      const selectedId = data.busy && data.runningId ? data.runningId : current.selectedId || data.rounds.at(-1)?.id || '';
+      if (selectedId !== current.selectedId) change.selectedId = selectedId;
+      if (projectionNotice && current.notice === projectionNotice) change.notice = '';
+      projectionNotice = undefined;
+    } catch (error) {
+      projectionNotice = `界面数据更新失败：${errorMessage(error)}`;
+      store.getState().setNotice(projectionNotice);
+      return;
+    }
     store.setState(change);
   };
-  const unsubscribe = runtime.subscribe(receive);
+  const schedule = () => {
+    if (!active || frame !== undefined) return;
+    frame = requestAnimationFrame(() => {
+      frame = undefined;
+      receive();
+    });
+  };
+  const unsubscribe = runtime.subscribe(schedule);
   const unsubscribeSearch = store.subscribe((state, previous) => {
     if (state.search !== previous.search) store.setState({ matches: searchRounds(state.data.rounds, state.search) });
   });
@@ -60,6 +80,8 @@ export function connectAppStore(store: AppStore, runtime: ClientRuntime): () => 
   });
   return () => {
     active = false;
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    frame = undefined;
     stopObservation();
     runtime.stopTranscript();
     unsubscribe();

@@ -321,8 +321,10 @@ test('accidentally asynchronous acceptance notifications are isolated without un
 });
 
 test('an async acceptance callback cannot overwrite replacement tracking after release and resubmit', async () => {
+  let replacement;
   const io = transport({
     submit: async (request, receive) => {
+      replacement = request.submissionId;
       const d = io.delivery(request, receive);
       d.input();
       d.execution();
@@ -332,11 +334,9 @@ test('an async acceptance callback cannot overwrite replacement tracking after r
   const runtime = client({ conversation: io });
   await runtime.initialize();
   let next;
-  let replacement;
   await runtime.submit(input, async () => {
     runtime.releaseSubmission();
     next = runtime.submit(input);
-    replacement = runtime.getSnapshot().submission.id;
     await Promise.resolve();
     throw new Error('old async callback');
   });
@@ -388,6 +388,7 @@ test('reconnection accepts an unchanged cumulative baseline as active feedback w
   });
   const known = runtime.getSnapshot().submission.remote;
   const following = runtime.reconnectSubmission();
+  await Promise.resolve();
   assert.equal(runtime.getSnapshot().submission.feedback.status, 'following');
   assert.equal(runtime.getSnapshot().submission.remote, known);
   assert.equal(accepted, 1);

@@ -110,6 +110,7 @@ test('entities load on demand, keep independent copies, and resume from a new ba
   await runtime.loadTranscript('old');
   assert.deepEqual(connections, ['current', 'old']);
   emit.get('old')(appended('old', 2, 1, [message('next')]));
+  await Promise.resolve();
   assert.equal(runtime.getSnapshot().transcripts.get('old').snapshot.end, 2);
   assert.equal(runtime.getSnapshot().messages.length, 1);
   runtime.stopTranscript('old');
@@ -167,6 +168,7 @@ test('default and UID subscriptions converge after identity is known without abo
   callbacks.get('t')({ type: 'baseline', snapshot: transcriptSnapshot([message('stale')], 't') });
   assert.equal(runtime.getSnapshot().messages.length, 0);
   callbacks.get('default')(appended('t', 1, 0, [message('current')]));
+  await Promise.resolve();
   assert.equal(runtime.getSnapshot().messages[0].content, 'current');
   runtime.stopTranscript();
 });
@@ -216,6 +218,7 @@ test('a throwing UI subscriber is detached without terminating entity sync or st
   await runtime.initialize();
   emit(appended('t', 1, 0, [message('first')]));
   emit(appended('t', 2, 1, [message('second')]));
+  await Promise.resolve();
   assert.equal(failingCalls, 1);
   assert.ok(healthyCalls >= 3);
   assert.equal(runtime.getSnapshot().messages.length, 2);
@@ -251,6 +254,7 @@ test('answer locators can precede their separately synchronized entity without i
   assert.equal(runtime.getSnapshot().messages.length, 0);
   assert.equal(runtime.getSnapshot().submission.remote.answer.index, 1);
   emit(appended('t', 1, 0, [message('question'), message('independently delivered', 'assistant')]));
+  await Promise.resolve();
   assert.equal(runtime.getSnapshot().messages[1].content, 'independently delivered');
   assert.equal(runtime.getSnapshot().submission.remote.result.status, 'completed');
   runtime.stopTranscript();
