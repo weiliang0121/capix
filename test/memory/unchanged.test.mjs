@@ -1,9 +1,9 @@
-import { readOutput } from '@capix-observer/protocol';
+import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { memoryOutputContract, initializeObserver, acceptExecutionInput, observeExecution } from '@capix-observer/service';
+import { memoryOutputContract, initializeObserver, acceptConversationInput, observeExecution } from '@capix/observer-service';
 
-import { MemoryRecordHelper } from '@capix-observer/runtime';
+import { MemoryRecordHelper } from '@capix/server-runtime';
 
 const previous = { id: 'old', topic: '键盘', content: '预算300', sourceIndexes: [0] };
 const input = { currentIndexes: [2, 3], messages: [0, 2, 3].map((index) => ({ index, message: { role: 'user', content: '原文' } })), memories: [previous] };

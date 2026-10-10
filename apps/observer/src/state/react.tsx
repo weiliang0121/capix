@@ -17,7 +17,7 @@ function useApplication() {
   return application;
 }
 
-export function useAppStore<T>(selector: (state: ReturnType<AppStore['getState']>) => T): T {
+export function useAppStore<SelectedState>(selector: (state: ReturnType<AppStore['getState']>) => SelectedState): SelectedState {
   return useStore(useApplication().store, selector);
 }
 

@@ -2,7 +2,7 @@ import { BaseRecord } from './record.js';
 import { replaceChildren } from './tree/access.js';
 
 /** Direct child references only; no invocation state or execution policy. */
-export abstract class CompositeRecord<T> extends BaseRecord<T> {
+export abstract class CompositeRecord<Value> extends BaseRecord<Value> {
   #childIds: readonly string[] = Object.freeze([]);
 
   get childIds(): readonly string[] {

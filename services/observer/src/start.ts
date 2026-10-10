@@ -1,8 +1,8 @@
 import { isSafeInteger } from 'es-toolkit/compat';
-import { initializeObserver } from './observer/environment.js';
-import { DeepSeekProvider } from './provider.js';
+import { initializeObserver } from './assembly/environment.js';
+import { DeepSeekProvider } from './assembly/provider.js';
 import { createObserverServer } from './http/server.js';
-import { validateSettings } from './settings.js';
+import { validateSettings } from './assembly/settings.js';
 
 const settings = validateSettings({
   model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',

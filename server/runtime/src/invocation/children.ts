@@ -1,4 +1,4 @@
-import type { RelationChange, RelationIdentity } from '../observation/facts.js';
+import type { InvocationRelationChange, InvocationRelationIdentity } from '../observation/facts.js';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
@@ -19,7 +19,7 @@ export class InvocationChildren {
     private readonly context: InvocationContext,
     private readonly failed?: (failure: InvocationFailure) => void,
     private readonly validate?: () => void,
-    private readonly observe?: (identity: RelationIdentity, change: RelationChange) => unknown | undefined,
+    private readonly observe?: (identity: InvocationRelationIdentity, change: InvocationRelationChange) => unknown | undefined,
   ) {
     this.view = Object.freeze({
       get: (invocation: InvocationView) => {

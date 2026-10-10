@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ResourceRequirements } from '../resource/bindings.js';
 import { definitionResources } from '../definition/invocation.js';
-import type { ExecutionInvocationBuilder, ExecutionStarted } from '../invocation/execution/builder.js';
+import type { ExecutionInvocationBuilder, ExecutionInvocationStarted } from '../invocation/execution/builder.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
 import type { ExecutionContext } from '../context/execution.js';
 import type { InvocationWork } from '../invocation/cycle.js';
@@ -13,37 +13,37 @@ import type { RuntimeContext } from '../context/runtime.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
 import { attachInvocationResources } from '../invocation/resources.js';
 
-export interface ExecutionCallbacks<I, O, R extends object> {
-  accepted?(input: I): void;
-  started?: ExecutionStarted<I, O, R>;
+export interface ExecutionInvocationCallbacks<Input, Output, Resources extends object> {
+  accepted?(input: Input): void;
+  started?: ExecutionInvocationStarted<Input, Output, Resources>;
 }
-export interface ExecutionAssembly<I, O, U, R extends object, ER extends object> {
-  entry(input: U): ResourceBindings<ER>;
-  capture(input: I): ResourceBindings<R>;
-  readonly callbacks?: ExecutionCallbacks<I, O, R>;
+export interface ExecutionInvocationBindings<Input, Output, Resources extends object, EntryInput, EntryResources extends object> {
+  entry(input: EntryInput): ResourceBindings<EntryResources>;
+  capture(input: Input): ResourceBindings<Resources>;
+  readonly callbacks?: ExecutionInvocationCallbacks<Input, Output, Resources>;
 }
 
-/** Bound execution node. Runtime owns reservation; the node owns fixed entry ordering. */
-export class Execution<I, O, R extends object = object, U = I, ER extends object = object> {
+/** Reusable E structure with fixed entry ordering; every accepted call creates its own ExecutionContext and Invocation. */
+export class BoundExecution<Input, Output, Resources extends object = object, EntryInput = Input, EntryResources extends object = object> {
   readonly id = randomUUID();
-  private readonly work: InvocationWork<ExecutionContext<I, O, R>, I, O>;
+  private readonly work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>>;
   constructor(
-    private readonly invocations: ExecutionInvocationBuilder,
-    readonly definition: ExecutionDefinition<I, O, R, U, ER, any>,
+    private readonly invocationBuilder: ExecutionInvocationBuilder,
+    readonly definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any>,
     readonly children: BoundChildren,
-    private readonly requires: ResourceRequirements<R> = definitionResources(definition) as ResourceRequirements<R>,
+    private readonly requires: ResourceRequirements<Resources> = definitionResources(definition) as ResourceRequirements<Resources>,
   ) {
     this.work = bindInvocationWork(definition, children);
   }
 
-  create(parent: Invocation<unknown, unknown, RuntimeContext>, input: U, options: InvocationRelationOptions = {}) {
+  create(parent: Invocation<unknown, unknown, RuntimeContext>, input: EntryInput, options: InvocationRelationOptions = {}) {
     parent.requireHealthy();
-    this.invocations.check(parent);
-    const assembly: ExecutionAssembly<I, O, U, R, ER> = parent.context.execution(this.definition);
-    const callbacks = assembly.callbacks ?? {};
+    this.invocationBuilder.check(parent);
+    const bindings: ExecutionInvocationBindings<Input, Output, Resources, EntryInput, EntryResources> = parent.context.executionBinding(this.definition);
+    const callbacks = bindings.callbacks ?? {};
     const entry = this.definition.entry;
-    const stage = <T>(name: 'accept' | 'notification' | 'admit' | 'capture', work: () => T): T => {
-      let value: T;
+    const stage = <Value>(name: 'accept' | 'notification' | 'admit' | 'capture', work: () => Value): Value => {
+      let value: Value;
       try {
         value = work();
       } catch (error) {
@@ -58,13 +58,13 @@ export class Execution<I, O, R extends object = object, U = I, ER extends object
       parent.publishEntry({ target: 'execution', instanceId: this.id, key: options.key, stage: name, status: 'accepted' });
       return value;
     };
-    let accepted: I;
+    let accepted: Input;
     if (entry) {
-      let resources: ResourceBindings<ER>;
+      let resources: ResourceBindings<EntryResources>;
       let active = true;
       try {
         accepted = stage('accept', () => {
-          resources = assembly.entry(input);
+          resources = bindings.entry(input);
           resources.restrict(() => {
             if (!active) throw new Error('Execution entry access has ended');
           });
@@ -81,18 +81,18 @@ export class Execution<I, O, R extends object = object, U = I, ER extends object
         active = false;
       }
     } else {
-      accepted = stage('accept', () => input as unknown as I);
+      accepted = stage('accept', () => input as unknown as Input);
       if (callbacks.accepted) stage('notification', () => callbacks.accepted!(accepted));
     }
     parent.requireHealthy();
-    const bound = stage('capture', () => assembly.capture(accepted));
-    return this.invocations.create(parent, accepted, {
+    const resources = stage('capture', () => bindings.capture(accepted));
+    return this.invocationBuilder.create(parent, accepted, {
       key: options.key,
       description: { id: this.id },
       requires: this.requires,
       initial: this.definition.run.requires,
       observation: this.definition.observation,
-      establish: () => ({ resources: bound }),
+      establish: () => ({ resources }),
       work: this.work,
       started: callbacks.started,
     });

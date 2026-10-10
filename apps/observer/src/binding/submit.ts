@@ -1,5 +1,5 @@
-import type { ClientRuntime } from '@capix-observer/client-runtime';
-import type { Message } from '@capix-observer/protocol';
+import type { ClientRuntime } from '@capix/client-runtime';
+import type { Message } from '@capix/protocol';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 import type { AppStore } from '../state/store.js';

@@ -1,15 +1,20 @@
+import type { InvocationLevel, InvocationRelationIdentity } from '@capix/protocol';
 import type { ContextState } from '../context/context.js';
 import type { InvocationProcess } from '../invocation/cycle.js';
 import type { InvocationResult } from '../invocation/result.js';
 import type { InvocationFailure } from '../invocation/failure.js';
 
-export interface CallIdentity {
+export type { InvocationRelationIdentity } from '@capix/protocol';
+
+/** Identity of one invocation, independent of its reusable structure and any record. */
+export interface InvocationIdentity {
   readonly contextId: string;
-  readonly level: 'runtime' | 'execution' | 'operation' | 'attempt';
+  readonly level: InvocationLevel;
   readonly parentContextId?: string;
 }
 
-export interface CallDescription {
+export interface InvocationDescription {
+  /** Stable bound-structure identity when supplied; not an invocation or record ID. */
   readonly id?: string;
   readonly name?: string;
   readonly label?: string;
@@ -17,17 +22,10 @@ export interface CallDescription {
   readonly callee?: string;
 }
 
-export interface RelationIdentity {
-  readonly parentContextId: string;
-  readonly childContextId: string;
-  readonly parentRound: number;
-  readonly key?: string;
-}
-
-export type RelationChange = { readonly kind: 'attached' } | { readonly kind: 'returned'; readonly result: InvocationResult<unknown> } | { readonly kind: 'receiving' } | { readonly kind: 'accepted'; readonly output: unknown } | { readonly kind: 'failed'; readonly error: unknown; readonly source: 'work' | 'observation'; readonly failure?: InvocationFailure };
+export type InvocationRelationChange = { readonly kind: 'attached' } | { readonly kind: 'returned'; readonly result: InvocationResult<unknown> } | { readonly kind: 'receiving' } | { readonly kind: 'accepted'; readonly output: unknown } | { readonly kind: 'failed'; readonly error: unknown; readonly source: 'work' | 'observation'; readonly failure?: InvocationFailure };
 
 /** Entry progress belongs to the parent call before a child Context exists. */
-export type EntryChange = Readonly<
+export type ExecutionEntryChange = Readonly<
   {
     target: 'execution';
     instanceId: string;
@@ -36,12 +34,12 @@ export type EntryChange = Readonly<
   } & ({ status: 'accepted' } | { status: 'failed'; error: unknown })
 >;
 
-export type CallChange = { readonly kind: 'started'; readonly input: unknown } | { readonly kind: 'process'; readonly process: InvocationProcess; readonly processSequence: number; readonly round: number } | ({ readonly kind: 'entry' } & EntryChange) | { readonly kind: 'relation'; readonly relation: RelationIdentity; readonly change: RelationChange } | { readonly kind: 'finished'; readonly state: ContextState<unknown> };
+export type InvocationChange = { readonly kind: 'started'; readonly input: unknown } | { readonly kind: 'process'; readonly process: InvocationProcess; readonly processSequence: number; readonly round: number } | ({ readonly kind: 'entry' } & ExecutionEntryChange) | { readonly kind: 'relation'; readonly relation: InvocationRelationIdentity; readonly change: InvocationRelationChange } | { readonly kind: 'finished'; readonly state: ContextState<unknown> };
 
 /** Borrowed values are only valid during synchronous observation. This is not a wire DTO. */
-export type CallFact = CallChange & {
-  readonly identity: CallIdentity;
-  readonly description?: CallDescription;
+export type InvocationFact = InvocationChange & {
+  readonly identity: InvocationIdentity;
+  readonly description?: InvocationDescription;
   readonly eventSequence: number;
   readonly occurredAt: string;
   readonly monotonicTime: number;
@@ -60,7 +58,7 @@ export interface ResourceObservation {
 }
 
 /** Facts of the reusable structure, ordered independently from individual calls. */
-export type RuntimeFact = Readonly<
+export type RuntimeStructureFact = Readonly<
   {
     runtimeId: string;
     sequence: number;

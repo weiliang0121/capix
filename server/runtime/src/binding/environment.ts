@@ -7,17 +7,17 @@ import type { ResourceRequirements } from '../resource/bindings.js';
 import { checkResourceRequests, resourceRequests } from '../resource/bindings.js';
 import type { ChildDefinition } from '../definition/children.js';
 import { BoundChildren } from './children.js';
-import { Operation } from '../operations/operation.js';
-import { Attempt } from '../attempt/attempt.js';
-import { Execution } from '../execution/execution.js';
+import { BoundOperation } from '../operation/operation.js';
+import { BoundAttempt } from '../attempt/attempt.js';
+import { BoundExecution } from '../execution/execution.js';
 import type { ExecutionInvocationBuilder } from '../invocation/execution/builder.js';
 
-/** Runtime-owned construction capabilities, never passed to content definitions. */
+/** BoundRuntime-owned construction capabilities, never passed to content definitions. */
 export class BindingEnvironment {
   constructor(
-    private readonly executions: ExecutionInvocationBuilder,
-    private readonly operations: OperationInvocationBuilder,
-    private readonly attempts: AttemptInvocationBuilder,
+    private readonly executionInvocationBuilder: ExecutionInvocationBuilder,
+    private readonly operationInvocationBuilder: OperationInvocationBuilder,
+    private readonly attemptInvocationBuilder: AttemptInvocationBuilder,
     private readonly localObservationResources?: ResourceRequirements,
     private readonly observations?: readonly ObservationInstallation[],
   ) {}
@@ -28,11 +28,11 @@ export class BindingEnvironment {
     this.check(requires, definitions, level, new Set(), owner);
     return new BoundChildren(definitions, (definition) =>
       definition.level === 'execution'
-        ? new Execution(this.executions, definition, this.children(this.resources(definition), definition.children, 'execution', definition), this.resources(definition))
+        ? new BoundExecution(this.executionInvocationBuilder, definition, this.children(this.resources(definition), definition.children, 'execution', definition), this.resources(definition))
         : definition.level === 'operation'
-          ? new Operation(this.operations, definition, this.children(this.resources(definition), definition.children, 'operation', definition), this.resources(definition))
-          : new Attempt(
-              this.attempts,
+          ? new BoundOperation(this.operationInvocationBuilder, definition, this.children(this.resources(definition), definition.children, 'operation', definition), this.resources(definition))
+          : new BoundAttempt(
+              this.attemptInvocationBuilder,
               definition,
               new BoundChildren([], () => {
                 throw new Error('Attempts cannot have children');

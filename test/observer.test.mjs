@@ -1,13 +1,13 @@
 import { callFor } from './fixtures/lifecycle.mjs';
-import { ExecutionRecordHelper } from '@capix-observer/runtime';
+import { ExecutionRecordHelper } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { observeFixture, createInput, resourceFact } from './fixtures/observer.mjs';
-import { DeepSeekProvider, acceptExecutionInput, answerOutputContract, selectionOutputContract, memoryOutputContract } from '@capix-observer/service';
-import { Transcript, RecordBook, Recorder, Runtime } from '@capix-observer/runtime';
-import { createRuntime, observeCall } from './fixtures/runtime.mjs';
+import { DeepSeekProvider, acceptConversationInput, answerOutputContract, selectionOutputContract, memoryOutputContract } from '@capix/observer-service';
+import { Transcript, RecordBook, Recorder, BoundRuntime } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
 
@@ -186,7 +186,7 @@ test('Transcript rejects invalid messages before execution or model calls begin'
     { content: ' ', history: [] },
   ]) {
     await assert.rejects(
-      async () => observeFixture(acceptExecutionInput(new Transcript(), { messages: [...candidate.history, { role: 'user', content: candidate.content }] }), settings, provider, (snapshot) => records.push(snapshot)),
+      async () => observeFixture(acceptConversationInput(new Transcript(), { messages: [...candidate.history, { role: 'user', content: candidate.content }] }), settings, provider, (snapshot) => records.push(snapshot)),
       (error) => error.code === 'INVALID_INPUT',
     );
   }
@@ -241,7 +241,7 @@ test('failure propagates through calls, is caught by Observer execution, and nev
 
 test('sequence ordering follows completion when calls overlap', async () => {
   const book = new RecordBook();
-  const runtime = createRuntime({ recorder: new Recorder(book) });
+  const runtime = createBoundRuntime({ recorder: new Recorder(book) });
   const execution = lifecycleFor(runtime).execution({ input, settings }).begin();
   const resolvers = [];
   class FirstOperation extends TestOperation {

@@ -1,0 +1,5 @@
+import type { RuntimeErrorValue, InvocationFailureFact } from './errors.js';
+import type { InvocationLevel, InvocationProcessStage, InvocationProcessAction, InvocationRelationIdentity, InvocationRelationPhase } from './types.js';
+
+/** Live call progress metadata, independent of recording or arbitrary IO serialization. */
+export type InvocationEvent = Readonly<{ type: 'invocation'; contextId: string; parentContextId?: string; level: InvocationLevel; sequence: number; occurredAt: string; change: Readonly<{ kind: 'started' }> | Readonly<{ kind: 'entry'; target: 'execution'; instanceId: string; key?: string; stage: 'accept' | 'notification' | 'admit' | 'capture'; status: 'accepted' | 'failed'; error?: RuntimeErrorValue }> | Readonly<{ kind: 'process'; processSequence: number; round: number; stage: InvocationProcessStage; action: InvocationProcessAction }> | Readonly<{ kind: 'relation'; identity: InvocationRelationIdentity; phase: InvocationRelationPhase; status?: 'succeeded' | 'failed'; failure?: InvocationFailureFact }> | Readonly<{ kind: 'finished'; status: 'succeeded' | 'failed' }> }>;

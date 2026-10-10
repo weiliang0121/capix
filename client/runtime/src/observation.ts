@@ -1,6 +1,6 @@
 import { isArray } from 'es-toolkit/compat';
-import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, RuntimeSnapshot, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceFact } from '@capix-observer/protocol';
-import { validateSnapshot } from '@capix-observer/protocol';
+import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, ExecutionRecordSnapshot, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord } from '@capix/protocol';
+import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 export class ObservationSequenceError extends Error {}
 /** A receiver-side replica. No UI geometry, business decisions or snapshot diffing. */
@@ -10,20 +10,20 @@ export class ObservationReplica {
   readonly overview: ObserverOverview;
   readonly memory: MemoryObservation;
   readonly entries: ReadonlyMap<string, RecordEntry>;
-  readonly invocations: ReadonlyMap<string, InvocationEvent>;
+  readonly invocationEvents: ReadonlyMap<string, InvocationEvent>;
   readonly transcriptRecords: readonly TranscriptRecord[];
-  readonly snapshots: ReadonlyMap<string, RuntimeSnapshot>;
+  readonly snapshots: ReadonlyMap<string, ExecutionRecordSnapshot>;
   readonly transcript: ObservationBaseline['transcript'];
   readonly memories: ObservationBaseline['memories'];
   readonly recorder: ObservationBaseline['recorder'];
 
-  private constructor(baseline: ObservationBaseline, entries = new Map(baseline.entries.map((entry) => [entry.data.id, entry])), invocations = new Map(baseline.invocations.map((event) => [event.contextId, event])), transcriptRecords: readonly TranscriptRecord[] = []) {
+  private constructor(baseline: ObservationBaseline, entries = new Map(baseline.entries.map((entry) => [entry.data.id, entry])), invocationEvents = new Map(baseline.invocations.map((event) => [event.contextId, event])), transcriptRecords: readonly TranscriptRecord[] = []) {
     this.scopeId = baseline.scopeId;
     this.sequence = baseline.sequence;
     this.overview = baseline.overview;
     this.memory = baseline.memory;
     this.entries = entries;
-    this.invocations = invocations;
+    this.invocationEvents = invocationEvents;
     this.transcriptRecords = transcriptRecords;
     this.transcript = baseline.transcript;
     this.memories = baseline.memories;
@@ -38,7 +38,7 @@ export class ObservationReplica {
     if (frame.sequence !== previous.sequence + 1) throw new ObservationSequenceError('观测交付存在缺口，需要重新建立基线。');
     // Stage every change in new structures; a rejected batch never mutates the accepted replica.
     const entries = new Map(previous.entries);
-    const invocations = new Map(previous.invocations);
+    const invocationEvents = new Map(previous.invocationEvents);
     const transcriptRecords = [...previous.transcriptRecords];
     let overview = previous.overview;
     let memory = previous.memory;
@@ -82,12 +82,12 @@ export class ObservationReplica {
         }
         recorder = { ...recorder, revision: event.revision };
       } else {
-        const last = invocations.get(event.contextId);
+        const last = invocationEvents.get(event.contextId);
         if (event.sequence !== (last?.sequence ?? 0) + 1) throw new ObservationSequenceError('调用变化顺序不连续。');
-        invocations.set(event.contextId, event);
+        invocationEvents.set(event.contextId, event);
       }
     }
-    return new ObservationReplica({ type: 'baseline', scopeId: frame.scopeId, sequence: frame.sequence, overview, memory, transcript, memories, recorder, entries: [], invocations: [] }, entries, invocations, transcriptRecords);
+    return new ObservationReplica({ type: 'baseline', scopeId: frame.scopeId, sequence: frame.sequence, overview, memory, transcript, memories, recorder, entries: [], invocations: [] }, entries, invocationEvents, transcriptRecords);
   }
 }
 
@@ -130,9 +130,9 @@ function applyRecord(entries: Map<string, RecordEntry>, event: RecordChangeEvent
   } else entries.set(data.id, { ...entry, data: { ...data, status: change.status, value: { ...data.value, ...change.result } } as ExecutionRecord });
 }
 
-function snapshots(entries: ReadonlyMap<string, RecordEntry>): ReadonlyMap<string, RuntimeSnapshot> {
+function snapshots(entries: ReadonlyMap<string, RecordEntry>): ReadonlyMap<string, ExecutionRecordSnapshot> {
   const values = [...entries.values()];
-  const result = new Map<string, RuntimeSnapshot>();
+  const result = new Map<string, ExecutionRecordSnapshot>();
   for (const item of values) {
     if (item.kind !== 'execution') continue;
     const execution = item.data as ExecutionRecord;
@@ -146,7 +146,7 @@ function snapshots(entries: ReadonlyMap<string, RecordEntry>): ReadonlyMap<strin
     // A record update and its boundary are separate formal facts; expose a call view when both exist.
     if ([execution, ...operations, ...attempts].some((record) => !events.some((event) => event.callId === record.id && event.value.type === 'call') || (record.status !== 'running' && !events.some((event) => event.callId === record.id && event.value.type === (record.status === 'succeeded' ? 'return' : 'throw'))))) continue;
     const callIds = new Set([execution.id, ...operations.map((record) => record.id), ...attempts.map((record) => record.id)]);
-    const resources = values.filter((entry) => entry.kind === 'resource' && entry.data.parentId && callIds.has(entry.data.parentId)).map((entry) => entry.data as ResourceFact);
+    const resources = values.filter((entry) => entry.kind === 'resource' && entry.data.parentId && callIds.has(entry.data.parentId)).map((entry) => entry.data as ResourceRecord);
     const parent = execution.parentId ? entries.get(execution.parentId) : undefined;
     if (!parent || parent.kind !== 'runtime-call') continue;
     const runtimeCall = parent.data as RuntimeCallRecord;
@@ -155,9 +155,9 @@ function snapshots(entries: ReadonlyMap<string, RecordEntry>): ReadonlyMap<strin
       .map((entry) => entry.data as InvocationBoundaryRecord)
       .sort((a, b) => a.sequence - b.sequence);
     if (!runtimeEvents.some((event) => event.value.type === 'call') || (runtimeCall.status !== 'running' && !runtimeEvents.some((event) => event.value.type === (runtimeCall.status === 'succeeded' ? 'return' : 'throw')))) continue;
-    resources.push(...values.filter((entry) => entry.kind === 'resource' && entry.data.parentId === runtimeCall.id).map((entry) => entry.data as ResourceFact));
+    resources.push(...values.filter((entry) => entry.kind === 'resource' && entry.data.parentId === runtimeCall.id).map((entry) => entry.data as ResourceRecord));
     const snapshot = { runtimeCall, runtimeEvents, execution, operations, attempts, events, resources };
-    validateSnapshot(snapshot);
+    validateExecutionRecordSnapshot(snapshot);
     result.set(execution.id, snapshot);
   }
   return result;

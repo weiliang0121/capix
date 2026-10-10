@@ -1,8 +1,8 @@
-import type { RuntimeSnapshot } from '@capix-observer/protocol';
+import type { ExecutionRecordSnapshot } from '@capix/protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 
 /** Application resource contracts are interpreted here, never in React or the receiver. */
-export function executionResources(snapshot: RuntimeSnapshot) {
+export function executionResources(snapshot: ExecutionRecordSnapshot) {
   const available = snapshot.resources.filter((fact) => fact.parentId === snapshot.execution.id && fact.phase === 'available');
   const settings = available.find((fact) => fact.access === 'model-settings.snapshot')?.value;
   const value = available.find((fact) => fact.access === 'transcript.fixedRange')?.value;

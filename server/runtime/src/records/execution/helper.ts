@@ -1,8 +1,8 @@
-import type { InvocationFailureFact } from '@capix-observer/protocol';
+import type { InvocationFailureFact } from '@capix/protocol';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 import type { Recorder } from '../recorder.js';
 import { InvocationBoundaryRecordHelper } from '../invocation-boundary/helper.js';
-import type { RuntimeErrorValue, ExecutionValue, RuntimeSnapshot } from '@capix-observer/protocol';
+import type { RuntimeErrorValue, ExecutionValue, ExecutionRecordSnapshot } from '@capix/protocol';
 
 import type { RecordBook } from '../container/book.js';
 import { OperationRecordHelper } from '../operation/helper.js';
@@ -13,8 +13,8 @@ import { ResourceRecord } from '../resource/record.js';
 
 /** Execution-specific recording operations. All managed objects are explicit arguments. */
 export class ExecutionRecordHelper {
-  static create(recorder: Recorder, definition: { contextId: string; parentId: string }, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error' | 'processes' | 'relationChanges' | 'resultOf'>): ExecutionRecord {
-    return recorder.add(new ExecutionRecord(definition.contextId, { ...value, startedAt: recorder.clock.now() }, definition.parentId));
+  static create(recorder: Recorder, options: { contextId: string; parentId: string }, value: Omit<ExecutionValue, 'startedAt' | 'output' | 'error' | 'processes' | 'relationChanges' | 'resultOf'>): ExecutionRecord {
+    return recorder.add(new ExecutionRecord(options.contextId, { ...value, startedAt: recorder.clock.now() }, options.parentId));
   }
 
   static get(book: RecordBook, id: string): ExecutionRecord {
@@ -40,7 +40,7 @@ export class ExecutionRecordHelper {
     return record;
   }
 
-  static snapshot(recorder: Recorder, id: string): RuntimeSnapshot {
+  static snapshot(recorder: Recorder, id: string): ExecutionRecordSnapshot {
     const operations = OperationRecordHelper.findByExecution(recorder, id);
     const execution = this.get(recorder.book, id);
     const parent = execution.parentId ? recorder.book.get(execution.parentId) : undefined;

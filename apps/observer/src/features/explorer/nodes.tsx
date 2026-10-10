@@ -1,4 +1,4 @@
-import type { ExecutionSummary } from '@capix-observer/protocol';
+import type { ExecutionSummary } from '@capix/protocol';
 import type { RoundView } from '../../state/data';
 import type { CallGeometry } from './layout';
 import { formatDuration } from './layout';

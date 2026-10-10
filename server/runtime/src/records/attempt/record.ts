@@ -1,11 +1,11 @@
 import { pick } from 'es-toolkit/object';
-import type { AttemptRecord as AttemptData, AttemptValue } from '@capix-observer/protocol';
+import type { AttemptRecord as AttemptData, AttemptValue } from '@capix/protocol';
 import { InvocationRecord } from '../invocation/record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
-export type AttemptRecordDefinition = Omit<AttemptData, 'id' | 'value' | 'status' | 'parentId' | 'childIds'>;
+export type AttemptRecordOptions = Omit<AttemptData, 'id' | 'value' | 'status' | 'parentId' | 'childIds'>;
 
-/** Records one named action invocation. Its owner supplies execution and operation instance identity. */
+/** Records one named action invocation. operationId identifies its parent operation record. */
 export class AttemptRecord extends InvocationRecord<AttemptValue> implements AttemptData {
   override readonly kind = 'attempt' as const;
   readonly contextId: string;
@@ -16,15 +16,15 @@ export class AttemptRecord extends InvocationRecord<AttemptValue> implements Att
   readonly caller: string;
   readonly callee: string;
 
-  constructor(definition: AttemptRecordDefinition, input: unknown) {
-    super(snapshotValue({ input, processes: [], relationChanges: [] }), definition.operationId);
-    this.contextId = definition.contextId;
-    this.operationId = definition.operationId;
-    this.name = definition.name;
-    this.label = definition.label;
-    this.source = definition.source;
-    this.caller = definition.caller;
-    this.callee = definition.callee;
+  constructor(options: AttemptRecordOptions, input: unknown) {
+    super(snapshotValue({ input, processes: [], relationChanges: [] }), options.operationId);
+    this.contextId = options.contextId;
+    this.operationId = options.operationId;
+    this.name = options.name;
+    this.label = options.label;
+    this.source = options.source;
+    this.caller = options.caller;
+    this.callee = options.callee;
     Object.freeze(this);
   }
 

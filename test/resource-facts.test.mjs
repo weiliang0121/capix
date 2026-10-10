@@ -1,11 +1,11 @@
-import { createRuntime } from './fixtures/runtime.mjs';
+import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { lifecycleFor, callFor, recordFor } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, TranscriptRangeRef, Transcript, Memories, MemoryResource, ChangeObserver, Recorder, RecordBook, ExecutionRecordHelper, ResourceRecord, snapshotValue } from '@capix-observer/runtime';
+import { bindResources, ResourceOffer, TranscriptResource, TranscriptRangeRef, Transcript, Memories, MemoryResource, ChangeBuffer, Recorder, RecordBook, ExecutionRecordHelper, ResourceRecord, snapshotValue } from '@capix/server-runtime';
 
 function scope(recorder = new Recorder(new RecordBook()), contextId = 'call') {
-  const runtime = createRuntime({ recorder });
+  const runtime = createBoundRuntime({ recorder });
   const context = lifecycleFor(runtime).execution({ input: contextId }).begin();
   const invocation = callFor(context);
   const record = recordFor(context);
@@ -147,7 +147,7 @@ test('fixed history recording stores stable locator only while endpoint reads im
 });
 
 test('content origins exist with no recorder and child writer endpoints do not retain the parent origin', () => {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const transcript = new Transcript([], { changes });
   const memories = new Memories(transcript, { changes });
   const bound = bindResources({ messages: TranscriptResource.append.request(), memory: MemoryResource.apply.request() }, [TranscriptResource.append.provide(() => transcript), MemoryResource.apply.provide(() => memories)])(null);
@@ -277,7 +277,7 @@ test('resource access names cannot ambiguously identify different offers in the 
 });
 
 test('entry-window restriction guards retained endpoints and readers without inventing a call origin', () => {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const transcript = new Transcript(
     [
       { role: 'user', content: 'one' },

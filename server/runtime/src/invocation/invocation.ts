@@ -4,38 +4,38 @@ import { Clock } from '../runtime/clock.js';
 import { DeclaredException } from '../exception/contract.js';
 import { InvocationStopped } from './stop.js';
 import type { InvocationFailure, InvocationPhase } from './failure.js';
-import { invocationScope, type InvocationFactsOf } from '../context/scope.js';
-import type { InvocationView, ChildCall } from './view.js';
+import { invocationContextView, type ContextFactsOf } from '../context/view.js';
+import type { InvocationView, ChildInvocationView } from './view.js';
 import { InvocationChildren, type ParentInvocation } from './children.js';
 import type { InvocationRelation, InvocationRelationOptions } from './relation.js';
 import type { InvocationChangeEmitter } from './changes.js';
 import type { InvocationContext } from '../context/context.js';
-import type { BoundCallObservation } from '../observation/binding.js';
-import type { CallChange, CallFact, CallIdentity, CallDescription, RelationIdentity, RelationChange, EntryChange } from '../observation/facts.js';
+import type { InvocationObservation } from '../observation/binding.js';
+import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDescription, InvocationRelationIdentity, InvocationRelationChange, ExecutionEntryChange } from '../observation/facts.js';
 import { combineFaults } from '../observation/error.js';
 import { failureFact } from './failure.js';
 import { cycle, type InvocationWork } from './cycle.js';
 
 /** Synchronous setup after validation, before record registration and work. Throws stop the call unchanged. */
-export type InvocationStarted<I, O, C extends InvocationContext<I, O>> = (context: C, invocation: Invocation<I, O, C>) => void;
+export type InvocationStarted<Input, Output, Context extends InvocationContext<Input, Output>> = (context: Context, invocation: Invocation<Input, Output, Context>) => void;
 
-export interface InvocationOptions<I, O, C extends InvocationContext<I, O>> {
-  context: C;
+export interface InvocationOptions<Input, Output, Context extends InvocationContext<Input, Output>> {
+  context: Context;
   clock?: Clock;
   parent?: { invocation: ParentInvocation } & InvocationRelationOptions;
-  work: InvocationWork<C, I, O>;
+  work: InvocationWork<Input, Output, Context>;
   signal: AbortSignal;
-  observation?: BoundCallObservation;
-  identity?: CallIdentity;
-  description?: CallDescription;
-  started?: InvocationStarted<I, O, C>;
+  observation?: InvocationObservation;
+  identity?: InvocationIdentity;
+  description?: InvocationDescription;
+  started?: InvocationStarted<Input, Output, Context>;
   /** Side-effect-free guard, checked at setup and before each execute/receive phase. */
   validate?: () => void;
   changes?: InvocationChangeEmitter;
 }
 
-/** A single-use structured call. Context, progress and records belong to this invocation, not the behavior instance. */
-export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I, O> = InvocationContext<I, O>> {
+/** A single-use structured call owns its Context and progress. Optional observation interprets its facts into records. */
+export class Invocation<Input = unknown, Output = unknown, Context extends InvocationContext<Input, Output> = InvocationContext<Input, Output>> {
   #started = false;
   #sequence = 0;
   #eventSequence = 0;
@@ -77,11 +77,11 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   }
   readonly children: InvocationChildren;
   readonly origin: Readonly<{ contextId: string }>;
-  readonly view: InvocationView<I, O, InvocationFactsOf<C>>;
-  readonly callView: ChildCall<I, O, InvocationFactsOf<C>>;
+  readonly view: InvocationView<Input, Output, ContextFactsOf<Context>>;
+  readonly callView: ChildInvocationView<Input, Output, ContextFactsOf<Context>>;
   readonly #parentRelation?: InvocationRelation;
 
-  get observation(): BoundCallObservation | undefined {
+  get observation(): InvocationObservation | undefined {
     return this.options.observation;
   }
 
@@ -97,7 +97,7 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     return ++this.#sequence;
   }
 
-  constructor(private readonly options: InvocationOptions<I, O, C>) {
+  constructor(private readonly options: InvocationOptions<Input, Output, Context>) {
     this.#clock = options.clock ?? new Clock();
     this.children = new InvocationChildren(
       options.context,
@@ -108,7 +108,7 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
       (relation, change) => this.publishRelation(relation, change),
     );
     this.origin = Object.freeze({ contextId: options.context.id });
-    const context = invocationScope(options.context);
+    const context = invocationContextView(options.context);
     const invocation = this;
     this.view = Object.freeze({
       context,
@@ -136,11 +136,11 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     this.#parentRelation = options.parent?.invocation.children.attach(this, options.parent);
   }
 
-  get context(): C {
+  get context(): Context {
     return this.options.context;
   }
 
-  async run(): Promise<O> {
+  async run(): Promise<Output> {
     if (this.#started) {
       const error = new Error('Invocation has already started');
       this.options.parent?.invocation.children.reject(error);
@@ -161,11 +161,11 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
   }
 
   /** Internal parent-owned entry outlet, omitted from the business invocation view. */
-  publishEntry(change: EntryChange): void {
+  publishEntry(change: ExecutionEntryChange): void {
     this.publish({ kind: 'entry', ...change });
   }
 
-  private publishRelation(relation: RelationIdentity, change: RelationChange): unknown | undefined {
+  private publishRelation(relation: InvocationRelationIdentity, change: InvocationRelationChange): unknown | undefined {
     try {
       this.publish({ kind: 'relation', relation, change });
       return undefined;
@@ -178,13 +178,13 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     }
   }
 
-  private publish(change: CallChange): void {
+  private publish(change: InvocationChange): void {
     const identity = this.options.identity ?? {
       contextId: this.context.id,
-      level: ('level' in this.context ? this.context.level : 'attempt') as CallIdentity['level'],
+      level: ('level' in this.context ? this.context.level : 'attempt') as InvocationIdentity['level'],
       ...(this.options.parent ? { parentContextId: this.options.parent.invocation.context.id } : {}),
     };
-    const fact: CallFact = Object.freeze({ ...change, identity, description: this.options.description, eventSequence: ++this.#eventSequence, occurredAt: this.#clock.now(), monotonicTime: this.#clock.tick() });
+    const fact: InvocationFact = Object.freeze({ ...change, identity, description: this.options.description, eventSequence: ++this.#eventSequence, occurredAt: this.#clock.now(), monotonicTime: this.#clock.tick() });
     const faults: unknown[] = [];
     try {
       let captured;
@@ -206,10 +206,10 @@ export class Invocation<I = unknown, O = unknown, C extends InvocationContext<I,
     }
   }
 
-  private async execute(): Promise<O> {
+  private async execute(): Promise<Output> {
     const context = this.context;
     context.requireRunning();
-    let output: O;
+    let output: Output;
     try {
       this.options.parent?.invocation.children.requireHealthy();
       this.options.validate?.();

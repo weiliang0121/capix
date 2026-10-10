@@ -1,4 +1,4 @@
-import type { Message } from '@capix-observer/protocol';
+import type { Message } from '@capix/protocol';
 
 /** Selection counts keyed by immutable message identity, independent of observation records. */
 export class SelectionUsage {

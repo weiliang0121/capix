@@ -1,40 +1,41 @@
 import { Invocation, type InvocationStarted } from '../invocation.js';
 import type { InvocationWork } from '../cycle.js';
 import type { InvocationCapabilities } from '../capabilities.js';
-import type { RuntimeContext, RuntimeCallOptions, RuntimeExecutionBindings } from '../../context/runtime.js';
+import type { RuntimeContext, ExecutionBindingResolver } from '../../context/runtime.js';
+import type { InvocationControls } from '../../context/context.js';
 import type { RuntimeContextBuilder } from '../../context/runtime/builder.js';
 import { ResourceBindings, type ResourceRequirements } from '../../resource/bindings.js';
 import type { ObservationDeclaration } from '../../observation/definition.js';
-import type { CallFact } from '../../observation/facts.js';
-import { bindCallObservation } from '../../observation/binding.js';
+import type { InvocationFact } from '../../observation/facts.js';
+import { bindInvocationObservation } from '../../observation/binding.js';
 import { InvocationChangeEmitter } from '../changes.js';
 import { attachInvocationResources } from '../resources.js';
 
-export interface RuntimeInvocationRequest<I, O, R extends object = object> {
-  readonly context: RuntimeCallOptions;
-  readonly resources?: ResourceBindings<R>;
-  readonly executions?: RuntimeExecutionBindings;
-  readonly requires?: ResourceRequirements<R>;
+export interface RuntimeInvocationRequest<Input, Output, Resources extends object = object> {
+  readonly controls: InvocationControls;
+  readonly resources?: ResourceBindings<Resources>;
+  readonly executionBindings?: ExecutionBindingResolver;
+  readonly requires?: ResourceRequirements<Resources>;
   readonly initial?: ResourceRequirements;
-  readonly observation?: readonly ObservationDeclaration<CallFact>[];
-  readonly work: InvocationWork<RuntimeContext<I, O, R>, I, O>;
-  readonly started?: InvocationStarted<I, O, RuntimeContext<I, O, R>>;
+  readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
+  readonly work: InvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>>;
+  readonly started?: InvocationStarted<Input, Output, RuntimeContext<Input, Output, Resources>>;
 }
 
 export class RuntimeInvocationBuilder {
   constructor(
     private readonly runtimeId: string,
-    private readonly contexts: RuntimeContextBuilder,
+    private readonly contextBuilder: RuntimeContextBuilder,
     private readonly capabilities: InvocationCapabilities = {},
   ) {}
 
-  create<I, O, R extends object = object>(input: I, request: RuntimeInvocationRequest<I, O, R>): Invocation<I, O, RuntimeContext<I, O, R>> {
-    const resources = (request.resources ?? new ResourceBindings<R>({} as ResourceRequirements<R>)).select(request.requires ?? ({} as ResourceRequirements<R>), request.initial);
-    const context = this.contexts.create<I, O, R>(input, request.context, resources, request.executions);
+  create<Input, Output, Resources extends object = object>(input: Input, request: RuntimeInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, RuntimeContext<Input, Output, Resources>> {
+    const resources = (request.resources ?? new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)).select(request.requires ?? ({} as ResourceRequirements<Resources>), request.initial);
+    const context = this.contextBuilder.create<Input, Output, Resources>(input, request.controls, resources, request.executionBindings);
     const identity = { contextId: context.id, level: 'runtime' as const };
-    const observation = bindCallObservation({ identity, description: { id: this.runtimeId }, declarations: request.observation, resources }, this.capabilities.observations);
+    const observation = bindInvocationObservation({ identity, description: { id: this.runtimeId }, declarations: request.observation, resources }, this.capabilities.observations);
     const changes = this.capabilities.changes ? new InvocationChangeEmitter(identity, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<I, O, RuntimeContext<I, O, R>>({ context, work: request.work, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: { id: this.runtimeId }, changes, started: request.started });
+    const invocation = new Invocation<Input, Output, RuntimeContext<Input, Output, Resources>>({ context, work: request.work, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: { id: this.runtimeId }, changes, started: request.started });
     attachInvocationResources(invocation, resources);
     return invocation;
   }

@@ -4,13 +4,13 @@ import type { RecordTree } from './tree.js';
 import { removeRegistration, prepareAttachment } from './tree/access.js';
 
 /** One synchronous registration, including its direct relation. */
-export class RecordRegistration<R extends BaseRecord<unknown>> {
+export class RecordRegistration<RecordType extends BaseRecord<unknown>> {
   private readonly attachment;
 
   constructor(
     private readonly book: RecordBook,
     tree: RecordTree,
-    private readonly record: R,
+    private readonly record: RecordType,
   ) {
     this.attachment = tree[prepareAttachment](record);
   }

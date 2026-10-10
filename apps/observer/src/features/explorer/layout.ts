@@ -1,6 +1,6 @@
 import { defaultColumnWidth, maximumColumnWidth, minimumColumnWidth } from '../../state/preferences.js';
 export { defaultColumnWidth, maximumColumnWidth, minimumColumnWidth } from '../../state/preferences.js';
-import type { ExecutionSummary, InvocationSummary } from '@capix-observer/protocol';
+import type { ExecutionSummary, InvocationSummary } from '@capix/protocol';
 
 export const axisWidth = 92;
 export const columnGap = 20;

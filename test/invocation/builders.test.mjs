@@ -1,8 +1,8 @@
 import { captureSource } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, ChangeObserver, bindResources, ResourceOffer, ResourceBindings } from '@capix-observer/runtime';
-import { createRuntime } from '../fixtures/runtime.mjs';
+import { Recorder, RecordBook, ChangeBuffer, bindResources, ResourceOffer, ResourceBindings } from '@capix/server-runtime';
+import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const operation = { id: 'operation', name: 'work', label: 'Work', source: 'test' };
@@ -10,8 +10,8 @@ const attempt = { name: 'action', label: 'Action', source: 'test', callee: 'proc
 const identity = { maxRounds: 1, execute: (context) => context.currentInput };
 
 test('reused builders bind each invocation to its own signal, settings and input', async () => {
-  const runtime = createRuntime();
-  const builders = [runtime.executionInvocations, runtime.operationInvocations, runtime.attemptInvocations];
+  const runtime = createBoundRuntime();
+  const builders = [runtime.executionInvocationBuilder, runtime.operationInvocationBuilder, runtime.attemptInvocationBuilder];
   const firstController = new AbortController();
   const secondController = new AbortController();
   const mutableSettings = { ...settings };
@@ -31,14 +31,14 @@ test('reused builders bind each invocation to its own signal, settings and input
       return context.currentInput;
     },
   };
-  const first = runtime.executionInvocations.create('first', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: firstController.signal }, work: inspect });
+  const first = runtime.executionInvocationBuilder.create('first', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: firstController.signal }, work: inspect });
   mutableSettings.model = 'next';
-  const second = runtime.executionInvocations.create('second', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: secondController.signal }, work: inspect });
-  const firstOperation = runtime.operationInvocations.create(first, { input: 'first operation', description: operation, work: identity });
-  const secondOperation = runtime.operationInvocations.create(second, { input: 'second operation', description: operation, work: identity });
-  const firstAttempt = runtime.attemptInvocations.create(firstOperation, { input: 'first action', description: attempt, work: identity });
-  const secondAttempt = runtime.attemptInvocations.create(secondOperation, { input: 'second action', description: attempt, work: identity });
-  const unstarted = runtime.executionInvocations.create('unstarted', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings })) }), context: {}, work: identity });
+  const second = runtime.executionInvocationBuilder.create('second', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: secondController.signal }, work: inspect });
+  const firstOperation = runtime.operationInvocationBuilder.create(first, { input: 'first operation', description: operation, work: identity });
+  const secondOperation = runtime.operationInvocationBuilder.create(second, { input: 'second operation', description: operation, work: identity });
+  const firstAttempt = runtime.attemptInvocationBuilder.create(firstOperation, { input: 'first action', description: attempt, work: identity });
+  const secondAttempt = runtime.attemptInvocationBuilder.create(secondOperation, { input: 'second action', description: attempt, work: identity });
+  const unstarted = runtime.executionInvocationBuilder.create('unstarted', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings })) }), context: {}, work: identity });
   assert.throws(() => unstarted.context.resources.values.settings, /started invocation/);
   await assert.rejects(unstarted.run(), /started invocation/);
   const firstRun = first.run();
@@ -56,28 +56,28 @@ test('reused builders bind each invocation to its own signal, settings and input
   release();
   await assert.rejects(firstRun, (error) => error.code === 'INVOCATION_CANCELLED' && error.cause === cause);
   assert.equal(await secondRun, 'second');
-  assert.deepEqual([runtime.executionInvocations, runtime.operationInvocations, runtime.attemptInvocations], builders);
+  assert.deepEqual([runtime.executionInvocationBuilder, runtime.operationInvocationBuilder, runtime.attemptInvocationBuilder], builders);
 });
 
 test('construction writes no call records and rejects foreign contexts before starting work', () => {
   const recorder = new Recorder(new RecordBook());
-  const first = createRuntime({ recorder });
-  const second = createRuntime({ recorder });
-  const root = first.executionInvocations.create('input', { context: { settings }, work: identity });
-  const child = first.operationInvocations.create(root, { input: 'input', description: operation, work: identity });
+  const first = createBoundRuntime({ recorder });
+  const second = createBoundRuntime({ recorder });
+  const root = first.executionInvocationBuilder.create('input', { context: { settings }, work: identity });
+  const child = first.operationInvocationBuilder.create(root, { input: 'input', description: operation, work: identity });
   assert.equal([...recorder.book.values()].filter((record) => ['execution', 'operation', 'attempt'].includes(record.kind)).length, 0);
-  assert.throws(() => second.operationInvocations.create(root, { input: 'foreign', description: operation, work: identity }), /another Runtime/);
-  assert.throws(() => second.attemptInvocations.create(child, { input: 'foreign', description: attempt, work: identity }), /another Runtime/);
+  assert.throws(() => second.operationInvocationBuilder.create(root, { input: 'foreign', description: operation, work: identity }), /another Runtime/);
+  assert.throws(() => second.attemptInvocationBuilder.create(child, { input: 'foreign', description: attempt, work: identity }), /another Runtime/);
   assert.equal([...recorder.book.values()].filter((record) => ['execution', 'operation', 'attempt'].includes(record.kind)).length, 0);
 });
 
 test('a constructed call rechecks its parent before entering work, including nested operations', async () => {
-  const runtime = createRuntime();
-  const root = runtime.executionInvocations.create('root', { context: { settings }, work: identity });
-  const parent = runtime.operationInvocations.create(root, { input: 'parent', description: operation, work: identity });
+  const runtime = createBoundRuntime();
+  const root = runtime.executionInvocationBuilder.create('root', { context: { settings }, work: identity });
+  const parent = runtime.operationInvocationBuilder.create(root, { input: 'parent', description: operation, work: identity });
   const forbidden = { maxRounds: 1, execute: () => assert.fail('ended parent must prevent work') };
-  const leaf = runtime.attemptInvocations.create(parent, { input: 'leaf', description: attempt, work: forbidden });
-  const nested = runtime.operationInvocations.create(parent, { input: 'nested', description: operation, work: forbidden });
+  const leaf = runtime.attemptInvocationBuilder.create(parent, { input: 'leaf', description: attempt, work: forbidden });
+  const nested = runtime.operationInvocationBuilder.create(parent, { input: 'nested', description: operation, work: forbidden });
   parent.context.complete('done');
   await assert.rejects(leaf.run(), /ended/);
   await assert.rejects(nested.run(), /ended/);
@@ -88,12 +88,12 @@ test('a constructed call rechecks its parent before entering work, including nes
 
 test('execution construction validates before capturing resources or starting child work', async () => {
   const recorder = new Recorder(new RecordBook());
-  const runtime = createRuntime({ recorder });
+  const runtime = createBoundRuntime({ recorder });
   const failure = new Error('construction rejected');
   let captures = 0;
   assert.throws(
     () =>
-      runtime.executionInvocations.create('input', {
+      runtime.executionInvocationBuilder.create('input', {
         context: {},
         validate() {
           throw failure;
@@ -108,7 +108,7 @@ test('execution construction validates before capturing resources or starting ch
   );
   assert.equal(captures, 0);
   assert.equal([...recorder.book.values()].filter((record) => record.kind === 'execution').length, 0);
-  const ready = runtime.executionInvocations.create('ready', { context: {}, work: identity });
+  const ready = runtime.executionInvocationBuilder.create('ready', { context: {}, work: identity });
   assert.equal(ready.record, undefined);
   assert.equal(await ready.run(), 'ready');
   assert.equal(ready.record.status, 'succeeded');
@@ -117,11 +117,11 @@ test('execution construction validates before capturing resources or starting ch
 test('started failure preserves the original error and skips the child record and work', async () => {
   for (const recorded of [false, true]) {
     const recorder = recorded ? new Recorder(new RecordBook()) : undefined;
-    const runtime = createRuntime({ recorder });
+    const runtime = createBoundRuntime({ recorder });
     const failure = new Error('delivery setup failed');
     let invocation;
     await assert.rejects(
-      runtime.executionInvocations.submit(() => 'input', {
+      runtime.executionInvocationBuilder.submit(() => 'input', {
         context: { settings: {} },
         work: { maxRounds: 1, execute: () => assert.fail('must not execute') },
         started: (context, current) => {
@@ -138,26 +138,26 @@ test('started failure preserves the original error and skips the child record an
     assert.equal(invocation.record, undefined);
     assert.equal(runtime.running, false);
     if (recorder) assert.equal([...recorder.book.values()].filter((record) => record.kind === 'execution').length, 0);
-    assert.equal(await runtime.executionInvocations.submit(() => 'next', { context: { settings: {} }, work: identity }), 'next');
+    assert.equal(await runtime.executionInvocationBuilder.submit(() => 'next', { context: { settings: {} }, work: identity }), 'next');
   }
 });
 
 test('shared builder capabilities produce independent call event scopes across nested calls and later submissions', async () => {
-  const changes = new ChangeObserver();
-  const runtime = createRuntime({ changes });
-  const root = runtime.executionInvocations.create('first', {
+  const changes = new ChangeBuffer();
+  const runtime = createBoundRuntime({ changes });
+  const root = runtime.executionInvocationBuilder.create('first', {
     context: { settings },
     work: {
       maxRounds: 1,
       execute(context, parent) {
-        return runtime.operationInvocations
+        return runtime.operationInvocationBuilder
           .create(parent, {
             input: context.input,
             description: operation,
             work: {
               maxRounds: 1,
               execute(context, parent) {
-                return runtime.attemptInvocations.create(parent, { input: context.input, description: attempt, work: identity }).run();
+                return runtime.attemptInvocationBuilder.create(parent, { input: context.input, description: attempt, work: identity }).run();
               },
             },
           })
@@ -166,7 +166,7 @@ test('shared builder capabilities produce independent call event scopes across n
     },
   });
   assert.equal(await root.run(), 'first');
-  const later = runtime.executionInvocations.create('later', { context: { settings }, work: identity });
+  const later = runtime.executionInvocationBuilder.create('later', { context: { settings }, work: identity });
   assert.equal(await later.run(), 'later');
   const events = changes.take().filter((event) => event.type === 'invocation');
   const scopes = Map.groupBy(events, (event) => event.contextId);
@@ -190,12 +190,12 @@ test('shared builder capabilities produce independent call event scopes across n
 });
 
 test('a completed ancestor stops an awaiting child before acceptance without exposing parent contexts', async () => {
-  const runtime = createRuntime();
-  const root = runtime.executionInvocations.create('root', { context: { settings }, work: identity });
-  const parent = runtime.operationInvocations.create(root, { input: 'parent', description: operation, work: identity });
-  const nested = runtime.operationInvocations.create(parent, { input: 'nested', description: operation, work: identity });
+  const runtime = createBoundRuntime();
+  const root = runtime.executionInvocationBuilder.create('root', { context: { settings }, work: identity });
+  const parent = runtime.operationInvocationBuilder.create(root, { input: 'parent', description: operation, work: identity });
+  const nested = runtime.operationInvocationBuilder.create(parent, { input: 'nested', description: operation, work: identity });
   let resume;
-  const leaf = runtime.attemptInvocations.create(nested, {
+  const leaf = runtime.attemptInvocationBuilder.create(nested, {
     input: 'leaf',
     description: attempt,
     work: {

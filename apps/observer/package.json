@@ -1,5 +1,5 @@
 {
-  "name": "@capix-observer/app",
+  "name": "@capix/observer-app",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,9 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@capix-observer/client-http": "workspace:*",
-    "@capix-observer/client-runtime": "workspace:*",
-    "@capix-observer/protocol": "workspace:*",
+    "@capix/client-http": "workspace:*",
+    "@capix/client-runtime": "workspace:*",
+    "@capix/protocol": "workspace:*",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "es-toolkit": "1.52.0",

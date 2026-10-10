@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RuntimeDefinition, ExecutionDefinition, ExceptionContract, ResourceOffer, assembleRuntime } from '@capix-observer/runtime';
+import { RuntimeDefinition, ExecutionDefinition, ExceptionContract, ResourceOffer, assembleRuntime } from '@capix/server-runtime';
 
-class Execution extends ExecutionDefinition {
+class TestExecutionDefinition extends ExecutionDefinition {
   constructor(execute, entry) {
     super();
     this.run = { requires: {}, execute };
@@ -33,13 +33,13 @@ function assemble(definition, options = {}) {
 
 function probe() {
   const facts = [];
-  return { facts, installation: { bindCall: () => ({ observe: (fact) => facts.push(fact) }) } };
+  return { facts, installation: { bindInvocation: () => ({ observe: (fact) => facts.push(fact) }) } };
 }
 
 test('R calls have independent contexts and ordinary E child relationships', async () => {
   const contexts = [];
   const parents = [];
-  const execution = new Execution((context) => context.currentInput * 2);
+  const execution = new TestExecutionDefinition((context) => context.currentInput * 2);
   const main = new Main(
     [execution],
     forward(execution, (context, invocation) => {
@@ -77,7 +77,7 @@ test('one Runtime rejects overlapping submissions and releases occupancy after f
   const started = new Promise((resolve) => {
     entered = resolve;
   });
-  const execution = new Execution(async (context) => {
+  const execution = new TestExecutionDefinition(async (context) => {
     if (context.currentInput === 'wait') {
       entered();
       await waiting;
@@ -98,14 +98,14 @@ test('one Runtime rejects overlapping submissions and releases occupancy after f
 
 test('R chooses from declared E nodes without entering the unused E', async () => {
   const chosen = [];
-  const first = new Execution(() => 'first', {
+  const first = new TestExecutionDefinition(() => 'first', {
     requires: {},
     accept: (input) => {
       chosen.push('first');
       return input;
     },
   });
-  const second = new Execution(() => 'second', {
+  const second = new TestExecutionDefinition(() => 'second', {
     requires: {},
     accept: (input) => {
       chosen.push('second');
@@ -127,8 +127,8 @@ test('R chooses from declared E nodes without entering the unused E', async () =
 });
 
 test('an undeclared E is a structural error even when R work catches it', async () => {
-  const allowed = new Execution(() => 'allowed');
-  const hidden = new Execution(() => assert.fail('must not execute'));
+  const allowed = new TestExecutionDefinition(() => 'allowed');
+  const hidden = new TestExecutionDefinition(() => assert.fail('must not execute'));
   const runtime = assemble(
     new Main([allowed], async (_context, invocation, children) => {
       try {
@@ -143,7 +143,7 @@ test('an undeclared E is a structural error even when R work catches it', async 
 
 test('E admission failure belongs to R before any E context or relation exists', async () => {
   let parent;
-  const execution = new Execution(() => assert.fail('must not execute'), {
+  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'), {
     requires: {},
     accept: () => {
       throw new Error('bad input');
@@ -172,7 +172,7 @@ test('E admission failure belongs to R before any E context or relation exists',
 test('E admission and capture retain their order inside the R call', async () => {
   const order = [];
   const messages = [];
-  const execution = new Execution(
+  const execution = new TestExecutionDefinition(
     (context) => {
       order.push('execute');
       return context.currentInput;
@@ -215,7 +215,7 @@ test('E admission and capture retain their order inside the R call', async () =>
 
 test('cancellation before R work does not enter E admission or append input', async () => {
   let accepted = 0;
-  const execution = new Execution(() => assert.fail('must not execute'), {
+  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'), {
     requires: {},
     accept: (input) => {
       accepted++;
@@ -233,7 +233,7 @@ test('cancellation before R work does not enter E admission or append input', as
 test('cancellation after E admission retains accepted input without running E work', async () => {
   const messages = [];
   const controller = new AbortController();
-  const execution = new Execution(() => assert.fail('must not execute'), {
+  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'), {
     requires: {},
     accept: (input) => {
       messages.push(input);
@@ -250,7 +250,7 @@ test('cancellation after E admission retains accepted input without running E wo
 
 test('E supplies are fulfilled without exposing them to R work', async () => {
   const secret = new ResourceOffer('test.secret', (source) => source);
-  const execution = new Execution((context) => context.resources.values.secret);
+  const execution = new TestExecutionDefinition((context) => context.resources.values.secret);
   execution.run.requires = { secret: secret.request() };
   const runtime = assemble(
     new Main(
@@ -267,7 +267,7 @@ test('E supplies are fulfilled without exposing them to R work', async () => {
 
 test('R acceptance failure preserves the completed E outcome', async () => {
   let relation;
-  const execution = new Execution(() => 2);
+  const execution = new TestExecutionDefinition(() => 2);
   const runtime = assemble(
     new Main([execution], async (_context, invocation, children) => {
       const child = children.get(execution).create(invocation, null);
@@ -288,7 +288,7 @@ test('R acceptance failure preserves the completed E outcome', async () => {
 test('R handles a declared E exception through the ordinary child relationship', async () => {
   const rejected = new ExceptionContract('EXECUTION_REJECTED');
   let parent;
-  const execution = new Execution(() => {
+  const execution = new TestExecutionDefinition(() => {
     throw rejected.create('unavailable', { reason: 'expected' });
   });
   execution.raises = [rejected];
@@ -318,10 +318,10 @@ test('R handles a declared E exception through the ordinary child relationship',
 test('R reports actual terminal observation failure while preserving successful work', async () => {
   let parent;
   let fail = true;
-  const execution = new Execution(() => 'output');
+  const execution = new TestExecutionDefinition(() => 'output');
   const installation = {
     failure: 'propagate',
-    bindCall: () => ({
+    bindInvocation: () => ({
       observe(fact) {
         if (fail && fact.identity.level === 'runtime' && fact.kind === 'finished') {
           fail = false;
@@ -348,7 +348,7 @@ test('R reports actual terminal observation failure while preserving successful 
 
 test('E entry failures cannot masquerade as a declared E work exception', async () => {
   const rejected = new ExceptionContract('ENTRY_REJECTED');
-  const execution = new Execution(() => assert.fail('must not execute'), {
+  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'), {
     requires: {},
     accept: () => {
       throw rejected.create('invalid', {});
@@ -365,7 +365,7 @@ test('E entry failures cannot masquerade as a declared E work exception', async 
 test('omitted observation installation leaves declarations and their dependencies dormant', async () => {
   const onlyObservation = new ResourceOffer('test.observation-only', (value) => value);
   let bound = 0;
-  const execution = new Execution(() => 'done');
+  const execution = new TestExecutionDefinition(() => 'done');
   execution.observation = [
     {
       requires: { extra: onlyObservation.request() },
@@ -383,7 +383,7 @@ test('omitted observation installation leaves declarations and their dependencie
 
 test('an explicit empty observation installation enables resource-free declarations', async () => {
   const events = [];
-  const execution = new Execution(() => 'done');
+  const execution = new TestExecutionDefinition(() => 'done');
   execution.observation = [
     {
       requires: {},
@@ -402,9 +402,9 @@ test('an explicit empty observation installation enables resource-free declarati
 
 test('observation installations cannot satisfy work or exception-handler resource requests', () => {
   const installed = new ResourceOffer('test.installed', (value) => value);
-  const installation = { provides: { local: installed.request() }, bindCall: () => ({ observe() {} }) };
+  const installation = { provides: { local: installed.request() }, bindInvocation: () => ({ observe() {} }) };
   for (const phase of ['run', 'exceptions']) {
-    const execution = new Execution(() => 'done');
+    const execution = new TestExecutionDefinition(() => 'done');
     if (phase === 'run') execution.run.requires = { forbidden: installed.request() };
     else execution.exceptions = { requires: { forbidden: installed.request() }, accepts: [], handle: () => assert.fail('not reached') };
     assert.throws(() => assemble(new Main([execution], forward(execution)), { observations: [installation] }), /Expected one resource provider/);
@@ -414,7 +414,7 @@ test('observation installations cannot satisfy work or exception-handler resourc
 test('E entry stages publish parent-owned facts before E context creation', async () => {
   const observed = probe();
   const changes = [];
-  const execution = new Execution((context) => context.currentInput, { requires: {}, accept: (input) => input + 1, admit() {} });
+  const execution = new TestExecutionDefinition((context) => context.currentInput, { requires: {}, accept: (input) => input + 1, admit() {} });
   const runtime = assemble(new Main([execution], forward(execution)), {
     observations: [observed.installation],
     changes: {
@@ -458,7 +458,7 @@ for (const stage of ['accept', 'notification', 'admit', 'capture']) {
     const fail = () => {
       throw failure;
     };
-    const execution = new Execution(() => assert.fail('unreachable'), { requires: {}, accept: stage === 'accept' ? fail : (input) => input, admit: stage === 'admit' ? fail : () => undefined });
+    const execution = new TestExecutionDefinition(() => assert.fail('unreachable'), { requires: {}, accept: stage === 'accept' ? fail : (input) => input, admit: stage === 'admit' ? fail : () => undefined });
     const runtime = assemble(new Main([execution], forward(execution)), {
       observations: [observed.installation],
       source: { entry: () => undefined, capture: stage === 'capture' ? fail : () => undefined, callbacks: () => ({ accepted: stage === 'notification' ? fail : () => undefined }) },
@@ -484,12 +484,12 @@ test('entry observation propagation preserves accepted fact and does not publish
   let notifications = 0;
   const observed = probe();
   const failure = new Error('observer failed');
-  const execution = new Execution(() => assert.fail('unreachable'));
+  const execution = new TestExecutionDefinition(() => assert.fail('unreachable'));
   const runtime = assemble(new Main([execution], forward(execution)), {
     observations: [
       {
         failure: 'propagate',
-        bindCall: () => ({
+        bindInvocation: () => ({
           observe: (fact) => {
             if (fact.kind === 'entry') throw failure;
           },
@@ -518,13 +518,13 @@ test('entry observation propagation preserves accepted fact and does not publish
 
 test('enabled observation installations check actual static parent declarations', () => {
   const checked = [];
-  const execution = new Execution(() => 'done');
+  const execution = new TestExecutionDefinition(() => 'done');
   const definition = new Main([execution], forward(execution));
   const installation = {
     check(scope, parent) {
       checked.push([scope.level, parent?.level]);
     },
-    bindCall: () => ({ observe() {} }),
+    bindInvocation: () => ({ observe() {} }),
   };
   assemble(definition, { observations: [installation] });
   assert.deepEqual(checked, [
@@ -538,7 +538,7 @@ test('parent retains child failure and returned-observation failure without repl
   const reporting = new Error('parent returned observation failed');
   let relation;
   let childError;
-  const execution = new Execution(() => {
+  const execution = new TestExecutionDefinition(() => {
     throw original;
   });
   const definition = new Main([execution], async (context, invocation, children) => {
@@ -555,7 +555,7 @@ test('parent retains child failure and returned-observation failure without repl
     observations: [
       {
         failure: 'propagate',
-        bindCall: () => ({
+        bindInvocation: () => ({
           observe(fact) {
             if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'failed') throw reporting;
           },

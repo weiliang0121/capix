@@ -7,7 +7,7 @@ export class RecordingError extends RuntimeError {
   }
 }
 
-export function writeRecord<T>(write: () => T): T {
+export function writeRecord<Result>(write: () => Result): Result {
   try {
     return write();
   } catch (error) {

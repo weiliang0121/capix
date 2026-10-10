@@ -2,9 +2,9 @@ import { createInput, observeFixture } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
-import { RuntimeError, RuntimeErrorHelper, snapshotValue } from '@capix-observer/runtime';
+import { RuntimeError, RuntimeErrorHelper, snapshotValue } from '@capix/server-runtime';
 
-import { validateSnapshot } from '@capix-observer/protocol';
+import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 function recordable(value) {
   const snapshot = snapshotValue(value);
@@ -175,7 +175,7 @@ test('unrecordable error detail and aggregates close the Observer execution with
         throw failure;
       },
     });
-    validateSnapshot(facts);
+    validateExecutionRecordSnapshot(facts);
     assert.equal(facts.execution.status, 'failed');
     assert.ok(facts.operations.every((operation) => operation.status !== 'running'));
     assert.ok(facts.attempts.every((attempt) => attempt.status !== 'running'));

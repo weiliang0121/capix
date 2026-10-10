@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeObserver, ChangeCaptureError, Transcript, TranscriptRecord, RecordBook, Recorder, bindRecording } from '@capix-observer/runtime';
-import { createRuntime } from '../fixtures/runtime.mjs';
+import { ChangeBuffer, ChangeCaptureError, Transcript, TranscriptRecord, RecordBook, Recorder, bindRecording } from '@capix/server-runtime';
+import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const message = (content) => ({ role: 'user', content });
 
 test('a shared observer receives source-local revisions in capture order and transfers separate batches', () => {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const first = new Transcript([message('initial')], { changes });
   const second = new Transcript([message('other')], { changes });
   first.append(message('next'));
@@ -31,7 +31,7 @@ test('a shared observer receives source-local revisions in capture order and tra
 });
 
 test('change facts freeze their accepted content and segment boundary without reloading live state', () => {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const transcript = new Transcript([], { changes });
   const input = [message('one'), message('two')];
   transcript.appendFrom(input);
@@ -53,7 +53,7 @@ test('change facts freeze their accepted content and segment boundary without re
 });
 
 test('empty and rejected changes do not advance revision; unobserved transcripts still maintain local order', () => {
-  for (const changes of [undefined, new ChangeObserver()]) {
+  for (const changes of [undefined, new ChangeBuffer()]) {
     const transcript = new Transcript([], { changes });
     transcript.append();
     assert.throws(() => transcript.append(message('valid'), { role: 'invalid', content: 'bad' }), TypeError);
@@ -76,7 +76,7 @@ test('record registration failure does not undo an already captured transcript f
       return super.add(record);
     }
   }
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const recording = bindRecording(new Recorder(new RejectingBook()), { failure: 'propagate' });
   const transcript = new Transcript([], { changes, observation: recording.transcript });
   assert.throws(
@@ -89,7 +89,7 @@ test('record registration failure does not undo an already captured transcript f
 });
 
 test('failed segment capture preserves the new boundary and later changes keep advancing', () => {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const transcript = new Transcript([message('one'), message('two')], {
     changes: {
       capture(event) {
@@ -124,11 +124,11 @@ test('capture failure reports committed facts and stops the local invocation ins
       if (event.type === 'transcript') throw cause;
     },
   };
-  const runtime = createRuntime({ recorder, changes });
+  const runtime = createBoundRuntime({ recorder, changes });
   const transcript = new Transcript([], { observation: runtime.recording.transcript, changes });
   let calls = 0;
   let receives = 0;
-  const invocation = runtime.executionInvocations.create('input', {
+  const invocation = runtime.executionInvocationBuilder.create('input', {
     context: { settings: {} },
     work: {
       maxRounds: 2,
@@ -157,7 +157,7 @@ test('capture failure reports committed facts and stops the local invocation ins
 });
 
 test('capturing and recording are separate outlets and capture runs after mutation', () => {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const recorder = new Recorder(new RecordBook());
   const recording = bindRecording(recorder);
   let transcript;

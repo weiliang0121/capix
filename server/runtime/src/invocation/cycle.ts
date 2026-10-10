@@ -14,19 +14,19 @@ export interface InvocationCycleOptions {
   onProcess: ProcessSink;
   validate?: () => void;
 }
-export interface InvocationWork<C extends InvocationContext<I, O>, I, O> {
-  execute(context: C, invocation: Invocation<I, O, C>): O | Promise<O>;
-  accept?(context: C, output: O, invocation: Invocation<I, O, C>): O | Continuation<I> | Promise<O | Continuation<I>>;
+export interface InvocationWork<Input, Output, Context extends InvocationContext<Input, Output>> {
+  execute(context: Context, invocation: Invocation<Input, Output, Context>): Output | Promise<Output>;
+  accept?(context: Context, output: Output, invocation: Invocation<Input, Output, Context>): Output | Continuation<Input> | Promise<Output | Continuation<Input>>;
   raises?: readonly ExceptionContract<any>[];
   exceptions?: {
     accepts: readonly ExceptionContract<any>[];
-    handle(context: C, exception: DeclaredException, invocation: Invocation<I, O, C>): InvocationResolution<I, O> | Promise<InvocationResolution<I, O>>;
+    handle(context: Context, exception: DeclaredException, invocation: Invocation<Input, Output, Context>): InvocationResolution<Input, Output> | Promise<InvocationResolution<Input, Output>>;
   };
   maxRounds: 1 | 2;
 }
 
 /** Structure decides when facets run; declarations only provide work and explicit handling decisions. */
-export async function cycle<I, O, C extends InvocationContext<I, O>>(invocation: Invocation<I, O, C>, work: InvocationWork<C, I, O>, options: InvocationCycleOptions): Promise<O> {
+export async function cycle<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, work: InvocationWork<Input, Output, Context>, options: InvocationCycleOptions): Promise<Output> {
   const context = invocation.context;
   const { signal, onProcess } = options;
   let input = context.input;
@@ -38,7 +38,7 @@ export async function cycle<I, O, C extends InvocationContext<I, O>>(invocation:
       options.validate?.();
       invocation.requireHealthy();
       onProcess({ stage: 'execute', type: 'start', input });
-      let result: InvocationResult<O>;
+      let result: InvocationResult<Output>;
       try {
         const output = await work.execute(context, invocation);
         invocation.requireHealthy();
@@ -66,8 +66,8 @@ export async function cycle<I, O, C extends InvocationContext<I, O>>(invocation:
   }
 }
 
-async function accept<I, O, C extends InvocationContext<I, O>>(invocation: Invocation<I, O, C>, work: InvocationWork<C, I, O>, output: O, onProcess: ProcessSink): Promise<O | Continuation<I>> {
-  let accepted: O | Continuation<I>;
+async function accept<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, work: InvocationWork<Input, Output, Context>, output: Output, onProcess: ProcessSink): Promise<Output | Continuation<Input>> {
+  let accepted: Output | Continuation<Input>;
   try {
     accepted = work.accept ? await work.accept(invocation.context, output, invocation) : output;
     invocation.requireHealthy();
@@ -81,13 +81,13 @@ async function accept<I, O, C extends InvocationContext<I, O>>(invocation: Invoc
   return accepted;
 }
 
-async function handle<I, O, C extends InvocationContext<I, O>>(invocation: Invocation<I, O, C>, work: InvocationWork<C, I, O>, failure: InvocationFailure, onProcess: ProcessSink): Promise<O | Continuation<I>> {
+async function handle<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, work: InvocationWork<Input, Output, Context>, failure: InvocationFailure, onProcess: ProcessSink): Promise<Output | Continuation<Input>> {
   const exception = failure.error;
   if (failure.kind !== 'exception' || !(exception instanceof DeclaredException) || !work.exceptions?.accepts.includes(exception.contract)) throw exception;
   const context = invocation.context;
   context.handling();
   onProcess({ stage: 'handling', type: 'start', error: exception, failure });
-  let resolution: InvocationResolution<I, O>;
+  let resolution: InvocationResolution<Input, Output>;
   try {
     resolution = await work.exceptions.handle(context, exception, invocation);
     invocation.requireHealthy();
@@ -109,7 +109,7 @@ async function handle<I, O, C extends InvocationContext<I, O>>(invocation: Invoc
   reportContinuation(onProcess, 'handling', continuation);
   return continuation;
 }
-function reportContinuation<I>(onProcess: ProcessSink, stage: 'receive' | 'handling', continuation: Continuation<I>): void {
+function reportContinuation<Input>(onProcess: ProcessSink, stage: 'receive' | 'handling', continuation: Continuation<Input>): void {
   if (!isNonBlankString(continuation.reason)) throw new InvocationStopped('INVALID_CONTINUATION', '继续执行必须说明原因。');
   onProcess({ stage, type: 'continue', input: continuation.input, reason: continuation.reason });
 }

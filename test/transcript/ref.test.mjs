@@ -1,10 +1,10 @@
-import { readOutput, validateSnapshot } from '@capix-observer/protocol';
+import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createInput, sourceFor, contextFor, transcriptFor, observeFixture } from '../fixtures/observer.mjs';
-import { ExecutionRecord, snapshotValue } from '@capix-observer/runtime';
+import { ExecutionRecord, snapshotValue } from '@capix/server-runtime';
 
-import { selectionOutputContract } from '@capix-observer/service';
+import { selectionOutputContract } from '@capix/observer-service';
 
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 
@@ -55,7 +55,7 @@ test('resource facts hold plain range locators; calls consume selected content a
       },
     },
     (snapshot) => {
-      validateSnapshot(snapshot);
+      validateExecutionRecordSnapshot(snapshot);
       snapshots.push(snapshot);
     },
   );
@@ -79,7 +79,7 @@ test('resource facts hold plain range locators; calls consume selected content a
   assert.deepEqual(assembled.selectedMessages, [{ index: 0, message: transcript.get(0) }]);
   assert.deepEqual(JSON.parse(requests[1].messages[1].content), { message: input, memories: [], history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });
   const browser = JSON.parse(JSON.stringify(facts));
-  validateSnapshot(browser);
+  validateExecutionRecordSnapshot(browser);
   assert.deepEqual(browser.execution.value.input, input);
   assert.equal(browser.resources.find((fact) => fact.id === rangeFact.id).value.end, 2);
   assert.equal(browser.resources.find((fact) => fact.id === rangeFact.id).value.messages, undefined);

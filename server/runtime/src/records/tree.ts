@@ -33,7 +33,7 @@ export class RecordTree {
     return result;
   }
 
-  /** Follow direct record links; no Runtime membership registry. */
+  /** Follow direct record links; no separate recording membership registry. */
   root(id: string): BaseRecord<unknown> {
     let record = this.require(id);
     const visited = new Set([id]);

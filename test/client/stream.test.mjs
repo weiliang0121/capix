@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
+import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
 import { snapshot, baseline, entriesOf } from './fixtures.mjs';
 
 function stream(text, chunkSize = 7) {

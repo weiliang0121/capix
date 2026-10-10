@@ -1,4 +1,4 @@
-import type { ExecutionRecord as ExecutionData, ExecutionValue } from '@capix-observer/protocol';
+import type { ExecutionRecord as ExecutionData, ExecutionValue } from '@capix/protocol';
 import { InvocationRecord } from '../invocation/record.js';
 import { snapshotValue } from '../value/snapshot.js';
 

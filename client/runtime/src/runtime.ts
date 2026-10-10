@@ -1,4 +1,4 @@
-import type { ConfigurationResponse, ConversationUpdate, ExecutionRequest, MemoryObservation, Message, ObserverOverview, RuntimeSnapshot, InvocationEvent, TranscriptRecord } from '@capix-observer/protocol';
+import type { ConfigurationResponse, ConversationUpdate, ConversationRequest, MemoryObservation, Message, ObserverOverview, ExecutionRecordSnapshot, InvocationEvent, TranscriptRecord } from '@capix/protocol';
 import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReplica, ObservationSequenceError } from './observation.js';
@@ -8,12 +8,12 @@ export interface ObservationState {
   readonly enabled: boolean;
   readonly loading: boolean;
   readonly error?: unknown;
-  readonly records: ReadonlyMap<string, RuntimeSnapshot>;
-  readonly updates: ReadonlyMap<string, RuntimeSnapshot>;
+  readonly records: ReadonlyMap<string, ExecutionRecordSnapshot>;
+  readonly updates: ReadonlyMap<string, ExecutionRecordSnapshot>;
   readonly overview: ObserverOverview;
   readonly memory: MemoryObservation;
   readonly cursor?: { scopeId: string; sequence: number };
-  readonly invocations?: ReadonlyMap<string, InvocationEvent>;
+  readonly invocationEvents?: ReadonlyMap<string, InvocationEvent>;
   readonly transcriptRecords?: readonly TranscriptRecord[];
 }
 
@@ -137,7 +137,7 @@ export class ClientRuntime {
   }
 
   /** Load an entity only when needed, then keep its copy current until explicitly stopped. */
-  loadTranscript(id: string): Promise<import('@capix-observer/protocol').TranscriptSnapshot> {
+  loadTranscript(id: string): Promise<import('@capix/protocol').TranscriptSnapshot> {
     return this.transcripts.watch(id);
   }
 
@@ -183,7 +183,7 @@ export class ClientRuntime {
         this.replica = next;
         ready = true;
         const records = frame.type === 'baseline' ? new Map(next.snapshots) : new Map([...this.state.observation.records, ...next.snapshots]);
-        this.updateObservation({ loading: false, overview: next.overview, memory: next.memory, records, updates: new Map(next.snapshots), cursor: { scopeId: next.scopeId, sequence: next.sequence }, invocations: next.invocations, transcriptRecords: next.transcriptRecords });
+        this.updateObservation({ loading: false, overview: next.overview, memory: next.memory, records, updates: new Map(next.snapshots), cursor: { scopeId: next.scopeId, sequence: next.sequence }, invocationEvents: next.invocationEvents, transcriptRecords: next.transcriptRecords });
       }, session.signal)
       .catch((error) => {
         if (session.signal.aborted || this.observationOwner !== owner) return;
@@ -201,11 +201,11 @@ export class ClientRuntime {
     if (this.observationOwner) this.connectObservation(this.observationOwner, false);
   }
 
-  getExecution(id: string): RuntimeSnapshot | undefined {
+  getExecution(id: string): ExecutionRecordSnapshot | undefined {
     return this.state.observation.records.get(id);
   }
 
-  async loadExecution(id: string, signal?: AbortSignal): Promise<RuntimeSnapshot> {
+  async loadExecution(id: string, signal?: AbortSignal): Promise<ExecutionRecordSnapshot> {
     if (!this.observation) throw new Error('未接入观测能力。');
     const cached = this.getExecution(id);
     if (cached && cached.execution.status !== 'running' && cached.runtimeCall.status !== 'running') return cached;
@@ -237,7 +237,7 @@ export class ClientRuntime {
     }
   }
 
-  async submit(request: ExecutionRequest, accepted?: () => void): Promise<void> {
+  async submit(request: ConversationRequest, accepted?: () => void): Promise<void> {
     if (this.state.busy) throw new Error('当前请求仍在处理。');
     if (this.state.initialization.status !== 'succeeded' || !this.state.config?.configured) throw new Error('请先完成客户端初始化与服务端模型配置。');
     const messages = request.messages.map((message) => ({ ...message }));

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ClientRuntime } from '@capix-observer/client-runtime';
+import { ClientRuntime } from '@capix/client-runtime';
 import { client, deferred, snapshot, transport, deliverAnswer } from './fixtures.mjs';
 
 const request = () => ({ messages: [{ role: 'user', content: '你好，查看北京' }], contextBudget: 32768 });

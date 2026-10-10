@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindObserver, ObserverRuntimeDefinition } from '@capix-observer/service';
-import { RuntimeError, AttemptRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix-observer/runtime';
+import { bindConversation, ConversationRuntimeDefinition } from '@capix/observer-service';
+import { RuntimeError, AttemptRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix/server-runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const answer = { kind: 'answer', content: '修正后的回答' };
@@ -27,8 +27,8 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
   const transcript = new Transcript([], { observation: recording?.transcript });
   const memories = new Memories(transcript, { observation: recording?.memory });
   const entities = { transcript, memories, selectionUsage: new SelectionUsage() };
-  const definition = new ObserverRuntimeDefinition();
-  const environment = { ...entities, definition, recording, book: recorder?.book, runtime: bindObserver(definition, entities, provider, { observations: recording ? [recording] : undefined }) };
+  const definition = new ConversationRuntimeDefinition();
+  const environment = { ...entities, definition, recording, book: recorder?.book, runtime: bindConversation(definition, entities, provider, { observations: recording ? [recording] : undefined }) };
   let invocation;
   return {
     ...environment,
@@ -42,7 +42,7 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
         {
           settings: configuration,
           signal,
-          execution: {
+          executionCallbacks: {
             started: (_context, current) => {
               invocation = current;
             },
@@ -187,9 +187,9 @@ test('record failure cannot be classified as an output rejection or trigger a se
 
 test('regeneration declaration rejects invalid evidence and missing feedback before constructing a child', async (t) => {
   const f = fixture([output('bad'), output(JSON.stringify(answer))]);
-  const behavior = f.definition.execution.operations.generation;
+  const behavior = f.definition.executionDefinition.operationDefinitions.generation;
   const handle = behavior.exceptions.handle;
-  const capability = behavior.invokeModel.regeneration;
+  const capability = behavior.invokeModelDefinition.regeneration;
   assert.equal(capability.declaration.maxAdditionalCalls, 1);
   assert.deepEqual(capability.declaration.rejectionCodes, ['INVALID_JSON', 'EMPTY_OUTPUT', 'OUTPUT_SHAPE']);
   let checked = false;
@@ -212,10 +212,10 @@ test('regeneration declaration rejects invalid evidence and missing feedback bef
 
 test('parent may decline an eligible regeneration without changing child capability', async (t) => {
   const f = fixture([output('bad')]);
-  const behavior = f.definition.execution.operations.generation;
+  const behavior = f.definition.executionDefinition.operationDefinitions.generation;
   t.mock.method(behavior.exceptions, 'handle', function (_context, _exception, invocation) {
     const children = invocation.children.values();
-    assert.equal(behavior.invokeModel.regeneration.allows(invocation, { previous: children[2], rejection: children[3] }), true);
+    assert.equal(behavior.invokeModelDefinition.regeneration.allows(invocation, { previous: children[2], rejection: children[3] }), true);
     return { kind: 'unhandled' };
   });
   await assert.rejects(f.run(), (error) => error.code === 'UNHANDLED_EXCEPTION' && error.cause.facts.code === 'INVALID_JSON');

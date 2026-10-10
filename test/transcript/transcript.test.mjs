@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript } from '@capix-observer/runtime';
+import { Transcript } from '@capix/server-runtime';
 
 test('history accumulates successive turns without changing an earlier message snapshot', () => {
   const history = new Transcript();

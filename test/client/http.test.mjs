@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { HttpTransport, ConversationHttpTransport, ObservationHttpTransport, HttpError, ObserverTransportError } from '@capix-observer/client-http';
+import { HttpTransport, ConversationHttpTransport, ObservationHttpTransport, HttpError, HttpTransportError } from '@capix/client-http';
 import { snapshot, transcriptSnapshot, baseline } from './fixtures.mjs';
 
 const input = { messages: [{ role: 'user', content: '测试' }] };
@@ -90,7 +90,7 @@ test('all Observer queries reject malformed success bodies at the response bound
     [observation, 'source', ['x.ts']],
     [observation, 'execution', ['e']],
   ]) {
-    await assert.rejects(client[method](...args), (error) => error instanceof ObserverTransportError && error.kind === 'contract', method);
+    await assert.rejects(client[method](...args), (error) => error instanceof HttpTransportError && error.kind === 'contract', method);
   }
 });
 
@@ -127,7 +127,7 @@ test('stream remote errors retain their server code', async () => {
       () => {},
       () => {},
     ),
-    (error) => error instanceof ObserverTransportError && error.kind === 'remote' && error.code === 'PUBLICATION_ERROR',
+    (error) => error instanceof HttpTransportError && error.kind === 'remote' && error.code === 'PUBLICATION_ERROR',
   );
 });
 

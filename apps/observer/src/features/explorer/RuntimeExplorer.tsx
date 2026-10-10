@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { InvocationSummary } from '@capix-observer/protocol';
+import type { InvocationSummary } from '@capix/protocol';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import type { ExplorerProps } from './types';
@@ -16,10 +16,10 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
   const pendingScroll = useRef<number | undefined>(undefined);
   const ids = useMemo(() => executions.map((execution) => execution.id), [executions]);
   const layout = useMemo(() => layoutColumns(ids, columnWidth), [ids, columnWidth]);
-  const invocations = useMemo(() => executions.map(layoutInvocations), [executions]);
+  const invocationLayouts = useMemo(() => executions.map(layoutInvocations), [executions]);
   const matchById = useMemo(() => new Map(matches.map((match) => [match.executionId, match])), [matches]);
-  const operationLanes = Math.max(1, ...invocations.map((item) => item.operationLanes));
-  const attemptLanes = Math.max(1, ...invocations.map((item) => item.attemptLanes));
+  const operationLanes = Math.max(1, ...invocationLayouts.map((item) => item.operationLanes));
+  const attemptLanes = Math.max(1, ...invocationLayouts.map((item) => item.attemptLanes));
   const densityName = columnWidth < 380 ? '紧凑' : columnWidth > 640 ? '展开' : '标准';
 
   const revealNavigation = useCallback((id: string) => {
@@ -119,7 +119,7 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
       <div className="explorer-row-content" style={{ width: layout.width }}>
         {layout.columns.map((column, index) => (
           <div key={column.id} className="explorer-call-column" style={{ left: column.x, width: column.width }}>
-            {invocations[index]?.calls
+            {invocationLayouts[index]?.calls
               .filter((item) => item.call.recordType === type)
               .map((item) => (
                 <InvocationNode key={item.call.id} item={item} columnWidth={column.width} onInspect={() => onInspect(column.id, item.call.id)} />

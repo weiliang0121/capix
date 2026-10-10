@@ -10,46 +10,46 @@ export class SourceIncomplete extends Error {
   }
 }
 
-export interface SourceBaseline<S> {
+export interface SourceBaseline<BaselineValue> {
   readonly sourceId: string;
   readonly revision: number;
-  readonly value: S;
+  readonly value: BaselineValue;
 }
-export interface SourceReceiver<D> {
-  change(change: { readonly revision: number; readonly value: D }): void;
+export interface SourceReceiver<Change> {
+  change(change: { readonly revision: number; readonly value: Change }): void;
   incomplete(error: SourceIncomplete): void;
 }
-export interface ObservationSource<S, D> {
+export interface ObservationSource<BaselineValue, Change> {
   /** A consistent baseline handoff; a failed opening leaves no subscription. */
-  open(receiver: SourceReceiver<D>): { readonly baseline: SourceBaseline<S>; close(): void };
+  open(receiver: SourceReceiver<Change>): { readonly baseline: SourceBaseline<BaselineValue>; close(): void };
 }
 export interface DeliveryConnection {
   readonly closed: boolean;
   close(): void;
 }
-export interface DeliverySink<D> extends DeliveryConnection {
-  enqueue(change: D): void;
+export interface DeliverySink<Change> extends DeliveryConnection {
+  enqueue(change: Change): void;
 }
-export interface DeliveryOptions<S, D, F> {
-  baseline(baseline: SourceBaseline<S>): F;
-  delta(changes: readonly D[]): F;
-  incomplete(error: SourceIncomplete): F;
-  error(error: unknown): F;
-  send(frame: F): void;
+export interface DeliveryOptions<BaselineValue, Change, Frame> {
+  baseline(baseline: SourceBaseline<BaselineValue>): Frame;
+  delta(changes: readonly Change[]): Frame;
+  incomplete(error: SourceIncomplete): Frame;
+  error(error: unknown): Frame;
+  send(frame: Frame): void;
   /** Supplementary sources keep their own handoff positions; this does not invent a shared revision. */
-  attach?(sink: DeliverySink<D>): (() => void) | void;
+  attach?(sink: DeliverySink<Change>): (() => void) | void;
   closed?(connection: DeliveryConnection): void;
 }
 
 /** Queue-only source callbacks; projection and delivery belong to the consuming connection. */
-export function bindDelivery<S, D, F>(source: ObservationSource<S, D>, options: DeliveryOptions<S, D, F>): DeliveryConnection {
+export function bindDelivery<BaselineValue, Change, Frame>(source: ObservationSource<BaselineValue, Change>, options: DeliveryOptions<BaselineValue, Change, Frame>): DeliveryConnection {
   let closed = false;
   let scheduled = false;
   let incomplete: SourceIncomplete | undefined;
-  let pending: D[] = [];
+  let pending: Change[] = [];
   let closeSource = () => {};
   let closeAdditional = () => {};
-  const connection: DeliverySink<D> = {
+  const connection: DeliverySink<Change> = {
     get closed() {
       return closed;
     },
@@ -72,7 +72,7 @@ export function bindDelivery<S, D, F>(source: ObservationSource<S, D>, options: 
       schedule();
     },
   };
-  const deliver = (frame: F) => {
+  const deliver = (frame: Frame) => {
     if (closed) return;
     try {
       options.send(frame);
@@ -80,7 +80,7 @@ export function bindDelivery<S, D, F>(source: ObservationSource<S, D>, options: 
       connection.close();
     }
   };
-  const terminate = (project: () => F) => {
+  const terminate = (project: () => Frame) => {
     pending = [];
     try {
       deliver(project());

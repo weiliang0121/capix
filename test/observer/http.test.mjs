@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { request } from 'node:http';
 import { test } from 'node:test';
-import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
-import { ClientRuntime } from '@capix-observer/client-runtime';
-import { Runtime } from '@capix-observer/runtime';
-import { createRuntime } from '../fixtures/runtime.mjs';
-import { readOutput, validateSnapshot } from '@capix-observer/protocol';
-import { createObserverServer, initializeObserver, bindObserver, ObserverRuntimeDefinition, acceptExecutionInput } from '@capix-observer/service';
+import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
+import { ClientRuntime } from '@capix/client-runtime';
+import { BoundRuntime } from '@capix/server-runtime';
+import { createBoundRuntime } from '../fixtures/runtime.mjs';
+import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
+import { createObserverServer, initializeObserver, bindConversation, ConversationRuntimeDefinition, acceptConversationInput } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -55,7 +55,7 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
   assert.ok(stream.every((item) => !('snapshot' in item)));
   const listed = await get('/api/executions');
   const snapshot = await get('/api/execution?id=' + listed.executions[0].id);
-  validateSnapshot(snapshot);
+  validateExecutionRecordSnapshot(snapshot);
   assert.equal(snapshot.execution.status, 'succeeded');
   assert.equal(readOutput(snapshot.execution.value).content, '测试回答');
   const overview = await get('/api/executions');
@@ -84,6 +84,12 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
   const source = await get('/api/source?file=' + encodeURIComponent(path));
   assert.equal(source.path, path);
   assert.match(source.content, /class SelectHistory/);
+  for (const call of execution.calls) {
+    const file = call.source.split(' · ')[0];
+    const resolved = await get('/api/source?file=' + encodeURIComponent(file));
+    assert.equal(resolved.path, file, `moved source must remain inspectable: ${call.source}`);
+    assert.ok(resolved.content.length > 0);
+  }
 });
 
 test('busy execution rejects another submission without adding messages or inventing a finished duration', async (t) => {
@@ -136,7 +142,7 @@ test('failed memory postprocessing still exposes the completed answer and the ac
 
 test('failure before a complete execution record produces a terminal transport error, never silent success', async (t) => {
   const { run, observer } = await setup(t);
-  observer.definition.execution.entry.admit = () => {
+  observer.definition.executionDefinition.entry.admit = () => {
     throw new Error('private diagnostic must not be an HTTP message');
   };
   const stream = await updates(await run());
@@ -273,7 +279,7 @@ test('answer is delivered before memory finishes, and closing observation does n
 
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
   const entities = createEnvironment();
-  const runtime = bindObserver(new ObserverRuntimeDefinition(), entities, provider);
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, provider);
   const received = [];
   const output = await runtime.run({ messages: [{ role: 'user', content: '问题' }] }, { settings, deliver: (update) => received.push(update) });
   assert.deepEqual(output, { kind: 'answer', content: '测试回答' });

@@ -1,4 +1,4 @@
-import type { RelationChange } from '../observation/facts.js';
+import type { InvocationRelationChange } from '../observation/facts.js';
 import { combineFaults } from '../observation/error.js';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationRelationView, InvocationView } from './view.js';
@@ -10,9 +10,9 @@ export interface InvocationRelationOptions {
   key?: string;
 }
 
-export interface InvocationTarget<O = unknown> {
-  readonly context: InvocationContext<unknown, O>;
-  run(): Promise<O>;
+export interface InvocationTarget<Output = unknown> {
+  readonly context: InvocationContext<unknown, Output>;
+  run(): Promise<Output>;
   readonly view?: InvocationView;
 }
 
@@ -29,7 +29,7 @@ export class InvocationRelation {
     readonly round: number,
     readonly key?: string,
     private readonly failed?: (failure: InvocationFailure) => void,
-    private readonly observe?: (change: RelationChange) => unknown | undefined,
+    private readonly observe?: (change: InvocationRelationChange) => unknown | undefined,
   ) {
     const relation = this;
     this.view = Object.freeze({
@@ -63,7 +63,7 @@ export class InvocationRelation {
     this.observe?.({ kind: 'returned', result: this.#returned });
   }
 
-  async accept<T>(work: () => T | Promise<T>): Promise<T> {
+  async accept<Value>(work: () => Value | Promise<Value>): Promise<Value> {
     if (this.#returned?.status !== 'succeeded') throw new Error('Child invocation has not returned successfully');
     if (this.#reception.status !== 'pending') throw new Error('Child result has already entered acceptance');
     this.#reception = Object.freeze({ status: 'receiving' });
@@ -73,7 +73,7 @@ export class InvocationRelation {
       const failed = this.observe?.({ kind: 'failed', error: observed, source: 'observation' });
       throw combineFaults([observed, ...(failed !== undefined ? [failed] : [])]);
     }
-    let output: T;
+    let output: Value;
     try {
       output = await work();
     } catch (error) {

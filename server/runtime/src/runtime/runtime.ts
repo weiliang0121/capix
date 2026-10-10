@@ -1,7 +1,7 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from './clock.js';
-import { bindRuntimeObservation, type EventConsumer } from '../observation/binding.js';
-import type { RuntimeFact } from '../observation/facts.js';
+import { bindRuntimeStructureObservation, type EventConsumer } from '../observation/binding.js';
+import type { RuntimeStructureFact } from '../observation/facts.js';
 import { randomUUID } from 'node:crypto';
 import { DeclaredException } from '../exception/contract.js';
 import { RuntimeError } from '../errors/error.js';
@@ -11,7 +11,8 @@ import { observationResources } from '../definition/invocation.js';
 import type { RuntimeDefinition } from '../definition/runtime.js';
 import type { BoundChildren } from '../binding/children.js';
 import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
-import type { RuntimeContext, RuntimeCallOptions, RuntimeExecutionBindings } from '../context/runtime.js';
+import type { RuntimeContext, ExecutionBindingResolver } from '../context/runtime.js';
+import type { InvocationControls } from '../context/context.js';
 import type { InvocationCapabilities } from '../invocation/capabilities.js';
 import type { InvocationWork } from '../invocation/cycle.js';
 import { RuntimeContextBuilder } from '../context/runtime/builder.js';
@@ -23,41 +24,41 @@ import { OperationInvocationBuilder } from '../invocation/operation/builder.js';
 import { AttemptContextBuilder } from '../context/attempt/builder.js';
 import { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
 
-export interface RuntimeBinding<I, O, P, R extends object = object> {
-  readonly definition: RuntimeDefinition<I, O, R, any>;
+export interface BoundRuntimeBinding<Input, Output, Options, Resources extends object = object> {
+  readonly definition: RuntimeDefinition<Input, Output, Resources, any>;
   readonly children: BoundChildren;
-  validate?(options: P): void;
-  resources(input: I, options: P): ResourceBindings<R>;
-  executions(input: I, options: P): RuntimeExecutionBindings;
+  validate?(options: Options): void;
+  resources(input: Input, options: Options): ResourceBindings<Resources>;
+  executionBindings(input: Input, options: Options): ExecutionBindingResolver;
 }
 
 /** Long-lived structure and occupancy; every run owns a separate Context and Invocation. */
-export class Runtime<I = unknown, O = unknown, P extends RuntimeCallOptions = RuntimeCallOptions, R extends object = object> {
+export class BoundRuntime<Input = unknown, Output = unknown, Options extends InvocationControls = InvocationControls, Resources extends object = object> {
   readonly id = randomUUID();
-  readonly runtimeInvocations: RuntimeInvocationBuilder;
-  readonly executionInvocations: ExecutionInvocationBuilder;
-  readonly operationInvocations: OperationInvocationBuilder;
-  readonly attemptInvocations: AttemptInvocationBuilder;
+  readonly runtimeInvocationBuilder: RuntimeInvocationBuilder;
+  readonly executionInvocationBuilder: ExecutionInvocationBuilder;
+  readonly operationInvocationBuilder: OperationInvocationBuilder;
+  readonly attemptInvocationBuilder: AttemptInvocationBuilder;
   readonly environment: BindingEnvironment;
-  readonly #binding?: RuntimeBinding<I, O, P, R>;
-  readonly #work?: InvocationWork<RuntimeContext<I, O, R>, I, O>;
+  readonly #binding?: BoundRuntimeBinding<Input, Output, Options, Resources>;
+  readonly #work?: InvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>>;
   #running = false;
   #sequence = 0;
   readonly #clock: Clock;
-  readonly #observation: EventConsumer<RuntimeFact>;
+  readonly #observation: EventConsumer<RuntimeStructureFact>;
 
-  constructor(options: InvocationCapabilities = {}, assemble?: (runtime: Runtime<I, O, P, R>) => RuntimeBinding<I, O, P, R>) {
+  constructor(options: InvocationCapabilities = {}, assemble?: (runtime: BoundRuntime<Input, Output, Options, Resources>) => BoundRuntimeBinding<Input, Output, Options, Resources>) {
     this.#clock = options.clock ?? new Clock();
-    this.#observation = bindRuntimeObservation(this.id, options.observations);
-    const runtimes = new RuntimeContextBuilder();
-    const executions = new ExecutionContextBuilder(runtimes);
-    const operations = new OperationContextBuilder(executions);
-    const attempts = new AttemptContextBuilder(operations);
-    this.runtimeInvocations = new RuntimeInvocationBuilder(this.id, runtimes, options);
-    this.executionInvocations = new ExecutionInvocationBuilder(executions, options);
-    this.operationInvocations = new OperationInvocationBuilder(operations, options);
-    this.attemptInvocations = new AttemptInvocationBuilder(attempts, options);
-    this.environment = new BindingEnvironment(this.executionInvocations, this.operationInvocations, this.attemptInvocations, observationResources(options.observations), options.observations);
+    this.#observation = bindRuntimeStructureObservation(this.id, options.observations);
+    const runtimeContextBuilder = new RuntimeContextBuilder();
+    const executionContextBuilder = new ExecutionContextBuilder(runtimeContextBuilder);
+    const operationContextBuilder = new OperationContextBuilder(executionContextBuilder);
+    const attemptContextBuilder = new AttemptContextBuilder(operationContextBuilder);
+    this.runtimeInvocationBuilder = new RuntimeInvocationBuilder(this.id, runtimeContextBuilder, options);
+    this.executionInvocationBuilder = new ExecutionInvocationBuilder(executionContextBuilder, options);
+    this.operationInvocationBuilder = new OperationInvocationBuilder(operationContextBuilder, options);
+    this.attemptInvocationBuilder = new AttemptInvocationBuilder(attemptContextBuilder, options);
+    this.environment = new BindingEnvironment(this.executionInvocationBuilder, this.operationInvocationBuilder, this.attemptInvocationBuilder, observationResources(options.observations), options.observations);
     this.#binding = assemble?.(this);
     if (this.#binding) this.#work = bindInvocationWork(this.#binding.definition, this.#binding.children);
     this.publish({ kind: 'established' });
@@ -72,7 +73,7 @@ export class Runtime<I = unknown, O = unknown, P extends RuntimeCallOptions = Ru
     if (!isUndefined(fault)) throw fault;
   }
 
-  async reserve<T>(work: () => T | Promise<T>): Promise<T> {
+  async reserve<Value>(work: () => Value | Promise<Value>): Promise<Value> {
     if (this.#running) {
       const error = new RuntimeError('RUNTIME_BUSY', '当前环境正在执行，请等待本次调用结束。');
       try {
@@ -103,7 +104,7 @@ export class Runtime<I = unknown, O = unknown, P extends RuntimeCallOptions = Ru
     }
   }
 
-  async run(input: I, options: P): Promise<O> {
+  async run(input: Input, options: Options): Promise<Output> {
     const binding = this.#binding;
     const work = this.#work;
     if (!binding || !work) throw new Error('Runtime has no assembled work');
@@ -113,11 +114,11 @@ export class Runtime<I = unknown, O = unknown, P extends RuntimeCallOptions = Ru
         try {
           binding.validate?.(options);
           const definition = binding.definition;
-          invocation = this.runtimeInvocations.create(input, {
-            context: options,
+          invocation = this.runtimeInvocationBuilder.create(input, {
+            controls: options,
             resources: binding.resources(input, options),
-            executions: binding.executions(input, options),
-            requires: this.environment.resources(definition) as ResourceRequirements<R>,
+            executionBindings: binding.executionBindings(input, options),
+            requires: this.environment.resources(definition) as ResourceRequirements<Resources>,
             initial: definition.run.requires,
             observation: definition.observation,
             work,

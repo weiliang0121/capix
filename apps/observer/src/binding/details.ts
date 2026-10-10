@@ -1,4 +1,4 @@
-import { hasOutput, readOutput, type MemoryObservation, type RuntimeSnapshot } from '@capix-observer/protocol';
+import { hasOutput, readOutput, type MemoryObservation, type ExecutionRecordSnapshot } from '@capix/protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 import { executionResources } from './resources.js';
@@ -6,7 +6,7 @@ import { projectExecution } from '../observation/project.js';
 import type { CallSpan } from '../observation/types.js';
 import type { CallMemory, CallDetail, ExecutionDetail } from '../state/data.js';
 
-export function projectDetail(snapshot: RuntimeSnapshot, memory: MemoryObservation): ExecutionDetail {
+export function projectDetail(snapshot: ExecutionRecordSnapshot, memory: MemoryObservation): ExecutionDetail {
   const trace = projectExecution(snapshot);
   const calls = trace.callSequence.calls.map((call) => (call.id === snapshot.execution.id ? { ...call, parentId: snapshot.runtimeCall.id } : call));
   const memoryAt = (call?: CallSpan): CallMemory => {

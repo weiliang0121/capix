@@ -1,4 +1,4 @@
-import type { InvocationFailureFact } from '@capix-observer/protocol';
+import type { InvocationFailureFact } from '@capix/protocol';
 
 /** Delivery classification is independent of whether work already established effects. */
 export interface InvocationFailure extends InvocationFailureFact {

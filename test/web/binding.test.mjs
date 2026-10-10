@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ClientRuntime } from '@capix-observer/client-runtime';
-import { initializeObserver, observeExecution, observeOverview, ObservationFeed } from '@capix-observer/service';
-import { Transcript, observeMemory } from '@capix-observer/runtime';
+import { ClientRuntime } from '@capix/client-runtime';
+import { initializeObserver, observeExecution, observeOverview, ObservationFeed } from '@capix/observer-service';
+import { Transcript, observeMemory } from '@capix/server-runtime';
 import { projectDetail } from '../../apps/observer/.test-dist/binding/details.js';
 import { createApplication } from '../../apps/observer/.test-dist/binding/application.js';
 import { client, deferred, snapshot, transport, deliverAnswer } from '../client/fixtures.mjs';

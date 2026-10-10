@@ -1,26 +1,26 @@
-import type { InvocationFailureFact } from '@capix-observer/protocol';
+import type { InvocationFailureFact } from '@capix/protocol';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 
 import type { Recorder } from '../recorder.js';
-import type { RuntimeErrorValue } from '@capix-observer/protocol';
+import type { RuntimeErrorValue } from '@capix/protocol';
 import type { RecordBook } from '../container/book.js';
 import { AttemptRecordHelper } from '../attempt/helper.js';
 import { ExecutionRecord } from '../execution/record.js';
-import { OperationRecord, type OperationRecordDefinition } from './record.js';
+import { OperationRecord, type OperationRecordOptions } from './record.js';
 
 /** Operation recording; scope queries and completion checks follow the record tree. */
 export class OperationRecordHelper {
-  static create(recorder: Recorder, definition: OperationRecordDefinition, input: unknown): OperationRecord {
+  static create(recorder: Recorder, options: OperationRecordOptions, input: unknown): OperationRecord {
     const book = recorder.book;
-    const execution = book.get(definition.executionId);
+    const execution = book.get(options.executionId);
     if (!(execution instanceof ExecutionRecord)) throw new Error('Execution does not exist');
     if (execution.status !== 'running') throw new Error('Record has already ended');
-    if (definition.parentOperationId) {
-      const parent = book.get(definition.parentOperationId);
-      if (!(parent instanceof OperationRecord) || parent.executionId !== definition.executionId) throw new Error('Parent operation belongs to another execution or does not exist');
+    if (options.parentOperationId) {
+      const parent = book.get(options.parentOperationId);
+      if (!(parent instanceof OperationRecord) || parent.executionId !== options.executionId) throw new Error('Parent operation belongs to another execution or does not exist');
       if (parent.status !== 'running') throw new Error('Record has already ended');
     }
-    const record = new OperationRecord(definition, input);
+    const record = new OperationRecord(options, input);
     return recorder.add(record);
   }
 

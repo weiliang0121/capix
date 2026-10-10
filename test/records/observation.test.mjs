@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindRecording, callRecording, Recorder, RecordBook, ChangeObserver, ResourceBindings, ExecutionRecordHelper, RuntimeCallRecord, defineObservation, InvocationRecordAccess } from '@capix-observer/runtime';
-import { readOutput, validateSnapshot } from '@capix-observer/protocol';
+import { bindRecording, invocationRecording, Recorder, RecordBook, ChangeBuffer, ResourceBindings, ExecutionRecordHelper, RuntimeCallRecord, defineObservation, InvocationRecordAccess } from '@capix/server-runtime';
+import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 
 function fixture(options) {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const recorder = new Recorder(new RecordBook(), { changes });
   const recording = bindRecording(recorder, options);
   const create = (level, contextId, parent, description = {}) => {
-    const declaration = callRecording();
+    const declaration = invocationRecording();
     const setup = { identity: { level, contextId, ...(parent ? { parentContextId: parent.setup.identity.contextId } : {}) }, description, resources: new ResourceBindings({}), declarations: [declaration] };
-    const call = recording.bindCall(setup, parent);
+    const call = recording.bindInvocation(setup, parent);
     const observe = declaration.bind(call.resources);
     let eventSequence = 0;
     return {
@@ -47,7 +47,7 @@ function completedPair() {
 test('record preset keeps R invocation, E timing and parent reception distinct', () => {
   const { recorder, recording, runtime, execution, changes } = completedPair();
   const snapshot = ExecutionRecordHelper.snapshot(recorder, execution.call.record.id);
-  validateSnapshot(snapshot);
+  validateExecutionRecordSnapshot(snapshot);
   assert.ok(runtime.call.record instanceof RuntimeCallRecord);
   assert.equal(runtime.call.record.parentId, recording.root.id);
   assert.equal(snapshot.execution.parentId, runtime.call.record.id);
@@ -91,10 +91,10 @@ test('record relation snapshots reject acceptance before return and duplicate ev
   const snapshot = ExecutionRecordHelper.snapshot(recorder, execution.call.record.id);
   const invalid = structuredClone(snapshot);
   invalid.runtimeCall.value.relationChanges.splice(1, 1);
-  assert.throws(() => validateSnapshot(invalid));
+  assert.throws(() => validateExecutionRecordSnapshot(invalid));
   const duplicate = structuredClone(snapshot);
   duplicate.runtimeCall.value.relationChanges[0].eventSequence = duplicate.runtimeCall.value.processes[0].eventSequence;
-  assert.throws(() => validateSnapshot(duplicate));
+  assert.throws(() => validateExecutionRecordSnapshot(duplicate));
 });
 
 test('execution snapshots require their actual Runtime call and its independent boundary facts', () => {
@@ -103,14 +103,14 @@ test('execution snapshots require their actual Runtime call and its independent 
   for (const field of ['runtimeCall', 'runtimeEvents']) {
     const missing = structuredClone(snapshot);
     delete missing[field];
-    assert.throws(() => validateSnapshot(missing));
+    assert.throws(() => validateExecutionRecordSnapshot(missing));
   }
   const unrelated = structuredClone(snapshot);
   unrelated.execution.parentId = 'another-runtime-call';
-  assert.throws(() => validateSnapshot(unrelated));
+  assert.throws(() => validateExecutionRecordSnapshot(unrelated));
   const wrongScope = structuredClone(snapshot);
   wrongScope.runtimeEvents[0].scopeId = snapshot.execution.id;
-  assert.throws(() => validateSnapshot(wrongScope));
+  assert.throws(() => validateExecutionRecordSnapshot(wrongScope));
 });
 
 test('preconstructed child attachments retain their fact order when the parent recording starts', () => {
@@ -130,12 +130,12 @@ test('preconstructed child attachments retain their fact order when the parent r
   child.publish({ kind: 'finished', state: { status: 'succeeded', output: 'done' } }, 13);
   parent.publish({ kind: 'relation', relation: { ...relation, key: 'prepared' }, change: { kind: 'returned', result: { status: 'succeeded', output: 'done' } } }, 14);
   parent.publish({ kind: 'finished', state: { status: 'succeeded', output: 'done' } }, 15);
-  validateSnapshot(ExecutionRecordHelper.snapshot(recorder, child.call.record.id));
+  validateExecutionRecordSnapshot(ExecutionRecordHelper.snapshot(recorder, child.call.record.id));
 });
 
 test('record installation supplies a scoped writer, not an automatic second call-record path', () => {
   const { recording } = fixture();
-  const scope = recording.bindCall({ identity: { level: 'runtime', contextId: 'r' }, description: { id: 'runtime' }, resources: new ResourceBindings({}), declarations: [callRecording()] });
+  const scope = recording.bindInvocation({ identity: { level: 'runtime', contextId: 'r' }, description: { id: 'runtime' }, resources: new ResourceBindings({}), declarations: [invocationRecording()] });
   const fact = { kind: 'started', input: null, identity: scope.setup.identity, description: scope.setup.description, eventSequence: 1, occurredAt: '2026-10-09T00:00:00.000Z', monotonicTime: 0 };
   scope.observe(fact);
   assert.equal(scope.record, undefined);

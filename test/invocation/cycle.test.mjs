@@ -1,27 +1,27 @@
-import { Execution, Operation, Attempt } from '../fixtures/behavior.mjs';
+import { ExecutionFixture, OperationFixture, AttemptFixture } from '../fixtures/behavior.mjs';
 import { callFor, recordFor, rememberCall } from '../fixtures/lifecycle.mjs';
-import { InvocationRecord, AttemptRecord } from '@capix-observer/runtime';
-import { subscribeExecutions } from '@capix-observer/service';
-import { ExecutionRecordHelper } from '@capix-observer/runtime';
+import { InvocationRecord, AttemptRecord } from '@capix/server-runtime';
+import { subscribeExecutions } from '@capix/observer-service';
+import { ExecutionRecordHelper } from '@capix/server-runtime';
 import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runtime, Recorder, RecordBook, ExceptionContract } from '@capix-observer/runtime';
-import { createRuntime, observeCall } from '../fixtures/runtime.mjs';
+import { BoundRuntime, Recorder, RecordBook, ExceptionContract } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 
-import { validateSnapshot } from '@capix-observer/protocol';
+import { validateExecutionRecordSnapshot } from '@capix/protocol';
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 import { TestOperation } from '../fixtures/operation.mjs';
 
 const settings = {};
 function fixture(recorded = true) {
   const recorder = recorded ? new Recorder(new RecordBook()) : undefined;
-  const runtime = createRuntime({ recorder });
+  const runtime = createBoundRuntime({ recorder });
   const lifecycle = lifecycleFor(runtime).execution({ input: 'root', settings });
   const execution = lifecycle.begin();
   return { runtime, recorder, execution, lifecycle };
 }
-class LocalOperation extends Operation {
+class LocalOperation extends OperationFixture {
   name = 'local';
   label = '本地处理';
   source = 'test/invocation/cycle.test.mjs';
@@ -37,7 +37,7 @@ test('local two-round handling keeps one context and one record with immutable p
   const { runtime, recorder, execution, lifecycle } = fixture();
   const published = [];
   subscribeExecutions(runtime.recording, (snapshot) => {
-    validateSnapshot(snapshot);
+    validateExecutionRecordSnapshot(snapshot);
     published.push(snapshot);
   });
   class Advance extends LocalOperation {
@@ -53,7 +53,7 @@ test('local two-round handling keeps one context and one record with immutable p
       return output.value < 2 ? context.continueWith(output, '补足到二') : output;
     }
   }
-  const operation = new Advance(runtime.operationInvocations),
+  const operation = new Advance(runtime.operationInvocationBuilder),
     input = { value: 0 };
   const output = await operation.call(callFor(execution), input);
   assert.deepEqual(output, { value: 2 });
@@ -90,7 +90,7 @@ test('local two-round handling keeps one context and one record with immutable p
 });
 
 test('EOA binds inherited execute and acceptance methods to each behavior instance', async () => {
-  for (const Base of [Execution, Operation, Attempt]) {
+  for (const Base of [ExecutionFixture, OperationFixture, AttemptFixture]) {
     const { runtime, recorder, execution } = fixture();
     class Local extends Base {
       name = 'local';
@@ -112,10 +112,10 @@ test('EOA binds inherited execute and acceptance methods to each behavior instan
       }
     }
     class Inherited extends Local {}
-    const work = new Inherited(Base === Execution ? runtime.executionInvocations : Base === Operation ? runtime.operationInvocations : runtime.attemptInvocations);
+    const work = new Inherited(Base === ExecutionFixture ? runtime.executionInvocationBuilder : Base === OperationFixture ? runtime.operationInvocationBuilder : runtime.attemptInvocationBuilder);
     let output;
-    if (Base === Execution) output = await work.call(0, { settings });
-    else if (Base === Operation) output = await work.call(callFor(execution), 0);
+    if (Base === ExecutionFixture) output = await work.call(0, { settings });
+    else if (Base === OperationFixture) output = await work.call(callFor(execution), 0);
     else {
       const parent = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), 'parent').begin();
       output = await work.call(callFor(parent), 0);
@@ -137,7 +137,7 @@ test('unhandled failure executes once and keeps the original error', async () =>
       throw failure;
     }
   }
-  const work = new Fail(runtime.operationInvocations);
+  const work = new Fail(runtime.operationInvocationBuilder);
   await assert.rejects(work.call(callFor(execution), 0), (error) => error === failure);
   assert.equal(work.contexts.length, 1);
   const record = recordFor(work.contexts[0]);
@@ -157,7 +157,7 @@ test('default limit is one total round and explicit local handling is capped at 
         return context.continueWith(output, '仍未满足要求');
       }
     }
-    const work = new Repeat(runtime.operationInvocations);
+    const work = new Repeat(runtime.operationInvocationBuilder);
     await assert.rejects(work.call(callFor(execution), 0), (e) => e.code === 'LOCAL_ROUND_LIMIT');
     assert.equal(work.contexts.length, limit);
     const context = work.contexts[0],
@@ -176,7 +176,7 @@ test('invalid limits and empty continuation reasons stop explicitly', async () =
     class Invalid extends LocalOperation {
       maxRounds = limit;
     }
-    const work = new Invalid(runtime.operationInvocations);
+    const work = new Invalid(runtime.operationInvocationBuilder);
     await assert.rejects(work.call(callFor(execution), 0), (e) => e.code === 'INVALID_ROUND_LIMIT');
     assert.equal(work.contexts.length, 0);
   }
@@ -187,7 +187,7 @@ test('invalid limits and empty continuation reasons stop explicitly', async () =
       return context.continueWith(output, ' ');
     }
   }
-  const work = new InvalidReason(runtime.operationInvocations);
+  const work = new InvalidReason(runtime.operationInvocationBuilder);
   await assert.rejects(work.call(callFor(execution), 0), (e) => e.code === 'INVALID_CONTINUATION');
   assert.equal(work.contexts.length, 1);
 });
@@ -206,7 +206,7 @@ test('cancelled calls do not enter execute; cancellation between rounds keeps th
       }
     }
     if (initiallyCancelled) controller.abort(cause);
-    const work = new Repeat(runtime.operationInvocations);
+    const work = new Repeat(runtime.operationInvocationBuilder);
     await assert.rejects(work.call(callFor(execution), 0), (e) => e.code === 'INVOCATION_CANCELLED' && e.cause === cause);
     assert.equal(work.contexts.length, initiallyCancelled ? 0 : 1);
     const record = observeCall(runtime.recording, callFor(execution)).operations[0];
@@ -224,7 +224,7 @@ test('acceptance errors stop locally and retain the execution result and origina
       throw failure;
     }
   }
-  const work = new Broken(runtime.operationInvocations);
+  const work = new Broken(runtime.operationInvocationBuilder);
   await assert.rejects(work.call(callFor(execution), 0), (error) => error === failure);
   assert.equal(work.contexts.length, 1);
   assert.equal(work.contexts[0].progress.result.output, 1);
@@ -237,7 +237,7 @@ test('acceptance errors stop locally and retain the execution result and origina
 test('a parent may handle a failed child without rewriting the failed child invocation', async () => {
   const { runtime, recorder, execution, lifecycle } = fixture();
   const rejected = new ExceptionContract('test.child-rejected');
-  class Child extends Attempt {
+  class Child extends AttemptFixture {
     raises = [rejected];
     name = 'child';
     label = 'child';
@@ -249,7 +249,7 @@ test('a parent may handle a failed child without rewriting the failed child invo
       return context.currentInput;
     }
   }
-  const child = new Child(runtime.attemptInvocations);
+  const child = new Child(runtime.attemptInvocationBuilder);
   class Parent extends LocalOperation {
     maxRounds = 2;
     execute(context, invocation) {
@@ -264,11 +264,11 @@ test('a parent may handle a failed child without rewriting the failed child invo
       },
     };
   }
-  const work = new Parent(runtime.operationInvocations);
+  const work = new Parent(runtime.operationInvocationBuilder);
   assert.equal(await work.call(callFor(execution), 0), 1);
   lifecycle.succeed(execution, 1);
   const snapshot = observeCall(runtime.recording, callFor(execution));
-  validateSnapshot(snapshot);
+  validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(
     snapshot.attempts.map((a) => a.status),
     ['failed', 'succeeded'],
@@ -293,7 +293,7 @@ test('record failure bypasses local recovery and prevents repeating successful w
       return context.continueWith(0, 'retry');
     }
   }
-  const work = new Repeat(runtime.operationInvocations);
+  const work = new Repeat(runtime.operationInvocationBuilder);
   await assert.rejects(work.call(callFor(execution), 0), (e) => e.code === 'OBSERVATION_FAILED' && e.cause?.code === 'RECORDING_FAILED' && e.cause.cause === failure);
   assert.equal(work.contexts.length, 1);
   assert.equal(received, 0);
@@ -314,7 +314,7 @@ test('work failure and failed process registration preserve both errors', async 
       throw failure;
     }
   }
-  await assert.rejects(new Fail(runtime.operationInvocations).call(callFor(execution), 0), (e) => e instanceof AggregateError && e.errors[0] === failure && e.errors[1].code === 'OBSERVATION_FAILED' && e.errors[1].cause?.code === 'RECORDING_FAILED' && e.errors[1].cause.cause === registration);
+  await assert.rejects(new Fail(runtime.operationInvocationBuilder).call(callFor(execution), 0), (e) => e instanceof AggregateError && e.errors[0] === failure && e.errors[1].code === 'OBSERVATION_FAILED' && e.errors[1].cause?.code === 'RECORDING_FAILED' && e.errors[1].cause.cause === registration);
 });
 
 test('no recorder is required by local handling; live input/output keep their identities', async () => {
@@ -332,7 +332,7 @@ test('no recorder is required by local handling; live input/output keep their id
       return output === initial ? context.continueWith(next, 'next') : output;
     }
   }
-  const work = new Local(runtime.operationInvocations);
+  const work = new Local(runtime.operationInvocationBuilder);
   assert.equal(await work.call(callFor(execution), initial), next);
   assert.equal(work.contexts[0].input, initial);
   assert.equal(work.contexts[0].currentInput, next);
@@ -347,7 +347,7 @@ test('child recording failures cannot be converted into parent retries', async (
     if (this instanceof AttemptRecord && process.type === 'return') throw new Error('child recording failed');
     original.call(this, process);
   });
-  class Child extends Attempt {
+  class Child extends AttemptFixture {
     name = 'child';
     label = 'child';
     source = 'test';
@@ -357,7 +357,7 @@ test('child recording failures cannot be converted into parent retries', async (
       return 'done';
     }
   }
-  const child = new Child(runtime.attemptInvocations);
+  const child = new Child(runtime.attemptInvocationBuilder);
   class Parent extends LocalOperation {
     maxRounds = 2;
     execute(context, invocation) {
@@ -369,7 +369,7 @@ test('child recording failures cannot be converted into parent retries', async (
       return context.continueWith(0, 'retry');
     }
   }
-  await assert.rejects(new Parent(runtime.operationInvocations).call(callFor(execution), 0), (e) => e.code === 'OBSERVATION_FAILED' && e.cause?.code === 'RECORDING_FAILED');
+  await assert.rejects(new Parent(runtime.operationInvocationBuilder).call(callFor(execution), 0), (e) => e.code === 'OBSERVATION_FAILED' && e.cause?.code === 'RECORDING_FAILED');
   assert.equal(effects, 1);
   assert.equal(receptions, 0);
 });
@@ -384,7 +384,7 @@ test('process publication is live during acceptance and does not create standalo
       });
     }
   }
-  const work = new Waiting(runtime.operationInvocations),
+  const work = new Waiting(runtime.operationInvocationBuilder),
     pending = work.call(callFor(execution), 0);
   while (!resume) await new Promise((resolve) => setImmediate(resolve));
   const snapshot = observeCall(runtime.recording, callFor(execution)),
@@ -398,10 +398,10 @@ test('process publication is live during acceptance and does not create standalo
   assert.equal([...recorder.book.values()].filter((record) => record.kind === 'runtime-call').length, 1);
   assert.equal([...recorder.book.values()].filter((record) => record.kind === 'operation').length, 1);
   assert.equal([...recorder.book.values()].filter((record) => record.kind === 'invocation-boundary').length, 3);
-  validateSnapshot(snapshot);
+  validateExecutionRecordSnapshot(snapshot);
   const corrupt = structuredClone(snapshot);
   corrupt.operations[0].value.processes[0].sequence = 9;
-  assert.throws(() => validateSnapshot(corrupt));
+  assert.throws(() => validateExecutionRecordSnapshot(corrupt));
   resume();
   assert.equal(await pending, 1);
   assert.equal(record.value.processes.length, 2);
@@ -416,5 +416,5 @@ test('a cyclic aggregate remains a work error rather than recursing in control c
       throw failure;
     }
   }
-  await assert.rejects(new Fail(runtime.operationInvocations).call(callFor(execution), 0), (error) => error === failure);
+  await assert.rejects(new Fail(runtime.operationInvocationBuilder).call(callFor(execution), 0), (error) => error === failure);
 });

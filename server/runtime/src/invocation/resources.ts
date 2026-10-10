@@ -3,7 +3,7 @@ import type { ResourceBindings } from '../resource/bindings.js';
 import type { Invocation } from './invocation.js';
 
 /** Supply capture is shared; call provenance and endpoint realization are not. */
-export function attachInvocationResources<I, O, C extends InvocationContext<I, O>>(invocation: Invocation<I, O, C>, resources: ResourceBindings): void {
+export function attachInvocationResources<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, resources: ResourceBindings): void {
   resources.attach({
     contextId: invocation.context.id,
     nextSequence: () => invocation.nextResourceSequence(),

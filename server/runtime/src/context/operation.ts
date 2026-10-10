@@ -3,30 +3,30 @@ import type { ExecutionContext } from './execution.js';
 import type { ExecutionContextBuilder } from './execution/builder.js';
 import { InvocationContext } from './context.js';
 
-export class OperationContext<I = unknown, O = unknown, R extends object = object> extends InvocationContext<I, O> {
+export class OperationContext<Input = unknown, Output = unknown, Resources extends object = object> extends InvocationContext<Input, Output> {
   get level(): 'operation' {
     return 'operation';
   }
   readonly signal: AbortSignal;
-  readonly #parent: ExecutionContext | OperationContext;
+  readonly #parentContext: ExecutionContext | OperationContext;
 
   constructor(
-    parent: ExecutionContext | OperationContext,
-    input: I,
-    readonly resources: ResourceBindings<R> = new ResourceBindings({} as ResourceRequirements<R>),
+    parentContext: ExecutionContext | OperationContext,
+    input: Input,
+    readonly resources: ResourceBindings<Resources> = new ResourceBindings({} as ResourceRequirements<Resources>),
   ) {
     super(input);
-    this.#parent = parent;
-    this.signal = parent.signal;
+    this.#parentContext = parentContext;
+    this.signal = parentContext.signal;
     Object.freeze(this);
   }
 
-  belongsTo(builder: ExecutionContextBuilder): boolean {
-    return this.#parent.belongsTo(builder);
+  belongsTo(executionContextBuilder: ExecutionContextBuilder): boolean {
+    return this.#parentContext.belongsTo(executionContextBuilder);
   }
 
   requireActive(): void {
     this.requireRunning();
-    this.#parent.requireActive();
+    this.#parentContext.requireActive();
   }
 }

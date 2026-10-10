@@ -1,5 +1,5 @@
 import { contextWithSource } from './observer.mjs';
-import { Invocation, InvocationChildren, OperationContext, AttemptContext, bindCallObservation, Clock } from '@capix-observer/runtime';
+import { Invocation, InvocationChildren, OperationContext, AttemptContext, bindInvocationObservation, Clock } from '@capix/server-runtime';
 import { fixtureState } from './runtime.mjs';
 import { callFor, recordFor, rememberCall } from './calls.mjs';
 export { callFor, recordFor, rememberCall } from './calls.mjs';
@@ -14,7 +14,7 @@ export function lifecycleFor(runtime) {
     create(execute) {
       const { context, parent, root } = establish();
       const identity = { contextId: context.id, level, parentContextId: parent.context.id };
-      const observation = bindCallObservation({ identity, description, declarations: state.observe, resources: context.resources }, state.recording ? [state.recording] : [], parent.observation);
+      const observation = bindInvocationObservation({ identity, description, declarations: state.observe, resources: context.resources }, state.recording ? [state.recording] : [], parent.observation);
       const clock = state.recorder?.clock ?? new Clock();
       if (execute) {
         const invocation = state.decorate(new Invocation({ context, parent: { invocation: parent }, identity, description, observation, clock, work: { execute, raises: description?.raises, maxRounds: 1 }, signal: context.signal }));

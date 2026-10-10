@@ -1,12 +1,8 @@
-import type { InvocationEvent } from '@capix-observer/protocol';
+import type { InvocationEvent } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import { captureChange } from '../changes/publish.js';
 
-export interface InvocationIdentity {
-  readonly contextId: string;
-  readonly level: InvocationEvent['level'];
-  readonly parentContextId?: string;
-}
+import type { InvocationIdentity } from '../observation/facts.js';
 
 /** Per-call event construction and source order; no listeners, records or execution policy. */
 export class InvocationChangeEmitter {

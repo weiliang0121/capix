@@ -1,9 +1,9 @@
 import { pick } from 'es-toolkit/object';
-import type { OperationRecord as OperationData, InvocationValue } from '@capix-observer/protocol';
+import type { OperationRecord as OperationData, InvocationValue } from '@capix/protocol';
 import { InvocationRecord } from '../invocation/record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
-export type OperationRecordDefinition = Omit<OperationData, 'id' | 'value' | 'status' | 'parentId' | 'childIds'>;
+export type OperationRecordOptions = Omit<OperationData, 'id' | 'value' | 'status' | 'parentId' | 'childIds'>;
 export class OperationRecord extends InvocationRecord<InvocationValue> implements OperationData {
   override readonly kind = 'operation' as const;
   readonly contextId: string;
@@ -15,17 +15,17 @@ export class OperationRecord extends InvocationRecord<InvocationValue> implement
   readonly source: string;
   readonly caller: string;
   readonly callee: string;
-  constructor(definition: OperationRecordDefinition, input: unknown) {
-    super(snapshotValue({ input, processes: [], relationChanges: [] }), definition.parentOperationId ?? definition.executionId);
-    this.contextId = definition.contextId;
-    this.executionId = definition.executionId;
-    this.operationInstanceId = definition.operationInstanceId;
-    this.parentOperationId = definition.parentOperationId;
-    this.operation = definition.operation;
-    this.label = definition.label;
-    this.source = definition.source;
-    this.caller = definition.caller;
-    this.callee = definition.callee;
+  constructor(options: OperationRecordOptions, input: unknown) {
+    super(snapshotValue({ input, processes: [], relationChanges: [] }), options.parentOperationId ?? options.executionId);
+    this.contextId = options.contextId;
+    this.executionId = options.executionId;
+    this.operationInstanceId = options.operationInstanceId;
+    this.parentOperationId = options.parentOperationId;
+    this.operation = options.operation;
+    this.label = options.label;
+    this.source = options.source;
+    this.caller = options.caller;
+    this.callee = options.callee;
     Object.freeze(this);
   }
   override toJSON(): OperationData {

@@ -3,15 +3,15 @@ import { ResourceActivity, ResourceSession, type ResourceOwner } from './activit
 import { Initializer } from '../initialization/initializer.js';
 import { ResourceRequest, type ResourceProvider, type ResourceValue } from './offer.js';
 
-export type ResourceRequirements<R extends object = object> = { readonly [K in keyof R]: ResourceRequest<R[K]> };
+export type ResourceRequirements<Resources extends object = object> = { readonly [Key in keyof Resources]: ResourceRequest<Resources[Key]> };
 
-export function resourceRequests<R extends object>(requires: ResourceRequirements<R>): readonly ResourceRequest<unknown>[] {
-  return Object.keys(requires).map((name) => requires[name as keyof R]);
+export function resourceRequests<Resources extends object>(requires: ResourceRequirements<Resources>): readonly ResourceRequest<unknown>[] {
+  return Object.keys(requires).map((name) => requires[name as keyof Resources]);
 }
 
 /** Supply captures survive phase changes; local endpoints do not cross declaration phases. */
-export class ResourceBindings<R extends object = object> {
-  readonly values: Readonly<R>;
+export class ResourceBindings<Resources extends object = object> {
+  readonly values: Readonly<Resources>;
   readonly #entries: readonly ResourceValue[];
   readonly #initial: ResourceRequirements;
   readonly #locals = new Map<string, Map<ResourceValue, { activity: ResourceActivity; endpoint: Initializer<unknown> }>>();
@@ -24,7 +24,7 @@ export class ResourceBindings<R extends object = object> {
   #started = false;
   #phase = 'run';
 
-  constructor(requires: ResourceRequirements<R>, available: readonly ResourceValue[] = [], initial: ResourceRequirements = requires) {
+  constructor(requires: ResourceRequirements<Resources>, available: readonly ResourceValue[] = [], initial: ResourceRequirements = requires) {
     const entries: ResourceValue[] = [];
     for (const request of resourceRequests(requires)) {
       const entry = available.find((value) => value.offer === request.offer);
@@ -33,14 +33,14 @@ export class ResourceBindings<R extends object = object> {
     }
     this.#entries = Object.freeze(entries);
     this.#initial = initial;
-    this.values = this.view(initial as ResourceRequirements<R>);
+    this.values = this.view(initial as ResourceRequirements<Resources>);
   }
 
   /** Each declaration receives a distinct, revocable named view, never this binding. */
-  view<T extends object>(requires: ResourceRequirements<T>, phase = 'run'): Readonly<T> {
+  view<SelectedResources extends object>(requires: ResourceRequirements<SelectedResources>, phase = 'run'): Readonly<SelectedResources> {
     const values = {};
     for (const name of Object.keys(requires)) {
-      const request = requires[name as keyof T];
+      const request = requires[name as keyof SelectedResources];
       const entry = this.#entries.find((value) => value.offer === request.offer);
       if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
       Object.defineProperty(values, name, {
@@ -56,7 +56,7 @@ export class ResourceBindings<R extends object = object> {
         },
       });
     }
-    return Object.freeze(values) as Readonly<T>;
+    return Object.freeze(values) as Readonly<SelectedResources>;
   }
 
   /** A construction window may end without creating an invocation or a fake origin. */
@@ -90,7 +90,7 @@ export class ResourceBindings<R extends object = object> {
     }
   }
 
-  select<T extends object>(requires: ResourceRequirements<T>, initial: ResourceRequirements = requires): ResourceBindings<T> {
+  select<SelectedResources extends object>(requires: ResourceRequirements<SelectedResources>, initial: ResourceRequirements = requires): ResourceBindings<SelectedResources> {
     return new ResourceBindings(requires, this.#entries, initial);
   }
 
@@ -171,7 +171,7 @@ export function checkResourceRequests(available: ResourceRequirements, requested
   }
 }
 
-export function checkResourceProviders<P>(requested: readonly ResourceRequest<unknown>[], providers: readonly ResourceProvider<P>[]): void {
+export function checkResourceProviders<Source>(requested: readonly ResourceRequest<unknown>[], providers: readonly ResourceProvider<Source>[]): void {
   const names = new Map<string, ResourceRequest<unknown>['offer']>();
   for (const request of requested) {
     const previous = names.get(request.offer.name);
@@ -183,9 +183,9 @@ export function checkResourceProviders<P>(requested: readonly ResourceRequest<un
 }
 
 /** Initialization checks publication identity; each call obtains values through the published access form. */
-export function bindResources<P, R extends object>(requires: ResourceRequirements<R>, providers: readonly ResourceProvider<P>[]): (parent: P) => ResourceBindings<R> {
+export function bindResources<Source, Resources extends object>(requires: ResourceRequirements<Resources>, providers: readonly ResourceProvider<Source>[]): (parent: Source) => ResourceBindings<Resources> {
   const requests = Object.freeze({ ...requires });
-  const declared = Object.keys(requests).map((name) => requests[name as keyof R]);
+  const declared = Object.keys(requests).map((name) => requests[name as keyof Resources]);
   checkResourceProviders(declared, providers);
   const offers = new Set(declared.map((request) => request.offer));
   const selected = providers.filter((provider) => offers.has(provider.offer));

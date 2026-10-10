@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isNonBlankString } from '../value/string.js';
 import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
-import type { MemoryContent } from '@capix-observer/protocol';
+import type { MemoryContent } from '@capix/protocol';
 import type { Transcript } from '../transcript/transcript.js';
 
 const contents = new WeakMap<Memory, MemoryContent>();

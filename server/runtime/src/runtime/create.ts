@@ -1,10 +1,10 @@
-import { Runtime, type RuntimeBinding } from './runtime.js';
+import { BoundRuntime, type BoundRuntimeBinding } from './runtime.js';
 import type { InvocationCapabilities } from '../invocation/capabilities.js';
-import type { RuntimeCallOptions } from '../context/runtime.js';
+import type { InvocationControls } from '../context/context.js';
 
-export interface RuntimeCreationOptions extends InvocationCapabilities {}
+export interface BoundRuntimeOptions extends InvocationCapabilities {}
 
 /** Establish the reusable R structure; each run creates its own call state. */
-export function createRuntime<I = unknown, O = unknown, P extends RuntimeCallOptions = RuntimeCallOptions, R extends object = object>(options: RuntimeCreationOptions = {}, assemble?: (runtime: Runtime<I, O, P, R>) => RuntimeBinding<I, O, P, R>): Runtime<I, O, P, R> {
-  return new Runtime(options, assemble);
+export function createBoundRuntime<Input = unknown, Output = unknown, Options extends InvocationControls = InvocationControls, Resources extends object = object>(options: BoundRuntimeOptions = {}, assemble?: (runtime: BoundRuntime<Input, Output, Options, Resources>) => BoundRuntimeBinding<Input, Output, Options, Resources>): BoundRuntime<Input, Output, Options, Resources> {
+  return new BoundRuntime(options, assemble);
 }

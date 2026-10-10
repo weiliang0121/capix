@@ -1,4 +1,4 @@
-import { callRecording } from '@capix-observer/runtime';
+import { invocationRecording } from '@capix/server-runtime';
 
 /** A real R declaration used by tests that focus on one selected E. */
 export function runtimeDefinition(execution) {
@@ -21,7 +21,7 @@ export function runtimeDefinition(execution) {
 
 /** Recording is an explicit declaration throughout the tested subtree. */
 export function recordDefinitions(definition) {
-  definition.observation ??= [callRecording({}, { failure: 'propagate' })];
+  definition.observation ??= [invocationRecording({}, { failure: 'propagate' })];
   for (const child of definition.children ?? []) recordDefinitions(child);
   return definition;
 }

@@ -1,9 +1,9 @@
-import { readOutput } from '@capix-observer/protocol';
+import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver, acceptExecutionInput, observeExecution, memoryOutputContract, bindObserver, ObserverRuntimeDefinition } from '@capix-observer/service';
+import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, bindConversation, ConversationRuntimeDefinition } from '@capix/observer-service';
 
-import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, SelectionUsage, bindRecording } from '@capix-observer/runtime';
+import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, SelectionUsage, bindRecording } from '@capix/server-runtime';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -184,8 +184,8 @@ test('recording observes the actual changed fact; registration failure propagate
   const recording = bindRecording(recorder, { failure: 'propagate' });
   const transcript = new Transcript([], { observation: recording.transcript });
   const memories = new Memories(transcript, { observation: recording.memory });
-  const execution = bindObserver(
-    new ObserverRuntimeDefinition(),
+  const execution = bindConversation(
+    new ConversationRuntimeDefinition(),
     { transcript, memories, selectionUsage: new SelectionUsage() },
     {
       async invoke(_request, purpose) {

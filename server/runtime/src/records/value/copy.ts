@@ -3,8 +3,8 @@ import { isNull } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 
 /** Copy record content without retaining live entity references. */
-export function copyContent<T>(value: T): T {
-  return copyValue(value, new Set()) as T;
+export function copyContent<Content>(value: Content): Content {
+  return copyValue(value, new Set()) as Content;
 }
 
 function copyValue(value: unknown, ancestors: Set<object>): unknown {

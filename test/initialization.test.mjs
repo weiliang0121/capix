@@ -3,8 +3,8 @@ import { captureSource, resourceBindingFor } from './fixtures/observer.mjs';
 import { createEnvironment } from './fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Initializer, ResourceOffer, bindResources, TranscriptResource, MemoryResource, assembleRuntime, OperationDefinition, ExecutionDefinition, AttemptRecord, OperationRecord } from '@capix-observer/runtime';
-import { initializeObserver, ModelSettingsResource } from '@capix-observer/service';
+import { Initializer, ResourceOffer, bindResources, TranscriptResource, MemoryResource, assembleRuntime, OperationDefinition, ExecutionDefinition, AttemptRecord, OperationRecord } from '@capix/server-runtime';
+import { initializeObserver, ModelSettingsResource } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'fixture', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -176,7 +176,7 @@ test('lazy access never shifts the capture point of configuration, history or me
   const memory = memories.apply([change])[0];
   const resources = resourceBindingFor(runtime, { invoke: () => assert.fail('unused') }, { transcript, memories });
   const configuration = { ...settings };
-  const root = runtime.executionInvocations.create(null, {
+  const root = runtime.executionInvocationBuilder.create(null, {
     context: {},
     requires: { settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), memories: MemoryResource.snapshot.request() },
     establish: () => ({ resources: resources(captureSource({ settings: configuration, transcript })) }),

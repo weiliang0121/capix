@@ -1,4 +1,4 @@
-import { bindResources, ResourceOffer, TranscriptResource, type ResourceRequirements, type AttemptContext } from '@capix-observer/runtime';
+import { bindResources, ResourceOffer, TranscriptResource, type ResourceRequirements, type AttemptContext } from '@capix/server-runtime';
 
 type Resources = { settings: { timeoutMs: number } };
 const settings = new ResourceOffer('settings', (source: { timeout: number }) => Object.freeze({ timeoutMs: source.timeout }));
@@ -19,7 +19,7 @@ context.resources.values.settings = { timeoutMs: 1 };
 
 // @ts-expect-error parent operation is not a public resource path
 context.operationContext;
-import type { ExecutionContext, OperationContext } from '@capix-observer/runtime';
+import type { ExecutionContext, OperationContext } from '@capix/server-runtime';
 declare const execution: ExecutionContext;
 declare const operation: OperationContext;
 // @ts-expect-error construction metadata is not a business resource

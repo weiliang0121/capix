@@ -10,21 +10,21 @@ import type { BoundChildren } from '../binding/children.js';
 import { bindInvocationWork } from '../binding/work.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
 
-/** A bound leaf node: fixed call mechanics and explicitly supplied content. */
-export class Attempt<I, O, R extends object = object> {
-  private readonly work: InvocationWork<AttemptContext<I, O, R>, I, O>;
+/** Reusable bound A leaf; every call creates its own AttemptContext and Invocation. */
+export class BoundAttempt<Input, Output, Resources extends object = object> {
+  private readonly work: InvocationWork<Input, Output, AttemptContext<Input, Output, Resources>>;
   constructor(
-    private readonly invocations: AttemptInvocationBuilder,
-    readonly definition: AttemptDefinition<I, O, R, any>,
+    private readonly invocationBuilder: AttemptInvocationBuilder,
+    readonly definition: AttemptDefinition<Input, Output, Resources, any>,
     children: BoundChildren,
-    private readonly requires: ResourceRequirements<R> = definitionResources(definition) as ResourceRequirements<R>,
+    private readonly requires: ResourceRequirements<Resources> = definitionResources(definition) as ResourceRequirements<Resources>,
   ) {
     this.work = bindInvocationWork(definition, children);
   }
-  create(parent: Invocation<unknown, unknown, OperationContext>, input: I, options: InvocationRelationOptions = {}) {
-    return this.invocations.create<I, O, R>(parent, { input, requires: this.requires, initial: this.definition.run.requires, observation: this.definition.observation, description: this.definition, work: this.work, key: options.key });
+  create(parent: Invocation<unknown, unknown, OperationContext>, input: Input, options: InvocationRelationOptions = {}) {
+    return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: this.definition.run.requires, observation: this.definition.observation, description: this.definition, work: this.work, key: options.key });
   }
-  call(parent: Invocation<unknown, unknown, OperationContext>, input: I): Promise<O> {
+  call(parent: Invocation<unknown, unknown, OperationContext>, input: Input): Promise<Output> {
     return this.create(parent, input).run();
   }
 }

@@ -1,11 +1,11 @@
 import { createEnvironment } from './fixtures/environment.mjs';
 import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
-import { Execution, Operation, Attempt } from './fixtures/behavior.mjs';
+import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence } from '@capix-observer/runtime';
-import { createRuntime } from './fixtures/runtime.mjs';
-import { bindObserver, ObserverRuntimeDefinition, GenerateAnswer } from '@capix-observer/service';
+import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence } from '@capix/server-runtime';
+import { createBoundRuntime } from './fixtures/runtime.mjs';
+import { bindConversation, ConversationRuntimeDefinition, GenerateAnswerDefinition } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 
@@ -20,7 +20,7 @@ function provider() {
 
 test('Observer narrows resources at each action, captures fixed values and expires live endpoints with the call', async () => {
   const entities = createEnvironment();
-  const definition = new ObserverRuntimeDefinition();
+  const definition = new ConversationRuntimeDefinition();
   const views = [];
   const inspect = (current) => {
     const execute = current.run.execute;
@@ -30,14 +30,14 @@ test('Observer narrows resources at each action, captures fixed values and expir
     };
     for (const child of current.children ?? []) inspect(child);
   };
-  inspect(definition.execution);
-  const runtime = bindObserver(definition, entities, provider());
+  inspect(definition.executionDefinition);
+  const runtime = bindConversation(definition, entities, provider());
   let first;
   await runtime.run(
     { messages: [{ role: 'user', content: '你好' }] },
     {
       settings,
-      execution: {
+      executionCallbacks: {
         started: (_context, invocation) => {
           first = invocation;
         },
@@ -66,10 +66,10 @@ test('Observer narrows resources at each action, captures fixed values and expir
 });
 
 test('nested operations cannot implicitly bypass their direct parent for execution resources', async () => {
-  const runtime = createRuntime();
-  const generation = bindChild(runtime, new GenerateAnswer());
+  const runtime = createBoundRuntime();
+  const generation = bindChild(runtime, new GenerateAnswerDefinition());
   let wrapper;
-  class NarrowOperation extends Operation {
+  class NarrowOperation extends OperationFixture {
     name = 'narrow';
     label = 'narrow';
     source = 'test';
@@ -78,20 +78,20 @@ test('nested operations cannot implicitly bypass their direct parent for executi
       return generation.call(invocation, { selection: { historyIndexes: [] }, memories: [] });
     }
   }
-  const operation = new NarrowOperation(runtime.operationInvocations);
-  class Entry extends Execution {
+  const operation = new NarrowOperation(runtime.operationInvocationBuilder);
+  class Entry extends ExecutionFixture {
     execute(_context, invocation) {
       return operation.call(invocation, null);
     }
   }
-  await assert.rejects(new Entry(runtime.executionInvocations).call(null, { settings }), /Unfulfilled resource request: model-settings.snapshot/);
+  await assert.rejects(new Entry(runtime.executionInvocationBuilder).call(null, { settings }), /Unfulfilled resource request: model-settings.snapshot/);
   assert.equal(wrapper.children.values().length, 0);
 });
 
 test('a leaf missing its declared resource fails before attaching a child invocation', async () => {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   let parent;
-  class Leaf extends Attempt {
+  class Leaf extends AttemptFixture {
     name = 'leaf';
     label = 'leaf';
     source = 'test';
@@ -100,8 +100,8 @@ test('a leaf missing its declared resource fails before attaching a child invoca
       throw new Error('must not execute');
     }
   }
-  const leaf = new Leaf(runtime.attemptInvocations, { history: TranscriptResource.fixedRange.request() });
-  class Parent extends Operation {
+  const leaf = new Leaf(runtime.attemptInvocationBuilder, { history: TranscriptResource.fixedRange.request() });
+  class Parent extends OperationFixture {
     name = 'parent';
     label = 'parent';
     source = 'test';
@@ -110,13 +110,13 @@ test('a leaf missing its declared resource fails before attaching a child invoca
       return leaf.call(invocation, null);
     }
   }
-  const operation = new Parent(runtime.operationInvocations);
-  class Entry extends Execution {
+  const operation = new Parent(runtime.operationInvocationBuilder);
+  class Entry extends ExecutionFixture {
     execute(_context, invocation) {
       return operation.call(invocation, null);
     }
   }
-  await assert.rejects(new Entry(runtime.executionInvocations).call(null, { settings }), /Unfulfilled resource request: transcript.fixedRange/);
+  await assert.rejects(new Entry(runtime.executionInvocationBuilder).call(null, { settings }), /Unfulfilled resource request: transcript.fixedRange/);
   assert.equal(parent.children.values().length, 0);
 });
 
@@ -215,16 +215,16 @@ test('fixed-range offer delivers only bounded immutable message access, without 
 });
 
 test('E requests fail before E attachment, recording or work while the parent R records the rejected construction', async () => {
-  const { Recorder, RecordBook } = await import('@capix-observer/runtime');
+  const { Recorder, RecordBook } = await import('@capix/server-runtime');
   const recorder = new Recorder(new RecordBook());
-  const runtime = createRuntime({ recorder });
-  class Entry extends Execution {
+  const runtime = createBoundRuntime({ recorder });
+  class Entry extends ExecutionFixture {
     requires = { history: TranscriptResource.fixedRange.request() };
     execute() {
       assert.fail('must not execute');
     }
   }
-  assert.throws(() => new Entry(runtime.executionInvocations).call(null, { settings }, () => assert.fail('must not start')), /Unfulfilled resource request: transcript.fixedRange/);
+  assert.throws(() => new Entry(runtime.executionInvocationBuilder).call(null, { settings }, () => assert.fail('must not start')), /Unfulfilled resource request: transcript.fixedRange/);
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(runtime.running, false);
   const entries = [...recorder.book.values()];
@@ -235,9 +235,9 @@ test('E requests fail before E attachment, recording or work while the parent R 
 });
 
 test('message and memory access preserves entity validation, change publication and fixed snapshots', async () => {
-  const { MemoryResource, SelectionUsageResource, Recorder, RecordBook, ChangeObserver } = await import('@capix-observer/runtime');
+  const { MemoryResource, SelectionUsageResource, Recorder, RecordBook, ChangeBuffer } = await import('@capix/server-runtime');
   const recorder = new Recorder(new RecordBook());
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const { transcript, memories, selectionUsage } = createEnvironment({ recorder, changes });
   const bind = bindResources(
     {
@@ -295,9 +295,9 @@ test('model offer exposes only invocation while preserving provider method owner
     assert.equal(this, model);
     return invoke(...args);
   };
-  const definition = new ObserverRuntimeDefinition();
-  const execute = definition.execution.run.execute;
-  definition.execution.run.execute = function (context, ...args) {
+  const definition = new ConversationRuntimeDefinition();
+  const execute = definition.executionDefinition.run.execute;
+  definition.executionDefinition.run.execute = function (context, ...args) {
     const access = context.resources.values.model;
     assert.notEqual(access, model);
     assert.deepEqual(Object.keys(access), ['invoke']);
@@ -307,6 +307,6 @@ test('model offer exposes only invocation while preserving provider method owner
     assert.equal(context.transcriptRange, undefined);
     return execute.call(this, context, ...args);
   };
-  const runtime = bindObserver(definition, entities, model);
+  const runtime = bindConversation(definition, entities, model);
   await runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
 });

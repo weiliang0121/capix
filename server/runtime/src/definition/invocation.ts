@@ -1,4 +1,4 @@
-import type { InvocationScope, ScopeResources } from '../context/scope.js';
+import type { InvocationContextView, ContextViewResources } from '../context/view.js';
 import type { InvocationView } from '../invocation/view.js';
 import type { Continuation, InvocationResolution } from '../invocation/result.js';
 import type { ResourceRequest } from '../resource/offer.js';
@@ -8,35 +8,35 @@ import type { ChildBindings } from '../binding/children.js';
 import type { ChildDefinition } from './children.js';
 import type { ExceptionContract, DeclaredException } from '../exception/contract.js';
 import type { ObservationDeclaration } from '../observation/definition.js';
-import type { CallFact } from '../observation/facts.js';
+import type { InvocationFact } from '../observation/facts.js';
 
-export interface InvocationRunDefinition<I, O, C extends InvocationScope<I, O>, R extends object> {
-  readonly requires: ResourceRequirements<R>;
+export interface InvocationRunDefinition<Input, Output, ContextView extends InvocationContextView<Input, Output>, Resources extends object> {
+  readonly requires: ResourceRequirements<Resources>;
   /** Omitted means all children declared by this owner. */
   readonly uses?: readonly ChildDefinition[];
-  execute(context: C, invocation: InvocationView<I, O, C>, children: ChildBindings): O | Promise<O>;
-  accept?(context: C, output: O, invocation: InvocationView<I, O, C>, children: ChildBindings): O | Continuation<I> | Promise<O | Continuation<I>>;
+  execute(context: ContextView, invocation: InvocationView<Input, Output, ContextView>, children: ChildBindings): Output | Promise<Output>;
+  accept?(context: ContextView, output: Output, invocation: InvocationView<Input, Output, ContextView>, children: ChildBindings): Output | Continuation<Input> | Promise<Output | Continuation<Input>>;
 }
 
-export interface InvocationExceptionDefinition<I, O, C extends InvocationScope<I, O>, R extends object> {
-  readonly requires: ResourceRequirements<R>;
+export interface InvocationExceptionDefinition<Input, Output, ContextView extends InvocationContextView<Input, Output>, Resources extends object> {
+  readonly requires: ResourceRequirements<Resources>;
   /** An exception handler receives no child call capabilities unless explicitly declared. */
   readonly uses?: readonly ChildDefinition[];
   readonly accepts: readonly ExceptionContract<any>[];
-  handle(context: C, exception: DeclaredException, invocation: InvocationView<I, O, C>, children: ChildBindings): InvocationResolution<I, O> | Promise<InvocationResolution<I, O>>;
+  handle(context: ContextView, exception: DeclaredException, invocation: InvocationView<Input, Output, ContextView>, children: ChildBindings): InvocationResolution<Input, Output> | Promise<InvocationResolution<Input, Output>>;
 }
 
 /** Owner declaration: work, handling and description are peers; none owns the others. */
-export abstract class InvocationDefinition<I, O, C extends InvocationScope<I, O>, R extends object, H extends object = Record<string, never>> {
+export abstract class InvocationDefinition<Input, Output, ContextView extends InvocationContextView<Input, Output>, Resources extends object, ExceptionResources extends object = Record<string, never>> {
   readonly maxRounds: 1 | 2 = 1;
   readonly raises: readonly ExceptionContract<any>[] = [];
-  abstract readonly run: InvocationRunDefinition<I, O, C, R>;
-  readonly exceptions?: InvocationExceptionDefinition<I, O, ScopeResources<C, H>, H>;
-  readonly observation?: readonly ObservationDeclaration<CallFact>[];
+  abstract readonly run: InvocationRunDefinition<Input, Output, ContextView, Resources>;
+  readonly exceptions?: InvocationExceptionDefinition<Input, Output, ContextViewResources<ContextView, ExceptionResources>, ExceptionResources>;
+  readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
 }
 
 /** Supply coverage is shared internally, while each declaration receives only its own named view. */
-export function definitionResources(definition: { readonly run: { readonly requires: ResourceRequirements }; readonly exceptions?: { readonly requires: ResourceRequirements }; readonly observation?: readonly ObservationDeclaration<CallFact>[] }, localObservationResources?: ResourceRequirements): ResourceRequirements {
+export function definitionResources(definition: { readonly run: { readonly requires: ResourceRequirements }; readonly exceptions?: { readonly requires: ResourceRequirements }; readonly observation?: readonly ObservationDeclaration<InvocationFact>[] }, localObservationResources?: ResourceRequirements): ResourceRequirements {
   const requires: Record<string, ResourceRequest<unknown>> = {};
   const localOffers = new Set(resourceRequests(localObservationResources ?? {}).map((request) => request.offer));
   for (const [name, request] of Object.entries(definition.run.requires)) requires[`run.${name}`] = request;

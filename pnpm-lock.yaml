@@ -8,21 +8,21 @@ importers:
 
   .:
     devDependencies:
-      '@capix-observer/client-http':
+      '@capix/client-http':
         specifier: workspace:*
         version: link:client/http
-      '@capix-observer/client-runtime':
+      '@capix/client-runtime':
         specifier: workspace:*
         version: link:client/runtime
-      '@capix-observer/protocol':
-        specifier: workspace:*
-        version: link:protocol
-      '@capix-observer/runtime':
-        specifier: workspace:*
-        version: link:server/runtime
-      '@capix-observer/service':
+      '@capix/observer-service':
         specifier: workspace:*
         version: link:services/observer
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:protocol
+      '@capix/server-runtime':
+        specifier: workspace:*
+        version: link:server/runtime
       '@types/node':
         specifier: 22.19.11
         version: 22.19.11
@@ -38,13 +38,13 @@ importers:
 
   apps/observer:
     dependencies:
-      '@capix-observer/client-http':
+      '@capix/client-http':
         specifier: workspace:*
         version: link:../../client/http
-      '@capix-observer/client-runtime':
+      '@capix/client-runtime':
         specifier: workspace:*
         version: link:../../client/runtime
-      '@capix-observer/protocol':
+      '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
       class-variance-authority:
@@ -105,10 +105,10 @@ importers:
 
   client/http:
     dependencies:
-      '@capix-observer/client-runtime':
+      '@capix/client-runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@capix-observer/protocol':
+      '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
       es-toolkit:
@@ -120,7 +120,7 @@ importers:
 
   client/runtime:
     dependencies:
-      '@capix-observer/protocol':
+      '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
       es-toolkit:
@@ -131,7 +131,7 @@ importers:
 
   server/runtime:
     dependencies:
-      '@capix-observer/protocol':
+      '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
       es-toolkit:
@@ -140,10 +140,10 @@ importers:
 
   services/observer:
     dependencies:
-      '@capix-observer/protocol':
+      '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
-      '@capix-observer/runtime':
+      '@capix/server-runtime':
         specifier: workspace:*
         version: link:../../server/runtime
       es-toolkit:

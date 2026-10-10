@@ -1,7 +1,7 @@
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { z } from 'zod';
-import { invocationProcessStages, invocationProcessActions, validateSnapshot, type ConfigurationResponse, type ConversationUpdate, type MemoryObservation, type ObserverOverview, type RuntimeSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix-observer/protocol';
-import { HttpError, type HttpResponseInfo, ObserverTransportError } from './errors.js';
+import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConfigurationResponse, type ConversationUpdate, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
+import { HttpError, type HttpResponseInfo, HttpTransportError } from './errors.js';
 
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const time = z.number().nonnegative();
@@ -39,19 +39,19 @@ export const overviewResponse = z.object({
 }) satisfies z.ZodType<ObserverOverview>;
 
 /** Check the response shape; domain mutations and model-output rules stay on the server. */
-export function acceptResponse<T>(schema: z.ZodType<T>, value: unknown, name: string): T {
+export function acceptResponse<Response>(schema: z.ZodType<Response>, value: unknown, name: string): Response {
   const result = schema.safeParse(value);
-  if (!result.success) throw new ObserverTransportError('contract', `${name}响应格式无效。`, 'INVALID_RESPONSE', { cause: result.error });
+  if (!result.success) throw new HttpTransportError('contract', `${name}响应格式无效。`, 'INVALID_RESPONSE', { cause: result.error });
   return result.data;
 }
 
-export function acceptSnapshot(value: unknown, expectedId?: string): RuntimeSnapshot {
+export function acceptSnapshot(value: unknown, expectedId?: string): ExecutionRecordSnapshot {
   try {
-    validateSnapshot(value);
+    validateExecutionRecordSnapshot(value);
   } catch (cause) {
-    throw new ObserverTransportError('contract', '运行记录格式无效或关联缺失。', 'INVALID_SNAPSHOT', { cause });
+    throw new HttpTransportError('contract', '运行记录格式无效或关联缺失。', 'INVALID_SNAPSHOT', { cause });
   }
-  if (expectedId && value.execution.id !== expectedId) throw new ObserverTransportError('contract', '返回了不同执行的记录。', 'EXECUTION_MISMATCH');
+  if (expectedId && value.execution.id !== expectedId) throw new HttpTransportError('contract', '返回了不同执行的记录。', 'EXECUTION_MISMATCH');
   return value;
 }
 
@@ -67,7 +67,7 @@ export function parseLine(line: string): unknown {
   try {
     return JSON.parse(line);
   } catch (cause) {
-    throw new ObserverTransportError('contract', '流 JSON 格式无效。', 'INVALID_JSON', { cause });
+    throw new HttpTransportError('contract', '流 JSON 格式无效。', 'INVALID_JSON', { cause });
   }
 }
 
@@ -75,7 +75,7 @@ export function deliver(callback: () => void, name: string): void {
   try {
     callback();
   } catch (cause) {
-    throw new ObserverTransportError('delivery', `${name}接收处理失败。`, 'DELIVERY_FAILED', { cause });
+    throw new HttpTransportError('delivery', `${name}接收处理失败。`, 'DELIVERY_FAILED', { cause });
   }
 }
 

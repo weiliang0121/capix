@@ -1,5 +1,5 @@
 {
-  "name": "@capix-observer/client-runtime",
+  "name": "@capix/client-runtime",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix-observer/protocol": "workspace:*",
+    "@capix/protocol": "workspace:*",
     "es-toolkit": "1.52.0"
   }
 }

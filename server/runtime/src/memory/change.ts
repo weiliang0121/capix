@@ -1,4 +1,4 @@
-import type { MemoryContent } from '@capix-observer/protocol';
+import type { MemoryContent } from '@capix/protocol';
 
 /** A proposed change. It becomes a record only after application succeeds. */
 export type MemoryChange = {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ClientRuntime, TranscriptReplica, TranscriptSequenceError } from '@capix-observer/client-runtime';
+import { ClientRuntime, TranscriptReplica, TranscriptSequenceError } from '@capix/client-runtime';
 import { deferred, transcriptSnapshot } from './fixtures.mjs';
 
 const message = (content, role = 'user') => ({ role, content });

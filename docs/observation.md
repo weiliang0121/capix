@@ -1,5 +1,7 @@
 # 观测迭代方案
 
+> 这是已实施迭代的设计与审查材料，包含当时的缺口、伪代码和迁移过程；不作为当前公开 API 清单。当前定位与命名见 [项目组织](organization.md)，运行契约见 [运行边界](runtime-boundaries.md)，记录与交付见 [记录机制](recording.md) 和 [增量观测](observation-increments.md)。
+
 状态：已实施并通过整仓验证。本轮补齐 R 的运行声明、绑定及本次调用，使 REOA 使用一致的调用与直接子关系机制；以运行结构的类型化观测出口为中心，解决子调用返回与父层接纳过程无法完整被观测的问题。同时将记录收敛为内置可选的观测预设，并明确观测声明、绑定、多种结果载体及 Service 消费辅助的边界。
 
 下文保留设计推演中的类型与伪代码；实际公开 API 与实施差异见文末“实施落点”。现有 EOA 工作、异常处理、资源访问与消息接纳职责继续保留；本轮替代了“R 只持有唯一 E，不具有自身调用”“观测只描述记录 IO”和“记录观测失败无条件影响运行”的旧约定。相关现状文档与 AGENTS.md 已同步修订。
@@ -146,7 +148,7 @@ Runtime.run 的契约不再直接以 ExecutionCallbacks 表达自身回调。服
 
 静态声明和装配元数据在范围建立时固定，不为每个构造函数制造运行事件。结构建立前的装配失败由该初始化边界处理，不能制造一个实际上不存在的调用。
 
-Runtime 结构有自身只读实例 ID，由自身建立时生成，用于实例结构事实；REOA 各次调用使用自己的 Context ID。两者都不使用 RuntimeRecord.id 作为运行身份。实例结构顺序与各次调用顺序分别维护，不引入新的 Run 层。
+Runtime 结构有自身只读实例 ID，由自身建立时生成，用于实例结构事实；REOA 各次调用使用自己的 Context ID。两者都不使用 RecordingRootRecord.id 作为运行身份。实例结构顺序与各次调用顺序分别维护，不引入新的 Run 层。
 
 RE、EO、OA 都使用相同的直接父子关系事实。先前拟议的 execution-returned 特化不再保留；E 的成功不会因 R 后续失败而被改写。
 
@@ -364,7 +366,7 @@ Transcript 和 Memories 保留正式变更与独立同步出口，不在内部�
 
 ```ts
 interface MutationOptions<E> {
-  readonly origin?: RuntimeOrigin;
+  readonly origin?: InvocationOrigin;
   readonly observation?: EventConsumer<E>;
 }
 
@@ -398,7 +400,7 @@ relationChanges 保存固定后的身份、结果描述、发生时间和 eventS
 
 关系条目保留运行父子身份、父轮次、工作位置和结果描述。已建立但未运行的子只有运行身份，不能为了得到子记录 ID 提前制造 started 或调用记录；子记录后来形成时，预设利用局部绑定的关系补充关联。不得新增全局 Context→Record 索引。
 
-RuntimeRecord 仍描述跨调用的实例范围。R 本次调用由单独的调用记录表达，共用 InvocationRecord 的过程与终态机制；不能把长期根记录反复结束或复用为各次调用记录。
+RecordingRootRecord 仍描述跨调用的实例范围。R 本次调用由单独的调用记录表达，共用 InvocationRecord 的过程与终态机制；不能把长期根记录反复结束或复用为各次调用记录。
 
 ```text
 Runtime 实例范围记录
@@ -491,7 +493,7 @@ client/runtime 只接纳公开基线、增量与明确来源状态，不读取�
 
 默认记录详情增加关系过程，至少区分子成功返回、父接纳中、父接纳成功、父接纳失败、没有显式接纳。保留原结果与接纳后结果的区别。新的关系条目不被显示成父调用自己的 receive。
 
-E 继续作为 QA 展示范围，R 调用不增加 QA 轮次。通过现有详情入口提供其父 R 调用及关系；概览遍历按记录种类与归属识别 E，不再假定 RuntimeRecord 的直接孩子全是 E。
+E 继续作为 QA 展示范围，R 调用不增加 QA 轮次。通过现有详情入口提供其父 R 调用及关系；概览遍历按记录种类与归属识别 E，不再假定 RecordingRootRecord 的直接孩子全是 E。
 
 父层在异步接纳期间重连时，基线需要包含该父关系的当前事实及已完成子调用的必要关联，不能仅从“活动子调用最新事件”恢复。这也覆盖 R 正在接纳已完成 E 的阶段。已完成 E 的详细正文继续按需加载，不扩大首次加载为所有历史完整快照。
 
@@ -560,7 +562,7 @@ E 继续作为 QA 展示范围，R 调用不增加 QA 轮次。通过现有详�
 - `defineObservation` 声明同步消费者及正式资源需求；绑定按观察窗口开放端口。`InvocationCapabilities.observations` 省略时关闭观测，显式 `[]` 启用声明且不附加预设，`[bindRecording(recorder)]` 安装记录所需的局部写端口。工作和异常处理不能申请此局部端口。
 - `callRecording({input, output})` 是明确的记录声明，`RecordingInstallation` 和每调用 `RecordingCall` 持有载体关系。结构绑定通过安装提供的检查端口验证记录父声明；内核不识别此规则。无记录声明不产生空调用记录。
 - 调用可能在父运行前附接子项；记录预设仅暂存此类 attached 事实，父记录建立后保留原事件序号与发生时间，展示偏移最低为零。事实生产不延后；父始终未启动则不补造记录。entry 事实不重复生成调用记录，入口产生的实体和资源变化仍由各自观测处理。
-- 记录树为 RuntimeRecord → RuntimeCallRecord → ExecutionRecord → OperationRecord/AttemptRecord；R 与 E 分别计时。边界 `scope=work` 与父层 returned 分开，`relationChanges` 与本调用 `processes` 分开。
+- 记录树为 RecordingRootRecord → RuntimeCallRecord → ExecutionRecord → OperationRecord/AttemptRecord；R 与 E 分别计时。边界 `scope=work` 与父层 returned 分开，`relationChanges` 与本调用 `processes` 分开。
 - 当前服务采用默认 isolate。漏写使提前建立的 `RecordSource` 永久标记不完整，客户端收到 `SOURCE_INCOMPLETE` 后不自动重建同一历史；正常网络断开不损坏来源。消息实体同步独立于记录来源。
 - `ChangeConsumer` 是共享捕获器唯一排空者，来源按基线水位排除重入产生的旧事件。客户端逐项接纳 R 终态及边界，父 R 仍运行时不会把已完成 E 的详情永久缓存；QA 仍按 E 展示。
 - Service 的 `observation/delivery.ts` 提供结构契约 `ObservationSource/SourceReceiver` 与 `bindDelivery`。记录适配通过 `open` 委托接续、缓冲、优先失效和连接清理；Feed 只组合公开映射及独立来源的水位，不发明跨源统一 revision。该辅助不进入内核，也不要求载体继承基类。

@@ -1,8 +1,8 @@
 import { pick } from 'es-toolkit/object';
-import type { InvocationBoundaryRecord as BoundaryData, InvocationBoundaryValue } from '@capix-observer/protocol';
+import type { InvocationBoundaryRecord as BoundaryData, InvocationBoundaryValue } from '@capix/protocol';
 import { BaseRecord } from '../record.js';
 
-export type InvocationBoundaryDefinition = Omit<BoundaryData, 'id' | 'value' | 'parentId' | 'scopeId'> & { readonly scopeId?: string };
+export type InvocationBoundaryRecordOptions = Omit<BoundaryData, 'id' | 'value' | 'parentId' | 'scopeId'> & { readonly scopeId?: string };
 
 /** An immutable boundary record. It has no live Context or running/ended state. */
 export class InvocationBoundaryRecord extends BaseRecord<InvocationBoundaryValue> implements BoundaryData {
@@ -14,14 +14,14 @@ export class InvocationBoundaryRecord extends BaseRecord<InvocationBoundaryValue
   readonly occurredAt: string;
   readonly offsetMs: number;
 
-  constructor(definition: InvocationBoundaryDefinition, value: Pick<InvocationBoundaryValue, 'type'>) {
-    super(Object.freeze({ type: value.type, scope: 'work' as const }), definition.callId);
-    this.scopeId = definition.scopeId ?? definition.executionId ?? definition.callId;
-    this.executionId = definition.executionId;
-    this.callId = definition.callId;
-    this.sequence = definition.sequence;
-    this.occurredAt = definition.occurredAt;
-    this.offsetMs = definition.offsetMs;
+  constructor(options: InvocationBoundaryRecordOptions, value: Pick<InvocationBoundaryValue, 'type'>) {
+    super(Object.freeze({ type: value.type, scope: 'work' as const }), options.callId);
+    this.scopeId = options.scopeId ?? options.executionId ?? options.callId;
+    this.executionId = options.executionId;
+    this.callId = options.callId;
+    this.sequence = options.sequence;
+    this.occurredAt = options.occurredAt;
+    this.offsetMs = options.offsetMs;
     Object.freeze(this);
   }
 

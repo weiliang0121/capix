@@ -4,7 +4,7 @@ import { removeRegistration } from '../tree/access.js';
 /** Owns record instances; knows no record kinds, lifecycle or execution functions. */
 export class RecordBook {
   readonly #records = new Map<string, BaseRecord<unknown>>();
-  add<R extends BaseRecord<unknown>>(record: R): R {
+  add<RecordType extends BaseRecord<unknown>>(record: RecordType): RecordType {
     if (this.#records.has(record.id)) throw new Error('Record ID already exists');
     this.#records.set(record.id, record);
     return record;

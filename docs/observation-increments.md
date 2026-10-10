@@ -1,6 +1,6 @@
 # 变化捕获与观测增量
 
-当前已经接通生产、捕获、发送、接收和应用绑定。观测不以重复完整执行快照作为实时消息；初次加载或重新同步使用基线，后续直接发送生产者明确声明的变化。不在 service 比较两份快照，也不从运行记录反推所有业务变化。声明和可选观测安装见 [观测边界](observation.md)。
+当前已经接通生产、捕获、发送、接收和应用绑定。观测不以重复完整执行快照作为实时消息；初次加载或重新同步使用基线，后续直接发送生产者明确声明的变化。不在 service 比较两份快照，也不从运行记录反推所有业务变化。声明和可选观测安装见 [运行中的观测边界](runtime-boundaries.md#观测失败与已成立事实)。
 
 ## 生产者与出口
 
@@ -15,14 +15,14 @@
 
 一次记录登记包含新记录及父级新增 childId；RecordRegistration 只保证 Book 与直接关系的同步登记。InvocationRecord 逐步补齐一次调用，InvocationBoundaryRecord 只表达整个调用进入、返回或抛错。它们登记后都可以产生 RecordChangeEvent，不能将变化通知再次自动登记成调用边界。
 
-ResourceFact 描述本次调用实际绑定、取得或调用资源的事实，直接归属于相应 R/E/O/A 调用记录，也通过 Recorder 的变化出口交付。内容实体仍自己产生 TranscriptEvent / MemoryEvent；资源访问记录不能替代内容变化事件。内容事件可保留 origin.contextId，无 Recorder 时也有运行来源。
+ResourceRecord 描述本次调用实际绑定、取得或调用资源的事实，直接归属于相应 R/E/O/A 调用记录，也通过 Recorder 的变化出口交付。内容实体仍自己产生 TranscriptEvent / MemoryEvent；资源访问记录不能替代内容变化事件。内容事件可保留 origin.contextId，无 Recorder 时也有运行来源。
 
 ## 单一排空与独立交付
 
 ```text
 Transcript ── TranscriptEvent ─┐
 Memories ──── MemoryEvent ─────┤
-Invocation ── InvocationEvent ├→ ChangeObserver<RuntimeChange>
+Invocation ── InvocationEvent ├→ ChangeBuffer<ObserverChange>
 Recorder ──── RecordChangeEvent┘        │ wait / take
                                        ↓
                                  ChangeConsumer
@@ -33,7 +33,7 @@ Recorder ──── RecordChangeEvent┘        │ wait / take
                                binding 组合记录定位符与实体正文 → Store → UI
 ```
 
-各来源只持有 ChangeCapture<自己的事件>。共享 ChangeObserver 只保留捕获顺序；capture 不调用消费者，wait 唤醒异步消费，take 转移当前批次。一个环境只有一个 ChangeConsumer 排空捕获器，RecordSource、消息同步与连接交付订阅其结果，不争抢缓冲。没有记录订阅时，消息实体仍正常同步；创建或关闭 HTTP 连接不创建或销毁来源。
+各来源只持有 ChangeCapture<自己的事件>。共享 ChangeBuffer 只保留捕获顺序；capture 不调用消费者，wait 唤醒异步消费，take 转移当前批次。一个环境只有一个 ChangeConsumer 排空捕获器，RecordSource、消息同步与连接交付订阅其结果，不争抢缓冲。没有记录订阅时，消息实体仍正常同步；创建或关闭 HTTP 连接不创建或销毁来源。
 
 Service 的 ObservationSource / SourceReceiver 约定一致打开与来源失效，bindDelivery 负责消费侧的排队、基线和增量投影、发送及连接解除。RecordSource 履行记录来源约定，ObservationFeed 提供 Observer 的投影与附加来源订阅；源回调只入队，不在生产者调用栈上写网络。该辅助位于服务层，不把 HTTP 或消费者生命周期移入运行内核。
 
@@ -47,7 +47,7 @@ ChangeConsumer 的 position 仅用于同步打开时的本地交接水位，不�
 
 每次 ObservationFeed.connect 创建自己的 scopeId，首帧 sequence 为 0，后续每个非空变化批次递增。来源 revision 跨连接连续，连接重建不会重置来源，也不复用旧交付范围。发送者不是通过多次异步查询拼凑基线。
 
-基线包含完整消息索引与执行简介、当前记忆及已有记忆记录、各来源水位、Runtime 根、活动 R 调用的局部子树和活动调用进度。E 已结束而 R 正在接纳时，该 E 子树仍包含在内。其他已完成执行的详细 IO 与过程不预取，通过详情接口按需加载。根 childIds 可以引用尚未加载的记录，不代表关系丢失。
+基线包含完整消息索引与执行简介、当前记忆及已有记忆记录、各来源水位、记录安装根、活动 R 调用的局部子树和活动调用进度。E 已结束而 R 正在接纳时，该 E 子树仍包含在内。其他已完成执行的详细 IO 与过程不预取，通过详情接口按需加载。根 childIds 可以引用尚未加载的记录，不代表关系丢失。
 
 后续 delta 只包含新事实。process-appended 和 relation-appended 分别发送新增过程与关系；终态发送结果或 resultOf；新记录与父级引用一起发送。Recorder.update 未给出特化描述时发送该记录的显式 replaced，正常调用过程使用特化增量。服务不解析动态业务正文来猜测变化。
 
@@ -65,19 +65,19 @@ ChangeConsumer 的 position 仅用于同步打开时的本地交接水位，不�
 
 调用过程和关系历史分开追加，以同调用 eventSequence 对照先后。子层 returned 不等于父层 accepted，failed.source 区分接纳工作与观测故障。入口阶段元数据可由父调用描述尚未建立 E 的 accept/notification/admit/capture 结果，不凭空创建一个失败 QA。R 详情沿独立 runtimeEvents 计时；图谱仍以 E 为 QA，不把 R 计入轮数。
 
-记录状态更新与边界登记是两个事实。接收端保留暂未齐备的原始条目，边界齐备后才生成通过 validateSnapshot 的本地执行视图。ConversationUpdate 交付提交状态与回答身份，completed 在 R.run 返回后产生；TranscriptReplica 保存独立查询/订阅所得的权威消息。两者核对实际消息位置与正文，不要求回答紧邻输入，也不再次向消息副本追加回答。
+记录状态更新与边界登记是两个事实。接收端保留暂未齐备的原始条目，边界齐备后才生成通过 validateExecutionRecordSnapshot 的本地执行视图。ConversationUpdate 交付提交状态与回答身份，completed 在 R.run 返回后产生；TranscriptReplica 保存独立查询/订阅所得的权威消息。两者核对实际消息位置与正文，不要求回答紧邻输入，也不再次向消息副本追加回答。
 
 顺序异常最多自动重建一次基线；连续异常停止并提示。SOURCE_INCOMPLETE 直接终止观测，不自动重连，显式重连同一失效来源也不能修复。普通断线不无限重连，可显式刷新健康来源。旧连接回调、旧详情响应不得覆盖新范围。binding 负责组织轮次、来源、父层接纳和记忆关联，UI 几何与选择状态不进入 Runtime。
 
 ## 调用索引退出后的归属
 
-| 用途                                 | 当前归属                                                              |
-| ------------------------------------ | --------------------------------------------------------------------- |
-| 执行下操作、操作下意图及活动下级查询 | RecordTree 的后代/直接子级查询                                        |
-| E 快照及父 R 详情                    | ExecutionRecordHelper 从树收集；R 与 E 边界各按 scopeId/sequence 排序 |
-| Context 与调用记录绑定               | 记录安装的本次 RecordingCall 持有记录句柄，通过其父预设关系建立归属   |
-| Context 重复登记                     | 正常构造创建独立 Context；不另建全局 Context 索引                     |
-| 共享 Recorder 中 Runtime 的记录归属  | RecordingInstallation.root + RecordTree                               |
-| 下一条边界序号及单调时间检查         | InvocationBoundaryRecordHelper 按实际计时范围查询                     |
+| 用途                                 | 当前归属                                                                  |
+| ------------------------------------ | ------------------------------------------------------------------------- |
+| 执行下操作、操作下意图及活动下级查询 | RecordTree 的后代/直接子级查询                                            |
+| E 快照及父 R 详情                    | ExecutionRecordHelper 从树收集；R 与 E 边界各按 scopeId/sequence 排序     |
+| Context 与调用记录绑定               | 记录安装的本次 InvocationRecording 持有记录句柄，通过其父预设关系建立归属 |
+| Context 重复登记                     | 正常构造创建独立 Context；不另建全局 Context 索引                         |
+| 共享 Recorder 中 Runtime 的记录归属  | RecordingInstallation.root + RecordTree                                   |
+| 下一条边界序号及单调时间检查         | InvocationBoundaryRecordHelper 按实际计时范围查询                         |
 
 InvocationRecordIndex、旧 Runtime 索引持有字段和 RecordIndex 均已退出。调用对象不因记录查询而持有 Recorder；记录关系与局部查询留在记录安装及树中。边界查询不预设交付游标，Transcript 变化也不复用调用边界记录。

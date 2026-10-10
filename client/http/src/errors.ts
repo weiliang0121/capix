@@ -19,8 +19,8 @@ export class HttpError extends Error {
   }
 }
 
-export class ObserverTransportError extends Error {
-  readonly name = 'ObserverTransportError';
+export class HttpTransportError extends Error {
+  readonly name = 'HttpTransportError';
   constructor(
     readonly kind: 'contract' | 'remote' | 'delivery',
     message: string,

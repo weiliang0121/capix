@@ -1,13 +1,13 @@
 import { resourceBindingFor, bindChild } from '../fixtures/observer.mjs';
 import { callFor } from '../fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
-import { readOutput } from '@capix-observer/protocol';
+import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript, Runtime } from '@capix-observer/runtime';
-import { createRuntime } from '../fixtures/runtime.mjs';
+import { Transcript, BoundRuntime } from '@capix/server-runtime';
+import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
-import { GenerateAnswer, estimateCapacity } from '@capix-observer/service';
+import { GenerateAnswerDefinition, estimateCapacity } from '@capix/observer-service';
 
 import { createInput, observeFixture } from '../fixtures/observer.mjs';
 
@@ -24,14 +24,14 @@ const withHistory = (request, indexes) => {
 };
 
 async function generate(input, contextBudget = settings.contextBudget, requests = []) {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   const provider = {
     async invoke(request) {
       requests.push(request);
       return output({ kind: 'answer', content: '完成' });
     },
   };
-  const operation = bindChild(runtime, new GenerateAnswer());
+  const operation = bindChild(runtime, new GenerateAnswerDefinition());
   const resourceBinding = resourceBindingFor(runtime, provider);
   const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
   const transcript = new Transcript([...history, input.message]);

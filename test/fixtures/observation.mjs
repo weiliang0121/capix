@@ -1,6 +1,6 @@
-import { bindCallObservation, defineObservation, ResourceBindings } from '@capix-observer/runtime';
+import { bindInvocationObservation, defineObservation, ResourceBindings } from '@capix/server-runtime';
 
 /** Focused call-mechanism tests observe real facts without installing the record preset. */
 export function observeCall(observe, failure = 'propagate') {
-  return bindCallObservation({ identity: { contextId: 'unused-binding-identity', level: 'attempt' }, resources: new ResourceBindings({}), declarations: [defineObservation({ requires: {}, observe }, { failure })] }, []);
+  return bindInvocationObservation({ identity: { contextId: 'unused-binding-identity', level: 'attempt' }, resources: new ResourceBindings({}), declarations: [defineObservation({ requires: {}, observe }, { failure })] }, []);
 }

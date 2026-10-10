@@ -1,55 +1,55 @@
 import { isUndefined } from 'es-toolkit/predicate';
-import type { TranscriptEvent, MemoryEvent } from '@capix-observer/protocol';
+import type { TranscriptEvent, MemoryEvent } from '@capix/protocol';
 import { resourceRequests, type ResourceRequirements, type ResourceBindings } from '../resource/bindings.js';
 import type { ObservationDeclaration } from './definition.js';
-import type { CallFact, CallIdentity, CallDescription, ResourceObservation, RuntimeFact } from './facts.js';
+import type { InvocationFact, InvocationIdentity, InvocationDescription, ResourceObservation, RuntimeStructureFact } from './facts.js';
 import { ObservationError, combineFaults } from './error.js';
 
-export interface EventConsumer<E> {
-  publish(event: E): unknown | undefined;
+export interface EventConsumer<Event> {
+  publish(event: Event): unknown | undefined;
 }
 
 /** A concrete installed capability may handle several typed sources without defining a carrier base. */
-export interface CallObserver {
+export interface InvocationObserver {
   readonly resources?: ResourceBindings;
-  observe(fact: CallFact): void;
+  observe(fact: InvocationFact): void;
   resource?(fact: ResourceObservation): void;
   transcript?(event: TranscriptEvent): void;
   memory?(event: MemoryEvent): void;
   available?(): boolean;
 }
 
-export interface CallObservationSetup {
-  readonly identity: CallIdentity;
-  readonly description?: CallDescription;
-  readonly declarations?: readonly ObservationDeclaration<CallFact>[];
+export interface InvocationObservationSetup {
+  readonly identity: InvocationIdentity;
+  readonly description?: InvocationDescription;
+  readonly declarations?: readonly ObservationDeclaration<InvocationFact>[];
   readonly resources: ResourceBindings;
 }
 
-export interface RuntimeObserver {
-  observe(fact: RuntimeFact): undefined;
+export interface RuntimeStructureObserver {
+  observe(fact: RuntimeStructureFact): undefined;
   available?(): boolean;
 }
 
 /** Static scope shape for capability-specific configuration checks; never a live invocation. */
 export interface ObservationDeclarationScope {
-  readonly level: CallIdentity['level'];
-  readonly observation?: readonly ObservationDeclaration<CallFact>[];
+  readonly level: InvocationIdentity['level'];
+  readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
 }
 
 export interface ObservationInstallation {
   check?(definition: ObservationDeclarationScope, parent?: ObservationDeclarationScope): void;
   readonly failure?: 'isolate' | 'propagate';
   readonly provides?: ResourceRequirements;
-  bindRuntime?(identity: Readonly<{ runtimeId: string }>): RuntimeObserver;
-  bindCall(setup: CallObservationSetup, parent?: CallObserver): CallObserver;
+  bindRuntimeStructure?(identity: Readonly<{ runtimeId: string }>): RuntimeStructureObserver;
+  bindInvocation(setup: InvocationObservationSetup, parent?: InvocationObserver): InvocationObserver;
   invalidate?(error: unknown): void;
 }
 
-class ObserverSession<T extends { available?(): boolean } = CallObserver> {
+class ObserverSession<Observer extends { available?(): boolean } = InvocationObserver> {
   active = true;
   constructor(
-    readonly observer: T,
+    readonly observer: Observer,
     readonly failure: 'isolate' | 'propagate',
     private readonly invalidated?: (error: unknown) => void,
   ) {}
@@ -57,7 +57,7 @@ class ObserverSession<T extends { available?(): boolean } = CallObserver> {
     this.active = false;
     this.invalidated?.(error);
   }
-  publish(work: (observer: T) => unknown): unknown | undefined {
+  publish(work: (observer: Observer) => unknown): unknown | undefined {
     if (!this.active) return undefined;
     try {
       if (this.observer.available?.() === false) {
@@ -81,15 +81,15 @@ class ObserverSession<T extends { available?(): boolean } = CallObserver> {
 }
 
 /** Local binding state; no record lookup and no business work ports. */
-export class BoundCallObservation {
+export class InvocationObservation {
   readonly #sessions: ObserverSession[] = [];
   readonly #installed = new Map<ObservationInstallation, ObserverSession>();
-  constructor(setup: CallObservationSetup, installations: readonly ObservationInstallation[] | undefined, parent?: BoundCallObservation) {
+  constructor(setup: InvocationObservationSetup, installations: readonly ObservationInstallation[] | undefined, parent?: InvocationObservation) {
     if (!installations) return;
     for (const installation of installations) {
       const previous = parent ? parent.#installed.get(installation) : undefined;
       if (parent && (!previous || !previous.active || previous.observer.available?.() === false)) continue;
-      const observer = installation.bindCall(setup, previous?.observer);
+      const observer = installation.bindInvocation(setup, previous?.observer);
       const session = new ObserverSession(observer, installation.failure ?? 'isolate', (error) => installation.invalidate?.(error));
       this.#installed.set(installation, session);
       this.#sessions.push(session);
@@ -115,13 +115,13 @@ export class BoundCallObservation {
       );
     }
   }
-  publish(fact: CallFact): unknown | undefined {
+  publish(fact: InvocationFact): unknown | undefined {
     return this.dispatch((observer) => observer.observe(fact));
   }
   readonly resource: EventConsumer<ResourceObservation> = { publish: (event) => this.dispatch((observer) => observer.resource?.(event)) };
   readonly transcript: EventConsumer<TranscriptEvent> = { publish: (event) => this.dispatch((observer) => observer.transcript?.(event)) };
   readonly memory: EventConsumer<MemoryEvent> = { publish: (event) => this.dispatch((observer) => observer.memory?.(event)) };
-  private dispatch(work: (observer: CallObserver) => unknown): unknown | undefined {
+  private dispatch(work: (observer: InvocationObserver) => unknown): unknown | undefined {
     const faults: unknown[] = [];
     for (const session of this.#sessions) {
       const fault = session.publish(work);
@@ -131,14 +131,14 @@ export class BoundCallObservation {
   }
 }
 
-export function bindCallObservation(setup: CallObservationSetup, installations: readonly ObservationInstallation[] | undefined, parent?: BoundCallObservation): BoundCallObservation {
-  return new BoundCallObservation(setup, installations, parent);
+export function bindInvocationObservation(setup: InvocationObservationSetup, installations: readonly ObservationInstallation[] | undefined, parent?: InvocationObservation): InvocationObservation {
+  return new InvocationObservation(setup, installations, parent);
 }
 
 /** Long-lived structure observations do not borrow a call context or record identity. */
-export function bindRuntimeObservation(runtimeId: string, installations: readonly ObservationInstallation[] = []): EventConsumer<RuntimeFact> {
+export function bindRuntimeStructureObservation(runtimeId: string, installations: readonly ObservationInstallation[] = []): EventConsumer<RuntimeStructureFact> {
   const sessions = installations.flatMap((installation) => {
-    const observer = installation.bindRuntime?.(Object.freeze({ runtimeId }));
+    const observer = installation.bindRuntimeStructure?.(Object.freeze({ runtimeId }));
     return observer ? [new ObserverSession(observer, installation.failure ?? 'isolate', (error) => installation.invalidate?.(error))] : [];
   });
   return {

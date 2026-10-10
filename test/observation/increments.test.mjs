@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { ChangeObserver, assembleRuntime, RuntimeDefinition, ExecutionDefinition, callRecording, bindRecording, Recorder, RecordBook, ExecutionRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix-observer/runtime';
-import { initializeObserver, ObservationFeed, acceptExecutionInput, createObserverServer } from '@capix-observer/service';
-import { ObservationReplica, ObservationSequenceError, ClientRuntime } from '@capix-observer/client-runtime';
-import { ConversationHttpTransport, ObservationHttpTransport } from '@capix-observer/client-http';
+import { ChangeBuffer, assembleRuntime, RuntimeDefinition, ExecutionDefinition, invocationRecording, bindRecording, Recorder, RecordBook, ExecutionRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix/server-runtime';
+import { initializeObserver, ObservationFeed, acceptConversationInput, createObserverServer } from '@capix/observer-service';
+import { ObservationReplica, ObservationSequenceError, ClientRuntime } from '@capix/client-runtime';
+import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
 import { baseline } from '../client/fixtures.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 2048, timeoutMs: 1000 };
@@ -39,13 +39,13 @@ async function run(environment, content) {
 
 function executionRuntime(execute, { changes, recording, accept, parentAccept } = {}) {
   class E extends ExecutionDefinition {
-    observation = recording ? [callRecording()] : undefined;
+    observation = recording ? [invocationRecording()] : undefined;
     run = { requires: {}, execute, ...(accept ? { accept } : {}) };
   }
   const execution = new E();
   class R extends RuntimeDefinition {
     children = [execution];
-    observation = recording ? [callRecording()] : undefined;
+    observation = recording ? [invocationRecording()] : undefined;
     run = {
       requires: {},
       execute: async (context, invocation, children) => {
@@ -59,7 +59,7 @@ function executionRuntime(execute, { changes, recording, accept, parentAccept } 
 }
 
 test('all live sources remain observable without Recorder and do not serialize arbitrary invocation IO', async () => {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const transcript = new Transcript([{ role: 'user', content: 'evidence' }], { changes });
   const memories = new Memories(transcript, { changes });
   const opaque = new Map([['external', () => {}]]);
@@ -96,7 +96,7 @@ test('all live sources remain observable without Recorder and do not serialize a
 });
 
 test('record registration captures its child and parent reference together; process deltas contain only the new entry', async () => {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const recorder = new Recorder(new RecordBook(), { clock: undefined, changes });
   const recording = bindRecording(recorder);
   const runtime = executionRuntime(() => 'output', { recording, changes });
@@ -402,13 +402,13 @@ test('joining during an active call seeds local source positions and continues t
   try {
     assert.equal(failure, undefined);
     assert.equal(replica.snapshots.get(record.id).execution.status, 'running');
-    assert.ok(replica.invocations.get(record.contextId).sequence > 1);
+    assert.ok(replica.invocationEvents.get(record.contextId).sequence > 1);
     release('output');
     await running;
     await settle();
     assert.equal(failure, undefined);
     assert.deepEqual(replica.snapshots.get(record.id), wire(ExecutionRecordHelper.snapshot(environment.recorder, record.id)));
-    assert.equal(replica.invocations.get(record.contextId).change.status, 'succeeded');
+    assert.equal(replica.invocationEvents.get(record.contextId).change.status, 'succeeded');
   } finally {
     release('output');
     await running;
@@ -498,7 +498,7 @@ test('actual recording failure terminates HTTP observation, rejects later health
 });
 
 test('individual record changes retain partial R terminal facts until the separate R boundary arrives', async () => {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const recorder = new Recorder(new RecordBook(), { changes });
   const recording = bindRecording(recorder);
   const initial = changes.take();

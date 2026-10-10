@@ -3,15 +3,16 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConfigurationResponse, ErrorResponse, ModelSettings, ConversationUpdate, SourceResponse } from '@capix-observer/protocol';
-import { ExecutionRecord, ExecutionRecordHelper, isObject, observeMemory, RuntimeError } from '@capix-observer/runtime';
-import type { initializeObserver } from '../observer/environment.js';
-import { transcriptSnapshot } from '../observer/transcript/feed.js';
-import { ObservationFeed } from '../observer/feed.js';
-import { SourceIncomplete } from '../observer/record-source.js';
+import type { ConfigurationResponse, ErrorResponse, ModelSettings, ConversationUpdate, SourceResponse } from '@capix/protocol';
+import { ExecutionRecord, ExecutionRecordHelper, observeMemory } from '@capix/server-runtime/recording';
+import { isObject, RuntimeError } from '@capix/server-runtime';
+import type { initializeObserver } from '../assembly/environment.js';
+import { transcriptSnapshot } from '../conversation/transcript/feed.js';
+import { ObservationFeed } from '../observation/feed.js';
+import { SourceIncomplete } from '../observation/record/source.js';
 import { observationWriter } from './observation-writer.js';
-import { observeOverview } from '../observer/overview.js';
-import { validateSettings } from '../settings.js';
+import { observeOverview } from '../observation/overview.js';
+import { validateSettings } from '../assembly/settings.js';
 import { allowedSources } from './source.js';
 
 export interface ObserverServerOptions {
@@ -29,6 +30,7 @@ export function createObserverServer(options: ObserverServerOptions) {
   const project = options.projectDirectory ?? fileURLToPath(new URL('../../../../', import.meta.url));
   const assets = options.assetsDirectory ?? resolve(project, 'apps/observer/dist');
   const feed = new ObservationFeed(observer);
+  const transcriptConnections = new Set<() => void>();
   const server = createServer((req, res) => {
     void handle(req, res).catch((error) => {
       const body: ErrorResponse = error instanceof RuntimeError || error instanceof SourceIncomplete ? { error: error.message, code: error.code } : { error: '服务内部错误。', code: 'INTERNAL_ERROR' };
@@ -82,10 +84,16 @@ export function createObserverServer(options: ObserverServerOptions) {
       if (url.pathname === '/api/transcript') return json(res, 200, transcriptSnapshot(observer.transcript));
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
       const write = observationWriter(res);
-      const unsubscribe = feed.connectTranscript((frame) => {
+      observer.consumer.flush();
+      const unsubscribe = observer.transcripts.connect((frame) => {
         if (!res.destroyed) write(frame);
       });
-      res.on('close', unsubscribe);
+      const close = () => {
+        unsubscribe();
+        transcriptConnections.delete(close);
+      };
+      transcriptConnections.add(close);
+      res.on('close', close);
       res.flushHeaders();
       return;
     }
@@ -123,7 +131,7 @@ export function createObserverServer(options: ObserverServerOptions) {
         settings: runSettings,
         signal: controller.signal,
         deliver,
-        execution: {
+        executionCallbacks: {
           accepted: () => {
             res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
             res.flushHeaders();
@@ -142,7 +150,10 @@ export function createObserverServer(options: ObserverServerOptions) {
     if (req.method === 'GET') return serveAsset(res, assets, url.pathname);
     return json(res, 404, { error: 'Not found' } satisfies ErrorResponse);
   }
-  server.on('close', () => feed.close());
+  server.on('close', () => {
+    feed.close();
+    for (const close of [...transcriptConnections]) close();
+  });
   return server;
 }
 

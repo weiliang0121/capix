@@ -1,15 +1,15 @@
-import type { ConfigurationResponse, ConversationUpdate, ExecutionRequest, MemoryObservation, ObserverOverview, RuntimeSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@capix-observer/protocol';
+import type { ConfigurationResponse, ConversationUpdate, ConversationRequest, MemoryObservation, ObserverOverview, ExecutionRecordSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@capix/protocol';
 
 export interface ConversationTransport {
   config(): Promise<ConfigurationResponse>;
-  run(request: ExecutionRequest, accept: (update: ConversationUpdate) => void, accepted: () => void): Promise<void>;
+  run(request: ConversationRequest, accept: (update: ConversationUpdate) => void, accepted: () => void): Promise<void>;
 }
 
 export interface ObservationTransport {
   overview(): Promise<ObserverOverview>;
   memory(): Promise<MemoryObservation>;
   source(path: string, signal?: AbortSignal): Promise<SourceResponse>;
-  execution(id: string, signal?: AbortSignal): Promise<RuntimeSnapshot>;
+  execution(id: string, signal?: AbortSignal): Promise<ExecutionRecordSnapshot>;
   observe(accept: (frame: ObservationFrame) => void, signal: AbortSignal): Promise<void>;
 }
 

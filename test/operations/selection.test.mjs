@@ -1,9 +1,9 @@
 import { createEnvironment } from '../fixtures/environment.mjs';
 import { resourceFact } from '../fixtures/observer.mjs';
-import { readOutput } from '@capix-observer/protocol';
+import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver, acceptExecutionInput, observeExecution } from '@capix-observer/service';
+import { initializeObserver, acceptConversationInput, observeExecution } from '@capix/observer-service';
 
 const settings = { model: 'test', contextBudget: 100000, maxOutputTokens: 256, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -46,16 +46,16 @@ for (const fails of [false, true]) {
 }
 
 test('message counts accumulate independently and never enter model requests', async () => {
-  const { bindObserver, ObserverRuntimeDefinition } = await import('@capix-observer/service');
-  const { createRuntime } = await import('@capix-observer/runtime');
-  const { Transcript } = await import('@capix-observer/runtime');
+  const { bindConversation, ConversationRuntimeDefinition } = await import('@capix/observer-service');
+  const { createBoundRuntime } = await import('@capix/server-runtime');
+  const { Transcript } = await import('@capix/server-runtime');
   const entities = createEnvironment({ messages: [{ role: 'user', content: '我在北京' }] });
   const transcript = entities.transcript;
   const original = transcript.get(0);
   const requests = [];
   let indexes = [0];
   let fails = false;
-  const runtime = bindObserver(new ObserverRuntimeDefinition(), entities, {
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, {
     async invoke(request, purpose) {
       const loaded = JSON.parse(request.messages[1].content);
       assert.doesNotMatch(JSON.stringify(request), /selectionCount/);

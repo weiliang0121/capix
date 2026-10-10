@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { captureSource } from './observer.mjs';
-import { ResourceBindings } from '@capix-observer/runtime';
+import { ResourceBindings } from '@capix/server-runtime';
 
 // Low-level mechanism fixtures deliberately retain actual Context/Invocation access.
 // Business definitions are separately verified through assembleRuntime's restricted views.
@@ -13,7 +13,7 @@ function work(owner) {
     ...(owner.accept ? { accept: (context, output, invocation) => owner.accept(context, output, invocation) } : {}),
   };
 }
-export class Execution {
+export class ExecutionFixture {
   constructor(builder) {
     this.builder = builder;
   }
@@ -30,7 +30,7 @@ export class Execution {
     });
   }
 }
-export class Operation {
+export class OperationFixture {
   id = randomUUID();
   constructor(builder) {
     this.builder = builder;
@@ -42,7 +42,7 @@ export class Operation {
     return this.create(parent, input).run();
   }
 }
-export class Attempt {
+export class AttemptFixture {
   constructor(builder, requires = {}) {
     this.builder = builder;
     this.requires = requires;

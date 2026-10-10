@@ -5,13 +5,13 @@ import type { RuntimeContextBuilder } from '../runtime/builder.js';
 
 /** Constructs this Runtime's contexts from already established per-call conditions. */
 export class ExecutionContextBuilder {
-  constructor(private readonly runtimes: RuntimeContextBuilder) {}
-  create<I, O, R extends object = object>(parent: RuntimeContext, input: I, resources?: ResourceBindings<R>): ExecutionContext<I, O, R> {
-    this.check(parent);
-    return new ExecutionContext(input, { signal: parent.signal }, this, resources, parent);
+  constructor(private readonly runtimeContextBuilder: RuntimeContextBuilder) {}
+  create<Input, Output, Resources extends object = object>(parentContext: RuntimeContext, input: Input, resources?: ResourceBindings<Resources>): ExecutionContext<Input, Output, Resources> {
+    this.check(parentContext);
+    return new ExecutionContext(input, { signal: parentContext.signal }, this, resources, parentContext);
   }
-  check(parent: RuntimeContext): void {
-    this.runtimes.requireActive(parent);
+  check(parentContext: RuntimeContext): void {
+    this.runtimeContextBuilder.requireActive(parentContext);
   }
   requireActive(context: ExecutionContext): void {
     context.requireActive();

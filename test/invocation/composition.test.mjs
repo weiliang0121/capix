@@ -1,17 +1,17 @@
-import { bindCallObservation, defineObservation, ResourceBindings } from '@capix-observer/runtime';
-import { Operation } from '../fixtures/behavior.mjs';
+import { bindInvocationObservation, defineObservation, ResourceBindings } from '@capix/server-runtime';
+import { OperationFixture } from '../fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, Invocation, OperationContext, Recorder, RecordBook } from '@capix-observer/runtime';
-import { createRuntime } from '../fixtures/runtime.mjs';
+import { Sequence, Invocation, OperationContext, Recorder, RecordBook } from '@capix/server-runtime';
+import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 
-class ComposedOperation extends Operation {
+class ComposedOperation extends OperationFixture {
   name = 'composed';
   label = 'Composed';
   source = 'test';
   constructor(runtime, composition) {
-    super(runtime.operationInvocations);
+    super(runtime.operationInvocationBuilder);
     this.composition = composition;
   }
   execute(context, invocation) {
@@ -20,7 +20,7 @@ class ComposedOperation extends Operation {
 }
 
 function root(runtime, composition, input = 1) {
-  return runtime.executionInvocations.create(input, {
+  return runtime.executionInvocationBuilder.create(input, {
     context: { settings: {} },
     work: { maxRounds: 1, execute: (context, invocation) => composition.run(invocation, context.currentInput) },
   });
@@ -35,7 +35,7 @@ function deferred() {
 }
 
 test('parent owns a child before it runs and distinguishes its return from parent acceptance', async () => {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   const entered = deferred();
   const release = deferred();
   const inner = new Sequence().step('leaf', { use: new TestAttempt(runtime, 'leaf', (input) => input + 1), input: ({ input }) => input });
@@ -70,7 +70,7 @@ test('parent owns a child before it runs and distinguishes its return from paren
 });
 
 test('child failure keeps accepted predecessors and prevents later child creation', async () => {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   const error = new Error('second failed');
   let observed;
   const first = new TestAttempt(runtime, 'first', (input) => {
@@ -108,7 +108,7 @@ test('child failure keeps accepted predecessors and prevents later child creatio
 });
 
 test('parent acceptance failure retains successful child and does not start next work or retry', async () => {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   let effects = 0;
   const error = new Error('parent append failed');
   const inner = new Sequence().step('leaf', { use: new TestAttempt(runtime, 'leaf', () => ++effects), input: () => null });
@@ -133,7 +133,7 @@ test('parent acceptance failure retains successful child and does not start next
 });
 
 test('shared behavior and composition retain independent nested O/O/A relationships per call', async () => {
-  const runtime = createRuntime({ recorder: new Recorder(new RecordBook()) });
+  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
   const leaf = new TestAttempt(runtime, 'identity');
   const inner = new ComposedOperation(runtime, new Sequence().step('leaf', { use: leaf, input: ({ input }) => input }));
   const outer = new ComposedOperation(runtime, new Sequence().step('inner', { use: inner, input: ({ input }) => input }));
@@ -153,9 +153,9 @@ test('shared behavior and composition retain independent nested O/O/A relationsh
 });
 
 test('direct calls also attach, without pretending parent acceptance took place', async () => {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   const operation = new ComposedOperation(runtime, new Sequence());
-  const invocation = runtime.executionInvocations.create(null, {
+  const invocation = runtime.executionInvocationBuilder.create(null, {
     context: { settings: {} },
     work: { maxRounds: 1, execute: (_context, parent) => operation.call(parent, null) },
   });
@@ -168,7 +168,7 @@ test('direct calls also attach, without pretending parent acceptance took place'
 });
 
 test('a terminal reporting failure remains a failed delivery with a succeeded child context', async () => {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   const error = new Error('finish record failed');
   const use = {
     create(parent, input, options) {
@@ -177,7 +177,7 @@ test('a terminal reporting failure remains a failed delivery with a succeeded ch
         context: new OperationContext(parent.context, input),
         signal: parent.context.signal,
         work: { maxRounds: 1, execute: () => 'completed' },
-        observation: bindCallObservation(
+        observation: bindInvocationObservation(
           {
             identity: { level: 'operation', contextId: 'delivery-probe' },
             resources: new ResourceBindings({}),
@@ -208,7 +208,7 @@ test('a terminal reporting failure remains a failed delivery with a succeeded ch
 });
 
 test('input preparation failure creates no child and repeated work positions produce separate calls', async () => {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   const use = new ComposedOperation(runtime, new Sequence());
   const error = new Error('cannot prepare input');
   const failed = root(

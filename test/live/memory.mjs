@@ -1,9 +1,9 @@
-import { readOutput } from '@capix-observer/protocol';
+import { readOutput } from '@capix/protocol';
 // Optional real-provider check. Uses the product execution unchanged; not part of the offline test suite.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { DeepSeekProvider, initializeObserver, acceptExecutionInput, observeExecution } from '@capix-observer/service';
+import { DeepSeekProvider, initializeObserver, acceptConversationInput, observeExecution } from '@capix/observer-service';
 
 const directory = resolve(process.argv[2] || 'traces/memoryLoop');
 await mkdir(directory);

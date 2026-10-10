@@ -3,7 +3,7 @@ import type { RecordBook } from '../container/book.js';
 import type { BaseRecord } from '../record.js';
 import { CompositeRecord } from '../composite.js';
 import { RuntimeCallRecord } from '../runtime-call/record.js';
-import { RuntimeRecord } from '../runtime/record.js';
+import { RecordingRootRecord } from '../root/record.js';
 import { InvocationRecord } from '../invocation/record.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
@@ -15,16 +15,16 @@ import { ResourceRecord } from '../resource/record.js';
 
 /** Existing record kinds' ownership rules; no storage, indexing or publication. */
 export function checkRelation(record: BaseRecord<unknown>, parent: CompositeRecord<unknown> | undefined, book: RecordBook): void {
-  if (record instanceof RuntimeRecord && parent) throw new Error('Runtime must be a root record');
-  if (record instanceof RuntimeCallRecord && !(parent instanceof RuntimeRecord)) throw new Error('Runtime call requires a Runtime instance parent');
-  if (record instanceof ExecutionRecord && !(parent instanceof RuntimeCallRecord)) throw new Error('Execution requires a Runtime call parent');
+  if (record instanceof RecordingRootRecord && parent) throw new Error('Recording root cannot have a parent record');
+  if (record instanceof RuntimeCallRecord && !(parent instanceof RecordingRootRecord)) throw new Error('Runtime call record requires a recording root parent');
+  if (record instanceof ExecutionRecord && !(parent instanceof RuntimeCallRecord)) throw new Error('Execution record requires a Runtime call record parent');
   if (record instanceof OperationRecord) {
     if (!(parent instanceof ExecutionRecord || parent instanceof OperationRecord)) throw new Error('Operation requires an execution or operation parent');
     if (record.parentId !== (record.parentOperationId ?? record.executionId)) throw new Error('Inconsistent operation parent');
   }
   if (record instanceof AttemptRecord && (!(parent instanceof OperationRecord) || record.operationId !== parent.id)) throw new Error('Attempt requires an operation parent');
-  if (record instanceof InvocationBoundaryRecord && !(parent instanceof InvocationRecord)) throw new Error('Event requires a call parent');
-  if (record instanceof ResourceRecord && !(parent instanceof InvocationRecord || parent instanceof RuntimeRecord)) throw new Error('Resource fact requires a runtime or invocation parent');
+  if (record instanceof InvocationBoundaryRecord && !(parent instanceof InvocationRecord)) throw new Error('Invocation boundary record requires an invocation record parent');
+  if (record instanceof ResourceRecord && !(parent instanceof InvocationRecord || parent instanceof RecordingRootRecord)) throw new Error('Resource record requires a recording root or invocation record parent');
   if (record instanceof ResourceRecord && parent instanceof InvocationRecord && parent.status !== 'running') throw new Error('Resource access owner has ended');
   const content = record instanceof MemoryRecord || record instanceof TranscriptRecord;
   if (!parent) {
@@ -47,7 +47,7 @@ export function checkRelation(record: BaseRecord<unknown>, parent: CompositeReco
   }
   if (record instanceof InvocationBoundaryRecord) {
     const expected = record.value.type === 'call' ? 'running' : record.value.type === 'return' ? 'succeeded' : 'failed';
-    if (!(parent instanceof InvocationRecord) || record.callId !== parent.id || parent.status !== expected) throw new Error('Event does not match the invocation record state');
+    if (!(parent instanceof InvocationRecord) || record.callId !== parent.id || parent.status !== expected) throw new Error('Boundary does not match the invocation record state');
     // Terminal evidence is recorded after the call has ended.
     return;
   }

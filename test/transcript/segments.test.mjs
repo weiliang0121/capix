@@ -1,9 +1,9 @@
 import { contextWithSource, sourceFor } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript, ExecutionContext, Memory } from '@capix-observer/runtime';
+import { Transcript, ExecutionContext, Memory } from '@capix/server-runtime';
 
-import { initializeObserver, acceptExecutionInput, observeExecution, memoryOutputContract } from '@capix-observer/service';
+import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract } from '@capix/observer-service';
 
 const settings = { model: 'test', contextBudget: 16000, maxOutputTokens: 1536, timeoutMs: 1000 };
 const reply = (value) => ({ id: 'fixture', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -135,8 +135,8 @@ for (const retained of [2, 1, 0]) {
 }
 
 test('retention stops at incomplete messages and never pulls a pair back out of an archived segment', async () => {
-  const { segmentCandidates } = await import('@capix-observer/service');
-  const { TranscriptRangeRef, TranscriptRangeReader } = await import('@capix-observer/runtime');
+  const { segmentCandidates } = await import('@capix/observer-service');
+  const { TranscriptRangeRef, TranscriptRangeReader } = await import('@capix/server-runtime');
   const transcript = new Transcript([
     { role: 'user', content: 'old' },
     { role: 'assistant', content: 'old response' },

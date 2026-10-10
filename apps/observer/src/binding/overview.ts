@@ -1,4 +1,4 @@
-import { readOutput, validateSnapshot, type InvocationSummary, type ObserverOverview, type RuntimeSnapshot } from '@capix-observer/protocol';
+import { readOutput, validateExecutionRecordSnapshot, type InvocationSummary, type ObserverOverview, type ExecutionRecordSnapshot } from '@capix/protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 import { executionResources } from './resources.js';
 import { isArray } from 'es-toolkit/compat';
@@ -7,12 +7,12 @@ function object(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {};
 }
 /** Live snapshots are projected locally; list loading never fetches all detail records. */
-export function updateOverview(previous: ObserverOverview, snapshot: RuntimeSnapshot): ObserverOverview {
-  validateSnapshot(snapshot);
+export function updateOverview(previous: ObserverOverview, snapshot: ExecutionRecordSnapshot): ObserverOverview {
+  validateExecutionRecordSnapshot(snapshot);
   const starts = new Map(snapshot.events.filter((event) => event.value.type === 'call').map((event) => [event.callId, event]));
   const ends = new Map(snapshot.events.filter((event) => event.value.type !== 'call').map((event) => [event.callId, event]));
   const records = [snapshot.execution, ...snapshot.operations, ...snapshot.attempts];
-  const calls: InvocationSummary[] = [{ ...snapshot.execution, recordType: 'execution' as const, name: 'execution', label: 'Execution.call', source: 'server/runtime/src/execution/execution.ts · Execution.call' }, ...snapshot.operations.map((record) => ({ ...record, recordType: 'operation' as const, name: record.operation, parentId: record.parentOperationId ?? record.executionId })), ...snapshot.attempts.map((record) => ({ ...record, recordType: 'attempt' as const, parentId: record.operationId }))].map((record) => {
+  const calls: InvocationSummary[] = [{ ...snapshot.execution, recordType: 'execution' as const, name: 'execution', label: '执行调用', source: 'server/runtime/src/execution/execution.ts · BoundExecution.create' }, ...snapshot.operations.map((record) => ({ ...record, recordType: 'operation' as const, name: record.operation, parentId: record.parentOperationId ?? record.executionId })), ...snapshot.attempts.map((record) => ({ ...record, recordType: 'attempt' as const, parentId: record.operationId }))].map((record) => {
     const start = starts.get(record.id)!;
     const end = ends.get(record.id);
     return { id: record.id, contextId: record.contextId, recordType: record.recordType, ...('parentId' in record ? { parentId: record.parentId } : {}), name: record.name, label: record.label, source: record.source, status: record.status, offsetMs: start.offsetMs, ...(end ? { durationMs: end.offsetMs - start.offsetMs } : {}) };

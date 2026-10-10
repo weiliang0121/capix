@@ -1,19 +1,19 @@
 import { createEnvironment } from './fixtures/environment.mjs';
-import { Execution, Operation, Attempt } from './fixtures/behavior.mjs';
+import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
-import { InvocationRecordHelper } from '@capix-observer/runtime';
+import { InvocationRecordHelper } from '@capix/server-runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, Runtime, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix-observer/runtime';
-import { createRuntime } from './fixtures/runtime.mjs';
-import { initializeObserver, bindObserver, ObserverRuntimeDefinition, observeExecution, observeOverview, acceptExecutionInput } from '@capix-observer/service';
+import { Invocation, InvocationContext, BoundRuntime, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix/server-runtime';
+import { createBoundRuntime } from './fixtures/runtime.mjs';
+import { initializeObserver, bindConversation, ConversationRuntimeDefinition, observeExecution, observeOverview, acceptConversationInput } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const createRecorder = (book = new RecordBook()) => new Recorder(book);
 const proposed = (content = '北京', memoryId = null) => ({ action: memoryId ? 'update' : 'create', memoryId, change: '确认地点', sourceIndexes: [0], result: { topic: '地点', content, sourceIndexes: [0] } });
 const raw = (value) => ({ id: 'fixture', model: 'fixture', finishReason: 'stop', usage: null, content: JSON.stringify(value) });
 
-class Echo extends Execution {
+class Echo extends ExecutionFixture {
   execute(context, invocation) {
     rememberCall(invocation);
     return context.currentInput;
@@ -50,7 +50,7 @@ test('Invocation consumes an established context and rejects concurrent reuse', 
   await assert.rejects(invocation.run(), /already started/);
 });
 
-test('Runtime reservation blocks other entry work and always releases after failure', async () => {
+test('BoundRuntime reservation blocks other entry work and always releases after failure', async () => {
   const { runtime, transcript } = createEnvironment();
   let release;
   const pending = new Promise((resolve) => {
@@ -148,7 +148,7 @@ test('new R assemblies share independently owned entities without absorbing thei
   const run = async (runtime, text) => observeExecution(runtime, environment.recording, { messages: [{ role: 'user', content: text }] }, { settings });
   const first = await run(environment.runtime, '我在北京');
   const memory = environment.memories.values()[0];
-  const next = bindObserver(new ObserverRuntimeDefinition(), environment, provider, { observations: [environment.recording], changes: environment.changes });
+  const next = bindConversation(new ConversationRuntimeDefinition(), environment, provider, { observations: [environment.recording], changes: environment.changes });
   const second = await run(next, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.memories.get(memory.id), memory);
@@ -166,10 +166,10 @@ test('new R assemblies share independently owned entities without absorbing thei
   assert.equal(response.callId, first.execution.id);
 });
 
-test('EOA rejects cross-Runtime contexts independently of the recording layer', async () => {
-  const a = createRuntime();
-  const b = createRuntime();
-  class Leaf extends Attempt {
+test('EOA rejects cross-BoundRuntime contexts independently of the recording layer', async () => {
+  const a = createBoundRuntime();
+  const b = createBoundRuntime();
+  class Leaf extends AttemptFixture {
     name = 'leaf';
     label = 'leaf';
     source = 'test';
@@ -178,24 +178,24 @@ test('EOA rejects cross-Runtime contexts independently of the recording layer', 
       assert.fail('foreign leaf must not run');
     }
   }
-  class Work extends Operation {
+  class Work extends OperationFixture {
     name = 'work';
     label = 'work';
     source = 'test';
     async execute(context, invocation) {
       rememberCall(invocation);
-      await assert.rejects(new Leaf(b.attemptInvocations).call(invocation, 'input'), /another Runtime/);
+      await assert.rejects(new Leaf(b.attemptInvocationBuilder).call(invocation, 'input'), /another Runtime/);
       return 'done';
     }
   }
-  class Root extends Execution {
+  class Root extends ExecutionFixture {
     async execute(context, invocation) {
       rememberCall(invocation);
-      await assert.rejects(new Work(b.operationInvocations).call(invocation, 'input'), /another Runtime/);
-      return new Work(a.operationInvocations).call(invocation, 'input');
+      await assert.rejects(new Work(b.operationInvocationBuilder).call(invocation, 'input'), /another Runtime/);
+      return new Work(a.operationInvocationBuilder).call(invocation, 'input');
     }
   }
-  assert.equal(await new Root(a.executionInvocations).call('input', { settings }), 'done');
+  assert.equal(await new Root(a.executionInvocationBuilder).call('input', { settings }), 'done');
 });
 
 test('Invocation distinguishes successful work from failed result registration without retrying', async (t) => {
@@ -205,39 +205,39 @@ test('Invocation distinguishes successful work from failed result registration w
     if (args[1].kind === 'execution') throw new Error('cannot register result');
     return finish(...args);
   });
-  const runtime = createRuntime({ recorder });
+  const runtime = createBoundRuntime({ recorder });
   let count = 0;
   let context;
-  class NonRecordable extends Execution {
+  class NonRecordable extends ExecutionFixture {
     execute(current) {
       context = current;
       count++;
       return 'completed';
     }
   }
-  await assert.rejects(new NonRecordable(runtime.executionInvocations).call('input', { settings }), (error) => error.code === 'OBSERVATION_FAILED');
+  await assert.rejects(new NonRecordable(runtime.executionInvocationBuilder).call('input', { settings }), (error) => error.code === 'OBSERVATION_FAILED');
   assert.equal(context.status, 'succeeded');
   assert.equal(count, 1);
   assert.equal(runtime.running, false);
 });
 
-test('Invocation start registration failure prevents work and releases the Runtime', async (t) => {
+test('Invocation start registration failure prevents work and releases the BoundRuntime', async (t) => {
   const recorder = createRecorder();
   const add = recorder.add.bind(recorder);
   t.mock.method(recorder, 'add', (record) => {
     if (record.kind === 'execution') throw new Error('cannot begin record');
     return add(record);
   });
-  const runtime = createRuntime({ recorder });
+  const runtime = createBoundRuntime({ recorder });
   let context;
   let executions = 0;
-  class Work extends Execution {
+  class Work extends ExecutionFixture {
     execute() {
       executions++;
     }
   }
   await assert.rejects(
-    new Work(runtime.executionInvocations).call('input', { settings }, (current) => {
+    new Work(runtime.executionInvocationBuilder).call('input', { settings }, (current) => {
       context = current;
     }),
     (error) => error.code === 'OBSERVATION_FAILED',
@@ -256,15 +256,15 @@ test('Invocation preserves both work and failure-registration errors without rep
     if (args[1].kind === 'execution') throw registration;
     return finish(...args);
   });
-  const runtime = createRuntime({ recorder });
+  const runtime = createBoundRuntime({ recorder });
   let context;
-  class Work extends Execution {
+  class Work extends ExecutionFixture {
     execute(current) {
       context = current;
       throw failure;
     }
   }
-  await assert.rejects(new Work(runtime.executionInvocations).call('input', { settings }), (error) => {
+  await assert.rejects(new Work(runtime.executionInvocationBuilder).call('input', { settings }), (error) => {
     assert.ok(error instanceof AggregateError);
     assert.equal(error.cause, failure);
     assert.equal(error.errors[0], failure);

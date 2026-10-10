@@ -1,9 +1,9 @@
 import { resourceFact } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver, acceptExecutionInput, observeExecution } from '@capix-observer/service';
+import { initializeObserver, acceptConversationInput, observeExecution } from '@capix/observer-service';
 
-import { Transcript } from '@capix-observer/runtime';
+import { Transcript } from '@capix/server-runtime';
 
 const settings = { model: 'one', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'fixture', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -100,7 +100,7 @@ test('invalid submissions cannot replace an initialized Transcript or partially 
     ],
   ]) {
     assert.throws(
-      () => acceptExecutionInput(environment.transcript, { messages }),
+      () => acceptConversationInput(environment.transcript, { messages }),
       (error) => error.code === 'INVALID_INPUT',
     );
     assert.equal(environment.transcript.length, 1);

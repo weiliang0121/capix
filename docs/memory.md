@@ -3,15 +3,15 @@
 ## 当前串行运行链路
 
 ```text
-M(n-1) + Q(n) + H → SelectHistory → S(n)
-M(n-1) + Q(n) + S(n) → GenerateAnswer → A(n)
-M(n-1) + Q(n) + A(n) + 可见原文 → ExtractMemory → M(n)
-M(n)              → 下一轮 SelectHistory
+M(n-1) + Q(n) + H → SelectHistoryDefinition → S(n)
+M(n-1) + Q(n) + S(n) → GenerateAnswerDefinition → A(n)
+M(n-1) + Q(n) + A(n) + 可见原文 → ExtractMemoryDefinition → M(n)
+M(n)              → 下一轮 SelectHistoryDefinition
 ```
 
-H 只有当前段内此前的原始用户/助手消息，不含记忆。ObserverExecutionDefinition.execute 在每轮开始取得 previousMemories（当前 Transcript 下 Memory.toJSON 的正文快照），用于筛选、回答和提取。记忆正文已有不可变语义，后续 Memory.update 不会改写这次捕获的内容。回答可以依据记忆有限继承旧段理解；提取的可见原文只有本轮 QA 和当前段筛选原文，不沿来源读取旧段。成功落实的更新在下一次执行开始读取，不从记录中恢复或查询运行输入。
+H 只有当前段内此前的原始用户/助手消息，不含记忆。ConversationExecutionDefinition.run.execute 在每轮开始取得 previousMemories（当前 Transcript 下 Memory.toJSON 的正文快照），用于筛选、回答和提取。记忆正文已有不可变语义，后续 Memory.update 不会改写这次捕获的内容。回答可以依据记忆有限继承旧段理解；提取的可见原文只有本轮 QA 和当前段筛选原文，不沿来源读取旧段。成功落实的更新在下一次执行开始读取，不从记录中恢复或查询运行输入。
 
-SelectHistory 输出仍只是当前段的原文索引。其 OperationRecord 输入明确显示 message/memories；PrepareModelRequest 输出保存实际发给模型的 message/memories/history。历史与记忆均计入容量检查；下一轮开始前必要时切换消息段，详见 [消息分段](transcript.md)。不移除记忆，记忆本身超限仍失败。模型的理解与索引选择质量不由 Schema 保证。
+SelectHistoryDefinition 输出仍只是当前段的原文索引。其 OperationRecord 输入明确显示 message/memories；PrepareModelRequestDefinition 输出保存实际发给模型的 message/memories/history。历史与记忆均计入容量检查；下一轮开始前必要时切换消息段，详见 [消息分段](transcript.md)。不移除记忆，记忆本身超限仍失败。模型的理解与索引选择质量不由 Schema 保证。
 
 ## 两种对象
 
@@ -53,13 +53,13 @@ MemoryRecord extends BaseRecord<{
                          ↓
 当前记忆 + 本轮QA + 当前段筛选候选原文
                          ↓
-ExtractMemory
-  → PrepareModelRequest：准备请求并检查容量
-  → InvokeModel：调用模型，保留原始返回
-  → AcceptModelOutput：解析与整批接纳
-  → ApplyMemory
-      ├─ Memories.apply 创建/更新并记录当前事实
-      └─ 每项落实后登记 MemoryRecord
+ExtractMemoryDefinition
+  → PrepareModelRequestDefinition：准备请求并检查容量
+  → InvokeModelDefinition：调用模型，保留原始返回
+  → AcceptModelOutputDefinition：解析与整批接纳
+  → ApplyMemoryDefinition
+      ├─ Memories.apply 审查、创建/更新并发布当前事实
+      └─ 可选记录预设消费事实并登记 MemoryRecord
 ```
 
 输出示例：
@@ -86,15 +86,15 @@ ExtractMemory
 
 接纳先检查候选结构、目标与引用合法性，以及原始候选是否重复更新同一 ID。若 update 的 result 与本轮旧记忆的 topic/content/sourceIndexes 完全相同（索引顺序也相同），将其作为无操作过滤，不要求它额外引用本轮消息，不修改 Memory 或新增 MemoryRecord。是否无变化不依据 change 的文字，不做语义相似判断；正文、主题或来源发生变化时仍必须提供本轮依据。未知引用、正文依据不包含变化依据等错误不能借无操作绕过。剩余变更整批检查通过后才落实，仍不接受部分有效批次。
 
-模型原始候选保留在 InvokeModel 的返回记录；AcceptModelOutput 保留实际接纳的变更，ApplyMemory 成功后返回这些变更作为操作最终输出。因此可以核对哪些候选被过滤，以及失败发生在接纳还是落实，不新增跳过事件。未增加错误反馈或自动重试。
+模型原始候选保留在 InvokeModelDefinition 的返回记录；AcceptModelOutputDefinition 保留实际接纳的变更，ApplyMemoryDefinition 成功后返回这些变更作为操作最终输出。因此可以核对哪些候选被过滤，以及失败发生在接纳还是落实，不新增跳过事件。未增加错误反馈或自动重试。
 
 提取请求装载当前记忆内容及来源索引，不沿引用加载来源原文，不消费 MemoryRecord。原文仍只增不改删。筛选候选是提取可用证据，不宣称全部用于回答。更新完整正文仍可能遗漏条件或错误理解；结构校验不证明变化说明与语义正确。
 
 ## 归属与边界
 
-- 环境独立建立 Memories；它绑定一个 Transcript，提供 get/values/snapshot/apply，统一审查、落实并记录正式变化。R 仅绑定其正式资源，不拥有实体生命周期。业务没有原集合引用或 Memory.update 旁路。
-- ApplyMemory 通过本层 memory.apply 资源提交已接纳提案，不传递记录来源、不自行修改内容或补写记录。资源绑定注入本次调用的来源。
-- Memories 发布确定的 MemoryEvent，实体自身不持有 Recorder。必要捕获与可选观察独立消费事件；调用中的资源绑定提供 origin 与本次观察端口，记录预设在自己内部形成 ChangeSource 及 MemoryRecord。独立变化使用环境端口，不虚构调用来源。
+- 环境独立建立 Memories；它绑定一个 Transcript，提供 get/values/snapshot/apply，统一审查、落实并发布正式变化。R 仅绑定其正式资源，不拥有实体生命周期。业务没有原集合引用或 Memory.update 旁路。
+- ApplyMemoryDefinition 通过本层 memory.apply 资源提交已接纳提案，不传递记录来源、不自行修改内容或补写记录。资源绑定注入本次调用的来源。
+- Memories 发布确定的 MemoryEvent，实体自身不持有 Recorder。必要捕获与可选观察独立消费事件；调用中的资源绑定提供 origin 与本次观察端口，记录预设在自己内部形成 RecordChangeSource 及 MemoryRecord。独立变化使用环境端口，不虚构调用来源。
 - MemoryRecord 保存在同一个 Book；按 memoryId 过滤，沿登记顺序返回。不另加索引；memoriesId/sequence 表达集合内正式变化顺序。
 - E/O/A 记录继续记录提取输入、模型原始返回和接纳候选；MemoryRecord 保存具体记忆体已落实的变化，二者不是重复对象。MemoryRecord 不持有调用 Context 实例、调用状态或虚构事件。
 - GET /api/memory 返回当前事实和变化记录的只读投影，原文依据使用 transcriptId/index 定位。客户端从独立消息副本组合原文，未加载时按需取得；页面展示记录正文、依据、结果快照、执行与操作 ID，不做差异推断。本轮保留 MemoryRecord 的不可变结果证据，不扩展记忆历史实体仓库。
@@ -105,11 +105,9 @@ ExtractMemory
 
 ## 观测展示
 
-QA 是一次执行的观测视角，不新增运行实体或记录。上方按实际执行顺序排列三行：用户、助手、记忆体，每列属于同一执行，超宽横向滚动。用户从执行范围读取，助手来自该次生成操作；原消息索引从提取操作已有的 currentIndexes 取得，不按相邻消息或重复文本配对。失败且未生成回答时保留空位，提取失败也保留已成功生成的回答。
+QA 是一次 E 调用的观测视角，不新增运行实体。导航对应执行轮次，主图上下文行聚合选中历史、可见记忆与变化入口，全文由右侧对话和详情提供。用户输入、生成结果和原文关联来自既有事实，不按相邻文本猜测配对；提取失败仍展示已经正式追加的回答。
 
-同一个选中执行 ID 控制 QA 详情、记忆卡片和调用时序。用户输入与助手回答并列展示；记忆区按 executionId 展示本轮 MemoryRecord，卡片横向滚动，正文是记录当时的结果快照。全部入口仅显示当前记忆总览，不展示某次时序。热度仍为全部执行累计，金框标记选中轮选择过的历史，不把累计次数当成过去时刻的热度。
-
-GET /api/executions 从已有记录投影轮次、消息关联及选择结果，GET /api/execution?id=... 查询该轮已有 E/O/A 和事件记录。查询不新增事实或记录，刷新后仍可查询本进程的历史执行；不包含持久化、导入或重放。快速切换时丢弃过期的前端请求结果，防止旧时序覆盖新选择；执行期间暂不可切换观察轮。
+记忆详情区分当前 Memory 正文与 MemoryRecord 当时的结果快照，沿调用 ID 查看本轮变化和依据。累计选择次数不代表过去某一时刻的热度，也不代表生成模型实际使用。GET /api/executions 提供轻量关联与计时，GET /api/execution?id=... 按需取得记录详情，GET /api/memory 组合当前正文与历史变化。查询不新建事实；切换详情时丢弃过期响应。UI 布局由应用负责，不作为实体或记录契约。
 
 ## 提取目标与表达边界
 
@@ -119,6 +117,6 @@ GET /api/executions 从已有记录投影轮次、消息关联及选择结果，
 
 ## 变化捕获
 
-Memories 可注入 ChangeCapture<MemoryEvent>。整批语义检查完成后，每个有效变更先固定不可变事件，再落实内容并推进 sequence，捕获成功后按需登记 MemoryRecord。空批次、无变化和预检查失败不占序号；捕获或记录失败保留已经落实的项，停止处理剩余项，不声称跨项回滚。
+Memories 可注入 ChangeCapture<MemoryEvent>。整批语义检查完成后，每个有效变更先固定不可变事件，再落实内容并推进 sequence，再分别尝试必要捕获与可选观察；记录预设消费观察事实生成 MemoryRecord。空批次、无变化和预检查失败不占序号；必要捕获失败或 propagate 观察失败保留已经落实的项并停止剩余处理；isolate 观察失败停用对应观察者，业务可继续。两者都不声称跨项回滚。
 
 MemoryEvent 与 MemoryRecord 通过 memoriesId/sequence 对应；前者同步当前事实，后者提供变化依据及调用归属。客户端分别更新当前记忆与历史记录，不重复落实内容。无 Recorder 时仍可捕获变化，无捕获器时仍可正常使用记忆。网络交付规则见 [观测增量](observation-increments.md)。

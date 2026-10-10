@@ -1,6 +1,6 @@
 import { ResourceOffer } from '../resource/offer.js';
 import type { SelectionUsage } from './usage.js';
-import type { Message } from '@capix-observer/protocol';
+import type { Message } from '@capix/protocol';
 
 export const SelectionUsageResource = Object.freeze({
   record: new ResourceOffer(

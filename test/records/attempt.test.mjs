@@ -1,19 +1,19 @@
 import { callFor, recordFor } from '../fixtures/lifecycle.mjs';
-import { ExecutionRecordHelper } from '@capix-observer/runtime';
+import { ExecutionRecordHelper } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
-import { readOutput, validateSnapshot } from '@capix-observer/protocol';
+import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { TestOperation } from '../fixtures/operation.mjs';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { ExceptionContract, Recorder, BaseRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, RecordBook } from '@capix-observer/runtime';
-import { createRuntime, observeCall } from '../fixtures/runtime.mjs';
+import { ExceptionContract, Recorder, BaseRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, RecordBook } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 import { test } from 'node:test';
 
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
 
 function setup() {
-  const runtime = createRuntime({ recorder: new Recorder(new RecordBook()) });
+  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
   const executionLifecycle = lifecycleFor(runtime).execution({ input: {}, settings: {} });
   const execution = executionLifecycle.begin();
   const operationLifecycle = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {});
@@ -46,7 +46,7 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   assert.equal(second.signal, operation.signal);
   assert.equal(second.operationContext, undefined);
   const during = observeCall(runtime.recording, callFor(execution));
-  validateSnapshot(during);
+  validateExecutionRecordSnapshot(during);
   assert.equal(during.operations.length, 1);
   assert.deepEqual(
     during.attempts.map((attempt) => attempt.status),
@@ -66,7 +66,7 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   assert.throws(() => second.complete({}), /ended/);
   assert.throws(() => lifecycleFor(runtime).attempt(operation, attempt, {}).begin(), /ended/);
   const final = observeCall(runtime.recording, callFor(execution));
-  validateSnapshot(final);
+  validateExecutionRecordSnapshot(final);
   assert.deepEqual(
     final.attempts.map((attempt) => attempt.status),
     ['failed', 'succeeded'],

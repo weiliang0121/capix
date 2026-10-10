@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ClientRuntime } from '@capix-observer/client-runtime';
+import { ClientRuntime } from '@capix/client-runtime';
 import { createAppStore } from '../../apps/observer/.test-dist/state/store.js';
 import { connectAppStore } from '../../apps/observer/.test-dist/binding/application.js';
 import { submitDraft } from '../../apps/observer/.test-dist/binding/submit.js';

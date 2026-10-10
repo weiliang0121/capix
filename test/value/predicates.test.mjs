@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { isNonBlankString, isNonEmptyArray, hasUniqueItems, Transcript, Memory, Memories } from '@capix-observer/runtime';
+import { isNonBlankString, isNonEmptyArray, hasUniqueItems, Transcript, Memory, Memories } from '@capix/server-runtime';
 
-import { modelTextSchema, modelIndexesSchema } from '@capix-observer/service';
+import { modelTextSchema, modelIndexesSchema } from '@capix/observer-service';
 
 test('text predicates, model schema and message acceptance agree without normalizing text', () => {
   const cases = [

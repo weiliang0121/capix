@@ -1,5 +1,5 @@
 {
-  "name": "@capix-observer/service",
+  "name": "@capix/observer-service",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,22 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./conversation": {
+      "types": "./dist/conversation.d.ts",
+      "import": "./dist/conversation.js"
+    },
+    "./observation": {
+      "types": "./dist/observation.d.ts",
+      "import": "./dist/observation.js"
+    },
+    "./assembly": {
+      "types": "./dist/assembly.d.ts",
+      "import": "./dist/assembly.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "import": "./dist/http.js"
     }
   },
   "scripts": {
@@ -14,9 +30,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix-observer/protocol": "workspace:*",
+    "@capix/protocol": "workspace:*",
     "es-toolkit": "1.52.0",
-    "@capix-observer/runtime": "workspace:*",
+    "@capix/server-runtime": "workspace:*",
     "zod": "4.6.5"
   }
 }

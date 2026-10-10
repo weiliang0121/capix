@@ -1,5 +1,7 @@
 # 运行体系、观测与绑定的改造方案
 
+> 这是已实施迭代的设计与审查材料，包含当时的缺口、伪代码和迁移过程；不作为当前公开 API 清单。当前定位与命名见 [项目组织](organization.md)，运行契约见 [运行边界](runtime-boundaries.md)，记录与交付见 [记录机制](recording.md) 和 [增量观测](observation-increments.md)。
+
 ## 本次基线与边界
 
 2026-10-08，基线提交 `d3b2544`：`refactor: separate runtime declarations bindings and execution structures`。
@@ -20,7 +22,7 @@
 
 ## 上轮已落地的边界（2026-10-09，观测迭代前）
 
-- 环境独立创建 Transcript、Memories、SelectionUsage、模型初始化器、Recorder 与变化捕获；RContext 只持有占用。`bindObserver` / `assembleRuntime` 产出唯一 `R.run(request, options, callbacks)` 业务入口。
+- 环境独立创建 Transcript、Memories、SelectionUsage、模型初始化器、Recorder 与变化捕获；RContext 只持有占用。`bindConversation` / `assembleRuntime` 产出唯一 `R.run(request, options, callbacks)` 业务入口。
 - E 的 `entry.requires/accept/admit` 说明提交契约，固定机制保持占用、检查、接纳、HTTP accepted、分段、资源捕获、Context/Invocation、started、记录、工作顺序。入口端点只在接纳窗口内有效。
 - 业务 execute/receive 使用 Scope / InvocationView，子关系也是只读投影；真实 Context、Recorder、资源重绑定等内部能力不向业务开放。原始 IO、错误对象身份仍保留以支持有限再次生成。
 - 资源声明定义访问接口及事实正文；共享供给和固定快照，逐调用绑定端点及来源。记录资源 `bound/available/unavailable/started/returned/threw`，无记录时不执行描述映射，方法仍保持原本同步或异步形式。
@@ -54,18 +56,18 @@ R 仍是 REOA 中的具体运行结构，负责当前约定的 E 入口和占用
 
 ```text
 initializeObserver
-  ├─ RecordBook / Clock / ChangeObserver / Recorder
-  ├─ createRuntime
+  ├─ RecordBook / Clock / ChangeBuffer / Recorder
+  ├─ createBoundRuntime
   │   ├─ Transcript / Memories / SelectionUsage
   │   ├─ RuntimeContext（三者的引用）
-  │   ├─ RuntimeRecord
+  │   ├─ RecordingRootRecord
   │   └─ Runtime（EOA 构造器、记录能力、运行占用）
-  ├─ ObserverRuntimeDefinition
+  ├─ ConversationRuntimeDefinition
   │   ├─ model 实例或工厂、providers、admit 分段策略
   │   └─ conversation E 声明 → O 声明 → A 声明
   └─ ObserverBinding
       ├─ 模型 Initializer、入口资源绑定
-      └─ RuntimeBinding.execution('conversation', source)
+      └─ BoundRuntimeBinding.execution('conversation', source)
           └─ ExecutionBinding
               ├─ E 声明、资源捕获、BoundChildren
               └─ Execution（主要转发给 InvocationBuilder）
@@ -90,7 +92,7 @@ HTTP → ObserverBinding.converse/submit
 
 ### 1. R 的创建仍暗含内容实体创建
 
-[runtime/create.ts](../server/runtime/src/runtime/create.ts) 创建 Transcript、Memories 和 SelectionUsage，再将三者放入 [RuntimeContext](../server/runtime/src/context/runtime.ts)。[Observer 环境](../services/observer/src/observer/environment.ts) 反过来从 `runtime.context` 取回消息集合。
+[runtime/create.ts](../server/runtime/src/runtime/create.ts) 创建 Transcript、Memories 和 SelectionUsage，再将三者放入 [RuntimeContext](../server/runtime/src/context/runtime.ts)。[Observer 环境](../services/observer/src/assembly/environment.ts) 反过来从 `runtime.context` 取回消息集合。
 
 ```ts
 // 当前关系的摘要，省略记录和变化接线。
@@ -106,7 +108,7 @@ return new Runtime(context, options);
 
 ### 2. 声明、绑定和运行结构尚未对齐
 
-[Runtime.run](../server/runtime/src/runtime/runtime.ts) 当前只接受回调并取得占用；[RuntimeBinding.execution](../server/runtime/src/binding/runtime.ts) 实际完成查声明、检查资源与子图、创建 E 结构和绑定。
+[Runtime.run](../server/runtime/src/runtime/runtime.ts) 当前只接受回调并取得占用；[BoundRuntimeBinding.execution](../server/runtime/src/binding/runtime.ts) 实际完成查声明、检查资源与子图、创建 E 结构和绑定。
 
 ```ts
 // 当前 API 的职责摘要。
@@ -117,7 +119,7 @@ executionBinding.submit(accept, options); // 真正使用声明和绑定发起�
 
 `execution(key)` 看似获取节点，实际重新建立节点；`Runtime.run` 看似执行业务结构，实际只负责排他。这是命名和对象持有关系一起错位。
 
-[Execution](../server/runtime/src/execution/execution.ts)、[Operation](../server/runtime/src/operations/operation.ts)、[Attempt](../server/runtime/src/attempt/attempt.ts) 主要转发给 Builder；定义、资源和子项主要放在对应 Binding。O 另有被观测使用的稳定实例 ID。
+[Execution](../server/runtime/src/execution/execution.ts)、[Operation](../server/runtime/src/operation/operation.ts)、[Attempt](../server/runtime/src/attempt/attempt.ts) 主要转发给 Builder；定义、资源和子项主要放在对应 Binding。O 另有被观测使用的稳定实例 ID。
 
 建议让运行实例成为明确的节点：持有落实后的绑定、直接子节点及自身构造器。绑定负责产生这个节点需要的装配结果，不再与 Structure 并列暴露两套可运行入口。应重分现有对象职责，而不是额外增加 Runner 或另一套节点包装。
 
@@ -125,7 +127,7 @@ R 最终通过 `run(input, controls)` 驱动唯一已装配 E；现有 `run(work
 
 ### 3. Service 的 R 声明混入了实体供应与 E 业务策略
 
-[ObserverRuntimeDefinition](../services/observer/src/observer/definition.ts) 当前既接收 `ModelProvider | (() => ModelProvider)`，又持有分段函数 `admit` 和供应函数表；[ObserverBinding](../services/observer/src/observer/binding.ts) 同时负责模型初始化、R 引用、E 绑定、入口资源和对话流交付。
+[ConversationRuntimeDefinition](../services/observer/src/conversation/definition.ts) 当前既接收 `ModelProvider | (() => ModelProvider)`，又持有分段函数 `admit` 和供应函数表；[ObserverBinding](../services/observer/src/conversation/binding.ts) 同时负责模型初始化、R 引用、E 绑定、入口资源和对话流交付。
 
 模型实例／工厂应属于环境供给，供应函数表属于绑定接线。按历史容量选择新分段是 E 入口的具体业务策略，不应放在 R 声明上。R 保留确定的执行次序，不理解模型预算和消息含义。
 
@@ -137,7 +139,7 @@ R 最终通过 `run(input, controls)` 驱动唯一已装配 E；现有 `run(work
 
 - [历史范围资源](../server/runtime/src/transcript/resource.ts) 不返回 Transcript 或 MessageRef，slice 只能收窄；追加端点只返回普通消息及索引。
 - [记忆资源](../server/runtime/src/memory/resource.ts) 返回快照，apply 不返回 Memory 实例。
-- [模型资源](../services/observer/src/model/resources.ts) 通过包装对象提供 invoke，保留供应者方法的接收对象；没有把 Provider 原实例直接交给 A。
+- [模型资源](../services/observer/src/conversation/model/resources.ts) 通过包装对象提供 invoke，保留供应者方法的接收对象；没有把 Provider 原实例直接交给 A。
 - [ResourceBindings](../server/runtime/src/resource/bindings.ts) 按资源公开项目身份匹配，子层只能选择父层已提供的项目；配置、范围和记忆快照固定时机，模型及部分访问对象按需兑现。
 
 不过 [InvocationDefinition](../server/runtime/src/definition/invocation.ts) 的 execute/receive 仍接收完整的 Context 与 Invocation。当前业务实际只需要其中一部分：
@@ -165,21 +167,21 @@ R 最终通过 `run(input, controls)` 驱动唯一已装配 E；现有 `run(work
 
 通用 Context 保存输入、进度、结果，没有分析消息或模型的业务逻辑；这一点应保留。业务输入构造、输出契约及再次生成决策继续在具体声明中。
 
-尚有明确的记录特化：[ExecutionRecordMetadata](../server/runtime/src/records/execution/helper.ts) 和 [ExecutionValue](../protocol/src/records.ts) 固定包含 `settings`、`transcriptRange`。service 已掌握何时捕获它们，但核心记录格式仍认识 Observer 信息。
+尚有明确的记录特化：[ExecutionRecordMetadata](../server/runtime/src/records/execution/helper.ts) 和 [ExecutionValue](../protocol/src/recording/types.ts) 固定包含 `settings`、`transcriptRange`。service 已掌握何时捕获它们，但核心记录格式仍认识 Observer 信息。
 
 建议本轮先隔离原 Record，保留现有观测字段。后续单独收敛 Observer 观测描述的归属；不能改成 `unknown` 或任意 `metadata` 字典就宣称已解耦。若迁移这些字段，需要同步 service 的 overview/selection/inspect 与 app 的详情和快照投影。
 
-RuntimeContext 的初步改造已确认：内容实体引用迁出后，仅接管 R 现有的唯一占用状态，不加入无消费者的执行历史或当前 E 集合。这还不代表 R 的持续数据生命周期已完整设计。RuntimeRecord 的根关联、创建时间与子引用保留，R 实例存活也不直接等同为全部数据生命周期。
+RuntimeContext 的初步改造已确认：内容实体引用迁出后，仅接管 R 现有的唯一占用状态，不加入无消费者的执行历史或当前 E 集合。这还不代表 R 的持续数据生命周期已完整设计。RecordingRootRecord 的根关联、创建时间与子引用保留，R 实例存活也不直接等同为全部数据生命周期。
 
 ### 6. 来源与子关系需要保留准确语义
 
-`Invocation.source` 是纯 ID 的 [ChangeSource](../server/runtime/src/records/source.ts)，不是原实体。业务目前两处使用：E [追加回答](../services/observer/src/observer/execution.ts)，A [落实记忆](../services/observer/src/attempt/memory/apply.ts)。其中 callId/executionId/operationId 是记录身份；无 Recorder 时整个 source 为 undefined。现有内容变化事件也不带调用来源，因此无记录时虽然仍有调用进度与内容变化，却不能可靠关联“哪个调用产生了这次变化”。
+`Invocation.source` 是纯 ID 的 [ChangeSource](../server/runtime/src/records/source.ts)，不是原实体。业务目前两处使用：E [追加回答](../services/observer/src/conversation/execution.ts)，A [落实记忆](../services/observer/src/conversation/attempt/memory/apply.ts)。其中 callId/executionId/operationId 是记录身份；无 Recorder 时整个 source 为 undefined。现有内容变化事件也不带调用来源，因此无记录时虽然仍有调用进度与内容变化，却不能可靠关联“哪个调用产生了这次变化”。
 
 需要区分运行来源与记录引用：前者表达已经成立的调用关系，可以从现有 Context 身份和直接父子关系着手；后者表达启用记录后对应的 Record 关系。来源事实由运行机制确定，记录绑定负责记录映射，观测不能靠事件相邻或时间相近猜测归因。不建立新的全局身份平台。先确定最小来源契约；其后如需传入内容变化事件，应同步调整 protocol 和客户端类型，并保持缺省情况下已有行为，不能声称只是内部接线。
 
 如果以后写资源自动绑定来源，必须绑定到当前 E/A 调用。资源值目前沿父子层共享，不能在 E 捕获时缓存 E 来源给全部下层，否则 A 的记忆变化会错误归属到 E。
 
-[有限再次生成](../services/observer/src/model/regeneration.ts) 确实依赖直接子调用的归属、先后、轮次、位置 key、输入、返回、接收状态及原始输出身份。需要继续区分：
+[有限再次生成](../services/observer/src/conversation/model/regeneration.ts) 确实依赖直接子调用的归属、先后、轮次、位置 key、输入、返回、接收状态及原始输出身份。需要继续区分：
 
 ```text
 子层工作完成 ≠ 子层成功交付给父层 ≠ 父层成功接纳
@@ -189,7 +191,7 @@ RuntimeContext 的初步改造已确认：内容实体引用迁出后，仅接�
 
 ### 7. 实体独立不等于本轮支持任意跨 R 共享
 
-[ObservationFeed](../services/observer/src/observer/feed.ts) 已有独立 scopeId，基线分别标识 Transcript、Memories、Recorder；[客户端副本](../client/runtime/src/observation.ts) 区分交付顺序和来源顺序。因此环境装配迁移不要求重做快照／增量协议，也不要求业务流依赖记录。
+[ObservationFeed](../services/observer/src/observation/feed.ts) 已有独立 scopeId，基线分别标识 Transcript、Memories、Recorder；[客户端副本](../client/runtime/src/observation.ts) 区分交付顺序和来源顺序。因此环境装配迁移不要求重做快照／增量协议，也不要求业务流依赖记录。
 
 但当前 feed 读取同 Book 内全部运行中的 E，selection 按 TranscriptRangeRef 归组，客户端要求 Recorder revision 连续。若多 R 共用来源，不能简单过滤其他 R 事件，否则会留下序号缺口。本轮保持“一套 Observer 环境明确选择一组来源”，不顺带支持任意共享环境、分域重放或多会话。
 
@@ -256,7 +258,7 @@ RuntimeContext 的初步改造已确认：内容实体引用迁出后，仅接�
 
 装配时确定共享能力和来源；调用建立时，构造机制再建立当前调用的记录关联、进度序号与计时现场。绑定不只发生一次初始化，但也不因此新增每一阶段的管理器。各来源可使用同一个捕获器的窄接口；每次调用状态独立。
 
-当前 ChangeObserver.take 转移并清空待消费批次，因此由一个消费入口统一取走，再向多个订阅者交付。不能给多个消费者分别 take 而假定每个都收到完整变化。
+当前 ChangeBuffer.take 转移并清空待消费批次，因此由一个消费入口统一取走，再向多个订阅者交付。不能给多个消费者分别 take 而假定每个都收到完整变化。
 
 可选注入需要同时明确以下约定：
 
@@ -290,7 +292,7 @@ const memories = new Memories(transcript, {
 });
 const model = new Initializer(createModel);
 
-const execution = new ObserverExecutionDefinition({ selection, generation, extraction });
+const execution = new ConversationExecutionDefinition({ selection, generation, extraction });
 const definition = { execution }; // R 当前只指定一个 E，不携带 model 原实例或业务 workflow。
 
 // R 只接收自身结构所需的绑定，其他实体已独立取得各自的能力。
@@ -327,7 +329,7 @@ HTTP 只接纳传输格式并提交普通数据，业务批量消息规则和分
 ```text
 R                已装配 E、运行入口、内部能力绑定
 RContext         唯一的当前占用状态及其检查／转换
-RuntimeRecord    可选的 R 记录根及 E 记录关系
+RecordingRootRecord    可选的 R 记录根及 E 记录关系
 ```
 
 R 仍负责在 try/finally 中取得和释放占用，Context 不执行 E。每次 E 结束释放占用，不结束或销毁 RContext；它也不代表所有独立内容实体的数据生命周期。
@@ -376,11 +378,11 @@ E 建立之前的提交接纳，以及普通调用外更新，可以没有调用
 // 契约方向，具体类型由内核定义；这些名称尚未落实到代码。
 const entry = {
   requires: {
-    ...observerEntryRequests,
+    ...conversationEntryRequests,
     messages: TranscriptResource.append.request(),
   },
   accept: acceptSubmittedMessages, // 提交批次 → 已接纳的输入消息
-  admit: prepareObserverSegment, // 已接纳输入 → 本次工作前的业务分段
+  admit: prepareConversationSegment, // 已接纳输入 → 本次工作前的业务分段
 };
 ```
 
@@ -403,7 +405,7 @@ HTTP 解析传输格式和配置；E 入口接收明确的普通提交数据。�
 
 ### 4. 资源事实与大实体关联（已确认并实现）
 
-通用调用记录只解释调用；资源自行声明访问契约及事实正文，统一使用 ResourceFact 承载。静态装配不产生记录，正式调用开始后记录绑定及访问事实。配置快照是可记录的数据；模型提供者是惰性能力，记录公开描述和调用信息，不遍历提供者内部对象。
+通用调用记录只解释调用；资源自行声明访问契约及事实正文，统一使用 ResourceRecord 承载。静态装配不产生记录，正式调用开始后记录绑定及访问事实。配置快照是可记录的数据；模型提供者是惰性能力，记录公开描述和调用信息，不遍历提供者内部对象。
 
 大实体不留活引用，也不默认在记录中展开。Transcript 记录保存集合 ID、索引范围与版本，客户端经受控端点按需或主动同步消息，再按 ID/索引组合。原文追加不可变，消息位置稳定；记忆更新继续保留已有 MemoryRecord 的不可变结果，不增加通用历史版本仓库。
 
@@ -426,7 +428,7 @@ HTTP 解析传输格式和配置；E 入口接收明确的普通提交数据。�
 | 5. R 入口及 Service 接纳 | definition/runtime、runtime/runtime、observer/definition/binding/execution、http/server                         | R 驱动唯一 E；模型来源在环境；分段归 E 业务入口；busy 时不追加输入，响应时机不改变                          |
 | 6. 清理与闭环            | public exports、测试夹具、源码查看映射、文档                                                                    | 旧入口没有残留调用者；类型、行为与文档对应；新结构不需要兼容转发链维持                                      |
 
-以上阶段已实施：R 的唯一占用迁入 RContext，本调用写端点绑定来源，最小运行来源进入跨端契约，E.entry.accept/admit 保留中间交付通知。第四项随后确认采用 ResourceFact 与实体 UID 定位，正文和消费改造已包含在本轮实现中。
+以上阶段已实施：R 的唯一占用迁入 RContext，本调用写端点绑定来源，最小运行来源进入跨端契约，E.entry.accept/admit 保留中间交付通知。第四项随后确认采用 ResourceRecord 与实体 UID 定位，正文和消费改造已包含在本轮实现中。
 
 现有测试优先适配而非另建验收体系：
 
@@ -450,7 +452,7 @@ HTTP 解析传输格式和配置；E 入口接收明确的普通提交数据。�
 
 ## 原定范围（实现状态见文首）
 
-不引入“运行时容器”、实体管理器、权限系统、R 工作流、多 E 调度、持久化、生命周期状态机或统一扩展平台。不调整 EOA 图宽、颜色及页面布局，不修改 AG-UI 适配。随后确认的 ResourceFact、实体 UID 与独立消息同步扩充了原定传输改动范围；已保留原有运行与观测分离、基线接缝和顺序校验。
+不引入“运行时容器”、实体管理器、权限系统、R 工作流、多 E 调度、持久化、生命周期状态机或统一扩展平台。不调整 EOA 图宽、颜色及页面布局，不修改 AG-UI 适配。随后确认的 ResourceRecord、实体 UID 与独立消息同步扩充了原定传输改动范围；已保留原有运行与观测分离、基线接缝和顺序校验。
 
 阶段 6 同步清理公开出口、旧运行包装类和过时源码说明，不保留兼容转发链。
 

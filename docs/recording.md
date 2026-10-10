@@ -1,8 +1,8 @@
 # 记录机制与特化处理
 
-Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 Clock。Recorder 本身不分派记录类型，具体关系规则位于 records/tree/relation.ts，不处理 Context、业务正文或 RuntimeSnapshot。
+Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 Clock。Recorder 本身不分派记录类型，具体关系规则位于 records/tree/relation.ts，不处理 Context、业务正文或 ExecutionRecordSnapshot。
 
-通用基类使用 BaseRecord，树形记录共用 CompositeRecord；RuntimeRecord 表达 R 范围，InvocationRecord 统一 REOA 的调用正文与状态，ResourceRecord 表达正式资源访问事实。RuntimeRecord 当前只保留创建时间与下级引用；不把记录登记、某次调用结束或实例释放等同于整个运行数据范围结束。
+通用基类使用 BaseRecord，树形记录共用 CompositeRecord；RecordingRootRecord 表达一次记录安装的跨调用范围，InvocationRecord 统一 REOA 的调用正文与状态，ResourceRecord 表达正式资源访问事实。RecordingRootRecord 当前只保留创建时间与下级引用；不把记录登记、某次调用结束或实例释放等同于整个运行数据范围结束。
 
 ## 通用机制
 
@@ -15,11 +15,11 @@ Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、�
 
 ## 直接归属与记录树
 
-BaseRecord.parentId 表达直接产生位置，构造后不可改写；没有调用来源的内容记录保持根记录。CompositeRecord.childIds 是直接下级的冻结 ID 数组，每次成功登记替换数组，已取得的 toJSON/childIds 快照不随之变化。RuntimeRecord 与调用记录均可持有下级，消息与记忆本体的 ID 仍是被描述对象，不作为父级。
+BaseRecord.parentId 表达直接产生位置，构造后不可改写；没有调用来源的内容记录保持根记录。CompositeRecord.childIds 是直接下级的冻结 ID 数组，每次成功登记替换数组，已取得的 toJSON/childIds 快照不随之变化。RecordingRootRecord 与调用记录均可持有下级，消息与记忆本体的 ID 仍是被描述对象，不作为父级。
 
-- RuntimeRecord 为运行范围的根；R 调用挂在根下，执行挂在 R 调用下；操作挂在执行或父操作下；意图挂在操作下。
-- 边界事件挂在被描述的调用下；消息变化、记忆变化依据内部 ChangeSource.callId 挂在实际产生它们的调用下。
-- ResourceRecord 通过 parentId 归属 R 或调用；当前资源接线归属具体 REOA 调用，调用资源事实只接受仍在运行的拥有者。资源种类只影响正文，不要求每新增实体就新增一条类型关系规则。
+- RecordingRootRecord 为一次记录安装的跨调用根；R 调用挂在根下，执行挂在 R 调用下；操作挂在执行或父操作下；意图挂在操作下。
+- 边界事件挂在被描述的调用下；消息变化、记忆变化依据内部 RecordChangeSource.callId 挂在实际产生它们的调用下。
+- ResourceRecord 通过 parentId 归属记录安装根或 REOA 调用记录；当前资源接线归属具体 REOA 调用，调用资源事实只接受仍在运行的拥有者。资源种类只影响正文，不要求每新增实体就新增一条类型关系规则。
 - 现有 executionId、operationId、parentOperationId、callId 等保留，构造时得到 parentId，登记时检查它们与正式关系一致。资源事实沿相同树查询，并进入详情、观测基线与增量。
 - 新下级调用要求祖先调用仍在运行。终态边界事件在调用结束之后登记；内容来源表示因果，不作为运行授权。内部实体 API 可以使用已经解析的来源；业务资源端点另行检查本次调用及祖先活动，调用结束后不能用保存的端点继续读写。
 
@@ -29,13 +29,13 @@ RecordRegistration 只覆盖一次记录登记，既不包含整个 EOA 调用�
 
 ## 调用记录
 
-`callRecording({ input?, output? })` 是内置观测声明，正式申请 InvocationRecordAccess。`bindRecording(recorder, { failure?, invalidate? })` 安装本调用写端口；RecordingCall 维护记录句柄、父预设和直接子预设，不建立全局 Context 反查。Invocation 不持有记录或 source，不直接调用记录 Helper。
+`invocationRecording({ input?, output? })` 是内置观测声明，正式申请 InvocationRecordAccess。`bindRecording(recorder, { failure?, invalidate? })` 安装本调用写端口；InvocationRecording 维护记录句柄、父预设和直接子预设，不建立全局 Context 反查。Invocation 不持有记录或 source，不直接调用记录 Helper。
 
-声明同步消费 CallFact。started 建立本层记录，process 捕获正文，finished 描述工作终态；关系变化写入父记录的 relationChanges。描述规则只影响记录，不替换业务 IO。观测关闭不执行描述。没有声明本预设的范围不生成空记录，其子预设也不伪造父节点。
+声明同步消费 InvocationFact。started 建立本层记录，process 捕获正文，finished 描述工作终态；关系变化写入父记录的 relationChanges。描述规则只影响记录，不替换业务 IO。观测关闭不执行描述。没有声明本预设的范围不生成空记录，其子预设也不伪造父节点。
 
-RuntimeRecord 描述跨调用范围，RuntimeCallRecord 描述独立的一次 R 调用。记录根由环境的记录安装持有，Runtime 不持有 Recorder。R 有自身计时起点；E/O/A 轮内偏移沿 E 计时。InvocationBoundaryRecord 使用 scopeId 与 scope='work'，不将 R 的时刻塞入 E，也不把工作成功边界冒充实际成功交付。
+RecordingRootRecord 描述跨调用范围，RuntimeCallRecord 描述独立的一次 R 调用。记录根由环境的记录安装持有，Runtime 不持有 Recorder。R 有自身计时起点；E/O/A 轮内偏移沿 E 计时。InvocationBoundaryRecord 使用 scopeId 与 scope='work'，不将 R 的时刻塞入 E，也不把工作成功边界冒充实际成功交付。
 
-InvocationRecordHelper 只复用载体更新。原 InvocationRecording、InvocationRecordIndex 与 Context 索引均已退出；记录句柄只存在于记录预设局部绑定中，归属查询由 RecordTree 提供，Book 是记录的存储。
+InvocationRecordHelper 只复用载体更新。旧调用索引及全局 Context 反查均已退出；记录句柄只存在于记录预设局部绑定中，归属查询由 RecordTree 提供，Book 是记录的存储。
 
 调用过程使用 execute（工作）、receive（正常接纳）、handling（异常处理）和 control（结构停止）。handling 明确记录 start/return/continue/unhandled/throw，不为处理器新增 EOA 层次。每项保留过程 sequence、调用事实 eventSequence、round、occurredAt、offsetMs 和对应正文；failure 可表达 exception/error、阶段、所属 contextId 及适用时的 contract 名称。契约实例不进入协议，名称只供解释，不能在客户端恢复处理权限。
 
@@ -47,7 +47,7 @@ Invocation.failure 是运行中的最终交付事实，不依赖记录存在。C
 
 Memories 和 Transcript 负责审查与落实内容，自身不依赖 Recorder。内部 ChangeProvenance 提供 origin.contextId 和类型化观察端口；资源绑定将本调用观察端口传入，实体将正式事件交给必要捕获与可选观察。无调用的独立实体变更可使用环境默认端口。
 
-记录安装从已发生事件构造 TranscriptRecord / MemoryRecord。ChangeSource 只存在于记录特化中，由本次记录句柄和父预设推导，实体不接收 callId/executionId，也不反查 Context。E entry 尚未建立 E 时归已有 R 调用。
+记录安装从已发生事件构造 TranscriptRecord / MemoryRecord。RecordChangeSource 只存在于记录特化中，由本次记录句柄和父预设推导，实体不接收 callId/executionId，也不反查 Context。E entry 尚未建立 E 时归已有 R 调用。
 
 TranscriptRecord 正文保存追加或分段范围，不重复原文。消息 UID 和绝对 index 用于跨端定位；TranscriptRangeRef/MessageRef 只可在内部实体适配中使用，不能进入记录正文。snapshotValue 对普通记录数据执行复制、检查、冻结，不再识别并保留这些实体引用。
 
@@ -69,17 +69,17 @@ entry 访问只有 accept/admit 的短生命周期守卫，尚不存在 E Contex
 
 Recorder 正式登记或更新之后，固定 RecordChangeEvent 并交给可选捕获器，然后通知原有同步订阅者。自身 id/revision 表达该登记范围；kind 由记录类声明，Recorder 不按 E/O/A 分派。added 同时描述新记录与父级引用；过程只发送新增条目，finish 只发送终态与结果。通用 update 的 describe 可提供特化变化，省略时使用显式 replaced。没有比较两份快照。
 
-Execution/Operation/Attempt 的 Helper 均通过 Recorder 更新，记录预设统一过程、父子关系与终态的描述。实例方法仍维护自身状态约束，正式运行更新不能绕过登记入口。Transcript 和 Memories 自己捕获内容事件，不依赖 Recorder 通知推导业务变化。
+ExecutionRecordHelper、OperationRecordHelper、AttemptRecordHelper 均通过 Recorder 更新，记录预设统一过程、父子关系与终态的描述。实例方法仍维护自身状态约束，正式运行更新不能绕过登记入口。Transcript 和 Memories 自己捕获内容事件，不依赖 Recorder 通知推导业务变化。
 
-Service ChangeConsumer 独占共享 ChangeObserver 的 take；RecordSource 与 feed 订阅它，发送一致基线及后续增量；消息实体正文由独立消息订阅出口交付。旧 subscribeExecutions 保留为本地诊断与测试工具，基于同步登记通知组织执行快照；HTTP 观测不再使用它。
+Service ChangeConsumer 独占共享 ChangeBuffer 的 take；RecordSource 与 feed 订阅它，发送一致基线及后续增量；消息实体正文由独立消息订阅出口交付。旧 subscribeExecutions 保留为本地诊断与测试工具，基于同步登记通知组织执行快照；HTTP 观测不再使用它。
 
-RuntimeSnapshot 包含父 R 调用、E/O/A、runtimeEvents/events 两个计时范围和资源事实正文，是按需查询及本地展示的执行视图，不是整棵记录树。观测基线另带 Runtime 根及活动执行记录，内容记录通过 record 增量传输。parentId/childIds 可以引用未装载的历史正文。对话由 R.run 独立交付，不从记录生成回答。消息正文通过集合 UID 独立加载和持续同步，客户端 binding 将资源定位与消息副本组合；原文未加载不等于空正文。
+ExecutionRecordSnapshot 包含父 R 调用、E/O/A、runtimeEvents/events 两个计时范围和资源事实正文，是按需查询及本地展示的执行视图，不是整棵记录树。观测基线另带 记录安装根及活动执行记录，内容记录通过 record 增量传输。parentId/childIds 可以引用未装载的历史正文。对话由 R.run 独立交付，不从记录生成回答。消息正文通过集合 UID 独立加载和持续同步，客户端 binding 将资源定位与消息副本组合；原文未加载不等于空正文。
 
 没有新增 Recorder 子类、插件注册、持久化、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。
 
 ## 局部顺序与索引迁移进度
 
-Invocation 自行给现有内部过程赋予连续 sequence，发布为 CallFact.process，由记录预设消费；记录不再通过 processes.length 生成序号，只检查是否连续。每次调用从 1 开始，重试不重置，无 Recorder 也推进。另有 eventSequence 统一排列本调用过程与关系事实；relationChanges 与 processes 分开存储。
+Invocation 自行给现有内部过程赋予连续 sequence，发布为 InvocationFact.process，由记录预设消费；记录不再通过 processes.length 生成序号，只检查是否连续。每次调用从 1 开始，重试不重置，无 Recorder 也推进。另有 eventSequence 统一排列本调用过程与关系事实；relationChanges 与 processes 分开存储。
 
 Memories 持有自身 id 和正式变化 sequence；MemoryRecord 保存 memoriesId/sequence/memoryId，分别表达变化范围、位置和对象。无变化与预检查失败不占号，已落实变化不会因记录失败回收序号。消息继续使用原有绝对 index。均不作为传输游标。
 
@@ -89,7 +89,7 @@ Memories 持有自身 id 和正式变化 sequence；MemoryRecord 保存 memories
 
 InvocationRecord 表达一次调用，RuntimeCallRecord、ExecutionRecord、OperationRecord、AttemptRecord 是四层调用的特化，持续补充内部过程与最终结果。InvocationBoundaryRecord 表达一次 call/return/throw 边界，创建后不可变；InvocationBoundaryRecordHelper 管理原有执行内顺序与时间检查。旧 EventRecord 命名及 records/event 路径已移除。
 
-两者都是运行记录，不是系统变化通知。边界记录的登记产生记录变化事件，但不能为该通知再次自动生成边界记录。RuntimeSnapshot.events 暂保留现有线字段，元素类型已明确为 InvocationBoundaryRecord；资源事实通过 RuntimeSnapshot.resources 另行表达，不混入调用边界数组。
+两者都是运行记录，不是系统变化通知。边界记录的登记产生记录变化事件，但不能为该通知再次自动生成边界记录。ExecutionRecordSnapshot.events 暂保留现有线字段，元素类型已明确为 InvocationBoundaryRecord；资源事实通过 ExecutionRecordSnapshot.resources 另行表达，不混入调用边界数组。
 
 ## 来源完整性与消费
 

@@ -1,8 +1,8 @@
 import { observeCall } from '../fixtures/observation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, Recorder, RecordBook, ExceptionContract } from '@capix-observer/runtime';
-import { createRuntime } from '../fixtures/runtime.mjs';
+import { Invocation, InvocationContext, Recorder, RecordBook, ExceptionContract } from '@capix/server-runtime';
+import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const signal = () => new AbortController().signal;
 const firstRound = new ExceptionContract('test.first-round');
@@ -48,14 +48,14 @@ test('Invocation owns continuous local sequence across retries, independently of
 });
 
 test('parallel invocations and nested calls keep separate local sequences', async () => {
-  const runtime = createRuntime({ recorder: new Recorder(new RecordBook()) });
+  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
   let child;
-  const root = runtime.executionInvocations.create('input', {
+  const root = runtime.executionInvocationBuilder.create('input', {
     context: { settings: {} },
     work: {
       maxRounds: 1,
       async execute(context, invocation) {
-        child = runtime.operationInvocations.create(invocation, { input: 'child', description: { id: 'op', name: 'op', label: 'Op', source: 'test' }, work: retryWork });
+        child = runtime.operationInvocationBuilder.create(invocation, { input: 'child', description: { id: 'op', name: 'op', label: 'Op', source: 'test' }, work: retryWork });
         return child.run();
       },
     },

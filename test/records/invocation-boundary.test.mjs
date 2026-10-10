@@ -1,13 +1,13 @@
 import { createRecordScope } from '../fixtures/runtime.mjs';
-import { RuntimeRecordHelper } from '@capix-observer/runtime';
+import { RecordingRootHelper } from '@capix/server-runtime';
 import { callFor } from '../fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BaseRecord, ExecutionRecordHelper, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, RecordBook, Clock, Recorder, Runtime } from '@capix-observer/runtime';
-import { createRuntime, observeCall } from '../fixtures/runtime.mjs';
+import { BaseRecord, ExecutionRecordHelper, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, RecordBook, Clock, Recorder, BoundRuntime } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 
-import { validateSnapshot } from '@capix-observer/protocol';
+import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 class ManualClock extends Clock {
   elapsed = 100;
@@ -24,7 +24,7 @@ test('event records share the Book, have their own IDs, and snapshots read the e
   const book = new RecordBook(),
     clock = new ManualClock();
   const recorder = new Recorder(book, { clock });
-  const runtime = createRuntime({ recorder });
+  const runtime = createBoundRuntime({ recorder });
   let firstContext, during;
   await invoke(lifecycleFor(runtime).execution({ input: 'first', settings: {} }), (context) => {
     firstContext = context;
@@ -65,12 +65,12 @@ test('event records share the Book, have their own IDs, and snapshots read the e
   assert.equal(during.events.length, 1);
   const changed = structuredClone(first);
   changed.events[0].id = changed.events[1].id;
-  assert.throws(() => validateSnapshot(changed));
+  assert.throws(() => validateExecutionRecordSnapshot(changed));
   changed.events[0].id = first.events[0].id;
   changed.events[0].executionId = secondSnapshot.execution.id;
-  assert.throws(() => validateSnapshot(changed));
-  validateSnapshot(first);
-  validateSnapshot(secondSnapshot);
+  assert.throws(() => validateExecutionRecordSnapshot(changed));
+  validateExecutionRecordSnapshot(first);
+  validateExecutionRecordSnapshot(secondSnapshot);
   first.events[0].sequence = 500;
   assert.equal(observeCall(runtime.recording, callFor(firstContext)).events[0].sequence, 1);
   assert.equal([...book.values()].filter((record) => record.kind === 'execution').length, 2);
@@ -96,7 +96,7 @@ test('event helpers reject foreign/non-call targets and leave no event or sequen
     assert.throws(() => InvocationBoundaryRecordHelper.create(recorder, { start: 100, executionId: execution.id, callId: target }, 'call'), /outside its timing scope/);
   }
   assert.throws(() => InvocationBoundaryRecordHelper.create(recorder, { start: 100, executionId: execution.id, callId: execution.id }, 'return'), /state/);
-  assert.throws(() => InvocationBoundaryRecordHelper.create(recorder, { start: 101, executionId: execution.id, callId: execution.id }, 'call'), /event time/);
+  assert.throws(() => InvocationBoundaryRecordHelper.create(recorder, { start: 101, executionId: execution.id, callId: execution.id }, 'call'), /invocation boundary time/);
   book.reject = true;
   assert.throws(() => InvocationBoundaryRecordHelper.create(recorder, { start: 100, executionId: execution.id, callId: execution.id }, 'call'), /registration failed/);
   assert.equal(InvocationBoundaryRecordHelper.last(recorder, execution.id), undefined);
@@ -109,7 +109,7 @@ test('event helpers reject foreign/non-call targets and leave no event or sequen
 });
 
 test('last event follows execution sequence across interleaved children, with failed writes leaving sequence reusable', async (t) => {
-  const { OperationRecordHelper, AttemptRecordHelper } = await import('@capix-observer/runtime');
+  const { OperationRecordHelper, AttemptRecordHelper } = await import('@capix/server-runtime');
   class FailingBook extends RecordBook {
     reject = false;
     add(record) {
@@ -144,7 +144,7 @@ test('last event follows execution sequence across interleaved children, with fa
   assert.equal(recorder.tree.descendants(execution.id).at(-1), fourth);
   assert.equal(InvocationBoundaryRecordHelper.last(recorder, execution.id), sixth);
   OperationRecordHelper.complete(recorder, second.id, {});
-  assert.throws(() => event(second, 'return', 104), /event time/);
+  assert.throws(() => event(second, 'return', 104), /invocation boundary time/);
   assert.equal(InvocationBoundaryRecordHelper.last(recorder, execution.id), sixth);
   const before = second.childIds;
   book.reject = true;
@@ -160,5 +160,5 @@ test('last event follows execution sequence across interleaved children, with fa
     snapshot.events.map((record) => record.sequence),
     [1, 2, 3, 4, 5, 6, 7, 8],
   );
-  validateSnapshot(snapshot);
+  validateExecutionRecordSnapshot(snapshot);
 });

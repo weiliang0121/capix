@@ -10,9 +10,9 @@ Transcript 是环境独立创建的内容实体，具有自己的 UID 和 revisi
         + 本轮 QA、当前段筛选原文 → 提取并更新记忆
 ```
 
-R.run 占用后先由 E.entry.accept 接纳消息，再发 accepted 通知；E.entry.admit 通过正式入口资源，在创建执行 Context 前检查 SelectHistory 的完整请求预算。容量计算与实际筛选共用正文、提示词和 Schema，使用现有 UTF-8 字节保守估算。若当前段历史导致超限，而仅本次输入加记忆可以容纳，则优先保留本次输入之前最近两轮完整 QA，从所保留轮次的起点开启新段；仍放不下时依次降为一轮、零轮。只调整边界，不复制消息，也不生成额外摘要。
+R.run 占用后先由 E.entry.accept 接纳消息，再发 accepted 通知；E.entry.admit 通过正式入口资源，在创建执行 Context 前检查 SelectHistoryDefinition 的完整请求预算。容量计算与实际筛选共用正文、提示词和 Schema，使用现有 UTF-8 字节保守估算。若当前段历史导致超限，而仅本次输入加记忆可以容纳，则优先保留本次输入之前最近两轮完整 QA，从所保留轮次的起点开启新段；仍放不下时依次降为一轮、零轮。只调整边界，不复制消息，也不生成额外摘要。
 
-bindObserver 在本轮 Context 建立前捕获切换后的 `[activeStart,end)`，执行中不再换段。新回答追加到当前段；旧调用的固定范围不随切换改变；记录保存 transcriptId/start/end/revision 普通定位数据，不保存实体对象引用。原始消息仍能通过绝对索引读取，热区与历史 QA 观测继续使用全部消息。已有时序详情中的执行范围会显示实际 start/end，分段由 Transcript 正式登记为 TranscriptRecord，不作为 EOA 调用节点。
+bindConversation 在本轮 Context 建立前捕获切换后的 `[activeStart,end)`，执行中不再换段。新回答追加到当前段；旧调用的固定范围不随切换改变；记录保存 transcriptId/start/end/revision 普通定位数据，不保存实体对象引用。原始消息仍能通过绝对索引读取，热区与历史 QA 观测继续使用全部消息。已有时序详情中的执行范围会显示实际 start/end，分段由 Transcript 发布事实，记录预设可生成 TranscriptRecord，不作为 EOA 调用节点。
 
 筛选只能返回当前段候选索引。回答直接接收同一份旧记忆快照，因此即使旧原文退出候选集合，也能使用保留下来的理解。提取不再沿记忆来源加载旧原文；更新可以在 result.sourceIndexes 保留该目标记忆的原有来源，本次变更依据仍须来自当前可见原文并包含本轮消息。保留来源不代表重新验证原文。
 
@@ -20,7 +20,7 @@ bindObserver 在本轮 Context 建立前捕获切换后的 `[activeStart,end)`�
 
 ## 最近轮次的保留
 
-observer/segment.ts 只为当前串行对话提出候选范围。它从本次输入向前识别最多两组紧邻的 user → assistant；遇到未回答消息或非交替内容就停止，不跨过缺口凑轮数，也不从旧段重新拉回消息。这里是当前消息形态的保留策略，不是新增 QA 实体，不依赖调用记录。
+conversation/segment.ts 只为当前串行对话提出候选范围。它从本次输入向前识别最多两组紧邻的 user → assistant；遇到未回答消息或非交替内容就停止，不跨过缺口凑轮数，也不从旧段重新拉回消息。这里是当前消息形态的保留策略，不是新增 QA 实体，不依赖调用记录。
 
 候选按两轮、一轮、零轮依次检查完整筛选请求预算，只选择第一个可容纳且向前推进的边界。原对象、绝对索引和过去调用固定的范围及记录定位不变。保留两轮表示它们进入筛选候选，不强制筛选和回答采用全部四条消息。
 
@@ -32,19 +32,19 @@ Transcript 由环境建立并持有，E/O/A 业务只通过本层声明的资源
 
 Transcript 自身负责消息和段边界的接纳、落实，以及本地 revision。一次非空批量追加或有效切段推进一次 revision；消息 index 仍只定位正文。没有捕获器、没有 Recorder 时，revision 同样推进；它不是网络交付游标。
 
-`new Transcript(messages, { changes, recorder })` 在接纳初始消息前固定两个可选出口；initializeObserver 在环境层分别建立 Transcript、Memories、R 和所需接线。createRuntime 不创建内容实体。Transcript 的 changes 只要求 `ChangeCapture<TranscriptEvent>`。一个 `ChangeObserver<A | B>` 可以共享给只产生 A 和只产生 B 的来源，不要求每个对象独占捕获器。服务已将消息、记忆、调用及记录登记接入同一捕获器。
+`new Transcript(messages, { changes, observation: recording.transcript })` 在接纳初始消息前固定两个可选出口；initializeObserver 在环境层分别建立 Transcript、Memories、R 和所需接线。createBoundRuntime 不创建内容实体。Transcript 的 changes 只要求 `ChangeCapture<TranscriptEvent>`。一个 `ChangeBuffer<A | B>` 可以共享给只产生 A 和只产生 B 的来源，不要求每个对象独占捕获器。服务已将消息、记忆、调用及记录登记接入同一捕获器。
 
 ```text
 整批接纳 → 固定事件正文 → 正式更新集合及 revision
-                          → 同步捕获 TranscriptEvent
-                          → 按需登记 TranscriptRecord
+                          ├─ 必要捕获 TranscriptEvent
+                          └─ 可选观察（记录预设可生成 TranscriptRecord）
 ```
 
-TranscriptEvent 固定 transcriptId、revision、occurredAt 与 change；messages-appended 保存 start 和已接纳的不可变消息，segment-started 保存 previousStart/start/end。事件及其正文、消息数组均冻结；消息正文复用 Transcript 已冻结的对象。事件不携带活的 Transcript 或调用记录，不从后来的状态反推。通过工作资源端点发生的变化携带 origin.contextId，即使未开启记录也保留来源；入口接纳或调用外变更允许没有 origin。内部可选 ChangeSource 只用于对应 TranscriptRecord 的记录归属。记录保存 transcriptId/revision 与追加/分段范围，不携带消息正文；它与携带消息正文的变化事件是两个不同出口。
+TranscriptEvent 固定 transcriptId、revision、occurredAt 与 change；messages-appended 保存 start 和已接纳的不可变消息，segment-started 保存 previousStart/start/end。事件及其正文、消息数组均冻结；消息正文复用 Transcript 已冻结的对象。事件不携带活的 Transcript 或调用记录，不从后来的状态反推。通过工作资源端点发生的变化携带 origin.contextId，即使未开启记录也保留来源；当前 E 入口接纳归已经建立的 R 调用；调用外变更允许没有 origin。内部可选 RecordChangeSource 只用于对应 TranscriptRecord 的记录归属。记录保存 transcriptId/revision 与追加/分段范围，不携带消息正文；它与携带消息正文的变化事件是两个不同出口。
 
-ChangeObserver 只暂存尚未取走的事实。capture 不调用消费者；take 转移当前批次、返回冻结数组并清空待取集合。不同来源的事件按捕获顺序放在一个批次中，但批次不表示业务事务。来源负责正文不可变，观察者不解释或复制泛型正文。服务已默认装配并通过 wait/take 持续消费；wait 只唤醒异步消费，不在 capture 内运行消费者。缓冲不持有已取出历史，不承诺持久化、消费确认、失败重投或重放。慢网络连接的缓存上限由发送者处理。
+ChangeBuffer 只暂存尚未取走的事实。capture 不调用消费者；take 转移当前批次、返回冻结数组并清空待取集合。不同来源的事件按捕获顺序放在一个批次中，但批次不表示业务事务。来源负责正文不可变，缓冲器不解释或复制泛型正文。服务已默认装配并通过 wait/take 持续消费；wait 只唤醒异步消费，不在 capture 内运行消费者。缓冲不持有已取出历史，不承诺持久化、消费确认、失败重投或重放。慢网络连接的缓存上限由发送者处理。
 
-ChangeCapture 的实现契约是同步完整接纳或在接纳前抛错，不运行下游消费者、不重入来源。自定义实现须遵守此约定，接口不能替代实现保证。捕获失败包装为 ChangeCaptureError，保留已发生的不可变事件及 cause；集合与 revision 保持已落实状态，后续运行记录登记尚未执行。调用循环将该错误视为必须停止，避免通过重做工作重复追加。记录失败则保留已捕获事件；两者不构成事务。既有 snapshot(end) 的原文读取语义不变。同步基线与网络增量由服务组织，详见 [观测增量](observation-increments.md)。
+ChangeCapture 的实现契约是同步完整接纳或在接纳前抛错，不运行下游消费者、不重入来源。自定义实现须遵守此约定，接口不能替代实现保证。捕获失败包装为 ChangeCaptureError，保留已发生的不可变事件及 cause；集合与 revision 保持已落实状态；同一事实的可选观察仍会独立尝试，多个故障汇总后交付。调用循环将该错误视为必须停止，避免通过重做工作重复追加。记录失败则保留已捕获事件；两者不构成事务。既有 snapshot(end) 的原文读取语义不变。同步基线与网络增量由服务组织，详见 [观测增量](observation-increments.md)。
 
 ## 资源访问与跨端组合
 

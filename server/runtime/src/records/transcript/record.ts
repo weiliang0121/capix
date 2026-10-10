@@ -1,13 +1,13 @@
-import type { TranscriptChange, TranscriptRecord as RecordData } from '@capix-observer/protocol';
-import type { ChangeSource } from '../source.js';
+import type { TranscriptChange, TranscriptRecord as RecordData } from '@capix/protocol';
+import type { RecordChangeSource } from '../source.js';
 import { BaseRecord } from '../record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
-export interface TranscriptDefinition {
+export interface TranscriptRecordOptions {
   transcriptId: string;
   revision: number;
   occurredAt: string;
-  source?: ChangeSource;
+  source?: RecordChangeSource;
 }
 
 export class TranscriptRecord extends BaseRecord<TranscriptChange> implements RecordData {
@@ -18,14 +18,14 @@ export class TranscriptRecord extends BaseRecord<TranscriptChange> implements Re
   readonly contextId?: string;
   readonly callId?: string;
   readonly executionId?: string;
-  constructor(definition: TranscriptDefinition, value: TranscriptChange) {
-    super(snapshotValue(value), definition.source?.callId);
-    this.transcriptId = definition.transcriptId;
-    this.revision = definition.revision;
-    this.occurredAt = definition.occurredAt;
-    this.contextId = definition.source?.contextId;
-    this.callId = definition.source?.callId;
-    this.executionId = definition.source?.executionId;
+  constructor(options: TranscriptRecordOptions, value: TranscriptChange) {
+    super(snapshotValue(value), options.source?.callId);
+    this.transcriptId = options.transcriptId;
+    this.revision = options.revision;
+    this.occurredAt = options.occurredAt;
+    this.contextId = options.source?.contextId;
+    this.callId = options.source?.callId;
+    this.executionId = options.source?.executionId;
     Object.freeze(this);
   }
   override toJSON(): RecordData {

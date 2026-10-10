@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver } from '@capix-observer/service';
-import { DeclaredException } from '@capix-observer/runtime';
+import { initializeObserver } from '@capix/observer-service';
+import { DeclaredException } from '@capix/server-runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const answer = { kind: 'answer', content: '这是回答。' };
@@ -25,7 +25,7 @@ async function execute(failAt) {
       { messages: [{ role: 'user', content: '你好' }] },
       {
         settings,
-        execution: {
+        executionCallbacks: {
           started: (_context, current) => {
             invocation = current;
           },

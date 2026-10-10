@@ -1,10 +1,10 @@
-import { Sequence, InvocationEntry, type OperationDefinition, type AttemptDefinition, type InvocationView, type ExecutionScope, type OperationScope, type ChildBindings, assembleRuntime, type ExecutionDefinition, type RuntimeDefinition, type RuntimeScope } from '@capix-observer/runtime';
+import { Sequence, InvocationEntry, type OperationDefinition, type AttemptDefinition, type InvocationView, type ExecutionContextView, type OperationContextView, type ChildBindings, assembleRuntime, type ExecutionDefinition, type RuntimeDefinition, type RuntimeContextView } from '@capix/server-runtime';
 
 declare const length: OperationDefinition<string, number>;
 declare const format: OperationDefinition<number, string>;
 declare const leaf: AttemptDefinition<string, string>;
-declare const parent: InvocationView<unknown, unknown, ExecutionScope>;
-declare const operation: InvocationView<unknown, unknown, OperationScope>;
+declare const parent: InvocationView<unknown, unknown, ExecutionContextView>;
+declare const operation: InvocationView<unknown, unknown, OperationContextView>;
 declare const bindings: ChildBindings;
 
 const sequence = new Sequence<string, typeof parent>().step('length', { use: length, input: ({ input }) => input }).step('format', { use: format, input: ({ outputs }) => outputs.length, accept: (_scope, value) => ({ text: value }) });
@@ -50,7 +50,7 @@ const objectDefinition: OperationDefinition<string, number> = {
 const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string, typeof parent>().step('length', { use: objectDefinition, input: ({ input }) => input }).run(parent, 'hello', bindings);
 void objectOutput;
 declare const execution: ExecutionDefinition<string, number>;
-declare const runtimeParent: InvocationView<unknown, unknown, RuntimeScope>;
+declare const runtimeParent: InvocationView<unknown, unknown, RuntimeContextView>;
 const runtimeDefinition: RuntimeDefinition<string, number> = {
   level: 'runtime',
   children: [execution],
@@ -83,13 +83,13 @@ parent.context.complete('done');
 // @ts-expect-error child relations do not publish reception mutation
 parent.children.values()[0].accept(() => null);
 
-import { ExceptionContract, ResourceOffer, type InvocationRunDefinition, type InvocationExceptionDefinition } from '@capix-observer/runtime';
+import { ExceptionContract, ResourceOffer, type InvocationRunDefinition, type InvocationExceptionDefinition } from '@capix/server-runtime';
 const issue = new ExceptionContract<{ reason: string }>('test.issue');
 const workValue = new ResourceOffer('work-value', (value: number) => value);
 const handlingValue = new ResourceOffer('handling-value', (value: string) => value);
-type WorkScope = OperationScope<string, string, { value: number }>;
-type HandlingScope = OperationScope<string, string, { repair: string }>;
-const run: InvocationRunDefinition<string, string, WorkScope, { value: number }> = {
+type WorkContextView = OperationContextView<string, string, { value: number }>;
+type HandlingContextView = OperationContextView<string, string, { repair: string }>;
+const run: InvocationRunDefinition<string, string, WorkContextView, { value: number }> = {
   requires: { value: workValue.request() },
   execute(context) {
     const value: number = context.resources.values.value;
@@ -98,7 +98,7 @@ const run: InvocationRunDefinition<string, string, WorkScope, { value: number }>
     return String(value);
   },
 };
-const exceptions: InvocationExceptionDefinition<string, string, HandlingScope, { repair: string }> = {
+const exceptions: InvocationExceptionDefinition<string, string, HandlingContextView, { repair: string }> = {
   requires: { repair: handlingValue.request() },
   accepts: [issue],
   handle(context) {
@@ -126,9 +126,9 @@ const childFacts = bindings.get(leaf).create(operation, 'input');
 // @ts-expect-error child call facts do not grant its resources to the parent
 childFacts.context.resources;
 
-import { defineObservation, type CallFact, type RuntimeFact, type ObservationDefinition, type ObservationDeclaration } from '@capix-observer/runtime';
+import { defineObservation, type InvocationFact, type RuntimeStructureFact, type ObservationDefinition, type ObservationDeclaration } from '@capix/server-runtime';
 const counter = new ResourceOffer('counter', (value: { increment(): void }) => value);
-const callProbe: ObservationDeclaration<CallFact> = defineObservation<CallFact, { counter: { increment(): void } }>({
+const callProbe: ObservationDeclaration<InvocationFact> = defineObservation<InvocationFact, { counter: { increment(): void } }>({
   requires: { counter: counter.request() },
   observe(fact, ports) {
     if (fact.kind === 'started') ports.counter.increment();
@@ -138,8 +138,8 @@ const callProbe: ObservationDeclaration<CallFact> = defineObservation<CallFact, 
   },
 });
 // @ts-expect-error structure facts and per-call facts are different observation contracts
-const structureProbe: ObservationDeclaration<RuntimeFact> = callProbe;
-const asynchronousProbe: ObservationDefinition<CallFact, Record<string, never>> = {
+const structureProbe: ObservationDeclaration<RuntimeStructureFact> = callProbe;
+const asynchronousProbe: ObservationDefinition<InvocationFact, Record<string, never>> = {
   requires: {},
   // @ts-expect-error asynchronous observation cannot retain the synchronous resource window
   observe: async () => undefined,

@@ -17,7 +17,7 @@ export class ErrorTraversal {
     return this.ancestors.has(value);
   }
 
-  within<T>(value: object, convert: () => T): T {
+  within<Result>(value: object, convert: () => Result): Result {
     this.ancestors.add(value);
     try {
       return convert();

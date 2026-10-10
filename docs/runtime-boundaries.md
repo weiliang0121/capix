@@ -1,44 +1,44 @@
 # 运行结构、调用与资源访问边界
 
-“运行时”表示声明、绑定、结构以及实体实际协作的活动状态，不等同于 `Runtime` 类。`Runtime` 只表示 R 层。世界的根是一簇独立实体：Transcript、Memories、SelectionUsage、模型供给、记录器、变化捕获器各有自己的职责与生命周期；R 绑定它们公开的资源访问形式，不成为这些实体的所有者。
+“运行时”表示声明、绑定、结构以及实体实际协作的活动状态，不等同于 `BoundRuntime` 类。`BoundRuntime` 只表示 R 层。世界的根是一簇独立实体：Transcript、Memories、SelectionUsage、模型供给、记录器、变化捕获器各有自己的职责与生命周期；R 绑定它们公开的资源访问形式，不成为这些实体的所有者。
 
 ## 声明、绑定和结构
 
-| 层次 | 声明                                                                 | 绑定职责                                                       | 固定结构                               |
-| ---- | -------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------- |
-| R    | RuntimeDefinition：E 子声明及 run/exceptions/observation             | assembleRuntime：供给检查、按次来源捕获及可选观测/变化能力装配 | Runtime：业务 run 入口、占用与构造能力 |
-| E    | ExecutionDefinition：entry、O 声明及平级 run/exceptions/observation  | 本次入口资源、工作资源与子结构接线                             | Execution → ExecutionInvocationBuilder |
-| O    | OperationDefinition：描述、O/A 声明及平级 run/exceptions/observation | 本位置的稳定结构身份、直接子入口与调用描述                     | Operation → OperationInvocationBuilder |
-| A    | AttemptDefinition：描述及平级 run/exceptions/observation             | 本次叶子访问与调用描述                                         | Attempt → AttemptInvocationBuilder     |
+| 层次 | 声明                                                                 | 绑定职责                                                       | 固定结构                                    |
+| ---- | -------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------- |
+| R    | RuntimeDefinition：E 子声明及 run/exceptions/observation             | assembleRuntime：供给检查、按次来源捕获及可选观测/变化能力装配 | BoundRuntime：业务 run 入口、占用与构造能力 |
+| E    | ExecutionDefinition：entry、O 声明及平级 run/exceptions/observation  | 本次入口资源、工作资源与子结构接线                             | BoundExecution → ExecutionInvocationBuilder |
+| O    | OperationDefinition：描述、O/A 声明及平级 run/exceptions/observation | 本位置的稳定结构身份、直接子入口与调用描述                     | BoundOperation → OperationInvocationBuilder |
+| A    | AttemptDefinition：描述及平级 run/exceptions/observation             | 本次叶子访问与调用描述                                         | BoundAttempt → AttemptInvocationBuilder     |
 
-声明由内核定义契约，服务提供具体内容，可使用类实例或满足契约的普通对象。声明不持有模型实例、Runtime、构造器、Recorder、原实体或本次调用状态。业务复杂度留在声明及组合中，绑定不执行 Sequence、不决定业务分支。
+声明由内核定义契约，服务提供具体内容，可使用类实例或满足契约的普通对象。声明不持有模型实例、BoundRuntime、构造器、Recorder、原实体或本次调用状态。业务复杂度留在声明及组合中，绑定不执行 Sequence、不决定业务分支。
 
-`run` 声明 execute 与可选的正常输出 accept；`exceptions` 声明可接纳的异常契约、所需能力及处理内容；`observation` 是接收类型化事实、申请独立端口的同步声明数组。记录 IO 描述通过 `callRecording({ input, output })` 预设完成。它们是所属声明中的平级部分，不是 run 引用的附属处理器。`raises` 与 `maxRounds` 是所属结构的交付与轮次约束。错误收敛由内核固定，不增加第四类可替换声明。详见 [异常与错误边界](exceptions.md)。
+`run` 声明 execute 与可选的正常输出 accept；`exceptions` 声明可接纳的异常契约、所需能力及处理内容；`observation` 是接收类型化事实、申请独立端口的同步声明数组。记录 IO 描述通过 `invocationRecording({ input, output })` 预设完成。它们是所属声明中的平级部分，不是 run 引用的附属处理器。`raises` 与 `maxRounds` 是所属结构的交付与轮次约束。错误收敛由内核固定，不增加第四类可替换声明。详见 [异常与错误边界](exceptions.md)。
 
-绑定是职责，不要求每层有一个与结构功能重复的可调用包装类。RuntimeBinding 是 R 装配结果的内部契约；落实后的 REOA 结构持有声明、调用工作及惰性直接子结构。服务只把已装配 R 作为业务运行入口。
+绑定是职责，不要求每层有一个与结构功能重复的可调用包装类。BoundRuntimeBinding 是 R 装配结果的内部契约；落实后的 REOA 结构持有声明、调用工作及惰性直接子结构。服务只把已装配 R 作为业务运行入口。
 
 ```ts
 const recording = bindRecording(recorder, { failure: 'isolate', invalidate: (error) => source.invalidate(error) });
 const transcript = new Transcript(messages, { observation: recording.transcript, changes });
 const memories = new Memories(transcript, { observation: recording.memory, changes });
 const selectionUsage = new SelectionUsage();
-const definition = new ObserverRuntimeDefinition();
-const runtime = bindObserver(definition, { transcript, memories, selectionUsage }, provider, { observations: [recording], changes });
+const definition = new ConversationRuntimeDefinition();
+const runtime = bindConversation(definition, { transcript, memories, selectionUsage }, provider, { observations: [recording], changes });
 
 await runtime.run({ messages: newMessages }, { settings, signal, deliver });
 ```
 
-上面是服务装配示例。`bindObserver` 创建模型 Initializer 并供应原实体；模型与配置不是同一对象，配置是固定数据，模型供给是可兑现的调用能力。显式供应同一模型实例可以共享它，供应工厂则由各次装配建立自己的模型缓存。
+上面是服务装配示例。`bindConversation` 创建模型 Initializer 并供应原实体；模型与配置不是同一对象，配置是固定数据，模型供给是可兑现的调用能力。显式供应同一模型实例可以共享它，供应工厂则由各次装配建立自己的模型缓存。
 
-`createRuntime({ observations?, changes?, clock? })` 是低层结构入口，不建立消息、记忆或记录实体。`assembleRuntime` 将声明、独立供给及本次来源绑定到 R。省略 observations 时关闭调用观测；显式空数组启用声明但不附加预设；[recording] 提供记录预设的本调用端口。开启后缺资源是装配错误，局部供给只满足观测声明，不能泄漏给工作和异常处理。
+`createBoundRuntime({ observations?, changes?, clock? })` 是低层结构入口，不建立消息、记忆或记录实体。`assembleRuntime` 将声明、独立供给及本次来源绑定到 R。省略 observations 时关闭调用观测；显式空数组启用声明但不附加预设；[recording] 提供记录预设的本调用端口。开启后缺资源是装配错误，局部供给只满足观测声明，不能泄漏给工作和异常处理。
 
-Runtime 实例维护占用与稳定 ID；每次 run 建立独立 RuntimeContext / Invocation，通过声明的 children 选择、调用并接纳 E。当前服务只配置一个 E，内核不假定唯一 E。reserve 拒绝并发并在 finally 释放，包括构造、调用和观测失败。RuntimeContext 保存本次输入、信号、资源与进度，不保存实例占用。
+BoundRuntime 实例维护占用与稳定 ID；每次 run 建立独立 RuntimeContext / Invocation，通过声明的 children 选择、调用并接纳 E。当前服务只配置一个 E，内核不假定唯一 E。reserve 拒绝并发并在 finally 释放，包括构造、调用和观测失败。RuntimeContext 保存本次输入、信号、资源与进度，不保存实例占用。
 
-RuntimeRecord 是记录预设的跨调用根，RuntimeCallRecord 表达一次 R 调用。归属为根 → R 调用 → E → O/A。它们与真实 Runtime/Context 身份分开；一次 R 调用结束不关闭实例根或独立实体。
+RecordingRootRecord 是记录预设的跨调用根，RuntimeCallRecord 表达一次 R 调用。归属为根 → R 调用 → E → O/A。它们与真实 BoundRuntime/Context 身份分开；一次 R 调用结束不关闭实例根或独立实体。
 
 ## E 的入口与工作
 
-ExecutionDefinition 可声明 `entry: { requires, accept, admit? }`。accept 和 admit 是业务内容；固定 Execution 结构只控制时机和访问窗口。未声明 entry 的通用定义直接使用提交输入。
+ExecutionDefinition 可声明 `entry: { requires, accept, admit? }`。accept 和 admit 是业务内容；固定 BoundExecution 结构只控制时机和访问窗口。未声明 entry 的通用定义直接使用提交输入。
 
 一次服务调用的顺序为：
 
@@ -73,10 +73,10 @@ Invocation 是单次、只能运行一次的结构化调用。它持有实际 Co
 
 业务声明实际收到的是冻结视图，不只是 TypeScript 的 Pick：
 
-- RuntimeScope、ExecutionScope、OperationScope、AttemptScope：本层 level、id、input/currentInput、progress、state/status、signal、当前声明申请的 resources.values 和 continueWith。运行内容和异常内容分别取得自己的资源别名。
-- InvocationView：本次 context、origin.contextId、过程 sequence、最终交付 failure 及只读直接子关系。本层工作视图有阶段资源，子关系与 ChildCall 的 Context 只保留运行事实，不含子层资源端点。
+- RuntimeContextView、ExecutionContextView、OperationContextView、AttemptContextView：本层 level、id、input/currentInput、progress、state/status、signal、当前声明申请的 resources.values 和 continueWith。运行内容和异常内容分别取得自己的资源别名。
+- InvocationView：本次 context、origin.contextId、过程 sequence、最终交付 failure 及只读直接子关系。本层工作视图有阶段资源，子关系与 ChildInvocationView 的 Context 只保留运行事实，不含子层资源端点。
 - InvocationRelationView：子调用视图、round、key、returned、reception，不提供 returnedWith/accept 或生命周期修改。
-- ChildBindings：本次父调用当前声明获准使用的子入口，get/entry 创建窄 ChildCall；组合通过 accept 记录父层接收。run.uses 缺省沿用所属子声明，exceptions.uses 缺省为空；二者都不能申请所属 children 之外的子项。
+- ChildBindings：本次父调用当前声明获准使用的子入口，get/entry 创建窄 ChildInvocationView；组合通过 accept 记录父层接收。run.uses 缺省沿用所属子声明，exceptions.uses 缺省为空；二者都不能申请所属 children 之外的子项。
 
 视图不暴露 Recorder、Record、原实体、ResourceBindings.select/attach、Context.complete/fail/startRound，也不能通过子关系绕过边界。视图保持 live getters；运行 IO、错误与再次生成证据保留原对象身份，不通过 JSON 复制“隔离”。业务视图的 level 保持类型层级约束，A 仍只能作为 O 的直接子项。
 
@@ -94,7 +94,7 @@ InvocationChildren 是直接父子运行关系，与 Recorder 无关。关系记
 
 Sequence 是不可变顺序定义，step 包含 key、use、input 与可选 accept；类型只能读取前项已接收输出。每次 run 新建本次输出容器；输入构造失败不创建子调用，子调用或接收失败停止后续创建。组合没有第四层 Context、Record、调度器或自动重试。
 
-回答生成仍只有一个受限再次生成声明：AcceptModelOutput 对完整返回的 INVALID_JSON、EMPTY_OUTPUT 或 OUTPUT_SHAPE 拒绝生产正式 modelOutputRejected 异常，保留原始拒绝原因与模型返回。该 A 通过 raises 允许向父层交付；GenerateAnswer.exceptions 按契约身份与直接子调用证据决定是否继续一次。InvokeModel.regeneration 的 InvocationEntry 复查直接归属、实际返回/接收状态、次数及完整反馈请求。第一轮组装上下文、准备、调用、接纳；第二轮只准备反馈请求、调用、接纳。不从 Recorder 反查，也不把调用关系写入业务 IO。
+回答生成仍只有一个受限再次生成声明：AcceptModelOutputDefinition 对完整返回的 INVALID_JSON、EMPTY_OUTPUT 或 OUTPUT_SHAPE 拒绝生产正式 modelOutputRejected 异常，保留原始拒绝原因与模型返回。该 A 通过 raises 允许向父层交付；GenerateAnswerDefinition.exceptions 按契约身份与直接子调用证据决定是否继续一次。InvokeModelDefinition.regeneration 的 InvocationEntry 复查直接归属、实际返回/接收状态、次数及完整反馈请求。第一轮组装上下文、准备、调用、接纳；第二轮只准备反馈请求、调用、接纳。不从 Recorder 反查，也不把调用关系写入业务 IO。
 
 网络、超时、取消、非 stop 返回、记录/捕获失败，以及内容落实后的错误不进入该重试分支。回答仅在生成操作成功返回后由 E 内 Sequence 对应步骤的 accept 追加并交付一次；记忆后处理失败保留已交付回答。
 

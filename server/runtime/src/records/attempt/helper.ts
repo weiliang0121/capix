@@ -1,22 +1,22 @@
-import type { InvocationFailureFact } from '@capix-observer/protocol';
+import type { InvocationFailureFact } from '@capix/protocol';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 
 import type { Recorder } from '../recorder.js';
-import type { RuntimeErrorValue } from '@capix-observer/protocol';
+import type { RuntimeErrorValue } from '@capix/protocol';
 import type { RecordBook } from '../container/book.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
-import { AttemptRecord, type AttemptRecordDefinition } from './record.js';
+import { AttemptRecord, type AttemptRecordOptions } from './record.js';
 
 /** Attempt recording; direct ownership queries follow the record tree. */
 export class AttemptRecordHelper {
-  static create(recorder: Recorder, definition: AttemptRecordDefinition, input: unknown): AttemptRecord {
+  static create(recorder: Recorder, options: AttemptRecordOptions, input: unknown): AttemptRecord {
     const book = recorder.book;
-    const operation = this.owner(book, definition.operationId);
+    const operation = this.owner(book, options.operationId);
     const execution = book.get(operation.executionId);
     if (!(execution instanceof ExecutionRecord)) throw new Error('Execution does not exist');
     if (execution.status !== 'running' || operation.status !== 'running') throw new Error('Record has already ended');
-    const record = new AttemptRecord(definition, input);
+    const record = new AttemptRecord(options, input);
     return recorder.add(record);
   }
 

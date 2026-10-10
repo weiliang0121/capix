@@ -1,8 +1,8 @@
 import { createRecordScope } from '../fixtures/runtime.mjs';
-import { RuntimeRecordHelper } from '@capix-observer/runtime';
+import { RecordingRootHelper } from '@capix/server-runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RecordBook, Recorder, BaseRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, MemoryRecord, TranscriptRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix-observer/runtime';
+import { RecordBook, Recorder, BaseRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, MemoryRecord, TranscriptRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper } from '@capix/server-runtime';
 
 const operationDefinition = (executionId, contextId, parentOperationId) => ({ executionId, contextId, parentOperationId, operationInstanceId: 'instance', operation: 'test', label: 'Test', source: 'test', caller: 'execution', callee: 'operation' });
 const attemptDefinition = (operationId) => ({ operationId, contextId: 'attempt', name: 'apply', label: 'Apply', source: 'test', caller: 'operation', callee: 'processing' });

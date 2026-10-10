@@ -1,4 +1,4 @@
-import { ClientRuntime } from '@capix-observer/client-runtime';
+import { ClientRuntime } from '@capix/client-runtime';
 export function snapshot(status = 'succeeded', id = 'execution-1') {
   const failed = status === 'failed';
   const runtimeId = `runtime-call-${id}`;

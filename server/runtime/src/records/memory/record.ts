@@ -2,16 +2,16 @@ import { isSafeInteger } from 'es-toolkit/compat';
 import { isNonBlankString } from '../../value/string.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import { pick, omitBy } from 'es-toolkit/object';
-import type { MemoryRecord as MemoryRecordData, MemoryRecordValue } from '@capix-observer/protocol';
-import type { ChangeSource } from '../source.js';
+import type { MemoryRecord as MemoryRecordData, MemoryRecordValue } from '@capix/protocol';
+import type { RecordChangeSource } from '../source.js';
 import { BaseRecord } from '../record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
-export interface MemoryDefinition {
+export interface MemoryRecordOptions {
   memoryId: string;
   memoriesId: string;
   sequence: number;
-  source?: ChangeSource;
+  source?: RecordChangeSource;
 }
 
 /** An applied change, with its own identity and immutable content. */
@@ -24,16 +24,16 @@ export class MemoryRecord extends BaseRecord<MemoryRecordValue> implements Memor
   readonly operationId?: string;
   readonly contextId?: string;
   readonly callId?: string;
-  constructor(definition: MemoryDefinition, value: MemoryRecordValue) {
-    super(snapshotValue(value), definition.source?.callId);
-    if (!isNonBlankString(definition.memoriesId) || !isSafeInteger(definition.sequence) || definition.sequence < 1) throw new Error('Memory change requires a scope and a positive sequence');
-    this.memoryId = definition.memoryId;
-    this.memoriesId = definition.memoriesId;
-    this.sequence = definition.sequence;
-    this.executionId = definition.source?.executionId;
-    this.operationId = definition.source?.operationId;
-    this.contextId = definition.source?.contextId;
-    this.callId = definition.source?.callId;
+  constructor(options: MemoryRecordOptions, value: MemoryRecordValue) {
+    super(snapshotValue(value), options.source?.callId);
+    if (!isNonBlankString(options.memoriesId) || !isSafeInteger(options.sequence) || options.sequence < 1) throw new Error('Memory change requires a scope and a positive sequence');
+    this.memoryId = options.memoryId;
+    this.memoriesId = options.memoriesId;
+    this.sequence = options.sequence;
+    this.executionId = options.source?.executionId;
+    this.operationId = options.source?.operationId;
+    this.contextId = options.source?.contextId;
+    this.callId = options.source?.callId;
     Object.freeze(this);
   }
 

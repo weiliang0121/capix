@@ -1,6 +1,6 @@
-import { definitionResources, ExecutionContext, Transcript, TranscriptRangeRef, ResourceBindings, Initializer, bindResources, BindingEnvironment, Memories, SelectionUsage } from '@capix-observer/runtime';
+import { definitionResources, ExecutionContext, Transcript, TranscriptRangeRef, ResourceBindings, Initializer, bindResources, BindingEnvironment, Memories, SelectionUsage } from '@capix/server-runtime';
 
-import { acceptExecutionInput, initializeObserver, observeExecution, observerExecutionRequests, observerProviders } from '@capix-observer/service';
+import { acceptConversationInput, initializeObserver, observeExecution, conversationExecutionRequests, conversationProviders } from '@capix/observer-service';
 
 const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);
@@ -16,7 +16,7 @@ export function contextWithSource(input, options, parent) {
 }
 export function resourceBindingFor(runtime, provider, provided) {
   const model = new Initializer(() => provider);
-  const binding = bindResources(observerExecutionRequests, observerProviders);
+  const binding = bindResources(conversationExecutionRequests, conversationProviders);
   const worlds = new WeakMap();
   return (source) => {
     const transcript = source.transcriptRange?.transcript ?? new Transcript();
@@ -29,7 +29,7 @@ export function resourceBindingFor(runtime, provider, provided) {
   };
 }
 export function bindChild(runtime, definition) {
-  const environment = new BindingEnvironment(runtime.executionInvocations, runtime.operationInvocations, runtime.attemptInvocations, runtime.recording?.provides);
+  const environment = new BindingEnvironment(runtime.executionInvocationBuilder, runtime.operationInvocationBuilder, runtime.attemptInvocationBuilder, runtime.recording?.provides);
   return environment.children(environment.resources(definition), [definition], 'operation').get(definition);
 }
 // Construction metadata is captured only by this test fixture, not exposed by a work Context.
@@ -38,7 +38,7 @@ export const contextFor = (input, settings = {}) => contextWithSource(input, { s
 
 export function createInput({ content, history }) {
   const transcript = new Transcript(history);
-  const input = acceptExecutionInput(transcript, { messages: [{ role: 'user', content }] });
+  const input = acceptConversationInput(transcript, { messages: [{ role: 'user', content }] });
   transcripts.set(input, transcript);
   return input;
 }

@@ -1,5 +1,5 @@
 import type { Clock } from '../runtime/clock.js';
-import type { InvocationEvent } from '@capix-observer/protocol';
+import type { InvocationEvent } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import type { ObservationInstallation } from '../observation/binding.js';
 

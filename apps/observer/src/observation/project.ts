@@ -1,11 +1,11 @@
-import { hasOutput, readOutput, validateSnapshot } from '@capix-observer/protocol';
-import type { RuntimeSnapshot, OperationRecord, InvocationValue, GenerationOutput } from '@capix-observer/protocol';
+import { hasOutput, readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
+import type { ExecutionRecordSnapshot, OperationRecord, InvocationValue, GenerationOutput } from '@capix/protocol';
 import type { CallSpan, Trace } from './types.js';
-export { validateSnapshot } from '@capix-observer/protocol';
+export { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 /** Each view is derived from the same current-format facts. */
-export function projectExecution(facts: RuntimeSnapshot): Trace {
-  validateSnapshot(facts);
+export function projectExecution(facts: ExecutionRecordSnapshot): Trace {
+  validateExecutionRecordSnapshot(facts);
   const execution = facts.execution;
   const starts = new Map(facts.events.filter((e) => e.value.type === 'call').map((e) => [e.callId, e]));
   const ends = new Map(facts.events.filter((e) => e.value.type !== 'call').map((e) => [e.callId, e]));
@@ -31,8 +31,8 @@ export function projectExecution(facts: RuntimeSnapshot): Trace {
     operation: 'execution',
     caller: 'caller',
     callee: 'execution',
-    label: 'Execution.call',
-    source: 'server/runtime/src/execution/execution.ts · Execution.call',
+    label: '执行调用',
+    source: 'server/runtime/src/execution/execution.ts · BoundExecution.create',
     ...result(execution.id, execution.value, execution.status),
   };
   const operations = new Map(facts.operations.map((operation) => [operation.id, operation]));

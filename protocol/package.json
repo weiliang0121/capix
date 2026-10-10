@@ -1,5 +1,5 @@
 {
-  "name": "@capix-observer/protocol",
+  "name": "@capix/protocol",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,26 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./content": {
+      "types": "./dist/content/index.d.ts",
+      "import": "./dist/content/index.js"
+    },
+    "./invocation": {
+      "types": "./dist/invocation/index.d.ts",
+      "import": "./dist/invocation/index.js"
+    },
+    "./conversation": {
+      "types": "./dist/conversation/index.d.ts",
+      "import": "./dist/conversation/index.js"
+    },
+    "./recording": {
+      "types": "./dist/recording/index.d.ts",
+      "import": "./dist/recording/index.js"
+    },
+    "./observer": {
+      "types": "./dist/observer/index.d.ts",
+      "import": "./dist/observer/index.js"
     }
   },
   "scripts": {

@@ -77,7 +77,7 @@ Runtime 的本地 subscribe 消费者逐个通知；抛错的消费者被移除�
 
 观测状态保存在 state.observation：enabled、loading、error、overview、memory、records、updates，以及 cursor、invocations、transcriptRecords。观测初始化或刷新失败只影响这个范围，不拒绝对话初始化或提交。
 
-ObservationReplica 在新结构中整批接纳 delta，失败不部分修改已接纳状态。重复交付忽略，范围和顺序缺口拒绝。记录新增与父级引用同步接纳；过程和父层接纳关系分别只追加新条目，并以 eventSequence 对照。资源事实作为独立 record entry 接收，按所属调用收集进 RuntimeSnapshot.resources；待调用记录和对应边界齐备后提供执行视图。客户端不从资源事实反推实际业务状态。
+ObservationReplica 在新结构中整批接纳 delta，失败不部分修改已接纳状态。重复交付忽略，范围和顺序缺口拒绝。记录新增与父级引用同步接纳；过程和父层接纳关系分别只追加新条目，并以 eventSequence 对照。资源事实作为独立 record entry 接收，按所属调用收集进 ExecutionRecordSnapshot.resources；待调用记录和对应边界齐备后提供执行视图。客户端不从资源事实反推实际业务状态。
 
 loadExecution 按需查询，E 与其父 R 均结束时才复用终态缓存；查询期间收到更新时保留新快照。详情不进入 updates，不用历史详情覆盖概览。source 保留按需源码查询，不承诺执行时源码归档。
 
@@ -89,16 +89,16 @@ HttpTransport 只处理地址、HTTP 状态、JSON 读取和错误，不感知�
 
 - ConversationHttpTransport：config、POST /api/run、transcript 查询和 GET /api/transcript/observe。对话流检查开始、Context 与集合身份、回答位置和终态；实体流接纳 baseline/delta/error，不将断流当作业务完成。
 - ObservationHttpTransport：overview、memory、execution、source 和 GET /api/observe。观测流可覆盖多次执行，结束不代表业务完成。
-- 普通响应由 Zod 接纳；记录详情由 validateSnapshot 验证并核对请求身份；消息实体还由接收层检查范围与版本。
+- 普通响应由 Zod 接纳；记录详情由 validateExecutionRecordSnapshot 验证并核对请求身份；消息实体还由接收层检查范围与版本。
 
-readLines 只负责 UTF-8 解码与行拆分。回调同步执行，失败后关闭 reader；HttpError 保留 HTTP 响应，ObserverTransportError 区分 contract / remote / delivery，网络异常保留原异常。取消实体或观测连接只解除对应交付。发送缓存有限，慢消费者断开后通过新基线接续，不承诺离线追赶。
+readLines 只负责 UTF-8 解码与行拆分。回调同步执行，失败后关闭 reader；HttpError 保留 HTTP 响应，HttpTransportError 区分 contract / remote / delivery，网络异常保留原异常。取消实体或观测连接只解除对应交付。发送缓存有限，慢消费者断开后通过新基线接续，不承诺离线追赶。
 
 ## 应用绑定与 Store
 
 - binding/application.ts 装配 Store 和命令，独立开启观测及对话初始化。卸载时分别停止观测和实体订阅；重新挂载恢复实体同步，保留已取得的配置与 UI 编辑。
 - binding/data.ts 组织业务消息与进度，并组合可选观测。对话正文只来自消息实体副本。
 - binding/observation.ts 按 UID/index 组合消息、上下文和记忆来源，明确区分未加载、加载中、缺失与错误；实体到达时即便记录未变化也重建对应读模型。
-- binding/resources.ts 解释应用约定的配置与历史范围资源事实；details.ts 为各调用组织资源事实列表，React 不解析原始 RuntimeSnapshot。
+- binding/resources.ts 解释应用约定的配置与历史范围资源事实；details.ts 为各调用组织资源事实列表，React 不解析原始 ExecutionRecordSnapshot。
 - projectConversation 仅给当前同一消息集合中的已有消息添加执行链接，不能用相同 index 跨集合猜测关联。
 - Store 保存应用读模型及草稿、预算、搜索、选择和弹层状态。组件持有局部 DOM、滚动和加载提示；未知原文提供加载入口，消息同步失败提供明确提示和重新连接入口。
 

@@ -1,10 +1,10 @@
-import { Execution } from './fixtures/behavior.mjs';
+import { ExecutionFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, BaseRecord, RecordBook, TranscriptRecord, MemoryRecord, ExecutionRecordHelper, Transcript, Memories } from '@capix-observer/runtime';
-import { createRuntime, observeCall, fixtureState } from './fixtures/runtime.mjs';
-import { subscribeExecutions } from '@capix-observer/service';
-import { validateSnapshot } from '@capix-observer/protocol';
+import { Recorder, BaseRecord, RecordBook, TranscriptRecord, MemoryRecord, ExecutionRecordHelper, Transcript, Memories } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall, fixtureState } from './fixtures/runtime.mjs';
+import { subscribeExecutions } from '@capix/observer-service';
+import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 class CustomRecord extends BaseRecord {
   revise(value) {
@@ -52,7 +52,7 @@ test('Recorder accepts an unrelated record kind, updates only its own instance a
 
 test('content notifications are visible to generic subscribers without manufacturing execution snapshots', () => {
   const recorder = new Recorder(new RecordBook());
-  const runtime = createRuntime({ recorder });
+  const runtime = createBoundRuntime({ recorder });
   const changes = [];
   const snapshots = [];
   recorder.subscribe((record) => changes.push(record));
@@ -71,32 +71,32 @@ test('content notifications are visible to generic subscribers without manufactu
 
 test('Observer projects only its own call scope even when two Runtimes share one Recorder', async () => {
   const recorder = new Recorder(new RecordBook());
-  const a = createRuntime({ recorder });
-  const b = createRuntime({ recorder });
+  const a = createBoundRuntime({ recorder });
+  const b = createBoundRuntime({ recorder });
   const views = [];
   const unsubscribe = subscribeExecutions(a.recording, (snapshot) => {
-    validateSnapshot(snapshot);
+    validateExecutionRecordSnapshot(snapshot);
     views.push(snapshot);
   });
-  class Echo extends Execution {
+  class Echo extends ExecutionFixture {
     execute(context) {
       return context.input;
     }
   }
   let first;
   let other;
-  await new Echo(a.executionInvocations).call('one', { settings: {} }, (context, invocation) => {
+  await new Echo(a.executionInvocationBuilder).call('one', { settings: {} }, (context, invocation) => {
     first = invocation;
   });
   const count = views.length;
-  await new Echo(b.executionInvocations).call('two', { settings: {} }, (context, invocation) => {
+  await new Echo(b.executionInvocationBuilder).call('two', { settings: {} }, (context, invocation) => {
     other = invocation;
   });
   assert.ok(count > 0);
   assert.equal(views.length, count);
   assert.equal(views.at(-1).execution.status, 'succeeded');
   assert.throws(() => observeCall(a.recording, other), /does not exist/);
-  const scope = fixtureState(a).scopes.get(first.context.id);
+  const scope = fixtureState(a).invocationRecordings.get(first.context.id);
   new Transcript().appendFrom([{ role: 'assistant', content: '已完成' }], {
     origin: first.origin,
     observation: {

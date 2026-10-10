@@ -1,19 +1,19 @@
 import { InvocationDefinition } from './invocation.js';
-import type { ExecutionScope } from '../context/scope.js';
+import type { ExecutionContextView } from '../context/view.js';
 import type { OperationDefinition } from './operation.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
 import type { invocationSignature } from './signature.js';
-import type { DefinitionParent } from './children.js';
+import type { DefinitionParentInvocationView } from './children.js';
 
-export interface ExecutionEntry<U, I, R extends object> {
-  readonly requires: ResourceRequirements<R>;
-  accept(input: U, resources: Readonly<R>): I;
-  admit?(input: I, resources: Readonly<R>): void;
+export interface ExecutionEntry<EntryInput, Input, EntryResources extends object> {
+  readonly requires: ResourceRequirements<EntryResources>;
+  accept(input: EntryInput, resources: Readonly<EntryResources>): Input;
+  admit?(input: Input, resources: Readonly<EntryResources>): void;
 }
 
-export abstract class ExecutionDefinition<I, O, R extends object = Record<string, never>, U = I, ER extends object = Record<string, never>, H extends object = Record<string, never>> extends InvocationDefinition<I, O, ExecutionScope<I, O, R>, R, H> {
-  declare readonly [invocationSignature]?: (parent: DefinitionParent<ExecutionDefinition<I, O, R, U, ER, H>>, input: U) => O;
+export abstract class ExecutionDefinition<Input, Output, Resources extends object = Record<string, never>, EntryInput = Input, EntryResources extends object = Record<string, never>, ExceptionResources extends object = Record<string, never>> extends InvocationDefinition<Input, Output, ExecutionContextView<Input, Output, Resources>, Resources, ExceptionResources> {
+  declare readonly [invocationSignature]?: (parent: DefinitionParentInvocationView<ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, ExceptionResources>>, input: EntryInput) => Output;
   readonly level = 'execution' as const;
   readonly children: readonly OperationDefinition<any, any, any, any>[] = [];
-  readonly entry?: ExecutionEntry<U, I, ER>;
+  readonly entry?: ExecutionEntry<EntryInput, Input, EntryResources>;
 }

@@ -1,11 +1,11 @@
 import { contextWithSource, sourceFor } from './fixtures/observer.mjs';
 import { callFor, recordFor } from './fixtures/lifecycle.mjs';
-import { InvocationRecordHelper, OperationRecord } from '@capix-observer/runtime';
+import { InvocationRecordHelper, OperationRecord } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationContext, ExecutionContext, Transcript, Recorder, RecordBook } from '@capix-observer/runtime';
-import { createRuntime, observeCall } from './fixtures/runtime.mjs';
+import { InvocationContext, ExecutionContext, Transcript, Recorder, RecordBook } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { TestOperation } from './fixtures/operation.mjs';
 
@@ -44,7 +44,7 @@ test('Context keeps live refs, separates undefined outcomes, and fixes execution
 });
 
 test('Operation executes named actions without records and preserves non-JSON intermediate and output refs', async () => {
-  const runtime = createRuntime(),
+  const runtime = createBoundRuntime(),
     seen = [],
     input = new Map([['content', 'hello']]);
   const fn = () => input.get('content');
@@ -79,7 +79,7 @@ test('Operation executes named actions without records and preserves non-JSON in
 
 test('an unrecordable execute result stops strict delivery and leaves the damaged recording incomplete', async () => {
   const records = recorder();
-  const runtime = createRuntime({ recorder: records });
+  const runtime = createBoundRuntime({ recorder: records });
   const root = lifecycleFor(runtime).execution(options);
   const execution = root.begin();
   let context;
@@ -110,7 +110,7 @@ test('an unrecordable execute result stops strict delivery and leaves the damage
 
 test('Work and failure-registration errors remain distinct; Context keeps the original thrown value', async (t) => {
   const records = recorder(),
-    runtime = createRuntime({ recorder: records });
+    runtime = createBoundRuntime({ recorder: records });
   const failure = { reason: 'work failed' },
     registration = new Error('record unavailable');
   const finish = InvocationRecordHelper.finish;
@@ -140,7 +140,7 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
 
 test('a strict start-observation failure prevents child work and is visible to its parent', async (t) => {
   const records = recorder();
-  const runtime = createRuntime({ recorder: records });
+  const runtime = createBoundRuntime({ recorder: records });
   const root = lifecycleFor(runtime).execution(options);
   const execution = root.begin();
   const failure = new Error('cannot record start');
@@ -171,7 +171,7 @@ test('a strict start-observation failure prevents child work and is visible to i
 });
 
 test('Contexts hide ancestor access while retaining lifecycle checks through nested parents', async () => {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   let attempt;
   let child;
   const operation = new TestOperation(runtime, {

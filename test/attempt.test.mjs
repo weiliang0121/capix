@@ -1,19 +1,19 @@
-import { Attempt, Operation } from './fixtures/behavior.mjs';
+import { AttemptFixture, OperationFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
-import { ExecutionRecordHelper } from '@capix-observer/runtime';
+import { ExecutionRecordHelper } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AttemptContext, Recorder, RecordBook, ExceptionContract } from '@capix-observer/runtime';
-import { createRuntime, observeCall } from './fixtures/runtime.mjs';
+import { AttemptContext, Recorder, RecordBook, ExceptionContract } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { TestOperation } from './fixtures/operation.mjs';
 
 import { TestAttempt } from './fixtures/attempt.mjs';
-import { validateSnapshot } from '@capix-observer/protocol';
+import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 function recordedRuntime() {
-  return createRuntime({ recorder: new Recorder(new RecordBook()) });
+  return createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
 }
 
 test('one Attempt instance creates independent contexts per call and leaves parent work running after failure', async () => {
@@ -21,7 +21,7 @@ test('one Attempt instance creates independent contexts per call and leaves pare
   const contexts = [];
   const rejection = new ExceptionContract('REJECTED_INPUT');
   const failure = rejection.create('rejected input', {});
-  class AcceptText extends Attempt {
+  class AcceptText extends AttemptFixture {
     raises = [rejection];
     name = 'acceptText';
     label = '接纳文本';
@@ -34,7 +34,7 @@ test('one Attempt instance creates independent contexts per call and leaves pare
       return context.input;
     }
   }
-  const attempt = new AcceptText(runtime.attemptInvocations);
+  const attempt = new AcceptText(runtime.attemptInvocationBuilder);
   const executionLifecycle = lifecycleFor(runtime).execution({ input: 'input', settings: {} });
   const execution = executionLifecycle.begin();
   const operationLifecycle = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), 'input');
@@ -81,7 +81,7 @@ test('Operation reuses its three Attempt instances while keeping call contexts a
     },
   });
   const attempts = operation.actions;
-  assert.ok(Object.values(attempts).every((attempt) => attempt instanceof Attempt));
+  assert.ok(Object.values(attempts).every((attempt) => attempt instanceof AttemptFixture));
   assert.equal(new Set(Object.values(attempts)).size, 3);
   const executions = [];
   for (const input of [1, 4]) {
@@ -107,9 +107,9 @@ test('Operation reuses its three Attempt instances while keeping call contexts a
 });
 
 test('Attempt works without a recorder and preserves non-JSON input and output identity', async () => {
-  const runtime = createRuntime();
+  const runtime = createBoundRuntime();
   const contexts = [];
-  class Identity extends Attempt {
+  class Identity extends AttemptFixture {
     name = 'identity';
     label = '原样返回';
     source = 'test/attempt.test.mjs · Identity';
@@ -122,7 +122,7 @@ test('Attempt works without a recorder and preserves non-JSON input and output i
   }
   const input = new Map([['content', 'original']]);
   const operation = new TestOperation(runtime);
-  const attempt = new Identity(runtime.attemptInvocations);
+  const attempt = new Identity(runtime.attemptInvocationBuilder);
   const output = await invoke(lifecycleFor(runtime).execution({ input, settings: {} }), (execution) => invoke(lifecycleFor(runtime).operation(execution, operation, input), (context, invocation) => attempt.call(invocation, input)));
   assert.equal(output, input);
   assert.equal(contexts[0].input, input);
@@ -141,7 +141,7 @@ test('operations can organize any number of named actions without a fixed stage 
     });
     assert.deepEqual(output, names);
     const snapshot = observeCall(runtime.recording, callFor(context));
-    validateSnapshot(snapshot);
+    validateExecutionRecordSnapshot(snapshot);
     assert.deepEqual(
       snapshot.attempts.map((attempt) => attempt.name),
       names,
@@ -152,7 +152,7 @@ test('operations can organize any number of named actions without a fixed stage 
 
 test('the operation owns branching and can explicitly call the same action twice without child attempts', async () => {
   const runtime = recordedRuntime();
-  class Increment extends Operation {
+  class Increment extends OperationFixture {
     name = 'increment';
     label = '按需递增';
     source = 'test/attempt.test.mjs · Increment';
@@ -163,7 +163,7 @@ test('the operation owns branching and can explicitly call the same action twice
       return output < 2 ? this.add.call(invocation, output) : output;
     }
   }
-  const operation = new Increment(runtime.operationInvocations);
+  const operation = new Increment(runtime.operationInvocationBuilder);
   for (const input of [0, 2]) {
     let context;
     const output = await invoke(lifecycleFor(runtime).execution({ input, settings: {} }), (execution) => {
@@ -172,7 +172,7 @@ test('the operation owns branching and can explicitly call the same action twice
     });
     assert.equal(output, input === 0 ? 2 : 3);
     const snapshot = observeCall(runtime.recording, callFor(context));
-    validateSnapshot(snapshot);
+    validateExecutionRecordSnapshot(snapshot);
     assert.equal(snapshot.attempts.length, input === 0 ? 2 : 1);
     assert.ok(snapshot.attempts.every((attempt) => attempt.name === 'addOne' && attempt.operationId === snapshot.operations[0].id));
     assert.equal(new Set(snapshot.attempts.map((attempt) => attempt.contextId)).size, snapshot.attempts.length);

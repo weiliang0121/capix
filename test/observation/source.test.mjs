@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeObserver, Recorder, RecordBook, RuntimeRecord } from '@capix-observer/runtime';
-import { ChangeConsumer, RecordSource, SourceIncomplete, initializeObserver, ObservationFeed } from '@capix-observer/service';
-import { ClientRuntime, ObservationSequenceError } from '@capix-observer/client-runtime';
+import { ChangeBuffer, Recorder, RecordBook, RecordingRootRecord } from '@capix/server-runtime';
+import { ChangeConsumer, RecordSource, SourceIncomplete, initializeObserver, ObservationFeed } from '@capix/observer-service';
+import { ClientRuntime, ObservationSequenceError } from '@capix/client-runtime';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 function fixture() {
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const recorder = new Recorder(new RecordBook(), { changes });
   const consumer = new ChangeConsumer(changes);
   const source = new RecordSource(recorder, consumer);
-  const add = () => recorder.add(new RuntimeRecord({ createdAt: new Date().toISOString() }));
+  const add = () => recorder.add(new RecordingRootRecord({ createdAt: new Date().toISOString() }));
   return { recorder, consumer, source, add };
 }
 
@@ -84,7 +84,8 @@ test('record delivery discards queued healthy changes on invalidation while mess
   const messages = [];
   try {
     feed.connect((frame) => records.push(frame));
-    feed.connectTranscript((frame) => messages.push(frame));
+    environment.consumer.flush();
+    environment.transcripts.connect((frame) => messages.push(frame));
     environment.transcript.append({ role: 'user', content: 'first' });
     environment.consumer.flush();
     environment.recordSource.invalidate(new Error('record mapper failed'));
@@ -173,7 +174,8 @@ test('reentrant feed opening fixes all source watermarks and does not replay pen
     if (change.type !== 'transcript' || opened) return;
     opened = true;
     feed.connect((frame) => observations.push(frame));
-    feed.connectTranscript((frame) => messages.push(frame));
+    environment.consumer.flush();
+    environment.transcripts.connect((frame) => messages.push(frame));
   });
   try {
     environment.transcript.append({ role: 'user', content: 'first' });
@@ -203,6 +205,34 @@ test('reentrant feed opening fixes all source watermarks and does not replay pen
     assert.equal(messages[1].event.revision, 3);
   } finally {
     off();
+    feed.close();
+    environment.consumer.close();
+  }
+});
+
+test('closing observation leaves the independently connected transcript live', async () => {
+  const environment = initializeObserver({ invoke: () => assert.fail('no model required') });
+  const feed = new ObservationFeed(environment);
+  const records = [];
+  const messages = [];
+  environment.consumer.flush();
+  const disconnect = environment.transcripts.connect((frame) => messages.push(frame));
+  try {
+    feed.connect((frame) => records.push(frame));
+    feed.close();
+    environment.transcript.append({ role: 'user', content: 'independent content' });
+    await settle();
+    assert.deepEqual(
+      records.map((frame) => frame.type),
+      ['baseline'],
+    );
+    assert.deepEqual(
+      messages.map((frame) => frame.type),
+      ['baseline', 'delta'],
+    );
+    assert.equal(messages[1].event.change.messages[0].content, 'independent content');
+  } finally {
+    disconnect();
     feed.close();
     environment.consumer.close();
   }

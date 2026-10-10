@@ -1,9 +1,9 @@
 import { observeCall } from '../fixtures/observation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, ExecutionContext, ExceptionContract, Recorder, RecordBook, ExecutionRecordHelper, callRecording } from '@capix-observer/runtime';
-import { createRuntime } from '../fixtures/runtime.mjs';
-import { readOutput, validateSnapshot } from '@capix-observer/protocol';
+import { Invocation, InvocationContext, ExecutionContext, ExceptionContract, Recorder, RecordBook, ExecutionRecordHelper, invocationRecording } from '@capix/server-runtime';
+import { createBoundRuntime } from '../fixtures/runtime.mjs';
+import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 
 const rejected = new ExceptionContract('TEST_OUTPUT_REJECTED');
 const make = (work, extra = {}) => new Invocation({ context: new InvocationContext('input'), signal: new AbortController().signal, work: { maxRounds: 1, ...work }, ...extra });
@@ -225,12 +225,12 @@ test('successful child context and failed final delivery remain distinct', async
 });
 
 test('record-only IO descriptions preserve live values and handling output references', async () => {
-  const runtime = createRuntime({ recorder: new Recorder(new RecordBook()) });
+  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
   const input = { text: 'original', internal: new Map() };
   const output = { text: 'fallback', internal: new Map() };
-  const call = runtime.executionInvocations.create(input, {
+  const call = runtime.executionInvocationBuilder.create(input, {
     context: {},
-    observation: [callRecording({ input: (value) => ({ text: value.text }), output: (value) => ({ text: value.text }) })],
+    observation: [invocationRecording({ input: (value) => ({ text: value.text }), output: (value) => ({ text: value.text }) })],
     work: {
       maxRounds: 1,
       raises: [rejected],
@@ -245,16 +245,16 @@ test('record-only IO descriptions preserve live values and handling output refer
   assert.equal(await call.run(), output);
   assert.equal(context.state.output, output);
   const snapshot = ExecutionRecordHelper.snapshot(runtime.recorder, call.record.id);
-  validateSnapshot(snapshot);
+  validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(snapshot.execution.value.input, { text: 'original' });
   assert.deepEqual(readOutput(snapshot.execution.value), { text: 'fallback' });
   assert.equal(snapshot.execution.value.processes.at(-1).stage, 'handling');
 });
 
 test('failed record delivery exposes error category without live failure objects', async () => {
-  const runtime = createRuntime({ recorder: new Recorder(new RecordBook()) });
+  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
   const exception = rejected.create('expected rejection', { value: 1 });
-  const call = runtime.executionInvocations.create('input', {
+  const call = runtime.executionInvocationBuilder.create('input', {
     context: {},
     work: {
       maxRounds: 1,
@@ -267,7 +267,7 @@ test('failed record delivery exposes error category without live failure objects
   const context = call.context;
   await assert.rejects(call.run(), (error) => error === exception);
   const snapshot = ExecutionRecordHelper.snapshot(runtime.recorder, call.record.id);
-  validateSnapshot(snapshot);
+  validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(snapshot.execution.value.failure, { kind: 'exception', phase: 'execute', contextId: context.id, contract: rejected.name });
   assert.equal(Object.hasOwn(snapshot.execution.value.processes.at(-1).failure, 'error'), false);
 });

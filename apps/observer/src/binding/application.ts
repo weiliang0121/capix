@@ -1,4 +1,4 @@
-import type { ClientRuntime } from '@capix-observer/client-runtime';
+import type { ClientRuntime } from '@capix/client-runtime';
 import { createAppStore } from '../state/store.js';
 import type { AppStore, AppState } from '../state/store.js';
 import { searchRounds } from './search.js';

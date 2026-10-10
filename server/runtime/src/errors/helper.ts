@@ -1,4 +1,4 @@
-import type { RuntimeErrorValue } from '@capix-observer/protocol';
+import type { RuntimeErrorValue } from '@capix/protocol';
 import { ErrorTraversal, formatLimits } from './traversal.js';
 import { formatError } from './format.js';
 

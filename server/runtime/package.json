@@ -1,5 +1,5 @@
 {
-  "name": "@capix-observer/runtime",
+  "name": "@capix/server-runtime",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,18 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./construction": {
+      "types": "./dist/construction.d.ts",
+      "import": "./dist/construction.js"
+    },
+    "./recording": {
+      "types": "./dist/recording.d.ts",
+      "import": "./dist/recording.js"
+    },
+    "./content": {
+      "types": "./dist/content.d.ts",
+      "import": "./dist/content.js"
     }
   },
   "scripts": {
@@ -14,7 +26,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix-observer/protocol": "workspace:*",
+    "@capix/protocol": "workspace:*",
     "es-toolkit": "1.52.0"
   }
 }

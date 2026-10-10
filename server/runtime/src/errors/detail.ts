@@ -2,7 +2,7 @@ import { isObjectLike } from '../value/object.js';
 import { isArray, isFinite } from 'es-toolkit/compat';
 import { isNativeError } from 'node:util/types';
 import { isBoolean, isDate, isMap, isNull, isNumber, isSet, isString, isSymbol, isUndefined } from 'es-toolkit/predicate';
-import type { RuntimeErrorDetail } from '@capix-observer/protocol';
+import type { RuntimeErrorDetail } from '@capix/protocol';
 import { ErrorTraversal, formatLimits } from './traversal.js';
 
 type DetailConverter = (value: unknown) => RuntimeErrorDetail;
@@ -49,7 +49,7 @@ function formatDate(value: Date): RuntimeErrorDetail {
   return { type: 'Date', value: isFinite(time) ? new Date(time).toISOString() : '[Invalid Date]' };
 }
 
-function formatEntries<T>(values: Iterable<T>, convert: (value: T) => RuntimeErrorDetail): RuntimeErrorDetail[] {
+function formatEntries<Item>(values: Iterable<Item>, convert: (value: Item) => RuntimeErrorDetail): RuntimeErrorDetail[] {
   const entries: RuntimeErrorDetail[] = [];
   for (const value of values) {
     if (entries.length >= formatLimits.entries) {

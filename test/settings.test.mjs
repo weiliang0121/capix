@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { validateSettings } from '@capix-observer/service';
+import { validateSettings } from '@capix/observer-service';
 
 const settings = { model: 'deepseek-flash', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
 

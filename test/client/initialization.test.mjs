@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ClientRuntime } from '@capix-observer/client-runtime';
+import { ClientRuntime } from '@capix/client-runtime';
 import { deferred, transcriptSnapshot } from './fixtures.mjs';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));

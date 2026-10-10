@@ -1,0 +1,38 @@
+import type { ObserverOverview } from './overview.js';
+import type { MemoryObservation } from './memory.js';
+import type { RecordEntry } from '../recording/changes.js';
+import type { ObserverChange } from './changes.js';
+import type { InvocationEvent } from '../invocation/changes.js';
+import type { TranscriptEvent } from '../content/changes.js';
+
+/** Observation identifies content changes; entity subscriptions carry their bodies. */
+export type TranscriptNotice = Omit<TranscriptEvent, 'change'> & { readonly change: Readonly<{ kind: 'messages-appended'; start: number; end: number }> | Extract<TranscriptEvent['change'], { kind: 'segment-started' }> };
+export type ObservationChange = Exclude<ObserverChange, TranscriptEvent> | TranscriptNotice;
+
+/** Baseline is lightweight for completed executions; only active record bodies are preloaded. */
+export interface ObservationBaseline {
+  readonly type: 'baseline';
+  readonly scopeId: string;
+  readonly sequence: number;
+  readonly overview: ObserverOverview;
+  readonly memory: MemoryObservation;
+  readonly transcript: { readonly id: string; readonly revision: number; readonly starts: readonly number[] };
+  readonly memories: { readonly id: string; readonly sequence: number };
+  readonly recorder: { readonly id: string; readonly revision: number };
+  readonly entries: readonly RecordEntry[];
+  readonly invocations: readonly InvocationEvent[];
+}
+export interface ObservationDelta {
+  readonly type: 'delta';
+  readonly scopeId: string;
+  readonly sequence: number;
+  readonly changes: readonly ObservationChange[];
+}
+export type ObservationFrame = ObservationBaseline | ObservationDelta;
+export interface ObservationSourceIncomplete {
+  readonly type: 'error';
+  readonly code: 'SOURCE_INCOMPLETE';
+  readonly sourceId: string;
+  readonly error: string;
+}
+export type ObservationUpdate = ObservationFrame | ObservationSourceIncomplete | { type: 'error'; error: string; code?: string };

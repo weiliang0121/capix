@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, InvocationChangeEmitter, ResourceBindings, ResourceOffer, bindResources, bindCallObservation, defineObservation, Transcript, createRuntime } from '@capix-observer/runtime';
+import { Invocation, InvocationContext, InvocationChangeEmitter, ResourceBindings, ResourceOffer, bindResources, bindInvocationObservation, defineObservation, Transcript, createBoundRuntime } from '@capix/server-runtime';
 
 function call({ observe, failure, work, parent, declarations, resources, capture } = {}) {
   const context = new InvocationContext({ mutable: new Map() });
   const identity = { contextId: context.id, level: 'attempt', ...(parent ? { parentContextId: parent.context.id } : {}) };
-  return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { maxRounds: 1, execute: () => 'output', ...work }, observation: bindCallObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ requires: {}, observe: observe ?? (() => undefined) }, { failure })] }, [], parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
+  return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { maxRounds: 1, execute: () => 'output', ...work }, observation: bindInvocationObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ requires: {}, observe: observe ?? (() => undefined) }, { failure })] }, [], parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
 }
 
 function observer(observe, failure) {
@@ -202,14 +202,14 @@ test('a committed Transcript fact reaches observation even when capture fails; r
 
 test('Runtime structure facts have their own order and failed acquisition reporting still releases occupancy', async () => {
   const facts = [];
-  const runtime = createRuntime({
+  const runtime = createBoundRuntime({
     observations: [
       {
         failure: 'propagate',
-        bindCall() {
+        bindInvocation() {
           return { observe() {} };
         },
-        bindRuntime(identity) {
+        bindRuntimeStructure(identity) {
           return {
             observe(fact) {
               facts.push(fact);
@@ -242,9 +242,9 @@ test('an availability check failure follows the observer isolation policy', asyn
   let invalidated = 0;
   const context = new InvocationContext(null);
   const identity = { contextId: context.id, level: 'attempt' };
-  const observation = bindCallObservation({ identity, resources: new ResourceBindings({}) }, [
+  const observation = bindInvocationObservation({ identity, resources: new ResourceBindings({}) }, [
     {
-      bindCall() {
+      bindInvocation() {
         return {
           available() {
             throw new Error('availability');
@@ -259,7 +259,7 @@ test('an availability check failure follows the observer isolation policy', asyn
       },
     },
     {
-      bindCall() {
+      bindInvocation() {
         return {
           observe(fact) {
             seen.push(fact);

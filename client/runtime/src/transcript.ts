@@ -1,4 +1,4 @@
-import type { TranscriptFrame, TranscriptSnapshot } from '@capix-observer/protocol';
+import type { TranscriptFrame, TranscriptSnapshot } from '@capix/protocol';
 import type { TranscriptTransport } from './transport.js';
 
 export class TranscriptSequenceError extends Error {}

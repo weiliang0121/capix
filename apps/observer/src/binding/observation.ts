@@ -1,5 +1,5 @@
-import type { ObservationState, TranscriptState } from '@capix-observer/client-runtime';
-import type { ObserverOverview } from '@capix-observer/protocol';
+import type { ObservationState, TranscriptState } from '@capix/client-runtime';
+import type { ObserverOverview } from '@capix/protocol';
 import type { AppData, RoundView, MemoryView } from '../state/data.js';
 import { projectDetail } from './details.js';
 import { errorMessage } from '../lib/errors.js';

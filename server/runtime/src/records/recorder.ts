@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { RecordChangeEvent, RecordMutation } from '@capix-observer/protocol';
+import type { RecordChangeEvent, RecordMutation } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import { captureChange } from '../changes/publish.js';
 import { snapshotValue } from './value/snapshot.js';
@@ -37,7 +37,7 @@ export class Recorder {
     this.tree = new RecordTree(book);
   }
 
-  add<R extends BaseRecord<unknown>>(record: R): R {
+  add<RecordType extends BaseRecord<unknown>>(record: RecordType): RecordType {
     const related = writeRecord(() => {
       if (this.#registering) throw new Error('Record registration cannot reenter');
       this.#registering = true;
@@ -52,7 +52,7 @@ export class Recorder {
     return record;
   }
 
-  update<R extends BaseRecord<unknown>>(record: R, apply: (record: R) => void, describe?: (record: R) => RecordMutation): void {
+  update<RecordType extends BaseRecord<unknown>>(record: RecordType, apply: (record: RecordType) => void, describe?: (record: RecordType) => RecordMutation): void {
     writeRecord(() => {
       if (this.#registering) throw new Error('Record registration cannot reenter');
       if (this.book.get(record.id) !== record) throw new Error('Record is not registered with this Recorder');

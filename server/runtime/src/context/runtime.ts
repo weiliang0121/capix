@@ -1,47 +1,43 @@
-import { InvocationContext } from './context.js';
+import { InvocationContext, type InvocationControls } from './context.js';
 import { ResourceBindings, type ResourceRequirements } from '../resource/bindings.js';
 import type { RuntimeContextBuilder } from './runtime/builder.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
-import type { ExecutionAssembly } from '../execution/execution.js';
-
-export interface RuntimeCallOptions {
-  readonly signal?: AbortSignal;
-}
+import type { ExecutionInvocationBindings } from '../execution/execution.js';
 
 /** Per-call construction access; only internal E construction can use these bindings. */
-export interface RuntimeExecutionBindings {
-  get(definition: ExecutionDefinition<any, any, any, any, any, any>): ExecutionAssembly<any, any, any, any, any>;
+export interface ExecutionBindingResolver {
+  get(definition: ExecutionDefinition<any, any, any, any, any, any>): ExecutionInvocationBindings<any, any, any, any, any>;
 }
 
-export class RuntimeContext<I = unknown, O = unknown, R extends object = object> extends InvocationContext<I, O> {
+export class RuntimeContext<Input = unknown, Output = unknown, Resources extends object = object> extends InvocationContext<Input, Output> {
   readonly level = 'runtime' as const;
   readonly signal: AbortSignal;
-  readonly #owner?: RuntimeContextBuilder;
-  readonly #executions?: RuntimeExecutionBindings;
+  readonly #contextBuilder?: RuntimeContextBuilder;
+  readonly #executionBindings?: ExecutionBindingResolver;
 
   constructor(
-    input: I,
-    options: RuntimeCallOptions = {},
-    owner?: RuntimeContextBuilder,
-    readonly resources: ResourceBindings<R> = new ResourceBindings({} as ResourceRequirements<R>),
-    executions?: RuntimeExecutionBindings,
+    input: Input,
+    controls: InvocationControls = {},
+    contextBuilder?: RuntimeContextBuilder,
+    readonly resources: ResourceBindings<Resources> = new ResourceBindings({} as ResourceRequirements<Resources>),
+    executionBindings?: ExecutionBindingResolver,
   ) {
     super(input);
-    this.signal = options.signal ?? new AbortController().signal;
-    this.#owner = owner;
-    this.#executions = executions;
+    this.signal = controls.signal ?? new AbortController().signal;
+    this.#contextBuilder = contextBuilder;
+    this.#executionBindings = executionBindings;
     Object.freeze(this);
   }
 
-  belongsTo(builder: RuntimeContextBuilder): boolean {
-    return !this.#owner || this.#owner === builder;
+  belongsTo(contextBuilder: RuntimeContextBuilder): boolean {
+    return !this.#contextBuilder || this.#contextBuilder === contextBuilder;
   }
   requireActive(): void {
     this.requireRunning();
   }
-  execution(definition: ExecutionDefinition<any, any, any, any, any, any>): ExecutionAssembly<any, any, any, any, any> {
+  executionBinding(definition: ExecutionDefinition<any, any, any, any, any, any>): ExecutionInvocationBindings<any, any, any, any, any> {
     this.requireActive();
-    if (!this.#executions) throw new Error('Runtime call has no execution construction binding');
-    return this.#executions.get(definition);
+    if (!this.#executionBindings) throw new Error('Runtime call has no execution construction binding');
+    return this.#executionBindings.get(definition);
   }
 }

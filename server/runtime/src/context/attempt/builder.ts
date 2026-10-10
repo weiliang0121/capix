@@ -4,14 +4,14 @@ import type { OperationContext } from '../operation.js';
 import type { OperationContextBuilder } from '../operation/builder.js';
 
 export class AttemptContextBuilder {
-  constructor(private readonly operations: OperationContextBuilder) {}
+  constructor(private readonly operationContextBuilder: OperationContextBuilder) {}
 
-  create<I, O, R extends object = object>(operation: OperationContext, input: I, resources?: ResourceBindings<R>): AttemptContext<I, O, R> {
-    this.check(operation);
-    return new AttemptContext(operation, input, resources);
+  create<Input, Output, Resources extends object = object>(parentContext: OperationContext, input: Input, resources?: ResourceBindings<Resources>): AttemptContext<Input, Output, Resources> {
+    this.check(parentContext);
+    return new AttemptContext(parentContext, input, resources);
   }
 
-  check(operation: OperationContext): void {
-    this.operations.requireActive(operation);
+  check(parentContext: OperationContext): void {
+    this.operationContextBuilder.requireActive(parentContext);
   }
 }

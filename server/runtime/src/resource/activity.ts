@@ -1,6 +1,6 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import { randomUUID } from 'node:crypto';
-import type { TranscriptEvent, MemoryEvent } from '@capix-observer/protocol';
+import type { TranscriptEvent, MemoryEvent } from '@capix/protocol';
 import type { EventConsumer } from '../observation/binding.js';
 import type { ResourceObservation } from '../observation/facts.js';
 import { RuntimeErrorHelper } from '../errors/helper.js';
@@ -15,9 +15,9 @@ export interface ResourceOwner {
   readonly validate: () => void;
   readonly error?: (error: unknown, allowException?: boolean) => void;
 }
-export interface ResourceOperation<T> {
+export interface ResourceInteractionDescription<Output> {
   readonly input?: () => unknown;
-  readonly output?: (result: T) => unknown;
+  readonly output?: (result: Output) => unknown;
 }
 
 /** Per-call local order and fact owner; sharing a supply never shares this session. */
@@ -88,11 +88,11 @@ export class ResourceActivity {
     this.publish('unavailable', () => ({ error: RuntimeErrorHelper.format(error) }));
   }
 
-  runSync<T>(action: string, detail: ResourceOperation<T>, execute: () => T): T {
+  runSync<Output>(action: string, detail: ResourceInteractionDescription<Output>, execute: () => Output): Output {
     this.validate();
     const interactionId = randomUUID();
     this.publish('started', () => ({ action, input: detail.input?.() ?? null }), interactionId);
-    let output: T;
+    let output: Output;
     try {
       output = execute();
     } catch (error) {
@@ -104,11 +104,11 @@ export class ResourceActivity {
     return output;
   }
 
-  async runAsync<T>(action: string, detail: ResourceOperation<T>, execute: () => Promise<T>): Promise<T> {
+  async runAsync<Output>(action: string, detail: ResourceInteractionDescription<Output>, execute: () => Promise<Output>): Promise<Output> {
     this.validate();
     const interactionId = randomUUID();
     this.publish('started', () => ({ action, input: detail.input?.() ?? null }), interactionId);
-    let output: T;
+    let output: Output;
     try {
       output = await execute();
     } catch (error) {

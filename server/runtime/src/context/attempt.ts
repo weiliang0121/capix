@@ -2,26 +2,26 @@ import { ResourceBindings, type ResourceRequirements } from '../resource/binding
 import type { OperationContext } from './operation.js';
 import { InvocationContext } from './context.js';
 
-export class AttemptContext<I = unknown, O = unknown, R extends object = object> extends InvocationContext<I, O> {
+export class AttemptContext<Input = unknown, Output = unknown, Resources extends object = object> extends InvocationContext<Input, Output> {
   get level(): 'attempt' {
     return 'attempt';
   }
   readonly signal: AbortSignal;
-  readonly #parent: OperationContext;
+  readonly #parentContext: OperationContext;
 
   constructor(
-    parent: OperationContext,
-    input: I,
-    readonly resources: ResourceBindings<R> = new ResourceBindings({} as ResourceRequirements<R>),
+    parentContext: OperationContext,
+    input: Input,
+    readonly resources: ResourceBindings<Resources> = new ResourceBindings({} as ResourceRequirements<Resources>),
   ) {
     super(input);
-    this.#parent = parent;
-    this.signal = parent.signal;
+    this.#parentContext = parentContext;
+    this.signal = parentContext.signal;
     Object.freeze(this);
   }
 
   requireActive(): void {
     this.requireRunning();
-    this.#parent.requireActive();
+    this.#parentContext.requireActive();
   }
 }

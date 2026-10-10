@@ -1,7 +1,7 @@
 import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExecutionDefinition, OperationDefinition, AttemptDefinition, InvocationEntry, Sequence, ResourceOffer, assembleRuntime, Recorder, RecordBook, bindRecording } from '@capix-observer/runtime';
+import { ExecutionDefinition, OperationDefinition, AttemptDefinition, InvocationEntry, Sequence, ResourceOffer, assembleRuntime, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
 
 const resource = new ResourceOffer('test.value', (value) => value, 'binding');
 class Read extends AttemptDefinition {

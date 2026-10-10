@@ -1,5 +1,5 @@
 import type { InvocationFailure } from './failure.js';
-import type { InvocationScope } from '../context/scope.js';
+import type { InvocationContextView } from '../context/view.js';
 import type { InvocationResult } from './result.js';
 import type { InvocationRelationReception } from './relation.js';
 
@@ -11,8 +11,8 @@ export interface InvocationRelationView {
   readonly reception: InvocationRelationReception;
 }
 
-export interface InvocationView<I = unknown, O = unknown, C extends InvocationScope<I, O> = InvocationScope<I, O>> {
-  readonly context: C;
+export interface InvocationView<Input = unknown, Output = unknown, ContextView extends InvocationContextView<Input, Output> = InvocationContextView<Input, Output>> {
+  readonly context: ContextView;
   readonly origin: Readonly<{ contextId: string }>;
   readonly sequence: number;
   readonly failure?: InvocationFailure;
@@ -22,6 +22,6 @@ export interface InvocationView<I = unknown, O = unknown, C extends InvocationSc
   };
 }
 
-export interface ChildCall<I = unknown, O = unknown, C extends InvocationScope<I, O> = InvocationScope<I, O>> extends InvocationView<I, O, C> {
-  run(): Promise<O>;
+export interface ChildInvocationView<Input = unknown, Output = unknown, ContextView extends InvocationContextView<Input, Output> = InvocationContextView<Input, Output>> extends InvocationView<Input, Output, ContextView> {
+  run(): Promise<Output>;
 }

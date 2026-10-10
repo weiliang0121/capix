@@ -1,13 +1,13 @@
 import { createEnvironment } from './fixtures/environment.mjs';
-import { Execution } from './fixtures/behavior.mjs';
+import { ExecutionFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
-import { subscribeExecutions } from '@capix-observer/service';
-import { ExecutionRecordHelper } from '@capix-observer/runtime';
+import { subscribeExecutions } from '@capix/observer-service';
+import { ExecutionRecordHelper } from '@capix/server-runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook } from '@capix-observer/runtime';
-import { createRuntime, observeCall } from './fixtures/runtime.mjs';
-import { bindObserver, ObserverRuntimeDefinition } from '@capix-observer/service';
+import { Recorder, RecordBook } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
+import { bindConversation, ConversationRuntimeDefinition } from '@capix/observer-service';
 
 import { TestOperation } from './fixtures/operation.mjs';
 import { createInput, transcriptFor } from './fixtures/observer.mjs';
@@ -17,7 +17,7 @@ const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, t
 test('one Execution and Operation can be called again after success and failure with fresh Contexts and records', async () => {
   const snapshots = [];
   const recorder = new Recorder(new RecordBook(), { clock: undefined });
-  const runtime = createRuntime({ recorder });
+  const runtime = createBoundRuntime({ recorder });
   subscribeExecutions(runtime.recording, (snapshot) => snapshots.push(snapshot));
   const failure = new Error('work failed');
   const contexts = [];
@@ -29,14 +29,14 @@ test('one Execution and Operation can be called again after success and failure 
     },
     accept: (value) => value,
   });
-  class EchoExecution extends Execution {
+  class EchoExecution extends ExecutionFixture {
     execute(context, invocation) {
       rememberCall(invocation);
       contexts.push(context);
       return operation.call(invocation, context.input);
     }
   }
-  const execution = new EchoExecution(runtime.executionInvocations);
+  const execution = new EchoExecution(runtime.executionInvocationBuilder);
   const first = { value: 'first' },
     last = { value: 'last' };
   assert.equal(snapshots.length, 0);
@@ -58,7 +58,7 @@ test('one Execution and Operation can be called again after success and failure 
   );
 });
 
-test('bindObserver, ObserverRuntimeDefinition returns answers without a recorder and uses the configuration of each call', async () => {
+test('bindConversation, ConversationRuntimeDefinition returns answers without a recorder and uses the configuration of each call', async () => {
   const requests = [];
   const provider = {
     async invoke(request, purpose) {
@@ -67,7 +67,7 @@ test('bindObserver, ObserverRuntimeDefinition returns answers without a recorder
     },
   };
   const entities = createEnvironment();
-  const runtime = bindObserver(new ObserverRuntimeDefinition(), entities, provider);
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, provider);
   for (const model of ['one', 'two']) {
     const answer = await runtime.run({ messages: [{ role: 'user', content: model }] }, { settings: { ...settings, model } });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });

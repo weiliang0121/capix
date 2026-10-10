@@ -1,5 +1,5 @@
 {
-  "name": "@capix-observer/client-http",
+  "name": "@capix/client-http",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,9 +14,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@capix-observer/protocol": "workspace:*",
+    "@capix/protocol": "workspace:*",
     "es-toolkit": "1.52.0",
-    "@capix-observer/client-runtime": "workspace:*",
+    "@capix/client-runtime": "workspace:*",
     "zod": "4.6.5"
   }
 }

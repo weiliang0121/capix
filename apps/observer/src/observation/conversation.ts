@@ -1,4 +1,4 @@
-import type { Message, ObserverOverview } from '@capix-observer/protocol';
+import type { Message, ObserverOverview } from '@capix/protocol';
 
 export interface ConversationMessage {
   key: string;

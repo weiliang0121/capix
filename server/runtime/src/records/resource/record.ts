@@ -1,11 +1,11 @@
-import type { ResourceFact } from '@capix-observer/protocol';
+import type { ResourceRecord as ResourceRecordData } from '@capix/protocol';
 import { BaseRecord } from '../record.js';
 import { snapshotValue } from '../value/snapshot.js';
 
-export type ResourceFactDefinition = Omit<ResourceFact, 'id' | 'value'>;
+export type ResourceRecordOptions = Omit<ResourceRecordData, 'id' | 'value'>;
 
 /** Resource-neutral identity and ownership; the access contract supplies a plain detail body. */
-export class ResourceRecord<Detail = unknown> extends BaseRecord<Detail> implements ResourceFact<Detail> {
+export class ResourceRecord<Detail = unknown> extends BaseRecord<Detail> implements ResourceRecordData<Detail> {
   override readonly kind = 'resource' as const;
   override get parentId(): string {
     return super.parentId!;
@@ -14,21 +14,21 @@ export class ResourceRecord<Detail = unknown> extends BaseRecord<Detail> impleme
   readonly supplyId: string;
   readonly sequence: number;
   readonly occurredAt: string;
-  readonly phase: ResourceFact['phase'];
+  readonly phase: ResourceRecordData['phase'];
   readonly interactionId?: string;
 
-  constructor(definition: ResourceFactDefinition, detail: Detail) {
-    super(snapshotValue(detail), definition.parentId);
-    this.access = definition.access;
-    this.supplyId = definition.supplyId;
-    this.sequence = definition.sequence;
-    this.occurredAt = definition.occurredAt;
-    this.phase = definition.phase;
-    this.interactionId = definition.interactionId;
+  constructor(options: ResourceRecordOptions, detail: Detail) {
+    super(snapshotValue(detail), options.parentId);
+    this.access = options.access;
+    this.supplyId = options.supplyId;
+    this.sequence = options.sequence;
+    this.occurredAt = options.occurredAt;
+    this.phase = options.phase;
+    this.interactionId = options.interactionId;
     Object.freeze(this);
   }
 
-  override toJSON(): ResourceFact<Detail> {
+  override toJSON(): ResourceRecordData<Detail> {
     return { ...super.toJSON(), parentId: this.parentId, access: this.access, supplyId: this.supplyId, sequence: this.sequence, occurredAt: this.occurredAt, phase: this.phase, ...(this.interactionId ? { interactionId: this.interactionId } : {}) };
   }
 }

@@ -1,8 +1,8 @@
-import type { ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceFact, ProcessRecord, RelationChangeRecord } from '@capix-observer/protocol';
+import type { ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceRecord, ProcessRecord, RelationChangeRecord } from '@capix/protocol';
 import type { ConversationMessage } from '../observation/conversation.js';
 import type { CallSpan } from '../observation/types.js';
 
-export interface RoundContext {
+export interface RoundSelectionSummary {
   inputCount: number;
   selectedCount: number;
   selectionComplete: boolean;
@@ -13,7 +13,7 @@ export interface RoundView extends Omit<ExecutionSummary, 'response'> {
   messagesLoaded: boolean;
   response?: { index?: number; content?: string };
   inputContent: string;
-  context: RoundContext;
+  context: RoundSelectionSummary;
 }
 export interface CallMemory {
   incoming: { id: string; topic: string; content: string; sourceIndexes: number[] }[];
@@ -27,7 +27,7 @@ export interface CallDetail extends Omit<CallSpan, 'recordType' | 'caller' | 'ca
   relationEntries: readonly RelationChangeRecord[];
   children: CallSpan[];
   memory: CallMemory;
-  resources: readonly ResourceFact[];
+  resources: readonly ResourceRecord[];
   localRounds: number;
   processEntries: { record: ProcessRecord; reused?: ProcessRecord }[];
 }
@@ -36,7 +36,7 @@ export interface ExecutionDetail {
   startedAt: string;
   status: ExecutionSummary['status'];
   contextId: string;
-  resources: readonly ResourceFact[];
+  resources: readonly ResourceRecord[];
   settings: unknown;
   transcriptRange: unknown;
   inputContent: string;

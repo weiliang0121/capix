@@ -1,5 +1,5 @@
 import type { Transcript } from './transcript.js';
-import type { Message, TranscriptRangeLocator } from '@capix-observer/protocol';
+import type { Message, TranscriptRangeLocator } from '@capix/protocol';
 import { ResourceOffer } from '../resource/offer.js';
 import type { ResourceActivity } from '../resource/activity.js';
 import { TranscriptRangeRef } from './ref.js';

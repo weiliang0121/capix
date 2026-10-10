@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Memories, Transcript, Recorder, RecordBook, MemoryRecord, observeMemory, bindRecording, ChangeObserver } from '@capix-observer/runtime';
+import { Memories, Transcript, Recorder, RecordBook, MemoryRecord, observeMemory, bindRecording, ChangeBuffer } from '@capix/server-runtime';
 
 const create = (text) => ({ action: 'create', memoryId: null, change: 'create', sourceIndexes: [0], result: { topic: 'topic', content: text, sourceIndexes: [0] } });
 const update = (memory, text) => ({ ...create(text), action: 'update', memoryId: memory.id });
@@ -56,7 +56,7 @@ test('recording failure does not reuse a memory change position or undo the appl
   }
   const book = new RejectingBook();
   const faults = [];
-  const changes = new ChangeObserver();
+  const changes = new ChangeBuffer();
   const recording = bindRecording(new Recorder(book), { failure: 'propagate', invalidate: (error) => faults.push(error) });
   const memories = new Memories(transcript(), { observation: recording.memory, changes });
   assert.throws(

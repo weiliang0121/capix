@@ -1,14 +1,14 @@
 import { createRecordScope } from './fixtures/runtime.mjs';
-import { RuntimeRecordHelper } from '@capix-observer/runtime';
+import { RecordingRootHelper } from '@capix/server-runtime';
 import { callFor, recordFor } from './fixtures/lifecycle.mjs';
-import { subscribeExecutions } from '@capix-observer/service';
+import { subscribeExecutions } from '@capix/observer-service';
 import { lifecycleFor } from './fixtures/lifecycle.mjs';
-import { readOutput, validateSnapshot } from '@capix-observer/protocol';
+import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { createInput, observeFixture } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Recorder, BaseRecord, ExecutionRecord, OperationRecord, RecordBook, ExecutionRecordHelper, OperationRecordHelper, Clock, RuntimeError } from '@capix-observer/runtime';
-import { createRuntime, observeCall } from './fixtures/runtime.mjs';
+import { Recorder, BaseRecord, ExecutionRecord, OperationRecord, RecordBook, ExecutionRecordHelper, OperationRecordHelper, Clock, RuntimeError } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 import { test } from 'node:test';
 
 import { TestOperation } from './fixtures/operation.mjs';
@@ -34,7 +34,7 @@ async function execute(answer = '{"kind":"answer","content":"海盐项目"}') {
   });
 }
 const createRecordedRuntime = (publish) => {
-  const runtime = createRuntime({ recorder: new Recorder(new RecordBook(), { clock: new Clock() }) });
+  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook(), { clock: new Clock() }) });
   if (publish) subscribeExecutions(runtime.recording, publish);
   return runtime;
 };
@@ -206,7 +206,7 @@ test('one node overlaps calls within and across executions without mixing input 
   complete(a, 'A');
   for (const execution of [a, b]) {
     const facts = observeCall(runtime.recording, callFor(execution));
-    validateSnapshot(facts);
+    validateExecutionRecordSnapshot(facts);
     assert.ok(facts.operations.every((op) => op.executionId === recordFor(execution).id && op.operationInstanceId === node.id));
   }
   assert.deepEqual(
@@ -251,7 +251,7 @@ test('Paired operations reject foreign parents, duplicate endings and ending bef
 
 test('Observer execution observes execution, operations and boundaries from the same records', async () => {
   const facts = await execute();
-  validateSnapshot(facts);
+  validateExecutionRecordSnapshot(facts);
   assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations', 'resources', 'runtimeCall', 'runtimeEvents']);
   assert.equal(facts.operations.length, 3);
   assert.equal(facts.attempts.length, 11);

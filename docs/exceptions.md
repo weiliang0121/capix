@@ -27,7 +27,7 @@ const definition = {
     },
   },
   observation: [
-    callRecording({
+    invocationRecording({
       input: (value) => describeInput(value),
       output: (value) => describeOutput(value),
     }),
@@ -39,7 +39,7 @@ const definition = {
 
 静态装配检查正常工作与异常处理所需资源的总覆盖，但运行时分别提供各自的具名资源和子调用端点。`run.uses` 缺省沿用所属节点的子声明，`exceptions.uses` 缺省为空。相同资源供应可以共享固定捕获，两个阶段的活端点分别受当前阶段约束，保存旧端点也不能跨阶段使用。已有 `timing: binding` 供应仍按其契约固定创建时事实；`timing: access` 的异常专用供应在正常路径不兑现。
 
-子调用关系公开身份、输入、结果和进度等事实，不公开子层的资源端点。资源只从本层本阶段绑定的 Scope 进入业务。
+子调用关系公开身份、输入、结果和进度等事实，不公开子层的资源端点。资源只从本层本阶段绑定的 ContextView 进入业务。
 
 ## 异常与错误
 
@@ -68,7 +68,7 @@ const definition = {
 
 ## 观测
 
-观测声明可将运行事实写入记录或其他载体，不改变运行输入输出。关闭观测安装时不兑现其依赖；安装后默认 isolate，可显式 propagate。记录 IO 描述由 callRecording 提供。服务采用 isolate，传播失败归属实际观测源，不递归进入业务异常处理。详见 [观测](observation.md)。
+观测声明可将运行事实写入记录或其他载体，不改变运行输入输出。关闭观测安装时不兑现其依赖；安装后默认 isolate，可显式 propagate。记录 IO 描述由 invocationRecording 提供。服务采用 isolate，传播失败归属实际观测源，不递归进入业务异常处理。详见 [观测](observation.md)。
 
 内部过程保留 `execute`、`receive`（正常接纳）、`control`，新增 `handling`（异常处理）。处理器的进入、返回、继续、未处理及失败分别可见。最终输出可以引用本调用的 `receive.return` 或 `handling.return`，不复制正文或跨记录引用。失败正文和过程可携带 `failure` 分类事实；客户端增量、快照校验和详情读取使用同一契约。
 

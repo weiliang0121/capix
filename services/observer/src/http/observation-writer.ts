@@ -1,7 +1,7 @@
 import type { ServerResponse } from 'node:http';
 
 /** Per-connection buffering is a sender concern; slow consumers never block the runtime. */
-export function observationWriter<T>(response: ServerResponse): ((frame: T) => void) & { end(frame: T): void } {
+export function observationWriter<Frame>(response: ServerResponse): ((frame: Frame) => void) & { end(frame: Frame): void } {
   const queue: string[] = [];
   let queuedBytes = 0;
   let blocked = response.writableNeedDrain;
@@ -28,7 +28,7 @@ export function observationWriter<T>(response: ServerResponse): ((frame: T) => v
     queue.length = 0;
     queuedBytes = 0;
   });
-  const write = (frame: T) => {
+  const write = (frame: Frame) => {
     if (ended || response.destroyed || response.writableEnded) return;
     const line = JSON.stringify(frame) + '\n';
     queuedBytes += Buffer.byteLength(line);
@@ -39,7 +39,7 @@ export function observationWriter<T>(response: ServerResponse): ((frame: T) => v
     queue.push(line);
     flush();
   };
-  write.end = (frame: T) => {
+  write.end = (frame: Frame) => {
     if (ended || response.destroyed || response.writableEnded) return;
     ended = true;
     queue.length = 0;

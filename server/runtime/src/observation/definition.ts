@@ -1,18 +1,18 @@
 import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
 
-export interface ObservationDefinition<F, P extends object> {
-  readonly requires: ResourceRequirements<P>;
-  observe(fact: F, ports: Readonly<P>): undefined;
+export interface ObservationDefinition<Fact, Ports extends object> {
+  readonly requires: ResourceRequirements<Ports>;
+  observe(fact: Fact, ports: Readonly<Ports>): undefined;
 }
 
 /** Erases only the resource parameter after checking the declaration's typed pairing. */
-export interface ObservationDeclaration<F> {
+export interface ObservationDeclaration<Fact> {
   readonly requires: ResourceRequirements;
-  bind(resources: ResourceBindings): (fact: F) => undefined;
+  bind(resources: ResourceBindings): (fact: Fact) => undefined;
   readonly failure?: 'isolate' | 'propagate';
 }
 
-export function defineObservation<F, P extends object>(definition: ObservationDefinition<F, P>, options: { failure?: 'isolate' | 'propagate' } = {}): ObservationDeclaration<F> {
+export function defineObservation<Fact, Ports extends object>(definition: ObservationDefinition<Fact, Ports>, options: { failure?: 'isolate' | 'propagate' } = {}): ObservationDeclaration<Fact> {
   return Object.freeze({
     requires: Object.freeze({ ...definition.requires }),
     failure: options.failure,
@@ -23,7 +23,7 @@ export function defineObservation<F, P extends object>(definition: ObservationDe
       local.restrict(() => {
         if (!active) throw new Error('Observation access window has ended');
       });
-      return (fact: F): undefined => {
+      return (fact: Fact): undefined => {
         active = true;
         try {
           if (!started) {

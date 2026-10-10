@@ -5,13 +5,13 @@ import { createInput, sourceFor, contextFor, transcriptFor } from './fixtures/ob
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
-import { Runtime, TranscriptResource, bindResources } from '@capix-observer/runtime';
-import { createRuntime } from './fixtures/runtime.mjs';
+import { BoundRuntime, TranscriptResource, bindResources } from '@capix/server-runtime';
+import { createBoundRuntime } from './fixtures/runtime.mjs';
 
-import { SelectHistory, AssembleContext, answerOutputContract, selectionOutputContract } from '@capix-observer/service';
+import { SelectHistoryDefinition, AssembleAnswerContextDefinition, answerOutputContract, selectionOutputContract } from '@capix/observer-service';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
-const runtime = createRuntime();
+const runtime = createBoundRuntime();
 const call = (operation, input, operationInput = input, resourceBinding) => invoke(lifecycleFor(runtime).execution({ input, settings, transcript: transcriptFor(input), resourceBinding }), (context) => operation.call(callFor(context), operationInput));
 const raw = (content) => ({
   id: 'test',
@@ -191,7 +191,7 @@ test('one selection operation can overlap calls without mixing their history bou
       return response;
     },
   };
-  const op = bindChild(runtime, new SelectHistory());
+  const op = bindChild(runtime, new SelectHistoryDefinition());
   const resourceBinding = resourceBindingFor(runtime, provider);
   const first = { content: 'one', history: [{ role: 'user', content: 'a' }] };
   const second = { content: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
@@ -220,9 +220,9 @@ test('assembly attempt consumes explicit sources and needs no recorder', async (
     ],
   });
   const input = { historyIndexes: [0] };
-  const attempt = bindChild(runtime, new AssembleContext());
+  const attempt = bindChild(runtime, new AssembleAnswerContextDefinition());
   const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message), resourceBinding: bindResources({ history: TranscriptResource.fixedRange.request() }, [TranscriptResource.fixedRange.provide((parent) => parent.transcriptRange)]) }), (execution) =>
-    runtime.operationInvocations
+    runtime.operationInvocationBuilder
       .create(callFor(execution), {
         input,
         requires: { history: TranscriptResource.fixedRange.request() },

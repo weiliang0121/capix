@@ -1,5 +1,5 @@
 import type { InvocationDefinition } from '../definition/invocation.js';
-import { invocationScope, type ScopeOf } from '../context/scope.js';
+import { invocationContextView, type ContextViewOf } from '../context/view.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationWork } from '../invocation/cycle.js';
 import type { BoundChildren } from './children.js';
@@ -8,11 +8,11 @@ import type { InvocationView } from '../invocation/view.js';
 import type { ChildDefinition } from '../definition/children.js';
 
 /** One assembly, separate views for work and exception declarations. */
-export function bindInvocationWork<I, O, C extends InvocationContext<I, O>, R extends object, H extends object>(definition: InvocationDefinition<I, O, ScopeOf<C>, R, H>, children: BoundChildren): InvocationWork<C, I, O> {
-  type Call = Parameters<InvocationWork<C, I, O>['execute']>[1];
-  const phases = new WeakMap<Call, Map<string, { view: InvocationView<I, O, ScopeOf<C>>; children: ReturnType<BoundChildren['forInvocation']> }>>();
+export function bindInvocationWork<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, ExceptionResources extends object>(definition: InvocationDefinition<Input, Output, ContextViewOf<Context>, Resources, ExceptionResources>, children: BoundChildren): InvocationWork<Input, Output, Context> {
+  type Call = Parameters<InvocationWork<Input, Output, Context>['execute']>[1];
+  const phases = new WeakMap<Call, Map<string, { view: InvocationView<Input, Output, ContextViewOf<Context>>; children: ReturnType<BoundChildren['forInvocation']> }>>();
   const access = (invocation: Call, phase: 'run' | 'exceptions', requires: ResourceRequirements, uses?: readonly ChildDefinition[]) => {
-    const resources = (invocation.context as C & { resources: ResourceBindings }).resources;
+    const resources = (invocation.context as Context & { resources: ResourceBindings }).resources;
     resources.activate(phase, requires);
     let calls = phases.get(invocation);
     if (!calls) {
@@ -21,7 +21,7 @@ export function bindInvocationWork<I, O, C extends InvocationContext<I, O>, R ex
     }
     let value = calls.get(phase);
     if (!value) {
-      const context = invocationScope(invocation.context, resources.view(requires, phase));
+      const context = invocationContextView(invocation.context, resources.view(requires, phase));
       const view = Object.freeze({
         context,
         origin: invocation.view.origin,
