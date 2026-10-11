@@ -59,7 +59,16 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
     assert.equal(facts.execution.status, 'succeeded');
     assert.deepEqual(
       facts.operations.map((item) => item.operation),
-      ['selection', 'answer', 'memory'],
+      ['selection', 'conversationDecision', 'answer', 'conversationDecision', 'memory'],
+    );
+    const decisions = facts.operations.filter((item) => item.operation === 'conversationDecision');
+    assert.deepEqual(
+      decisions.map((record) => readOutput(record.value).kind),
+      ['invoke', 'finish'],
+    );
+    assert.ok(
+      decisions.every((record) => !facts.attempts.some((attempt) => attempt.operationId === record.id)),
+      'ordinary routing does not make additional model calls',
     );
   }
   assert.equal(requests.length, 9);
@@ -68,9 +77,9 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
     const extraction = JSON.parse(requests[index + 2].request.messages[1].content);
     assert.deepEqual(selection.memories, extraction.memories);
   }
-  assert.deepEqual(first.operations[0].value.input.memories, []);
-  assert.equal(second.operations[0].value.input.memories[0].content, '用户聚餐预算200元。');
-  assert.equal(third.operations[0].value.input.memories[0].content, '用户聚餐预算150元。');
+  assert.deepEqual(first.operations.find((record) => record.operation === 'selection').value.input.memories, []);
+  assert.equal(second.operations.find((record) => record.operation === 'selection').value.input.memories[0].content, '用户聚餐预算200元。');
+  assert.equal(third.operations.find((record) => record.operation === 'selection').value.input.memories[0].content, '用户聚餐预算150元。');
   assert.equal(environment.memories.get(memory.id), memory);
   assert.equal(environment.memories.values().length, 2);
   assert.equal(memory.content, '用户聚餐预算150元。');

@@ -19,13 +19,13 @@ export interface InvocationTarget<Output = unknown> {
 export type InvocationRelationReception = Readonly<{ status: 'pending' } | { status: 'receiving' } | { status: 'accepted'; output: unknown } | { status: 'failed'; error: unknown }>;
 
 /** A direct parent-child relationship, not another invocation or E/O/A execution layer. */
-export class InvocationRelation {
-  #returned?: InvocationResult<unknown>;
+export class InvocationRelation<Output = unknown> {
+  #returned?: InvocationResult<Output>;
   readonly view: InvocationRelationView;
   #reception: InvocationRelationReception = Object.freeze({ status: 'pending' });
 
   constructor(
-    readonly invocation: InvocationTarget,
+    readonly invocation: InvocationTarget<Output>,
     readonly round: number,
     readonly key?: string,
     private readonly failed?: (failure: InvocationFailure) => void,
@@ -49,7 +49,7 @@ export class InvocationRelation {
     });
   }
 
-  get returned(): InvocationResult<unknown> | undefined {
+  get returned(): InvocationResult<Output> | undefined {
     return this.#returned;
   }
 
@@ -57,14 +57,14 @@ export class InvocationRelation {
     return this.#reception;
   }
 
-  returnedWith(result: InvocationResult<unknown>): void {
+  returnedWith(result: InvocationResult<Output>): void {
     if (this.#returned) throw new Error('Child invocation has already returned');
     this.#returned = Object.freeze(result);
     if (result.status === 'failed' && result.failure) this.failed?.(result.failure);
     this.observe?.({ kind: 'returned', result: this.#returned });
   }
 
-  async accept<Value>(work: () => Value | Promise<Value>): Promise<Value> {
+  async accept<Value>(work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
     this.validate?.();
     if (this.#returned?.status !== 'succeeded') throw new Error('Child invocation has not returned successfully');
     if (this.#reception.status !== 'pending') throw new Error('Child result has already entered acceptance');
@@ -78,7 +78,7 @@ export class InvocationRelation {
     let output: Value;
     try {
       this.validate?.();
-      output = await work();
+      output = await work(this.#returned.output);
     } catch (error) {
       this.#reception = Object.freeze({ status: 'failed', error });
       const failed = this.observe?.({ kind: 'failed', error, source: 'work' });

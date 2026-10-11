@@ -100,14 +100,15 @@ test('disabled or invalid file tasks reject before appending input or invoking t
   assert.equal(enabled.calls.length, 0);
 });
 
-test('a missing file ends one turn but releases admission for the next queued ordinary question', async (t) => {
+test('a missing file is clarified before execution and releases admission for the next queued question', async (t) => {
   const f = await fixture(t);
   f.runtime.enqueue(request('read missing', { sourcePath: 'missing.txt', output: { path: 'never.md' } }));
   f.runtime.enqueue(request('ordinary question'));
   await settle(f.runtime, 2);
   const submissions = [...f.runtime.getSnapshot().submissions.values()];
-  assert.equal(submissions[0].remote.result.status, 'failed');
-  assert.equal(submissions[0].remote.fileOutput.status, 'not-created');
+  assert.equal(submissions[0].remote.result.status, 'completed');
+  assert.deepEqual(submissions[0].remote.task, { kind: 'clarify' });
+  assert.equal(submissions[0].remote.fileOutput, undefined);
   assert.equal(submissions[1].remote.result.status, 'completed');
   assert.equal(submissions[1].remote.fileOutput, undefined);
   assert.equal(f.environment.runtime.running, false);
@@ -118,10 +119,15 @@ test('existing output is never overwritten and needs-info never creates an outpu
   const f = await fixture(t);
   await writeFile(join(f.root, 'answer.md'), 'original');
   f.runtime.enqueue(request('read', { sourcePath: 'input.txt', output: { path: 'answer.md' } }));
-  const failed = await settle(f.runtime);
-  assert.equal(failed.result.status, 'failed');
-  assert.equal(failed.fileOutput.status, 'not-created');
-  assert.equal(failed.answer.index, 1, 'formal answer survives a later save failure');
+  const checked = await settle(f.runtime);
+  assert.equal(checked.result.status, 'completed');
+  assert.deepEqual(checked.task, { kind: 'clarify' });
+  assert.equal(checked.fileOutput, undefined);
+  assert.equal(checked.answer.index, 1, 'preflight asks for a new path without generating or saving');
+  assert.equal(
+    f.calls.some((call) => call.purpose === 'answer'),
+    false,
+  );
   assert.equal(await readFile(join(f.root, 'answer.md'), 'utf8'), 'original');
   const clarify = await fixture(t, { answer: () => output({ kind: 'needs-info', content: '请明确摘要范围。' }) });
   clarify.runtime.enqueue(request('read', { sourcePath: 'input.txt', output: { path: 'answer.md' } }));
@@ -218,7 +224,6 @@ for (const explicit of [true, false]) {
 for (const proposal of [
   { kind: 'clarify', question: '请提供来源文件名。' },
   { kind: 'unsupported', explanation: '当前不能覆盖已有文件。' },
-  { kind: 'file', task: { sourcePath: '../outside' }, instruction: '读取' },
 ]) {
   test(`non-executable request is answered without file or answer-model calls: ${proposal.kind}`, async (t) => {
     const f = await fixture(t, { proposal });
@@ -235,6 +240,35 @@ for (const proposal of [
     assert.deepEqual(await readdir(f.root), ['input.txt']);
   });
 }
+
+test('an invalid model candidate can be corrected within this QA without asking the user', async (t) => {
+  let proposals = 0;
+  const f = await fixture(t, {
+    proposal: (modelRequest) => {
+      proposals++;
+      if (proposals === 1) return { kind: 'file', task: { sourcePath: 'input.txt', output: { path: 'input.txt' } }, instruction: '总结文档' };
+      assert.ok(JSON.stringify(modelRequest).includes('same-path'));
+      return { kind: 'file', task: { sourcePath: 'input.txt' }, instruction: '总结文档' };
+    },
+  });
+  f.runtime.enqueue(request('总结 input.txt，只在对话中回答'));
+  const snapshot = await settle(f.runtime);
+  assert.equal(snapshot.result.status, 'completed');
+  assert.deepEqual(snapshot.task, { kind: 'file', task: { sourcePath: 'input.txt' } });
+  assert.equal(proposals, 2);
+  assert.equal(f.environment.transcript.length, 2);
+  assert.deepEqual(await readdir(f.root), ['input.txt']);
+});
+
+test('natural user absolute paths inside the configured workspace do not need a clarification turn', async (t) => {
+  const f = await fixture(t, { proposal: () => ({ kind: 'file', task: { sourcePath: join(f.root, 'input.txt'), output: { path: join(f.root, 'translated.md') } }, instruction: '翻译后保存' }) });
+  f.runtime.enqueue(request(`把 ${join(f.root, 'input.txt')} 翻译并保存到 translated.md`));
+  const snapshot = await settle(f.runtime);
+  assert.equal(snapshot.result.status, 'completed');
+  assert.deepEqual(snapshot.task, { kind: 'file', task: { sourcePath: 'input.txt', output: { path: 'translated.md' } } });
+  assert.equal(snapshot.fileOutput.status, 'created');
+  assert.equal(f.calls.filter((call) => call.purpose === 'understanding').length, 1);
+});
 
 test('a clarification response can choose a file branch on the next QA without replaying prior work', async (t) => {
   let understanding = 0;

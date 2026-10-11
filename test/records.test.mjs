@@ -253,7 +253,10 @@ test('Observer execution observes execution, operations and boundaries from the 
   const facts = await execute();
   validateExecutionRecordSnapshot(facts);
   assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations', 'resources', 'runtimeCall', 'runtimeEvents']);
-  assert.equal(facts.operations.length, 3);
+  assert.deepEqual(
+    facts.operations.map((record) => record.operation),
+    ['selection', 'conversationDecision', 'answer', 'conversationDecision', 'memory'],
+  );
   assert.equal(facts.attempts.length, 11);
   const sequence = projectExecution(facts).callSequence;
   assert.deepEqual(
@@ -273,6 +276,7 @@ test('Observer execution observes execution, operations and boundaries from the 
     selection: ['prepareModelRequest', 'invokeModel', 'acceptModelOutput'],
     answer: ['assembleContext', 'prepareModelRequest', 'invokeModel', 'acceptModelOutput'],
     memory: ['prepareModelRequest', 'invokeModel', 'acceptModelOutput', 'applyMemory'],
+    conversationDecision: [],
   };
   for (const operation of facts.operations) {
     const attempts = facts.attempts.filter((attempt) => attempt.operationId === operation.id);
@@ -280,6 +284,11 @@ test('Observer execution observes execution, operations and boundaries from the 
       attempts.map((attempt) => attempt.name),
       expectedActions[operation.operation],
     );
+    if (operation.operation === 'conversationDecision') {
+      assert.ok(['invoke', 'finish'].includes(readOutput(operation.value).kind));
+      assert.ok(facts.execution.value.relationChanges.some((entry) => entry.identity.childContextId === operation.contextId && entry.change.kind === 'accepted'));
+      continue;
+    }
     const preparation = attempts.find((attempt) => attempt.name === 'prepareModelRequest');
     const invocation = attempts.find((attempt) => attempt.name === 'invokeModel');
     const acceptance = attempts.find((attempt) => attempt.name === 'acceptModelOutput');
@@ -301,7 +310,10 @@ test('Observer execution observes execution, operations and boundaries from the 
     assert.equal('outputId' in op, false);
   }
   const view = projectExecution(facts);
-  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'operation').length, 3);
+  assert.deepEqual(
+    view.callSequence.calls.filter((call) => call.recordType === 'operation').map((call) => call.id),
+    facts.operations.map((record) => record.id),
+  );
   assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'attempt').length, 11);
   assert.deepEqual(view.result, { kind: 'answer', content: '海盐项目' });
 });

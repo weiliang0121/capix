@@ -27,9 +27,9 @@
 
 ## 可选文件任务
 
-`ConversationRequest.fileTask` 为 `{ sourcePath, output?: { path } }` 或 `{ output: { path } }`，路径相对于服务端显式配置的工作目录。`ConfigurationResponse.files` 存在时表示支持此任务，给出 `maxReadBytes/maxWriteBytes`；不公开宿主绝对路径。合法路径、结构和启用条件在追加输入前检查，文件实际存在性、UTF-8 与字节上限在读取 A 中检查。原文和结果仍以正式 user/assistant 消息同步，文件正文不进入提交反馈。
+`ConversationRequest.fileTask` 为 `{ sourcePath, output?: { path } }` 或 `{ output: { path } }`，路径相对于服务端显式配置的工作目录。`ConfigurationResponse.files` 存在时表示支持此任务，给出 `maxReadBytes/maxWriteBytes`；不公开宿主绝对路径。合法路径、结构和启用条件在追加输入前检查，文件预检先检查命名来源、目标及元数据；实际读写仍独立检查存在性、UTF-8、字节上限及禁止覆盖。自然语言候选中的配置根内绝对路径可由服务规范为相对路径，正式 fileTask 契约仍只使用相对路径。原文和结果仍以正式 user/assistant 消息同步，文件正文不进入提交反馈。
 
-服务在 E 接纳任务后发布 `task`：`reply`、`file { task: FileTask }`、`clarify` 或 `unsupported`。它是本轮稳定的分支选择，不能更换或消失；出现前必须已有正式输入。普通自然语言也可得到 file 任务，客户端不从文本识别路径。显式 fileTask 是完整约束，远端不能偷偷扩大或换成普通回答。首次累计快照可以同时含 input、task、回答及终态。
+服务在 E 接纳任务后发布 `task`：`reply`、`file { task: FileTask }`、`clarify` 或 `unsupported`。决策候选和预检结果不发布为 task，只有正式执行分支启动或最终澄清/不支持时发布。它是本轮稳定的分支选择，不能更换或消失；出现前必须已有正式输入。普通自然语言也可得到 file 任务，客户端不从文本识别路径。显式 fileTask 是完整约束，远端不能偷偷扩大或换成普通回答。首次累计快照可以同时含 input、task、回答及终态。
 
 提交的 `fileOutput` 独立表达结果文件：`pending`、`created`（path/bytes/SHA-256 digest 回执）、`not-created`（not-started/cancelled/failed）或 `unconfirmed`。requested 来自 E 正式选择含输出的文件任务；started 与发布结果来自实际文件端点。端点完成发布后立即发出 created，即使稍后取消、父层接纳或记忆处理失败也保留。工作结束时，完整来源证实尚未开始的输出为 not-started；已经开始但缺少可信结果的输出只能是 unconfirmed。
 

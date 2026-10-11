@@ -45,18 +45,28 @@ test('Observer retains its E/O/A composition without additional execution record
   const children = invocation.children.values();
   assert.deepEqual(
     children.map((child) => child.key),
-    ['selection', 'generation', 'extraction'],
+    ['selection', 'decision', 'generation', 'decision', 'extraction'],
   );
   assert.deepEqual(
     children.map((child) => child.reception.status),
-    ['accepted', 'accepted', 'accepted'],
+    ['accepted', 'accepted', 'accepted', 'accepted', 'accepted'],
+  );
+  const generation = children.find((child) => child.key === 'generation');
+  const decisions = children.filter((child) => child.key === 'decision');
+  assert.deepEqual(
+    decisions.map((child) => child.returned.output.kind),
+    ['invoke', 'finish'],
+  );
+  assert.ok(
+    decisions.every((child) => child.invocation.children.values().length === 0),
+    'deterministic decisions do not add model calls',
   );
   assert.deepEqual(
-    children[1].invocation.children.values().map((child) => child.key),
+    generation.invocation.children.values().map((child) => child.key),
     ['context', 'request', 'model', 'acceptance'],
   );
-  assert.deepEqual(children[1].returned.output, answer);
-  assert.equal(children[1].reception.output.response.message, environment.transcript.get(1));
+  assert.deepEqual(generation.returned.output, answer);
+  assert.equal(generation.reception.output.response.message, environment.transcript.get(1));
   assert.deepEqual(invocation.context.state.output, answer);
 });
 
@@ -71,17 +81,21 @@ test('memory failure preserves the delivered answer and completed generation rel
   assert.equal(environment.transcript.length, 2);
   assert.equal(environment.transcript.get(1).content, answer.content);
   const children = invocation.children.values();
-  assert.equal(children[1].invocation.context.status, 'succeeded');
-  assert.equal(children[1].reception.status, 'accepted');
-  assert.equal(children[2].returned.status, 'failed');
-  assert.equal(children[2].returned.error, error.cause);
-  assert.equal(children[2].invocation.failure.kind, 'exception');
-  const extraction = children[2].invocation.children.values();
-  assert.equal(error.cause.facts.output, extraction[1].returned.output);
+  const generated = children.find((child) => child.key === 'generation');
+  const extracted = children.find((child) => child.key === 'extraction');
+  assert.equal(generated.invocation.context.status, 'succeeded');
+  assert.equal(generated.reception.status, 'accepted');
+  assert.equal(extracted.returned.status, 'failed');
+  assert.equal(extracted.returned.error, error.cause);
+  assert.equal(extracted.invocation.failure.kind, 'exception');
+  const extraction = extracted.invocation.children.values();
+  const model = extraction.find((child) => child.key === 'model');
+  const acceptance = extraction.find((child) => child.key === 'acceptance');
+  assert.equal(error.cause.facts.output, model.returned.output);
   assert.equal(error.cause.facts.output.content, 'invalid JSON');
-  assert.equal(extraction[2].returned.error, error.cause);
+  assert.equal(acceptance.returned.error, error.cause);
   assert.deepEqual(
-    children[2].invocation.children.values().map((child) => child.key),
+    extraction.map((child) => child.key),
     ['request', 'model', 'acceptance'],
   );
 });
@@ -93,14 +107,19 @@ test('invalid model output stays available through the actual child invocation w
   assert.deepEqual(calls, ['selection', 'answer', 'answer']);
   assert.equal(environment.transcript.length, 1);
   const children = invocation.children.values();
-  assert.equal(children.length, 2);
-  const generation = children[1].invocation.children.values();
-  assert.equal(generation[2].returned.output.content, 'invalid JSON');
-  assert.equal(generation[2].reception.status, 'accepted');
-  for (const [model, acceptance] of [
-    [generation[2], generation[3]],
-    [generation[5], generation[6]],
-  ]) {
+  assert.deepEqual(
+    children.map((child) => child.key),
+    ['selection', 'decision', 'generation'],
+  );
+  const generation = children.find((child) => child.key === 'generation').invocation.children.values();
+  const models = generation.filter((child) => child.key === 'model');
+  const acceptances = generation.filter((child) => child.key === 'acceptance');
+  assert.equal(models.length, 2);
+  assert.equal(acceptances.length, 2);
+  assert.equal(models[0].returned.output.content, 'invalid JSON');
+  assert.equal(models[0].reception.status, 'accepted');
+  for (const [index, model] of models.entries()) {
+    const acceptance = acceptances[index];
     const rejection = acceptance.returned.error;
     assert.ok(rejection instanceof DeclaredException);
     assert.equal(rejection.code, 'MODEL_OUTPUT_REJECTED');
@@ -109,7 +128,7 @@ test('invalid model output stays available through the actual child invocation w
     assert.equal(rejection.facts.output, model.returned.output);
     assert.equal(acceptance.invocation.failure.kind, 'exception');
   }
-  assert.equal(generation[6].returned.error, error.cause);
+  assert.equal(acceptances[1].returned.error, error.cause);
   assert.equal(invocation.failure.error, error.cause);
-  assert.notEqual(generation[3].invocation.context, generation[6].invocation.context);
+  assert.notEqual(acceptances[0].invocation.context, acceptances[1].invocation.context);
 });

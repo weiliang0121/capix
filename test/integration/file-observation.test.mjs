@@ -69,7 +69,11 @@ function assertFileCalls(snapshot) {
   assert.equal(snapshot.execution.status, 'succeeded');
   assert.equal(snapshot.runtimeCall.status, 'succeeded');
   const fileCalls = snapshot.attempts.filter((attempt) => attempt.callee === 'filesystem');
-  assert.equal(fileCalls.length, 2, 'both file read and file create retain their declared external actor');
+  assert.deepEqual(
+    fileCalls.map((call) => call.name),
+    ['inspectFileTask', 'readText', 'createText'],
+    'preflight, read and create retain their declared external actor',
+  );
   assert.ok(fileCalls.every((attempt) => attempt.status === 'succeeded'));
   const nested = snapshot.operations.find((operation) => operation.parentOperationId);
   assert.ok(nested, 'document generation remains a nested O instead of being flattened to E');

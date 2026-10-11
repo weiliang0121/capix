@@ -19,7 +19,8 @@ export interface ChildBinding<Definition extends ChildDefinition> {
 export interface ChildBindings {
   get<Definition extends ChildDefinition>(definition: Definition): ChildBinding<Definition>;
   entry<Definition extends ChildDefinition, EntryInput>(entry: InvocationEntry<Definition, EntryInput>): { create(parent: DefinitionParentInvocationView<Definition>, input: EntryInput, options?: InvocationRelationOptions): ChildInvocationView<DefinitionInvocationInput<Definition>, DefinitionOutput<Definition>, DefinitionContextFacts<Definition>> };
-  accept<Value>(child: InvocationView, work: () => Value | Promise<Value>): Promise<Value>;
+  /** Receive this child's actual successful delivery before choosing the next work. */
+  accept<Output, Value>(child: ChildInvocationView<unknown, Output>, work: (delivered: NoInfer<Output>) => Value | Promise<Value>): Promise<Value>;
   requireActive(): void;
 }
 
@@ -86,16 +87,16 @@ export class BoundChildren {
               return create(entry.definition, actual, entry.accept(actual, input, options), options) as ChildInvocationView<DefinitionInvocationInput<Definition>, DefinitionOutput<Definition>, DefinitionContextFacts<Definition>>;
             }),
         }),
-      accept: async <Value>(child: InvocationView, work: () => Value | Promise<Value>) => {
+      accept: async <Output, Value>(child: ChildInvocationView<unknown, Output>, work: (delivered: NoInfer<Output>) => Value | Promise<Value>) => {
         let rejected: { error: unknown } | undefined;
         try {
           requireActive();
           const invocation = calls.get(child);
           if (!invocation) throw new Error('Invocation is not a child created through this binding');
-          return await parent.children.get(invocation).accept(async () => {
+          return await parent.children.get(invocation).accept(async (delivered) => {
             try {
               requireActive();
-              return await work();
+              return await work(delivered);
             } catch (error) {
               rejected = { error };
               throw error;

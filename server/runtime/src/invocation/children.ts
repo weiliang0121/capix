@@ -46,7 +46,7 @@ export class InvocationChildren {
     this.failed?.(Object.freeze({ kind: 'error', phase: this.context.progress.phase, contextId: this.context.id, error }));
   }
 
-  attach(invocation: InvocationTarget, options: InvocationRelationOptions = {}): InvocationRelation {
+  attach<Output>(invocation: InvocationTarget<Output>, options: InvocationRelationOptions = {}): InvocationRelation<Output> {
     this.context.requireRunning();
     this.requireHealthy();
     if (this.#items.has(invocation)) throw new Error('Child invocation is already attached');
@@ -65,10 +65,11 @@ export class InvocationChildren {
     return relation;
   }
 
-  get(invocation: InvocationTarget): InvocationRelation {
+  get<Output>(invocation: InvocationTarget<Output>): InvocationRelation<Output> {
     const relation = this.#items.get(invocation);
     if (!relation) throw new Error('Invocation is not a direct child');
-    return relation;
+    // The relation was attached for this exact target; the map erases only its output type.
+    return relation as InvocationRelation<Output>;
   }
 
   values(): readonly InvocationRelation[] {

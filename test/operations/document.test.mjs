@@ -101,10 +101,13 @@ for (const recorded of [true, false]) {
     const children = f.invocation().children.values();
     assert.deepEqual(
       children.map((child) => child.key),
-      ['selection', 'generation', 'save', 'extraction'],
+      ['selection', 'decision', 'preflight', 'decision', 'generation', 'decision', 'save', 'decision', 'extraction'],
     );
     assert.deepEqual(
-      children[1].invocation.children.values().map((child) => child.key),
+      children
+        .find((child) => child.key === 'generation')
+        .invocation.children.values()
+        .map((child) => child.key),
       ['read', 'generation'],
     );
     if (f.recorder) assert.equal(JSON.stringify([...f.recorder.book.values()].map((record) => record.toJSON())).includes(sourceText), false);
@@ -160,22 +163,28 @@ test('disabled file capability rejects before accepting input', async () => {
   assert.equal(transcript.length, 0);
 });
 
-test('failed read accepts only user input and releases the runtime for a later conversation', async (t) => {
+test('a missing source is clarified before read and releases the runtime for a later conversation', async (t) => {
   const f = await fixture(t);
-  await assert.rejects(f.run({ sourcePath: 'missing.txt' }));
-  assert.equal(f.transcript.length, 1);
+  assert.equal((await f.run({ sourcePath: 'missing.txt' })).kind, 'needs-info');
+  assert.equal(f.transcript.length, 2);
+  assert.deepEqual(f.counts(), { reads: 0, writes: 0 });
   await f.run(null);
-  assert.equal(f.transcript.length, 3);
+  assert.equal(f.transcript.length, 4);
 });
 
-test('existing output cannot be overwritten and create failure preserves the accepted answer', async (t) => {
+test('existing output is detected before generation without attempting overwrite', async (t) => {
   const f = await fixture(t);
   await writeFile(join(f.root, 'summary.txt'), 'keep');
-  await assert.rejects(f.run());
+  assert.equal((await f.run()).kind, 'needs-info');
   assert.equal(await readFile(join(f.root, 'summary.txt'), 'utf8'), 'keep');
   assert.equal(f.transcript.length, 2);
-  assert.equal(f.transcript.get(1).content, answer.content);
-  assert.equal(f.progress.at(-1).kind, 'not-created');
+  assert.ok(f.transcript.get(1).content.includes('已存在'));
+  assert.deepEqual(f.progress, []);
+  assert.deepEqual(f.counts(), { reads: 0, writes: 0 });
+  assert.equal(
+    f.calls.some((call) => call.purpose === 'answer'),
+    false,
+  );
 });
 
 test('post-answer memory failure preserves file publication and assistant body', async (t) => {

@@ -8,6 +8,9 @@ export interface RequestUnderstandingInput {
   readonly selection: Selection;
   readonly memories: readonly ReturnType<Memory['toJSON']>[];
   readonly fileTask?: FileTask;
+  readonly available?: readonly { readonly name: string; readonly description: string; readonly arguments: Readonly<Record<string, unknown>> }[];
+  readonly feedback?: { readonly code: string; readonly message: string };
+  readonly progress?: { readonly file?: FileTask; readonly saved?: { readonly path: string } };
 }
 
 /** The last exchange supplements selection so a direct clarification reply has its question. */

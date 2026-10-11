@@ -1,7 +1,7 @@
 import type { FileReceipt, FileTask } from '@capix/protocol';
 import { ResourceOffer, type ProgressChannel } from '@capix/server-runtime';
 import type { WorkspaceFiles } from './workspace.js';
-import type { FileProgress, TextDocument } from './types.js';
+import type { FileProgress, FileTaskInspection, TextDocument } from './types.js';
 import { isRelativeFilePath } from './path.js';
 import { fileFailure } from './error.js';
 
@@ -17,10 +17,22 @@ export interface FileReader {
 export interface FileCreator {
   createText(path: string, text: string, signal?: AbortSignal): Promise<FileReceipt>;
 }
+export interface FileInspector {
+  inspect(task: FileTask, signal?: AbortSignal): Promise<FileTaskInspection>;
+}
 export function documentDescriptor(document: TextDocument): FileReceipt {
   return Object.freeze({ path: document.path, bytes: document.bytes, digest: document.digest });
 }
 export const FileResources = Object.freeze({
+  inspect: new ResourceOffer<FileResourceSource, FileInspector>(
+    'workspace-files.inspect',
+    (source, activity) =>
+      Object.freeze({
+        inspect: (task: FileTask, signal?: AbortSignal) => activity.runAsync('inspect', { input: () => ({ task }), output: (result) => result }, () => source.files.checkTask(task, { signal, constraint: source.constraint })),
+      }),
+    'access',
+    { describe: (source) => ({ constraint: source.constraint ?? null, maxReadBytes: source.files.configuration.maxReadBytes, overwrite: false }) },
+  ),
   readText: new ResourceOffer<FileResourceSource, FileReader, FileResourceSource, string>(
     'workspace-files.read-text',
     (source, activity) =>

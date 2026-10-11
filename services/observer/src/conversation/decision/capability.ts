@@ -1,0 +1,61 @@
+import { z } from 'zod';
+import type { OperationDefinition, ChildBindings, DefinitionEntryInput, DefinitionOutput, DefinitionParentInvocationView } from '@capix/server-runtime';
+import type { ConversationCapabilityName, ConversationCapabilityOffer, ConversationDecisionFeedback } from './types.js';
+import { modelTextSchema } from '../model/schema.js';
+
+/** A service-local adapter between selectable arguments and the real declared child. */
+export interface ConversationCapability<State> {
+  readonly use: OperationDefinition<any, any, any, any>;
+  readonly offer: ConversationCapabilityOffer;
+  available(state: State): boolean;
+  validate(value: unknown): boolean;
+  run(value: unknown, state: State): Promise<State>;
+}
+
+export function conversationCapability<Arguments, State, Definition extends OperationDefinition<any, any, any, any>>(
+  options: {
+    readonly name: ConversationCapabilityName;
+    readonly description: string;
+    readonly use: Definition;
+    readonly key: string;
+    readonly schema: z.ZodType<Arguments>;
+    readonly available: (state: State) => boolean;
+    readonly input: (arguments_: Arguments, state: State) => DefinitionEntryInput<Definition>;
+    readonly accept: (delivered: DefinitionOutput<Definition>, state: State) => State;
+  },
+  parent: DefinitionParentInvocationView<Definition>,
+  children: ChildBindings,
+): ConversationCapability<State> {
+  return Object.freeze({
+    use: options.use,
+    offer: Object.freeze({ name: options.name, description: options.description, arguments: z.toJSONSchema(options.schema) }),
+    available: options.available,
+    validate: (value: unknown) => options.schema.safeParse(value).success,
+    run: async (value: unknown, state: State) => {
+      const child = children.get(options.use).create(parent, options.input(options.schema.parse(value), state), { key: options.key });
+      await child.run();
+      return children.accept(child, (delivered) => options.accept(delivered, state));
+    },
+  });
+}
+
+const conclusionSchema = z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('settled') }), z.strictObject({ kind: z.literal('clarify'), question: modelTextSchema }), z.strictObject({ kind: z.literal('unsupported'), explanation: modelTextSchema })]);
+const proposal = z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('invoke'), capability: z.string(), arguments: z.unknown() }), z.strictObject({ kind: z.literal('finish'), conclusion: conclusionSchema })]);
+
+export type AcceptedConversationDecision = z.infer<typeof proposal> | { readonly kind: 'revise'; readonly feedback: ConversationDecisionFeedback };
+
+/** Predictable proposal rejection is a normal delivery; child/handler failures still throw. */
+export function acceptConversationDecision<State>(value: unknown, capabilities: ReadonlyMap<string, ConversationCapability<State>>, state: State, canFinish: (conclusion: z.infer<typeof conclusionSchema>) => boolean): AcceptedConversationDecision {
+  const checked = proposal.safeParse(value);
+  if (!checked.success) return reviseDecision('DECISION_SHAPE', '提案必须选择已公开能力并提供其参数，或按结论契约结束。');
+  const decision = checked.data;
+  if (decision.kind === 'finish') return canFinish(decision.conclusion) ? decision : reviseDecision('UNSETTLED', '只能根据已接纳的真实交付结束；未生成回答或尚未完成已选定的保存步骤。');
+  const capability = capabilities.get(decision.capability);
+  if (!capability || !capability.available(state)) return reviseDecision('UNAVAILABLE_CAPABILITY', '该能力未注册或当前阶段不可使用，请根据 available 和已接纳进展重新选择。');
+  if (!capability.validate(decision.arguments)) return reviseDecision('CAPABILITY_ARGUMENTS', '参数不符合所选能力的公开契约，请修正提案。');
+  return decision;
+}
+
+export function reviseDecision(code: string, message: string): Extract<AcceptedConversationDecision, { kind: 'revise' }> {
+  return { kind: 'revise', feedback: { code, message } };
+}

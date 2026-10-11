@@ -10,9 +10,10 @@ import { RecordSource } from '../observation/record/source.js';
 import { TranscriptFeed } from '../conversation/transcript/feed.js';
 import { ModelSource } from '../conversation/model/source.js';
 import type { WorkspaceFiles } from '../files/index.js';
+import type { ConversationDecisionDefinition } from '../conversation/decision/types.js';
 
 /** Independent entity lifetimes are established here; R only binds their published access. */
-export function initializeObserver(provider: ModelInitialization, messages: readonly Message[] = [], options: { files?: WorkspaceFiles } = {}) {
+export function initializeObserver(provider: ModelInitialization, messages: readonly Message[] = [], options: { files?: WorkspaceFiles; decision?: ConversationDecisionDefinition; maxDecisionSteps?: number } = {}) {
   const book = new RecordBook();
   const clock = new Clock();
   const changes = new ChangeBuffer<ObserverChange>();
@@ -27,7 +28,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
   });
   const memories = new Memories(transcript, { observation: recording.memory, changes });
   const selectionUsage = new SelectionUsage();
-  const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files) });
+  const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps });
   const model = new ModelSource(provider);
   const runtime = bindConversation(definition, { transcript, memories, selectionUsage, files: options.files }, model, { observations: [recording], changes });
   return { transcript, memories, selectionUsage, files: options.files, model, book, clock, recorder, recording, runtime, changes, definition, consumer, recordSource, transcripts };

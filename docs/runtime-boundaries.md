@@ -102,17 +102,33 @@ BindingEnvironment 在装配时沿轻量声明检查 R→E、E→O、O→O/A、�
 
 Initializer 只支持同步一次建立、递归检查、成功或失败缓存，没有重置、异步调度或统一释放。共享声明不承诺隔离应用自己保存的外部闭包；绑定后修改声明不是动态重配置能力。
 
-InvocationChildren 是直接父子运行关系，与 Recorder 无关。关系记录子 Context 状态、run 返回/抛错以及父层接收状态；成功 Context 与交付失败可以同时存在，例如终态记录失败。直接 call 不声称父层已接收，只有明确的组合 accept 才推进 reception。
+InvocationChildren 是直接父子运行关系，与 Recorder 无关。关系记录子 Context 状态、run 返回/抛错以及父层接收状态；成功 Context 与交付失败可以同时存在，例如终态记录失败。直接 call 不声称父层已接收，只有明确的组合 accept 才推进 reception。`children.accept(child, delivered => accepted)` 的 delivered 来自该直接子调用保存的真实成功返回，类型跟随 child；不能接纳异父、未返回、失败或已经接纳的调用。父层可以将真实交付加工成自己的接纳结果，returned 与 accepted 不必相等。
 
 O/A 需要在执行中确定更小资源范围时，可信装配可配置 `childResources: [bindChildResources(definition, [offer.refine(input => selection)])]`。创建子调用前，根据该调用的输入派生供给；ResourceOffer 的 refine 检查并返回收窄后的捕获，内核只允许处理该子声明已经申请、父层已经供应的 offer。新供给有独立 supplyId，不修改父层或兄弟，不重捕获无关模型或原文。规则不是业务编排，也不能自行增加资源；endpoint 继续受调用活动与声明阶段约束。
 
-Observer 在选择历史之后插入请求理解 O，由 E 接纳有限候选并选择普通生成或文档处理；随后可创建保存 O。所选文档 O/保存 O 的绑定按输入收窄 read/create 路径。这是固定子声明上的条件组合，没有引入计划解释器或动态能力注册。
+Observer 的 E 在选择历史后运行有限决策循环。决策 O 交付 `invoke { capability, arguments }` 或 `finish { conclusion }` 提案；E 检查公开能力、参数、当前阶段和完成条件，再调用真实子声明。当前能力条目为 checkFile、answer、document、save，条目引用真实子声明，并分别提供参数 Schema、可用条件、内部输入构造和真实输出接纳。决策 O、选择历史与记忆收尾不进入可选目录。目录是本次 E 组合的派生信息，不是第二个全局注册表。
+
+默认决策 O 将已知交付直接转为下一步：预检通过后处理正文、回答落实后按已选目标保存、保存凭据接纳后结束。只有目标尚未确定或候选需要修正时，内部理解 O 才使用模型；函数决策 O 无模型资源，也使用同一交付契约。可通过 `ConversationRuntimeDefinition({ decision })` 替换声明；专门的决策模型同样可提供一个 O，在其内部通过 A 接入。E 不知道具体 Prompt 或模型类型。
+
+```ts
+const definition = new ConversationRuntimeDefinition({
+  decision: new FunctionConversationDecisionDefinition(({ progress }) => (progress.answer ? { kind: 'finish', conclusion: { kind: 'settled' } } : { kind: 'invoke', capability: 'answer', arguments: {} })),
+});
+```
+
+以上是纯问答策略；选择其他能力的策略需要消费预检交付和 available，不能拿这个策略绕过显式文件任务。E 只接纳真实事实支持的完成提案：没有回答不能 settled；已有成功正文且选定保存目标时，必须接纳真实保存凭据才能 settled。决策输入是独立数据副本，不把实体、端点或可修改的内部进展交给策略。正式用户 message 仍保留冻结身份，以对应固定原文范围。
+
+循环默认最多 8 步，可在 1–16 步内配置。无效提案与重复文件候选形成正常接纳反馈，不成为内核错误；达到上限则以 DECISION_LIMIT 失败，保留已落实内容。真实子调用、绑定、观测传播或处理器错误按现有机制退出，不转给模型无限修正。这与 Invocation.maxRounds 的同一调用有限再次生成是两种边界。
+
+文件预检 O→A 通过独立 inspect 资源，仅核对命名路径和元数据；根内绝对路径可规范为相对路径，不读取正文、不枚举目录、不预留文件。候选缺陷返回 revise，已确认的文件条件不足返回 needs-input，环境故障与取消仍抛出。显式文件范围在预检端点核对，实际文档 O/保存 O 的绑定继续收窄 read/create 路径。预检通过不保证随后成功，实际读取继续检查 UTF-8、大小和目录身份，实际创建继续拒绝覆盖。
+
+候选与预检事实只存在于本次 E 进展和普通调用交付中。task 在正式执行分支启动或形成澄清/不支持结论时才发布一次。回答生成后由 E 接纳并追加，记忆提取是 E 的固定收尾，不由策略选择。没有新增 DecisionRecord、Context 规划字段、跨 QA 挂起、持久计划或运行中注册能力。
 
 Sequence 是不可变顺序定义，step 包含 key、use、input 与可选 accept；类型只能读取前项已接收输出。每次 run 新建本次输出容器；输入构造失败不创建子调用，子调用或接收失败停止后续创建。组合没有第四层 Context、Record、调度器或自动重试。
 
 回答生成仍只有一个受限再次生成声明：AcceptModelOutputDefinition 对完整返回的 INVALID_JSON、EMPTY_OUTPUT 或 OUTPUT_SHAPE 拒绝生产正式 modelOutputRejected 异常，保留原始拒绝原因与模型返回。该 A 通过 raises 允许向父层交付；GenerateAnswerDefinition.exceptions 按契约身份与直接子调用证据决定是否继续一次。InvokeModelDefinition.regeneration 的 InvocationEntry 复查直接归属、实际返回/接收状态、次数及完整反馈请求。第一轮组装上下文、准备、调用、接纳；第二轮只准备反馈请求、调用、接纳。不从 Recorder 反查，也不把调用关系写入业务 IO。
 
-网络、超时、取消、非 stop 返回、记录/捕获失败，以及内容落实后的错误不进入该重试分支。回答仅在生成操作成功返回后由 E 内 Sequence 对应步骤的 accept 追加并交付一次；记忆后处理失败保留已交付回答。
+网络、超时、取消、非 stop 返回、记录/捕获失败，以及内容落实后的错误不进入该重试分支。回答仅在生成操作成功返回后由 E 对应能力条目的 accept 追加并交付一次；记忆后处理失败保留已交付回答。
 
 ## 资源供给、访问与事实
 

@@ -62,7 +62,8 @@ test('three actual model stages produce a causal trace and selected original con
     JSON.parse(provider.calls[1].request.messages[1].content).history.map((m) => m.index),
     [0, 1],
   );
-  assert.equal(trace.nodes.length, 15);
+  assert.equal(trace.nodes.filter((node) => node.operation !== 'conversationDecision').length, 15);
+  assert.equal(trace.nodes.filter((node) => node.operation === 'conversationDecision').length, 2);
   assert.equal(
     trace.nodes.some((node) => node.operation === 'input'),
     false,
@@ -197,8 +198,11 @@ test('Transcript rejects invalid messages before execution or model calls begin'
 test('Named action sequence records nested call and return boundaries rather than adjacent stage edges', async () => {
   const { trace } = await run(scripted([output('{"historyIndexes":[0,1]}'), output(JSON.stringify(reply))]));
   const { calls, events } = trace.callSequence;
-  assert.equal(calls.length, 15);
-  assert.equal(events.length, 30);
+  assert.equal(calls.filter((call) => call.operation !== 'conversationDecision').length, 15);
+  const decisions = calls.filter((call) => call.operation === 'conversationDecision');
+  assert.equal(decisions.length, 2);
+  assert.ok(decisions.every((call) => call.parentId === calls.find((parent) => parent.operation === 'execution').id));
+  assert.equal(events.length, calls.length * 2);
   const active = new Set();
   let previousTime = -1;
   events.forEach((event, index) => {
@@ -224,6 +228,9 @@ test('Named action sequence records nested call and return boundaries rather tha
   const firstEnd = events.find((e) => e.callId === calls.find((c) => c.operation === 'selection').id && e.value.type === 'return');
   const secondStart = events.find((e) => e.callId === calls.find((c) => c.operation === 'answer').id && e.value.type === 'call');
   assert.ok(firstEnd.sequence < secondStart.sequence);
+  const decisionStart = events.find((event) => event.callId === decisions[0].id && event.value.type === 'call');
+  const decisionEnd = events.find((event) => event.callId === decisions[0].id && event.value.type === 'return');
+  assert.ok(firstEnd.sequence < decisionStart.sequence && decisionEnd.sequence < secondStart.sequence);
 });
 
 test('failure propagates through calls, is caught by Observer execution, and never creates skipped calls', async () => {

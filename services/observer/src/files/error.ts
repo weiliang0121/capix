@@ -1,6 +1,6 @@
 import { ExceptionContract } from '@capix/server-runtime';
 
-export type FileFailureReason = 'path' | 'unavailable' | 'outside' | 'symbolic-link' | 'not-file' | 'too-large' | 'encoding' | 'changed' | 'exists' | 'not-allowed' | 'io';
+export type FileFailureReason = 'path' | 'unavailable' | 'workspace-unavailable' | 'outside' | 'symbolic-link' | 'not-file' | 'too-large' | 'encoding' | 'changed' | 'exists' | 'not-allowed' | 'io';
 
 export const FileAccessException = new ExceptionContract<{ readonly operation: 'read' | 'create'; readonly path: string; readonly reason: FileFailureReason }>('FILE_ACCESS');
 
@@ -8,6 +8,7 @@ export function fileFailure(operation: 'read' | 'create', path: string, reason: 
   const messages: Record<FileFailureReason, string> = {
     path: '文件路径必须是工作目录内的规范相对路径。',
     unavailable: '文件或所在目录不可用。',
+    'workspace-unavailable': '配置的文件工作目录不可用。',
     outside: '文件路径超出了配置的工作目录。',
     'symbolic-link': '文件访问不接受符号链接。',
     'not-file': '只能读取普通文本文件。',

@@ -1,12 +1,12 @@
 import { constants, type Stats } from 'node:fs';
 import { lstat, realpath, open, link, unlink, type FileHandle } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
-import { resolve, relative, sep, dirname, join } from 'node:path';
+import { resolve, relative, sep, dirname, join, isAbsolute } from 'node:path';
 import { DeclaredException, InvocationCancelled, type ProgressChannel } from '@capix/server-runtime';
-import type { FileReceipt } from '@capix/protocol';
+import type { FileReceipt, FileTask } from '@capix/protocol';
 import { FileAccessException, fileFailure } from './error.js';
 import { isRelativeFilePath } from './path.js';
-import type { TextDocument, FileProgress } from './types.js';
+import type { TextDocument, FileProgress, FileTaskInspection } from './types.js';
 
 interface DirectoryIdentity {
   readonly path: string;
@@ -38,6 +38,36 @@ export class WorkspaceFiles {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 64 * 1024) throw new RangeError('File limits must be integers between 1 and 65536 bytes');
     }
     this.configuration = Object.freeze({ maxReadBytes, maxWriteBytes });
+  }
+
+  /** Inspect only named paths. Actual read/create recheck independently; no handle survives this call. */
+  async checkTask(task: FileTask, options: { readonly signal?: AbortSignal; readonly constraint?: FileTask } = {}): Promise<FileTaskInspection> {
+    requireActive(options.signal);
+    const normalized = this.normalizeTask(task);
+    if (normalized.kind !== 'ready') return normalized;
+    const candidate = normalized.task;
+    if (options.constraint && (candidate.sourcePath !== options.constraint.sourcePath || candidate.output?.path !== options.constraint.output?.path)) return Object.freeze({ kind: 'revise', reason: 'constraint', feedback: '候选来源、目标和是否保存必须完整符合本次显式文件任务，不能自行增删或替换。' });
+    if (candidate.sourcePath && candidate.sourcePath === candidate.output?.path) return Object.freeze({ kind: 'revise', reason: 'same-path', feedback: '来源与输出不能是同一路径。请依据用户已给出的要求修正候选；不能自行改名或把检查失败当作已执行。' });
+
+    const firstPath = candidate.sourcePath ?? candidate.output!.path;
+    const firstOperation = candidate.sourcePath ? 'read' : 'create';
+    try {
+      // A missing/broken workspace is an environment failure, not a request for another filename.
+      await this.rootDirectory(firstOperation, firstPath);
+      requireActive(options.signal);
+    } catch (error) {
+      throw this.failure(firstOperation, firstPath, error);
+    }
+    if (candidate.sourcePath) {
+      const problem = await this.inspectPath('read', candidate.sourcePath, options.signal);
+      if (problem) return problem;
+    }
+    if (candidate.output) {
+      const problem = await this.inspectPath('create', candidate.output.path, options.signal);
+      if (problem) return problem;
+    }
+    requireActive(options.signal);
+    return normalized;
   }
 
   async readText(path: string, signal?: AbortSignal): Promise<TextDocument> {
@@ -149,13 +179,93 @@ export class WorkspaceFiles {
   private validatePath(operation: 'read' | 'create', path: string): void {
     if (!isRelativeFilePath(path)) throw fileFailure(operation, path, 'path');
   }
+  private normalizeTask(task: FileTask): FileTaskInspection {
+    if (!task || typeof task !== 'object' || (task.sourcePath === undefined && task.output === undefined)) return Object.freeze({ kind: 'revise', reason: 'task-shape', feedback: '文件候选必须提供来源路径或输出路径。' });
+    const paths: { sourcePath?: string; output?: { readonly path: string } } = {};
+    for (const key of ['sourcePath', 'output'] as const) {
+      const value = key === 'sourcePath' ? task.sourcePath : task.output?.path;
+      if (value === undefined) {
+        if (key === 'output' && task.output !== undefined) return Object.freeze({ kind: 'revise', reason: 'path', feedback: '输出候选缺少文件路径。' });
+        continue;
+      }
+      if (typeof value !== 'string' || /[\\:\u0000-\u001f\u007f]/u.test(value)) return Object.freeze({ kind: 'revise', reason: 'path', feedback: '请保留用户指定的文件名，使用规范路径，不能包含控制字符、反斜线或路径跳转。' });
+      let path = value;
+      if (isAbsolute(path)) {
+        if (
+          !path
+            .split('/')
+            .slice(1)
+            .every((part) => part.length > 0 && part !== '.' && part !== '..')
+        )
+          return Object.freeze({ kind: 'revise', reason: 'path', feedback: '绝对路径必须是规范路径，不能包含路径跳转或空路径段。' });
+        path = relative(this.#root, path);
+        if (!path || path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path)) return Object.freeze({ kind: 'needs-input', reason: 'outside', question: '指定路径不在配置的文件工作目录内，请提供工作目录内的文件路径。' });
+      }
+      if (!isRelativeFilePath(path)) return Object.freeze({ kind: 'revise', reason: 'path', feedback: '文件候选需要规范的工作目录相对路径，不能包含路径跳转或空路径段。' });
+      if (key === 'sourcePath') paths.sourcePath = path;
+      else paths.output = Object.freeze({ path });
+    }
+    const accepted: FileTask = paths.sourcePath !== undefined ? Object.freeze({ sourcePath: paths.sourcePath, ...(paths.output ? { output: paths.output } : {}) }) : Object.freeze({ output: paths.output! });
+    return Object.freeze({ kind: 'ready', task: accepted });
+  }
+
+  private async inspectPath(operation: 'read' | 'create', path: string, signal?: AbortSignal): Promise<Exclude<FileTaskInspection, { kind: 'ready' }> | undefined> {
+    try {
+      requireActive(signal);
+      const location = await this.locate(operation, path);
+      requireActive(signal);
+      let entry: Stats;
+      try {
+        entry = await lstat(location.target);
+      } catch (error) {
+        if (operation === 'create' && error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+          requireActive(signal);
+          return undefined;
+        }
+        throw error;
+      }
+      requireActive(signal);
+      if (operation === 'create') return Object.freeze({ kind: 'needs-input', reason: 'exists', question: `输出文件 ${path} 已存在。当前能力只创建新文件，请提供另一个输出文件名。` });
+      if (entry.isSymbolicLink()) throw fileFailure(operation, path, 'symbolic-link');
+      if (!entry.isFile()) throw fileFailure(operation, path, 'not-file');
+      if (entry.size > this.configuration.maxReadBytes) throw fileFailure(operation, path, 'too-large');
+      return undefined;
+    } catch (error) {
+      const code = error instanceof Error && 'code' in error ? error.code : undefined;
+      if (code === 'ENOENT' || code === 'ENOTDIR') {
+        requireActive(signal);
+        return Object.freeze({ kind: 'needs-input', reason: operation === 'read' ? 'source-missing' : 'directory-missing', question: operation === 'read' ? `找不到来源文件 ${path}，请确认工作目录内的文件路径。` : `输出路径 ${path} 的目录不存在或不是目录，请提供已有目录内的新文件路径。` });
+      }
+      if (error instanceof DeclaredException && error.contract === FileAccessException) {
+        const reason = error.facts.reason;
+        if (reason === 'symbolic-link' || reason === 'not-file' || reason === 'too-large' || reason === 'unavailable') {
+          requireActive(signal);
+          return Object.freeze({ kind: 'needs-input', reason, question: reason === 'symbolic-link' ? '指定路径包含符号链接，请提供工作目录内的普通文件路径。' : reason === 'not-file' ? '指定来源不是普通文件，请提供文本文件路径。' : reason === 'too-large' ? `来源文件超过了 ${this.configuration.maxReadBytes} 字节的读取范围，请提供更小的文本文件。` : '指定路径的目录不可用，请提供已有目录内的文件路径。' });
+        }
+      }
+      // Permission and IO failures cannot be repaired by changing a model proposal.
+      throw this.failure(operation, path, error);
+    }
+  }
+
+  private async rootDirectory(operation: 'read' | 'create', path: string): Promise<DirectoryIdentity> {
+    try {
+      const root = await realpath(this.#root);
+      const rootStat = await lstat(root);
+      if (!rootStat.isDirectory()) throw fileFailure(operation, path, 'workspace-unavailable');
+      const identity = directory(root, rootStat);
+      if (this.#identity && (this.#identity.path !== root || this.#identity.dev !== identity.dev || this.#identity.ino !== identity.ino)) throw fileFailure(operation, path, 'changed');
+      this.#identity ??= identity;
+      return identity;
+    } catch (error) {
+      if (error instanceof DeclaredException && error.contract === FileAccessException) throw error;
+      // Root availability belongs to the environment, even if it changes after a first preflight check.
+      throw fileFailure(operation, path, 'workspace-unavailable', error);
+    }
+  }
   private async locate(operation: 'read' | 'create', path: string): Promise<FileLocation> {
-    const root = await realpath(this.#root);
-    const rootStat = await lstat(root);
-    if (!rootStat.isDirectory()) throw fileFailure(operation, path, 'unavailable');
-    const identity = directory(root, rootStat);
-    if (this.#identity && (this.#identity.path !== root || this.#identity.dev !== identity.dev || this.#identity.ino !== identity.ino)) throw fileFailure(operation, path, 'changed');
-    this.#identity ??= identity;
+    const identity = await this.rootDirectory(operation, path);
+    const root = identity.path;
     const target = resolve(root, path);
     const within = relative(root, target);
     if (!within || within.startsWith(`..${sep}`) || within === '..') throw fileFailure(operation, path, 'outside');

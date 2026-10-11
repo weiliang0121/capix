@@ -45,8 +45,8 @@ test('Observer narrows resources at each action, captures fixed values and expir
     },
   );
   const firstViews = [...views];
-  const entry = firstViews[0].resources;
-  const selection = firstViews[1].resources;
+  const entry = firstViews.find((view) => view.definition === definition.executionDefinition).resources;
+  const selection = firstViews.find((view) => view.definition === definition.executionDefinition.operationDefinitions.selection).resources;
   assert.equal(entry.history.locate().end, 1);
   assert.equal(selection.history.locate().end, 1);
   assert.notEqual(entry.history, selection.history);
@@ -55,7 +55,16 @@ test('Observer narrows resources at each action, captures fixed values and expir
   assert.equal(selection.timeoutMs, 1000);
   assert.throws(() => entry.history.read(0), /running|ended/i);
   assert.equal(first.record, undefined);
-  assert.ok(first.children.values().length === 3);
+  assert.deepEqual(
+    first.children.values().map((relation) => relation.key),
+    ['selection', 'decision', 'generation', 'decision', 'extraction'],
+  );
+  const decisions = firstViews.filter((view) => view.definition === definition.executionDefinition.operationDefinitions.decision);
+  assert.equal(decisions.length, 2);
+  assert.ok(
+    decisions.every((view) => Object.keys(view.resources).length === 0),
+    'ordinary deterministic decisions need no inherited history or model capabilities',
+  );
   views.length = 0;
   await runtime.run({ messages: [{ role: 'user', content: '继续' }] }, { settings: { ...settings, timeoutMs: 2000 } });
   assert.equal(views[0].resources.history.end, 3);

@@ -99,8 +99,19 @@ test('the observed execution preserves ranking, records actual requests and acco
   });
   assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
   assert.equal(requests.length, 3);
-  assert.equal(facts.operations.length, 3);
-  assert.deepEqual(readOutput(facts.operations[0].value).historyIndexes, [2, 0, 1]);
+  assert.deepEqual(
+    facts.operations.map((record) => record.operation),
+    ['selection', 'conversationDecision', 'answer', 'conversationDecision', 'memory'],
+  );
+  assert.deepEqual(readOutput(facts.operations.find((record) => record.operation === 'selection').value).historyIndexes, [2, 0, 1]);
+  for (const decision of facts.operations.filter((record) => record.operation === 'conversationDecision')) {
+    assert.deepEqual(decision.value.input.request.selection.historyIndexes, [2, 0, 1]);
+    assert.equal(
+      facts.attempts.some((record) => record.operationId === decision.id),
+      false,
+      'routing consumes accepted ranking without another model request',
+    );
+  }
   const generation = facts.operations.find((record) => record.operation === 'answer');
   assert.deepEqual(generation.value.input.selection.historyIndexes, [2, 0, 1]);
   const prepared = facts.attempts.find((record) => record.operationId === generation.id && record.name === 'prepareModelRequest');

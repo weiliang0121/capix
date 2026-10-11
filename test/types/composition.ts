@@ -54,6 +54,21 @@ void alternativeOutput;
 // @ts-expect-error alternative entry enforces its own input contract
 bindings.entry(alternative).create(operation, 'wrong');
 
+const lengthCall = bindings.get(length).create(parent, 'hello');
+const acceptedLength: Promise<{ text: string }> = bindings.accept(lengthCall, (delivered) => ({ text: delivered.toFixed() }));
+void acceptedLength;
+// @ts-expect-error the child's output determines the delivered type, not the callback
+bindings.accept(lengthCall, (delivered: string) => delivered.length);
+bindings.accept(lengthCall, (delivered) => {
+  // @ts-expect-error successful length delivery is a number
+  const text: string = delivered;
+  return text;
+});
+// @ts-expect-error a parent view is not a typed child invocation handle
+bindings.accept(parent, () => null);
+const acceptedAlternative: Promise<number> = bindings.accept(bindings.entry(alternative).create(operation, 1), (delivered) => delivered.length);
+void acceptedAlternative;
+
 // Contracts also support typed objects; no inheritance or synthetic identity is required.
 const objectDefinition: OperationDefinition<string, number> = {
   level: 'operation',
@@ -78,8 +93,8 @@ const runtimeDefinition: RuntimeDefinition<string, number> = {
     requires: {},
     async execute(context, invocation, children) {
       const child = children.get(execution).create(invocation, context.currentInput);
-      const output = await child.run();
-      return children.accept(child, () => output);
+      await child.run();
+      return children.accept(child, (delivered) => delivered);
     },
   },
 };

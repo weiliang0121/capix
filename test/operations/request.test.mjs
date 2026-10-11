@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Transcript } from '@capix/server-runtime/content';
-import { UnderstandRequestDefinition, requestOutputContract, acceptRequestProposal } from '@capix/observer-service';
+import { UnderstandRequestDefinition, requestOutputContract } from '@capix/observer-service';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { bindChild, resourceBindingFor } from '../fixtures/observer.mjs';
 import { callFor, lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
@@ -10,7 +10,7 @@ const settings = { model: 'fixture', contextBudget: 100000, maxOutputTokens: 102
 const raw = (value) => ({ id: 'fixture', model: 'fixture', content: typeof value === 'string' ? value : JSON.stringify(value), finishReason: 'stop', usage: null });
 const file = (task = { sourcePath: 'notes.md', output: { path: 'translation.md' } }) => ({ kind: 'file', task, instruction: '把 notes.md 翻译成白话文。' });
 
-async function understand({ messages = [{ role: 'user', content: '请翻译 notes.md 并保存为 translation.md' }], selection = [], files = true, proposal = file(), memories = [], contextBudget = settings.contextBudget, requests = [] } = {}) {
+async function understand({ messages = [{ role: 'user', content: '请翻译 notes.md 并保存为 translation.md' }], selection = [], files = true, proposal = file(), memories = [], available, feedback, progress, contextBudget = settings.contextBudget, requests = [] } = {}) {
   const transcript = new Transcript(messages);
   const message = transcript.get(transcript.length - 1);
   const runtime = createBoundRuntime();
@@ -23,7 +23,7 @@ async function understand({ messages = [{ role: 'user', content: '请翻译 note
       return raw(proposal);
     },
   });
-  const input = { message, selection: { historyIndexes: selection }, memories };
+  const input = { message, selection: { historyIndexes: selection }, memories, ...(available ? { available } : {}), ...(feedback ? { feedback } : {}), ...(progress ? { progress } : {}) };
   const result = await invoke(lifecycleFor(runtime).execution({ input: message, transcript, resourceBinding, settings: { ...settings, contextBudget } }), (context) => operation.call(callFor(context), input));
   return { result, requests, definition, transcript };
 }
@@ -52,42 +52,10 @@ test('understanding accepts four strict candidate shapes, including generation w
   assert.match(schema, /instruction/);
 });
 
-test('parent acceptance copies and freezes executable file ranges without normalizing paths', () => {
-  const proposal = file();
-  const accepted = acceptRequestProposal(proposal, { files: true });
-  assert.deepEqual(accepted, proposal);
-  assert.ok(Object.isFrozen(accepted));
-  assert.ok(Object.isFrozen(accepted.task));
-  assert.ok(Object.isFrozen(accepted.task.output));
-  proposal.task.output.path = 'changed.md';
-  assert.equal(accepted.task.output.path, 'translation.md');
-});
-
-test('invalid file paths and overwriting the source become clarification before resource access', () => {
-  for (const task of [{ sourcePath: '../notes.md' }, { sourcePath: '/tmp/notes.md' }, { output: { path: 'a\\b.md' } }, { sourcePath: 'notes.md', output: { path: 'notes.md' } }]) {
-    assert.equal(acceptRequestProposal(file(task), { files: true }).kind, 'clarify');
-  }
-});
-
-test('parent acceptance cannot silently add, remove or replace explicitly requested operations', () => {
-  const fileTask = { sourcePath: 'notes.md' };
-  assert.deepEqual(acceptRequestProposal(file(fileTask), { files: true, fileTask }), file(fileTask));
-  for (const proposal of [file(), file({ sourcePath: 'other.md' }), file({ output: { path: 'notes.md' } }), { kind: 'reply' }, { kind: 'unsupported', explanation: '历史助手曾说没有文件能力。' }]) {
-    assert.equal(acceptRequestProposal(proposal, { files: true, fileTask }).kind, 'clarify');
-  }
-  assert.equal(acceptRequestProposal({ kind: 'clarify', question: '请确认处理目标。' }, { files: true, fileTask }).kind, 'clarify');
-});
-
-test('file candidate cannot enable an unavailable capability', () => {
-  assert.equal(acceptRequestProposal(file(), { files: false }).kind, 'unsupported');
-  assert.deepEqual(acceptRequestProposal({ kind: 'reply' }, { files: false }), { kind: 'reply' });
-});
-
-test('request understanding only prepares and invokes the model, leaving parent acceptance separate', async () => {
+test('request understanding only proposes a candidate, leaving path eligibility to the declared preflight', async () => {
   const proposal = file({ sourcePath: '../notes.md' });
   const { result, definition, transcript } = await understand({ proposal });
   assert.deepEqual(result, proposal);
-  assert.equal(acceptRequestProposal(result, { files: true }).kind, 'clarify');
   assert.equal(transcript.length, 1);
   assert.deepEqual(
     definition.children.map((child) => child.name),
@@ -135,6 +103,27 @@ test('request understanding does not invoke the model when the fixed request exc
   const requests = [];
   await assert.rejects(understand({ contextBudget: 256, requests }), (error) => error.code === 'CAPACITY_EXCEEDED');
   assert.equal(requests.length, 0);
+});
+
+test('understanding receives the current capability contract and preflight feedback without adding them to history', async () => {
+  const available = [{ name: 'checkFile', description: '检查候选文件路径', arguments: { type: 'object', properties: { task: { type: 'object' } } } }];
+  const feedback = { code: 'SAME_PATH', message: '请从用户要求中重新选择保存路径。' };
+  const progress = { file: { sourcePath: 'notes.md' } };
+  const { requests, transcript } = await understand({ available, feedback, progress });
+  const payload = JSON.parse(requests[0].messages[1].content);
+  assert.deepEqual(payload.available, available);
+  assert.deepEqual(payload.feedback, feedback);
+  assert.deepEqual(payload.progress, progress);
+  assert.deepEqual(payload.history, []);
+  assert.equal(transcript.length, 1);
+  assert.match(requests[0].messages[0].content, /用户提供的配置根内绝对路径/);
+  assert.match(requests[0].messages[0].content, /不要自行发明输出路径/);
+  assert.match(requests[0].messages[0].content, /预检通过并不意味着已读取正文或已保存/);
+});
+
+test('a provided capability directory controls file availability at this decision point', async () => {
+  const { requests } = await understand({ available: [{ name: 'answer', description: '回答', arguments: { type: 'object' } }] });
+  assert.equal(JSON.parse(requests[0].messages[1].content).capabilities.files, null);
 });
 
 test('malformed model output is rejected without automatic regeneration', async () => {

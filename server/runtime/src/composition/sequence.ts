@@ -44,14 +44,14 @@ export class Sequence<Input, Parent extends ParentInvocation | InvocationView, O
         const target = 'create' in use ? use : resolveDeclared(use, children);
         const child = target.create(parent, prepare(scope), { key });
 
-        const output = await child.run();
+        await child.run();
         if (children) {
           children.requireActive();
-          return children.accept(child as ChildInvocationView, () => (accept ? accept(scope, output) : output));
+          return children.accept(child as ChildInvocationView<unknown, StepOutput>, (delivered) => (accept ? accept(scope, delivered) : delivered));
         }
         const owner = parent as ParentInvocation;
         owner.context.requireRunning();
-        return owner.children.get(child as InvocationTarget).accept(() => (accept ? accept(scope, output) : output));
+        return owner.children.get(child as InvocationTarget<StepOutput>).accept((delivered) => (accept ? accept(scope, delivered) : delivered));
       },
     });
     return new Sequence([...this.entries, entry]);

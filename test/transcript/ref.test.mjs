@@ -37,9 +37,9 @@ test('input is a plain immutable message; the execution range fixes visibility a
 
 test('resource facts hold plain range locators; calls consume selected content and ignore later appends', async () => {
   const input = createInput({ content: '她呢', history: [{ role: 'user', content: '林岚负责海盐项目' }] });
-  const transcript = transcriptFor(input),
-    requests = [],
-    snapshots = [];
+  const transcript = transcriptFor(input);
+  const requests = [];
+  const snapshots = [];
   const facts = await observeFixture(
     input,
     settings,
@@ -60,9 +60,16 @@ test('resource facts hold plain range locators; calls consume selected content a
     },
   );
   assert.equal(facts.execution.status, 'succeeded');
-  assert.equal(facts.operations.length, 3);
+  assert.deepEqual(
+    facts.operations.map((record) => record.operation),
+    ['selection', 'conversationDecision', 'answer', 'conversationDecision', 'memory'],
+  );
   assert.equal(facts.attempts.length, 11);
-  assert.equal(facts.events.length, 30);
+  assert.equal(facts.events.length, 2 * (1 + facts.operations.length + facts.attempts.length));
+  for (const decision of facts.operations.filter((record) => record.operation === 'conversationDecision')) {
+    assert.deepEqual(decision.value.input.request.selection.historyIndexes, [0]);
+    assert.equal(JSON.stringify(decision.value.input).includes('later unrelated message'), false);
+  }
   assert.deepEqual(facts.execution.value.input, input);
   assert.notEqual(facts.execution.value.input, input);
   const rangeFact = facts.resources.find((fact) => fact.parentId === facts.execution.id && fact.access === 'transcript.fixedRange' && fact.phase === 'available');
