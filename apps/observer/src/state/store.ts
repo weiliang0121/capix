@@ -15,6 +15,7 @@ export interface AppState {
   memoryOpen: boolean;
   settingsOpen: boolean;
   draft: string;
+  fileDraft: { sourcePath: string; outputPath: string };
   conversationFocus?: string;
   history: string;
   budget: string;
@@ -31,6 +32,7 @@ interface AppActions {
   setMemoryOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setDraft: (text: string) => void;
+  setFileDraft: (draft: { sourcePath: string; outputPath: string }) => void;
   setHistory: (text: string) => void;
   setBudget: (text: string) => void;
   setNotice: (text: string) => void;
@@ -49,6 +51,7 @@ export function createAppStore() {
     memoryOpen: false,
     settingsOpen: false,
     draft: '',
+    fileDraft: { sourcePath: '', outputPath: '' },
     history: '[]',
     budget: '32768',
     notice: '',
@@ -61,6 +64,7 @@ export function createAppStore() {
     setMemoryOpen: (memoryOpen) => set({ memoryOpen }),
     setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
     setDraft: (draft) => set({ draft }),
+    setFileDraft: (fileDraft) => set({ fileDraft }),
     setHistory: (history) => set({ history }),
     setBudget: (budget) => set({ budget }),
     setNotice: (notice) => set({ notice }),

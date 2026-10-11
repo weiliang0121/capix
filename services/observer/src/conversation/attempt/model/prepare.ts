@@ -1,4 +1,4 @@
-import { invocationRecording } from '@capix/server-runtime/recording';
+import { invocationRecording, type InvocationRecordDescription } from '@capix/server-runtime/recording';
 import { ModelSettingsResource } from '../../model/resources.js';
 import type { ResourceRequirements } from '@capix/server-runtime';
 import type { ModelRequestResources } from '../../resources.js';
@@ -9,7 +9,7 @@ import { checkCapacity } from '../../model/capacity.js';
 
 /** Build the operation-specific request and verify capacity before sending it. */
 export class PrepareModelRequestDefinition<Input, Resources extends ModelRequestResources = ModelRequestResources> extends AttemptDefinition<Input, ModelRequest, Resources> {
-  readonly observation = [invocationRecording()];
+  readonly observation;
   readonly run;
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request() });
 
@@ -21,8 +21,10 @@ export class PrepareModelRequestDefinition<Input, Resources extends ModelRequest
   constructor(
     private readonly createRequest: (input: Input, resources: Resources) => ModelRequest,
     requires: ResourceRequirements<Resources> = PrepareModelRequestDefinition.requires as ResourceRequirements<Resources>,
+    description: InvocationRecordDescription<Input, ModelRequest> = {},
   ) {
     super();
+    this.observation = [invocationRecording(description)];
     this.run = { requires, execute: this.execute.bind(this) };
   }
 

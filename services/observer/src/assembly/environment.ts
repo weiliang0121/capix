@@ -9,9 +9,10 @@ import { ChangeConsumer } from './changes.js';
 import { RecordSource } from '../observation/record/source.js';
 import { TranscriptFeed } from '../conversation/transcript/feed.js';
 import { ModelSource } from '../conversation/model/source.js';
+import type { WorkspaceFiles } from '../files/index.js';
 
 /** Independent entity lifetimes are established here; R only binds their published access. */
-export function initializeObserver(provider: ModelInitialization, messages: readonly Message[] = []) {
+export function initializeObserver(provider: ModelInitialization, messages: readonly Message[] = [], options: { files?: WorkspaceFiles } = {}) {
   const book = new RecordBook();
   const clock = new Clock();
   const changes = new ChangeBuffer<ObserverChange>();
@@ -26,8 +27,8 @@ export function initializeObserver(provider: ModelInitialization, messages: read
   });
   const memories = new Memories(transcript, { observation: recording.memory, changes });
   const selectionUsage = new SelectionUsage();
-  const definition = new ConversationRuntimeDefinition();
+  const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files) });
   const model = new ModelSource(provider);
-  const runtime = bindConversation(definition, { transcript, memories, selectionUsage }, model, { observations: [recording], changes });
-  return { transcript, memories, selectionUsage, model, book, clock, recorder, recording, runtime, changes, definition, consumer, recordSource, transcripts };
+  const runtime = bindConversation(definition, { transcript, memories, selectionUsage, files: options.files }, model, { observations: [recording], changes });
+  return { transcript, memories, selectionUsage, files: options.files, model, book, clock, recorder, recording, runtime, changes, definition, consumer, recordSource, transcripts };
 }

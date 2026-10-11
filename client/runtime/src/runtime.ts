@@ -160,7 +160,7 @@ export class ClientRuntime {
   private async loadConfiguration(attempt: InitializationAttempt): Promise<void> {
     if (this.sources.config) return;
     const config = await this.conversation.config();
-    if (attempt.running) this.update({ config: Object.freeze({ ...config }) });
+    if (attempt.running) this.update({ config: Object.freeze({ ...config, ...(config.files ? { files: Object.freeze({ ...config.files }) } : {}) }) });
   }
 
   private async loadInitialTranscript(attempt: InitializationAttempt): Promise<void> {

@@ -5,6 +5,7 @@ import type { InvocationFact } from '../../observation/facts.js';
 import { bindInvocationObservation } from '../../binding/observation.js';
 import { attachInvocationResources } from '../resources.js';
 import type { ResourceRequirements } from '../../resource/bindings.js';
+import type { ResourceRefinement } from '../../resource/offer.js';
 import type { InvocationCapabilities } from '../capabilities.js';
 import { InvocationChangeEmitter } from '../changes.js';
 import { Invocation } from '../invocation.js';
@@ -19,6 +20,7 @@ export interface OperationInvocationRequest<Input, Output, Resources extends obj
   input: Input;
   requires?: ResourceRequirements<Resources>;
   initial?: ResourceRequirements;
+  refinements?: readonly ResourceRefinement<Input>[];
   observation?: readonly ObservationDeclaration<InvocationFact>[];
   key?: string;
   description: OperationDescription;
@@ -36,7 +38,7 @@ export class OperationInvocationBuilder {
     parent.requireActive();
     this.contextBuilder.check(owner);
     const requires = request.requires ?? ({} as ResourceRequirements<Resources>);
-    const resources = owner.resources.select(requires, request.initial);
+    const resources = owner.resources.select(requires, request.initial, { input: request.input, refinements: request.refinements ?? [] });
     const context = this.contextBuilder.create<Input, Output, Resources>(owner, request.input, resources);
     const identity = { contextId: context.id, level: 'operation' as const, parentContextId: parent.context.id };
     const observation = bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources: context.resources }, this.capabilities.observations, parent.observation);

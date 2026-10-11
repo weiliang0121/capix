@@ -1,4 +1,22 @@
 import { Sequence, InvocationEntry, type OperationDefinition, type AttemptDefinition, type InvocationView, type ExecutionContextView, type OperationContextView, type ChildBindings, assembleRuntime, type ExecutionDefinition, type RuntimeDefinition, type RuntimeContextView } from '@capix/server-runtime';
+import { bindChildResources, type ResourceRefinement } from '@capix/server-runtime';
+
+const bounded = new ResourceOffer<{ readonly allowed: readonly string[] }, readonly string[], { readonly allowed: readonly string[] }, string>('bounded', (source) => source.allowed, 'access', { refine: (source, selected) => ({ allowed: source.allowed.filter((value) => value === selected) }) });
+declare const fileOperation: OperationDefinition<{ readonly path: string }, string>;
+bindChildResources(fileOperation, [bounded.refine<{ readonly path: string }>((input) => input.path)]);
+// @ts-expect-error only a resource offer can issue the nominal refinement contract
+const forgedRefinement: ResourceRefinement<{ readonly path: string }> = { offer: bounded.request().offer };
+void forgedRefinement;
+const issuedRefinement = bounded.refine<{ readonly path: string }>((input) => input.path);
+// @ts-expect-error resource validation cannot be replaced with arbitrary capture logic
+issuedRefinement.apply = () => ({ allowed: ['outside'] });
+// @ts-expect-error binding input must match the selected definition's input
+bindChildResources(fileOperation, [bounded.refine<number>((input) => String(input))]);
+// @ts-expect-error selection must use the contract defined by the resource
+bounded.refine<{ readonly path: string }>(() => 42);
+declare const fileExecution: ExecutionDefinition<{ readonly path: string }, string>;
+// @ts-expect-error E captures its own resources; child refinement is for O/A
+bindChildResources(fileExecution, [bounded.refine<{ readonly path: string }>((input) => input.path)]);
 
 declare const length: OperationDefinition<string, number>;
 declare const format: OperationDefinition<number, string>;

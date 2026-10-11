@@ -1,6 +1,6 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import { pick } from 'es-toolkit/object';
-import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedInvocationResult, RecordedRelationChange, InvocationOrigin } from '@capix/protocol';
+import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedInvocationResult, RecordedRelationChange, InvocationOrigin, InvocationRelationIdentity } from '@capix/protocol';
 import type { EventConsumer, InvocationObserver } from '../observation/observer.js';
 import type { InvocationObservationSetup, ObservationInstallation } from '../binding/observation.js';
 import type { ObservationDeclarationScope } from '../definition/observation.js';
@@ -30,6 +30,8 @@ import { checkRecordingDeclaration } from './observation-check.js';
 export interface InvocationRecordDescription<Input = unknown, Output = unknown> {
   readonly input?: (input: Input) => unknown;
   readonly output?: (output: Output) => unknown;
+  /** Parent acceptance may produce a different value from the child's returned output. */
+  readonly relationAccepted?: (output: unknown, relation: InvocationRelationIdentity) => unknown;
 }
 export interface InvocationRecordWriter {
   observe(fact: InvocationFact, description?: InvocationRecordDescription): undefined;
@@ -51,6 +53,7 @@ export function invocationRecording<Input = unknown, Output = unknown>(descripti
   const mapped: InvocationRecordDescription = {
     ...(description.input ? { input: (input: unknown) => description.input!(input as Input) } : {}),
     ...(description.output ? { output: (output: unknown) => description.output!(output as Output) } : {}),
+    ...(description.relationAccepted ? { relationAccepted: description.relationAccepted } : {}),
   };
   return defineObservation<InvocationFact, { record: InvocationRecordWriter }>(
     {
@@ -246,6 +249,7 @@ export class InvocationRecording implements InvocationObserver {
     if (fact.relation.parentContextId !== record.contextId) throw new Error('Relation fact belongs to another parent');
     let change: RecordedRelationChange;
     if (fact.change.kind === 'returned') change = { kind: 'returned', result: recordedResult(fact.change.result, childRecording ? childRecording.#recordDescription : undefined) };
+    else if (fact.change.kind === 'accepted' && this.#recordDescription.relationAccepted) change = { kind: 'accepted', output: this.#recordDescription.relationAccepted(fact.change.output, fact.relation) };
     else if (fact.change.kind === 'failed') change = { kind: 'failed', source: fact.change.source, error: RuntimeErrorHelper.format(fact.change.error), ...(fact.change.failure ? { failure: failureFact(fact.change.failure) } : {}) };
     else change = fact.change;
     const relation = { identity: fact.relation, eventSequence: fact.eventSequence, occurredAt: fact.occurredAt, offsetMs, ...(childRecording?.record ? { childId: childRecording.record.id } : {}), change };

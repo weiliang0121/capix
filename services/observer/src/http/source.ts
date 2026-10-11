@@ -1,5 +1,15 @@
 /** Explicit source inspection boundary; never expose arbitrary project files. */
 export const allowedSources = new Set([
+  'services/observer/src/conversation/operations/request/understand.ts',
+  'services/observer/src/conversation/operations/request/input.ts',
+  'services/observer/src/conversation/operations/request/output.ts',
+  'services/observer/src/conversation/operations/document/save.ts',
+  'services/observer/src/conversation/task.ts',
+  'services/observer/src/conversation/operations/document/process.ts',
+  'services/observer/src/conversation/attempt/files/read.ts',
+  'services/observer/src/conversation/attempt/files/create.ts',
+  'services/observer/src/files/workspace.ts',
+  'services/observer/src/files/resources.ts',
   'server/runtime/src/memory/memory.ts',
   'server/runtime/src/memory/memories.ts',
   'server/runtime/src/memory/change.ts',

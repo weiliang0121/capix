@@ -62,7 +62,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     const url = new URL(req.url || '/', `http://${req.headers.host}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
-    if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured } satisfies ConfigurationResponse);
+    if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured, ...(observer.files ? { files: observer.files.configuration } : {}) } satisfies ConfigurationResponse);
     if (req.method === 'GET' && url.pathname === '/api/conversation/admission') return json(res, 200, admission());
     if (req.method === 'GET' && url.pathname === '/api/observe') {
       observer.recordSource.assertComplete();
@@ -168,7 +168,7 @@ export function createObserverServer(options: ObserverServerOptions) {
         submission.reject(new RuntimeError('RUNTIME_BUSY', '运行环境正忙，请稍后再提交。'), { retry: 'admission' });
         return json(res, 409, submission.snapshot);
       }
-      submission.start((signal) => observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, signal }));
+      submission.start((signal) => observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, signal }));
       // This controller only detaches the initial HTTP waiter; it is never passed to runtime.run.
       const waiting = new AbortController();
       const detachWaiting = () => waiting.abort();

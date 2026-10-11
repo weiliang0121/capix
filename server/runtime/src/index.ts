@@ -14,7 +14,7 @@ export * from './composition/sequence.js';
 export * from './binding/runtime.js';
 export * from './binding/observation.js';
 export * from './binding/resources.js';
-export { ResourceOffer, type ResourceRequest, type ResourceProvider } from './resource/offer.js';
+export { ResourceOffer, type ResourceRequest, type ResourceProvider, type ResourceRefinement } from './resource/offer.js';
 export * from './resource/bindings.js';
 export { ResourceActivity, type ResourceInteractionDescription, type ResourceOwner } from './resource/activity.js';
 export * from './initialization/initializer.js';

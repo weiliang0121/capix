@@ -1,11 +1,11 @@
-import type { ConversationAdmission, ConversationRequest } from '@capix/protocol';
+import type { ConversationAdmission, ConversationRequest, FileTask } from '@capix/protocol';
 import type { ConversationTransport } from './transport.js';
 import { acceptConversationRequest } from './request.js';
 import { validAdmission } from './admission.js';
 import { ClientSubmission, type ClientSubmissionState, type SubmissionReception } from './submission.js';
 
 export interface ClientQueueState {
-  readonly waiting: readonly { readonly id: string; readonly pending: string }[];
+  readonly waiting: readonly { readonly id: string; readonly pending: string; readonly fileTask?: FileTask }[];
   readonly blocked?: string;
 }
 export interface ConversationQueueOptions {
@@ -75,7 +75,7 @@ export class ConversationQueue {
   }
 
   get snapshot(): ClientQueueState {
-    return Object.freeze({ waiting: Object.freeze(this.waiting.map(({ id, pending }) => Object.freeze({ id, pending }))), ...(this.blocked ? { blocked: this.blocked } : {}) });
+    return Object.freeze({ waiting: Object.freeze(this.waiting.map(({ id, pending, input }) => Object.freeze({ id, pending, ...(input.fileTask ? { fileTask: input.fileTask } : {}) }))), ...(this.blocked ? { blocked: this.blocked } : {}) });
   }
 
   get submission(): ClientSubmission | undefined {

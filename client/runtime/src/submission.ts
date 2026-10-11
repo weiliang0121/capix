@@ -1,8 +1,10 @@
-import type { ConversationRequest, ConversationSubmissionSnapshot } from '@capix/protocol';
+import type { ConversationRequest, ConversationSubmissionSnapshot, FileTask } from '@capix/protocol';
 import { isEqual } from 'es-toolkit';
 import type { ConversationTransport } from './transport.js';
 import { acceptConversationRequest } from './request.js';
 import { acceptActivities } from './activities.js';
+import { acceptFileOutput } from './files.js';
+import { acceptConversationTask } from './task.js';
 import { validAdmission } from './admission.js';
 
 export type SubmissionFeedback = { readonly status: 'idle' | 'connecting' | 'following' | 'ended' } | { readonly status: 'interrupted'; readonly error: unknown };
@@ -12,6 +14,7 @@ export interface ClientSubmissionState {
   /** Stable local input identity; a rejected admission may require a new POST identity. */
   readonly queueId: string;
   readonly pending: string;
+  readonly fileTask?: FileTask;
   readonly remote?: ConversationSubmissionSnapshot;
   readonly feedback: SubmissionFeedback;
   readonly notificationError?: unknown;
@@ -46,7 +49,7 @@ export class ClientSubmission {
     const accepted = acceptConversationRequest(input);
     this.input = accepted.input;
     this.bytes = accepted.bytes;
-    this.state = Object.freeze({ id: this.id, queueId, pending: this.input.messages.at(-1)!.content, feedback: Object.freeze({ status: 'idle' }) });
+    this.state = Object.freeze({ id: this.id, queueId, pending: this.input.messages.at(-1)!.content, ...(this.input.fileTask ? { fileTask: this.input.fileTask } : {}), feedback: Object.freeze({ status: 'idle' }) });
   }
 
   get snapshot(): ClientSubmissionState {
@@ -105,12 +108,16 @@ export class ClientSubmission {
     if (next.input && this.transcriptId && next.input.transcriptId !== this.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
     if (previous && next.revision < previous.revision) return;
     let activities;
+    let task;
+    let fileOutput;
     try {
       activities = acceptActivities(next.activities, previous?.activities);
+      task = acceptConversationTask(next.task, previous?.task, this.input.fileTask);
+      fileOutput = acceptFileOutput(next.fileOutput, previous?.fileOutput, task?.kind === 'file' ? task.task : undefined);
     } catch (cause) {
-      throw new SubmissionContractError('提交处理过程无效。', { cause });
+      throw new SubmissionContractError('提交过程或文件结果无效。', { cause });
     }
-    const accepted = activities ? { ...next, activities } : next;
+    const accepted = { ...next, ...(activities ? { activities } : {}), ...(task ? { task } : {}), ...(fileOutput ? { fileOutput } : {}) };
     if (previous) {
       if (next.revision === previous.revision) {
         if (!isEqual(accepted, previous)) throw new SubmissionContractError('同一提交修订包含不同事实。');
@@ -209,6 +216,9 @@ export function assertSubmissionSnapshot(snapshot: ConversationSubmissionSnapsho
   if (snapshot.submissionId !== expectedId || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0 || !Array.isArray(snapshot.executions) || new Set(snapshot.executions.map((execution) => execution.contextId)).size !== snapshot.executions.length || snapshot.executions.some((execution) => !execution.contextId) || !snapshot.integrity || !['complete', 'incomplete'].includes(snapshot.integrity.status)) throw new SubmissionContractError('提交反馈身份或修订格式无效。');
   if (snapshot.input && (!snapshot.input.transcriptId || !Number.isSafeInteger(snapshot.input.start) || !Number.isSafeInteger(snapshot.input.end) || snapshot.input.start < 0 || snapshot.input.end <= snapshot.input.start || (snapshot.input.revision !== undefined && (!Number.isSafeInteger(snapshot.input.revision) || snapshot.input.revision < 0)))) throw new SubmissionContractError('提交输入范围无效。');
   if ((snapshot.result && !['completed', 'cancelled', 'failed', 'rejected'].includes(snapshot.result.status)) || (snapshot.result && (snapshot.result.status === 'failed' || snapshot.result.status === 'rejected') && !validFailure(snapshot.result.error)) || (snapshot.integrity.status === 'incomplete' && !validFailure(snapshot.integrity.error))) throw new SubmissionContractError('提交结果或来源完整性诊断无效。');
+  if (snapshot.result && snapshot.fileOutput?.status === 'pending') throw new SubmissionContractError('已结束的提交不能保留待创建的文件状态。');
+  if (snapshot.task !== undefined && !snapshot.input) throw new SubmissionContractError('处理任务需要已接纳的输入。');
+  if (snapshot.result?.status === 'rejected' && (snapshot.task !== undefined || snapshot.fileOutput !== undefined)) throw new SubmissionContractError('未接纳的提交不能包含任务或文件执行事实。');
   if (snapshot.cancelRequested !== undefined && snapshot.cancelRequested !== true) throw new SubmissionContractError('取消请求事实无效。');
   if (snapshot.result?.status === 'cancelled' && !snapshot.cancelRequested) throw new SubmissionContractError('取消结果缺少取消请求事实。');
   if (snapshot.answer && (!snapshot.input || !Number.isSafeInteger(snapshot.answer.index) || snapshot.answer.transcriptId !== snapshot.input.transcriptId || snapshot.answer.index < snapshot.input.end)) throw new SubmissionContractError('提交回答位置与输入范围不一致。');
@@ -225,6 +235,8 @@ function copySubmission(snapshot: ConversationSubmissionSnapshot): ConversationS
     ...(snapshot.answer ? { answer: Object.freeze({ ...snapshot.answer }) } : {}),
     executions: Object.freeze(snapshot.executions.map((execution) => Object.freeze({ ...execution }))),
     ...(snapshot.activities ? { activities: snapshot.activities } : {}),
+    ...(snapshot.task ? { task: snapshot.task } : {}),
+    ...(snapshot.fileOutput ? { fileOutput: snapshot.fileOutput } : {}),
     ...(snapshot.admission ? { admission: Object.freeze({ ...snapshot.admission, ...(snapshot.admission.status === 'unavailable' ? { error: Object.freeze({ ...snapshot.admission.error }) } : {}) }) } : {}),
     ...(snapshot.result ? { result: Object.freeze({ ...snapshot.result, ...('error' in snapshot.result ? { error: Object.freeze({ ...snapshot.result.error }) } : {}) }) } : {}),
     integrity: Object.freeze({ ...snapshot.integrity, ...('error' in snapshot.integrity ? { error: Object.freeze({ ...snapshot.integrity.error }) } : {}) }),

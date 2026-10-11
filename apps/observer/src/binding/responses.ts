@@ -34,7 +34,8 @@ function response(submission: ClientSubmissionState, state: ClientState, body?: 
   // Body availability and the actual submission outcome retain their own notices.
   // Only the current submission has a reconnect command; retained failures remain readable.
   if (notice?.reconnect && submission.id !== state.submission?.id) notice = { ...notice, reconnect: false };
-  return { kind: 'response', key: JSON.stringify(['response', submission.queueId]), submissionId: submission.id, queueId: submission.queueId, bodyState: availability, ...(afterInputKey ? { afterInputKey } : {}), ...(body ? { body } : {}), ...(process ? { process } : {}), ...(notice ? { notice } : {}) };
+  const fileTask = remote?.task?.kind === 'file' ? remote.task.task : remote?.task ? undefined : submission.fileTask;
+  return { kind: 'response', key: JSON.stringify(['response', submission.queueId]), submissionId: submission.id, queueId: submission.queueId, bodyState: availability, ...(fileTask ? { fileTask } : {}), ...(remote?.fileOutput ? { fileOutput: remote.fileOutput } : {}), ...(afterInputKey ? { afterInputKey } : {}), ...(body ? { body } : {}), ...(process ? { process } : {}), ...(notice ? { notice } : {}) };
 }
 
 /** Compose response regions from submission locators while leaving formal transcript content intact. */

@@ -478,7 +478,7 @@ test('the concrete conversation can deliver without a Recorder or any execution 
   assert.deepEqual(output, { kind: 'answer', content: '测试回答' });
   assert.deepEqual(
     received.map((item) => item.kind),
-    ['input', 'execution', 'answer'],
+    ['input', 'execution', 'task', 'answer'],
   );
   assert.equal(received[0].range.transcriptId, entities.transcript.id);
   assert.equal(runtime.recorder, undefined);

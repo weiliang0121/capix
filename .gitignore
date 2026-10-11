@@ -7,3 +7,4 @@ traces/
 .DS_Store
 .test-dist/
 *.tsbuildinfo
+/workspace-files/

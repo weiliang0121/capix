@@ -3,6 +3,8 @@ import { RuntimeError, ProgressChannel, isInvocationCancelled, type InvocationPr
 import { ConversationInputError } from './accept.js';
 import type { ConversationProgress } from './progress.js';
 import { ConversationActivityProjection } from './activity.js';
+import { ConversationFileProjection } from './files.js';
+import type { FileProgress } from '../files/index.js';
 
 export function conversationFailure(error: unknown): ConversationFailure {
   return Object.freeze(error instanceof RuntimeError ? { code: error.code, message: error.message } : { code: 'INTERNAL_ERROR', message: '服务内部错误。' });
@@ -18,6 +20,23 @@ export class ConversationSubmission {
   private completedAt: number | undefined;
   private task: Promise<void> | undefined;
   private readonly activities = new ConversationActivityProjection((activities) => this.update({ activities }));
+  private readonly files = new ConversationFileProjection((fileOutput) => this.update({ fileOutput }));
+  readonly fileProgress = new ProgressChannel<FileProgress>({
+    receive: (fact): undefined => {
+      if (this.completedAt !== undefined) throw new Error('File progress arrived after service completion');
+      const task = this.state.task;
+      if (!this.state.input || task?.kind !== 'file' || !task.task.output) throw new Error('File progress requires an accepted input and selected output task');
+      const path = fact.kind === 'created' ? fact.receipt.path : fact.path;
+      if (path !== task.task.output.path) throw new Error('File progress does not belong to the selected output path');
+      this.files.receive(fact);
+    },
+    failed: (error): undefined => {
+      this.files.invalidate();
+      // Independent delivery failures must not expose a receipt without its accepted scope.
+      // Once the task is known, file uncertainty can stay local to that output projection.
+      if (!this.state.input || this.state.task?.kind !== 'file' || !this.state.task.task.output) this.invalidate(error);
+    },
+  });
   readonly activity = new ProgressChannel<InvocationProgress>({
     receive: (fact): undefined => {
       if (this.completedAt !== undefined) throw new Error('Activity arrived after service completion');
@@ -75,10 +94,11 @@ export class ConversationSubmission {
     } catch (error) {
       if (isInvocationCancelled(error, this.controller.signal)) result = Object.freeze({ status: 'cancelled' });
       else {
-        const rejected = this.state.integrity.status === 'complete' && !this.state.input && (error instanceof ConversationInputError || (error instanceof RuntimeError && error.code === 'RUNTIME_BUSY'));
+        const rejected = this.state.integrity.status === 'complete' && !this.state.input && !this.state.task && !this.state.fileOutput && (error instanceof ConversationInputError || (error instanceof RuntimeError && error.code === 'RUNTIME_BUSY'));
         result = Object.freeze(rejected ? { status: 'rejected', error: conversationFailure(error), ...(error instanceof RuntimeError && error.code === 'RUNTIME_BUSY' ? { retry: 'admission' as const } : {}) } : { status: 'failed', error: conversationFailure(error) });
       }
     }
+    this.files.finish();
     this.completedAt = Date.now();
     this.update({ result });
   }
@@ -86,6 +106,12 @@ export class ConversationSubmission {
   private receive(fact: ConversationProgress): undefined {
     if (this.state.integrity.status === 'incomplete') return;
     if (this.completedAt !== undefined) throw new Error('Progress arrived after service completion');
+    if (fact.kind === 'task') {
+      if (!this.state.input || this.state.task) throw new Error('Task selection requires a committed input and may only occur once');
+      const task = fact.task.kind === 'file' ? Object.freeze({ kind: 'file' as const, task: Object.freeze({ ...fact.task.task, ...(fact.task.task.output ? { output: Object.freeze({ ...fact.task.task.output }) } : {}) }) }) : Object.freeze({ kind: fact.task.kind });
+      this.update({ task });
+      return;
+    }
     if (fact.kind === 'execution') {
       if (this.state.executions.some((item) => item.contextId === fact.contextId)) return;
       this.update({ executions: Object.freeze([...this.state.executions, Object.freeze({ contextId: fact.contextId })]) });

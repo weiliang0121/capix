@@ -176,7 +176,7 @@ test('conversation binding selects its declared E instead of giving every R chil
   assert.equal(environment.transcript.length, 4);
   assert.deepEqual(
     received.map((fact) => fact.kind),
-    ['input', 'execution', 'answer'],
+    ['input', 'execution', 'task', 'answer'],
   );
   assert.equal(received[0].range.start, 2);
   assert.equal(received.at(-1).range.start, 3);
@@ -225,7 +225,7 @@ test('a single submission channel disables its consumer across input, execution 
       },
     }),
   });
-  assert.deepEqual(next, ['input', 'execution', 'answer'], 'a new call owns its own channel and does not inherit earlier failures');
+  assert.deepEqual(next, ['input', 'execution', 'task', 'answer'], 'a new call owns its own channel and does not inherit earlier failures');
 });
 
 test('pre-runtime rejection is terminal, queryable, and cannot subsequently start work', async () => {

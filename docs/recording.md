@@ -29,7 +29,9 @@ RecordRegistration 只覆盖一次记录登记，既不包含整个 EOA 调用�
 
 ## 调用记录
 
-`invocationRecording({ input?, output? })` 是内置观测声明，正式申请 InvocationRecordAccess。`bindRecording(recorder, { failure?, invalidate? })` 安装本调用写端口；InvocationRecording 维护记录句柄、父预设和直接子预设，不建立全局 Context 反查。Invocation 不持有记录或 source，不直接调用记录 Helper。
+`invocationRecording({ input?, output?, relationAccepted? })` 是内置观测声明，正式申请 InvocationRecordAccess。`bindRecording(recorder, { failure?, invalidate? })` 安装本调用写端口；InvocationRecording 维护记录句柄、父预设和直接子预设，不建立全局 Context 反查。Invocation 不持有记录或 source，不直接调用记录 Helper。
+
+子调用 returned 使用子声明的 output 描述；父层 accepted 可以产生不同值，由父声明的 `relationAccepted(output, relation)` 独立描述。默认仍保留原值，不根据对象身份推断两种语义相等。文件分支据此将读取正文和模型请求投影为路径、字节数、摘要或请求元数据；运行中的输入输出与父子接纳仍保留真实对象。模型产生的回答仍按原有规则记录，生成正文可能引用源文，这不等于存储原始文件。
 
 声明同步消费 InvocationFact。started 建立本层记录，process 捕获正文，finished 描述工作终态；关系变化写入父记录的 relationChanges。描述规则只影响记录，不替换业务 IO。观测关闭不执行描述。没有声明本预设的范围不生成空记录，其子预设也不伪造父节点。
 

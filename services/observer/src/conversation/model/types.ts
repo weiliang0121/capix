@@ -1,4 +1,4 @@
-export type Purpose = 'selection' | 'answer' | 'memory';
+export type Purpose = 'selection' | 'understanding' | 'answer' | 'memory';
 export type ModelInitialization = ModelProvider | (() => ModelProvider);
 export interface ModelProvider {
   /** A known provider condition requiring replacement/reconfiguration; reading it never probes the model. */

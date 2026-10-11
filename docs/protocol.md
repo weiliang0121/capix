@@ -25,6 +25,18 @@
 - GET `/api/observe` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接，每个连接都有独立 scopeId，首帧 sequence 为 0。序号缺口最多自动重建一次基线；SOURCE_INCOMPLETE 是记录来源已缺失事实的终止控制，不自动重试，也不能通过重连同一来源补救。不提供历史重放或跨查询一致性承诺。
 - 除上述正式提交拒绝外，HTTP 非 2xx 返回 ErrorResponse。无保留项时提交查询返回 404 / SUBMISSION_UNAVAILABLE，不能据此断言未执行；相同身份仍保留时 POST 返回 409 / SUBMISSION_EXISTS，不启动第二次工作。记录来源失效后，观测流及 executions/execution/memory 查询明确返回 SOURCE_INCOMPLETE；实体查询与订阅不依赖记录完整性。不改变现有运行失败的事实记录。
 
+## 可选文件任务
+
+`ConversationRequest.fileTask` 为 `{ sourcePath, output?: { path } }` 或 `{ output: { path } }`，路径相对于服务端显式配置的工作目录。`ConfigurationResponse.files` 存在时表示支持此任务，给出 `maxReadBytes/maxWriteBytes`；不公开宿主绝对路径。合法路径、结构和启用条件在追加输入前检查，文件实际存在性、UTF-8 与字节上限在读取 A 中检查。原文和结果仍以正式 user/assistant 消息同步，文件正文不进入提交反馈。
+
+服务在 E 接纳任务后发布 `task`：`reply`、`file { task: FileTask }`、`clarify` 或 `unsupported`。它是本轮稳定的分支选择，不能更换或消失；出现前必须已有正式输入。普通自然语言也可得到 file 任务，客户端不从文本识别路径。显式 fileTask 是完整约束，远端不能偷偷扩大或换成普通回答。首次累计快照可以同时含 input、task、回答及终态。
+
+提交的 `fileOutput` 独立表达结果文件：`pending`、`created`（path/bytes/SHA-256 digest 回执）、`not-created`（not-started/cancelled/failed）或 `unconfirmed`。requested 来自 E 正式选择含输出的文件任务；started 与发布结果来自实际文件端点。端点完成发布后立即发出 created，即使稍后取消、父层接纳或记忆处理失败也保留。工作结束时，完整来源证实尚未开始的输出为 not-started；已经开始但缺少可信结果的输出只能是 unconfirmed。
+
+没有 `fileOutput` 只表示尚未收到该项事实，不等价于未创建；输入拒绝、尚未进入受理通知等情况可以没有该字段。客户端保留本地路径意图，与服务事实区分。已确认终态不可回退；任务终态不能携带 pending，受理拒绝不能同时携带文件执行事实。文件投影失效不改写执行结果或已经确认的创建回执；缺失任务归属时不发布无归属的文件结果，并标记反馈解释不完整。回答先正式落实，再执行保存；保存失败和记忆失败都保留正文，文件组件独立显示保存结果。
+
+文件任务复用提交查询和 follow，不另建文件同步集合，也不因反馈断线重做。SHA-256 标识本次实际读取/发布的字节，不承诺外部文件今后不变化。当前仅提供结果路径与回执，没有下载、任意路径浏览、覆盖、追加或删除接口。`/api/source` 仍是独立源码白名单端点。
+
 ## 身份、顺序与时间
 
 submissionId 是服务请求的关联身份，Context.id 是一次内核调用身份，Record.id 是可选观测载体身份，三者互不替代。一次提交可关联零个或多个 E；即使不启用 Recorder 也能取得消息落实和调用进展。投影 revision 仅表达该提交解释状态的变化，允许连接合并中间状态后交付更高修订；它不是调用顺序、消息 revision 或观测游标。累计事实不可回退，同修订必须等值。

@@ -2,6 +2,8 @@ import type { Message } from '../content/message.js';
 import type { ModelSettings } from './settings.js';
 import type { MessageLocator, TranscriptRangeLocator, TranscriptSnapshot } from '../content/transcript.js';
 import type { ConversationActivities } from './activity.js';
+import type { FileTask, FileOutput } from './files.js';
+import type { ConversationTask } from './task.js';
 
 /** A public service diagnosis, independent of private runtime errors and observation records. */
 export interface ConversationFailure {
@@ -27,6 +29,9 @@ export interface ConversationSubmissionSnapshot {
   readonly executions: readonly { readonly contextId: string }[];
   /** Optional, independently complete progress projection. It never determines the submission result. */
   readonly activities?: ConversationActivities;
+  /** Fixed after parent acceptance; a proposal or explicit input alone is not this fact. */
+  readonly task?: ConversationTask;
+  readonly fileOutput?: FileOutput;
   /** The service accepted a stop request; this does not establish a terminal result. */
   readonly cancelRequested?: true;
   /** Admission conditions at publication time, independent of this submission's immutable result. */
@@ -39,9 +44,11 @@ export interface ConversationSubmissionSnapshot {
 export interface ConversationRequest {
   messages: Message[];
   contextBudget?: number;
+  fileTask?: FileTask;
 }
 export interface ConfigurationResponse extends ModelSettings {
   configured: boolean;
+  files?: { readonly maxReadBytes: number; readonly maxWriteBytes: number };
 }
 export interface TranscriptResponse extends TranscriptSnapshot {}
 export interface ErrorResponse {

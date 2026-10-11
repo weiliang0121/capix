@@ -1,4 +1,5 @@
 import type { ResourceRequirements } from '../resource/bindings.js';
+import type { ResourceRefinement } from '../resource/offer.js';
 import { definitionResources } from '../binding/resources.js';
 import { randomUUID } from 'node:crypto';
 import type { Invocation } from '../invocation/invocation.js';
@@ -20,12 +21,13 @@ export class BoundOperation<Input, Output, Resources extends object = object> {
     readonly definition: OperationDefinition<Input, Output, Resources, any>,
     readonly children: BoundChildren,
     private readonly requires: ResourceRequirements<Resources> = definitionResources(definition) as ResourceRequirements<Resources>,
+    private readonly refinements?: readonly ResourceRefinement<Input>[],
   ) {
     this.work = bindInvocationWork(definition, children);
   }
   create(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, input: Input, options: InvocationRelationOptions = {}) {
     const { name, label, source } = this.definition;
-    return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: this.definition.run.requires, observation: this.definition.observation, description: { id: this.id, name, label, source }, work: this.work, key: options.key });
+    return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: this.definition.run.requires, refinements: this.refinements, observation: this.definition.observation, description: { id: this.id, name, label, source }, work: this.work, key: options.key });
   }
   call(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, input: Input): Promise<Output> {
     return this.create(parent, input).run();

@@ -17,6 +17,8 @@ export function ConversationPanel() {
   const selectedId = useAppStore((state) => state.selectedId);
   const inspect = useAppStore((state) => state.inspect);
   const draft = useAppStore((state) => state.draft);
+  const fileDraft = useAppStore((state) => state.fileDraft);
+  const setFileDraft = useAppStore((state) => state.setFileDraft);
   const setDraft = useAppStore((state) => state.setDraft);
   const focus = useAppStore((state) => state.conversationFocus);
   const { submit, reconnectConversation, reconnectSubmission, cancelSubmission } = useAppCommands();
@@ -52,7 +54,7 @@ export function ConversationPanel() {
       )}
       <ChatMessages rows={conversation} focus={focus} selectedId={selectedId} onInspect={inspect} onReconnect={reconnectSubmission} />
       <MessageQueue queue={queue} onCancel={cancelSubmission} />
-      <Composer configured={config?.configured ?? false} loaded={Boolean(config)} draft={draft} current={submissionControl} onDraft={setDraft} onSubmit={submit} onCancel={cancelSubmission} />
+      <Composer configured={config?.configured ?? false} loaded={Boolean(config)} draft={draft} current={submissionControl} files={config?.files} fileDraft={fileDraft} onFileDraft={setFileDraft} onDraft={setDraft} onSubmit={submit} onCancel={cancelSubmission} />
     </aside>
   );
 }

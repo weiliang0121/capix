@@ -1,4 +1,4 @@
-import { definitionResources, observationResources } from './resources.js';
+import { checkChildResourceBindings, definitionResources, observationResources, type ChildResourceBinding } from './resources.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
 import type { RuntimeDefinition } from '../definition/runtime.js';
 import type { InvocationControls } from '../context/context.js';
@@ -28,6 +28,7 @@ export interface RuntimeCallSource<Input, Options, Source> {
 export interface RuntimeAssemblyOptions<Input, Options, Source> extends BoundRuntimeOptions {
   readonly providers: readonly ResourceProvider<Source>[];
   readonly source: RuntimeCallSource<Input, Options, Source>;
+  readonly childResources?: readonly ChildResourceBinding[];
 }
 
 /** Assemble the reusable R business endpoint from declarations and independent resource supplies. */
@@ -35,6 +36,8 @@ export function assembleRuntime<Input, Output, Resources extends object, Options
   const source = options.source;
   for (const observation of options.observations ?? []) observation.check?.(definition);
   const localObservationResources = observationResources(options.observations);
+  const childResources = Object.freeze([...(options.childResources ?? [])]);
+  checkChildResourceBindings(definition.children, childResources, localObservationResources);
   const requires = definitionResources(definition, localObservationResources) as ResourceRequirements<Resources>;
   const runtimeResources = bindResources(requires, options.providers);
   if (resourceRequests(requires).length && !source.runtime) throw new Error('Runtime resource requests require a runtime source');
@@ -49,7 +52,7 @@ export function assembleRuntime<Input, Output, Resources extends object, Options
   );
   return createBoundRuntime<Input, Output, Options, Resources>(options, (runtime) => ({
     definition,
-    children: runtime.environment.children(requires, definition.children, 'runtime', definition),
+    children: runtime.environment.children(requires, definition.children, 'runtime', definition, childResources),
     validate: source.validate?.bind(source),
     progress: source.progress?.bind(source),
     resources: (input, callOptions) => (source.runtime ? runtimeResources(source.runtime(input, callOptions)) : new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)),

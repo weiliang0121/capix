@@ -3,3 +3,4 @@ export * from './assembly/changes.js';
 export * from './assembly/environment.js';
 export * from './assembly/provider.js';
 export * from './assembly/settings.js';
+export * from './files/index.js';

@@ -12,7 +12,7 @@ const action = z.enum(['create', 'update']);
 const content = z.object({ topic: z.string(), content: z.string(), sourceIndexes: z.array(index) });
 const memoryRecord = z.object({ id, parentId: id.optional(), memoryId: id, memoriesId: id, sequence: z.number().int().positive(), contextId: id.optional(), callId: id.optional(), executionId: id.optional(), operationId: id.optional(), value: z.object({ action, change: z.string(), sourceIndexes: z.array(index), result: content }) });
 
-export const configurationResponse = z.object({ configured: z.boolean(), model: z.string(), contextBudget: index, maxOutputTokens: index, timeoutMs: index }) satisfies z.ZodType<ConfigurationResponse>;
+export const configurationResponse = z.object({ configured: z.boolean(), model: z.string(), contextBudget: index, maxOutputTokens: index, timeoutMs: index, files: z.object({ maxReadBytes: index.positive(), maxWriteBytes: index.positive() }).optional() }) satisfies z.ZodType<ConfigurationResponse>;
 export const transcriptResponse = z.object({ id, revision: index, start: z.literal(0), end: index, starts: z.array(index).min(1), messages: z.array(message) }) satisfies z.ZodType<TranscriptResponse>;
 export const sourceResponse = z.object({ path: z.string(), content: z.string() }) satisfies z.ZodType<SourceResponse>;
 export const memoryResponse = z.object({ items: z.array(z.object({ id, topic: z.string(), content: z.string(), sources: z.array(z.object({ transcriptId: id, index })), records: z.array(memoryRecord) })) }) satisfies z.ZodType<MemoryObservation>;
@@ -61,6 +61,8 @@ const conversationActivities = z.object({
   calls: z.array(z.object({ contextId: id.max(256), parentContextId: id.max(256).optional(), level: z.enum(['runtime', 'execution', 'operation', 'attempt']), label: z.string().max(120), status: z.enum(['running', 'succeeded', 'failed', 'cancelled']), phase: z.enum(['setup', ...invocationProcessStages]), round: index.max(2), startedAt: z.iso.datetime().optional(), finishedAt: z.iso.datetime().optional(), relation: z.object({ phase: z.enum(['attached', 'returned', 'receiving', 'accepted', 'failed']), returned: z.enum(['succeeded', 'failed', 'cancelled']).optional() }).optional() })).max(512),
   integrity: z.discriminatedUnion('status', [z.object({ status: z.literal('complete') }), z.object({ status: z.literal('incomplete'), error: conversationFailure })]),
 });
+const fileTask = z.union([z.object({ sourcePath: id, output: z.object({ path: id }).optional() }), z.object({ sourcePath: z.never().optional(), output: z.object({ path: id }) })]);
+const conversationTask = z.discriminatedUnion('kind', [z.object({ kind: z.literal('reply') }), z.object({ kind: z.literal('file'), task: fileTask }), z.object({ kind: z.literal('clarify') }), z.object({ kind: z.literal('unsupported') })]);
 export const submissionResponse = z.object({
   submissionId: id,
   revision: index,
@@ -68,6 +70,8 @@ export const submissionResponse = z.object({
   answer: z.object({ transcriptId: id, index }).optional(),
   executions: z.array(z.object({ contextId: id })),
   activities: conversationActivities.optional(),
+  task: conversationTask.optional(),
+  fileOutput: z.discriminatedUnion('status', [z.object({ status: z.literal('pending'), path: id }), z.object({ status: z.literal('created'), receipt: z.object({ path: id, bytes: index, digest: z.string().regex(/^[a-f0-9]{64}$/u) }) }), z.object({ status: z.literal('not-created'), path: id, reason: z.enum(['not-started', 'cancelled', 'failed']) }), z.object({ status: z.literal('unconfirmed'), path: id })]).optional(),
   cancelRequested: z.literal(true).optional(),
   admission: admissionResponse.optional(),
   result: z.discriminatedUnion('status', [z.object({ status: z.literal('completed'), retry: z.never().optional() }), z.object({ status: z.literal('cancelled'), retry: z.never().optional() }), z.object({ status: z.literal('failed'), error: conversationFailure, retry: z.never().optional() }), z.object({ status: z.literal('rejected'), error: conversationFailure, retry: z.literal('admission').optional() })]).optional(),

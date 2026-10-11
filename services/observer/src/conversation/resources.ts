@@ -1,6 +1,9 @@
 import { type Initializer, type ResourceProvider, type ResourceRequest, type ProgressReceiver } from '@capix/server-runtime';
 import { TranscriptResource, MemoryResource, SelectionUsageResource, type Transcript, type Memories, type SelectionUsage, type TranscriptRangeRef, type TranscriptRangeReader, type TranscriptAppendProgress } from '@capix/server-runtime/content';
-import type { ModelSettings } from '@capix/protocol';
+import type { ModelSettings, FileTask, ConversationTask } from '@capix/protocol';
+import { FileResources, type WorkspaceFiles, type FileProgress, type FileResourceSource, type FileReader, type FileCreator } from '../files/index.js';
+import type { ProgressChannel } from '@capix/server-runtime';
+import { ConversationTaskResource, type TaskSelection } from './task.js';
 import { ModelSettingsResource, ModelResource } from './model/resources.js';
 import type { ModelProvider, ModelInvocation } from './model/types.js';
 
@@ -23,6 +26,9 @@ export interface ConversationExecutionResources extends ConversationResources, M
   readonly memories: Offered<typeof MemoryResource.snapshot>;
   readonly messages: Offered<typeof TranscriptResource.append>;
   readonly selectionUsage: Offered<typeof SelectionUsageResource.record>;
+  readonly tasks: TaskSelection;
+  readonly reader?: FileReader;
+  readonly creator?: FileCreator;
 }
 
 export const conversationExecutionRequests = Object.freeze({
@@ -34,6 +40,7 @@ export const conversationExecutionRequests = Object.freeze({
   memoryWriter: MemoryResource.apply.request(),
   messages: TranscriptResource.append.request(),
   selectionUsage: SelectionUsageResource.record.request(),
+  tasks: ConversationTaskResource.request(),
 });
 export const conversationEntryRequests = Object.freeze({
   settings: ModelSettingsResource.snapshot.request(),
@@ -50,10 +57,15 @@ export interface ConversationResourceSource {
   readonly memories: Memories;
   readonly selectionUsage: SelectionUsage;
   readonly model: Initializer<ModelProvider>;
+  readonly files?: WorkspaceFiles;
+  readonly fileTask?: FileTask;
+  readonly taskProgress?: ProgressReceiver<ConversationTask>;
+  readonly fileProgress?: ProgressChannel<FileProgress>;
 }
 
 /** Supply declarations contain no live Runtime or provider instance. */
 export const conversationProviders: readonly ResourceProvider<ConversationResourceSource>[] = Object.freeze([
+  ConversationTaskResource.provide((source: ConversationResourceSource) => ({ progress: source.taskProgress })),
   ModelSettingsResource.snapshot.provide((source: ConversationResourceSource) => source.settings),
   ModelSettingsResource.timeout.provide((source: ConversationResourceSource) => source.settings.timeoutMs),
   TranscriptResource.fixedRange.provide((source: ConversationResourceSource) => {
@@ -69,3 +81,10 @@ export const conversationProviders: readonly ResourceProvider<ConversationResour
 ]);
 
 export type ConversationEntryResources = { [Alias in keyof typeof conversationEntryRequests]: (typeof conversationEntryRequests)[Alias] extends ResourceRequest<infer Value> ? Value : never };
+
+export const conversationFileProviders: readonly ResourceProvider<ConversationResourceSource>[] = Object.freeze([FileResources.readText.provide(fileSource), FileResources.createText.provide(fileSource)]);
+
+function fileSource(source: ConversationResourceSource): FileResourceSource {
+  if (!source.files) throw new Error('A configured file workspace is required');
+  return { files: source.files, constraint: source.fileTask, progress: source.fileProgress };
+}

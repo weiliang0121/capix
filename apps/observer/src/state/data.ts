@@ -1,4 +1,4 @@
-import type { ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceRecord, ProcessRecord, RelationChangeRecord } from '@capix/protocol';
+import type { FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceRecord, ProcessRecord, RelationChangeRecord } from '@capix/protocol';
 import type { ConversationItem } from './conversation.js';
 import type { CallSpan } from '../observation/types.js';
 
@@ -72,7 +72,7 @@ export interface SubmissionControl {
   disabled: boolean;
 }
 export interface ConversationQueueView {
-  readonly waiting: readonly { readonly id: string; readonly pending: string }[];
+  readonly waiting: readonly { readonly id: string; readonly pending: string; readonly fileTask?: FileTask }[];
   readonly blocked?: string;
 }
 export function emptyAppData(): AppData {

@@ -1,4 +1,4 @@
-import { invocationRecording } from '@capix/server-runtime/recording';
+import { invocationRecording, type InvocationRecordDescription } from '@capix/server-runtime/recording';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../resources.js';
 import { InvocationEntry, AttemptDefinition, type AttemptContextView, RuntimeError } from '@capix/server-runtime';
@@ -10,7 +10,7 @@ import { checkCapacity } from '../../model/capacity.js';
 import type { ModelRequest, ModelOutput, Purpose } from '../../model/types.js';
 
 export class InvokeModelDefinition extends AttemptDefinition<ModelRequest, ModelOutput, ModelCallResources> {
-  readonly observation = [invocationRecording()];
+  readonly observation;
   static readonly requires = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), model: ModelResource.invoke.request() });
 
   readonly run = { requires: InvokeModelDefinition.requires, execute: this.execute.bind(this) };
@@ -31,8 +31,12 @@ export class InvokeModelDefinition extends AttemptDefinition<ModelRequest, Model
     }),
   });
 
-  constructor(private readonly purpose: Purpose) {
+  constructor(
+    private readonly purpose: Purpose,
+    description: InvocationRecordDescription<ModelRequest, ModelOutput> = {},
+  ) {
     super();
+    this.observation = [invocationRecording(description)];
   }
 
   private execute(context: AttemptContextView<ModelRequest, ModelOutput, ModelCallResources>): Promise<ModelOutput> {

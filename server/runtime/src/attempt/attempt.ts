@@ -1,4 +1,5 @@
 import type { ResourceRequirements } from '../resource/bindings.js';
+import type { ResourceRefinement } from '../resource/offer.js';
 import { definitionResources } from '../binding/resources.js';
 import type { Invocation } from '../invocation/invocation.js';
 import type { OperationContext } from '../context/operation.js';
@@ -18,11 +19,12 @@ export class BoundAttempt<Input, Output, Resources extends object = object> {
     readonly definition: AttemptDefinition<Input, Output, Resources, any>,
     children: BoundChildren,
     private readonly requires: ResourceRequirements<Resources> = definitionResources(definition) as ResourceRequirements<Resources>,
+    private readonly refinements?: readonly ResourceRefinement<Input>[],
   ) {
     this.work = bindInvocationWork(definition, children);
   }
   create(parent: Invocation<unknown, unknown, OperationContext>, input: Input, options: InvocationRelationOptions = {}) {
-    return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: this.definition.run.requires, observation: this.definition.observation, description: this.definition, work: this.work, key: options.key });
+    return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: this.definition.run.requires, refinements: this.refinements, observation: this.definition.observation, description: this.definition, work: this.work, key: options.key });
   }
   call(parent: Invocation<unknown, unknown, OperationContext>, input: Input): Promise<Output> {
     return this.create(parent, input).run();

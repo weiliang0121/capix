@@ -260,3 +260,46 @@
   font-size: var(--font-xs);
   overflow-wrap: anywhere;
 }
+
+.file-task-controls {
+  margin-bottom: 10px;
+  color: var(--muted-foreground);
+  font-size: var(--font-sm);
+}
+.file-task-controls summary {
+  cursor: pointer;
+}
+.file-task-controls p {
+  font-size: var(--font-xs);
+  margin: 8px 0;
+}
+.file-task-controls label {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+.file-result {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  font-size: var(--font-sm);
+  overflow-wrap: anywhere;
+}
+.file-result p {
+  margin: 3px 0;
+}
+.file-result span {
+  color: var(--foreground);
+}
+.file-result .file-result-size,
+.message-queue-file {
+  color: var(--muted-foreground);
+  font-size: var(--font-xs);
+}
+.message-queue-content {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

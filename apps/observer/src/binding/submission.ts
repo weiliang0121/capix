@@ -20,7 +20,7 @@ export function projectSubmission(state: Pick<ClientState, 'submission' | 'answe
   // A committed answer remains usable even if later work fails. Keep the service
   // diagnosis in runtime/observation data, not in the user's answer presentation.
   if (result?.status === 'failed' && remote?.answer) return { progress: answerPending ? '回答已生成，正文待同步…' : '' };
-  if (result?.status === 'failed') return { progress: '', submissionNotice: { message: '这次未能完成回答，可以重新发送或调整问题后再试。', ...actions } };
+  if (result?.status === 'failed') return { progress: '', submissionNotice: { message: result.error.code === 'FILE_ACCESS' ? `文件处理未完成：${result.error.message}请检查文件路径或内容后再试。` : '这次未能完成回答，可以重新发送或调整问题后再试。', ...actions } };
   if (result?.status === 'rejected') return { progress: '', submissionNotice: { message: '这条消息未被接纳，可以重新发送。', ...actions } };
   if (result && cancelling) return { progress: answerPending ? '回答正文待同步…' : '', submissionNotice: { message: `${answer}处理已完成，取消没有改变已完成的结果。`, ...actions } };
   if (cancelling) {

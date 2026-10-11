@@ -1,7 +1,8 @@
 import { RuntimeError, isObject, isNonEmptyArray, isNonBlankString } from '@capix/server-runtime';
 import { type Transcript } from '@capix/server-runtime/content';
 
-import type { Message } from '@capix/protocol';
+import type { Message, FileTask } from '@capix/protocol';
+import { isRelativeFilePath } from '../files/index.js';
 
 export class ConversationInputError extends RuntimeError {
   constructor(message: string) {
@@ -32,4 +33,28 @@ export function acceptMessages(value: unknown, append: (messages: readonly Messa
     return { role: message.role, content: message.content } satisfies Message;
   });
   return append(messages).at(-1)!.message;
+}
+
+export interface AcceptedConversationInput {
+  readonly message: Readonly<Message>;
+  readonly fileTask?: FileTask;
+}
+
+/** Validate optional capability instructions before appending any formal message. */
+export function acceptConversationRequest(value: unknown, append: (messages: readonly Message[]) => readonly { message: Readonly<Message> }[], filesEnabled: boolean): AcceptedConversationInput {
+  const fileTask = acceptFileTask(isObject(value) ? value.fileTask : undefined, filesEnabled);
+  const message = acceptMessages(value, append);
+  return Object.freeze({ message, ...(fileTask ? { fileTask } : {}) });
+}
+
+function acceptFileTask(value: unknown, enabled: boolean): FileTask | undefined {
+  if (value === undefined) return undefined;
+  if (!enabled) throw new ConversationInputError('当前服务未启用文件处理。');
+  if (!isObject(value) || Object.keys(value).some((key) => key !== 'sourcePath' && key !== 'output') || (value.sourcePath !== undefined && !isRelativeFilePath(value.sourcePath))) throw new ConversationInputError('文件任务需要合法的工作目录相对路径。');
+  if (value.output !== undefined && (!isObject(value.output) || Object.keys(value.output).some((key) => key !== 'path') || !isRelativeFilePath(value.output.path))) throw new ConversationInputError('输出文件需要合法的工作目录相对路径。');
+  const output = value.output as { path: string } | undefined;
+  if (value.sourcePath === undefined && !output) throw new ConversationInputError('文件任务至少需要源文件或输出文件。');
+  if (output?.path === value.sourcePath) throw new ConversationInputError('输出必须是不同于源文件的新文件。');
+  if (value.sourcePath === undefined) return Object.freeze({ output: Object.freeze({ path: output!.path }) });
+  return Object.freeze({ sourcePath: value.sourcePath as string, ...(output ? { output: Object.freeze({ path: output.path }) } : {}) });
 }

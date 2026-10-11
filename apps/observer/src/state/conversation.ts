@@ -1,4 +1,4 @@
-import type { Message } from '@capix/protocol';
+import type { Message, FileTask, FileOutput } from '@capix/protocol';
 import type { SubmissionNotice } from './data.js';
 
 export interface ConversationMessage {
@@ -29,6 +29,8 @@ export interface ConversationResponse {
   readonly submissionId: string;
   readonly queueId: string;
   readonly afterInputKey?: string;
+  readonly fileTask?: FileTask;
+  readonly fileOutput?: FileOutput;
   readonly bodyState: 'unconfirmed' | 'unloaded' | 'pending' | 'available' | 'missing' | 'error';
   readonly body?: ConversationMessage;
   readonly process?: ConversationProcess;

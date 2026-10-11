@@ -5,6 +5,7 @@ import type { InvocationFact } from '../../observation/facts.js';
 import { bindInvocationObservation } from '../../binding/observation.js';
 import { attachInvocationResources } from '../resources.js';
 import type { ResourceRequirements } from '../../resource/bindings.js';
+import type { ResourceRefinement } from '../../resource/offer.js';
 import type { InvocationCapabilities } from '../capabilities.js';
 import { InvocationChangeEmitter } from '../changes.js';
 import { Invocation } from '../invocation.js';
@@ -19,6 +20,7 @@ export interface AttemptInvocationRequest<Input, Output, Resources extends objec
   input: Input;
   requires?: ResourceRequirements<Resources>;
   initial?: ResourceRequirements;
+  refinements?: readonly ResourceRefinement<Input>[];
   observation?: readonly ObservationDeclaration<InvocationFact>[];
   key?: string;
   description: AttemptDescription;
@@ -34,7 +36,8 @@ export class AttemptInvocationBuilder {
   create<Input, Output, Resources extends object = object>(parent: Invocation<unknown, unknown, OperationContext>, request: AttemptInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, AttemptContext<Input, Output, Resources>> {
     parent.requireActive();
     this.contextBuilder.check(parent.context);
-    const context = this.contextBuilder.create<Input, Output, Resources>(parent.context, request.input, parent.context.resources.select(request.requires ?? ({} as ResourceRequirements<Resources>), request.initial));
+    const resources = parent.context.resources.select(request.requires ?? ({} as ResourceRequirements<Resources>), request.initial, { input: request.input, refinements: request.refinements ?? [] });
+    const context = this.contextBuilder.create<Input, Output, Resources>(parent.context, request.input, resources);
     const identity = { contextId: context.id, level: 'attempt' as const, parentContextId: parent.context.id };
     const observation = bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources: context.resources }, this.capabilities.observations, parent.observation);
     const changes = this.capabilities.changes ? new InvocationChangeEmitter({ contextId: context.id, level: 'attempt', parentContextId: parent.context.id }, this.capabilities.changes) : undefined;

@@ -21,7 +21,15 @@ export function MessageQueue({ queue, onCancel }: MessageQueueProps) {
         {queue.waiting.map((item, index) => (
           <li key={item.id}>
             <span className="message-queue-index">{index + 1}</span>
-            <p>{item.pending}</p>
+            <div className="message-queue-content">
+              <p>{item.pending}</p>
+              {item.fileTask && (
+                <span className="message-queue-file">
+                  {item.fileTask.sourcePath ? `文件：${item.fileTask.sourcePath}` : '保存结果'}
+                  {item.fileTask.output ? `${item.fileTask.sourcePath ? ' → ' : '：'}${item.fileTask.output.path}` : ''}
+                </span>
+              )}
+            </div>
             <Button type="button" variant="ghost" size="sm" onClick={() => void onCancel(item.id)} aria-label={`撤回待发送消息 ${index + 1}`}>
               撤回
             </Button>

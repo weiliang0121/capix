@@ -1,6 +1,6 @@
 import type { ObservationDeclarationScope } from '../definition/observation.js';
 import type { ObservationInstallation } from './observation.js';
-import { definitionResources } from './resources.js';
+import { definitionResources, type ChildResourceBinding } from './resources.js';
 import { isFunction } from 'es-toolkit/predicate';
 import type { OperationInvocationBuilder } from '../invocation/operation/builder.js';
 import type { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
@@ -25,13 +25,13 @@ export class BindingEnvironment {
   resources(definition: Parameters<typeof definitionResources>[0]): ResourceRequirements<any> {
     return definitionResources(definition, this.localObservationResources) as ResourceRequirements<any>;
   }
-  children(requires: ResourceRequirements, definitions: readonly ChildDefinition[], level: 'runtime' | 'execution' | 'operation' | 'attempt', owner?: ObservationDeclarationScope): BoundChildren {
+  children(requires: ResourceRequirements, definitions: readonly ChildDefinition[], level: 'runtime' | 'execution' | 'operation' | 'attempt', owner?: ObservationDeclarationScope, childResources: readonly ChildResourceBinding[] = []): BoundChildren {
     this.check(requires, definitions, level, new Set(), owner);
     return new BoundChildren(definitions, (definition) =>
       definition.level === 'execution'
-        ? new BoundExecution(this.executionInvocationBuilder, definition, this.children(this.resources(definition), definition.children, 'execution', definition), this.resources(definition))
+        ? new BoundExecution(this.executionInvocationBuilder, definition, this.children(this.resources(definition), definition.children, 'execution', definition, childResources), this.resources(definition))
         : definition.level === 'operation'
-          ? new BoundOperation(this.operationInvocationBuilder, definition, this.children(this.resources(definition), definition.children, 'operation', definition), this.resources(definition))
+          ? new BoundOperation(this.operationInvocationBuilder, definition, this.children(this.resources(definition), definition.children, 'operation', definition, childResources), this.resources(definition), childResources.find((binding) => binding.definition === definition)?.refinements)
           : new BoundAttempt(
               this.attemptInvocationBuilder,
               definition,
@@ -39,6 +39,7 @@ export class BindingEnvironment {
                 throw new Error('Attempts cannot have children');
               }),
               this.resources(definition),
+              childResources.find((binding) => binding.definition === definition)?.refinements,
             ),
     );
   }

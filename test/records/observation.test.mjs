@@ -7,8 +7,8 @@ function fixture(options) {
   const changes = new ChangeBuffer();
   const recorder = new Recorder(new RecordBook(), { changes });
   const recording = bindRecording(recorder, options);
-  const create = (level, contextId, parent, description = {}) => {
-    const declaration = invocationRecording({}, { failure: 'propagate' });
+  const create = (level, contextId, parent, description = {}, recordDescription = {}) => {
+    const declaration = invocationRecording(recordDescription, { failure: 'propagate' });
     const setup = { identity: { level, contextId, ...(parent ? { parentContextId: parent.setup.identity.contextId } : {}) }, description, resources: new ResourceBindings({}), declarations: [declaration] };
     const call = recording.bindInvocation(setup, parent);
     const observation = bindInvocationObservation({ ...setup, resources: call.resources }, []);
@@ -23,6 +23,38 @@ function fixture(options) {
   };
   return { changes, recorder, recording, create };
 }
+
+test('parent acceptance has its own record projection and leaves the actual relation value unchanged', () => {
+  const value = fixture();
+  const seen = [];
+  const runtime = value.create(
+    'runtime',
+    'r-map',
+    undefined,
+    { id: 'runtime-map' },
+    {
+      relationAccepted(output, relation) {
+        seen.push({ output, relation });
+        return { key: relation.key, size: output.body.length };
+      },
+    },
+  );
+  runtime.publish({ kind: 'started', input: null }, 0);
+  const child = value.create('execution', 'e-map', runtime.call, {}, { output: () => ({ returned: true }) });
+  const relation = { parentContextId: 'r-map', childContextId: 'e-map', parentRound: 1, key: 'document' };
+  runtime.publish({ kind: 'relation', relation, change: { kind: 'attached' } }, 1);
+  child.publish({ kind: 'started', input: null }, 2);
+  const returned = { text: 'private original' };
+  runtime.publish({ kind: 'relation', relation, change: { kind: 'returned', result: { status: 'succeeded', output: returned } } }, 3);
+  runtime.publish({ kind: 'relation', relation, change: { kind: 'receiving' } }, 4);
+  const accepted = { body: returned.text, extra: 'parent decision' };
+  runtime.publish({ kind: 'relation', relation, change: { kind: 'accepted', output: accepted } }, 5);
+  assert.deepEqual(runtime.call.record.value.relationChanges[1].change.result.output, { returned: true });
+  assert.deepEqual(runtime.call.record.value.relationChanges[3].change.output, { key: 'document', size: 16 });
+  assert.equal(seen[0].output, accepted);
+  assert.deepEqual(accepted, { body: 'private original', extra: 'parent decision' });
+  assert.equal(JSON.stringify(runtime.call.record.value).includes('private original'), false);
+});
 function completedPair() {
   const value = fixture();
   const runtime = value.create('runtime', 'r-context', undefined, { id: 'runtime-instance' });

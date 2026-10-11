@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ResourceActivity, ResourceSession, type ResourceOwner } from './activity.js';
 import { Initializer } from '../initialization/initializer.js';
-import { ResourceRequest, type ResourceProvider, type ResourceValue } from './offer.js';
+import { ResourceRequest, applyResourceRefinement, isResourceRefinement, type ResourceProvider, type ResourceValue, type ResourceRefinement } from './offer.js';
 
 export type ResourceRequirements<Resources extends object = object> = { readonly [Key in keyof Resources]: ResourceRequest<Resources[Key]> };
 
@@ -90,8 +90,23 @@ export class ResourceBindings<Resources extends object = object> {
     }
   }
 
-  select<SelectedResources extends object>(requires: ResourceRequirements<SelectedResources>, initial: ResourceRequirements = requires): ResourceBindings<SelectedResources> {
-    return new ResourceBindings(requires, this.#entries, initial);
+  select<SelectedResources extends object, Input = unknown>(requires: ResourceRequirements<SelectedResources>, initial: ResourceRequirements = requires, selection?: { readonly input: Input; readonly refinements: readonly ResourceRefinement<Input>[] }): ResourceBindings<SelectedResources> {
+    if (!selection?.refinements.length) return new ResourceBindings(requires, this.#entries, initial);
+    const selected = new ResourceBindings(requires, this.#entries, initial);
+    const refinements = new Map<ResourceValue['offer'], ResourceRefinement<Input>>();
+    for (const refinement of selection.refinements) {
+      if (!isResourceRefinement(refinement)) throw new Error('Resource refinement was not issued by an offer');
+      if (!selected.#entries.some((entry) => entry.offer === refinement.offer)) throw new Error(`Refined resource is not requested: ${refinement.offer.name}`);
+      if (refinements.has(refinement.offer)) throw new Error(`Duplicate resource refinement: ${refinement.offer.name}`);
+      refinements.set(refinement.offer, refinement);
+    }
+    const entries = selected.#entries.map((entry) => {
+      const refinement = refinements.get(entry.offer);
+      if (!refinement) return entry;
+      const captured = applyResourceRefinement(refinement, entry.offer, entry.capture(), selection.input);
+      return Object.freeze({ ...entry, supplyId: randomUUID(), capture: () => captured, get: () => captured });
+    });
+    return new ResourceBindings(requires, entries, initial);
   }
 
   /** Combine supply captures for a distinct declaration, without exposing another declaration's endpoints. */

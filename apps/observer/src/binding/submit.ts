@@ -1,5 +1,5 @@
 import type { ClientRuntime } from '@capix/client-runtime';
-import type { Message } from '@capix/protocol';
+import type { FileTask, Message } from '@capix/protocol';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 import type { AppStore } from '../state/store.js';
@@ -17,7 +17,7 @@ function acceptHistory(text: string): Message[] {
 export async function submitDraft(store: AppStore, runtime: ClientRuntime): Promise<void> {
   const observed = runtime.getSnapshot();
   if (!observed.config?.configured) return;
-  const { draft, history, budget } = store.getState();
+  const { draft, history, budget, fileDraft } = store.getState();
   if (!draft.trim()) {
     store.setState({ notice: '请先填写消息。' });
     return;
@@ -25,12 +25,15 @@ export async function submitDraft(store: AppStore, runtime: ClientRuntime): Prom
   try {
     const contextBudget = Number(budget);
     if (!Number.isSafeInteger(contextBudget) || contextBudget < 256 || contextBudget > 1000000) throw new Error('容量预算需要是 256–1000000 的整数。');
+    const hasFileTask = Boolean(fileDraft.sourcePath || fileDraft.outputPath);
+    if (hasFileTask && !observed.config.files) throw new Error('服务未启用工作目录文件处理。');
+    const fileTask: FileTask | undefined = fileDraft.sourcePath ? { sourcePath: fileDraft.sourcePath, ...(fileDraft.outputPath ? { output: { path: fileDraft.outputPath } } : {}) } : fileDraft.outputPath ? { output: { path: fileDraft.outputPath } } : undefined;
     const messages = [...acceptHistory(history), { role: 'user' as const, content: draft }];
     store.setState({ notice: '' });
-    const queued = runtime.enqueue({ messages, contextBudget });
+    const queued = runtime.enqueue({ messages, contextBudget, ...(fileTask ? { fileTask } : {}) });
     const focus = !observed.busy && !observed.queue.waiting.length && !observed.queue.blocked;
     // Local acceptance owns this input now; preserve any edits made during publication.
-    store.setState((current) => ({ draft: current.draft === draft ? '' : current.draft, history: current.history === history ? '[]' : current.history, conversationFocus: focus ? queued.id : current.conversationFocus }));
+    store.setState((current) => ({ draft: current.draft === draft ? '' : current.draft, fileDraft: current.fileDraft === fileDraft ? { sourcePath: '', outputPath: '' } : current.fileDraft, history: current.history === history ? '[]' : current.history, conversationFocus: focus ? queued.id : current.conversationFocus }));
   } catch (error) {
     store.setState({ notice: errorMessage(error) });
   }
