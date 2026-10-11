@@ -25,6 +25,7 @@ export * from './invocation/view.js';
 export * from './invocation/description.js';
 export * from './invocation/identity.js';
 export * from './invocation/progress.js';
+export { InvocationCancelled, isInvocationCancelled } from './invocation/cancellation.js';
 export * from './progress/channel.js';
 export type { InvocationResult, Continuation, InvocationResolution } from './invocation/result.js';
 export type { InvocationFailure, InvocationPhase } from './invocation/failure.js';

@@ -6,16 +6,17 @@ ClientRuntime 装配提交跟踪、消息同步与可选观测消费，协调它
 
 ## 内部职责归属
 
-| 对象                | 自己维护的范围                                           | 与 ClientRuntime 的接缝                                                                                   |
-| ------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| ClientSubmission    | 一笔提交的身份、累计事实、当前反馈连接及通知状态         | Runtime 选择 POST 或 follow，授予已初始化的 transcriptId；对象报告局部变化，Runtime 在发布后通知 accepted |
-| TranscriptReceiver  | 各消息集合的订阅、基线、副本和同步状态                   | 报告已接纳的集合状态；Runtime 协调初始化与当前对话正文                                                    |
-| ObservationReceiver | 可选观测连接、来源副本、详情缓存和旧响应隔离             | 报告完整 ObservationState；不取得 Runtime，也不操作提交或消息                                             |
-| ClientRuntime       | 初始化门控、当前提交选择、跨来源协调、公开快照与通知顺序 | 保持应用已有入口，不再直接维护各消费对象的连接控制器                                                      |
+| 对象                | 自己维护的范围                                             | 与 ClientRuntime 的接缝                                                                               |
+| ------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| ClientSubmission    | 一笔提交的固定输入、身份、累计事实、反馈连接及取消请求状态 | 队列选择 POST 或 follow，授予已初始化的 transcriptId；对象报告局部变化，Runtime 在发布后通知 accepted |
+| ConversationQueue   | 等待顺序、当前提交、暂停、容量及推进条件                   | Runtime 提供当前环境资格，队列接纳本地输入并串行发送；不会以断流或取消请求确认释放占用                |
+| TranscriptReceiver  | 各消息集合的订阅、基线、副本和同步状态                     | 报告已接纳的集合状态；Runtime 协调初始化与当前对话正文                                                |
+| ObservationReceiver | 可选观测连接、来源副本、详情缓存和旧响应隔离               | 报告完整 ObservationState；不取得 Runtime，也不操作提交或消息                                         |
+| ClientRuntime       | 初始化门控、队列装配、跨来源协调、公开快照与通知顺序       | 保持应用入口，不直接维护连接控制器或第二份当前提交占用                                                |
 
 ObservationReplica 只接纳观测基线与增量，连接生命周期在 observation/receiver.ts；两者按职责组织在 observation/ 下。Receiver 是包内实现，不增加应用装配入口。初始化要协调配置与消息，快照发布要协调多个来源，二者仍留在 Runtime；没有增加通用连接管理器、事件总线或调度框架。
 
-ClientSubmission.connect 接收连接函数和窄的 SubmissionReception（transcriptId、changed），不持有整个 Runtime 或 transport。它自行校验集合归属、隔离旧连接、解释反馈结束与断开；由 Runtime 决定何时允许新提交、重连或释放跟踪。stopFollowing 先完成本地状态转移再解除连接，由调用方协调这次停止的状态发布，避免停止过程重复通知。
+ClientSubmission.connect 接收连接函数和窄的 SubmissionReception（transcriptId、changed），不持有整个 Runtime。它自行校验集合归属、隔离旧连接、解释反馈结束与断开；队列决定何时发送下一笔，并为发送、查询和取消操作传入 transport。stopFollowing 先完成本地状态转移再解除连接，由调用方协调这次停止的状态发布，避免停止过程重复通知。
 
 替换或释放跟踪时，先确定新的本地归属，再 abort 捕获的旧连接；abort 监听器可能同步重入，之后仍需核对当前身份。服务结果已经出现但反馈连接尚未结束时，新提交也会解除旧反馈连接。关闭交付始终不代表取消服务端业务。
 
@@ -33,7 +34,7 @@ await runtime.submit({ messages: [{ role: 'user', content: '你好' }] });
 runtime.stopTranscript();
 ```
 
-ConversationTransport 提供 config、submit、follow；TranscriptTransport 提供 transcript(id?, signal?) 查询与 observeTranscript(id, accept, signal) 订阅。transcripts 是必需接入：对话正文由消息实体副本提供，不从观测记录生成。
+ConversationTransport 提供 config、submit、follow、read 和 cancel；TranscriptTransport 提供 transcript(id?, signal?) 查询与 observeTranscript(id, accept, signal) 订阅。transcripts 是必需接入：对话正文由消息实体副本提供，不从观测记录生成。
 
 initialize 并行取得配置和当前集合订阅的首帧基线。同一次进行中的初始化返回同一 Promise；失败不会永久缓存 rejected Promise，之后显式 initialize 会建立新尝试，不自动重试。配置与实体各自成功时分别保留已经确认的内容，后续尝试复用配置和健康实体连接；不能因为保留了部分配置就提前允许 submit。配置慢于实体流时，最终采用已经接纳的最新消息副本，不能把首帧旧内容覆盖到新增量之上。初始化结束前再次确认实体同步仍然有效。初始化不会请求执行概览、记忆或记录详情。
 
@@ -41,17 +42,50 @@ state.initialization 表达本次环境初始化的 idle、running、succeeded�
 
 stopTranscript 停止当前集合或全部集合时，也结束正在进行的初始化；已确认的配置和消息副本保留。旧尝试随后返回的配置被忽略，停止的实体连接回调也不能写入，新 initialize 可以明确建立下一次尝试。这不等于取消服务端工作，也不改变服务端 Initializer 的一次构造及失败缓存规则。
 
-业务状态包含 messages、transcriptId、transcripts、submission 和初始化错误。messages 是当前集合已接纳 snapshot.messages 的便利引用；权威副本保存在按 UID 索引的 transcripts 中。submission 保存本地 id/pending、已确认的 remote 累计投影及 feedback 连接状态；busy/pending/contextId/answered 只从 submission 派生，不另外维护一套执行真相。
+业务状态包含 messages、transcriptId、transcripts、submission、submissions 和初始化错误。messages 是当前集合已接纳 snapshot.messages 的便利引用；权威副本保存在按 UID 索引的 transcripts 中。submission 保存本地 id/pending、已确认的 remote 累计投影及 feedback 连接状态；busy/pending/contextId/answered 只从 submission 派生，不另外维护一套执行真相。
 
-1. submit 为本次提交生成 submissionId，复制输入，仅调用一次 POST。正在跟踪且尚无 result 时拒绝新提交，不排队、不自动重发。
+1. enqueue 同步检查并固定本地输入，为本次提交生成 submissionId 后放入等待队列；本地接纳不代表服务端已经接纳。submit 保留明确的立即发送入口与连接 Promise；有未结束提交、等待项或暂停状态时拒绝，不能插队。两者都只发送一次 POST，不自动重发。
 2. remote.input 来自正式消息写入位置，首次确认后在公开状态发布阶段调用一次 accepted(submission)。HTTP 200、收到首帧或建立 E 都不等于输入已接纳。回调接收该提交的不可变快照，必须同步返回 undefined；抛错或意外返回 Promise 只保存 notificationError，不停止接收或改写服务结果。
 3. remote.executions 保存服务选择关联的 E Context 身份，可以为空或多项；输入在 E Context 建立前也能正式落实。remote.answer 只指向已落实回答，正文来自独立实体同步，不从记录或提交反馈重复追加。
-4. remote.result 是服务任务 completed / failed / rejected。后处理失败保留已确认回答；completed 只表示任务返回，不凭空补造 input/answer。remote.integrity 说明服务进展解释是否完整，与任务结果分开。
-5. feedback 表示 connecting / following / ended / interrupted。断流、网络失败或投影不完整都不能证明服务执行失败；保留所有已确认事实。消息实体和观测同步失败各自保存在对应范围，不撤回提交结果。
-6. reconnectSubmission 只 follow 同一 submissionId，不重新发送输入。新连接接收当前累计投影，允许 revision 跳跃；忽略旧修订，同版本冲突、事实回退或更改必须拒绝。旧连接回调不能写入新连接状态。
-7. stopFollowing 只停反馈连接，releaseSubmission 明确结束本地跟踪并允许后续提交；两者都不是取消服务端运行。服务端未知、已淘汰或重启后丢失的 submissionId 仍表示结果无法确认，不能推断“没有执行”。
+4. remote.result 是服务任务 completed / failed / rejected / cancelled。后处理失败或取消保留已确认回答；completed 只表示任务返回，不凭空补造 input/answer。remote.cancelRequested 只表示服务端已接收取消要求，不能替代实际结束结果。remote.integrity 说明服务进展解释是否完整，与任务结果分开。
+5. feedback 表示 idle（尚未发送）、connecting / following / ended / interrupted。断流、网络失败或投影不完整都不能证明服务执行失败；保留所有已确认事实。消息实体和观测同步失败各自保存在对应范围，不撤回提交结果。
+6. reconnectSubmission 只 follow 同一 submissionId，不重新发送输入；若有未确认的取消意图，可同时重发取消控制。refreshSubmission 单次查询同一身份，接纳事实而不改变反馈连接状态。新连接接收当前累计投影，允许 revision 跳跃；忽略旧修订，同版本冲突、事实回退或更改必须拒绝。旧连接回调不能写入新连接状态。
+7. stopFollowing 只停反馈连接；releaseSubmission 不能释放已发送但结果未知的当前提交。服务端未知、已淘汰或重启后丢失的 submissionId 仍表示结果无法确认，不能推断“没有执行”，也不能为了推进等待项丢弃当前身份。
+
+`remote.activities` 单独保存服务投影的 REOA 过程元数据。HTTP 检查格式，ClientSubmission 接纳调用身份、直接归属、轮次、终态和父层接纳事实，拒绝回退；`activities.integrity` 不代替提交结果，也不改写正文可用性。明确的过程来源失效保留最后事实；畸形反馈仍按协议错误拒绝，不把坏数据补成完成。
+
+`state.submissions` 以 submissionId 保留最近 32 笔已发送提交的不可变快照；不保留旧连接和原始请求，不包含未发送的队列项。新提交开始不删除上一笔过程，超过上限时只移除最早的本地快照，不改动消息集合。它是当前客户端会话内的有限保留，刷新页面后不自动重建历史过程。
 
 本轮只恢复反馈，不恢复执行。服务端保留是有界进程内状态，不提供幂等重提、持久化、离线重放或重启后的任务恢复。实体同步和可选观测有独立连接与接纳规则。
+
+## 本地消息队列与取消
+
+```ts
+const first = runtime.enqueue({ messages: [{ role: 'user', content: '介绍一下北京' }] });
+const next = runtime.enqueue({ messages: [{ role: 'user', content: '周末适合去哪里？' }] });
+runtime.pauseQueue(); // 只停止后续发送，当前服务处理继续
+await runtime.cancelSubmission(next.id); // 尚未发送：撤回本地等待项
+await runtime.cancelSubmission(first.id); // 已发送：停队并请求服务取消
+// 上面的 Promise 只结束本次控制请求，不承诺服务已经停止。
+runtime.resumeQueue(); // 恢复发送许可；当前结果未知时仍不会推进
+```
+
+ConversationQueue 是单个客户端的内存 FIFO，不是服务调度或多客户端互斥。入队时复制冻结完整 messages/contextBudget；排队期间的编辑不修改它。默认最多 32 条等待项、等待输入合计 16 MiB，并检查每笔输入的 HTTP 容量边界；满时整笔拒绝，不丢弃已有输入。容量不包含当前活动项。ClientRuntimeOptions.queue 可以设置等待容量，应用暂不提供额外设置。
+
+queue.waiting 只公开待发送项的 id/pending，queue.paused 表达暂停，blocked 表达环境未就绪或消息集合改变。它们与当前 submission、服务结果和反馈健康分别发布。等待项没有正式消息定位，不进入 transcript，也不制造 QA。初始化与配置通过后才能本地接纳；发送前再次检查环境和集合身份，不能把旧队列交给另一段对话。
+
+只有当前 remote.result 确认后才可能发送下一笔。正常 completed 自动推进；failed、rejected、cancelled、进展不完整的结束或本地主动取消都停队，保留等待项。HTTP 结束、回答已写入、正文同步完成、取消要求已确认都不是释放依据。正文落后本身不阻止后续提交，消息仍通过独立集合接口同步。
+
+控制操作不排进消息 FIFO：
+
+- cancelSubmission(id)：尚未发送时本地撤回；当前项已发送时先暂停队列，再独立请求取消。调用者传固定 id，避免异步期间改为操作下一项。
+- clearQueue()：只撤回等待项，不改变当前业务；pauseQueue()/resumeQueue() 只改变后续发送许可。
+- cancelAll()：先停队并清空等待项，再请求取消当前项；远端控制失败不恢复已清空的本地等待项。
+- reconnectSubmission()/refreshSubmission()：分别 follow 原身份或单次查询；不会重新 POST，也不重新追加输入。
+
+submission.cancellation 表达 requested / sending / acknowledged / uncertain。请求响应丢失时保留取消意图；已知服务 cancelRequested 后显示“等待实际结束”，只在 result 到达后显示取消、完成或失败。首次取消可能早于服务登记，未知响应不能证明不会执行；之后收到新修订可再次尝试同一身份的取消控制，或由用户显式重试/重新同步，始终不重发业务输入。普通查询、取消控制与反馈连接有独立的请求生命周期。
+
+停止反馈不会取消业务，也不会清空队列。应用卸载停止呈现订阅和实体/观测消费，不销毁仍存活的 Runtime；再次挂载读其当前队列。页面刷新或丢弃整个实例不会保存等待项，也无法保证恢复已发送的身份；本轮没有持久化队列或离线恢复。
 
 ## 接纳、协调与发布
 
@@ -126,7 +160,7 @@ loadExecution 按需查询，E 与其父 R 均结束时才复用终态缓存；�
 
 HttpTransport 只处理地址、HTTP 状态、JSON 读取和错误，不感知业务、实体或记录。
 
-- ConversationHttpTransport：config、POST /api/run、GET /api/submissions/:id 与 /follow、transcript 查询和 GET /api/transcript/observe。提交响应逐行接纳 ConversationSubmissionSnapshot，HTTP 拒绝也可能携带正式投影；实体流接纳 baseline/delta/error，不将断流当作业务完成。
+- ConversationHttpTransport：config、POST /api/run、GET /api/submissions/:id 与 /follow、POST /api/submissions/:id/cancel、transcript 查询和 GET /api/transcript/observe。提交响应逐行接纳 ConversationSubmissionSnapshot，HTTP 拒绝也可能携带正式投影；取消响应同样接纳累计事实，不把控制确认当成执行结束。实体流接纳 baseline/delta/error，不将断流当作业务完成。
 - ObservationHttpTransport：overview、memory、execution、source 和 GET /api/observe。观测流可覆盖多次执行，结束不代表业务完成。
 - 普通响应由 Zod 接纳；记录详情由 validateExecutionRecordSnapshot 验证并核对请求身份；消息实体还由接收层检查范围与版本。
 
@@ -135,13 +169,24 @@ readLines 只负责 UTF-8 解码与行拆分。回调同步执行，失败后关
 ## 应用绑定与 Store
 
 - binding/application.ts 装配 Store 和命令，独立开启观测及对话初始化。初次连接立即投影，后续 Runtime 通知合并到 requestAnimationFrame，执行时读取最新公开快照，完成投影后一次写入 Store；这与 Runtime 的接纳和微任务发布是不同边界。卸载取消待处理帧并分别停止观测和实体订阅；重新挂载恢复实体同步，保留已取得的配置与 UI 编辑。投影失败只显示本地提示，后续成功投影可继续更新。
-- binding/data.ts 组织业务消息与进度，并组合可选观测；binding/submission.ts 将已确认事实和反馈状态转换成提示，提供重新同步和结束跟踪入口。对话正文只来自消息实体副本。
+- binding/submit.ts 解析并提交本次草稿与追加历史；enqueue 成功立即清理对应编辑，失败保留原输入。忙碌时仍可编辑与加入队列，不再等待远端 input 事实才让用户输入下一条。
+- binding/data.ts 组织业务消息、队列与进度，并组合可选观测；binding/submission.ts 将已确认事实、取消要求与反馈状态转换成提示和当前控制按钮。结果未知时提供重新同步/请求取消，不提供释放占用。明确失败或拒绝且没有输入定位时，提示区保留本次用户输入全文，便于阅读和复制；它不进入正式对话。MessageQueue 只消费读模型与明确动作，支持逐项撤回、清空、暂停恢复和取消全部；对话正文只来自消息实体副本。
 - binding/observation.ts 按 UID/index 组合消息、上下文和记忆来源，明确区分未加载、加载中、缺失与错误；实体到达时即便记录未变化也重建对应读模型。
 - binding/resources.ts 解释应用约定的配置与历史范围资源事实；details.ts 为各调用组织资源事实列表，React 不解析原始 ExecutionRecordSnapshot。
 - projectConversation 仅给当前同一消息集合中的已有消息添加执行链接，不能用相同 index 跨集合猜测关联。
 - Store 保存应用读模型及草稿、预算、搜索、选择和弹层状态。组件持有局部 DOM、滚动和加载提示；未知原文提供加载入口，消息同步失败提供明确提示和重新连接入口。
 
 对话仍用 Streamdown 静态渲染助手完整回答，用户输入保持纯文本；use-stick-to-bottom 处理滚动。消息图片只显示说明及显式链接，不自动加载外部资源。
+
+### 对话中的处理过程
+
+`binding/activities.ts` 将提交反馈中的 REOA 过程转换为应用读模型，不读取 Observer 记录、主图几何或模型思考文本。正式输入定位的 `transcriptId / end - 1` 决定过程块位于哪条用户消息之后；相同文本不构成关联。输入正文尚未同步时，过程单独显示“消息正文待同步”，不会伪造正式消息。历史过程仅来自客户端仍保留的已跟踪提交，不从已有消息推导执行历史。
+
+对话只显示本次提交的一条当前进度，服务事实推进时原位替换文案；不展开 REOA 树，也不累积每一步的提示。binding 沿直接父子关系确定当前操作目的和正在工作的意图，例如“正在生成回答 · 调用模型”；同一模型调用进入记忆操作后会替换为“正在提取记忆体 · 调用模型”，不通过中文名称匹配猜测业务。再次尝试根据调用及祖先 round 明确提示，不推断重试原因。短阶段可能在一帧内结束，不为展示人为回放或延迟后续事实。
+
+调用返回、父层接纳与提交结果仍是不同事实：子调用完成但结果待接纳时提示正在处理结果，只有 submission.result 才确定最终完成、失败或取消。当前过程提示替换通用的“等待回答”提示，避免同一次提交出现两个 loading。回答已落实但后处理仍在运行时，继续展示真实阶段；完成后只留下简短结果，正文尚未同步则保留独立的正文同步提示。
+
+反馈连接中断、过程来源不完整时停止运行中 loading，说明状态待确认并标注最后收到的进展；重新连接不能提前恢复运行确信。过程来源故障不改写消息和提交结果。React 只消费精简的 `ConversationProcess` 读模型，不接收完整调用列表。客户端仍保留已有调用事实，展示变化不改动协议、运行状态或观测详情。过程提示不计入消息数量，不发回模型，也不驱动队列。
 
 ### 记录来源完整性与父调用详情
 

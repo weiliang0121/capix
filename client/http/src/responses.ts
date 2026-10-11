@@ -56,13 +56,19 @@ export function acceptSnapshot(value: unknown, expectedId?: string): ExecutionRe
 }
 
 const conversationFailure = z.object({ code: id, message: z.string() });
+const conversationActivities = z.object({
+  calls: z.array(z.object({ contextId: id.max(256), parentContextId: id.max(256).optional(), level: z.enum(['runtime', 'execution', 'operation', 'attempt']), label: z.string().max(120), status: z.enum(['running', 'succeeded', 'failed', 'cancelled']), phase: z.enum(['setup', ...invocationProcessStages]), round: index.max(2), startedAt: z.iso.datetime().optional(), finishedAt: z.iso.datetime().optional(), relation: z.object({ phase: z.enum(['attached', 'returned', 'receiving', 'accepted', 'failed']), returned: z.enum(['succeeded', 'failed', 'cancelled']).optional() }).optional() })).max(512),
+  integrity: z.discriminatedUnion('status', [z.object({ status: z.literal('complete') }), z.object({ status: z.literal('incomplete'), error: conversationFailure })]),
+});
 export const submissionResponse = z.object({
   submissionId: id,
   revision: index,
   input: z.object({ transcriptId: id, start: index, end: index, revision: index.optional() }).optional(),
   answer: z.object({ transcriptId: id, index }).optional(),
   executions: z.array(z.object({ contextId: id })),
-  result: z.discriminatedUnion('status', [z.object({ status: z.literal('completed') }), z.object({ status: z.literal('failed'), error: conversationFailure }), z.object({ status: z.literal('rejected'), error: conversationFailure })]).optional(),
+  activities: conversationActivities.optional(),
+  cancelRequested: z.literal(true).optional(),
+  result: z.discriminatedUnion('status', [z.object({ status: z.literal('completed') }), z.object({ status: z.literal('cancelled') }), z.object({ status: z.literal('failed'), error: conversationFailure }), z.object({ status: z.literal('rejected'), error: conversationFailure })]).optional(),
   integrity: z.discriminatedUnion('status', [z.object({ status: z.literal('complete') }), z.object({ status: z.literal('incomplete'), error: conversationFailure })]),
 }) satisfies z.ZodType<ConversationSubmissionSnapshot>;
 

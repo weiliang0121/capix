@@ -1,13 +1,18 @@
-import type { ConversationSubmissionSnapshot } from '@capix/protocol';
+import type { ConversationRequest, ConversationSubmissionSnapshot } from '@capix/protocol';
 import { isEqual } from 'es-toolkit';
+import type { ConversationTransport } from './transport.js';
+import { acceptConversationRequest } from './request.js';
+import { acceptActivities } from './activities.js';
 
-export type SubmissionFeedback = { readonly status: 'connecting' | 'following' | 'ended' } | { readonly status: 'interrupted'; readonly error: unknown };
+export type SubmissionFeedback = { readonly status: 'idle' | 'connecting' | 'following' | 'ended' } | { readonly status: 'interrupted'; readonly error: unknown };
+export type SubmissionCancellation = { readonly status: 'requested' | 'sending' | 'acknowledged' } | { readonly status: 'uncertain'; readonly error: unknown };
 export interface ClientSubmissionState {
   readonly id: string;
   readonly pending: string;
   readonly remote?: ConversationSubmissionSnapshot;
   readonly feedback: SubmissionFeedback;
   readonly notificationError?: unknown;
+  readonly cancellation?: SubmissionCancellation;
 }
 
 export interface SubmissionReception {
@@ -23,12 +28,21 @@ export class ClientSubmission {
   private state: ClientSubmissionState;
   private accepted = false;
   private session?: AbortController;
+  private transcriptId?: string;
+  private sent = false;
+  private cancellationTask?: Promise<void>;
+  private cancellationRevision = -1;
+  readonly input: ConversationRequest;
+  readonly bytes: number;
 
   constructor(
-    pending: string,
+    input: ConversationRequest,
     private readonly notifyAccepted?: (submission: ClientSubmissionState) => undefined,
   ) {
-    this.state = Object.freeze({ id: this.id, pending, feedback: Object.freeze({ status: 'connecting' }) });
+    const accepted = acceptConversationRequest(input);
+    this.input = accepted.input;
+    this.bytes = accepted.bytes;
+    this.state = Object.freeze({ id: this.id, pending: this.input.messages.at(-1)!.content, feedback: Object.freeze({ status: 'idle' }) });
   }
 
   get snapshot(): ClientSubmissionState {
@@ -37,6 +51,7 @@ export class ClientSubmission {
 
   /** Consume one feedback connection. Reconnection never submits business input itself. */
   async connect(connect: (receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal) => Promise<void>, reception: SubmissionReception): Promise<void> {
+    this.bindReception(reception);
     const previous = this.session;
     const session = new AbortController();
     this.session = session;
@@ -49,8 +64,8 @@ export class ClientSubmission {
     try {
       await connect((snapshot) => {
         if (!current()) return;
-        if (snapshot.input && snapshot.input.transcriptId !== reception.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
         this.receive(snapshot);
+        this.feedback({ status: submissionFeedbackEnded(this.state.remote!) ? 'ended' : 'following' });
         reception.changed();
       }, session.signal);
       if (!current()) return;
@@ -83,17 +98,79 @@ export class ClientSubmission {
   receive(next: ConversationSubmissionSnapshot): void {
     const previous = this.state.remote;
     assertSubmissionSnapshot(next, this.id);
+    if (next.input && this.transcriptId && next.input.transcriptId !== this.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
+    if (previous && next.revision < previous.revision) return;
+    let activities;
+    try {
+      activities = acceptActivities(next.activities, previous?.activities);
+    } catch (cause) {
+      throw new SubmissionContractError('提交处理过程无效。', { cause });
+    }
+    const accepted = activities ? { ...next, activities } : next;
     if (previous) {
-      if (next.revision < previous.revision) return;
       if (next.revision === previous.revision) {
-        if (!isEqual(next, previous)) throw new SubmissionContractError('同一提交修订包含不同事实。');
-        this.feedback({ status: submissionFeedbackEnded(previous) ? 'ended' : 'following' });
+        if (!isEqual(accepted, previous)) throw new SubmissionContractError('同一提交修订包含不同事实。');
         return;
       }
-      if ((previous.input && !isEqual(next.input, previous.input)) || (previous.answer && !isEqual(next.answer, previous.answer)) || (previous.result && !isEqual(next.result, previous.result)) || (previous.integrity.status === 'incomplete' && !isEqual(next.integrity, previous.integrity)) || previous.executions.some((execution, index) => !isEqual(execution, next.executions[index]))) throw new SubmissionContractError('提交反馈中的既有事实发生回退或改变。');
+      if ((previous.cancelRequested && !next.cancelRequested) || (previous.input && !isEqual(next.input, previous.input)) || (previous.answer && !isEqual(next.answer, previous.answer)) || (previous.result && !isEqual(next.result, previous.result)) || (previous.integrity.status === 'incomplete' && !isEqual(next.integrity, previous.integrity)) || previous.executions.some((execution, index) => !isEqual(execution, next.executions[index]))) throw new SubmissionContractError('提交反馈中的既有事实发生回退或改变。');
     }
-    const remote = copySubmission(next);
-    this.state = Object.freeze({ ...this.state, remote, feedback: Object.freeze({ status: submissionFeedbackEnded(remote) ? 'ended' : 'following' }) });
+    const remote = copySubmission(accepted);
+    this.state = Object.freeze({ ...this.state, remote, ...(remote.cancelRequested && this.state.cancellation ? { cancellation: Object.freeze({ status: 'acknowledged' as const }) } : {}) });
+  }
+
+  get dispatched(): boolean {
+    return this.sent;
+  }
+
+  send(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
+    if (this.sent) throw new Error('同一提交不能重复发送。');
+    this.sent = true;
+    return this.connect((receive, signal) => transport.submit({ submissionId: this.id, input: this.input }, receive, signal), reception);
+  }
+
+  private bindReception(reception: SubmissionReception): void {
+    if (this.transcriptId && this.transcriptId !== reception.transcriptId) throw new SubmissionContractError('提交不能切换消息集合。');
+    this.transcriptId = reception.transcriptId;
+  }
+
+  /** A control response accepts facts without pretending a feedback connection is open. */
+  async refresh(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
+    this.bindReception(reception);
+    this.receive(await transport.read(this.id, AbortSignal.timeout(10_000)));
+    reception.changed();
+  }
+
+  get shouldRetryCancellation(): boolean {
+    return this.state.cancellation?.status === 'uncertain' && !!this.state.remote && !this.state.remote.result && !this.state.remote.cancelRequested && this.state.remote.revision > this.cancellationRevision;
+  }
+
+  /** Request delivery and actual cancellation are separate facts. Never abort feedback here. */
+  requestCancellation(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
+    this.bindReception(reception);
+    if (this.state.remote?.result || this.state.remote?.cancelRequested) return Promise.resolve();
+    if (this.cancellationTask) return this.cancellationTask;
+    this.state = Object.freeze({ ...this.state, cancellation: Object.freeze({ status: 'requested' }) });
+    // Establish single-flight ownership before consumers can synchronously reenter.
+    const task = Promise.resolve().then(() => this.cancel(transport, reception));
+    this.cancellationTask = task;
+    reception.changed();
+    return task;
+  }
+
+  private async cancel(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
+    try {
+      if (this.state.remote?.result || this.state.remote?.cancelRequested) return;
+      this.cancellationRevision = this.state.remote?.revision ?? -1;
+      this.state = Object.freeze({ ...this.state, cancellation: Object.freeze({ status: 'sending' }) });
+      reception.changed();
+      this.receive(await transport.cancel(this.id, AbortSignal.timeout(10_000)));
+      if (!this.state.remote?.cancelRequested && !this.state.remote?.result) throw new SubmissionContractError('服务未确认取消请求。');
+    } catch (error) {
+      if (!this.state.remote?.cancelRequested && !this.state.remote?.result) this.state = Object.freeze({ ...this.state, cancellation: Object.freeze({ status: 'uncertain' as const, error }) });
+    } finally {
+      this.cancellationTask = undefined;
+      reception.changed();
+    }
   }
 
   get acceptancePending(): boolean {
@@ -124,7 +201,9 @@ export function submissionFeedbackEnded(snapshot: ConversationSubmissionSnapshot
 export function assertSubmissionSnapshot(snapshot: ConversationSubmissionSnapshot, expectedId: string): void {
   if (snapshot.submissionId !== expectedId || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0 || !Array.isArray(snapshot.executions) || new Set(snapshot.executions.map((execution) => execution.contextId)).size !== snapshot.executions.length || snapshot.executions.some((execution) => !execution.contextId) || !snapshot.integrity || !['complete', 'incomplete'].includes(snapshot.integrity.status)) throw new SubmissionContractError('提交反馈身份或修订格式无效。');
   if (snapshot.input && (!snapshot.input.transcriptId || !Number.isSafeInteger(snapshot.input.start) || !Number.isSafeInteger(snapshot.input.end) || snapshot.input.start < 0 || snapshot.input.end <= snapshot.input.start || (snapshot.input.revision !== undefined && (!Number.isSafeInteger(snapshot.input.revision) || snapshot.input.revision < 0)))) throw new SubmissionContractError('提交输入范围无效。');
-  if ((snapshot.result && !['completed', 'failed', 'rejected'].includes(snapshot.result.status)) || (snapshot.result && snapshot.result.status !== 'completed' && !validFailure(snapshot.result.error)) || (snapshot.integrity.status === 'incomplete' && !validFailure(snapshot.integrity.error))) throw new SubmissionContractError('提交结果或来源完整性诊断无效。');
+  if ((snapshot.result && !['completed', 'cancelled', 'failed', 'rejected'].includes(snapshot.result.status)) || (snapshot.result && (snapshot.result.status === 'failed' || snapshot.result.status === 'rejected') && !validFailure(snapshot.result.error)) || (snapshot.integrity.status === 'incomplete' && !validFailure(snapshot.integrity.error))) throw new SubmissionContractError('提交结果或来源完整性诊断无效。');
+  if (snapshot.cancelRequested !== undefined && snapshot.cancelRequested !== true) throw new SubmissionContractError('取消请求事实无效。');
+  if (snapshot.result?.status === 'cancelled' && !snapshot.cancelRequested) throw new SubmissionContractError('取消结果缺少取消请求事实。');
   if (snapshot.answer && (!snapshot.input || !Number.isSafeInteger(snapshot.answer.index) || snapshot.answer.transcriptId !== snapshot.input.transcriptId || snapshot.answer.index < snapshot.input.end)) throw new SubmissionContractError('提交回答位置与输入范围不一致。');
 }
 
@@ -132,9 +211,11 @@ function copySubmission(snapshot: ConversationSubmissionSnapshot): ConversationS
   return Object.freeze({
     submissionId: snapshot.submissionId,
     revision: snapshot.revision,
+    ...(snapshot.cancelRequested ? { cancelRequested: true as const } : {}),
     ...(snapshot.input ? { input: Object.freeze({ ...snapshot.input }) } : {}),
     ...(snapshot.answer ? { answer: Object.freeze({ ...snapshot.answer }) } : {}),
     executions: Object.freeze(snapshot.executions.map((execution) => Object.freeze({ ...execution }))),
+    ...(snapshot.activities ? { activities: snapshot.activities } : {}),
     ...(snapshot.result ? { result: Object.freeze({ ...snapshot.result, ...('error' in snapshot.result ? { error: Object.freeze({ ...snapshot.result.error }) } : {}) }) } : {}),
     integrity: Object.freeze({ ...snapshot.integrity, ...('error' in snapshot.integrity ? { error: Object.freeze({ ...snapshot.integrity.error }) } : {}) }),
   });

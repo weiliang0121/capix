@@ -1,9 +1,10 @@
-import type { ConfigurationResponse, ConversationRequest, ConversationSubmissionSnapshot, Message, ExecutionRecordSnapshot } from '@capix/protocol';
+import type { ConfigurationResponse, ConversationRequest, Message, ExecutionRecordSnapshot } from '@capix/protocol';
 import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReceiver, type ObservationState } from './observation/receiver.js';
 import { ClientSubmission, type ClientSubmissionState } from './submission.js';
 import { InitializationAttempt, type ClientInitializationState } from './initialization.js';
+import { ConversationQueue, type ClientQueueState, type ConversationQueueOptions } from './queue.js';
 import { coordinateConversation, type ContentAvailability } from './conversation.js';
 
 export interface ClientState {
@@ -13,6 +14,9 @@ export interface ClientState {
   readonly transcriptId?: string;
   readonly transcripts: ReadonlyMap<string, TranscriptState>;
   readonly submission?: ClientSubmissionState;
+  /** Recent locally followed submissions; separate from authoritative transcript history. */
+  readonly submissions: ReadonlyMap<string, ClientSubmissionState>;
+  readonly queue: ClientQueueState;
   readonly busy: boolean;
   readonly pending: string;
   readonly contextId: string;
@@ -27,9 +31,10 @@ export interface ClientRuntimeOptions {
   readonly conversation: ConversationTransport;
   readonly transcripts: TranscriptTransport;
   readonly observation?: ObservationTransport;
+  readonly queue?: ConversationQueueOptions;
 }
 
-type ClientSources = Pick<ClientState, 'initialization' | 'config' | 'transcriptId' | 'transcripts' | 'submission' | 'error' | 'observation'>;
+type ClientSources = Pick<ClientState, 'initialization' | 'config' | 'transcriptId' | 'transcripts' | 'submission' | 'submissions' | 'queue' | 'error' | 'observation'>;
 
 /** Business delivery is independent of the optional observation capability. */
 export class ClientRuntime {
@@ -42,7 +47,7 @@ export class ClientRuntime {
   private readonly listeners = new Set<() => void>();
   private initialization?: InitializationAttempt;
   private initializationNumber = 0;
-  private submission?: ClientSubmission;
+  private readonly queue: ConversationQueue;
 
   private readonly conversation: ConversationTransport;
   private readonly observation: ObservationReceiver;
@@ -56,7 +61,13 @@ export class ClientRuntime {
     this.transcripts = new TranscriptReceiver(options.transcripts, (transcripts) => {
       this.update({ transcripts });
     });
-    this.sources = { initialization: { status: 'idle' }, transcripts: new Map(), observation: this.observation.snapshot };
+    this.queue = new ConversationQueue(
+      this.conversation,
+      () => ({ ready: this.sources.initialization.status === 'succeeded' && !!this.sources.config?.configured, transcriptId: this.sources.transcriptId }),
+      (submission) => this.updateSubmission(submission),
+      options.queue,
+    );
+    this.sources = { initialization: { status: 'idle' }, transcripts: new Map(), submissions: new Map(), observation: this.observation.snapshot, queue: this.queue.snapshot };
     this.state = Object.freeze({ ...this.sources, ...coordinateConversation(this.sources) });
   }
 
@@ -71,6 +82,7 @@ export class ClientRuntime {
   private update(change: Partial<ClientSources>): void {
     this.sources = { ...this.sources, ...change };
     this.dirty = true;
+    if ('initialization' in change || 'transcriptId' in change) this.queue.checkEnvironment();
     if (this.scheduled) return;
     this.scheduled = true;
     queueMicrotask(() => {
@@ -190,63 +202,82 @@ export class ClientRuntime {
     return this.observation.source(path, signal);
   }
 
-  private updateSubmission(submission: ClientSubmission): void {
-    if (this.submission !== submission) return;
-    if (submission.acceptancePending) this.acceptances.add(submission);
-    if (this.sources.submission !== submission.snapshot) this.update({ submission: submission.snapshot });
+  private updateSubmission(submission?: ClientSubmission): void {
+    if (this.queue.submission !== submission) return;
+    if (submission?.acceptancePending) this.acceptances.add(submission);
+    let submissions = this.sources.submissions;
+    if (submission?.dispatched && submissions.get(submission.id) !== submission.snapshot) {
+      const retained = new Map(submissions);
+      retained.set(submission.id, submission.snapshot);
+      // Keep only snapshots, not old connections, mutable calls or input request bodies.
+      for (const id of retained.keys()) {
+        if (retained.size <= 32) break;
+        if (id !== submission.id) retained.delete(id);
+      }
+      submissions = retained;
+    }
+    this.update({ submission: submission?.snapshot, submissions, queue: this.queue.snapshot });
   }
 
-  /** Sends once. Interruption means feedback is unknown, not that server work failed. */
+  /** Local acceptance is synchronous; it does not claim service admission or completion. */
+  enqueue(request: ConversationRequest): { readonly id: string } {
+    const receipt = this.queue.enqueue(request);
+    this.publish();
+    return receipt;
+  }
+
+  /** Immediate send, without jumping the queue. Promise completion belongs to feedback only. */
   async submit(request: ConversationRequest, accepted?: (submission: ClientSubmissionState) => undefined): Promise<void> {
     this.publish();
-    if (this.submission && !this.submission.snapshot.remote?.result) throw new Error('当前提交尚未确认结束，请重新连接或明确结束跟踪。');
-    if (this.sources.initialization.status !== 'succeeded' || !this.sources.config?.configured) throw new Error('请先完成客户端初始化与服务端模型配置。');
-    const input = { ...request, messages: request.messages.map((message) => ({ ...message })) };
-    const submission = new ClientSubmission(input.messages.at(-1)?.content ?? '', accepted);
-    const previous = this.submission;
-    this.submission = submission;
-    this.update({ submission: submission.snapshot });
-    previous?.stopFollowing();
+    const submission = this.queue.prepare(request, accepted);
     this.publish();
-    await this.connectSubmission(submission, (receive, signal) => this.conversation.submit({ submissionId: submission.id, input }, receive, signal));
+    await this.queue.send(submission);
   }
 
-  /** Follow an existing identity only; never automatically resubmit its input. */
-  async reconnectSubmission(): Promise<void> {
-    const submission = this.submission;
+  pauseQueue(): void {
+    this.queue.pause();
     this.publish();
-    if (this.submission !== submission) return;
-    if (!submission) throw new Error('没有可重新连接的提交。');
-    if (submission.snapshot.remote?.result) return;
-    await this.connectSubmission(submission, (receive, signal) => this.conversation.follow(submission.id, receive, signal));
+  }
+
+  resumeQueue(): void {
+    this.queue.resume();
+    this.publish();
+  }
+
+  clearQueue(): void {
+    this.queue.clear();
+    this.publish();
+  }
+
+  cancelSubmission(id: string): Promise<void> {
+    const cancellation = this.queue.cancel(id);
+    this.publish();
+    return cancellation;
+  }
+
+  cancelAll(): Promise<void> {
+    const cancellation = this.queue.cancelAll();
+    this.publish();
+    return cancellation;
+  }
+
+  reconnectSubmission(): Promise<void> {
+    this.publish();
+    return this.queue.reconnect();
+  }
+
+  refreshSubmission(): Promise<void> {
+    return this.queue.refresh();
   }
 
   stopFollowing(): void {
-    const submission = this.submission;
-    this.publish();
-    if (this.submission !== submission) return;
-    if (submission) {
-      submission.stopFollowing();
-      this.updateSubmission(submission);
-    }
+    this.queue.stopFollowing();
     this.publish();
   }
 
-  /** Relinquish local tracking explicitly. It is not cancellation or proof of remote completion. */
+  /** Unknown remote work cannot be discarded to release the local queue. */
   releaseSubmission(): void {
-    const submission = this.submission;
+    this.queue.release();
     this.publish();
-    if (this.submission !== submission) return;
-    this.submission = undefined;
-    this.update({ submission: undefined });
-    submission?.stopFollowing();
-    this.publish();
-  }
-
-  private async connectSubmission(submission: ClientSubmission, connect: (receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal) => Promise<void>): Promise<void> {
-    if (this.submission !== submission) return;
-    const transcriptId = this.sources.transcriptId;
-    if (!transcriptId) throw new Error('请先完成客户端消息集合初始化。');
-    await submission.connect(connect, { transcriptId, changed: () => this.updateSubmission(submission) });
   }
 }

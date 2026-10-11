@@ -53,8 +53,8 @@ export class BoundChildren {
     };
     const requireActive = () =>
       protect(() => {
-        validate?.();
         parent.requireHealthy();
+        validate?.();
         parent.context.requireRunning();
         if ('requireActive' in parent.context) (parent.context as { requireActive(): void }).requireActive();
       });
@@ -94,6 +94,7 @@ export class BoundChildren {
           if (!invocation) throw new Error('Invocation is not a child created through this binding');
           return await parent.children.get(invocation).accept(async () => {
             try {
+              requireActive();
               return await work();
             } catch (error) {
               rejected = { error };

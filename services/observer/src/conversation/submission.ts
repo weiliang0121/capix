@@ -1,7 +1,8 @@
 import type { ConversationFailure, ConversationSubmissionSnapshot } from '@capix/protocol';
-import { RuntimeError, ProgressChannel } from '@capix/server-runtime';
+import { RuntimeError, ProgressChannel, isInvocationCancelled, type InvocationProgress } from '@capix/server-runtime';
 import { ConversationInputError } from './accept.js';
 import type { ConversationProgress } from './progress.js';
+import { ConversationActivityProjection } from './activity.js';
 
 export function conversationFailure(error: unknown): ConversationFailure {
   return Object.freeze(error instanceof RuntimeError ? { code: error.code, message: error.message } : { code: 'INTERNAL_ERROR', message: '服务内部错误。' });
@@ -11,17 +12,26 @@ export function conversationFailure(error: unknown): ConversationFailure {
 export class ConversationSubmission {
   private state: ConversationSubmissionSnapshot;
   private readonly listeners = new Set<(snapshot: ConversationSubmissionSnapshot) => void>();
+  private readonly controller = new AbortController();
   private notifying = false;
   private started = false;
   private completedAt: number | undefined;
   private task: Promise<void> | undefined;
+  private readonly activities = new ConversationActivityProjection((activities) => this.update({ activities }));
+  readonly activity = new ProgressChannel<InvocationProgress>({
+    receive: (fact): undefined => {
+      if (this.completedAt !== undefined) throw new Error('Activity arrived after service completion');
+      this.activities.receive(fact);
+    },
+    failed: (error): undefined => this.activities.invalidate(error),
+  });
   readonly progress = new ProgressChannel<ConversationProgress>({
     receive: (fact): undefined => this.receive(fact),
     failed: (error): undefined => this.invalidate(error),
   });
 
   constructor(readonly id: string) {
-    this.state = Object.freeze({ submissionId: id, revision: 0, executions: Object.freeze([]), integrity: Object.freeze({ status: 'complete' }) });
+    this.state = Object.freeze({ submissionId: id, revision: 0, executions: Object.freeze([]), activities: this.activities.snapshot, integrity: Object.freeze({ status: 'complete' }) });
   }
 
   get snapshot(): ConversationSubmissionSnapshot {
@@ -33,10 +43,18 @@ export class ConversationSubmission {
   }
 
   /** Always consumes task rejection. Delivery callers only read the resulting service facts. */
-  start(work: () => Promise<unknown>): void {
+  start(work: (signal: AbortSignal) => Promise<unknown>): void {
     if (this.started || this.completedAt !== undefined) throw new Error('Submission has already started or ended');
     this.started = true;
     this.task = this.run(work);
+  }
+
+  /** Request cooperative cancellation without ending delivery or inventing a work result. */
+  requestCancellation(): ConversationSubmissionSnapshot {
+    if (this.state.result || this.state.cancelRequested) return this.state;
+    this.update({ cancelRequested: true });
+    this.controller.abort(new Error('Conversation cancellation requested'));
+    return this.state;
   }
 
   /** Only service checks performed before runtime entry may produce this explicit refusal. */
@@ -46,13 +64,16 @@ export class ConversationSubmission {
     this.update({ result: Object.freeze({ status: 'rejected', error: conversationFailure(error) }) });
   }
 
-  private async run(work: () => Promise<unknown>): Promise<void> {
+  private async run(work: (signal: AbortSignal) => Promise<unknown>): Promise<void> {
     try {
-      await work();
+      await work(this.controller.signal);
       this.update({ result: Object.freeze({ status: 'completed' }) });
     } catch (error) {
-      const rejected = this.state.integrity.status === 'complete' && !this.state.input && (error instanceof ConversationInputError || (error instanceof RuntimeError && error.code === 'RUNTIME_BUSY'));
-      this.update({ result: Object.freeze({ status: rejected ? 'rejected' : 'failed', error: conversationFailure(error) }) });
+      if (isInvocationCancelled(error, this.controller.signal)) this.update({ result: Object.freeze({ status: 'cancelled' }) });
+      else {
+        const rejected = this.state.integrity.status === 'complete' && !this.state.input && (error instanceof ConversationInputError || (error instanceof RuntimeError && error.code === 'RUNTIME_BUSY'));
+        this.update({ result: Object.freeze({ status: rejected ? 'rejected' : 'failed', error: conversationFailure(error) }) });
+      }
     } finally {
       this.completedAt = Date.now();
     }

@@ -1,12 +1,5 @@
 import type { Message, ObserverOverview } from '@capix/protocol';
-
-export interface ConversationMessage {
-  key: string;
-  message: Readonly<Message>;
-  index?: number;
-  executionId?: string;
-  round?: number;
-}
+import type { ConversationMessage } from '../state/conversation.js';
 
 /** A view of observed messages, never a write to the server transcript. */
 export function projectConversation(messages: readonly Readonly<Message>[], overview: ObserverOverview, transcriptId?: string): ConversationMessage[] {

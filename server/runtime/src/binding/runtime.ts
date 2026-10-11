@@ -18,7 +18,10 @@ export interface RuntimeCallSource<Input, Options, Source> {
   entry(input: unknown, options: Options, definition: AnyExecutionDefinition): Source;
   capture(input: unknown, options: Options, definition: AnyExecutionDefinition): Source;
   callbacks?(definition: AnyExecutionDefinition, options: Options): ExecutionInvocationCallbacks<any, any, any> | undefined;
-  progress?(definition: AnyExecutionDefinition, options: Options): ProgressReceiver<InvocationProgress> | undefined;
+  /** One passive receiver for the R call and its complete invocation subtree. */
+  progress?(input: Input, options: Options): ProgressReceiver<InvocationProgress> | undefined;
+  /** Optional E-subtree receiver selected by declaration, independent of the R receiver. */
+  executionProgress?(definition: AnyExecutionDefinition, options: Options): ProgressReceiver<InvocationProgress> | undefined;
 }
 
 /** Supplies and per-call capture functions used to bind one reusable RuntimeDefinition. */
@@ -48,6 +51,7 @@ export function assembleRuntime<Input, Output, Resources extends object, Options
     definition,
     children: runtime.environment.children(requires, definition.children, 'runtime', definition),
     validate: source.validate?.bind(source),
+    progress: source.progress?.bind(source),
     resources: (input, callOptions) => (source.runtime ? runtimeResources(source.runtime(input, callOptions)) : new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)),
     executionBindings: (_input, callOptions) => ({
       get(executionDefinition) {
@@ -57,7 +61,7 @@ export function assembleRuntime<Input, Output, Resources extends object, Options
           entry: (input) => resourceBindings.entry(source.entry(input, callOptions, executionDefinition)),
           capture: (input) => resourceBindings.capture(source.capture(input, callOptions, executionDefinition)),
           callbacks: source.callbacks?.(executionDefinition, callOptions),
-          progress: source.progress?.(executionDefinition, callOptions),
+          progress: source.executionProgress?.(executionDefinition, callOptions),
         };
       },
     }),

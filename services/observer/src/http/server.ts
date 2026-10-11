@@ -112,12 +112,20 @@ export function createObserverServer(options: ObserverServerOptions) {
       if (!allowedSources.has(path)) return json(res, 404, { error: '未找到源码。' } satisfies ErrorResponse);
       return json(res, 200, { path, content: await readFile(resolve(project, path), 'utf8') } satisfies SourceResponse);
     }
-    const submissionPath = /^\/api\/submissions\/([a-zA-Z0-9_-]{1,128})(\/follow)?$/.exec(url.pathname);
-    if (req.method === 'GET' && submissionPath) {
+    const submissionPath = /^\/api\/submissions\/([a-zA-Z0-9_-]{1,128})(\/follow|\/cancel)?$/.exec(url.pathname);
+    if (req.method === 'GET' && submissionPath && submissionPath[2] !== '/cancel') {
       const submission = submissions.get(submissionPath[1]!);
       if (!submission) return json(res, 404, { code: 'SUBMISSION_UNAVAILABLE', error: '提交进展不可用；这不表示请求没有执行。' } satisfies ErrorResponse);
-      if (submissionPath[2]) return followSubmission(submission, res);
+      if (submissionPath[2] === '/follow') return followSubmission(submission, res);
       return json(res, 200, submission.snapshot);
+    }
+    if (req.method === 'POST' && submissionPath?.[2] === '/cancel') {
+      if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' } satisfies ErrorResponse);
+      const body = await readBody(req);
+      if (!isObject(body) || Object.keys(body).length) throw new RuntimeError('INVALID_INPUT', '取消请求正文必须为空对象。');
+      const submission = submissions.get(submissionPath[1]!);
+      if (!submission) return json(res, 404, { code: 'SUBMISSION_UNAVAILABLE', error: '提交进展不可用；不能确认取消，也不表示请求没有执行。' } satisfies ErrorResponse);
+      return json(res, 200, submission.requestCancellation());
     }
     if (req.method === 'POST' && url.pathname === '/api/run') {
       if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' } satisfies ErrorResponse);
@@ -132,7 +140,7 @@ export function createObserverServer(options: ObserverServerOptions) {
         submission.reject(error);
         return json(res, 400, submission.snapshot);
       }
-      submission.start(() => observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress }));
+      submission.start((signal) => observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, signal }));
       // This controller only detaches the initial HTTP waiter; it is never passed to runtime.run.
       const waiting = new AbortController();
       const detachWaiting = () => waiting.abort();

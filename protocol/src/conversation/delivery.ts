@@ -1,6 +1,7 @@
 import type { Message } from '../content/message.js';
 import type { ModelSettings } from './settings.js';
 import type { MessageLocator, TranscriptRangeLocator, TranscriptSnapshot } from '../content/transcript.js';
+import type { ConversationActivities } from './activity.js';
 
 /** A public service diagnosis, independent of private runtime errors and observation records. */
 export interface ConversationFailure {
@@ -21,7 +22,11 @@ export interface ConversationSubmissionSnapshot {
   readonly input?: TranscriptRangeLocator;
   readonly answer?: MessageLocator;
   readonly executions: readonly { readonly contextId: string }[];
-  readonly result?: { readonly status: 'completed' } | { readonly status: 'failed' | 'rejected'; readonly error: ConversationFailure };
+  /** Optional, independently complete progress projection. It never determines the submission result. */
+  readonly activities?: ConversationActivities;
+  /** The service accepted a stop request; this does not establish a terminal result. */
+  readonly cancelRequested?: true;
+  readonly result?: { readonly status: 'completed' | 'cancelled' } | { readonly status: 'failed' | 'rejected'; readonly error: ConversationFailure };
   readonly integrity: { readonly status: 'complete' } | { readonly status: 'incomplete'; readonly error: ConversationFailure };
 }
 

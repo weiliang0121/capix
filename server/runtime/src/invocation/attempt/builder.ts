@@ -32,6 +32,7 @@ export class AttemptInvocationBuilder {
   ) {}
 
   create<Input, Output, Resources extends object = object>(parent: Invocation<unknown, unknown, OperationContext>, request: AttemptInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, AttemptContext<Input, Output, Resources>> {
+    parent.requireActive();
     this.contextBuilder.check(parent.context);
     const context = this.contextBuilder.create<Input, Output, Resources>(parent.context, request.input, parent.context.resources.select(request.requires ?? ({} as ResourceRequirements<Resources>), request.initial));
     const identity = { contextId: context.id, level: 'attempt' as const, parentContextId: parent.context.id };

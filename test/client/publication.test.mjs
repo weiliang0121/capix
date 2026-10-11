@@ -45,7 +45,7 @@ async function fixture(t, options = {}) {
     },
   });
   t.after(() => {
-    runtime.releaseSubmission();
+    runtime.stopFollowing();
     runtime.stopTranscript();
     feedback.resolve();
   });
@@ -274,6 +274,7 @@ test('subscriber reentrancy cannot replace the public snapshot midway through a 
   f.runtime.subscribe(() => seen.push(f.runtime.getSnapshot()));
 
   f.delivery.input(range);
+  f.delivery.complete();
   await settle();
   assert.equal(beforeRelease, afterRelease);
   assert.equal(seen[0], beforeRelease, 'later listeners still consume the same publication');
@@ -284,7 +285,12 @@ test('subscriber reentrancy cannot replace the public snapshot midway through a 
 });
 
 test('acceptance queued by a reentrant submission survives immediate release and carries its original identity', async (t) => {
-  const f = await fixture(t, { onSubmit: (delivery) => delivery.input(range) });
+  const f = await fixture(t, {
+    onSubmit: (delivery) => {
+      delivery.input(range);
+      delivery.complete();
+    },
+  });
   let acted = false;
   let work;
   let beforeSubmit;

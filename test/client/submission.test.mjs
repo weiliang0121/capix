@@ -107,7 +107,7 @@ test('acceptance notification failure cannot reject remote facts or cut off late
   runtime.stopTranscript();
 });
 
-test('explicitly stopping feedback preserves unresolved submission; release permits new tracking only', async () => {
+test('stopping feedback preserves unresolved submission and cannot release queue ownership', async () => {
   const signals = [];
   const io = transport({
     submit: async (_request, _receive, signal) => {
@@ -125,13 +125,10 @@ test('explicitly stopping feedback preserves unresolved submission; release perm
   assert.equal(runtime.getSnapshot().busy, true);
   assert.equal(runtime.getSnapshot().submission.feedback.status, 'ended');
   await assert.rejects(runtime.submit(input), /尚未确认结束/);
-  runtime.releaseSubmission();
-  assert.equal(runtime.getSnapshot().submission, undefined);
-  assert.equal(runtime.getSnapshot().busy, false);
-  const second = runtime.submit(input);
-  assert.notEqual(runtime.getSnapshot().submission.id, firstId);
-  runtime.releaseSubmission();
-  await second;
+  assert.throws(() => runtime.releaseSubmission(), /尚未确认结束/);
+  assert.equal(runtime.getSnapshot().submission.id, firstId);
+  assert.equal(runtime.getSnapshot().busy, true);
+  assert.equal(signals.length, 1);
   runtime.stopTranscript();
 });
 
@@ -162,7 +159,7 @@ test('replaced feedback owner ignores late frames and errors from the former con
 
 test('cumulative receiver accepts old versions and revision gaps but rejects conflicts and fact regression', () => {
   const make = () => {
-    const submission = new ClientSubmission('test');
+    const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'test' }] });
     const first = submissionSnapshot(submission.id, { revision: 4, input: range, executions: [{ contextId: 'e1' }] });
     submission.receive(first);
     return { submission, first };
@@ -181,7 +178,7 @@ test('cumulative receiver accepts old versions and revision gaps but rejects con
 });
 
 test('remote snapshot copies cannot be mutated by transports after acceptance', () => {
-  const submission = new ClientSubmission('test');
+  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'test' }] });
   const value = submissionSnapshot(submission.id, { revision: 1, input: { ...range }, executions: [{ contextId: 'e' }] });
   submission.receive(value);
   value.input.end = 5;
@@ -206,7 +203,8 @@ test('invalid feedback interrupts its connection without removing valid accepted
   assert.equal(runtime.getSnapshot().submission.feedback.status, 'interrupted');
   assert.ok(runtime.getSnapshot().submission.feedback.error instanceof SubmissionContractError);
   assert.equal(runtime.getSnapshot().busy, true);
-  runtime.releaseSubmission();
+  assert.throws(() => runtime.releaseSubmission(), /尚未确认结束/);
+  runtime.stopFollowing();
   runtime.stopTranscript();
 });
 
@@ -254,7 +252,8 @@ test('input facts must belong to the initialized transcript and cannot silently 
   assert.equal(runtime.getSnapshot().submission.remote, undefined);
   assert.equal(runtime.getSnapshot().submission.feedback.status, 'interrupted');
   assert.equal(runtime.getSnapshot().transcriptId, range.transcriptId);
-  runtime.releaseSubmission();
+  assert.throws(() => runtime.releaseSubmission(), /尚未确认结束/);
+  runtime.stopFollowing();
   runtime.stopTranscript();
 });
 

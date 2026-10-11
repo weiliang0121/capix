@@ -210,8 +210,12 @@ test('cancelled calls do not enter execute; cancellation between rounds keeps th
     await assert.rejects(work.call(callFor(execution), 0), (e) => e.code === 'INVOCATION_CANCELLED' && e.cause === cause);
     assert.equal(work.contexts.length, initiallyCancelled ? 0 : 1);
     const record = observeCall(runtime.recording, callFor(execution)).operations[0];
+    if (initiallyCancelled) {
+      assert.equal(record, undefined, 'cancelled parent cannot construct a new operation');
+      continue;
+    }
     assert.equal(record.value.processes.at(-1).type, 'stop');
-    assert.equal(record.value.processes.at(-1).round, initiallyCancelled ? 0 : 1);
+    assert.equal(record.value.processes.at(-1).round, 1);
   }
 });
 

@@ -2,7 +2,7 @@ import { type Initializer, type ResourceProvider, type ResourceRequest, type Pro
 import { TranscriptResource, MemoryResource, SelectionUsageResource, type Transcript, type Memories, type SelectionUsage, type TranscriptRangeRef, type TranscriptRangeReader, type TranscriptAppendProgress } from '@capix/server-runtime/content';
 import type { ModelSettings } from '@capix/protocol';
 import { ModelSettingsResource, ModelResource } from './model/resources.js';
-import type { ModelProvider } from './model/types.js';
+import type { ModelProvider, ModelInvocation } from './model/types.js';
 
 type Offered<Offer extends { request(): ResourceRequest<unknown> }> = ReturnType<Offer['request']> extends ResourceRequest<infer Value> ? Value : never;
 export interface ModelRequestResources {
@@ -10,7 +10,7 @@ export interface ModelRequestResources {
 }
 export interface ModelCallResources extends ModelRequestResources {
   readonly timeoutMs: number;
-  readonly model: ModelProvider;
+  readonly model: ModelInvocation;
 }
 export interface HistoryResources {
   readonly history: TranscriptRangeReader;

@@ -1,4 +1,14 @@
 import type { InvocationIdentity } from './identity.js';
+import type { InvocationProcess } from './cycle.js';
+import type { InvocationRelationIdentity, InvocationRelationChange } from '../observation/facts.js';
 
-/** Established call-local progress. Completion does not imply parent acceptance or delivery. */
-export type InvocationProgress = Readonly<{ kind: 'started'; identity: InvocationIdentity } | { kind: 'finished'; identity: InvocationIdentity; status: 'succeeded' | 'failed' }>;
+/** Passive metadata of established work facts. No IO, borrowed entities or diagnostics. */
+export type InvocationProgress = Readonly<
+  {
+    identity: InvocationIdentity;
+    /** Ordered within the producing invocation, not across its subtree or a transport. */
+    eventSequence: number;
+    occurredAt: string;
+    description?: Readonly<{ name?: string; label?: string }>;
+  } & ({ kind: 'started' } | { kind: 'process'; processSequence: number; round: number; stage: InvocationProcess['stage']; action: InvocationProcess['type'] } | { kind: 'relation'; relation: InvocationRelationIdentity; phase: Exclude<InvocationRelationChange['kind'], 'returned'> } | { kind: 'relation'; relation: InvocationRelationIdentity; phase: 'returned'; status: 'succeeded' | 'failed' | 'cancelled' } | { kind: 'finished'; status: 'succeeded' | 'failed' | 'cancelled' })
+>;

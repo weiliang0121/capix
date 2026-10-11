@@ -219,3 +219,86 @@ test('pre-runtime rejection is terminal, queryable, and cannot subsequently star
   assert.throws(() => active.reject(new Error('too late')), /Cannot reject/);
   await complete(active);
 });
+
+test('cancellation is idempotent and waits for work to settle instead of releasing on request', async () => {
+  const submission = new ConversationSubmission('cooperative-cancel');
+  let receivedSignal;
+  let release;
+  submission.start((signal) => {
+    receivedSignal = signal;
+    return new Promise((resolve) => {
+      release = resolve;
+    });
+  });
+  const requested = submission.requestCancellation();
+  assert.equal(requested.cancelRequested, true);
+  assert.equal(requested.result, undefined);
+  assert.equal(receivedSignal.aborted, true);
+  assert.equal(submission.endedAt, undefined);
+  assert.equal(submission.requestCancellation(), requested);
+  release();
+  const result = await complete(submission);
+  assert.equal(result.result.status, 'completed', 'a request alone does not convert successful work into cancellation');
+  assert.equal(result.cancelRequested, true);
+  assert.equal(submission.requestCancellation(), result);
+});
+
+test('only runtime-confirmed cancellation terminates as cancelled and keeps committed content', async () => {
+  const environment = createEnvironment();
+  let entered;
+  const entering = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, {
+    async invoke(_request, _purpose, signal) {
+      entered();
+      return new Promise((_resolve, reject) => {
+        if (signal.aborted) reject(signal.reason);
+        else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    },
+  });
+  const submission = new ConversationSubmission('confirmed-cancel');
+  submission.start((signal) => runtime.run(input, { settings, progress: submission.progress, activity: submission.activity, signal }));
+  await entering;
+  submission.requestCancellation();
+  const result = await complete(submission);
+  assert.equal(result.result.status, 'cancelled');
+  assert.equal(result.cancelRequested, true);
+  assert.equal(result.input.end, 1);
+  assert.equal(result.activities.integrity.status, 'complete');
+  assert.equal(result.activities.calls.find((call) => call.level === 'runtime').status, 'cancelled');
+  assert.ok(result.activities.calls.some((call) => call.level === 'attempt' && call.status === 'cancelled'));
+  assert.equal(environment.transcript.length, 1);
+  assert.equal(runtime.running, false);
+});
+
+test('an independent failure after a cancellation request remains a failure', async () => {
+  const submission = new ConversationSubmission('failed-with-cancel');
+  let rejectWork;
+  submission.start(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectWork = reject;
+      }),
+  );
+  submission.requestCancellation();
+  rejectWork(new Error('independent work failure'));
+  const result = await complete(submission);
+  assert.equal(result.cancelRequested, true);
+  assert.equal(result.result.status, 'failed');
+  assert.equal(result.result.error.code, 'INTERNAL_ERROR');
+});
+
+test('late cancellation never changes an already completed or rejected submission', async () => {
+  const completed = new ConversationSubmission('completed-before-cancel');
+  completed.start(async () => undefined);
+  const snapshot = await complete(completed);
+  assert.equal(completed.requestCancellation(), snapshot);
+  assert.equal(snapshot.cancelRequested, undefined);
+  const rejected = new ConversationSubmission('rejected-before-cancel');
+  rejected.reject(new Error('not accepted'));
+  const refusal = rejected.snapshot;
+  assert.equal(rejected.requestCancellation(), refusal);
+  assert.equal(refusal.cancelRequested, undefined);
+});

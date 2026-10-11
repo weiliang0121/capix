@@ -37,7 +37,8 @@ test('application keeps a committed answer across disconnect and reconnects feed
   assert.equal(pending.busy, true);
   assert.match(pending.submissionNotice.message, /结果待确认/);
   assert.equal(pending.submissionNotice.reconnect, true);
-  assert.equal(pending.submissionNotice.release, true);
+  assert.equal('release' in pending.submissionNotice, false);
+  assert.equal(pending.submissionControl.label, '取消当前');
   assert.equal(app.store.getState().draft, '');
   await app.commands.reconnectSubmission();
   await frames.flush();
@@ -49,7 +50,7 @@ test('application keeps a committed answer across disconnect and reconnects feed
   disconnect();
 });
 
-test('ending unknown local tracking preserves edits and explicitly does not claim server cancellation', async (t) => {
+test('unknown active result remains tracked while later locally accepted input waits', async (t) => {
   const frames = installFrames(t);
   let calls = 0;
   const runtime = client({
@@ -66,16 +67,19 @@ test('ending unknown local tracking preserves edits and explicitly does not clai
   app.store.getState().setDraft('未确认输入');
   await app.commands.submit();
   await frames.flush();
-  assert.equal(app.store.getState().draft, '未确认输入');
+  assert.equal(app.store.getState().draft, '');
   assert.equal(app.store.getState().data.busy, true);
   assert.equal(app.store.getState().data.pendingLabel, '提交待确认');
-  app.commands.releaseSubmission();
+  app.store.getState().setDraft('后续消息');
+  await app.commands.submit();
   await frames.flush();
   assert.equal(calls, 1);
-  assert.equal(app.store.getState().data.busy, false);
-  assert.equal(app.store.getState().data.submissionNotice, undefined);
-  assert.equal(app.store.getState().draft, '未确认输入');
-  assert.match(app.store.getState().notice, /未被取消/);
+  assert.equal(app.store.getState().data.busy, true);
+  assert.match(app.store.getState().data.submissionNotice.message, /结果待确认/);
+  assert.equal(app.store.getState().data.queue.waiting[0].pending, '后续消息');
+  assert.equal(app.store.getState().draft, '');
+  assert.equal('release' in app.store.getState().data.submissionNotice, false);
+  app.commands.clearQueue();
   disconnect();
 });
 
@@ -105,18 +109,46 @@ test('application distinguishes known rejection, failed postprocessing and incom
     const data = app.store.getState().data;
     assert.equal(data.busy, scenario === 'incomplete');
     assert.equal(data.submissionNotice.reconnect, scenario === 'incomplete');
-    assert.equal(data.submissionNotice.release, scenario === 'incomplete');
+    assert.equal('release' in data.submissionNotice, false);
     if (scenario === 'rejected') {
       assert.match(data.submissionNotice.message, /提交被拒绝/);
       assert.equal(data.conversation.length, 0);
       assert.equal(data.pending, '');
-      assert.equal(app.store.getState().draft, '问题');
+      assert.equal(data.submissionNotice.input, '问题', 'a rejected input remains readable outside the formal transcript');
+      assert.equal(app.store.getState().draft, '');
     } else {
       assert.equal(data.conversation.at(-1).message.content, '已落实回答');
       assert.match(data.submissionNotice.message, scenario === 'failed' ? /回答已保留.*记忆处理失败/ : /进展无法完整确认/);
+      assert.equal(data.submissionNotice.input, undefined, 'already committed input is not repeated in the notice');
     }
     disconnect();
   }
+});
+
+test('cancellation presentation keeps control acknowledgement separate from actual termination', () => {
+  const initial = client({ conversation: transport() }).getSnapshot();
+  const state = { ...initial, busy: true, submission: { id: 'current', pending: '问题', feedback: { status: 'following' }, cancellation: { status: 'acknowledged' }, remote: submissionSnapshot('current', { revision: 2, cancelRequested: true }) } };
+  const pending = projectSubmission(state);
+  assert.match(pending.submissionNotice.message, /服务已接收取消请求.*实际结束/);
+  assert.equal(pending.submissionControl.id, 'current');
+  assert.equal(pending.submissionControl.disabled, true);
+  assert.equal(pending.progress, '等待取消结果…');
+
+  const uncertain = projectSubmission({ ...state, submission: { ...state.submission, remote: undefined, feedback: { status: 'interrupted', error: new Error('断流') }, cancellation: { status: 'uncertain', error: new Error('响应丢失') } } });
+  assert.match(uncertain.submissionNotice.message, /是否送达尚未确认.*响应丢失/);
+  assert.equal(uncertain.submissionControl.label, '重试取消');
+  assert.equal(uncertain.submissionControl.disabled, false);
+  assert.equal(uncertain.submissionNotice.reconnect, true);
+
+  const answer = { transcriptId: 'transcript', index: 1 };
+  const cancelled = projectSubmission({ ...state, answerAvailability: 'pending', submission: { ...state.submission, remote: { ...state.submission.remote, answer, result: { status: 'cancelled' } } } });
+  assert.match(cancelled.submissionNotice.message, /回答已保留，正文待同步.*处理已取消/);
+  assert.equal(cancelled.submissionControl, undefined);
+  assert.equal(cancelled.submissionNotice.reconnect, false);
+
+  const completed = projectSubmission({ ...state, submission: { ...state.submission, remote: { ...state.submission.remote, result: { status: 'completed' } } } });
+  assert.match(completed.submissionNotice.message, /处理已完成.*没有改变/);
+  assert.equal(completed.submissionControl, undefined);
 });
 
 test('submission presentation distinguishes completed work from body synchronization and keeps cached answers available', () => {

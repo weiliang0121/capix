@@ -39,19 +39,19 @@ test('editing search resets its cursor without changing the selected round or ru
   assert.equal(runtime.getSnapshot().messages.length, 0);
 });
 
-test('submission keeps edits until acceptance, prevents concurrent sends and leaves server observations in runtime until binding commits application data', async (t) => {
+test('local queue acceptance clears submitted edits and prevents concurrent transport sends', async (t) => {
   const frames = installFrames(t);
   const gate = deferred();
   let accept;
-  let sent;
+  const sent = [];
   let calls = 0;
   const io = transport({
     submit: async (request, receive) => {
       calls++;
-      sent = request.input;
+      sent.push(request.input);
       const delivery = io.delivery(request, receive);
       accept = () => delivery.input();
-      await gate.promise;
+      if (calls === 1) await gate.promise;
       delivery.complete();
     },
   });
@@ -61,11 +61,15 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
   store.getState().setDraft('继续讨论');
   store.getState().setHistory('[{"role":"assistant","content":"已有回答"}]');
   const operation = submitDraft(store, runtime);
+  assert.equal(store.getState().draft, '');
+  assert.equal(store.getState().history, '[]');
+  store.getState().setDraft('继续排队');
   await submitDraft(store, runtime);
   await frames.flush();
   assert.equal(calls, 1);
-  assert.equal(store.getState().draft, '继续讨论');
-  assert.deepEqual(sent.messages, [
+  assert.equal(store.getState().draft, '');
+  assert.equal(runtime.getSnapshot().queue.waiting.length, 1);
+  assert.deepEqual(sent[0].messages, [
     { role: 'assistant', content: '已有回答' },
     { role: 'user', content: '继续讨论' },
   ]);
@@ -78,9 +82,13 @@ test('submission keeps edits until acceptance, prevents concurrent sends and lea
   for (const field of ['messages', 'overview', 'memory', 'busy', 'runningId']) assert.equal(field in store.getState(), false);
   gate.resolve();
   await operation;
+  await frames.flush();
+  assert.equal(calls, 2);
+  assert.deepEqual(sent[1].messages, [{ role: 'user', content: '继续排队' }]);
 });
 
-test('rejected submission preserves edits and exposes remote rejection without appending messages', async () => {
+test('remote rejection preserves the submitted preview after local acceptance cleared the draft', async (t) => {
+  const frames = installFrames(t);
   const runtime = client({
     conversation: transport({
       submit: async (request, receive) => receive(submissionSnapshot(request.submissionId, { revision: 1, result: { status: 'rejected', error: { code: 'RUNTIME_BUSY', message: '服务忙碌' } } })),
@@ -90,14 +98,17 @@ test('rejected submission preserves edits and exposes remote rejection without a
   await runtime.initialize();
   store.getState().setDraft('保留这条输入');
   await submitDraft(store, runtime);
-  assert.equal(store.getState().draft, '保留这条输入');
+  await frames.flush();
+  assert.equal(store.getState().draft, '');
   assert.equal(store.getState().notice, '');
   assert.equal(runtime.getSnapshot().submission.remote.result.status, 'rejected');
   assert.equal(runtime.getSnapshot().busy, false);
+  assert.equal(runtime.getSnapshot().submission.pending, '保留这条输入');
+  assert.equal(runtime.getSnapshot().queue.paused, true);
   assert.deepEqual(runtime.getSnapshot().messages, []);
 });
 
-test('invalid form input never reaches the runtime submission and late acceptance preserves newer edits', async (t) => {
+test('invalid form input never reaches the queue and late remote acceptance preserves newer edits', async (t) => {
   const frames = installFrames(t);
   let accept;
   let calls = 0;
@@ -126,6 +137,7 @@ test('invalid form input never reaches the runtime submission and late acceptanc
   assert.equal(calls, 0);
   store.getState().setHistory('[]');
   const operation = submitDraft(store, runtime);
+  await frames.flush();
   store.getState().setDraft('后续新草稿');
   store.getState().setHistory('[{"role":"user","content":"新编辑"}]');
   accept();

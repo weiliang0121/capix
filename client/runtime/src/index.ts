@@ -7,6 +7,8 @@ export type { ObservationState } from './observation/receiver.js';
 
 export { TranscriptReplica, TranscriptSequenceError, type TranscriptState } from './transcript.js';
 
-export { ClientSubmission, SubmissionContractError, type ClientSubmissionState, type SubmissionFeedback, type SubmissionReception } from './submission.js';
+export { ClientSubmission, SubmissionContractError, type ClientSubmissionState, type SubmissionFeedback, type SubmissionCancellation, type SubmissionReception } from './submission.js';
 
 export type { ContentAvailability } from './conversation.js';
+
+export type { ClientQueueState, ConversationQueueOptions } from './queue.js';

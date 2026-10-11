@@ -2,6 +2,7 @@ import type { Invocation } from './invocation.js';
 import type { InvocationContext } from '../context/context.js';
 import { Continuation, type InvocationResult, type InvocationResolution } from './result.js';
 import { InvocationStopped } from './stop.js';
+import { requireNotCancelled } from './cancellation.js';
 import { DeclaredException, type ExceptionContract } from '../exception/contract.js';
 import type { InvocationFailure } from './failure.js';
 import { isNonBlankString } from '../value/string.js';
@@ -33,6 +34,7 @@ export async function cycle<Input, Output, Context extends InvocationContext<Inp
   try {
     if (work.maxRounds !== 1 && work.maxRounds !== 2) throw new InvocationStopped('INVALID_ROUND_LIMIT', '本地调用只允许一轮或两轮执行。');
     for (let round = 1; round <= work.maxRounds; round++) {
+      invocation.requireHealthy();
       requireNotCancelled(signal);
       context.startRound(round, input);
       options.validate?.();
@@ -40,6 +42,7 @@ export async function cycle<Input, Output, Context extends InvocationContext<Inp
       onProcess({ stage: 'execute', type: 'start', input });
       let result: InvocationResult<Output>;
       try {
+        invocation.requireActive();
         const output = await work.execute(context, invocation);
         invocation.requireHealthy();
         result = { status: 'succeeded', output };
@@ -50,6 +53,7 @@ export async function cycle<Input, Output, Context extends InvocationContext<Inp
       context.receiving(result);
       if (result.status === 'succeeded') onProcess({ stage: 'execute', type: 'return', output: result.output });
       else reportFailure(onProcess, 'execute', result.failure!);
+      invocation.requireHealthy();
       options.validate?.();
       requireNotCancelled(signal);
       invocation.requireHealthy();
@@ -89,6 +93,7 @@ async function handle<Input, Output, Context extends InvocationContext<Input, Ou
   onProcess({ stage: 'handling', type: 'start', error: exception, failure });
   let resolution: InvocationResolution<Input, Output>;
   try {
+    invocation.requireActive();
     resolution = await work.exceptions.handle(context, exception, invocation);
     invocation.requireHealthy();
     if (!isObject(resolution) || !['return', 'continue', 'unhandled'].includes(resolution.kind) || (resolution.kind === 'return' && !Object.hasOwn(resolution, 'output')) || (resolution.kind === 'continue' && (!Object.hasOwn(resolution, 'input') || !isNonBlankString(resolution.reason)))) throw new InvocationStopped('INVALID_EXCEPTION_RESOLUTION', '异常处理返回了无效的处理结果。');
@@ -112,9 +117,6 @@ async function handle<Input, Output, Context extends InvocationContext<Input, Ou
 function reportContinuation<Input>(onProcess: ProcessSink, stage: 'receive' | 'handling', continuation: Continuation<Input>): void {
   if (!isNonBlankString(continuation.reason)) throw new InvocationStopped('INVALID_CONTINUATION', '继续执行必须说明原因。');
   onProcess({ stage, type: 'continue', input: continuation.input, reason: continuation.reason });
-}
-function requireNotCancelled(signal: AbortSignal): void {
-  if (signal.aborted) throw new InvocationStopped('INVOCATION_CANCELLED', '调用已取消，不再开始下一轮。', undefined, { cause: signal.reason });
 }
 function reportFailure(onProcess: ProcessSink, stage: 'execute' | 'receive' | 'handling' | 'control', failure: InvocationFailure): void {
   try {

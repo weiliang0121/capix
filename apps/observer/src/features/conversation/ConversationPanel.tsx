@@ -3,16 +3,20 @@ import { Settings2 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { ChatMessages } from './ChatMessages';
+import { MessageQueue } from './MessageQueue';
 import { Composer } from './Composer';
 import './conversation.css';
 export function ConversationPanel() {
   const messageCount = useAppStore((state) => state.data.messageCount);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const conversation = useAppStore((state) => state.data.conversation);
+  const pendingProcesses = useAppStore((state) => state.data.pendingProcesses);
   const pending = useAppStore((state) => state.data.pending);
   const pendingLabel = useAppStore((state) => state.data.pendingLabel);
   const conversationError = useAppStore((state) => state.data.conversationError);
   const submissionNotice = useAppStore((state) => state.data.submissionNotice);
+  const submissionControl = useAppStore((state) => state.data.submissionControl);
+  const queue = useAppStore((state) => state.data.queue);
   const progress = useAppStore((state) => state.data.progress);
   const busy = useAppStore((state) => state.data.busy);
   const config = useAppStore((state) => state.data.config);
@@ -20,7 +24,7 @@ export function ConversationPanel() {
   const inspect = useAppStore((state) => state.inspect);
   const draft = useAppStore((state) => state.draft);
   const setDraft = useAppStore((state) => state.setDraft);
-  const { submit, reconnectConversation, reconnectSubmission, releaseSubmission } = useAppCommands();
+  const { submit, reconnectConversation, reconnectSubmission, cancelSubmission, cancelAll, clearQueue, pauseQueue, resumeQueue } = useAppCommands();
   return (
     <aside className="conversation-panel">
       <header className="panel-heading">
@@ -52,24 +56,24 @@ export function ConversationPanel() {
       {submissionNotice && (
         <div className="submission-notice" role="status" aria-live="polite">
           <p>{submissionNotice.message}</p>
-          {(submissionNotice.reconnect || submissionNotice.release) && (
+          {submissionNotice.input && (
+            <div className="submission-input" tabIndex={0} aria-label="本次提交的输入">
+              <span>本次提交的输入</span>
+              <p>{submissionNotice.input}</p>
+            </div>
+          )}
+          {submissionNotice.reconnect && (
             <div className="submission-notice-actions">
-              {submissionNotice.reconnect && (
-                <Button variant="outline" size="sm" onClick={() => void reconnectSubmission()}>
-                  重新同步
-                </Button>
-              )}
-              {submissionNotice.release && (
-                <Button variant="ghost" size="sm" onClick={releaseSubmission}>
-                  结束跟踪
-                </Button>
-              )}
+              <Button variant="outline" size="sm" onClick={() => void reconnectSubmission()}>
+                重新同步
+              </Button>
             </div>
           )}
         </div>
       )}
-      <ChatMessages rows={conversation} pending={pending} pendingLabel={pendingLabel} progress={progress} selectedId={selectedId} onInspect={inspect} />
-      <Composer configured={config?.configured ?? false} loaded={Boolean(config)} busy={busy} draft={draft} onDraft={setDraft} onSubmit={submit} />
+      <ChatMessages rows={conversation} pendingProcesses={pendingProcesses} pending={pending} pendingLabel={pendingLabel} progress={progress} selectedId={selectedId} onInspect={inspect} />
+      <MessageQueue queue={queue} current={submissionControl} onCancel={cancelSubmission} onCancelAll={cancelAll} onClear={clearQueue} onPause={pauseQueue} onResume={resumeQueue} />
+      <Composer configured={config?.configured ?? false} loaded={Boolean(config)} queueing={busy || queue.paused || queue.waiting.length > 0} draft={draft} onDraft={setDraft} onSubmit={submit} />
     </aside>
   );
 }

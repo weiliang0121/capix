@@ -31,6 +31,10 @@ export function lifecycleFor(runtime) {
         requireHealthy() {
           if (fault) throw fault;
         },
+        requireActive() {
+          this.requireHealthy();
+          context.requireActive();
+        },
         reject(error) {
           fault = error;
         },

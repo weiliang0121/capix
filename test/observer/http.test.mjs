@@ -52,6 +52,9 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
   assert.ok(stream[0].input);
   assert.equal(stream.at(-1).result.status, 'completed');
   assert.equal(stream.at(-1).answer.index, 1);
+  assert.equal(stream.at(-1).activities.integrity.status, 'complete');
+  assert.deepEqual(new Set(stream.at(-1).activities.calls.map((call) => call.level)), new Set(['runtime', 'execution', 'operation', 'attempt']));
+  assert.ok(stream.at(-1).activities.calls.every((call) => call.status === 'succeeded'));
   assert.ok(stream.every((item) => !('snapshot' in item)));
   const listed = await get('/api/executions');
   const snapshot = await get('/api/execution?id=' + listed.executions[0].id);
@@ -227,6 +230,14 @@ test('real HTTP headless client uses conversation only for two rounds without an
   assert.equal(runtime.getSnapshot().messages.at(-1).content, '测试回答');
   assert.equal(paths.filter((path) => path === '/api/run').length, 2);
   assert.equal(runtime.getSnapshot().observation.records.size, 0);
+  const submissions = [...runtime.getSnapshot().submissions.values()];
+  assert.equal(submissions.length, 2);
+  for (const submission of submissions) {
+    assert.equal(submission.remote.result.status, 'completed');
+    assert.equal(submission.remote.activities.integrity.status, 'complete');
+    assert.deepEqual(new Set(submission.remote.activities.calls.map((call) => call.level)), new Set(['runtime', 'execution', 'operation', 'attempt']));
+    assert.ok(submission.remote.activities.calls.every((call) => call.status === 'succeeded'));
+  }
 });
 
 test('answer is delivered before memory finishes, and closing observation does not cancel the conversation', async (t) => {
@@ -422,9 +433,116 @@ test('invalid settings with a valid submission ID are retained as explicit rejec
   const runtime = new ClientRuntime({ conversation: transport, transcripts: transport });
   t.after(() => runtime.stopTranscript());
   await runtime.initialize();
-  await runtime.submit({ messages: [{ role: 'user', content: 'bad' }], contextBudget: 0 });
-  assert.equal(runtime.getSnapshot().submission.remote.result.status, 'rejected');
+  await assert.rejects(runtime.submit({ messages: [{ role: 'user', content: 'bad' }], contextBudget: 0 }), /容量预算/);
+  assert.equal(runtime.getSnapshot().submission, undefined, 'local validation does not create remote work');
   assert.equal(runtime.getSnapshot().busy, false);
   await runtime.submit({ messages: [{ role: 'user', content: 'normal' }] });
   assert.equal(runtime.getSnapshot().submission.remote.result.status, 'completed');
+});
+
+test('HTTP cancellation retains an answer and waits for non-cooperating work before releasing runtime', async (t) => {
+  let entered;
+  const entering = new Promise((resolve) => {
+    entered = resolve;
+  });
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  t.after(() => release());
+  let modelSignal;
+  const { base, run, observer } = await setup(t, {
+    async invoke(request, purpose, signal) {
+      if (purpose === 'memory') {
+        modelSignal = signal;
+        entered();
+        await gate;
+      }
+      return provider.invoke(request, purpose);
+    },
+  });
+  const id = randomUUID();
+  const response = await run('已有回答后取消', { id });
+  const delivery = updates(response);
+  await entering;
+  const client = new ConversationHttpTransport(base);
+  const requested = await client.cancel(id);
+  assert.equal(requested.cancelRequested, true);
+  assert.ok(requested.input);
+  assert.ok(requested.answer);
+  assert.equal(requested.result, undefined);
+  assert.equal(modelSignal.aborted, true);
+  assert.equal(observer.runtime.running, true);
+  assert.equal(observer.transcript.length, 2);
+  const duplicate = await client.cancel(id);
+  assert.deepEqual(duplicate, requested);
+  const busy = await run('取消尚未结束不得执行');
+  assert.equal(busy.status, 409);
+  assert.equal((await busy.json()).result.error.code, 'RUNTIME_BUSY');
+  assert.equal(observer.transcript.length, 2);
+  release();
+  const frames = await delivery;
+  const terminal = frames.at(-1);
+  assert.equal(terminal.result.status, 'cancelled');
+  assert.deepEqual(terminal.answer, requested.answer);
+  assert.equal(observer.runtime.running, false);
+  assert.equal(observer.transcript.length, 2);
+  assert.equal(observer.memories.snapshot().length, 0);
+  assert.deepEqual(await client.read(id), terminal);
+  assert.deepEqual(await client.cancel(id), terminal);
+  assert.equal((await updates(await run('下一次正常输入'))).at(-1).result.status, 'completed');
+});
+
+test('HTTP cancellation signals running model work independently of feedback connection lifetime', async (t) => {
+  let entered;
+  const entering = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const { base, run, observer } = await setup(t, {
+    async invoke(_request, _purpose, signal) {
+      entered();
+      return new Promise((_resolve, reject) => {
+        if (signal.aborted) reject(signal.reason);
+        else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    },
+  });
+  const id = randomUUID();
+  const response = await run('取消调用', { id });
+  await entering;
+  await response.body.cancel();
+  assert.equal(observer.runtime.running, true, 'disconnecting delivery does not request cancellation');
+  const client = new ConversationHttpTransport(base);
+  await client.cancel(id);
+  const frames = [];
+  await client.follow(id, (frame) => frames.push(frame), new AbortController().signal);
+  assert.equal(frames.at(-1).result.status, 'cancelled');
+  assert.equal(frames.at(-1).cancelRequested, true);
+  assert.equal(observer.runtime.running, false);
+  assert.equal(observer.transcript.length, 1);
+});
+
+test('unknown cancellation does not reserve an ID or prevent a later POST from executing', async (t) => {
+  const { base, run } = await setup(t);
+  const id = randomUUID();
+  const client = new ConversationHttpTransport(base);
+  await assert.rejects(client.cancel(id), (error) => error.code === 'SUBMISSION_UNAVAILABLE' && error.response.status === 404);
+  const terminal = (await updates(await run('稍后到达的提交', { id }))).at(-1);
+  assert.equal(terminal.result.status, 'completed');
+  assert.equal(terminal.cancelRequested, undefined);
+  assert.deepEqual(await client.cancel(id), terminal);
+});
+
+test('cancel requires same-origin JSON and validates its empty body before changing work', async (t) => {
+  const { base } = await setup(t);
+  const url = `${base}/api/submissions/${randomUUID()}/cancel`;
+  for (const headers of [{ 'Content-Type': 'text/plain' }, { 'Content-Type': 'application/json', Origin: 'https://other.test' }]) {
+    const response = await fetch(url, { method: 'POST', headers, body: '{}' });
+    assert.equal(response.status, 403);
+  }
+  for (const body of ['{', '{"input":"not a cancellation field"}']) {
+    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base }, body });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).result, undefined);
+  }
 });

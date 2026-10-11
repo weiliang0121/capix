@@ -3,6 +3,7 @@ import { ResourceBindings, type ResourceRequirements } from '../resource/binding
 import type { RuntimeContextBuilder } from './runtime/builder.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
 import type { ExecutionInvocationBindings } from '../execution/execution.js';
+import { requireNotCancelled } from '../invocation/cancellation.js';
 
 /** Per-call construction access; only internal E construction can use these bindings. */
 export interface ExecutionBindingResolver {
@@ -34,6 +35,7 @@ export class RuntimeContext<Input = unknown, Output = unknown, Resources extends
   }
   requireActive(): void {
     this.requireRunning();
+    requireNotCancelled(this.signal);
   }
   executionBinding(definition: ExecutionDefinition<any, any, any, any, any, any>): ExecutionInvocationBindings<any, any, any, any, any> {
     this.requireActive();

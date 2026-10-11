@@ -3,6 +3,9 @@ export type ModelInitialization = ModelProvider | (() => ModelProvider);
 export interface ModelProvider {
   invoke(request: ModelRequest, purpose: Purpose, signal: AbortSignal): Promise<ModelOutput>;
 }
+export interface ModelInvocation {
+  invoke(request: ModelRequest, purpose: Purpose, controls: { readonly signal: AbortSignal; readonly timeoutMs: number }): Promise<ModelOutput>;
+}
 export interface Selection {
   historyIndexes: number[];
 }

@@ -1,7 +1,7 @@
 import { isArray, isFinite } from 'es-toolkit/compat';
 import { isString } from 'es-toolkit/predicate';
 import type { ModelOutput, ModelProvider, ModelRequest, Purpose } from '../conversation/model/types.js';
-import { isObject, RuntimeError } from '@capix/server-runtime';
+import { isObject, RuntimeError, InvocationCancelled } from '@capix/server-runtime';
 
 export class DeepSeekProvider implements ModelProvider {
   constructor(
@@ -18,8 +18,9 @@ export class DeepSeekProvider implements ModelProvider {
         body: JSON.stringify(request),
         signal,
       });
-    } catch {
-      throw new RuntimeError(signal.aborted ? 'CALL_ABORTED' : 'NETWORK_ERROR', signal.aborted ? '调用已取消或超过时限。' : '无法连接 DeepSeek。');
+    } catch (cause) {
+      if (isAbortedRequest(cause, signal)) throw new InvocationCancelled(signal, { cause });
+      throw new RuntimeError('NETWORK_ERROR', '无法连接 DeepSeek。', undefined, { cause });
     }
     if (!response.ok) {
       await response.body?.cancel();
@@ -28,8 +29,9 @@ export class DeepSeekProvider implements ModelProvider {
     let body: unknown;
     try {
       body = await response.json();
-    } catch {
-      throw new RuntimeError('PROVIDER_ENVELOPE', 'DeepSeek HTTP 响应不是 JSON。');
+    } catch (cause) {
+      if (isAbortedRequest(cause, signal)) throw new InvocationCancelled(signal, { cause });
+      throw new RuntimeError('PROVIDER_ENVELOPE', 'DeepSeek HTTP 响应不是 JSON。', undefined, { cause });
     }
     if (!isObject(body) || !isArray(body.choices) || !isObject(body.choices[0])) throw new RuntimeError('PROVIDER_ENVELOPE', 'DeepSeek 响应缺少 choices。');
     const choice = body.choices[0];
@@ -50,4 +52,9 @@ export class DeepSeekProvider implements ModelProvider {
           : null,
     };
   }
+}
+
+/** Fetch may reject with the supplied reason; body readers use a native AbortError. */
+function isAbortedRequest(error: unknown, signal: AbortSignal): boolean {
+  return signal.aborted && (error === signal.reason || (error instanceof DOMException && error.name === 'AbortError'));
 }

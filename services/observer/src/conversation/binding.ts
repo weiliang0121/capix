@@ -1,4 +1,4 @@
-import { Initializer, assembleRuntime, type ChangeCapture, type InvocationControls, type ExecutionInvocationCallbacks, type ObservationInstallation, type ProgressChannel } from '@capix/server-runtime';
+import { Initializer, assembleRuntime, type ChangeCapture, type InvocationControls, type ExecutionInvocationCallbacks, type ObservationInstallation, type ProgressChannel, type InvocationProgress } from '@capix/server-runtime';
 import { TranscriptRangeRef, type Transcript, type Memories, type SelectionUsage, type TranscriptAppendProgress } from '@capix/server-runtime/content';
 import { isFunction } from 'es-toolkit/predicate';
 import type { ModelSettings, InvocationEvent, Message, GenerationOutput } from '@capix/protocol';
@@ -12,6 +12,8 @@ export interface ConversationRunOptions extends InvocationControls {
   settings: ModelSettings;
   /** One passive channel for this submission. Reusing it explicitly shares its failure state. */
   progress?: ProgressChannel<ConversationProgress>;
+  /** Optional passive REOA metadata; a failed activity consumer does not disable content progress. */
+  activity?: ProgressChannel<InvocationProgress>;
   executionCallbacks?: ExecutionInvocationCallbacks<Readonly<Message>, GenerationOutput, ConversationExecutionResources>;
 }
 export interface ConversationEntities {
@@ -46,11 +48,19 @@ export function bindConversation(definition: ConversationRuntimeDefinition, enti
       entry: (_input: unknown, options: ConversationRunOptions, current) => source(options, 'input', current === definition.executionDefinition),
       capture: (_input, options: ConversationRunOptions, current) => ({ ...source(options, 'answer', current === definition.executionDefinition), transcriptRange: new TranscriptRangeRef(entities.transcript, entities.transcript.activeStart, entities.transcript.length) }),
       callbacks: (current, options) => (current === definition.executionDefinition ? options.executionCallbacks : undefined),
-      progress: (current, options) =>
+      progress: (_input, options) =>
+        options.activity
+          ? {
+              receive: (fact): undefined => {
+                options.activity!.publish(fact);
+              },
+            }
+          : undefined,
+      executionProgress: (current, options) =>
         current === definition.executionDefinition && options.progress
           ? {
               receive: (fact): undefined => {
-                if (fact.kind === 'started') options.progress!.publish({ kind: 'execution', contextId: fact.identity.contextId });
+                if (fact.kind === 'started' && fact.identity.level === 'execution') options.progress!.publish({ kind: 'execution', contextId: fact.identity.contextId });
               },
             }
           : undefined,

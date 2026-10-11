@@ -2,6 +2,8 @@ import type { ConfigurationResponse, ConversationSubmissionSnapshot, Conversatio
 
 export interface ConversationTransport {
   config(): Promise<ConfigurationResponse>;
+  read(id: string, signal?: AbortSignal): Promise<ConversationSubmissionSnapshot>;
+  cancel(id: string, signal?: AbortSignal): Promise<ConversationSubmissionSnapshot>;
   submit(request: ConversationSubmissionRequest, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void>;
   follow(id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void>;
 }

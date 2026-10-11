@@ -172,6 +172,37 @@ test('follow and read use the same submission identity and never post again', as
   ]);
 });
 
+test('cancel posts a separate identity-scoped request and accepts requested or terminal facts', async () => {
+  const requested = submissionSnapshot('a/b', { revision: 3, cancelRequested: true });
+  const terminal = { ...requested, revision: 4, result: { status: 'cancelled' } };
+  const controller = new AbortController();
+  const calls = [];
+  const client = new ConversationHttpTransport('http://example.test', async (url, init) => {
+    calls.push({ url, method: init.method, body: init.body });
+    assert.equal(init.signal, controller.signal);
+    assert.equal(init.headers['Content-Type'], 'application/json');
+    return Response.json(calls.length === 1 ? requested : terminal);
+  });
+  assert.deepEqual(await client.cancel('a/b', controller.signal), requested);
+  assert.deepEqual(await client.cancel('a/b', controller.signal), terminal);
+  assert.deepEqual(calls, [
+    { url: 'http://example.test/api/submissions/a%2Fb/cancel', method: 'POST', body: '{}' },
+    { url: 'http://example.test/api/submissions/a%2Fb/cancel', method: 'POST', body: '{}' },
+  ]);
+  assert.equal(controller.signal.aborted, false);
+});
+
+test('cancel validates identity and cancellation facts and does not invent a result for unavailable work', async () => {
+  const unavailable = new ConversationHttpTransport('', async () => Response.json({ code: 'SUBMISSION_UNAVAILABLE', error: 'unavailable' }, { status: 404 }));
+  await assert.rejects(unavailable.cancel('submission'), (error) => error instanceof HttpError && error.code === 'SUBMISSION_UNAVAILABLE');
+  await assert.rejects(jsonConversation(submissionSnapshot('other', { cancelRequested: true })).cancel('submission'), (error) => error.code === 'SUBMISSION_MISMATCH');
+  await assert.rejects(jsonConversation({ ...initial, cancelRequested: false }).cancel('submission'), (error) => error.kind === 'contract');
+  const cancelled = { ...initial, revision: 2, cancelRequested: true, result: { status: 'cancelled' } };
+  const values = [];
+  await jsonConversation(cancelled).follow('submission', (value) => values.push(value), signal());
+  assert.deepEqual(values, [cancelled]);
+});
+
 test('malformed submission feedback is rejected before delivery', async () => {
   for (const body of ['{"submissionId":', line({ ...initial, revision: 1.5 }), line({ ...initial, answer: { transcriptId: 't', index: -1 } })]) {
     const io = new ConversationHttpTransport('', async () => new Response(body));
@@ -180,6 +211,24 @@ test('malformed submission feedback is rejected before delivery', async () => {
       (error) => error.kind === 'contract',
     );
   }
+});
+
+test('submission HTTP boundary accepts bounded activity metadata and strips arbitrary bodies', async () => {
+  const call = { contextId: 'r', level: 'runtime', label: '运行', status: 'running', phase: 'execute', round: 1, startedAt: '2026-10-11T00:00:00.000Z' };
+  const body = { ...initial, activities: { calls: [{ ...call, input: 'private', output: 'private', source: '/private/file' }], integrity: { status: 'complete' } } };
+  const accepted = await jsonConversation(body).read('submission');
+  assert.deepEqual(accepted.activities.calls, [call]);
+  const incomplete = { ...body, activities: { calls: [call], integrity: { status: 'incomplete', error: { code: 'ACTIVITY_INCOMPLETE', message: 'incomplete' } } } };
+  assert.deepEqual((await jsonConversation(incomplete).read('submission')).activities, incomplete.activities);
+  for (const invalid of [
+    { ...call, round: 3 },
+    { ...call, status: 'waiting' },
+    { ...call, startedAt: 'not time' },
+    { ...call, label: 'a'.repeat(121) },
+  ]) {
+    await assert.rejects(jsonConversation({ ...initial, activities: { calls: [invalid], integrity: { status: 'complete' } } }).read('submission'), (error) => error.kind === 'contract');
+  }
+  await assert.rejects(jsonConversation({ ...initial, activities: { calls: Array.from({ length: 513 }, () => call), integrity: { status: 'complete' } } }).read('submission'), (error) => error.kind === 'contract');
 });
 
 test('feedback consumer failure closes the active reader and retains the cause', async () => {

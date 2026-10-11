@@ -3,11 +3,14 @@ import type { InvocationFailure } from './failure.js';
 import type { InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
 import { InvocationRelation, type InvocationRelationOptions, type InvocationTarget } from './relation.js';
+import type { InvocationProgress } from './progress.js';
 
 export interface ParentInvocation {
   readonly context: InvocationContext;
   readonly children: InvocationChildren;
+  readonly hasProgress?: boolean;
   requireHealthy?(): void;
+  publishProgress?(fact: InvocationProgress): void;
 }
 
 /** Direct child relationships owned by one parent, independent of records and E/O/A. */
@@ -48,7 +51,14 @@ export class InvocationChildren {
     this.requireHealthy();
     if (this.#items.has(invocation)) throw new Error('Child invocation is already attached');
     const identity = Object.freeze({ parentContextId: this.context.id, childContextId: invocation.context.id, parentRound: this.context.progress.round, ...(options.key ? { key: options.key } : {}) });
-    const relation = new InvocationRelation(invocation, this.context.progress.round, options.key, this.failed, (change) => this.observe?.(identity, change));
+    const relation = new InvocationRelation(
+      invocation,
+      this.context.progress.round,
+      options.key,
+      this.failed,
+      (change) => this.observe?.(identity, change),
+      () => this.requireHealthy(),
+    );
     this.#items.set(invocation, relation);
     this.observe?.(identity, { kind: 'attached' });
     this.requireHealthy();

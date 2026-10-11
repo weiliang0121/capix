@@ -41,6 +41,8 @@
 
 ## 对话与交付
 
+- ConversationQueue 管理有界本地等待、当前提交与暂停，ClientSubmission 接纳固定输入、远端事实并分别维护反馈和取消控制。成功入队不代表服务接纳，待发内容不进入正式消息集合；不因断流、取消 ACK 或 release 放弃未知当前项来推进队列。
+- 取消通过 submission 独立控制接口传给 R.run；cancelRequested 不等于 cancelled，运行真正退出才发布终态。取消当前项、失败/拒绝默认暂停后续队列。InvocationCancelled 绑定具体控制信号，已归属故障优先；既成内容保留，收尾不受取消阻断，不以 Promise.race 提前释放运行。
 - ConversationRequest {messages} 是服务对话输入，不是通用 E 契约。正式接纳 1–501 条消息，末条为 user；忙碌返回409，不追加输入。回答追加后发 answer，记忆后处理前可见；completed 等 R.run 返回后发送。后处理失败保留回答。
 - ConversationRuntimeDefinition / ConversationExecutionDefinition 组织选择、生成、记忆提取。业务复杂度在具体声明，绑定固定资源来源。消息同步与观测 Feed 独立连接/关闭；不观测仍能正常对话。
 - 只有 GenerateAnswerDefinition 明确支持一次再次生成：完整模型返回被 INVALID_JSON/EMPTY_OUTPUT/OUTPUT_SHAPE 拒绝时，依据直接子调用证据与声明契约继续。第二轮只准备反馈请求、调用及接纳，不重复选择、上下文组装或回答追加。超时、网络、取消、非 stop 返回、捕获/记录错误不自动重试。
@@ -50,6 +52,7 @@
 ## 提交与反馈生命周期
 
 - POST 对话使用 `{ submissionId, input }`；ConversationSubmission 在服务侧持有任务和累计进展投影，连接只消费。内核只暴露被动调用/内容事实，服务绑定选择来源，服务投影解释 C/S 语义，不由记录推断业务。
+- 对话过程消费被动 REOA 元数据，独立于 Recorder 和消息正文。activities 保留子调用状态与父层接纳事实，独立完整性失效不改写提交结果；单次最多 512 个调用位置。客户端最多保留 32 笔已跟踪提交快照，应用按正式输入定位关联过程，不从文本或记录反推。
 - 输入与回答正式写入、R.run 实际返回/抛错、投影完整性、反馈连接和实体同步分别表达。断线只解除消费，不取消服务运行；反馈故障不回写 Context，不导致业务重做。
 - 服务仅有界保留进程内提交；查询/follow 恢复反馈，不恢复执行。不承诺持久化、幂等重提或重启恢复。客户端只发送一次，重连不重新 POST；未知/淘汰提交不证明未执行。未确认结果时默认阻止新提交，用户可显式结束本地跟踪，不能称为取消。
 

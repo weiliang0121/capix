@@ -38,6 +38,6 @@ export class InvokeModelDefinition extends AttemptDefinition<ModelRequest, Model
   private execute(context: AttemptContextView<ModelRequest, ModelOutput, ModelCallResources>): Promise<ModelOutput> {
     const { timeoutMs, settings, model } = context.resources.values;
     checkCapacity(context.currentInput, settings);
-    return model.invoke(context.currentInput, this.purpose, AbortSignal.any([context.signal, AbortSignal.timeout(timeoutMs)]));
+    return model.invoke(context.currentInput, this.purpose, { signal: context.signal, timeoutMs });
   }
 }

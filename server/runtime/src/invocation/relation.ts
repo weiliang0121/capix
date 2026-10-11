@@ -30,6 +30,7 @@ export class InvocationRelation {
     readonly key?: string,
     private readonly failed?: (failure: InvocationFailure) => void,
     private readonly observe?: (change: InvocationRelationChange) => unknown | undefined,
+    private readonly validate?: () => void,
   ) {
     const relation = this;
     this.view = Object.freeze({
@@ -64,6 +65,7 @@ export class InvocationRelation {
   }
 
   async accept<Value>(work: () => Value | Promise<Value>): Promise<Value> {
+    this.validate?.();
     if (this.#returned?.status !== 'succeeded') throw new Error('Child invocation has not returned successfully');
     if (this.#reception.status !== 'pending') throw new Error('Child result has already entered acceptance');
     this.#reception = Object.freeze({ status: 'receiving' });
@@ -75,6 +77,7 @@ export class InvocationRelation {
     }
     let output: Value;
     try {
+      this.validate?.();
       output = await work();
     } catch (error) {
       this.#reception = Object.freeze({ status: 'failed', error });

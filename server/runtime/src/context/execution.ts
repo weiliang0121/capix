@@ -2,6 +2,7 @@ import type { ExecutionContextBuilder } from './execution/builder.js';
 import { InvocationContext, type InvocationControls } from './context.js';
 import { ResourceBindings, type ResourceRequirements } from '../resource/bindings.js';
 import type { RuntimeContext } from './runtime.js';
+import { requireNotCancelled } from '../invocation/cancellation.js';
 
 export class ExecutionContext<Input = unknown, Output = unknown, Resources extends object = object> extends InvocationContext<Input, Output> {
   get level(): 'execution' {
@@ -27,5 +28,6 @@ export class ExecutionContext<Input = unknown, Output = unknown, Resources exten
   requireActive(): void {
     this.requireRunning();
     this.#parentContext?.requireActive();
+    requireNotCancelled(this.signal);
   }
 }

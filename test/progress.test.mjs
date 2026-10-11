@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, ProgressChannel, Transcript, TranscriptResource, bindResources, ExecutionDefinition, assembleRuntime } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationCancelled, RuntimeError, ProgressChannel, Transcript, TranscriptResource, bindResources, ExecutionDefinition, OperationDefinition, AttemptDefinition, assembleRuntime } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 const message = (content) => ({ role: 'user', content });
@@ -14,7 +14,7 @@ test('passive progress does not expose Context and receiver faults never change 
     progress: {
       receive(fact) {
         notifications++;
-        assert.deepEqual(Object.keys(fact), ['kind', 'identity']);
+        assert.deepEqual(Object.keys(fact), ['identity', 'eventSequence', 'occurredAt', 'kind']);
         assert.ok(Object.isFrozen(fact));
         assert.ok(Object.isFrozen(fact.identity));
         throw error;
@@ -85,7 +85,7 @@ test('strict setup remains part of running, before started progress', async () =
   await assert.rejects(call.run(), (error) => error === failure);
   assert.equal(executed, false);
   assert.deepEqual(
-    facts.map(({ kind, status }) => [kind, status]),
+    facts.filter(({ kind }) => kind !== 'process').map(({ kind, status }) => [kind, status]),
     [['finished', 'failed']],
   );
 });
@@ -108,7 +108,7 @@ test('progress precedes strict observation and reports the established call outc
   await assert.rejects(call.run(), (error) => error === failure);
   assert.equal(call.context.status, 'succeeded');
   assert.deepEqual(
-    facts.map(({ kind, status }) => [kind, status]),
+    facts.filter(({ kind }) => kind !== 'process').map(({ kind, status }) => [kind, status]),
     [
       ['started', undefined],
       ['finished', 'succeeded'],
@@ -215,7 +215,7 @@ test('append commit reaches its local receiver before resource returned observat
   assert.equal(transcript.length, 1);
 });
 
-test('assembly selects execution progress by declaration and each run receives a separate identity', async () => {
+test('assembly selects local execution progress by declaration and each run receives a separate identity', async () => {
   class Echo extends ExecutionDefinition {
     run = { requires: {}, execute: (context) => context.currentInput };
   }
@@ -227,7 +227,7 @@ test('assembly selects execution progress by declaration and each run receives a
     source: {
       entry: () => null,
       capture: () => null,
-      progress(definition) {
+      executionProgress(definition) {
         selected.push(definition);
         return {
           receive(fact) {
@@ -241,7 +241,7 @@ test('assembly selects execution progress by declaration and each run receives a
   assert.equal(await runtime.run('second', {}), 'second');
   assert.deepEqual(selected, [execution, execution]);
   assert.deepEqual(
-    facts.map(({ kind, identity }) => [kind, identity.level]),
+    facts.filter(({ kind }) => kind !== 'process').map(({ kind, identity }) => [kind, identity.level]),
     [
       ['started', 'execution'],
       ['finished', 'execution'],
@@ -249,6 +249,268 @@ test('assembly selects execution progress by declaration and each run receives a
       ['finished', 'execution'],
     ],
   );
-  assert.notEqual(facts[0].identity.contextId, facts[2].identity.contextId);
+  assert.notEqual(facts[0].identity.contextId, facts.at(-1).identity.contextId);
   assert.ok(facts.every((fact) => typeof fact.identity.parentContextId === 'string'));
+});
+
+function delegated(child) {
+  return {
+    requires: {},
+    uses: [child],
+    async execute(context, invocation, children) {
+      const call = children.get(child).create(invocation, context.currentInput, { key: 'child' });
+      const result = await call.run();
+      return children.accept(call, () => result);
+    },
+  };
+}
+
+function hierarchy() {
+  const attempt = new (class extends AttemptDefinition {
+    name = 'echo';
+    label = '测试能力';
+    source = 'private-source';
+    callee = 'private-provider';
+    run = { requires: {}, execute: (context) => context.currentInput };
+  })();
+  const operation = new (class extends OperationDefinition {
+    name = 'compose';
+    label = '组合工作';
+    source = 'private-operation-source';
+    children = [attempt];
+    run = delegated(attempt);
+  })();
+  const execution = new (class extends ExecutionDefinition {
+    children = [operation];
+    run = delegated(operation);
+  })();
+  return runtimeDefinition(execution);
+}
+
+test('one per-run progress receiver sees REOA and parent acceptance without recording or IO', async () => {
+  const runs = [];
+  const runtime = assembleRuntime(hierarchy(), {
+    providers: [],
+    source: {
+      entry: () => null,
+      capture: () => null,
+      progress(input, options) {
+        assert.equal(input, 'private-input');
+        assert.equal(options.marker, 'per-call');
+        const facts = [];
+        runs.push(facts);
+        return {
+          receive: (fact) => {
+            facts.push(fact);
+          },
+        };
+      },
+    },
+  });
+  assert.equal(await runtime.run('private-input', { marker: 'per-call' }), 'private-input');
+  assert.equal(await runtime.run('private-input', { marker: 'per-call' }), 'private-input');
+  assert.equal(runs.length, 2);
+  for (const facts of runs) {
+    assert.deepEqual(
+      facts.filter((fact) => fact.kind === 'started').map((fact) => fact.identity.level),
+      ['runtime', 'execution', 'operation', 'attempt'],
+    );
+    assert.deepEqual(
+      facts.filter((fact) => fact.kind === 'finished').map((fact) => fact.identity.level),
+      ['attempt', 'operation', 'execution', 'runtime'],
+    );
+    assert.equal(facts.filter((fact) => fact.kind === 'relation' && fact.phase === 'accepted').length, 3);
+    for (const relation of facts.filter((fact) => fact.kind === 'relation' && fact.phase === 'returned')) {
+      assert.equal(relation.status, 'succeeded');
+      const finished = facts.findIndex((fact) => fact.kind === 'finished' && fact.identity.contextId === relation.relation.childContextId);
+      const receiving = facts.findIndex((fact) => fact.kind === 'relation' && fact.phase === 'receiving' && fact.relation.childContextId === relation.relation.childContextId);
+      assert.ok(finished < facts.indexOf(relation));
+      assert.ok(facts.indexOf(relation) < receiving);
+    }
+    const sequences = new Map();
+    for (const fact of facts) {
+      assert.ok(Object.isFrozen(fact));
+      assert.ok(Object.isFrozen(fact.identity));
+      assert.ok(Number.isFinite(Date.parse(fact.occurredAt)));
+      assert.ok(fact.eventSequence > (sequences.get(fact.identity.contextId) ?? 0));
+      sequences.set(fact.identity.contextId, fact.eventSequence);
+    }
+    const visible = JSON.stringify(facts);
+    assert.doesNotMatch(visible, /private-/);
+    assert.match(visible, /测试能力/);
+    assert.match(visible, /组合工作/);
+    assert.equal(sequences.size, 4);
+  }
+  assert.notEqual(runs[0][0].identity.contextId, runs[1][0].identity.contextId);
+});
+
+test('local progress failure disables only its receiver while ancestor keeps the entire subtree', async () => {
+  const facts = [];
+  let localNotifications = 0;
+  let localFailures = 0;
+  const runtime = assembleRuntime(hierarchy(), {
+    providers: [],
+    source: {
+      entry: () => null,
+      capture: () => null,
+      progress: () => ({
+        receive: (fact) => {
+          facts.push(fact);
+        },
+      }),
+      executionProgress: () => ({
+        receive() {
+          localNotifications++;
+          throw new Error('local projection unavailable');
+        },
+        failed() {
+          localFailures++;
+        },
+      }),
+    },
+  });
+  assert.equal(await runtime.run('answer', {}), 'answer');
+  assert.equal(localNotifications, 1);
+  assert.equal(localFailures, 1);
+  assert.equal(facts.filter((fact) => fact.kind === 'finished').length, 4);
+  const factsById = new Set(facts.map((fact) => `${fact.identity.contextId}:${fact.eventSequence}`));
+  assert.equal(factsById.size, facts.length);
+});
+
+test('process progress preserves distinct local rounds without exposing continuation content', async () => {
+  const facts = [];
+  const call = invocation({
+    work: {
+      maxRounds: 2,
+      execute: (context) => context.currentInput,
+      accept: (context, output) => (context.progress.round === 1 ? context.continueWith('private-followup', 'private-reason') : output),
+    },
+    progress: {
+      receive: (fact) => {
+        facts.push(fact);
+      },
+    },
+  });
+  assert.equal(await call.run(), 'private-followup');
+  assert.deepEqual(
+    facts.filter((fact) => fact.kind === 'process').map((fact) => [fact.round, fact.stage, fact.action]),
+    [
+      [1, 'execute', 'start'],
+      [1, 'execute', 'return'],
+      [1, 'receive', 'continue'],
+      [2, 'execute', 'start'],
+      [2, 'execute', 'return'],
+      [2, 'receive', 'return'],
+    ],
+  );
+  assert.doesNotMatch(JSON.stringify(facts), /private-/);
+});
+
+test('finished progress calls only same-control cancellation cancelled, retaining owned errors', async () => {
+  for (const mode of ['cancelled', 'other-signal', 'same-code', 'work-error']) {
+    const controller = new AbortController();
+    const other = new AbortController();
+    const facts = [];
+    const call = invocation({
+      signal: controller.signal,
+      work: {
+        maxRounds: 1,
+        execute() {
+          controller.abort();
+          if (mode === 'cancelled') throw new InvocationCancelled(controller.signal);
+          if (mode === 'other-signal') {
+            other.abort();
+            throw new InvocationCancelled(other.signal);
+          }
+          if (mode === 'same-code') throw new RuntimeError('INVOCATION_CANCELLED', 'private-error');
+          throw new Error('private-error');
+        },
+      },
+      progress: {
+        receive: (fact) => {
+          facts.push(fact);
+        },
+      },
+    });
+    await assert.rejects(call.run());
+    assert.equal(facts.at(-1).kind, 'finished');
+    assert.equal(facts.at(-1).status, mode === 'cancelled' ? 'cancelled' : 'failed');
+    assert.doesNotMatch(JSON.stringify(facts), /private-/);
+  }
+});
+
+test('passive descriptions never execute getters or leak source and callee', async () => {
+  const facts = [];
+  const description = {
+    get name() {
+      assert.fail('metadata accessor must remain unevaluated');
+    },
+    label: 'safe label',
+    source: 'private-source',
+    callee: 'private-provider',
+  };
+  const call = invocation({
+    description,
+    progress: {
+      receive: (fact) => {
+        facts.push(fact);
+      },
+    },
+  });
+  assert.equal(await call.run(), 'answer');
+  assert.deepEqual(facts[0].description, { label: 'safe label' });
+  assert.ok(Object.isFrozen(facts[0].description));
+  assert.doesNotMatch(JSON.stringify(facts), /private-/);
+});
+
+test('without a receiver the passive outlet does not inspect descriptions', async () => {
+  let inspected = 0;
+  const description = new Proxy(
+    {},
+    {
+      getOwnPropertyDescriptor() {
+        inspected++;
+        throw new Error('must not inspect');
+      },
+    },
+  );
+  assert.equal(await invocation({ description }).run(), 'answer');
+  assert.equal(inspected, 0);
+});
+
+test('child cancellation is distinguished in parent return progress and never accepted', async () => {
+  const controller = new AbortController();
+  const facts = [];
+  const definition = hierarchy();
+  const attempt = definition.children[0].children[0].children[0];
+  attempt.run = {
+    requires: {},
+    execute() {
+      controller.abort();
+      throw new InvocationCancelled(controller.signal);
+    },
+  };
+  const runtime = assembleRuntime(definition, {
+    providers: [],
+    source: {
+      entry: () => null,
+      capture: () => null,
+      progress: () => ({
+        receive: (fact) => {
+          facts.push(fact);
+        },
+      }),
+    },
+  });
+  await assert.rejects(runtime.run('input', { signal: controller.signal }), (error) => error instanceof InvocationCancelled);
+  assert.deepEqual(
+    facts.filter((fact) => fact.kind === 'finished').map((fact) => fact.status),
+    ['cancelled', 'cancelled', 'cancelled', 'cancelled'],
+  );
+  assert.deepEqual(
+    facts.filter((fact) => fact.kind === 'relation' && fact.phase === 'returned').map((fact) => fact.status),
+    ['cancelled', 'cancelled', 'cancelled'],
+  );
+  assert.equal(facts.filter((fact) => fact.kind === 'relation' && fact.phase === 'accepted').length, 0);
+  assert.equal(runtime.running, false);
 });

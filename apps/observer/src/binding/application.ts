@@ -17,9 +17,22 @@ export function createApplication(runtime: ClientRuntime) {
         runtime.reconnectSubmission().catch((error) => {
           store.getState().setNotice(errorMessage(error));
         }),
-      releaseSubmission: () => {
-        runtime.releaseSubmission();
-        store.getState().setNotice('已结束本地跟踪；服务端处理未被取消。');
+      cancelSubmission: (id: string) =>
+        runtime.cancelSubmission(id).catch((error) => {
+          store.getState().setNotice(errorMessage(error));
+        }),
+      cancelAll: () =>
+        runtime.cancelAll().catch((error) => {
+          store.getState().setNotice(errorMessage(error));
+        }),
+      clearQueue: () => runtime.clearQueue(),
+      pauseQueue: () => runtime.pauseQueue(),
+      resumeQueue: () => {
+        try {
+          runtime.resumeQueue();
+        } catch (error) {
+          store.getState().setNotice(errorMessage(error));
+        }
       },
       reconnectConversation: () =>
         runtime.initialize().catch((error) => {

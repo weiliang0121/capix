@@ -73,6 +73,8 @@ Transcript 的 append 在整批消息落实并更新 revision 后发布 Transcri
 
 进展接收失败停用对应出口并报告 failure；同步抛错、意外异步返回及失败报告错误均不得进入 Context、Invocation 或业务异常处理。它与必要 ChangeCapture 的严格职责、观测声明的可选 propagate 策略不同。进展是反馈依据，无法完整接收时由服务标记解释不完整；已成立事实不回滚，也不重做业务。
 
+`source.progress` / `source.executionProgress` 工厂属于绑定构造契约，工厂求值失败仍按构造错误传播；隔离边界针对已建立接收器的 `receive` / `failed`，不掩盖装配错误。
+
 Conversation 绑定选择哪些调用与实体写入属于本次请求，产生服务内部 ConversationProgress；ConversationSubmission 再解释成跨端累计投影。R.run 的实际返回/抛错决定服务任务结果，不能由 E finished、记录状态或网络连接结束代替。见 [跨端协议](protocol.md)。
 
 ## Context、Invocation 与业务视图
@@ -158,5 +160,11 @@ Transcript 全批预检后追加，Memories 全批预检后逐项落实。捕获
 消息实体通过独立受控端点获取与同步，记录中的 UID/范围在客户端绑定层与实体副本组合。未加载不等于空正文；已加载实体接续增量，快照与增量有明确接续点。可变记忆不能用最新正文冒充历史证据。详见 [协议](protocol.md) 与 [观测增量](observation-increments.md)。
 
 对话交付读取服务提交投影，独立消息流提供正文。回答追加后、记忆后处理前即可被确认；是否启用观测不决定对话能力。HTTP 连接结束不取消运行，投影消费和网络/UI 故障不回写业务结果。
+
+## 协作取消
+
+运行取消通过本次 R 的 InvocationControls.signal 传递到 E/O/A。新子调用、父层接纳及业务资源活动复用公共活动检查；先保留已归属错误，再检查取消。InvocationCancelled 绑定本次 signal 身份，isInvocationCancelled 只识别这个明确交付，不遍历 cause 或仅比较 code。Context、Invocation 和调用方保持同一交付原因；独立错误与复合故障不能被并发取消覆盖。
+
+模型资源把运行信号与 timeout 合并，在资源活动捕获之前规范化：主动取消保留根信号身份，超时为 MODEL_TIMEOUT，网络和解析故障保留真实原因。取消不回滚已经成立的实体更新，也不阻止内核收尾、记录终态和释放占用。能力未响应取消时仍等待其返回，不采用抢先结束 Promise 的方式虚构完成。服务根据 R.run 的实际退出投影 cancelled，内核不感知客户端队列或服务提交协议。
 
 当前不增加 Thread/TRSA、持久化恢复、通用版本仓库、权限、插件注册、动态规划、跨进程重放或页面布局重做。记录和实体历史保留能力也不等同于未来持久化保证。

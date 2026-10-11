@@ -87,7 +87,7 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
       accepted = stage('accept', () => input as unknown as Input);
       if (callbacks.accepted) stage('notification', () => callbacks.accepted!(accepted));
     }
-    parent.requireHealthy();
+    parent.requireActive();
     const resources = stage('capture', () => bindings.capture(accepted));
     return this.invocationBuilder.create(parent, accepted, {
       key: options.key,

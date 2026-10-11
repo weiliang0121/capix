@@ -265,6 +265,7 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
   await runtime.initialize();
   await until(() => !runtime.getSnapshot().observation.loading);
   for (const content of ['first', 'second', 'third', 'fourth']) {
+    runtime.resumeQueue(); // Explicitly continue after the deliberately failed third round.
     await runtime.submit({ messages: [{ role: 'user', content }] });
     assert.equal(runtime.getSnapshot().submission.remote.result.status, content === 'third' ? 'failed' : 'completed');
     assert.equal(runtime.getSnapshot().submission.feedback.status, 'ended', 'a remote failure is a confirmed outcome, not a broken connection');

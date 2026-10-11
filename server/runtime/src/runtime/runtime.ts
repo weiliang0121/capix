@@ -24,11 +24,14 @@ import { OperationContextBuilder } from '../context/operation/builder.js';
 import { OperationInvocationBuilder } from '../invocation/operation/builder.js';
 import { AttemptContextBuilder } from '../context/attempt/builder.js';
 import { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
+import type { ProgressReceiver } from '../progress/channel.js';
+import type { InvocationProgress } from '../invocation/progress.js';
 
 export interface BoundRuntimeBinding<Input, Output, Options, Resources extends object = object> {
   readonly definition: RuntimeDefinition<Input, Output, Resources, any>;
   readonly children: BoundChildren;
   validate?(options: Options): void;
+  progress?(input: Input, options: Options): ProgressReceiver<InvocationProgress> | undefined;
   resources(input: Input, options: Options): ResourceBindings<Resources>;
   executionBindings(input: Input, options: Options): ExecutionBindingResolver;
 }
@@ -123,6 +126,7 @@ export class BoundRuntime<Input = unknown, Output = unknown, Options extends Inv
             initial: definition.run.requires,
             observation: definition.observation,
             work,
+            progress: binding.progress?.(input, options),
           });
         } catch (error) {
           try {

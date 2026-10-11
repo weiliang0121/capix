@@ -1,5 +1,5 @@
 import type { ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceRecord, ProcessRecord, RelationChangeRecord } from '@capix/protocol';
-import type { ConversationMessage } from '../observation/conversation.js';
+import type { ConversationMessage, ConversationProcess } from './conversation.js';
 import type { CallSpan } from '../observation/types.js';
 
 export interface RoundSelectionSummary {
@@ -53,11 +53,14 @@ export interface AppData {
   observationError?: unknown;
   conversationError?: string;
   submissionNotice?: SubmissionNotice;
+  submissionControl?: SubmissionControl;
+  queue: ConversationQueueView;
   busy: boolean;
   pending: string;
   pendingLabel: string;
   runningId: string;
   conversation: readonly ConversationMessage[];
+  pendingProcesses: readonly ConversationProcess[];
   messageCount: number;
   progress: string;
   rounds: readonly RoundView[];
@@ -67,10 +70,20 @@ export interface AppData {
 export interface SubmissionNotice {
   message: string;
   reconnect: boolean;
-  release: boolean;
+  input?: string;
+}
+export interface SubmissionControl {
+  id: string;
+  label: string;
+  disabled: boolean;
+}
+export interface ConversationQueueView {
+  readonly waiting: readonly { readonly id: string; readonly pending: string }[];
+  readonly paused: boolean;
+  readonly blocked?: string;
 }
 export function emptyAppData(): AppData {
-  return { observationLoading: false, busy: false, pending: '', pendingLabel: '等待接纳', runningId: '', conversation: [], messageCount: 0, progress: '', rounds: [], memory: { items: [] }, details: new Map() };
+  return { observationLoading: false, busy: false, queue: { waiting: [], paused: false }, pending: '', pendingLabel: '等待接纳', runningId: '', conversation: [], pendingProcesses: [], messageCount: 0, progress: '', rounds: [], memory: { items: [] }, details: new Map() };
 }
 
 export interface SearchMatch {

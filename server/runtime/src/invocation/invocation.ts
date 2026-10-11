@@ -3,6 +3,7 @@ import { RuntimeErrorHelper } from '../errors/helper.js';
 import { Clock } from '../runtime/clock.js';
 import { DeclaredException } from '../exception/contract.js';
 import { InvocationStopped } from './stop.js';
+import { isInvocationCancelled, requireNotCancelled } from './cancellation.js';
 import type { InvocationFailure, InvocationPhase } from './failure.js';
 import { invocationContextView, type ContextFactsOf } from '../context/view.js';
 import type { InvocationView, ChildInvocationView } from './view.js';
@@ -31,6 +32,7 @@ export interface InvocationOptions<Input, Output, Context extends InvocationCont
   identity?: InvocationIdentity;
   description?: InvocationDescription;
   started?: InvocationStarted<Input, Output, Context>;
+  /** Local receiver for this call and its descendants; independently isolated from ancestors. */
   progress?: ProgressReceiver<InvocationProgress>;
   /** Side-effect-free guard, checked at setup and before each execute/receive phase. */
   validate?: () => void;
@@ -39,6 +41,7 @@ export interface InvocationOptions<Input, Output, Context extends InvocationCont
 
 /** A single-use structured call owns its Context and progress. Optional observation consumes its typed facts without requiring a particular carrier. */
 export class Invocation<Input = unknown, Output = unknown, Context extends InvocationContext<Input, Output> = InvocationContext<Input, Output>> {
+  readonly hasProgress: boolean;
   #started = false;
   #sequence = 0;
   #eventSequence = 0;
@@ -61,6 +64,13 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   requireHealthy(): void {
     if (this.#fault) throw this.#fault.error;
+  }
+
+  /** Work access stops cooperatively; completion and reporting do not use this guard. */
+  requireActive(): void {
+    this.requireHealthy();
+    this.context.requireRunning();
+    requireNotCancelled(this.options.signal);
   }
 
   classify(error: unknown, phase: InvocationPhase, forceError = false): InvocationFailure {
@@ -105,13 +115,14 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   constructor(private readonly options: InvocationOptions<Input, Output, Context>) {
     this.#clock = options.clock ?? new Clock();
     this.#progress = options.progress ? new ProgressChannel(options.progress) : undefined;
+    this.hasProgress = !!this.#progress || !!options.parent?.invocation.hasProgress;
     this.#identity = Object.freeze(options.identity ? { ...options.identity } : { contextId: options.context.id, level: ('level' in options.context ? options.context.level : 'attempt') as InvocationIdentity['level'], ...(options.parent ? { parentContextId: options.parent.invocation.context.id } : {}) });
     this.children = new InvocationChildren(
       options.context,
       (failure) => {
         if (failure.kind === 'error' && !this.#fault) this.#fault = failure;
       },
-      () => this.requireHealthy(),
+      () => this.requireActive(),
       (relation, change) => this.publishRelation(relation, change),
     );
     this.origin = Object.freeze({ contextId: options.context.id });
@@ -185,12 +196,50 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     }
   }
 
+  /** Internal forwarding preserves producer identity and sequence; absent from business views. */
+  publishProgress(fact: InvocationProgress): void {
+    this.#progress?.publish(fact);
+    this.options.parent?.invocation.publishProgress?.(fact);
+  }
+
+  private progress(fact: InvocationFact): void {
+    if (!this.hasProgress || fact.kind === 'entry') return;
+    const description: { name?: string; label?: string } = {};
+    // Descriptions are optional metadata. Accessors and proxies must not run work
+    // or introduce a new failure through the passive outlet.
+    try {
+      if (fact.description) {
+        for (const key of ['name', 'label'] as const) {
+          const property = Object.getOwnPropertyDescriptor(fact.description, key);
+          if (property && 'value' in property && typeof property.value === 'string') description[key] = property.value;
+        }
+      }
+    } catch {
+      // A hostile description cannot prevent publication of the underlying fact.
+    }
+    const identity = Object.freeze({ contextId: fact.identity.contextId, level: fact.identity.level, ...(fact.identity.parentContextId ? { parentContextId: fact.identity.parentContextId } : {}) });
+    const base = { identity, eventSequence: fact.eventSequence, occurredAt: fact.occurredAt, ...(Object.keys(description).length ? { description: Object.freeze(description) } : {}) };
+    if (fact.kind === 'started') this.publishProgress(Object.freeze({ ...base, kind: 'started' }));
+    else if (fact.kind === 'process') this.publishProgress(Object.freeze({ ...base, kind: 'process', processSequence: fact.processSequence, round: fact.round, stage: fact.process.stage, action: fact.process.type }));
+    else if (fact.kind === 'relation') {
+      const relation = Object.freeze({ parentContextId: fact.relation.parentContextId, childContextId: fact.relation.childContextId, parentRound: fact.relation.parentRound, ...(fact.relation.key ? { key: fact.relation.key } : {}) });
+      if (fact.change.kind === 'returned') {
+        const result = fact.change.result;
+        const status = result.status === 'succeeded' ? 'succeeded' : isInvocationCancelled(result.error, this.options.signal) ? 'cancelled' : 'failed';
+        this.publishProgress(Object.freeze({ ...base, kind: 'relation', relation, phase: 'returned', status }));
+      } else this.publishProgress(Object.freeze({ ...base, kind: 'relation', relation, phase: fact.change.kind }));
+    } else {
+      const state = fact.state;
+      const status = state.status === 'succeeded' ? 'succeeded' : state.status === 'failed' && isInvocationCancelled(state.error, this.options.signal) ? 'cancelled' : 'failed';
+      this.publishProgress(Object.freeze({ ...base, kind: 'finished', status }));
+    }
+  }
+
   private publish(change: InvocationChange): void {
     const identity = this.#identity;
-    // A passive consumer sees the established fact even if strict observation fails next.
-    if (change.kind === 'started') this.#progress?.publish(Object.freeze({ kind: 'started', identity }));
-    if (change.kind === 'finished') this.#progress?.publish(Object.freeze({ kind: 'finished', identity, status: change.state.status === 'succeeded' ? 'succeeded' : 'failed' }));
     const fact: InvocationFact = Object.freeze({ ...change, identity, description: this.options.description, eventSequence: ++this.#eventSequence, occurredAt: this.#clock.now(), monotonicTime: this.#clock.tick() });
+    // A passive consumer sees the established fact even if strict observation fails next.
+    this.progress(fact);
     const faults: unknown[] = [];
     try {
       let captured;
@@ -229,13 +278,14 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       });
     } catch (error) {
       const failure = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.round ? context.progress.phase : 'setup', true);
-      context.fail(error, Object.freeze({ ...failure, error, ...(error instanceof AggregateError ? { kind: 'error' as const } : {}) }));
+      const delivered = error instanceof AggregateError ? error : failure.error;
+      context.fail(delivered, Object.freeze({ ...failure, error: delivered, ...(error instanceof AggregateError ? { kind: 'error' as const } : {}) }));
       try {
         this.publish({ kind: 'finished', state: context.state });
       } catch (observed) {
-        throw new AggregateError([error, observed], 'Call failure and its observation both failed', { cause: error });
+        throw new AggregateError([delivered, observed], 'Call failure and its observation both failed', { cause: delivered });
       }
-      throw error;
+      throw delivered;
     }
     // Terminal observation may fail delivery, but never changes the committed work outcome.
     context.complete(output);

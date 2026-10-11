@@ -8,8 +8,7 @@ export function attachInvocationResources<Input, Output, Context extends Invocat
     contextId: invocation.context.id,
     nextSequence: () => invocation.nextResourceSequence(),
     validate: () => {
-      invocation.requireHealthy();
-      invocation.context.requireRunning();
+      invocation.requireActive();
       if ('requireActive' in invocation.context) (invocation.context as { requireActive(): void }).requireActive();
     },
     observation: invocation.observation?.resource,

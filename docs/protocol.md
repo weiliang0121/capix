@@ -17,7 +17,9 @@
 - GET `/api/source?file=路径` → SourceResponse。路径为仓库相对源文件路径，服务端白名单验证。
 - POST `/api/run` 接受 ConversationSubmissionRequest `{ submissionId, input: ConversationRequest }`。首次发送建立服务提交对象并启动运行，200 返回 NDJSON，每行是完整的 ConversationSubmissionSnapshot；输入已落实、任务已结束或投影失效时即可开始交付。客户端生成 submissionId，使首个响应丢失后仍可查询；该身份不提供幂等重提承诺。
 - GET `/api/submissions/:id` 返回当前累计提交投影；GET `/api/submissions/:id/follow` 同步衔接当前投影与后续变化。关闭任意反馈连接仅解除消费，不取消已启动的服务运行。终态或进展解释不完整时本次连接结束；后者仍可显式查询最终任务结果。
-- 提交投影包含 submissionId、revision、可选 input 范围、可选 answer 定位、executions Context 身份数组、可选 result 和 integrity。输入与回答来自实体正式写入点；executions 来自选定声明的调用现场；result 在 R.run 实际返回或抛错后形成。投影不包含原文、Record 或运行对象。
+- POST `/api/submissions/:id/cancel` 以同源 JSON 请求取消已登记的运行，返回累计提交投影。重复请求在保留期内幂等；未知身份仍返回 SUBMISSION_UNAVAILABLE，不登记取消标记，也不能据此认为原请求不会执行。取消控制不关闭原反馈或消息同步。
+- 提交投影包含 submissionId、revision、可选 input 范围、可选 answer 定位、executions Context 身份数组、可选 cancelRequested、result 和 integrity。输入与回答来自实体正式写入点；executions 来自选定声明的调用现场；result 在 R.run 实际返回或抛错后形成。投影不包含原文、Record 或运行对象。cancelRequested 只表示已请求停止；result 为 completed/failed/rejected/cancelled，只有本次运行实际以可识别的取消原因退出才报告 cancelled。已有输入、回答和记忆不回滚，取消与完成竞争可以得到 cancelRequested + completed；单纯信号已取消不能遮蔽独立故障。
+- 可选 activities 是本次提交的有界 REOA 过程投影，包含 calls 和独立 integrity。Observer 默认启用；不安装 Recorder 也可使用。每项仅含 contextId、直接 parentContextId、level、label、status、phase、round、可选开始/结束时间以及父层 relation。过程、内容落实、提交结果分别判断；活动来源失效不关闭提交反馈，也不影响消息同步或运行结果。
 - 明确的输入拒绝返回 400、忙碌拒绝返回 409，响应体可以是保留下来的提交投影，客户端应接纳其中的 rejected 事实。已经接纳输入后的失败通过累计投影表达，回答不会因后处理失败撤销。仅有网络状态码不能替代正式运行事实。
 - GET `/api/observe` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接，每个连接都有独立 scopeId，首帧 sequence 为 0。序号缺口最多自动重建一次基线；SOURCE_INCOMPLETE 是记录来源已缺失事实的终止控制，不自动重试，也不能通过重连同一来源补救。不提供历史重放或跨查询一致性承诺。
 - 除上述正式提交拒绝外，HTTP 非 2xx 返回 ErrorResponse。无保留项时提交查询返回 404 / SUBMISSION_UNAVAILABLE，不能据此断言未执行；相同身份仍保留时 POST 返回 409 / SUBMISSION_EXISTS，不启动第二次工作。记录来源失效后，观测流及 executions/execution/memory 查询明确返回 SOURCE_INCOMPLETE；实体查询与订阅不依赖记录完整性。不改变现有运行失败的事实记录。
@@ -28,7 +30,17 @@ submissionId 是服务请求的关联身份，Context.id 是一次内核调用�
 
 executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
 
-服务提交对象拥有运行任务与投影，连接只读取。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接最多保留一个待发最新投影，慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
+服务提交对象拥有运行任务、独立取消控制器与投影，反馈连接只读取。运行信号传给 R.run，不借用 HTTP 连接信号；能力不合作时继续等待，不提前释放占用。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接最多保留一个待发最新投影，慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
+
+## 对话处理过程
+
+被动 InvocationProgress 由调用结构发布，运行绑定在每次 R 调用选择全 REOA 来源，服务直接投影明确事实；不从记录、消息数量或两份快照差异反推。ConversationSubmission 的 activity 与内容 progress 通道独立隔离。活动关闭或消费者失败不参与业务接纳，不影响运行。
+
+ConversationActivity 使用 Context 身份，status 为 running/succeeded/failed/cancelled，phase 为 setup/execute/receive/handling/control，round 为本调用处理轮次（0–2）。同一次 O 继续处理时保留自身身份并更新轮次，新建 A 有独立身份。短调用完成后仍保留条目。started 之前的建立失败可只有 finishedAt，不补造开始时间。
+
+relation 描述父层处理该子调用的 attached/returned/receiving/accepted/failed，并保留真实返回 succeeded/failed/cancelled。子调用成功与父层接纳不是同一事实；子调用工作成功但交付失败时可以同时出现 status:succeeded 与 relation.returned:failed。取消请求 ACK 不结束任何条目，只有已发生的调用退出更新其状态。调用进展不替代提交 result，异常重试中的子失败也不推断整轮失败。
+
+活动仅公开名称、归属和进展元数据，不传输入输出、诊断正文、模型思考、源码或资源对象。label 最多 120 字符，每次提交最多保留 512 个调用位置（包括等待子调用开始的关系）。超限或来源顺序/关系失效后保留已知前缀，activities.integrity 永久变为 ACTIVITY_INCOMPLETE；后续内容与最终 result 继续更新。调用局部 eventSequence 用于服务接纳，不混入交付 revision。查询与 follow 返回同一有界累计状态，不承诺完整过程事件回放。
 
 执行列表按实际登记顺序。边界事件 scopeId 确定计时范围，sequence 与单调 offsetMs 是范围内部时序依据；R 调用和每个 E 分别计时，EOA 共用 E 范围。occurredAt/startedAt 是展示用墙钟。未结束调用没有 durationMs；不得补造耗时。跨 QA 只有先后关系，前端使用等宽列，轮内才按计时比例布局。
 

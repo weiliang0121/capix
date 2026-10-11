@@ -94,6 +94,7 @@ export class ResourceActivity {
     this.publish('started', () => ({ action, input: detail.input?.() ?? null }), interactionId);
     let output: Output;
     try {
+      this.validate();
       output = execute();
     } catch (error) {
       this.failed(action, interactionId, error);
@@ -110,6 +111,7 @@ export class ResourceActivity {
     this.publish('started', () => ({ action, input: detail.input?.() ?? null }), interactionId);
     let output: Output;
     try {
+      this.validate();
       output = await execute();
     } catch (error) {
       this.failed(action, interactionId, error);

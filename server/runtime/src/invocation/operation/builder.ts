@@ -33,6 +33,7 @@ export class OperationInvocationBuilder {
 
   create<Input, Output, Resources extends object = object>(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, request: OperationInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, OperationContext<Input, Output, Resources>> {
     const owner = parent.context;
+    parent.requireActive();
     this.contextBuilder.check(owner);
     const requires = request.requires ?? ({} as ResourceRequirements<Resources>);
     const resources = owner.resources.select(requires, request.initial);

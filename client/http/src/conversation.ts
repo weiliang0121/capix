@@ -40,6 +40,11 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
     return this.acceptSubmission(value, id);
   }
 
+  async cancel(id: string, signal?: AbortSignal): Promise<ConversationSubmissionSnapshot> {
+    const response = await this.send(`/api/submissions/${encodeURIComponent(id)}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal });
+    return this.acceptSubmission(parseLine(await response.text()), id);
+  }
+
   private acceptSubmission(value: unknown, id: string): ConversationSubmissionSnapshot {
     const snapshot = acceptResponse(submissionResponse, value, '提交');
     if (snapshot.submissionId !== id) throw new HttpTransportError('contract', '提交反馈身份不一致。', 'SUBMISSION_MISMATCH');
