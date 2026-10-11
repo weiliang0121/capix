@@ -1,6 +1,7 @@
 import type { CallMemory } from '../../state/data';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { ChangeCard } from './MemoryDialog';
+import { MemoryResultSources } from './MemoryResultSources';
 export function MemoryAtCall({ incoming, changes }: CallMemory) {
   return (
     <div className="detail-grid">
@@ -16,6 +17,7 @@ export function MemoryAtCall({ incoming, changes }: CallMemory) {
               <CardContent>
                 <p className="memory-content">{item.content}</p>
                 <p className="subtle">原文依据：{item.sourceIndexes.map((source) => `[${source}]`).join(' ')}</p>
+                <MemoryResultSources sources={item.sourceResults} />
               </CardContent>
             </Card>
           ))}

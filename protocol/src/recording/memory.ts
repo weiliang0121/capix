@@ -1,10 +1,11 @@
-import type { MemoryContent } from '../content/memory.js';
+import type { MemoryContent, MemoryResultSource } from '../content/memory.js';
 import type { BaseRecord } from './types.js';
 
 export interface MemoryRecordValue {
   readonly action: 'create' | 'update';
   readonly change: string;
   readonly sourceIndexes: readonly number[];
+  readonly sourceResults?: readonly MemoryResultSource[];
   readonly result: MemoryContent;
 }
 

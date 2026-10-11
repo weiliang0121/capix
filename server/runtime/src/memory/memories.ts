@@ -9,6 +9,7 @@ import type { MemoryChange } from './change.js';
 import type { Transcript } from '../transcript/transcript.js';
 import { isNonBlankString } from '../value/string.js';
 import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
+import { prepareMemoryResultSources } from './source.js';
 
 export interface MemoriesOptions {
   observation?: EventConsumer<MemoryEvent>;
@@ -55,23 +56,29 @@ export class Memories {
       if (!isNonBlankString(change.change) || !isNonEmptyArray(change.sourceIndexes) || !hasUniqueItems(change.sourceIndexes)) throw new TypeError('Memory change requires an explanation and unique evidence');
       for (const index of change.sourceIndexes) this.transcript.ref(index);
       const result = Memory.prepare(this.transcript, change.result);
+      const sourceResults = prepareMemoryResultSources(this.transcript, change.sourceResults);
       if (!change.sourceIndexes.every((index) => result.sourceIndexes.includes(index))) throw new Error('Memory result must include change evidence');
+      if (sourceResults?.some((source) => !result.sourceResults?.some((candidate) => isEqual(source, candidate)))) throw new Error('Memory result must include the unchanged result sources of this change');
       if (change.action === 'create') {
         if (!isNull(change.memoryId)) throw new Error('Creating memory cannot specify an existing identity');
-        return { change, result, memory: undefined };
+        return { change, result, sourceResults, memory: undefined };
       }
       if (change.action !== 'update') throw new Error('Unknown memory change action');
       const memory = this.#items.get(change.memoryId);
       if (!memory) throw new Error('Memory update target does not exist in this Runtime');
+      for (const source of result.sourceResults ?? []) {
+        const previous = memory.sourceResults?.find((candidate) => candidate.id === source.id);
+        if (previous && !isEqual(previous, source)) throw new Error('Memory result source identity cannot change its receipt');
+      }
       if (targets.has(memory.id)) throw new Error('A batch cannot update the same memory twice');
       targets.add(memory.id);
-      return { change, result, memory };
+      return { change, result, sourceResults, memory };
     });
     const applied: Memory[] = [];
-    for (const { change, result, memory: previous } of prepared) {
+    for (const { change, result, sourceResults, memory: previous } of prepared) {
       if (previous && isEqual(previous.snapshot(), result)) continue;
       const memory = previous ?? new Memory(this.transcript, result);
-      const event: MemoryEvent = Object.freeze({ type: 'memory', memoriesId: this.id, sequence: this.#sequence + 1, occurredAt: new Date().toISOString(), ...(provenance.origin ? { origin: Object.freeze({ ...provenance.origin }) } : {}), change: Object.freeze({ action: change.action, memoryId: memory.id, explanation: change.change, sourceIndexes: Object.freeze([...change.sourceIndexes]), result }) });
+      const event: MemoryEvent = Object.freeze({ type: 'memory', memoriesId: this.id, sequence: this.#sequence + 1, occurredAt: new Date().toISOString(), ...(provenance.origin ? { origin: Object.freeze({ ...provenance.origin }) } : {}), change: Object.freeze({ action: change.action, memoryId: memory.id, explanation: change.change, sourceIndexes: Object.freeze([...change.sourceIndexes]), ...(sourceResults ? { sourceResults } : {}), result }) });
       if (previous) updateMemory(memory, result);
       else this.#items.set(memory.id, memory);
       ++this.#sequence;

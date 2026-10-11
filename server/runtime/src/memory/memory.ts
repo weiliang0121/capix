@@ -3,6 +3,7 @@ import { isNonBlankString } from '../value/string.js';
 import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
 import type { MemoryContent } from '@capix/protocol';
 import type { Transcript } from '../transcript/transcript.js';
+import { prepareMemoryResultSources } from './source.js';
 
 const contents = new WeakMap<Memory, MemoryContent>();
 
@@ -27,6 +28,9 @@ export class Memory {
   get sourceIndexes(): readonly number[] {
     return contents.get(this)!.sourceIndexes;
   }
+  get sourceResults() {
+    return contents.get(this)!.sourceResults;
+  }
 
   snapshot(): MemoryContent {
     return contents.get(this)!;
@@ -39,7 +43,8 @@ export class Memory {
   static prepare(transcript: Transcript, content: MemoryContent): MemoryContent {
     if (!isNonBlankString(content.topic) || !isNonBlankString(content.content) || !isNonEmptyArray(content.sourceIndexes) || !hasUniqueItems(content.sourceIndexes)) throw new TypeError('Memory requires topic, content and unique source indexes');
     for (const index of content.sourceIndexes) transcript.ref(index);
-    return Object.freeze({ topic: content.topic, content: content.content, sourceIndexes: Object.freeze([...content.sourceIndexes]) });
+    const sourceResults = prepareMemoryResultSources(transcript, content.sourceResults);
+    return Object.freeze({ topic: content.topic, content: content.content, sourceIndexes: Object.freeze([...content.sourceIndexes]), ...(sourceResults ? { sourceResults } : {}) });
   }
 }
 

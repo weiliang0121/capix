@@ -1,4 +1,4 @@
-import type { FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceRecord, ProcessRecord, RelationChangeRecord } from '@capix/protocol';
+import type { FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, MemoryResultSource, Message, ResourceRecord, ProcessRecord, RelationChangeRecord } from '@capix/protocol';
 import type { ConversationItem } from './conversation.js';
 import type { CallSpan } from '../observation/types.js';
 import type { CallGraphModel } from './graph.js';
@@ -17,7 +17,7 @@ export interface RoundView extends Omit<ExecutionSummary, 'response'> {
   context: RoundSelectionSummary;
 }
 export interface CallMemory {
-  incoming: { id: string; topic: string; content: string; sourceIndexes: number[] }[];
+  incoming: { id: string; topic: string; content: string; sourceIndexes: number[]; sourceResults?: readonly MemoryResultSource[] }[];
   changes: MemoryRecord[];
 }
 export interface CallDetail extends Omit<CallSpan, 'recordType' | 'caller' | 'callee'> {

@@ -67,6 +67,7 @@ export class ObservationReplica {
           topic: change.result.topic,
           content: change.result.content,
           sources: change.result.sourceIndexes.map((index) => ({ transcriptId: transcript.id, index })),
+          ...(change.result.sourceResults ? { sourceResults: change.result.sourceResults } : {}),
           records: old?.records ?? [],
         };
         memory = { items: old ? memory.items.map((value) => (value.id === item.id ? item : value)) : [...memory.items, item] };

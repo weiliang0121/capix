@@ -67,6 +67,13 @@
   font-size: var(--font-sm);
   line-height: 1.8;
 }
+.memory-result-sources blockquote {
+  overflow-wrap: anywhere;
+}
+.memory-result-digest {
+  color: var(--muted-foreground);
+  font-size: var(--font-xs);
+}
 
 @media (max-width: 760px) {
   .memory-grid {

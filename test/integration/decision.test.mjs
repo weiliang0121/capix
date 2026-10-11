@@ -33,7 +33,7 @@ async function fixture(t, decide, options = {}) {
     async invoke(request, purpose) {
       modelCalls.push({ request, purpose });
       if (purpose === 'selection') return output({ historyIndexes: [] });
-      if (purpose === 'memory') return output({ memories: [] });
+      if (purpose === 'memory') return output(options.memory ? options.memory(JSON.parse(request.messages[1].content)) : { memories: [] });
       assert.equal(purpose, 'answer', 'function decisions must not invoke an understanding model');
       if (options.answerFails) throw options.answerFails;
       return output(answer);
@@ -139,6 +139,74 @@ test('explicit file work cannot bypass preflight or revise the user-supplied fil
     f.progress.filter((fact) => fact.kind === 'task').map((fact) => fact.task),
     [{ kind: 'file', task }],
   );
+});
+
+for (const recording of [true, false]) {
+  test(`accepted file receipts become memory sources and later model context (${recording ? 'recorded' : 'without recording'})`, async (t) => {
+    const task = { sourcePath: 'input.txt', output: { path: 'result.md' } };
+    const policy = filePolicy(task);
+    const f = await fixture(t, (input) => (input.request.message.content === '处理并保存' ? policy(input) : ordinary(input)), {
+      recording,
+      memory: (input) => {
+        if (!input.results) return { memories: [] };
+        const source = input.results[0];
+        assert.equal(source.kind, 'file-created');
+        assert.equal(source.answerIndex, input.currentIndexes[1]);
+        assert.deepEqual(source.receipt, f.fileProgress.find((fact) => fact.kind === 'created').receipt);
+        return { memories: [{ action: 'create', memoryId: null, change: '本轮正文已创建到结果文件。', sourceIndexes: input.currentIndexes, sourceResultIds: [source.id], result: { topic: '文件处理结果', content: '本轮生成的正文曾保存到 result.md。', sourceIndexes: input.currentIndexes, sourceResultIds: [source.id] } }] };
+      },
+    });
+    await f.run('处理并保存');
+    const memory = f.environment.memories.values()[0].toJSON();
+    const source = memory.sourceResults[0];
+    assert.ok(source.id.length > 0);
+    assert.equal(source.receipt.path, 'result.md');
+    assert.equal(source.receipt.bytes, Buffer.byteLength(answer.content));
+    assert.equal('sourceResultIds' in memory, false);
+    assert.equal(await readFile(join(f.root, source.receipt.path), 'utf8'), answer.content);
+    await rm(join(f.root, source.receipt.path));
+    const previousCount = f.modelCalls.length;
+    await f.run('刚才的结果在哪里');
+    for (const call of f.modelCalls.slice(previousCount)) {
+      const input = JSON.parse(call.request.messages[1].content);
+      assert.deepEqual(input.memories[0].sourceResults, [source]);
+      assert.match(call.request.messages[0].content, /不保证文件当前仍存在/);
+      assert.equal(input.results, undefined, 'an old result remains on its memory, not a new accepted operation');
+    }
+    assert.deepEqual(f.environment.memories.values()[0].toJSON(), memory);
+    if (!recording) assert.equal(f.environment.recorder, undefined);
+  });
+}
+
+test('preflight candidates and unsaved answers do not become operation sources', async (t) => {
+  const f = await fixture(t, (input) => (!input.latest ? inspect({ sourcePath: 'missing.txt' }) : ordinary(input)));
+  await f.run();
+  assert.equal(f.inputs[1].latest.output.kind, 'needs-input');
+  const input = JSON.parse(f.modelCalls.find((call) => call.purpose === 'memory').request.messages[1].content);
+  assert.equal(input.results, undefined);
+  assert.equal(f.fileProgress.length, 0);
+});
+
+test('forged memory source after publication preserves the file and answer without partially applying memories or repeating save', async (t) => {
+  const task = { output: { path: 'result.md' } };
+  const f = await fixture(t, filePolicy(task), {
+    memory: (input) => {
+      const proposal = (id) => ({ action: 'create', memoryId: null, change: '保留保存结果', sourceIndexes: input.currentIndexes, sourceResultIds: [id], result: { topic: '文件处理', content: '结果已保存到 result.md。', sourceIndexes: input.currentIndexes, sourceResultIds: [id] } });
+      return { memories: [proposal(input.results[0].id), proposal('invented-source')] };
+    },
+  });
+  await assert.rejects(f.run('生成并保存'), { code: 'MEMORY_SOURCE' });
+  assert.equal(await readFile(join(f.root, task.output.path), 'utf8'), answer.content);
+  assert.deepEqual(f.environment.transcript.snapshot(), [
+    { role: 'user', content: '生成并保存' },
+    { role: 'assistant', content: answer.content },
+  ]);
+  assert.equal(f.environment.runtime.running, false);
+  assert.equal(f.environment.memories.values().length, 0, 'a valid first proposal must not be applied before the invalid second proposal is checked');
+  assert.equal(f.fileProgress.filter((fact) => fact.kind === 'created').length, 1);
+  assert.equal(f.modelCalls.filter((call) => call.purpose === 'answer').length, 1);
+  assert.equal(f.modelCalls.filter((call) => call.purpose === 'memory').length, 1);
+  assert.equal([...f.environment.book.values()].filter((record) => record.kind === 'operation' && record.operation === 'saveResult').length, 1);
 });
 
 test('decisions cannot replace save arguments, repeat answer/save effects, or finish before the promised save', async (t) => {
@@ -295,6 +363,11 @@ for (const phase of ['read', 'create']) {
     await assert.rejects(f.run());
     assert.equal(f.inputs.length, phase === 'read' ? 2 : 3, 'an actual I/O failure does not enter the decision loop again');
     assert.equal(f.environment.runtime.running, false);
+    assert.equal(
+      f.modelCalls.some((call) => call.purpose === 'memory'),
+      false,
+    );
+    assert.equal(f.environment.memories.values().length, 0);
     if (phase === 'create') {
       assert.equal(await readFile(join(f.root, task.output.path), 'utf8'), 'created after preflight');
       assert.equal(f.environment.transcript.get(1).content, answer.content);

@@ -9,13 +9,16 @@ const id = z.string().min(1);
 const status = z.enum(['running', 'succeeded', 'failed']);
 const message = z.object({ role: z.enum(['user', 'assistant']), content: z.string() });
 const action = z.enum(['create', 'update']);
-const content = z.object({ topic: z.string(), content: z.string(), sourceIndexes: z.array(index) });
-const memoryRecord = z.object({ id, parentId: id.optional(), memoryId: id, memoriesId: id, sequence: z.number().int().positive(), contextId: id.optional(), callId: id.optional(), executionId: id.optional(), operationId: id.optional(), value: z.object({ action, change: z.string(), sourceIndexes: z.array(index), result: content }) });
+const fileReceipt = z.object({ path: id, bytes: index, digest: z.string().regex(/^[a-f0-9]{64}$/u) });
+const memoryResultSource = z.object({ id, kind: z.literal('file-created'), answerIndex: index, receipt: fileReceipt });
+const sourceResults = z.array(memoryResultSource).optional();
+const content = z.object({ topic: z.string(), content: z.string(), sourceIndexes: z.array(index), sourceResults });
+const memoryRecord = z.object({ id, parentId: id.optional(), memoryId: id, memoriesId: id, sequence: z.number().int().positive(), contextId: id.optional(), callId: id.optional(), executionId: id.optional(), operationId: id.optional(), value: z.object({ action, change: z.string(), sourceIndexes: z.array(index), sourceResults, result: content }) });
 
 export const configurationResponse = z.object({ configured: z.boolean(), model: z.string(), contextBudget: index, maxOutputTokens: index, timeoutMs: index, files: z.object({ maxReadBytes: index.positive(), maxWriteBytes: index.positive() }).optional() }) satisfies z.ZodType<ConfigurationResponse>;
 export const transcriptResponse = z.object({ id, revision: index, start: z.literal(0), end: index, starts: z.array(index).min(1), messages: z.array(message) }) satisfies z.ZodType<TranscriptResponse>;
 export const sourceResponse = z.object({ path: z.string(), content: z.string() }) satisfies z.ZodType<SourceResponse>;
-export const memoryResponse = z.object({ items: z.array(z.object({ id, topic: z.string(), content: z.string(), sources: z.array(z.object({ transcriptId: id, index })), records: z.array(memoryRecord) })) }) satisfies z.ZodType<MemoryObservation>;
+export const memoryResponse = z.object({ items: z.array(z.object({ id, topic: z.string(), content: z.string(), sources: z.array(z.object({ transcriptId: id, index })), sourceResults, records: z.array(memoryRecord) })) }) satisfies z.ZodType<MemoryObservation>;
 export const overviewResponse = z.object({
   transcriptId: z.string(),
   messages: z.array(z.object({ index, count: index })),
@@ -71,7 +74,7 @@ export const submissionResponse = z.object({
   executions: z.array(z.object({ contextId: id })),
   activities: conversationActivities.optional(),
   task: conversationTask.optional(),
-  fileOutput: z.discriminatedUnion('status', [z.object({ status: z.literal('pending'), path: id }), z.object({ status: z.literal('created'), receipt: z.object({ path: id, bytes: index, digest: z.string().regex(/^[a-f0-9]{64}$/u) }) }), z.object({ status: z.literal('not-created'), path: id, reason: z.enum(['not-started', 'cancelled', 'failed']) }), z.object({ status: z.literal('unconfirmed'), path: id })]).optional(),
+  fileOutput: z.discriminatedUnion('status', [z.object({ status: z.literal('pending'), path: id }), z.object({ status: z.literal('created'), receipt: fileReceipt }), z.object({ status: z.literal('not-created'), path: id, reason: z.enum(['not-started', 'cancelled', 'failed']) }), z.object({ status: z.literal('unconfirmed'), path: id })]).optional(),
   cancelRequested: z.literal(true).optional(),
   admission: admissionResponse.optional(),
   result: z.discriminatedUnion('status', [z.object({ status: z.literal('completed'), retry: z.never().optional() }), z.object({ status: z.literal('cancelled'), retry: z.never().optional() }), z.object({ status: z.literal('failed'), error: conversationFailure, retry: z.never().optional() }), z.object({ status: z.literal('rejected'), error: conversationFailure, retry: z.literal('admission').optional() })]).optional(),
@@ -122,7 +125,7 @@ const relation = z.object({ identity: relationIdentity, eventSequence: index.min
 const transcriptEvent = z.object({ type: z.literal('transcript'), transcriptId: id, revision: index.min(1), occurredAt: z.string(), origin: z.object({ contextId: id }).optional(), change: z.discriminatedUnion('kind', [z.object({ kind: z.literal('messages-appended'), start: index, messages: z.array(message).min(1) }), z.object({ kind: z.literal('segment-started'), previousStart: index, start: index, end: index })]) });
 const transcriptObservation = transcriptEvent.extend({ change: z.discriminatedUnion('kind', [z.object({ kind: z.literal('messages-appended'), start: index, end: index }), z.object({ kind: z.literal('segment-started'), previousStart: index, start: index, end: index })]) });
 export const transcriptUpdate = z.discriminatedUnion('type', [z.object({ type: z.literal('baseline'), snapshot: transcriptResponse }), z.object({ type: z.literal('delta'), event: transcriptEvent }), z.object({ type: z.literal('error'), error: z.string(), code: z.string() })]) satisfies z.ZodType<TranscriptUpdate>;
-const memoryEvent = z.object({ type: z.literal('memory'), memoriesId: id, sequence: index.min(1), occurredAt: z.string(), origin: z.object({ contextId: id }).optional(), change: z.object({ action, memoryId: id, explanation: z.string(), sourceIndexes: z.array(index), result: content }) });
+const memoryEvent = z.object({ type: z.literal('memory'), memoriesId: id, sequence: index.min(1), occurredAt: z.string(), origin: z.object({ contextId: id }).optional(), change: z.object({ action, memoryId: id, explanation: z.string(), sourceIndexes: z.array(index), sourceResults, result: content }) });
 const recordEvent = z.object({ type: z.literal('record'), recorderId: id, revision: index.min(1), occurredAt: z.string(), change: z.discriminatedUnion('kind', [z.object({ kind: z.literal('added'), entry, parent: z.object({ id, childId: id }).optional() }), z.object({ kind: z.literal('process-appended'), id, process }), z.object({ kind: z.literal('relation-appended'), id, relation }), z.object({ kind: z.literal('finished'), id, status: z.enum(['succeeded', 'failed']), result: z.object({ output: z.unknown().optional(), resultOf: index.min(1).optional(), error: z.object({ code: z.string(), message: z.string() }).passthrough().optional(), failure: failure.optional() }) }), z.object({ kind: z.literal('replaced'), entry })]) });
 const invocationEvent = z.object({
   type: z.literal('invocation'),

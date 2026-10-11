@@ -2,6 +2,7 @@ import { hasOutput, readOutput, type MemoryObservation, type ExecutionRecordSnap
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
 import { executionResources } from './resources.js';
+import { projectMemoryResults } from './memory.js';
 import { projectExecution } from '../observation/project.js';
 import type { CallSpan } from '../observation/types.js';
 import type { CallMemory, CallDetail, ExecutionDetail } from '../state/data.js';
@@ -12,7 +13,7 @@ export function projectDetail(snapshot: ExecutionRecordSnapshot, memory: MemoryO
   const memoryAt = (call?: CallSpan): CallMemory => {
     const owner = call?.recordType === 'attempt' ? snapshot.operations.find((item) => item.id === call.parentId) : call?.recordType === 'operation' ? snapshot.operations.find((item) => item.id === call.id) : snapshot.operations.find((item) => item.operation === 'selection');
     const input = isPlainObject(owner?.value.input) ? owner.value.input : {};
-    const incoming = isArray(input.memories) ? input.memories.filter(isPlainObject).map((item, index) => ({ id: isString(item.id) ? item.id : String(index), topic: String(item.topic ?? ''), content: String(item.content ?? ''), sourceIndexes: isArray(item.sourceIndexes) ? item.sourceIndexes.filter(isNumber) : [] })) : [];
+    const incoming = isArray(input.memories) ? input.memories.filter(isPlainObject).map((item, index) => ({ id: isString(item.id) ? item.id : String(index), topic: String(item.topic ?? ''), content: String(item.content ?? ''), sourceIndexes: isArray(item.sourceIndexes) ? item.sourceIndexes.filter(isNumber) : [], ...(item.sourceResults === undefined ? {} : { sourceResults: projectMemoryResults(item.sourceResults) }) })) : [];
     const changes = memory.items.flatMap((item) => item.records).filter((record) => record.executionId === trace.id && (!call || call.recordType === 'execution' || record.operationId === owner?.id));
     return { incoming, changes };
   };

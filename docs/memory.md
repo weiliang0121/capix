@@ -5,7 +5,7 @@
 ```text
 M(n-1) + Q(n) + H → SelectHistoryDefinition → S(n)
 M(n-1) + Q(n) + S(n) → GenerateAnswerDefinition → A(n)
-M(n-1) + Q(n) + A(n) + 可见原文 → ExtractMemoryDefinition → M(n)
+M(n-1) + Q(n) + A(n) + 可见原文 + 已接纳的保存凭据 → ExtractMemoryDefinition → M(n)
 M(n)              → 下一轮 SelectHistoryDefinition
 ```
 
@@ -24,6 +24,7 @@ Memory {
   topic: string;
   content: string;
   sourceIndexes: readonly number[];
+  sourceResults?: readonly MemoryResultSource[];
 }
 ```
 
@@ -34,6 +35,7 @@ MemoryRecord extends BaseRecord<{
   action: 'create' | 'update';
   change: string;                  // 本次明确发生了什么，不从两份正文推断
   sourceIndexes: readonly number[]; // 本次变化依据
+  sourceResults?: readonly MemoryResultSource[]; // 本次采用的已接纳操作结果
   result: MemoryContent;           // 落实之后的完整内容快照
 }> {
   memoryId: string;
@@ -51,7 +53,7 @@ MemoryRecord extends BaseRecord<{
 ```text
 选择 → 组装 → 生成 → 追加正式 assistant 消息
                          ↓
-当前记忆 + 本轮QA + 当前段筛选候选原文
+当前记忆 + 本轮QA + 当前段筛选候选原文 + 本轮已接纳保存结果（如有）
                          ↓
 ExtractMemoryDefinition
   → PrepareModelRequestDefinition：准备请求并检查容量
@@ -87,6 +89,29 @@ ExtractMemoryDefinition
 接纳先检查候选结构、目标与引用合法性，以及原始候选是否重复更新同一 ID。若 update 的 result 与本轮旧记忆的 topic/content/sourceIndexes 完全相同（索引顺序也相同），将其作为无操作过滤，不要求它额外引用本轮消息，不修改 Memory 或新增 MemoryRecord。是否无变化不依据 change 的文字，不做语义相似判断；正文、主题或来源发生变化时仍必须提供本轮依据。未知引用、正文依据不包含变化依据等错误不能借无操作绕过。剩余变更整批检查通过后才落实，仍不接受部分有效批次。
 
 模型原始候选保留在 InvokeModelDefinition 的返回记录；AcceptModelOutputDefinition 保留实际接纳的变更，ApplyMemoryDefinition 成功后返回这些变更作为操作最终输出。因此可以核对哪些候选被过滤，以及失败发生在接纳还是落实，不新增跳过事件。未增加错误反馈或自动重试。
+
+## 已接纳的保存结果
+
+文件能力返回真实创建凭据，E 经子调用接纳后保存到本轮 `state.saved`。进入记忆提取时，服务从该凭据复制一份 `MemoryResultSource`，给它一次生成的来源 ID；提取输入的 `results` 提供这些值。不从调用记录、客户端投影、候选路径或助手文本反推文件创建。
+
+```ts
+MemoryResultSource {
+  id: string;                  // 来源值身份，不是记录 ID
+  kind: 'file-created';
+  answerIndex: number;          // 此 Memory 所属 Transcript 内的回答位置
+  receipt: { path; bytes; digest };
+}
+```
+
+`answerIndex` 说明来源关联到哪次回答，不把回答文本当成文件创建凭据。凭据只证明当时创建了对应字节；以后文件可能被删除或修改，再次操作必须按当时环境检查。来源值只保存不可变数据，不持有文件句柄或调用实例。
+
+模型在变更及 `result` 中分别使用可选 `sourceResultIds` 引用来源，不能返回或重写凭据。变更引用只能来自本次 `results`；完整结果还可继承目标记忆已有来源，不能借用其他记忆的来源。接纳端将 ID 解析为对应真实 `sourceResults`，变化所用来源必须完整包含于结果中。未知、重复或不在允许集合的 ID 拒绝整批提案；继承旧来源不表示本轮重新访问了文件。无操作比较包含结果来源，因此新增来源本身也属于变化。
+
+本轮保留原有 `sourceIndexes` 及本轮消息依据规则，结果来源作为补充，不设计脱离消息的纯操作记忆。Memories 在统一落实入口校验来源结构、回答位置、变化依据包含关系以及同一来源身份不可改写，并复制冻结正文。来源所述操作是否确实发生，由传入已接纳结果的服务契约保证；实体不读取文件系统，也不建立证据注册表。
+
+来源随当前记忆、变化事件和可选记忆记录同步，客户端基线、增量及详情都保留相同内容。关闭 Recorder 不影响保存结果进入提取及后续记忆使用。没有操作来源的普通记忆保持原有结构。
+
+记忆仍是可取舍的理解，提取可以返回空数组；本功能不保证每次保存生成记忆，也不承担全部操作事实的可靠留存。记忆提取失败不撤销已创建的文件或正式回答。本轮没有增加持久化、通用证据系统或新的受理/审查实体。
 
 提取请求装载当前记忆内容及来源索引，不沿引用加载来源原文，不消费 MemoryRecord。原文仍只增不改删。筛选候选是提取可用证据，不宣称全部用于回答。更新完整正文仍可能遗漏条件或错误理解；结构校验不证明变化说明与语义正确。
 

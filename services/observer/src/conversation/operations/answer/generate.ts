@@ -42,6 +42,7 @@ export class GenerateAnswerDefinition extends OperationDefinition<GenerationInpu
   protected readonly task: string;
   private static readonly answerTask = `结合当前 message、所选 history 和已有 memories，用中文直接完成用户本次请求。history 是当前消息段的部分原文；memories 是可用于延续交流的已有理解，旧段原文可能不可见。依据足够时正常回答，缺失的细节不要补造。
 按信息的对象、适用条件和时效判断依据，当前明确的补充与纠正优先；记忆和助手先前的回答都不自动成为已验证事实。保留尚未消解的冲突与不确定性，不把建议当作确认、局部条件当作普遍偏好。
+记忆中的 sourceResults 若包含 file-created，它是系统接纳的历史创建凭据，可说明当时保存的路径与内容指纹，但不保证文件当前仍存在或内容未变，也不能替代本轮实际读取。
 如果提供 task，task.instruction 是父层已经接纳的本轮内容处理目标，可能包含上一轮澄清的必要信息；task.fileTask 是确定的文件范围，不能扩大。不要把保存目标路径当成已经保存的事实。
 kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少用户可补充的必要信息，content 给出具体澄清问题；unknown 为缺乏知识或实际能力，content 如实说明。content 是直接呈现给用户的正文。`;
 

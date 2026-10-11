@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { DataBlock } from '../inspection/blocks';
+import { MemoryResultSources } from './MemoryResultSources';
 import './memory.css';
 export function ChangeCard({ record, onInspect }: { record: MemoryRecord; onInspect?: (id: string, call?: string) => void }) {
   return (
@@ -22,8 +23,10 @@ export function ChangeCard({ record, onInspect }: { record: MemoryRecord; onInsp
         <p className="memory-content">{record.value.result.content}</p>
         <details>
           <summary>依据与记录</summary>
-          <p>本次依据：{record.value.sourceIndexes.map((index) => `[${index}]`).join(' ')}</p>
-          <p>完整依据：{record.value.result.sourceIndexes.map((index) => `[${index}]`).join(' ')}</p>
+          <p>本次原文依据：{record.value.sourceIndexes.map((index) => `[${index}]`).join(' ')}</p>
+          <MemoryResultSources sources={record.value.sourceResults} label="本次操作依据" />
+          <p>完整原文依据：{record.value.result.sourceIndexes.map((index) => `[${index}]`).join(' ')}</p>
+          <MemoryResultSources sources={record.value.result.sourceResults} label="完整操作依据" />
           <DataBlock title="记录关联" value={{ memoryId: record.memoryId, recordId: record.id, executionId: record.executionId, operationId: record.operationId }} />
         </details>
         {onInspect && record.executionId && (
@@ -41,7 +44,7 @@ export function MemoryDialog({ open, onOpenChange, memory, onInspect, onLoadTran
       <DialogContent className="inspector-dialog">
         <DialogHeader>
           <DialogTitle>当前记忆</DialogTitle>
-          <DialogDescription>{memory.items.length} 个当前理解 · 原文依据与每轮变化保留在各记忆下</DialogDescription>
+          <DialogDescription>{memory.items.length} 个当前理解 · 原文、操作依据与每轮变化保留在各记忆下</DialogDescription>
         </DialogHeader>
         <div className="dialog-scroll">
           <div className="memory-grid">
@@ -72,6 +75,7 @@ export function MemoryDialog({ open, onOpenChange, memory, onInspect, onLoadTran
                       </blockquote>
                     ))}
                   </details>
+                  <MemoryResultSources sources={item.sourceResults} />
                   <details>
                     <summary>变化记录 · {item.records.length} 条</summary>
                     {[...item.records].reverse().map((record) => (

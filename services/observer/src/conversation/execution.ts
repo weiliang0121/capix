@@ -115,7 +115,7 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
           resources.messages.append([{ role: 'assistant', content: answer.content }]);
           return answer;
         }
-        const extraction = children.get(this.operationDefinitions.extraction).create(invocation, prepareMemoryInput(resources.history, state.response!, selected.historyIndexes, memories), { key: 'extraction' });
+        const extraction = children.get(this.operationDefinitions.extraction).create(invocation, prepareMemoryInput(resources.history, state.response!, selected.historyIndexes, memories, { saved: state.saved }), { key: 'extraction' });
         await extraction.run();
         await children.accept(extraction, (delivered) => delivered);
         return state.answer!;

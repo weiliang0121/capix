@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createObservationProjection } from '../../apps/observer/.test-dist/binding/observation.js';
 import { projectConversation } from '../../apps/observer/.test-dist/observation/conversation.js';
 import { transcriptSnapshot } from '../client/fixtures.mjs';
+import { projectMemoryResults } from '../../apps/observer/.test-dist/binding/memory.js';
 
 const messages = [
   { role: 'user', content: '原文问题' },
@@ -17,6 +18,17 @@ const overview = {
   executions: [{ id: 'e', startedAt: '2026-10-09T00:00:00Z', status: 'succeeded', inputIndex: 0, response: { index: 1 }, selections: [{ operationId: 'o', status: 'succeeded', indexes: [0] }], availableMemoryIds: [], memoryChanges: [], calls: [], observedOffsetMs: 0 }],
 };
 const state = { enabled: true, loading: false, overview, records: new Map(), updates: new Map(), memory: { items: [{ id: 'm', topic: '主题', content: '记忆正文', sources: [{ transcriptId: 't', index: 0 }], records: [] }] } };
+
+test('memory projection preserves structured operation sources while opaque call inputs accept only recognized fields', () => {
+  const source = { id: 'saved-result', kind: 'file-created', answerIndex: 1, receipt: { path: 'summary.md', bytes: 12, digest: 'a'.repeat(64) } };
+  const memory = { items: [{ ...state.memory.items[0], sourceResults: [source] }] };
+  const projected = createObservationProjection()({ ...state, memory }, new Map());
+  assert.deepEqual(projected.memory.items[0].sourceResults, [source]);
+  const input = { ...source, private: 'omit', receipt: { ...source.receipt, body: 'omit' } };
+  assert.deepEqual(projectMemoryResults([input, { ...source, answerIndex: -1 }, { ...source, kind: 'file-planned' }]), [source]);
+  assert.notEqual(projectMemoryResults([input])[0].receipt, input.receipt);
+  assert.equal(projectMemoryResults(undefined), undefined);
+});
 
 test('binding distinguishes unloaded entity references and recomposes observation when only entity data arrives', () => {
   const project = createObservationProjection();
