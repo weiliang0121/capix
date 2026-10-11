@@ -44,7 +44,7 @@ test('failed configuration retains established entity synchronization and an exp
   emit(append(1, 'received after failed initialization'));
   await Promise.resolve();
   assert.equal(runtime.getSnapshot().messages.length, 1);
-  assert.equal(runtime.getSnapshot().transcripts.get('current').syncing, true);
+  assert.equal(runtime.getSnapshot().transcripts.get('current').sync.status, 'live');
   const second = runtime.initialize();
   assert.notEqual(second, first);
   assert.equal(runtime.initialize(), second);
@@ -197,7 +197,7 @@ test('an entity connection lost while configuration is pending cannot make initi
   await rejected;
   assert.equal(runtime.getSnapshot().config.model, 'fixture');
   assert.equal(runtime.getSnapshot().initialization.status, 'failed');
-  assert.equal(runtime.getSnapshot().transcripts.get('current').syncing, false);
+  assert.notEqual(runtime.getSnapshot().transcripts.get('current').sync.status, 'live');
 });
 
 test('stopping the default entity during its first baseline publication also invalidates pending configuration', async () => {
@@ -224,7 +224,7 @@ test('stopping the default entity during its first baseline publication also inv
   pendingConfig.resolve(configuration('stale'));
   await settle();
   assert.equal(runtime.getSnapshot().config, undefined);
-  assert.equal(runtime.getSnapshot().transcripts.get('current').syncing, false);
+  assert.notEqual(runtime.getSnapshot().transcripts.get('current').sync.status, 'live');
   assert.equal(stops, 1, 'the next publication exposes the stopped attempt and stopped synchronization together');
   const before = notifications;
   await runtime.initialize();
@@ -288,7 +288,7 @@ test('a replaced first-baseline callback cannot merge away the new initializatio
   assert.equal(streams.length, 2);
   assert.equal(streams[0].aborted, true);
   assert.equal(streams[1].aborted, false);
-  assert.equal(runtime.getSnapshot().transcripts.get('current').syncing, true);
+  assert.equal(runtime.getSnapshot().transcripts.get('current').sync.status, 'live');
   oldConfig.resolve(configuration('stale'));
   await settle();
   assert.equal(runtime.getSnapshot().config.model, 'new');

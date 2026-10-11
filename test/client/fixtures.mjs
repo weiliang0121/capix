@@ -24,6 +24,7 @@ export const transcriptSnapshot = (messages = [], id = 'fixture-transcript', rev
 export function transport(overrides = {}) {
   const io = {
     config: async () => ({ configured: true, model: 'fixture', contextBudget: 32768 }),
+    admission: async () => ({ transcriptId: 'fixture-transcript', status: 'ready' }),
     overview: async () => ({ transcriptId: 'fixture-transcript', executions: [], messages: [] }),
     transcript: async () => transcriptSnapshot(),
     memory: async () => ({ items: [] }),
@@ -137,10 +138,10 @@ export function submissionDelivery(request, receive, options = {}) {
       return publish({ answer: { transcriptId: current.input.transcriptId, index: position } });
     },
     complete() {
-      return publish({ result: { status: 'completed' } });
+      return publish({ result: { status: 'completed' }, admission: { transcriptId: current.input?.transcriptId ?? 'fixture-transcript', status: 'ready' } });
     },
     fail(code = 'TEST', message = '测试失败') {
-      return publish({ result: { status: 'failed', error: { code, message } } });
+      return publish({ result: { status: 'failed', error: { code, message } }, admission: { transcriptId: current.input?.transcriptId ?? 'fixture-transcript', status: 'ready' } });
     },
   };
 }

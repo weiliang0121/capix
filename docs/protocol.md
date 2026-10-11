@@ -8,6 +8,7 @@
 
 ## HTTP
 
+- GET `/api/conversation/admission` → ConversationAdmission（当前集合身份及 ready/busy/unavailable；不预占、不探测模型）。
 - GET `/api/config` → ConfigurationResponse（配置与 configured，绝不返回 key）。
 - GET `/api/transcript?id=集合ID` → TranscriptSnapshot（id/revision/start/end/starts/messages）。不指定 ID 表示当前对话集合；未知 ID 返回 404，服务只暴露装配进来的集合。数组位置仍是全量 Transcript 的绝对 index。
 - GET `/api/transcript/observe?id=集合ID` → 独立 TranscriptUpdate（baseline/delta/error）。首帧是同一同步边界的消息基线，后续仅传实体增量，不带调用记录；该订阅独立于观测。
@@ -31,6 +32,16 @@ submissionId 是服务请求的关联身份，Context.id 是一次内核调用�
 executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
 
 服务提交对象拥有运行任务、独立取消控制器与投影，反馈连接只读取。运行信号传给 R.run，不借用 HTTP 连接信号；能力不合作时继续等待，不提前释放占用。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接最多保留一个待发最新投影，慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
+
+## 接纳条件与下一笔提交
+
+ConversationSubmissionSnapshot.result 只说明这一笔已经完成、失败、取消或未被接纳；其发布在 runtime.run 实际返回/抛错和占用释放之后。admission 是附带的当时服务接纳提示，与不可变结果分开。旧提交的 read/follow 不能充当当前服务可用性查询；需要时 GET /api/conversation/admission 读取实时条件。辅助提示读取失败不能阻断运行进展或结果发布。
+
+ConversationAdmission 只公开 transcriptId、status，以及 unavailable 时的 error。服务从实际 runtime.running、配置、已知模型构造/能力不可用和保留容量取得依据；查询不主动兑现惰性 Provider。ready 表示允许尝试接纳，不能保证之后模型成功，也不保证查询到 POST 之间没有竞争。最终受理检查仍在服务端。
+
+rejected.retry:admission 是明确未接纳且允许再次尝试受理的声明，当前用于忙碌、保留容量不足或已知环境不可用造成的未接纳；不能带已经落实的 input、answer 或 execution。它不表示重新执行失败业务。客户端保留同一本地队列项，再次尝试时创建新的 submissionId；旧身份仅用于其结果查询。同身份重复 POST 仍拒绝，不增加幂等执行承诺。
+
+单轮输出失败和后处理失败不等于服务失去接纳能力；相反，服务空闲也不证明某个反馈丢失的提交没有执行。结果未知必须继续确认原身份，不能依据 admission 自动重发。等待项不因前一笔失败被清空，服务不可接纳时也不应逐条消耗后续输入。
 
 ## 对话处理过程
 
@@ -88,4 +99,4 @@ ObservationBaseline 的 sequence 固定为本连接的 0，另带独立的 Trans
 
 消息定位使用 MessageLocator / TranscriptRangeLocator，记录不包含活 Ref。范围可带捕获时的 revision；客户端允许用更新的追加型消息副本读取旧范围，但不能因此扩大原范围。没有加载、加载失败、版本/位置缺失与空消息分别表达。MemoryObservation.sources 同样只提供消息定位符；记忆变更结果保持既有不可变记录。
 
-客户端 TranscriptReplica 在首基线之后检查集合身份、严格连续 revision 和追加/分段边界；重复版本忽略，缺口最多重建一次，停止后再次订阅重新获得基线。不对未加载集合缓存无限增量。当前端点提供完整集合基线，不实现分页、历史重放、持久化或跨集合事务。
+客户端 TranscriptReplica 在首基线之后检查集合身份、严格连续 revision 和追加/分段边界；重复版本不推进副本。消息连接中断与修订缺口由 TranscriptReceiver 有限退避重建基线，主动停止后须显式再次订阅；策略见客户端文档。基线不能改写已接纳正文或分段前缀，身份/内容冲突及来源失效停止自动恢复。不对未加载集合缓存无限增量。当前端点提供完整集合基线，不实现分页、历史重放、持久化或跨集合事务。

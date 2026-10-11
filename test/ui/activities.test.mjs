@@ -6,7 +6,7 @@ import { ConversationProcess } from '../../apps/observer/.test-dist/features/con
 const requireApp = createRequire(new URL('../../apps/observer/package.json', import.meta.url));
 const { createElement } = requireApp('react');
 const { renderToStaticMarkup } = requireApp('react-dom/server');
-const process = { id: 'submission-1', label: '正在生成回答 · 调用模型', active: true, inputPending: false };
+const process = { id: 'submission-1', label: '正在生成回答 · 调用模型', active: true };
 
 test('current progress is one accessible live hint instead of a call history or disclosure', () => {
   const html = renderToStaticMarkup(createElement(ConversationProcess, { process }));

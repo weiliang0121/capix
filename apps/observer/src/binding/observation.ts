@@ -77,7 +77,9 @@ export function createObservationProjection() {
         sources: item.sources.map((source) => {
           const entity = transcripts.get(source.transcriptId);
           const message = entity?.snapshot?.messages[source.index];
-          return { ...source, ...(message ? { message } : {}), state: message ? 'loaded' : entity?.loading ? 'loading' : entity?.error ? 'error' : entity?.snapshot ? 'missing' : 'unloaded', ...(entity?.error ? { error: errorMessage(entity.error) } : {}) };
+          const loading = entity?.sync.status === 'connecting' || entity?.sync.status === 'retrying';
+          const failure = entity?.sync.status === 'failed' ? entity.sync : undefined;
+          return { ...source, ...(message ? { message } : {}), state: message ? 'loaded' : loading ? 'loading' : failure ? 'error' : entity?.snapshot ? 'missing' : 'unloaded', ...(failure ? { error: errorMessage(failure.error) } : {}) };
         }),
       })),
     };

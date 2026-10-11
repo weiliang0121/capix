@@ -3,11 +3,14 @@ import { isEqual } from 'es-toolkit';
 import type { ConversationTransport } from './transport.js';
 import { acceptConversationRequest } from './request.js';
 import { acceptActivities } from './activities.js';
+import { validAdmission } from './admission.js';
 
 export type SubmissionFeedback = { readonly status: 'idle' | 'connecting' | 'following' | 'ended' } | { readonly status: 'interrupted'; readonly error: unknown };
 export type SubmissionCancellation = { readonly status: 'requested' | 'sending' | 'acknowledged' } | { readonly status: 'uncertain'; readonly error: unknown };
 export interface ClientSubmissionState {
   readonly id: string;
+  /** Stable local input identity; a rejected admission may require a new POST identity. */
+  readonly queueId: string;
   readonly pending: string;
   readonly remote?: ConversationSubmissionSnapshot;
   readonly feedback: SubmissionFeedback;
@@ -38,11 +41,12 @@ export class ClientSubmission {
   constructor(
     input: ConversationRequest,
     private readonly notifyAccepted?: (submission: ClientSubmissionState) => undefined,
+    queueId = this.id,
   ) {
     const accepted = acceptConversationRequest(input);
     this.input = accepted.input;
     this.bytes = accepted.bytes;
-    this.state = Object.freeze({ id: this.id, pending: this.input.messages.at(-1)!.content, feedback: Object.freeze({ status: 'idle' }) });
+    this.state = Object.freeze({ id: this.id, queueId, pending: this.input.messages.at(-1)!.content, feedback: Object.freeze({ status: 'idle' }) });
   }
 
   get snapshot(): ClientSubmissionState {
@@ -134,9 +138,12 @@ export class ClientSubmission {
   }
 
   /** A control response accepts facts without pretending a feedback connection is open. */
-  async refresh(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
+  async refresh(transport: ConversationTransport, reception: SubmissionReception, signal?: AbortSignal): Promise<void> {
     this.bindReception(reception);
-    this.receive(await transport.read(this.id, AbortSignal.timeout(10_000)));
+    const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
+    const snapshot = await transport.read(this.id, requestSignal);
+    requestSignal.throwIfAborted();
+    this.receive(snapshot);
     reception.changed();
   }
 
@@ -205,6 +212,8 @@ export function assertSubmissionSnapshot(snapshot: ConversationSubmissionSnapsho
   if (snapshot.cancelRequested !== undefined && snapshot.cancelRequested !== true) throw new SubmissionContractError('取消请求事实无效。');
   if (snapshot.result?.status === 'cancelled' && !snapshot.cancelRequested) throw new SubmissionContractError('取消结果缺少取消请求事实。');
   if (snapshot.answer && (!snapshot.input || !Number.isSafeInteger(snapshot.answer.index) || snapshot.answer.transcriptId !== snapshot.input.transcriptId || snapshot.answer.index < snapshot.input.end)) throw new SubmissionContractError('提交回答位置与输入范围不一致。');
+  if (snapshot.result && 'retry' in snapshot.result && (snapshot.result.status !== 'rejected' || snapshot.result.retry !== 'admission' || snapshot.integrity.status !== 'complete' || snapshot.input || snapshot.answer || snapshot.executions.length)) throw new SubmissionContractError('重新接纳只能用于明确未受理的提交。');
+  if (snapshot.admission !== undefined && !validAdmission(snapshot.admission)) throw new SubmissionContractError('服务接纳状态无效。');
 }
 
 function copySubmission(snapshot: ConversationSubmissionSnapshot): ConversationSubmissionSnapshot {
@@ -216,6 +225,7 @@ function copySubmission(snapshot: ConversationSubmissionSnapshot): ConversationS
     ...(snapshot.answer ? { answer: Object.freeze({ ...snapshot.answer }) } : {}),
     executions: Object.freeze(snapshot.executions.map((execution) => Object.freeze({ ...execution }))),
     ...(snapshot.activities ? { activities: snapshot.activities } : {}),
+    ...(snapshot.admission ? { admission: Object.freeze({ ...snapshot.admission, ...(snapshot.admission.status === 'unavailable' ? { error: Object.freeze({ ...snapshot.admission.error }) } : {}) }) } : {}),
     ...(snapshot.result ? { result: Object.freeze({ ...snapshot.result, ...('error' in snapshot.result ? { error: Object.freeze({ ...snapshot.result.error }) } : {}) }) } : {}),
     integrity: Object.freeze({ ...snapshot.integrity, ...('error' in snapshot.integrity ? { error: Object.freeze({ ...snapshot.integrity.error }) } : {}) }),
   });

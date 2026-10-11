@@ -173,15 +173,16 @@ test('failed postprocessing and later entity connection failure retain an alread
   await settle();
 
   const stopped = f.runtime.getSnapshot();
-  assert.equal(stopped.transcripts.get(range.transcriptId).syncing, false);
-  assert.equal(stopped.transcripts.get(range.transcriptId).error, disconnected);
+  assert.notEqual(stopped.transcripts.get(range.transcriptId).sync.status, 'live');
+  assert.equal(stopped.transcripts.get(range.transcriptId).sync.error, disconnected);
   assert.equal(stopped.answerAvailability, 'available');
   assert.equal(stopped.messages, completed.messages);
   assert.equal(stopped.submission.remote, completed.submission.remote, 'synchronization failure does not rewrite the business outcome');
-  assert.equal(completed.transcripts.get(range.transcriptId).error, undefined, 'the prior published snapshot remains fixed');
+  assert.equal(completed.transcripts.get(range.transcriptId).sync.error, undefined, 'the prior published snapshot remains fixed');
 });
 
 test('unrecoverable entity gaps preserve content availability and the independently confirmed service result', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const firstGap = deferred();
   const secondGap = deferred();
   let connections = 0;
@@ -203,12 +204,19 @@ test('unrecoverable entity gaps preserve content availability and the independen
   const completed = f.runtime.getSnapshot();
   firstGap.resolve();
   await settle();
+  t.mock.timers.tick(500);
+  await settle();
   assert.equal(connections, 2);
   secondGap.resolve();
   await settle();
+  for (const delay of [1500, 4000]) {
+    t.mock.timers.tick(delay);
+    await settle();
+  }
 
   const failedSync = f.runtime.getSnapshot();
-  assert.ok(failedSync.transcripts.get(range.transcriptId).error instanceof TranscriptSequenceError);
+  assert.equal(failedSync.transcripts.get(range.transcriptId).sync.status, 'failed');
+  assert.ok(failedSync.transcripts.get(range.transcriptId).sync.error instanceof TranscriptSequenceError);
   assert.deepEqual(failedSync.messages, [question, answer]);
   assert.equal(failedSync.answerAvailability, 'available');
   assert.equal(failedSync.submission.remote, completed.submission.remote);

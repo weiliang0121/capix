@@ -21,23 +21,9 @@ export function createApplication(runtime: ClientRuntime) {
         runtime.cancelSubmission(id).catch((error) => {
           store.getState().setNotice(errorMessage(error));
         }),
-      cancelAll: () =>
-        runtime.cancelAll().catch((error) => {
-          store.getState().setNotice(errorMessage(error));
-        }),
-      clearQueue: () => runtime.clearQueue(),
-      pauseQueue: () => runtime.pauseQueue(),
-      resumeQueue: () => {
-        try {
-          runtime.resumeQueue();
-        } catch (error) {
-          store.getState().setNotice(errorMessage(error));
-        }
-      },
-      reconnectConversation: () =>
-        runtime.initialize().catch((error) => {
-          store.getState().setNotice(errorMessage(error));
-        }),
+      // Initialization and message failures are projected from current state;
+      // a previous connection's rejected promise must not overwrite that state.
+      reconnectConversation: () => runtime.initialize().catch(() => undefined),
       loadExecution: async (id: string, signal?: AbortSignal): Promise<void> => {
         await runtime.loadExecution(id, signal);
       },
@@ -88,9 +74,7 @@ export function connectAppStore(store: AppStore, runtime: ClientRuntime): () => 
   });
   receive();
   const stopObservation = runtime.startObservation();
-  void runtime.initialize().catch((error) => {
-    if (active) store.getState().setNotice(errorMessage(error));
-  });
+  void runtime.initialize().catch(() => undefined);
   return () => {
     active = false;
     if (frame !== undefined) cancelAnimationFrame(frame);

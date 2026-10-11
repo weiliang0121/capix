@@ -84,3 +84,22 @@
   border-color: var(--border);
   margin-block: 18px;
 }
+.answer-content {
+  min-height: 26px;
+}
+.answer-reveal-all {
+  display: block;
+  margin-top: 8px;
+  padding: 2px 0;
+  color: var(--muted-foreground);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+.answer-reveal-all:hover {
+  color: var(--foreground);
+}
+.answer-reveal-all:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+  border-radius: 2px;
+}

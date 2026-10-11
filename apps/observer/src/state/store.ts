@@ -15,6 +15,7 @@ export interface AppState {
   memoryOpen: boolean;
   settingsOpen: boolean;
   draft: string;
+  conversationFocus?: string;
   history: string;
   budget: string;
   notice: string;

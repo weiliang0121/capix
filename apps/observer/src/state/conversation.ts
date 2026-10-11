@@ -1,4 +1,5 @@
 import type { Message } from '@capix/protocol';
+import type { SubmissionNotice } from './data.js';
 
 export interface ConversationMessage {
   key: string;
@@ -6,7 +7,32 @@ export interface ConversationMessage {
   index?: number;
   executionId?: string;
   round?: number;
-  processes?: readonly ConversationProcess[];
+  /** Presentation eligibility only; the message always retains its complete formal content. */
+  reveal?: boolean;
+}
+
+export type ConversationItem = (ConversationMessage & { readonly kind: 'message' }) | ConversationPendingInput | ConversationResponse;
+
+export interface ConversationPendingInput {
+  readonly kind: 'pending-input';
+  readonly key: string;
+  readonly submissionId: string;
+  readonly queueId: string;
+  readonly content: string;
+  readonly label: string;
+}
+
+/** A presentation region, not an assistant message or a new service-side entity. */
+export interface ConversationResponse {
+  readonly kind: 'response';
+  readonly key: string;
+  readonly submissionId: string;
+  readonly queueId: string;
+  readonly afterInputKey?: string;
+  readonly bodyState: 'unconfirmed' | 'unloaded' | 'pending' | 'available' | 'missing' | 'error';
+  readonly body?: ConversationMessage;
+  readonly process?: ConversationProcess;
+  readonly notice?: SubmissionNotice;
 }
 
 export interface ConversationProcess {
@@ -14,5 +40,4 @@ export interface ConversationProcess {
   readonly label: string;
   readonly active: boolean;
   readonly notice?: string;
-  readonly inputPending: boolean;
 }

@@ -1,15 +1,31 @@
 import { useRef } from 'react';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, LoaderCircle, Square } from 'lucide-react';
 import { Textarea } from '../../components/ui/textarea.js';
 import { Button } from '../../components/ui/button.js';
-export function Composer({ configured, loaded, queueing, draft, onDraft, onSubmit }: { configured: boolean; loaded: boolean; queueing: boolean; draft: string; onDraft: (text: string) => void; onSubmit: () => Promise<void> }) {
+import type { SubmissionControl } from '../../state/data.js';
+
+interface ComposerProps {
+  configured: boolean;
+  loaded: boolean;
+  draft: string;
+  current?: SubmissionControl;
+  onDraft: (text: string) => void;
+  onSubmit: () => Promise<void>;
+  onCancel: (id: string) => Promise<void>;
+}
+
+export function Composer({ configured, loaded, draft, current, onDraft, onSubmit, onCancel }: ComposerProps) {
   const composing = useRef(false);
+  const hasDraft = Boolean(draft.trim());
+  const send = () => {
+    if (configured && hasDraft) void onSubmit();
+  };
   return (
     <form
       className="composer"
       onSubmit={(event) => {
         event.preventDefault();
-        void onSubmit();
+        send();
       }}
     >
       <Textarea
@@ -26,15 +42,24 @@ export function Composer({ configured, loaded, queueing, draft, onDraft, onSubmi
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current) {
             event.preventDefault();
-            void onSubmit();
+            send();
           }
         }}
       />
       <div className="composer-bottom">
-        <span>{!configured && loaded ? '请在服务端配置模型 Key' : `Enter ${queueing ? '加入队列' : '发送'} · Shift + Enter 换行`}</span>
-        <Button type="submit" size="icon" disabled={!configured || !draft.trim()} aria-label={queueing ? '加入队列' : '发送消息'}>
-          <ArrowUp />
-        </Button>
+        <span>{!configured && loaded ? '请在服务端配置模型 Key' : 'Enter 发送 · Shift + Enter 换行'}</span>
+        <div className="flex items-center gap-2">
+          {current && (
+            <Button type="button" variant={hasDraft ? 'outline' : 'default'} size="icon" disabled={current.disabled} aria-label={current.label} onClick={() => void onCancel(current.id)}>
+              {current.disabled ? <LoaderCircle aria-hidden="true" className="animate-spin" /> : <Square aria-hidden="true" fill="currentColor" />}
+            </Button>
+          )}
+          {(hasDraft || !current) && (
+            <Button type="submit" size="icon" disabled={!configured || !hasDraft} aria-label="发送消息">
+              <ArrowUp aria-hidden="true" />
+            </Button>
+          )}
+        </div>
       </div>
     </form>
   );

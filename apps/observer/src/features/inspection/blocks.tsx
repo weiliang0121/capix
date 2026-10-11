@@ -24,7 +24,7 @@ export function TextBlock({ title, content, markdown = false }: { title: string;
     <section className="text-block">
       <h3>{title}</h3>
       <div className="detail-message">
-        <MessageContent content={content} markdown={markdown} />
+        <MessageContent content={content} format={markdown ? 'markdown' : 'plain'} />
       </div>
     </section>
   );

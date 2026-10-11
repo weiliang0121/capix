@@ -4,12 +4,21 @@ import type { ModelOutput, ModelProvider, ModelRequest, Purpose } from '../conve
 import { isObject, RuntimeError, InvocationCancelled } from '@capix/server-runtime';
 
 export class DeepSeekProvider implements ModelProvider {
+  private failure: RuntimeError | undefined;
   constructor(
     private readonly key: string,
     private readonly fetcher: typeof fetch = fetch,
   ) {}
+
+  get unavailable(): RuntimeError | undefined {
+    return this.failure;
+  }
+
   async invoke(request: ModelRequest, _purpose: Purpose, signal: AbortSignal): Promise<ModelOutput> {
-    if (!this.key) throw new RuntimeError('KEY_MISSING', '服务端尚未配置 DEEPSEEK_API_KEY；请填写 .env 并重启。');
+    if (!this.key) {
+      this.failure = new RuntimeError('KEY_MISSING', '服务端尚未配置 DEEPSEEK_API_KEY；请填写 .env 并重启。');
+      throw this.failure;
+    }
     let response: Response;
     try {
       response = await this.fetcher('https://api.deepseek.com/chat/completions', {
@@ -23,8 +32,11 @@ export class DeepSeekProvider implements ModelProvider {
       throw new RuntimeError('NETWORK_ERROR', '无法连接 DeepSeek。', undefined, { cause });
     }
     if (!response.ok) {
-      await response.body?.cancel();
-      throw new RuntimeError(`HTTP_${response.status}`, `DeepSeek 返回 HTTP ${response.status}；未自动重试。`);
+      const error = new RuntimeError(`HTTP_${response.status}`, `DeepSeek 返回 HTTP ${response.status}；未自动重试。`);
+      if (response.status === 401 || response.status === 403) this.failure = error;
+      // A body cleanup failure does not erase the already received HTTP result.
+      await response.body?.cancel().catch(() => undefined);
+      throw error;
     }
     let body: unknown;
     try {

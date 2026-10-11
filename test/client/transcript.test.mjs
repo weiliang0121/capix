@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ClientRuntime, TranscriptReplica, TranscriptSequenceError } from '@capix/client-runtime';
+import { ClientRuntime, TranscriptReplica, TranscriptSequenceError, TranscriptConnectionError } from '@capix/client-runtime';
 import { deferred, transcriptSnapshot, submissionDelivery } from './fixtures.mjs';
 
 const message = (content, role = 'user') => ({ role, content });
@@ -68,7 +68,8 @@ test('conversation and entity streams may arrive in either order without duplica
   runtime.stopTranscript();
 });
 
-test('a missed revision rebuilds the baseline once; a second gap stays visible', async () => {
+test('repeated revision gaps exhaust bounded recovery and remain visible', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   let connections = 0;
   const transcripts = {
     transcript: async () => transcriptSnapshot(),
@@ -84,9 +85,14 @@ test('a missed revision rebuilds the baseline once; a second gap stays visible',
   await settle();
   await settle();
   await settle();
-  assert.equal(connections, 2);
-  assert.equal(runtime.getSnapshot().transcripts.get('t').syncing, false);
-  assert.ok(runtime.getSnapshot().transcripts.get('t').error instanceof TranscriptSequenceError);
+  for (const delay of [500, 1500, 4000]) {
+    t.mock.timers.tick(delay);
+    await settle();
+    await settle();
+  }
+  assert.equal(connections, 4);
+  assert.equal(runtime.getSnapshot().transcripts.get('t').sync.status, 'failed');
+  assert.ok(runtime.getSnapshot().transcripts.get('t').sync.error instanceof TranscriptSequenceError);
   assert.equal(runtime.getSnapshot().messages.length, 0);
 });
 
@@ -173,7 +179,8 @@ test('default and UID subscriptions converge after identity is known without abo
   runtime.stopTranscript();
 });
 
-test('a network disconnect obtains one new baseline and never retries business execution', async () => {
+test('a network disconnect obtains a new baseline after backoff and never retries business execution', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   let connections = 0;
   const runtime = new ClientRuntime({
     conversation: { config, submit: async () => assert.fail('not a business retry') },
@@ -181,13 +188,17 @@ test('a network disconnect obtains one new baseline and never retries business e
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
         connections++;
-        if (connections === 1) throw new TypeError('network disconnected');
+        if (connections === 1) throw new TranscriptConnectionError('network disconnected');
         accept({ type: 'baseline', snapshot: transcriptSnapshot([message('fresh')], 't') });
         await wait(signal);
       },
     },
   });
-  await runtime.initialize();
+  const initial = runtime.initialize();
+  await settle();
+  assert.equal(connections, 1);
+  t.mock.timers.tick(500);
+  await initial;
   assert.equal(connections, 2);
   assert.equal(runtime.getSnapshot().messages[0].content, 'fresh');
   runtime.stopTranscript();
@@ -222,8 +233,8 @@ test('a throwing UI subscriber is detached without terminating entity sync or st
   assert.equal(failingCalls, 1);
   assert.ok(healthyCalls >= 3);
   assert.equal(runtime.getSnapshot().messages.length, 2);
-  assert.equal(runtime.getSnapshot().transcripts.get('t').syncing, true);
-  assert.equal(runtime.getSnapshot().transcripts.get('t').error, undefined);
+  assert.equal(runtime.getSnapshot().transcripts.get('t').sync.status, 'live');
+  assert.equal(runtime.getSnapshot().transcripts.get('t').sync.error, undefined);
   runtime.stopTranscript();
 });
 

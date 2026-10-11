@@ -8,6 +8,7 @@ import { bindConversation } from '../conversation/binding.js';
 import { ChangeConsumer } from './changes.js';
 import { RecordSource } from '../observation/record/source.js';
 import { TranscriptFeed } from '../conversation/transcript/feed.js';
+import { ModelSource } from '../conversation/model/source.js';
 
 /** Independent entity lifetimes are established here; R only binds their published access. */
 export function initializeObserver(provider: ModelInitialization, messages: readonly Message[] = []) {
@@ -26,6 +27,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
   const memories = new Memories(transcript, { observation: recording.memory, changes });
   const selectionUsage = new SelectionUsage();
   const definition = new ConversationRuntimeDefinition();
-  const runtime = bindConversation(definition, { transcript, memories, selectionUsage }, provider, { observations: [recording], changes });
-  return { transcript, memories, selectionUsage, book, clock, recorder, recording, runtime, changes, definition, consumer, recordSource, transcripts };
+  const model = new ModelSource(provider);
+  const runtime = bindConversation(definition, { transcript, memories, selectionUsage }, model, { observations: [recording], changes });
+  return { transcript, memories, selectionUsage, model, book, clock, recorder, recording, runtime, changes, definition, consumer, recordSource, transcripts };
 }

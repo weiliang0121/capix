@@ -1,8 +1,8 @@
-import { Initializer, assembleRuntime, type ChangeCapture, type InvocationControls, type ExecutionInvocationCallbacks, type ObservationInstallation, type ProgressChannel, type InvocationProgress } from '@capix/server-runtime';
+import { assembleRuntime, type ChangeCapture, type InvocationControls, type ExecutionInvocationCallbacks, type ObservationInstallation, type ProgressChannel, type InvocationProgress } from '@capix/server-runtime';
 import { TranscriptRangeRef, type Transcript, type Memories, type SelectionUsage, type TranscriptAppendProgress } from '@capix/server-runtime/content';
-import { isFunction } from 'es-toolkit/predicate';
 import type { ModelSettings, InvocationEvent, Message, GenerationOutput } from '@capix/protocol';
-import type { ModelProvider, ModelInitialization } from './model/types.js';
+import type { ModelInitialization } from './model/types.js';
+import { ModelSource } from './model/source.js';
 import { ConversationRuntimeDefinition } from './definition.js';
 import { conversationProviders, type ConversationExecutionResources } from './resources.js';
 import type { ConversationProgress } from './progress.js';
@@ -23,8 +23,8 @@ export interface ConversationEntities {
 }
 
 /** Bind independent entities to R. The resulting R is the sole business execution entry. */
-export function bindConversation(definition: ConversationRuntimeDefinition, entities: ConversationEntities, provider: ModelInitialization, observation: { observations?: readonly ObservationInstallation[]; changes?: ChangeCapture<InvocationEvent> } = {}) {
-  const model = new Initializer<ModelProvider>(isFunction(provider) ? provider : () => provider);
+export function bindConversation(definition: ConversationRuntimeDefinition, entities: ConversationEntities, provider: ModelInitialization | ModelSource, observation: { observations?: readonly ObservationInstallation[]; changes?: ChangeCapture<InvocationEvent> } = {}) {
+  const model = provider instanceof ModelSource ? provider : new ModelSource(provider);
   const source = (options: ConversationRunOptions, kind: 'input' | 'answer', selected: boolean) => ({
     ...entities,
     settings: Object.freeze({ ...options.settings }),

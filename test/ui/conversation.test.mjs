@@ -47,3 +47,14 @@ test('conversation content is complete without observation data', () => {
   );
   assert.ok(rows.every((row) => row.executionId === undefined));
 });
+
+test('message presentation identity includes the collection and stable formal index', () => {
+  const overview = { messages: [], executions: [] };
+  const first = projectConversation([user, assistant], overview, 'collection:1');
+  const repeated = projectConversation([user, assistant], overview, 'collection:1');
+  const other = projectConversation([user, assistant], overview, 'collection');
+  assert.equal(first[1].key, repeated[1].key);
+  assert.notEqual(first[0].key, first[1].key);
+  assert.notEqual(first[1].key, other[1].key);
+  assert.deepEqual(JSON.parse(first[1].key), ['collection:1', 1]);
+});

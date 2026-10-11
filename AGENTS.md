@@ -16,6 +16,7 @@
 - services/observer 的 conversation 提供业务 R/E/O/A、模型契约和绑定、消息同步；observation 提供来源/记录投影/观测交付；assembly 建立独立实体和共享消费；http 负责宿主交付。不得让 conversation 依赖环境初始化来取得隐式对象。
 - ClientRuntime 保持无 UI：以 conversation/transcripts/observation 具名装配，初始化配置与消息同步，观测显式开启。当前依赖对话和 Observer 契约，不宣称已是任意业务的通用客户端。client/http 只做收发与协议接纳；app binding 投影后写入 Store，React 消费读模型与明确 props。内部接纳、会话协调与公开快照分开；每条增量照常消费，微任务合并发布，命令门控使用即时内部状态。正文可用性与服务结果、连接健康分别表达；app binding 按浏览器帧合并投影，一次写 Store。
 - ClientSubmission 持有单次提交的反馈连接与事实，TranscriptReceiver / ObservationReceiver 各自持有同步生命周期；ClientRuntime 只协调初始化、当前提交、跨来源状态与发布。连接替换先转移本地归属再 abort 旧连接，回调重入后复核身份；停止消费不取消服务端业务。
+- 消息副本与同步连接状态分开。TranscriptReceiver 对明确连接中断和修订缺口有限退避重建基线，主动停止清理定时器；身份/正文冲突、协议错误及来源失效终止自动恢复。基线不能改写既有消息前缀。恢复就绪等待本次有效基线，不复用首次 ready；已初始化客户端的同步波动不重置业务接纳资格或触发重 POST。
 - 服务模型请求、Schema、Provider 适配与配置接纳留在服务。Key 仅由服务端环境获取，不输出、不写记录或传到客户端。模型能力与配置是不同对象。
 
 ## 运行结构与访问
@@ -41,8 +42,9 @@
 
 ## 对话与交付
 
-- ConversationQueue 管理有界本地等待、当前提交与暂停，ClientSubmission 接纳固定输入、远端事实并分别维护反馈和取消控制。成功入队不代表服务接纳，待发内容不进入正式消息集合；不因断流、取消 ACK 或 release 放弃未知当前项来推进队列。
-- 取消通过 submission 独立控制接口传给 R.run；cancelRequested 不等于 cancelled，运行真正退出才发布终态。取消当前项、失败/拒绝默认暂停后续队列。InvocationCancelled 绑定具体控制信号，已归属故障优先；既成内容保留，收尾不受取消阻断，不以 Promise.race 提前释放运行。
+- ConversationQueue 管理有界本地等待、当前提交和自动推进；本地 queueId 与一次 POST 的 submissionId 分开。ClientSubmission 接纳固定输入、远端事实并分别维护反馈和取消控制。成功入队不代表服务接纳，待发内容不进入正式消息集合；不因断流、取消 ACK、服务空闲或 release 放弃未知当前项来推进队列。
+- 单轮失败或取消不暂停、清空后续消息；已确认结束后依据服务接纳事实自动推进。等待项只提供撤销，不要求用户暂停或恢复队列。服务明确未接纳且声明 retry:admission 时，保留同一本地项与顺序，确认可接纳后使用新提交身份尝试；结果未知只查询或跟随原身份，不能重 POST。
+- 取消通过 submission 独立控制接口传给 R.run；cancelRequested 不等于 cancelled，运行真正退出才发布终态。停止当前只影响当前项，等待项仍自动处理。InvocationCancelled 绑定具体控制信号，已归属故障优先；既成内容保留，收尾不受取消阻断，不以 Promise.race 提前释放运行。
 - ConversationRequest {messages} 是服务对话输入，不是通用 E 契约。正式接纳 1–501 条消息，末条为 user；忙碌返回409，不追加输入。回答追加后发 answer，记忆后处理前可见；completed 等 R.run 返回后发送。后处理失败保留回答。
 - ConversationRuntimeDefinition / ConversationExecutionDefinition 组织选择、生成、记忆提取。业务复杂度在具体声明，绑定固定资源来源。消息同步与观测 Feed 独立连接/关闭；不观测仍能正常对话。
 - 只有 GenerateAnswerDefinition 明确支持一次再次生成：完整模型返回被 INVALID_JSON/EMPTY_OUTPUT/OUTPUT_SHAPE 拒绝时，依据直接子调用证据与声明契约继续。第二轮只准备反馈请求、调用及接纳，不重复选择、上下文组装或回答追加。超时、网络、取消、非 stop 返回、捕获/记录错误不自动重试。
@@ -54,6 +56,7 @@
 - POST 对话使用 `{ submissionId, input }`；ConversationSubmission 在服务侧持有任务和累计进展投影，连接只消费。内核只暴露被动调用/内容事实，服务绑定选择来源，服务投影解释 C/S 语义，不由记录推断业务。
 - 对话过程消费被动 REOA 元数据，独立于 Recorder 和消息正文。activities 保留子调用状态与父层接纳事实，独立完整性失效不改写提交结果；单次最多 512 个调用位置。客户端最多保留 32 笔已跟踪提交快照，应用按正式输入定位关联过程，不从文本或记录反推。
 - 输入与回答正式写入、R.run 实际返回/抛错、投影完整性、反馈连接和实体同步分别表达。断线只解除消费，不取消服务运行；反馈故障不回写 Context，不导致业务重做。
+- 服务接纳状态 ready/busy/unavailable 与提交结果独立，由服务根据实际占用、配置和已知必要能力状态投影。结束反馈可以附带当时状态，按需查询取得当前状态；ready 不预占、不保证下次模型成功，POST 仍做最终接纳检查。查询不触发惰性 Provider 构造或真实模型请求；可选观测失效不代表对话入口失效。
 - 服务仅有界保留进程内提交；查询/follow 恢复反馈，不恢复执行。不承诺持久化、幂等重提或重启恢复。客户端只发送一次，重连不重新 POST；未知/淘汰提交不证明未执行。未确认结果时默认阻止新提交，用户可显式结束本地跟踪，不能称为取消。
 
 ## 编码、界面与验证

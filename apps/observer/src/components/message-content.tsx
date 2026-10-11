@@ -22,10 +22,10 @@ const components: Components = {
   ),
 };
 
-export const MessageContent = memo(function MessageContent({ content, markdown = false }: { content: string; markdown?: boolean }) {
-  if (!markdown) return <div className="message-text">{content}</div>;
+export const MessageContent = memo(function MessageContent({ content, format = 'plain', complete = true }: { content: string; format?: 'plain' | 'markdown'; complete?: boolean }) {
+  if (format === 'plain') return <div className="message-text">{content}</div>;
   return (
-    <Streamdown className="message-text markdown-content" mode="static" controls={false} lineNumbers={false} skipHtml rehypePlugins={rehypePlugins} components={components}>
+    <Streamdown className="message-text markdown-content" mode={complete ? 'static' : 'streaming'} parseIncompleteMarkdown={!complete} animated={false} isAnimating={!complete} controls={false} lineNumbers={false} skipHtml rehypePlugins={rehypePlugins} components={components}>
       {content}
     </Streamdown>
   );

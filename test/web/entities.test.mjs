@@ -25,7 +25,7 @@ test('binding distinguishes unloaded entity references and recomposes observatio
   assert.equal(first.rounds[0].response.content, undefined);
   assert.equal(first.rounds[0].context.selectedMessages[0].entry, undefined);
   assert.equal(first.memory.items[0].sources[0].state, 'unloaded');
-  const second = project(state, new Map([['t', { snapshot: transcriptSnapshot(messages, 't'), syncing: true, loading: false }]]));
+  const second = project(state, new Map([['t', { snapshot: transcriptSnapshot(messages, 't'), sync: { status: 'live' } }]]));
   assert.equal(second.rounds[0].inputContent, '原文问题');
   assert.equal(second.rounds[0].response.content, '原文回答');
   assert.equal(second.rounds[0].context.selectedMessages[0].entry.count, 2);
@@ -36,11 +36,26 @@ test('binding distinguishes unloaded entity references and recomposes observatio
 
 test('missing and failed entity reads are distinct from unloaded content and unrelated identities never create chat links', () => {
   const project = createObservationProjection();
-  const missing = project(state, new Map([['t', { snapshot: transcriptSnapshot([], 't'), loading: false, syncing: false }]]));
+  const missing = project(state, new Map([['t', { snapshot: transcriptSnapshot([], 't'), sync: { status: 'stopped' } }]]));
   assert.equal(missing.memory.items[0].sources[0].state, 'missing');
-  const failure = project(state, new Map([['t', { loading: false, syncing: false, error: new Error('读取失败') }]]));
+  const failure = project(state, new Map([['t', { sync: { status: 'failed', error: new Error('读取失败') } }]]));
   assert.equal(failure.memory.items[0].sources[0].state, 'error');
   assert.equal(failure.memory.items[0].sources[0].error, '读取失败');
   assert.equal(projectConversation(messages, overview, 'unrelated')[0].executionId, undefined);
   assert.equal(projectConversation(messages, overview, 't')[0].executionId, 'e');
+});
+
+test('memory references awaiting a replacement baseline stay loading while cached references remain usable', () => {
+  const project = createObservationProjection();
+  for (const sync of [
+    { status: 'connecting', attempt: 1 },
+    { status: 'retrying', attempt: 1, retryAt: 1000, error: new Error('连接中断') },
+  ]) {
+    const missing = project(state, new Map([['t', { snapshot: transcriptSnapshot([], 't'), sync }]]));
+    assert.equal(missing.memory.items[0].sources[0].state, 'loading');
+    assert.equal(missing.memory.items[0].sources[0].error, undefined);
+    const cached = project(state, new Map([['t', { snapshot: transcriptSnapshot(messages, 't'), sync }]]));
+    assert.equal(cached.memory.items[0].sources[0].state, 'loaded');
+    assert.equal(cached.memory.items[0].sources[0].message, messages[0]);
+  }
 });

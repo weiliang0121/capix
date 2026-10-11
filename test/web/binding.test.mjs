@@ -68,7 +68,7 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   app.store.getState().setDraft(request.messages[0].content);
   const submitting = app.commands.submit();
   await frames.flush();
-  assert.equal(app.store.getState().data.pending, request.messages[0].content);
+  assert.equal(app.store.getState().data.conversation.find((item) => item.kind === 'pending-input').content, request.messages[0].content);
   delivery.input();
   delivery.execution(fixture.final.execution.contextId);
   delivery.answer('上海周末行程。');
@@ -83,7 +83,7 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
     data.rounds[0].context.selectedMessages.map((item) => item.entry.count),
     [1, 1],
   );
-  assert.equal(data.conversation.at(-1).message.content, '上海周末行程。');
+  assert.equal(data.conversation.at(-1).body.message.content, '上海周末行程。');
   assert.equal(app.store.getState().matches[0].executionId, id);
   const answer = [...data.details.get(id).calls.values()].find((call) => call.operation === 'answer');
   assert.equal(answer.children.length, 4);
@@ -148,7 +148,7 @@ test('binding remount retains business messages despite unavailable observation'
   const reconnect = app.connect();
   await frames.flush();
   assert.equal(app.store.getState().budget, '8192');
-  assert.equal(app.store.getState().data.conversation.at(-1).message.content, '上海周末行程。');
+  assert.equal(app.store.getState().data.conversation.at(-1).body.message.content, '上海周末行程。');
   assert.equal(app.store.getState().data.details.get(fixture.final.execution.id).answer, '上海周末行程。');
   assert.ok(app.store.getState().data.observationError);
   assert.equal(app.store.getState().notice, '');
@@ -236,7 +236,7 @@ test('binding supports a conversation-only runtime and never synthesizes respons
   app.store.getState().setDraft('继续');
   await app.commands.submit();
   await frames.flush();
-  assert.equal(app.store.getState().data.conversation.at(-1).message.content, '独立回答');
+  assert.equal(app.store.getState().data.conversation.at(-1).body.message.content, '独立回答');
   assert.equal(app.store.getState().data.rounds.length, 0);
   assert.equal(app.store.getState().notice, '');
   disconnect();

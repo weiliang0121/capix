@@ -9,7 +9,7 @@ import { ClientRuntime } from '@capix/client-runtime';
 import { BoundRuntime, ProgressChannel } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
-import { createObserverServer, initializeObserver, bindConversation, ConversationRuntimeDefinition, acceptConversationInput } from '@capix/observer-service';
+import { createObserverServer, initializeObserver, bindConversation, ConversationRuntimeDefinition, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -18,9 +18,9 @@ const provider = {
     return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'memory' ? { memories: [] } : { kind: 'answer', content: '测试回答' });
   },
 };
-async function setup(t, model = provider, configured = false) {
+async function setup(t, model = provider, configured = true, submissionRetention) {
   const observer = initializeObserver(model);
-  const server = createObserverServer({ observer, settings, configured });
+  const server = createObserverServer({ observer, settings, configured, submissionRetention });
   assert.equal(server.listening, false, 'service construction must not start listening');
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -115,6 +115,11 @@ test('busy execution rejects another submission without adding messages or inven
     for (const call of overview.executions[0].calls.filter((call) => call.status === 'running')) assert.equal(Object.hasOwn(call, 'durationMs'), false);
     const busy = await run('must not append');
     assert.equal(busy.status, 409);
+    const refused = await busy.json();
+    assert.equal(refused.result.status, 'rejected');
+    assert.equal(refused.result.retry, 'admission');
+    assert.equal(refused.admission.status, 'busy');
+    assert.equal(refused.input, undefined);
     assert.equal(observer.transcript.length, 1);
     release();
     assert.equal((await updates(first)).at(-1).result.status, 'completed');
@@ -133,12 +138,185 @@ test('failed memory postprocessing still exposes the completed answer and the ac
   const stream = await updates(await run());
   assert.equal(stream.at(-1).result.status, 'failed');
   assert.equal(stream.at(-1).answer.index, 1);
+  assert.equal(stream.at(-1).admission.status, 'ready');
   assert.equal((await get('/api/transcript')).messages[1].content, '测试回答');
   const { executions } = await get('/api/executions');
   assert.equal(executions[0].status, 'failed');
   assert.equal(executions[0].memoryStatus, 'failed');
   assert.deepEqual(executions[0].response, { index: 1 });
   assert.equal(executions[0].calls.filter((call) => call.status === 'failed').length, 3);
+});
+
+test('admission is a current hint while retained results keep their original facts', async (t) => {
+  let release;
+  let gated = false;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const { run, get, observer } = await setup(t, {
+    async invoke(request, purpose) {
+      if (gated && purpose === 'answer') await gate;
+      return provider.invoke(request, purpose);
+    },
+  });
+  t.after(() => release());
+  const id = 'already-completed';
+  const finished = (await updates(await run('first', { id }))).at(-1);
+  assert.deepEqual(await get('/api/conversation/admission'), { transcriptId: observer.transcript.id, status: 'ready' });
+  assert.equal(finished.admission.status, 'ready');
+  gated = true;
+  const second = await run('second');
+  assert.equal((await get('/api/conversation/admission')).status, 'busy');
+  assert.deepEqual(await get('/api/submissions/' + id), finished, 'a current condition does not rewrite a retained terminal snapshot');
+  release();
+  assert.equal((await updates(second)).at(-1).admission.status, 'ready');
+});
+
+test('unconfigured service refuses before input and queries never initialize the provider', async (t) => {
+  let initialized = 0;
+  const { run, get, observer } = await setup(
+    t,
+    () => {
+      initialized += 1;
+      return provider;
+    },
+    false,
+  );
+  const state = await get('/api/conversation/admission');
+  assert.equal(state.status, 'unavailable');
+  assert.equal(state.error.code, 'KEY_MISSING');
+  const response = await run();
+  assert.equal(response.status, 503);
+  const refusal = await response.json();
+  assert.equal(refusal.result.status, 'rejected');
+  assert.equal(refusal.result.retry, 'admission');
+  assert.equal(refusal.admission.status, 'unavailable');
+  assert.equal(observer.transcript.length, 0);
+  assert.equal(initialized, 0);
+});
+
+test('known initialization failure stops later admission without probing or retrying construction', async (t) => {
+  let initialized = 0;
+  const { run, get, observer } = await setup(t, () => {
+    initialized += 1;
+    throw new Error('private constructor');
+  });
+  assert.equal((await get('/api/conversation/admission')).status, 'ready');
+  assert.equal(initialized, 0);
+  const failed = (await updates(await run())).at(-1);
+  assert.equal(failed.result.status, 'failed');
+  assert.equal(failed.admission.status, 'unavailable');
+  assert.equal(failed.admission.error.code, 'MODEL_INITIALIZATION_FAILED');
+  assert.equal(observer.transcript.length, 1);
+  const refused = await (await run()).json();
+  assert.equal(refused.result.status, 'rejected');
+  assert.equal(refused.result.retry, 'admission');
+  assert.equal(observer.transcript.length, 1);
+  assert.equal((await get('/api/conversation/admission')).status, 'unavailable');
+  assert.equal(initialized, 1);
+});
+
+test('provider credential denial is known unavailable while transient HTTP failure remains ready', async (t) => {
+  for (const status of [401, 403, 500]) {
+    await t.test(String(status), async (t) => {
+      let invoked = 0;
+      const model = new DeepSeekProvider('fixture-key', async () => {
+        invoked += 1;
+        return new Response('', { status });
+      });
+      const { run, get, observer } = await setup(t, model);
+      assert.equal((await get('/api/conversation/admission')).status, 'ready');
+      assert.equal(invoked, 0);
+      const failed = (await updates(await run())).at(-1);
+      assert.equal(failed.result.status, 'failed');
+      assert.equal(failed.admission.status, status === 500 ? 'ready' : 'unavailable');
+      if (status !== 500) {
+        assert.equal(failed.admission.error.code, `HTTP_${status}`);
+        const refused = await (await run()).json();
+        assert.equal(refused.result.status, 'rejected');
+        assert.equal(refused.result.retry, 'admission');
+        assert.equal(observer.transcript.length, 1);
+        assert.equal(invoked, 1);
+      } else {
+        await updates(await run());
+        assert.equal(invoked, 2);
+        assert.equal(observer.transcript.length, 2);
+      }
+    });
+  }
+});
+
+test('provider body cleanup cannot erase known credential denial', async (t) => {
+  const model = new DeepSeekProvider(
+    'fixture-key',
+    async () =>
+      new Response(
+        new ReadableStream({
+          cancel() {
+            throw new Error('cleanup failed');
+          },
+        }),
+        { status: 401 },
+      ),
+  );
+  const { run, get } = await setup(t, model);
+  const failed = (await updates(await run())).at(-1);
+  assert.equal(failed.result.error.code, 'HTTP_401');
+  assert.equal(failed.admission.status, 'unavailable');
+  assert.equal((await get('/api/conversation/admission')).error.code, 'HTTP_401');
+});
+
+test('single-call output length and invalid input leave admission ready', async (t) => {
+  const { run, get } = await setup(t, {
+    async invoke() {
+      return { ...raw({}), finishReason: 'length' };
+    },
+  });
+  const invalid = await (await run('', { body: { messages: [{ role: 'assistant', content: 'invalid final role' }] } })).json();
+  assert.equal(invalid.result.status, 'rejected');
+  assert.equal(invalid.result.retry, undefined);
+  assert.equal(invalid.admission.status, 'ready');
+  const failed = (await updates(await run())).at(-1);
+  assert.equal(failed.result.status, 'failed');
+  assert.equal(failed.admission.status, 'ready');
+  assert.equal((await get('/api/conversation/admission')).status, 'ready');
+});
+
+test('full feedback retention explicitly refuses fresh work and preserves duplicate and unknown semantics', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const { run, get, observer } = await setup(
+    t,
+    {
+      async invoke(request, purpose) {
+        if (purpose === 'answer') await gate;
+        return provider.invoke(request, purpose);
+      },
+    },
+    true,
+    { maxEntries: 1 },
+  );
+  t.after(() => release());
+  const first = await run('first', { id: 'retained-active' });
+  const duplicate = await run('duplicate', { id: 'retained-active' });
+  assert.equal(duplicate.status, 409);
+  assert.equal((await duplicate.json()).code, 'SUBMISSION_EXISTS');
+  const refused = await run('capacity', { id: 'no-slot' });
+  assert.equal(refused.status, 503);
+  const snapshot = await refused.json();
+  assert.equal(snapshot.result.status, 'rejected');
+  assert.equal(snapshot.result.error.code, 'SUBMISSION_CAPACITY');
+  assert.equal(snapshot.result.retry, 'admission');
+  assert.equal(snapshot.admission.status, 'busy');
+  assert.equal(snapshot.input, undefined);
+  assert.equal(observer.transcript.length, 1);
+  assert.equal((await get('/api/submissions/no-slot')).code, 'SUBMISSION_UNAVAILABLE');
+  release();
+  const terminal = (await updates(first)).at(-1);
+  assert.equal(terminal.admission.status, 'ready', 'the completing submission releases its retention slot before publishing admission');
+  assert.equal((await get('/api/conversation/admission')).status, 'ready');
 });
 
 test('failure before a complete execution record produces a terminal transport error, never silent success', async (t) => {
@@ -178,14 +356,14 @@ test('transport validates origin, input and source boundary before accepting wor
     req.end();
   });
   assert.equal(blocked, 403);
-  assert.deepEqual(await get('/api/config'), { ...settings, configured: false });
+  assert.deepEqual(await get('/api/config'), { ...settings, configured: true });
 });
 
 test('separate HTTP subclasses deliver business content while records remain separately queryable', async (t) => {
   const { base } = await setup(t);
   const client = new ConversationHttpTransport(base);
   const observation = new ObservationHttpTransport(base);
-  assert.deepEqual(await client.config(), { ...settings, configured: false });
+  assert.deepEqual(await client.config(), { ...settings, configured: true });
   assert.deepEqual(await observation.overview(), { transcriptId: (await client.transcript()).id, messages: [], executions: [] });
   const received = [];
   await client.submit(
@@ -217,7 +395,7 @@ test('real HTTP headless client uses conversation only for two rounds without an
   const http = new ConversationHttpTransport(base, (url, init) => {
     const path = new URL(url).pathname;
     paths.push(path);
-    assert.ok(['/api/config', '/api/transcript', '/api/transcript/observe', '/api/run'].includes(path), path);
+    assert.ok(['/api/config', '/api/conversation/admission', '/api/transcript', '/api/transcript/observe', '/api/run'].includes(path), path);
     return fetch(url, init);
   });
   const runtime = new ClientRuntime({ conversation: http, transcripts: http });

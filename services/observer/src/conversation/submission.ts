@@ -1,4 +1,4 @@
-import type { ConversationFailure, ConversationSubmissionSnapshot } from '@capix/protocol';
+import type { ConversationAdmission, ConversationFailure, ConversationSubmissionSnapshot } from '@capix/protocol';
 import { RuntimeError, ProgressChannel, isInvocationCancelled, type InvocationProgress } from '@capix/server-runtime';
 import { ConversationInputError } from './accept.js';
 import type { ConversationProgress } from './progress.js';
@@ -30,7 +30,10 @@ export class ConversationSubmission {
     failed: (error): undefined => this.invalidate(error),
   });
 
-  constructor(readonly id: string) {
+  constructor(
+    readonly id: string,
+    private readonly options: { admission?: () => ConversationAdmission } = {},
+  ) {
     this.state = Object.freeze({ submissionId: id, revision: 0, executions: Object.freeze([]), activities: this.activities.snapshot, integrity: Object.freeze({ status: 'complete' }) });
   }
 
@@ -58,25 +61,26 @@ export class ConversationSubmission {
   }
 
   /** Only service checks performed before runtime entry may produce this explicit refusal. */
-  reject(error: unknown): void {
+  reject(error: unknown, options: { retry?: 'admission' } = {}): void {
     if (this.started || this.completedAt !== undefined || this.state.revision !== 0) throw new Error('Cannot reject a submission after processing or progress');
     this.completedAt = Date.now();
-    this.update({ result: Object.freeze({ status: 'rejected', error: conversationFailure(error) }) });
+    this.update({ result: Object.freeze({ status: 'rejected', error: conversationFailure(error), ...options }) });
   }
 
   private async run(work: (signal: AbortSignal) => Promise<unknown>): Promise<void> {
+    let result: NonNullable<ConversationSubmissionSnapshot['result']>;
     try {
       await work(this.controller.signal);
-      this.update({ result: Object.freeze({ status: 'completed' }) });
+      result = Object.freeze({ status: 'completed' });
     } catch (error) {
-      if (isInvocationCancelled(error, this.controller.signal)) this.update({ result: Object.freeze({ status: 'cancelled' }) });
+      if (isInvocationCancelled(error, this.controller.signal)) result = Object.freeze({ status: 'cancelled' });
       else {
         const rejected = this.state.integrity.status === 'complete' && !this.state.input && (error instanceof ConversationInputError || (error instanceof RuntimeError && error.code === 'RUNTIME_BUSY'));
-        this.update({ result: Object.freeze({ status: rejected ? 'rejected' : 'failed', error: conversationFailure(error) }) });
+        result = Object.freeze(rejected ? { status: 'rejected', error: conversationFailure(error), ...(error instanceof RuntimeError && error.code === 'RUNTIME_BUSY' ? { retry: 'admission' as const } : {}) } : { status: 'failed', error: conversationFailure(error) });
       }
-    } finally {
-      this.completedAt = Date.now();
     }
+    this.completedAt = Date.now();
+    this.update({ result });
   }
 
   private receive(fact: ConversationProgress): undefined {
@@ -103,7 +107,14 @@ export class ConversationSubmission {
   }
 
   private update(change: Partial<ConversationSubmissionSnapshot>): void {
-    this.state = Object.freeze({ ...this.state, ...change, revision: this.state.revision + 1 });
+    const next = { ...this.state, ...change, revision: this.state.revision + 1 };
+    delete next.admission;
+    try {
+      if (this.options.admission) next.admission = this.options.admission();
+    } catch {
+      // An optional current-condition hint cannot invalidate committed progress or retain stale advice.
+    }
+    this.state = Object.freeze(next);
     if (this.notifying) return;
     this.notifying = true;
     // Connection work never runs inside the producer's progress callback.
@@ -162,7 +173,7 @@ export interface SubmissionRetention {
 }
 
 /** Process-local feedback retention. Eviction never cancels or queues runtime work. */
-export function createSubmissionStore(options: SubmissionRetention = {}) {
+export function createSubmissionStore(options: SubmissionRetention & { admission?: () => ConversationAdmission } = {}) {
   const entries = new Map<string, ConversationSubmission>();
   const maximum = options.maxEntries ?? 128;
   const ttlMs = options.ttlMs ?? 5 * 60_000;
@@ -172,6 +183,10 @@ export function createSubmissionStore(options: SubmissionRetention = {}) {
     for (const [id, submission] of entries) if (submission.endedAt !== undefined && now - submission.endedAt >= ttlMs) entries.delete(id);
   };
   return {
+    get available(): boolean {
+      expire();
+      return entries.size < maximum || [...entries.values()].some((entry) => entry.endedAt !== undefined);
+    },
     get(id: string): ConversationSubmission | undefined {
       expire();
       return entries.get(id);
@@ -184,7 +199,7 @@ export function createSubmissionStore(options: SubmissionRetention = {}) {
         if (oldest) entries.delete(oldest.id);
       }
       if (entries.size >= maximum) throw new RuntimeError('SUBMISSION_CAPACITY', '暂时无法保留新的提交进展，请稍后再试。');
-      const submission = new ConversationSubmission(id);
+      const submission = new ConversationSubmission(id, { admission: options.admission });
       entries.set(id, submission);
       return submission;
     },

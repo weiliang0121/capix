@@ -5,39 +5,18 @@
   flex: 1;
   min-height: 0;
 }
-.submission-notice {
-  flex: none;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--border);
+.response-notice {
   color: var(--muted-foreground);
   font-size: var(--font-sm);
+  line-height: 1.7;
+  margin-top: 10px;
+  overflow-wrap: anywhere;
 }
-.submission-notice p {
+.response-notice p {
   margin: 0;
 }
-.submission-notice-actions {
-  display: flex;
-  gap: 8px;
+.response-notice button {
   margin-top: 8px;
-}
-.submission-input {
-  margin-top: 8px;
-  max-height: 140px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px;
-}
-.submission-input span {
-  font-size: var(--font-xs);
-}
-.submission-input p {
-  margin-top: 4px;
-  color: var(--foreground);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
 }
 .conversation-scroll {
   flex: 1;
@@ -45,10 +24,14 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  overflow-anchor: none;
 }
 .conversation-content {
   min-height: 100%;
   padding: 20px 18px;
+}
+.conversation-content > :last-child {
+  margin-bottom: 0;
 }
 .chat-empty {
   min-height: 300px;
@@ -95,6 +78,43 @@
   font-size: var(--font-xs);
   margin-left: 4px;
 }
+.message-actions,
+.message-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.message-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.message-copy-feedback {
+  font-size: var(--font-xs);
+}
+.message-copy-button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.message-copy-button:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+.message-copy-button:focus-visible {
+  outline: 1px solid var(--ring);
+  outline-offset: 2px;
+}
+.message-copy-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
 .message-location {
   display: inline-flex;
   align-items: center;
@@ -120,32 +140,18 @@
 .pending {
   opacity: 0.7;
 }
-.chat-progress {
-  color: var(--muted-foreground);
-  font-size: var(--font-sm);
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
 .message-queue {
   flex: none;
   border-top: 1px solid var(--border);
   padding: 10px 18px;
   font-size: var(--font-sm);
 }
-.message-queue-heading,
-.message-queue-actions {
+.message-queue-heading {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-.message-queue-heading {
   justify-content: space-between;
   color: var(--muted-foreground);
-}
-.message-queue-actions {
-  flex-wrap: wrap;
-  margin-top: 4px;
 }
 .message-queue-notice {
   color: var(--muted-foreground);
@@ -232,10 +238,13 @@
 }
 
 .conversation-process {
-  margin: -10px 0 24px;
+  margin: 0;
   color: var(--muted-foreground);
   font-size: var(--font-sm);
   line-height: 1.6;
+}
+.answer-content + .conversation-process {
+  margin-top: 12px;
 }
 .conversation-process-summary {
   display: flex;

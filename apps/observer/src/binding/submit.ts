@@ -27,9 +27,10 @@ export async function submitDraft(store: AppStore, runtime: ClientRuntime): Prom
     if (!Number.isSafeInteger(contextBudget) || contextBudget < 256 || contextBudget > 1000000) throw new Error('容量预算需要是 256–1000000 的整数。');
     const messages = [...acceptHistory(history), { role: 'user' as const, content: draft }];
     store.setState({ notice: '' });
-    runtime.enqueue({ messages, contextBudget });
+    const queued = runtime.enqueue({ messages, contextBudget });
+    const focus = !observed.busy && !observed.queue.waiting.length && !observed.queue.blocked;
     // Local acceptance owns this input now; preserve any edits made during publication.
-    store.setState((current) => ({ draft: current.draft === draft ? '' : current.draft, history: current.history === history ? '[]' : current.history }));
+    store.setState((current) => ({ draft: current.draft === draft ? '' : current.draft, history: current.history === history ? '[]' : current.history, conversationFocus: focus ? queued.id : current.conversationFocus }));
   } catch (error) {
     store.setState({ notice: errorMessage(error) });
   }

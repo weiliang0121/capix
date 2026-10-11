@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse } from '@capix/protocol';
+import type { ConversationAdmission, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse } from '@capix/protocol';
 import { ExecutionRecord, ExecutionRecordHelper, observeMemory } from '@capix/server-runtime/recording';
 import { isObject, RuntimeError } from '@capix/server-runtime';
 import type { initializeObserver } from '../assembly/environment.js';
@@ -14,7 +14,7 @@ import { observationWriter } from './observation-writer.js';
 import { observeOverview } from '../observation/overview.js';
 import { validateSettings } from '../assembly/settings.js';
 import { allowedSources } from './source.js';
-import { createSubmissionStore, type SubmissionRetention } from '../conversation/submission.js';
+import { ConversationSubmission, createSubmissionStore, type SubmissionRetention } from '../conversation/submission.js';
 import { followSubmission } from './submission.js';
 
 export interface ObserverServerOptions {
@@ -33,7 +33,7 @@ export function createObserverServer(options: ObserverServerOptions) {
   const project = options.projectDirectory ?? fileURLToPath(new URL('../../../../', import.meta.url));
   const assets = options.assetsDirectory ?? resolve(project, 'apps/observer/dist');
   const feed = new ObservationFeed(observer);
-  const submissions = createSubmissionStore(options.submissionRetention);
+  const submissions = createSubmissionStore({ ...options.submissionRetention, admission });
   const transcriptConnections = new Set<() => void>();
   const server = createServer((req, res) => {
     void handle(req, res).catch((error) => {
@@ -46,6 +46,15 @@ export function createObserverServer(options: ObserverServerOptions) {
     });
   });
 
+  /** A current, non-reserving projection. Reading it never initializes or calls the provider. */
+  function admission(): ConversationAdmission {
+    const transcriptId = observer.transcript.id;
+    if (!configured) return Object.freeze({ transcriptId, status: 'unavailable', error: Object.freeze({ code: 'KEY_MISSING', message: '服务端尚未配置模型凭据；请配置并重启。' }) });
+    const failure = observer.model.failure;
+    if (failure) return Object.freeze({ transcriptId, status: 'unavailable', error: failure });
+    return Object.freeze({ transcriptId, status: observer.runtime.running || !submissions.available ? 'busy' : 'ready' });
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const address = server.address();
     const port = address && !isString(address) ? address.port : undefined;
@@ -54,6 +63,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured } satisfies ConfigurationResponse);
+    if (req.method === 'GET' && url.pathname === '/api/conversation/admission') return json(res, 200, admission());
     if (req.method === 'GET' && url.pathname === '/api/observe') {
       observer.recordSource.assertComplete();
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
@@ -131,7 +141,17 @@ export function createObserverServer(options: ObserverServerOptions) {
       if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' } satisfies ErrorResponse);
       const data = await readBody(req);
       if (!isObject(data) || typeof data.submissionId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(data.submissionId)) throw new RuntimeError('INVALID_INPUT', '无效提交身份。');
-      const submission = submissions.create(data.submissionId);
+      const currentAdmission = admission();
+      let submission: ConversationSubmission;
+      try {
+        submission = submissions.create(data.submissionId);
+      } catch (error) {
+        if (!(error instanceof RuntimeError) || error.code !== 'SUBMISSION_CAPACITY') throw error;
+        // This refusal has not run and occupies no retained slot. A lost response remains unknown.
+        const refusal = new ConversationSubmission(data.submissionId, { admission });
+        refusal.reject(error, { retry: 'admission' });
+        return json(res, 503, refusal.snapshot);
+      }
       let runSettings: ModelSettings;
       try {
         if (!isObject(data.input)) throw new RuntimeError('INVALID_INPUT', '无效对话输入。');
@@ -139,6 +159,14 @@ export function createObserverServer(options: ObserverServerOptions) {
       } catch (error) {
         submission.reject(error);
         return json(res, 400, submission.snapshot);
+      }
+      if (currentAdmission.status === 'unavailable') {
+        submission.reject(new RuntimeError(currentAdmission.error.code, currentAdmission.error.message), { retry: 'admission' });
+        return json(res, 503, submission.snapshot);
+      }
+      if (currentAdmission.status === 'busy') {
+        submission.reject(new RuntimeError('RUNTIME_BUSY', '运行环境正忙，请稍后再提交。'), { retry: 'admission' });
+        return json(res, 409, submission.snapshot);
       }
       submission.start((signal) => observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, signal }));
       // This controller only detaches the initial HTTP waiter; it is never passed to runtime.run.

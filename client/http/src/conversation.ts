@@ -1,8 +1,8 @@
-import type { ConversationTransport, TranscriptTransport } from '@capix/client-runtime';
+import { TranscriptConnectionError, type ConversationTransport, type TranscriptTransport } from '@capix/client-runtime';
 import type { ConversationSubmissionSnapshot, ConversationSubmissionRequest, TranscriptFrame } from '@capix/protocol';
 import { HttpTransport } from './transport.js';
 import { HttpError, HttpTransportError } from './errors.js';
-import { acceptResponse, configurationResponse, transcriptResponse, transcriptUpdate, submissionResponse, responseStatusError, parseLine, deliver } from './responses.js';
+import { acceptResponse, configurationResponse, admissionResponse, transcriptResponse, transcriptUpdate, submissionResponse, responseStatusError, parseLine, deliver } from './responses.js';
 import { readLines } from './stream.js';
 
 /** Conversation requests and delivery, independent of observation. */
@@ -12,20 +12,31 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
   async config() {
     return acceptResponse(configurationResponse, await this.get('/api/config'), '配置');
   }
+  async admission(signal?: AbortSignal) {
+    return acceptResponse(admissionResponse, await this.get('/api/conversation/admission', signal), '对话接纳');
+  }
   async transcript(id?: string, signal?: AbortSignal) {
     const snapshot = acceptResponse(transcriptResponse, await this.get(`/api/transcript${id ? `?id=${encodeURIComponent(id)}` : ''}`, signal), '消息');
     if (id && snapshot.id !== id) throw new HttpTransportError('contract', '返回了不同的消息集合。', 'TRANSCRIPT_MISMATCH');
     return snapshot;
   }
   async observeTranscript(id: string | undefined, accept: (frame: TranscriptFrame) => void, signal: AbortSignal): Promise<void> {
-    const response = await this.send(`/api/transcript/observe${id ? `?id=${encodeURIComponent(id)}` : ''}`, { signal });
-    if (!response.body) throw new HttpTransportError('contract', '服务未返回消息流。', 'MISSING_STREAM');
-    for await (const line of readLines(response.body)) {
-      const frame = acceptResponse(transcriptUpdate, parseLine(line), '消息流');
-      if (frame.type === 'error') throw new HttpTransportError('remote', frame.error, frame.code);
-      deliver(() => accept(frame), '消息变化');
+    try {
+      const response = await this.send(`/api/transcript/observe${id ? `?id=${encodeURIComponent(id)}` : ''}`, { signal });
+      if (!response.body) throw new HttpTransportError('contract', '服务未返回消息流。', 'MISSING_STREAM');
+      for await (const line of readLines(response.body)) {
+        const frame = acceptResponse(transcriptUpdate, parseLine(line), '消息流');
+        if (frame.type === 'error') throw new HttpTransportError('remote', frame.error, frame.code);
+        deliver(() => accept(frame), '消息变化');
+      }
+      if (!signal.aborted) throw new HttpTransportError('contract', '消息同步连接已结束。', 'INCOMPLETE_STREAM');
+    } catch (error) {
+      if (signal.aborted) throw error;
+      // Contract, source and delivery failures remain terminal. Callback TypeErrors
+      // are already wrapped by deliver and must never masquerade as network loss.
+      if (error instanceof TypeError || (error instanceof HttpError && [408, 429, 500, 502, 503, 504].includes(error.response.status)) || (error instanceof HttpTransportError && error.kind === 'contract' && error.code === 'INCOMPLETE_STREAM')) throw new TranscriptConnectionError(error.message, { cause: error });
+      throw error;
     }
-    if (!signal.aborted) throw new HttpTransportError('contract', '消息同步连接已结束。', 'INCOMPLETE_STREAM');
   }
   async submit(request: ConversationSubmissionRequest, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void> {
     await this.feedback('/api/run', request.submissionId, receive, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal });

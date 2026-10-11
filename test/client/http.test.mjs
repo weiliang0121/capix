@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpTransport, ConversationHttpTransport, ObservationHttpTransport, HttpError, HttpTransportError } from '@capix/client-http';
+import { TranscriptConnectionError } from '@capix/client-runtime';
 import { snapshot, transcriptSnapshot, baseline, submissionSnapshot } from './fixtures.mjs';
 
 const input = { messages: [{ role: 'user', content: '测试' }] };
@@ -58,6 +59,7 @@ test('all Observer queries reject malformed success bodies at the response bound
   const observation = jsonObservation({ unexpected: true });
   for (const [client, method, args] of [
     [conversation, 'config', []],
+    [conversation, 'admission', []],
     [conversation, 'transcript', []],
     [observation, 'overview', []],
     [observation, 'memory', []],
@@ -66,6 +68,34 @@ test('all Observer queries reject malformed success bodies at the response bound
   ]) {
     await assert.rejects(client[method](...args), (error) => error instanceof HttpTransportError && error.kind === 'contract', method);
   }
+});
+
+test('admission query accepts only current service conditions and forwards cancellation', async () => {
+  for (const value of [
+    { transcriptId: 't', status: 'ready' },
+    { transcriptId: 't', status: 'busy' },
+    { transcriptId: 't', status: 'unavailable', error: { code: 'KEY_MISSING', message: 'unavailable' } },
+  ]) {
+    const controller = new AbortController();
+    const client = new ConversationHttpTransport('http://example.test', async (url, init) => {
+      assert.equal(url, 'http://example.test/api/conversation/admission');
+      assert.equal(init.signal, controller.signal);
+      return Response.json(value);
+    });
+    assert.deepEqual(await client.admission(controller.signal), value);
+  }
+  for (const value of [{ status: 'ready' }, { transcriptId: 't', status: 'unavailable' }, { transcriptId: 't', status: 'running' }]) await assert.rejects(jsonConversation(value).admission(), (error) => error.kind === 'contract');
+});
+
+test('temporary non-admission retains a formal retry fact despite the HTTP status', async () => {
+  const snapshot = { ...initial, revision: 1, result: { status: 'rejected', error: { code: 'RUNTIME_BUSY', message: 'busy' }, retry: 'admission' }, admission: { transcriptId: 't', status: 'busy' } };
+  const client = new ConversationHttpTransport('', async () => Response.json(snapshot, { status: 409 }));
+  const values = [];
+  await client.submit(request, (value) => values.push(value), signal());
+  assert.deepEqual(values, [snapshot]);
+  await assert.rejects(jsonConversation({ ...snapshot, result: { ...snapshot.result, retry: 'always' } }).read('submission'), (error) => error.kind === 'contract');
+  await assert.rejects(jsonConversation({ ...snapshot, result: { status: 'failed', error: snapshot.result.error, retry: 'admission' } }).read('submission'), (error) => error.kind === 'contract');
+  await assert.rejects(jsonConversation({ ...snapshot, admission: { status: 'ready' } }).read('submission'), (error) => error.kind === 'contract');
 });
 
 test('Observer queries accept declared fields without coercing malformed nested data', async () => {
@@ -105,7 +135,7 @@ test('entity queries validate the requested UID and entity streams preserve revi
   const received = [];
   await assert.rejects(
     client.observeTranscript('t', (frame) => received.push(frame), new AbortController().signal),
-    (error) => error.code === 'INCOMPLETE_STREAM',
+    (error) => error instanceof TranscriptConnectionError && error.cause instanceof HttpTransportError && error.cause.code === 'INCOMPLETE_STREAM',
   );
   assert.equal(url, 'http://example.test/api/transcript/observe?id=t');
   assert.deepEqual(received, [baseline, delta]);

@@ -1,7 +1,7 @@
-import type { ClientState, ClientSubmissionState } from '@capix/client-runtime';
+import type { ClientSubmissionState } from '@capix/client-runtime';
 import { findLast } from 'es-toolkit/compat';
 import type { ConversationActivity } from '@capix/protocol';
-import type { ConversationMessage, ConversationProcess } from '../state/conversation.js';
+import type { ConversationProcess } from '../state/conversation.js';
 
 /** Prefer the owning operation's purpose; an A describes the current step within it. */
 function currentActivity(calls: readonly ConversationActivity[]): string {
@@ -35,7 +35,7 @@ function currentActivity(calls: readonly ConversationActivity[]): string {
   return `正在${purpose}${step}${retry}`;
 }
 
-function projectProcess(submission: ClientSubmissionState): ConversationProcess | undefined {
+export function projectConversationProcess(submission: ClientSubmissionState): ConversationProcess | undefined {
   const remote = submission.remote;
   const activities = remote?.activities;
   if (!activities || (!activities.calls.length && activities.integrity.status === 'complete')) return undefined;
@@ -51,26 +51,5 @@ function projectProcess(submission: ClientSubmissionState): ConversationProcess 
   if (incomplete) warnings.push(`过程信息不完整：${activities.integrity.status === 'incomplete' ? activities.integrity.error.message : ''}`);
   if (!result && (interrupted || synchronizing || incomplete) && activities.calls.length) warnings.push(`最后收到的进展：${current}。`);
   if (result && activities.calls.some((call) => call.status === 'running')) warnings.push('部分调用的结束状态尚未取得。');
-  return { id: submission.id, label, active, inputPending: Boolean(remote.input), ...(warnings.length ? { notice: warnings.join(' ') } : {}) };
-}
-
-/** Attach progress only through an accepted input locator, never through matching text or observer records. */
-export function projectConversationActivities(messages: readonly ConversationMessage[], state: Pick<ClientState, 'transcriptId' | 'submission' | 'submissions'>): { conversation: readonly ConversationMessage[]; pendingProcesses: readonly ConversationProcess[] } {
-  const attached = new Map<number, ConversationProcess[]>();
-  const pendingProcesses: ConversationProcess[] = [];
-  const indexes = new Set(messages.map((row) => row.index));
-  for (const submission of state.submissions.values()) {
-    const process = projectProcess(submission);
-    if (!process) continue;
-    const input = submission.remote?.input;
-    if (!input && submission.id !== state.submission?.id) continue;
-    if (input && input.transcriptId !== state.transcriptId) continue;
-    const index = input ? input.end - 1 : undefined;
-    if (index !== undefined && indexes.has(index)) {
-      const processes = attached.get(index) ?? [];
-      processes.push({ ...process, inputPending: false });
-      attached.set(index, processes);
-    } else pendingProcesses.push(process);
-  }
-  return { conversation: attached.size ? messages.map((row) => (row.index !== undefined && attached.has(row.index) ? { ...row, processes: attached.get(row.index) } : row)) : messages, pendingProcesses };
+  return { id: submission.id, label, active, ...(warnings.length ? { notice: warnings.join(' ') } : {}) };
 }

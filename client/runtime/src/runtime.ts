@@ -121,7 +121,8 @@ export class ClientRuntime {
 
   initialize(): Promise<void> {
     if (this.initialization?.running) return this.initialization.promise;
-    if (this.sources.initialization.status === 'succeeded' && this.sources.config && this.sources.transcriptId && this.sources.transcripts.get(this.sources.transcriptId)?.syncing) return Promise.resolve();
+    // Once configured, reconnecting content does not reclassify service admission.
+    if (this.sources.initialization.status === 'succeeded' && this.sources.config && this.sources.transcriptId) return this.transcripts.watch(this.sources.transcriptId).then(() => undefined);
     const attempt = new InitializationAttempt(++this.initializationNumber);
     this.initialization = attempt;
     this.update({ initialization: attempt.snapshot, error: undefined });
@@ -147,9 +148,13 @@ export class ClientRuntime {
 
   private async loadInitial(attempt: InitializationAttempt): Promise<void> {
     await Promise.all([this.loadConfiguration(attempt), this.loadInitialTranscript(attempt)]);
-    if (!attempt.running) return;
-    const transcript = this.sources.transcriptId ? this.sources.transcripts.get(this.sources.transcriptId) : undefined;
-    if (!transcript?.syncing) throw transcript?.error ?? new Error('初始化结束前消息同步已停止。');
+    while (attempt.running) {
+      const id = this.sources.transcriptId;
+      const sync = id ? this.sources.transcripts.get(id)?.sync : undefined;
+      if (sync?.status === 'live') return;
+      if (id && (sync?.status === 'retrying' || sync?.status === 'connecting')) await this.transcripts.watch(id);
+      else throw sync?.status === 'failed' ? sync.error : new Error('初始化结束前消息同步已停止。');
+    }
   }
 
   private async loadConfiguration(attempt: InitializationAttempt): Promise<void> {
@@ -232,16 +237,6 @@ export class ClientRuntime {
     const submission = this.queue.prepare(request, accepted);
     this.publish();
     await this.queue.send(submission);
-  }
-
-  pauseQueue(): void {
-    this.queue.pause();
-    this.publish();
-  }
-
-  resumeQueue(): void {
-    this.queue.resume();
-    this.publish();
   }
 
   clearQueue(): void {

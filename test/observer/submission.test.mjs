@@ -24,6 +24,29 @@ const complete = (submission) =>
     if (submission.snapshot.result) disconnect();
   });
 
+test('admission hint failure does not interrupt committed progress or terminal publication', async () => {
+  let fail = false;
+  const submission = new ConversationSubmission('hint-failed', {
+    admission: () => {
+      if (fail) throw new Error('hint unavailable');
+      return { transcriptId: 'transcript', status: 'ready' };
+    },
+  });
+  submission.progress.publish({ kind: 'input', range: { transcriptId: 'transcript', start: 0, end: 1 } });
+  assert.equal(submission.snapshot.admission.status, 'ready');
+  fail = true;
+  submission.progress.publish({ kind: 'answer', range: { transcriptId: 'transcript', start: 1, end: 2 } });
+  assert.equal(submission.snapshot.admission, undefined, 'do not retain a stale ready hint');
+  assert.equal(submission.snapshot.answer.index, 1);
+  assert.equal(submission.snapshot.integrity.status, 'complete');
+  submission.start(async () => 'done');
+  const snapshot = await complete(submission);
+  assert.equal(snapshot.result.status, 'completed');
+  assert.equal(snapshot.admission, undefined);
+  assert.ok(submission.endedAt !== undefined);
+  await setTimeout(0);
+});
+
 test('service projection retains input committed before capture failure, without records or error reinterpretation', async () => {
   const environment = createEnvironment({
     changes: {

@@ -9,6 +9,9 @@ export interface ConversationFailure {
   readonly message: string;
 }
 
+/** Current service admission conditions; a ready response does not reserve the next run. */
+export type ConversationAdmission = { readonly transcriptId: string } & ({ readonly status: 'ready' } | { readonly status: 'busy' } | { readonly status: 'unavailable'; readonly error: ConversationFailure });
+
 /** Correlation only: the identifier does not promise idempotency or persistence. */
 export interface ConversationSubmissionRequest {
   readonly submissionId: string;
@@ -26,7 +29,10 @@ export interface ConversationSubmissionSnapshot {
   readonly activities?: ConversationActivities;
   /** The service accepted a stop request; this does not establish a terminal result. */
   readonly cancelRequested?: true;
-  readonly result?: { readonly status: 'completed' | 'cancelled' } | { readonly status: 'failed' | 'rejected'; readonly error: ConversationFailure };
+  /** Admission conditions at publication time, independent of this submission's immutable result. */
+  readonly admission?: ConversationAdmission;
+  /** retry is only granted for definite non-admission under temporary service conditions. */
+  readonly result?: { readonly status: 'completed' | 'cancelled' } | { readonly status: 'failed'; readonly error: ConversationFailure } | { readonly status: 'rejected'; readonly error: ConversationFailure; readonly retry?: 'admission' };
   readonly integrity: { readonly status: 'complete' } | { readonly status: 'incomplete'; readonly error: ConversationFailure };
 }
 

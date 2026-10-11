@@ -9,7 +9,6 @@ export function ConversationProcess({ process }: { process: ProcessView }) {
         {process.active && <LoaderCircle size={14} className="animate-spin" aria-hidden="true" />}
         <span>{process.label}</span>
       </div>
-      {process.inputPending && <p className="conversation-process-notice">输入已接纳，消息正文待同步。</p>}
       {process.notice && <p className="conversation-process-notice">{process.notice}</p>}
     </div>
   );
