@@ -75,6 +75,32 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   assert.equal(during.attempts[1].status, 'running');
 });
 
+test('declared record participants are extensible names, not ownership or a fixed capability list', () => {
+  const { runtime, execution, operation, attempt } = setup();
+  attempt.callee = 'filesystem';
+  lifecycleFor(runtime).attempt(operation, attempt, {}).begin();
+  const snapshot = observeCall(runtime.recording, callFor(execution));
+  validateExecutionRecordSnapshot(snapshot);
+  assert.equal(snapshot.attempts[0].callee, 'filesystem');
+
+  for (const kind of ['operations', 'attempts']) {
+    for (const field of ['caller', 'callee']) {
+      const extended = structuredClone(snapshot);
+      extended[kind][0][field] = 'custom-capability';
+      validateExecutionRecordSnapshot(extended);
+      for (const invalid of [undefined, null, 1, {}, '', '   ']) {
+        const malformed = structuredClone(snapshot);
+        malformed[kind][0][field] = invalid;
+        assert.throws(() => validateExecutionRecordSnapshot(malformed));
+      }
+    }
+  }
+
+  const unrelated = structuredClone(snapshot);
+  unrelated.attempts[0].operationId = 'missing-operation';
+  assert.throws(() => validateExecutionRecordSnapshot(unrelated));
+});
+
 test('attempt ownership uses direct record ownership and rejects missing or incorrectly typed parents', (t) => {
   const { runtime, execution, operation, definition: declaration } = setup();
   const operationRecord = recordFor(operation);

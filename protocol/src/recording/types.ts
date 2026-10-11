@@ -74,6 +74,7 @@ export interface OperationRecord<Input = unknown, Output = unknown> extends Comp
   readonly operation: string;
   readonly label: string;
   readonly source: string;
+  /** Declared participant names, not record identities or a closed capability registry. */
   readonly caller: string;
   readonly callee: string;
 }
@@ -87,6 +88,7 @@ export interface AttemptRecord<Input = unknown, Output = unknown> extends Compos
   readonly name: string;
   readonly label: string;
   readonly source: string;
+  /** Declared participant names, not record identities or a closed capability registry. */
   readonly caller: string;
   readonly callee: string;
 }

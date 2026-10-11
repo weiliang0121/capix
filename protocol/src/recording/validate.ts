@@ -24,9 +24,10 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
   if (!runtimeCall || typeof runtimeCall.id !== 'string' || !runtimeCall.id || runtimeCall.id === executionId || typeof runtimeCall.runtimeInstanceId !== 'string' || !runtimeCall.runtimeInstanceId || !runtimeCall.value || typeof runtimeCall.value.startedAt !== 'string' || snapshot.execution.parentId !== runtimeCall.id || !['running', 'succeeded', 'failed'].includes(runtimeCall.status)) return fail();
   acceptContextIdentity(runtimeCall);
 
-  const actors = ['caller', 'execution', 'operation', 'processing', 'provider'];
+  // Participants describe declared capabilities; record identities establish ownership below.
+  const validParticipant = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
   for (const operationRecord of snapshot.operations) {
-    if (!operationRecord || typeof operationRecord.id !== 'string' || !operationRecord.id || bodies.has(operationRecord.id) || operationRecord.executionId !== executionId || typeof operationRecord.operationInstanceId !== 'string' || !operationRecord.operationInstanceId || typeof operationRecord.operation !== 'string' || typeof operationRecord.label !== 'string' || typeof operationRecord.source !== 'string' || !actors.includes(operationRecord.caller) || !actors.includes(operationRecord.callee) || (operationRecord.parentOperationId !== undefined && typeof operationRecord.parentOperationId !== 'string')) return fail();
+    if (!operationRecord || typeof operationRecord.id !== 'string' || !operationRecord.id || bodies.has(operationRecord.id) || operationRecord.executionId !== executionId || typeof operationRecord.operationInstanceId !== 'string' || !operationRecord.operationInstanceId || typeof operationRecord.operation !== 'string' || typeof operationRecord.label !== 'string' || typeof operationRecord.source !== 'string' || !validParticipant(operationRecord.caller) || !validParticipant(operationRecord.callee) || (operationRecord.parentOperationId !== undefined && typeof operationRecord.parentOperationId !== 'string')) return fail();
     acceptContextIdentity(operationRecord);
     operations.set(operationRecord.id, operationRecord);
     parents.set(operationRecord.id, operationRecord.parentOperationId ?? executionId);
@@ -34,7 +35,7 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
     bodies.set(operationRecord.id, operationRecord.value);
   }
   for (const attemptRecord of snapshot.attempts) {
-    if (!attemptRecord || typeof attemptRecord.id !== 'string' || !attemptRecord.id || bodies.has(attemptRecord.id) || typeof attemptRecord.operationId !== 'string' || !operations.has(attemptRecord.operationId) || typeof attemptRecord.name !== 'string' || !attemptRecord.name.trim() || typeof attemptRecord.label !== 'string' || !attemptRecord.label.trim() || typeof attemptRecord.source !== 'string' || !actors.includes(attemptRecord.caller) || !actors.includes(attemptRecord.callee)) return fail();
+    if (!attemptRecord || typeof attemptRecord.id !== 'string' || !attemptRecord.id || bodies.has(attemptRecord.id) || typeof attemptRecord.operationId !== 'string' || !operations.has(attemptRecord.operationId) || typeof attemptRecord.name !== 'string' || !attemptRecord.name.trim() || typeof attemptRecord.label !== 'string' || !attemptRecord.label.trim() || typeof attemptRecord.source !== 'string' || !validParticipant(attemptRecord.caller) || !validParticipant(attemptRecord.callee)) return fail();
     acceptContextIdentity(attemptRecord);
     parents.set(attemptRecord.id, attemptRecord.operationId);
     statuses.set(attemptRecord.id, attemptRecord.status);
