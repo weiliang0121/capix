@@ -1,9 +1,16 @@
 import type { ObservationState, TranscriptState } from '@capix/client-runtime';
 import type { ObserverOverview } from '@capix/protocol';
-import type { AppData, RoundView, MemoryView } from '../state/data.js';
+import type { AppData, RoundView, MemoryView, ExecutionDetail } from '../state/data.js';
+import type { CallGraphModel } from '../state/graph.js';
 import { projectDetail } from './details.js';
 import { errorMessage } from '../lib/errors.js';
 import { updateOverview } from './overview.js';
+import { projectCallGraph } from './graph.js';
+
+interface GraphSource {
+  calls: RoundView['calls'];
+  detail: ExecutionDetail | undefined;
+}
 
 function projectRounds(overview: ObserverOverview, transcripts: ReadonlyMap<string, TranscriptState>): RoundView[] {
   const counts = new Map(overview.messages.map((message) => [message.index, message.count]));
@@ -36,6 +43,8 @@ export function createObservationProjection() {
   let previousTranscripts: ReadonlyMap<string, TranscriptState> | undefined;
   let rounds: readonly RoundView[] = [];
   let details: AppData['details'] = new Map();
+  let graphs: AppData['graphs'] = new Map();
+  let graphSources = new Map<string, GraphSource>();
   return (state: ObservationState, transcripts: ReadonlyMap<string, TranscriptState>) => {
     if (!previous || previous.overview !== state.overview || previous.updates !== state.updates || previous.memory !== state.memory || previous.transcriptRecords !== state.transcriptRecords || previousTranscripts !== transcripts) {
       overview = [...state.updates.values()].reduce(updateOverview, state.overview);
@@ -57,7 +66,7 @@ export function createObservationProjection() {
             .flatMap((item) => item.records)
             .filter((record) => record.executionId === execution.id)
             .map((record) => ({ id: record.id, memoryId: record.memoryId, operationId: record.operationId, action: record.value.action, change: record.value.change }));
-          return { ...execution, memoryChanges, ...(execution.response && answerIndex !== undefined ? { response: { ...execution.response, index: answerIndex } } : {}) };
+          return { ...execution, memoryChanges, ...(answerIndex !== undefined ? { response: { ...execution.response, index: answerIndex } } : {}) };
         }),
       };
       rounds = projectRounds(overview, transcripts);
@@ -71,6 +80,25 @@ export function createObservationProjection() {
     }
     previous = state;
     previousTranscripts = transcripts;
+    let nextGraphs: Map<string, CallGraphModel> | undefined;
+    const nextSources = new Map<string, GraphSource>();
+    for (const round of rounds) {
+      const detail = details.get(round.id);
+      const source = graphSources.get(round.id);
+      if (!source || source.calls !== round.calls || source.detail !== detail) {
+        nextGraphs ??= new Map(graphs);
+        nextGraphs.set(round.id, projectCallGraph(round, detail));
+      }
+      nextSources.set(round.id, { calls: round.calls, detail });
+    }
+    for (const id of graphs.keys()) {
+      if (!nextSources.has(id)) {
+        nextGraphs ??= new Map(graphs);
+        nextGraphs.delete(id);
+      }
+    }
+    graphSources = nextSources;
+    if (nextGraphs) graphs = nextGraphs;
     const memory: MemoryView = {
       items: state.memory.items.map((item) => ({
         ...item,
@@ -83,6 +111,6 @@ export function createObservationProjection() {
         }),
       })),
     };
-    return { overview, rounds, details, memory, loading: state.loading, error: state.error };
+    return { overview, rounds, details, graphs, memory, loading: state.loading, error: state.error };
   };
 }

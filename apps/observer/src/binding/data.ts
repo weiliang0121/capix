@@ -57,6 +57,7 @@ export function createDataProjection() {
       rounds: observation.rounds,
       memory: observation.memory,
       details: observation.details,
+      graphs: observation.graphs,
     };
     previous = state;
     previousOverview = observation.overview;

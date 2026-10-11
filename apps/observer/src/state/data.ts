@@ -1,6 +1,7 @@
 import type { FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, Message, ResourceRecord, ProcessRecord, RelationChangeRecord } from '@capix/protocol';
 import type { ConversationItem } from './conversation.js';
 import type { CallSpan } from '../observation/types.js';
+import type { CallGraphModel } from './graph.js';
 
 export interface RoundSelectionSummary {
   inputCount: number;
@@ -61,6 +62,7 @@ export interface AppData {
   rounds: readonly RoundView[];
   memory: MemoryView;
   details: ReadonlyMap<string, ExecutionDetail>;
+  graphs: ReadonlyMap<string, CallGraphModel>;
 }
 export interface SubmissionNotice {
   message: string;
@@ -76,7 +78,7 @@ export interface ConversationQueueView {
   readonly blocked?: string;
 }
 export function emptyAppData(): AppData {
-  return { observationLoading: false, busy: false, queue: { waiting: [] }, runningId: '', conversation: [], messageCount: 0, rounds: [], memory: { items: [] }, details: new Map() };
+  return { observationLoading: false, busy: false, queue: { waiting: [] }, runningId: '', conversation: [], messageCount: 0, rounds: [], memory: { items: [] }, details: new Map(), graphs: new Map() };
 }
 
 export interface SearchMatch {

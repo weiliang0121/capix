@@ -2,7 +2,6 @@ import { defaultColumnWidth, maximumColumnWidth, minimumColumnWidth } from '../.
 export { defaultColumnWidth, maximumColumnWidth, minimumColumnWidth } from '../../state/preferences.js';
 import type { ExecutionSummary, InvocationSummary } from '@capix/protocol';
 
-export const axisWidth = 92;
 export const columnGap = 20;
 
 export interface ColumnLayout {
@@ -17,8 +16,24 @@ export function layoutColumns(ids: readonly string[], requestedWidth: number): C
   return { columnWidth, width: Math.max(0, ids.length * (columnWidth + columnGap) - columnGap), columns: ids.map((id, index) => ({ id, x: index * (columnWidth + columnGap), width: columnWidth })) };
 }
 
-export function visibleColumns(layout: ColumnLayout, scrollLeft: number, viewportWidth: number): string[] {
-  return layout.columns.filter((column) => column.x + column.width > scrollLeft && column.x < scrollLeft + viewportWidth).map((column) => column.id);
+export interface ColumnWindow {
+  columns: (ColumnLayout['columns'][number] & { index: number })[];
+  visibleIds: string[];
+}
+
+/** Keep scrolling work proportional to the viewport, including adjacent QA for smooth entry. */
+export function visibleColumnWindow(layout: ColumnLayout, scrollLeft: number, viewportWidth: number, overscan = 1): ColumnWindow {
+  if (!layout.columns.length || !Number.isFinite(scrollLeft) || !Number.isFinite(viewportWidth) || viewportWidth <= 0) return { columns: [], visibleIds: [] };
+  const left = Math.max(0, scrollLeft);
+  if (left >= layout.width) return { columns: [], visibleIds: [] };
+  const right = Math.min(layout.width, left + viewportWidth);
+  const stride = layout.columnWidth + columnGap;
+  const first = Math.floor(left / stride) + (left % stride >= layout.columnWidth ? 1 : 0);
+  const end = Math.min(layout.columns.length, Math.ceil(right / stride));
+  const margin = Number.isFinite(overscan) ? Math.max(0, Math.floor(overscan)) : 0;
+  const start = Math.max(0, first - margin);
+  const limit = Math.min(layout.columns.length, end + margin);
+  return { columns: layout.columns.slice(start, limit).map((column, index) => ({ ...column, index: start + index })), visibleIds: layout.columns.slice(first, end).map((column) => column.id) };
 }
 
 /** Preserve the QA and local position beneath the pointer when density changes. */
@@ -28,12 +43,6 @@ export function densityScroll(before: ColumnLayout, after: ColumnLayout, scrollL
   const local = position - index * (before.columnWidth + columnGap);
   const mapped = index * (after.columnWidth + columnGap) + (local <= before.columnWidth ? (local / before.columnWidth) * after.columnWidth : after.columnWidth + local - before.columnWidth);
   return Math.min(Math.max(0, after.width - viewportWidth), Math.max(0, mapped - anchor));
-}
-
-export function wheelIntent(deltaX: number, deltaY: number, deltaMode: number, viewportWidth: number, shiftKey = false): { pan: number; density: number } {
-  const unit = deltaMode === 1 ? 16 : deltaMode === 2 ? viewportWidth : 1;
-  if (shiftKey || Math.abs(deltaX) > Math.abs(deltaY)) return { pan: (shiftKey && !deltaX ? deltaY : deltaX) * unit, density: 0 };
-  return { pan: 0, density: deltaY * unit };
 }
 
 export type CallFamily = 'selection' | 'answer' | 'memory' | 'neutral';

@@ -1,5 +1,5 @@
 import { BrainCircuit } from 'lucide-react';
-import { useAppStore } from '../../state/react';
+import { useAppStore, useAppCommands } from '../../state/react';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { errorMessage } from '../../lib/errors';
@@ -8,6 +8,8 @@ export function ExplorerPanel() {
   const observationError = useAppStore((state) => state.data.observationError);
   const observationLoading = useAppStore((state) => state.data.observationLoading);
   const rounds = useAppStore((state) => state.data.rounds);
+  const graphs = useAppStore((state) => state.data.graphs);
+  const { loadExecution } = useAppCommands();
   const memoryCount = useAppStore((state) => state.data.memory.items.length);
   const selectedId = useAppStore((state) => state.selectedId);
   const select = useAppStore((state) => state.select);
@@ -45,7 +47,7 @@ export function ExplorerPanel() {
           正在加载观测数据…
         </p>
       )}
-      <RuntimeExplorer rounds={rounds} matches={matches} search={search} setSearch={setSearch} matchCursor={matchCursor} setMatchCursor={setMatchCursor} columnWidth={columnWidth} setColumnWidth={setColumnWidth} selectedId={selectedId} onSelect={select} onInspect={inspect} />
+      <RuntimeExplorer rounds={rounds} graphs={graphs} loadExecution={loadExecution} matches={matches} search={search} setSearch={setSearch} matchCursor={matchCursor} setMatchCursor={setMatchCursor} columnWidth={columnWidth} setColumnWidth={setColumnWidth} selectedId={selectedId} onSelect={select} onInspect={inspect} />
     </section>
   );
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { columnGap, densityScroll, layoutColumns, layoutInvocations, maximumColumnWidth, minimumColumnWidth, visibleColumns, wheelIntent } from '../../apps/observer/.test-dist/features/explorer/layout.js';
+import { columnGap, densityScroll, layoutColumns, layoutInvocations, maximumColumnWidth, minimumColumnWidth, visibleColumnWindow } from '../../apps/observer/.test-dist/features/explorer/layout.js';
 
 const call = (id, recordType, offsetMs, durationMs, parentId, name = id) => ({ id, recordType, offsetMs, durationMs, parentId, name, label: id, status: durationMs === undefined ? 'running' : 'succeeded' });
 const execution = (calls, observedOffsetMs = 0) => ({ calls, observedOffsetMs });
@@ -66,15 +66,7 @@ test('density changes keep pointer position inside a QA or gap and clamp viewpor
 
 test('visible range excludes QA that only touch a viewport boundary', () => {
   const layout = layoutColumns(['a', 'b', 'c'], 440);
-  assert.deepEqual(visibleColumns(layout, 0, 440), ['a']);
-  assert.deepEqual(visibleColumns(layout, 440, 480), ['b']);
-  assert.deepEqual(visibleColumns(layout, 100, 800), ['a', 'b']);
-});
-
-test('wheel separates horizontal panning from density and supports line/page and shift input', () => {
-  assert.deepEqual(wheelIntent(10, 2, 0, 800), { pan: 10, density: 0 });
-  assert.deepEqual(wheelIntent(2, -10, 0, 800), { pan: 0, density: -10 });
-  assert.deepEqual(wheelIntent(0, 3, 1, 800), { pan: 0, density: 48 });
-  assert.deepEqual(wheelIntent(1, 0, 2, 800), { pan: 800, density: 0 });
-  assert.deepEqual(wheelIntent(0, 40, 0, 800, true), { pan: 40, density: 0 });
+  assert.deepEqual(visibleColumnWindow(layout, 0, 440).visibleIds, ['a']);
+  assert.deepEqual(visibleColumnWindow(layout, 440, 480).visibleIds, ['b']);
+  assert.deepEqual(visibleColumnWindow(layout, 100, 800).visibleIds, ['a', 'b']);
 });

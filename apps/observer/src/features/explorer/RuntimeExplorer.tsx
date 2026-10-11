@@ -1,25 +1,25 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
-import type { InvocationSummary } from '@capix/protocol';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import type { ExplorerProps } from './types';
-import { axisWidth, defaultColumnWidth, densityScroll, formatDuration, layoutColumns, layoutInvocations, maximumColumnWidth, minimumColumnWidth, visibleColumns, wheelIntent } from './layout';
+import { defaultColumnWidth, densityScroll, formatDuration, layoutColumns, maximumColumnWidth, minimumColumnWidth, visibleColumnWindow } from './layout';
+import { qaName, roleNames, statusNames, Status, Highlight } from './nodes';
+import { RoundGraph } from './RoundGraph';
 import './explorer.css';
 
-import { qaName, roleNames, statusNames, laneNames, laneHeight, Status, Highlight, ContextSummary, InvocationNode } from './nodes';
-
-export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSelect, onInspect, search, setSearch, matchCursor, setMatchCursor, columnWidth, setColumnWidth }: ExplorerProps) {
-  const [visibleIds, setVisibleIds] = useState<string[]>([]);
+export function RuntimeExplorer({ rounds, graphs, loadExecution, matches, selectedId, onSelect, onInspect, search, setSearch, matchCursor, setMatchCursor, columnWidth, setColumnWidth }: ExplorerProps) {
   const viewport = useRef<HTMLDivElement>(null);
   const navigation = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<number | undefined>(undefined);
-  const ids = useMemo(() => executions.map((execution) => execution.id), [executions]);
+  const scrollFrame = useRef<number | undefined>(undefined);
+  const [view, setView] = useState({ left: 0, width: 0, height: 0 });
+  const [mode, setMode] = useState<'calls' | 'timing'>('calls');
+  const [expanded, setExpanded] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const [heights, setHeights] = useState<ReadonlyMap<string, number>>(new Map());
+  const ids = useMemo(() => rounds.map((round) => round.id), [rounds]);
   const layout = useMemo(() => layoutColumns(ids, columnWidth), [ids, columnWidth]);
-  const invocationLayouts = useMemo(() => executions.map(layoutInvocations), [executions]);
+  const window = useMemo(() => visibleColumnWindow(layout, view.left, view.width), [layout, view.left, view.width]);
   const matchById = useMemo(() => new Map(matches.map((match) => [match.executionId, match])), [matches]);
-  const operationLanes = Math.max(1, ...invocationLayouts.map((item) => item.operationLanes));
-  const attemptLanes = Math.max(1, ...invocationLayouts.map((item) => item.attemptLanes));
   const densityName = columnWidth < 380 ? '紧凑' : columnWidth > 640 ? '展开' : '标准';
 
   const revealNavigation = useCallback((id: string) => {
@@ -30,22 +30,21 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
     else if (item.offsetLeft + item.offsetWidth > container.scrollLeft + container.clientWidth) container.scrollLeft = item.offsetLeft + item.offsetWidth - container.clientWidth;
   }, []);
 
-  const updateVisible = useCallback(
-    (syncNavigation = false) => {
-      const container = viewport.current;
-      if (!container) return;
-      const next = visibleColumns(layout, container.scrollLeft, Math.max(0, container.clientWidth - axisWidth));
-      setVisibleIds((previous) => (previous.join('|') === next.join('|') ? previous : next));
-      if (syncNavigation && next.length) revealNavigation(next.includes(selectedId) ? selectedId : next[0]!);
-    },
-    [layout, revealNavigation, selectedId],
-  );
+  const updateVisible = useCallback(() => {
+    const container = viewport.current;
+    if (!container) return;
+    const next = { left: container.scrollLeft, width: container.clientWidth, height: container.clientHeight };
+    setView((previous) => (previous.left === next.left && previous.width === next.width && previous.height === next.height ? previous : next));
+  }, []);
 
   const locate = useCallback(
     (id: string) => {
       const column = layout.columns.find((item) => item.id === id);
       const container = viewport.current;
-      if (container && column) container.scrollLeft = Math.max(0, column.x - Math.max(0, container.clientWidth - axisWidth - column.width) / 2);
+      if (container && column) {
+        container.scrollLeft = Math.max(0, column.x - Math.max(0, container.clientWidth - column.width) / 2);
+        container.scrollTop = 0;
+      }
       revealNavigation(id);
       onSelect(id);
       updateVisible();
@@ -54,14 +53,11 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
   );
 
   const changeDensity = useCallback(
-    (width: number, anchor?: number) => {
+    (width: number) => {
       const container = viewport.current;
       const next = layoutColumns(ids, width);
       if (next.columnWidth === layout.columnWidth) return;
-      if (container) {
-        const visibleWidth = Math.max(0, container.clientWidth - axisWidth);
-        pendingScroll.current = densityScroll(layout, next, container.scrollLeft, anchor ?? visibleWidth / 2, visibleWidth);
-      }
+      if (container) pendingScroll.current = densityScroll(layout, next, container.scrollLeft, container.clientWidth / 2, container.clientWidth);
       setColumnWidth(next.columnWidth);
     },
     [ids, layout, setColumnWidth],
@@ -78,26 +74,17 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
   useEffect(() => {
     const container = viewport.current;
     if (!container) return;
-    const observer = new ResizeObserver(() => updateVisible());
+    const observer = new ResizeObserver(updateVisible);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [updateVisible]);
-
-  // Passive React wheel listeners cannot prevent page scrolling while changing graph density.
-  useEffect(() => {
-    const container = viewport.current;
-    if (!container) return;
-    const wheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.metaKey) return;
-      const intent = wheelIntent(event.deltaX, event.deltaY, event.deltaMode, container.clientWidth, event.shiftKey);
-      if (!intent.pan && !intent.density) return;
-      event.preventDefault();
-      if (intent.pan) container.scrollLeft += intent.pan;
-      else changeDensity(layout.columnWidth * Math.exp(-intent.density * 0.002), Math.max(0, event.clientX - container.getBoundingClientRect().left - axisWidth));
-    };
-    container.addEventListener('wheel', wheel, { passive: false });
-    return () => container.removeEventListener('wheel', wheel);
-  }, [changeDensity, layout.columnWidth]);
+  }, [updateVisible, Boolean(rounds.length)]);
+  useEffect(
+    () => () => {
+      if (scrollFrame.current !== undefined) cancelAnimationFrame(scrollFrame.current);
+    },
+    [],
+  );
+  useEffect(() => setHeights(new Map()), [mode, columnWidth]);
 
   const previousSelection = useRef('');
   useEffect(() => {
@@ -106,32 +93,28 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
     locate(selectedId);
   }, [ids, locate, selectedId]);
 
+  const toggle = useCallback((id: string, open: boolean) => setExpanded((previous) => new Map(previous).set(id, open)), []);
+  const measured = useCallback((id: string, height: number) => {
+    setHeights((previous) => (previous.get(id) === height ? previous : new Map(previous).set(id, height)));
+  }, []);
+  const onScroll = () => {
+    if (scrollFrame.current !== undefined) return;
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = undefined;
+      updateVisible();
+    });
+  };
   const goToMatch = (direction: 1 | -1) => {
     if (!matches.length) return;
     const next = matchCursor < 0 ? (direction === 1 ? 0 : matches.length - 1) : (matchCursor + direction + matches.length) % matches.length;
     setMatchCursor(next);
     locate(matches[next]!.executionId);
   };
-
-  const row = (type: InvocationSummary['recordType'], lanes: number) => (
-    <div className={`explorer-row explorer-invocation-row explorer-row-${type}`} style={{ height: lanes * laneHeight }}>
-      <div className="explorer-axis">{laneNames[type]}</div>
-      <div className="explorer-row-content" style={{ width: layout.width }}>
-        {layout.columns.map((column, index) => (
-          <div key={column.id} className="explorer-call-column" style={{ left: column.x, width: column.width }}>
-            {invocationLayouts[index]?.calls
-              .filter((item) => item.call.recordType === type)
-              .map((item) => (
-                <InvocationNode key={item.call.id} item={item} columnWidth={column.width} onInspect={() => onInspect(column.id, item.call.id)} />
-              ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const first = window.columns[0];
+  const canvasHeight = Math.max(view.height, ...heights.values());
 
   return (
-    <section className="explorer-root" aria-label="运行图谱" style={{ '--explorer-axis-width': `${axisWidth}px` } as CSSProperties}>
+    <section className="explorer-root" aria-label="运行图谱">
       <div className="explorer-toolbar">
         <div className="explorer-search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
@@ -143,9 +126,7 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
             aria-label="搜索问答全文"
             placeholder="搜索用户输入或助手回答…"
             value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-            }}
+            onChange={(event) => setSearch(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();
@@ -167,8 +148,16 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
             </>
           )}
         </div>
+        <div className="explorer-view-mode" role="group" aria-label="图谱查看方式">
+          <button type="button" aria-pressed={mode === 'calls'} onClick={() => setMode('calls')}>
+            调用
+          </button>
+          <button type="button" aria-pressed={mode === 'timing'} onClick={() => setMode('timing')}>
+            耗时
+          </button>
+        </div>
         <div className="explorer-density">
-          <span>密度</span>
+          <span>列宽</span>
           <Button variant="outline" size="icon" className="explorer-small-control" aria-label="显示更多问答" disabled={columnWidth <= minimumColumnWidth} onClick={() => changeDensity(columnWidth / 1.25)}>
             −
           </Button>
@@ -181,28 +170,27 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
           </Button>
         </div>
       </div>
-
-      {executions.length ? (
+      {rounds.length ? (
         <>
           <div className="explorer-navigation-heading">
             <span>
-              轮次导航 <b>{executions.length}</b>
+              轮次导航 <b>{rounds.length}</b>
             </span>
             <span>点击定位 · 浅底为可见范围</span>
           </div>
           <nav className="explorer-navigation" aria-label="问答轮次导航" ref={navigation}>
-            {executions.map((execution, index) => {
-              const match = matchById.get(execution.id);
+            {rounds.map((round, index) => {
+              const match = matchById.get(round.id);
               return (
-                <button key={execution.id} type="button" className={`explorer-nav-card${selectedId === execution.id ? ' explorer-nav-current' : ''}${visibleIds.includes(execution.id) ? ' explorer-nav-visible' : ''}${match ? ' explorer-nav-match' : ''}`} data-execution-id={execution.id} aria-current={selectedId === execution.id ? 'true' : undefined} aria-label={`${qaName(index)}，${statusNames[execution.status]}，${execution.inputContent}`} onClick={() => locate(execution.id)}>
+                <button key={round.id} type="button" className={`explorer-nav-card${selectedId === round.id ? ' explorer-nav-current' : ''}${window.visibleIds.includes(round.id) ? ' explorer-nav-visible' : ''}${match ? ' explorer-nav-match' : ''}`} data-execution-id={round.id} aria-current={selectedId === round.id ? 'true' : undefined} aria-label={`${qaName(index)}，${statusNames[round.status]}，${round.inputContent}`} onClick={() => locate(round.id)}>
                   <div className="explorer-nav-heading">
                     <strong>{qaName(index)}</strong>
-                    {selectedId === execution.id && execution.status === 'succeeded' ? (
+                    {selectedId === round.id && round.status === 'succeeded' ? (
                       <Badge variant="secondary" className="explorer-current-tag">
                         当前查看
                       </Badge>
                     ) : (
-                      <Status status={execution.status} />
+                      <Status status={round.status} />
                     )}
                   </div>
                   <p>
@@ -212,12 +200,12 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
                         <Highlight text={match.snippet} search={search} />
                       </>
                     ) : (
-                      execution.inputContent
+                      round.inputContent
                     )}
                   </p>
                   <div className="explorer-nav-meta">
-                    <span>{formatDuration(execution.durationMs)}</span>
-                    {execution.memoryChanges.length > 0 && <span>记忆变化 {execution.memoryChanges.length}</span>}
+                    <span>{formatDuration(round.durationMs)}</span>
+                    {round.memoryChanges.length > 0 && <span>记忆变化 {round.memoryChanges.length}</span>}
                   </div>
                 </button>
               );
@@ -229,35 +217,15 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
               <span className="explorer-family-key explorer-family-answer">回答</span>
               <span className="explorer-family-key explorer-family-memory">记忆</span>
             </div>
-            <span>轮内宽度表示耗时 · 点击节点查看记录</span>
+            <span>{mode === 'calls' ? '连线表示父子归属 · 序号表示同级调用顺序' : '轮内宽度表示耗时 · 点击节点查看记录'}</span>
           </div>
-          <div className="explorer-viewport" ref={viewport} onScroll={() => updateVisible(true)} tabIndex={0} aria-label="执行图谱，纵向滚轮调整密度，横向滚轮平移">
-            <div className="explorer-canvas" style={{ width: layout.width + axisWidth }}>
-              <div className="explorer-row explorer-qa-row">
-                <div className="explorer-axis">问答</div>
-                <div className="explorer-row-content" style={{ width: layout.width }}>
-                  {layout.columns.map((column, index) => (
-                    <button type="button" key={column.id} className={`explorer-qa-header${selectedId === column.id ? ' explorer-qa-current' : ''}`} style={{ left: column.x, width: column.width }} onClick={() => onInspect(column.id)} aria-label={`查看 ${qaName(index)} 详情`}>
-                      <strong>{qaName(index)}</strong>
-                      <span>{new Date(executions[index]!.startedAt).toLocaleTimeString('zh-CN', { hour12: false })}</span>
-                      <span>{formatDuration(executions[index]!.durationMs)}</span>
-                    </button>
-                  ))}
-                </div>
+          <div className="explorer-viewport" ref={viewport} onScroll={onScroll} tabIndex={0} aria-label="调用图谱，横向浏览问答，纵向查看调用">
+            <div className="explorer-graphs-canvas" style={{ width: layout.width, minHeight: canvasHeight }}>
+              <div className="explorer-graphs-window" style={{ marginLeft: first?.x ?? 0 }}>
+                {window.columns.map((column) => (
+                  <RoundGraph key={column.id} round={rounds[column.index]!} graph={graphs.get(column.id)} index={column.index} width={column.width} selected={selectedId === column.id} mode={mode} expanded={expanded} toggle={toggle} inspect={onInspect} load={loadExecution} measured={measured} />
+                ))}
               </div>
-              <div className="explorer-row explorer-context-row">
-                <div className="explorer-axis">上下文</div>
-                <div className="explorer-row-content" style={{ width: layout.width }}>
-                  {layout.columns.map((column, index) => (
-                    <div className="explorer-context-column" key={column.id} style={{ left: column.x, width: column.width }}>
-                      <ContextSummary execution={executions[index]!} onInspect={() => onInspect(column.id)} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {row('execution', 1)}
-              {row('operation', operationLanes)}
-              {row('attempt', attemptLanes)}
             </div>
           </div>
         </>
@@ -267,7 +235,7 @@ export function RuntimeExplorer({ rounds: executions, matches, selectedId, onSel
             ◇
           </div>
           <h3>从一次对话开始</h3>
-          <p>发送消息后，在这里查看上下文、执行和意图的关系。</p>
+          <p>发送消息后，在这里查看上下文和实际调用路径。</p>
         </div>
       )}
     </section>

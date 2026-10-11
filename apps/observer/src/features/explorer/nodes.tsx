@@ -1,5 +1,4 @@
 import type { ExecutionSummary } from '@capix/protocol';
-import type { RoundView } from '../../state/data';
 import type { CallGeometry } from './layout';
 import { formatDuration } from './layout';
 import { Badge } from '../../components/ui/badge';
@@ -27,51 +26,6 @@ export function Highlight({ text, search }: { text: string; search: string }) {
       <mark>{text.slice(index, index + term.length)}</mark>
       {text.slice(index + term.length)}
     </>
-  );
-}
-
-export function ContextSummary({ execution, onInspect }: { execution: RoundView; onInspect: () => void }) {
-  const { inputCount, selectedCount, selectedMessages, selectionComplete } = execution.context;
-  return (
-    <button type="button" className="explorer-context" onClick={onInspect} aria-label={`查看本轮上下文：选中 ${selectedCount} 条历史，${execution.availableMemoryIds.length} 个可见记忆，${execution.memoryChanges.length} 项记忆变化`}>
-      <div className="explorer-context-message">
-        <span>
-          输入 #{execution.inputIndex} · 累计被选 {inputCount} 次
-        </span>
-        <p>{execution.inputContent}</p>
-      </div>
-      <div className="explorer-context-facts">
-        <span>
-          历史 <b>{selectionComplete ? `${selectedCount} 条选中` : '尚未选定'}</b>
-        </span>
-        <span>
-          记忆 <b>{execution.availableMemoryIds.length} 个可见</b>
-        </span>
-        <span>
-          回答 <b>{execution.response ? (execution.response.content === undefined ? '尚未加载' : `${execution.response.content.length} 字符`) : '尚无回答'}</b>
-        </span>
-        <span>
-          变化 <b>{execution.memoryChanges.length} 项</b>
-        </span>
-      </div>
-      {selectedMessages.length > 0 && (
-        <div className="explorer-evidence">
-          <span className="explorer-evidence-label">选中历史 · 按选择优先级</span>
-          {selectedMessages.slice(0, 3).map(({ index, entry }) => (
-            <div key={index} className="explorer-evidence-item">
-              <span className="explorer-evidence-meta">
-                #{index} · {entry ? roleNames[entry.message.role] : '消息'} · 被选 {entry?.count ?? 0} 次
-              </span>
-              <span className="explorer-evidence-text">{entry?.message.content ?? '原文不可用'}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="explorer-context-links">
-        <span>{selectedCount ? `查看全部 ${selectedCount} 条选中原文与记录` : '查看消息、上下文与记录'}</span>
-        <span aria-hidden="true">↗</span>
-      </div>
-    </button>
   );
 }
 

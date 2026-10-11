@@ -65,7 +65,7 @@ relation 描述父层处理该子调用的 attached/returned/receiving/accepted/
 
 活动仅公开名称、归属和进展元数据，不传输入输出、诊断正文、模型思考、源码或资源对象。label 最多 120 字符，每次提交最多保留 512 个调用位置（包括等待子调用开始的关系）。超限或来源顺序/关系失效后保留已知前缀，activities.integrity 永久变为 ACTIVITY_INCOMPLETE；后续内容与最终 result 继续更新。调用局部 eventSequence 用于服务接纳，不混入交付 revision。查询与 follow 返回同一有界累计状态，不承诺完整过程事件回放。
 
-执行列表按实际登记顺序。边界事件 scopeId 确定计时范围，sequence 与单调 offsetMs 是范围内部时序依据；R 调用和每个 E 分别计时，EOA 共用 E 范围。occurredAt/startedAt 是展示用墙钟。未结束调用没有 durationMs；不得补造耗时。跨 QA 只有先后关系，前端使用等宽列，轮内才按计时比例布局。
+执行列表按实际登记顺序。边界事件 scopeId 确定计时范围，sequence 与单调 offsetMs 是范围内部时序依据；R 调用和每个 E 分别计时，EOA 共用 E 范围。occurredAt/startedAt 是展示用墙钟。未结束调用没有 durationMs；不得补造耗时。跨 QA 不推断执行依赖，前端使用等宽列；默认调用树按直接 parentId 连接，以父层 attached 关系的 eventSequence 表达同级调用顺序，不以时间反推关系。耗时视图才在轮内按计时比例布局。
 
 availableMemoryIds 来自本轮输入快照，只表示可见，不能宣称模型实际采用。selections 是选择操作结果；容量裁剪后的最终原文与候选有区别，详情必须以实际请求记录为准。response 即使后处理失败也可以存在。
 
