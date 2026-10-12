@@ -1,3 +1,4 @@
+import { validateRecordingArchiveOrigin } from '../observer/archive.js';
 import { hasOutput, outputProcess, readOutput } from './invocation.js';
 import type { ExecutionRecordSnapshot, OperationRecord, InvocationValue, RelationChangeRecord, InvocationBoundaryRecord } from './types.js';
 
@@ -8,6 +9,8 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
   };
   if (!value || typeof value !== 'object') return fail();
   const snapshot = value as ExecutionRecordSnapshot;
+  if (snapshot.archive !== undefined) validateRecordingArchiveOrigin(snapshot.archive);
+  const historical = snapshot.archive !== undefined;
   if (!snapshot.execution || typeof snapshot.execution.id !== 'string' || !snapshot.execution.id || !snapshot.execution.value || typeof snapshot.execution.value.startedAt !== 'string' || !Array.isArray(snapshot.operations) || !Array.isArray(snapshot.attempts) || !Array.isArray(snapshot.events) || !Array.isArray(snapshot.resources)) return fail();
   const executionId = snapshot.execution.id;
   const operations = new Map<string, OperationRecord>();
@@ -48,48 +51,21 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
   for (const status of statuses.values()) {
     if (!['running', 'succeeded', 'failed'].includes(status)) return fail();
   }
-  for (const body of observedBodies.values()) {
-    if (!body || !Array.isArray(body.processes) || !Array.isArray(body.relationChanges) || typeof body !== 'object' || !Object.hasOwn(body, 'input') || (hasOutput(body) && Object.hasOwn(body, 'error')) || (Object.hasOwn(body, 'output') && Object.hasOwn(body, 'resultOf')) || (Object.hasOwn(body, 'error') && (!body.error || typeof body.error.code !== 'string' || typeof body.error.message !== 'string'))) return fail();
-  }
-  for (const body of observedBodies.values()) {
-    if (body.failure && (!Object.hasOwn(body, 'error') || !validFailure(body.failure))) return fail();
-    let previousRound = 0;
-    let previousTime = 0;
-    let previousSequence = 0;
-    for (const [index, process] of body.processes.entries()) {
-      if (!process || !Number.isSafeInteger(process.eventSequence) || process.eventSequence <= previousSequence || process.sequence !== index + 1 || !Number.isInteger(process.round) || process.round < previousRound || process.round > 2 || !Number.isFinite(process.offsetMs) || process.offsetMs < previousTime || typeof process.occurredAt !== 'string') return fail();
-      const valid = process.stage === 'execute' ? ['start', 'return', 'throw'] : process.stage === 'receive' ? ['return', 'throw', 'continue'] : process.stage === 'handling' ? ['start', 'return', 'throw', 'continue', 'unhandled'] : process.stage === 'control' ? ['stop'] : [];
-      if (!valid.includes(process.type) || (process.round === 0 && process.stage !== 'control')) return fail();
-      if (((process.stage === 'execute' && process.type === 'start') || process.type === 'continue') && !Object.hasOwn(process, 'input')) return fail();
-      if (process.type === 'return' && Object.hasOwn(process, 'output') === Object.hasOwn(process, 'resultOf')) return fail();
-      if ('resultOf' in process) {
-        try {
-          const target = outputProcess(body, process.resultOf, process.sequence);
-          if (process.stage !== 'receive' || target.stage !== 'execute' || target.round !== process.round || target.sequence !== process.sequence - 1) return fail();
-        } catch {
-          return fail();
-        }
-      }
-      if ((process.type === 'throw' || process.type === 'stop' || (process.stage === 'handling' && (process.type === 'start' || process.type === 'unhandled'))) && (!process.error || typeof process.error.code !== 'string' || typeof process.error.message !== 'string')) return fail();
-      if (process.type === 'continue' && (typeof process.reason !== 'string' || !process.reason.trim())) return fail();
-      if ('failure' in process && process.failure && !validFailure(process.failure)) return fail();
-      previousRound = process.round;
-      previousTime = process.offsetMs;
-      previousSequence = process.eventSequence;
-    }
-    const owner = [...observedBodies].find(([, value]) => value === body)?.[0];
+  for (const [owner, body] of observedBodies) {
     const ownerContextId = owner === runtimeCall.id ? runtimeCall.contextId : owner === snapshot.execution.id ? snapshot.execution.contextId : (snapshot.operations.find((record) => record.id === owner)?.contextId ?? snapshot.attempts.find((record) => record.id === owner)?.contextId);
-    if (!validRelations(body, ownerContextId)) return fail();
-    if (Object.hasOwn(body, 'resultOf')) {
-      try {
-        readOutput(body);
-      } catch {
-        return fail();
-      }
-    }
+    validateInvocationRecordValue(body, ownerContextId!);
   }
   for (const operationRecord of operations.values()) {
     if (operationRecord.parentOperationId !== undefined && !operations.has(operationRecord.parentOperationId)) return fail();
+  }
+  for (const id of parents.keys()) {
+    const visited = new Set<string>([id]);
+    let ancestor = parents.get(id);
+    while (ancestor && ancestor !== executionId) {
+      if (visited.has(ancestor)) return fail();
+      visited.add(ancestor);
+      ancestor = parents.get(ancestor);
+    }
   }
   const active = new Set<string>();
   const entered = new Set<string>();
@@ -112,11 +88,12 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
       ended.add(boundary.callId);
     }
   }
-  if (entered.size !== bodies.size) return fail();
+  if (!historical && entered.size !== bodies.size) return fail();
   for (const [id, body] of bodies) {
-    if (!ended.has(id) && (statuses.get(id) !== 'running' || hasOutput(body) || Object.hasOwn(body, 'error'))) return fail();
+    if (!historical && !ended.has(id) && (statuses.get(id) !== 'running' || hasOutput(body) || Object.hasOwn(body, 'error'))) return fail();
+    if (historical && !validRecordedStatus(statuses.get(id)!, body)) return fail();
   }
-  if (!Array.isArray(snapshot.runtimeEvents) || !validRuntimeCallBoundaries(snapshot.runtimeEvents, runtimeCall.id, runtimeCall.status, runtimeCall.value)) return fail();
+  if (!Array.isArray(snapshot.runtimeEvents) || !validRuntimeCallBoundaries(snapshot.runtimeEvents, runtimeCall.id, runtimeCall.status, runtimeCall.value, historical)) return fail();
   for (const boundary of snapshot.runtimeEvents) {
     if (boundaryIds.has(boundary.id) || observedBodies.has(boundary.id) || contextIds.has(boundary.id)) return fail();
     boundaryIds.add(boundary.id);
@@ -191,10 +168,57 @@ function validRelations(body: InvocationValue, ownerContextId: string | undefine
 function validError(value: unknown): boolean {
   return !!value && typeof value === 'object' && typeof (value as { code?: unknown }).code === 'string' && typeof (value as { message?: unknown }).message === 'string';
 }
-function validRuntimeCallBoundaries(boundaries: readonly InvocationBoundaryRecord[], id: string, status: string, value: InvocationValue): boolean {
-  if (boundaries.length < 1 || boundaries.length > 2) return false;
+function validRuntimeCallBoundaries(boundaries: readonly InvocationBoundaryRecord[], id: string, status: string, value: InvocationValue, historical = false): boolean {
+  if ((!historical && boundaries.length < 1) || boundaries.length > 2) return false;
   for (const [index, boundary] of boundaries.entries()) {
     if (!boundary || !boundary.id || boundary.scopeId !== id || boundary.executionId !== undefined || boundary.callId !== id || boundary.parentId !== id || boundary.sequence !== index + 1 || !Number.isFinite(boundary.offsetMs) || boundary.offsetMs < (boundaries[index - 1]?.offsetMs ?? 0) || !Number.isFinite(Date.parse(boundary.occurredAt)) || boundary.value?.scope !== 'work' || boundary.value.type !== (index === 0 ? 'call' : status === 'succeeded' ? 'return' : 'throw')) return false;
   }
+  if (historical && boundaries.length < 2) return validRecordedStatus(status, value);
   return status === 'running' ? boundaries.length === 1 : boundaries.length === 2 && (status === 'succeeded' ? hasOutput(value) : Object.hasOwn(value, 'error'));
+}
+
+/** Validate one invocation body independently of its separately published boundaries. */
+export function validateInvocationRecordValue(value: unknown, ownerContextId: string): asserts value is InvocationValue {
+  const fail = () => {
+    throw new Error('调用记录正文无效。');
+  };
+  const body = value as InvocationValue;
+  if (!body || !Array.isArray(body.processes) || !Array.isArray(body.relationChanges) || typeof body !== 'object' || !Object.hasOwn(body, 'input') || (hasOutput(body) && Object.hasOwn(body, 'error')) || (Object.hasOwn(body, 'output') && Object.hasOwn(body, 'resultOf')) || (Object.hasOwn(body, 'error') && (!body.error || typeof body.error.code !== 'string' || typeof body.error.message !== 'string'))) return fail();
+  if (body.failure && (!Object.hasOwn(body, 'error') || !validFailure(body.failure))) return fail();
+  let previousRound = 0;
+  let previousTime = 0;
+  let previousSequence = 0;
+  for (const [index, process] of body.processes.entries()) {
+    if (!process || !Number.isSafeInteger(process.eventSequence) || process.eventSequence <= previousSequence || process.sequence !== index + 1 || !Number.isInteger(process.round) || process.round < previousRound || process.round > 2 || !Number.isFinite(process.offsetMs) || process.offsetMs < previousTime || typeof process.occurredAt !== 'string') return fail();
+    const valid = process.stage === 'execute' ? ['start', 'return', 'throw'] : process.stage === 'receive' ? ['return', 'throw', 'continue'] : process.stage === 'handling' ? ['start', 'return', 'throw', 'continue', 'unhandled'] : process.stage === 'control' ? ['stop'] : [];
+    if (!valid.includes(process.type) || (process.round === 0 && process.stage !== 'control')) return fail();
+    if (((process.stage === 'execute' && process.type === 'start') || process.type === 'continue') && !Object.hasOwn(process, 'input')) return fail();
+    if (process.type === 'return' && Object.hasOwn(process, 'output') === Object.hasOwn(process, 'resultOf')) return fail();
+    if ('resultOf' in process) {
+      try {
+        const target = outputProcess(body, process.resultOf, process.sequence);
+        if (process.stage !== 'receive' || target.stage !== 'execute' || target.round !== process.round || target.sequence !== process.sequence - 1) return fail();
+      } catch {
+        return fail();
+      }
+    }
+    if ((process.type === 'throw' || process.type === 'stop' || (process.stage === 'handling' && (process.type === 'start' || process.type === 'unhandled'))) && (!process.error || typeof process.error.code !== 'string' || typeof process.error.message !== 'string')) return fail();
+    if (process.type === 'continue' && (typeof process.reason !== 'string' || !process.reason.trim())) return fail();
+    if ('failure' in process && process.failure && !validFailure(process.failure)) return fail();
+    previousRound = process.round;
+    previousTime = process.offsetMs;
+    previousSequence = process.eventSequence;
+  }
+  if (!validRelations(body, ownerContextId)) return fail();
+  if (Object.hasOwn(body, 'resultOf')) {
+    try {
+      readOutput(body);
+    } catch {
+      return fail();
+    }
+  }
+}
+
+function validRecordedStatus(status: string, body: InvocationValue): boolean {
+  return status === 'running' ? !hasOutput(body) && !Object.hasOwn(body, 'error') : status === 'succeeded' ? hasOutput(body) && !Object.hasOwn(body, 'error') : status === 'failed' && Object.hasOwn(body, 'error') && !hasOutput(body);
 }

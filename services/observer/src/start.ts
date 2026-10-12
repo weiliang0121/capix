@@ -4,6 +4,10 @@ import { DeepSeekProvider } from './assembly/provider.js';
 import { createObserverServer } from './http/server.js';
 import { validateSettings } from './assembly/settings.js';
 import { WorkspaceFiles } from './files/index.js';
+import { SqliteObserverStore } from './persistence/store.js';
+import { resolve, relative, isAbsolute, sep } from 'node:path';
+import { existsSync, realpathSync, mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const settings = validateSettings({
   model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
@@ -16,5 +20,28 @@ const port = Number(process.env.PORT || 4317);
 if (!isSafeInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const fileRoot = process.env.CAPIX_FILES_ROOT;
 const files = fileRoot ? new WorkspaceFiles({ root: fileRoot }) : undefined;
-const server = createObserverServer({ observer: initializeObserver(() => new DeepSeekProvider(key), [], { files }), settings, configured: Boolean(key) });
+const dataDirectory = resolve(process.env.CAPIX_DATA_DIR || fileURLToPath(new URL('../../../.capix/', import.meta.url)));
+mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
+if (fileRoot) {
+  const root = existsSync(fileRoot) ? realpathSync(fileRoot) : resolve(fileRoot);
+  const location = relative(root, realpathSync(dataDirectory));
+  const outside = location === '..' || location.startsWith(`..${sep}`) || isAbsolute(location);
+  if (!outside) throw new Error('内容数据库必须位于模型文件工作区之外。');
+}
+const persistence = SqliteObserverStore.open(resolve(dataDirectory, 'observer.sqlite'));
+let observer: ReturnType<typeof initializeObserver>;
+try {
+  observer = initializeObserver(() => new DeepSeekProvider(key), [], { files, persistence });
+} catch (error) {
+  persistence.close();
+  throw error;
+}
+const server = createObserverServer({ observer, settings, configured: Boolean(key) });
+// Every change is already committed. An exiting active run leaves its archive open, never completed.
+process.once('exit', () => {
+  if (observer.runtime.running) persistence.close();
+  else observer.close();
+});
+process.once('SIGINT', () => process.exit(0));
+process.once('SIGTERM', () => process.exit(0));
 server.listen(port, '127.0.0.1', () => console.log(`CAPiX Observer · http://127.0.0.1:${port} · DeepSeek ${key ? 'configured' : 'key missing'}`));

@@ -49,9 +49,11 @@ export class RecordTree {
 
   /** Internal staging; registration is the only writer. */
   [prepareAttachment](record: BaseRecord<unknown>) {
+    if (record.historical) throw new Error('Historical record cannot be registered again');
     if (this.book.get(record.id)) throw new Error('Record ID already exists');
     if (record instanceof CompositeRecord && record.childIds.length) throw new Error('New composite record must have no children');
     const parent = isUndefined(record.parentId) ? undefined : this.require(record.parentId);
+    if (parent?.historical) throw new Error('Historical record is read-only');
     if (parent && !(parent instanceof CompositeRecord)) throw new Error('Record parent cannot contain children');
     checkRelation(record, parent, this.book);
     if (!parent) return undefined;

@@ -1,6 +1,6 @@
 import { isArray } from 'es-toolkit/compat';
 import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, ExecutionRecordSnapshot, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord } from '@capix/protocol';
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { validateExecutionRecordSnapshot, validateRecordingArchives, validateRecordingArchiveOrigin } from '@capix/protocol';
 
 export class ObservationSequenceError extends Error {}
 /** A receiver-side replica. No UI geometry, business decisions or snapshot diffing. */
@@ -32,7 +32,11 @@ export class ObservationReplica {
   }
 
   static receive(previous: ObservationReplica | undefined, frame: ObservationFrame): ObservationReplica {
-    if (frame.type === 'baseline') return new ObservationReplica(frame);
+    if (frame.type === 'baseline') {
+      if (frame.overview.archives !== undefined) validateRecordingArchives(frame.overview.archives);
+      for (const execution of frame.overview.executions) if (execution.archive !== undefined) validateRecordingArchiveOrigin(execution.archive);
+      return new ObservationReplica(frame);
+    }
     if (!previous || frame.scopeId !== previous.scopeId) throw new ObservationSequenceError('观测范围不一致，需要重新建立基线。');
     if (frame.sequence <= previous.sequence) return previous;
     if (frame.sequence !== previous.sequence + 1) throw new ObservationSequenceError('观测交付存在缺口，需要重新建立基线。');

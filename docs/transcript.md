@@ -16,7 +16,7 @@ bindConversation 在本轮 Context 建立前捕获切换后的 `[activeStart,end
 
 筛选只能返回当前段候选索引。回答直接接收同一份旧记忆快照，因此即使旧原文退出候选集合，也能使用保留下来的理解。提取不再沿记忆来源加载旧原文；更新可以在 result.sourceIndexes 保留该目标记忆的原有来源，本次变更依据仍须来自当前可见原文并包含本轮消息。保留来源不代表重新验证原文。
 
-这是有限继承，不承诺完整还原旧段或保证记忆语义正确。记忆或单条输入自身超限仍失败，不会通过不断创建空段绕过；回答和提取各自的实际请求仍执行容量检查，模型返回长度及所选内容可能使后续阶段超限。分段没有自动重试、提前压缩、旧段召回、并行或持久化；既有调用取消仍由 Invocation 处理，不因此回滚分段。切段已发生后若后续阶段失败，不自动回退当前段，也不删掉已接纳消息。
+这是有限继承，不承诺完整还原旧段或保证记忆语义正确。记忆或单条输入自身超限仍失败，不会通过不断创建空段绕过；回答和提取各自的实际请求仍执行容量检查，模型返回长度及所选内容可能使后续阶段超限。分段没有自动重试、提前压缩、旧段召回或并行；既有调用取消仍由 Invocation 处理，不因此回滚分段。切段已发生后若后续阶段失败，不自动回退当前段，也不删掉已接纳消息。可选持久端口保存正式消息和分段边界，见 [持久化](persistence.md)。
 
 ## 最近轮次的保留
 
@@ -32,7 +32,7 @@ Transcript 由环境建立并持有，E/O/A 业务只通过本层声明的资源
 
 Transcript 自身负责消息和段边界的接纳、落实，以及本地 revision。一次非空批量追加或有效切段推进一次 revision；消息 index 仍只定位正文。没有捕获器、没有 Recorder 时，revision 同样推进；它不是网络交付游标。
 
-`new Transcript(messages, { changes, observation: recording.transcript })` 在接纳初始消息前固定两个可选出口；initializeObserver 在环境层分别建立 Transcript、Memories、R 和所需接线。createBoundRuntime 不创建内容实体。Transcript 的 changes 只要求 `ChangeCapture<TranscriptEvent>`。一个 `ChangeBuffer<A | B>` 可以共享给只产生 A 和只产生 B 的来源，不要求每个对象独占捕获器。服务已将消息、记忆、调用及记录登记接入同一捕获器。
+`new Transcript(messages, { changes, observation: recording.transcript })` 在接纳初始消息前固定两个可选出口；initializeObserver 在环境层分别建立 Transcript、Memories、R 和所需接线。createBoundRuntime 不创建内容实体。另有可选 persistence 端口，在内存变更和两个发布出口之前同步提交；restore 不执行该端口或重发事件。Transcript 的 changes 只要求 `ChangeCapture<TranscriptEvent>`。一个 `ChangeBuffer<A | B>` 可以共享给只产生 A 和只产生 B 的来源，不要求每个对象独占捕获器。服务已将消息、记忆、调用及记录登记接入同一捕获器。
 
 ```text
 整批接纳 → 固定事件正文 → 正式更新集合及 revision

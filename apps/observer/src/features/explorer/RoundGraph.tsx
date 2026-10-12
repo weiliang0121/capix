@@ -1,3 +1,4 @@
+import { archiveNotice } from '../../observation/status.js';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import type { RoundView } from '../../state/data.js';
@@ -53,7 +54,7 @@ export function RoundGraph({ round, graph, index, width, selected, mode, expande
           <ArrowUpRight size={13} />
         </button>
         <Status status={round.status} />
-        <span className="round-graph-total">{formatDuration(round.durationMs)}</span>
+        <span className="round-graph-total">{formatDuration(round.durationMs, round.status)}</span>
       </header>
       <button type="button" className="round-graph-context" onClick={() => inspect(round.id)} aria-label={`查看 ${qaName(index)} 的输入和上下文`}>
         <p>{round.inputContent}</p>
@@ -64,6 +65,7 @@ export function RoundGraph({ round, graph, index, width, selected, mode, expande
           {round.memoryChanges.length > 0 && <span>记忆变化 {round.memoryChanges.length} 项</span>}
         </div>
       </button>
+      {round.archive && <p className="call-graph-note">{archiveNotice(round.archive)}</p>}
       {mode === 'calls' ? (
         <>
           {summaryOnly && (

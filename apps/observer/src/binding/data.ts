@@ -50,6 +50,7 @@ export function createDataProjection() {
       runningId: current?.id ?? '',
       observationLoading: observation.loading,
       observationError: observation.error,
+      observationNotice: observation.notice,
       conversationSync: projectConversationSync(state),
       conversation,
       messageCount: state.messages.length,

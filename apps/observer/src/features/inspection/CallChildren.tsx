@@ -12,7 +12,7 @@ export function CallChildren({ children, executionId, inspect }: { children: rea
           </span>
           <span className="inline-meta">
             <Status value={call.status} />
-            {duration(call.durationMs)}
+            {duration(call.durationMs, call.status)}
             <ArrowUpRight />
           </span>
         </Button>

@@ -213,19 +213,49 @@ test('consumer exceptions are isolated and a pending initial append is represent
   }
 });
 
-test('memory capture failure keeps the applied fact but never proceeds to the next item', () => {
+test('memory capture failure preserves the whole committed batch and attempts publication of every fact', () => {
   const transcript = new Transcript([{ role: 'user', content: 'evidence' }]);
+  const captured = [];
+  const observed = [];
+  const failure = new Error('capture failed');
   const memories = new Memories(transcript, {
     changes: {
-      capture() {
-        throw new Error('capture failed');
+      capture(event) {
+        assert.equal(memories.sequence, 2);
+        assert.equal(memories.values().length, 2);
+        captured.push(event);
+        throw failure;
+      },
+    },
+    observation: {
+      publish(event) {
+        observed.push(event);
       },
     },
   });
-  assert.throws(() => memories.apply([memoryChange('one'), memoryChange('two')]), ChangeCaptureError);
-  assert.equal(memories.sequence, 1);
-  assert.equal(memories.values().length, 1);
-  assert.equal(memories.values()[0].content, 'one');
+  assert.throws(
+    () => memories.apply([memoryChange('one'), memoryChange('two')]),
+    (error) => {
+      assert.ok(error instanceof AggregateError);
+      assert.equal(error.errors.length, 2);
+      for (const [index, fault] of error.errors.entries()) {
+        assert.ok(fault instanceof ChangeCaptureError);
+        assert.equal(fault.cause, failure);
+        assert.equal(fault.event, captured[index]);
+      }
+      return true;
+    },
+  );
+  assert.equal(memories.sequence, 2);
+  assert.deepEqual(
+    memories.values().map((memory) => memory.content),
+    ['one', 'two'],
+  );
+  assert.deepEqual(
+    captured.map((event) => event.sequence),
+    [1, 2],
+  );
+  assert.deepEqual(observed, captured);
 });
 
 async function serve(t, observer) {

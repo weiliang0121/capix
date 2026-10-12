@@ -1,6 +1,6 @@
 import { defaultColumnWidth, maximumColumnWidth, minimumColumnWidth } from '../../state/preferences.js';
 export { defaultColumnWidth, maximumColumnWidth, minimumColumnWidth } from '../../state/preferences.js';
-import type { ExecutionSummary, InvocationSummary } from '@capix/protocol';
+import type { RoundView, ObservedInvocation } from '../../state/data.js';
 
 export const columnGap = 20;
 
@@ -47,7 +47,7 @@ export function densityScroll(before: ColumnLayout, after: ColumnLayout, scrollL
 
 export type CallFamily = 'selection' | 'answer' | 'memory' | 'neutral';
 export interface CallGeometry {
-  call: InvocationSummary;
+  call: ObservedInvocation;
   left: number;
   width: number;
   lane: number;
@@ -61,14 +61,14 @@ export interface InvocationLayout {
 }
 
 /** Width encodes time only within this execution. Running spans stop at observed facts. */
-export function layoutInvocations(execution: ExecutionSummary): InvocationLayout {
+export function layoutInvocations(execution: Pick<RoundView, 'calls' | 'observedOffsetMs'>): InvocationLayout {
   const byId = new Map(execution.calls.map((call) => [call.id, call]));
   const root = execution.calls.find((call) => call.recordType === 'execution');
   const start = root?.offsetMs ?? Math.min(0, ...execution.calls.map((call) => call.offsetMs));
   const observedEnd = Math.max(start, execution.observedOffsetMs, ...execution.calls.map((call) => call.offsetMs + (call.durationMs ?? 0)));
   const span = Math.max(0, root?.durationMs ?? observedEnd - start);
-  const ancestors = (call: InvocationSummary): InvocationSummary[] => {
-    const result: InvocationSummary[] = [];
+  const ancestors = (call: ObservedInvocation): ObservedInvocation[] => {
+    const result: ObservedInvocation[] = [];
     const visited = new Set([call.id]);
     let parent = call.parentId ? byId.get(call.parentId) : undefined;
     while (parent && !visited.has(parent.id)) {
@@ -91,8 +91,8 @@ export function layoutInvocations(execution: ExecutionSummary): InvocationLayout
   return { calls, operationLanes: Math.max(1, ...calls.filter((item) => item.call.recordType === 'operation').map((item) => item.lane + 1)), attemptLanes: Math.max(1, ...calls.filter((item) => item.call.recordType === 'attempt').map((item) => item.lane + 1)) };
 }
 
-export function formatDuration(milliseconds: number | undefined): string {
-  if (milliseconds === undefined) return '进行中';
+export function formatDuration(milliseconds: number | undefined, status = 'running'): string {
+  if (milliseconds === undefined) return status === 'running' ? '进行中' : '耗时未取得';
   if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
   return `${(milliseconds / 1000).toFixed(milliseconds < 10000 ? 2 : 1)} s`;
 }

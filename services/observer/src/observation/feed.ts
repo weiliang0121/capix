@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ObservationBaseline, ObservationFrame, ObservationUpdate, ObserverChange, ObservationChange, RecordEntry, ExecutionRecord, RuntimeCallRecord } from '@capix/protocol';
+import type { ObservationBaseline, ObservationFrame, ObservationUpdate, ObserverChange, ObservationChange, RecordEntry, ExecutionRecord, RuntimeCallRecord, RecordingArchive } from '@capix/protocol';
 import type { Transcript, Memories } from '@capix/server-runtime/content';
 import { observeMemory, snapshotValue, type RecordBook, type RecordingInstallation } from '@capix/server-runtime/recording';
 import type { ChangeConsumer } from '../assembly/changes.js';
@@ -14,6 +14,7 @@ export interface ObservationEnvironment {
   readonly transcript: Transcript;
   readonly book: RecordBook;
   readonly memories: Memories;
+  readonly recordingArchives?: readonly RecordingArchive[];
 }
 /** Each connection consumes an atomic source opening; delivery never runs in a producer. */
 export class ObservationFeed {
@@ -65,7 +66,18 @@ export class ObservationFeed {
 
 /** A running R can be receiving a finished E: retain that whole local subtree until R finishes. */
 function activeEntries(entries: readonly RecordEntry[], rootId?: string): RecordEntry[] {
-  const selected = new Set(entries.filter((entry) => entry.data.id === rootId || ((entry.kind === 'runtime-call' || entry.kind === 'execution') && (entry.data as RuntimeCallRecord | ExecutionRecord).status === 'running')).map((entry) => entry.data.id));
+  const byId = new Map(entries.map((entry) => [entry.data.id, entry]));
+  const belongsToCurrent = (entry: RecordEntry): boolean => {
+    const visited = new Set<string>();
+    let current: RecordEntry | undefined = entry;
+    while (current && !visited.has(current.data.id)) {
+      if (current.data.id === rootId) return true;
+      visited.add(current.data.id);
+      current = current.data.parentId ? byId.get(current.data.parentId) : undefined;
+    }
+    return false;
+  };
+  const selected = new Set(entries.filter((entry) => entry.data.id === rootId || ((entry.kind === 'runtime-call' || entry.kind === 'execution') && (entry.data as RuntimeCallRecord | ExecutionRecord).status === 'running' && belongsToCurrent(entry))).map((entry) => entry.data.id));
   let changed = true;
   while (changed) {
     changed = false;

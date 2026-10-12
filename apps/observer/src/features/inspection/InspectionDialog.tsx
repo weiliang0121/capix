@@ -1,3 +1,4 @@
+import { archiveNotice } from '../../observation/status.js';
 import { useEffect, useState } from 'react';
 import { ArrowUpRight, ChevronLeft } from 'lucide-react';
 import type { Inspection } from '../../state/store';
@@ -35,7 +36,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                 <>
                   <Status value={call?.status ?? detail.status} />
                   <span>
-                    {duration(call ? call.durationMs : qa?.durationMs)} · {new Date(call?.startedAt ?? detail.startedAt).toLocaleString()}
+                    {duration(call ? call.durationMs : qa?.durationMs, call?.status ?? detail.status)} · {new Date(call?.startedAt ?? detail.startedAt).toLocaleString()}
                   </span>
                 </>
               ) : (
@@ -44,6 +45,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
             </div>
           </DialogDescription>
         </DialogHeader>
+        {detail?.archive && <p className="subtle">{archiveNotice(detail.archive)}</p>}
         {loading && (
           <p className="empty-note" role="status">
             读取记录…
@@ -106,7 +108,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                       <section className="selection-detail">
                         <h3>本轮历史选择</h3>
                         {qa?.selections.map((selection) => (
-                          <p key={selection.operationId}>{selection.indexes ? selection.indexes.map((index) => `[${index}]`).join(' → ') || '未选择历史' : statusLabels[selection.status]}</p>
+                          <p key={selection.operationId}>{selection.indexes ? selection.indexes.map((index) => `[${index}]`).join(' → ') || '未选择历史' : statusLabels[qa.archive && selection.status === 'running' ? 'unresolved' : selection.status]}</p>
                         ))}
                       </section>
                       <Button variant="outline" onClick={() => onInspect(detail.id, detail.id)}>

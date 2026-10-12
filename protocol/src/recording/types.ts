@@ -1,3 +1,4 @@
+import type { RecordingArchiveOrigin } from '../observer/archive.js';
 import type { InvocationFailureFact, RuntimeErrorValue } from '../invocation/errors.js';
 import type { ResourceRecord } from './resource.js';
 import type { InvocationRelationIdentity } from '../invocation/types.js';
@@ -110,6 +111,7 @@ export interface InvocationBoundaryRecord extends BaseRecord<InvocationBoundaryV
 }
 /** One E invocation's record subtree, parent R invocation record and recorded work boundaries. */
 export interface ExecutionRecordSnapshot {
+  readonly archive?: RecordingArchiveOrigin;
   runtimeCall: RuntimeCallRecord;
   runtimeEvents: InvocationBoundaryRecord[];
   execution: ExecutionRecord;

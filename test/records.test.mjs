@@ -51,7 +51,7 @@ test('Book stores any record by identity without creating invocation boundaries'
   const book = new RecordBook();
   const value = { material: 'reference' };
   const record = new BaseRecord(value);
-  assert.deepEqual(Object.getOwnPropertyNames(RecordBook.prototype).sort(), ['add', 'constructor', 'get', 'values']);
+  assert.deepEqual(Object.getOwnPropertyNames(RecordBook.prototype).sort(), ['add', 'constructor', 'exportState', 'get', 'values']);
   assert.equal('status' in record, false);
   assert.equal(book.add(record), record);
   assert.equal(book.get(record.id), record);

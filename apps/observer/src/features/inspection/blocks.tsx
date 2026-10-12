@@ -1,6 +1,6 @@
 import { Badge } from '../../components/ui/badge';
 import { MessageContent } from '../../components/message-content';
-export const statusLabels: Record<string, string> = { running: '运行中', passed: '完成', succeeded: '完成', failed: '失败' };
+export const statusLabels: Record<string, string> = { running: '运行中', passed: '完成', succeeded: '完成', failed: '失败', unresolved: '上次运行未取得结束记录' };
 export function Status({ value }: { value: string }) {
   return (
     <Badge variant="secondary" className={`status-tag status-${value}`}>
@@ -8,8 +8,8 @@ export function Status({ value }: { value: string }) {
     </Badge>
   );
 }
-export function duration(value: number | undefined) {
-  return value === undefined ? '进行中' : value < 1000 ? `${Math.round(value)} ms` : `${(value / 1000).toFixed(2)} s`;
+export function duration(value: number | undefined, status = 'running') {
+  return value === undefined ? (status === 'running' ? '进行中' : '耗时未取得') : value < 1000 ? `${Math.round(value)} ms` : `${(value / 1000).toFixed(2)} s`;
 }
 export function DataBlock({ title, value }: { title: string; value: unknown }) {
   return (

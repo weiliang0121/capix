@@ -1,6 +1,7 @@
+import type { ObservationStatus } from './status.js';
 import type { ExecutionRecordSnapshot, ProcessRecord, RuntimeErrorValue, InvocationFailureFact, InvocationBoundaryRecord, GenerationOutput } from '@capix/protocol';
 export type Purpose = 'selection' | 'answer' | 'memory';
-export type NodeStatus = 'running' | 'passed' | 'failed';
+export type NodeStatus = 'running' | 'passed' | 'failed' | 'unresolved';
 export interface TraceNode {
   recordType: 'execution' | 'operation' | 'attempt';
   contextId: string;
@@ -35,7 +36,7 @@ export interface CallSpan {
   target?: string;
   label: string;
   source: string;
-  status: 'running' | 'passed' | 'failed';
+  status: 'running' | 'passed' | 'failed' | 'unresolved';
   offsetMs: number;
   durationMs?: number;
   input?: unknown;
@@ -55,7 +56,7 @@ export interface Trace {
   id: string;
   startedAt: string;
   durationMs: number;
-  status: 'running' | 'succeeded' | 'failed';
+  status: ObservationStatus;
   nodes: TraceNode[];
   callSequence: CallSequence;
   result?: GenerationOutput;

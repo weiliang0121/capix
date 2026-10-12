@@ -1,4 +1,5 @@
-import type { FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, MemoryResultSource, Message, ResourceRecord, ProcessRecord, RelationChangeRecord } from '@capix/protocol';
+import type { ObservationStatus } from '../observation/status.js';
+import type { FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, MemoryResultSource, Message, ResourceRecord, ProcessRecord, RelationChangeRecord, InvocationSummary, RecordingArchiveOrigin } from '@capix/protocol';
 import type { ConversationItem } from './conversation.js';
 import type { CallSpan } from '../observation/types.js';
 import type { CallGraphModel } from './graph.js';
@@ -9,7 +10,12 @@ export interface RoundSelectionSummary {
   selectionComplete: boolean;
   selectedMessages: { index: number; entry?: { index: number; count: number; message: Readonly<Message> } }[];
 }
-export interface RoundView extends Omit<ExecutionSummary, 'response'> {
+export interface ObservedInvocation extends Omit<InvocationSummary, 'status'> {
+  status: ObservationStatus;
+}
+export interface RoundView extends Omit<ExecutionSummary, 'response' | 'status' | 'calls'> {
+  status: ObservationStatus;
+  calls: readonly ObservedInvocation[];
   transcriptId: string;
   messagesLoaded: boolean;
   response?: { index?: number; content?: string };
@@ -35,7 +41,8 @@ export interface CallDetail extends Omit<CallSpan, 'recordType' | 'caller' | 'ca
 export interface ExecutionDetail {
   id: string;
   startedAt: string;
-  status: ExecutionSummary['status'];
+  status: ObservationStatus;
+  archive?: RecordingArchiveOrigin;
   contextId: string;
   resources: readonly ResourceRecord[];
   settings: unknown;
@@ -52,6 +59,7 @@ export interface AppData {
   config?: ConfigurationResponse;
   observationLoading: boolean;
   observationError?: unknown;
+  observationNotice?: string;
   conversationSync?: { message: string; reconnect: boolean };
   submissionControl?: SubmissionControl;
   queue: ConversationQueueView;

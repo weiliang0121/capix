@@ -11,25 +11,69 @@ import { TranscriptFeed } from '../conversation/transcript/feed.js';
 import { ModelSource } from '../conversation/model/source.js';
 import type { WorkspaceFiles } from '../files/index.js';
 import type { ConversationDecisionDefinition } from '../conversation/decision/types.js';
+import type { SqliteObserverStore } from '../persistence/store.js';
 
 /** Independent entity lifetimes are established here; R only binds their published access. */
-export function initializeObserver(provider: ModelInitialization, messages: readonly Message[] = [], options: { files?: WorkspaceFiles; decision?: ConversationDecisionDefinition; maxDecisionSteps?: number } = {}) {
-  const book = new RecordBook();
+export function initializeObserver(provider: ModelInitialization, messages: readonly Message[] = [], options: { files?: WorkspaceFiles; decision?: ConversationDecisionDefinition; maxDecisionSteps?: number; persistence?: SqliteObserverStore } = {}) {
+  const persistence = options.persistence;
+  const saved = persistence?.load();
+  if (saved && messages.length) throw new Error('Cannot append startup messages to restored content');
+  // Restore and validate everything before a new recording installation can publish changes.
+  const initialTranscript = persistence ? (saved ? Transcript.restore(saved.transcript) : new Transcript(messages)) : undefined;
+  const initialMemories = initialTranscript ? (saved ? Memories.restore(saved.memories, initialTranscript) : new Memories(initialTranscript)) : undefined;
+  const book = saved ? RecordBook.restore(saved.recording.book) : new RecordBook();
+  if (persistence && !saved) persistence.initialize({ transcript: initialTranscript!.exportState(), memories: initialMemories!.exportState() });
+  const recordingArchives = saved?.recording.archives ?? [];
   const clock = new Clock();
   const changes = new ChangeBuffer<ObserverChange>();
-  const recorder = new Recorder(book, { clock, changes });
-  const consumer = new ChangeConsumer(changes);
-  const recordSource = new RecordSource(recorder, consumer);
-  const recording = bindRecording(recorder, { invalidate: (error) => recordSource.invalidate(error) });
-  const transcript = new Transcript(messages, { observation: recording.transcript, changes });
-  const transcripts = new TranscriptFeed(transcript);
-  consumer.subscribe((change) => {
-    if (change.type === 'transcript') transcripts.publish(change);
+  const recorder = new Recorder(book, {
+    clock,
+    changes: persistence
+      ? {
+          capture(event) {
+            persistence.applyRecordChange(event);
+            changes.capture(event);
+          },
+        }
+      : changes,
   });
-  const memories = new Memories(transcript, { observation: recording.memory, changes });
-  const selectionUsage = new SelectionUsage();
-  const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps });
-  const model = new ModelSource(provider);
-  const runtime = bindConversation(definition, { transcript, memories, selectionUsage, files: options.files }, model, { observations: [recording], changes });
-  return { transcript, memories, selectionUsage, files: options.files, model, book, clock, recorder, recording, runtime, changes, definition, consumer, recordSource, transcripts };
+  persistence?.openRecording(recorder.id);
+  const consumer = new ChangeConsumer(changes);
+  try {
+    const recordSource = new RecordSource(recorder, consumer);
+    const recording = bindRecording(recorder, {
+      invalidate: (error) => {
+        persistence?.invalidateRecording(recorder.id);
+        recordSource.invalidate(error);
+      },
+    });
+    const transcript = initialTranscript ? Transcript.restore(initialTranscript.exportState(), { observation: recording.transcript, changes, persistence: persistence?.transcript }) : new Transcript(messages, { observation: recording.transcript, changes });
+    const transcripts = new TranscriptFeed(transcript);
+    consumer.subscribe((change) => {
+      if (change.type === 'transcript') transcripts.publish(change);
+    });
+    const memories = initialMemories ? Memories.restore(initialMemories.exportState(), transcript, { observation: recording.memory, changes, persistence: persistence?.memories }) : new Memories(transcript, { observation: recording.memory, changes });
+    const selectionUsage = new SelectionUsage();
+    const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps });
+    const model = new ModelSource(provider);
+    const runtime = bindConversation(definition, { transcript, memories, selectionUsage, files: options.files }, model, { observations: [recording], changes });
+    let closed = false;
+    function close(): void {
+      if (closed) return;
+      if (runtime.running) throw new Error('Cannot close an environment with an active invocation');
+      closed = true;
+      try {
+        persistence?.sealRecording(recorder.id, recorder.revision);
+      } finally {
+        transcripts.close();
+        consumer.close();
+        persistence?.close();
+      }
+    }
+    return { transcript, memories, selectionUsage, files: options.files, model, book, clock, recorder, recording, runtime, changes, definition, consumer, recordSource, transcripts, recordingArchives, persistence, close };
+  } catch (error) {
+    consumer.close();
+    persistence?.invalidateRecording(recorder.id);
+    throw error;
+  }
 }

@@ -1,3 +1,4 @@
+import type { RecordingArchive, RecordingArchiveOrigin } from './archive.js';
 import type { ExecutionRecord } from '../recording/types.js';
 import type { ExecutionObservation } from './execution.js';
 import type { MemoryRecord } from '../recording/memory.js';
@@ -24,6 +25,7 @@ export interface InvocationSummary {
 }
 type ObservedExecution = ExecutionObservation['executions'][number];
 export interface ExecutionSummary extends ObservedExecution {
+  readonly archive?: RecordingArchiveOrigin;
   durationMs?: number;
   /** Last recorded monotonic offset; includes incomplete runs without inventing an end. */
   observedOffsetMs: number;
@@ -34,6 +36,7 @@ export interface ExecutionSummary extends ObservedExecution {
   memoryChanges: { id: string; memoryId: string; operationId?: string; action: MemoryRecord['value']['action']; change: string }[];
 }
 export interface ObserverOverview {
+  readonly archives?: readonly RecordingArchive[];
   transcriptId: string;
   messages: ExecutionObservation['messages'];
   executions: ExecutionSummary[];

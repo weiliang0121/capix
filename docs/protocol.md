@@ -91,7 +91,9 @@ BaseRecord 表达身份、直接 parentId 与正文；CompositeRecord 增加 chi
 
 ExecutionRecordSnapshot 仍以一个 E 为查询范围，包含其 E/O/A、边界与资源事实；同时包含必填父层 runtimeCall、runtimeEvents 及 R 直属资源事实，不附带 记录安装根正文或 R 的其他 E 子树。runtimeCall/runtimeEvents 缺失的旧快照不再接纳；runtimeEvents 仅包含 R 自身的边界，不能混入 E 的 events。响应外的 parentId/childIds 引用不意味着已完整装载整棵树。观测基线携带 记录安装根与活动 R 的局部子树；E 已完成但 R 仍在接纳时，该 E 子树继续保留。其余已完成正文按需查询，R 不作为新 QA 计数。
 
-relationChanges 保留父层真实发生的 attached、returned、receiving、accepted、failed，含父子 Context、父轮次、可选 key/子记录 ID 和 eventSequence。returned 是子层结果，accepted 才是父层完成接纳；failed.source 区分接纳工作与观测故障，不能从 E 成功推断 R 成功。交付游标与各来源顺序分开，不承诺持久化或业务恢复。
+relationChanges 保留父层真实发生的 attached、returned、receiving、accepted、failed，含父子 Context、父轮次、可选 key/子记录 ID 和 eventSequence。returned 是子层结果，accepted 才是父层完成接纳；failed.source 区分接纳工作与观测故障，不能从 E 成功推断 R 成功。交付游标与各来源顺序分开，不承诺旧游标重放或业务恢复。
+
+ObserverOverview 可带 archives（sourceId、rootIds、revision、state），其执行简介和 ExecutionRecordSnapshot 可带对应 archive 来源。state=open/sealed/incomplete 解释持久历史的封存状态；旧 running 不代表仍在执行。归档详情允许缺少尚未保存的边界尾部，不放宽已有身份、归属、顺序及正文规则。当前活动基线与历史来源分开，见 [持久化](persistence.md)。
 
 ## 变化与交付
 

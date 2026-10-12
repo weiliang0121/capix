@@ -1,3 +1,4 @@
+import { observationStatus } from '../observation/status.js';
 import type { ObservationState, TranscriptState } from '@capix/client-runtime';
 import type { ObserverOverview } from '@capix/protocol';
 import type { AppData, RoundView, MemoryView, ExecutionDetail } from '../state/data.js';
@@ -12,7 +13,7 @@ interface GraphSource {
   detail: ExecutionDetail | undefined;
 }
 
-function projectRounds(overview: ObserverOverview, transcripts: ReadonlyMap<string, TranscriptState>): RoundView[] {
+function projectRounds(overview: ObserverOverview, transcripts: ReadonlyMap<string, TranscriptState>, projectedCalls: WeakMap<object, RoundView['calls']>): RoundView[] {
   const counts = new Map(overview.messages.map((message) => [message.index, message.count]));
   return overview.executions.map((execution) => {
     const indexes = [...new Set(execution.selections.flatMap((selection) => selection.indexes ?? []))];
@@ -20,8 +21,17 @@ function projectRounds(overview: ObserverOverview, transcripts: ReadonlyMap<stri
     const snapshot = transcripts.get(transcriptId)?.snapshot;
     const messages = snapshot?.messages ?? [];
     const answer = execution.response?.index === undefined ? undefined : messages[execution.response.index];
+    const calls = execution.calls;
+    const previousCalls = projectedCalls.get(execution.calls);
+    if (execution.archive && !previousCalls)
+      projectedCalls.set(
+        execution.calls,
+        execution.calls.map((call) => ({ ...call, status: observationStatus(call.status, execution.archive) })),
+      );
     return {
       ...execution,
+      status: observationStatus(execution.status, execution.archive),
+      calls: execution.archive ? projectedCalls.get(execution.calls)! : calls,
       transcriptId,
       messagesLoaded: Boolean(snapshot),
       ...(execution.response ? { response: { ...execution.response, ...(answer ? { content: answer.content } : {}) } } : {}),
@@ -45,6 +55,7 @@ export function createObservationProjection() {
   let details: AppData['details'] = new Map();
   let graphs: AppData['graphs'] = new Map();
   let graphSources = new Map<string, GraphSource>();
+  const projectedCalls = new WeakMap<object, RoundView['calls']>();
   return (state: ObservationState, transcripts: ReadonlyMap<string, TranscriptState>) => {
     if (!previous || previous.overview !== state.overview || previous.updates !== state.updates || previous.memory !== state.memory || previous.transcriptRecords !== state.transcriptRecords || previousTranscripts !== transcripts) {
       overview = [...state.updates.values()].reduce(updateOverview, state.overview);
@@ -69,12 +80,12 @@ export function createObservationProjection() {
           return { ...execution, memoryChanges, ...(answerIndex !== undefined ? { response: { ...execution.response, index: answerIndex } } : {}) };
         }),
       };
-      rounds = projectRounds(overview, transcripts);
+      rounds = projectRounds(overview, transcripts, projectedCalls);
     }
     if (!previous || previous.records !== state.records || previous.memory !== state.memory) {
-      const next = new Map(details);
+      const next = new Map<string, ExecutionDetail>();
       for (const [id, snapshot] of state.records) {
-        if (previous?.records.get(id) !== snapshot || previous?.memory !== state.memory) next.set(id, projectDetail(snapshot, state.memory));
+        next.set(id, previous?.records.get(id) !== snapshot || previous?.memory !== state.memory ? projectDetail(snapshot, state.memory) : details.get(id)!);
       }
       details = next;
     }
@@ -111,6 +122,8 @@ export function createObservationProjection() {
         }),
       })),
     };
-    return { overview, rounds, details, graphs, memory, loading: state.loading, error: state.error };
+    const uncertain = overview.archives?.filter((archive) => archive.state !== 'sealed').length ?? 0;
+    const notice = uncertain ? `${uncertain} 份历史记录来源未完整封存；保留最后已保存事实，不代表仍在执行。` : undefined;
+    return { overview, rounds, details, graphs, memory, loading: state.loading, error: state.error, notice };
   };
 }

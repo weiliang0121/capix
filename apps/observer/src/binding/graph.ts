@@ -1,3 +1,4 @@
+import { observationStatus } from '../observation/status.js';
 import type { RelationChangeRecord } from '@capix/protocol';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import type { CallDetail, ExecutionDetail, RoundView } from '../state/data.js';
@@ -104,7 +105,7 @@ export function projectCallGraph(round: RoundView, detail?: ExecutionDetail): Ca
         id,
         label: call.label,
         level: call.recordType,
-        status: call.status === 'passed' ? 'succeeded' : call.status,
+        status: call.status === 'unresolved' ? 'unresolved' : observationStatus(call.status === 'passed' ? 'succeeded' : call.status, round.archive),
         name: local?.operation ?? summary?.name,
         ...(call.durationMs === undefined ? {} : { durationMs: call.durationMs }),
         ...(description ? { summary: short(description) } : {}),

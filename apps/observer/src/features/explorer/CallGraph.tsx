@@ -3,7 +3,7 @@ import type { CallGraphModel, CallGraphNode } from '../../state/graph.js';
 import { formatDuration } from './layout.js';
 
 const levelLabels = { execution: 'E', operation: 'O', attempt: 'A' };
-const statusLabels = { running: '运行中', succeeded: '完成', failed: '失败' };
+const statusLabels = { running: '运行中', succeeded: '完成', failed: '失败', unresolved: '上次运行未取得结束记录' };
 
 function hasFailure(node: CallGraphNode): boolean {
   return node.status === 'failed' || node.reception?.status === 'failed' || node.children.some(hasFailure);

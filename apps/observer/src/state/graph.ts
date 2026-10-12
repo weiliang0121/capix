@@ -1,10 +1,11 @@
+import type { ObservationStatus } from '../observation/status.js';
 import type { RelationChangeRecord } from '@capix/protocol';
 
 export interface CallGraphNode {
   readonly id: string;
   readonly label: string;
   readonly level: 'execution' | 'operation' | 'attempt';
-  readonly status: 'running' | 'succeeded' | 'failed';
+  readonly status: ObservationStatus;
   readonly name?: string;
   readonly summary?: string;
   readonly reception?: { readonly status: RelationChangeRecord['change']['kind']; readonly label: string };

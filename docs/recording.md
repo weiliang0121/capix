@@ -25,7 +25,7 @@ BaseRecord.parentId 表达直接产生位置，构造后不可改写；没有调
 
 Recorder.tree 提供 children(id)、descendants(id) 与 root(id)，直接沿 Book 中记录的 childIds 查询，不扫描整个 Book，也不维护第二份节点或边集合。root 沿直接 parentId 查到根并核对下级引用，不维护 Runtime 成员表。后代查询按深度优先返回归属顺序，不能作为事件发生顺序。父级引用写入和关系提交使用包内能力，不对业务公开 attach/reparent 方法。Book.add 仍是底层存储操作，正式业务登记必须经过 Recorder.add。
 
-RecordRegistration 只覆盖一次记录登记，既不包含整个 EOA 调用，也不回滚 Transcript 或 Memories 已经落实的业务变化。没有异步事务、持久化、恢复、重试或补偿体系。
+RecordRegistration 只覆盖一次记录登记，既不包含整个 EOA 调用，也不回滚 Transcript 或 Memories 已经落实的业务变化。它不承担异步事务、执行恢复、重试或补偿。服务通过变化出口另行保存记录，见 [持久化](persistence.md)。
 
 ## 调用记录
 
@@ -77,7 +77,7 @@ Service ChangeConsumer 独占共享 ChangeBuffer 的 take；RecordSource 与 fee
 
 ExecutionRecordSnapshot 包含父 R 调用、E/O/A、runtimeEvents/events 两个计时范围和资源事实正文，是按需查询及本地展示的执行视图，不是整棵记录树。观测基线另带 记录安装根及活动执行记录，内容记录通过 record 增量传输。parentId/childIds 可以引用未装载的历史正文。对话由 R.run 独立交付，不从记录生成回答。消息正文通过集合 UID 独立加载和持续同步，客户端 binding 将资源定位与消息副本组合；原文未加载不等于空正文。
 
-没有新增 Recorder 子类、插件注册、持久化、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。
+没有新增 Recorder 子类、插件注册、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。RecordBook.exportState / restore 提供历史载入，具体结构检查位于 records/restoration；恢复的具体记录类型和 ID 保留，historical 记录不可修改，也不能附加新的子记录。该入口不重放登记、通知或调用。
 
 ## 局部顺序与索引迁移进度
 
@@ -96,3 +96,5 @@ InvocationRecord 表达一次调用，RuntimeCallRecord、ExecutionRecord、Oper
 ## 来源完整性与消费
 
 记录源在首次观察前建立，并将 invalidate 接入安装。记录观察漏写后 source 永久标为不完整，旧连接以 SOURCE_INCOMPLETE 结束，新完整基线被拒绝；不能通过换游标或再次快照假装补齐丢失事实。isolate 不保证记录完整。多载体声明在部分写入后失败，保留已写数据，并使所依赖的完整性来源失效。单个网络消费失败不使源损坏，消息同步保持独立。
+
+重启后的旧来源作为显式归档加载，不冒充新的健康活动来源。归档保留 open/sealed/incomplete 状态和最后保存的 revision；新的 Recorder/RecordingInstallation 只负责本进程变化。历史 running 表示“未取得结束记录”，不能作为活动调用继续计算耗时或恢复业务。内容实体从自己的持久状态恢复，不从调用记录或 MemoryRecord 反推。

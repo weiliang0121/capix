@@ -204,7 +204,7 @@ export function RuntimeExplorer({ rounds, graphs, loadExecution, matches, select
                     )}
                   </p>
                   <div className="explorer-nav-meta">
-                    <span>{formatDuration(round.durationMs)}</span>
+                    <span>{formatDuration(round.durationMs, round.status)}</span>
                     {round.memoryChanges.length > 0 && <span>记忆变化 {round.memoryChanges.length}</span>}
                   </div>
                 </button>

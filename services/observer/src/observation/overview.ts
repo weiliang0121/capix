@@ -1,15 +1,16 @@
 import { isUndefined } from 'es-toolkit/predicate';
-import type { ExecutionSummary, InvocationSummary, ObserverOverview } from '@capix/protocol';
+import type { ExecutionSummary, InvocationSummary, ObserverOverview, RecordingArchive } from '@capix/protocol';
 import { AttemptRecord, InvocationBoundaryRecord, ExecutionRecord, MemoryRecord, OperationRecord, type RecordBook } from '@capix/server-runtime/recording';
 import { type Transcript } from '@capix/server-runtime/content';
 import { executionTranscript } from './evidence.js';
 import { inspectExecutions } from './inspect.js';
+import { executionArchive } from './archive.js';
 import type { SelectionInput } from '../conversation/operations/history/input.js';
 
 type ObservedCallRecord = ExecutionRecord | OperationRecord | AttemptRecord;
 
 /** Read list/timing facts directly: opening the explorer does not load every invocation body. */
-export function observeOverview(observer: { readonly book: RecordBook; readonly transcript: Transcript }): ObserverOverview {
+export function observeOverview(observer: { readonly book: RecordBook; readonly transcript: Transcript; readonly recordingArchives?: readonly RecordingArchive[] }): ObserverOverview {
   const observation = inspectExecutions(observer.book, observer.transcript);
   const records = [...observer.book.values()];
   const operations = records.filter((record): record is OperationRecord => record instanceof OperationRecord);
@@ -47,8 +48,10 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
     const captured = selection?.value.input as SelectionInput | undefined;
     const range = executionTranscript(observer.book, record.id);
     const call = summarize(record);
+    const archive = executionArchive(observer.book, observer.recordingArchives, record.id);
     return {
       ...execution,
+      ...(archive ? { archive } : {}),
       observedOffsetMs: observedOffsets.get(execution.id) ?? 0,
       ...(isUndefined(call.durationMs) ? {} : { durationMs: call.durationMs }),
       calls: [call, ...ownOperations.map(summarize), ...attempts.filter((attempt) => operationIds.has(attempt.operationId)).map(summarize)],
@@ -57,5 +60,5 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
       memoryChanges: changes.filter((change) => change.executionId === execution.id).map((change) => ({ id: change.id, memoryId: change.memoryId, operationId: change.operationId, action: change.value.action, change: change.value.change })),
     };
   });
-  return { transcriptId: observer.transcript.id, messages: observation.messages, executions };
+  return { transcriptId: observer.transcript.id, messages: observation.messages, executions, ...(observer.recordingArchives?.length ? { archives: observer.recordingArchives } : {}) };
 }

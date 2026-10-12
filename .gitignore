@@ -8,3 +8,4 @@ traces/
 .test-dist/
 *.tsbuildinfo
 /workspace-files/
+/.capix/

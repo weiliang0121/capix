@@ -10,10 +10,12 @@ import type { ChangeCapture } from '../changes/capture.js';
 import { createTranscriptEvent, type TranscriptEvent } from './event.js';
 import type { ProgressChannel } from '../progress/channel.js';
 import type { TranscriptAppendProgress } from './progress.js';
+import type { TranscriptCommit, TranscriptPersistence, TranscriptState } from './persistence.js';
 
 export interface TranscriptOptions {
   observation?: EventConsumer<TranscriptEvent>;
   changes?: ChangeCapture<TranscriptEvent>;
+  persistence?: TranscriptPersistence;
 }
 
 export interface TranscriptAppendOptions extends ChangeProvenance<TranscriptEvent> {
@@ -22,10 +24,11 @@ export interface TranscriptAppendOptions extends ChangeProvenance<TranscriptEven
 
 /** Original accepted messages, including the current input; independent of execution records. */
 export class Transcript {
-  readonly id = randomUUID();
+  #id: string = randomUUID();
   readonly #observation?: EventConsumer<TranscriptEvent>;
-  #publishing = false;
+  #mutating = false;
   readonly #changes?: ChangeCapture<TranscriptEvent>;
+  readonly #persistence?: TranscriptPersistence;
   #revision = 0;
   readonly #messages: Readonly<Message>[] = [];
   readonly #starts: number[] = [0];
@@ -33,8 +36,35 @@ export class Transcript {
   constructor(messages: readonly Message[] = [], options: TranscriptOptions = {}) {
     this.#observation = options.observation;
     this.#changes = options.changes;
+    this.#persistence = options.persistence;
     if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
     this.append(...messages);
+  }
+
+  get id(): string {
+    return this.#id;
+  }
+
+  /** Hydration is silent: it neither submits persistence writes nor replays accepted facts. */
+  static restore(state: TranscriptState, options: TranscriptOptions = {}): Transcript {
+    if (!isObject(state) || !isNonBlankString(state.id) || !isArray(state.messages) || !isArray(state.starts)) throw new TypeError('Invalid persisted transcript');
+    const messages = Array.from(state.messages, (message) => Transcript.accept(message));
+    const starts = Array.from(state.starts);
+    if (!starts.length || starts[0] !== 0 || starts.some((start, index) => !isSafeInteger(start) || start < 0 || (index > 0 && (start <= starts[index - 1]! || start >= messages.length)))) throw new TypeError('Invalid persisted transcript segments');
+    const minimumRevision = messages.length ? starts.length : 0;
+    const maximumRevision = messages.length + starts.length - 1;
+    if (!isSafeInteger(state.revision) || state.revision < minimumRevision || state.revision > maximumRevision) throw new TypeError('Invalid persisted transcript revision');
+    const transcript = new Transcript([], options);
+    transcript.#id = state.id;
+    transcript.#revision = state.revision;
+    transcript.#starts.length = 0;
+    for (const start of starts) transcript.#starts.push(start);
+    for (const message of messages) transcript.#messages.push(message);
+    return transcript;
+  }
+
+  exportState(): TranscriptState {
+    return Object.freeze({ id: this.id, revision: this.#revision, starts: Object.freeze([...this.#starts]), messages: Object.freeze([...this.#messages]) });
   }
 
   get length(): number {
@@ -56,14 +86,19 @@ export class Transcript {
   }
 
   startSegment(start: number, provenance: ChangeProvenance<TranscriptEvent> = {}): void {
-    if (this.#publishing) throw new Error('Transcript change publication cannot reenter mutation');
-    if (!isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
-    const previousStart = this.activeStart;
-    const end = this.length;
-    const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'segment-started', previousStart, start, end }, provenance.origin);
-    this.#starts.push(start);
-    this.#revision = event.revision;
-    this.capture(event, provenance.observation);
+    this.enterMutation();
+    try {
+      if (!isSafeInteger(start) || start <= this.activeStart || start >= this.length) throw new RangeError('New segment must start inside the active range');
+      const previousStart = this.activeStart;
+      const end = this.length;
+      const event = createTranscriptEvent(this.id, this.nextRevision(), { kind: 'segment-started', previousStart, start, end }, provenance.origin);
+      this.commit(Object.freeze({ kind: 'start-segment', transcriptId: this.id, expectedRevision: this.#revision, revision: event.revision, start }));
+      this.#starts.push(start);
+      this.#revision = event.revision;
+      this.capture(event, provenance.observation);
+    } finally {
+      this.#mutating = false;
+    }
   }
 
   append(...messages: readonly Message[]): void {
@@ -71,25 +106,42 @@ export class Transcript {
   }
 
   appendFrom(messages: readonly Message[], provenance: TranscriptAppendOptions = {}): void {
-    if (this.#publishing) throw new Error('Transcript change publication cannot reenter mutation');
-    if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
-    // Check the whole batch before changing the transcript.
-    const accepted = messages.map((message) => Transcript.accept(message));
-    if (!accepted.length) return;
-    const start = this.length;
-    const event = createTranscriptEvent(this.id, this.#revision + 1, { kind: 'messages-appended', start, messages: accepted }, provenance.origin);
-    for (const message of accepted) this.#messages.push(message);
-    this.#revision = event.revision;
-    this.capture(event, provenance.observation, provenance.progress);
+    this.enterMutation();
+    try {
+      if (!isArray(messages)) throw new TypeError('消息集合必须是数组。');
+      const accepted = Object.freeze(Array.from(messages, (message) => Transcript.accept(message)));
+      if (!accepted.length) return;
+      const start = this.length;
+      const event = createTranscriptEvent(this.id, this.nextRevision(), { kind: 'messages-appended', start, messages: accepted }, provenance.origin);
+      this.commit(Object.freeze({ kind: 'append', transcriptId: this.id, expectedRevision: this.#revision, revision: event.revision, start, messages: accepted }));
+      for (const message of accepted) this.#messages.push(message);
+      this.#revision = event.revision;
+      this.capture(event, provenance.observation, provenance.progress);
+    } finally {
+      this.#mutating = false;
+    }
   }
 
   private capture(event: TranscriptEvent, observation = this.#observation, progress?: ProgressChannel<TranscriptAppendProgress>): void {
-    this.#publishing = true;
-    try {
-      if (event.change.kind === 'messages-appended') progress?.publish(Object.freeze({ transcriptId: this.id, start: event.change.start, end: event.change.start + event.change.messages.length, revision: event.revision }));
-      publishFact(event, this.#changes, observation);
-    } finally {
-      this.#publishing = false;
+    if (event.change.kind === 'messages-appended') progress?.publish(Object.freeze({ transcriptId: this.id, start: event.change.start, end: event.change.start + event.change.messages.length, revision: event.revision }));
+    publishFact(event, this.#changes, observation);
+  }
+
+  private enterMutation(): void {
+    if (this.#mutating) throw new Error('Transcript persistence or change publication cannot reenter mutation');
+    this.#mutating = true;
+  }
+
+  private nextRevision(): number {
+    if (!isSafeInteger(this.#revision + 1)) throw new RangeError('Transcript revision is exhausted');
+    return this.#revision + 1;
+  }
+
+  private commit(change: TranscriptCommit): void {
+    const result: unknown = this.#persistence?.commit(change);
+    if (result !== undefined) {
+      void Promise.resolve(result).catch(() => undefined);
+      throw new TypeError('Transcript persistence must complete synchronously and return undefined');
     }
   }
 

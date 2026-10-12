@@ -8,7 +8,7 @@ export { OperationRecord, type OperationRecordOptions } from './operation/record
 export { OperationRecordHelper } from './operation/helper.js';
 export { AttemptRecord, type AttemptRecordOptions } from './attempt/record.js';
 export { AttemptRecordHelper } from './attempt/helper.js';
-export { RecordBook } from './container/book.js';
+export { RecordBook, type RecordBookState } from './container/book.js';
 export { InvocationBoundaryRecord, type InvocationBoundaryRecordOptions } from './invocation-boundary/record.js';
 export { InvocationBoundaryRecordHelper } from './invocation-boundary/helper.js';
 

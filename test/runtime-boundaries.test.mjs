@@ -275,20 +275,54 @@ test('Invocation preserves both work and failure-registration errors without rep
   assert.equal(runtime.running, false);
 });
 
-test('memory registration failure preserves the applied batch prefix and does not silently apply the rest', () => {
+test('memory registration failure preserves the committed batch and does not hide its remaining changes', () => {
+  const failure = new Error('cannot record memory');
+  const attempted = [];
+  const captured = [];
   class Reject extends RecordBook {
     add(record) {
-      if (record instanceof MemoryRecord) throw new Error('cannot record memory');
+      if (record instanceof MemoryRecord) {
+        attempted.push(record);
+        throw failure;
+      }
       return super.add(record);
     }
   }
-  const { memories } = createEnvironment({ recorder: createRecorder(new Reject()), messages: [{ role: 'user', content: '地点' }] });
+  const recorder = createRecorder(new Reject());
+  const { memories } = createEnvironment({
+    recorder,
+    messages: [{ role: 'user', content: '地点' }],
+    changes: {
+      capture(event) {
+        if (event.type === 'memory') captured.push(event);
+      },
+    },
+  });
   assert.throws(
     () => memories.apply([proposed('北京'), proposed('上海')]),
-    (error) => error.code === 'OBSERVATION_FAILED',
+    (error) => {
+      assert.equal(error.code, 'OBSERVATION_FAILED');
+      assert.equal(error.cause.code, 'RECORDING_FAILED');
+      assert.equal(error.cause.cause, failure);
+      return true;
+    },
   );
+  assert.equal(memories.sequence, 2);
   assert.deepEqual(
     memories.values().map((memory) => memory.content),
-    ['北京'],
+    ['北京', '上海'],
   );
+  assert.deepEqual(
+    captured.map((event) => [event.sequence, event.change.result.content]),
+    [
+      [1, '北京'],
+      [2, '上海'],
+    ],
+  );
+  assert.deepEqual(
+    attempted.map((record) => record.value.result.content),
+    ['北京'],
+    'the failed optional consumer stays disabled; formal change capture still sees both facts',
+  );
+  assert.equal([...recorder.book.values()].filter((record) => record instanceof MemoryRecord).length, 0);
 });

@@ -5,6 +5,7 @@ import { Badge } from '../../components/ui/badge';
 import { errorMessage } from '../../lib/errors';
 import { RuntimeExplorer } from './RuntimeExplorer';
 export function ExplorerPanel() {
+  const observationNotice = useAppStore((state) => state.data.observationNotice);
   const observationError = useAppStore((state) => state.data.observationError);
   const observationLoading = useAppStore((state) => state.data.observationLoading);
   const rounds = useAppStore((state) => state.data.rounds);
@@ -37,6 +38,11 @@ export function ExplorerPanel() {
           记忆 <span className="button-count">{memoryCount}</span>
         </Button>
       </header>
+      {observationNotice && (
+        <p className="observation-notice" role="status">
+          {observationNotice}
+        </p>
+      )}
       {Boolean(observationError) && (
         <p className="observation-notice" role="status">
           观测暂不可用：{errorMessage(observationError)}

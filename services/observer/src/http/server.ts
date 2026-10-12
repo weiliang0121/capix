@@ -12,6 +12,7 @@ import { ObservationFeed } from '../observation/feed.js';
 import { SourceIncomplete } from '../observation/record/source.js';
 import { observationWriter } from './observation-writer.js';
 import { observeOverview } from '../observation/overview.js';
+import { executionArchive } from '../observation/archive.js';
 import { validateSettings } from '../assembly/settings.js';
 import { allowedSources } from './source.js';
 import { ConversationSubmission, createSubmissionStore, type SubmissionRetention } from '../conversation/submission.js';
@@ -49,6 +50,7 @@ export function createObserverServer(options: ObserverServerOptions) {
   /** A current, non-reserving projection. Reading it never initializes or calls the provider. */
   function admission(): ConversationAdmission {
     const transcriptId = observer.transcript.id;
+    if (observer.persistence?.failure) return Object.freeze({ transcriptId, status: 'unavailable', error: observer.persistence.failure });
     if (!configured) return Object.freeze({ transcriptId, status: 'unavailable', error: Object.freeze({ code: 'KEY_MISSING', message: '服务端尚未配置模型凭据；请配置并重启。' }) });
     const failure = observer.model.failure;
     if (failure) return Object.freeze({ transcriptId, status: 'unavailable', error: failure });
@@ -115,7 +117,8 @@ export function createObserverServer(options: ObserverServerOptions) {
       observer.recordSource.assertComplete();
       const id = url.searchParams.get('id') || '';
       if (!(observer.book.get(id) instanceof ExecutionRecord)) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
-      return json(res, 200, ExecutionRecordHelper.snapshot(observer.recording.recorder, id));
+      const archive = executionArchive(observer.book, observer.recordingArchives, id);
+      return json(res, 200, { ...ExecutionRecordHelper.snapshot(observer.recording.recorder, id), ...(archive ? { archive } : {}) });
     }
     if (req.method === 'GET' && url.pathname === '/api/source') {
       const path = url.searchParams.get('file') || '';

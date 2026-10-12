@@ -11,6 +11,7 @@ export abstract class CompositeRecord<Value> extends BaseRecord<Value> {
 
   /** Package-internal write, committed only by record registration. */
   [replaceChildren](ids: readonly string[]): void {
+    this.requireWritable();
     this.#childIds = ids;
   }
 

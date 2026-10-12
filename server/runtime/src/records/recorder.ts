@@ -56,6 +56,7 @@ export class Recorder {
     writeRecord(() => {
       if (this.#registering) throw new Error('Record registration cannot reenter');
       if (this.book.get(record.id) !== record) throw new Error('Record is not registered with this Recorder');
+      if (record.historical) throw new Error('Historical record is read-only');
       apply(record);
     });
     this.capture(describe ? describe(record) : { kind: 'replaced', entry: { kind: record.kind, data: record.toJSON() } });

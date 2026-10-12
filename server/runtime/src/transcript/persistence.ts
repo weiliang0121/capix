@@ -1,0 +1,20 @@
+import type { Message } from '@capix/protocol';
+
+/** Restorable content state; revisions describe mutations, not delivery cursors. */
+export interface TranscriptState {
+  readonly id: string;
+  readonly revision: number;
+  readonly starts: readonly number[];
+  readonly messages: readonly Readonly<Message>[];
+}
+
+export type TranscriptCommit = {
+  readonly transcriptId: string;
+  readonly expectedRevision: number;
+  readonly revision: number;
+} & ({ readonly kind: 'append'; readonly start: number; readonly messages: readonly Readonly<Message>[] } | { readonly kind: 'start-segment'; readonly start: number });
+
+/** Synchronously commit a validated change before the entity makes it visible. */
+export interface TranscriptPersistence {
+  commit(change: TranscriptCommit): undefined;
+}

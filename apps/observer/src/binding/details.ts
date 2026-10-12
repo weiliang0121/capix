@@ -1,3 +1,4 @@
+import { observationStatus } from '../observation/status.js';
 import { hasOutput, readOutput, type MemoryObservation, type ExecutionRecordSnapshot } from '@capix/protocol';
 import { isNumber, isPlainObject, isString } from 'es-toolkit/predicate';
 import { isArray } from 'es-toolkit/compat';
@@ -45,7 +46,7 @@ export function projectDetail(snapshot: ExecutionRecordSnapshot, memory: MemoryO
     callee: 'runtime',
     label: '运行调用',
     source: '',
-    status: parent.status === 'succeeded' ? 'passed' : parent.status,
+    status: parent.status === 'succeeded' ? 'passed' : observationStatus(parent.status, snapshot.archive),
     startedAt: parent.value.startedAt,
     offsetMs: 0,
     ...(runtimeStart && runtimeEnd ? { durationMs: runtimeEnd.offsetMs - runtimeStart.offsetMs } : {}),
@@ -65,6 +66,7 @@ export function projectDetail(snapshot: ExecutionRecordSnapshot, memory: MemoryO
     id: trace.id,
     startedAt: trace.startedAt,
     status: trace.status,
+    ...(snapshot.archive ? { archive: snapshot.archive } : {}),
     contextId: snapshot.execution.contextId,
     ...executionResources(snapshot),
     resources: snapshot.resources,

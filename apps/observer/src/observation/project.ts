@@ -1,3 +1,4 @@
+import { observationStatus } from './status.js';
 import { hasOutput, readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import type { ExecutionRecordSnapshot, OperationRecord, InvocationValue, GenerationOutput } from '@capix/protocol';
 import type { CallSpan, Trace } from './types.js';
@@ -10,12 +11,12 @@ export function projectExecution(facts: ExecutionRecordSnapshot): Trace {
   const starts = new Map(facts.events.filter((e) => e.value.type === 'call').map((e) => [e.callId, e]));
   const ends = new Map(facts.events.filter((e) => e.value.type !== 'call').map((e) => [e.callId, e]));
   const result = (id: string, body: InvocationValue, status: OperationRecord['status']) => {
-    const start = starts.get(id)!;
+    const start = starts.get(id);
     const end = ends.get(id);
     return {
-      status: status === 'succeeded' ? ('passed' as const) : status,
-      offsetMs: start.offsetMs,
-      ...(end ? { durationMs: end.offsetMs - start.offsetMs } : {}),
+      status: status === 'succeeded' ? ('passed' as const) : observationStatus(status, facts.archive),
+      offsetMs: start?.offsetMs ?? 0,
+      ...(end && start ? { durationMs: end.offsetMs - start.offsetMs } : {}),
       input: body.input,
       processes: body.processes,
       ...(hasOutput(body) ? { output: readOutput(body) } : {}),
@@ -71,13 +72,13 @@ export function projectExecution(facts: ExecutionRecordSnapshot): Trace {
       };
     }),
   ];
-  calls.sort((a, b) => starts.get(a.id)!.sequence - starts.get(b.id)!.sequence);
+  calls.sort((a, b) => (starts.get(a.id)?.sequence ?? Number.MAX_SAFE_INTEGER) - (starts.get(b.id)?.sequence ?? Number.MAX_SAFE_INTEGER));
   return {
     facts,
     id: execution.id,
     startedAt: execution.value.startedAt,
     durationMs: facts.events.at(-1)?.offsetMs ?? 0,
-    status: execution.status,
+    status: observationStatus(execution.status, facts.archive),
     nodes: calls.map((call) => ({
       ...call,
       group: call.operation?.startsWith('selection') ? 'selection' : call.operation?.startsWith('answer') ? 'answer' : call.operation?.startsWith('memory') ? 'memory' : 'flow',

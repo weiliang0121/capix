@@ -8,6 +8,7 @@ import { CompositeRecord } from '../composite.js';
 
 import { isUndefined } from 'es-toolkit/predicate';
 import { snapshotValue } from '../value/snapshot.js';
+import { restoreStatus } from '../restoration/access.js';
 
 export type ConcreteInvocationRecord = RuntimeCallRecord | ExecutionRecord | OperationRecord | AttemptRecord;
 
@@ -19,7 +20,13 @@ export class InvocationRecord<Value extends InvocationValue> extends CompositeRe
   }
 
   protected requireRunning(): void {
+    this.requireWritable();
     if (this.#status !== 'running') throw new Error('Record has already ended');
+  }
+
+  [restoreStatus](status: 'running' | 'succeeded' | 'failed'): void {
+    this.requireWritable();
+    this.#status = status;
   }
 
   append(process: ProcessRecord): void {
