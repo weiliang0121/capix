@@ -1,4 +1,4 @@
-import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationRequest, Message, ExecutionRecordSnapshot, InteractionObservation } from '@capix/protocol';
+import type { ConversationDescriptor, ConversationListResponse, ConversationSubmissionDiscovery, ConfigurationResponse, ConversationRequest, Message, ExecutionRecordSnapshot, InteractionObservation } from '@capix/protocol';
 import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReceiver, type ObservationState } from './observation/receiver.js';
@@ -7,6 +7,7 @@ import { InitializationAttempt, type ClientInitializationState } from './initial
 import { ConversationQueue, type ClientQueueState, type ConversationQueueOptions } from './queue.js';
 import { coordinateConversation, type ContentAvailability } from './conversation.js';
 import { InteractionObserver } from './observation/interactions.js';
+import { acceptTrackingLocator, type ClientTrackingLocator, type ClientTrackingStore } from './tracking.js';
 
 export interface ClientState {
   readonly conversation?: ConversationDescriptor;
@@ -14,6 +15,8 @@ export interface ClientState {
   readonly switching: boolean;
   readonly canSwitchConversation: boolean;
   readonly conversationError?: unknown;
+  /** Optional host storage failure; never changes the service's business result. */
+  readonly trackingError?: unknown;
   readonly initialization: ClientInitializationState;
   readonly config?: ConfigurationResponse;
   readonly messages: readonly Readonly<Message>[];
@@ -38,9 +41,10 @@ export interface ClientRuntimeOptions {
   readonly transcripts: TranscriptTransport;
   readonly observation?: ObservationTransport;
   readonly queue?: ConversationQueueOptions;
+  readonly tracking?: ClientTrackingStore;
 }
 
-type ClientSources = Pick<ClientState, 'conversation' | 'conversations' | 'switching' | 'conversationError' | 'initialization' | 'config' | 'transcriptId' | 'transcripts' | 'submission' | 'submissions' | 'queue' | 'error' | 'observation'>;
+type ClientSources = Pick<ClientState, 'conversation' | 'conversations' | 'switching' | 'conversationError' | 'trackingError' | 'initialization' | 'config' | 'transcriptId' | 'transcripts' | 'submission' | 'submissions' | 'queue' | 'error' | 'observation'>;
 
 /** Business delivery is independent of the optional observation capability. */
 export class ClientRuntime {
@@ -58,6 +62,9 @@ export class ClientRuntime {
   private openingTranscript?: string;
   private catalogRequest = 0;
   private catalogRefreshSubmission?: string;
+  private readonly tracking?: ClientTrackingStore;
+  private trackingLoaded = false;
+  private trackingLocator?: ClientTrackingLocator;
 
   private readonly conversation: ConversationTransport;
   private readonly observation: ObservationReceiver;
@@ -66,6 +73,7 @@ export class ClientRuntime {
 
   constructor(options: ClientRuntimeOptions) {
     this.conversation = options.conversation;
+    this.tracking = options.tracking;
     this.interactions = new InteractionObserver(options.observation);
     this.observation = new ObservationReceiver(options.observation, (observation) => {
       this.update({ observation });
@@ -150,6 +158,7 @@ export class ClientRuntime {
         (error) => {
           if (!attempt.running) return;
           attempt.fail(error);
+          if (this.initialization !== attempt) return;
           this.update({ initialization: attempt.snapshot, error });
           this.publish();
         },
@@ -176,17 +185,81 @@ export class ClientRuntime {
   }
 
   private async loadInitialTranscript(attempt: InitializationAttempt): Promise<void> {
+    const locator = this.loadTracking();
     const catalog = acceptCatalog(await this.conversation.conversations());
     if (!attempt.running) return;
-    const selected = catalog.conversations.find((item) => item.id === catalog.defaultConversationId)!;
+    const remembered = locator ? catalog.conversations.find((item) => item.id === locator.conversationId) : undefined;
+    if (locator?.submissionId && !remembered) throw new Error('原提交所属对话已不可用，无法确认其结果。');
+    const selected = remembered ?? catalog.conversations.find((item) => item.id === catalog.defaultConversationId)!;
+    if (remembered && remembered.transcriptId !== locator!.transcriptId) throw new Error('保存的对话与当前消息集合身份不一致。');
     this.update({ conversations: catalog.conversations });
     this.openingTranscript = selected.transcriptId;
-    await this.transcripts.watch(selected.transcriptId);
+    const [, discovery] = await Promise.all([this.transcripts.watch(selected.transcriptId), locator?.submissionId ? Promise.resolve(undefined) : this.discoverSubmission(selected, attempt.signal)]);
     if (!attempt.running) return;
     this.openingTranscript = undefined;
     this.update({ conversation: selected, transcriptId: selected.transcriptId });
     this.interactions.setConversation(selected.id);
+    if (!attempt.running) return;
     this.observation.setConversation(selected.id, selected.transcriptId);
+    if (!attempt.running) return;
+    if (locator?.submissionId) {
+      const current = this.queue.submission;
+      const submission = current?.id === locator.submissionId && current.conversationId === selected.id ? current : this.queue.attach({ conversationId: selected.id, submissionId: locator.submissionId }, selected.transcriptId);
+      // The locator is not authority: query the original identity before following it.
+      // Failure remains attached and blocks new dispatch; it never causes another POST.
+      await this.queue.refresh(attempt.signal).catch(() => undefined);
+      if (!attempt.running || this.queue.submission !== submission) return;
+      if (submission.snapshot.remote && !submission.snapshot.remote.result && submission.snapshot.feedback.status !== 'unavailable') void this.queue.reconnect();
+    } else if (discovery?.submission) {
+      const baseline = discovery.submission;
+      const current = this.queue.submission;
+      if (current?.id !== baseline.submission.submissionId || current.conversationId !== selected.id) this.queue.attach({ conversationId: selected.id, submissionId: baseline.submission.submissionId }, selected.transcriptId, baseline);
+      void this.queue.reconnect();
+    }
+    this.saveTracking();
+  }
+
+  private async discoverSubmission(target: ConversationDescriptor, signal?: AbortSignal): Promise<ConversationSubmissionDiscovery> {
+    const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
+    const discovery = await this.conversation.activeSubmission(target.id, requestSignal);
+    requestSignal.throwIfAborted();
+    if (!discovery || discovery.conversationId !== target.id || discovery.transcriptId !== target.transcriptId) throw new Error('活动提交查询返回了不同的对话或消息集合。');
+    const baseline = discovery.submission;
+    if (baseline && (baseline.type !== 'baseline' || baseline.submission.conversationId !== target.id || baseline.submission.result || (baseline.submission.input && baseline.submission.input.transcriptId !== target.transcriptId) || (baseline.submission.admission && baseline.submission.admission.transcriptId !== target.transcriptId))) throw new Error('活动提交与目标对话不一致。');
+    // Validate before changing the selected conversation or closing its existing connections.
+    if (baseline) ClientSubmission.attach({ conversationId: target.id, submissionId: baseline.submission.submissionId }, target.transcriptId, baseline);
+    return discovery;
+  }
+
+  private loadTracking(): ClientTrackingLocator | undefined {
+    if (this.trackingLoaded) return this.trackingLocator;
+    this.trackingLoaded = true;
+    try {
+      const locator = this.tracking?.load();
+      this.trackingLocator = locator === undefined ? undefined : acceptTrackingLocator(locator);
+    } catch (trackingError) {
+      this.update({ trackingError });
+    }
+    return this.trackingLocator;
+  }
+
+  /** Written synchronously before dispatch through submission's connecting notification. */
+  private saveTracking(): void {
+    const target = this.sources.conversation;
+    if (!this.tracking || !target) return;
+    const submission = this.queue.submission;
+    if (submission && submission.conversationId !== target.id) return;
+    const submissionId = submission?.dispatched && !submission.snapshot.remote?.result ? submission.id : undefined;
+    const locator: ClientTrackingLocator = Object.freeze({ conversationId: target.id, transcriptId: target.transcriptId, ...(submissionId ? { submissionId } : {}) });
+    if (this.trackingLocator?.conversationId === locator.conversationId && this.trackingLocator.transcriptId === locator.transcriptId && this.trackingLocator.submissionId === locator.submissionId) return;
+    // A storage failure is reported once per locator transition, not on every progress delta.
+    this.trackingLocator = locator;
+    try {
+      this.tracking.save(locator);
+      if (this.sources.trackingError !== undefined) this.update({ trackingError: undefined });
+    } catch (trackingError) {
+      this.update({ trackingError });
+    }
   }
 
   private get canSwitchConversation(): boolean {
@@ -257,19 +330,31 @@ export class ClientRuntime {
     if (generation !== this.opening) return;
     const previousId = this.sources.transcriptId;
     this.openingTranscript = target.transcriptId;
-    await this.transcripts.watch(target.transcriptId);
+    const [, discovery] = await Promise.all([this.transcripts.watch(target.transcriptId), this.discoverSubmission(target)]);
     if (generation !== this.opening) return;
     const sync = this.sources.transcripts.get(target.transcriptId)?.sync;
     if (sync?.status !== 'live') throw sync?.status === 'failed' ? sync.error : new Error('目标对话的消息同步尚未就绪。');
-    this.upsertConversation(target);
-    this.queue.openConversation();
-    if (generation !== this.opening) return;
-    this.openingTranscript = undefined;
-    this.acceptances.clear();
-    this.update({ conversation: target, transcriptId: target.transcriptId, submission: undefined, submissions: new Map(), switching: false, conversationError: undefined });
-    this.interactions.setConversation(target.id);
-    this.observation.setConversation(target.id, target.transcriptId);
-    if (previousId && previousId !== this.sources.transcriptId && previousId !== this.openingTranscript) this.transcripts.stop(previousId);
+    try {
+      this.upsertConversation(target);
+      this.queue.openConversation();
+      if (generation !== this.opening) return;
+      this.openingTranscript = undefined;
+      this.acceptances.clear();
+      this.update({ conversation: target, transcriptId: target.transcriptId, submission: undefined, submissions: new Map(), conversationError: undefined });
+      this.interactions.setConversation(target.id);
+      if (generation !== this.opening) return;
+      this.observation.setConversation(target.id, target.transcriptId);
+      if (generation !== this.opening) return;
+      if (discovery.submission) {
+        this.queue.attach({ conversationId: target.id, submissionId: discovery.submission.submission.submissionId }, target.transcriptId, discovery.submission);
+        void this.queue.reconnect();
+      }
+      if (generation !== this.opening) return;
+      this.update({ switching: false });
+      this.saveTracking();
+    } finally {
+      if (previousId && previousId !== this.sources.transcriptId && previousId !== this.openingTranscript) this.transcripts.stop(previousId);
+    }
   }
 
   private failOpening(generation: number, conversationError: unknown): void {
@@ -291,7 +376,7 @@ export class ClientRuntime {
     this.transcripts.stop(id);
     if (stopsInitialization && attempt.running) {
       attempt.stop();
-      this.update({ initialization: attempt.snapshot });
+      if (this.initialization === attempt) this.update({ initialization: attempt.snapshot });
     }
     this.publish();
   }
@@ -340,6 +425,7 @@ export class ClientRuntime {
       submissions = retained;
     }
     this.update({ submission: submission?.snapshot, submissions, queue: this.queue.snapshot });
+    this.saveTracking();
     if (submission?.snapshot.remote?.result && this.catalogRefreshSubmission !== submission.id) {
       this.catalogRefreshSubmission = submission.id;
       void this.refreshConversations().catch(() => undefined);
@@ -395,6 +481,13 @@ export class ClientRuntime {
   /** Unknown remote work cannot be discarded to release the local queue. */
   releaseSubmission(): void {
     this.queue.release();
+    this.publish();
+  }
+
+  /** Explicitly end unavailable local tracking; this makes no claim about remote effects. */
+  abandonSubmission(): void {
+    this.queue.abandon();
+    this.saveTracking();
     this.publish();
   }
 }

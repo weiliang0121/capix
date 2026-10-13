@@ -35,7 +35,7 @@ function View({ rows, focus, current, draft = '', queue = emptyQueue, height = 6
   return (
     <StrictMode>
       <div style={{ width: 550, height, display: 'flex', flexDirection: 'column', border: '1px solid #303030', margin: '20px auto', background: '#171717' }}>
-        <ChatMessages rows={rows} focus={focus} selectedId="" onInspect={nothing} onReconnect={async () => {}} />
+        <ChatMessages rows={rows} focus={focus} selectedId="" onInspect={nothing} onReconnect={async () => {}} onAbandon={async () => {}} />
         <MessageQueue queue={queue} onCancel={cancel} />
         <Composer configured loaded draft={draft} current={current} onDraft={nothing} onSubmit={send} onCancel={cancel} />
       </div>

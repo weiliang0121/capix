@@ -161,6 +161,7 @@ test('lost feedback follows the same submission without repeating file creation'
     transport: (io) => ({
       config: () => io.config(),
       conversations: (signal) => io.conversations(signal),
+      activeSubmission: (id, signal) => io.activeSubmission(id, signal),
       conversation: (id, signal) => io.conversation(id, signal),
       createConversation: (signal) => io.createConversation(signal),
       admission: (id, signal) => io.admission(id, signal),

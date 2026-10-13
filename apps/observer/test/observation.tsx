@@ -18,6 +18,7 @@ const unexpected = async (): Promise<never> => {
 const conversation: ConversationTransport = {
   conversations: async () => ({ conversations: [descriptor], defaultConversationId: descriptor.id }),
   conversation: async () => descriptor,
+  activeSubmission: async () => ({ conversationId: descriptor.id, transcriptId: descriptor.transcriptId }),
   createConversation: unexpected,
   config: async () => ({ configured: true, model: 'fixture-model', contextBudget: 4096, maxOutputTokens: 1024, timeoutMs: 10000 }),
   admission: unexpected,

@@ -147,6 +147,30 @@ test('bounded retention never evicts active work, expires completed progress, an
   assert.equal(store.get('second'), undefined);
 });
 
+test('active discovery follows the service lifetime even when projection fails, and excludes refused or settled work', async () => {
+  const store = createSubmissionStore();
+  const refused = store.create('refused', 'conversation');
+  refused.reject(new Error('not accepted'));
+  assert.equal(store.active('conversation'), undefined);
+  const active = store.create('active', 'conversation');
+  let finish;
+  active.start(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  active.progress.publish({ kind: 'input', range: { transcriptId: 'transcript', start: 0, end: 1 } });
+  active.progress.publish({ kind: 'input', range: { transcriptId: 'transcript', start: 1, end: 2 } });
+  assert.equal(active.snapshot.integrity.status, 'incomplete');
+  assert.equal(store.active('conversation'), active);
+  assert.equal(store.active('other'), undefined);
+  finish();
+  await complete(active);
+  assert.equal(store.active('conversation'), undefined);
+  assert.equal(store.get('active'), active, 'completion retains ID lookup until eviction');
+});
+
 test('conversation binding selects its declared E instead of giving every R child the same public meaning', async () => {
   const environment = createEnvironment();
   const definition = new ConversationRuntimeDefinition();

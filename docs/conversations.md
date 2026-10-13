@@ -26,18 +26,19 @@ interface ConversationSubmissionRequest {
 
 提交身份首次登记时固定对话归属，累计反馈与接纳状态均明确携带 `conversationId`。之后 follow/read/cancel 依据已登记的 submission 查找，不读取页面选择。原有反馈故障、取消和未知结果规则不变，不承诺提交的持久重放或重启恢复。
 
-| 接口                                                 | 目标                                                 |
-| ---------------------------------------------------- | ---------------------------------------------------- |
-| GET `/api/conversations`                             | 对话列表及 `defaultConversationId`                   |
-| POST `/api/conversations`，空 JSON 对象              | 新建并返回 descriptor                                |
-| GET `/api/conversations/:id`                         | 读取确定的对话元信息                                 |
-| POST `/api/run`                                      | 正文必带 `conversationId/submissionId/input`         |
-| GET `/api/conversation/admission`                    | 必带 query `conversationId`                          |
-| GET `/api/executions`、`/api/memory`、`/api/observe` | 必带 query `conversationId`                          |
-| GET `/api/execution`                                 | query `conversationId` 与记录 `id`，只读取该对话记录 |
-| GET `/api/transcript`、`/api/transcript/observe`     | 必带实体 `id`，只读取服务提供的集合                  |
-| `/api/submissions/:id` 及 follow/cancel              | 已固定的提交归属                                     |
-| `/api/config`、`/api/source`                         | 服务级配置与允许读取的源码                           |
+| 接口                                                 | 目标                                                             |
+| ---------------------------------------------------- | ---------------------------------------------------------------- |
+| GET `/api/conversations`                             | 对话列表及 `defaultConversationId`                               |
+| POST `/api/conversations`，空 JSON 对象              | 新建并返回 descriptor                                            |
+| GET `/api/conversations/:id`                         | 读取确定的对话元信息                                             |
+| GET `/api/conversations/:id/submission`              | 当前活动提交基线及对话/消息集合身份，没有活动项则省略 submission |
+| POST `/api/run`                                      | 正文必带 `conversationId/submissionId/input`                     |
+| GET `/api/conversation/admission`                    | 必带 query `conversationId`                                      |
+| GET `/api/executions`、`/api/memory`、`/api/observe` | 必带 query `conversationId`                                      |
+| GET `/api/execution`                                 | query `conversationId` 与记录 `id`，只读取该对话记录             |
+| GET `/api/transcript`、`/api/transcript/observe`     | 必带实体 `id`，只读取服务提供的集合                              |
+| `/api/submissions/:id` 及 follow/cancel              | 已固定的提交归属                                                 |
+| `/api/config`、`/api/source`                         | 服务级配置与允许读取的源码                                       |
 
 新建与 POST 执行是不同动作；创建空对话不追加输入、不调用模型。不存在的目标明确失败，不回退到默认对话。两个浏览器的选择互不改变对方的目标。
 
@@ -46,7 +47,7 @@ interface ConversationSubmissionRequest {
 ClientRuntime 仍是一套无 UI 的协调结构，增加目录读取与打开对话，不为每个历史项保留一个后台客户端或队列。
 
 ```ts
-await runtime.initialize(); // 读取目录，打开稳定默认对话
+await runtime.initialize(); // 读取目录，优先打开宿主保存的对话，否则打开默认对话
 await runtime.refreshConversations();
 const conversation = await runtime.createConversation(); // 创建并打开
 await runtime.openConversation(existingId);
@@ -57,9 +58,11 @@ runtime.enqueue({ messages: [{ role: 'user', content: '继续' }] });
 
 第一版只有当前提交已确认结束且等待队列为空时才允许新建或切换。未知结果不能因服务 ready、断流或点击历史而被丢弃。切换不会取消当前请求，也不清空、迁移待发送消息。
 
-打开期间暂不接纳本地发送。取得目标元信息与有效消息基线之后才切换活动身份、提交跟踪与观测作用域；失败保留原对话。并发打开与旧连接回调有代次/身份检查。可选观测独立建立，失败不妨碍消息阅读和正常提交。
+打开期间暂不接纳本地发送。取得目标元信息、有效消息基线及当前活动提交查询后才切换活动身份、提交跟踪与观测作用域；失败保留原对话。有活动项则接回其反馈，没有本地输入也可跟踪和取消。并发打开与旧连接回调有代次/身份检查。可选观测独立建立，失败不妨碍消息阅读和正常提交。
 
 消息副本可按实体身份保留，旧对话消费连接停止；观测详情、游标及活动读模型不能跨对话沿用。历史内容恢复不恢复旧提交和执行实例。
+
+Observer 的 sessionStorage 只保存当前标签页的对话/消息集合及未确认提交身份。刷新时读原提交，服务还在运行则继续跟随；服务已无法查询则保持未知，不按原输入重提。详见 [客户端接回](client-runtime.md#刷新后的接回)。这不增加服务提交持久化、服务重启续跑或后台多会话消费。
 
 ## 应用呈现
 

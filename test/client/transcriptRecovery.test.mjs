@@ -15,6 +15,7 @@ function fixture(t, options = {}) {
   let posts = 0;
   const conversation = transport({
     conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', 'current')], defaultConversationId: 'fixture-conversation' }),
+    activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 'current' }),
     submit: async (request, receive) => {
       posts++;
       const delivery = conversation.delivery(request, receive);

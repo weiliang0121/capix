@@ -378,7 +378,7 @@ test('client performs one bounded baseline retry on a sequence gap and ignores t
   feed.close();
   let connections = 0;
   let oldAccept;
-  const io = transport({ conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', initial.transcript.id)], defaultConversationId: 'fixture-conversation' }), transcript: async () => transcriptSnapshot([], initial.transcript.id) });
+  const io = transport({ activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: initial.transcript.id }), conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', initial.transcript.id)], defaultConversationId: 'fixture-conversation' }), transcript: async () => transcriptSnapshot([], initial.transcript.id) });
   const runtime = new ClientRuntime({
     conversation: io,
     transcripts: io,

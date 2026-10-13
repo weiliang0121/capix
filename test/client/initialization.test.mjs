@@ -11,7 +11,7 @@ const append = (revision, content) => ({ type: 'delta', event: { type: 'transcri
 
 function createClient(config, observeTranscript) {
   return new ClientRuntime({
-    conversation: { conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', 'current')], defaultConversationId: 'fixture-conversation' }), config, submit: async () => assert.fail('initialization must not start business work') },
+    conversation: { conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', 'current')], defaultConversationId: 'fixture-conversation' }), activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 'current' }), config, submit: async () => assert.fail('initialization must not start business work') },
     transcripts: { transcript: async () => assert.fail('initialization uses an atomic stream baseline'), observeTranscript },
   });
 }

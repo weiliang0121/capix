@@ -22,4 +22,11 @@ export interface ConversationSubmissionBaseline {
   readonly preview?: AnswerPreviewSnapshot;
 }
 
+/** Process-local active work for a conversation. Absence does not settle any previously known submission. */
+export interface ConversationSubmissionDiscovery {
+  readonly conversationId: string;
+  readonly transcriptId: string;
+  readonly submission?: ConversationSubmissionBaseline;
+}
+
 export type ConversationSubmissionFrame = ConversationSubmissionBaseline | ConversationSubmissionUpdate | { readonly type: 'answer'; readonly conversationId: string; readonly submissionId: string; readonly change: AnswerPreviewChange };

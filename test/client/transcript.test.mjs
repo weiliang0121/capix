@@ -43,6 +43,7 @@ test('conversation and entity streams may arrive in either order without duplica
   const runtime = new ClientRuntime({
     transcripts,
     conversation: {
+      activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 't' }),
       conversations,
       config,
       submit: async (request, accept) => {
@@ -82,7 +83,7 @@ test('repeated revision gaps exhaust bounded recovery and remain visible', async
       accept(appended('t', connections === 1 ? 3 : 7, 0, [message('gap')]));
     },
   };
-  const runtime = new ClientRuntime({ transcripts, conversation: { conversations, config, submit: async () => {} } });
+  const runtime = new ClientRuntime({ transcripts, conversation: { activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 't' }), conversations, config, submit: async () => {} } });
   await runtime.initialize();
   await settle();
   await settle();
@@ -110,7 +111,7 @@ test('entities load on demand, keep independent copies, and resume from a new ba
       await wait(signal);
     },
   };
-  const runtime = new ClientRuntime({ transcripts, conversation: { conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', 'current')], defaultConversationId: 'fixture-conversation' }), config, submit: async () => {} } });
+  const runtime = new ClientRuntime({ transcripts, conversation: { activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 'current' }), conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', 'current')], defaultConversationId: 'fixture-conversation' }), config, submit: async () => {} } });
   await runtime.initialize();
   assert.deepEqual(connections, ['current']);
   assert.equal(runtime.getSnapshot().transcripts.has('old'), false);
@@ -132,7 +133,7 @@ test('slow configuration initialization cannot overwrite newer entity deltas wit
   const configuration = deferred();
   let emit;
   const runtime = new ClientRuntime({
-    conversation: { conversations, config: () => configuration.promise, submit: async () => {} },
+    conversation: { activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 't' }), conversations, config: () => configuration.promise, submit: async () => {} },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
@@ -156,7 +157,7 @@ test('initialization and explicit UID subscription share the same entity connect
   const callbacks = new Map();
   const signals = new Map();
   const runtime = new ClientRuntime({
-    conversation: { conversations, config, submit: async () => {} },
+    conversation: { activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 't' }), conversations, config, submit: async () => {} },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (id, accept, signal) => {
@@ -184,7 +185,7 @@ test('a network disconnect obtains a new baseline after backoff and never retrie
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let connections = 0;
   const runtime = new ClientRuntime({
-    conversation: { conversations, config, submit: async () => assert.fail('not a business retry') },
+    conversation: { activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 't' }), conversations, config, submit: async () => assert.fail('not a business retry') },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
@@ -208,7 +209,7 @@ test('a network disconnect obtains a new baseline after backoff and never retrie
 test('a throwing UI subscriber is detached without terminating entity sync or starving other consumers', async () => {
   let emit;
   const runtime = new ClientRuntime({
-    conversation: { conversations, config, submit: async () => {} },
+    conversation: { activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 't' }), conversations, config, submit: async () => {} },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
@@ -243,6 +244,7 @@ test('answer locators can precede their separately synchronized entity without i
   let emit;
   const runtime = new ClientRuntime({
     conversation: {
+      activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 't' }),
       conversations,
       config,
       submit: async (request, accept) => {

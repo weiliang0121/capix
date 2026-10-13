@@ -411,7 +411,7 @@ test('real HTTP headless client uses conversation only for two rounds without an
   const http = new ConversationHttpTransport(base, (url, init) => {
     const path = new URL(url).pathname;
     paths.push(path);
-    assert.ok(['/api/config', '/api/conversations', `/api/conversations/${conversationId}`, '/api/conversation/admission', '/api/transcript', '/api/transcript/observe', '/api/run'].includes(path), path);
+    assert.ok(['/api/config', '/api/conversations', `/api/conversations/${conversationId}`, `/api/conversations/${conversationId}/submission`, '/api/conversation/admission', '/api/transcript', '/api/transcript/observe', '/api/run'].includes(path), path);
     return fetch(url, init);
   });
   const runtime = new ClientRuntime({ conversation: http, transcripts: http });
@@ -546,7 +546,7 @@ test('disconnecting submission delivery does not cancel work; reconnect reads th
   });
   const calls = [];
   t.after(() => release());
-  const { base, run, get, observer } = await setup(t, {
+  const { base, run, get, observer, conversations, conversationId } = await setup(t, {
     async invoke(request, purpose) {
       calls.push(purpose);
       if (purpose === 'selection') await gate;
@@ -560,6 +560,13 @@ test('disconnecting submission delivery does not cancel work; reconnect reads th
   assert.equal(pending.input.end, 1);
   assert.equal(pending.result, undefined);
   assert.equal(observer.transcript.length, 1);
+  const discovered = await get(`/api/conversations/${conversationId}/submission`);
+  assert.equal(discovered.conversationId, conversationId);
+  assert.equal(discovered.transcriptId, observer.transcript.id);
+  assert.equal(discovered.submission.submission.submissionId, id);
+  assert.deepEqual(discovered.submission.submission.input, pending.input);
+  const other = conversations.create();
+  assert.deepEqual(await get(`/api/conversations/${other.id}/submission`), { conversationId: other.id, transcriptId: other.transcriptId });
   const duplicate = await run('不得再次执行', { id });
   assert.equal(duplicate.status, 409);
   assert.equal((await duplicate.json()).code, 'SUBMISSION_EXISTS');
@@ -573,6 +580,7 @@ test('disconnecting submission delivery does not cancel work; reconnect reads th
   assert.deepEqual(calls, ['selection', 'answer', 'memory']);
   assert.deepEqual(await get(`/api/submissions/${id}`), frames.at(-1));
   assert.equal(observer.transcript.length, 2);
+  assert.equal((await get(`/api/conversations/${conversationId}/submission`)).submission, undefined);
   const late = await updates(await fetch(`${base}/api/submissions/${id}/follow`));
   assert.deepEqual(late, [frames.at(-1)]);
 });

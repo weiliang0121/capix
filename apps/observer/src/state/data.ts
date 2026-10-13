@@ -61,6 +61,7 @@ export interface AppData {
   switchingConversation: boolean;
   canSwitchConversation: boolean;
   conversationError?: string;
+  trackingNotice?: string;
   config?: ConfigurationResponse;
   observationLoading: boolean;
   observationReconnectable: boolean;
@@ -81,6 +82,7 @@ export interface AppData {
 export interface SubmissionNotice {
   message: string;
   reconnect: boolean;
+  abandon?: boolean;
 }
 export interface SubmissionControl {
   id: string;

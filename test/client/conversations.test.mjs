@@ -17,6 +17,7 @@ async function fixture(t, options = {}) {
     config: async () => ({ configured: true, model: 'fixture', contextBudget: 1024, maxOutputTokens: 128, timeoutMs: 1000 }),
     conversations: async () => ({ conversations: [...descriptors.values()], defaultConversationId: 'a' }),
     conversation: async (id) => descriptors.get(id),
+    activeSubmission: async (id) => ({ conversationId: id, transcriptId: descriptors.get(id).transcriptId }),
     createConversation: async () => {
       const created = conversationDescriptor('new', 'transcript-new');
       descriptors.set(created.id, created);
@@ -293,4 +294,38 @@ test('a catalog refresh started before creation cannot later remove the newly cr
   await settle();
   assert.equal(f.runtime.getSnapshot().conversation.id, 'new');
   assert.ok(f.runtime.getSnapshot().conversations.some((item) => item.id === 'new'));
+});
+
+test('reentrant opening while closing old observation prevents a superseded active submission from taking ownership', async (t) => {
+  let next;
+  let runtime;
+  const f = await fixture(t, {
+    conversation: {
+      activeSubmission: async (id) => ({ conversationId: id, transcriptId: `transcript-${id}`, ...(id === 'b' ? { submission: { type: 'baseline', submission: submissionSnapshot('active-b', { conversationId: 'b' }) } } : {}) }),
+      follow: async () => assert.fail('superseded conversation must not start following'),
+    },
+    observation: async (id, receive, signal) => {
+      receive(baseline({ scopeId: id, transcript: { id: `transcript-${id}`, revision: 1, starts: [0] }, overview: { transcriptId: `transcript-${id}`, messages: [], executions: [] } }));
+      if (id === 'a')
+        signal.addEventListener(
+          'abort',
+          () => {
+            next = runtime.openConversation('c');
+          },
+          { once: true },
+        );
+      await wait(signal);
+    },
+  });
+  runtime = f.runtime;
+  const stop = runtime.startObservation();
+  t.after(stop);
+  await settle();
+  await runtime.openConversation('b');
+  assert.ok(next);
+  await next;
+  assert.equal(runtime.getSnapshot().conversation.id, 'c');
+  assert.equal(runtime.getSnapshot().submission, undefined);
+  assert.equal(f.streams.get('transcript-a').signal.aborted, true);
+  assert.equal(f.streams.get('transcript-b').signal.aborted, true);
 });

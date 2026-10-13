@@ -15,6 +15,7 @@ export function ConversationPanel() {
   const switching = useAppStore((state) => state.data.switchingConversation);
   const canSwitch = useAppStore((state) => state.data.canSwitchConversation);
   const conversationError = useAppStore((state) => state.data.conversationError);
+  const trackingNotice = useAppStore((state) => state.data.trackingNotice);
   const setNotice = useAppStore((state) => state.setNotice);
   const messageCount = useAppStore((state) => state.data.messageCount);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
@@ -30,7 +31,7 @@ export function ConversationPanel() {
   const setFileDraft = useAppStore((state) => state.setFileDraft);
   const setDraft = useAppStore((state) => state.setDraft);
   const focus = useAppStore((state) => state.conversationFocus);
-  const { submit, reconnectConversation, reconnectSubmission, cancelSubmission, createConversation } = useAppCommands();
+  const { submit, reconnectConversation, reconnectSubmission, abandonSubmission, cancelSubmission, createConversation } = useAppCommands();
   return (
     <aside className="conversation-panel">
       <header className="panel-heading conversation-heading">
@@ -53,6 +54,11 @@ export function ConversationPanel() {
           {conversationError}
         </p>
       )}
+      {trackingNotice && (
+        <p className="conversation-navigation-notice" role="status">
+          {trackingNotice}
+        </p>
+      )}
       {conversationSync && (
         <div className="notice" role="status">
           {conversationSync.message}{' '}
@@ -69,7 +75,7 @@ export function ConversationPanel() {
           )}
         </div>
       )}
-      <ChatMessages key={`messages:${currentConversation?.id ?? 'initial'}`} rows={conversation} focus={focus} selectedId={selectedId} onInspect={inspect} onReconnect={reconnectSubmission} />
+      <ChatMessages key={`messages:${currentConversation?.id ?? 'initial'}`} rows={conversation} focus={focus} selectedId={selectedId} onInspect={inspect} onReconnect={reconnectSubmission} onAbandon={abandonSubmission} />
       <MessageQueue queue={queue} onCancel={cancelSubmission} />
       <Composer key={`composer:${currentConversation?.id ?? 'initial'}`} disabled={switching || !currentConversation} configured={config?.configured ?? false} loaded={Boolean(config)} draft={draft} current={submissionControl} files={config?.files} fileDraft={fileDraft} onFileDraft={setFileDraft} onDraft={setDraft} onSubmit={submit} onCancel={cancelSubmission} />
       <ConversationHistory open={historyOpen} onOpenChange={setHistoryOpen} />

@@ -27,6 +27,7 @@ const descriptor = { id: 'fixture-conversation', title: '测试对话', transcri
 const conversation: ConversationTransport = {
   conversations: async () => ({ conversations: [descriptor], defaultConversationId: descriptor.id }),
   conversation: async () => descriptor,
+  activeSubmission: async () => ({ conversationId: descriptor.id, transcriptId: descriptor.transcriptId }),
   createConversation: async () => {
     throw new Error('This fixture does not create conversations.');
   },

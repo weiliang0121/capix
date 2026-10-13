@@ -1,4 +1,4 @@
-import type { ConversationAdmission, ConversationRequest, FileTask } from '@capix/protocol';
+import type { ConversationAdmission, ConversationRequest, ConversationSubmissionBaseline, FileTask } from '@capix/protocol';
 import type { ConversationTransport } from './transport.js';
 import { acceptConversationRequest } from './request.js';
 import { validAdmission } from './admission.js';
@@ -98,6 +98,19 @@ export class ConversationQueue {
     this.transcriptId = undefined;
   }
 
+  /** Reestablish local ownership before receiving any fact; a tracked submission has no queue entry. */
+  attach(identity: { readonly conversationId: string; readonly submissionId: string }, transcriptId: string, baseline?: ConversationSubmissionBaseline): ClientSubmission {
+    if (!this.canSwitchConversation) throw new Error('当前提交尚未结束或仍有待发送消息，不能替换跟踪。');
+    const submission = ClientSubmission.attach(identity, transcriptId, baseline);
+    this.conversationId = identity.conversationId;
+    this.transcriptId = transcriptId;
+    this.needsAdmission = true;
+    this.admissionMismatch = false;
+    this.blocked = undefined;
+    this.replace(undefined, submission);
+    return submission;
+  }
+
   enqueue(input: ConversationRequest): { readonly id: string } {
     this.requireReady();
     if (this.waiting.length >= this.maxWaiting) throw new Error('等待队列已满，请先撤回部分消息。');
@@ -189,10 +202,10 @@ export class ConversationQueue {
     await submission.connect((receive, signal) => this.transport.follow(submission.id, receive, signal), reception);
   }
 
-  async refresh(): Promise<void> {
+  async refresh(signal?: AbortSignal): Promise<void> {
     const submission = this.current;
     if (!submission) throw new Error('没有可查询的提交。');
-    await submission.refresh(this.transport, this.reception(submission));
+    await submission.refresh(this.transport, this.reception(submission), signal);
   }
 
   stopFollowing(): void {
@@ -201,6 +214,23 @@ export class ConversationQueue {
     const submission = this.current;
     submission?.stopFollowing();
     this.changed(submission);
+  }
+
+  /** A lost server identity cannot prove non-execution. Explicitly stop tracking, never cancel or retry it. */
+  abandon(): void {
+    const previous = this.current;
+    if (!previous || previous.snapshot.feedback.status !== 'unavailable') throw new Error('只有服务明确不再保留的提交才能结束本地跟踪。');
+    if (this.waiting.length) throw new Error('请先撤回待发送消息，再结束本地跟踪。');
+    this.current = undefined;
+    this.active = undefined;
+    this.settled = undefined;
+    this.needsAdmission = true;
+    this.admissionMismatch = false;
+    this.automatic = true;
+    this.blocked = undefined;
+    this.stopConfirmation();
+    this.changed();
+    previous.stopFollowing();
   }
 
   release(): void {
@@ -234,7 +264,7 @@ export class ConversationQueue {
     return { transcriptId: this.transcriptId!, changed: () => this.changed(submission), recoverPreview: (signal) => this.transport.read(submission.id, signal) };
   }
 
-  private replace(entry: QueueEntry, submission: ClientSubmission): void {
+  private replace(entry: QueueEntry | undefined, submission: ClientSubmission): void {
     const previous = this.current;
     this.current = submission;
     this.active = entry;
@@ -283,7 +313,10 @@ export class ConversationQueue {
     const current = this.current;
     if (current && !current.snapshot.remote?.result) {
       if (!current.dispatched) void this.send(current);
-      else if (current.snapshot.feedback.status === 'interrupted' || current.snapshot.feedback.status === 'ended') {
+      else if (current.snapshot.feedback.status === 'unavailable') {
+        this.stopConfirmation('result');
+        this.setBlocked('服务不再保留这次提交，结果仍未确认。请先撤回待发送消息，再明确结束本地跟踪。');
+      } else if (current.snapshot.feedback.status === 'interrupted' || current.snapshot.feedback.status === 'ended') {
         this.setBlocked('当前提交结果尚未确认，等待服务端确认后继续。');
         if (this.automatic) this.retry('result');
       }
@@ -352,23 +385,29 @@ export class ConversationQueue {
 
   private confirmResult(): void {
     const submission = this.current;
-    if (!submission || submission.snapshot.remote?.result || !this.automatic || this.probe) return;
+    if (!submission || submission.snapshot.remote?.result || submission.snapshot.feedback.status === 'unavailable' || !this.automatic || this.probe) return;
     const probe = { controller: new AbortController(), kind: 'result' as const };
     this.probe = probe;
+    let received = false;
     void submission
       .refresh(this.transport, this.reception(submission), probe.controller.signal)
+      .then(() => {
+        received = true;
+      })
       .catch(() => {
-        if (this.probe === probe && this.current === submission) this.setBlocked('当前提交结果尚未确认，正在重试查询。');
+        if (this.probe === probe && this.current === submission && submission.snapshot.feedback.status !== 'unavailable') this.setBlocked('当前提交结果尚未确认，正在重试查询。');
       })
       .finally(() => {
         if (this.probe !== probe) return;
         this.probe = undefined;
-        if (this.current === submission && !submission.snapshot.remote?.result && this.automatic) this.retry('result');
+        if (this.current !== submission || submission.snapshot.remote?.result || !this.automatic || submission.snapshot.feedback.status === 'unavailable') return;
+        if (received && submission.snapshot.remote?.integrity.status === 'complete') void this.reconnect();
+        else this.retry('result');
       });
   }
 
   private retry(kind: ConfirmationKind): void {
-    if (this.probe || this.retryTimer !== undefined || (kind === 'admission' && !this.waiting.length) || (kind === 'result' && !this.automatic)) return;
+    if (this.probe || this.retryTimer !== undefined || (kind === 'admission' && !this.waiting.length) || (kind === 'result' && (!this.automatic || this.current?.snapshot.feedback.status === 'unavailable'))) return;
     const delay = Math.min(250 * 2 ** Math.min(this.retries++, 5), 8000);
     this.retryKind = kind;
     this.retryTimer = setTimeout(() => {

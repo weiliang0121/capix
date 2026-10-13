@@ -1,4 +1,4 @@
-import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationAdmission, ConversationSubmissionBaseline, ConversationSubmissionFrame, ConversationSubmissionRequest, MemoryObservation, ObserverOverview, ExecutionRecordSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@capix/protocol';
+import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationAdmission, ConversationSubmissionBaseline, ConversationSubmissionDiscovery, ConversationSubmissionFrame, ConversationSubmissionRequest, MemoryObservation, ObserverOverview, ExecutionRecordSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@capix/protocol';
 
 export interface ConversationTransport {
   config(): Promise<ConfigurationResponse>;
@@ -6,10 +6,16 @@ export interface ConversationTransport {
   createConversation(signal?: AbortSignal): Promise<ConversationDescriptor>;
   conversation(id: string, signal?: AbortSignal): Promise<ConversationDescriptor>;
   admission(conversationId: string, signal?: AbortSignal): Promise<ConversationAdmission>;
+  activeSubmission(conversationId: string, signal?: AbortSignal): Promise<ConversationSubmissionDiscovery>;
   read(id: string, signal?: AbortSignal): Promise<ConversationSubmissionBaseline>;
   cancel(id: string, signal?: AbortSignal): Promise<ConversationSubmissionBaseline>;
   submit(request: ConversationSubmissionRequest, receive: (frame: ConversationSubmissionFrame) => void, signal: AbortSignal): Promise<void>;
   follow(id: string, receive: (frame: ConversationSubmissionFrame) => void, signal: AbortSignal): Promise<void>;
+}
+
+/** The service no longer retains this submission. Its execution outcome remains unknown. */
+export class SubmissionUnavailableError extends Error {
+  readonly name = 'SubmissionUnavailableError';
 }
 
 export interface ObservationTransport {

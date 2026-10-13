@@ -3,6 +3,7 @@ export type ClientInitializationState = { readonly status: 'idle' } | { readonly
 /** One environment initialization attempt, independent of server invocation machinery. */
 export class InitializationAttempt {
   readonly promise: Promise<void>;
+  private readonly controller = new AbortController();
   private resolve!: () => void;
   private reject!: (error: unknown) => void;
   private state: ClientInitializationState;
@@ -19,6 +20,10 @@ export class InitializationAttempt {
     return this.state.status === 'running';
   }
 
+  get signal(): AbortSignal {
+    return this.controller.signal;
+  }
+
   get snapshot(): ClientInitializationState {
     return this.state;
   }
@@ -33,12 +38,14 @@ export class InitializationAttempt {
     this.requireRunning();
     this.state = { status: 'failed', attempt: this.number, error };
     this.reject(error);
+    this.controller.abort();
   }
 
   stop(): void {
     this.requireRunning();
     this.state = { status: 'stopped', attempt: this.number };
     this.reject(new DOMException('客户端初始化已停止。', 'AbortError'));
+    this.controller.abort();
   }
 
   private requireRunning(): void {

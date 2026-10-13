@@ -16,6 +16,7 @@ interface ChatMessagesProps {
   selectedId: string;
   onInspect: (id: string) => void;
   onReconnect: () => Promise<void>;
+  onAbandon: () => Promise<void>;
 }
 
 export function ChatMessages(props: ChatMessagesProps) {
@@ -28,11 +29,11 @@ export function ChatMessages(props: ChatMessagesProps) {
   );
 }
 
-function ConversationView({ rows: source, focus, selectedId, onInspect, onReconnect }: ChatMessagesProps) {
+function ConversationView({ rows: source, focus, selectedId, onInspect, onReconnect, onAbandon }: ChatMessagesProps) {
   const { rows, playing } = useConversationReveal(source);
   const response = findLast(rows, (row) => row.kind === 'response');
   const inputOwners = new Map(source.flatMap((row) => (row.kind === 'response' && row.afterInputKey ? [[row.afterInputKey, row.queueId] as const] : [])));
-  const { scrollRef, contentRef, reading, latest } = useConversationScroll(rows, response ? { key: response.key, queueId: response.queueId, inputKey: response.afterInputKey } : undefined, focus);
+  const { scrollRef, contentRef, reading, latest } = useConversationScroll(rows, response ? { key: response.key, inputKey: response.afterInputKey } : undefined, focus);
   return (
     <div className="conversation-body">
       <div ref={scrollRef} className="conversation-scroll" role="log" aria-live="off" aria-label="对话消息" tabIndex={0}>
@@ -51,7 +52,7 @@ function ConversationView({ rows: source, focus, selectedId, onInspect, onReconn
             </div>
           )}
           {rows.map((row) => {
-            if (row.kind === 'response') return <AssistantResponse key={row.key} response={row} reveal={(row.content?.key ?? row.body?.key) === playing} selectedId={selectedId} onInspect={onInspect} onReconnect={onReconnect} />;
+            if (row.kind === 'response') return <AssistantResponse key={row.key} response={row} reveal={(row.content?.key ?? row.body?.key) === playing} selectedId={selectedId} onInspect={onInspect} onReconnect={onReconnect} onAbandon={onAbandon} />;
             if (row.kind === 'pending-input') {
               return (
                 <article key={row.key} data-conversation-key={row.key} data-submission-input={row.queueId} className="chat-message user pending">

@@ -1,6 +1,7 @@
 import type { ClientState, ClientSubmissionState } from '@capix/client-runtime';
 import type { ConversationMessage } from '../state/conversation.js';
 import { responseLocator } from './responses.js';
+import { submissionPresentationKey } from './submission.js';
 
 const maximumDeferredMessages = 32;
 
@@ -19,15 +20,16 @@ export function createRevealProjection() {
 
   return (rows: readonly ConversationMessage[], state: ClientState): readonly ConversationMessage[] => {
     const tracked = new Map<string, ClientSubmissionState>();
-    for (const submission of state.submissions.values()) tracked.set(submission.queueId, submission);
-    if (state.submission) tracked.set(state.submission.queueId, state.submission);
+    for (const submission of state.submissions.values()) tracked.set(submissionPresentationKey(submission), submission);
+    if (state.submission) tracked.set(submissionPresentationKey(state.submission), state.submission);
     const ids = new Set(tracked.keys());
     for (const id of eligible) {
       if (!ids.has(id)) eligible.delete(id);
     }
     if (initialized) {
       for (const id of ids) {
-        if (!previousIds.has(id)) eligible.add(id);
+        const submission = tracked.get(id)!;
+        if (!previousIds.has(id) && (submission.queueId !== undefined || (submission.remote && !responseLocator(submission)))) eligible.add(id);
       }
     }
     for (const [id, submission] of tracked) {
@@ -35,7 +37,7 @@ export function createRevealProjection() {
       const answer = responseLocator(submission);
       // A view opened during generation already displays a live preview. Its later
       // formal body continues that display even though this is not a new local submission.
-      if (preview?.status === 'live' && preview.snapshot && preview.snapshot.state !== 'discarded' && (!answer || answer.transcriptId !== state.transcriptId || rows[answer.index]?.message.role !== 'assistant')) eligible.add(id);
+      if (preview?.status === 'live' && preview.snapshot && preview.snapshot.state !== 'discarded' && (submission.queueId !== undefined || preview.snapshot.state !== 'committed') && (!answer || answer.transcriptId !== state.transcriptId || rows[answer.index]?.message.role !== 'assistant')) eligible.add(id);
     }
     let changed = false;
     if (transcriptId !== state.transcriptId) {
@@ -79,7 +81,7 @@ export function createRevealProjection() {
       const submission = submissions.get(owner);
       const answer = submission ? responseLocator(submission) : undefined;
       if (submission && answer && answer.transcriptId === transcriptId && answer.index === index) {
-        revealed.set(index, submission.queueId);
+        revealed.set(index, submissionPresentationKey(submission));
         deferred.delete(index);
         changed = true;
       } else if (!awaitingLocator(submission) || index >= rows.length) {

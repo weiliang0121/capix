@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConversationAdmission, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse, InteractionUpdate } from '@capix/protocol';
+import type { ConversationAdmission, ConversationSubmissionDiscovery, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse, InteractionUpdate } from '@capix/protocol';
 import { ExecutionRecord, ExecutionRecordHelper, observeMemory } from '@capix/server-runtime/recording';
 import { isObject, isInvocationCancelled, RuntimeError } from '@capix/server-runtime';
 import type { ObserverConversations } from '../assembly/conversations.js';
@@ -77,6 +77,12 @@ export function createObserverServer(options: ObserverServerOptions) {
     if (req.method === 'GET' && url.pathname === '/api/conversations') return json(res, 200, conversations.list());
     const conversationPath = /^\/api\/conversations\/([a-zA-Z0-9_-]{1,128})$/.exec(url.pathname);
     if (req.method === 'GET' && conversationPath) return json(res, 200, conversations.get(conversationPath[1]!));
+    const discoveryPath = /^\/api\/conversations\/([a-zA-Z0-9_-]{1,128})\/submission$/.exec(url.pathname);
+    if (req.method === 'GET' && discoveryPath) {
+      const conversation = conversations.get(discoveryPath[1]!);
+      const active = submissions.active(conversation.id);
+      return json(res, 200, { conversationId: conversation.id, transcriptId: conversation.transcriptId, ...(active ? { submission: active.baseline } : {}) } satisfies ConversationSubmissionDiscovery);
+    }
     if (req.method === 'POST' && url.pathname === '/api/conversations') {
       if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' } satisfies ErrorResponse);
       const body = await readBody(req);

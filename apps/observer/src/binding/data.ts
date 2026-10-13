@@ -55,7 +55,8 @@ export function createDataProjection() {
     const content = projectReveal(messages, state);
     const result = state.submission?.remote?.result;
     const admissionQueueChanged = result?.status === 'rejected' && result.retry === 'admission' && previous?.queue.waiting !== state.queue.waiting;
-    const conversation = content !== previousContent || previous?.submissions !== state.submissions || previous?.submission !== state.submission || previous?.transcripts !== state.transcripts || previous?.queue.blocked !== state.queue.blocked || admissionQueueChanged ? projectResponses(content, state) : data.conversation;
+    const abandonmentChanged = state.submission?.feedback.status === 'unavailable' && Boolean(previous?.queue.waiting.length) !== Boolean(state.queue.waiting.length);
+    const conversation = content !== previousContent || previous?.submissions !== state.submissions || previous?.submission !== state.submission || previous?.transcripts !== state.transcripts || previous?.queue.blocked !== state.queue.blocked || abandonmentChanged || admissionQueueChanged ? projectResponses(content, state) : data.conversation;
     if (previousContextId !== state.contextId || previousExecutions !== observation.overview.executions) {
       runningId = state.contextId ? (observation.overview.executions.find((item) => item.calls.some((call) => call.recordType === 'execution' && call.contextId === state.contextId))?.id ?? '') : '';
       previousContextId = state.contextId;
@@ -68,6 +69,7 @@ export function createDataProjection() {
       switchingConversation: state.switching,
       canSwitchConversation: state.canSwitchConversation,
       conversationError: state.conversationError ? errorMessage(state.conversationError) : undefined,
+      trackingNotice: state.trackingError ? '本地接回位置暂不可用，刷新后可能无法自动接回本次处理；当前对话仍可继续。' : undefined,
       config: state.config,
       busy: state.busy,
       queue: state.queue,

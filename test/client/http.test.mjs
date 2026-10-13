@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpTransport, ConversationHttpTransport, ObservationHttpTransport, HttpError, HttpTransportError } from '@capix/client-http';
-import { TranscriptConnectionError, ObservationConnectionError } from '@capix/client-runtime';
+import { TranscriptConnectionError, ObservationConnectionError, SubmissionUnavailableError } from '@capix/client-runtime';
 import { snapshot, transcriptSnapshot, baseline, submissionSnapshot } from './fixtures.mjs';
 
 const input = { messages: [{ role: 'user', content: '测试' }] };
@@ -61,6 +61,7 @@ test('all Observer queries reject malformed success bodies at the response bound
   for (const [client, method, args] of [
     [conversation, 'config', []],
     [conversation, 'admission', []],
+    [conversation, 'activeSubmission', ['fixture-conversation']],
     [conversation, 'transcript', []],
     [observation, 'overview', []],
     [observation, 'memory', []],
@@ -86,6 +87,34 @@ test('admission query accepts only current service conditions and forwards cance
     assert.deepEqual(await client.admission('fixture-conversation', controller.signal), value);
   }
   for (const value of [{ status: 'ready' }, { conversationId: 'fixture-conversation', transcriptId: 't', status: 'unavailable' }, { conversationId: 'fixture-conversation', transcriptId: 't', status: 'running' }]) await assert.rejects(jsonConversation(value).admission('fixture-conversation'), (error) => error.kind === 'contract');
+});
+
+test('active submission discovery validates scope and forwards cancellation without requiring progress before input acceptance', async () => {
+  const base = { conversationId: 'fixture-conversation', transcriptId: 't' };
+  const active = { ...base, submission: wire(initial) };
+  const incomplete = { ...base, submission: wire({ ...initial, integrity: { status: 'incomplete', error: { code: 'PROJECTION_FAILED', message: 'unavailable progress' } } }) };
+  const controller = new AbortController();
+  for (const value of [base, active, incomplete]) {
+    const io = new ConversationHttpTransport('http://example.test', async (url, init) => {
+      assert.equal(url, 'http://example.test/api/conversations/fixture-conversation/submission');
+      assert.equal(init.method, undefined);
+      assert.equal(init.signal, controller.signal);
+      return Response.json(value);
+    });
+    assert.deepEqual(await io.activeSubmission(base.conversationId, controller.signal), value);
+  }
+  for (const value of [
+    { ...base, conversationId: 'foreign' },
+    { ...base, submission: wire({ ...initial, conversationId: 'foreign' }) },
+    { ...base, submission: wire({ ...initial, input: { transcriptId: 'foreign', start: 0, end: 1 } }) },
+    { ...base, submission: wire({ ...initial, answer: { transcriptId: 'foreign', index: 1 } }) },
+    { ...base, submission: wire({ ...initial, admission: { ...base, conversationId: 'foreign', status: 'busy' } }) },
+    { ...base, submission: wire({ ...initial, admission: { ...base, transcriptId: 'foreign', status: 'busy' } }) },
+    { ...base, submission: wire({ ...initial, result: { status: 'completed' } }) },
+    { ...base, submission: wire({ ...initial, revision: -1 }) },
+    { ...base, submission: wire({ ...initial, executions: null }) },
+  ])
+    await assert.rejects(jsonConversation(value).activeSubmission(base.conversationId), (error) => error instanceof HttpTransportError && error.kind === 'contract');
 });
 
 test('temporary non-admission retains a formal retry fact despite the HTTP status', async () => {
@@ -177,8 +206,11 @@ test('unknown HTTP failures and unavailable follow preserve uncertainty and diag
   const io = new ConversationHttpTransport('', async () => Response.json({ code: 'SUBMISSION_UNAVAILABLE', error: 'unavailable' }, { status: 404 }));
   await assert.rejects(
     io.follow('submission', () => assert.fail('No remote facts'), signal()),
-    (error) => error instanceof HttpError && error.code === 'SUBMISSION_UNAVAILABLE' && error.response.status === 404,
+    (error) => error instanceof SubmissionUnavailableError && error.cause instanceof HttpError && error.cause.code === 'SUBMISSION_UNAVAILABLE' && error.cause.response.status === 404,
   );
+  await assert.rejects(io.read('submission'), (error) => error instanceof SubmissionUnavailableError && error.cause.response.status === 404);
+  const missingRoute = new ConversationHttpTransport('', async () => Response.json({ error: 'route missing' }, { status: 404 }));
+  await assert.rejects(missingRoute.read('submission'), (error) => error instanceof HttpError && !(error instanceof SubmissionUnavailableError));
   const other = new ConversationHttpTransport('', async () => Response.json(wire(submissionSnapshot('foreign', { result: { status: 'rejected', error: { code: 'BUSY', message: 'busy' } } })), { status: 409 }));
   await assert.rejects(
     other.submit(request, () => assert.fail('foreign'), signal()),

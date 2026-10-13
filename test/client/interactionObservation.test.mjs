@@ -8,7 +8,7 @@ const received = { ...initial, revision: 2, result: { kind: 'received', feedback
 const signal = () => new AbortController().signal;
 
 async function fixture(t, observation) {
-  const io = transport({ conversation: async (id) => conversationDescriptor(id, `transcript-${id}`) });
+  const io = transport({ conversation: async (id) => conversationDescriptor(id, `transcript-${id}`), activeSubmission: async (id) => ({ conversationId: id, transcriptId: id === 'fixture-conversation' ? 'fixture-transcript' : `transcript-${id}` }) });
   io.observeTranscript = async (id, accept, control) => {
     accept({ type: 'baseline', snapshot: transcriptSnapshot([], id) });
     await wait(control);

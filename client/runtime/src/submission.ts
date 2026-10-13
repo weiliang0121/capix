@@ -1,6 +1,6 @@
 import type { ConversationRequest, ConversationSubmissionSnapshot, ConversationSubmissionFrame, ConversationSubmissionBaseline, ConversationSubmissionUpdate, FileTask } from '@capix/protocol';
 import { isEqual } from 'es-toolkit';
-import type { ConversationTransport } from './transport.js';
+import { SubmissionUnavailableError, type ConversationTransport } from './transport.js';
 import { acceptConversationRequest } from './request.js';
 import { acceptActivities, acceptActivityChange } from './activities.js';
 import { acceptFileOutput } from './files.js';
@@ -8,14 +8,14 @@ import { acceptConversationTask } from './task.js';
 import { validAdmission } from './admission.js';
 import { AnswerPreviewReceiver, type AnswerPreviewState } from './preview.js';
 
-export type SubmissionFeedback = { readonly status: 'idle' | 'connecting' | 'following' | 'ended' } | { readonly status: 'interrupted'; readonly error: unknown };
+export type SubmissionFeedback = { readonly status: 'idle' | 'connecting' | 'following' | 'ended' } | { readonly status: 'interrupted' | 'unavailable'; readonly error: unknown };
 export type SubmissionCancellation = { readonly status: 'requested' | 'sending' | 'acknowledged' } | { readonly status: 'uncertain'; readonly error: unknown };
 export interface ClientSubmissionState {
   readonly id: string;
   readonly conversationId: string;
   /** Stable local input identity; a rejected admission may require a new POST identity. */
-  readonly queueId: string;
-  readonly pending: string;
+  readonly queueId?: string;
+  readonly pending?: string;
   readonly fileTask?: FileTask;
   readonly remote?: ConversationSubmissionSnapshot;
   readonly feedback: SubmissionFeedback;
@@ -34,7 +34,9 @@ export class SubmissionContractError extends Error {}
 
 /** Local tracking of one submission. Connection state never invents a remote result. */
 export class ClientSubmission {
-  readonly id = globalThis.crypto.randomUUID();
+  readonly id: string;
+  readonly conversationId: string;
+  private readonly notifyAccepted?: (submission: ClientSubmissionState) => undefined;
   private state: ClientSubmissionState;
   private accepted = false;
   private session?: AbortController;
@@ -44,20 +46,41 @@ export class ClientSubmission {
   private cancellationRevision = -1;
   private readonly previews = new AnswerPreviewReceiver();
   private executionPositions = new Map<string, number>();
-  readonly input: ConversationRequest;
+  readonly input?: ConversationRequest;
   readonly bytes: number;
 
-  constructor(
-    readonly conversationId: string,
-    input: ConversationRequest,
-    private readonly notifyAccepted?: (submission: ClientSubmissionState) => undefined,
-    queueId = this.id,
-  ) {
+  constructor(identity: { readonly conversationId: string; readonly submissionId: string });
+  constructor(conversationId: string, input: ConversationRequest, notifyAccepted?: (submission: ClientSubmissionState) => undefined, queueId?: string);
+  constructor(identity: string | { readonly conversationId: string; readonly submissionId: string }, input?: ConversationRequest, notifyAccepted?: (submission: ClientSubmissionState) => undefined, queueId?: string) {
+    const conversationId = typeof identity === 'string' ? identity : identity.conversationId;
     if (typeof conversationId !== 'string' || !conversationId) throw new TypeError('提交必须明确所属对话。');
-    const accepted = acceptConversationRequest(input);
+    this.conversationId = conversationId;
+    if (typeof identity !== 'string') {
+      if (typeof identity.submissionId !== 'string' || !identity.submissionId) throw new TypeError('接回提交必须明确原提交身份。');
+      this.id = identity.submissionId;
+      this.bytes = 0;
+      this.sent = true;
+      this.accepted = true;
+      this.state = Object.freeze({ id: this.id, conversationId, feedback: Object.freeze({ status: 'connecting' }) });
+      return;
+    }
+    const accepted = acceptConversationRequest(input!);
+    this.id = globalThis.crypto.randomUUID();
+    this.notifyAccepted = notifyAccepted;
     this.input = accepted.input;
     this.bytes = accepted.bytes;
-    this.state = Object.freeze({ id: this.id, conversationId, queueId, pending: this.input.messages.at(-1)!.content, ...(this.input.fileTask ? { fileTask: this.input.fileTask } : {}), feedback: Object.freeze({ status: 'idle' }) });
+    this.state = Object.freeze({ id: this.id, conversationId, queueId: queueId ?? this.id, pending: this.input.messages.at(-1)!.content, ...(this.input.fileTask ? { fileTask: this.input.fileTask } : {}), feedback: Object.freeze({ status: 'idle' }) });
+  }
+
+  /** Attach to existing facts without manufacturing a local request or another POST identity. */
+  static attach(identity: { readonly conversationId: string; readonly submissionId: string }, transcriptId: string, baseline?: ConversationSubmissionBaseline): ClientSubmission {
+    const submission = new ClientSubmission(identity);
+    submission.bindReception({ transcriptId, changed: () => undefined });
+    if (baseline) {
+      submission.receiveFrame(baseline);
+      if (submission.snapshot.remote && submissionFeedbackEnded(submission.snapshot.remote)) submission.feedback({ status: 'ended' });
+    }
+    return submission;
   }
 
   get snapshot(): ClientSubmissionState {
@@ -113,7 +136,7 @@ export class ClientSubmission {
     } catch (error) {
       if (!current()) return;
       const failingState = this.state;
-      this.feedback({ status: 'interrupted', error });
+      this.feedback({ status: error instanceof SubmissionUnavailableError ? 'unavailable' : 'interrupted', error });
       completionChanged = this.state !== failingState;
     } finally {
       if (current()) {
@@ -127,13 +150,13 @@ export class ClientSubmission {
   stopFollowing(): void {
     const session = this.session;
     this.session = undefined;
-    if (this.state.feedback.status !== 'ended') this.feedback({ status: 'ended' });
+    if (this.state.feedback.status !== 'ended' && this.state.feedback.status !== 'unavailable') this.feedback({ status: 'ended' });
     session?.abort();
   }
 
   feedback(feedback: SubmissionFeedback): void {
     const previous = this.state.feedback;
-    if (feedback.status === previous.status && (feedback.status !== 'interrupted' || (previous.status === 'interrupted' && feedback.error === previous.error))) return;
+    if (feedback.status === previous.status && (!('error' in feedback) || ('error' in previous && feedback.error === previous.error))) return;
     this.state = Object.freeze({ ...this.state, feedback: Object.freeze({ ...feedback }) });
   }
 
@@ -162,7 +185,7 @@ export class ClientSubmission {
     let fileOutput;
     try {
       activities = acceptActivities(next.activities, previous?.activities);
-      task = acceptConversationTask(next.task, previous?.task, this.input.fileTask);
+      task = acceptConversationTask(next.task, previous?.task, this.input?.fileTask);
       fileOutput = acceptFileOutput(next.fileOutput, previous?.fileOutput, task?.kind === 'file' ? task.task : undefined);
     } catch (cause) {
       throw new SubmissionContractError('提交过程或文件结果无效。', { cause });
@@ -214,7 +237,7 @@ export class ClientSubmission {
     let fileOutput = previous.fileOutput;
     try {
       if (change.activities !== undefined) activities = acceptActivityChange(change.activities, previous.activities);
-      if (change.task !== undefined) task = acceptConversationTask(change.task, previous.task, this.input.fileTask);
+      if (change.task !== undefined) task = acceptConversationTask(change.task, previous.task, this.input?.fileTask);
       if (change.fileOutput !== undefined) fileOutput = acceptFileOutput(change.fileOutput, previous.fileOutput, task?.kind === 'file' ? task.task : undefined);
     } catch (cause) {
       throw new SubmissionContractError('提交过程或文件结果无效。', { cause });
@@ -250,12 +273,14 @@ export class ClientSubmission {
   }
 
   send(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
-    if (this.sent) throw new Error('同一提交不能重复发送。');
+    if (this.sent || !this.input) throw new Error('同一提交不能重复发送。');
     this.sent = true;
-    return this.connect((receive, signal) => transport.submit({ conversationId: this.conversationId, submissionId: this.id, input: this.input }, receive, signal), reception);
+    const input = this.input;
+    return this.connect((receive, signal) => transport.submit({ conversationId: this.conversationId, submissionId: this.id, input }, receive, signal), reception);
   }
 
   private bindReception(reception: SubmissionReception): void {
+    if (typeof reception.transcriptId !== 'string' || !reception.transcriptId) throw new SubmissionContractError('提交接收必须绑定消息集合。');
     if (this.transcriptId && this.transcriptId !== reception.transcriptId) throw new SubmissionContractError('提交不能切换消息集合。');
     this.transcriptId = reception.transcriptId;
   }
@@ -264,10 +289,20 @@ export class ClientSubmission {
   async refresh(transport: ConversationTransport, reception: SubmissionReception, signal?: AbortSignal): Promise<void> {
     this.bindReception(reception);
     const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
-    const snapshot = await transport.read(this.id, requestSignal);
-    requestSignal.throwIfAborted();
-    this.receiveFrame(snapshot);
-    reception.changed();
+    try {
+      const snapshot = await transport.read(this.id, requestSignal);
+      requestSignal.throwIfAborted();
+      this.receiveFrame(snapshot);
+      if (this.state.remote && submissionFeedbackEnded(this.state.remote)) this.feedback({ status: 'ended' });
+      else if (this.state.feedback.status === 'unavailable') this.feedback({ status: this.session ? 'following' : 'ended' });
+      reception.changed();
+    } catch (error) {
+      if (!signal?.aborted) {
+        this.feedback({ status: error instanceof SubmissionUnavailableError ? 'unavailable' : 'interrupted', error });
+        reception.changed();
+      }
+      throw error;
+    }
   }
 
   get shouldRetryCancellation(): boolean {

@@ -22,6 +22,13 @@ export function createApplication(runtime: ClientRuntime) {
         runtime.reconnectSubmission().catch((error) => {
           store.getState().setNotice(errorMessage(error));
         }),
+      abandonSubmission: async () => {
+        try {
+          await runtime.abandonSubmission();
+        } catch (error) {
+          store.getState().setNotice(errorMessage(error));
+        }
+      },
       cancelSubmission: (id: string) =>
         runtime.cancelSubmission(id).catch((error) => {
           store.getState().setNotice(errorMessage(error));

@@ -1,8 +1,8 @@
-import { TranscriptConnectionError, type ConversationTransport, type TranscriptTransport } from '@capix/client-runtime';
+import { TranscriptConnectionError, SubmissionUnavailableError, type ConversationTransport, type TranscriptTransport } from '@capix/client-runtime';
 import type { ConversationSubmissionBaseline, ConversationSubmissionFrame, ConversationSubmissionRequest, TranscriptFrame } from '@capix/protocol';
 import { HttpTransport } from './transport.js';
 import { HttpError, HttpTransportError } from './errors.js';
-import { acceptResponse, conversationResponse, conversationsResponse, configurationResponse, admissionResponse, transcriptResponse, transcriptUpdate, submissionBaselineResponse, submissionFrameResponse, responseStatusError, parseLine, deliver } from './responses.js';
+import { acceptResponse, conversationResponse, conversationsResponse, configurationResponse, admissionResponse, transcriptResponse, transcriptUpdate, submissionBaselineResponse, submissionDiscoveryResponse, submissionFrameResponse, responseStatusError, parseLine, deliver } from './responses.js';
 import { readLines } from './stream.js';
 
 /** Conversation requests and delivery, independent of observation. */
@@ -27,6 +27,17 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
   async admission(conversationId: string, signal?: AbortSignal) {
     const value = acceptResponse(admissionResponse, await this.get(`/api/conversation/admission?conversationId=${encodeURIComponent(conversationId)}`, signal), '对话接纳');
     if (value.conversationId !== conversationId) throw new HttpTransportError('contract', '接纳状态不属于请求的对话。', 'CONVERSATION_MISMATCH');
+    return value;
+  }
+  async activeSubmission(conversationId: string, signal?: AbortSignal) {
+    const value = acceptResponse(submissionDiscoveryResponse, await this.get(`/api/conversations/${encodeURIComponent(conversationId)}/submission`, signal), '当前提交');
+    if (value.conversationId !== conversationId) throw new HttpTransportError('contract', '当前提交不属于请求的对话。', 'CONVERSATION_MISMATCH');
+    const submission = value.submission?.submission;
+    if (submission) {
+      if (submission.conversationId !== conversationId || (submission.admission && submission.admission.conversationId !== conversationId)) throw new HttpTransportError('contract', '当前提交反馈不属于请求的对话。', 'CONVERSATION_MISMATCH');
+      if ([submission.input, submission.answer, submission.admission].some((item) => item && item.transcriptId !== value.transcriptId)) throw new HttpTransportError('contract', '当前提交反馈不属于声明的消息集合。', 'TRANSCRIPT_MISMATCH');
+      if (submission.result) throw new HttpTransportError('contract', '当前提交查询不能返回已结束的提交。', 'INVALID_RESPONSE');
+    }
     return value;
   }
   async transcript(id: string, signal?: AbortSignal) {
@@ -61,8 +72,13 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
   }
 
   async read(id: string, signal?: AbortSignal): Promise<ConversationSubmissionBaseline> {
-    const value = await this.get(`/api/submissions/${encodeURIComponent(id)}`, signal);
-    return this.acceptBaseline(value, id);
+    try {
+      const value = await this.get(`/api/submissions/${encodeURIComponent(id)}`, signal);
+      return this.acceptBaseline(value, id);
+    } catch (error) {
+      if (error instanceof HttpError && error.phase === 'status' && error.code === 'SUBMISSION_UNAVAILABLE') throw new SubmissionUnavailableError(error.message, { cause: error });
+      throw error;
+    }
   }
 
   async cancel(id: string, signal?: AbortSignal): Promise<ConversationSubmissionBaseline> {
@@ -89,6 +105,7 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
     try {
       response = await this.send(path, init);
     } catch (error) {
+      if (init.method !== 'POST' && error instanceof HttpError && error.phase === 'status' && error.code === 'SUBMISSION_UNAVAILABLE') throw new SubmissionUnavailableError(error.message, { cause: error });
       // A known rejection is a formal cumulative fact even when HTTP uses a non-2xx status.
       if (!(error instanceof HttpError) || !submissionBaselineResponse.safeParse(error.body).success) throw error;
       const frame = this.acceptFrame(error.body, id, conversationId);

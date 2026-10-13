@@ -41,6 +41,7 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   let detailReads = 0;
   const io = transport({
     conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', fixture.transcriptId)], defaultConversationId: 'fixture-conversation' }),
+    activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: fixture.transcriptId }),
     admission: async () => ({ conversationId: 'fixture-conversation', transcriptId: fixture.transcriptId, status: 'ready' }),
     baseline: fixture.frames[0],
     overview: async () => (finished ? fixture.overview : { messages: history.map((message, index) => ({ index, message, count: 0 })), executions: [] }),
@@ -122,6 +123,7 @@ test('binding remount retains business messages despite unavailable observation'
   let finished = false;
   const io = transport({
     conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', fixture.transcriptId)], defaultConversationId: 'fixture-conversation' }),
+    activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: fixture.transcriptId }),
     admission: async () => ({ conversationId: 'fixture-conversation', transcriptId: fixture.transcriptId, status: 'ready' }),
     overview: async () => {
       if (finished) throw new Error('概览刷新失败');
@@ -163,7 +165,7 @@ test('loading old detail records does not replace a fresh server overview or rep
   const frames = installFrames(t);
   const fixture = await recordedRound();
   const id = fixture.final.execution.id;
-  const runtime = withObservation(transport({ conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', fixture.transcriptId)], defaultConversationId: 'fixture-conversation' }), overview: async () => fixture.overview, transcript: async () => ({ id: fixture.transcriptId, revision: 3, start: 0, end: fixture.messages.length, starts: [0], messages: fixture.messages }), memory: async () => fixture.memory, execution: async () => fixture.final }));
+  const runtime = withObservation(transport({ conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', fixture.transcriptId)], defaultConversationId: 'fixture-conversation' }), activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: fixture.transcriptId }), overview: async () => fixture.overview, transcript: async () => ({ id: fixture.transcriptId, revision: 3, start: 0, end: fixture.messages.length, starts: [0], messages: fixture.messages }), memory: async () => fixture.memory, execution: async () => fixture.final }));
   const app = createApplication(runtime);
   const disconnect = app.connect();
   await runtime.initialize();

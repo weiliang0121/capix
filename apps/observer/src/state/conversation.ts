@@ -27,7 +27,7 @@ export interface ConversationResponse {
   readonly kind: 'response';
   readonly key: string;
   readonly submissionId: string;
-  readonly queueId: string;
+  readonly queueId?: string;
   readonly afterInputKey?: string;
   readonly fileTask?: FileTask;
   readonly fileOutput?: FileOutput;

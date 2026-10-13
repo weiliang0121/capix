@@ -1,6 +1,6 @@
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { z } from 'zod';
-import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConversationDescriptor, type ConversationListResponse, type ConversationAdmission, type ConfigurationResponse, type ConversationSubmissionSnapshot, type ConversationSubmissionBaseline, type ConversationSubmissionFrame, type AnswerPreviewSnapshot, type AnswerPreviewChange, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
+import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConversationDescriptor, type ConversationListResponse, type ConversationAdmission, type ConfigurationResponse, type ConversationSubmissionSnapshot, type ConversationSubmissionBaseline, type ConversationSubmissionDiscovery, type ConversationSubmissionFrame, type AnswerPreviewSnapshot, type AnswerPreviewChange, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
 import { HttpError, type HttpResponseInfo, HttpTransportError } from './errors.js';
 
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -87,6 +87,7 @@ export const submissionResponse = z.object({
 // Preview payload acceptance belongs to its isolated receiver: a malformed optional
 // candidate must not prevent subsequent formal submission facts from being consumed.
 export const submissionBaselineResponse = z.object({ type: z.literal('baseline'), submission: submissionResponse, preview: z.custom<AnswerPreviewSnapshot>().optional() }) satisfies z.ZodType<ConversationSubmissionBaseline>;
+export const submissionDiscoveryResponse = z.object({ conversationId: id, transcriptId: id, submission: submissionBaselineResponse.optional() }) satisfies z.ZodType<ConversationSubmissionDiscovery>;
 const submissionChange = z.object({
   input: submissionResponse.shape.input,
   answer: submissionResponse.shape.answer,

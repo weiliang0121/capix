@@ -154,7 +154,7 @@ for (const kind of ['incomplete', 'identity', 'scope', 'consumer']) {
 
 test('a failed observation scope does not prevent opening and observing another conversation', async (t) => {
   const next = conversationDescriptor('next', 'next-transcript');
-  const io = transport({ conversation: async () => next });
+  const io = transport({ conversation: async () => next, activeSubmission: async (id) => ({ conversationId: id, transcriptId: id === next.id ? next.transcriptId : 'fixture-transcript' }) });
   io.observeTranscript = async (id, receive, signal) => {
     receive({ type: 'baseline', snapshot: transcriptSnapshot([], id) });
     await untilAbort(signal);

@@ -1,6 +1,7 @@
 export { ClientRuntime, type ClientRuntimeOptions, type ClientState } from './runtime.js';
 export type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
-export { TranscriptConnectionError, ObservationConnectionError } from './transport.js';
+export { TranscriptConnectionError, ObservationConnectionError, SubmissionUnavailableError } from './transport.js';
+export type { ClientTrackingLocator, ClientTrackingStore } from './tracking.js';
 export type { ClientInitializationState } from './initialization.js';
 
 export { ObservationReplica, ObservationSequenceError, ObservationContractError } from './observation/replica.js';

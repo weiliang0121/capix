@@ -310,6 +310,11 @@ export function createSubmissionStore(options: SubmissionRetention & { admission
       expire();
       return entries.get(id);
     },
+    active(conversationId: string): ConversationSubmission | undefined {
+      expire();
+      for (const submission of entries.values()) if (submission.conversationId === conversationId && submission.endedAt === undefined) return submission;
+      return undefined;
+    },
     create(id: string, conversationId: string): ConversationSubmission {
       expire();
       if (entries.has(id)) throw new RuntimeError('SUBMISSION_EXISTS', '该提交仍在保留范围内，请查询其进展。');

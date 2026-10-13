@@ -1,13 +1,17 @@
-import type { ClientState } from '@capix/client-runtime';
+import type { ClientState, ClientSubmissionState } from '@capix/client-runtime';
 import type { SubmissionControl, SubmissionNotice } from '../state/data.js';
 import { errorMessage } from '../lib/errors.js';
 
 /** Public request facts and feedback health have different meanings in the interface. */
-export function projectSubmission(state: Pick<ClientState, 'submission' | 'answerAvailability'>): { progress: string; submissionNotice?: SubmissionNotice; submissionControl?: SubmissionControl } {
+export function projectSubmission(state: Pick<ClientState, 'submission' | 'answerAvailability'> & Partial<Pick<ClientState, 'queue'>>): { progress: string; submissionNotice?: SubmissionNotice; submissionControl?: SubmissionControl } {
   const submission = state.submission;
   if (!submission) return { progress: '' };
   const remote = submission.remote;
   const result = remote?.result;
+  if (!result && submission.feedback.status === 'unavailable') {
+    const waiting = Boolean(state.queue?.waiting.length);
+    return { progress: '', submissionNotice: { message: `服务已无法查询原提交；这不表示它未执行。结束本地跟踪不会取消服务端处理。${waiting ? '请先撤回待发送消息，再结束本地跟踪。' : ''}`, reconnect: false, abandon: !waiting } };
+  }
   const disconnected = submission.feedback.status === 'interrupted' || submission.feedback.status === 'ended';
   const incomplete = remote?.integrity.status === 'incomplete';
   const answerPending = remote?.answer && (state.answerAvailability === 'unloaded' || state.answerAvailability === 'pending');
@@ -32,7 +36,12 @@ export function projectSubmission(state: Pick<ClientState, 'submission' | 'answe
   if (!result && disconnected) return { progress: '', submissionControl, submissionNotice: { message: `结果待确认。${submission.feedback.status === 'interrupted' ? errorMessage(submission.feedback.error) : '已停止接收本次进展。'}`, ...actions } };
   if (submission.notificationError) return { progress: result ? '' : '正在同步本次进展…', submissionControl, submissionNotice: { message: `本地接纳通知处理失败：${errorMessage(submission.notificationError)}`, ...actions } };
   if (result) return { progress: answerPending ? '服务处理已完成，回答正文待同步…' : '' };
-  if (submission.feedback.status === 'connecting') return { progress: remote ? '正在重新同步本次提交…' : '正在提交…', submissionControl };
+  if (submission.feedback.status === 'connecting') return { progress: remote || submission.pending === undefined ? '正在接回本次处理…' : '正在提交…', submissionControl };
   if (remote?.answer) return { progress: answerPending ? '回答已落实，正文待同步；等待服务处理结果…' : '回答已落实，等待服务处理结果…', submissionControl };
   return { progress: remote?.input ? '输入已接纳，正在等待回答…' : '正在确认本次提交…', submissionControl };
+}
+
+/** Local admission retries share a region; attached remote work has no local queue identity. */
+export function submissionPresentationKey(submission: ClientSubmissionState): string {
+  return JSON.stringify(submission.queueId ? ['response', submission.queueId] : ['submission-response', submission.id]);
 }

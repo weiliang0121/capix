@@ -37,6 +37,7 @@ const conversation: ConversationTransport = {
     if (!value) throw new Error('Conversation not found');
     return value;
   },
+  activeSubmission: async (id) => ({ conversationId: id, transcriptId: conversations.get(id)!.transcriptId }),
   createConversation: async () => {
     const created = { id: 'created', title: '新对话', transcriptId: 'created-messages', createdAt: 5, updatedAt: 5 };
     conversations.set(created.id, created);

@@ -11,6 +11,7 @@
 - GET `/api/conversations` → ConversationListResponse（目录与稳定默认身份）。
 - POST `/api/conversations` 接受空 JSON 对象，返回新建 ConversationDescriptor。
 - GET `/api/conversations/:id` → 指定对话元信息；未知身份明确失败。
+- GET `/api/conversations/:id/submission` → ConversationSubmissionDiscovery `{ conversationId, transcriptId, submission?: ConversationSubmissionBaseline }`。只发现当前未结束的提交，不列历史、不创建运行环境、不兑现 Provider。没有活动项时省略 submission；保存了旧身份的客户端仍需 read 原 ID 确认结果，不能把本接口为空当作原提交未执行。
 
 - GET `/api/conversation/admission?conversationId=对话ID` → ConversationAdmission（当前对话与集合身份及 ready/busy/unavailable；不预占、不探测模型）。
 - GET `/api/config` → ConfigurationResponse（配置与 configured，绝不返回 key）。

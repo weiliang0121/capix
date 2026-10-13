@@ -7,7 +7,7 @@ import { FileResult } from './FileResult';
 import { MessageHeading } from './MessageHeading';
 
 /** One stable assistant region receives both progress and its independently synchronized body. */
-export const AssistantResponse = memo(function AssistantResponse({ response, reveal, selectedId, onInspect, onReconnect }: { response: ConversationResponse; reveal: boolean; selectedId: string; onInspect: (id: string) => void; onReconnect: () => Promise<void> }) {
+export const AssistantResponse = memo(function AssistantResponse({ response, reveal, selectedId, onInspect, onReconnect, onAbandon }: { response: ConversationResponse; reveal: boolean; selectedId: string; onInspect: (id: string) => void; onReconnect: () => Promise<void>; onAbandon: () => Promise<void> }) {
   const { body, content, process, notice } = response;
   return (
     <article data-conversation-key={response.key} data-response-id={response.queueId} className={`chat-message assistant${body?.executionId === selectedId ? ' current' : ''}`}>
@@ -21,6 +21,11 @@ export const AssistantResponse = memo(function AssistantResponse({ response, rev
           {notice.reconnect && (
             <Button type="button" variant="outline" size="sm" onClick={() => void onReconnect()}>
               重新同步
+            </Button>
+          )}
+          {notice.abandon && (
+            <Button type="button" variant="outline" size="sm" onClick={() => void onAbandon()}>
+              结束本地跟踪
             </Button>
           )}
         </div>

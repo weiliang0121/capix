@@ -26,6 +26,7 @@ export function transport(overrides = {}) {
   const io = {
     conversations: async () => ({ conversations: [conversationDescriptor()], defaultConversationId: 'fixture-conversation' }),
     conversation: async () => conversationDescriptor(),
+    activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 'fixture-transcript' }),
     createConversation: async () => conversationDescriptor(),
     config: async () => ({ configured: true, model: 'fixture', contextBudget: 32768 }),
     admission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 'fixture-transcript', status: 'ready' }),

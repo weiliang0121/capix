@@ -60,6 +60,7 @@ test('catalog and content browsing are passive; explicit targets isolate two cli
   for (const descriptor of [first, second]) {
     assert.deepEqual(await service.get('/api/conversations/' + descriptor.id), descriptor);
     assert.equal((await service.get('/api/conversation/admission?conversationId=' + descriptor.id)).status, 'ready');
+    assert.deepEqual(await service.get(`/api/conversations/${descriptor.id}/submission`), { conversationId: descriptor.id, transcriptId: descriptor.transcriptId });
     assert.equal((await service.get('/api/transcript?id=' + descriptor.transcriptId)).messages.length, 0);
     assert.equal(service.host.peek(descriptor.id), undefined, 'reading content does not construct runtime or recorder');
   }
@@ -67,10 +68,14 @@ test('catalog and content browsing are passive; explicit targets isolate two cli
   assert.equal(service.calls, 0);
   assert.equal((await service.request('/api/conversation/admission')).status, 400);
   assert.equal((await service.request('/api/transcript')).status, 400);
+  const missing = await service.request('/api/conversations/unknown/submission');
+  assert.equal(missing.status, 404);
+  assert.equal((await missing.json()).code, 'CONVERSATION_NOT_FOUND');
   const left = await service.run(first.id, 'left-submission', '只属于第一段');
   const right = await service.run(second.id, 'right-submission', '只属于第二段');
   assert.equal(left.result.status, 'completed');
   assert.equal(right.result.status, 'completed');
+  assert.equal((await service.get(`/api/conversations/${first.id}/submission`)).submission, undefined, 'finished submissions are retained by ID, not advertised as current work');
   assert.equal(left.conversationId, first.id);
   assert.equal(right.conversationId, second.id);
   assert.equal(left.input.transcriptId, first.transcriptId);

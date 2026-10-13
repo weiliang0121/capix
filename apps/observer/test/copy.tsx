@@ -32,7 +32,7 @@ async function render(rows: ConversationItem[]) {
   root.render(
     <StrictMode>
       <div style={{ width: 500, height: 600, display: 'flex', flexDirection: 'column', margin: '20px auto' }}>
-        <ChatMessages rows={rows} selectedId="" onInspect={nothing} onReconnect={async () => {}} />
+        <ChatMessages rows={rows} selectedId="" onInspect={nothing} onReconnect={async () => {}} onAbandon={async () => {}} />
       </div>
     </StrictMode>,
   );

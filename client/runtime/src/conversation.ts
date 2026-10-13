@@ -20,7 +20,7 @@ export function coordinateConversation(sources: ConversationSources) {
   return {
     messages: (sources.transcriptId ? sources.transcripts.get(sources.transcriptId)?.snapshot?.messages : undefined) ?? emptyMessages,
     busy: Boolean(submission && !remote?.result),
-    pending: submission && !remote?.input && !remote?.result ? submission.pending : '',
+    pending: submission && !remote?.input && !remote?.result ? (submission.pending ?? '') : '',
     contextId: remote?.executions.at(-1)?.contextId ?? '',
     answered: Boolean(remote?.answer),
     inputAvailability: availability(sources.transcripts, remote?.input),

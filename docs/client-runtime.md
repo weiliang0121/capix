@@ -34,7 +34,7 @@ await runtime.submit({ messages: [{ role: 'user', content: '你好' }] });
 runtime.stopTranscript();
 ```
 
-ConversationTransport 提供 conversations/createConversation/conversation、config、admission、submit、follow、read 和 cancel；TranscriptTransport 提供 transcript(id, signal?) 查询与 observeTranscript(id, accept, signal) 订阅。transcripts 是必需接入：对话正文由消息实体副本提供，不从观测记录生成。
+ConversationTransport 提供 conversations/createConversation/conversation、activeSubmission、config、admission、submit、follow、read 和 cancel；TranscriptTransport 提供 transcript(id, signal?) 查询与 observeTranscript(id, accept, signal) 订阅。transcripts 是必需接入：对话正文由消息实体副本提供，不从观测记录生成。
 
 initialize 并行取得配置和当前集合订阅的首帧基线。同一次进行中的初始化返回同一 Promise；失败不会永久缓存 rejected Promise，之后显式 initialize 会建立新尝试。初始化尝试本身不自动重建，消息连接在接收器内部有限重试。配置与实体各自成功时分别保留已经确认的内容，后续尝试复用配置和健康实体连接；不能因为保留了部分配置就提前允许 submit。配置慢于实体流时，最终采用已经接纳的最新消息副本，不能把首帧旧内容覆盖到新增量之上。初始化结束前再次确认实体同步仍然有效。初始化不会请求执行概览、记忆或记录详情。
 
@@ -48,8 +48,8 @@ stopTranscript 停止当前集合或全部集合时，也结束正在进行的�
 2. remote.input 来自正式消息写入位置，首次确认后在公开状态发布阶段调用一次 accepted(submission)。HTTP 200、收到首帧或建立 E 都不等于输入已接纳。回调接收该提交的不可变快照，必须同步返回 undefined；抛错或意外返回 Promise 只保存 notificationError，不停止接收或改写服务结果。
 3. remote.executions 保存服务选择关联的 E Context 身份，可以为空或多项；输入在 E Context 建立前也能正式落实。remote.answer 只指向已落实回答，正文来自独立实体同步，不从记录或提交反馈重复追加。
 4. remote.result 是服务任务 completed / failed / rejected / cancelled。后处理失败或取消保留已确认回答；completed 只表示任务返回，不凭空补造 input/answer。remote.cancelRequested 只表示服务端已接收取消要求，不能替代实际结束结果。remote.integrity 说明服务进展解释是否完整，与任务结果分开。
-5. feedback 表示 idle（尚未发送）、connecting / following / ended / interrupted。断流、网络失败或投影不完整都不能证明服务执行失败；保留所有已确认事实。消息实体和观测同步失败各自保存在对应范围，不撤回提交结果。
-6. reconnectSubmission 只 follow 同一 submissionId，不重新发送输入；若有未确认的取消意图，可同时重发取消控制。refreshSubmission 单次查询同一身份，接纳事实而不改变反馈连接状态。新连接接收当前累计投影，允许 revision 跳跃；忽略旧修订，同版本冲突、事实回退或更改必须拒绝。旧连接回调不能写入新连接状态。
+5. feedback 表示 idle（尚未发送）、connecting / following / ended / interrupted / unavailable。unavailable 只来自服务明确的 SUBMISSION_UNAVAILABLE，表示已无法查询，不能证明未执行。断流、网络失败或投影不完整都不能证明服务执行失败；保留所有已确认事实。消息实体和观测同步失败各自保存在对应范围，不撤回提交结果。
+6. reconnectSubmission 只 follow 同一 submissionId，不重新发送输入；若有未确认的取消意图，可同时重发取消控制。refreshSubmission 单次查询同一身份，接纳事实；查询失败分别标明 interrupted 或 unavailable，终态标明 ended。新连接接收当前累计投影，允许 revision 跳跃；忽略旧修订，同版本冲突、事实回退或更改必须拒绝。旧连接回调不能写入新连接状态。
 7. stopFollowing 只停反馈连接；releaseSubmission 不能释放已发送但结果未知的当前提交。服务端未知、已淘汰或重启后丢失的 submissionId 仍表示结果无法确认，不能推断“没有执行”，也不能为了推进等待项丢弃当前身份。
 
 `remote.activities` 单独保存服务投影的 REOA 过程元数据。HTTP 检查格式，ClientSubmission 接纳调用身份、直接归属、轮次、终态和父层接纳事实，拒绝回退；`activities.integrity` 不代替提交结果，也不改写正文可用性。明确的过程来源失效保留最后事实；畸形反馈仍按协议错误拒绝，不把坏数据补成完成。
@@ -61,6 +61,16 @@ stopTranscript 停止当前集合或全部集合时，也结束正在进行的�
 `state.submissions` 以 submissionId 保留最近 32 笔已发送提交的不可变快照；不保留旧连接和原始请求，不包含未发送的队列项。新提交开始不删除上一笔过程，超过上限时只移除最早的本地快照，不改动消息集合。它是当前对话的有限保留，切换对话时清理，刷新页面后不自动重建历史过程。
 
 本轮只恢复反馈，不恢复执行。服务端保留是有界进程内状态，不提供幂等重提、持久化、离线重放或重启后的任务恢复。实体同步和可选观测有独立连接与接纳规则。
+
+### 刷新后的接回
+
+可选 `ClientTrackingStore` 由宿主提供同步 load/save，只保存 `{ conversationId, transcriptId, submissionId? }`。Observer 应用使用当前标签页的 sessionStorage，刷新保留，关闭标签页不承诺恢复；无 IndexedDB、完整请求、消息副本、等待队列、取消意图或展示游标的持久化。Runtime 不依赖浏览器存储 API，存储异常单独保存到 trackingError，不中断业务；相同定位不随每条增量重复写入。
+
+第一次 initialize 优先打开保存的对话并核对消息集合身份。有未确认 submissionId 时，使用原身份 read；仍在运行则 follow，已经结束则接纳终态。没有本地提交身份时，activeSubmission 查询目标对话当前活动提交；打开历史对话也做这次查询。查询只是发现，不占用服务入口，不能据此承诺后续 POST 一定成功。坏基线不能覆盖原会话，发现或初始化失败可显式重试。
+
+接回建立的是 ClientSubmission 跟踪，没有本地 queueId、pending 或 input；不制造用户消息，不加入待发队列，也不调用 submit。正式内容继续由 Transcript 同步，预览、活动及终态继续由提交反馈接纳。服务内正在执行的工作保持原样，可在接回后独立取消。已有正式回答默认直接显示，正在增长的预览可继续按呈现层节奏消费。
+
+定位在实际 POST 前保存；仅确认 result 或用户显式结束本地跟踪后移除 submissionId。停止反馈、消息连接断开或服务 ready 都不清除它。服务重启或淘汰身份后，unavailable 停止自动确认并保留结果未知；应用提示该状态并提供 `abandonSubmission()`，有等待项时先撤回。此操作不取消服务、不补造结束事实、不重发旧输入，之后的新提交仍按服务接纳规则办理。
 
 ## 本地消息队列与取消
 

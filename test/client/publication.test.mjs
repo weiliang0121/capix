@@ -20,6 +20,7 @@ async function fixture(t, options = {}) {
   let posts = 0;
   const runtime = new ClientRuntime({
     conversation: {
+      activeSubmission: async () => ({ conversationId: 'fixture-conversation', transcriptId: range.transcriptId }),
       conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', range.transcriptId)], defaultConversationId: 'fixture-conversation' }),
       config: async () => ({ configured: true, model: 'fixture', contextBudget: 1000, maxOutputTokens: 100, timeoutMs: 1000 }),
       submit: async (request, receive, signal) => {

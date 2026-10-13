@@ -104,6 +104,7 @@ test('HTTP: readiness racing another caller retains the same waiting item and re
     transport: (io, environment) => ({
       config: () => io.config(),
       conversations: (signal) => io.conversations(signal),
+      activeSubmission: (id, signal) => io.activeSubmission(id, signal),
       conversation: (id, signal) => io.conversation(id, signal),
       createConversation: (signal) => io.createConversation(signal),
       admission: (id, signal) => io.admission(id, signal),
@@ -155,6 +156,7 @@ test('HTTP: lost feedback follows the original submission, without reposting it 
       transport: (io) => ({
         config: () => io.config(),
         conversations: (signal) => io.conversations(signal),
+        activeSubmission: (id, signal) => io.activeSubmission(id, signal),
         conversation: (id, signal) => io.conversation(id, signal),
         createConversation: (signal) => io.createConversation(signal),
         admission: (id, signal) => io.admission(id, signal),

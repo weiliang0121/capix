@@ -3,7 +3,6 @@ import { useStickToBottom, type GetTargetScrollTop } from 'use-stick-to-bottom';
 
 interface ResponsePosition {
   readonly key: string;
-  readonly queueId: string;
   readonly inputKey?: string;
 }
 interface ReadingAnchor {
@@ -171,7 +170,7 @@ export function useConversationScroll(rows: unknown, response: ResponsePosition 
       consumedFocus.current = focus;
       latest();
     }
-  }, [rows, response?.key, response?.inputKey, response?.queueId, focus, latest, contentRef]);
+  }, [rows, response?.key, response?.inputKey, focus, latest, contentRef]);
 
   // Preserve selection-induced escapes even when a later shrink makes the library relock.
   useLayoutEffect(() => {
