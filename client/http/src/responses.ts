@@ -1,6 +1,6 @@
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { z } from 'zod';
-import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConversationAdmission, type ConfigurationResponse, type ConversationSubmissionSnapshot, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
+import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConversationDescriptor, type ConversationListResponse, type ConversationAdmission, type ConfigurationResponse, type ConversationSubmissionSnapshot, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
 import { HttpError, type HttpResponseInfo, HttpTransportError } from './errors.js';
 
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -15,6 +15,8 @@ const sourceResults = z.array(memoryResultSource).optional();
 const content = z.object({ topic: z.string(), content: z.string(), sourceIndexes: z.array(index), sourceResults });
 const memoryRecord = z.object({ id, parentId: id.optional(), memoryId: id, memoriesId: id, sequence: z.number().int().positive(), contextId: id.optional(), callId: id.optional(), executionId: id.optional(), operationId: id.optional(), value: z.object({ action, change: z.string(), sourceIndexes: z.array(index), sourceResults, result: content }) });
 
+export const conversationResponse = z.object({ id, title: z.string(), transcriptId: id, createdAt: time, updatedAt: time }).refine((value) => value.updatedAt >= value.createdAt) satisfies z.ZodType<ConversationDescriptor>;
+export const conversationsResponse = z.object({ conversations: z.array(conversationResponse), defaultConversationId: id }).refine((value) => value.conversations.some((item) => item.id === value.defaultConversationId) && new Set(value.conversations.map((item) => item.id)).size === value.conversations.length && new Set(value.conversations.map((item) => item.transcriptId)).size === value.conversations.length) satisfies z.ZodType<ConversationListResponse>;
 export const configurationResponse = z.object({ configured: z.boolean(), model: z.string(), contextBudget: index, maxOutputTokens: index, timeoutMs: index, files: z.object({ maxReadBytes: index.positive(), maxWriteBytes: index.positive() }).optional() }) satisfies z.ZodType<ConfigurationResponse>;
 export const transcriptResponse = z.object({ id, revision: index, start: z.literal(0), end: index, starts: z.array(index).min(1), messages: z.array(message) }) satisfies z.ZodType<TranscriptResponse>;
 export const sourceResponse = z.object({ path: z.string(), content: z.string() }) satisfies z.ZodType<SourceResponse>;
@@ -59,7 +61,7 @@ export function acceptSnapshot(value: unknown, expectedId?: string): ExecutionRe
 }
 
 const conversationFailure = z.object({ code: id, message: z.string() });
-export const admissionResponse = z.discriminatedUnion('status', [z.object({ transcriptId: id, status: z.literal('ready') }), z.object({ transcriptId: id, status: z.literal('busy') }), z.object({ transcriptId: id, status: z.literal('unavailable'), error: conversationFailure })]) satisfies z.ZodType<ConversationAdmission>;
+export const admissionResponse = z.discriminatedUnion('status', [z.object({ conversationId: id, transcriptId: id, status: z.literal('ready') }), z.object({ conversationId: id, transcriptId: id, status: z.literal('busy') }), z.object({ conversationId: id, transcriptId: id, status: z.literal('unavailable'), error: conversationFailure })]) satisfies z.ZodType<ConversationAdmission>;
 const conversationActivities = z.object({
   calls: z.array(z.object({ contextId: id.max(256), parentContextId: id.max(256).optional(), level: z.enum(['runtime', 'execution', 'operation', 'attempt']), label: z.string().max(120), status: z.enum(['running', 'succeeded', 'failed', 'cancelled']), phase: z.enum(['setup', ...invocationProcessStages]), round: index.max(2), startedAt: z.iso.datetime().optional(), finishedAt: z.iso.datetime().optional(), relation: z.object({ phase: z.enum(['attached', 'returned', 'receiving', 'accepted', 'failed']), returned: z.enum(['succeeded', 'failed', 'cancelled']).optional() }).optional() })).max(512),
   integrity: z.discriminatedUnion('status', [z.object({ status: z.literal('complete') }), z.object({ status: z.literal('incomplete'), error: conversationFailure })]),
@@ -67,6 +69,7 @@ const conversationActivities = z.object({
 const fileTask = z.union([z.object({ sourcePath: id, output: z.object({ path: id }).optional() }), z.object({ sourcePath: z.never().optional(), output: z.object({ path: id }) })]);
 const conversationTask = z.discriminatedUnion('kind', [z.object({ kind: z.literal('reply') }), z.object({ kind: z.literal('file'), task: fileTask }), z.object({ kind: z.literal('clarify') }), z.object({ kind: z.literal('unsupported') })]);
 export const submissionResponse = z.object({
+  conversationId: id,
   submissionId: id,
   revision: index,
   input: z.object({ transcriptId: id, start: index, end: index, revision: index.optional() }).optional(),

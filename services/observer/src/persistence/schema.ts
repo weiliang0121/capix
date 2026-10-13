@@ -1,16 +1,12 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { conversationTitle } from '../conversation/title.js';
 
 /** Local format migrations preserve existing content; unknown versions never create an empty conversation. */
 export function initializeSchema(database: DatabaseSync): void {
   const version = database.prepare('PRAGMA user_version').get()?.user_version;
-  if (version === 2) return;
-  if (version === 1) {
-    try {
-      database.exec(`BEGIN IMMEDIATE; ${interactions} PRAGMA user_version = 2; COMMIT;`);
-    } catch (error) {
-      if (database.isTransaction) database.exec('ROLLBACK');
-      throw error;
-    }
+  if (version === 3) return;
+  if (version === 1 || version === 2) {
+    migrateConversations(database, version === 1);
     return;
   }
   if (version !== 0 || database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()) throw new Error('Unsupported Observer persistence schema');
@@ -60,6 +56,7 @@ export function initializeSchema(database: DatabaseSync): void {
     PRAGMA user_version = 2;
     COMMIT;
   `);
+  migrateConversations(database);
 }
 
 const interactions = `
@@ -71,3 +68,37 @@ const interactions = `
     body TEXT NOT NULL CHECK (json_valid(body))
   ) STRICT;
 `;
+
+function migrateConversations(database: DatabaseSync, addInteractions = false): void {
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      ${addInteractions ? interactions : ''}
+      CREATE TABLE conversations (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        transcript_id TEXT NOT NULL UNIQUE REFERENCES transcripts(id),
+        memories_id TEXT NOT NULL UNIQUE REFERENCES memory_sets(id),
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      ) STRICT;
+      INSERT INTO conversations(id, title, transcript_id, memories_id, created_at, updated_at)
+        SELECT lower(hex(randomblob(16))), '新对话', transcript_id, memories_id, unixepoch() * 1000, unixepoch() * 1000 FROM metadata;
+      CREATE TABLE conversation_settings (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), default_id TEXT NOT NULL REFERENCES conversations(id)) STRICT;
+      INSERT INTO conversation_settings SELECT 1, id FROM conversations LIMIT 1;
+      ALTER TABLE record_sources ADD COLUMN conversation_id TEXT REFERENCES conversations(id);
+      UPDATE record_sources SET conversation_id = (SELECT default_id FROM conversation_settings WHERE singleton = 1);
+      DROP TABLE metadata;
+      PRAGMA user_version = 3;
+    `);
+    for (const row of database.prepare('SELECT id, transcript_id FROM conversations').all()) {
+      const first = database.prepare("SELECT body FROM messages WHERE transcript_id = ? AND json_extract(body, '$.role') = 'user' ORDER BY position LIMIT 1").get(row.transcript_id!);
+      const title = conversationTitle(first ? [JSON.parse(first.body as string)] : []);
+      database.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(title, row.id!);
+    }
+    database.exec('COMMIT');
+  } catch (error) {
+    if (database.isTransaction) database.exec('ROLLBACK');
+    throw error;
+  }
+}

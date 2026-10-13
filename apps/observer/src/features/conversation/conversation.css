@@ -303,3 +303,110 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+.conversation-panel {
+  container-type: inline-size;
+}
+.conversation-heading {
+  padding-inline: 16px;
+  gap: 8px;
+}
+.conversation-heading-copy {
+  min-width: 0;
+  flex: 1;
+}
+.conversation-heading .heading-title {
+  gap: 8px;
+}
+.conversation-heading h2 {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.conversation-heading .heading-title > :last-child {
+  flex: none;
+}
+.conversation-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+.conversation-controls button {
+  padding-inline: 8px;
+}
+.conversation-controls span {
+  display: none;
+}
+@container (min-width: 420px) {
+  .conversation-controls span {
+    display: inline;
+  }
+}
+.conversation-navigation-notice {
+  margin: 0;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: var(--font-sm);
+}
+.conversation-history-dialog {
+  max-width: min(520px, calc(100vw - 32px));
+}
+.conversation-history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: min(480px, 60dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.conversation-history-list li + li {
+  margin-top: 8px;
+}
+.conversation-history-list button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.conversation-history-list button:hover,
+.conversation-history-list button[aria-current='true'] {
+  background: var(--accent);
+}
+.conversation-history-list button:focus-visible {
+  outline: 1px solid var(--ring);
+  outline-offset: -2px;
+}
+.conversation-history-list button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.conversation-history-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.conversation-history-title strong {
+  min-width: 0;
+  flex: 1;
+  font-size: var(--font-md);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.conversation-history-title > :not(strong) {
+  flex: none;
+}
+.conversation-history-list time {
+  color: var(--muted-foreground);
+  font-size: var(--font-sm);
+}
+.conversation-history-error p {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}

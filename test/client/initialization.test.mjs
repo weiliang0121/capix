@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientRuntime } from '@capix/client-runtime';
-import { deferred, transcriptSnapshot } from './fixtures.mjs';
+import { conversationDescriptor, deferred, transcriptSnapshot } from './fixtures.mjs';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const wait = (signal) => new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
@@ -11,7 +11,7 @@ const append = (revision, content) => ({ type: 'delta', event: { type: 'transcri
 
 function createClient(config, observeTranscript) {
   return new ClientRuntime({
-    conversation: { config, submit: async () => assert.fail('initialization must not start business work') },
+    conversation: { conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', 'current')], defaultConversationId: 'fixture-conversation' }), config, submit: async () => assert.fail('initialization must not start business work') },
     transcripts: { transcript: async () => assert.fail('initialization uses an atomic stream baseline'), observeTranscript },
   });
 }
@@ -168,6 +168,7 @@ test('stop before the first baseline preserves confirmed configuration and permi
   await rejected;
   assert.equal(runtime.getSnapshot().config.model, 'fixture');
   const second = runtime.initialize();
+  await settle();
   streams[0].accept({ type: 'baseline', snapshot: transcriptSnapshot([message('old')], 'old', 1) });
   streams[1].accept({ type: 'baseline', snapshot: transcriptSnapshot([], 'current', 0) });
   await second;

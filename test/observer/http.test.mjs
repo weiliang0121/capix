@@ -10,7 +10,7 @@ import { ClientRuntime } from '@capix/client-runtime';
 import { BoundRuntime, ProgressChannel, defineObservation } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
-import { ConversationSubmission, createObserverServer, initializeObserver, bindConversation, ConversationRuntimeDefinition, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
+import { ConversationSubmission, createObserverServer, ObserverConversations, bindConversation, ConversationRuntimeDefinition, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -20,8 +20,10 @@ const provider = {
   },
 };
 async function setup(t, model = provider, configured = true, submissionRetention, configuration = settings) {
-  const observer = initializeObserver(model);
-  const server = createObserverServer({ observer, settings: configuration, configured, submissionRetention });
+  const conversations = new ObserverConversations(model);
+  const conversationId = conversations.list().defaultConversationId;
+  const observer = conversations.open(conversationId);
+  const server = createObserverServer({ conversations, settings: configuration, configured, submissionRetention });
   assert.equal(server.listening, false, 'service construction must not start listening');
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -33,9 +35,14 @@ async function setup(t, model = provider, configured = true, submissionRetention
       }),
   );
   const base = `http://127.0.0.1:${server.address().port}`;
-  const get = (path) => fetch(base + path).then((response) => response.json());
-  const run = (content = '测试输入', options = {}) => fetch(base + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, ...options.headers }, body: JSON.stringify({ submissionId: options.id ?? randomUUID(), input: options.body ?? { messages: [{ role: 'user', content }] } }) });
-  return { observer, server, base, get, run };
+  const get = (path) => {
+    const url = new URL(path, base);
+    if (['/api/conversation/admission', '/api/executions', '/api/execution', '/api/memory'].includes(url.pathname)) url.searchParams.set('conversationId', conversationId);
+    if (url.pathname === '/api/transcript' && !url.searchParams.has('id')) url.searchParams.set('id', observer.transcript.id);
+    return fetch(url).then((response) => response.json());
+  };
+  const run = (content = '测试输入', options = {}) => fetch(base + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, ...options.headers }, body: JSON.stringify({ conversationId, submissionId: options.id ?? randomUUID(), input: options.body ?? { messages: [{ role: 'user', content }] } }) });
+  return { observer, conversations, conversationId, server, base, get, run };
 }
 const updates = async (response) =>
   (await response.text())
@@ -168,7 +175,7 @@ test('admission is a current hint while retained results keep their original fac
   t.after(() => release());
   const id = 'already-completed';
   const finished = (await updates(await run('first', { id }))).at(-1);
-  assert.deepEqual(await get('/api/conversation/admission'), { transcriptId: observer.transcript.id, status: 'ready' });
+  assert.deepEqual(await get('/api/conversation/admission'), { conversationId: (await get('/api/conversations')).defaultConversationId, transcriptId: observer.transcript.id, status: 'ready' });
   assert.equal(finished.admission.status, 'ready');
   gated = true;
   const second = await run('second');
@@ -366,14 +373,14 @@ test('transport validates origin, input and source boundary before accepting wor
 });
 
 test('separate HTTP subclasses deliver business content while records remain separately queryable', async (t) => {
-  const { base } = await setup(t);
+  const { base, conversationId, observer } = await setup(t);
   const client = new ConversationHttpTransport(base);
   const observation = new ObservationHttpTransport(base);
   assert.deepEqual(await client.config(), { ...settings, configured: true });
-  assert.deepEqual(await observation.overview(), { transcriptId: (await client.transcript()).id, messages: [], executions: [] });
+  assert.deepEqual(await observation.overview(conversationId), { transcriptId: (await client.transcript(observer.transcript.id)).id, messages: [], executions: [] });
   const received = [];
   await client.submit(
-    { submissionId: randomUUID(), input: { messages: [{ role: 'user', content: '测试输入' }] } },
+    { conversationId, submissionId: randomUUID(), input: { messages: [{ role: 'user', content: '测试输入' }] } },
     (snapshot) => {
       received.push(snapshot);
     },
@@ -381,27 +388,27 @@ test('separate HTTP subclasses deliver business content while records remain sep
   );
   assert.ok(received[0].input);
   assert.equal(received.at(-1).result.status, 'completed');
-  const overview = await observation.overview();
-  const last = await observation.execution(overview.executions[0].id);
+  const overview = await observation.overview(conversationId);
+  const last = await observation.execution(conversationId, overview.executions[0].id);
   assert.equal(last.execution.status, 'succeeded');
   assert.equal(last.execution.contextId, received.at(-1).executions[0].contextId);
-  assert.equal((await observation.overview()).executions[0].response.index, 1);
+  assert.equal((await observation.overview(conversationId)).executions[0].response.index, 1);
   assert.deepEqual(
-    (await client.transcript()).messages.map((item) => item.role),
+    (await client.transcript(observer.transcript.id)).messages.map((item) => item.role),
     ['user', 'assistant'],
   );
-  assert.deepEqual(await observation.memory(), { items: [] });
+  assert.deepEqual(await observation.memory(conversationId), { items: [] });
   const path = last.operations[0].source.split(' · ')[0];
   assert.match((await observation.source(path)).content, /class SelectHistory/);
 });
 
 test('real HTTP headless client uses conversation only for two rounds without any observation requests', async (t) => {
-  const { base } = await setup(t, provider, true);
+  const { base, conversationId, observer } = await setup(t, provider, true);
   const paths = [];
   const http = new ConversationHttpTransport(base, (url, init) => {
     const path = new URL(url).pathname;
     paths.push(path);
-    assert.ok(['/api/config', '/api/conversation/admission', '/api/transcript', '/api/transcript/observe', '/api/run'].includes(path), path);
+    assert.ok(['/api/config', '/api/conversations', `/api/conversations/${conversationId}`, '/api/conversation/admission', '/api/transcript', '/api/transcript/observe', '/api/run'].includes(path), path);
     return fetch(url, init);
   });
   const runtime = new ClientRuntime({ conversation: http, transcripts: http });
@@ -430,14 +437,14 @@ test('answer is delivered before memory finishes, and closing observation does n
     release = resolve;
   });
   t.after(() => release());
-  const { base } = await setup(t, {
+  const { base, conversationId, observer } = await setup(t, {
     async invoke(request, purpose) {
       if (purpose === 'memory') await gate;
       return provider.invoke(request, purpose);
     },
   });
   const controller = new AbortController();
-  const observationResponse = await fetch(base + '/api/observe', { signal: controller.signal });
+  const observationResponse = await fetch(base + '/api/observe?conversationId=' + conversationId, { signal: controller.signal });
   assert.equal(observationResponse.status, 200);
   const reader = observationResponse.body.getReader();
   const client = new ConversationHttpTransport(base);
@@ -447,7 +454,7 @@ test('answer is delivered before memory finishes, and closing observation does n
   });
   const received = [];
   const run = client.submit(
-    { submissionId: randomUUID(), input: { messages: [{ role: 'user', content: '问题' }] } },
+    { conversationId, submissionId: randomUUID(), input: { messages: [{ role: 'user', content: '问题' }] } },
     (update) => {
       received.push(update);
       if (update.answer) answerReady();
@@ -493,7 +500,11 @@ test('the concrete conversation can deliver without a Recorder or any execution 
 
 test('HTTP client accepts the real answer index after an independent entity append during execution', async (t) => {
   let observer;
-  const { base, observer: environment } = await setup(
+  const {
+    base,
+    conversationId,
+    observer: environment,
+  } = await setup(
     t,
     {
       async invoke(_request, purpose) {
@@ -518,7 +529,7 @@ test('HTTP client accepts the real answer index after an independent entity appe
     ['本次输入', '运行期间独立追加', '正式回答'],
   );
   assert.equal(runtime.getSnapshot().messages[2].role, 'assistant');
-  const overview = await new ObservationHttpTransport(base).overview();
+  const overview = await new ObservationHttpTransport(base).overview(conversationId);
   assert.equal(overview.executions[0].inputIndex, 0);
   assert.equal(overview.executions[0].response.index, 2);
 });
@@ -562,7 +573,7 @@ test('disconnecting submission delivery does not cancel work; reconnect reads th
 });
 
 test('an unavailable submission is not reported as rejected or never executed', async (t) => {
-  const { base } = await setup(t);
+  const { base, conversationId, observer } = await setup(t);
   const response = await fetch(`${base}/api/submissions/${randomUUID()}`);
   assert.equal(response.status, 404);
   const body = await response.json();
@@ -718,7 +729,7 @@ test('unknown cancellation does not reserve an ID or prevent a later POST from e
 });
 
 test('cancel requires same-origin JSON and validates its empty body before changing work', async (t) => {
-  const { base } = await setup(t);
+  const { base, conversationId, observer } = await setup(t);
   const url = `${base}/api/submissions/${randomUUID()}/cancel`;
   for (const headers of [{ 'Content-Type': 'text/plain' }, { 'Content-Type': 'application/json', Origin: 'https://other.test' }]) {
     const response = await fetch(url, { method: 'POST', headers, body: '{}' });

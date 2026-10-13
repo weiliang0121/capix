@@ -23,9 +23,15 @@ function publish(patch: Partial<ConversationSubmissionSnapshot>) {
   active.snapshot = { ...active.snapshot, ...patch, revision: active.snapshot.revision + 1 };
   active.receive(active.snapshot);
 }
+const descriptor = { id: 'fixture-conversation', title: '测试对话', transcriptId, createdAt: 1, updatedAt: 1 };
 const conversation: ConversationTransport = {
+  conversations: async () => ({ conversations: [descriptor], defaultConversationId: descriptor.id }),
+  conversation: async () => descriptor,
+  createConversation: async () => {
+    throw new Error('This fixture does not create conversations.');
+  },
   config: async () => ({ configured: true, model: 'local-fixture', contextBudget: 32768, maxOutputTokens: 4096, timeoutMs: 10000, files: { maxReadBytes: 65536, maxWriteBytes: 65536 } }),
-  admission: async () => ({ transcriptId, status: 'ready' }),
+  admission: async () => ({ conversationId: descriptor.id, transcriptId, status: 'ready' }),
   read: async () => {
     if (!active) throw new Error('No active submission');
     return active.snapshot;
@@ -35,7 +41,7 @@ const conversation: ConversationTransport = {
   },
   cancel: async () => {
     if (!active) throw new Error('No active submission');
-    publish({ cancelRequested: true, result: { status: 'cancelled' }, admission: { transcriptId, status: 'ready' } });
+    publish({ cancelRequested: true, result: { status: 'cancelled' }, admission: { conversationId: descriptor.id, transcriptId, status: 'ready' } });
     active.finish();
     return active.snapshot;
   },
@@ -43,7 +49,7 @@ const conversation: ConversationTransport = {
     sent.push(request);
     const start = transcript.end;
     append(request.input.messages);
-    const initial: ConversationSubmissionSnapshot = { submissionId: request.submissionId, revision: 1, input: { transcriptId, start, end: transcript.end }, executions: [], integrity: { status: 'complete' }, task: request.input.fileTask ? { kind: 'file', task: request.input.fileTask } : { kind: 'reply' }, ...(request.input.fileTask?.output ? { fileOutput: { status: 'pending', path: request.input.fileTask.output.path } } : {}) };
+    const initial: ConversationSubmissionSnapshot = { conversationId: request.conversationId, submissionId: request.submissionId, revision: 1, input: { transcriptId, start, end: transcript.end }, executions: [], integrity: { status: 'complete' }, task: request.input.fileTask ? { kind: 'file', task: request.input.fileTask } : { kind: 'reply' }, ...(request.input.fileTask?.output ? { fileOutput: { status: 'pending', path: request.input.fileTask.output.path } } : {}) };
     if (sent.length === 1) {
       await new Promise<void>((resolve) => {
         active = { snapshot: initial, receive, finish: resolve };
@@ -53,7 +59,7 @@ const conversation: ConversationTransport = {
     }
     const index = transcript.end;
     append([{ role: 'assistant', content: '请补充文档需要保留的重点。' }]);
-    receive({ ...initial, revision: 2, answer: { transcriptId, index }, result: { status: 'completed' }, admission: { transcriptId, status: 'ready' }, fileOutput: { status: 'not-created', path: request.input.fileTask!.output!.path, reason: 'not-started' } });
+    receive({ ...initial, revision: 2, answer: { transcriptId, index }, result: { status: 'completed' }, admission: { conversationId: descriptor.id, transcriptId, status: 'ready' }, fileOutput: { status: 'not-created', path: request.input.fileTask!.output!.path, reason: 'not-started' } });
   },
 };
 const transcripts: TranscriptTransport = {

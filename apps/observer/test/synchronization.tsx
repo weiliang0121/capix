@@ -29,7 +29,13 @@ const restored: TranscriptSnapshot = { ...snapshot, revision: 2, end: 4, message
 const unexpected = async (): Promise<never> => {
   throw new Error('This fixture must not submit, cancel or read any service task.');
 };
+const descriptor = { id: 'fixture-conversation', title: '测试对话', transcriptId, createdAt: 1, updatedAt: 1 };
 const conversation: ConversationTransport = {
+  conversations: async () => ({ conversations: [descriptor], defaultConversationId: descriptor.id }),
+  conversation: async () => descriptor,
+  createConversation: async () => {
+    throw new Error('This fixture does not create conversations.');
+  },
   config: async () => ({ configured: true, model: 'local-fixture', contextBudget: 32768, maxOutputTokens: 4096, timeoutMs: 10_000 }),
   admission: unexpected,
   read: unexpected,

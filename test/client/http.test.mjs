@@ -5,7 +5,7 @@ import { TranscriptConnectionError } from '@capix/client-runtime';
 import { snapshot, transcriptSnapshot, baseline, submissionSnapshot } from './fixtures.mjs';
 
 const input = { messages: [{ role: 'user', content: '测试' }] };
-const request = { submissionId: 'submission', input };
+const request = { conversationId: 'fixture-conversation', submissionId: 'submission', input };
 const initial = submissionSnapshot('submission');
 const signal = () => new AbortController().signal;
 const line = (value) => JSON.stringify(value);
@@ -31,10 +31,10 @@ test('HTTP base supports a different API without Observer endpoints or response 
 test('HTTP failures retain status, method, URL and non-JSON body', async () => {
   for (const body of ['', '<html>Bad Gateway</html>']) {
     const client = new ObservationHttpTransport('http://example.test', async () => new Response(body, { status: 502 }));
-    await assert.rejects(client.overview(), (error) => {
+    await assert.rejects(client.overview('fixture-conversation'), (error) => {
       assert.ok(error instanceof HttpError);
       assert.equal(error.phase, 'status');
-      assert.deepEqual(error.response, { status: 502, method: 'GET', url: 'http://example.test/api/executions' });
+      assert.deepEqual(error.response, { status: 502, method: 'GET', url: 'http://example.test/api/executions?conversationId=fixture-conversation' });
       assert.equal(error.body, body);
       assert.equal(error.message, 'HTTP 502');
       return true;
@@ -72,23 +72,23 @@ test('all Observer queries reject malformed success bodies at the response bound
 
 test('admission query accepts only current service conditions and forwards cancellation', async () => {
   for (const value of [
-    { transcriptId: 't', status: 'ready' },
-    { transcriptId: 't', status: 'busy' },
-    { transcriptId: 't', status: 'unavailable', error: { code: 'KEY_MISSING', message: 'unavailable' } },
+    { conversationId: 'fixture-conversation', transcriptId: 't', status: 'ready' },
+    { conversationId: 'fixture-conversation', transcriptId: 't', status: 'busy' },
+    { conversationId: 'fixture-conversation', transcriptId: 't', status: 'unavailable', error: { code: 'KEY_MISSING', message: 'unavailable' } },
   ]) {
     const controller = new AbortController();
     const client = new ConversationHttpTransport('http://example.test', async (url, init) => {
-      assert.equal(url, 'http://example.test/api/conversation/admission');
+      assert.equal(url, 'http://example.test/api/conversation/admission?conversationId=fixture-conversation');
       assert.equal(init.signal, controller.signal);
       return Response.json(value);
     });
-    assert.deepEqual(await client.admission(controller.signal), value);
+    assert.deepEqual(await client.admission('fixture-conversation', controller.signal), value);
   }
-  for (const value of [{ status: 'ready' }, { transcriptId: 't', status: 'unavailable' }, { transcriptId: 't', status: 'running' }]) await assert.rejects(jsonConversation(value).admission(), (error) => error.kind === 'contract');
+  for (const value of [{ status: 'ready' }, { conversationId: 'fixture-conversation', transcriptId: 't', status: 'unavailable' }, { conversationId: 'fixture-conversation', transcriptId: 't', status: 'running' }]) await assert.rejects(jsonConversation(value).admission('fixture-conversation'), (error) => error.kind === 'contract');
 });
 
 test('temporary non-admission retains a formal retry fact despite the HTTP status', async () => {
-  const snapshot = { ...initial, revision: 1, result: { status: 'rejected', error: { code: 'RUNTIME_BUSY', message: 'busy' }, retry: 'admission' }, admission: { transcriptId: 't', status: 'busy' } };
+  const snapshot = { ...initial, revision: 1, result: { status: 'rejected', error: { code: 'RUNTIME_BUSY', message: 'busy' }, retry: 'admission' }, admission: { conversationId: 'fixture-conversation', transcriptId: 't', status: 'busy' } };
   const client = new ConversationHttpTransport('', async () => Response.json(snapshot, { status: 409 }));
   const values = [];
   await client.submit(request, (value) => values.push(value), signal());
@@ -101,17 +101,17 @@ test('temporary non-admission retains a formal retry fact despite the HTTP statu
 test('Observer queries accept declared fields without coercing malformed nested data', async () => {
   const config = { model: 'fixture', configured: true, contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 30000 };
   assert.deepEqual(await jsonConversation(config).config(), config);
-  assert.deepEqual(await jsonConversation(transcriptSnapshot(input.messages)).transcript(), transcriptSnapshot(input.messages));
-  assert.deepEqual(await jsonObservation({ transcriptId: 'fixture-transcript', executions: [], messages: [] }).overview(), { transcriptId: 'fixture-transcript', executions: [], messages: [] });
+  assert.deepEqual(await jsonConversation(transcriptSnapshot(input.messages)).transcript('fixture-transcript'), transcriptSnapshot(input.messages));
+  assert.deepEqual(await jsonObservation({ transcriptId: 'fixture-transcript', executions: [], messages: [] }).overview('fixture-conversation'), { transcriptId: 'fixture-transcript', executions: [], messages: [] });
   assert.deepEqual(await jsonObservation({ items: [] }).memory(), { items: [] });
   await assert.rejects(jsonConversation({ ...config, contextBudget: '32768' }).config(), /响应格式无效/);
-  await assert.rejects(jsonConversation({ messages: [{ role: 'system', content: 'invalid' }] }).transcript(), /响应格式无效/);
-  await assert.rejects(jsonObservation({ executions: [], messages: [{ index: -1, count: 0, message: input.messages[0] }] }).overview(), /响应格式无效/);
+  await assert.rejects(jsonConversation({ messages: [{ role: 'system', content: 'invalid' }] }).transcript('fixture-transcript'), /响应格式无效/);
+  await assert.rejects(jsonObservation({ executions: [], messages: [{ index: -1, count: 0, message: input.messages[0] }] }).overview('fixture-conversation'), /响应格式无效/);
   await assert.rejects(jsonObservation({ items: [{ id: 'm', topic: '主题', content: '内容', sources: [], records: [{ id: 'r' }] }] }).memory(), /响应格式无效/);
 });
 
 test('record and source query responses must match the requested identity', async () => {
-  await assert.rejects(jsonObservation(snapshot()).execution('different'), (error) => error.code === 'EXECUTION_MISMATCH');
+  await assert.rejects(jsonObservation(snapshot()).execution('fixture-conversation', 'different'), (error) => error.code === 'EXECUTION_MISMATCH');
   await assert.rejects(jsonObservation({ path: 'different.ts', content: 'source' }).source('requested.ts'), (error) => error.code === 'SOURCE_MISMATCH');
 });
 
@@ -119,7 +119,7 @@ test('execution details require the actual parent R record and its independent b
   for (const field of ['runtimeCall', 'runtimeEvents']) {
     const incomplete = snapshot();
     delete incomplete[field];
-    await assert.rejects(jsonObservation(incomplete).execution(incomplete.execution.id), (error) => error.code === 'INVALID_SNAPSHOT');
+    await assert.rejects(jsonObservation(incomplete).execution('fixture-conversation', incomplete.execution.id), (error) => error.code === 'INVALID_SNAPSHOT');
   }
 });
 
@@ -151,7 +151,7 @@ test('observation delivery preserves E entry diagnostics and parent relationship
   const received = [];
   const client = new ObservationHttpTransport('', async () => new Response(frames.map(line).join('\n')));
   await assert.rejects(
-    client.observe((frame) => received.push(frame), new AbortController().signal),
+    client.observe('fixture-conversation', (frame) => received.push(frame), new AbortController().signal),
     (error) => error.code === 'INCOMPLETE_STREAM',
   );
   assert.deepEqual(received, frames);

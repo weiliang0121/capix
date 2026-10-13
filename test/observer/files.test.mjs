@@ -22,7 +22,7 @@ function request(submission) {
 }
 
 test('accepted file intent prevents a late input-shaped error from being projected as non-admission', async () => {
-  const submission = new ConversationSubmission('accepted-file-late-error');
+  const submission = new ConversationSubmission('accepted-file-late-error', 'conversation');
   submission.start(async () => {
     request(submission);
     throw new ConversationInputError('late binding failure');
@@ -33,7 +33,7 @@ test('accepted file intent prevents a late input-shaped error from being project
 });
 
 test('a committed output survives overall failure and later file observer faults', async () => {
-  const submission = new ConversationSubmission('saved-then-failed');
+  const submission = new ConversationSubmission('saved-then-failed', 'conversation');
   request(submission);
   submission.start(async () => {
     submission.fileProgress.publish({ kind: 'started', path: receipt.path });
@@ -49,11 +49,11 @@ test('a committed output survives overall failure and later file observer faults
 });
 
 test('finishing without reaching creation confirms not-started; an interrupted started output remains unconfirmed', async () => {
-  const skipped = new ConversationSubmission('needs-info');
+  const skipped = new ConversationSubmission('needs-info', 'conversation');
   request(skipped);
   skipped.start(async () => undefined);
   assert.deepEqual((await complete(skipped)).fileOutput, { status: 'not-created', path: receipt.path, reason: 'not-started' });
-  const interrupted = new ConversationSubmission('unknown-write');
+  const interrupted = new ConversationSubmission('unknown-write', 'conversation');
   request(interrupted);
   interrupted.start(async () => {
     interrupted.fileProgress.publish({ kind: 'started', path: receipt.path });
@@ -63,7 +63,7 @@ test('finishing without reaching creation confirms not-started; an interrupted s
 });
 
 test('file feedback failure cannot become a false no-write result on finish', async () => {
-  const submission = new ConversationSubmission('file-progress-failed');
+  const submission = new ConversationSubmission('file-progress-failed', 'conversation');
   request(submission);
   submission.start(async () => {
     submission.fileProgress.publish({ kind: 'started', path: 'wrong.md' });
@@ -77,7 +77,7 @@ test('file feedback failure cannot become a false no-write result on finish', as
 });
 
 test('known non-publication keeps its reason; ordinary turns have no file state', async () => {
-  const submission = new ConversationSubmission('known-no-file');
+  const submission = new ConversationSubmission('known-no-file', 'conversation');
   request(submission);
   submission.start(async () => {
     submission.fileProgress.publish({ kind: 'started', path: receipt.path });
@@ -85,14 +85,14 @@ test('known non-publication keeps its reason; ordinary turns have no file state'
     throw new Error('call ended');
   });
   assert.deepEqual((await complete(submission)).fileOutput, { status: 'not-created', path: receipt.path, reason: 'cancelled' });
-  const plain = new ConversationSubmission('plain');
+  const plain = new ConversationSubmission('plain', 'conversation');
   plain.start(async () => undefined);
   assert.equal((await complete(plain)).fileOutput, undefined);
 });
 
 test('file progress without accepted task never exposes orphaned output facts', () => {
   for (const task of [undefined, { kind: 'reply' }, { kind: 'clarify' }, { kind: 'file', task: { sourcePath: 'notes.md' } }]) {
-    const submission = new ConversationSubmission('orphan-file-progress');
+    const submission = new ConversationSubmission('orphan-file-progress', 'conversation');
     submission.progress.publish({ kind: 'input', range: { transcriptId: 'files-transcript', start: 0, end: 1 } });
     if (task) submission.progress.publish({ kind: 'task', task });
     submission.fileProgress.publish({ kind: 'requested', path: receipt.path });
@@ -105,8 +105,8 @@ test('file progress without accepted task never exposes orphaned output facts', 
 });
 
 test('failed task progress leaves execution independent and terminal feedback consumable by the client', async () => {
-  const client = new ClientSubmission({ messages: [{ role: 'user', content: '保存为 answer.md' }] });
-  const submission = new ConversationSubmission(client.id);
+  const client = new ClientSubmission('conversation', { messages: [{ role: 'user', content: '保存为 answer.md' }] });
+  const submission = new ConversationSubmission(client.id, 'conversation');
   const received = [];
   const disconnect = submission.connect((snapshot) => {
     received.push(snapshot);
@@ -135,7 +135,7 @@ test('failed task progress leaves execution independent and terminal feedback co
 });
 
 test('a mismatched output path cannot start a second output or rewrite a confirmed receipt', async () => {
-  const submission = new ConversationSubmission('different-output');
+  const submission = new ConversationSubmission('different-output', 'conversation');
   request(submission);
   submission.start(async () => {
     submission.fileProgress.publish({ kind: 'started', path: receipt.path });

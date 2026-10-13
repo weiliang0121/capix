@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initializeObserver, createObserverServer, WorkspaceFiles } from '@capix/observer-service';
+import { ObserverConversations, createObserverServer, WorkspaceFiles } from '@capix/observer-service';
 import { ClientRuntime } from '@capix/client-runtime';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
 
@@ -23,7 +23,7 @@ async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'capix-file-observation-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, task.sourcePath), '要改写的文件正文。');
-  const environment = initializeObserver(
+  const conversations = new ObserverConversations(
     {
       async invoke(_request, purpose) {
         if (purpose === 'selection') return output({ historyIndexes: [] });
@@ -35,7 +35,9 @@ async function fixture(t) {
     [],
     { files: new WorkspaceFiles({ root }) },
   );
-  const server = createObserverServer({ observer: environment, settings, configured: true });
+  const conversationId = conversations.list().defaultConversationId;
+  const environment = conversations.open(conversationId);
+  const server = createObserverServer({ conversations, settings, configured: true });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -53,6 +55,7 @@ async function fixture(t) {
     runtime.stopTranscript();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+    conversations.close();
   });
   await runtime.initialize();
   return {
@@ -113,7 +116,7 @@ test('file read-and-save deltas reach a completed client observation without sto
 test('completed file records load on demand through the same protocol contract as live observation', async (t) => {
   const f = await fixture(t);
   await f.run();
-  const overview = await f.observation.overview();
+  const overview = await f.observation.overview(f.runtime.getSnapshot().conversation.id);
   assert.equal(overview.executions[0].status, 'succeeded');
   const snapshot = await f.runtime.loadExecution(overview.executions[0].id);
   assertFileCalls(snapshot);

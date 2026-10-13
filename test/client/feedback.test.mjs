@@ -7,7 +7,7 @@ const range = { transcriptId: 'fixture-transcript', start: 0, end: 1 };
 const reception = (changed = () => undefined) => ({ transcriptId: range.transcriptId, changed });
 
 test('a submission reconnect owns feedback independently of late frames and errors from its former connection', async () => {
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
   const old = deferred();
   const current = deferred();
   let oldReceive;
@@ -42,7 +42,7 @@ test('a submission reconnect owns feedback independently of late frames and erro
 });
 
 test('stopping feedback during its initial change does not open the connection or announce a remote outcome', async () => {
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
   let connections = 0;
   let changes = 0;
   await submission.connect(
@@ -59,7 +59,7 @@ test('stopping feedback during its initial change does not open the connection o
 });
 
 test('reconnecting from the initial change starts only the replacement connection', async () => {
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
   let originalConnections = 0;
   let replacementConnections = 0;
   let replacement;
@@ -80,7 +80,7 @@ test('reconnecting from the initial change starts only the replacement connectio
 });
 
 test('reconnecting during frame acceptance isolates the remainder of the old synchronous producer', async () => {
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
   let replacement;
   let oldSignal;
   let didReconnect = false;
@@ -108,7 +108,7 @@ test('reconnecting during frame acceptance isolates the remainder of the old syn
 
 test('a synchronous connection failure interrupts feedback without producing a business failure', async () => {
   const cause = new TypeError('connection could not open');
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
   const changes = [];
   await submission.connect(
     () => {
@@ -126,13 +126,13 @@ test('a synchronous connection failure interrupts feedback without producing a b
 
 test('connection completion requires a known result or explicit source incompleteness', async () => {
   for (const patch of [{}, { revision: 1, input: range }]) {
-    const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+    const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
     await submission.connect(async (receive) => receive(submissionSnapshot(submission.id, patch)), reception());
     assert.equal(submission.snapshot.feedback.status, 'interrupted');
     assert.match(submission.snapshot.feedback.error.message, /远端结果仍未确认/);
     assert.equal(submission.snapshot.remote.result, undefined);
   }
-  const incomplete = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+  const incomplete = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
   await incomplete.connect(async (receive) => receive(submissionSnapshot(incomplete.id, { revision: 1, input: range, integrity: { status: 'incomplete', error: { code: 'PROGRESS_INCOMPLETE', message: 'source lost facts' } } })), reception());
   assert.equal(incomplete.snapshot.feedback.status, 'ended');
   assert.equal(incomplete.snapshot.remote.integrity.status, 'incomplete');
@@ -140,7 +140,7 @@ test('connection completion requires a known result or explicit source incomplet
 });
 
 test('foreign transcript input interrupts feedback while preserving previously accepted facts', async () => {
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
   await submission.connect(async (receive) => {
     receive(submissionSnapshot(submission.id, { revision: 1, input: range, executions: [{ contextId: 'known' }] }));
     receive(submissionSnapshot(submission.id, { revision: 2, input: { ...range, transcriptId: 'foreign' }, executions: [{ contextId: 'known' }], result: { status: 'completed' } }));
@@ -159,7 +159,7 @@ test('stopping local feedback preserves accepted facts and leaves once acceptanc
   let signal;
   let changes = 0;
   let acceptances = 0;
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] }, () => {
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] }, () => {
     acceptances++;
   });
   const work = submission.connect(
@@ -221,7 +221,7 @@ test('a new runtime submission closes the former feedback connection even when t
 });
 
 test('stopping feedback cannot overwrite a connection synchronously opened by its abort listener', async () => {
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
   const current = deferred();
   let following;
   let currentReceive;
@@ -252,7 +252,7 @@ test('stopping feedback cannot overwrite a connection synchronously opened by it
 });
 
 test('a connection opened from an abort listener supersedes the outer reconnect request', async () => {
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'question' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'question' }] });
   let nested;
   let outerConnections = 0;
   const original = submission.connect(async (_receive, signal) => {

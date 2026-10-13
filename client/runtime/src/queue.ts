@@ -14,6 +14,7 @@ export interface ConversationQueueOptions {
 }
 interface QueueEnvironment {
   readonly ready: boolean;
+  readonly conversationId?: string;
   readonly transcriptId?: string;
 }
 type ConfirmationKind = 'admission' | 'result';
@@ -26,6 +27,7 @@ class QueueEntry {
   attempt?: ClientSubmission;
 
   constructor(
+    readonly conversationId: string,
     input: ConversationRequest,
     private readonly notifyAccepted?: (submission: ClientSubmissionState) => undefined,
   ) {
@@ -39,7 +41,7 @@ class QueueEntry {
   }
 
   create(): ClientSubmission {
-    this.attempt = new ClientSubmission(this.input, this.notifyAccepted, this.id);
+    this.attempt = new ClientSubmission(this.conversationId, this.input, this.notifyAccepted, this.id);
     return this.attempt;
   }
 }
@@ -50,6 +52,7 @@ export class ConversationQueue {
   private current?: ClientSubmission;
   private active?: QueueEntry;
   private settled?: ClientSubmission;
+  private conversationId?: string;
   private transcriptId?: string;
   private scheduled = false;
   private blocked?: string;
@@ -82,10 +85,23 @@ export class ConversationQueue {
     return this.current;
   }
 
+  get canSwitchConversation(): boolean {
+    return !this.waiting.length && (!this.current || !!this.current.snapshot.remote?.result);
+  }
+
+  openConversation(): void {
+    if (!this.canSwitchConversation) throw new Error('当前提交尚未结束或仍有待发送消息。');
+    this.release();
+    this.needsAdmission = false;
+    this.admissionMismatch = false;
+    this.conversationId = undefined;
+    this.transcriptId = undefined;
+  }
+
   enqueue(input: ConversationRequest): { readonly id: string } {
     this.requireReady();
     if (this.waiting.length >= this.maxWaiting) throw new Error('等待队列已满，请先撤回部分消息。');
-    const entry = new QueueEntry(input);
+    const entry = new QueueEntry(this.conversationId!, input);
     if (this.waiting.reduce((sum, item) => sum + item.bytes, entry.bytes) > this.maxBytes) throw new Error('等待消息总容量已满，请先撤回部分消息。');
     this.waiting.push(entry);
     this.changed();
@@ -97,7 +113,7 @@ export class ConversationQueue {
     if (this.current && !this.current.snapshot.remote?.result) throw new Error('当前提交尚未确认结束，请重新连接或请求取消。');
     if (this.waiting.length) throw new Error('已有等待消息，请依次发送。');
     this.requireReady();
-    const entry = new QueueEntry(input, accepted);
+    const entry = new QueueEntry(this.conversationId!, input, accepted);
     const submission = entry.create();
     this.replace(entry, submission);
     return submission;
@@ -106,7 +122,7 @@ export class ConversationQueue {
   send(submission: ClientSubmission): Promise<void> {
     if (this.current !== submission || submission.dispatched) return Promise.resolve();
     const environment = this.environment();
-    if (!environment.ready || environment.transcriptId !== this.transcriptId) {
+    if (!environment.ready || environment.conversationId !== this.conversationId || environment.transcriptId !== this.transcriptId) {
       this.setBlocked('调用环境尚未就绪或消息集合已改变。');
       return Promise.resolve();
     }
@@ -114,7 +130,7 @@ export class ConversationQueue {
     this.setBlocked(undefined);
     if (this.current !== submission) return Promise.resolve();
     const currentEnvironment = this.environment();
-    if (!currentEnvironment.ready || currentEnvironment.transcriptId !== this.transcriptId) {
+    if (!currentEnvironment.ready || currentEnvironment.conversationId !== this.conversationId || currentEnvironment.transcriptId !== this.transcriptId) {
       this.setBlocked('调用环境尚未就绪或消息集合已改变。');
       return Promise.resolve();
     }
@@ -204,12 +220,13 @@ export class ConversationQueue {
 
   private requireReady(): void {
     const environment = this.environment();
-    if (!environment.ready || !environment.transcriptId) throw new Error('请先完成客户端初始化与服务端模型配置。');
-    if ((this.waiting.length || (this.current && !this.current.snapshot.remote?.result)) && this.transcriptId !== environment.transcriptId) throw new Error('消息集合已改变，不能将旧队列转交到新的对话。');
-    if (this.transcriptId !== environment.transcriptId) {
+    if (!environment.ready || !environment.conversationId || !environment.transcriptId) throw new Error('请先完成客户端初始化与服务端模型配置。');
+    if ((this.waiting.length || (this.current && !this.current.snapshot.remote?.result)) && (this.conversationId !== environment.conversationId || this.transcriptId !== environment.transcriptId)) throw new Error('消息集合已改变，不能将旧队列转交到新的对话。');
+    if (this.conversationId !== environment.conversationId || this.transcriptId !== environment.transcriptId) {
       this.needsAdmission = false;
       this.admissionMismatch = false;
     }
+    this.conversationId = environment.conversationId;
     this.transcriptId = environment.transcriptId;
   }
 
@@ -237,7 +254,7 @@ export class ConversationQueue {
       this.stopConfirmation('result');
       const entry = this.active;
       this.active = undefined;
-      this.needsAdmission = remote.admission?.status !== 'ready' || remote.admission.transcriptId !== this.transcriptId;
+      this.needsAdmission = remote.admission?.status !== 'ready' || remote.admission.conversationId !== this.conversationId || remote.admission.transcriptId !== this.transcriptId;
       if (remote.result.status === 'rejected' && remote.result.retry === 'admission' && entry && !current.snapshot.cancellation) {
         this.waiting.unshift(entry);
         this.needsAdmission = true;
@@ -278,7 +295,7 @@ export class ConversationQueue {
       return;
     }
     const environment = this.environment();
-    const blocked = !environment.ready ? '请先完成客户端初始化。' : environment.transcriptId !== this.transcriptId || this.admissionMismatch ? '消息集合已改变，请撤回旧队列。' : undefined;
+    const blocked = !environment.ready ? '请先完成客户端初始化。' : environment.conversationId !== this.conversationId || environment.transcriptId !== this.transcriptId || this.admissionMismatch ? '消息集合已改变，请撤回旧队列。' : undefined;
     if (blocked) {
       this.stopConfirmation('admission');
       this.setBlocked(blocked);
@@ -307,13 +324,13 @@ export class ConversationQueue {
     void Promise.resolve()
       .then(() => {
         if (!owns()) return;
-        return this.transport.admission(signal);
+        return this.transport.admission(head.conversationId, signal);
       })
       .then((admission) => {
         if (!owns()) return;
         signal.throwIfAborted();
         if (!validAdmission(admission)) throw new TypeError('服务接纳状态无效。');
-        if (admission.transcriptId !== this.transcriptId) {
+        if (admission.conversationId !== this.conversationId || admission.transcriptId !== this.transcriptId) {
           this.admissionMismatch = true;
           this.setBlocked('消息集合已改变，请撤回旧队列。');
           return;

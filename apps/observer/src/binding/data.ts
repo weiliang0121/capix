@@ -7,6 +7,7 @@ import { createObservationProjection } from './observation.js';
 import { projectSubmission } from './submission.js';
 import { projectResponses } from './responses.js';
 import { createRevealProjection } from './reveal.js';
+import { errorMessage } from '../lib/errors.js';
 import type { ConversationMessage } from '../state/conversation.js';
 
 function projectConversationSync(state: ClientState): AppData['conversationSync'] {
@@ -26,14 +27,23 @@ function projectConversationSync(state: ClientState): AppData['conversationSync'
 
 /** Business content is authoritative; observation only adds optional links and inspector views. */
 export function createDataProjection() {
-  const projectObservation = createObservationProjection();
-  const projectReveal = createRevealProjection();
+  let projectObservation = createObservationProjection();
+  let projectReveal = createRevealProjection();
   let previous: ClientState | undefined;
   let previousOverview: ObserverOverview | undefined;
   let messages: readonly ConversationMessage[] = [];
   let previousContent: readonly ConversationMessage[] | undefined;
   let data: AppData = emptyAppData();
   return (state: ClientState): AppData => {
+    if (previous?.conversation && previous.conversation.id !== state.conversation?.id) {
+      projectObservation = createObservationProjection();
+      projectReveal = createRevealProjection();
+      previous = undefined;
+      previousOverview = undefined;
+      previousContent = undefined;
+      messages = [];
+      data = emptyAppData();
+    }
     const observation = projectObservation(state.observation, state.transcripts);
     const conversationChanged = previous?.messages !== state.messages || previousOverview !== observation.overview || previous?.transcriptId !== state.transcriptId;
     if (conversationChanged) messages = projectConversation(state.messages, observation.overview, state.transcriptId);
@@ -44,6 +54,11 @@ export function createDataProjection() {
     const current = observation.overview.executions.find((item) => item.calls.some((call) => call.recordType === 'execution' && call.contextId === state.contextId));
     const submission = projectSubmission(state);
     data = {
+      activeConversation: state.conversation,
+      conversations: state.conversations,
+      switchingConversation: state.switching,
+      canSwitchConversation: state.canSwitchConversation,
+      conversationError: state.conversationError ? errorMessage(state.conversationError) : undefined,
       config: state.config,
       busy: state.busy,
       queue: state.queue,

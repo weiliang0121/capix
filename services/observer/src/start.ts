@@ -1,5 +1,5 @@
 import { isSafeInteger } from 'es-toolkit/compat';
-import { initializeObserver } from './assembly/environment.js';
+import { ObserverConversations } from './assembly/conversations.js';
 import { DeepSeekProvider } from './assembly/provider.js';
 import { createObserverServer } from './http/server.js';
 import { validateSettings } from './assembly/settings.js';
@@ -29,18 +29,18 @@ if (fileRoot) {
   if (!outside) throw new Error('内容数据库必须位于模型文件工作区之外。');
 }
 const persistence = SqliteObserverStore.open(resolve(dataDirectory, 'observer.sqlite'));
-let observer: ReturnType<typeof initializeObserver>;
+let conversations: ObserverConversations;
 try {
-  observer = initializeObserver(() => new DeepSeekProvider(key), [], { files, persistence });
+  conversations = new ObserverConversations(() => new DeepSeekProvider(key), [], { files, persistence });
 } catch (error) {
   persistence.close();
   throw error;
 }
-const server = createObserverServer({ observer, settings, configured: Boolean(key) });
+const server = createObserverServer({ conversations, settings, configured: Boolean(key) });
 // Every change is already committed. An exiting active run leaves its archive open, never completed.
 process.once('exit', () => {
-  if (observer.runtime.running || observer.interactions.active) persistence.close();
-  else observer.close();
+  if (conversations.active) persistence.close();
+  else conversations.close();
 });
 process.once('SIGINT', () => process.exit(0));
 process.once('SIGTERM', () => process.exit(0));

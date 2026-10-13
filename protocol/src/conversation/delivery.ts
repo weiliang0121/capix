@@ -12,16 +12,18 @@ export interface ConversationFailure {
 }
 
 /** Current service admission conditions; a ready response does not reserve the next run. */
-export type ConversationAdmission = { readonly transcriptId: string } & ({ readonly status: 'ready' } | { readonly status: 'busy' } | { readonly status: 'unavailable'; readonly error: ConversationFailure });
+export type ConversationAdmission = { readonly conversationId: string; readonly transcriptId: string } & ({ readonly status: 'ready' } | { readonly status: 'busy' } | { readonly status: 'unavailable'; readonly error: ConversationFailure });
 
 /** Correlation only: the identifier does not promise idempotency or persistence. */
 export interface ConversationSubmissionRequest {
+  readonly conversationId: string;
   readonly submissionId: string;
   readonly input: ConversationRequest;
 }
 
 /** Cumulative service facts. The revision belongs to this projection, not to a connection or invocation. */
 export interface ConversationSubmissionSnapshot {
+  readonly conversationId: string;
   readonly submissionId: string;
   readonly revision: number;
   readonly input?: TranscriptRangeLocator;

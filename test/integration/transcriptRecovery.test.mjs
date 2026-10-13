@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { initializeObserver, createObserverServer } from '@capix/observer-service';
+import { ObserverConversations, createObserverServer } from '@capix/observer-service';
 import { ClientRuntime, TranscriptConnectionError } from '@capix/client-runtime';
 import { ConversationHttpTransport } from '@capix/client-http';
 
@@ -24,7 +24,7 @@ test('HTTP: transcript reconnect catches up a committed answer without repeating
   const answer = deferred();
   const reconnect = deferred();
   let answerCalls = 0;
-  const environment = initializeObserver({
+  const conversations = new ObserverConversations({
     async invoke(_request, purpose) {
       if (purpose === 'selection') return output({ historyIndexes: [] });
       if (purpose === 'memory') return output({ memories: [] });
@@ -33,7 +33,9 @@ test('HTTP: transcript reconnect catches up a committed answer without repeating
       return output({ kind: 'answer', content: 'answer committed while message connection was offline' });
     },
   });
-  const server = createObserverServer({ observer: environment, settings, configured: true });
+  const conversationId = conversations.list().defaultConversationId;
+  const environment = conversations.open(conversationId);
+  const server = createObserverServer({ conversations, settings, configured: true });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -71,6 +73,7 @@ test('HTTP: transcript reconnect catches up a committed answer without repeating
     runtime.stopTranscript();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+    conversations.close();
   });
   await runtime.initialize();
   const id = runtime.getSnapshot().transcriptId;
@@ -103,7 +106,7 @@ test('HTTP: transcript reconnect catches up a committed answer without repeating
   await until(() => runtime.getSnapshot().transcripts.get(id).sync.status === 'live' && runtime.getSnapshot().answerAvailability === 'available');
   const recovered = runtime.getSnapshot();
   assert.equal(connections.length, 2);
-  assert.equal(connections[0].id, null);
+  assert.equal(connections[0].id, id);
   assert.equal(connections[1].id, id, 'recovery stays bound to the original entity');
   assert.ok(connections[1].startedAt - interruptedAt >= 450, 'recovery observes the real 500 ms backoff');
   assert.deepEqual(

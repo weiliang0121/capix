@@ -1,8 +1,8 @@
-# 单一对话持久化
+# 对话持久化
 
-本轮保存当前单一对话的 Transcript、Memories 和可选记录预设产物。重新启动时恢复内容实体及只读历史记录，再装配新的 Provider、REOA 绑定、记录安装和交付连接，允许开始新 QA。
+按 Conversation 保存独立的 Transcript、Memories 和可选记录预设产物，参见 [对话身份与切换](conversations.md)。重新启动时恢复内容实体及只读历史记录，再装配新的 Provider、REOA 绑定、记录安装和交付连接，允许开始新 QA。
 
-Invocation、Context、未完成步骤、本地等待队列与服务提交身份不恢复。独立 Interaction 另行保存固定模型请求与已接收反馈，允许按 ID 读取，不恢复原调用或自动重发。历史记录用于解释已经观测到的过程，不能用于驱动旧执行。暂不新增 Thread、多会话目录、任务账本或后台工作队列。
+Invocation、Context、未完成步骤、本地等待队列与服务提交身份不恢复。独立 Interaction 另行保存固定模型请求与已接收反馈，允许按 ID 读取，不恢复原调用或自动重发。历史记录用于解释已经观测到的过程，不能用于驱动旧执行。暂不新增 Thread、任务账本或后台工作队列。
 
 ## 依赖与位置
 
@@ -10,21 +10,21 @@ Invocation、Context、未完成步骤、本地等待队列与服务提交身份
 
 `pnpm start` 默认使用仓库 `.capix/observer.sqlite`；`CAPIX_DATA_DIR` 可覆盖目录。目录自动创建，数据库与已有 SQLite sidecar 文件设为 `0600`，新目录为 `0700`。数据目录必须位于 `CAPIX_FILES_ROOT` 之外，避免对话文件能力访问消息、记忆和记录存储。`.capix/` 已被 Git 忽略。
 
-数据库启用 WAL、`synchronous=FULL` 和外键检查，当前保持独占锁，一个数据库只支持一个写服务。第二个服务启动明确失败，不用各自内存副本竞争写入。数据库格式使用 `user_version=2`，已有 v1 在事务中增加独立 interactions 表，不改写原内容与记录；未知版本、损坏或不完整身份关系拒绝加载，不静默清空或创建空对话替代。内容恢复结构仍是 ObserverStoredState version 1，与数据库格式版本分别维护。
+数据库启用 WAL、`synchronous=FULL` 和外键检查，当前保持独占锁，一个数据库只支持一个写服务。第二个服务启动明确失败，不用各自内存副本竞争写入。数据库格式使用 `user_version=3`，v1 先增加独立 interactions 表，再由 v2 迁移对话目录和来源归属。旧内容成为默认对话，保留原实体与记录身份；未知版本、损坏或不完整身份关系拒绝加载，不静默清空或创建空对话替代。内容恢复结构仍是 ObserverStoredState version 1，与数据库格式版本分别维护。
 
 程序化装配保持显式：
 
 ```ts
-import { initializeObserver, SqliteObserverStore } from '@capix/observer-service/assembly';
+import { ObserverConversations, SqliteObserverStore } from '@capix/observer-service/assembly';
 
 const persistence = SqliteObserverStore.open('/private/capix-data/observer.sqlite');
-const environment = initializeObserver(provider, [], { persistence });
+const conversations = new ObserverConversations(provider, [], { persistence });
 
 // 在没有活动调用或外部交互时关闭；封存本次记录来源并释放存储。
-environment.close();
+conversations.close();
 ```
 
-不传 persistence 时保持原有内存行为。initializeObserver 失败时，由创建 store 的宿主负责关闭；默认启动入口已处理这一点。不能同时传入恢复库和新增启动消息，以免重启无意重复追加。
+不传 persistence 时保持原有内存行为。宿主初始化失败时，由创建 store 的启动代码负责关闭；默认启动入口已处理这一点。不能同时传入恢复库和新增启动消息，以免重启无意重复追加。
 
 ## 内容正式成立的顺序
 

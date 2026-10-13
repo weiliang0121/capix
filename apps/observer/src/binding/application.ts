@@ -5,6 +5,7 @@ import { searchRounds } from './search.js';
 import { createDataProjection } from './data.js';
 import { errorMessage } from '../lib/errors.js';
 import { submitDraft } from './submit.js';
+import { projectConversationChange } from './conversations.js';
 
 export function createApplication(runtime: ClientRuntime) {
   const store = createAppStore();
@@ -12,6 +13,9 @@ export function createApplication(runtime: ClientRuntime) {
     store,
     connect: () => connectAppStore(store, runtime),
     commands: {
+      refreshConversations: () => runtime.refreshConversations(),
+      createConversation: () => runtime.createConversation(),
+      openConversation: (id: string) => runtime.openConversation(id),
       submit: () => submitDraft(store, runtime),
       reconnectSubmission: () =>
         runtime.reconnectSubmission().catch((error) => {
@@ -47,10 +51,11 @@ export function connectAppStore(store: AppStore, runtime: ClientRuntime): () => 
       const observed = runtime.getSnapshot();
       const data = project(observed);
       const current = store.getState();
-      change = { data };
-      if (data.rounds !== current.data.rounds) change.matches = searchRounds(data.rounds, current.search);
+      const local = projectConversationChange(current, observed.conversation?.id);
+      change = { ...local, data };
+      if (data.rounds !== current.data.rounds || local.search !== undefined) change.matches = searchRounds(data.rounds, local.search ?? current.search);
       if (observed.config && observed.config !== current.data.config) change.budget = String(observed.config.contextBudget);
-      const selectedId = data.busy && data.runningId ? data.runningId : current.selectedId || data.rounds.at(-1)?.id || '';
+      const selectedId = data.busy && data.runningId ? data.runningId : (local.selectedId ?? current.selectedId) || data.rounds.at(-1)?.id || '';
       if (selectedId !== current.selectedId) change.selectedId = selectedId;
       if (projectionNotice && current.notice === projectionNotice) change.notice = '';
       projectionNotice = undefined;
@@ -70,7 +75,7 @@ export function connectAppStore(store: AppStore, runtime: ClientRuntime): () => 
   };
   const unsubscribe = runtime.subscribe(schedule);
   const unsubscribeSearch = store.subscribe((state, previous) => {
-    if (state.search !== previous.search) store.setState({ matches: searchRounds(state.data.rounds, state.search) });
+    if (state.search !== previous.search && state.matches === previous.matches) store.setState({ matches: searchRounds(state.data.rounds, state.search) });
   });
   receive();
   const stopObservation = runtime.startObservation();

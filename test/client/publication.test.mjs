@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientRuntime, TranscriptSequenceError } from '@capix/client-runtime';
-import { deferred, submissionDelivery, transcriptSnapshot } from './fixtures.mjs';
+import { conversationDescriptor, deferred, submissionDelivery, transcriptSnapshot } from './fixtures.mjs';
 
 const question = { role: 'user', content: '问题' };
 const answer = { role: 'assistant', content: '回答' };
@@ -20,6 +20,7 @@ async function fixture(t, options = {}) {
   let posts = 0;
   const runtime = new ClientRuntime({
     conversation: {
+      conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', range.transcriptId)], defaultConversationId: 'fixture-conversation' }),
       config: async () => ({ configured: true, model: 'fixture', contextBudget: 1000, maxOutputTokens: 100, timeoutMs: 1000 }),
       submit: async (request, receive, signal) => {
         posts++;

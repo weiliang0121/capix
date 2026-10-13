@@ -11,6 +11,7 @@ export type SubmissionFeedback = { readonly status: 'idle' | 'connecting' | 'fol
 export type SubmissionCancellation = { readonly status: 'requested' | 'sending' | 'acknowledged' } | { readonly status: 'uncertain'; readonly error: unknown };
 export interface ClientSubmissionState {
   readonly id: string;
+  readonly conversationId: string;
   /** Stable local input identity; a rejected admission may require a new POST identity. */
   readonly queueId: string;
   readonly pending: string;
@@ -42,14 +43,16 @@ export class ClientSubmission {
   readonly bytes: number;
 
   constructor(
+    readonly conversationId: string,
     input: ConversationRequest,
     private readonly notifyAccepted?: (submission: ClientSubmissionState) => undefined,
     queueId = this.id,
   ) {
+    if (typeof conversationId !== 'string' || !conversationId) throw new TypeError('提交必须明确所属对话。');
     const accepted = acceptConversationRequest(input);
     this.input = accepted.input;
     this.bytes = accepted.bytes;
-    this.state = Object.freeze({ id: this.id, queueId, pending: this.input.messages.at(-1)!.content, ...(this.input.fileTask ? { fileTask: this.input.fileTask } : {}), feedback: Object.freeze({ status: 'idle' }) });
+    this.state = Object.freeze({ id: this.id, conversationId, queueId, pending: this.input.messages.at(-1)!.content, ...(this.input.fileTask ? { fileTask: this.input.fileTask } : {}), feedback: Object.freeze({ status: 'idle' }) });
   }
 
   get snapshot(): ClientSubmissionState {
@@ -105,6 +108,7 @@ export class ClientSubmission {
   receive(next: ConversationSubmissionSnapshot): void {
     const previous = this.state.remote;
     assertSubmissionSnapshot(next, this.id);
+    if (next.conversationId !== this.conversationId) throw new SubmissionContractError('提交反馈不属于本次对话。');
     if (next.input && this.transcriptId && next.input.transcriptId !== this.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
     if (previous && next.revision < previous.revision) return;
     let activities;
@@ -136,7 +140,7 @@ export class ClientSubmission {
   send(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
     if (this.sent) throw new Error('同一提交不能重复发送。');
     this.sent = true;
-    return this.connect((receive, signal) => transport.submit({ submissionId: this.id, input: this.input }, receive, signal), reception);
+    return this.connect((receive, signal) => transport.submit({ conversationId: this.conversationId, submissionId: this.id, input: this.input }, receive, signal), reception);
   }
 
   private bindReception(reception: SubmissionReception): void {
@@ -213,7 +217,7 @@ export function submissionFeedbackEnded(snapshot: ConversationSubmissionSnapshot
 }
 
 export function assertSubmissionSnapshot(snapshot: ConversationSubmissionSnapshot, expectedId: string): void {
-  if (snapshot.submissionId !== expectedId || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0 || !Array.isArray(snapshot.executions) || new Set(snapshot.executions.map((execution) => execution.contextId)).size !== snapshot.executions.length || snapshot.executions.some((execution) => !execution.contextId) || !snapshot.integrity || !['complete', 'incomplete'].includes(snapshot.integrity.status)) throw new SubmissionContractError('提交反馈身份或修订格式无效。');
+  if (!snapshot.conversationId || snapshot.submissionId !== expectedId || !Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0 || !Array.isArray(snapshot.executions) || new Set(snapshot.executions.map((execution) => execution.contextId)).size !== snapshot.executions.length || snapshot.executions.some((execution) => !execution.contextId) || !snapshot.integrity || !['complete', 'incomplete'].includes(snapshot.integrity.status)) throw new SubmissionContractError('提交反馈身份或修订格式无效。');
   if (snapshot.input && (!snapshot.input.transcriptId || !Number.isSafeInteger(snapshot.input.start) || !Number.isSafeInteger(snapshot.input.end) || snapshot.input.start < 0 || snapshot.input.end <= snapshot.input.start || (snapshot.input.revision !== undefined && (!Number.isSafeInteger(snapshot.input.revision) || snapshot.input.revision < 0)))) throw new SubmissionContractError('提交输入范围无效。');
   if ((snapshot.result && !['completed', 'cancelled', 'failed', 'rejected'].includes(snapshot.result.status)) || (snapshot.result && (snapshot.result.status === 'failed' || snapshot.result.status === 'rejected') && !validFailure(snapshot.result.error)) || (snapshot.integrity.status === 'incomplete' && !validFailure(snapshot.integrity.error))) throw new SubmissionContractError('提交结果或来源完整性诊断无效。');
   if (snapshot.result && snapshot.fileOutput?.status === 'pending') throw new SubmissionContractError('已结束的提交不能保留待创建的文件状态。');
@@ -223,11 +227,12 @@ export function assertSubmissionSnapshot(snapshot: ConversationSubmissionSnapsho
   if (snapshot.result?.status === 'cancelled' && !snapshot.cancelRequested) throw new SubmissionContractError('取消结果缺少取消请求事实。');
   if (snapshot.answer && (!snapshot.input || !Number.isSafeInteger(snapshot.answer.index) || snapshot.answer.transcriptId !== snapshot.input.transcriptId || snapshot.answer.index < snapshot.input.end)) throw new SubmissionContractError('提交回答位置与输入范围不一致。');
   if (snapshot.result && 'retry' in snapshot.result && (snapshot.result.status !== 'rejected' || snapshot.result.retry !== 'admission' || snapshot.integrity.status !== 'complete' || snapshot.input || snapshot.answer || snapshot.executions.length)) throw new SubmissionContractError('重新接纳只能用于明确未受理的提交。');
-  if (snapshot.admission !== undefined && !validAdmission(snapshot.admission)) throw new SubmissionContractError('服务接纳状态无效。');
+  if (snapshot.admission !== undefined && (!validAdmission(snapshot.admission) || snapshot.admission.conversationId !== snapshot.conversationId || (snapshot.input && snapshot.admission.transcriptId !== snapshot.input.transcriptId))) throw new SubmissionContractError('服务接纳状态无效。');
 }
 
 function copySubmission(snapshot: ConversationSubmissionSnapshot): ConversationSubmissionSnapshot {
   return Object.freeze({
+    conversationId: snapshot.conversationId,
     submissionId: snapshot.submissionId,
     revision: snapshot.revision,
     ...(snapshot.cancelRequested ? { cancelRequested: true as const } : {}),

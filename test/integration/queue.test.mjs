@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { initializeObserver, createObserverServer } from '@capix/observer-service';
+import { ObserverConversations, createObserverServer } from '@capix/observer-service';
 import { ClientRuntime } from '@capix/client-runtime';
 import { ConversationHttpTransport } from '@capix/client-http';
 
@@ -22,7 +22,7 @@ async function until(check) {
 }
 async function fixture(t, answer, options = {}) {
   let calls = 0;
-  const environment = initializeObserver(
+  const conversations = new ObserverConversations(
     options.initialize ?? {
       async invoke(_request, purpose, signal) {
         if (purpose === 'selection') return output({ historyIndexes: [] });
@@ -31,7 +31,9 @@ async function fixture(t, answer, options = {}) {
       },
     },
   );
-  const server = createObserverServer({ observer: environment, settings, configured: true });
+  const conversationId = conversations.list().defaultConversationId;
+  const environment = conversations.open(conversationId);
+  const server = createObserverServer({ conversations, settings, configured: true });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -48,12 +50,14 @@ async function fixture(t, answer, options = {}) {
     runtime.stopTranscript();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+    conversations.close();
   });
   await runtime.initialize();
   return {
     runtime,
     environment,
     transport,
+    conversationId,
     posts,
     get calls() {
       return calls;
@@ -99,7 +103,10 @@ test('HTTP: readiness racing another caller retains the same waiting item and re
   const f = await fixture(t, async () => output({ kind: 'answer', content: 'answer' }), {
     transport: (io, environment) => ({
       config: () => io.config(),
-      admission: (signal) => io.admission(signal),
+      conversations: (signal) => io.conversations(signal),
+      conversation: (id, signal) => io.conversation(id, signal),
+      createConversation: (signal) => io.createConversation(signal),
+      admission: (id, signal) => io.admission(id, signal),
       read: (id, signal) => io.read(id, signal),
       follow: (id, receive, signal) => io.follow(id, receive, signal),
       cancel: (id, signal) => io.cancel(id, signal),
@@ -147,7 +154,10 @@ test('HTTP: lost feedback follows the original submission, without reposting it 
     {
       transport: (io) => ({
         config: () => io.config(),
-        admission: (signal) => io.admission(signal),
+        conversations: (signal) => io.conversations(signal),
+        conversation: (id, signal) => io.conversation(id, signal),
+        createConversation: (signal) => io.createConversation(signal),
+        admission: (id, signal) => io.admission(id, signal),
         read: (id, signal) => {
           reads.push(id);
           return io.read(id, signal);
@@ -212,12 +222,12 @@ test('HTTP: a known model initialization failure blocks admission without draini
       throw new Error('fixture model initialization failed');
     },
   });
-  assert.equal((await f.transport.admission()).status, 'ready');
+  assert.equal((await f.transport.admission(f.conversationId)).status, 'ready');
   assert.equal(initialized, 0, 'checking admission must preserve lazy model construction');
   f.runtime.enqueue(input('first'));
   const second = f.runtime.enqueue(input('keep waiting'));
   await until(() => f.runtime.getSnapshot().submission?.remote?.result?.status === 'failed');
-  const admission = await f.transport.admission();
+  const admission = await f.transport.admission(f.conversationId);
   assert.equal(admission.status, 'unavailable');
   assert.equal(admission.error.code, 'MODEL_INITIALIZATION_FAILED');
   await until(() => Boolean(f.runtime.getSnapshot().queue.blocked));

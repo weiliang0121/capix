@@ -1,4 +1,4 @@
-import type { ConfigurationResponse, ConversationRequest, Message, ExecutionRecordSnapshot } from '@capix/protocol';
+import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationRequest, Message, ExecutionRecordSnapshot } from '@capix/protocol';
 import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReceiver, type ObservationState } from './observation/receiver.js';
@@ -8,6 +8,11 @@ import { ConversationQueue, type ClientQueueState, type ConversationQueueOptions
 import { coordinateConversation, type ContentAvailability } from './conversation.js';
 
 export interface ClientState {
+  readonly conversation?: ConversationDescriptor;
+  readonly conversations: readonly ConversationDescriptor[];
+  readonly switching: boolean;
+  readonly canSwitchConversation: boolean;
+  readonly conversationError?: unknown;
   readonly initialization: ClientInitializationState;
   readonly config?: ConfigurationResponse;
   readonly messages: readonly Readonly<Message>[];
@@ -34,7 +39,7 @@ export interface ClientRuntimeOptions {
   readonly queue?: ConversationQueueOptions;
 }
 
-type ClientSources = Pick<ClientState, 'initialization' | 'config' | 'transcriptId' | 'transcripts' | 'submission' | 'submissions' | 'queue' | 'error' | 'observation'>;
+type ClientSources = Pick<ClientState, 'conversation' | 'conversations' | 'switching' | 'conversationError' | 'initialization' | 'config' | 'transcriptId' | 'transcripts' | 'submission' | 'submissions' | 'queue' | 'error' | 'observation'>;
 
 /** Business delivery is independent of the optional observation capability. */
 export class ClientRuntime {
@@ -48,6 +53,10 @@ export class ClientRuntime {
   private initialization?: InitializationAttempt;
   private initializationNumber = 0;
   private readonly queue: ConversationQueue;
+  private opening = 0;
+  private openingTranscript?: string;
+  private catalogRequest = 0;
+  private catalogRefreshSubmission?: string;
 
   private readonly conversation: ConversationTransport;
   private readonly observation: ObservationReceiver;
@@ -63,12 +72,12 @@ export class ClientRuntime {
     });
     this.queue = new ConversationQueue(
       this.conversation,
-      () => ({ ready: this.sources.initialization.status === 'succeeded' && !!this.sources.config?.configured, transcriptId: this.sources.transcriptId }),
+      () => ({ ready: !this.sources.switching && this.sources.initialization.status === 'succeeded' && !!this.sources.config?.configured, conversationId: this.sources.conversation?.id, transcriptId: this.sources.transcriptId }),
       (submission) => this.updateSubmission(submission),
       options.queue,
     );
-    this.sources = { initialization: { status: 'idle' }, transcripts: new Map(), submissions: new Map(), observation: this.observation.snapshot, queue: this.queue.snapshot };
-    this.state = Object.freeze({ ...this.sources, ...coordinateConversation(this.sources) });
+    this.sources = { conversations: Object.freeze([]), switching: false, initialization: { status: 'idle' }, transcripts: new Map(), submissions: new Map(), observation: this.observation.snapshot, queue: this.queue.snapshot };
+    this.state = Object.freeze({ ...this.sources, canSwitchConversation: this.canSwitchConversation, ...coordinateConversation(this.sources) });
   }
 
   readonly getSnapshot = (): ClientState => this.state;
@@ -82,7 +91,7 @@ export class ClientRuntime {
   private update(change: Partial<ClientSources>): void {
     this.sources = { ...this.sources, ...change };
     this.dirty = true;
-    if ('initialization' in change || 'transcriptId' in change) this.queue.checkEnvironment();
+    if ('initialization' in change || 'transcriptId' in change || 'switching' in change) this.queue.checkEnvironment();
     if (this.scheduled) return;
     this.scheduled = true;
     queueMicrotask(() => {
@@ -96,7 +105,7 @@ export class ClientRuntime {
     if (!this.dirty || this.publishing) return;
     this.publishing = true;
     this.dirty = false;
-    this.state = Object.freeze({ ...this.sources, ...coordinateConversation(this.sources) });
+    this.state = Object.freeze({ ...this.sources, canSwitchConversation: this.canSwitchConversation, ...coordinateConversation(this.sources) });
     const acceptances = [...this.acceptances].map((submission) => ({ submission, snapshot: submission.snapshot }));
     this.acceptances.clear();
     const listeners = [...this.listeners];
@@ -164,10 +173,106 @@ export class ClientRuntime {
   }
 
   private async loadInitialTranscript(attempt: InitializationAttempt): Promise<void> {
-    const transcript = await this.transcripts.watch(this.sources.transcriptId);
+    const catalog = acceptCatalog(await this.conversation.conversations());
     if (!attempt.running) return;
-    const current = this.sources.transcripts.get(transcript.id)?.snapshot ?? transcript;
-    this.update({ transcriptId: current.id });
+    const selected = catalog.conversations.find((item) => item.id === catalog.defaultConversationId)!;
+    this.update({ conversations: catalog.conversations });
+    this.openingTranscript = selected.transcriptId;
+    await this.transcripts.watch(selected.transcriptId);
+    if (!attempt.running) return;
+    this.openingTranscript = undefined;
+    this.update({ conversation: selected, transcriptId: selected.transcriptId });
+    this.observation.setConversation(selected.id, selected.transcriptId);
+  }
+
+  private get canSwitchConversation(): boolean {
+    return this.sources.initialization.status === 'succeeded' && !this.sources.switching && this.queue.canSwitchConversation;
+  }
+
+  async refreshConversations(): Promise<void> {
+    const request = ++this.catalogRequest;
+    try {
+      const catalog = acceptCatalog(await this.conversation.conversations());
+      if (request !== this.catalogRequest) return;
+      const selected = catalog.conversations.find((item) => item.id === this.sources.conversation?.id);
+      if (selected && selected.transcriptId !== this.sources.transcriptId) throw new Error('已有对话的消息集合身份发生改变。');
+      this.update({ conversations: catalog.conversations, ...(selected ? { conversation: selected } : {}), conversationError: undefined });
+    } catch (conversationError) {
+      if (request === this.catalogRequest) this.update({ conversationError });
+      throw conversationError;
+    }
+  }
+
+  private beginOpening(): number {
+    if (this.sources.initialization.status !== 'succeeded' || !this.queue.canSwitchConversation) throw new Error('当前提交尚未结束或仍有待发送消息，暂不能切换对话。');
+    const generation = ++this.opening;
+    const abandoned = this.openingTranscript;
+    this.openingTranscript = undefined;
+    this.update({ switching: true, conversationError: undefined });
+    if (abandoned && abandoned !== this.sources.transcriptId) this.transcripts.stop(abandoned);
+    return generation;
+  }
+
+  async createConversation(): Promise<ConversationDescriptor> {
+    if (!this.canSwitchConversation) throw new Error('当前不能新建对话，请等待当前处理结束。');
+    const generation = this.beginOpening();
+    try {
+      const created = acceptDescriptor(await this.conversation.createConversation());
+      this.upsertConversation(created);
+      await this.activateConversation(created, generation);
+      return created;
+    } catch (conversationError) {
+      this.failOpening(generation, conversationError);
+      throw conversationError;
+    }
+  }
+
+  async openConversation(id: string): Promise<void> {
+    if (!id) throw new TypeError('对话身份不能为空。');
+    if (id === this.sources.conversation?.id && !this.sources.switching) return;
+    const generation = this.beginOpening();
+    try {
+      const target = acceptDescriptor(await this.conversation.conversation(id));
+      if (target.id !== id) throw new Error('返回了不同的对话。');
+      await this.activateConversation(target, generation);
+    } catch (conversationError) {
+      this.failOpening(generation, conversationError);
+      throw conversationError;
+    }
+  }
+
+  private upsertConversation(conversation: ConversationDescriptor): void {
+    this.catalogRequest++;
+    const existing = this.sources.conversations.find((item) => item.id === conversation.id);
+    if (existing && existing.transcriptId !== conversation.transcriptId) throw new Error('已有对话的消息集合身份发生改变。');
+    const conversations = [...this.sources.conversations.filter((item) => item.id !== conversation.id), conversation].sort((a, b) => b.updatedAt - a.updatedAt);
+    this.update({ conversations: Object.freeze(conversations) });
+  }
+
+  private async activateConversation(target: ConversationDescriptor, generation: number): Promise<void> {
+    if (generation !== this.opening) return;
+    const previousId = this.sources.transcriptId;
+    this.openingTranscript = target.transcriptId;
+    await this.transcripts.watch(target.transcriptId);
+    if (generation !== this.opening) return;
+    const sync = this.sources.transcripts.get(target.transcriptId)?.sync;
+    if (sync?.status !== 'live') throw sync?.status === 'failed' ? sync.error : new Error('目标对话的消息同步尚未就绪。');
+    this.upsertConversation(target);
+    this.queue.openConversation();
+    if (generation !== this.opening) return;
+    this.openingTranscript = undefined;
+    this.acceptances.clear();
+    this.update({ conversation: target, transcriptId: target.transcriptId, submission: undefined, submissions: new Map(), switching: false, conversationError: undefined });
+    this.observation.setConversation(target.id, target.transcriptId);
+    if (previousId && previousId !== this.sources.transcriptId && previousId !== this.openingTranscript) this.transcripts.stop(previousId);
+  }
+
+  private failOpening(generation: number, conversationError: unknown): void {
+    if (generation !== this.opening) return;
+    const candidate = this.openingTranscript;
+    this.openingTranscript = undefined;
+    this.update({ switching: false, conversationError });
+    if (candidate && candidate !== this.sources.transcriptId) this.transcripts.stop(candidate);
   }
 
   /** Load an entity only when needed, then keep its copy current until explicitly stopped. */
@@ -177,7 +282,7 @@ export class ClientRuntime {
 
   stopTranscript(id?: string): void {
     const attempt = this.initialization;
-    const stopsInitialization = attempt?.running && (!id || id === (this.sources.transcriptId ?? this.transcripts.defaultId));
+    const stopsInitialization = attempt?.running && (!id || id === (this.sources.transcriptId ?? this.openingTranscript));
     this.transcripts.stop(id);
     if (stopsInitialization && attempt.running) {
       attempt.stop();
@@ -222,6 +327,10 @@ export class ClientRuntime {
       submissions = retained;
     }
     this.update({ submission: submission?.snapshot, submissions, queue: this.queue.snapshot });
+    if (submission?.snapshot.remote?.result && this.catalogRefreshSubmission !== submission.id) {
+      this.catalogRefreshSubmission = submission.id;
+      void this.refreshConversations().catch(() => undefined);
+    }
   }
 
   /** Local acceptance is synchronous; it does not claim service admission or completion. */
@@ -275,4 +384,16 @@ export class ClientRuntime {
     this.queue.release();
     this.publish();
   }
+}
+
+function acceptDescriptor(value: ConversationDescriptor): ConversationDescriptor {
+  if (!value || typeof value.id !== 'string' || !value.id || typeof value.title !== 'string' || typeof value.transcriptId !== 'string' || !value.transcriptId || !Number.isFinite(value.createdAt) || !Number.isFinite(value.updatedAt) || value.createdAt < 0 || value.updatedAt < value.createdAt) throw new TypeError('对话信息格式无效。');
+  return Object.freeze({ id: value.id, title: value.title, transcriptId: value.transcriptId, createdAt: value.createdAt, updatedAt: value.updatedAt });
+}
+
+function acceptCatalog(value: ConversationListResponse): ConversationListResponse {
+  if (!value || !Array.isArray(value.conversations)) throw new TypeError('对话列表格式无效。');
+  const conversations = Object.freeze(value.conversations.map(acceptDescriptor));
+  if (!conversations.some((item) => item.id === value.defaultConversationId) || new Set(conversations.map((item) => item.id)).size !== conversations.length || new Set(conversations.map((item) => item.transcriptId)).size !== conversations.length) throw new TypeError('对话列表身份关联无效。');
+  return Object.freeze({ conversations, defaultConversationId: value.defaultConversationId });
 }

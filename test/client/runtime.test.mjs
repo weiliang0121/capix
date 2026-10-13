@@ -139,6 +139,7 @@ test('late observation loads and notifications from a disconnected session canno
     },
   });
   const runtime = client({ conversation: io, observation: io });
+  await runtime.initialize();
   const stop = runtime.startObservation();
   stop();
   const stopNew = runtime.startObservation();
@@ -159,6 +160,7 @@ test('a completed E does not make its still-running parent R detail permanently 
   let reads = 0;
   const io = transport({ execution: async () => (++reads === 1 ? running : finished) });
   const runtime = client({ conversation: io, observation: io });
+  await runtime.initialize();
   assert.equal((await runtime.loadExecution(execution.execution.id)).runtimeCall.status, 'running');
   assert.equal((await runtime.loadExecution(execution.execution.id)).runtimeCall.status, 'succeeded');
   assert.equal((await runtime.loadExecution(execution.execution.id)).runtimeCall.status, 'succeeded');

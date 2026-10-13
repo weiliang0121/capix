@@ -70,7 +70,7 @@ Interaction → Provider → 固定反馈 → 可被多个 A 读取
 
 ## 保存与恢复边界
 
-SQLite `interactions` 独立保存 ID、contract、revision、固定请求与反馈/失败状态。没有调用 ID 外键；单一对话内容不必先存在。提交带 expectedRevision，存储检查请求和已收反馈不可更改。格式 v1 到 v2 在事务中迁移，保留原消息、记忆和历史记录。
+SQLite `interactions` 独立保存 ID、contract、revision、固定请求与反馈/失败状态。没有调用 ID 外键；对话内容不必先存在。提交带 expectedRevision，存储检查请求和已收反馈不可更改。格式 v1 到 v2 在事务中迁移，保留原消息、记忆和历史记录。
 
 按已知 ID 读取时，宿主可以惰性载入保存状态，不建立 Provider：
 

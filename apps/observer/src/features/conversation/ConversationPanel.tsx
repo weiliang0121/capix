@@ -1,12 +1,21 @@
 import { useAppStore, useAppCommands } from '../../state/react';
-import { Settings2 } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { ChatMessages } from './ChatMessages';
 import { MessageQueue } from './MessageQueue';
 import { Composer } from './Composer';
+import { ConversationControls } from './ConversationControls';
+import { ConversationHistory } from './ConversationHistory';
+import { errorMessage } from '../../lib/errors';
 import './conversation.css';
 export function ConversationPanel() {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const currentConversation = useAppStore((state) => state.data.activeConversation);
+  const switching = useAppStore((state) => state.data.switchingConversation);
+  const canSwitch = useAppStore((state) => state.data.canSwitchConversation);
+  const conversationError = useAppStore((state) => state.data.conversationError);
+  const setNotice = useAppStore((state) => state.setNotice);
   const messageCount = useAppStore((state) => state.data.messageCount);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const conversation = useAppStore((state) => state.data.conversation);
@@ -21,21 +30,29 @@ export function ConversationPanel() {
   const setFileDraft = useAppStore((state) => state.setFileDraft);
   const setDraft = useAppStore((state) => state.setDraft);
   const focus = useAppStore((state) => state.conversationFocus);
-  const { submit, reconnectConversation, reconnectSubmission, cancelSubmission } = useAppCommands();
+  const { submit, reconnectConversation, reconnectSubmission, cancelSubmission, createConversation } = useAppCommands();
   return (
     <aside className="conversation-panel">
-      <header className="panel-heading">
-        <div>
+      <header className="panel-heading conversation-heading">
+        <div className="conversation-heading-copy">
           <span className="eyebrow">CONVERSATION</span>
           <div className="heading-title">
-            <h2>对话</h2>
+            <h2>{currentConversation?.title ?? '对话'}</h2>
             <Badge variant="secondary">{messageCount} 条</Badge>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} aria-label="对话设置">
-          <Settings2 />
-        </Button>
+        <ConversationControls canSwitch={canSwitch} switching={switching} onCreate={() => void createConversation().catch((error) => setNotice(errorMessage(error)))} onHistory={() => setHistoryOpen(true)} onSettings={() => setSettingsOpen(true)} />
       </header>
+      {switching && (
+        <p className="conversation-navigation-notice" role="status">
+          正在打开对话…
+        </p>
+      )}
+      {conversationError && (
+        <p className="conversation-navigation-notice" role="alert">
+          {conversationError}
+        </p>
+      )}
       {conversationSync && (
         <div className="notice" role="status">
           {conversationSync.message}{' '}
@@ -52,9 +69,10 @@ export function ConversationPanel() {
           )}
         </div>
       )}
-      <ChatMessages rows={conversation} focus={focus} selectedId={selectedId} onInspect={inspect} onReconnect={reconnectSubmission} />
+      <ChatMessages key={`messages:${currentConversation?.id ?? 'initial'}`} rows={conversation} focus={focus} selectedId={selectedId} onInspect={inspect} onReconnect={reconnectSubmission} />
       <MessageQueue queue={queue} onCancel={cancelSubmission} />
-      <Composer configured={config?.configured ?? false} loaded={Boolean(config)} draft={draft} current={submissionControl} files={config?.files} fileDraft={fileDraft} onFileDraft={setFileDraft} onDraft={setDraft} onSubmit={submit} onCancel={cancelSubmission} />
+      <Composer key={`composer:${currentConversation?.id ?? 'initial'}`} disabled={switching || !currentConversation} configured={config?.configured ?? false} loaded={Boolean(config)} draft={draft} current={submissionControl} files={config?.files} fileDraft={fileDraft} onFileDraft={setFileDraft} onDraft={setDraft} onSubmit={submit} onCancel={cancelSubmission} />
+      <ConversationHistory open={historyOpen} onOpenChange={setHistoryOpen} />
     </aside>
   );
 }

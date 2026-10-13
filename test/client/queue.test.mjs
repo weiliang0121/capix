@@ -6,8 +6,8 @@ const input = (content = 'question') => ({ messages: [{ role: 'user', content }]
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const wait = (signal) => (signal.aborted ? Promise.resolve() : new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true })));
 const range = { transcriptId: 'fixture-transcript', start: 0, end: 1 };
-const ready = { transcriptId: range.transcriptId, status: 'ready' };
-const busy = { transcriptId: range.transcriptId, status: 'busy' };
+const ready = { conversationId: 'fixture-conversation', transcriptId: range.transcriptId, status: 'ready' };
+const busy = { conversationId: 'fixture-conversation', transcriptId: range.transcriptId, status: 'busy' };
 const failure = { code: 'BROKEN', message: 'test failure' };
 const rejected = { status: 'rejected', error: { code: 'RUNTIME_BUSY', message: 'busy' }, retry: 'admission' };
 
@@ -18,7 +18,7 @@ async function fixture(t, options = {}) {
   let cancels = 0;
   let admissions = 0;
   const io = transport({
-    admission: async (signal) => {
+    admission: async (_conversationId, signal) => {
       admissions++;
       return options.admission ? options.admission(signal) : ready;
     },

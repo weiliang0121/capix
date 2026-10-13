@@ -27,10 +27,10 @@ const complete = (submission) =>
 
 test('admission hint failure does not interrupt committed progress or terminal publication', async () => {
   let fail = false;
-  const submission = new ConversationSubmission('hint-failed', {
+  const submission = new ConversationSubmission('hint-failed', 'conversation', {
     admission: () => {
       if (fail) throw new Error('hint unavailable');
-      return { transcriptId: 'transcript', status: 'ready' };
+      return { conversationId: 'conversation', transcriptId: 'transcript', status: 'ready' };
     },
   });
   submission.progress.publish({ kind: 'input', range: { transcriptId: 'transcript', start: 0, end: 1 } });
@@ -57,7 +57,7 @@ test('service projection retains input committed before capture failure, without
     },
   });
   const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
-  const submission = new ConversationSubmission('append-failed');
+  const submission = new ConversationSubmission('append-failed', 'conversation');
   submission.start(() => runtime.run(input, { settings, progress: submission.progress }));
   const snapshot = await complete(submission);
   assert.equal(environment.transcript.length, 1);
@@ -90,7 +90,7 @@ test('service input acceptance only classifies validation it actually owns', () 
 test('projection failure stops trustworthy progress but does not stop a running conversation', async () => {
   const environment = createEnvironment();
   const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
-  const submission = new ConversationSubmission('broken-projection');
+  const submission = new ConversationSubmission('broken-projection', 'conversation');
   // A second committed input cannot be interpreted as the same submission's input.
   submission.progress.publish({ kind: 'input', range: { transcriptId: environment.transcript.id, start: 0, end: 1, revision: 1 } });
   submission.start(() => runtime.run(input, { settings, progress: submission.progress }));
@@ -103,7 +103,7 @@ test('projection failure stops trustworthy progress but does not stop a running 
 });
 
 test('connection listeners execute outside producers and failed listeners cannot affect other delivery', async () => {
-  const submission = new ConversationSubmission('listeners');
+  const submission = new ConversationSubmission('listeners', 'conversation');
   const channel = submission.progress;
   const snapshots = [];
   let insideProducer = false;
@@ -126,7 +126,7 @@ test('connection listeners execute outside producers and failed listeners cannot
 
 test('bounded retention never evicts active work, expires completed progress, and prevents retained duplicate submissions', async () => {
   const store = createSubmissionStore({ maxEntries: 1, ttlMs: 10 });
-  const first = store.create('first');
+  const first = store.create('first', 'conversation');
   let release;
   first.start(
     () =>
@@ -134,12 +134,12 @@ test('bounded retention never evicts active work, expires completed progress, an
         release = resolve;
       }),
   );
-  assert.throws(() => store.create('first'), { code: 'SUBMISSION_EXISTS' });
-  assert.throws(() => store.create('second'), { code: 'SUBMISSION_CAPACITY' });
+  assert.throws(() => store.create('first', 'conversation'), { code: 'SUBMISSION_EXISTS' });
+  assert.throws(() => store.create('second', 'conversation'), { code: 'SUBMISSION_CAPACITY' });
   assert.equal(store.get('first'), first);
   release();
   await complete(first);
-  const second = store.create('second');
+  const second = store.create('second', 'conversation');
   assert.equal(store.get('first'), undefined);
   second.start(async () => {});
   await complete(second);
@@ -184,7 +184,7 @@ test('conversation binding selects its declared E instead of giving every R chil
 });
 
 test('async delivery listeners are isolated and readiness cancellation only detaches that waiter', async () => {
-  const submission = new ConversationSubmission('async-listener');
+  const submission = new ConversationSubmission('async-listener', 'conversation');
   submission.connect(async () => {
     throw new Error('async consumer rejected');
   });
@@ -230,7 +230,7 @@ test('a single submission channel disables its consumer across input, execution 
 });
 
 test('pre-runtime rejection is terminal, queryable, and cannot subsequently start work', async () => {
-  const submission = new ConversationSubmission('pre-rejected');
+  const submission = new ConversationSubmission('pre-rejected', 'conversation');
   submission.reject(new Error('invalid request settings'));
   assert.equal(submission.snapshot.result.status, 'rejected');
   assert.equal(submission.snapshot.input, undefined);
@@ -238,14 +238,14 @@ test('pre-runtime rejection is terminal, queryable, and cannot subsequently star
   assert.ok(submission.endedAt !== undefined);
   assert.throws(() => submission.start(async () => assert.fail('rejected work must never run')), /already started or ended/);
   assert.throws(() => submission.reject(new Error('again')), /Cannot reject/);
-  const active = new ConversationSubmission('already-started');
+  const active = new ConversationSubmission('already-started', 'conversation');
   active.start(async () => {});
   assert.throws(() => active.reject(new Error('too late')), /Cannot reject/);
   await complete(active);
 });
 
 test('cancellation is idempotent and waits for work to settle instead of releasing on request', async () => {
-  const submission = new ConversationSubmission('cooperative-cancel');
+  const submission = new ConversationSubmission('cooperative-cancel', 'conversation');
   let receivedSignal;
   let release;
   submission.start((signal) => {
@@ -288,7 +288,7 @@ test('only runtime-confirmed cancellation terminates as cancelled and keeps comm
       }),
     ),
   );
-  const submission = new ConversationSubmission('confirmed-cancel');
+  const submission = new ConversationSubmission('confirmed-cancel', 'conversation');
   submission.start((signal) => runtime.run(input, { settings, progress: submission.progress, activity: submission.activity, signal }));
   await entering;
   submission.requestCancellation();
@@ -304,7 +304,7 @@ test('only runtime-confirmed cancellation terminates as cancelled and keeps comm
 });
 
 test('an independent failure after a cancellation request remains a failure', async () => {
-  const submission = new ConversationSubmission('failed-with-cancel');
+  const submission = new ConversationSubmission('failed-with-cancel', 'conversation');
   let rejectWork;
   submission.start(
     () =>
@@ -321,12 +321,12 @@ test('an independent failure after a cancellation request remains a failure', as
 });
 
 test('late cancellation never changes an already completed or rejected submission', async () => {
-  const completed = new ConversationSubmission('completed-before-cancel');
+  const completed = new ConversationSubmission('completed-before-cancel', 'conversation');
   completed.start(async () => undefined);
   const snapshot = await complete(completed);
   assert.equal(completed.requestCancellation(), snapshot);
   assert.equal(snapshot.cancelRequested, undefined);
-  const rejected = new ConversationSubmission('rejected-before-cancel');
+  const rejected = new ConversationSubmission('rejected-before-cancel', 'conversation');
   rejected.reject(new Error('not accepted'));
   const refusal = rejected.snapshot;
   assert.equal(rejected.requestCancellation(), refusal);

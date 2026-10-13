@@ -7,7 +7,7 @@ import { errorMessage } from '../lib/errors.js';
 
 function acceptHistory(text: string): Message[] {
   const value: unknown = JSON.parse(text);
-  if (!isArray(value) || value.length > 500) throw new Error('追加历史需要是最多 500 条消息的数组。');
+  if (!isArray(value) || value.length > 500) throw new Error('导入消息需要是最多 500 条消息的数组。');
   return value.map((message) => {
     if (!isPlainObject(message) || (message.role !== 'user' && message.role !== 'assistant') || !isString(message.content) || !message.content.trim()) throw new Error('每条消息需要 user / assistant 角色与非空正文。');
     return { role: message.role, content: message.content };
@@ -16,8 +16,10 @@ function acceptHistory(text: string): Message[] {
 
 export async function submitDraft(store: AppStore, runtime: ClientRuntime): Promise<void> {
   const observed = runtime.getSnapshot();
-  if (!observed.config?.configured) return;
-  const { draft, history, budget, fileDraft } = store.getState();
+  if (!observed.config?.configured || observed.switching) return;
+  const current = store.getState();
+  if (current.data.activeConversation && current.data.activeConversation.id !== observed.conversation?.id) return;
+  const { draft, history, budget, fileDraft } = current;
   if (!draft.trim()) {
     store.setState({ notice: '请先填写消息。' });
     return;

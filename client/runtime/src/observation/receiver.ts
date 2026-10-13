@@ -22,6 +22,8 @@ export class ObservationReceiver {
   private session?: AbortController;
   private generation = 0;
   private replica?: ObservationReplica;
+  private conversationId?: string;
+  private transcriptId?: string;
 
   constructor(
     private readonly transport: ObservationTransport | undefined,
@@ -35,6 +37,20 @@ export class ObservationReceiver {
   private update(change: Partial<ObservationState>): void {
     this.state = Object.freeze({ ...this.state, ...change });
     this.changed(this.state);
+  }
+
+  setConversation(conversationId: string, transcriptId: string): void {
+    if (this.conversationId === conversationId && this.transcriptId === transcriptId) return;
+    const previous = this.session;
+    this.session = undefined;
+    this.conversationId = conversationId;
+    this.transcriptId = transcriptId;
+    this.generation++;
+    this.replica = undefined;
+    this.state = Object.freeze({ enabled: !!this.owner, loading: false, records: new Map(), updates: new Map(), overview: { transcriptId, messages: [], executions: [] }, memory: { items: [] } });
+    this.changed(this.state);
+    previous?.abort();
+    if (this.owner) this.connect(this.owner, true);
   }
 
   /** Starting a new owner supersedes the previous one; old stop handles cannot stop it. */
@@ -59,7 +75,7 @@ export class ObservationReceiver {
   }
 
   private connect(owner: symbol, resync: boolean): void {
-    if (!this.transport) return;
+    if (!this.transport || !this.conversationId) return;
     const previous = this.session;
     const session = new AbortController();
     this.session = session;
@@ -71,20 +87,25 @@ export class ObservationReceiver {
 
   private async consume(owner: symbol, session: AbortController, resync: boolean): Promise<void> {
     const current = () => this.owner === owner && this.session === session && !session.signal.aborted;
-    if (!current() || !this.transport) return;
+    if (!current() || !this.transport || !this.conversationId) return;
     let ready = false;
     try {
-      await this.transport.observe((frame) => {
-        if (!current()) return;
-        if (!ready && frame.type !== 'baseline') throw new ObservationSequenceError('观测连接缺少初始基线。');
-        if (ready && frame.type === 'baseline') throw new ObservationSequenceError('同一连接重复提供基线。');
-        const next = ObservationReplica.receive(ready ? this.replica : undefined, frame);
-        if (next === this.replica) return;
-        this.replica = next;
-        ready = true;
-        const records = frame.type === 'baseline' ? new Map(next.snapshots) : new Map([...this.state.records, ...next.snapshots]);
-        this.update({ loading: false, overview: next.overview, memory: next.memory, records, updates: new Map(next.snapshots), cursor: { scopeId: next.scopeId, sequence: next.sequence }, invocationEvents: next.invocationEvents, transcriptRecords: next.transcriptRecords });
-      }, session.signal);
+      await this.transport.observe(
+        this.conversationId,
+        (frame) => {
+          if (!current()) return;
+          if (frame.type === 'baseline' && frame.transcript.id !== this.transcriptId) throw new ObservationSequenceError('观测不属于当前对话的消息集合。');
+          if (!ready && frame.type !== 'baseline') throw new ObservationSequenceError('观测连接缺少初始基线。');
+          if (ready && frame.type === 'baseline') throw new ObservationSequenceError('同一连接重复提供基线。');
+          const next = ObservationReplica.receive(ready ? this.replica : undefined, frame);
+          if (next === this.replica) return;
+          this.replica = next;
+          ready = true;
+          const records = frame.type === 'baseline' ? new Map(next.snapshots) : new Map([...this.state.records, ...next.snapshots]);
+          this.update({ loading: false, overview: next.overview, memory: next.memory, records, updates: new Map(next.snapshots), cursor: { scopeId: next.scopeId, sequence: next.sequence }, invocationEvents: next.invocationEvents, transcriptRecords: next.transcriptRecords });
+        },
+        session.signal,
+      );
     } catch (error) {
       if (!current()) return;
       // A missing delivery can rebuild its baseline once; incomplete source facts cannot be repaired here.
@@ -102,11 +123,11 @@ export class ObservationReceiver {
   }
 
   async loadExecution(id: string, signal?: AbortSignal): Promise<ExecutionRecordSnapshot> {
-    if (!this.transport) throw new Error('未接入观测能力。');
+    if (!this.transport || !this.conversationId) throw new Error('未接入观测能力或尚未打开对话。');
     const cached = this.getExecution(id);
     if (cached && (cached.archive || (cached.execution.status !== 'running' && cached.runtimeCall.status !== 'running'))) return cached;
     const generation = this.generation;
-    const snapshot = await this.transport.execution(id, signal);
+    const snapshot = await this.transport.execution(this.conversationId, id, signal);
     if (generation !== this.generation) throw new Error('观测连接已更换，忽略旧详情响应。');
     const current = this.getExecution(id);
     if (current && current !== cached) return current;

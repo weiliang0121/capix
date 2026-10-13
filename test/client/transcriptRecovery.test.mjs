@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientRuntime, TranscriptConnectionError, TranscriptSequenceError, TranscriptReplica } from '@capix/client-runtime';
-import { deferred, transcriptSnapshot, transport } from './fixtures.mjs';
+import { conversationDescriptor, deferred, transcriptSnapshot, transport } from './fixtures.mjs';
 
 const message = (content, role = 'user') => ({ role, content });
 const baseline = (messages = [message('retained')], id = 'current', revision = messages.length) => ({ type: 'baseline', snapshot: transcriptSnapshot(messages, id, revision) });
@@ -14,6 +14,7 @@ function fixture(t, options = {}) {
   const streams = [];
   let posts = 0;
   const conversation = transport({
+    conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', 'current')], defaultConversationId: 'fixture-conversation' }),
     submit: async (request, receive) => {
       posts++;
       const delivery = conversation.delivery(request, receive);
@@ -68,6 +69,7 @@ test('reconnection preserves formal content and waits for a new baseline without
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
   const f = fixture(t, { autoBaseline: false });
   const init = f.runtime.initialize();
+  await settle();
   f.streams[0].send(baseline());
   await init;
   await f.runtime.submit({ messages: [message('question')] });
@@ -109,6 +111,7 @@ test('initial transient failures have a finite budget, reject readiness, and per
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(t, { autoBaseline: false });
   const init = f.runtime.initialize();
+  await settle();
   const failed = assert.rejects(init, TranscriptConnectionError);
   f.streams[0].fail(new TranscriptConnectionError('offline'));
   await settle();
@@ -123,6 +126,7 @@ test('initial transient failures have a finite budget, reject readiness, and per
   await tick(t, 60000);
   assert.equal(f.streams.length, 4);
   const next = f.runtime.initialize();
+  await settle();
   f.streams.at(-1).send(baseline());
   await next;
   assert.equal(f.sync().status, 'live');
@@ -178,6 +182,7 @@ test('identity and immutable prefix conflicts stop recovery and preserve the pri
   for (const frame of [baseline([message('retained')], 'another'), baseline([message('changed')], 'current', 1), baseline([message('changed')], 'current', 2)]) {
     const f = fixture(t, { autoBaseline: false });
     const init = f.runtime.initialize();
+    await settle();
     f.streams[0].send(baseline());
     await init;
     const before = f.runtime.getSnapshot().messages;
@@ -218,6 +223,7 @@ test('connection abort listeners see recovery ownership and cannot receive stale
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(t, { autoBaseline: false });
   const init = f.runtime.initialize();
+  await settle();
   f.streams[0].send(baseline());
   await init;
   let ready = false;
@@ -236,7 +242,7 @@ test('connection abort listeners see recovery ownership and cannot receive stale
   assert.equal(ready, true);
 });
 
-test('a new default subscription can adopt a retrying UID subscription and cancel its old timer', async (t) => {
+test('initialization shares a retrying explicit UID subscription without resetting its retry budget', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(t, { autoBaseline: false });
   const named = f.runtime.loadTranscript('current');
@@ -246,6 +252,9 @@ test('a new default subscription can adopt a retrying UID subscription and cance
   await settle();
   const recovered = f.runtime.loadTranscript('current');
   const initialized = f.runtime.initialize();
+  await settle();
+  assert.equal(f.streams.length, 1);
+  await tick(t, 500);
   assert.equal(f.streams.length, 2);
   f.streams[1].send(baseline());
   await initialized;

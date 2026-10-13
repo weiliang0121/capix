@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { SqliteObserverStore, initializeObserver, createObserverServer } from '@capix/observer-service';
+import { SqliteObserverStore, ObserverConversations, createObserverServer } from '@capix/observer-service';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -22,7 +22,7 @@ function fixture(t) {
     async start() {
       let calls = 0;
       const store = SqliteObserverStore.open(path);
-      const observer = initializeObserver(
+      const conversations = new ObserverConversations(
         {
           async invoke(_request, purpose) {
             ++calls;
@@ -32,7 +32,8 @@ function fixture(t) {
         [],
         { persistence: store },
       );
-      const server = createObserverServer({ observer, settings, configured: true });
+      const observer = conversations.open(conversations.list().defaultConversationId);
+      const server = createObserverServer({ conversations, settings, configured: true });
       server.listen(0, '127.0.0.1');
       await once(server, 'listening');
       let closed = false;
@@ -47,7 +48,7 @@ function fixture(t) {
           closed = true;
           server.closeAllConnections();
           await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-          observer.close();
+          conversations.close();
         },
       };
       running.push(item);
@@ -56,14 +57,22 @@ function fixture(t) {
   };
 }
 async function run(base, id, content = '你好') {
-  return fetch(base + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: id, input: { messages: [{ role: 'user', content }] } }) });
+  const conversationId = (await (await fetch(base + '/api/conversations')).json()).defaultConversationId;
+  return fetch(base + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId, submissionId: id, input: { messages: [{ role: 'user', content }] } }) });
 }
 const frames = async (response) =>
   (await response.text())
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line));
-const get = async (base, path) => (await fetch(base + path)).json();
+const get = async (base, path) => {
+  const catalog = await (await fetch(base + '/api/conversations')).json();
+  const current = catalog.conversations.find((item) => item.id === catalog.defaultConversationId);
+  const url = new URL(path, base);
+  if (url.pathname === '/api/transcript') url.searchParams.set('id', current.transcriptId);
+  else url.searchParams.set('conversationId', current.id);
+  return (await fetch(url)).json();
+};
 
 test('HTTP restart restores content and record details but cannot claim the old submission is resumable', async (t) => {
   const disk = fixture(t);

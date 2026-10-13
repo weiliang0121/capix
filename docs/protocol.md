@@ -8,21 +8,25 @@
 
 ## HTTP
 
-- GET `/api/conversation/admission` → ConversationAdmission（当前集合身份及 ready/busy/unavailable；不预占、不探测模型）。
+- GET `/api/conversations` → ConversationListResponse（目录与稳定默认身份）。
+- POST `/api/conversations` 接受空 JSON 对象，返回新建 ConversationDescriptor。
+- GET `/api/conversations/:id` → 指定对话元信息；未知身份明确失败。
+
+- GET `/api/conversation/admission?conversationId=对话ID` → ConversationAdmission（当前对话与集合身份及 ready/busy/unavailable；不预占、不探测模型）。
 - GET `/api/config` → ConfigurationResponse（配置与 configured，绝不返回 key）。
-- GET `/api/transcript?id=集合ID` → TranscriptSnapshot（id/revision/start/end/starts/messages）。不指定 ID 表示当前对话集合；未知 ID 返回 404，服务只暴露装配进来的集合。数组位置仍是全量 Transcript 的绝对 index。
+- GET `/api/transcript?id=集合ID` → TranscriptSnapshot（id/revision/start/end/starts/messages）。ID 必须明确；未知 ID 返回 404，服务只暴露已登记对话的集合。数组位置仍是全量 Transcript 的绝对 index。
 - GET `/api/transcript/observe?id=集合ID` → 独立 TranscriptUpdate（baseline/delta/error）。首帧是同一同步边界的消息基线，后续仅传实体增量，不带调用记录；该订阅独立于观测。
-- GET `/api/executions` → ObserverOverview：仅含 transcriptId 与消息索引/计数，不含消息正文；搜索由客户端消息副本提供，执行列表包含 InvocationSummary（计时和身份，不含 IO/processes）、固定 transcriptRange、availableMemoryIds 和 memoryChanges 简介。
-- GET `/api/execution?id=记录ID` → ExecutionRecordSnapshot。仅在打开详情时请求；返回当前完整记录。
-- GET `/api/memory` → MemoryObservation。记忆正文、来源与已生成的变更记录。
+- GET `/api/executions?conversationId=对话ID` → ObserverOverview：仅含 transcriptId 与消息索引/计数，不含消息正文；搜索由客户端消息副本提供，执行列表包含 InvocationSummary（计时和身份，不含 IO/processes）、固定 transcriptRange、availableMemoryIds 和 memoryChanges 简介。
+- GET `/api/execution?conversationId=对话ID&id=记录ID` → ExecutionRecordSnapshot。仅在打开详情时请求；返回当前完整记录。
+- GET `/api/memory?conversationId=对话ID` → MemoryObservation。记忆正文、来源与已生成的变更记录。
 - GET `/api/source?file=路径` → SourceResponse。路径为仓库相对源文件路径，服务端白名单验证。
-- POST `/api/run` 接受 ConversationSubmissionRequest `{ submissionId, input: ConversationRequest }`。首次发送建立服务提交对象并启动运行，200 返回 NDJSON，每行是完整的 ConversationSubmissionSnapshot；输入已落实、任务已结束或投影失效时即可开始交付。客户端生成 submissionId，使首个响应丢失后仍可查询；该身份不提供幂等重提承诺。
+- POST `/api/run` 接受 ConversationSubmissionRequest `{ conversationId, submissionId, input: ConversationRequest }`。首次发送建立服务提交对象并启动运行，200 返回 NDJSON，每行是完整的 ConversationSubmissionSnapshot；输入已落实、任务已结束或投影失效时即可开始交付。客户端生成 submissionId，使首个响应丢失后仍可查询；该身份不提供幂等重提承诺。
 - GET `/api/submissions/:id` 返回当前累计提交投影；GET `/api/submissions/:id/follow` 同步衔接当前投影与后续变化。关闭任意反馈连接仅解除消费，不取消已启动的服务运行。终态或进展解释不完整时本次连接结束；后者仍可显式查询最终任务结果。
 - POST `/api/submissions/:id/cancel` 以同源 JSON 请求取消已登记的运行，返回累计提交投影。重复请求在保留期内幂等；未知身份仍返回 SUBMISSION_UNAVAILABLE，不登记取消标记，也不能据此认为原请求不会执行。取消控制不关闭原反馈或消息同步。
-- 提交投影包含 submissionId、revision、可选 input 范围、可选 answer 定位、executions Context 身份数组、可选 cancelRequested、result 和 integrity。输入与回答来自实体正式写入点；executions 来自选定声明的调用现场；result 在 R.run 实际返回或抛错后形成。投影不包含原文、Record 或运行对象。cancelRequested 只表示已请求停止；result 为 completed/failed/rejected/cancelled，只有本次运行实际以可识别的取消原因退出才报告 cancelled。已有输入、回答和记忆不回滚，取消与完成竞争可以得到 cancelRequested + completed；单纯信号已取消不能遮蔽独立故障。
+- 提交投影包含 conversationId、submissionId、revision、可选 input 范围、可选 answer 定位、executions Context 身份数组、可选 cancelRequested、result 和 integrity。输入与回答来自实体正式写入点；executions 来自选定声明的调用现场；result 在 R.run 实际返回或抛错后形成。投影不包含原文、Record 或运行对象。cancelRequested 只表示已请求停止；result 为 completed/failed/rejected/cancelled，只有本次运行实际以可识别的取消原因退出才报告 cancelled。已有输入、回答和记忆不回滚，取消与完成竞争可以得到 cancelRequested + completed；单纯信号已取消不能遮蔽独立故障。
 - 可选 activities 是本次提交的有界 REOA 过程投影，包含 calls 和独立 integrity。Observer 默认启用；不安装 Recorder 也可使用。每项仅含 contextId、直接 parentContextId、level、label、status、phase、round、可选开始/结束时间以及父层 relation。过程、内容落实、提交结果分别判断；活动来源失效不关闭提交反馈，也不影响消息同步或运行结果。
 - 明确的输入拒绝返回 400、忙碌拒绝返回 409，响应体可以是保留下来的提交投影，客户端应接纳其中的 rejected 事实。已经接纳输入后的失败通过累计投影表达，回答不会因后处理失败撤销。仅有网络状态码不能替代正式运行事实。
-- GET `/api/observe` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接，每个连接都有独立 scopeId，首帧 sequence 为 0。序号缺口最多自动重建一次基线；SOURCE_INCOMPLETE 是记录来源已缺失事实的终止控制，不自动重试，也不能通过重连同一来源补救。不提供历史重放或跨查询一致性承诺。
+- GET `/api/observe?conversationId=对话ID` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接，每个连接都有独立 scopeId，首帧 sequence 为 0。序号缺口最多自动重建一次基线；SOURCE_INCOMPLETE 是记录来源已缺失事实的终止控制，不自动重试，也不能通过重连同一来源补救。不提供历史重放或跨查询一致性承诺。
 - 除上述正式提交拒绝外，HTTP 非 2xx 返回 ErrorResponse。无保留项时提交查询返回 404 / SUBMISSION_UNAVAILABLE，不能据此断言未执行；相同身份仍保留时 POST 返回 409 / SUBMISSION_EXISTS，不启动第二次工作。记录来源失效后，观测流及 executions/execution/memory 查询明确返回 SOURCE_INCOMPLETE；实体查询与订阅不依赖记录完整性。不改变现有运行失败的事实记录。
 
 ## 可选文件任务
@@ -39,7 +43,7 @@
 
 ## 身份、顺序与时间
 
-submissionId 是服务请求的关联身份，Context.id 是一次内核调用身份，Record.id 是可选观测载体身份，三者互不替代。一次提交可关联零个或多个 E；即使不启用 Recorder 也能取得消息落实和调用进展。投影 revision 仅表达该提交解释状态的变化，允许连接合并中间状态后交付更高修订；它不是调用顺序、消息 revision 或观测游标。累计事实不可回退，同修订必须等值。
+conversationId 是持续交流的身份，submissionId 是已固定目标的服务请求关联身份，Context.id 是一次内核调用身份，Record.id 是可选观测载体身份，这些身份互不替代。一次提交可关联零个或多个 E；即使不启用 Recorder 也能取得消息落实和调用进展。投影 revision 仅表达该提交解释状态的变化，允许连接合并中间状态后交付更高修订；它不是调用顺序、消息 revision 或观测游标。累计事实不可回退，同修订必须等值。
 
 executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
 
@@ -49,7 +53,7 @@ executionId/operationId/parentOperationId 指向记录；消息 index 永不随�
 
 ConversationSubmissionSnapshot.result 只说明这一笔已经完成、失败、取消或未被接纳；其发布在 runtime.run 实际返回/抛错和占用释放之后。admission 是附带的当时服务接纳提示，与不可变结果分开。旧提交的 read/follow 不能充当当前服务可用性查询；需要时 GET /api/conversation/admission 读取实时条件。辅助提示读取失败不能阻断运行进展或结果发布。
 
-ConversationAdmission 只公开 transcriptId、status，以及 unavailable 时的 error。服务从实际 runtime.running、配置、已知模型构造/能力不可用和保留容量取得依据；查询不主动兑现惰性 Provider。ready 表示允许尝试接纳，不能保证之后模型成功，也不保证查询到 POST 之间没有竞争。最终受理检查仍在服务端。
+ConversationAdmission 只公开 conversationId、transcriptId、status，以及 unavailable 时的 error。服务从实际 runtime.running、配置、已知模型构造/能力不可用和保留容量取得依据；查询不主动兑现惰性 Provider。ready 表示允许尝试接纳，不能保证之后模型成功，也不保证查询到 POST 之间没有竞争。最终受理检查仍在服务端。
 
 rejected.retry:admission 是明确未接纳且允许再次尝试受理的声明，当前用于忙碌、保留容量不足或已知环境不可用造成的未接纳；不能带已经落实的 input、answer 或 execution。它不表示重新执行失败业务。客户端保留同一本地队列项，再次尝试时创建新的 submissionId；旧身份仅用于其结果查询。同身份重复 POST 仍拒绝，不增加幂等执行承诺。
 

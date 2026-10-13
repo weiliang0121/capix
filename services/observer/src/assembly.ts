@@ -5,3 +5,5 @@ export * from './assembly/provider.js';
 export * from './assembly/settings.js';
 export * from './files/index.js';
 export * from './persistence/index.js';
+
+export * from './assembly/conversations.js';

@@ -58,7 +58,7 @@ interface TranscriptReady {
 
 interface TranscriptSession {
   readonly key: string;
-  id?: string;
+  readonly id: string;
   ready?: TranscriptReady;
   controller?: AbortController;
   timer?: ReturnType<typeof setTimeout>;
@@ -80,12 +80,7 @@ export class TranscriptReceiver {
     private readonly changed: (states: ReadonlyMap<string, TranscriptState>) => void,
   ) {}
 
-  get defaultId(): string | undefined {
-    return this.sessions.get('')?.id;
-  }
-
   private publish(session: TranscriptSession): void {
-    if (!session.id) return;
     this.states = new Map(this.states).set(session.id, Object.freeze({ snapshot: this.replicas.get(session.id)?.snapshot, sync: Object.freeze(session.sync) }));
     this.changed(this.states);
   }
@@ -104,11 +99,12 @@ export class TranscriptReceiver {
     return session.ready;
   }
 
-  watch(id?: string): Promise<TranscriptSnapshot> {
-    const key = id ?? '';
-    const existing = this.sessions.get(key) ?? [...this.sessions.values()].find((session) => id && session.id === id);
+  watch(id: string): Promise<TranscriptSnapshot> {
+    if (!id) return Promise.reject(new TypeError('消息订阅必须明确集合身份。'));
+    const key = id;
+    const existing = this.sessions.get(key);
     if (existing) {
-      if (existing.sync.status === 'live' && existing.id) return Promise.resolve(this.replicas.get(existing.id)!.snapshot);
+      if (existing.sync.status === 'live') return Promise.resolve(this.replicas.get(existing.id)!.snapshot);
       return this.pending(existing).promise;
     }
     const session: TranscriptSession = { key, id, retries: 0, sync: { status: 'connecting', attempt: 0 } };
@@ -142,23 +138,11 @@ export class TranscriptReceiver {
             const previous = this.replicas.get(next.snapshot.id);
             const accepted = frame.type === 'baseline' ? TranscriptReplica.receive(previous, frame, session.id) : this.acceptDelta(previous, next, frame);
             local = next;
-            session.id = next.snapshot.id;
             this.replicas.set(session.id, accepted);
             if (liveSince === undefined) liveSince = Date.now();
             session.sync = { status: 'live' };
             this.publish(session);
             if (!current()) return;
-            // Default and explicit UID requests can discover that they share one entity.
-            for (const other of [...this.sessions.values()]) {
-              if (other === session || other.id !== session.id) continue;
-              this.sessions.delete(other.key);
-              clearTimeout(other.timer);
-              const old = other.controller;
-              other.controller = undefined;
-              other.ready?.resolve(accepted.snapshot);
-              old?.abort();
-              if (!current()) return;
-            }
             const ready = session.ready;
             session.ready = undefined;
             ready?.resolve(accepted.snapshot);
@@ -208,7 +192,7 @@ export class TranscriptReceiver {
     return previous;
   }
 
-  async refresh(id?: string, signal?: AbortSignal): Promise<TranscriptSnapshot> {
+  async refresh(id: string, signal?: AbortSignal): Promise<TranscriptSnapshot> {
     const snapshot = await this.transport.transcript(id, signal);
     const next = TranscriptReplica.receive(this.replicas.get(snapshot.id), { type: 'baseline', snapshot }, id);
     this.replicas.set(snapshot.id, next);

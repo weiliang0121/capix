@@ -128,7 +128,7 @@ test('second writer is excluded, unknown schema and broken metadata cannot becom
   store.close();
   installTrigger(disk.path, 'PRAGMA user_version = 99');
   assert.throws(() => disk.open(), /Unsupported/);
-  installTrigger(disk.path, "PRAGMA user_version = 2; INSERT INTO transcripts VALUES ('orphan', 0, '[0]')");
+  installTrigger(disk.path, "PRAGMA user_version = 3; INSERT INTO transcripts VALUES ('orphan', 0, '[0]')");
   const broken = disk.open();
   assert.throws(() => broken.load(), /保存或加载失败/);
 });

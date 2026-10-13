@@ -13,7 +13,7 @@ test('transcript connection failures retain network and stream read causes', asy
     throw network;
   });
   await assert.rejects(
-    disconnected.observeTranscript(undefined, () => {}, signal()),
+    disconnected.observeTranscript('transcript', () => {}, signal()),
     (error) => error instanceof TranscriptConnectionError && error.cause === network && error.message === network.message,
   );
 
@@ -169,7 +169,7 @@ test('transcript recovery classification does not change query or submission fai
   });
   await assert.rejects(client.transcript('transcript'), (error) => error === failure);
   await assert.rejects(
-    client.submit({ submissionId: 'submission', input: { messages: [{ role: 'user', content: 'question' }] } }, () => {}, signal()),
+    client.submit({ conversationId: 'fixture-conversation', submissionId: 'submission', input: { messages: [{ role: 'user', content: 'question' }] } }, () => {}, signal()),
     (error) => error === failure,
   );
 });

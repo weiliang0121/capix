@@ -159,7 +159,7 @@ test('replaced feedback owner ignores late frames and errors from the former con
 
 test('cumulative receiver accepts old versions and revision gaps but rejects conflicts and fact regression', () => {
   const make = () => {
-    const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'test' }] });
+    const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'test' }] });
     const first = submissionSnapshot(submission.id, { revision: 4, input: range, executions: [{ contextId: 'e1' }] });
     submission.receive(first);
     return { submission, first };
@@ -178,7 +178,7 @@ test('cumulative receiver accepts old versions and revision gaps but rejects con
 });
 
 test('remote snapshot copies cannot be mutated by transports after acceptance', () => {
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: 'test' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'test' }] });
   const value = submissionSnapshot(submission.id, { revision: 1, input: { ...range }, executions: [{ contextId: 'e' }] });
   submission.receive(value);
   value.input.end = 5;

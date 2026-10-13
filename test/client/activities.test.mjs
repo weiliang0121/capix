@@ -13,7 +13,7 @@ const activities = (calls, integrity = { status: 'complete' }) => ({ calls, inte
 const receive = (submission, calls, revision, patch = {}) => submission.receive(submissionSnapshot(submission.id, { revision, activities: activities(calls), ...patch }));
 
 test('cumulative activity reception retains short calls and separates return from parent acceptance', () => {
-  const submission = new ClientSubmission(input);
+  const submission = new ClientSubmission('fixture-conversation', input);
   const r = root();
   const e = child('e', 'r', 'execution');
   receive(submission, [r, e], 2);
@@ -28,7 +28,7 @@ test('cumulative activity reception retains short calls and separates return fro
 });
 
 test('activity copies are immutable and exclude undeclared data from a custom transport', () => {
-  const submission = new ClientSubmission(input);
+  const submission = new ClientSubmission('fixture-conversation', input);
   const calls = [root(), child('e', 'r', 'execution')];
   calls[0].input = { credential: 'fixture-only' };
   receive(submission, calls, 1);
@@ -46,7 +46,7 @@ test('activity copies are immutable and exclude undeclared data from a custom tr
 });
 
 test('duplicate revisions compare accepted activity fields without permitting changed facts', () => {
-  const submission = new ClientSubmission(input);
+  const submission = new ClientSubmission('fixture-conversation', input);
   const calls = [{ ...root(), input: { ignored: true } }, child('e', 'r', 'execution', { relation: { phase: 'attached', source: { ignored: true } } })];
   const snapshot = submissionSnapshot(submission.id, { revision: 4, activities: activities(calls) });
   submission.receive(snapshot);
@@ -70,7 +70,7 @@ test('duplicate revisions compare accepted activity fields without permitting ch
 test('malformed identities, topology and lifecycle boundaries do not partially replace a snapshot', () => {
   const malformed = [[root(), root()], [root(), child('a', 'r', 'attempt')], [root(), child('o', 'absent', 'operation')], [{ ...root(), parentContextId: 'r' }], [{ ...root(), status: 'succeeded' }], [{ ...root(), finishedAt: end }], [{ ...root(), startedAt: 'invalid' }], [{ ...root(), round: -1 }], [root(), child('e', 'r', 'execution', { relation: { phase: 'accepted', returned: 'failed' } })]];
   for (const calls of malformed) {
-    const submission = new ClientSubmission(input);
+    const submission = new ClientSubmission('fixture-conversation', input);
     receive(submission, [root()], 1);
     const before = submission.snapshot;
     assert.throws(() => receive(submission, calls, 2), SubmissionContractError);
@@ -83,11 +83,11 @@ test('activity facts cannot disappear, reorder, change parent or revive a termin
   const e = done(child('e', 'r', 'execution', { relation: { phase: 'accepted', returned: 'succeeded' } }));
   const regressed = [[], [r], [e, r], [r, { ...e, label: 'new label' }], [r, { ...e, status: 'running', finishedAt: undefined }], [r, { ...e, status: 'cancelled' }], [r, { ...e, relation: { phase: 'receiving', returned: 'succeeded' } }]];
   for (const calls of regressed) {
-    const submission = new ClientSubmission(input);
+    const submission = new ClientSubmission('fixture-conversation', input);
     receive(submission, [r, e], 10);
     assert.throws(() => receive(submission, calls, 11), SubmissionContractError);
   }
-  const submission = new ClientSubmission(input);
+  const submission = new ClientSubmission('fixture-conversation', input);
   receive(submission, [r, e], 10);
   assert.throws(() => submission.receive(submissionSnapshot(submission.id, { revision: 11 })), SubmissionContractError);
   receive(submission, [r], 1);
@@ -114,13 +114,13 @@ test('running phases allow skipped and repeated actions while preventing same-ro
     ['receive', 1, 'setup', 2],
   ];
   for (const [phase, round, nextPhase, nextRound] of valid) {
-    const submission = new ClientSubmission(input);
+    const submission = new ClientSubmission('fixture-conversation', input);
     receive(submission, [{ ...root(), phase, round }], 1);
     receive(submission, [{ ...root(), phase: nextPhase, round: nextRound }], 2);
     assert.equal(submission.snapshot.remote.activities.calls[0].phase, nextPhase);
   }
   for (const [phase, round, nextPhase, nextRound] of invalid) {
-    const submission = new ClientSubmission(input);
+    const submission = new ClientSubmission('fixture-conversation', input);
     receive(submission, [{ ...root(), phase, round }], 1);
     const before = submission.snapshot;
     assert.throws(() => receive(submission, [{ ...root(), phase: nextPhase, round: nextRound }], 2), SubmissionContractError);
@@ -129,7 +129,7 @@ test('running phases allow skipped and repeated actions while preventing same-ro
 });
 
 test('an independently incomplete activity source retains facts while business delivery completes', () => {
-  const submission = new ClientSubmission(input);
+  const submission = new ClientSubmission('fixture-conversation', input);
   const r = root();
   const incomplete = activities([r], { status: 'incomplete', error: { code: 'ACTIVITY_INCOMPLETE', message: '进展不可用' } });
   receive(submission, [r], 1);
@@ -142,7 +142,7 @@ test('an independently incomplete activity source retains facts while business d
 });
 
 test('cancellation intent never makes running activities terminal', () => {
-  const submission = new ClientSubmission(input);
+  const submission = new ClientSubmission('fixture-conversation', input);
   receive(submission, [root()], 1);
   receive(submission, [root()], 2, { cancelRequested: true });
   assert.equal(submission.snapshot.remote.activities.calls[0].status, 'running');
@@ -151,7 +151,7 @@ test('cancellation intent never makes running activities terminal', () => {
 });
 
 test('a retry keeps the failed child and appends a new invocation identity', () => {
-  const submission = new ClientSubmission(input);
+  const submission = new ClientSubmission('fixture-conversation', input);
   const base = [root(), child('e', 'r', 'execution'), child('o', 'e', 'operation')];
   const failed = child('a1', 'o', 'attempt', { status: 'failed', finishedAt: end, relation: { phase: 'returned', returned: 'failed' } });
   receive(submission, [...base, failed], 5);

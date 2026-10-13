@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientRuntime, TranscriptReplica, TranscriptSequenceError, TranscriptConnectionError } from '@capix/client-runtime';
-import { deferred, transcriptSnapshot, submissionDelivery } from './fixtures.mjs';
+import { conversationDescriptor, deferred, transcriptSnapshot, submissionDelivery } from './fixtures.mjs';
 
 const message = (content, role = 'user') => ({ role, content });
 const appended = (id, revision, start, messages) => ({ type: 'delta', event: { type: 'transcript', transcriptId: id, revision, occurredAt: '2026-10-09T00:00:00Z', origin: { contextId: 'context' }, change: { kind: 'messages-appended', start, messages } } });
 const wait = (signal) => new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+const conversations = async () => ({ conversations: [conversationDescriptor('fixture-conversation', 't')], defaultConversationId: 'fixture-conversation' });
 const config = async () => ({ configured: true, model: 'fixture', contextBudget: 1000, maxOutputTokens: 100, timeoutMs: 1000 });
 
 test('entity receiving preserves identity, exact revision, fixed prefixes and segment changes', () => {
@@ -42,6 +43,7 @@ test('conversation and entity streams may arrive in either order without duplica
   const runtime = new ClientRuntime({
     transcripts,
     conversation: {
+      conversations,
       config,
       submit: async (request, accept) => {
         emit(appended('t', 1, 0, [message('question')]));
@@ -80,7 +82,7 @@ test('repeated revision gaps exhaust bounded recovery and remain visible', async
       accept(appended('t', connections === 1 ? 3 : 7, 0, [message('gap')]));
     },
   };
-  const runtime = new ClientRuntime({ transcripts, conversation: { config, submit: async () => {} } });
+  const runtime = new ClientRuntime({ transcripts, conversation: { conversations, config, submit: async () => {} } });
   await runtime.initialize();
   await settle();
   await settle();
@@ -108,7 +110,7 @@ test('entities load on demand, keep independent copies, and resume from a new ba
       await wait(signal);
     },
   };
-  const runtime = new ClientRuntime({ transcripts, conversation: { config, submit: async () => {} } });
+  const runtime = new ClientRuntime({ transcripts, conversation: { conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', 'current')], defaultConversationId: 'fixture-conversation' }), config, submit: async () => {} } });
   await runtime.initialize();
   assert.deepEqual(connections, ['current']);
   assert.equal(runtime.getSnapshot().transcripts.has('old'), false);
@@ -130,7 +132,7 @@ test('slow configuration initialization cannot overwrite newer entity deltas wit
   const configuration = deferred();
   let emit;
   const runtime = new ClientRuntime({
-    conversation: { config: () => configuration.promise, submit: async () => {} },
+    conversation: { conversations, config: () => configuration.promise, submit: async () => {} },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
@@ -150,14 +152,14 @@ test('slow configuration initialization cannot overwrite newer entity deltas wit
   runtime.stopTranscript();
 });
 
-test('default and UID subscriptions converge after identity is known without aborting waiting callers', async () => {
+test('initialization and explicit UID subscription share the same entity connection', async () => {
   const callbacks = new Map();
   const signals = new Map();
   const runtime = new ClientRuntime({
-    conversation: { config, submit: async () => {} },
+    conversation: { conversations, config, submit: async () => {} },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
-      observeTranscript: async (id = 'default', accept, signal) => {
+      observeTranscript: async (id, accept, signal) => {
         callbacks.set(id, accept);
         signals.set(id, signal);
         await wait(signal);
@@ -166,14 +168,13 @@ test('default and UID subscriptions converge after identity is known without abo
   });
   const initial = runtime.initialize();
   const requested = runtime.loadTranscript('t');
-  callbacks.get('default')({ type: 'baseline', snapshot: transcriptSnapshot([], 't') });
+  await settle();
+  callbacks.get('t')({ type: 'baseline', snapshot: transcriptSnapshot([], 't') });
   assert.equal((await requested).id, 't');
   await initial;
-  assert.equal(signals.get('t').aborted, true);
-  assert.equal(signals.get('default').aborted, false);
-  callbacks.get('t')({ type: 'baseline', snapshot: transcriptSnapshot([message('stale')], 't') });
-  assert.equal(runtime.getSnapshot().messages.length, 0);
-  callbacks.get('default')(appended('t', 1, 0, [message('current')]));
+  assert.equal(signals.size, 1);
+  assert.equal(signals.get('t').aborted, false);
+  callbacks.get('t')(appended('t', 1, 0, [message('current')]));
   await Promise.resolve();
   assert.equal(runtime.getSnapshot().messages[0].content, 'current');
   runtime.stopTranscript();
@@ -183,7 +184,7 @@ test('a network disconnect obtains a new baseline after backoff and never retrie
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let connections = 0;
   const runtime = new ClientRuntime({
-    conversation: { config, submit: async () => assert.fail('not a business retry') },
+    conversation: { conversations, config, submit: async () => assert.fail('not a business retry') },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
@@ -207,7 +208,7 @@ test('a network disconnect obtains a new baseline after backoff and never retrie
 test('a throwing UI subscriber is detached without terminating entity sync or starving other consumers', async () => {
   let emit;
   const runtime = new ClientRuntime({
-    conversation: { config, submit: async () => {} },
+    conversation: { conversations, config, submit: async () => {} },
     transcripts: {
       transcript: async () => transcriptSnapshot(),
       observeTranscript: async (_id, accept, signal) => {
@@ -242,6 +243,7 @@ test('answer locators can precede their separately synchronized entity without i
   let emit;
   const runtime = new ClientRuntime({
     conversation: {
+      conversations,
       config,
       submit: async (request, accept) => {
         const delivery = submissionDelivery(request, accept);

@@ -225,14 +225,14 @@ test('v1 migration preserves conversation content, memory identities and recordi
   const before = disk.open();
   const expected = before.load();
   before.close();
-  disk.edit((database) => database.exec('DROP TABLE interactions; PRAGMA user_version = 1;'));
+  disk.edit((database) => database.exec(`CREATE TABLE metadata (singleton INTEGER PRIMARY KEY, transcript_id TEXT, memories_id TEXT); INSERT INTO metadata SELECT 1, transcript_id, memories_id FROM conversations; DROP TABLE conversation_settings; ALTER TABLE record_sources DROP COLUMN conversation_id; DROP TABLE conversations; DROP TABLE interactions; PRAGMA user_version = 1;`));
   const migrated = disk.open();
   assert.deepEqual(migrated.load(), expected);
   assert.ok(expected.recording.book.entries.length > 0);
   const interaction = create(migrated);
   assert.equal(migrated.interactions.read(interaction.id).delivery, 'prepared');
   migrated.close();
-  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 2));
+  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 3));
 });
 
 test('migration failure keeps v1 and its committed content intact', (t) => {

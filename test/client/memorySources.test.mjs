@@ -31,7 +31,7 @@ test('memory incremental delivery and replica preserve accepted sources independ
   const io = new ObservationHttpTransport('', async () => new Response(frames.map((value) => JSON.stringify(value)).join('\n')));
   const received = [];
   await assert.rejects(
-    io.observe((value) => received.push(value), new AbortController().signal),
+    io.observe('fixture-conversation', (value) => received.push(value), new AbortController().signal),
     (error) => error.code === 'INCOMPLETE_STREAM',
   );
   assert.deepEqual(received, frames);

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { ConversationAdmission, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse } from '@capix/protocol';
 import { ExecutionRecord, ExecutionRecordHelper, observeMemory } from '@capix/server-runtime/recording';
 import { isObject, isInvocationCancelled, RuntimeError } from '@capix/server-runtime';
-import type { initializeObserver } from '../assembly/environment.js';
+import type { ObserverConversations } from '../assembly/conversations.js';
 import { transcriptSnapshot } from '../conversation/transcript/feed.js';
 import { ObservationFeed } from '../observation/feed.js';
 import { SourceIncomplete } from '../observation/record/source.js';
@@ -19,7 +19,7 @@ import { ConversationSubmission, createSubmissionStore, type SubmissionRetention
 import { followSubmission } from './submission.js';
 
 export interface ObserverServerOptions {
-  observer: ReturnType<typeof initializeObserver>;
+  conversations: ObserverConversations;
   settings: ModelSettings;
   configured: boolean;
   submissionRetention?: SubmissionRetention;
@@ -29,11 +29,18 @@ export interface ObserverServerOptions {
 
 /** Assemble transport around an initialized world. Importing this module never starts a listener. */
 export function createObserverServer(options: ObserverServerOptions) {
-  const { observer, configured } = options;
+  const { conversations, configured } = options;
   const settings = validateSettings(options.settings);
   const project = options.projectDirectory ?? fileURLToPath(new URL('../../../../', import.meta.url));
   const assets = options.assetsDirectory ?? resolve(project, 'apps/observer/dist');
-  const feed = new ObservationFeed(observer);
+  const feeds = new Map<string, ObservationFeed>();
+  function feedFor(id: string): ObservationFeed {
+    const current = feeds.get(id);
+    if (current) return current;
+    const feed = new ObservationFeed(conversations.open(id));
+    feeds.set(id, feed);
+    return feed;
+  }
   const submissions = createSubmissionStore({ ...options.submissionRetention, admission });
   const transcriptConnections = new Set<() => void>();
   const server = createServer((req, res) => {
@@ -43,18 +50,19 @@ export function createObserverServer(options: ObserverServerOptions) {
         if (!res.destroyed) res.destroy();
         return;
       }
-      if (!res.destroyed) json(res, error instanceof RuntimeError ? (error.code === 'RUNTIME_BUSY' || error.code === 'SUBMISSION_EXISTS' ? 409 : error.code === 'SUBMISSION_CAPACITY' ? 503 : 400) : 500, body);
+      if (!res.destroyed) json(res, error instanceof RuntimeError ? (error.code === 'RUNTIME_BUSY' || error.code === 'SUBMISSION_EXISTS' ? 409 : error.code === 'SUBMISSION_CAPACITY' ? 503 : error.code === 'CONVERSATION_NOT_FOUND' || error.code === 'TRANSCRIPT_NOT_FOUND' ? 404 : 400) : 500, body);
     });
   });
 
   /** A current, non-reserving projection. Reading it never initializes or calls the provider. */
-  function admission(): ConversationAdmission {
-    const transcriptId = observer.transcript.id;
-    if (observer.persistence?.failure) return Object.freeze({ transcriptId, status: 'unavailable', error: observer.persistence.failure });
-    if (!configured) return Object.freeze({ transcriptId, status: 'unavailable', error: Object.freeze({ code: 'KEY_MISSING', message: '服务端尚未配置模型凭据；请配置并重启。' }) });
-    const failure = observer.model.failure;
-    if (failure) return Object.freeze({ transcriptId, status: 'unavailable', error: failure });
-    return Object.freeze({ transcriptId, status: observer.runtime.running || observer.interactions.cancelling || !submissions.available ? 'busy' : 'ready' });
+  function admission(conversationId: string): ConversationAdmission {
+    const transcriptId = conversations.get(conversationId).transcriptId;
+    const observer = conversations.peek(conversationId);
+    if (conversations.persistence?.failure) return Object.freeze({ conversationId, transcriptId, status: 'unavailable', error: conversations.persistence.failure });
+    if (!configured) return Object.freeze({ conversationId, transcriptId, status: 'unavailable', error: Object.freeze({ code: 'KEY_MISSING', message: '服务端尚未配置模型凭据；请配置并重启。' }) });
+    const failure = conversations.model.failure;
+    if (failure) return Object.freeze({ conversationId, transcriptId, status: 'unavailable', error: failure });
+    return Object.freeze({ conversationId, transcriptId, status: observer?.runtime.running || observer?.interactions.cancelling || !submissions.available ? 'busy' : 'ready' });
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -64,9 +72,27 @@ export function createObserverServer(options: ObserverServerOptions) {
     const url = new URL(req.url || '/', `http://${req.headers.host}`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
-    if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured, ...(observer.files ? { files: observer.files.configuration } : {}) } satisfies ConfigurationResponse);
-    if (req.method === 'GET' && url.pathname === '/api/conversation/admission') return json(res, 200, admission());
+    if (req.method === 'GET' && url.pathname === '/api/config') return json(res, 200, { ...settings, configured, ...(conversations.files ? { files: conversations.files.configuration } : {}) } satisfies ConfigurationResponse);
+    if (req.method === 'GET' && url.pathname === '/api/conversations') return json(res, 200, conversations.list());
+    const conversationPath = /^\/api\/conversations\/([a-zA-Z0-9_-]{1,128})$/.exec(url.pathname);
+    if (req.method === 'GET' && conversationPath) return json(res, 200, conversations.get(conversationPath[1]!));
+    if (req.method === 'POST' && url.pathname === '/api/conversations') {
+      if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' } satisfies ErrorResponse);
+      const body = await readBody(req);
+      if (!isObject(body) || Object.keys(body).length) throw new RuntimeError('INVALID_INPUT', '新建对话请求正文必须为空对象。');
+      return json(res, 201, conversations.create());
+    }
+    const target = () => {
+      const id = url.searchParams.get('conversationId');
+      if (!id) throw new RuntimeError('INVALID_INPUT', '需要明确对话身份。');
+      conversations.get(id);
+      return id;
+    };
+    if (req.method === 'GET' && url.pathname === '/api/conversation/admission') return json(res, 200, admission(target()));
     if (req.method === 'GET' && url.pathname === '/api/observe') {
+      const id = target();
+      const observer = conversations.open(id);
+      const feed = feedFor(id);
       observer.recordSource.assertComplete();
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
       const write = observationWriter(res);
@@ -87,16 +113,19 @@ export function createObserverServer(options: ObserverServerOptions) {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/memory') {
+      const observer = conversations.open(target());
       observer.recordSource.assertComplete();
       return json(res, 200, observeMemory(observer.memories, observer.book));
     }
     if (req.method === 'GET' && url.pathname === '/api/executions') {
+      const observer = conversations.open(target());
       observer.recordSource.assertComplete();
       return json(res, 200, observeOverview(observer));
     }
     if (req.method === 'GET' && (url.pathname === '/api/transcript' || url.pathname === '/api/transcript/observe')) {
       const id = url.searchParams.get('id');
-      if (id && id !== observer.transcript.id) return json(res, 404, { error: '未找到消息集合。' } satisfies ErrorResponse);
+      if (!id) throw new RuntimeError('INVALID_INPUT', '需要明确消息集合身份。');
+      const observer = conversations.forTranscript(id);
       if (url.pathname === '/api/transcript') return json(res, 200, transcriptSnapshot(observer.transcript));
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
       const write = observationWriter(res);
@@ -114,6 +143,7 @@ export function createObserverServer(options: ObserverServerOptions) {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/execution') {
+      const observer = conversations.open(target());
       observer.recordSource.assertComplete();
       const id = url.searchParams.get('id') || '';
       if (!(observer.book.get(id) instanceof ExecutionRecord)) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
@@ -144,14 +174,16 @@ export function createObserverServer(options: ObserverServerOptions) {
       if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' } satisfies ErrorResponse);
       const data = await readBody(req);
       if (!isObject(data) || typeof data.submissionId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(data.submissionId)) throw new RuntimeError('INVALID_INPUT', '无效提交身份。');
-      const currentAdmission = admission();
+      if (typeof data.conversationId !== 'string') throw new RuntimeError('INVALID_INPUT', '需要明确对话身份。');
+      const conversationId = conversations.get(data.conversationId).id;
+      const currentAdmission = admission(conversationId);
       let submission: ConversationSubmission;
       try {
-        submission = submissions.create(data.submissionId);
+        submission = submissions.create(data.submissionId, conversationId);
       } catch (error) {
         if (!(error instanceof RuntimeError) || error.code !== 'SUBMISSION_CAPACITY') throw error;
         // This refusal has not run and occupies no retained slot. A lost response remains unknown.
-        const refusal = new ConversationSubmission(data.submissionId, { admission });
+        const refusal = new ConversationSubmission(data.submissionId, conversationId, { admission: () => admission(conversationId) });
         refusal.reject(error, { retry: 'admission' });
         return json(res, 503, refusal.snapshot);
       }
@@ -172,6 +204,7 @@ export function createObserverServer(options: ObserverServerOptions) {
         return json(res, 409, submission.snapshot);
       }
       submission.start(async (signal) => {
+        const observer = conversations.open(conversationId);
         try {
           return await observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, signal });
         } catch (error) {
@@ -200,7 +233,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     return json(res, 404, { error: 'Not found' } satisfies ErrorResponse);
   }
   server.on('close', () => {
-    feed.close();
+    for (const feed of feeds.values()) feed.close();
     for (const close of [...transcriptConnections]) close();
   });
   return server;

@@ -12,7 +12,7 @@ const fileSnapshot = (id, patch = {}) => submissionSnapshot(id, { input: { trans
 
 test('local file request is detached, deeply frozen and validates only a relative portable path', () => {
   const request = input();
-  const submission = new ClientSubmission(request);
+  const submission = new ClientSubmission('fixture-conversation', request);
   request.fileTask.sourcePath = 'changed.md';
   request.fileTask.output.path = 'changed-output.md';
   assert.deepEqual(submission.input.fileTask, task());
@@ -20,15 +20,15 @@ test('local file request is detached, deeply frozen and validates only a relativ
   assert.ok(Object.isFrozen(submission.input.fileTask));
   assert.ok(Object.isFrozen(submission.input.fileTask.output));
   for (const path of ['', '../secret', '/absolute', 'a/../secret', 'a//b', 'C:private', 'a\\b', 'a\u0000b', 'a/'.repeat(600)]) {
-    assert.throws(() => new ClientSubmission({ ...input(), fileTask: { sourcePath: path } }), /相对文件路径/);
-    assert.throws(() => new ClientSubmission({ ...input(), fileTask: { sourcePath: 'valid.md', output: { path } } }), /相对路径/);
+    assert.throws(() => new ClientSubmission('fixture-conversation', { ...input(), fileTask: { sourcePath: path } }), /相对文件路径/);
+    assert.throws(() => new ClientSubmission('fixture-conversation', { ...input(), fileTask: { sourcePath: 'valid.md', output: { path } } }), /相对路径/);
   }
-  assert.throws(() => new ClientSubmission({ ...input(), fileTask: { sourcePath: 'a.md', upload: 'body' } }), /文件任务/);
-  assert.throws(() => new ClientSubmission({ ...input(), fileTask: { sourcePath: 'a.md', output: { path: 'a.md' } } }), /不能覆盖来源/);
-  const outputOnly = new ClientSubmission({ ...input(), fileTask: { output: { path: 'poem.md' } } });
+  assert.throws(() => new ClientSubmission('fixture-conversation', { ...input(), fileTask: { sourcePath: 'a.md', upload: 'body' } }), /文件任务/);
+  assert.throws(() => new ClientSubmission('fixture-conversation', { ...input(), fileTask: { sourcePath: 'a.md', output: { path: 'a.md' } } }), /不能覆盖来源/);
+  const outputOnly = new ClientSubmission('fixture-conversation', { ...input(), fileTask: { output: { path: 'poem.md' } } });
   assert.deepEqual(outputOnly.input.fileTask, { output: { path: 'poem.md' } });
   assert.ok(Object.isFrozen(outputOnly.input.fileTask.output));
-  assert.throws(() => new ClientSubmission({ ...input(), fileTask: {} }), /文件任务/);
+  assert.throws(() => new ClientSubmission('fixture-conversation', { ...input(), fileTask: {} }), /文件任务/);
 });
 
 test('queued metadata stays with the original request and dispatches once after failure', async () => {
@@ -63,7 +63,7 @@ test('queued metadata stays with the original request and dispatches once after 
 });
 
 test('confirmed file creation survives overall cancellation and cannot regress or change identity', () => {
-  const submission = new ClientSubmission(input());
+  const submission = new ClientSubmission('fixture-conversation', input());
   const first = fileSnapshot(submission.id, { fileOutput: { status: 'pending', path: task().output.path } });
   submission.receive(first);
   const created = { ...first, revision: 1, fileOutput: { status: 'created', receipt: receipt() } };
@@ -80,17 +80,17 @@ test('confirmed file creation survives overall cancellation and cannot regress o
 });
 
 test('follow may first reveal a settled receipt; missing file fact is never treated as no creation', () => {
-  const submission = new ClientSubmission(input());
+  const submission = new ClientSubmission('fixture-conversation', input());
   submission.receive(submissionSnapshot(submission.id));
   assert.equal(submission.snapshot.remote.fileOutput, undefined);
   submission.receive(fileSnapshot(submission.id, { revision: 20, fileOutput: { status: 'created', receipt: receipt() }, result: { status: 'failed', error: { code: 'AFTER_COMMIT', message: 'Later failure' } } }));
   assert.equal(submission.snapshot.remote.fileOutput.status, 'created');
-  const ordinary = new ClientSubmission({ messages: input().messages });
+  const ordinary = new ClientSubmission('fixture-conversation', { messages: input().messages });
   assert.throws(() => ordinary.receive(submissionSnapshot(ordinary.id, { fileOutput: { status: 'created', receipt: receipt() } })), SubmissionContractError);
 });
 
 test('uncertain publication is not repaired from invented definite later facts', () => {
-  const submission = new ClientSubmission(input());
+  const submission = new ClientSubmission('fixture-conversation', input());
   const snapshot = fileSnapshot(submission.id, { fileOutput: { status: 'unconfirmed', path: task().output.path } });
   submission.receive(snapshot);
   assert.throws(() => submission.receive({ ...snapshot, revision: 1, fileOutput: { status: 'not-created', path: task().output.path, reason: 'failed' } }), SubmissionContractError);
@@ -109,7 +109,7 @@ test('HTTP preserves file configuration and cumulative receipt and rejects malfo
 });
 
 test('natural-language submission accepts selected output-only task and settled receipt from first follow', () => {
-  const submission = new ClientSubmission({ messages: [{ role: 'user', content: '摘录李白的诗并保存为 results/summary.md' }] });
+  const submission = new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: '摘录李白的诗并保存为 results/summary.md' }] });
   const selected = { kind: 'file', task: { output: { path: receipt().path } } };
   submission.receive(fileSnapshot(submission.id, { revision: 12, task: selected, fileOutput: { status: 'created', receipt: receipt() }, answer: { transcriptId: 'fixture-transcript', index: 1 }, result: { status: 'completed' } }));
   selected.task.output.path = 'mutated.md';
@@ -121,7 +121,7 @@ test('natural-language submission accepts selected output-only task and settled 
 });
 
 test('task selection is immutable and does not itself imply output or terminal state', () => {
-  const submission = new ClientSubmission({ messages: input().messages });
+  const submission = new ClientSubmission('fixture-conversation', { messages: input().messages });
   const selected = fileSnapshot(submission.id);
   submission.receive(selected);
   assert.equal(submission.snapshot.remote.result, undefined);
@@ -134,15 +134,15 @@ test('task selection is immutable and does not itself imply output or terminal s
 
 test('explicit file intent cannot be silently ignored, expanded or replaced by service selection', () => {
   for (const selected of [{ kind: 'reply' }, { kind: 'file', task: { sourcePath: 'other.md', output: task().output } }, { kind: 'file', task: { sourcePath: task().sourcePath } }, { kind: 'file', task: { output: task().output } }]) {
-    const submission = new ClientSubmission(input());
+    const submission = new ClientSubmission('fixture-conversation', input());
     assert.throws(() => submission.receive(fileSnapshot(submission.id, { task: selected })), SubmissionContractError);
   }
-  const readOnly = new ClientSubmission({ messages: input().messages, fileTask: { sourcePath: task().sourcePath } });
+  const readOnly = new ClientSubmission('fixture-conversation', { messages: input().messages, fileTask: { sourcePath: task().sourcePath } });
   assert.throws(() => readOnly.receive(fileSnapshot(readOnly.id)), SubmissionContractError, 'service cannot add writing to a read-only task');
-  const createOnly = new ClientSubmission({ messages: input().messages, fileTask: { output: task().output } });
+  const createOnly = new ClientSubmission('fixture-conversation', { messages: input().messages, fileTask: { output: task().output } });
   assert.throws(() => createOnly.receive(fileSnapshot(createOnly.id)), SubmissionContractError, 'service cannot add reading to a create-only task');
   for (const kind of ['clarify', 'unsupported']) {
-    const submission = new ClientSubmission(input());
+    const submission = new ClientSubmission('fixture-conversation', input());
     submission.receive(fileSnapshot(submission.id, { task: { kind } }));
     assert.deepEqual(submission.snapshot.remote.task, { kind });
     assert.throws(() => submission.receive(fileSnapshot(submission.id, { revision: 1, task: { kind }, fileOutput: { status: 'created', receipt: receipt() } })), SubmissionContractError);
@@ -150,7 +150,7 @@ test('explicit file intent cannot be silently ignored, expanded or replaced by s
 });
 
 test('selected tasks require accepted input and rejected admission cannot contain task facts', () => {
-  const submission = new ClientSubmission({ messages: input().messages });
+  const submission = new ClientSubmission('fixture-conversation', { messages: input().messages });
   assert.throws(() => submission.receive(submissionSnapshot(submission.id, { task: { kind: 'reply' } })), SubmissionContractError);
   assert.throws(() => submission.receive(fileSnapshot(submission.id, { result: { status: 'rejected', error: { code: 'BUSY', message: 'busy' } } })), SubmissionContractError);
   assert.throws(() => submission.receive(fileSnapshot(submission.id, { task: { kind: 'file', task: {} } })), SubmissionContractError);
@@ -168,7 +168,7 @@ test('HTTP accepts selected output-only task and rejects incomplete task shapes'
 });
 
 test('accepted file receipts expose only declared immutable fields from a custom transport', () => {
-  const submission = new ClientSubmission(input());
+  const submission = new ClientSubmission('fixture-conversation', input());
   const fileOutput = { status: 'created', receipt: { ...receipt(), privateBody: 'private document' }, internal: { sensitive: true } };
   submission.receive(fileSnapshot(submission.id, { fileOutput }));
   assert.deepEqual(submission.snapshot.remote.fileOutput, { status: 'created', receipt: receipt() });
@@ -178,7 +178,7 @@ test('accepted file receipts expose only declared immutable fields from a custom
 
 test('terminal submission cannot retain pending output and rejected submission cannot contain file work', () => {
   for (const status of ['completed', 'cancelled', 'failed']) {
-    const submission = new ClientSubmission(input());
+    const submission = new ClientSubmission('fixture-conversation', input());
     const result = status === 'failed' ? { status, error: { code: 'TEST', message: 'failure' } } : { status };
     assert.throws(() => submission.receive(fileSnapshot(submission.id, { fileOutput: { status: 'pending', path: task().output.path }, result, ...(status === 'cancelled' ? { cancelRequested: true } : {}) })), SubmissionContractError);
     assert.equal(submission.snapshot.remote, undefined, 'invalid terminal facts do not partially commit');
@@ -189,7 +189,7 @@ test('terminal submission cannot retain pending output and rejected submission c
       { status: 'not-created', path: task().output.path, reason: 'not-started' },
       { status: 'unconfirmed', path: task().output.path },
     ]) {
-      const submission = new ClientSubmission(input());
+      const submission = new ClientSubmission('fixture-conversation', input());
       assert.throws(() => submission.receive(fileSnapshot(submission.id, { fileOutput, result: { status: 'rejected', error: { code: 'RUNTIME_BUSY', message: 'busy' }, ...(retry ? { retry } : {}) } })), SubmissionContractError);
       assert.equal(submission.snapshot.remote, undefined, 'a file fact cannot authorize re-POST as a rejected submission');
     }

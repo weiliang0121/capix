@@ -21,7 +21,7 @@ const first = submissionSnapshot('s', { revision: 1, input, executions: [{ conte
 const answer = { ...first, revision: 3, answer: { transcriptId: 't', index: 3 } };
 const completed = { ...answer, revision: 4, result: { status: 'completed' } };
 const lines = (...items) => items.map((item) => JSON.stringify(item)).join('\n');
-const consume = (text, accept = () => {}) => new ConversationHttpTransport('', async () => new Response(stream(text, 1))).submit({ submissionId: 's', input: { messages: [] } }, accept, new AbortController().signal);
+const consume = (text, accept = () => {}) => new ConversationHttpTransport('', async () => new Response(stream(text, 1))).submit({ conversationId: 'fixture-conversation', submissionId: 's', input: { messages: [] } }, accept, new AbortController().signal);
 
 test('cumulative feedback joins UTF-8 and line boundaries independently of record and entity streams', async () => {
   const failed = { ...answer, revision: 4, result: { status: 'failed', error: { code: 'POSTPROCESS', message: '记忆处理失败' } } };
@@ -56,7 +56,7 @@ test('observation stream accepts multiple executions independently and validates
   const received = [];
   const http = new ObservationHttpTransport('', async () => new Response(stream(lines(baseline({ entries: entriesOf(snapshot()) }), { type: 'delta', scopeId: 'fixture-scope', sequence: 1, changes: entriesOf(snapshot('running', 'another')).map((entry, index) => ({ type: 'record', recorderId: 'fixture-recorder', revision: index + 1, occurredAt: '2026-09-30T00:00:00Z', change: { kind: 'added', entry } })) }))));
   await assert.rejects(
-    http.observe((value) => received.push(value), new AbortController().signal),
+    http.observe('fixture-conversation', (value) => received.push(value), new AbortController().signal),
     /观测连接已结束/,
   );
   assert.deepEqual(
@@ -65,7 +65,7 @@ test('observation stream accepts multiple executions independently and validates
   );
   const invalid = new ObservationHttpTransport('', async () => new Response('{"type":"snapshot","snapshot":{}}\n'));
   await assert.rejects(
-    invalid.observe(() => {}, new AbortController().signal),
+    invalid.observe('fixture-conversation', () => {}, new AbortController().signal),
     (error) => error.code === 'INVALID_RESPONSE',
   );
 });

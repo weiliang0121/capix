@@ -8,12 +8,13 @@ export type RecordReceiver = SourceReceiver<RecordChangeEvent>;
 /** Integrity belongs to the lifetime of the source, not to any HTTP connection. */
 export class RecordSource implements ObservationSource<readonly RecordEntry[], RecordChangeEvent> {
   readonly #receivers = new Map<RecordReceiver, number>();
+  readonly #unsubscribe: () => void;
   #failure?: SourceIncomplete;
   constructor(
     private readonly recorder: Recorder,
     private readonly consumer: ChangeConsumer,
   ) {
-    consumer.subscribe((change) => {
+    this.#unsubscribe = consumer.subscribe((change) => {
       if (change.type !== 'record' || change.recorderId !== recorder.id || this.#failure) return;
       for (const [receiver, revision] of this.#receivers) {
         if (change.revision <= revision) continue;
@@ -32,6 +33,7 @@ export class RecordSource implements ObservationSource<readonly RecordEntry[], R
   invalidate(error: unknown): void {
     if (this.#failure) return;
     this.#failure = new SourceIncomplete(this.recorder.id, '记录来源已不完整，不能继续提供完整的观测基线或增量。', { cause: error });
+    this.#unsubscribe();
     const receivers = [...this.#receivers.keys()];
     this.#receivers.clear();
     for (const receiver of receivers) {

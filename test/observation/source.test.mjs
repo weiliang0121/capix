@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { ChangeBuffer, Recorder, RecordBook, RecordingRootRecord } from '@capix/server-runtime';
 import { ChangeConsumer, RecordSource, SourceIncomplete, initializeObserver, ObservationFeed } from '@capix/observer-service';
 import { ClientRuntime, ObservationSequenceError } from '@capix/client-runtime';
+import { transport } from '../client/fixtures.mjs';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 function fixture() {
@@ -112,9 +113,10 @@ test('record delivery discards queued healthy changes on invalidation while mess
 test('an incomplete record source does not trigger client automatic baseline repair', async () => {
   let attempts = 0;
   const failure = Object.assign(new Error('source incomplete', { cause: new ObservationSequenceError('missing source fact') }), { code: 'SOURCE_INCOMPLETE' });
+  const io = transport();
   const runtime = new ClientRuntime({
-    conversation: {},
-    transcripts: {},
+    conversation: io,
+    transcripts: io,
     observation: {
       async observe() {
         attempts++;
@@ -122,6 +124,7 @@ test('an incomplete record source does not trigger client automatic baseline rep
       },
     },
   });
+  await runtime.initialize();
   const stop = runtime.startObservation();
   try {
     await settle();
@@ -130,6 +133,7 @@ test('an incomplete record source does not trigger client automatic baseline rep
     assert.equal(runtime.getSnapshot().observation.loading, false);
   } finally {
     stop();
+    runtime.stopTranscript();
   }
 });
 

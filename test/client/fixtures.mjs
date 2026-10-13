@@ -18,17 +18,21 @@ export function snapshot(status = 'succeeded', id = 'execution-1') {
   };
 }
 
+export const conversationDescriptor = (id = 'fixture-conversation', transcriptId = 'fixture-transcript') => ({ id, title: '测试对话', transcriptId, createdAt: 1, updatedAt: 1 });
 export const client = (options) => new ClientRuntime({ transcripts: options.conversation, ...options });
 export const transcriptSnapshot = (messages = [], id = 'fixture-transcript', revision = messages.length) => ({ id, revision, start: 0, end: messages.length, starts: [0], messages });
 
 export function transport(overrides = {}) {
   const io = {
+    conversations: async () => ({ conversations: [conversationDescriptor()], defaultConversationId: 'fixture-conversation' }),
+    conversation: async () => conversationDescriptor(),
+    createConversation: async () => conversationDescriptor(),
     config: async () => ({ configured: true, model: 'fixture', contextBudget: 32768 }),
-    admission: async () => ({ transcriptId: 'fixture-transcript', status: 'ready' }),
+    admission: async () => ({ conversationId: 'fixture-conversation', transcriptId: 'fixture-transcript', status: 'ready' }),
     overview: async () => ({ transcriptId: 'fixture-transcript', executions: [], messages: [] }),
     transcript: async () => transcriptSnapshot(),
     memory: async () => ({ items: [] }),
-    execution: async (id) => snapshot('succeeded', id),
+    execution: async (_conversationId, id) => snapshot('succeeded', id),
     source: async (path) => ({ path, content: 'fixture source' }),
     observe: async (_accept, signal) => {
       if (signal.aborted) return;
@@ -67,7 +71,7 @@ export function transport(overrides = {}) {
   io.appendMessages = append;
   io.delivery = (request, receive) => submissionDelivery(request, receive, { append, transcript: () => entity });
   const watch = io.observe;
-  io.observe = async (accept, signal) => {
+  io.observe = async (_conversationId, accept, signal) => {
     let ready = false;
     const queued = [];
     const emit = (value) => {
@@ -87,7 +91,7 @@ export function transport(overrides = {}) {
       () => undefined,
       (error) => error,
     );
-    const initial = overrides.baseline ?? baseline({ overview: await io.overview(), memory: await io.memory() });
+    const initial = overrides.baseline ?? baseline({ overview: await io.overview(), memory: await io.memory(), transcript: { id: entity.id, revision: entity.revision, starts: entity.starts } });
     if (signal.aborted) return;
     accept(initial);
     ready = true;
@@ -108,12 +112,12 @@ export function deferred() {
 }
 
 export function submissionSnapshot(id, patch = {}) {
-  return { submissionId: id, revision: 0, executions: [], integrity: { status: 'complete' }, ...patch };
+  return { conversationId: 'fixture-conversation', submissionId: id, revision: 0, executions: [], integrity: { status: 'complete' }, ...patch };
 }
 
 /** Explicit test producer of cumulative submission facts, independent of optional entity delivery. */
 export function submissionDelivery(request, receive, options = {}) {
-  let current = submissionSnapshot(request.submissionId);
+  let current = submissionSnapshot(request.submissionId, { conversationId: request.conversationId });
   const publish = (patch) => {
     current = { ...current, ...patch, revision: current.revision + 1 };
     receive(current);
@@ -138,10 +142,10 @@ export function submissionDelivery(request, receive, options = {}) {
       return publish({ answer: { transcriptId: current.input.transcriptId, index: position } });
     },
     complete() {
-      return publish({ result: { status: 'completed' }, admission: { transcriptId: current.input?.transcriptId ?? 'fixture-transcript', status: 'ready' } });
+      return publish({ result: { status: 'completed' }, admission: { conversationId: request.conversationId, transcriptId: current.input?.transcriptId ?? 'fixture-transcript', status: 'ready' } });
     },
     fail(code = 'TEST', message = '测试失败') {
-      return publish({ result: { status: 'failed', error: { code, message } }, admission: { transcriptId: current.input?.transcriptId ?? 'fixture-transcript', status: 'ready' } });
+      return publish({ result: { status: 'failed', error: { code, message } }, admission: { conversationId: request.conversationId, transcriptId: current.input?.transcriptId ?? 'fixture-transcript', status: 'ready' } });
     },
   };
 }

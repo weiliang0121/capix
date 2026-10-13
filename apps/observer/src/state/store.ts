@@ -7,8 +7,15 @@ export interface Inspection {
   callId?: string;
 }
 
+export interface ConversationDraft {
+  draft: string;
+  fileDraft: { sourcePath: string; outputPath: string };
+  history: string;
+}
+
 export interface AppState {
   data: AppData;
+  conversationDrafts: ReadonlyMap<string, ConversationDraft>;
   matches: readonly SearchMatch[];
   selectedId: string;
   inspection?: Inspection;
@@ -46,6 +53,7 @@ interface AppActions {
 export function createAppStore() {
   return createStore<AppState & AppActions>()((set) => ({
     data: emptyAppData(),
+    conversationDrafts: new Map(),
     matches: [],
     selectedId: '',
     memoryOpen: false,

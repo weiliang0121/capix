@@ -45,7 +45,7 @@ test('submission exposes live REOA calls and parent acceptance without installin
       }),
     ),
   );
-  const submission = new ConversationSubmission('activity');
+  const submission = new ConversationSubmission('activity', 'conversation');
   submission.start((signal) => runtime.run(input, { settings, signal, progress: submission.progress, activity: submission.activity }));
   await entering;
   const during = submission.snapshot;
@@ -92,7 +92,7 @@ test('activity keeps failed child and new retry identities while the parent succ
       }),
     ),
   );
-  const submission = new ConversationSubmission('retry-activity');
+  const submission = new ConversationSubmission('retry-activity', 'conversation');
   submission.start((signal) => runtime.run(input, { settings, signal, progress: submission.progress, activity: submission.activity }));
   const snapshot = await complete(submission);
   assert.equal(snapshot.result.status, 'completed');
@@ -121,7 +121,7 @@ test('activity source failure is independent of committed content and actual sub
       }),
     ),
   );
-  const submission = new ConversationSubmission('activity-incomplete');
+  const submission = new ConversationSubmission('activity-incomplete', 'conversation');
   submission.activity.publish(fact('orphan', 'attempt', 'started', 1, {}, 'missing-parent'));
   assert.equal(submission.snapshot.activities.integrity.status, 'incomplete');
   const retained = submission.snapshot.activities;
@@ -135,7 +135,7 @@ test('activity source failure is independent of committed content and actual sub
 });
 
 test('activity capacity retains the known prefix and reports permanent independent incompleteness', () => {
-  const submission = new ConversationSubmission('activity-capacity');
+  const submission = new ConversationSubmission('activity-capacity', 'conversation');
   submission.activity.publish(fact('r', 'runtime', 'started', 1));
   for (let index = 0; index < 512; index++) submission.activity.publish(fact(`e-${index}`, 'execution', 'started', 1, {}, 'r'));
   assert.equal(submission.snapshot.activities.calls.length, 512);
@@ -148,7 +148,7 @@ test('activity capacity retains the known prefix and reports permanent independe
 });
 
 test('failure before started is represented as setup and a successful call can still fail parent delivery', () => {
-  const submission = new ConversationSubmission('activity-relations');
+  const submission = new ConversationSubmission('activity-relations', 'conversation');
   submission.activity.publish(fact('r', 'runtime', 'started', 1));
   const relation = { parentContextId: 'r', childContextId: 'e', parentRound: 1 };
   submission.activity.publish(fact('r', 'runtime', 'relation', 2, { relation, phase: 'attached' }));

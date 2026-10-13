@@ -1,5 +1,5 @@
 import type { ObservationStatus } from '../observation/status.js';
-import type { FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, MemoryResultSource, Message, ResourceRecord, ProcessRecord, RelationChangeRecord, InvocationSummary, RecordingArchiveOrigin } from '@capix/protocol';
+import type { ConversationDescriptor, FileTask, ConfigurationResponse, ExecutionSummary, MemoryObservation, MemoryRecord, MemoryResultSource, Message, ResourceRecord, ProcessRecord, RelationChangeRecord, InvocationSummary, RecordingArchiveOrigin } from '@capix/protocol';
 import type { ConversationItem } from './conversation.js';
 import type { CallSpan } from '../observation/types.js';
 import type { CallGraphModel } from './graph.js';
@@ -56,6 +56,11 @@ export interface ExecutionDetail {
   memory: CallMemory;
 }
 export interface AppData {
+  activeConversation?: ConversationDescriptor;
+  conversations: readonly ConversationDescriptor[];
+  switchingConversation: boolean;
+  canSwitchConversation: boolean;
+  conversationError?: string;
   config?: ConfigurationResponse;
   observationLoading: boolean;
   observationError?: unknown;
@@ -86,7 +91,7 @@ export interface ConversationQueueView {
   readonly blocked?: string;
 }
 export function emptyAppData(): AppData {
-  return { observationLoading: false, busy: false, queue: { waiting: [] }, runningId: '', conversation: [], messageCount: 0, rounds: [], memory: { items: [] }, details: new Map(), graphs: new Map() };
+  return { conversations: [], switchingConversation: false, canSwitchConversation: false, observationLoading: false, busy: false, queue: { waiting: [] }, runningId: '', conversation: [], messageCount: 0, rounds: [], memory: { items: [] }, details: new Map(), graphs: new Map() };
 }
 
 export interface SearchMatch {

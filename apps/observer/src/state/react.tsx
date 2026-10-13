@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useStore } from 'zustand';
-import type { Application } from '../binding/application';
-import type { AppStore } from './store';
+import type { Application } from '../binding/application.js';
+import type { AppStore } from './store.js';
 
 const ApplicationContext = createContext<Application | undefined>(undefined);
 

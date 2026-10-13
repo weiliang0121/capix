@@ -41,6 +41,7 @@ function Notice() {
 }
 
 export function App() {
+  const conversationId = useAppStore((state) => state.data.activeConversation?.id);
   return (
     <div className="app-shell">
       <Header />
@@ -50,7 +51,7 @@ export function App() {
         <ConversationPanel />
       </main>
       <SettingsDialog />
-      <ObservationDialogs />
+      <ObservationDialogs key={conversationId ?? 'initial'} />
     </div>
   );
 }

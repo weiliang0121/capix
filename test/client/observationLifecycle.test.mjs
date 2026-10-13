@@ -11,12 +11,13 @@ const runtimeWith = (observation) => client({ conversation: transport(), observa
 test('replacement observation owner isolates old delivery and old stop handles', async () => {
   const connections = [];
   const runtime = runtimeWith({
-    observe: async (receive, signal) => {
+    observe: async (_conversationId, receive, signal) => {
       connections.push({ receive, signal });
       receive(baseline({ scopeId: `scope-${connections.length}` }));
       await untilAbort(signal);
     },
   });
+  await runtime.initialize();
   const stopFirst = runtime.startObservation();
   await settle();
   const previous = runtime.getSnapshot().observation;
@@ -38,11 +39,12 @@ test('replacement observation owner isolates old delivery and old stop handles',
 test('observation delivery sequence failures receive at most one baseline retry', async () => {
   let connections = 0;
   const runtime = runtimeWith({
-    observe: async (receive) => {
+    observe: async (_conversationId, receive) => {
       connections++;
       receive({ type: 'delta', scopeId: 'missing', sequence: 1, changes: [] });
     },
   });
+  await runtime.initialize();
   const stop = runtime.startObservation();
   await settle();
   assert.equal(connections, 2);
@@ -60,6 +62,7 @@ test('source incompleteness never triggers automatic baseline reconstruction', a
       throw failure;
     },
   });
+  await runtime.initialize();
   const stop = runtime.startObservation();
   await settle();
   assert.equal(connections, 1);
@@ -74,6 +77,7 @@ test('synchronously thrown transport errors remain inside the observation state'
       throw failure;
     },
   });
+  await runtime.initialize();
   const stop = runtime.startObservation();
   await settle();
   assert.equal(runtime.getSnapshot().observation.error, failure);
@@ -86,11 +90,12 @@ test('an unconnected detail request cannot survive an intervening start and stop
   const response = deferred();
   const runtime = runtimeWith({
     execution: () => response.promise,
-    observe: async (receive, signal) => {
+    observe: async (_conversationId, receive, signal) => {
       receive(baseline());
       await untilAbort(signal);
     },
   });
+  await runtime.initialize();
   const pending = runtime.loadExecution('execution-1');
   runtime.startObservation()();
   response.resolve(snapshot());
@@ -109,12 +114,13 @@ test('live detail updates take precedence over an older pending detail response'
       reads++;
       return response.promise;
     },
-    observe: async (accept, signal) => {
+    observe: async (_conversationId, accept, signal) => {
       receive = accept;
       accept(baseline({ entries: entriesOf(running) }));
       await untilAbort(signal);
     },
   });
+  await runtime.initialize();
   const stop = runtime.startObservation();
   const pending = runtime.loadExecution('execution-1');
   receive({ type: 'delta', scopeId: 'fixture-scope', sequence: 1, changes: entriesOf(terminal).map((entry, index) => ({ type: 'record', recorderId: 'fixture-recorder', revision: index + 1, occurredAt: '2026-10-11T00:00:00Z', change: { kind: 'replaced', entry } })) });
@@ -129,13 +135,14 @@ test('a previous connection rejection cannot clear or fail a refreshed observati
   const old = deferred();
   let connections = 0;
   const runtime = runtimeWith({
-    observe: async (receive, signal) => {
+    observe: async (_conversationId, receive, signal) => {
       connections++;
       receive(baseline({ scopeId: `scope-${connections}` }));
       if (connections === 1) await old.promise;
       else await untilAbort(signal);
     },
   });
+  await runtime.initialize();
   const stop = runtime.startObservation();
   await runtime.refreshObservation();
   old.reject(new Error('stale failure'));
@@ -152,7 +159,7 @@ for (const command of ['stop', 'replace', 'failure']) {
     const failure = deferred();
     let stopReplacement;
     const runtime = runtimeWith({
-      observe: async (receive, signal) => {
+      observe: async (_conversationId, receive, signal) => {
         const first = connections.length === 0;
         connections.push({ receive, signal });
         receive(baseline({ scopeId: `scope-${connections.length}` }));
@@ -163,6 +170,7 @@ for (const command of ['stop', 'replace', 'failure']) {
         } else await untilAbort(signal);
       },
     });
+    await runtime.initialize();
     const stop = runtime.startObservation();
     if (command === 'stop') stop();
     else if (command === 'replace') runtime.startObservation()();

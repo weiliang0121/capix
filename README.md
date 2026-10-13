@@ -12,7 +12,8 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 - [记录机制](docs/recording.md)、[增量观测](docs/observation-increments.md)：可选记录预设、变化生产、来源完整性与交付。
 - [跨端协议](docs/protocol.md)、[客户端运行能力](docs/client-runtime.md)：独立对话交付、实体同步、观测接收、应用绑定与 Store。
 - [消息与分段](docs/transcript.md)、[运行记忆](docs/memory.md)：内容实体的当前行为。
-- [单一对话持久化](docs/persistence.md)：内容提交、历史记录与重启边界。
+- [对话身份与切换](docs/conversations.md)：新建、历史、明确提交目标与资源归属。
+- [对话持久化](docs/persistence.md)：内容提交、历史记录与重启边界。
 - [外部交互](docs/interactions.md)：独立请求与反馈、A 的本地等待、再次读取和持久化边界。
 
 `docs/review.md` 和 `docs/observation.md` 保留设计推演过程，文首明确标为历史材料；当前契约以以上专题文档和实现为准。
@@ -51,12 +52,12 @@ services/observer/src/
   conversation/    对话 R/E、O/A 声明、模型契约、资源绑定、消息同步
   files/           可选工作目录实体与受控文本读写资源
   observation/     记录来源、查询投影、观测交付
-  persistence/     单一对话的 SQLite 存储与历史记录保存
+  persistence/     多对话的 SQLite 存储与历史记录保存
   assembly/        独立实体、供给、配置与共享变化消费的装配
   http/            对话、实体、观测端点与静态资源
 ```
 
-`ConversationRuntimeDefinition` / `ConversationExecutionDefinition` 定义对话；`initializeObserver` 组合完整参考应用。`TranscriptFeed` 同步消息实体，`ObservationFeed` 交付观测，它们可以独立连接和关闭。对话使用 `ConversationRequest`，不把它当成通用 E 输入契约。
+`ConversationRuntimeDefinition` / `ConversationExecutionDefinition` 定义对话；`initializeObserver` 装配单个对话的运行环境，`ObserverConversations` 管理参考服务中的对话目录与按对话装配。`TranscriptFeed` 同步消息实体，`ObservationFeed` 交付观测，它们可以独立连接和关闭。对话使用 `ConversationRequest`，不把它当成通用 E 输入契约。
 
 ```ts
 import { initializeObserver } from '@capix/observer-service/assembly';
@@ -100,7 +101,7 @@ pnpm start
 
 默认服务为 `http://127.0.0.1:4317`，提供构建后的界面和 API。开发时先在另一个终端运行 `PORT=4320 pnpm start`，再运行 `pnpm dev`；Vite 的 API 代理可通过 `OBSERVER_API_ORIGIN` 调整。服务端更改后需要重新构建和重启。
 
-`pnpm start` 默认把当前单一对话的消息、记忆、记录和独立模型交互保存到 `.capix/observer.sqlite`，目录已被 Git 忽略。可用 `CAPIX_DATA_DIR` 指定其他目录；它必须位于模型文件工作区之外。同一数据库只允许一个服务进程写入。重启恢复内容与历史记录，并建立新运行环境；不会继续旧 QA、重发模型或文件操作，也不恢复旧提交身份。已有进程的纯内存对话不会自动迁入新库。程序化 `initializeObserver(provider)` 仍默认为内存模式，接入方式见 [持久化](docs/persistence.md)。
+`pnpm start` 默认把各对话的消息、记忆、记录和独立模型交互保存到 `.capix/observer.sqlite`，目录已被 Git 忽略。可用 `CAPIX_DATA_DIR` 指定其他目录；它必须位于模型文件工作区之外。同一数据库只允许一个服务进程写入。重启恢复内容与历史记录，并建立新运行环境；不会继续旧 QA、重发模型或文件操作，也不恢复旧提交身份。已有进程的纯内存对话不会自动迁入新库。程序化 `initializeObserver(provider)` 仍默认为内存模式，接入方式见 [持久化](docs/persistence.md)。
 
 设置 `CAPIX_FILES_ROOT` 为一个已存在、由宿主管理的本地工作目录可启用文件任务。可在对话中直接说明相对路径和读写要求，也可展开文件任务输入，填写来源和/或结果路径。当前支持最多 64 KiB 的 UTF-8 普通文本，按实际执行时的内容读取；结果仅新建，目录需预先存在。自然语言通过请求理解 O 提出普通回答、文件、澄清或不支持候选，E 接纳后选择已声明的分支；显式文件任务跳过理解。路径缺失时在当前 QA 提问，下一轮重新理解；不以“继续”自动重放历史写入。支持读文件、读后保存、直接生成后保存。明确回答先追加为正式消息，然后才保存；保存失败保留回答。
 

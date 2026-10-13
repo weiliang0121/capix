@@ -2,7 +2,7 @@ import { TranscriptConnectionError, type ConversationTransport, type TranscriptT
 import type { ConversationSubmissionSnapshot, ConversationSubmissionRequest, TranscriptFrame } from '@capix/protocol';
 import { HttpTransport } from './transport.js';
 import { HttpError, HttpTransportError } from './errors.js';
-import { acceptResponse, configurationResponse, admissionResponse, transcriptResponse, transcriptUpdate, submissionResponse, responseStatusError, parseLine, deliver } from './responses.js';
+import { acceptResponse, conversationResponse, conversationsResponse, configurationResponse, admissionResponse, transcriptResponse, transcriptUpdate, submissionResponse, responseStatusError, parseLine, deliver } from './responses.js';
 import { readLines } from './stream.js';
 
 /** Conversation requests and delivery, independent of observation. */
@@ -12,17 +12,31 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
   async config() {
     return acceptResponse(configurationResponse, await this.get('/api/config'), '配置');
   }
-  async admission(signal?: AbortSignal) {
-    return acceptResponse(admissionResponse, await this.get('/api/conversation/admission', signal), '对话接纳');
+  async conversations(signal?: AbortSignal) {
+    return acceptResponse(conversationsResponse, await this.get('/api/conversations', signal), '对话列表');
   }
-  async transcript(id?: string, signal?: AbortSignal) {
-    const snapshot = acceptResponse(transcriptResponse, await this.get(`/api/transcript${id ? `?id=${encodeURIComponent(id)}` : ''}`, signal), '消息');
+  async conversation(id: string, signal?: AbortSignal) {
+    const value = acceptResponse(conversationResponse, await this.get(`/api/conversations/${encodeURIComponent(id)}`, signal), '对话');
+    if (value.id !== id) throw new HttpTransportError('contract', '返回了不同的对话。', 'CONVERSATION_MISMATCH');
+    return value;
+  }
+  async createConversation(signal?: AbortSignal) {
+    const response = await this.send('/api/conversations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal });
+    return acceptResponse(conversationResponse, parseLine(await response.text()), '对话');
+  }
+  async admission(conversationId: string, signal?: AbortSignal) {
+    const value = acceptResponse(admissionResponse, await this.get(`/api/conversation/admission?conversationId=${encodeURIComponent(conversationId)}`, signal), '对话接纳');
+    if (value.conversationId !== conversationId) throw new HttpTransportError('contract', '接纳状态不属于请求的对话。', 'CONVERSATION_MISMATCH');
+    return value;
+  }
+  async transcript(id: string, signal?: AbortSignal) {
+    const snapshot = acceptResponse(transcriptResponse, await this.get(`/api/transcript?id=${encodeURIComponent(id)}`, signal), '消息');
     if (id && snapshot.id !== id) throw new HttpTransportError('contract', '返回了不同的消息集合。', 'TRANSCRIPT_MISMATCH');
     return snapshot;
   }
-  async observeTranscript(id: string | undefined, accept: (frame: TranscriptFrame) => void, signal: AbortSignal): Promise<void> {
+  async observeTranscript(id: string, accept: (frame: TranscriptFrame) => void, signal: AbortSignal): Promise<void> {
     try {
-      const response = await this.send(`/api/transcript/observe${id ? `?id=${encodeURIComponent(id)}` : ''}`, { signal });
+      const response = await this.send(`/api/transcript/observe?id=${encodeURIComponent(id)}`, { signal });
       if (!response.body) throw new HttpTransportError('contract', '服务未返回消息流。', 'MISSING_STREAM');
       for await (const line of readLines(response.body)) {
         const frame = acceptResponse(transcriptUpdate, parseLine(line), '消息流');
@@ -39,7 +53,7 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
     }
   }
   async submit(request: ConversationSubmissionRequest, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void> {
-    await this.feedback('/api/run', request.submissionId, receive, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal });
+    await this.feedback('/api/run', request.submissionId, receive, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal }, request.conversationId);
   }
 
   async follow(id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void> {
@@ -56,27 +70,28 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
     return this.acceptSubmission(parseLine(await response.text()), id);
   }
 
-  private acceptSubmission(value: unknown, id: string): ConversationSubmissionSnapshot {
+  private acceptSubmission(value: unknown, id: string, conversationId?: string): ConversationSubmissionSnapshot {
     const snapshot = acceptResponse(submissionResponse, value, '提交');
     if (snapshot.submissionId !== id) throw new HttpTransportError('contract', '提交反馈身份不一致。', 'SUBMISSION_MISMATCH');
+    if (conversationId && snapshot.conversationId !== conversationId) throw new HttpTransportError('contract', '提交反馈不属于请求的对话。', 'CONVERSATION_MISMATCH');
     return snapshot;
   }
 
-  private async feedback(path: string, id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, init: RequestInit): Promise<void> {
+  private async feedback(path: string, id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, init: RequestInit, conversationId?: string): Promise<void> {
     let response: Response;
     try {
       response = await this.send(path, init);
     } catch (error) {
       // A known rejection is a formal cumulative fact even when HTTP uses a non-2xx status.
       if (!(error instanceof HttpError) || !submissionResponse.safeParse(error.body).success) throw error;
-      const snapshot = this.acceptSubmission(error.body, id);
+      const snapshot = this.acceptSubmission(error.body, id, conversationId);
       deliver(() => receive(snapshot), '提交反馈');
       if (!snapshot.result && snapshot.integrity.status !== 'incomplete') throw new HttpTransportError('contract', 'HTTP 请求已结束，提交结果仍未确认。', 'INCOMPLETE_STREAM');
       return;
     }
     if (!response.body) throw new HttpTransportError('contract', '服务未返回提交反馈流。', 'MISSING_STREAM');
     for await (const line of readLines(response.body)) {
-      const snapshot = this.acceptSubmission(parseLine(line), id);
+      const snapshot = this.acceptSubmission(parseLine(line), id, conversationId);
       deliver(() => receive(snapshot), '提交反馈');
       if (snapshot.result || snapshot.integrity.status === 'incomplete') return;
     }

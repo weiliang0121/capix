@@ -31,9 +31,9 @@ export function SettingsDialog() {
           <p>模型与连接信息由服务端提供。</p>
         </div>
         <details className="history-editor">
-          <summary>下一轮追加已有消息</summary>
+          <summary>下一轮导入消息</summary>
           <p>仅用于接纳原始 user / assistant 消息；不会创建历史执行记录。</p>
-          <Textarea aria-label="追加历史 JSON" value={history} onChange={(event) => setHistory(event.target.value)} spellCheck={false} />
+          <Textarea aria-label="导入消息 JSON" value={history} onChange={(event) => setHistory(event.target.value)} spellCheck={false} />
           <Button variant="secondary" size="sm" onClick={fillExample}>
             填入澄清样例
           </Button>

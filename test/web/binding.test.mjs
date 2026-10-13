@@ -6,7 +6,7 @@ import { initializeObserver, observeExecution, observeOverview, ObservationFeed 
 import { Transcript, observeMemory } from '@capix/server-runtime';
 import { projectDetail } from '../../apps/observer/.test-dist/binding/details.js';
 import { createApplication } from '../../apps/observer/.test-dist/binding/application.js';
-import { client, deferred, snapshot, transport, submissionDelivery } from '../client/fixtures.mjs';
+import { client, deferred, snapshot, transport, submissionDelivery, conversationDescriptor } from '../client/fixtures.mjs';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const withObservation = (io) => client({ conversation: io, observation: io });
@@ -40,6 +40,8 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   let finished = false;
   let detailReads = 0;
   const io = transport({
+    conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', fixture.transcriptId)], defaultConversationId: 'fixture-conversation' }),
+    admission: async () => ({ conversationId: 'fixture-conversation', transcriptId: fixture.transcriptId, status: 'ready' }),
     baseline: fixture.frames[0],
     overview: async () => (finished ? fixture.overview : { messages: history.map((message, index) => ({ index, message, count: 0 })), executions: [] }),
     transcript: async () => ({ id: fixture.transcriptId, revision: finished ? 3 : 1, start: 0, end: finished ? fixture.messages.length : history.length, starts: [0], messages: finished ? fixture.messages : history }),
@@ -119,6 +121,8 @@ test('binding remount retains business messages despite unavailable observation'
   const fixture = await recordedRound();
   let finished = false;
   const io = transport({
+    conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', fixture.transcriptId)], defaultConversationId: 'fixture-conversation' }),
+    admission: async () => ({ conversationId: 'fixture-conversation', transcriptId: fixture.transcriptId, status: 'ready' }),
     overview: async () => {
       if (finished) throw new Error('概览刷新失败');
       return { messages: [], executions: [] };
@@ -159,7 +163,7 @@ test('loading old detail records does not replace a fresh server overview or rep
   const frames = installFrames(t);
   const fixture = await recordedRound();
   const id = fixture.final.execution.id;
-  const runtime = withObservation(transport({ overview: async () => fixture.overview, transcript: async () => ({ id: fixture.transcriptId, revision: 3, start: 0, end: fixture.messages.length, starts: [0], messages: fixture.messages }), memory: async () => fixture.memory, execution: async () => fixture.final }));
+  const runtime = withObservation(transport({ conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', fixture.transcriptId)], defaultConversationId: 'fixture-conversation' }), overview: async () => fixture.overview, transcript: async () => ({ id: fixture.transcriptId, revision: 3, start: 0, end: fixture.messages.length, starts: [0], messages: fixture.messages }), memory: async () => fixture.memory, execution: async () => fixture.final }));
   const app = createApplication(runtime);
   const disconnect = app.connect();
   await runtime.initialize();

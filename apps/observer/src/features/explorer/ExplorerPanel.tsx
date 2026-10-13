@@ -5,6 +5,7 @@ import { Badge } from '../../components/ui/badge';
 import { errorMessage } from '../../lib/errors';
 import { RuntimeExplorer } from './RuntimeExplorer';
 export function ExplorerPanel() {
+  const conversationId = useAppStore((state) => state.data.activeConversation?.id);
   const observationNotice = useAppStore((state) => state.data.observationNotice);
   const observationError = useAppStore((state) => state.data.observationError);
   const observationLoading = useAppStore((state) => state.data.observationLoading);
@@ -53,7 +54,7 @@ export function ExplorerPanel() {
           正在加载观测数据…
         </p>
       )}
-      <RuntimeExplorer rounds={rounds} graphs={graphs} loadExecution={loadExecution} matches={matches} search={search} setSearch={setSearch} matchCursor={matchCursor} setMatchCursor={setMatchCursor} columnWidth={columnWidth} setColumnWidth={setColumnWidth} selectedId={selectedId} onSelect={select} onInspect={inspect} />
+      <RuntimeExplorer key={conversationId ?? 'initial'} rounds={rounds} graphs={graphs} loadExecution={loadExecution} matches={matches} search={search} setSearch={setSearch} matchCursor={matchCursor} setMatchCursor={setMatchCursor} columnWidth={columnWidth} setColumnWidth={setColumnWidth} selectedId={selectedId} onSelect={select} onInspect={inspect} />
     </section>
   );
 }

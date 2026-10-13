@@ -51,9 +51,10 @@ export class ConversationSubmission {
 
   constructor(
     readonly id: string,
+    readonly conversationId: string,
     private readonly options: { admission?: () => ConversationAdmission } = {},
   ) {
-    this.state = Object.freeze({ submissionId: id, revision: 0, executions: Object.freeze([]), activities: this.activities.snapshot, integrity: Object.freeze({ status: 'complete' }) });
+    this.state = Object.freeze({ conversationId, submissionId: id, revision: 0, executions: Object.freeze([]), activities: this.activities.snapshot, integrity: Object.freeze({ status: 'complete' }) });
   }
 
   get snapshot(): ConversationSubmissionSnapshot {
@@ -199,7 +200,7 @@ export interface SubmissionRetention {
 }
 
 /** Process-local feedback retention. Eviction never cancels or queues runtime work. */
-export function createSubmissionStore(options: SubmissionRetention & { admission?: () => ConversationAdmission } = {}) {
+export function createSubmissionStore(options: SubmissionRetention & { admission?: (conversationId: string) => ConversationAdmission } = {}) {
   const entries = new Map<string, ConversationSubmission>();
   const maximum = options.maxEntries ?? 128;
   const ttlMs = options.ttlMs ?? 5 * 60_000;
@@ -217,7 +218,7 @@ export function createSubmissionStore(options: SubmissionRetention & { admission
       expire();
       return entries.get(id);
     },
-    create(id: string): ConversationSubmission {
+    create(id: string, conversationId: string): ConversationSubmission {
       expire();
       if (entries.has(id)) throw new RuntimeError('SUBMISSION_EXISTS', '该提交仍在保留范围内，请查询其进展。');
       if (entries.size >= maximum) {
@@ -225,7 +226,7 @@ export function createSubmissionStore(options: SubmissionRetention & { admission
         if (oldest) entries.delete(oldest.id);
       }
       if (entries.size >= maximum) throw new RuntimeError('SUBMISSION_CAPACITY', '暂时无法保留新的提交进展，请稍后再试。');
-      const submission = new ConversationSubmission(id, { admission: options.admission });
+      const submission = new ConversationSubmission(id, conversationId, { admission: options.admission ? () => options.admission!(conversationId) : undefined });
       entries.set(id, submission);
       return submission;
     },

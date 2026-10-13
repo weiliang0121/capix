@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
 import { ChangeBuffer, assembleRuntime, RuntimeDefinition, ExecutionDefinition, invocationRecording, bindRecording, Recorder, RecordBook, ExecutionRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix/server-runtime';
-import { initializeObserver, ObservationFeed, acceptConversationInput, createObserverServer } from '@capix/observer-service';
+import { ObserverConversations, ObservationFeed, acceptConversationInput, createObserverServer } from '@capix/observer-service';
 import { ObservationReplica, ObservationSequenceError, ClientRuntime } from '@capix/client-runtime';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
-import { baseline } from '../client/fixtures.mjs';
+import { baseline, transport, conversationDescriptor, transcriptSnapshot } from '../client/fixtures.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 2048, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'fixture', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -13,10 +13,11 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 const wire = (value) => JSON.parse(JSON.stringify(value));
 const memoryChange = (content, id = null, indexes = [0]) => ({ action: id ? 'update' : 'create', memoryId: id, change: 'new evidence', sourceIndexes: indexes, result: { topic: 'topic', content, sourceIndexes: indexes } });
 
+const environments = new WeakMap();
 function fixture(messages = []) {
   let round = 0;
   let environment;
-  environment = initializeObserver(
+  const conversations = new ObserverConversations(
     {
       async invoke(request, purpose) {
         const input = JSON.parse(request.messages[1].content);
@@ -31,6 +32,8 @@ function fixture(messages = []) {
     },
     messages,
   );
+  environment = conversations.open(conversations.list().defaultConversationId);
+  environments.set(environment, conversations);
   return environment;
 }
 async function run(environment, content) {
@@ -259,7 +262,8 @@ test('memory capture failure preserves the whole committed batch and attempts pu
 });
 
 async function serve(t, observer) {
-  const server = createObserverServer({ observer, settings, configured: true });
+  const conversations = environments.get(observer);
+  const server = createObserverServer({ conversations, settings, configured: true });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   t.after(
@@ -329,13 +333,15 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
 
 test('large entity baseline preserves full message text while observation carries only locations', async (t) => {
   const content = '中文'.repeat(50000);
-  const base = await serve(t, fixture([{ role: 'user', content }]));
+  const environment = fixture([{ role: 'user', content }]);
+  const base = await serve(t, environment);
+  const conversationId = environments.get(environment).list().defaultConversationId;
   const controller = new AbortController();
   t.after(() => controller.abort());
   let frame;
   await new ConversationHttpTransport(base)
     .observeTranscript(
-      undefined,
+      environment.transcript.id,
       (value) => {
         frame = value;
         controller.abort();
@@ -347,7 +353,7 @@ test('large entity baseline preserves full message text while observation carrie
     });
   assert.equal(frame.type, 'baseline');
   assert.equal(frame.snapshot.messages[0].content, content);
-  const overview = await new ObservationHttpTransport(base).overview();
+  const overview = await new ObservationHttpTransport(base).overview(conversationId);
   assert.equal('message' in overview.messages[0], false);
 });
 
@@ -361,11 +367,12 @@ test('client performs one bounded baseline retry on a sequence gap and ignores t
   feed.close();
   let connections = 0;
   let oldAccept;
+  const io = transport({ conversations: async () => ({ conversations: [conversationDescriptor('fixture-conversation', initial.transcript.id)], defaultConversationId: 'fixture-conversation' }), transcript: async () => transcriptSnapshot([], initial.transcript.id) });
   const runtime = new ClientRuntime({
-    conversation: {},
-    transcripts: {},
+    conversation: io,
+    transcripts: io,
     observation: {
-      async observe(accept, signal) {
+      async observe(_conversationId, accept, signal) {
         connections++;
         accept(initial);
         if (connections === 1) {
@@ -376,6 +383,7 @@ test('client performs one bounded baseline retry on a sequence gap and ignores t
       },
     },
   });
+  await runtime.initialize();
   const stop = runtime.startObservation();
   try {
     await until(() => connections === 2 && !runtime.getSnapshot().observation.loading);
@@ -385,21 +393,24 @@ test('client performs one bounded baseline retry on a sequence gap and ignores t
     assert.equal(runtime.getSnapshot().observation.error, undefined);
   } finally {
     stop();
+    runtime.stopTranscript();
   }
 });
 
 test('repeated sequence failure stops after one retry instead of looping forever', async () => {
   let connections = 0;
+  const io = transport();
   const runtime = new ClientRuntime({
-    conversation: {},
-    transcripts: {},
+    conversation: io,
+    transcripts: io,
     observation: {
-      async observe(accept) {
+      async observe(_conversationId, accept) {
         connections++;
         accept({ type: 'delta', scopeId: 'no-baseline', sequence: 1, changes: [] });
       },
     },
   });
+  await runtime.initialize();
   const stop = runtime.startObservation();
   try {
     await until(() => Boolean(runtime.getSnapshot().observation.error));
@@ -407,6 +418,7 @@ test('repeated sequence failure stops after one retry instead of looping forever
     assert.equal(runtime.getSnapshot().observation.loading, false);
   } finally {
     stop();
+    runtime.stopTranscript();
   }
 });
 
@@ -513,19 +525,23 @@ test('actual recording failure terminates HTTP observation, rejects later health
   await until(() => runtime.getSnapshot().observation.error?.code === 'SOURCE_INCOMPLETE');
   await until(() => runtime.getSnapshot().messages.length === 1);
   assert.equal(runtime.getSnapshot().messages[0].content, 'a fact despite record failure');
-  const result = await fetch(`${base}/api/executions`);
+  const result = await fetch(`${base}/api/executions?conversationId=${runtime.getSnapshot().conversation.id}`);
   assert.equal(result.status, 500);
   assert.equal((await result.json()).code, 'SOURCE_INCOMPLETE');
-  await assert.rejects(observation.overview(), (error) => error.code === 'SOURCE_INCOMPLETE');
+  await assert.rejects(observation.overview(runtime.getSnapshot().conversation.id), (error) => error.code === 'SOURCE_INCOMPLETE');
   let nextBaseline = false;
   await assert.rejects(
-    observation.observe(() => {
-      nextBaseline = true;
-    }, new AbortController().signal),
+    observation.observe(
+      runtime.getSnapshot().conversation.id,
+      () => {
+        nextBaseline = true;
+      },
+      new AbortController().signal,
+    ),
     (error) => error.code === 'SOURCE_INCOMPLETE',
   );
   assert.equal(nextBaseline, false);
-  assert.equal((await transcript.transcript()).messages.length, 1);
+  assert.equal((await transcript.transcript(environment.transcript.id)).messages.length, 1);
 });
 
 test('individual record changes retain partial R terminal facts until the separate R boundary arrives', async () => {

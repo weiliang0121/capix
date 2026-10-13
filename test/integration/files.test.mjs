@@ -5,7 +5,7 @@ import { mkdtemp, writeFile, readFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { initializeObserver, createObserverServer, WorkspaceFiles } from '@capix/observer-service';
+import { ObserverConversations, createObserverServer, WorkspaceFiles } from '@capix/observer-service';
 import { ClientRuntime } from '@capix/client-runtime';
 import { ConversationHttpTransport } from '@capix/client-http';
 
@@ -23,7 +23,7 @@ async function fixture(t, options = {}) {
   await writeFile(join(root, 'input.txt'), '文件正文 evidence-unique-中文');
   const calls = [];
   const files = options.disabled ? undefined : new WorkspaceFiles({ root });
-  const environment = initializeObserver(
+  const conversations = new ObserverConversations(
     {
       async invoke(modelRequest, purpose, signal) {
         calls.push({ purpose, request: modelRequest });
@@ -39,7 +39,9 @@ async function fixture(t, options = {}) {
     [],
     { files },
   );
-  const server = createObserverServer({ observer: environment, settings, configured: true });
+  const conversationId = conversations.list().defaultConversationId;
+  const environment = conversations.open(conversationId);
+  const server = createObserverServer({ conversations, settings, configured: true });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -56,6 +58,7 @@ async function fixture(t, options = {}) {
     runtime.stopTranscript();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+    conversations.close();
   });
   await runtime.initialize();
   return { root, calls, files, environment, server, base, posts, transport, runtime };
@@ -88,13 +91,13 @@ test('HTTP file task reads evidence, creates answer bytes and delivers an indepe
 test('disabled or invalid file tasks reject before appending input or invoking the model', async (t) => {
   const f = await fixture(t, { disabled: true });
   assert.equal((await f.transport.config()).files, undefined);
-  const response = await fetch(`${f.base}/api/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: 'disabled', input: request('read', { sourcePath: 'input.txt' }) }) });
+  const response = await fetch(`${f.base}/api/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: f.runtime.getSnapshot().conversation.id, submissionId: 'disabled', input: request('read', { sourcePath: 'input.txt' }) }) });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).result.status, 'rejected');
   assert.equal(f.environment.transcript.length, 0);
   assert.equal(f.calls.length, 0);
   const enabled = await fixture(t);
-  const invalid = await fetch(`${enabled.base}/api/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: 'invalid', input: request('read', { sourcePath: '../outside' }) }) });
+  const invalid = await fetch(`${enabled.base}/api/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: enabled.runtime.getSnapshot().conversation.id, submissionId: 'invalid', input: request('read', { sourcePath: '../outside' }) }) });
   assert.equal(invalid.status, 400);
   assert.equal(enabled.environment.transcript.length, 0);
   assert.equal(enabled.calls.length, 0);
@@ -154,7 +157,10 @@ test('lost feedback follows the same submission without repeating file creation'
   const f = await fixture(t, {
     transport: (io) => ({
       config: () => io.config(),
-      admission: (signal) => io.admission(signal),
+      conversations: (signal) => io.conversations(signal),
+      conversation: (id, signal) => io.conversation(id, signal),
+      createConversation: (signal) => io.createConversation(signal),
+      admission: (id, signal) => io.admission(id, signal),
       read: (id, signal) => {
         reads.push(id);
         return io.read(id, signal);
