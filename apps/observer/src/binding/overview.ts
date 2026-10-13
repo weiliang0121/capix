@@ -8,6 +8,36 @@ function object(value: unknown): Record<string, unknown> {
 }
 /** Live snapshots are projected locally; list loading never fetches all detail records. */
 export function updateOverview(previous: ObserverOverview, snapshot: ExecutionRecordSnapshot): ObserverOverview {
+  return updateOverviews(previous, [snapshot]);
+}
+
+/** One delivery can affect multiple E under an R; update their selection contributions once. */
+export function updateOverviews(previous: ObserverOverview, snapshots: Iterable<ExecutionRecordSnapshot>): ObserverOverview {
+  const byId = new Map(previous.executions.map((item) => [item.id, item]));
+  const counts = new Map<number, number>();
+  let transcriptId = previous.transcriptId;
+  let changed = false;
+  const contribute = (execution: ObserverOverview['executions'][number] | undefined, direction: number) => {
+    for (const selection of execution?.selections ?? []) for (const index of new Set(selection.indexes ?? [])) counts.set(index, (counts.get(index) ?? 0) + direction);
+  };
+  for (const snapshot of snapshots) {
+    const existing = byId.get(snapshot.execution.id);
+    const item = projectExecutionSummary(snapshot, existing, previous.messages.length);
+    contribute(existing, -1);
+    contribute(item, 1);
+    byId.set(item.id, item);
+    transcriptId = item.transcriptRange?.transcriptId ?? transcriptId;
+    changed = true;
+  }
+  if (!changed) return previous;
+  const messages = previous.messages.map((message) => {
+    const delta = counts.get(message.index) ?? 0;
+    return delta ? { ...message, count: message.count + delta } : message;
+  });
+  return { ...previous, transcriptId, executions: [...byId.values()], messages };
+}
+
+function projectExecutionSummary(snapshot: ExecutionRecordSnapshot, existing: ObserverOverview['executions'][number] | undefined, fallbackInputIndex: number): ObserverOverview['executions'][number] {
   validateExecutionRecordSnapshot(snapshot);
   const starts = new Map(snapshot.events.filter((event) => event.value.type === 'call').map((event) => [event.callId, event]));
   const ends = new Map(snapshot.events.filter((event) => event.value.type !== 'call').map((event) => [event.callId, event]));
@@ -18,11 +48,10 @@ export function updateOverview(previous: ObserverOverview, snapshot: ExecutionRe
     return { id: record.id, contextId: record.contextId, recordType: record.recordType, ...('parentId' in record ? { parentId: record.parentId } : {}), name: record.name, label: record.label, source: record.source, status: record.status, offsetMs: start?.offsetMs ?? 0, ...(end && start ? { durationMs: end.offsetMs - start.offsetMs } : {}) };
   });
   calls.sort((a, b) => (starts.get(a.id)?.sequence ?? Number.MAX_SAFE_INTEGER) - (starts.get(b.id)?.sequence ?? Number.MAX_SAFE_INTEGER));
-  const existing = previous.executions.find((item) => item.id === snapshot.execution.id);
   const observedOffsetMs = Math.max(snapshot.events.at(-1)?.offsetMs ?? 0, ...records.map((record) => record.value.processes.at(-1)?.offsetMs ?? 0));
   const durationMs = calls.find((call) => call.recordType === 'execution')?.durationMs;
   const range = executionResources(snapshot).transcriptRange;
-  const inputIndex = range ? range.end - 1 : (existing?.inputIndex ?? previous.messages.length);
+  const inputIndex = range ? range.end - 1 : (existing?.inputIndex ?? fallbackInputIndex);
   const selections = snapshot.operations.filter((operation) => operation.operation === 'selection');
   const response = snapshot.operations.find((operation) => operation.operation === 'answer' && operation.status === 'succeeded');
   const responseValue = response ? object(readOutput(response.value)) : {};
@@ -46,7 +75,5 @@ export function updateOverview(previous: ObserverOverview, snapshot: ExecutionRe
     ...(isString(responseValue.content) ? { response: { ...(existing?.response?.index === undefined ? {} : { index: existing.response.index }) } } : {}),
     ...(snapshot.operations.find((operation) => operation.operation === 'memory') ? { memoryStatus: snapshot.operations.find((operation) => operation.operation === 'memory')!.status } : {}),
   };
-  const executions = existing ? previous.executions.map((value) => (value.id === item.id ? item : value)) : [...previous.executions, item];
-  const messages = [...previous.messages];
-  return { ...previous, transcriptId: range?.transcriptId ?? previous.transcriptId, executions, messages: messages.map((message) => ({ ...message, count: executions.reduce((count, execution) => count + execution.selections.filter((selection) => selection.indexes?.includes(message.index)).length, 0) })) };
+  return item;
 }

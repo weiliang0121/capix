@@ -101,8 +101,9 @@ export class ObservationReceiver {
           if (next === this.replica) return;
           this.replica = next;
           ready = true;
-          const records = frame.type === 'baseline' ? new Map(next.snapshots) : new Map([...this.state.records, ...next.snapshots]);
-          this.update({ loading: false, overview: next.overview, memory: next.memory, records, updates: new Map(next.snapshots), cursor: { scopeId: next.scopeId, sequence: next.sequence }, invocationEvents: next.invocationEvents, transcriptRecords: next.transcriptRecords });
+          const records = frame.type === 'baseline' ? next.snapshots : next.updates.size ? new Map([...this.state.records, ...next.updates]) : this.state.records;
+          const updates = frame.type === 'baseline' ? next.snapshots : next.updates.size ? new Map([...this.state.updates, ...next.updates]) : this.state.updates;
+          this.update({ loading: false, overview: next.overview, memory: next.memory, records, updates, cursor: { scopeId: next.scopeId, sequence: next.sequence }, invocationEvents: next.invocationEvents, transcriptRecords: next.transcriptRecords });
         },
         session.signal,
       );

@@ -3,6 +3,8 @@ import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEv
 import { validateExecutionRecordSnapshot, validateRecordingArchives, validateRecordingArchiveOrigin } from '@capix/protocol';
 
 export class ObservationSequenceError extends Error {}
+/** Reconnecting cannot repair a foreign identity or contradictory formal fact. */
+export class ObservationContractError extends ObservationSequenceError {}
 /** A receiver-side replica. No UI geometry, business decisions or snapshot diffing. */
 export class ObservationReplica {
   readonly scopeId: string;
@@ -13,11 +15,13 @@ export class ObservationReplica {
   readonly invocationEvents: ReadonlyMap<string, InvocationEvent>;
   readonly transcriptRecords: readonly TranscriptRecord[];
   readonly snapshots: ReadonlyMap<string, ExecutionRecordSnapshot>;
+  /** Only complete execution views produced by this delivery; snapshots remains the cumulative replica. */
+  readonly updates: ReadonlyMap<string, ExecutionRecordSnapshot>;
   readonly transcript: ObservationBaseline['transcript'];
   readonly memories: ObservationBaseline['memories'];
   readonly recorder: ObservationBaseline['recorder'];
 
-  private constructor(baseline: ObservationBaseline, entries = new Map(baseline.entries.map((entry) => [entry.data.id, entry])), invocationEvents = new Map(baseline.invocations.map((event) => [event.contextId, event])), transcriptRecords: readonly TranscriptRecord[] = []) {
+  private constructor(baseline: ObservationBaseline, entries: ReadonlyMap<string, RecordEntry> = new Map(baseline.entries.map((entry) => [entry.data.id, entry])), invocationEvents: ReadonlyMap<string, InvocationEvent> = new Map(baseline.invocations.map((event) => [event.contextId, event])), transcriptRecords: readonly TranscriptRecord[] = [], previous?: ObservationReplica, affected?: ReadonlySet<string>) {
     this.scopeId = baseline.scopeId;
     this.sequence = baseline.sequence;
     this.overview = baseline.overview;
@@ -28,7 +32,9 @@ export class ObservationReplica {
     this.transcript = baseline.transcript;
     this.memories = baseline.memories;
     this.recorder = baseline.recorder;
-    this.snapshots = snapshots(entries);
+    const next = snapshots(entries, previous?.snapshots, affected);
+    this.snapshots = next.snapshots;
+    this.updates = next.updates;
   }
 
   static receive(previous: ObservationReplica | undefined, frame: ObservationFrame): ObservationReplica {
@@ -37,13 +43,15 @@ export class ObservationReplica {
       for (const execution of frame.overview.executions) if (execution.archive !== undefined) validateRecordingArchiveOrigin(execution.archive);
       return new ObservationReplica(frame);
     }
-    if (!previous || frame.scopeId !== previous.scopeId) throw new ObservationSequenceError('观测范围不一致，需要重新建立基线。');
+    if (!previous) throw new ObservationSequenceError('观测连接缺少初始基线。');
+    if (frame.scopeId !== previous.scopeId) throw new ObservationContractError('观测范围不一致。');
     if (frame.sequence <= previous.sequence) return previous;
     if (frame.sequence !== previous.sequence + 1) throw new ObservationSequenceError('观测交付存在缺口，需要重新建立基线。');
     // Stage every change in new structures; a rejected batch never mutates the accepted replica.
-    const entries = new Map(previous.entries);
-    const invocationEvents = new Map(previous.invocationEvents);
-    const transcriptRecords = [...previous.transcriptRecords];
+    let entries: Map<string, RecordEntry> | undefined;
+    const changedRecords = new Set<string>();
+    let invocationEvents: Map<string, InvocationEvent> | undefined;
+    let transcriptRecords = previous.transcriptRecords;
     let overview = previous.overview;
     let memory = previous.memory;
     let transcript = previous.transcript;
@@ -51,21 +59,23 @@ export class ObservationReplica {
     let recorder = previous.recorder;
     for (const event of frame.changes) {
       if (event.type === 'transcript') {
-        if (event.transcriptId !== transcript.id || event.revision !== transcript.revision + 1) throw new ObservationSequenceError('消息变化顺序不连续。');
+        if (event.transcriptId !== transcript.id) throw new ObservationContractError('消息集合身份不一致。');
+        if (event.revision !== transcript.revision + 1) throw new ObservationSequenceError('消息变化顺序不连续。');
         const change = event.change;
         if (change.kind === 'messages-appended') {
-          if (change.start !== overview.messages.length || change.end <= change.start) throw new ObservationSequenceError('消息追加位置不一致。');
+          if (change.start !== overview.messages.length || change.end <= change.start) throw new ObservationContractError('消息追加位置不一致。');
           overview = { ...overview, messages: [...overview.messages, ...Array.from({ length: change.end - change.start }, (_, offset) => ({ index: change.start + offset, count: 0 }))] };
         } else {
-          if (change.previousStart !== transcript.starts.at(-1) || change.start <= change.previousStart || change.start >= change.end || change.end !== overview.messages.length) throw new ObservationSequenceError('消息段边界不一致。');
+          if (change.previousStart !== transcript.starts.at(-1) || change.start <= change.previousStart || change.start >= change.end || change.end !== overview.messages.length) throw new ObservationContractError('消息段边界不一致。');
           transcript = { ...transcript, starts: [...transcript.starts, change.start] };
         }
         transcript = { ...transcript, revision: event.revision };
       } else if (event.type === 'memory') {
-        if (event.memoriesId !== memories.id || event.sequence !== memories.sequence + 1) throw new ObservationSequenceError('记忆变化顺序不连续。');
+        if (event.memoriesId !== memories.id) throw new ObservationContractError('记忆集合身份不一致。');
+        if (event.sequence !== memories.sequence + 1) throw new ObservationSequenceError('记忆变化顺序不连续。');
         const change = event.change;
         const old = memory.items.find((item) => item.id === change.memoryId);
-        if ((change.action === 'create') === Boolean(old)) throw new ObservationSequenceError('记忆变化目标不一致。');
+        if ((change.action === 'create') === Boolean(old)) throw new ObservationContractError('记忆变化目标不一致。');
         const item = {
           id: change.memoryId,
           topic: change.result.topic,
@@ -77,69 +87,81 @@ export class ObservationReplica {
         memory = { items: old ? memory.items.map((value) => (value.id === item.id ? item : value)) : [...memory.items, item] };
         memories = { ...memories, sequence: event.sequence };
       } else if (event.type === 'record') {
-        if (event.recorderId !== recorder.id || event.revision !== recorder.revision + 1) throw new ObservationSequenceError('记录变化顺序不连续。');
+        if (event.recorderId !== recorder.id) throw new ObservationContractError('记录来源身份不一致。');
+        if (event.revision !== recorder.revision + 1) throw new ObservationSequenceError('记录变化顺序不连续。');
+        entries ??= new Map(previous.entries);
         applyRecord(entries, event);
         const change = event.change;
-        if (change.kind === 'added' && change.entry.kind === 'transcript') transcriptRecords.push(change.entry.data as TranscriptRecord);
+        changedRecords.add(change.kind === 'added' || change.kind === 'replaced' ? change.entry.data.id : change.id);
+        if (change.kind === 'added' && change.parent) changedRecords.add(change.parent.id);
+        if (change.kind === 'added' && change.entry.kind === 'transcript') transcriptRecords = [...transcriptRecords, change.entry.data as TranscriptRecord];
         if (change.kind === 'added' && change.entry.kind === 'memory') {
           const record = change.entry.data as MemoryRecord;
           memory = { items: memory.items.map((item) => (item.id === record.memoryId ? { ...item, records: [...item.records, record] } : item)) };
         }
         recorder = { ...recorder, revision: event.revision };
       } else {
+        invocationEvents ??= new Map(previous.invocationEvents);
         const last = invocationEvents.get(event.contextId);
         if (event.sequence !== (last?.sequence ?? 0) + 1) throw new ObservationSequenceError('调用变化顺序不连续。');
         invocationEvents.set(event.contextId, event);
       }
     }
-    return new ObservationReplica({ type: 'baseline', scopeId: frame.scopeId, sequence: frame.sequence, overview, memory, transcript, memories, recorder, entries: [], invocations: [] }, entries, invocationEvents, transcriptRecords);
+    const acceptedEntries = entries ?? previous.entries;
+    return new ObservationReplica({ type: 'baseline', scopeId: frame.scopeId, sequence: frame.sequence, overview, memory, transcript, memories, recorder, entries: [], invocations: [] }, acceptedEntries, invocationEvents ?? previous.invocationEvents, transcriptRecords, previous, affectedExecutions(previous.entries, acceptedEntries, changedRecords));
   }
 }
 
 function applyRecord(entries: Map<string, RecordEntry>, event: RecordChangeEvent): void {
   const change = event.change;
   if (change.kind === 'added') {
-    if (entries.has(change.entry.data.id)) throw new ObservationSequenceError('重复登记记录。');
-    if (change.parent && (change.entry.data.parentId !== change.parent.id || change.parent.childId !== change.entry.data.id)) throw new ObservationSequenceError('记录归属不一致。');
+    if (entries.has(change.entry.data.id)) throw new ObservationContractError('重复登记记录。');
+    if (change.parent && (change.entry.data.parentId !== change.parent.id || change.parent.childId !== change.entry.data.id)) throw new ObservationContractError('记录归属不一致。');
     entries.set(change.entry.data.id, change.entry);
     if (change.parent) {
       const parent = entries.get(change.parent.id);
       // Completed historical bodies may not be loaded. Their references remain explicit IDs.
       if (parent) {
         const data = parent.data as typeof parent.data & { childIds: readonly string[] };
-        if (!isArray(data.childIds) || data.childIds.includes(change.parent.childId)) throw new ObservationSequenceError('父级引用无效。');
+        if (!isArray(data.childIds) || data.childIds.includes(change.parent.childId)) throw new ObservationContractError('父级引用无效。');
         entries.set(data.id, { ...parent, data: { ...data, childIds: [...data.childIds, change.parent.childId] } as typeof data });
       }
     }
     return;
   }
   if (change.kind === 'replaced') {
+    const previous = entries.get(change.entry.data.id);
+    if (previous && (previous.kind !== change.entry.kind || previous.data.parentId !== change.entry.data.parentId)) throw new ObservationContractError('记录身份或直接归属不能被替换。');
     entries.set(change.entry.data.id, change.entry);
     return;
   }
   const entry = entries.get(change.id);
-  if (!entry || !['runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) throw new ObservationSequenceError('调用记录尚未装载。');
+  if (!entry || !['runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) throw new ObservationContractError('调用记录尚未装载。');
   const data = entry.data as RuntimeCallRecord | ExecutionRecord | OperationRecord | AttemptRecord;
-  if (data.status !== 'running') throw new ObservationSequenceError('调用记录已经结束。');
+  if (data.status !== 'running') throw new ObservationContractError('调用记录已经结束。');
   if (change.kind === 'process-appended' || change.kind === 'relation-appended') {
     const sequence = Math.max(data.value.processes.at(-1)?.eventSequence ?? 0, data.value.relationChanges.at(-1)?.eventSequence ?? 0);
     const next = change.kind === 'process-appended' ? change.process.eventSequence : change.relation.eventSequence;
-    if (next <= sequence) throw new ObservationSequenceError('调用事实顺序没有前进。');
+    if (next <= sequence) throw new ObservationContractError('调用事实顺序没有前进。');
   }
   if (change.kind === 'relation-appended') {
-    if (change.relation.identity.parentContextId !== data.contextId) throw new ObservationSequenceError('调用关系不属于此父调用。');
+    if (change.relation.identity.parentContextId !== data.contextId) throw new ObservationContractError('调用关系不属于此父调用。');
     entries.set(data.id, { ...entry, data: { ...data, value: { ...data.value, relationChanges: [...data.value.relationChanges, change.relation] } } });
   } else if (change.kind === 'process-appended') {
-    if (change.process.sequence !== data.value.processes.length + 1) throw new ObservationSequenceError('调用过程顺序不连续。');
+    if (change.process.sequence !== data.value.processes.length + 1) throw new ObservationContractError('调用过程顺序不连续。');
     entries.set(data.id, { ...entry, data: { ...data, value: { ...data.value, processes: [...data.value.processes, change.process] } } });
   } else entries.set(data.id, { ...entry, data: { ...data, status: change.status, value: { ...data.value, ...change.result } } as ExecutionRecord });
 }
 
-function snapshots(entries: ReadonlyMap<string, RecordEntry>): ReadonlyMap<string, ExecutionRecordSnapshot> {
-  const values = [...entries.values()];
-  const result = new Map<string, ExecutionRecordSnapshot>();
-  for (const item of values) {
-    if (item.kind !== 'execution') continue;
+function snapshots(entries: ReadonlyMap<string, RecordEntry>, previous?: ReadonlyMap<string, ExecutionRecordSnapshot>, affected?: ReadonlySet<string>) {
+  if (previous && affected?.size === 0) return { snapshots: previous, updates: new Map<string, ExecutionRecordSnapshot>() };
+  const result = new Map(previous);
+  const updates = new Map<string, ExecutionRecordSnapshot>();
+  const ids = affected ?? new Set([...entries.values()].filter((entry) => entry.kind === 'execution').map((entry) => entry.data.id));
+  for (const id of ids) {
+    result.delete(id);
+    const item = entries.get(id);
+    if (!item || item.kind !== 'execution') continue;
     const execution = item.data as ExecutionRecord;
     // Match the server detail projection through explicit ownership, independently of delivery batch order.
     const scope = descendants(entries, item);
@@ -165,8 +187,40 @@ function snapshots(entries: ReadonlyMap<string, RecordEntry>): ReadonlyMap<strin
     const snapshot = { runtimeCall, runtimeEvents, execution, operations, attempts, events, resources };
     validateExecutionRecordSnapshot(snapshot);
     result.set(execution.id, snapshot);
+    updates.set(execution.id, snapshot);
   }
-  return result;
+  return { snapshots: result, updates };
+}
+
+/** Resolve ownership from formal record relationships, not a comparison of snapshots. */
+function affectedExecutions(previous: ReadonlyMap<string, RecordEntry>, entries: ReadonlyMap<string, RecordEntry>, changed: ReadonlySet<string>): Set<string> {
+  const affected = new Set<string>();
+  const visit = (source: ReadonlyMap<string, RecordEntry>, id: string) => {
+    const visited = new Set<string>();
+    let entry = source.get(id);
+    while (entry) {
+      if (visited.has(entry.data.id)) throw new ObservationContractError('记录归属存在循环或重复引用。');
+      visited.add(entry.data.id);
+      if (entry.kind === 'execution') {
+        affected.add(entry.data.id);
+        return;
+      }
+      if (entry.kind === 'runtime-call') {
+        // R facts are part of every directly contained E view, including multiple E in one R.
+        for (const childId of (entry.data as RuntimeCallRecord).childIds) {
+          if (source.get(childId)?.kind === 'execution') affected.add(childId);
+        }
+        return;
+      }
+      if (!entry.data.parentId) return;
+      entry = source.get(entry.data.parentId);
+    }
+  };
+  for (const id of changed) {
+    visit(previous, id);
+    visit(entries, id);
+  }
+  return affected;
 }
 
 function descendants(entries: ReadonlyMap<string, RecordEntry>, parent: RecordEntry): RecordEntry[] {
@@ -174,7 +228,7 @@ function descendants(entries: ReadonlyMap<string, RecordEntry>, parent: RecordEn
   const pending = children(entries, parent).reverse();
   const visited = new Set([parent.data.id]);
   for (let entry = pending.pop(); entry; entry = pending.pop()) {
-    if (visited.has(entry.data.id)) throw new ObservationSequenceError('记录归属存在循环或重复引用。');
+    if (visited.has(entry.data.id)) throw new ObservationContractError('记录归属存在循环或重复引用。');
     visited.add(entry.data.id);
     result.push(entry);
     pending.push(...children(entries, entry).reverse());
@@ -184,10 +238,10 @@ function descendants(entries: ReadonlyMap<string, RecordEntry>, parent: RecordEn
 
 function children(entries: ReadonlyMap<string, RecordEntry>, parent: RecordEntry): RecordEntry[] {
   if (!('childIds' in parent.data)) return [];
-  if (!isArray(parent.data.childIds)) throw new ObservationSequenceError('父级引用无效。');
+  if (!isArray(parent.data.childIds)) throw new ObservationContractError('父级引用无效。');
   return parent.data.childIds.map((id) => {
     const child = entries.get(id);
-    if (!child || child.data.parentId !== parent.data.id) throw new ObservationSequenceError('记录子级缺失或归属不一致。');
+    if (!child || child.data.parentId !== parent.data.id) throw new ObservationContractError('记录子级缺失或归属不一致。');
     return child;
   });
 }
