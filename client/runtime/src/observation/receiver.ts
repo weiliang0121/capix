@@ -1,10 +1,11 @@
 import type { ExecutionRecordSnapshot, InvocationEvent, MemoryObservation, ObserverOverview, SourceResponse, TranscriptRecord } from '@capix/protocol';
-import type { ObservationTransport } from '../transport.js';
-import { ObservationReplica, ObservationSequenceError } from './replica.js';
+import { ObservationConnectionError, type ObservationTransport } from '../transport.js';
+import { ObservationReplica, ObservationSequenceError, ObservationContractError } from './replica.js';
 
 export interface ObservationState {
   readonly enabled: boolean;
   readonly loading: boolean;
+  readonly reconnectable: boolean;
   readonly error?: unknown;
   readonly records: ReadonlyMap<string, ExecutionRecordSnapshot>;
   readonly updates: ReadonlyMap<string, ExecutionRecordSnapshot>;
@@ -17,13 +18,14 @@ export interface ObservationState {
 
 /** Owns optional observation delivery and its accepted cache; publication belongs to the client. */
 export class ObservationReceiver {
-  private state: ObservationState = Object.freeze({ enabled: false, loading: false, records: new Map(), updates: new Map(), overview: { transcriptId: '', messages: [], executions: [] }, memory: { items: [] } });
+  private state: ObservationState = Object.freeze({ enabled: false, loading: false, reconnectable: false, records: new Map(), updates: new Map(), overview: { transcriptId: '', messages: [], executions: [] }, memory: { items: [] } });
   private owner?: symbol;
   private session?: AbortController;
   private generation = 0;
   private replica?: ObservationReplica;
   private conversationId?: string;
   private transcriptId?: string;
+  private terminal = false;
 
   constructor(
     private readonly transport: ObservationTransport | undefined,
@@ -45,12 +47,13 @@ export class ObservationReceiver {
     this.session = undefined;
     this.conversationId = conversationId;
     this.transcriptId = transcriptId;
-    this.generation++;
+    const generation = ++this.generation;
     this.replica = undefined;
-    this.state = Object.freeze({ enabled: !!this.owner, loading: false, records: new Map(), updates: new Map(), overview: { transcriptId, messages: [], executions: [] }, memory: { items: [] } });
+    this.terminal = false;
+    this.state = Object.freeze({ enabled: !!this.owner, loading: false, reconnectable: false, records: new Map(), updates: new Map(), overview: { transcriptId, messages: [], executions: [] }, memory: { items: [] } });
     this.changed(this.state);
     previous?.abort();
-    if (this.owner) this.connect(this.owner, true);
+    if (this.generation === generation && this.owner) this.connect(this.owner, true);
   }
 
   /** Starting a new owner supersedes the previous one; old stop handles cannot stop it. */
@@ -58,7 +61,8 @@ export class ObservationReceiver {
     if (!this.transport) return () => {};
     const owner = Symbol('observation');
     this.owner = owner;
-    this.connect(owner, true);
+    if (this.terminal) this.update({ enabled: true });
+    else this.connect(owner, true);
     return () => {
       if (this.owner !== owner) return;
       const session = this.session;
@@ -71,7 +75,7 @@ export class ObservationReceiver {
   }
 
   refresh(): void {
-    if (this.owner) this.connect(this.owner, false);
+    if (this.owner && !this.terminal) this.connect(this.owner, false);
   }
 
   private connect(owner: symbol, resync: boolean): void {
@@ -80,7 +84,7 @@ export class ObservationReceiver {
     const session = new AbortController();
     this.session = session;
     this.generation++;
-    this.update({ enabled: true, loading: true, error: undefined });
+    this.update({ enabled: true, loading: true, reconnectable: false, error: undefined });
     previous?.abort();
     void this.consume(owner, session, resync);
   }
@@ -94,9 +98,9 @@ export class ObservationReceiver {
         this.conversationId,
         (frame) => {
           if (!current()) return;
-          if (frame.type === 'baseline' && frame.transcript.id !== this.transcriptId) throw new ObservationSequenceError('观测不属于当前对话的消息集合。');
+          if (frame.type === 'baseline' && frame.transcript.id !== this.transcriptId) throw new ObservationContractError('观测不属于当前对话的消息集合。');
           if (!ready && frame.type !== 'baseline') throw new ObservationSequenceError('观测连接缺少初始基线。');
-          if (ready && frame.type === 'baseline') throw new ObservationSequenceError('同一连接重复提供基线。');
+          if (ready && frame.type === 'baseline') throw new ObservationContractError('同一连接重复提供基线。');
           const next = ObservationReplica.receive(ready ? this.replica : undefined, frame);
           if (next === this.replica) return;
           this.replica = next;
@@ -107,6 +111,7 @@ export class ObservationReceiver {
         },
         session.signal,
       );
+      if (current()) throw new ObservationConnectionError('观测连接已结束。');
     } catch (error) {
       if (!current()) return;
       // A missing delivery can rebuild its baseline once; incomplete source facts cannot be repaired here.
@@ -114,7 +119,9 @@ export class ObservationReceiver {
         this.connect(owner, false);
         return;
       }
-      this.update({ loading: false, error });
+      const reconnectable = !sourceIncomplete(error) && error instanceof ObservationConnectionError;
+      this.terminal = !reconnectable;
+      this.update({ loading: false, reconnectable, error });
       session.abort();
     }
   }
@@ -143,7 +150,8 @@ export class ObservationReceiver {
 }
 
 function sequenceFailure(error: unknown): boolean {
-  return error instanceof ObservationSequenceError || (error instanceof Error && error.cause instanceof ObservationSequenceError);
+  const candidate = error instanceof Error && error.cause instanceof ObservationSequenceError ? error.cause : error;
+  return candidate instanceof ObservationSequenceError && !(candidate instanceof ObservationContractError);
 }
 
 function sourceIncomplete(error: unknown): boolean {

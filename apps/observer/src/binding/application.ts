@@ -28,6 +28,7 @@ export function createApplication(runtime: ClientRuntime) {
       // Initialization and message failures are projected from current state;
       // a previous connection's rejected promise must not overwrite that state.
       reconnectConversation: () => runtime.initialize().catch(() => undefined),
+      reconnectObservation: () => runtime.refreshObservation(),
       loadExecution: async (id: string, signal?: AbortSignal): Promise<void> => {
         await runtime.loadExecution(id, signal);
       },

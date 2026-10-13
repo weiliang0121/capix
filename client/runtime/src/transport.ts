@@ -25,6 +25,11 @@ export class TranscriptConnectionError extends Error {
   readonly name = 'TranscriptConnectionError';
 }
 
+/** A transport-confirmed interruption; observation may establish a fresh baseline. */
+export class ObservationConnectionError extends Error {
+  readonly name = 'ObservationConnectionError';
+}
+
 /** Entity content can be loaded and synchronized independently of observation. */
 export interface TranscriptTransport {
   transcript(id: string, signal?: AbortSignal): Promise<TranscriptResponse>;

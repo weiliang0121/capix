@@ -63,6 +63,7 @@ export interface AppData {
   conversationError?: string;
   config?: ConfigurationResponse;
   observationLoading: boolean;
+  observationReconnectable: boolean;
   observationError?: unknown;
   observationNotice?: string;
   conversationSync?: { message: string; reconnect: boolean };
@@ -91,7 +92,7 @@ export interface ConversationQueueView {
   readonly blocked?: string;
 }
 export function emptyAppData(): AppData {
-  return { conversations: [], switchingConversation: false, canSwitchConversation: false, observationLoading: false, busy: false, queue: { waiting: [] }, runningId: '', conversation: [], messageCount: 0, rounds: [], memory: { items: [] }, details: new Map(), graphs: new Map() };
+  return { conversations: [], switchingConversation: false, canSwitchConversation: false, observationLoading: false, observationReconnectable: false, busy: false, queue: { waiting: [] }, runningId: '', conversation: [], messageCount: 0, rounds: [], memory: { items: [] }, details: new Map(), graphs: new Map() };
 }
 
 export interface SearchMatch {

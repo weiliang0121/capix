@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ObservationSequenceError } from '@capix/client-runtime';
+import { ObservationSequenceError, ObservationConnectionError } from '@capix/client-runtime';
 import { baseline, client, deferred, entriesOf, snapshot, transport } from './fixtures.mjs';
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -174,7 +174,7 @@ for (const command of ['stop', 'replace', 'failure']) {
     const stop = runtime.startObservation();
     if (command === 'stop') stop();
     else if (command === 'replace') runtime.startObservation()();
-    else failure.reject(new Error('old connection failed'));
+    else failure.reject(new ObservationConnectionError('old connection failed'));
     await settle();
     assert.equal(connections.length, 2);
     connections[1].receive({ type: 'delta', scopeId: 'scope-2', sequence: 1, changes: [] });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpTransport, ConversationHttpTransport, ObservationHttpTransport, HttpError, HttpTransportError } from '@capix/client-http';
-import { TranscriptConnectionError } from '@capix/client-runtime';
+import { TranscriptConnectionError, ObservationConnectionError } from '@capix/client-runtime';
 import { snapshot, transcriptSnapshot, baseline, submissionSnapshot } from './fixtures.mjs';
 
 const input = { messages: [{ role: 'user', content: '测试' }] };
@@ -152,7 +152,7 @@ test('observation delivery preserves E entry diagnostics and parent relationship
   const client = new ObservationHttpTransport('', async () => new Response(frames.map(line).join('\n')));
   await assert.rejects(
     client.observe('fixture-conversation', (frame) => received.push(frame), new AbortController().signal),
-    (error) => error.code === 'INCOMPLETE_STREAM',
+    (error) => error instanceof ObservationConnectionError,
   );
   assert.deepEqual(received, frames);
 });

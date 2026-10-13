@@ -1,8 +1,8 @@
-import type { ObservationTransport } from '@capix/client-runtime';
+import { ObservationConnectionError, type ObservationTransport } from '@capix/client-runtime';
 import type { ObservationFrame } from '@capix/protocol';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { HttpTransport } from './transport.js';
-import { HttpTransportError } from './errors.js';
+import { HttpError, HttpTransportError } from './errors.js';
 import { acceptResponse, acceptSnapshot, acceptObservationFrame, overviewResponse, memoryResponse, sourceResponse, responseStatusError, parseLine, deliver } from './responses.js';
 import { readLines } from './stream.js';
 
@@ -25,15 +25,23 @@ export class ObservationHttpTransport extends HttpTransport implements Observati
     return acceptSnapshot(await this.get(`/api/execution?conversationId=${encodeURIComponent(conversationId)}&id=${encodeURIComponent(id)}`, signal), id);
   }
   async observe(conversationId: string, accept: (frame: ObservationFrame) => void, signal: AbortSignal): Promise<void> {
-    const response = await this.send(`/api/observe?conversationId=${encodeURIComponent(conversationId)}`, { signal });
-    if (!response.body) throw new HttpTransportError('contract', '服务未返回记录流。', 'MISSING_STREAM');
-    for await (const line of readLines(response.body)) {
-      const update = parseLine(line);
-      if (!isPlainObject(update)) throw new HttpTransportError('contract', '记录流格式无效。', 'INVALID_UPDATE');
-      if (update.type === 'error' && isString(update.error)) throw new HttpTransportError('remote', update.error, isString(update.code) ? update.code : undefined);
-      const frame = acceptObservationFrame(update);
-      deliver(() => accept(frame), '观测变化');
+    try {
+      const response = await this.send(`/api/observe?conversationId=${encodeURIComponent(conversationId)}`, { signal });
+      if (!response.body) throw new HttpTransportError('contract', '服务未返回记录流。', 'MISSING_STREAM');
+      for await (const line of readLines(response.body)) {
+        const update = parseLine(line);
+        if (!isPlainObject(update)) throw new HttpTransportError('contract', '记录流格式无效。', 'INVALID_UPDATE');
+        if (update.type === 'error' && isString(update.error)) throw new HttpTransportError('remote', update.error, isString(update.code) ? update.code : undefined);
+        const frame = acceptObservationFrame(update);
+        deliver(() => accept(frame), '观测变化');
+      }
+      if (!signal.aborted) throw new ObservationConnectionError('观测连接已结束。');
+    } catch (error) {
+      if (signal.aborted) throw error;
+      // Source and callback failures remain terminal, including a structured source error on HTTP 503.
+      if (error instanceof HttpTransportError || (error instanceof HttpError && error.code)) throw error;
+      if (error instanceof TypeError || (error instanceof HttpError && error.phase === 'status' && [408, 429, 500, 502, 503, 504].includes(error.response.status))) throw new ObservationConnectionError(error.message, { cause: error });
+      throw error;
     }
-    if (!signal.aborted) throw new HttpTransportError('contract', '观测连接已结束。', 'INCOMPLETE_STREAM');
   }
 }

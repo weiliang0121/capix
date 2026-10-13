@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ObservationHttpTransport } from '@capix/client-http';
-import { ObservationReplica } from '@capix/client-runtime';
+import { ObservationReplica, ObservationConnectionError } from '@capix/client-runtime';
 import { baseline } from './fixtures.mjs';
 
 const source = { id: 'saved-result', kind: 'file-created', answerIndex: 1, receipt: { path: 'summary.md', bytes: 12, digest: 'a'.repeat(64) } };
@@ -32,7 +32,7 @@ test('memory incremental delivery and replica preserve accepted sources independ
   const received = [];
   await assert.rejects(
     io.observe('fixture-conversation', (value) => received.push(value), new AbortController().signal),
-    (error) => error.code === 'INCOMPLETE_STREAM',
+    (error) => error instanceof ObservationConnectionError,
   );
   assert.deepEqual(received, frames);
   const initial = ObservationReplica.receive(undefined, received[0]);

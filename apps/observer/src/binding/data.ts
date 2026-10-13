@@ -64,6 +64,7 @@ export function createDataProjection() {
       queue: state.queue,
       runningId: current?.id ?? '',
       observationLoading: observation.loading,
+      observationReconnectable: state.observation.reconnectable,
       observationError: observation.error,
       observationNotice: observation.notice,
       conversationSync: projectConversationSync(state),

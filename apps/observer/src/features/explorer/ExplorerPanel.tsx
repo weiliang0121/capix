@@ -9,9 +9,10 @@ export function ExplorerPanel() {
   const observationNotice = useAppStore((state) => state.data.observationNotice);
   const observationError = useAppStore((state) => state.data.observationError);
   const observationLoading = useAppStore((state) => state.data.observationLoading);
+  const observationReconnectable = useAppStore((state) => state.data.observationReconnectable);
   const rounds = useAppStore((state) => state.data.rounds);
   const graphs = useAppStore((state) => state.data.graphs);
-  const { loadExecution } = useAppCommands();
+  const { loadExecution, reconnectObservation } = useAppCommands();
   const memoryCount = useAppStore((state) => state.data.memory.items.length);
   const selectedId = useAppStore((state) => state.selectedId);
   const select = useAppStore((state) => state.select);
@@ -45,13 +46,20 @@ export function ExplorerPanel() {
         </p>
       )}
       {Boolean(observationError) && (
-        <p className="observation-notice" role="status">
-          观测暂不可用：{errorMessage(observationError)}
-        </p>
+        <div className="observation-notice" role="status">
+          <span>
+            {observationReconnectable ? '观测连接已中断' : '观测已停止'}：{errorMessage(observationError)}
+          </span>
+          {observationReconnectable && (
+            <Button variant="ghost" size="sm" onClick={() => void reconnectObservation()}>
+              重新连接观测
+            </Button>
+          )}
+        </div>
       )}
-      {!observationError && observationLoading && !rounds.length && (
+      {!observationError && observationLoading && (
         <p className="observation-notice" role="status">
-          正在加载观测数据…
+          {rounds.length ? '正在重新连接观测，已接收的图谱仍然保留…' : '正在加载观测数据…'}
         </p>
       )}
       <RuntimeExplorer key={conversationId ?? 'initial'} rounds={rounds} graphs={graphs} loadExecution={loadExecution} matches={matches} search={search} setSearch={setSearch} matchCursor={matchCursor} setMatchCursor={setMatchCursor} columnWidth={columnWidth} setColumnWidth={setColumnWidth} selectedId={selectedId} onSelect={select} onInspect={inspect} />
