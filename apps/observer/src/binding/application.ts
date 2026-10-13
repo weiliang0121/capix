@@ -6,6 +6,7 @@ import { createDataProjection } from './data.js';
 import { errorMessage } from '../lib/errors.js';
 import { submitDraft } from './submit.js';
 import { projectConversationChange } from './conversations.js';
+import type { InteractionObservation } from '@capix/protocol';
 
 export function createApplication(runtime: ClientRuntime) {
   const store = createAppStore();
@@ -34,6 +35,8 @@ export function createApplication(runtime: ClientRuntime) {
       },
       loadTranscript: (id: string) => runtime.loadTranscript(id),
       source: (path: string, signal?: AbortSignal) => runtime.source(path, signal),
+      interactionLinks: (callId: string, signal?: AbortSignal) => runtime.interactionLinks(callId, signal),
+      observeInteraction: (callId: string, id: string, accept: (value: InteractionObservation) => void, signal: AbortSignal) => runtime.observeInteraction(callId, id, accept, signal),
     },
   };
 }

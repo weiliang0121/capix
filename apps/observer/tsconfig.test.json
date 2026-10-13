@@ -6,5 +6,5 @@
     "declaration": false,
     "jsx": "react-jsx"
   },
-  "include": ["src/observation/**/*.ts", "src/features/explorer/layout.ts", "src/features/explorer/types.ts", "src/features/conversation/Composer.tsx", "src/features/conversation/ConversationControls.tsx", "src/features/conversation/ConversationHistory.tsx", "src/features/conversation/FileResult.tsx", "src/features/conversation/MessageQueue.tsx", "src/features/conversation/ConversationProcess.tsx", "src/features/conversation/AnswerContent.tsx", "src/presentation/**/*.ts", "src/presentation/**/*.tsx", "src/state/**/*.ts", "src/binding/**/*.ts", "src/components/message-content.tsx", "src/features/memory/MemoryResultSources.tsx"]
+  "include": ["src/observation/**/*.ts", "src/features/explorer/layout.ts", "src/features/explorer/types.ts", "src/features/conversation/Composer.tsx", "src/features/conversation/ConversationControls.tsx", "src/features/conversation/ConversationHistory.tsx", "src/features/conversation/FileResult.tsx", "src/features/conversation/MessageQueue.tsx", "src/features/conversation/ConversationProcess.tsx", "src/features/conversation/AnswerContent.tsx", "src/features/inspection/InteractionDetails.tsx", "src/presentation/**/*.ts", "src/presentation/**/*.tsx", "src/state/**/*.ts", "src/binding/**/*.ts", "src/components/message-content.tsx", "src/features/memory/MemoryResultSources.tsx"]
 }

@@ -2,13 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { RuntimeError } from '../errors/error.js';
 import { RuntimeErrorHelper } from '../errors/helper.js';
 import { isNonBlankString } from '../value/string.js';
-import type { InteractionFeedback, InteractionOptions, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
+import type { InteractionFact, InteractionFeedback, InteractionOptions, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
 import { captureInteractionValue, sameInteractionValue } from './value.js';
+import { ProgressChannel } from '../progress/channel.js';
 
 /** One fixed external exchange. Invocation waiters neither own its delivery nor consume its reply. */
 export class Interaction<Request, Reply> {
   #state: InteractionState<Request, Reply>;
   readonly #options: InteractionOptions<Request, Reply>;
+  readonly #observation?: ProgressChannel<InteractionFact<Request, Reply>>;
   readonly #listeners = new Set<() => void>();
   #settled: Promise<void> = Promise.resolve();
   #fault?: { readonly error: unknown };
@@ -19,6 +21,7 @@ export class Interaction<Request, Reply> {
   constructor(request: Request, options: InteractionOptions<Request, Reply>) {
     if (!isNonBlankString(options.contract.key)) throw new TypeError('Interaction contract key must be nonempty');
     this.#options = Object.freeze({ ...options, contract: Object.freeze({ key: options.contract.key, request: options.contract.request.bind(options.contract), reply: options.contract.reply.bind(options.contract) }) });
+    this.#observation = options.observation ? new ProgressChannel(options.observation) : undefined;
     const captured = captureInteractionValue(request);
     this.#state = Object.freeze({ id: randomUUID(), contract: this.#options.contract.key, revision: 0, request: captureInteractionValue(this.#options.contract.request(captured)), delivery: 'prepared' });
     const committed: unknown = this.#options.persistence?.create(this.#state);
@@ -26,6 +29,7 @@ export class Interaction<Request, Reply> {
       void Promise.resolve(committed).catch(() => undefined);
       throw new TypeError('Interaction persistence must be synchronous');
     }
+    this.#observation?.publish(Object.freeze({ type: 'changed', state: this.#state }));
   }
 
   get id(): string {
@@ -99,7 +103,7 @@ export class Interaction<Request, Reply> {
   read(): InteractionRead<Reply> {
     if (this.#fault) return { kind: 'unavailable', error: this.#fault.error };
     if (this.#state.feedback) return { kind: 'received', feedback: this.#state.feedback };
-    if (this.#deliveryFailure) return { kind: 'unavailable', error: this.#deliveryFailure.error };
+    if (this.#state.failure) return { kind: 'unavailable', error: this.#deliveryFailure?.error ?? new RuntimeError(this.#state.failure.code, this.#state.failure.message) };
     if (this.#restored) return { kind: 'unavailable', error: new RuntimeError('INTERACTION_RESTORED_PENDING', 'Saved interaction has no received reply and no active delivery owner') };
     return { kind: 'pending' };
   }
@@ -176,8 +180,10 @@ export class Interaction<Request, Reply> {
         throw new TypeError('Interaction persistence must be synchronous');
       }
       this.#state = state;
+      this.#observation?.publish(Object.freeze({ type: 'changed', state }));
     } catch (error) {
       this.#fault = { error };
+      this.#observation?.publish(Object.freeze({ type: 'unavailable', state: this.#state, error: RuntimeErrorHelper.format(error) }));
       this.notify();
       throw error;
     } finally {

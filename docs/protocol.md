@@ -18,6 +18,8 @@
 - GET `/api/transcript/observe?id=集合ID` → 独立 TranscriptUpdate（baseline/delta/error）。首帧是同一同步边界的消息基线，后续仅传实体增量，不带调用记录；该订阅独立于观测。
 - GET `/api/executions?conversationId=对话ID` → ObserverOverview：仅含 transcriptId 与消息索引/计数，不含消息正文；搜索由客户端消息副本提供，执行列表包含 InvocationSummary（计时和身份，不含 IO/processes）、固定 transcriptRange、availableMemoryIds 和 memoryChanges 简介。
 - GET `/api/execution?conversationId=对话ID&id=记录ID` → ExecutionRecordSnapshot。仅在打开详情时请求；返回当前完整记录。
+- GET `/api/interactions?conversationId=对话ID&callId=调用ID` → CallInteractionLinks，仅提供该调用资源访问明确关联的外部交互 ID。
+- GET `/api/interaction/observe?conversationId=对话ID&callId=调用ID&id=交互ID` → NDJSON InteractionUpdate。先读取所选调用关联，再交付累计元数据 snapshot；received/unavailable 是本次订阅终态。模型请求/回复正文不包含在此投影中，revision 属于交互已提交状态，保存失败可在同一 revision 表达 unavailable。连接失败与交互失败分别处理，不能由断流推断业务结束。恢复历史仅按 ID 读取，不触发模型或重发。
 - GET `/api/memory?conversationId=对话ID` → MemoryObservation。记忆正文、来源与已生成的变更记录。
 - GET `/api/source?file=路径` → SourceResponse。路径为仓库相对源文件路径，服务端白名单验证。
 - POST `/api/run` 接受 ConversationSubmissionRequest `{ conversationId, submissionId, input: ConversationRequest }`。首次发送建立服务提交对象并启动运行，200 返回 NDJSON，每行是完整的 ConversationSubmissionSnapshot；输入已落实、任务已结束或投影失效时即可开始交付。客户端生成 submissionId，使首个响应丢失后仍可查询；该身份不提供幂等重提承诺。

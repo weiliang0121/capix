@@ -2,7 +2,7 @@
 
 `Interaction<Request, Reply>` 表达一笔固定请求及其外部反馈，独立于 REOA 的 Invocation、Context 和可选记录。A 可以发起交互并等待，也可以只读取此前交互；A 结束不会删除反馈。O 根据子调用真实交付决定是否再建立一个 A。
 
-本轮用现有模型能力验证这一边界，不增加外部能力平台、恢复调度或跨端协议。
+当前用模型能力验证这一边界，并提供按调用关联读取元数据的 Observer 端点，不增加外部能力平台或恢复调度。
 
 ## 实体、契约与装配
 
@@ -81,8 +81,18 @@ const restored = new ModelInteractions(new ModelSource(providerFactory), {
 const output = await restored.result({ id: savedInteractionId }, { signal });
 ```
 
-已保存反馈可以再次交给新的调用解释。只有 prepared/started、没有反馈的历史交互返回 `INTERACTION_RESTORED_PENDING`，不会重发，也不会无限等待一个已不存在的发送者。保存的失败按诊断返回。恢复实例只读，不恢复原 Invocation、QA 或提交身份；本轮没有恢复后的自动编排与客户端交互查询接口。
+已保存反馈可以再次交给新的调用解释。只有 prepared/started、没有反馈的历史交互返回 `INTERACTION_RESTORED_PENDING`，不会重发，也不会无限等待一个已不存在的发送者。保存的失败按诊断返回。恢复实例只读，不恢复原 Invocation、QA 或提交身份，也没有恢复后的自动编排。
 
 宿主默认保留最近 128 笔已结束交互，活动交互不淘汰。持久化交互可按 ID 重载；纯内存交互被淘汰后明确 unknown，不能据此推断“未发送”。数据库历史暂不自动清理。
 
 当前只有一个发送者，A1/A2 是顺序调用，读取也非破坏性，因此无需租约。单次 start 检查和版本条件写入各自保护本地不变量，不承诺跨进程接管或远端恰好一次。外部响应已到达但尚未保存时进程退出，仍可能丢失反馈；本轮没有持久 Inbox 或远端回查能力。
+
+## 按需观测
+
+Interaction 可接收可选 `observation` 窄端口，通过 ProgressChannel 隔离消费者错误。成功安装状态后发布 changed；必要保存失败时发布 unavailable，保留最后已提交 revision。恢复读取不伪造新变化。此出口不依赖 Recorder，事实与发送、反馈本身同生命周期。
+
+ModelInteractions 提供只读 observe，返回一致的当前状态、读取结果及解除函数，后续跟随该实体事实；不构造 Provider 或重新发送。Observer 服务将其投影为 `InteractionObservation`，仅含身份、契约、模型用途、发送登记、保留方式及反馈可用状态，不提供请求或回复正文。
+
+客户端先通过 conversationId + callId 查询资源访问记录中的真实关联，再订阅对应交互。资源记录自身的 interactionId 是资源动作 ID，不能拿来充当外部交互 ID；这里明确读取 start 的 output.id 或 wait/result 的 input.id。禁止按任意全局 ID 查询其他调用或对话。记录完整性失效时，关联入口也明确失败，但不影响交互实体自身继续接收。
+
+每条连接先发累计 snapshot，后续变化合并到微任务交付，不在实体变更栈上写网络；取得 received/unavailable 后结束本次订阅，不提供自动追赶或重发。以后再次打开详情会重新读当前事实。未持久化且被淘汰的交互明确 unknown。图中 A1 的 pending 返回和父层接纳保留为历史事实，晚到反馈只更新交互卡片，不改变 A1 结果，不据此判定回答或父层业务接纳成功。

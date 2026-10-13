@@ -13,6 +13,8 @@ export interface ConversationTransport {
 }
 
 export interface ObservationTransport {
+  interactions?(conversationId: string, callId: string, signal?: AbortSignal): Promise<import('@capix/protocol').CallInteractionLinks>;
+  observeInteraction?(conversationId: string, callId: string, id: string, accept: (value: import('@capix/protocol').InteractionObservation) => void, signal: AbortSignal): Promise<void>;
   overview(conversationId: string): Promise<ObserverOverview>;
   memory(conversationId: string): Promise<MemoryObservation>;
   source(path: string, signal?: AbortSignal): Promise<SourceResponse>;

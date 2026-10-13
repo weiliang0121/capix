@@ -176,7 +176,7 @@ loadExecution 按需查询，E 与其父 R 均结束时才复用终态缓存；�
 HttpTransport 只处理地址、HTTP 状态、JSON 读取和错误，不感知业务、实体或记录。
 
 - ConversationHttpTransport：对话目录及创建/读取、config、POST /api/run、GET /api/submissions/:id 与 /follow、POST /api/submissions/:id/cancel、transcript 查询和 GET /api/transcript/observe。提交响应逐行接纳 ConversationSubmissionSnapshot，HTTP 拒绝也可能携带正式投影；取消响应同样接纳累计事实，不把控制确认当成执行结束。实体流接纳 baseline/delta/error，不将断流当作业务完成。
-- ObservationHttpTransport：overview、memory、execution、source 和 GET /api/observe。观测流可覆盖多次执行，结束不代表业务完成。
+- ObservationHttpTransport：overview、memory、execution、source、GET /api/observe，以及按调用关联查询和订阅 Interaction 元数据。记录观测流可覆盖多次执行，结束不代表业务完成。
 - 普通响应由 Zod 接纳；记录详情由 validateExecutionRecordSnapshot 验证并核对请求身份；消息实体还由接收层检查范围与版本。
 
 readLines 只负责 UTF-8 解码与行拆分。回调同步执行，失败后关闭 reader；HttpError 保留 HTTP 响应，HttpTransportError 区分 contract / remote / delivery，网络异常保留原异常。取消实体或观测连接只解除对应交付。发送缓存有限，慢消费者断开后通过新基线接续，不承诺离线追赶。
@@ -232,6 +232,10 @@ presentation/conversation/scroll.ts 只维护 DOM 几何和阅读意图，不消
 真实浏览器回归可打开 `/test/conversation.html`，检查助手区域复用、占位到正式输入、短回答留白、长正文跟随、自主阅读、队列自动派发和 Enter/取消交互；不连接服务或调用模型。
 
 ### 记录来源完整性与父调用详情
+
+外部交互详情走独立、按需的 `interactionLinks` / `observeInteraction`：先取得所选调用资源记录明确关联的 ID，再订阅交互元数据。`InteractionObserver` 持有这些短期连接，检查身份、不可变描述和修订单调；切换对话取消旧范围，晚到响应不能进入新范围。它不重发模型，不写提交结果，不合并进入全局记录 Feed。组件关闭即停止消费。
+
+`binding/interactions.ts` 将本次返回、外部反馈与父层 relation 组合成 InteractionView，卡片只渲染明确的展示字段。分别解释本次返回 pending、外部 pending/received/unavailable、父层接纳。received 只说明反馈信封已取得，不能证明业务内容通过校验；仅启用持久化时显示已保存。观测断开保留最后事实并明确提示，不把连接错误改写为交互失败。独立浏览器 fixture `/test/observation.html` 验证重连资格与迟到反馈展示，不访问服务或真实模型。
 
 记录流每次连接通过服务端来源的 `open({ change, incomplete })` 建立一致基线，再按连接自己的 `scopeId/sequence` 接收增量；连接重建会更换交付范围，不改变来源 `recorder.id/revision`。`SOURCE_INCOMPLETE` 表示记录来源已经缺失事实，不是客户端落后。该错误终止本次记录流，不触发自动基线重试，已接纳的记录保留并与观测错误共同展示。重新连接同一个失效来源也不能生成健康基线。消息实体同步有独立消费出口，记录失效不会停止消息同步或禁止对话。
 

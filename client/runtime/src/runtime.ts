@@ -1,4 +1,4 @@
-import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationRequest, Message, ExecutionRecordSnapshot } from '@capix/protocol';
+import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationRequest, Message, ExecutionRecordSnapshot, InteractionObservation } from '@capix/protocol';
 import type { ConversationTransport, ObservationTransport, TranscriptTransport } from './transport.js';
 import { TranscriptReceiver, type TranscriptState } from './transcript.js';
 import { ObservationReceiver, type ObservationState } from './observation/receiver.js';
@@ -6,6 +6,7 @@ import { ClientSubmission, type ClientSubmissionState } from './submission.js';
 import { InitializationAttempt, type ClientInitializationState } from './initialization.js';
 import { ConversationQueue, type ClientQueueState, type ConversationQueueOptions } from './queue.js';
 import { coordinateConversation, type ContentAvailability } from './conversation.js';
+import { InteractionObserver } from './observation/interactions.js';
 
 export interface ClientState {
   readonly conversation?: ConversationDescriptor;
@@ -61,9 +62,11 @@ export class ClientRuntime {
   private readonly conversation: ConversationTransport;
   private readonly observation: ObservationReceiver;
   private readonly transcripts: TranscriptReceiver;
+  private readonly interactions: InteractionObserver;
 
   constructor(options: ClientRuntimeOptions) {
     this.conversation = options.conversation;
+    this.interactions = new InteractionObserver(options.observation);
     this.observation = new ObservationReceiver(options.observation, (observation) => {
       this.update({ observation });
     });
@@ -182,6 +185,7 @@ export class ClientRuntime {
     if (!attempt.running) return;
     this.openingTranscript = undefined;
     this.update({ conversation: selected, transcriptId: selected.transcriptId });
+    this.interactions.setConversation(selected.id);
     this.observation.setConversation(selected.id, selected.transcriptId);
   }
 
@@ -263,6 +267,7 @@ export class ClientRuntime {
     this.openingTranscript = undefined;
     this.acceptances.clear();
     this.update({ conversation: target, transcriptId: target.transcriptId, submission: undefined, submissions: new Map(), switching: false, conversationError: undefined });
+    this.interactions.setConversation(target.id);
     this.observation.setConversation(target.id, target.transcriptId);
     if (previousId && previousId !== this.sources.transcriptId && previousId !== this.openingTranscript) this.transcripts.stop(previousId);
   }
@@ -310,6 +315,14 @@ export class ClientRuntime {
 
   source(path: string, signal?: AbortSignal) {
     return this.observation.source(path, signal);
+  }
+
+  interactionLinks(callId: string, signal?: AbortSignal) {
+    return this.interactions.links(callId, signal);
+  }
+
+  observeInteraction(callId: string, id: string, accept: (value: InteractionObservation) => void, signal: AbortSignal): Promise<void> {
+    return this.interactions.observe(callId, id, accept, signal);
   }
 
   private updateSubmission(submission?: ClientSubmission): void {

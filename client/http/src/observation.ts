@@ -1,10 +1,11 @@
 import { ObservationConnectionError, type ObservationTransport } from '@capix/client-runtime';
-import type { ObservationFrame } from '@capix/protocol';
+import type { ObservationFrame, InteractionObservation } from '@capix/protocol';
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { HttpTransport } from './transport.js';
 import { HttpError, HttpTransportError } from './errors.js';
 import { acceptResponse, acceptSnapshot, acceptObservationFrame, overviewResponse, memoryResponse, sourceResponse, responseStatusError, parseLine, deliver } from './responses.js';
 import { readLines } from './stream.js';
+import { consumeInteraction, interactionLinksResponse } from './interaction.js';
 
 /** Observation queries and subscriptions, independent of conversation delivery. */
 export class ObservationHttpTransport extends HttpTransport implements ObservationTransport {
@@ -23,6 +24,16 @@ export class ObservationHttpTransport extends HttpTransport implements Observati
   }
   async execution(conversationId: string, id: string, signal?: AbortSignal) {
     return acceptSnapshot(await this.get(`/api/execution?conversationId=${encodeURIComponent(conversationId)}&id=${encodeURIComponent(id)}`, signal), id);
+  }
+  async interactions(conversationId: string, callId: string, signal?: AbortSignal) {
+    const links = acceptResponse(interactionLinksResponse, await this.get(`/api/interactions?conversationId=${encodeURIComponent(conversationId)}&callId=${encodeURIComponent(callId)}`, signal), '调用交互关联');
+    if (links.callId !== callId) throw new HttpTransportError('contract', '返回了不同调用的交互关联。', 'CALL_MISMATCH');
+    return links;
+  }
+  async observeInteraction(conversationId: string, callId: string, id: string, accept: (value: InteractionObservation) => void, signal: AbortSignal): Promise<void> {
+    const response = await this.send(`/api/interaction/observe?conversationId=${encodeURIComponent(conversationId)}&callId=${encodeURIComponent(callId)}&id=${encodeURIComponent(id)}`, { signal });
+    if (!response.body) throw new HttpTransportError('contract', '服务未返回交互观测流。', 'MISSING_STREAM');
+    await consumeInteraction(response.body, id, accept);
   }
   async observe(conversationId: string, accept: (frame: ObservationFrame) => void, signal: AbortSignal): Promise<void> {
     try {

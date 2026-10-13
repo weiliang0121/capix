@@ -5,3 +5,4 @@ export * from './selection.js';
 export * from './changes.js';
 export * from './stream.js';
 export * from './archive.js';
+export * from './interaction.js';

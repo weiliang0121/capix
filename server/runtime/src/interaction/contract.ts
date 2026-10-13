@@ -1,4 +1,5 @@
 import type { RuntimeErrorValue } from '@capix/protocol';
+import type { ProgressReceiver } from '../progress/channel.js';
 
 /** A versioned data boundary, independent of any invocation or recording preset. */
 export interface InteractionContract<Request, Reply> {
@@ -38,7 +39,11 @@ export interface InteractionPersistence<Request = unknown, Reply = unknown> {
 export interface InteractionOptions<Request, Reply> {
   readonly contract: InteractionContract<Request, Reply>;
   readonly persistence?: InteractionPersistence<Request, Reply>;
+  /** Passive facts after state installation. A failed observer never rejects delivery or feedback. */
+  readonly observation?: ProgressReceiver<InteractionFact<Request, Reply>>;
 }
+
+export type InteractionFact<Request = unknown, Reply = unknown> = { readonly type: 'changed'; readonly state: InteractionState<Request, Reply> } | { readonly type: 'unavailable'; readonly state: InteractionState<Request, Reply>; readonly error: RuntimeErrorValue };
 
 export type InteractionRead<Reply> = { readonly kind: 'pending' } | { readonly kind: 'received'; readonly feedback: InteractionFeedback<Reply> } | { readonly kind: 'unavailable'; readonly error: unknown };
 

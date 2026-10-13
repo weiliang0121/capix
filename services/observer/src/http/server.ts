@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConversationAdmission, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse } from '@capix/protocol';
+import type { ConversationAdmission, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse, InteractionUpdate } from '@capix/protocol';
 import { ExecutionRecord, ExecutionRecordHelper, observeMemory } from '@capix/server-runtime/recording';
 import { isObject, isInvocationCancelled, RuntimeError } from '@capix/server-runtime';
 import type { ObserverConversations } from '../assembly/conversations.js';
@@ -17,6 +17,7 @@ import { validateSettings } from '../assembly/settings.js';
 import { allowedSources } from './source.js';
 import { ConversationSubmission, createSubmissionStore, type SubmissionRetention } from '../conversation/submission.js';
 import { followSubmission } from './submission.js';
+import { callInteractionLinks, observeCallInteraction } from '../observation/interactions.js';
 
 export interface ObserverServerOptions {
   conversations: ObserverConversations;
@@ -89,6 +90,28 @@ export function createObserverServer(options: ObserverServerOptions) {
       return id;
     };
     if (req.method === 'GET' && url.pathname === '/api/conversation/admission') return json(res, 200, admission(target()));
+    if (req.method === 'GET' && (url.pathname === '/api/interactions' || url.pathname === '/api/interaction/observe')) {
+      const observer = conversations.open(target());
+      const callId = url.searchParams.get('callId');
+      if (!callId) throw new RuntimeError('INVALID_INPUT', '需要明确调用身份。');
+      if (url.pathname === '/api/interactions') return json(res, 200, callInteractionLinks(observer, callId));
+      const id = url.searchParams.get('id');
+      if (!id) throw new RuntimeError('INVALID_INPUT', '需要明确交互身份。');
+      const write = observationWriter<InteractionUpdate>(res);
+      // Validate the link and establish observation before committing HTTP success headers.
+      const unsubscribe = observeCallInteraction(observer, callId, id, (frame) => {
+        try {
+          if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+          if (frame.type === 'error' || frame.value.result.kind !== 'pending') write.end(frame);
+          else write(frame);
+        } catch {
+          res.destroy();
+        }
+      });
+      res.on('close', unsubscribe);
+      if (res.writableEnded || res.destroyed) unsubscribe();
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/observe') {
       const id = target();
       const observer = conversations.open(id);

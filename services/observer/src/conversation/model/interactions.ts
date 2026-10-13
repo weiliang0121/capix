@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Interaction, InvocationCancelled, RuntimeError, isInvocationCancelled, type InteractionContract, type InteractionPersistence, type InteractionState } from '@capix/server-runtime';
+import { Interaction, InvocationCancelled, RuntimeError, ProgressChannel, isInvocationCancelled, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState, type ProgressReceiver } from '@capix/server-runtime';
 import { ModelSource } from './source.js';
 import type { ModelOutput, ModelRequest, Purpose } from './types.js';
 
@@ -38,6 +38,7 @@ export class ModelInteractions {
   readonly #interactions = new Map<string, Interaction<ModelInteractionRequest, ModelOutput>>();
   readonly #active = new Set<Interaction<ModelInteractionRequest, ModelOutput>>();
   readonly #signals = new Map<string, AbortSignal>();
+  readonly #observers = new Map<string, Set<ProgressChannel<InteractionFact<ModelInteractionRequest, ModelOutput>>>>();
   readonly #retained: number;
   #closed = false;
 
@@ -67,10 +68,29 @@ export class ModelInteractions {
     if (this.active) throw new RuntimeError('MODEL_INTERACTIONS_ACTIVE', '仍有模型交互正在进行，不能关闭交互宿主。');
     this.#closed = true;
     this.#interactions.clear();
+    this.#observers.clear();
   }
 
   states(): readonly InteractionState<ModelInteractionRequest, ModelOutput>[] {
     return [...this.#interactions.values()].map((interaction) => interaction.exportState());
+  }
+
+  /** Host observation is read-only and never initializes a provider or sends a request. */
+  observe(ref: ModelInteractionRef, receiver: ProgressReceiver<InteractionFact<ModelInteractionRequest, ModelOutput>>) {
+    const interaction = this.get(ref);
+    const observer = new ProgressChannel(receiver);
+    const observers = this.#observers.get(ref.id) ?? new Set();
+    observers.add(observer);
+    this.#observers.set(ref.id, observers);
+    return {
+      state: interaction.exportState(),
+      result: interaction.read(),
+      retained: this.options.persistence ? ('persistent' as const) : ('memory' as const),
+      close: () => {
+        observers.delete(observer);
+        if (!observers.size) this.#observers.delete(ref.id);
+      },
+    };
   }
 
   start(request: ModelRequest, purpose: Purpose, controls: { readonly signal: AbortSignal; readonly timeoutMs: number }): ModelInteractionRef {
@@ -78,7 +98,7 @@ export class ModelInteractions {
     if (controls.signal.aborted) throw new InvocationCancelled(controls.signal);
     // Provider construction must fail before an exchange is registered as dispatched.
     const provider = this.source.get();
-    const interaction = new Interaction({ request, purpose, timeoutMs: controls.timeoutMs }, { contract: modelInteractionContract, persistence: this.options.persistence });
+    const interaction = new Interaction({ request, purpose, timeoutMs: controls.timeoutMs }, { contract: modelInteractionContract, persistence: this.options.persistence, observation: { receive: (fact) => this.publish(fact) } });
     this.#interactions.set(interaction.id, interaction);
     const timeout = AbortSignal.timeout(controls.timeoutMs);
     const signal = AbortSignal.any([controls.signal, timeout]);
@@ -166,6 +186,10 @@ export class ModelInteractions {
 
   private requireOpen(): void {
     if (this.#closed) throw new RuntimeError('MODEL_INTERACTIONS_CLOSED', '模型交互宿主已经关闭。');
+  }
+
+  private publish(fact: InteractionFact<ModelInteractionRequest, ModelOutput>): undefined {
+    for (const observer of [...(this.#observers.get(fact.state.id) ?? [])]) observer.publish(fact);
   }
 
   private prune(): void {

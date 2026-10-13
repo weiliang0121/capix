@@ -19,6 +19,7 @@
 - 消息副本与同步连接状态分开。TranscriptReceiver 对明确连接中断和修订缺口有限退避重建基线，主动停止清理定时器；身份/正文冲突、协议错误及来源失效终止自动恢复。基线不能改写既有消息前缀。恢复就绪等待本次有效基线，不复用首次 ready；已初始化客户端的同步波动不重置业务接纳资格或触发重 POST。
 - 服务模型请求、Schema、Provider 适配与配置接纳留在服务。Key 仅由服务端环境获取，不输出、不写记录或传到客户端。模型能力与配置是不同对象。
 - Interaction 独立于 Invocation 与 Recorder，固定请求只发送一次，反馈非破坏读取；局部等待到期不重发。服务 ModelInteractions 持有实体，资源分 create/read；请求模型 O 接纳 A1 pending 后可建立 A2 读取同一交互。Provider 总超时与局部等待分开；宿主取消的交接窗口由服务等待同 owner 交互收尾并维持 busy，R 无需伪装仍在运行。恢复有反馈只读、无反馈明确 unavailable；不引入租约、自动重放或执行恢复。详见 [外部交互](docs/interactions.md)。
+- Interaction 的可选观测发布已安装状态与保存失败，消费者故障隔离，不依赖 Recorder。Observer 按 conversationId/callId 的真实资源访问关联提供元数据查询与订阅，不公开任意 ID 的请求/反馈正文。局部等待、外部反馈和父层接纳分别展示；持久化反馈才能称已保存。切换对话/关闭详情解除消费，不重发调用。
 
 ## 运行结构与访问
 
@@ -43,6 +44,8 @@
 - ObserverChange 只是当前服务环境的来源联合，不是内核全部事件类型。一个 ChangeConsumer 独占 take，向 RecordSource 和独立实体出口分发。记录来源缺失事实永久终止 SOURCE_INCOMPLETE，不能重拉基线假装修复；网络失败不破坏来源。不得比较全量快照反推增量。顺序、来源修订与交付游标各有边界，批次不宣称业务事务。详见 [观测增量](docs/observation-increments.md)。
 - Transcript / Memories 的可选持久端口同步提交已预检查的变更，成功后才更新内存、发布进展与变化；记忆整批提交、整批落实后逐项通知，通知失败不留下半批事实。restore 静默恢复身份、顺序、分段及来源，不重放 append/create。SQLite 实现在服务 persistence 内，不进入 REOA 或 protocol。
 - Observer 默认保存到被 Git 忽略的 `.capix/observer.sqlite`，可用 `CAPIX_DATA_DIR` 指定模型文件工作区之外的目录。单进程独占写入，启用 WAL/FULL；内容保存失败使服务不可接纳，不退化到仅内存。历史 RecordBook 只读，旧来源保留 open/sealed/incomplete 标记；每次启动新建记录安装与变化来源。旧 running 表示未取得结束记录，不伪造失败、不进入当前活动基线。详见 [持久化](docs/persistence.md)。
+- 内容与可选记录分开加载；装配复用已恢复实体并点查核对 Transcript/Memories 身份。历史记录逻辑损坏使该对话观测 SOURCE_INCOMPLETE，保留原库，不阻止健康内容和新 QA；真实数据库/内容故障继续严格失败。初始内存消息在绑定观测后正式追加一次，恢复历史不重演事实。
+- 观测副本只重建受影响且边界齐备的 E，R 变化影响其全部直接 E；保留整批接纳和累计 updates。Binding 依赖消息、选择计数、记忆来源复用未变读模型，不宣称消除所有浅扫描。传输确认的网络/EOF/暂时 HTTP 故障允许手动重连，保留已有图谱；来源、身份/协议及消费者失败不可由 refresh 或重挂绕过。
 
 ## 对话与交付
 

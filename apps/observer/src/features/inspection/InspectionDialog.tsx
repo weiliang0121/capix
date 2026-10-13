@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { MemoryAtCall } from '../memory/MemoryAtCall';
 import { CallChildren } from './CallChildren';
 import { Source } from './Source';
+import { InteractionDetails } from './InteractionDetails';
+import { hasInteraction } from '../../binding/interactions.js';
 import { DataBlock, TextBlock, Status, statusLabels, duration } from './blocks';
 import './inspection.css';
 export function InspectionDialog({ target, detail, loading, error, qa, number, onClose, onInspect }: { target?: Inspection; detail?: ExecutionDetail; loading: boolean; error: string; qa?: RoundView; number: number; onClose: () => void; onInspect: (id: string, call?: string) => void }) {
@@ -90,6 +92,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                         <DataBlock title={call.error ? '失败原因' : '最终结果'} value={call.error ?? call.output} />
                         {call.failure && <DataBlock title="失败归属" value={call.failure} />}
                       </div>
+                      {hasInteraction(call) && <InteractionDetails key={call.id} call={call} parent={call.parentId ? detail.calls.get(call.parentId) : undefined} />}
                       {call.parentId && (
                         <Button variant="ghost" size="sm" onClick={() => onInspect(detail.id, call.parentId)}>
                           查看父调用 <ArrowUpRight />
