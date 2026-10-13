@@ -101,7 +101,7 @@ test('the observed execution preserves ranking, records actual requests and acco
   assert.equal(requests.length, 3);
   assert.deepEqual(
     facts.operations.map((record) => record.operation),
-    ['selection', 'conversationDecision', 'answer', 'conversationDecision', 'memory'],
+    ['selection', 'requestModel', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
   );
   assert.deepEqual(readOutput(facts.operations.find((record) => record.operation === 'selection').value).historyIndexes, [2, 0, 1]);
   for (const decision of facts.operations.filter((record) => record.operation === 'conversationDecision')) {

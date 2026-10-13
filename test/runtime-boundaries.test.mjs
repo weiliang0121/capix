@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
@@ -148,7 +149,7 @@ test('new R assemblies share independently owned entities without absorbing thei
   const run = async (runtime, text) => observeExecution(runtime, environment.recording, { messages: [{ role: 'user', content: text }] }, { settings });
   const first = await run(environment.runtime, '我在北京');
   const memory = environment.memories.values()[0];
-  const next = bindConversation(new ConversationRuntimeDefinition(), environment, provider, { observations: [environment.recording], changes: environment.changes });
+  const next = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)), { observations: [environment.recording], changes: environment.changes });
   const second = await run(next, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.memories.get(memory.id), memory);

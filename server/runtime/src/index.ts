@@ -19,6 +19,10 @@ export * from './resource/bindings.js';
 export { ResourceActivity, type ResourceInteractionDescription, type ResourceOwner } from './resource/activity.js';
 export * from './initialization/initializer.js';
 
+// Independent external interactions; waiting invocations do not own delivery or retained feedback.
+export * from './interaction/contract.js';
+export * from './interaction/interaction.js';
+
 // Business-facing context and invocation views, results and shared time.
 export * from './context/view.js';
 export * from './invocation/view.js';

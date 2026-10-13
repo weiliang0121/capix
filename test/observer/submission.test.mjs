@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
@@ -55,7 +56,7 @@ test('service projection retains input committed before capture failure, without
       },
     },
   });
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, provider);
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
   const submission = new ConversationSubmission('append-failed');
   submission.start(() => runtime.run(input, { settings, progress: submission.progress }));
   const snapshot = await complete(submission);
@@ -88,7 +89,7 @@ test('service input acceptance only classifies validation it actually owns', () 
 
 test('projection failure stops trustworthy progress but does not stop a running conversation', async () => {
   const environment = createEnvironment();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, provider);
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
   const submission = new ConversationSubmission('broken-projection');
   // A second committed input cannot be interpreted as the same submission's input.
   submission.progress.publish({ kind: 'input', range: { transcriptId: environment.transcript.id, start: 0, end: 1, revision: 1 } });
@@ -163,7 +164,7 @@ test('conversation binding selects its declared E instead of giving every R chil
       return children.accept(selected, () => output);
     },
   };
-  const runtime = bindConversation(definition, environment, provider);
+  const runtime = bindConversation(definition, environment, new ModelInteractions(new ModelSource(provider)));
   const received = [];
   await runtime.run(input, {
     settings,
@@ -198,7 +199,7 @@ test('async delivery listeners are isolated and readiness cancellation only deta
 
 test('a single submission channel disables its consumer across input, execution and answer sources', async () => {
   const environment = createEnvironment();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, provider);
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
   const received = [];
   const failures = [];
   const failure = new Error('input projection failed');
@@ -272,15 +273,21 @@ test('only runtime-confirmed cancellation terminates as cancelled and keeps comm
   const entering = new Promise((resolve) => {
     entered = resolve;
   });
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, {
-    async invoke(_request, _purpose, signal) {
-      entered();
-      return new Promise((_resolve, reject) => {
-        if (signal.aborted) reject(signal.reason);
-        else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-      });
-    },
-  });
+  const runtime = bindConversation(
+    new ConversationRuntimeDefinition(),
+    environment,
+    new ModelInteractions(
+      new ModelSource({
+        async invoke(_request, _purpose, signal) {
+          entered();
+          return new Promise((_resolve, reject) => {
+            if (signal.aborted) reject(signal.reason);
+            else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        },
+      }),
+    ),
+  );
   const submission = new ConversationSubmission('confirmed-cancel');
   submission.start((signal) => runtime.run(input, { settings, progress: submission.progress, activity: submission.activity, signal }));
   await entering;

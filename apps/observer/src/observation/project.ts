@@ -73,6 +73,11 @@ export function projectExecution(facts: ExecutionRecordSnapshot): Trace {
     }),
   ];
   calls.sort((a, b) => (starts.get(a.id)?.sequence ?? Number.MAX_SAFE_INTEGER) - (starts.get(b.id)?.sequence ?? Number.MAX_SAFE_INTEGER));
+  const groups = new Map<string, Trace['nodes'][number]['group']>();
+  for (const call of calls) {
+    const group = call.operation?.startsWith('selection') ? 'selection' : call.operation?.startsWith('answer') ? 'answer' : call.operation?.startsWith('memory') ? 'memory' : ((call.parentId ? groups.get(call.parentId) : undefined) ?? 'flow');
+    groups.set(call.id, group);
+  }
   return {
     facts,
     id: execution.id,
@@ -81,7 +86,7 @@ export function projectExecution(facts: ExecutionRecordSnapshot): Trace {
     status: observationStatus(execution.status, facts.archive),
     nodes: calls.map((call) => ({
       ...call,
-      group: call.operation?.startsWith('selection') ? 'selection' : call.operation?.startsWith('answer') ? 'answer' : call.operation?.startsWith('memory') ? 'memory' : 'flow',
+      group: groups.get(call.id)!,
     })),
     callSequence: {
       version: 1,

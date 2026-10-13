@@ -255,7 +255,7 @@ test('Observer execution observes execution, operations and boundaries from the 
   assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations', 'resources', 'runtimeCall', 'runtimeEvents']);
   assert.deepEqual(
     facts.operations.map((record) => record.operation),
-    ['selection', 'conversationDecision', 'answer', 'conversationDecision', 'memory'],
+    ['selection', 'requestModel', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
   );
   assert.equal(facts.attempts.length, 11);
   const sequence = projectExecution(facts).callSequence;
@@ -273,9 +273,10 @@ test('Observer execution observes execution, operations and boundaries from the 
     assert.equal(call.target, attempt.callee);
   }
   const expectedActions = {
-    selection: ['prepareModelRequest', 'invokeModel', 'acceptModelOutput'],
-    answer: ['assembleContext', 'prepareModelRequest', 'invokeModel', 'acceptModelOutput'],
-    memory: ['prepareModelRequest', 'invokeModel', 'acceptModelOutput', 'applyMemory'],
+    selection: ['prepareModelRequest', 'acceptModelOutput'],
+    answer: ['assembleContext', 'prepareModelRequest', 'acceptModelOutput'],
+    memory: ['prepareModelRequest', 'acceptModelOutput', 'applyMemory'],
+    requestModel: ['invokeModel'],
     conversationDecision: [],
   };
   for (const operation of facts.operations) {
@@ -289,8 +290,16 @@ test('Observer execution observes execution, operations and boundaries from the 
       assert.ok(facts.execution.value.relationChanges.some((entry) => entry.identity.childContextId === operation.contextId && entry.change.kind === 'accepted'));
       continue;
     }
+    if (operation.operation === 'requestModel') {
+      const invocation = attempts[0];
+      assert.deepEqual(invocation.value.input, operation.value.input);
+      assert.equal(readOutput(invocation.value).kind, 'received');
+      assert.deepEqual(readOutput(invocation.value).output, readOutput(operation.value));
+      assert.ok(facts.operations.some((parent) => parent.id === operation.parentId));
+      continue;
+    }
     const preparation = attempts.find((attempt) => attempt.name === 'prepareModelRequest');
-    const invocation = attempts.find((attempt) => attempt.name === 'invokeModel');
+    const invocation = facts.operations.find((child) => child.parentId === operation.id && child.operation === 'requestModel');
     const acceptance = attempts.find((attempt) => attempt.name === 'acceptModelOutput');
     assert.deepEqual(invocation.value.input, readOutput(preparation.value));
     assert.deepEqual(acceptance.value.input.output, readOutput(invocation.value));
@@ -321,7 +330,7 @@ test('Observer execution observes execution, operations and boundaries from the 
 test('Acceptance rejection preserves raw output and its original cause without recording an accepted result', async () => {
   const facts = await execute('broken-json');
   const answer = facts.operations.find((op) => op.operation === 'answer');
-  const invoked = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'invokeModel');
+  const invoked = facts.operations.find((operation) => operation.parentId === answer.id && operation.operation === 'requestModel');
   const accepted = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'acceptModelOutput');
   assert.equal(readOutput(invoked.value).content, 'broken-json');
   assert.equal(accepted.value.input.output.content, 'broken-json');

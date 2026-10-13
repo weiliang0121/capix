@@ -22,13 +22,15 @@ const recording = bindRecording(recorder, { failure: 'isolate', invalidate: (err
 const transcript = new Transcript(messages, { observation: recording.transcript, changes });
 const memories = new Memories(transcript, { observation: recording.memory, changes });
 const selectionUsage = new SelectionUsage();
+const model = new ModelSource(provider);
+const interactions = new ModelInteractions(model);
 const definition = new ConversationRuntimeDefinition();
-const runtime = bindConversation(definition, { transcript, memories, selectionUsage }, provider, { observations: [recording], changes });
+const runtime = bindConversation(definition, { transcript, memories, selectionUsage }, interactions, { observations: [recording], changes });
 
 await runtime.run({ messages: newMessages }, { settings, signal, progress });
 ```
 
-上面是服务装配示例。progress 是宿主为本次请求建立的 `ProgressChannel<ConversationProgress>`，输入、回答和调用映射共同使用它；任一来源消费失败后统一停用，下一次请求使用独立通道。`bindConversation` 创建模型 Initializer 并供应原实体；模型与配置不是同一对象，配置是固定数据，模型供给是可兑现的调用能力。显式供应同一模型实例可以共享它，供应工厂则由各次装配建立自己的模型缓存。
+上面是服务装配示例。progress 是宿主为本次请求建立的 `ProgressChannel<ConversationProgress>`，输入、回答和调用映射共同使用它；任一来源消费失败后统一停用，下一次请求使用独立通道。环境建立 ModelSource 与 ModelInteractions，`bindConversation` 只绑定正式创建/读取资源；模型与配置不是同一对象，配置是固定数据，模型供给是可兑现的调用能力。读取已有交互不兑现惰性 Provider。
 
 `createBoundRuntime({ observations?, changes?, clock? })` 是低层结构入口，不建立消息、记忆或记录实体。`assembleRuntime` 将声明、独立供给及本次来源绑定到 R。省略 observations 时关闭调用观测；显式空数组启用声明但不附加预设；[recording] 提供记录预设的本调用端口。开启后缺资源是装配错误，局部供给只满足观测声明，不能泄漏给工作和异常处理。
 
@@ -126,7 +128,9 @@ const definition = new ConversationRuntimeDefinition({
 
 Sequence 是不可变顺序定义，step 包含 key、use、input 与可选 accept；类型只能读取前项已接收输出。每次 run 新建本次输出容器；输入构造失败不创建子调用，子调用或接收失败停止后续创建。组合没有第四层 Context、Record、调度器或自动重试。
 
-回答生成仍只有一个受限再次生成声明：AcceptModelOutputDefinition 对完整返回的 INVALID_JSON、EMPTY_OUTPUT 或 OUTPUT_SHAPE 拒绝生产正式 modelOutputRejected 异常，保留原始拒绝原因与模型返回。该 A 通过 raises 允许向父层交付；GenerateAnswerDefinition.exceptions 按契约身份与直接子调用证据决定是否继续一次。InvokeModelDefinition.regeneration 的 InvocationEntry 复查直接归属、实际返回/接收状态、次数及完整反馈请求。第一轮组装上下文、准备、调用、接纳；第二轮只准备反馈请求、调用、接纳。不从 Recorder 反查，也不把调用关系写入业务 IO。
+回答生成仍只有一个受限再次生成声明：AcceptModelOutputDefinition 对完整返回的 INVALID_JSON、EMPTY_OUTPUT 或 OUTPUT_SHAPE 拒绝生产正式 modelOutputRejected 异常，保留原始拒绝原因与模型返回。该 A 通过 raises 允许向父层交付；GenerateAnswerDefinition.exceptions 按契约身份与直接子调用证据决定是否继续一次。RequestModelDefinition.regeneration 的 InvocationEntry 复查直接归属、实际返回/接收状态、次数及完整反馈请求。第一轮组装上下文、准备、调用、接纳；第二轮只准备反馈请求、调用、接纳。不从 Recorder 反查，也不把调用关系写入业务 IO。
+
+模型请求 O 将发送和本地等待分开：A1 返回 received 或 pending，后者由 O 正式接纳后建立 A2，读取同一 Interaction。交互独立于两次 Invocation，Provider 只发送一次；这不是上述再次生成。固定请求和反馈可通过实体持久端口保存，无需记录预设。详见 [外部交互](interactions.md)。
 
 网络、超时、取消、非 stop 返回、记录/捕获失败，以及内容落实后的错误不进入该重试分支。回答仅在生成操作成功返回后由 E 对应能力条目的 accept 追加并交付一次；记忆后处理失败保留已交付回答。
 
@@ -146,14 +150,14 @@ ResourceBindings 持有供给与本次端点：
 
 资源发布 ResourceObservation，记录预设可将其写为 ResourceRecord：公共部分表达父调用、访问形式、供给、局部顺序、时间、阶段和操作关联；具体正文由资源契约定义。静态声明不登记。bound/available 不等于实际使用，runSync/runAsync 只包正式操作，不拦截每个属性读取。模型供给描述不序列化 Provider，消息资源只保存 UID、固定范围及必要版本，不保留运行实体引用。
 
-| 资源访问形式                     | 业务端点                  | 记录说明                                         |
-| -------------------------------- | ------------------------- | ------------------------------------------------ |
-| 配置 snapshot/timeout            | 固定配置或字段值          | 本次采用的值，不等于模型实际请求                 |
-| Transcript fixedRange            | locate/read/entries/slice | 原文 UID、固定区间与版本；不内嵌原文集合         |
-| Transcript append / segmentation | append / current、start   | 正式访问及变化关联，entry 不伪造调用归属         |
-| Memory snapshot / apply          | 固定正文 / 提案落实       | 所见版本或实际变化事实；不返回 Memory 实例       |
-| SelectionUsage record            | add                       | 正式统计写入，不暴露统计实体                     |
-| Model invoke                     | invoke                    | 实际供给描述、请求及结果摘要；不复制已有调用证据 |
+| 资源访问形式                     | 业务端点                  | 记录说明                                     |
+| -------------------------------- | ------------------------- | -------------------------------------------- |
+| 配置 snapshot/timeout            | 固定配置或字段值          | 本次采用的值，不等于模型实际请求             |
+| Transcript fixedRange            | locate/read/entries/slice | 原文 UID、固定区间与版本；不内嵌原文集合     |
+| Transcript append / segmentation | append / current、start   | 正式访问及变化关联，entry 不伪造调用归属     |
+| Memory snapshot / apply          | 固定正文 / 提案落实       | 所见版本或实际变化事实；不返回 Memory 实例   |
+| SelectionUsage record            | add                       | 正式统计写入，不暴露统计实体                 |
+| Model create / read              | start / wait / result     | 交互身份、访问摘要；请求与反馈由交互契约固定 |
 
 E 记录不再认识 settings/transcriptRange。资源访问事实解释可见范围，选择 O 的结果解释实际选择，模型 A 的输入解释实际请求，不能互相替代。
 
@@ -185,6 +189,6 @@ Transcript 全批预检后追加，Memories 全批预检后逐项落实。捕获
 
 运行取消通过本次 R 的 InvocationControls.signal 传递到 E/O/A。新子调用、父层接纳及业务资源活动复用公共活动检查；先保留已归属错误，再检查取消。InvocationCancelled 绑定本次 signal 身份，isInvocationCancelled 只识别这个明确交付，不遍历 cause 或仅比较 code。Context、Invocation 和调用方保持同一交付原因；独立错误与复合故障不能被并发取消覆盖。
 
-模型资源把运行信号与 timeout 合并，在资源活动捕获之前规范化：主动取消保留根信号身份，超时为 MODEL_TIMEOUT，网络和解析故障保留真实原因。取消不回滚已经成立的实体更新，也不阻止内核收尾、记录终态和释放占用。能力未响应取消时仍等待其返回，不采用抢先结束 Promise 的方式虚构完成。服务根据 R.run 的实际退出投影 cancelled，内核不感知客户端队列或服务提交协议。
+模型交互宿主把运行信号与 timeout 合并，在资源活动捕获之前规范化：主动取消保留根信号身份，超时为 MODEL_TIMEOUT，网络和解析故障保留真实原因。取消不回滚已经成立的实体更新，也不阻止内核收尾、记录终态和释放占用。活跃读取的宿主取消等待真实发送结束；A1/A2 交接时 R 可能已退出而交互仍在取消收尾，服务提交出口等待同一宿主交互并保持接纳 busy，然后投影 cancelled。内核不感知客户端队列或服务提交协议，也不把独立交互强行附属于调用生命周期。
 
 当前不增加 Thread/TRSA、未完成调用恢复、通用版本仓库、权限、插件注册、动态规划或跨进程重放。单一对话的内容与记录持久化由独立实体端口和服务存储负责，见 [持久化](persistence.md)；不序列化 Invocation / Context，也不让历史记录重新驱动运行。

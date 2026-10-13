@@ -62,15 +62,21 @@ test('three actual model stages produce a causal trace and selected original con
     JSON.parse(provider.calls[1].request.messages[1].content).history.map((m) => m.index),
     [0, 1],
   );
-  assert.equal(trace.nodes.filter((node) => node.operation !== 'conversationDecision').length, 15);
+  assert.equal(trace.nodes.filter((node) => node.operation !== 'conversationDecision').length, 18);
   assert.equal(trace.nodes.filter((node) => node.operation === 'conversationDecision').length, 2);
   assert.equal(
     trace.nodes.some((node) => node.operation === 'input'),
     false,
   );
   assert.ok(trace.nodes.every((n) => n.status === 'passed' && n.durationMs >= 0));
-  assert.ok(records.some((t) => t.nodes.find((n) => n.operation === 'selection.invokeModel')?.status === 'running'));
+  assert.ok(records.some((t) => t.nodes.find((n) => n.operation === 'requestModel.invokeModel' && n.group === 'selection')?.status === 'running'));
   assert.equal(records[0].nodes[0].status, 'running');
+  for (const stage of ['selection', 'answer', 'memory']) {
+    const owner = trace.nodes.find((node) => node.operation === stage);
+    const request = trace.nodes.find((node) => node.operation === 'requestModel' && node.parentId === owner.id);
+    assert.equal(request.group, stage);
+    assert.equal(trace.nodes.find((node) => node.parentId === request.id).group, stage);
+  }
   const original = records[0].facts.execution.value.input;
   assert.equal(trace.facts.execution.value.input, original);
   assert.throws(() => {
@@ -161,7 +167,7 @@ test('DeepSeek request uses JSON mode; transport secret is absent from observati
   assert.equal(trace.status, 'succeeded');
   assert.equal(sent.length, 3);
   assert.equal(JSON.stringify(records).includes('test-secret-do-not-log'), false);
-  assert.equal(trace.nodes.find((n) => n.operation === 'selection.invokeModel').output.usage.totalTokens, 15);
+  assert.equal(trace.nodes.find((n) => n.operation === 'requestModel.invokeModel' && n.group === 'selection').output.output.usage.totalTokens, 15);
 });
 test('provider HTTP errors remain explicit and never retry', async () => {
   let calls = 0;
@@ -198,7 +204,7 @@ test('Transcript rejects invalid messages before execution or model calls begin'
 test('Named action sequence records nested call and return boundaries rather than adjacent stage edges', async () => {
   const { trace } = await run(scripted([output('{"historyIndexes":[0,1]}'), output(JSON.stringify(reply))]));
   const { calls, events } = trace.callSequence;
-  assert.equal(calls.filter((call) => call.operation !== 'conversationDecision').length, 15);
+  assert.equal(calls.filter((call) => call.operation !== 'conversationDecision').length, 18);
   const decisions = calls.filter((call) => call.operation === 'conversationDecision');
   assert.equal(decisions.length, 2);
   assert.ok(decisions.every((call) => call.parentId === calls.find((parent) => parent.operation === 'execution').id));
@@ -220,8 +226,11 @@ test('Named action sequence records nested call and return boundaries rather tha
     }
   });
   assert.equal(active.size, 0);
-  const invoke = calls.find((c) => c.operation === 'selection.invokeModel');
-  assert.equal(invoke.parentId, calls.find((c) => c.operation === 'selection').id);
+  const selection = calls.find((call) => call.operation === 'selection');
+  const request = calls.find((call) => call.operation === 'requestModel' && call.parentId === selection.id);
+  const invoke = calls.find((call) => call.operation === 'requestModel.invokeModel' && call.parentId === request.id);
+  assert.equal(invoke.parentId, request.id);
+  assert.equal(request.parentId, selection.id);
   assert.equal(invoke.caller, 'operation');
   assert.equal(invoke.callee, 'attempt');
   assert.equal(invoke.target, 'provider');

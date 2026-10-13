@@ -2,10 +2,12 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { mkdirSync, chmodSync, existsSync, openSync, fchmodSync, closeSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { RuntimeError } from '@capix/server-runtime';
+import type { InteractionCommit, InteractionState } from '@capix/server-runtime';
 import { snapshotValue } from '@capix/server-runtime/recording';
+import { isEqual } from 'es-toolkit';
 import type { TranscriptState, TranscriptCommit, TranscriptPersistence, MemoriesState, MemoriesCommit, MemoriesPersistence } from '@capix/server-runtime/content';
 import type { ConversationFailure, RecordChangeEvent, RecordEntry, CompositeRecord, RecordingArchive } from '@capix/protocol';
-import type { ObserverStoredState } from './types.js';
+import type { ObserverInteractionPersistence, ObserverStoredState } from './types.js';
 import { initializeSchema } from './schema.js';
 import { updateRecord } from './records.js';
 
@@ -15,6 +17,7 @@ type Row = Record<string, string | number | bigint | Uint8Array | null>;
 export class SqliteObserverStore {
   readonly transcript: TranscriptPersistence = { commit: (change) => this.commitTranscript(change) };
   readonly memories: MemoriesPersistence = { commit: (change) => this.commitMemories(change) };
+  readonly interactions: ObserverInteractionPersistence = { create: (state) => this.createInteraction(state), commit: (change) => this.commitInteraction(change), read: (id) => this.readInteraction(id) };
   readonly #database: DatabaseSync;
   #failure?: ConversationFailure;
   #activeSource?: string;
@@ -143,6 +146,42 @@ export class SqliteObserverStore {
         this.run('INSERT INTO memories(id, collection_id, body) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET body = excluded.body', memory.id, change.memoriesId, encode(memory));
       }
       this.run('UPDATE memory_sets SET sequence = ? WHERE id = ?', change.sequence, change.memoriesId);
+    });
+  }
+
+  private createInteraction(state: InteractionState): undefined {
+    this.requireContent();
+    this.transaction(() => {
+      const body = encodeInteraction(state);
+      if (state.revision !== 0 || state.delivery !== 'prepared' || state.feedback !== undefined || state.failure !== undefined) throw new Error('Interaction creation must save a prepared request');
+      const inserted = this.#database.prepare('INSERT INTO interactions(id, contract, revision, request, body) VALUES (?, ?, ?, ?, ?)').run(state.id, state.contract, state.revision, JSON.stringify(state.request), body);
+      if (Number(inserted.changes) !== 1) throw new Error('Interaction request was not saved');
+    });
+  }
+
+  private commitInteraction(change: InteractionCommit): undefined {
+    this.requireContent();
+    this.transaction(() => {
+      const state = change.state;
+      const body = encodeInteraction(state);
+      const row = this.get('SELECT id, contract, revision, request, body FROM interactions WHERE id = ?', state.id);
+      if (!row || row.revision !== change.expectedRevision || state.revision !== change.expectedRevision + 1) throw new Error('Interaction revision does not match saved state');
+      const previous = interactionState(row);
+      if (previous.contract !== state.contract || !isEqual(previous.request, state.request)) throw new Error('Interaction identity and request cannot change');
+      if (state.delivery !== 'started' || (previous.delivery === 'prepared' && (state.feedback !== undefined || state.failure !== undefined))) throw new Error('Interaction delivery must be started before feedback');
+      if (previous.feedback !== undefined && !isEqual(previous.feedback, state.feedback)) throw new Error('Stored interaction feedback cannot be replaced');
+      if (previous.failure !== undefined && !isEqual(previous.failure, state.failure)) throw new Error('Stored interaction failure cannot be replaced');
+      // BEGIN IMMEDIATE makes the read/check/write one local commit; the predicate retains the expected revision explicitly.
+      const updated = this.#database.prepare('UPDATE interactions SET revision = ?, body = ? WHERE id = ? AND revision = ?').run(state.revision, body, state.id, change.expectedRevision);
+      if (Number(updated.changes) !== 1) throw new Error('Interaction revision was not committed');
+    });
+  }
+
+  private readInteraction(id: string): InteractionState | undefined {
+    this.requireContent();
+    return this.transaction(() => {
+      const row = this.get('SELECT id, contract, revision, request, body FROM interactions WHERE id = ?', id);
+      return row ? interactionState(row) : undefined;
     });
   }
 
@@ -279,6 +318,19 @@ function encode(value: unknown): string {
 function parse(value: unknown): any {
   if (typeof value !== 'string') throw new TypeError('Stored body must be JSON text');
   return JSON.parse(value);
+}
+
+function encodeInteraction(state: InteractionState): string {
+  if (typeof state.id !== 'string' || !state.id || typeof state.contract !== 'string' || !state.contract || !Number.isSafeInteger(state.revision) || state.revision < 0) throw new Error('Invalid interaction identity or revision');
+  const body = JSON.stringify(state);
+  if (!isEqual(JSON.parse(body), state)) throw new Error('Interaction state must contain only JSON data');
+  return body;
+}
+
+function interactionState(row: Row): InteractionState {
+  const state = parse(row.body) as InteractionState;
+  if (state.id !== row.id || state.contract !== row.contract || state.revision !== row.revision || !isEqual(state.request, parse(row.request))) throw new Error('Stored interaction identity does not match');
+  return state;
 }
 
 function databaseUnavailable(error: unknown): boolean {

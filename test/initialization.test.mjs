@@ -33,8 +33,11 @@ test('unused operations and model providers stay inactive; bound O identities su
   assert.deepEqual(operations(env), []);
   await assert.rejects(run(env), /model unavailable/);
   const first = operations(env);
-  assert.equal(first.length, 1);
-  assert.equal(first[0].operation, 'selection');
+  assert.deepEqual(
+    first.map((operation) => operation.operation),
+    ['selection', 'requestModel'],
+  );
+  assert.equal(first[1].parentId, first[0].id);
   assert.equal(
     attempts(env).some((record) => record.name === 'acceptModelOutput'),
     false,

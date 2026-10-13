@@ -5,9 +5,6 @@ export interface ModelProvider {
   readonly unavailable?: { readonly code: string; readonly message: string };
   invoke(request: ModelRequest, purpose: Purpose, signal: AbortSignal): Promise<ModelOutput>;
 }
-export interface ModelInvocation {
-  invoke(request: ModelRequest, purpose: Purpose, controls: { readonly signal: AbortSignal; readonly timeoutMs: number }): Promise<ModelOutput>;
-}
 export interface Selection {
   historyIndexes: number[];
 }

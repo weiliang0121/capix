@@ -9,6 +9,7 @@ import { ChangeConsumer } from './changes.js';
 import { RecordSource } from '../observation/record/source.js';
 import { TranscriptFeed } from '../conversation/transcript/feed.js';
 import { ModelSource } from '../conversation/model/source.js';
+import { ModelInteractions } from '../conversation/model/interactions.js';
 import type { WorkspaceFiles } from '../files/index.js';
 import type { ConversationDecisionDefinition } from '../conversation/decision/types.js';
 import type { SqliteObserverStore } from '../persistence/store.js';
@@ -56,11 +57,14 @@ export function initializeObserver(provider: ModelInitialization, messages: read
     const selectionUsage = new SelectionUsage();
     const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps });
     const model = new ModelSource(provider);
-    const runtime = bindConversation(definition, { transcript, memories, selectionUsage, files: options.files }, model, { observations: [recording], changes });
+    const interactions = new ModelInteractions(model, { persistence: persistence?.interactions });
+    const runtime = bindConversation(definition, { transcript, memories, selectionUsage, files: options.files }, interactions, { observations: [recording], changes });
     let closed = false;
     function close(): void {
       if (closed) return;
       if (runtime.running) throw new Error('Cannot close an environment with an active invocation');
+      if (interactions.active) throw new Error('Cannot close an environment with active external interactions');
+      interactions.close();
       closed = true;
       try {
         persistence?.sealRecording(recorder.id, recorder.revision);
@@ -70,7 +74,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
         persistence?.close();
       }
     }
-    return { transcript, memories, selectionUsage, files: options.files, model, book, clock, recorder, recording, runtime, changes, definition, consumer, recordSource, transcripts, recordingArchives, persistence, close };
+    return { transcript, memories, selectionUsage, files: options.files, model, interactions, book, clock, recorder, recording, runtime, changes, definition, consumer, recordSource, transcripts, recordingArchives, persistence, close };
   } catch (error) {
     consumer.close();
     persistence?.invalidateRecording(recorder.id);

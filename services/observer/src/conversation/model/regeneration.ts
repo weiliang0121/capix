@@ -1,8 +1,8 @@
 import { modelOutputRejected, type ModelOutputRejection } from './rejection.js';
-import { DeclaredException, RuntimeError, isObject, type InvocationView, type InvocationRelationView, type OperationContextView } from '@capix/server-runtime';
+import { DeclaredException, RuntimeError, isObject, type InvocationView, type InvocationRelationView, type OperationContextView, type ExecutionContextView } from '@capix/server-runtime';
 import type { ModelOutput, ModelRequest } from './types.js';
 
-export type ModelParentInvocationView = InvocationView<unknown, unknown, Omit<OperationContextView, 'resources'>>;
+export type ModelParentInvocationView = InvocationView<unknown, unknown, Omit<OperationContextView, 'resources'>> | InvocationView<unknown, unknown, Omit<ExecutionContextView, 'resources'>>;
 
 /** Live evidence from one parent's direct children; never serialized as model input. */
 export interface ModelRegenerationEvidence {

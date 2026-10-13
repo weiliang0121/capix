@@ -69,7 +69,7 @@ test('a real change and an unchanged update complete together; only the change i
   const operation = facts.operations.find((item) => item.operation === 'memory');
   assert.equal(readOutput(operation.value).memories.length, 1);
   assert.equal(readOutput(operation.value).memories[0].result.content, '使用离线包');
-  const invoked = facts.attempts.find((item) => item.operationId === operation.id && item.name === 'invokeModel');
+  const invoked = facts.operations.find((item) => item.parentId === operation.id && item.operation === 'requestModel');
   assert.equal(JSON.parse(readOutput(invoked.value).content).memories.length, 2);
   assert.equal(keyboard.snapshot(), keyboardContent);
   assert.equal(MemoryRecordHelper.find(environment.book, keyboard.id).length, 1);

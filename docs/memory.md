@@ -57,7 +57,7 @@ MemoryRecord extends BaseRecord<{
                          ↓
 ExtractMemoryDefinition
   → PrepareModelRequestDefinition：准备请求并检查容量
-  → InvokeModelDefinition：调用模型，保留原始返回
+  → RequestModelDefinition：通过 A 发起/读取模型交互，保留原始返回
   → AcceptModelOutputDefinition：解析与整批接纳
   → ApplyMemoryDefinition
       ├─ Memories.apply 审查、创建/更新并发布当前事实
@@ -88,7 +88,7 @@ ExtractMemoryDefinition
 
 接纳先检查候选结构、目标与引用合法性，以及原始候选是否重复更新同一 ID。若 update 的 result 与本轮旧记忆的 topic/content/sourceIndexes 完全相同（索引顺序也相同），将其作为无操作过滤，不要求它额外引用本轮消息，不修改 Memory 或新增 MemoryRecord。是否无变化不依据 change 的文字，不做语义相似判断；正文、主题或来源发生变化时仍必须提供本轮依据。未知引用、正文依据不包含变化依据等错误不能借无操作绕过。剩余变更整批检查通过后才落实，仍不接受部分有效批次。
 
-模型原始候选保留在 InvokeModelDefinition 的返回记录；AcceptModelOutputDefinition 保留实际接纳的变更，ApplyMemoryDefinition 成功后返回这些变更作为操作最终输出。因此可以核对哪些候选被过滤，以及失败发生在接纳还是落实，不新增跳过事件。未增加错误反馈或自动重试。
+模型原始候选保留在 RequestModelDefinition 的返回记录；独立 Interaction 也保存未经业务解释的 ModelOutput。AcceptModelOutputDefinition 保留实际接纳的变更，ApplyMemoryDefinition 成功后返回这些变更作为操作最终输出。因此可以核对哪些候选被过滤，以及失败发生在接纳还是落实，不新增跳过事件。未增加错误反馈或自动重试。
 
 ## 已接纳的保存结果
 

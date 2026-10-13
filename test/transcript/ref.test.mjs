@@ -62,7 +62,7 @@ test('resource facts hold plain range locators; calls consume selected content a
   assert.equal(facts.execution.status, 'succeeded');
   assert.deepEqual(
     facts.operations.map((record) => record.operation),
-    ['selection', 'conversationDecision', 'answer', 'conversationDecision', 'memory'],
+    ['selection', 'requestModel', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
   );
   assert.equal(facts.attempts.length, 11);
   assert.equal(facts.events.length, 2 * (1 + facts.operations.length + facts.attempts.length));

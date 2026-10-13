@@ -141,29 +141,53 @@ function snapshots(entries: ReadonlyMap<string, RecordEntry>): ReadonlyMap<strin
   for (const item of values) {
     if (item.kind !== 'execution') continue;
     const execution = item.data as ExecutionRecord;
-    const operations = values.filter((entry) => entry.kind === 'operation' && (entry.data as OperationRecord).executionId === execution.id).map((entry) => entry.data as OperationRecord);
-    const ids = new Set(operations.map((operation) => operation.id));
-    const attempts = values.filter((entry) => entry.kind === 'attempt' && ids.has((entry.data as AttemptRecord).operationId)).map((entry) => entry.data as AttemptRecord);
-    const events = values
+    // Match the server detail projection through explicit ownership, independently of delivery batch order.
+    const scope = descendants(entries, item);
+    const operations = scope.filter((entry) => entry.kind === 'operation').map((entry) => entry.data as OperationRecord);
+    const attempts = scope.filter((entry) => entry.kind === 'attempt').map((entry) => entry.data as AttemptRecord);
+    const events = scope
       .filter((entry) => entry.kind === 'invocation-boundary' && (entry.data as InvocationBoundaryRecord).executionId === execution.id)
       .map((entry) => entry.data as InvocationBoundaryRecord)
       .sort((a, b) => a.sequence - b.sequence);
     // A record update and its boundary are separate formal facts; expose a call view when both exist.
     if ([execution, ...operations, ...attempts].some((record) => !events.some((event) => event.callId === record.id && event.value.type === 'call') || (record.status !== 'running' && !events.some((event) => event.callId === record.id && event.value.type === (record.status === 'succeeded' ? 'return' : 'throw'))))) continue;
-    const callIds = new Set([execution.id, ...operations.map((record) => record.id), ...attempts.map((record) => record.id)]);
-    const resources = values.filter((entry) => entry.kind === 'resource' && entry.data.parentId && callIds.has(entry.data.parentId)).map((entry) => entry.data as ResourceRecord);
+    const resources = scope.filter((entry) => entry.kind === 'resource').map((entry) => entry.data as ResourceRecord);
     const parent = execution.parentId ? entries.get(execution.parentId) : undefined;
     if (!parent || parent.kind !== 'runtime-call') continue;
     const runtimeCall = parent.data as RuntimeCallRecord;
-    const runtimeEvents = values
+    const runtimeChildren = children(entries, parent);
+    const runtimeEvents = runtimeChildren
       .filter((entry) => entry.kind === 'invocation-boundary' && (entry.data as InvocationBoundaryRecord).callId === runtimeCall.id)
       .map((entry) => entry.data as InvocationBoundaryRecord)
       .sort((a, b) => a.sequence - b.sequence);
     if (!runtimeEvents.some((event) => event.value.type === 'call') || (runtimeCall.status !== 'running' && !runtimeEvents.some((event) => event.value.type === (runtimeCall.status === 'succeeded' ? 'return' : 'throw')))) continue;
-    resources.push(...values.filter((entry) => entry.kind === 'resource' && entry.data.parentId === runtimeCall.id).map((entry) => entry.data as ResourceRecord));
+    resources.push(...runtimeChildren.filter((entry) => entry.kind === 'resource').map((entry) => entry.data as ResourceRecord));
     const snapshot = { runtimeCall, runtimeEvents, execution, operations, attempts, events, resources };
     validateExecutionRecordSnapshot(snapshot);
     result.set(execution.id, snapshot);
   }
   return result;
+}
+
+function descendants(entries: ReadonlyMap<string, RecordEntry>, parent: RecordEntry): RecordEntry[] {
+  const result: RecordEntry[] = [];
+  const pending = children(entries, parent).reverse();
+  const visited = new Set([parent.data.id]);
+  for (let entry = pending.pop(); entry; entry = pending.pop()) {
+    if (visited.has(entry.data.id)) throw new ObservationSequenceError('记录归属存在循环或重复引用。');
+    visited.add(entry.data.id);
+    result.push(entry);
+    pending.push(...children(entries, entry).reverse());
+  }
+  return result;
+}
+
+function children(entries: ReadonlyMap<string, RecordEntry>, parent: RecordEntry): RecordEntry[] {
+  if (!('childIds' in parent.data)) return [];
+  if (!isArray(parent.data.childIds)) throw new ObservationSequenceError('父级引用无效。');
+  return parent.data.childIds.map((id) => {
+    const child = entries.get(id);
+    if (!child || child.data.parentId !== parent.data.id) throw new ObservationSequenceError('记录子级缺失或归属不一致。');
+    return child;
+  });
 }

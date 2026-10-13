@@ -1,2 +1,2 @@
 export { SqliteObserverStore } from './store.js';
-export type { ObserverStoredState, RecordingArchive } from './types.js';
+export type { ObserverStoredState, ObserverInteractionPersistence, RecordingArchive } from './types.js';

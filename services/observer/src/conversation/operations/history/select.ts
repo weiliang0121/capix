@@ -13,7 +13,7 @@ import { historyMessages, type SelectionInput } from './input.js';
 import { selectionOutputContract, type SelectionBasis } from './output.js';
 
 import { PrepareModelRequestDefinition } from '../../attempt/model/prepare.js';
-import { InvokeModelDefinition } from '../../attempt/model/invoke.js';
+import { RequestModelDefinition } from '../model/request.js';
 import { AcceptModelOutputDefinition, type ModelAcceptanceInput } from '../../attempt/model/accept.js';
 
 import { loadRequest } from '../../model/request.js';
@@ -32,23 +32,23 @@ export class SelectHistoryDefinition extends OperationDefinition<SelectionInput,
   protected readonly purpose = 'selection';
   protected readonly outputContract = selectionOutputContract;
 
-  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), model: ModelResource.invoke.request() } as const);
+  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() } as const);
   readonly run;
   readonly children;
   private readonly composition;
 
   readonly prepareRequestDefinition: PrepareModelRequestDefinition<SelectionInput, ModelRequestResources & HistoryResources>;
-  readonly invokeModelDefinition: InvokeModelDefinition;
+  readonly requestModelDefinition: RequestModelDefinition;
   readonly acceptOutputDefinition: AcceptModelOutputDefinition<ModelAcceptanceInput & { basis: SelectionBasis }, Selection>;
 
   constructor() {
     super();
     this.prepareRequestDefinition = new PrepareModelRequestDefinition<SelectionInput, ModelRequestResources & HistoryResources>((input, resources) => loadRequest(selectionPayload(input, historyMessages(resources.history, input.message)), selectionTask, this.outputContract.schema, resources.settings), selectionRequestResources);
-    this.invokeModelDefinition = new InvokeModelDefinition(this.purpose);
+    this.requestModelDefinition = new RequestModelDefinition(this.purpose);
     this.acceptOutputDefinition = new AcceptModelOutputDefinition({ schema: this.outputContract.schema, accept: (value, input: ModelAcceptanceInput & { basis: SelectionBasis }) => this.outputContract.accept(value, input.basis) });
     this.composition = new Sequence<SelectionInput, InvocationView<SelectionInput, Selection, OperationContextView<SelectionInput, Selection, ConversationResources>>>()
       .step('request', { use: this.prepareRequestDefinition, input: ({ input }) => input })
-      .step('model', { use: this.invokeModelDefinition, input: ({ outputs }) => outputs.request })
+      .step('model', { use: this.requestModelDefinition, input: ({ outputs }) => outputs.request })
       .step('acceptance', {
         use: this.acceptOutputDefinition,
         input: ({ parent, outputs }) => {
@@ -56,7 +56,7 @@ export class SelectHistoryDefinition extends OperationDefinition<SelectionInput,
           return { output: outputs.model, basis: { start: range.start, end: range.end - 1 } };
         },
       });
-    this.children = Object.freeze([this.prepareRequestDefinition, this.invokeModelDefinition, this.acceptOutputDefinition]);
+    this.children = Object.freeze([this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition]);
     this.run = { requires: SelectHistoryDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 

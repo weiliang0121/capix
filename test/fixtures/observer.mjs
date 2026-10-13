@@ -1,6 +1,6 @@
-import { definitionResources, ExecutionContext, Transcript, TranscriptRangeRef, ResourceBindings, Initializer, bindResources, BindingEnvironment, Memories, SelectionUsage } from '@capix/server-runtime';
+import { definitionResources, ExecutionContext, Transcript, TranscriptRangeRef, ResourceBindings, bindResources, BindingEnvironment, Memories, SelectionUsage } from '@capix/server-runtime';
 
-import { acceptConversationInput, initializeObserver, observeExecution, conversationExecutionRequests, conversationProviders } from '@capix/observer-service';
+import { acceptConversationInput, initializeObserver, observeExecution, conversationExecutionRequests, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
 
 const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);
@@ -15,7 +15,7 @@ export function contextWithSource(input, options, parent) {
   return context;
 }
 export function resourceBindingFor(runtime, provider, provided) {
-  const model = new Initializer(() => provider);
+  const model = new ModelInteractions(new ModelSource(provider));
   const binding = bindResources(conversationExecutionRequests, conversationProviders);
   const worlds = new WeakMap();
   return (source) => {

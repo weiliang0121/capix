@@ -1,9 +1,18 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-/** One local format. Unknown versions must never be replaced with an empty conversation. */
+/** Local format migrations preserve existing content; unknown versions never create an empty conversation. */
 export function initializeSchema(database: DatabaseSync): void {
   const version = database.prepare('PRAGMA user_version').get()?.user_version;
-  if (version === 1) return;
+  if (version === 2) return;
+  if (version === 1) {
+    try {
+      database.exec(`BEGIN IMMEDIATE; ${interactions} PRAGMA user_version = 2; COMMIT;`);
+    } catch (error) {
+      if (database.isTransaction) database.exec('ROLLBACK');
+      throw error;
+    }
+    return;
+  }
   if (version !== 0 || database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()) throw new Error('Unsupported Observer persistence schema');
   database.exec(`
     BEGIN IMMEDIATE;
@@ -47,7 +56,18 @@ export function initializeSchema(database: DatabaseSync): void {
       kind TEXT NOT NULL,
       body TEXT NOT NULL CHECK (json_valid(body))
     ) STRICT;
-    PRAGMA user_version = 1;
+    ${interactions}
+    PRAGMA user_version = 2;
     COMMIT;
   `);
 }
+
+const interactions = `
+  CREATE TABLE interactions (
+    id TEXT PRIMARY KEY,
+    contract TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision >= 0),
+    request TEXT NOT NULL CHECK (json_valid(request)),
+    body TEXT NOT NULL CHECK (json_valid(body))
+  ) STRICT;
+`;

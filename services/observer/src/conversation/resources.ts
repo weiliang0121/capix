@@ -1,11 +1,11 @@
-import { type Initializer, type ResourceProvider, type ResourceRequest, type ProgressReceiver } from '@capix/server-runtime';
+import { type ResourceProvider, type ResourceRequest, type ProgressReceiver } from '@capix/server-runtime';
 import { TranscriptResource, MemoryResource, SelectionUsageResource, type Transcript, type Memories, type SelectionUsage, type TranscriptRangeRef, type TranscriptRangeReader, type TranscriptAppendProgress } from '@capix/server-runtime/content';
 import type { ModelSettings, FileTask, ConversationTask } from '@capix/protocol';
 import { FileResources, type WorkspaceFiles, type FileProgress, type FileResourceSource, type FileReader, type FileCreator, type FileInspector } from '../files/index.js';
 import type { ProgressChannel } from '@capix/server-runtime';
 import { ConversationTaskResource, type TaskSelection } from './task.js';
 import { ModelSettingsResource, ModelResource } from './model/resources.js';
-import type { ModelProvider, ModelInvocation } from './model/types.js';
+import type { ModelInteractions, ModelInteractionCreator, ModelInteractionReader } from './model/interactions.js';
 
 type Offered<Offer extends { request(): ResourceRequest<unknown> }> = ReturnType<Offer['request']> extends ResourceRequest<infer Value> ? Value : never;
 export interface ModelRequestResources {
@@ -13,7 +13,8 @@ export interface ModelRequestResources {
 }
 export interface ModelCallResources extends ModelRequestResources {
   readonly timeoutMs: number;
-  readonly model: ModelInvocation;
+  readonly modelCreator: ModelInteractionCreator;
+  readonly modelReader: ModelInteractionReader;
 }
 export interface HistoryResources {
   readonly history: TranscriptRangeReader;
@@ -36,7 +37,8 @@ export const conversationExecutionRequests = Object.freeze({
   settings: ModelSettingsResource.snapshot.request(),
   timeoutMs: ModelSettingsResource.timeout.request(),
   history: TranscriptResource.fixedRange.request(),
-  model: ModelResource.invoke.request(),
+  modelCreator: ModelResource.create.request(),
+  modelReader: ModelResource.read.request(),
   memories: MemoryResource.snapshot.request(),
   memoryWriter: MemoryResource.apply.request(),
   messages: TranscriptResource.append.request(),
@@ -57,7 +59,7 @@ export interface ConversationResourceSource {
   readonly messageProgress?: ProgressReceiver<TranscriptAppendProgress>;
   readonly memories: Memories;
   readonly selectionUsage: SelectionUsage;
-  readonly model: Initializer<ModelProvider>;
+  readonly model: ModelInteractions;
   readonly files?: WorkspaceFiles;
   readonly fileTask?: FileTask;
   readonly taskProgress?: ProgressReceiver<ConversationTask>;
@@ -73,7 +75,8 @@ export const conversationProviders: readonly ResourceProvider<ConversationResour
     if (!source.transcriptRange) throw new Error('Execution Transcript range is required');
     return source.transcriptRange;
   }),
-  ModelResource.invoke.provide((source: ConversationResourceSource) => source.model.get()),
+  ModelResource.create.provide((source: ConversationResourceSource) => source.model),
+  ModelResource.read.provide((source: ConversationResourceSource) => source.model),
   MemoryResource.snapshot.provide((source: ConversationResourceSource) => source.memories),
   MemoryResource.apply.provide((source: ConversationResourceSource) => source.memories),
   TranscriptResource.append.provide((source: ConversationResourceSource) => ({ transcript: source.transcript, progress: source.messageProgress })),

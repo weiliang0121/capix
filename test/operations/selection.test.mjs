@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 import { resourceFact } from '../fixtures/observer.mjs';
 import { readOutput } from '@capix/protocol';
@@ -55,22 +56,28 @@ test('message counts accumulate independently and never enter model requests', a
   const requests = [];
   let indexes = [0];
   let fails = false;
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, {
-    async invoke(request, purpose) {
-      const loaded = JSON.parse(request.messages[1].content);
-      assert.doesNotMatch(JSON.stringify(request), /selectionCount/);
-      if (purpose === 'memory') return raw({ memories: [] });
-      assert.deepEqual(Object.keys(loaded.message).sort(), ['content', 'role']);
-      assert.ok(loaded.history.every((item) => JSON.stringify(Object.keys(item).sort()) === JSON.stringify(['content', 'index', 'role'])));
-      if (purpose === 'selection') {
-        requests.push(loaded);
-        return raw({ historyIndexes: indexes });
-      }
-      assert.ok(loaded.history.every((item) => !('selectionCount' in item)));
-      if (fails) throw new Error('generation failed');
-      return raw({ kind: 'answer', content: '测试回复' });
-    },
-  });
+  const runtime = bindConversation(
+    new ConversationRuntimeDefinition(),
+    entities,
+    new ModelInteractions(
+      new ModelSource({
+        async invoke(request, purpose) {
+          const loaded = JSON.parse(request.messages[1].content);
+          assert.doesNotMatch(JSON.stringify(request), /selectionCount/);
+          if (purpose === 'memory') return raw({ memories: [] });
+          assert.deepEqual(Object.keys(loaded.message).sort(), ['content', 'role']);
+          assert.ok(loaded.history.every((item) => JSON.stringify(Object.keys(item).sort()) === JSON.stringify(['content', 'index', 'role'])));
+          if (purpose === 'selection') {
+            requests.push(loaded);
+            return raw({ historyIndexes: indexes });
+          }
+          assert.ok(loaded.history.every((item) => !('selectionCount' in item)));
+          if (fails) throw new Error('generation failed');
+          return raw({ kind: 'answer', content: '测试回复' });
+        },
+      }),
+    ),
+  );
   const run = async () => {
     return runtime.run({ messages: [{ role: 'user', content: '继续' }] }, { settings });
   };

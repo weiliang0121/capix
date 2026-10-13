@@ -59,6 +59,8 @@ ResourceOffer 是资源模块公开的契约：来源捕获、正式访问端点
 
 ResourceRecord 使用同一 BaseRecord、Recorder 与记录树。公共字段为 parentId、access、supplyId、sequence、occurredAt、phase 及可选 interactionId，value 由资源定义并经通用快照规则留存。phase 区分 bound、available、unavailable、started、returned、threw；它们是运行事实，不给每个资源增加一套可推进状态机。
 
+这里的 interactionId 配对一次资源方法的 started/returned/threw，不是独立外部 Interaction 的身份。模型资源的返回摘要和 A 的交付另含外部交互 ID；同一外部交互可以对应多次资源读取，各次访问仍有自己的边界。
+
 静态 request/provide 不登记记录。调用记录 begin 后激活 run 请求，进入异常处理时才激活 exceptions 请求：bound 描述本次关联，available 描述兑现后的值或供应者。相同供给在同一调用内不因阶段切换重复登记 bound/available；惰性资源没有实际访问就不创建 Provider。正式 read/entries/invoke/apply 等方法通过 ResourceActivity 的同步或异步操作边界登记，不把同步读取改成 Promise，不拦截每次属性读取。
 
 E 不再拥有 settings/transcriptRange 特化字段。配置资源记录固定参数，原文资源记录 transcriptId/start/end/revision；原文可见范围不表示实际模型上下文，选择结果及模型实际请求分别查看 O/A 的已有 IO。记忆写入的访问事实可按本调用与实体变化序号关联 MemoryRecord，不再另存第二份记忆变化正文。

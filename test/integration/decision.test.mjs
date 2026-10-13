@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -47,7 +48,7 @@ async function fixture(t, decide, options = {}) {
           const memories = new Memories(transcript);
           const entities = { transcript, memories, selectionUsage: new SelectionUsage(), files };
           const definition = new ConversationRuntimeDefinition({ files: true, decision, maxDecisionSteps: config.maxDecisionSteps });
-          return { ...entities, runtime: bindConversation(definition, entities, provider) };
+          return { ...entities, runtime: bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider))) };
         })()
       : initializeObserver(provider, [], config);
   return {

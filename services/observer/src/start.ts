@@ -39,7 +39,7 @@ try {
 const server = createObserverServer({ observer, settings, configured: Boolean(key) });
 // Every change is already committed. An exiting active run leaves its archive open, never completed.
 process.once('exit', () => {
-  if (observer.runtime.running) persistence.close();
+  if (observer.runtime.running || observer.interactions.active) persistence.close();
   else observer.close();
 });
 process.once('SIGINT', () => process.exit(0));

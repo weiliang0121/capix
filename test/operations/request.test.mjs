@@ -59,7 +59,7 @@ test('request understanding only proposes a candidate, leaving path eligibility 
   assert.equal(transcript.length, 1);
   assert.deepEqual(
     definition.children.map((child) => child.name),
-    ['prepareModelRequest', 'invokeModel', 'acceptModelOutput'],
+    ['prepareModelRequest', 'requestModel', 'acceptModelOutput'],
   );
   assert.ok(Object.values(definition.run.requires).every((request) => !request.offer.name.startsWith('workspace-files')));
 });

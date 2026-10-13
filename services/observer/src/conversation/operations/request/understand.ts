@@ -8,7 +8,7 @@ import type { ModelRequest } from '../../model/types.js';
 import { loadRequest } from '../../model/request.js';
 import { checkCapacity, estimateCapacity } from '../../model/capacity.js';
 import { PrepareModelRequestDefinition } from '../../attempt/model/prepare.js';
-import { InvokeModelDefinition } from '../../attempt/model/invoke.js';
+import { RequestModelDefinition } from '../model/request.js';
 import { AcceptModelOutputDefinition, type ModelAcceptanceInput } from '../../attempt/model/accept.js';
 import { understandingHistory, type RequestUnderstandingInput } from './input.js';
 import { requestOutputContract, type RequestProposal } from './output.js';
@@ -28,23 +28,23 @@ export class UnderstandRequestDefinition extends OperationDefinition<RequestUnde
   readonly name = 'understanding';
   readonly label = '理解请求';
   readonly source = 'services/observer/src/conversation/operations/request/understand.ts · UnderstandRequestDefinition';
-  static readonly requires = Object.freeze({ ...requestResources, timeoutMs: ModelSettingsResource.timeout.request(), model: ModelResource.invoke.request() });
+  static readonly requires = Object.freeze({ ...requestResources, timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
   readonly run;
   readonly children;
   private readonly composition;
   private readonly filesEnabled: boolean;
   readonly prepareRequestDefinition: PrepareModelRequestDefinition<RequestUnderstandingInput, ModelRequestResources & HistoryResources>;
-  readonly invokeModelDefinition = new InvokeModelDefinition('understanding');
+  readonly requestModelDefinition = new RequestModelDefinition('understanding');
   readonly acceptOutputDefinition = new AcceptModelOutputDefinition<ModelAcceptanceInput, RequestProposal>(requestOutputContract);
 
   constructor(options: { readonly files: boolean }) {
     super();
     this.filesEnabled = options.files;
     this.prepareRequestDefinition = new PrepareModelRequestDefinition((input, resources) => this.createRequest(input, resources), requestResources);
-    this.children = Object.freeze([this.prepareRequestDefinition, this.invokeModelDefinition, this.acceptOutputDefinition]);
+    this.children = Object.freeze([this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition]);
     this.composition = new Sequence<RequestUnderstandingInput, InvocationView<unknown, unknown, OperationContextView>>()
       .step('request', { use: this.prepareRequestDefinition, input: ({ input }) => input })
-      .step('model', { use: this.invokeModelDefinition, input: ({ outputs }) => outputs.request })
+      .step('model', { use: this.requestModelDefinition, input: ({ outputs }) => outputs.request })
       .step('acceptance', { use: this.acceptOutputDefinition, input: ({ outputs }) => ({ output: outputs.model }) });
     this.run = { requires: UnderstandRequestDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }

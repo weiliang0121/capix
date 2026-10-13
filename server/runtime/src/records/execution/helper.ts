@@ -6,7 +6,8 @@ import type { RuntimeErrorValue, ExecutionValue, ExecutionRecordSnapshot } from 
 
 import type { RecordBook } from '../container/book.js';
 import { OperationRecordHelper } from '../operation/helper.js';
-import { AttemptRecordHelper } from '../attempt/helper.js';
+import { AttemptRecord } from '../attempt/record.js';
+import { OperationRecord } from '../operation/record.js';
 import { ExecutionRecord } from './record.js';
 import { RuntimeCallRecord } from '../runtime-call/record.js';
 import { ResourceRecord } from '../resource/record.js';
@@ -41,18 +42,20 @@ export class ExecutionRecordHelper {
   }
 
   static snapshot(recorder: Recorder, id: string): ExecutionRecordSnapshot {
-    const operations = OperationRecordHelper.findByExecution(recorder, id);
     const execution = this.get(recorder.book, id);
     const parent = execution.parentId ? recorder.book.get(execution.parentId) : undefined;
     if (!(parent instanceof RuntimeCallRecord)) throw new Error('Execution requires its recorded Runtime call');
+    // Detail arrays follow childIds in ownership order; boundary sequences carry chronology separately.
+    // Filtering one tree walk preserves nested O/A order without scanning a shared Book or grouping by kind first.
+    const records = recorder.tree.descendants(id);
     return {
       runtimeCall: parent.toJSON(),
       runtimeEvents: InvocationBoundaryRecordHelper.findByScope(recorder, parent.id).map((event) => event.toJSON()),
       execution: execution.toJSON(),
-      operations: operations.map((record) => record.toJSON()),
-      attempts: operations.flatMap((operation) => AttemptRecordHelper.findByOperation(recorder, operation.id).map((record) => record.toJSON())),
+      operations: records.filter((record): record is OperationRecord => record instanceof OperationRecord).map((record) => record.toJSON()),
+      attempts: records.filter((record): record is AttemptRecord => record instanceof AttemptRecord).map((record) => record.toJSON()),
       events: InvocationBoundaryRecordHelper.findByExecution(recorder, id).map((event) => event.toJSON()),
-      resources: [...recorder.tree.descendants(id), ...recorder.tree.children(parent.id)].filter((record): record is ResourceRecord => record instanceof ResourceRecord).map((record) => record.toJSON()),
+      resources: [...records, ...recorder.tree.children(parent.id)].filter((record): record is ResourceRecord => record instanceof ResourceRecord).map((record) => record.toJSON()),
     };
   }
 }

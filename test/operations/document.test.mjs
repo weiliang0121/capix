@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
@@ -46,7 +47,7 @@ async function fixture(t, { recorded = true, answers = [answer], memoryFailure =
   const memories = new Memories(transcript, { observation: recording?.memory });
   const entities = { transcript, memories, files, selectionUsage: new SelectionUsage() };
   const definition = new ConversationRuntimeDefinition({ files: true });
-  const runtime = bindConversation(definition, entities, provider, { observations: recording ? [recording] : undefined });
+  const runtime = bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider)), { observations: recording ? [recording] : undefined });
   const progress = [];
   const fileProgress = new ProgressChannel({
     receive(fact) {
@@ -156,9 +157,15 @@ test('malformed file tasks fail before accepting transcript input or reading fil
 
 test('disabled file capability rejects before accepting input', async () => {
   const transcript = new Transcript();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), { transcript, memories: new Memories(transcript), selectionUsage: new SelectionUsage() }, () => {
-    throw new Error('must not initialize provider');
-  });
+  const runtime = bindConversation(
+    new ConversationRuntimeDefinition(),
+    { transcript, memories: new Memories(transcript), selectionUsage: new SelectionUsage() },
+    new ModelInteractions(
+      new ModelSource(() => {
+        throw new Error('must not initialize provider');
+      }),
+    ),
+  );
   await assert.rejects(runtime.run({ messages: [{ role: 'user', content: 'hello' }], fileTask: { sourcePath: 'source.txt' } }, { settings }));
   assert.equal(transcript.length, 0);
 });
@@ -215,9 +222,15 @@ test('declared file support requires the bound workspace entity', () => {
   const transcript = new Transcript();
   assert.throws(
     () =>
-      bindConversation(new ConversationRuntimeDefinition({ files: true }), { transcript, memories: new Memories(transcript), selectionUsage: new SelectionUsage() }, () => {
-        throw new Error('unused');
-      }),
+      bindConversation(
+        new ConversationRuntimeDefinition({ files: true }),
+        { transcript, memories: new Memories(transcript), selectionUsage: new SelectionUsage() },
+        new ModelInteractions(
+          new ModelSource(() => {
+            throw new Error('unused');
+          }),
+        ),
+      ),
     /workspace file entity/,
   );
 });

@@ -1,8 +1,7 @@
 import { assembleRuntime, bindChildResources, type ChangeCapture, type InvocationControls, type ExecutionInvocationCallbacks, type ObservationInstallation, type ProgressChannel, type InvocationProgress } from '@capix/server-runtime';
 import { TranscriptRangeRef, type Transcript, type Memories, type SelectionUsage, type TranscriptAppendProgress } from '@capix/server-runtime/content';
 import type { ModelSettings, InvocationEvent, GenerationOutput, ConversationTask } from '@capix/protocol';
-import type { ModelInitialization } from './model/types.js';
-import { ModelSource } from './model/source.js';
+import type { ModelInteractions } from './model/interactions.js';
 import { ConversationRuntimeDefinition } from './definition.js';
 import { conversationProviders, conversationFileProviders, type ConversationExecutionResources } from './resources.js';
 import type { ConversationProgress } from './progress.js';
@@ -29,10 +28,9 @@ export interface ConversationEntities {
 }
 
 /** Bind independent entities to R. The resulting R is the sole business execution entry. */
-export function bindConversation(definition: ConversationRuntimeDefinition, entities: ConversationEntities, provider: ModelInitialization | ModelSource, observation: { observations?: readonly ObservationInstallation[]; changes?: ChangeCapture<InvocationEvent> } = {}) {
+export function bindConversation(definition: ConversationRuntimeDefinition, entities: ConversationEntities, model: ModelInteractions, observation: { observations?: readonly ObservationInstallation[]; changes?: ChangeCapture<InvocationEvent> } = {}) {
   if (definition.filesEnabled && !entities.files) throw new Error('File-enabled conversation requires a workspace file entity');
   const operations = definition.executionDefinition.operationDefinitions;
-  const model = provider instanceof ModelSource ? provider : new ModelSource(provider);
   const source = (options: ConversationRunOptions, kind: 'input' | 'answer', selected: boolean) => ({
     ...entities,
     settings: Object.freeze({ ...options.settings }),

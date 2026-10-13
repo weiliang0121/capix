@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bindConversation, ConversationRuntimeDefinition } from '@capix/observer-service';
@@ -28,7 +29,7 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
   const memories = new Memories(transcript, { observation: recording?.memory });
   const entities = { transcript, memories, selectionUsage: new SelectionUsage() };
   const definition = new ConversationRuntimeDefinition();
-  const environment = { ...entities, definition, recording, book: recorder?.book, runtime: bindConversation(definition, entities, provider, { observations: recording ? [recording] : undefined }) };
+  const environment = { ...entities, definition, recording, book: recorder?.book, runtime: bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider)), { observations: recording ? [recording] : undefined }) };
   let invocation;
   return {
     ...environment,
@@ -189,7 +190,7 @@ test('regeneration declaration rejects invalid evidence and missing feedback bef
   const f = fixture([output('bad'), output(JSON.stringify(answer))]);
   const behavior = f.definition.executionDefinition.operationDefinitions.generation;
   const handle = behavior.exceptions.handle;
-  const capability = behavior.invokeModelDefinition.regeneration;
+  const capability = behavior.requestModelDefinition.regeneration;
   assert.equal(capability.declaration.maxAdditionalCalls, 1);
   assert.deepEqual(capability.declaration.rejectionCodes, ['INVALID_JSON', 'EMPTY_OUTPUT', 'OUTPUT_SHAPE']);
   let checked = false;
@@ -215,7 +216,7 @@ test('parent may decline an eligible regeneration without changing child capabil
   const behavior = f.definition.executionDefinition.operationDefinitions.generation;
   t.mock.method(behavior.exceptions, 'handle', function (_context, _exception, invocation) {
     const children = invocation.children.values();
-    assert.equal(behavior.invokeModelDefinition.regeneration.allows(invocation, { previous: children[2], rejection: children[3] }), true);
+    assert.equal(behavior.requestModelDefinition.regeneration.allows(invocation, { previous: children[2], rejection: children[3] }), true);
     return { kind: 'unhandled' };
   });
   await assert.rejects(f.run(), (error) => error.code === 'UNHANDLED_EXCEPTION' && error.cause.facts.code === 'INVALID_JSON');

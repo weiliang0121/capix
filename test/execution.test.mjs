@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { ExecutionFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
@@ -67,7 +68,7 @@ test('bindConversation, ConversationRuntimeDefinition returns answers without a 
     },
   };
   const entities = createEnvironment();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, provider);
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, new ModelInteractions(new ModelSource(provider)));
   for (const model of ['one', 'two']) {
     const answer = await runtime.run({ messages: [{ role: 'user', content: model }] }, { settings: { ...settings, model } });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });

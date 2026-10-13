@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -59,7 +60,7 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
     assert.equal(facts.execution.status, 'succeeded');
     assert.deepEqual(
       facts.operations.map((item) => item.operation),
-      ['selection', 'conversationDecision', 'answer', 'conversationDecision', 'memory'],
+      ['selection', 'requestModel', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
     );
     const decisions = facts.operations.filter((item) => item.operation === 'conversationDecision');
     assert.deepEqual(
@@ -156,7 +157,7 @@ test('failed extraction leaves current memory and its records unchanged and keep
   invalid = true;
   const facts = await run(environment, '改成150');
   assert.equal(facts.execution.status, 'failed');
-  assert.equal(facts.operations.at(-1).value.error.code, 'MEMORY_SOURCE');
+  assert.equal(facts.operations.find((item) => item.operation === 'memory').value.error.code, 'MEMORY_SOURCE');
   assert.equal(facts.operations.find((item) => item.operation === 'answer').status, 'succeeded');
   assert.equal(environment.transcript.current('assistant').content, '正式回答');
   assert.equal(memory.content, '200');
@@ -196,13 +197,15 @@ test('recording observes the actual changed fact; registration failure propagate
   const execution = bindConversation(
     new ConversationRuntimeDefinition(),
     { transcript, memories, selectionUsage: new SelectionUsage() },
-    {
-      async invoke(_request, purpose) {
-        if (purpose === 'selection') return raw({ historyIndexes: [] });
-        if (purpose === 'answer') return raw({ kind: 'answer', content: '了解' });
-        return raw({ memories: [change(content('预算', '150', [0]), '建立预算150')] });
-      },
-    },
+    new ModelInteractions(
+      new ModelSource({
+        async invoke(_request, purpose) {
+          if (purpose === 'selection') return raw({ historyIndexes: [] });
+          if (purpose === 'answer') return raw({ kind: 'answer', content: '了解' });
+          return raw({ memories: [change(content('预算', '150', [0]), '建立预算150')] });
+        },
+      }),
+    ),
     { observations: [recording] },
   );
   await assert.rejects(execution.run({ messages: [{ role: 'user', content: '预算150' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'memory record registration failed');
@@ -237,10 +240,16 @@ test('invalid memory output stops at acceptance without invoking application or 
     attempts.map((attempt) => [attempt.name, attempt.status]),
     [
       ['prepareModelRequest', 'succeeded'],
-      ['invokeModel', 'succeeded'],
       ['acceptModelOutput', 'failed'],
     ],
   );
+  const requested = snapshot.operations.find((operation) => operation.parentId === extraction.id && operation.operation === 'requestModel');
+  assert.equal(requested.status, 'succeeded');
+  assert.deepEqual(readOutput(requested.value), invalid);
+  const invoked = snapshot.attempts.find((attempt) => attempt.operationId === requested.id);
+  assert.equal(invoked.name, 'invokeModel');
+  assert.equal(readOutput(invoked.value).kind, 'received');
+  assert.deepEqual(readOutput(invoked.value).output, invalid);
   const rejection = extraction.value.error;
   assert.equal(rejection.code, 'MODEL_OUTPUT_REJECTED');
   assert.equal(rejection.cause.code, 'OUTPUT_SHAPE');

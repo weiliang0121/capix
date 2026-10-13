@@ -7,7 +7,7 @@ import { Sequence } from '@capix/server-runtime';
 import type { InvocationView } from '@capix/server-runtime';
 import { OperationDefinition, type OperationContextView } from '@capix/server-runtime';
 import { PrepareModelRequestDefinition } from '../../attempt/model/prepare.js';
-import { InvokeModelDefinition } from '../../attempt/model/invoke.js';
+import { RequestModelDefinition } from '../model/request.js';
 import { AcceptModelOutputDefinition, type ModelAcceptanceInput } from '../../attempt/model/accept.js';
 
 import { ApplyMemoryDefinition } from '../../attempt/memory/apply.js';
@@ -30,28 +30,28 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
 如提供 results，它们是本轮已经接纳的实际操作结果。file-created 说明 answerIndex 对应的正式回答已创建到 receipt.path，bytes 与 digest 描述当时写入的内容；这证明历史创建事实，不保证文件当前仍存在或内容未变。预检通过、保存目标和助手声称已保存不构成创建事实。
 若记忆采用操作结果，在本次变化的 sourceResultIds 中引用 results 的 ID，并在 result.sourceResultIds 中保留支撑完整正文的 ID；后者必须包含本次变化引用，update 还可沿用该目标记忆 sourceResults 中的 ID，不能借用其他记忆来源。只引用系统提供的 ID，不编造或输出凭据。操作来源不替代消息来源；没有使用时省略 sourceResultIds。按后续理解价值选择是否保留，即使有操作结果，也允许返回空 memories。`;
 
-  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), model: ModelResource.invoke.request(), memoryWriter: MemoryResource.apply.request() } as const);
+  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request(), memoryWriter: MemoryResource.apply.request() } as const);
   readonly run;
   readonly children;
   private readonly composition;
 
   readonly prepareRequestDefinition: PrepareModelRequestDefinition<MemoryInput>;
-  readonly invokeModelDefinition: InvokeModelDefinition;
+  readonly requestModelDefinition: RequestModelDefinition;
   readonly acceptOutputDefinition: AcceptModelOutputDefinition<ModelAcceptanceInput & { basis: MemoryInput }, MemoryExtraction>;
   readonly applyMemoryDefinition: ApplyMemoryDefinition;
 
   constructor() {
     super();
     this.prepareRequestDefinition = new PrepareModelRequestDefinition((input, resources) => loadRequest(this.prepare(input), this.task, this.outputContract.schema, resources.settings));
-    this.invokeModelDefinition = new InvokeModelDefinition(this.purpose);
+    this.requestModelDefinition = new RequestModelDefinition(this.purpose);
     this.acceptOutputDefinition = new AcceptModelOutputDefinition({ schema: this.outputContract.schema, accept: (value, input: ModelAcceptanceInput & { basis: MemoryInput }) => this.outputContract.accept(value, input.basis) });
     this.applyMemoryDefinition = new ApplyMemoryDefinition();
     this.composition = new Sequence<MemoryInput, InvocationView<unknown, unknown, OperationContextView>>()
       .step('request', { use: this.prepareRequestDefinition, input: ({ input }) => input })
-      .step('model', { use: this.invokeModelDefinition, input: ({ outputs }) => outputs.request })
+      .step('model', { use: this.requestModelDefinition, input: ({ outputs }) => outputs.request })
       .step('acceptance', { use: this.acceptOutputDefinition, input: ({ input, outputs }) => ({ output: outputs.model, basis: input }) })
       .step('application', { use: this.applyMemoryDefinition, input: ({ outputs }) => outputs.acceptance });
-    this.children = Object.freeze([this.prepareRequestDefinition, this.invokeModelDefinition, this.acceptOutputDefinition, this.applyMemoryDefinition]);
+    this.children = Object.freeze([this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition, this.applyMemoryDefinition]);
     this.run = { requires: ExtractMemoryDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 

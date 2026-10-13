@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -6,10 +7,10 @@ import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
 import { ClientRuntime } from '@capix/client-runtime';
-import { BoundRuntime, ProgressChannel } from '@capix/server-runtime';
+import { BoundRuntime, ProgressChannel, defineObservation } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
-import { createObserverServer, initializeObserver, bindConversation, ConversationRuntimeDefinition, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
+import { ConversationSubmission, createObserverServer, initializeObserver, bindConversation, ConversationRuntimeDefinition, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -18,9 +19,9 @@ const provider = {
     return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'memory' ? { memories: [] } : { kind: 'answer', content: '测试回答' });
   },
 };
-async function setup(t, model = provider, configured = true, submissionRetention) {
+async function setup(t, model = provider, configured = true, submissionRetention, configuration = settings) {
   const observer = initializeObserver(model);
-  const server = createObserverServer({ observer, settings, configured, submissionRetention });
+  const server = createObserverServer({ observer, settings: configuration, configured, submissionRetention });
   assert.equal(server.listening, false, 'service construction must not start listening');
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -144,7 +145,12 @@ test('failed memory postprocessing still exposes the completed answer and the ac
   assert.equal(executions[0].status, 'failed');
   assert.equal(executions[0].memoryStatus, 'failed');
   assert.deepEqual(executions[0].response, { index: 1 });
-  assert.equal(executions[0].calls.filter((call) => call.status === 'failed').length, 3);
+  const failed = executions[0].calls.filter((call) => call.status === 'failed');
+  assert.deepEqual(
+    failed.map((call) => call.label),
+    ['执行调用', '提取记忆体', '请求模型', '发起模型调用'],
+  );
+  for (let index = 1; index < failed.length; index++) assert.equal(failed[index].parentId, failed[index - 1].id);
 });
 
 test('admission is a current hint while retained results keep their original facts', async (t) => {
@@ -462,7 +468,7 @@ test('answer is delivered before memory finishes, and closing observation does n
 
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
   const entities = createEnvironment();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, provider);
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, new ModelInteractions(new ModelSource(provider)));
   const received = [];
   const output = await runtime.run(
     { messages: [{ role: 'user', content: '问题' }] },
@@ -724,3 +730,82 @@ test('cancel requires same-origin JSON and validates its empty body before chang
     assert.equal((await response.json()).result, undefined);
   }
 });
+
+for (const fault of [false, true]) {
+  test(`cancellation between A1 return and A2 creation ${fault ? 'preserves the structural failure' : 'drains before the service terminal result'}`, async (t) => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    t.after(() => release());
+    let pending;
+    const returned = new Promise((resolve) => {
+      pending = resolve;
+    });
+    let submission;
+    const originalStart = ConversationSubmission.prototype.start;
+    t.mock.method(ConversationSubmission.prototype, 'start', function (work) {
+      submission = this;
+      return originalStart.call(this, work);
+    });
+    const { observer, run, get } = await setup(
+      t,
+      {
+        async invoke(request, purpose) {
+          if (purpose === 'selection') await gate;
+          return provider.invoke(request, purpose);
+        },
+      },
+      true,
+      undefined,
+      { ...settings, timeoutMs: 1000 },
+    );
+    const model = observer.definition.executionDefinition.operationDefinitions.selection.requestModelDefinition;
+    model.observation = [
+      ...model.observation,
+      defineObservation(
+        {
+          requires: {},
+          observe(fact) {
+            if (fact.kind !== 'relation' || fact.change.kind !== 'returned' || fact.change.result.status !== 'succeeded' || fact.change.result.output.kind !== 'pending') return;
+            // The public cancellation entry is invoked at the exact synchronous handoff boundary.
+            submission.requestCancellation();
+            pending();
+            if (fault) throw new Error('handoff observer fault');
+          },
+        },
+        { failure: 'propagate' },
+      ),
+    ];
+    const id = randomUUID();
+    const stream = updates(await run('交接处取消', { id }));
+    try {
+      await returned;
+      const interim = await get(`/api/submissions/${id}`);
+      assert.equal(observer.runtime.running, false, 'the R invocation has genuinely ended');
+      assert.equal(observer.interactions.active, true);
+      assert.equal(observer.interactions.cancelling, true);
+      assert.equal(interim.cancelRequested, true);
+      if (fault) {
+        assert.equal(interim.result.status, 'failed');
+        assert.notEqual(interim.result.status, 'cancelled');
+      } else assert.equal(interim.result, undefined, 'service cancellation is still draining its external owner');
+      assert.equal((await get('/api/conversation/admission')).status, 'busy');
+      const blocked = await run('暂不接纳新的 QA');
+      assert.equal(blocked.status, 409);
+      assert.equal((await blocked.json()).result.retry, 'admission');
+      assert.equal(observer.transcript.length, 1);
+      release();
+      await observer.interactions.settled();
+      const completed = (await stream).at(-1);
+      assert.equal(completed.result.status, fault ? 'failed' : 'cancelled');
+      assert.equal((await get('/api/conversation/admission')).status, 'ready');
+      assert.equal(observer.interactions.cancelling, false);
+      assert.equal(observer.transcript.length, 1);
+    } finally {
+      release();
+      await observer.interactions.settled();
+      await stream;
+    }
+  });
+}

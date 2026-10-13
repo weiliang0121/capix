@@ -2,7 +2,7 @@
 
 本轮保存当前单一对话的 Transcript、Memories 和可选记录预设产物。重新启动时恢复内容实体及只读历史记录，再装配新的 Provider、REOA 绑定、记录安装和交付连接，允许开始新 QA。
 
-Invocation、Context、模型请求、未完成步骤、本地等待队列与服务提交身份不恢复。历史记录用于解释已经观测到的过程，不能用于驱动旧执行。暂不新增 Thread、多会话目录、任务账本或后台工作队列。
+Invocation、Context、未完成步骤、本地等待队列与服务提交身份不恢复。独立 Interaction 另行保存固定模型请求与已接收反馈，允许按 ID 读取，不恢复原调用或自动重发。历史记录用于解释已经观测到的过程，不能用于驱动旧执行。暂不新增 Thread、多会话目录、任务账本或后台工作队列。
 
 ## 依赖与位置
 
@@ -10,7 +10,7 @@ Invocation、Context、模型请求、未完成步骤、本地等待队列与服
 
 `pnpm start` 默认使用仓库 `.capix/observer.sqlite`；`CAPIX_DATA_DIR` 可覆盖目录。目录自动创建，数据库与已有 SQLite sidecar 文件设为 `0600`，新目录为 `0700`。数据目录必须位于 `CAPIX_FILES_ROOT` 之外，避免对话文件能力访问消息、记忆和记录存储。`.capix/` 已被 Git 忽略。
 
-数据库启用 WAL、`synchronous=FULL` 和外键检查，当前保持独占锁，一个数据库只支持一个写服务。第二个服务启动明确失败，不用各自内存副本竞争写入。数据库格式使用 `user_version=1`；未知版本、损坏或不完整身份关系拒绝加载，不静默清空或创建空对话替代。
+数据库启用 WAL、`synchronous=FULL` 和外键检查，当前保持独占锁，一个数据库只支持一个写服务。第二个服务启动明确失败，不用各自内存副本竞争写入。数据库格式使用 `user_version=2`，已有 v1 在事务中增加独立 interactions 表，不改写原内容与记录；未知版本、损坏或不完整身份关系拒绝加载，不静默清空或创建空对话替代。内容恢复结构仍是 ObserverStoredState version 1，与数据库格式版本分别维护。
 
 程序化装配保持显式：
 
@@ -20,7 +20,7 @@ import { initializeObserver, SqliteObserverStore } from '@capix/observer-service
 const persistence = SqliteObserverStore.open('/private/capix-data/observer.sqlite');
 const environment = initializeObserver(provider, [], { persistence });
 
-// 在没有活动调用时关闭；封存本次记录来源并释放存储。
+// 在没有活动调用或外部交互时关闭；封存本次记录来源并释放存储。
 environment.close();
 ```
 
@@ -43,6 +43,12 @@ Transcript 保存稳定 id、消息绝对 index、正文、revision 和分段起
 记忆整批预检查、整批提交、整批安装，然后逐项发布事实。某条通知失败不会使已提交批次只有前半段存在；仍尝试发布剩余项，并报告单个或聚合失败。观测失败不回滚内容，也不重新执行工作。
 
 数据库提交失败时内存不改变，不发布 accepted / answer 或内容变化。启用持久化的内容存储失效后，服务接纳状态变成 unavailable，拒绝后续新提交；不默默退化为仅内存模式。回答已经保存而记忆失败时，回答仍保留。
+
+## 独立交互保存
+
+`store.interactions` 提供 create/commit/read。Interaction 先保存 prepared 请求，再保存 started 发送意图，最后保存反馈或失败；反馈保存后才允许 A 解释。请求与已接收反馈不可替换，更新检查 expectedRevision。存储不依赖记录安装，也不要求先初始化对话内容。
+
+已保存的 ModelOutput 包含未经业务 JSON 接纳的 content；因此模型内容解释失败后仍可读取它。恢复读取不创建 Provider，不继续旧 QA；只有发送意图而无反馈时明确不可恢复等待。模型发送与 SQLite 不是跨系统事务，也没有进程重启后重新发送的承诺。独立生命周期、取消及读者边界见 [外部交互](interactions.md)。
 
 ## 记录保存与历史读取
 

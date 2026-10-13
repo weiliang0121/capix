@@ -1,47 +1,33 @@
 import { invocationRecording, type InvocationRecordDescription } from '@capix/server-runtime/recording';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../resources.js';
-import { InvocationEntry, AttemptDefinition, type AttemptContextView, RuntimeError } from '@capix/server-runtime';
-
-import { allowsModelRegeneration, modelRegenerationDeclaration, modelRegenerationInput, prepareRegenerationRequest, type ModelParentInvocationView, type ModelRegenerationEvidence } from '../../model/regeneration.js';
-import { isEqual } from 'es-toolkit/predicate';
+import { AttemptDefinition, type AttemptContextView } from '@capix/server-runtime';
 import { checkCapacity } from '../../model/capacity.js';
-
 import type { ModelRequest, ModelOutput, Purpose } from '../../model/types.js';
+import type { ModelInteractionResult } from '../../model/interactions.js';
 
-export class InvokeModelDefinition extends AttemptDefinition<ModelRequest, ModelOutput, ModelCallResources> {
+/** Initiate one exchange and wait locally; pending is an explicit delivery to its parent. */
+export class InvokeModelDefinition extends AttemptDefinition<ModelRequest, ModelInteractionResult, ModelCallResources> {
   readonly observation;
-  static readonly requires = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), model: ModelResource.invoke.request() });
-
+  static readonly requires = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
   readonly run = { requires: InvokeModelDefinition.requires, execute: this.execute.bind(this) };
-
   readonly name = 'invokeModel';
-  readonly label = '调用模型';
+  readonly label = '发起模型调用';
   readonly source = 'services/observer/src/conversation/attempt/model/invoke.ts · InvokeModelDefinition';
   readonly callee = 'provider';
-
-  readonly regeneration = Object.freeze({
-    declaration: modelRegenerationDeclaration,
-    requires: this.run.requires,
-    allows: (parent: ModelParentInvocationView, evidence: ModelRegenerationEvidence) => allowsModelRegeneration(parent, evidence),
-    entry: new InvocationEntry<InvokeModelDefinition, { request: ModelRequest; evidence: ModelRegenerationEvidence }>(this, (parent: ModelParentInvocationView, input: { request: ModelRequest; evidence: ModelRegenerationEvidence }, options) => {
-      const evidence = modelRegenerationInput(parent, input.evidence);
-      if (options.key !== input.evidence.previous.key || !isEqual(input.request, prepareRegenerationRequest(evidence))) throw new RuntimeError('MODEL_REGENERATION_NOT_ALLOWED', '再次生成必须保留原请求与对应的错误反馈。');
-      return input.request;
-    }),
-  });
 
   constructor(
     private readonly purpose: Purpose,
     description: InvocationRecordDescription<ModelRequest, ModelOutput> = {},
   ) {
     super();
-    this.observation = [invocationRecording(description)];
+    this.observation = [invocationRecording<ModelRequest, ModelInteractionResult>({ input: description.input, output: (result) => (result.kind === 'received' ? { ...result, output: description.output ? description.output(result.output) : result.output } : result) })];
   }
 
-  private execute(context: AttemptContextView<ModelRequest, ModelOutput, ModelCallResources>): Promise<ModelOutput> {
-    const { timeoutMs, settings, model } = context.resources.values;
+  private execute(context: AttemptContextView<ModelRequest, ModelInteractionResult, ModelCallResources>): Promise<ModelInteractionResult> {
+    const { timeoutMs, settings, modelCreator, modelReader } = context.resources.values;
     checkCapacity(context.currentInput, settings);
-    return model.invoke(context.currentInput, this.purpose, { signal: context.signal, timeoutMs });
+    const interaction = modelCreator.start(context.currentInput, this.purpose, { signal: context.signal, timeoutMs });
+    return modelReader.wait(interaction, { signal: context.signal, waitMs: Math.max(1, Math.floor(timeoutMs / 2)) });
   }
 }

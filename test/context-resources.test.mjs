@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
@@ -31,7 +32,7 @@ test('Observer narrows resources at each action, captures fixed values and expir
     for (const child of current.children ?? []) inspect(child);
   };
   inspect(definition.executionDefinition);
-  const runtime = bindConversation(definition, entities, provider());
+  const runtime = bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider())));
   let first;
   await runtime.run(
     { messages: [{ role: 'user', content: '你好' }] },
@@ -296,7 +297,7 @@ test('message and memory access preserves entity validation, change publication 
   assert.equal(selectionUsage.get(appended[0].message), 1);
 });
 
-test('model offer exposes only invocation while preserving provider method ownership', async () => {
+test('model offers separate creation and reading while preserving provider method ownership', async () => {
   const entities = createEnvironment();
   const model = { ...provider(), privateValue: 'provider-only' };
   const invoke = model.invoke;
@@ -307,15 +308,19 @@ test('model offer exposes only invocation while preserving provider method owner
   const definition = new ConversationRuntimeDefinition();
   const execute = definition.executionDefinition.run.execute;
   definition.executionDefinition.run.execute = function (context, ...args) {
-    const access = context.resources.values.model;
-    assert.notEqual(access, model);
-    assert.deepEqual(Object.keys(access), ['invoke']);
-    assert.equal(access.privateValue, undefined);
-    assert.ok(Object.isFrozen(access));
+    const creator = context.resources.values.modelCreator;
+    const reader = context.resources.values.modelReader;
+    assert.notEqual(creator, model);
+    assert.deepEqual(Object.keys(creator), ['start']);
+    assert.deepEqual(Object.keys(reader), ['wait', 'result']);
+    assert.equal(creator.privateValue, undefined);
+    assert.equal(reader.start, undefined);
+    assert.ok(Object.isFrozen(creator));
+    assert.ok(Object.isFrozen(reader));
     assert.equal(context.settings, undefined);
     assert.equal(context.transcriptRange, undefined);
     return execute.call(this, context, ...args);
   };
-  const runtime = bindConversation(definition, entities, model);
+  const runtime = bindConversation(definition, entities, new ModelInteractions(new ModelSource(model)));
   await runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
 });

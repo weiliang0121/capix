@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bindResources, InvocationCancelled, isInvocationCancelled } from '@capix/server-runtime';
-import { DeepSeekProvider, ModelResource } from '@capix/observer-service';
+import { DeepSeekProvider, ModelResource, ModelSource, ModelInteractions } from '@capix/observer-service';
 
 const request = { model: 'fixture', messages: [], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 1, stream: false };
 const output = { id: 'fixture', model: 'fixture', content: '{}', finishReason: 'stop', usage: null };
 function model(provider) {
-  return bindResources({ model: ModelResource.invoke.request() }, [ModelResource.invoke.provide(() => provider)])(null).values.model;
+  const interactions = new ModelInteractions(new ModelSource(provider));
+  const resources = bindResources({ creator: ModelResource.create.request(), reader: ModelResource.read.request() }, [ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)])(null).values;
+  return { invoke: (request, purpose, controls) => resources.reader.result(resources.creator.start(request, purpose, controls), controls) };
 }
 
 test('provider fetch and body abort preserve the native cause and exact control identity', async () => {

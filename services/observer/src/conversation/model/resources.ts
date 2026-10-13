@@ -1,6 +1,5 @@
-import type { ModelRequest, Purpose } from './types.js';
-import type { ModelProvider, ModelInvocation } from './types.js';
-import { ResourceOffer, RuntimeError, InvocationCancelled, isInvocationCancelled } from '@capix/server-runtime';
+import type { ModelInteractions, ModelInteractionCreator, ModelInteractionReader } from './interactions.js';
+import { ResourceOffer } from '@capix/server-runtime';
 import type { ModelSettings } from '@capix/protocol';
 
 /** Configuration values and provider access have separate contracts and evidence. */
@@ -10,27 +9,23 @@ export const ModelSettingsResource = Object.freeze({
 });
 
 export const ModelResource = Object.freeze({
-  invoke: new ResourceOffer(
-    'model.invoke',
-    (provider: ModelProvider, activity): ModelInvocation =>
-      Object.freeze({
-        invoke: (request: ModelRequest, purpose: Purpose, controls: { readonly signal: AbortSignal; readonly timeoutMs: number }) =>
-          activity.runAsync('invoke', { input: () => ({ model: request.model, purpose }), output: (result) => ({ id: result.id, model: result.model, finishReason: result.finishReason, usage: result.usage }) }, async () => {
-            const timeout = AbortSignal.timeout(controls.timeoutMs);
-            const signal = AbortSignal.any([controls.signal, timeout]);
-            try {
-              const output = await provider.invoke(request, purpose, signal);
-              if (signal.aborted) throw signal.reason;
-              return output;
-            } catch (error) {
-              if (!isInvocationCancelled(error, signal) && !(signal.aborted && error === signal.reason)) throw error;
-              if (controls.signal.aborted && signal.reason === controls.signal.reason) throw new InvocationCancelled(controls.signal, { cause: error });
-              if (timeout.aborted && signal.reason === timeout.reason) throw new RuntimeError('MODEL_TIMEOUT', '模型调用超过时限。', undefined, { cause: error });
-              throw error;
-            }
-          }),
+  create: new ResourceOffer(
+    'model-interaction.create',
+    (interactions: ModelInteractions, activity): ModelInteractionCreator =>
+      Object.freeze<ModelInteractionCreator>({
+        start: (request, purpose, controls) => activity.runSync('start', { input: () => ({ model: request.model, purpose }), output: (ref) => ref }, () => interactions.start(request, purpose, controls)),
       }),
     'access',
-    { describe: () => ({ capability: 'model.invoke' }) },
+    { describe: () => ({ capability: 'model-interaction.create' }) },
+  ),
+  read: new ResourceOffer(
+    'model-interaction.read',
+    (interactions: ModelInteractions, activity): ModelInteractionReader =>
+      Object.freeze<ModelInteractionReader>({
+        wait: (ref, controls) => activity.runAsync('wait', { input: () => ref, output: (result) => ({ kind: result.kind, interaction: result.interaction }) }, () => interactions.wait(ref, controls)),
+        result: (ref, controls) => activity.runAsync('result', { input: () => ref, output: (result) => ({ id: result.id, model: result.model, finishReason: result.finishReason, usage: result.usage }) }, () => interactions.result(ref, controls)),
+      }),
+    'access',
+    { describe: () => ({ capability: 'model-interaction.read' }) },
   ),
 });

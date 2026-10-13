@@ -1,3 +1,4 @@
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConversationSubmission, ConversationRuntimeDefinition, bindConversation } from '@capix/observer-service';
@@ -29,15 +30,21 @@ test('submission exposes live REOA calls and parent acceptance without installin
   const gate = new Promise((resolve) => {
     release = resolve;
   });
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, {
-    async invoke(_request, purpose) {
-      if (purpose === 'answer') {
-        entered();
-        await gate;
-      }
-      return response(purpose);
-    },
-  });
+  const runtime = bindConversation(
+    new ConversationRuntimeDefinition(),
+    environment,
+    new ModelInteractions(
+      new ModelSource({
+        async invoke(_request, purpose) {
+          if (purpose === 'answer') {
+            entered();
+            await gate;
+          }
+          return response(purpose);
+        },
+      }),
+    ),
+  );
   const submission = new ConversationSubmission('activity');
   submission.start((signal) => runtime.run(input, { settings, signal, progress: submission.progress, activity: submission.activity }));
   await entering;
@@ -45,7 +52,7 @@ test('submission exposes live REOA calls and parent acceptance without installin
   assert.equal(during.result, undefined);
   assert.equal(during.activities.integrity.status, 'complete');
   assert.deepEqual(new Set(during.activities.calls.map((call) => call.level)), new Set(['runtime', 'execution', 'operation', 'attempt']));
-  assert.ok(during.activities.calls.some((call) => call.level === 'attempt' && call.label === '调用模型' && call.status === 'running'));
+  assert.ok(during.activities.calls.some((call) => call.level === 'attempt' && call.label === '发起模型调用' && call.status === 'running'));
   assert.ok(
     during.activities.calls.some((call) => call.level === 'attempt' && call.status === 'succeeded'),
     'completed short activities remain visible',
@@ -73,12 +80,18 @@ test('submission exposes live REOA calls and parent acceptance without installin
 
 test('activity keeps failed child and new retry identities while the parent succeeds in its second round', async () => {
   let answers = 0;
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), createEnvironment(), {
-    async invoke(_request, purpose) {
-      if (purpose === 'answer' && ++answers === 1) return { ...response(purpose), content: '{invalid JSON' };
-      return response(purpose);
-    },
-  });
+  const runtime = bindConversation(
+    new ConversationRuntimeDefinition(),
+    createEnvironment(),
+    new ModelInteractions(
+      new ModelSource({
+        async invoke(_request, purpose) {
+          if (purpose === 'answer' && ++answers === 1) return { ...response(purpose), content: '{invalid JSON' };
+          return response(purpose);
+        },
+      }),
+    ),
+  );
   const submission = new ConversationSubmission('retry-activity');
   submission.start((signal) => runtime.run(input, { settings, signal, progress: submission.progress, activity: submission.activity }));
   const snapshot = await complete(submission);
@@ -88,19 +101,26 @@ test('activity keeps failed child and new retry identities while the parent succ
   assert.equal(generation.status, 'succeeded');
   assert.equal(generation.round, 2);
   const children = snapshot.activities.calls.filter((call) => call.parentContextId === generation.contextId);
-  const modelCalls = children.filter((call) => call.label === '调用模型');
+  const modelCalls = children.filter((call) => call.level === 'operation' && call.label === '请求模型');
   assert.equal(modelCalls.length, 2);
   assert.notEqual(modelCalls[0].contextId, modelCalls[1].contextId);
+  for (const model of modelCalls) assert.equal(snapshot.activities.calls.filter((call) => call.parentContextId === model.contextId && call.level === 'attempt' && call.label === '发起模型调用').length, 1);
   assert.ok(children.some((call) => call.status === 'failed' && call.relation.returned === 'failed'));
 });
 
 test('activity source failure is independent of committed content and actual submission completion', async () => {
   const environment = createEnvironment();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, {
-    async invoke(_request, purpose) {
-      return response(purpose);
-    },
-  });
+  const runtime = bindConversation(
+    new ConversationRuntimeDefinition(),
+    environment,
+    new ModelInteractions(
+      new ModelSource({
+        async invoke(_request, purpose) {
+          return response(purpose);
+        },
+      }),
+    ),
+  );
   const submission = new ConversationSubmission('activity-incomplete');
   submission.activity.publish(fact('orphan', 'attempt', 'started', 1, {}, 'missing-parent'));
   assert.equal(submission.snapshot.activities.integrity.status, 'incomplete');
