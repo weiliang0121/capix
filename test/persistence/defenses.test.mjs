@@ -48,7 +48,7 @@ test('load rejects orphan foreign-key rows without silently hiding or deleting s
   }
   const reopened = disk.open();
   assert.throws(
-    () => reopened.load(),
+    () => reopened.loadContent(),
     (error) => error.code === 'PERSISTENCE_UNAVAILABLE' && error.cause?.message === 'Stored database integrity check failed',
   );
   assert.equal(reopened.failure.code, 'PERSISTENCE_UNAVAILABLE');
@@ -87,7 +87,7 @@ test('opening existing storage narrows legacy database and sidecar modes before 
     chmodSync(disk.path + suffix, 0o644);
   }
   const reopened = disk.open();
-  assert.equal(reopened.load().transcript.messages[0].content, 'saved content');
+  assert.equal(reopened.loadContent().transcript.messages[0].content, 'saved content');
   for (const suffix of ['', '-wal', '-shm']) {
     const path = disk.path + suffix;
     if (existsSync(path)) assert.equal(statSync(path).mode & 0o777, 0o600, `private mode for existing ${suffix || 'database'}`);

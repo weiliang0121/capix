@@ -64,7 +64,7 @@ test('interaction feedback survives restart independently of content metadata an
   });
   await interaction.settled();
   assert.equal(sends, 1);
-  assert.equal(store.load(), undefined, 'independent interactions do not fabricate a conversation');
+  assert.equal(store.loadContent(), undefined, 'independent interactions do not fabricate a conversation');
   const expected = interaction.exportState();
   assert.deepEqual(store.interactions.read(interaction.id), expected);
   assert.throws(() => JSON.parse(interaction.read().feedback.payload.content), SyntaxError, 'business interpretation remains separate from capture');
@@ -223,12 +223,14 @@ test('v1 migration preserves conversation content, memory identities and recordi
   environment.memories.apply([{ action: 'create', memoryId: null, change: 'keep source', sourceIndexes: [0, 1], result: { topic: 'fixture', content: 'saved memory', sourceIndexes: [0, 1] } }]);
   environment.close();
   const before = disk.open();
-  const expected = before.load();
+  const expected = before.loadContent();
+  const expectedRecording = before.loadRecording();
   before.close();
   disk.edit((database) => database.exec(`CREATE TABLE metadata (singleton INTEGER PRIMARY KEY, transcript_id TEXT, memories_id TEXT); INSERT INTO metadata SELECT 1, transcript_id, memories_id FROM conversations; DROP TABLE conversation_settings; ALTER TABLE record_sources DROP COLUMN conversation_id; DROP TABLE conversations; DROP TABLE interactions; PRAGMA user_version = 1;`));
   const migrated = disk.open();
-  assert.deepEqual(migrated.load(), expected);
-  assert.ok(expected.recording.book.entries.length > 0);
+  assert.deepEqual(migrated.loadContent(), expected);
+  assert.deepEqual(migrated.loadRecording(), expectedRecording);
+  assert.ok(expectedRecording.book.entries.length > 0);
   const interaction = create(migrated);
   assert.equal(migrated.interactions.read(interaction.id).delivery, 'prepared');
   migrated.close();

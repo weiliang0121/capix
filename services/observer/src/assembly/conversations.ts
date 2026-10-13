@@ -37,7 +37,7 @@ export class ObserverConversations {
       for (const descriptor of existing.conversations) this.#descriptors.set(descriptor.id, descriptor);
     } else {
       // Validate a previously empty database before treating it as a new world.
-      this.persistence?.load();
+      this.persistence?.loadContent();
       this.#defaultId = this.createContent(messages).id;
     }
   }
@@ -54,9 +54,12 @@ export class ObserverConversations {
   }
 
   get(id: string): ConversationDescriptor {
-    const descriptor = this.list().conversations.find((value) => value.id === id);
+    this.requireOpen();
+    const descriptor = this.persistence && !this.persistence.failure ? this.persistence.conversation(id) : this.#descriptors.get(id);
+    if (descriptor) this.#descriptors.set(id, descriptor);
+    if (!this.persistence) this.#content.get(id)?.consumer.flush();
     if (!descriptor) throw new RuntimeError('CONVERSATION_NOT_FOUND', '未找到对话。');
-    return descriptor;
+    return this.#descriptors.get(id)!;
   }
 
   create(): ConversationDescriptor {
@@ -68,14 +71,15 @@ export class ObserverConversations {
     this.get(id);
     const known = this.#content.get(id);
     if (known) return known;
-    const saved = this.persistence!.load(id);
+    const saved = this.persistence!.loadContent(id);
     const content = restoreConversationContent(saved, [], this.persistence);
     this.#content.set(id, content);
     return content;
   }
 
   forTranscript(id: string): ConversationContent {
-    const descriptor = this.list().conversations.find((value) => value.transcriptId === id);
+    this.requireOpen();
+    const descriptor = this.persistence && !this.persistence.failure ? this.persistence.conversationForTranscript(id) : [...this.#descriptors.values()].find((value) => value.transcriptId === id);
     if (!descriptor) throw new RuntimeError('TRANSCRIPT_NOT_FOUND', '未找到消息集合。');
     return this.content(descriptor.id);
   }
@@ -116,7 +120,7 @@ export class ObserverConversations {
     const memories = new Memories(transcript);
     const now = Date.now();
     const descriptor = this.persistence ? this.persistence.createConversation({ transcript: transcript.exportState(), memories: memories.exportState() }) : Object.freeze({ id: randomUUID(), title: conversationTitle(transcript.snapshot()), transcriptId: transcript.id, createdAt: now, updatedAt: now });
-    const saved = { version: 1 as const, transcript: transcript.exportState(), memories: memories.exportState(), recording: { book: { entries: [] }, archives: [] } };
+    const saved = { version: 1 as const, transcript: transcript.exportState(), memories: memories.exportState() };
     const content = restoreConversationContent(saved, [], this.persistence);
     this.#descriptors.set(descriptor.id, descriptor);
     this.#content.set(descriptor.id, content);

@@ -11,12 +11,14 @@ export interface ObserverInteractionPersistence extends InteractionPersistence {
 }
 
 /** Stored content is independent of optional recording and of the current service process. */
-export interface ObserverStoredState {
+export interface ObserverStoredContent {
   readonly version: 1;
   readonly transcript: TranscriptState;
   readonly memories: MemoriesState;
-  readonly recording: {
-    readonly book: RecordBookState;
-    readonly archives: readonly RecordingArchive[];
-  };
+}
+
+/** Historical observation is recovered independently from required content. */
+export interface ObserverStoredRecording {
+  readonly book: RecordBookState;
+  readonly archives: readonly RecordingArchive[];
 }

@@ -8,7 +8,7 @@ import { snapshotValue } from '@capix/server-runtime/recording';
 import { isEqual } from 'es-toolkit';
 import type { TranscriptState, TranscriptCommit, TranscriptPersistence, MemoriesState, MemoriesCommit, MemoriesPersistence } from '@capix/server-runtime/content';
 import type { ConversationDescriptor, ConversationListResponse, ConversationFailure, RecordChangeEvent, RecordEntry, CompositeRecord, RecordingArchive } from '@capix/protocol';
-import type { ObserverInteractionPersistence, ObserverStoredState } from './types.js';
+import type { ObserverInteractionPersistence, ObserverStoredContent, ObserverStoredRecording } from './types.js';
 import { conversationTitle } from '../conversation/title.js';
 import { initializeSchema } from './schema.js';
 import { updateRecord } from './records.js';
@@ -58,27 +58,50 @@ export class SqliteObserverStore {
 
   list(): ConversationListResponse {
     return this.transaction(() => {
-      const conversations = this.all('SELECT id, title, transcript_id, created_at, updated_at FROM conversations ORDER BY updated_at DESC, rowid DESC').map((row) => Object.freeze({ id: row.id as string, title: row.title as string, transcriptId: row.transcript_id as string, createdAt: row.created_at as number, updatedAt: row.updated_at as number }));
+      const conversations = this.all('SELECT id, title, transcript_id, created_at, updated_at FROM conversations ORDER BY updated_at DESC, rowid DESC').map(descriptor);
       const defaultConversationId = this.get('SELECT default_id FROM conversation_settings WHERE singleton = 1')?.default_id as string | undefined;
       if (conversations.length > 0 !== Boolean(defaultConversationId) || (defaultConversationId && !conversations.some((item) => item.id === defaultConversationId))) throw new Error('Invalid default conversation');
       return { conversations, defaultConversationId: defaultConversationId ?? '' };
     });
   }
 
-  /** One consistent read. Only a completely empty database represents a new conversation. */
-  load(conversationId?: string): ObserverStoredState | undefined {
+  conversation(id: string): ConversationDescriptor | undefined {
     return this.transaction(() => {
-      if (this.all('PRAGMA quick_check').some((row) => row.quick_check !== 'ok') || this.get('PRAGMA foreign_key_check')) throw new Error('Stored database integrity check failed');
-      if (this.get('SELECT count(*) AS count FROM transcripts')?.count !== this.get('SELECT count(*) AS count FROM conversations')?.count || this.get('SELECT count(*) AS count FROM memory_sets')?.count !== this.get('SELECT count(*) AS count FROM conversations')?.count || this.get('SELECT 1 FROM record_sources WHERE conversation_id IS NULL LIMIT 1')) throw new Error('Unowned content or recording source');
+      const row = this.get('SELECT id, title, transcript_id, created_at, updated_at FROM conversations WHERE id = ?', id);
+      return row ? descriptor(row) : undefined;
+    });
+  }
+
+  conversationForTranscript(id: string): ConversationDescriptor | undefined {
+    return this.transaction(() => {
+      const row = this.get('SELECT id, title, transcript_id, created_at, updated_at FROM conversations WHERE transcript_id = ?', id);
+      return row ? descriptor(row) : undefined;
+    });
+  }
+
+  /** Internal assembly identity check; no message, memory body or observation is loaded. */
+  contentIdentity(id: string): { readonly transcriptId: string; readonly memoriesId: string } | undefined {
+    return this.transaction(() => {
+      const row = this.get('SELECT transcript_id, memories_id FROM conversations WHERE id = ?', id);
+      return row ? Object.freeze({ transcriptId: row.transcript_id as string, memoriesId: row.memories_id as string }) : undefined;
+    });
+  }
+
+  /** Required content is read consistently without querying or decoding historical recording. */
+  loadContent(conversationId?: string): ObserverStoredContent | undefined {
+    return this.transaction(() => {
+      for (const table of ['conversations', 'conversation_settings', 'transcripts', 'messages', 'memory_sets', 'memories']) {
+        if (this.all(`PRAGMA quick_check(${table})`).some((row) => row.quick_check !== 'ok') || this.get(`PRAGMA foreign_key_check(${table})`)) throw new Error('Stored database integrity check failed');
+      }
+      if (this.get('SELECT count(*) AS count FROM transcripts')?.count !== this.get('SELECT count(*) AS count FROM conversations')?.count || this.get('SELECT count(*) AS count FROM memory_sets')?.count !== this.get('SELECT count(*) AS count FROM conversations')?.count) throw new Error('Unowned content');
       const metadata = conversationId ? this.get('SELECT transcript_id, memories_id FROM conversations WHERE id = ?', conversationId) : this.get('SELECT transcript_id, memories_id FROM conversations WHERE id = (SELECT default_id FROM conversation_settings WHERE singleton = 1)');
       if (!metadata) {
         if (conversationId) throw new Error('Conversation does not exist');
-        for (const table of ['transcripts', 'messages', 'memory_sets', 'memories', 'record_sources', 'records']) {
+        for (const table of ['transcripts', 'messages', 'memory_sets', 'memories']) {
           if (this.get(`SELECT 1 FROM ${table} LIMIT 1`)) throw new Error('Persistence metadata is missing');
         }
         return undefined;
       }
-      const identity = conversationId ?? this.get('SELECT default_id FROM conversation_settings WHERE singleton = 1')!.default_id;
       const transcript = this.get('SELECT id, revision, starts FROM transcripts WHERE id = ?', metadata.transcript_id!);
       const memories = this.get('SELECT id, transcript_id, sequence FROM memory_sets WHERE id = ?', metadata.memories_id!);
       if (!transcript || !memories || memories.transcript_id !== transcript.id) throw new Error('Stored content identities do not match');
@@ -89,8 +112,22 @@ export class SqliteObserverStore {
         if (data.id !== row.id) throw new Error('Stored memory identity does not match');
         return data;
       });
-      const archives: RecordingArchive[] = this.all('SELECT id, revision, roots, state FROM record_sources WHERE conversation_id = ? ORDER BY rowid', identity!).map((row) => ({ sourceId: row.id as string, revision: row.revision as number, rootIds: parse(row.roots), state: row.state as RecordingArchive['state'] }));
-      const records = this.all('SELECT id, source_id, kind, body FROM records WHERE source_id IN (SELECT id FROM record_sources WHERE conversation_id = ?) ORDER BY ordinal', identity!);
+      return {
+        version: 1,
+        transcript: { id: transcript.id as string, revision: transcript.revision as number, starts: parse(transcript.starts), messages: messages.map((row) => parse(row.body)) },
+        memories: { id: memories.id as string, transcriptId: transcript.id as string, sequence: memories.sequence as number, items },
+      };
+    });
+  }
+
+  /** A malformed archive disables observation; only database failure disables required content. */
+  loadRecording(conversationId?: string): ObserverStoredRecording {
+    return this.transaction(() => {
+      if (this.get('PRAGMA foreign_key_check(record_sources)') || this.get('PRAGMA foreign_key_check(records)') || this.get('SELECT 1 FROM record_sources WHERE conversation_id IS NULL LIMIT 1')) throw new Error('Unowned recording source or record');
+      const identity = conversationId ?? this.get('SELECT default_id FROM conversation_settings WHERE singleton = 1')?.default_id;
+      if (identity === undefined) return { book: { entries: [] }, archives: [] };
+      const archives: RecordingArchive[] = this.all('SELECT id, revision, roots, state FROM record_sources WHERE conversation_id = ? ORDER BY rowid', identity).map((row) => ({ sourceId: row.id as string, revision: row.revision as number, rootIds: parse(row.roots), state: row.state as RecordingArchive['state'] }));
+      const records = this.all('SELECT id, source_id, kind, body FROM records WHERE source_id IN (SELECT id FROM record_sources WHERE conversation_id = ?) ORDER BY ordinal', identity);
       const byId = new Map(records.map((row) => [row.id, row]));
       const entries = records.map((row) => {
         const data = parse(row.body);
@@ -101,15 +138,16 @@ export class SqliteObserverStore {
       for (const archive of archives) {
         const roots = records.filter((row) => row.source_id === archive.sourceId && row.kind === 'runtime').map((row) => row.id);
         if (!Array.isArray(archive.rootIds) || roots.length !== archive.rootIds.length || roots.some((id, index) => id !== archive.rootIds[index])) throw new Error('Stored recording roots do not match');
-        if (archive.revision < roots.length || !Number.isSafeInteger(archive.revision)) throw new Error('Invalid stored recording revision');
+        if (archive.revision < roots.length || !Number.isSafeInteger(archive.revision) || !['open', 'sealed', 'incomplete'].includes(archive.state)) throw new Error('Invalid stored recording revision or state');
       }
-      return {
-        version: 1,
-        transcript: { id: transcript.id as string, revision: transcript.revision as number, starts: parse(transcript.starts), messages: messages.map((row) => parse(row.body)) },
-        memories: { id: memories.id as string, transcriptId: transcript.id as string, sequence: memories.sequence as number, items },
-        recording: { book: { entries }, archives },
-      };
-    });
+      return { book: { entries }, archives };
+    }, false);
+  }
+
+  /** Entity-level restoration validation is part of required content integrity. */
+  invalidateContent(cause: unknown): never {
+    this.failContent();
+    throw new RuntimeError('PERSISTENCE_UNAVAILABLE', '内容恢复失败，请检查服务存储。', undefined, { cause });
   }
 
   /** Initial identities are generated by the entities and installed together before any runtime binds. */
@@ -211,11 +249,12 @@ export class SqliteObserverStore {
     });
   }
 
-  openRecording(sourceId: string, conversationId = this.list().defaultConversationId): void {
+  openRecording(sourceId: string, conversationId?: string): void {
     if (this.#activeSources.has(sourceId)) throw new Error('This recording source already has a writer');
     this.transaction(() => {
-      if (!this.get('SELECT 1 FROM conversations WHERE id = ?', conversationId)) throw new Error('Content must be initialized before recording');
-      this.run("INSERT INTO record_sources(id, revision, roots, state, conversation_id) VALUES (?, 0, '[]', 'open', ?)", sourceId, conversationId);
+      const identity = conversationId ?? this.get('SELECT default_id FROM conversation_settings WHERE singleton = 1')?.default_id;
+      if (identity === undefined || !this.get('SELECT 1 FROM conversations WHERE id = ?', identity)) throw new Error('Content must be initialized before recording');
+      this.run("INSERT INTO record_sources(id, revision, roots, state, conversation_id) VALUES (?, 0, '[]', 'open', ?)", sourceId, identity);
     });
     this.#activeSources.add(sourceId);
   }
@@ -337,6 +376,10 @@ export class SqliteObserverStore {
   }
 }
 
+function descriptor(row: Row): ConversationDescriptor {
+  return Object.freeze({ id: row.id as string, title: row.title as string, transcriptId: row.transcript_id as string, createdAt: row.created_at as number, updatedAt: row.updated_at as number });
+}
+
 function encode(value: unknown): string {
   return JSON.stringify(snapshotValue(value));
 }
@@ -361,5 +404,5 @@ function interactionState(row: Row): InteractionState {
 
 function databaseUnavailable(error: unknown): boolean {
   if (!(error instanceof Error) || !('errcode' in error) || typeof error.errcode !== 'number') return false;
-  return new Set([5, 6, 8, 10, 11, 13, 14, 26]).has(error.errcode & 255);
+  return new Set([1, 5, 6, 7, 8, 10, 11, 13, 14, 15, 17, 21, 26]).has(error.errcode & 255);
 }

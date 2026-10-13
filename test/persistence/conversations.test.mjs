@@ -111,7 +111,8 @@ test('v2 single-conversation migration preserves identities, indexes, source own
   const id = host.list().defaultConversationId;
   const environment = host.open(id);
   await environment.runtime.run({ messages: [{ role: 'user', content: ' \n '.repeat(40) + '原有对话' }] }, { settings });
-  const saved = host.persistence.load(id);
+  const saved = host.persistence.loadContent(id);
+  const recording = host.persistence.loadRecording(id);
   host.close();
   const database = new DatabaseSync(disk.path);
   database.exec(`CREATE TABLE metadata(singleton INTEGER PRIMARY KEY, transcript_id TEXT, memories_id TEXT); INSERT INTO metadata SELECT 1, transcript_id, memories_id FROM conversations; DROP TABLE conversation_settings; ALTER TABLE record_sources DROP COLUMN conversation_id; DROP TABLE conversations; PRAGMA user_version = 2;`);
@@ -121,7 +122,8 @@ test('v2 single-conversation migration preserves identities, indexes, source own
   assert.equal(current.conversations.length, 1);
   assert.equal(current.conversations[0].transcriptId, saved.transcript.id);
   assert.equal(current.conversations[0].title, '原有对话');
-  assert.deepEqual(migrated.persistence.load(current.defaultConversationId), { ...saved, recording: { ...saved.recording, archives: saved.recording.archives.map((archive) => ({ ...archive, state: 'sealed' })) } });
+  assert.deepEqual(migrated.persistence.loadContent(current.defaultConversationId), saved);
+  assert.deepEqual(migrated.persistence.loadRecording(current.defaultConversationId), { ...recording, archives: recording.archives.map((archive) => ({ ...archive, state: 'sealed' })) });
   const created = migrated.create();
   assert.equal(migrated.list().conversations.length, 2);
   assert.notEqual(created.id, current.defaultConversationId);

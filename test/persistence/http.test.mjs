@@ -113,3 +113,24 @@ test('content save failure gates following submissions through server admission 
   assert.equal(refusal.result.error.code, 'PERSISTENCE_UNAVAILABLE');
   assert.equal(current.calls, 0);
 });
+
+test('unreadable historical records fail observation explicitly while transcript delivery and new QA remain available', async (t) => {
+  const disk = fixture(t);
+  const first = await disk.start();
+  assert.equal((await frames(await run(first.base, 'before-damage'))).at(-1).result.status, 'completed');
+  const original = await get(first.base, '/api/transcript');
+  await first.close();
+  const database = new DatabaseSync(disk.path);
+  database.exec("UPDATE records SET body = json_set(body, '$.id', 'invalid-record-id') WHERE kind = 'execution'");
+  database.close();
+  const next = await disk.start();
+  assert.deepEqual(await get(next.base, '/api/transcript'), original);
+  assert.equal((await get(next.base, '/api/conversation/admission')).status, 'ready');
+  const overview = await get(next.base, '/api/executions');
+  assert.equal(overview.code, 'SOURCE_INCOMPLETE');
+  const feed = await get(next.base, '/api/observe');
+  assert.equal(feed.code, 'SOURCE_INCOMPLETE');
+  assert.equal((await frames(await run(next.base, 'after-damage'))).at(-1).result.status, 'completed');
+  assert.equal((await get(next.base, '/api/transcript')).messages.length, 4);
+  assert.equal((await get(next.base, '/api/conversation/admission')).status, 'ready');
+});

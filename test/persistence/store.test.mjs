@@ -73,7 +73,7 @@ test('content roundtrip preserves identities, segmentation, memory source receip
   const expected = { transcript: content.transcript.exportState(), memories: content.memories.exportState() };
   store.close();
   const reopened = disk.open();
-  const saved = reopened.load();
+  const saved = reopened.loadContent();
   assert.deepEqual(saved.transcript, expected.transcript);
   assert.deepEqual(saved.memories, expected.memories);
   assert.deepEqual(
@@ -86,7 +86,7 @@ test('content roundtrip preserves identities, segmentation, memory source receip
   assert.equal(transcript.get(3).content, '重启后回答');
   assert.equal(transcript.revision, expected.transcript.revision + 1);
   assert.equal(memories.get(first.id).sourceResults[0].receipt.path, 'saved.md');
-  assert.deepEqual(reopened.load().recording.book.entries, []);
+  assert.deepEqual(reopened.loadRecording().book.entries, []);
 });
 
 test('SQL failure rolls back the entire append and memory batch before in-memory visibility', (t) => {
@@ -105,20 +105,20 @@ test('SQL failure rolls back the entire append and memory batch before in-memory
   const content = createContent(store);
   assert.throws(() => content.transcript.append({ role: 'user', content: 'first' }, { role: 'assistant', content: 'reject' }), /保存或加载失败/);
   assert.equal(content.transcript.length, 0);
-  assert.equal(store.load().transcript.messages.length, 0);
+  assert.equal(store.loadContent().transcript.messages.length, 0);
   assert.equal(store.failure.code, 'PERSISTENCE_UNAVAILABLE');
   assert.throws(() => content.transcript.append({ role: 'user', content: 'still blocked' }), /内容存储不可用/);
   store.close();
   const reopened = disk.open();
-  const saved = reopened.load();
+  const saved = reopened.loadContent();
   const transcript = Transcript.restore(saved.transcript, { persistence: reopened.transcript });
   const memories = Memories.restore(saved.memories, transcript, { persistence: reopened.memories });
   transcript.append({ role: 'user', content: 'first' }, { role: 'assistant', content: 'answer' });
   assert.throws(() => memories.apply([createMemory('first'), createMemory('reject')]), /保存或加载失败/);
   assert.equal(memories.values().length, 0);
   assert.equal(memories.sequence, 0);
-  assert.equal(reopened.load().memories.items.length, 0);
-  assert.equal(reopened.load().transcript.messages.length, 2, 'previously committed answer survives');
+  assert.equal(reopened.loadContent().memories.items.length, 0);
+  assert.equal(reopened.loadContent().transcript.messages.length, 2, 'previously committed answer survives');
 });
 
 test('second writer is excluded, unknown schema and broken metadata cannot become an empty conversation', (t) => {
@@ -130,7 +130,7 @@ test('second writer is excluded, unknown schema and broken metadata cannot becom
   assert.throws(() => disk.open(), /Unsupported/);
   installTrigger(disk.path, "PRAGMA user_version = 3; INSERT INTO transcripts VALUES ('orphan', 0, '[0]')");
   const broken = disk.open();
-  assert.throws(() => broken.load(), /保存或加载失败/);
+  assert.throws(() => broken.loadContent(), /保存或加载失败/);
 });
 
 test('restored environment continues a new QA while retaining original queryable record trees', async (t) => {
@@ -172,8 +172,8 @@ test('optional record saving failure preserves content and saves an honest incom
   assert.throws(() => first.recordSource.assertComplete(), /不完整/);
   first.close();
   const reopened = disk.open();
-  const state = reopened.load();
-  assert.equal(state.recording.archives[0].state, 'incomplete');
+  const state = reopened.loadRecording();
+  assert.equal(state.archives[0].state, 'incomplete');
   const restored = initializeObserver(provider, [], { persistence: reopened });
   disk.track(restored);
   assert.equal(restored.transcript.length, 2);
