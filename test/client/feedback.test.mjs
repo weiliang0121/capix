@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ClientSubmission, SubmissionContractError } from '@capix/client-runtime';
-import { client, deferred, submissionSnapshot, transport } from './fixtures.mjs';
+import { client, deferred, submissionSnapshot as snapshot, transport } from './fixtures.mjs';
 
+const submissionSnapshot = (...args) => ({ type: 'baseline', submission: snapshot(...args) });
 const range = { transcriptId: 'fixture-transcript', start: 0, end: 1 };
 const reception = (changed = () => undefined) => ({ transcriptId: range.transcriptId, changed });
 

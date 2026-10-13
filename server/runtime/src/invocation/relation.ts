@@ -1,3 +1,4 @@
+import type { InvocationOutputReceiver } from '../output/contract.js';
 import type { InvocationRelationChange } from '../observation/facts.js';
 import { combineFaults } from '../observation/error.js';
 import type { InvocationFailure } from './failure.js';
@@ -8,6 +9,7 @@ import type { InvocationResult } from './result.js';
 export interface InvocationRelationOptions {
   /** Work position in a composition, not the reusable behavior's identity. */
   key?: string;
+  output?: InvocationOutputReceiver<any, any>;
 }
 
 export interface InvocationTarget<Output = unknown> {

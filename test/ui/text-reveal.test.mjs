@@ -209,3 +209,38 @@ test('instances have independent rates, clocks and skip preferences', () => {
   assert.equal(second.snapshot.text, 'x');
   assert.equal(first.snapshot.text, 'abc');
 });
+
+test('incremental segmentation preserves graphemes across every UTF-16 packet boundary', () => {
+  for (const text of ['🇨🇳🇬🇧🇺🇸🇯🇵!', 'a\r\nb', 'e\u0301\u0308🙂', '👨‍👩‍👧‍👦👍🏽!', '\u0600字क्‍ष']) {
+    const incremental = new TextReveal({ text: '', complete: false });
+    for (let end = 1; end <= text.length; end++) incremental.receive({ text: text.slice(0, end), complete: false });
+    incremental.receive({ text, complete: true });
+    const complete = new TextReveal({ text, complete: true });
+    for (let now = 0; now <= 1000; now += 25) {
+      incremental.tick(now);
+      complete.tick(now);
+      assert.deepEqual(incremental.snapshot, complete.snapshot, JSON.stringify(text));
+    }
+  }
+});
+
+test('segmentation work grows with appended text instead of all prior prefixes', (t) => {
+  const segment = Intl.Segmenter.prototype.segment;
+  let units = 0;
+  t.mock.method(Intl.Segmenter.prototype, 'segment', function (text) {
+    units += text.length;
+    return segment.call(this, text);
+  });
+  const reveal = new TextReveal({ text: '', complete: false });
+  let text = '';
+  for (let index = 0; index < 1000; index++) {
+    text += '字🙂abcdef';
+    reveal.receive({ text, complete: false });
+  }
+  assert.ok(units <= text.length + 1000, `segmented ${units} units for ${text.length} received units`);
+  reveal.finish();
+  const before = units;
+  reveal.receive({ text: `${text}extra`, complete: true });
+  assert.equal(units, before, 'static display has no remaining grapheme work');
+  assert.equal(reveal.snapshot.text, `${text}extra`);
+});

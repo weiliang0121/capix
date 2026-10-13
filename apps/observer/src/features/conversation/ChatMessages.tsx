@@ -19,9 +19,10 @@ interface ChatMessagesProps {
 }
 
 export function ChatMessages(props: ChatMessagesProps) {
-  const messageKeys = props.rows.flatMap((row) => (row.kind === 'message' ? [row.key] : row.kind === 'response' && row.body ? [row.body.key] : []));
+  const messageKeys = props.rows.flatMap((row) => (row.kind === 'message' ? [row.key] : row.kind === 'response' && (row.content || row.body) ? [row.content?.key ?? row.body!.key] : []));
+  const pendingKeys = props.rows.flatMap((row) => (row.kind === 'response' && row.content && !row.content.complete ? [row.content.key] : []));
   return (
-    <TextRevealProvider keys={messageKeys}>
+    <TextRevealProvider keys={messageKeys} pendingKeys={pendingKeys}>
       <ConversationView {...props} />
     </TextRevealProvider>
   );
@@ -50,7 +51,7 @@ function ConversationView({ rows: source, focus, selectedId, onInspect, onReconn
             </div>
           )}
           {rows.map((row) => {
-            if (row.kind === 'response') return <AssistantResponse key={row.key} response={row} reveal={row.body?.key === playing} selectedId={selectedId} onInspect={onInspect} onReconnect={onReconnect} />;
+            if (row.kind === 'response') return <AssistantResponse key={row.key} response={row} reveal={(row.content?.key ?? row.body?.key) === playing} selectedId={selectedId} onInspect={onInspect} onReconnect={onReconnect} />;
             if (row.kind === 'pending-input') {
               return (
                 <article key={row.key} data-conversation-key={row.key} data-submission-input={row.queueId} className="chat-message user pending">

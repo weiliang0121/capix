@@ -1,10 +1,20 @@
 import type { ClientSubmissionState } from '@capix/client-runtime';
 import { findLast } from 'es-toolkit/compat';
-import type { ConversationActivity } from '@capix/protocol';
+import type { ConversationActivity, ConversationActivities } from '@capix/protocol';
 import type { ConversationProcess } from '../state/conversation.js';
 
+const activityLabels = new WeakMap<ConversationActivities, string>();
+
 /** Prefer the owning operation's purpose; an A describes the current step within it. */
-function currentActivity(calls: readonly ConversationActivity[]): string {
+function currentActivity(activities: ConversationActivities): string {
+  const cached = activityLabels.get(activities);
+  if (cached !== undefined) return cached;
+  const label = describeActivity(activities.calls);
+  activityLabels.set(activities, label);
+  return label;
+}
+
+function describeActivity(calls: readonly ConversationActivity[]): string {
   const current = findLast(calls, (call) => call.status === 'running');
   if (!current) return '等待处理结果';
   const byId = new Map(calls.map((call) => [call.contextId, call]));
@@ -45,7 +55,7 @@ export function projectConversationProcess(submission: ClientSubmissionState): C
   const incomplete = activities.integrity.status === 'incomplete';
   const cancelling = Boolean(submission.cancellation || remote.cancelRequested);
   const active = !result && submission.feedback.status === 'following' && !incomplete;
-  const current = currentActivity(activities.calls);
+  const current = currentActivity(activities);
   const label = result?.status === 'completed' ? '处理完成' : result?.status === 'cancelled' ? '处理已取消' : result?.status === 'rejected' ? '提交被拒绝' : result?.status === 'failed' ? (remote.answer ? '回答已保留，后续处理失败' : '处理失败') : interrupted ? '连接中断，结果待确认' : incomplete ? '过程状态暂不可用' : synchronizing ? '正在同步处理状态' : cancelling ? '等待取消结果' : current;
   const warnings = [];
   if (incomplete) warnings.push(`过程信息不完整：${activities.integrity.status === 'incomplete' ? activities.integrity.error.message : ''}`);

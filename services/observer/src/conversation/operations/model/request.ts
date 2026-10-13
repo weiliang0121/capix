@@ -1,15 +1,22 @@
 import { invocationRecording, type InvocationRecordDescription } from '@capix/server-runtime/recording';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../resources.js';
-import { InvocationEntry, OperationDefinition, RuntimeError, type OperationContextView, type InvocationView, type ChildBindings } from '@capix/server-runtime';
+import { InvocationEntry, OperationDefinition, RuntimeError, type OperationContextView, type InvocationWorkView, type ChildBindings } from '@capix/server-runtime';
 import { allowsModelRegeneration, modelRegenerationDeclaration, modelRegenerationInput, prepareRegenerationRequest, type ModelParentInvocationView, type ModelRegenerationEvidence } from '../../model/regeneration.js';
 import { isEqual } from 'es-toolkit/predicate';
-import type { ModelRequest, ModelOutput, Purpose } from '../../model/types.js';
+import type { ModelRequest, ModelOutput, Purpose, ModelTextDelta } from '../../model/types.js';
 import { InvokeModelDefinition } from '../../attempt/model/invoke.js';
 import { FollowModelDefinition } from '../../attempt/model/follow.js';
 
 /** One external request with bounded local waits; following never regenerates or resends. */
-export class RequestModelDefinition extends OperationDefinition<ModelRequest, ModelOutput, ModelCallResources> {
+export class RequestModelDefinition extends OperationDefinition<ModelRequest, ModelOutput, ModelCallResources, Record<string, never>, ModelTextDelta> {
+  readonly output = {
+    result: (value: unknown) => value as ModelOutput,
+    delta: (value: unknown): ModelTextDelta => {
+      if (!value || typeof value !== 'object' || !('text' in value) || typeof value.text !== 'string' || !value.text.length) throw new TypeError('Model text delta required');
+      return value as ModelTextDelta;
+    },
+  };
   readonly name = 'requestModel';
   readonly label = '请求模型';
   readonly source = 'services/observer/src/conversation/operations/model/request.ts · RequestModelDefinition';
@@ -38,13 +45,30 @@ export class RequestModelDefinition extends OperationDefinition<ModelRequest, Mo
     this.run = { requires: RequestModelDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  private async execute(context: OperationContextView<ModelRequest, ModelOutput, ModelCallResources>, invocation: InvocationView<ModelRequest, ModelOutput, OperationContextView<ModelRequest, ModelOutput, ModelCallResources>>, children: ChildBindings): Promise<ModelOutput> {
-    const initial = children.get(this.invokeDefinition).create(invocation, context.currentInput, { key: 'start' });
-    await initial.run();
-    const result = await children.accept(initial, (delivered) => delivered);
-    if (result.kind === 'received') return result.output;
-    const follow = children.get(this.followDefinition).create(invocation, result.interaction, { key: 'follow' });
-    await follow.run();
-    return children.accept(follow, (delivered) => delivered);
+  private async execute(context: OperationContextView<ModelRequest, ModelOutput, ModelCallResources>, invocation: InvocationWorkView<ModelRequest, ModelOutput, OperationContextView<ModelRequest, ModelOutput, ModelCallResources>, ModelTextDelta>, children: ChildBindings): Promise<ModelOutput> {
+    let detach = () => {};
+    const initial = children.get(this.invokeDefinition).create(invocation, context.currentInput, {
+      key: 'start',
+      output: {
+        receive: (event): undefined => {
+          if (event.kind === 'delta' && context.currentInput.stream)
+            detach = context.resources.values.modelReader.subscribe(event.delta, {
+              receive: (delta): undefined => {
+                invocation.output.emit(delta);
+              },
+            });
+        },
+      },
+    });
+    try {
+      await initial.run();
+      const result = await children.accept(initial, (delivered) => delivered);
+      if (result.kind === 'received') return result.output;
+      const follow = children.get(this.followDefinition).create(invocation, result.interaction, { key: 'follow' });
+      await follow.run();
+      return await children.accept(follow, (delivered) => delivered);
+    } finally {
+      detach();
+    }
   }
 }

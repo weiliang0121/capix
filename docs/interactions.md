@@ -93,6 +93,14 @@ Interaction 可接收可选 `observation` 窄端口，通过 ProgressChannel 隔
 
 ModelInteractions 提供只读 observe，返回一致的当前状态、读取结果及解除函数，后续跟随该实体事实；不构造 Provider 或重新发送。Observer 服务将其投影为 `InteractionObservation`，仅含身份、契约、模型用途、发送登记、保留方式及反馈可用状态，不提供请求或回复正文。
 
-客户端先通过 conversationId + callId 查询资源访问记录中的真实关联，再订阅对应交互。资源记录自身的 interactionId 是资源动作 ID，不能拿来充当外部交互 ID；这里明确读取 start 的 output.id 或 wait/result 的 input.id。禁止按任意全局 ID 查询其他调用或对话。记录完整性失效时，关联入口也明确失败，但不影响交互实体自身继续接收。
+客户端先通过 conversationId + callId 查询资源访问记录中的真实关联，再订阅对应交互。资源记录自身的 interactionId 是资源动作 ID，不能拿来充当外部交互 ID；这里明确读取 start 的 output.id 或 wait/result/subscribe 的 input.id。禁止按任意全局 ID 查询其他调用或对话。记录完整性失效时，关联入口也明确失败，但不影响交互实体自身继续接收。
 
 每条连接先发累计 snapshot，后续变化合并到微任务交付，不在实体变更栈上写网络；取得 received/unavailable 后结束本次订阅，不提供自动追赶或重发。以后再次打开详情会重新读当前事实。未持久化且被淘汰的交互明确 unknown。图中 A1 的 pending 返回和父层接纳保留为历史事实，晚到反馈只更新交互卡片，不改变 A1 结果，不据此判定回答或父层业务接纳成功。
+
+## 临时输出消费
+
+只有 stream=true 的固定请求建立 ModelTextBuffer。Provider 的第四个被动进展参数发布原始文本增量；ModelInteractions 保存最多 4 MiB 的临时前缀，read.subscribe(ref, receiver) 同步回放已有前缀并继续消费，不执行新请求、不改变 Interaction revision。它不是持久化反馈，也不替代 observe 的实体元数据。
+
+InvokeModel A 在启动后通过自己的输出声明交付交互身份；RequestModel O 收到身份后，在本层正式申请的 read 资源上订阅原始文本，跨越首次 pending 和后续 A 读取，finally 解除消费。资源只记录一次订阅操作和交互身份，不把每片正文重复写入记录。订阅注册后若严格资源观测失败，立即撤销本次订阅；已发起的外部工作仍按原交互生命周期处理。
+
+Provider 完成/取消后停止生产；临时前缀不持久化，已恢复的完整反馈仍可读取，临时输出不可恢复时明确独立失效。下游预览可退化为前缀或不可用，不能因此重发模型。最终仍只有完整 ModelOutput 进入交互反馈保存与业务接纳。

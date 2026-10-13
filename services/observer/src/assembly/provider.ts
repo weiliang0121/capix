@@ -1,7 +1,8 @@
 import { isArray, isFinite } from 'es-toolkit/compat';
 import { isString } from 'es-toolkit/predicate';
-import type { ModelOutput, ModelProvider, ModelRequest, Purpose } from '../conversation/model/types.js';
-import { isObject, RuntimeError, InvocationCancelled } from '@capix/server-runtime';
+import type { ModelOutput, ModelProvider, ModelRequest, ModelTextDelta, Purpose } from '../conversation/model/types.js';
+import { isObject, RuntimeError, InvocationCancelled, type ProgressChannel } from '@capix/server-runtime';
+import { receiveModelStream } from './modelStream.js';
 
 export class DeepSeekProvider implements ModelProvider {
   private failure: RuntimeError | undefined;
@@ -14,7 +15,7 @@ export class DeepSeekProvider implements ModelProvider {
     return this.failure;
   }
 
-  async invoke(request: ModelRequest, _purpose: Purpose, signal: AbortSignal): Promise<ModelOutput> {
+  async invoke(request: ModelRequest, _purpose: Purpose, signal: AbortSignal, progress?: ProgressChannel<ModelTextDelta>): Promise<ModelOutput> {
     if (!this.key) {
       this.failure = new RuntimeError('KEY_MISSING', '服务端尚未配置 DEEPSEEK_API_KEY；请填写 .env 并重启。');
       throw this.failure;
@@ -37,6 +38,16 @@ export class DeepSeekProvider implements ModelProvider {
       // A body cleanup failure does not erase the already received HTTP result.
       await response.body?.cancel().catch(() => undefined);
       throw error;
+    }
+    if (request.stream) {
+      if (!response.body) throw new RuntimeError('PROVIDER_ENVELOPE', 'DeepSeek 未返回模型流。');
+      try {
+        return await receiveModelStream(response.body, signal, progress);
+      } catch (cause) {
+        if (isAbortedRequest(cause, signal)) throw new InvocationCancelled(signal, { cause });
+        if (cause instanceof RuntimeError) throw cause;
+        throw new RuntimeError('PROVIDER_STREAM_ERROR', '模型流读取失败。', undefined, { cause });
+      }
     }
     let body: unknown;
     try {

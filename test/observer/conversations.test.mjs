@@ -27,8 +27,15 @@ async function fixture(t) {
     host.close();
   });
   const request = (path, body) => fetch(base + path, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const get = async (path) => (await request(path)).json();
-  const run = async (conversationId, submissionId, content) => (await (await request('/api/run', { conversationId, submissionId, input: { messages: [{ role: 'user', content }] } })).text()).trim().split('\n').map(JSON.parse).at(-1);
+  const get = async (path) => {
+    const value = await (await request(path)).json();
+    if (path.startsWith('/api/submissions/') && !value.code) {
+      assert.equal(value.type, 'baseline');
+      return value.submission;
+    }
+    return value;
+  };
+  const run = async (conversationId, submissionId, content) => submissionSnapshots((await (await request('/api/run', { conversationId, submissionId, input: { messages: [{ role: 'user', content }] } })).text()).trim().split('\n').map(JSON.parse)).at(-1);
   return {
     host,
     request,
@@ -136,3 +143,4 @@ test('repeated lazy assembly failure releases its record listener while shared c
   assert.equal(content.transcript.length, 3);
   assert.equal(frames.length, 4, 'the established transcript connection survives all assembly failures');
 });
+import { submissionSnapshots } from '../fixtures/submissions.mjs';

@@ -1,10 +1,17 @@
 import type { ClientState, ClientSubmissionState } from '@capix/client-runtime';
-import type { ConversationItem, ConversationMessage, ConversationProcess, ConversationResponse } from '../state/conversation.js';
+import type { ConversationItem, ConversationMessage, ConversationProcess, ConversationResponse, ConversationResponseContent } from '../state/conversation.js';
 import { projectConversationProcess } from './activities.js';
 import { projectSubmission } from './submission.js';
 
+/** Both facts explicitly identify a formal message; neither is inferred from text or adjacency. */
+export function responseLocator(submission: ClientSubmissionState) {
+  if (submission.remote?.answer) return submission.remote.answer;
+  const preview = submission.preview;
+  return preview?.status === 'live' && preview.snapshot?.state === 'committed' ? preview.snapshot.message : undefined;
+}
+
 function bodyState(submission: ClientSubmissionState, state: ClientState, body?: ConversationMessage): ConversationResponse['bodyState'] {
-  const answer = submission.remote?.answer;
+  const answer = responseLocator(submission);
   if (!answer) return 'unconfirmed';
   if (body) return 'available';
   const source = state.transcripts.get(answer.transcriptId);
@@ -15,16 +22,53 @@ function bodyState(submission: ClientSubmissionState, state: ClientState, body?:
   return source?.snapshot ? 'missing' : 'unloaded';
 }
 
+function previewMatches(submission: ClientSubmissionState, transcriptId: string | undefined, body: ConversationMessage): boolean {
+  const preview = submission.preview?.snapshot;
+  const answer = responseLocator(submission);
+  if (submission.preview?.status !== 'live' || preview?.state !== 'committed' || preview.message?.transcriptId !== transcriptId || preview.message?.index !== body.index || answer?.transcriptId !== transcriptId || answer?.index !== body.index) return false;
+  return preview.consistency === 'complete' ? body.message.content === preview.text : preview.consistency === 'prefix' && body.message.content.startsWith(preview.text);
+}
+
+function content(submission: ClientSubmissionState, transcriptId: string | undefined, availability: ConversationResponse['bodyState'], body?: ConversationMessage): ConversationResponseContent | undefined {
+  const preview = submission.preview?.snapshot;
+  if (body) {
+    // A body shown before its locator is history; do not replay it when the feedback catches up.
+    const continuePreview = preview && previewMatches(submission, transcriptId, body) && body.reveal;
+    return { key: continuePreview ? JSON.stringify(['preview', submission.id, preview.generation]) : body.key, text: body.message.content, complete: true, reveal: preview ? !!continuePreview : !!body.reveal, provisional: false };
+  }
+  if (!preview) return;
+  return {
+    key: JSON.stringify(['preview', submission.id, preview.generation]),
+    text: preview.text,
+    complete: preview.state === 'committed' ? preview.consistency !== 'prefix' || availability === 'error' || availability === 'missing' : preview.state === 'discarded' || !!submission.remote?.result,
+    reveal: true,
+    provisional: true,
+  };
+}
+
+function previewNotice(submission: ClientSubmissionState, transcriptId: string | undefined, body?: ConversationMessage): string | undefined {
+  if (body) return submission.preview?.snapshot && !previewMatches(submission, transcriptId, body) ? '已更新为正式接纳的回答。' : undefined;
+  const preview = submission.preview;
+  if (!preview?.snapshot) return;
+  if (preview.snapshot.state === 'discarded') return preview.snapshot.reason === 'cancelled' ? '生成已停止，以上内容未作为正式回答保存。' : '以上生成内容未被接纳为正式回答。';
+  if (preview.snapshot.state === 'committed') return '回答已接纳，正在同步正式正文。';
+  if (submission.remote?.result) return '以上生成内容未被确认为正式回答。';
+  if (preview.status === 'failed') return '回答预览暂不可用，已接收内容保留，正在等待正式回答。';
+  if (preview.status === 'interrupted') return '回答预览同步中断，已接收内容保留。';
+}
+
 function response(submission: ClientSubmissionState, state: ClientState, body?: ConversationMessage, afterInputKey?: string): ConversationResponse {
   const remote = submission.remote;
   const result = remote?.result;
   const availability = bodyState(submission, state, body);
   const presentation = projectSubmission({ submission, answerAvailability: availability === 'available' ? 'available' : availability === 'unconfirmed' ? 'unconfirmed' : 'pending' });
-  const activity = projectConversationProcess(submission);
+  const activity = result ? undefined : projectConversationProcess(submission);
   let process: ConversationProcess | undefined;
   if (!result && activity) process = activity;
   else if (presentation.progress) process = { id: submission.id, label: presentation.progress, active: result ? availability === 'pending' : submission.feedback.status === 'connecting' || (submission.feedback.status === 'following' && remote?.integrity.status !== 'incomplete') };
   let notice = presentation.submissionNotice;
+  const previewMessage = previewNotice(submission, state.transcriptId, body);
+  if (previewMessage) notice = { message: [notice?.message, previewMessage].filter(Boolean).join(' '), reconnect: notice?.reconnect ?? false };
   if (availability === 'error' || availability === 'missing' || availability === 'unloaded') {
     const detail = availability === 'error' ? '回答已生成，正文暂未同步，可以重新连接消息。' : availability === 'missing' ? '回答已落实，但本地消息集合尚未取得对应正文。' : '回答已落实，正文尚未加载。';
     if (result || !process) process = { id: submission.id, label: availability === 'error' ? '回答正文同步失败' : availability === 'missing' ? '回答正文暂不可用' : '回答正文尚未加载', active: false };
@@ -35,16 +79,56 @@ function response(submission: ClientSubmissionState, state: ClientState, body?: 
   // Only the current submission has a reconnect command; retained failures remain readable.
   if (notice?.reconnect && submission.id !== state.submission?.id) notice = { ...notice, reconnect: false };
   const fileTask = remote?.task?.kind === 'file' ? remote.task.task : remote?.task ? undefined : submission.fileTask;
-  return { kind: 'response', key: JSON.stringify(['response', submission.queueId]), submissionId: submission.id, queueId: submission.queueId, bodyState: availability, ...(fileTask ? { fileTask } : {}), ...(remote?.fileOutput ? { fileOutput: remote.fileOutput } : {}), ...(afterInputKey ? { afterInputKey } : {}), ...(body ? { body } : {}), ...(process ? { process } : {}), ...(notice ? { notice } : {}) };
+  const display = content(submission, state.transcriptId, availability, body);
+  return { kind: 'response', key: JSON.stringify(['response', submission.queueId]), submissionId: submission.id, queueId: submission.queueId, bodyState: availability, ...(fileTask ? { fileTask } : {}), ...(remote?.fileOutput ? { fileOutput: remote.fileOutput } : {}), ...(afterInputKey ? { afterInputKey } : {}), ...(body ? { body } : {}), ...(display ? { content: display } : {}), ...(process ? { process } : {}), ...(notice ? { notice } : {}) };
 }
 
-/** Compose response regions from submission locators while leaving formal transcript content intact. */
-export function projectResponses(messages: readonly ConversationMessage[], state: ClientState): readonly ConversationItem[] {
+/** Retain unchanged history and formal indexes across preview-only browser frames. */
+export function createResponseProjection() {
+  let previousMessages: readonly ConversationMessage[] | undefined;
+  let byIndex = new Map<number, ConversationMessage>();
+  const messageItems = new WeakMap<ConversationMessage, ConversationItem>();
+  const responses = new Map<string, { dependencies: readonly unknown[]; value: ConversationResponse }>();
+  return (messages: readonly ConversationMessage[], state: ClientState): readonly ConversationItem[] => {
+    if (messages !== previousMessages) {
+      byIndex = new Map(messages.filter((row) => row.index !== undefined).map((row) => [row.index!, row]));
+      previousMessages = messages;
+    }
+    const retained = new Set<string>();
+    const result = composeResponses(
+      messages,
+      state,
+      byIndex,
+      (submission, current, body, afterInputKey) => {
+        retained.add(submission.id);
+        const answer = responseLocator(submission);
+        const source = answer ? current.transcripts.get(answer.transcriptId) : undefined;
+        const dependencies = [submission, current.transcriptId, current.submission?.id, source, body, afterInputKey];
+        const cached = responses.get(submission.id);
+        if (cached && dependencies.every((value, index) => value === cached.dependencies[index])) return cached.value;
+        const value = response(submission, current, body, afterInputKey);
+        responses.set(submission.id, { dependencies, value });
+        return value;
+      },
+      (message) => {
+        let item = messageItems.get(message);
+        if (!item) {
+          item = { kind: 'message', ...message };
+          messageItems.set(message, item);
+        }
+        return item;
+      },
+    );
+    for (const id of responses.keys()) if (!retained.has(id)) responses.delete(id);
+    return result;
+  };
+}
+
+function composeResponses(messages: readonly ConversationMessage[], state: ClientState, byIndex: ReadonlyMap<number, ConversationMessage>, projectResponse: typeof response, projectMessage: (message: ConversationMessage) => ConversationItem): readonly ConversationItem[] {
   // Repeated admission attempts keep one local response; the newest attempt owns its facts.
   const tracked = new Map<string, ClientSubmissionState>();
   for (const submission of state.submissions.values()) tracked.set(submission.queueId, submission);
   if (state.submission && state.submission.feedback.status !== 'idle') tracked.set(state.submission.queueId, state.submission);
-  const byIndex = new Map(messages.filter((row) => row.index !== undefined).map((row) => [row.index!, row]));
   const attached = new Map<string, ConversationResponse[]>();
   const consumed = new Set<string>();
   const pending: ConversationItem[] = [];
@@ -57,11 +141,11 @@ export function projectResponses(messages: readonly ConversationMessage[], state
     if (retryAdmission && !waitingAdmission) continue;
     if ((!input && !current) || (input && input.transcriptId !== state.transcriptId)) continue;
     const inputRow = input ? byIndex.get(input.end - 1) : undefined;
-    const answer = submission.remote?.answer;
+    const answer = responseLocator(submission);
     const candidate = answer && answer.transcriptId === state.transcriptId ? byIndex.get(answer.index) : undefined;
     const body = candidate?.message.role === 'assistant' ? candidate : undefined;
     const pendingKey = JSON.stringify(['pending-input', submission.queueId]);
-    const projected = response(submission, state, body, inputRow?.key ?? (current ? pendingKey : undefined));
+    const projected = projectResponse(submission, state, body, inputRow?.key ?? (current ? pendingKey : undefined));
     const item = waitingAdmission ? { ...projected, notice: undefined, process: { id: submission.queueId, label: state.queue.blocked ?? '等待服务接纳，将自动重试', active: false } } : projected;
     if (body) consumed.add(body.key);
     if (inputRow) {
@@ -75,7 +159,7 @@ export function projectResponses(messages: readonly ConversationMessage[], state
   }
   const result: ConversationItem[] = [];
   for (const message of messages) {
-    if (!consumed.has(message.key)) result.push({ kind: 'message', ...message });
+    if (!consumed.has(message.key)) result.push(projectMessage(message));
     result.push(...(attached.get(message.key) ?? []));
   }
   result.push(...pending);

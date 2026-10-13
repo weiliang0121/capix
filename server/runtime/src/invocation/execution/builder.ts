@@ -1,3 +1,4 @@
+import type { InvocationOutputReceiver } from '../../output/contract.js';
 import type { ProgressReceiver } from '../../progress/channel.js';
 import type { InvocationProgress } from '../progress.js';
 import type { ObservationDeclaration } from '../../definition/observation.js';
@@ -22,6 +23,7 @@ export interface ExecutionInvocationEnvironment<Resources extends object> {
 
 export interface ExecutionInvocationRequest<Input, Output, Resources extends object = object> {
   readonly progress?: ProgressReceiver<InvocationProgress>;
+  readonly output?: InvocationOutputReceiver<Output>;
   key?: string;
   description?: InvocationDescription;
   requires?: ResourceRequirements<Resources>;
@@ -54,7 +56,7 @@ export class ExecutionInvocationBuilder {
     const identity = { contextId: context.id, level: 'execution' as const, parentContextId: parent.context.id };
     const observation = bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources }, this.capabilities.observations, parent.observation);
     const changes = this.capabilities.changes ? new InvocationChangeEmitter(identity, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<Input, Output, ExecutionContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, progress: request.progress, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, started: request.started, changes, validate: () => this.check(parent) });
+    const invocation = new Invocation<Input, Output, ExecutionContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, started: request.started, changes, validate: () => this.check(parent) });
     attachInvocationResources(invocation, context.resources);
     return invocation;
   }

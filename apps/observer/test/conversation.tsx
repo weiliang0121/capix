@@ -305,6 +305,43 @@ try {
       window.matchMedia = original;
     }
   });
+  await check('an exhausted streaming preview waits for acceptance before opening the next assistant', async () => {
+    await render({ rows: history });
+    const preview: ConversationResponse = { ...response('stream', 'stream-input'), content: { key: 'stream-generation-1', text: '**预览**', complete: false, reveal: true, provisional: true } };
+    await render({ rows: [...history, preview, response('stream-next', 'stream-next-input')] });
+    const deadline = Date.now() + 2000;
+    while (element(preview.key).querySelector('[data-presentation="revealing"]') && Date.now() < deadline) await settle();
+    assert(element(preview.key).querySelector('[data-presentation="waiting"]'), 'consuming the prefix does not complete the preview');
+    assert(!element('response-stream-next'), 'next assistant remains behind the waiting preview');
+    assert(!element(preview.key).querySelector('.answer-reveal-all'), 'waiting exposes no misleading show-all button');
+    const committed: ConversationResponse = { ...preview, bodyState: 'available', body: { key: 'stream-message', message: { role: 'assistant', content: '**预览**与正式回答'.repeat(30) }, reveal: true }, content: { ...preview.content!, text: '**预览**与正式回答'.repeat(30), complete: true, provisional: false } };
+    await render({ rows: [...history, committed, response('stream-next', 'stream-next-input')] });
+    assert(element(preview.key).querySelector('[data-message-key="stream-generation-1"]'), 'formal handoff preserves preview display identity');
+    assert(element(preview.key).querySelector('strong')?.textContent === '预览', 'already displayed prefix survives handoff');
+    assert(!element('response-stream-next'), 'newly available final suffix must still play');
+    (element(preview.key).querySelector('.answer-reveal-all') as HTMLButtonElement).click();
+    await settle();
+    assert(element('response-stream-next'), 'completion of final text opens the next region');
+  });
+  await check('a new generation resets only the preview text while rejected partial output can finish locally', async () => {
+    await render({ rows: history });
+    const first: ConversationResponse = { ...response('retry-stream', 'retry-stream-input'), content: { key: 'retry-generation-1', text: '旧内容'.repeat(100), complete: false, reveal: true, provisional: true } };
+    await render({ rows: [...history, first] });
+    const region = element(first.key);
+    assert(region.querySelector('.answer-reveal-all')?.textContent === '显示已接收内容', 'partial skip describes only received content');
+    const replacement: ConversationResponse = { ...first, content: { ...first.content!, key: 'retry-generation-2', text: '新内容'.repeat(100) } };
+    await render({ rows: [...history, replacement] });
+    assert(element(first.key) === region, 'generation does not create a new assistant region');
+    assert(!region.textContent?.includes('旧内容'), 'old generation is not spliced into new text');
+    assert(region.querySelector('[data-message-key="retry-generation-2"]'), 'new generation has its own cursor');
+    const cancelled: ConversationResponse = { ...replacement, content: { ...replacement.content!, complete: true }, notice: { message: '生成已停止，以上内容未作为正式回答保存。', reconnect: false }, process: undefined };
+    await render({ rows: [...history, cancelled, response('retry-stream-next', 'retry-stream-next-input')] });
+    assert(!element('response-retry-stream-next'), 'cancel does not skip local text consumption');
+    (region.querySelector('.answer-reveal-all') as HTMLButtonElement).click();
+    await settle();
+    assert(region.textContent?.includes('未作为正式回答保存'), 'retained partial output has an explicit unaccepted notice');
+    assert(element('response-retry-stream-next'), 'settled cancelled content cannot strand next assistant');
+  });
   await check('content shrinking to the bottom does not take over a reader position', async () => {
     const next: ConversationItem = { kind: 'message', key: 'shrink-input', message: { role: 'user', content: '尺寸变化' } };
     scene = { rows: [...history, next, response('shrink', next.key, '长回答\n\n'.repeat(100))], focus: 'shrink' };

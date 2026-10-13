@@ -9,6 +9,7 @@ export type { ObservationState } from './observation/receiver.js';
 export { TranscriptReplica, TranscriptSequenceError, type TranscriptState, type TranscriptSyncState } from './transcript.js';
 
 export { ClientSubmission, SubmissionContractError, type ClientSubmissionState, type SubmissionFeedback, type SubmissionCancellation, type SubmissionReception } from './submission.js';
+export type { AnswerPreviewState } from './preview.js';
 
 export type { ContentAvailability } from './conversation.js';
 

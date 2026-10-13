@@ -1,3 +1,4 @@
+import type { InvocationOutputReceiver } from '../../output/contract.js';
 import type { ProgressReceiver } from '../../progress/channel.js';
 import type { InvocationProgress } from '../progress.js';
 import type { ObservationDeclaration } from '../../definition/observation.js';
@@ -17,6 +18,7 @@ import type { AttemptDescription } from '../description.js';
 
 export interface AttemptInvocationRequest<Input, Output, Resources extends object = object> {
   readonly progress?: ProgressReceiver<InvocationProgress>;
+  readonly output?: InvocationOutputReceiver<Output>;
   input: Input;
   requires?: ResourceRequirements<Resources>;
   initial?: ResourceRequirements;
@@ -41,7 +43,7 @@ export class AttemptInvocationBuilder {
     const identity = { contextId: context.id, level: 'attempt' as const, parentContextId: parent.context.id };
     const observation = bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources: context.resources }, this.capabilities.observations, parent.observation);
     const changes = this.capabilities.changes ? new InvocationChangeEmitter({ contextId: context.id, level: 'attempt', parentContextId: parent.context.id }, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<Input, Output, AttemptContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, progress: request.progress, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, changes, validate: () => this.contextBuilder.check(parent.context) });
+    const invocation = new Invocation<Input, Output, AttemptContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, changes, validate: () => this.contextBuilder.check(parent.context) });
     attachInvocationResources(invocation, context.resources);
     return invocation;
   }

@@ -17,10 +17,12 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
   const parents = new Map<string, string>();
   const statuses = new Map([[executionId, snapshot.execution.status]]);
   const bodies = new Map<string, InvocationValue>([[executionId, snapshot.execution.value]]);
+  const contextsByRecord = new Map<string, string>();
   const contextIds = new Set<string>();
   const acceptContextIdentity = (record: { id: string; contextId: string }) => {
     if (typeof record.contextId !== 'string' || !record.contextId || record.contextId === record.id || contextIds.has(record.contextId)) return fail();
     contextIds.add(record.contextId);
+    contextsByRecord.set(record.id, record.contextId);
   };
   acceptContextIdentity(snapshot.execution);
   const runtimeCall = snapshot.runtimeCall;
@@ -52,8 +54,7 @@ export function validateExecutionRecordSnapshot(value: unknown): asserts value i
     if (!['running', 'succeeded', 'failed'].includes(status)) return fail();
   }
   for (const [owner, body] of observedBodies) {
-    const ownerContextId = owner === runtimeCall.id ? runtimeCall.contextId : owner === snapshot.execution.id ? snapshot.execution.contextId : (snapshot.operations.find((record) => record.id === owner)?.contextId ?? snapshot.attempts.find((record) => record.id === owner)?.contextId);
-    validateInvocationRecordValue(body, ownerContextId!);
+    validateInvocationRecordValue(body, contextsByRecord.get(owner)!);
   }
   for (const operationRecord of operations.values()) {
     if (operationRecord.parentOperationId !== undefined && !operations.has(operationRecord.parentOperationId)) return fail();

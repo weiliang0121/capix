@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteObserverStore, ObserverConversations, createObserverServer } from '@capix/observer-service';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { submissionSnapshots } from '../fixtures/submissions.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 function fixture(t) {
@@ -60,11 +61,7 @@ async function run(base, id, content = '你好') {
   const conversationId = (await (await fetch(base + '/api/conversations')).json()).defaultConversationId;
   return fetch(base + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId, submissionId: id, input: { messages: [{ role: 'user', content }] } }) });
 }
-const frames = async (response) =>
-  (await response.text())
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line));
+const frames = async (response) => submissionSnapshots((await response.text()).trim().split('\n').map(JSON.parse));
 const get = async (base, path) => {
   const catalog = await (await fetch(base + '/api/conversations')).json();
   const current = catalog.conversations.find((item) => item.id === catalog.defaultConversationId);
@@ -108,7 +105,9 @@ test('content save failure gates following submissions through server admission 
   assert.equal((await get(current.base, '/api/transcript')).messages.length, 0);
   const next = await run(current.base, 'must-not-run');
   assert.equal(next.status, 503);
-  const refusal = await next.json();
+  const baseline = await next.json();
+  assert.equal(baseline.type, 'baseline');
+  const refusal = baseline.submission;
   assert.equal(refusal.result.status, 'rejected');
   assert.equal(refusal.result.error.code, 'PERSISTENCE_UNAVAILABLE');
   assert.equal(current.calls, 0);

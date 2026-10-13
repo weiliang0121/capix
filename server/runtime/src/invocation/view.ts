@@ -1,3 +1,4 @@
+import type { InvocationOutputWriter } from '../output/contract.js';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationContextView } from '../context/view.js';
 import type { InvocationResult } from './result.js';
@@ -24,4 +25,9 @@ export interface InvocationView<Input = unknown, Output = unknown, ContextView e
 
 export interface ChildInvocationView<Input = unknown, Output = unknown, ContextView extends InvocationContextView<Input, Output> = InvocationContextView<Input, Output>> extends InvocationView<Input, Output, ContextView> {
   run(): Promise<Output>;
+}
+
+/** Only execute receives a writer; relation and acceptance views retain read-only call facts. */
+export interface InvocationWorkView<Input = unknown, Output = unknown, ContextView extends InvocationContextView<Input, Output> = InvocationContextView<Input, Output>, Delta = never> extends InvocationView<Input, Output, ContextView> {
+  readonly output: InvocationOutputWriter<Delta>;
 }

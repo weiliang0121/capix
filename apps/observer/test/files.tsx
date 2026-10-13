@@ -1,7 +1,7 @@
 // Open /test/files.html through Vite. Local transport only: no filesystem, service or model access.
 import { createRoot } from 'react-dom/client';
 import { ClientRuntime, type ConversationTransport, type TranscriptTransport } from '@capix/client-runtime';
-import type { ConversationSubmissionSnapshot, ConversationSubmissionRequest, TranscriptFrame, TranscriptSnapshot, Message } from '@capix/protocol';
+import type { ConversationSubmissionSnapshot, ConversationSubmissionFrame, ConversationSubmissionRequest, TranscriptFrame, TranscriptSnapshot, Message } from '@capix/protocol';
 import { createApplication } from '../src/binding/application';
 import { AppProvider } from '../src/state/react';
 import { ConversationPanel } from '../src/features/conversation/ConversationPanel';
@@ -11,7 +11,7 @@ const transcriptId = 'file-browser-fixture';
 let transcript: TranscriptSnapshot = { id: transcriptId, revision: 0, start: 0, end: 0, starts: [0], messages: [] };
 const listeners = new Set<(frame: TranscriptFrame) => void>();
 const sent: ConversationSubmissionRequest[] = [];
-let active: { snapshot: ConversationSubmissionSnapshot; receive: (snapshot: ConversationSubmissionSnapshot) => void; finish: () => void } | undefined;
+let active: { snapshot: ConversationSubmissionSnapshot; receive: (frame: ConversationSubmissionFrame) => void; finish: () => void } | undefined;
 const receipt = { path: 'summary.md', bytes: 48, digest: 'a'.repeat(64) };
 function append(messages: readonly Message[]) {
   const start = transcript.end;
@@ -21,7 +21,7 @@ function append(messages: readonly Message[]) {
 function publish(patch: Partial<ConversationSubmissionSnapshot>) {
   if (!active) throw new Error('No active fixture submission');
   active.snapshot = { ...active.snapshot, ...patch, revision: active.snapshot.revision + 1 };
-  active.receive(active.snapshot);
+  active.receive({ type: 'baseline', submission: active.snapshot });
 }
 const descriptor = { id: 'fixture-conversation', title: '测试对话', transcriptId, createdAt: 1, updatedAt: 1 };
 const conversation: ConversationTransport = {
@@ -34,7 +34,7 @@ const conversation: ConversationTransport = {
   admission: async () => ({ conversationId: descriptor.id, transcriptId, status: 'ready' }),
   read: async () => {
     if (!active) throw new Error('No active submission');
-    return active.snapshot;
+    return { type: 'baseline', submission: active.snapshot };
   },
   follow: async () => {
     throw new Error('Unexpected follow');
@@ -43,7 +43,7 @@ const conversation: ConversationTransport = {
     if (!active) throw new Error('No active submission');
     publish({ cancelRequested: true, result: { status: 'cancelled' }, admission: { conversationId: descriptor.id, transcriptId, status: 'ready' } });
     active.finish();
-    return active.snapshot;
+    return { type: 'baseline', submission: active.snapshot };
   },
   submit: async (request, receive) => {
     sent.push(request);
@@ -53,13 +53,13 @@ const conversation: ConversationTransport = {
     if (sent.length === 1) {
       await new Promise<void>((resolve) => {
         active = { snapshot: initial, receive, finish: resolve };
-        receive(initial);
+        receive({ type: 'baseline', submission: initial });
       });
       return;
     }
     const index = transcript.end;
     append([{ role: 'assistant', content: '请补充文档需要保留的重点。' }]);
-    receive({ ...initial, revision: 2, answer: { transcriptId, index }, result: { status: 'completed' }, admission: { conversationId: descriptor.id, transcriptId, status: 'ready' }, fileOutput: { status: 'not-created', path: request.input.fileTask!.output!.path, reason: 'not-started' } });
+    receive({ type: 'baseline', submission: { ...initial, revision: 2, answer: { transcriptId, index }, result: { status: 'completed' }, admission: { conversationId: descriptor.id, transcriptId, status: 'ready' }, fileOutput: { status: 'not-created', path: request.input.fileTask!.output!.path, reason: 'not-started' } } });
   },
 };
 const transcripts: TranscriptTransport = {

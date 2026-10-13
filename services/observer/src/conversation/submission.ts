@@ -1,9 +1,11 @@
-import type { ConversationAdmission, ConversationFailure, ConversationSubmissionSnapshot } from '@capix/protocol';
+import type { ConversationAdmission, ConversationFailure, ConversationSubmissionSnapshot, ConversationSubmissionFrame, ConversationSubmissionBaseline, ConversationSubmissionChange, ConversationSubmissionUpdate, ConversationActivity, AnswerPreviewChange } from '@capix/protocol';
 import { RuntimeError, ProgressChannel, isInvocationCancelled, type InvocationProgress } from '@capix/server-runtime';
 import { ConversationInputError } from './accept.js';
 import type { ConversationProgress } from './progress.js';
 import { ConversationActivityProjection } from './activity.js';
 import { ConversationFileProjection } from './files.js';
+import { ConversationPreviewProjection } from './preview.js';
+import type { AnswerProgress } from './operations/answer/stream.js';
 import type { FileProgress } from '../files/index.js';
 
 export function conversationFailure(error: unknown): ConversationFailure {
@@ -12,8 +14,34 @@ export function conversationFailure(error: unknown): ConversationFailure {
 
 /** One service request outlives individual connections. It neither owns messages nor schedules work. */
 export class ConversationSubmission {
-  private state: ConversationSubmissionSnapshot;
+  private state: Omit<ConversationSubmissionSnapshot, 'activities'>;
+  private current?: ConversationSubmissionSnapshot;
   private readonly listeners = new Set<(snapshot: ConversationSubmissionSnapshot) => void>();
+  private readonly frameListeners = new Map<(frame: ConversationSubmissionFrame) => void, number>();
+  private pendingFromRevision?: number;
+  private pendingChange: ConversationSubmissionChange = {};
+  private readonly pendingCalls = new Map<string, ConversationActivity>();
+  private pendingPreview: AnswerPreviewChange[] = [];
+  private rebaseline = false;
+  private readonly preview = new ConversationPreviewProjection((change) => {
+    if (!this.rebaseline) {
+      this.pendingPreview.push(change);
+      if (this.pendingPreview.length > 512) {
+        this.pendingPreview = [];
+        this.rebaseline = true;
+      }
+    }
+    this.notify();
+  });
+  readonly answerProgress = new ProgressChannel<AnswerProgress>({
+    receive: (fact): undefined => {
+      if (this.completedAt !== undefined) throw new Error('Answer output arrived after completion');
+      this.preview.receive(fact);
+    },
+    failed: (): undefined => {
+      this.preview.finish('failed');
+    },
+  });
   private readonly controller = new AbortController();
   private notifying = false;
   private started = false;
@@ -54,11 +82,15 @@ export class ConversationSubmission {
     readonly conversationId: string,
     private readonly options: { admission?: () => ConversationAdmission } = {},
   ) {
-    this.state = Object.freeze({ conversationId, submissionId: id, revision: 0, executions: Object.freeze([]), activities: this.activities.snapshot, integrity: Object.freeze({ status: 'complete' }) });
+    this.state = Object.freeze({ conversationId, submissionId: id, revision: 0, executions: Object.freeze([]), integrity: Object.freeze({ status: 'complete' }) });
   }
 
   get snapshot(): ConversationSubmissionSnapshot {
-    return this.state;
+    return (this.current ??= Object.freeze({ ...this.state, activities: this.activities.snapshot }));
+  }
+
+  get baseline(): ConversationSubmissionBaseline {
+    return Object.freeze({ type: 'baseline', submission: this.snapshot, ...(this.preview.snapshot ? { preview: this.preview.snapshot } : {}) });
   }
 
   get endedAt(): number | undefined {
@@ -74,10 +106,10 @@ export class ConversationSubmission {
 
   /** Request cooperative cancellation without ending delivery or inventing a work result. */
   requestCancellation(): ConversationSubmissionSnapshot {
-    if (this.state.result || this.state.cancelRequested) return this.state;
+    if (this.state.result || this.state.cancelRequested) return this.snapshot;
     this.update({ cancelRequested: true });
     this.controller.abort(new Error('Conversation cancellation requested'));
-    return this.state;
+    return this.snapshot;
   }
 
   /** Only service checks performed before runtime entry may produce this explicit refusal. */
@@ -99,6 +131,7 @@ export class ConversationSubmission {
         result = Object.freeze(rejected ? { status: 'rejected', error: conversationFailure(error), ...(error instanceof RuntimeError && error.code === 'RUNTIME_BUSY' ? { retry: 'admission' as const } : {}) } : { status: 'failed', error: conversationFailure(error) });
       }
     }
+    this.preview.finish(result.status === 'cancelled' ? 'cancelled' : 'failed');
     this.files.finish();
     this.completedAt = Date.now();
     this.update({ result });
@@ -115,7 +148,7 @@ export class ConversationSubmission {
     }
     if (fact.kind === 'execution') {
       if (this.state.executions.some((item) => item.contextId === fact.contextId)) return;
-      this.update({ executions: Object.freeze([...this.state.executions, Object.freeze({ contextId: fact.contextId })]) });
+      this.update({ executions: Object.freeze([Object.freeze({ contextId: fact.contextId })]) });
       return;
     }
     if (fact.range.end <= fact.range.start) throw new Error('Committed message range must not be empty');
@@ -133,27 +166,64 @@ export class ConversationSubmission {
     this.update({ integrity: Object.freeze({ status: 'incomplete', error: Object.freeze({ code: 'SUBMISSION_INCOMPLETE', message: '本次提交的进展解释不完整；运行可能仍在继续。' }) }) });
   }
 
-  private update(change: Partial<ConversationSubmissionSnapshot>): void {
-    const next = { ...this.state, ...change, revision: this.state.revision + 1 };
+  private update(change: ConversationSubmissionChange): void {
+    const { activities, executions, admission: _admission, ...fields } = change;
+    const next = { ...this.state, ...fields, revision: this.state.revision + 1, ...(executions ? { executions: Object.freeze([...this.state.executions, ...executions]) } : {}) };
     delete next.admission;
     try {
       if (this.options.admission) next.admission = this.options.admission();
     } catch {
       // An optional current-condition hint cannot invalidate committed progress or retain stale advice.
     }
+    this.pendingFromRevision ??= this.state.revision;
+    this.pendingChange = {
+      ...this.pendingChange,
+      ...fields,
+      admission: next.admission ?? null,
+      ...(executions ? { executions: [...(this.pendingChange.executions ?? []), ...executions] } : {}),
+      ...(activities?.integrity ? { activities: { integrity: activities.integrity } } : {}),
+    };
+    for (const call of activities?.calls ?? []) this.pendingCalls.set(call.contextId, call);
     this.state = Object.freeze(next);
+    this.current = undefined;
+    this.notify();
+  }
+
+  private notify(): void {
     if (this.notifying) return;
     this.notifying = true;
     // Connection work never runs inside the producer's progress callback.
     queueMicrotask(() => {
       this.notifying = false;
-      for (const listener of [...this.listeners]) this.deliver(listener);
+      const changes = this.pendingPreview;
+      const baseline = this.rebaseline;
+      const fromRevision = this.pendingFromRevision;
+      const change = this.pendingChange;
+      const calls = Object.freeze([...this.pendingCalls.values()]);
+      const revision = this.state.revision;
+      this.pendingPreview = [];
+      this.rebaseline = false;
+      this.pendingFromRevision = undefined;
+      this.pendingChange = {};
+      this.pendingCalls.clear();
+      const update: ConversationSubmissionUpdate | undefined = fromRevision === undefined ? undefined : Object.freeze({ type: 'submission', conversationId: this.conversationId, submissionId: this.id, fromRevision, revision, change: Object.freeze({ ...change, ...(calls.length || change.activities ? { activities: Object.freeze({ ...change.activities, ...(calls.length ? { calls } : {}) }) } : {}), ...(change.executions ? { executions: Object.freeze(change.executions) } : {}) }) });
+      // Baselines alone need the cumulative graph and complete preview. Normal changes
+      // keep their producer-supplied fields, so a text chunk never serializes that graph.
+      const current = baseline ? this.baseline : undefined;
+      for (const listener of [...this.frameListeners.keys()]) {
+        if (current) this.deliverFrame(listener, current);
+        else {
+          for (const change of changes) this.deliverFrame(listener, { type: 'answer', conversationId: this.conversationId, submissionId: this.id, change });
+          if (update && update.revision > (this.frameListeners.get(listener) ?? Infinity)) this.deliverFrame(listener, update);
+        }
+      }
+      if (update) for (const listener of [...this.listeners]) this.deliver(listener);
     });
   }
 
   private deliver(listener: (snapshot: ConversationSubmissionSnapshot) => void): void {
     try {
-      const result: unknown = listener(this.state);
+      const result: unknown = listener(this.snapshot);
       if (result !== undefined) {
         void Promise.resolve(result).catch(() => undefined);
         this.listeners.delete(listener);
@@ -170,10 +240,32 @@ export class ConversationSubmission {
     return () => this.listeners.delete(listener);
   }
 
+  connectFrames(listener: (frame: ConversationSubmissionFrame) => void): () => void {
+    this.frameListeners.set(listener, -1);
+    this.deliverFrame(listener, this.baseline);
+    return () => this.frameListeners.delete(listener);
+  }
+
+  private deliverFrame(listener: (frame: ConversationSubmissionFrame) => void, frame: ConversationSubmissionFrame): void {
+    if (!this.frameListeners.has(listener)) return;
+    // Set ownership before invoking a consumer, which may synchronously reconnect.
+    if (frame.type === 'baseline') this.frameListeners.set(listener, frame.submission.revision);
+    else if (frame.type === 'submission') this.frameListeners.set(listener, frame.revision);
+    try {
+      const result: unknown = listener(frame);
+      if (result !== undefined) {
+        void Promise.resolve(result).catch(() => undefined);
+        this.frameListeners.delete(listener);
+      }
+    } catch {
+      this.frameListeners.delete(listener);
+    }
+  }
+
   async ready(signal?: AbortSignal): Promise<ConversationSubmissionSnapshot> {
     const ready = (snapshot: ConversationSubmissionSnapshot) => !!snapshot.input || !!snapshot.result || snapshot.integrity.status === 'incomplete';
     signal?.throwIfAborted();
-    if (ready(this.state)) return this.state;
+    if (ready(this.state)) return this.snapshot;
     return new Promise((resolve, reject) => {
       const close = () => {
         this.listeners.delete(listener);

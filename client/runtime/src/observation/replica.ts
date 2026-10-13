@@ -171,8 +171,16 @@ function snapshots(entries: ReadonlyMap<string, RecordEntry>, previous?: Readonl
       .filter((entry) => entry.kind === 'invocation-boundary' && (entry.data as InvocationBoundaryRecord).executionId === execution.id)
       .map((entry) => entry.data as InvocationBoundaryRecord)
       .sort((a, b) => a.sequence - b.sequence);
+    const called = new Set<string>();
+    const returned = new Set<string>();
+    const threw = new Set<string>();
+    for (const event of events) {
+      if (event.value.type === 'call') called.add(event.callId);
+      else if (event.value.type === 'return') returned.add(event.callId);
+      else threw.add(event.callId);
+    }
     // A record update and its boundary are separate formal facts; expose a call view when both exist.
-    if ([execution, ...operations, ...attempts].some((record) => !events.some((event) => event.callId === record.id && event.value.type === 'call') || (record.status !== 'running' && !events.some((event) => event.callId === record.id && event.value.type === (record.status === 'succeeded' ? 'return' : 'throw'))))) continue;
+    if ([execution, ...operations, ...attempts].some((record) => !called.has(record.id) || (record.status !== 'running' && !(record.status === 'succeeded' ? returned : threw).has(record.id)))) continue;
     const resources = scope.filter((entry) => entry.kind === 'resource').map((entry) => entry.data as ResourceRecord);
     const parent = execution.parentId ? entries.get(execution.parentId) : undefined;
     if (!parent || parent.kind !== 'runtime-call') continue;

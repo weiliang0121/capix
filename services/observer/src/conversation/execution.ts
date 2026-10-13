@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { invocationRecording } from '@capix/server-runtime/recording';
-import { ExecutionDefinition, RuntimeError, type InvocationView, type ExecutionContextView, type ChildBindings } from '@capix/server-runtime';
+import { ExecutionDefinition, RuntimeError, type InvocationWorkView, type ExecutionContextView, type ChildBindings } from '@capix/server-runtime';
 import type { GenerationOutput, ConversationTask } from '@capix/protocol';
 import { conversationExecutionRequests, conversationEntryRequests, type ConversationExecutionResources, type ConversationEntryResources } from './resources.js';
 import { prepareMemoryInput } from './operations/memory/input.js';
@@ -9,6 +9,7 @@ import type { ExtractMemoryDefinition } from './operations/memory/extract.js';
 import { acceptConversationRequest, type AcceptedConversationInput } from './accept.js';
 import { prepareConversationSegment } from './admission.js';
 import type { GenerateAnswerDefinition } from './operations/answer/generate.js';
+import { answerStream, type AnswerProgress, type AnswerGenerationEvent } from './operations/answer/stream.js';
 import { ProcessDocumentDefinition } from './operations/document/process.js';
 import { SaveResultDefinition } from './operations/document/save.js';
 import { CheckFileTaskDefinition } from './operations/preflight/check.js';
@@ -32,14 +33,15 @@ interface ExecutionProgress extends ConversationDecisionProgress {
   readonly response?: ReturnType<ConversationExecutionResources['messages']['append']>[number];
 }
 type Context = ExecutionContextView<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources>;
-type Call = InvocationView<AcceptedConversationInput, GenerationOutput, Context>;
+type Call = InvocationWorkView<AcceptedConversationInput, GenerationOutput, Context, AnswerProgress>;
 const emptyArguments = z.strictObject({});
 const path = z.string().min(1).max(1024);
 const output = z.strictObject({ path });
 const fileArguments = z.strictObject({ task: z.union([z.strictObject({ sourcePath: path, output: output.optional() }), z.strictObject({ output })]), instruction: modelTextSchema });
 
 /** E admits decisions and child deliveries. All evolving business state belongs to this call. */
-export class ConversationExecutionDefinition extends ExecutionDefinition<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources, unknown, ConversationEntryResources> {
+export class ConversationExecutionDefinition extends ExecutionDefinition<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources, unknown, ConversationEntryResources, Record<string, never>, AnswerProgress> {
+  readonly output = { result: answerStream.result, delta: (value: unknown) => value as AnswerProgress };
   readonly observation = [invocationRecording<AcceptedConversationInput, GenerationOutput>({ input: ({ message, fileTask }) => ({ ...message, ...(fileTask ? { fileTask } : {}) }) })];
   readonly run;
   readonly entry;
@@ -133,7 +135,17 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
       const task: ConversationTask = state.file ? { kind: 'file', task: state.file.task } : { kind: 'reply' };
       resources.tasks.select(task);
     };
-    const receiveAnswer = (answer: GenerationOutput, state: ExecutionProgress, capability: 'answer' | 'document'): ExecutionProgress => Object.freeze({ ...state, answer, response: resources.messages.append([{ role: 'assistant', content: answer.content }])[0]!, latest: { capability, output: answer } });
+    let candidate: Extract<AnswerGenerationEvent, { kind: 'completed' }> | undefined;
+    const receiveGeneration = (event: AnswerGenerationEvent): undefined => {
+      if (event.kind === 'started' || event.kind === 'discarded') candidate = undefined;
+      if (event.kind === 'completed' && !event.discarded) candidate = event;
+      invocation.output.emit({ kind: 'generation', event });
+    };
+    const receiveAnswer = (answer: GenerationOutput, state: ExecutionProgress, capability: 'answer' | 'document'): ExecutionProgress => {
+      const response = resources.messages.append([{ role: 'assistant', content: answer.content }])[0]!;
+      if (candidate?.result === answer) invocation.output.emit({ kind: 'committed', source: { contextId: candidate.contextId, round: candidate.round }, message: { transcriptId: resources.history.transcriptId, index: response.index }, content: answer.content });
+      return Object.freeze({ ...state, answer, response, latest: { capability, output: answer } });
+    };
     const entries: ConversationCapability<ExecutionProgress>[] = [
       conversationCapability(
         {
@@ -141,6 +153,7 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
           description: '根据当前目标生成回答；若已有预检通过的保存目标，回答正文可在后续保存。内部自行构造历史、记忆和模型输入。',
           use: definitions.generation,
           key: 'generation',
+          output: { receive: receiveGeneration },
           schema: emptyArguments,
           available: (state: ExecutionProgress) => !state.answer && state.file?.task.sourcePath === undefined && (!context.currentInput.fileTask || Boolean(state.file)),
           input: (_arguments, state) => {
@@ -178,6 +191,11 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
             description: '读取已通过预检的来源文本并完成内容处理。只使用父层已接纳的目标，模型不能另选路径。',
             use: document,
             key: 'generation',
+            output: {
+              receive: (event): undefined => {
+                if (event.kind === 'delta') receiveGeneration(event.delta);
+              },
+            },
             schema: emptyArguments,
             available: (state: ExecutionProgress) => !state.answer && state.file?.task.sourcePath !== undefined,
             input: (_arguments, state) => {

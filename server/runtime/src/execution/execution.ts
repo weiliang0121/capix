@@ -1,3 +1,5 @@
+import { combineOutputReceivers } from '../output/delivery.js';
+import type { InvocationOutputReceiver } from '../output/contract.js';
 import { randomUUID } from 'node:crypto';
 import type { ResourceRequirements } from '../resource/bindings.js';
 import { definitionResources } from '../binding/resources.js';
@@ -24,6 +26,7 @@ export interface ExecutionInvocationBindings<Input, Output, Resources extends ob
   capture(input: Input): ResourceBindings<Resources>;
   readonly callbacks?: ExecutionInvocationCallbacks<Input, Output, Resources>;
   readonly progress?: ProgressReceiver<InvocationProgress>;
+  readonly output?: InvocationOutputReceiver<Output>;
 }
 
 /** Reusable E structure with fixed entry ordering; every accepted call creates its own ExecutionContext and Invocation. */
@@ -32,7 +35,7 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
   private readonly work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>>;
   constructor(
     private readonly invocationBuilder: ExecutionInvocationBuilder,
-    readonly definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any>,
+    readonly definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>,
     readonly children: BoundChildren,
     private readonly requires: ResourceRequirements<Resources> = definitionResources(definition) as ResourceRequirements<Resources>,
   ) {
@@ -99,6 +102,7 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
       work: this.work,
       started: callbacks.started,
       progress: bindings.progress,
+      output: combineOutputReceivers(options.output, bindings.output),
     });
   }
 }

@@ -22,12 +22,14 @@
 - GET `/api/interaction/observe?conversationId=对话ID&callId=调用ID&id=交互ID` → NDJSON InteractionUpdate。先读取所选调用关联，再交付累计元数据 snapshot；received/unavailable 是本次订阅终态。模型请求/回复正文不包含在此投影中，revision 属于交互已提交状态，保存失败可在同一 revision 表达 unavailable。连接失败与交互失败分别处理，不能由断流推断业务结束。恢复历史仅按 ID 读取，不触发模型或重发。
 - GET `/api/memory?conversationId=对话ID` → MemoryObservation。记忆正文、来源与已生成的变更记录。
 - GET `/api/source?file=路径` → SourceResponse。路径为仓库相对源文件路径，服务端白名单验证。
-- POST `/api/run` 接受 ConversationSubmissionRequest `{ conversationId, submissionId, input: ConversationRequest }`。首次发送建立服务提交对象并启动运行，200 返回 NDJSON，每行是完整的 ConversationSubmissionSnapshot；输入已落实、任务已结束或投影失效时即可开始交付。客户端生成 submissionId，使首个响应丢失后仍可查询；该身份不提供幂等重提承诺。
-- GET `/api/submissions/:id` 返回当前累计提交投影；GET `/api/submissions/:id/follow` 同步衔接当前投影与后续变化。关闭任意反馈连接仅解除消费，不取消已启动的服务运行。终态或进展解释不完整时本次连接结束；后者仍可显式查询最终任务结果。
-- POST `/api/submissions/:id/cancel` 以同源 JSON 请求取消已登记的运行，返回累计提交投影。重复请求在保留期内幂等；未知身份仍返回 SUBMISSION_UNAVAILABLE，不登记取消标记，也不能据此认为原请求不会执行。取消控制不关闭原反馈或消息同步。
+- POST `/api/run` 接受 ConversationSubmissionRequest `{ conversationId, submissionId, input: ConversationRequest }`。首次发送建立服务提交对象并启动运行，200 返回 NDJSON，每行是 ConversationSubmissionFrame（baseline/submission/answer）；输入已落实、任务已结束或投影失效时即可开始交付。客户端生成 submissionId，使首个响应丢失后仍可查询；该身份不提供幂等重提承诺。
+- GET `/api/submissions/:id` 返回 ConversationSubmissionBaseline（当前累计提交投影与可选预览）；GET `/api/submissions/:id/follow` 同步衔接当前投影与后续变化。关闭任意反馈连接仅解除消费，不取消已启动的服务运行。终态或进展解释不完整时本次连接结束；后者仍可显式查询最终任务结果。
+- POST `/api/submissions/:id/cancel` 以同源 JSON 请求取消已登记的运行，返回 ConversationSubmissionBaseline。重复请求在保留期内幂等；未知身份仍返回 SUBMISSION_UNAVAILABLE，不登记取消标记，也不能据此认为原请求不会执行。取消控制不关闭原反馈或消息同步。
 - 提交投影包含 conversationId、submissionId、revision、可选 input 范围、可选 answer 定位、executions Context 身份数组、可选 cancelRequested、result 和 integrity。输入与回答来自实体正式写入点；executions 来自选定声明的调用现场；result 在 R.run 实际返回或抛错后形成。投影不包含原文、Record 或运行对象。cancelRequested 只表示已请求停止；result 为 completed/failed/rejected/cancelled，只有本次运行实际以可识别的取消原因退出才报告 cancelled。已有输入、回答和记忆不回滚，取消与完成竞争可以得到 cancelRequested + completed；单纯信号已取消不能遮蔽独立故障。
 - 可选 activities 是本次提交的有界 REOA 过程投影，包含 calls 和独立 integrity。Observer 默认启用；不安装 Recorder 也可使用。每项仅含 contextId、直接 parentContextId、level、label、status、phase、round、可选开始/结束时间以及父层 relation。过程、内容落实、提交结果分别判断；活动来源失效不关闭提交反馈，也不影响消息同步或运行结果。
-- 明确的输入拒绝返回 400、忙碌拒绝返回 409，响应体可以是保留下来的提交投影，客户端应接纳其中的 rejected 事实。已经接纳输入后的失败通过累计投影表达，回答不会因后处理失败撤销。仅有网络状态码不能替代正式运行事实。
+- `baseline` 携带完整提交状态与可选预览，只用于首次连接、查询、取消响应和慢连接追赶。正常 `submission` 帧为 `{ conversationId, submissionId, fromRevision, revision, change }`：只携带本修订区间已落实的字段、新增 execution 身份及变化的 activity 条目；`admission:null` 明确移除旧提示，省略字段表示未变化。变化由生产者安装事实时提供，微任务合并同一调用的最后状态，不比较完整快照推导增量。正文 `answer` 帧不会附带未变化的提交状态。
+- 接收方从完整基线开始应用连续修订；控制查询可能取得流批次内部的基线，允许重叠区间中已知 execution 前缀与调用条目幂等合并，但不允许改变身份、顺序或回退状态。修订缺口停止当前反馈消费，重连仍取得明确完整基线，不重 POST。内部累计快照和传输增量是不同形态。
+- 明确的输入拒绝返回 400、忙碌拒绝返回 409，响应体可以是保留下来的提交基线，客户端应接纳其中的 rejected 事实。已经接纳输入后的失败通过累计投影表达，回答不会因后处理失败撤销。仅有网络状态码不能替代正式运行事实。
 - GET `/api/observe?conversationId=对话ID` 独立返回 NDJSON ObservationUpdate：baseline 建立当前事实与来源游标，delta 携带 scopeId/sequence 和明确变化，error 表示观测异常。关闭连接仅解除订阅，不中断对话执行。基线与订阅同步衔接，每个连接都有独立 scopeId，首帧 sequence 为 0。序号缺口最多自动重建一次基线；SOURCE_INCOMPLETE 是记录来源已缺失事实的终止控制，不自动重试，也不能通过重连同一来源补救。不提供历史重放或跨查询一致性承诺。
 - 除上述正式提交拒绝外，HTTP 非 2xx 返回 ErrorResponse。无保留项时提交查询返回 404 / SUBMISSION_UNAVAILABLE，不能据此断言未执行；相同身份仍保留时 POST 返回 409 / SUBMISSION_EXISTS，不启动第二次工作。记录来源失效后，观测流及 executions/execution/memory 查询明确返回 SOURCE_INCOMPLETE；实体查询与订阅不依赖记录完整性。不改变现有运行失败的事实记录。
 
@@ -49,7 +51,7 @@ conversationId 是持续交流的身份，submissionId 是已固定目标的服�
 
 executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
 
-服务提交对象拥有运行任务、独立取消控制器与投影，反馈连接只读取。运行信号传给 R.run，不借用 HTTP 连接信号；能力不合作时继续等待，不提前释放占用。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接最多保留一个待发最新投影，慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
+服务提交对象拥有运行任务、独立取消控制器与投影，反馈连接只读取。运行信号传给 R.run，不借用 HTTP 连接信号；能力不合作时继续等待，不提前释放占用。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接受背压阻塞后仅标记需要重建基线，可写时发送当时的完整基线，不丢弃任意正文片段后继续发送无效增量。慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
 
 ## 接纳条件与下一笔提交
 
@@ -69,7 +71,21 @@ ConversationActivity 使用 Context 身份，status 为 running/succeeded/failed
 
 relation 描述父层处理该子调用的 attached/returned/receiving/accepted/failed，并保留真实返回 succeeded/failed/cancelled。子调用成功与父层接纳不是同一事实；子调用工作成功但交付失败时可以同时出现 status:succeeded 与 relation.returned:failed。取消请求 ACK 不结束任何条目，只有已发生的调用退出更新其状态。调用进展不替代提交 result，异常重试中的子失败也不推断整轮失败。
 
-活动仅公开名称、归属和进展元数据，不传输入输出、诊断正文、模型思考、源码或资源对象。label 最多 120 字符，每次提交最多保留 512 个调用位置（包括等待子调用开始的关系）。超限或来源顺序/关系失效后保留已知前缀，activities.integrity 永久变为 ACTIVITY_INCOMPLETE；后续内容与最终 result 继续更新。调用局部 eventSequence 用于服务接纳，不混入交付 revision。查询与 follow 返回同一有界累计状态，不承诺完整过程事件回放。
+活动仅公开名称、归属和进展元数据，不传输入输出、诊断正文、模型思考、源码或资源对象。label 最多 120 字符，每次提交最多保留 512 个调用位置（包括等待子调用开始的关系）。超限或来源顺序/关系失效后保留已知前缀，activities.integrity 永久变为 ACTIVITY_INCOMPLETE；后续内容与最终 result 继续更新。调用局部 eventSequence 用于服务接纳，不混入交付 revision。查询与 follow 初始基线提供同一有界累计状态；后续只传变化条目，不承诺完整过程事件回放。不同边界事件若映射到相同公开 phase/round，则仍检查来源顺序，但不重复发布相同状态。
+
+## 数据量边界
+
+| 出口                       | 正常传输                         | 全量与计算边界                                                                       |
+| -------------------------- | -------------------------------- | ------------------------------------------------------------------------------------ |
+| 提交 / follow              | 提交字段与调用条目增量、正文增量 | 完整基线用于建立和追赶；预览不驱动完整调用数组构造或序列化                           |
+| 原文订阅                   | 正式 append/segment 变化         | 首次和重连保留全量消息基线与前缀一致性检查；客户端复用已确认消息，不重复复制同一基线 |
+| 观测订阅                   | 明确记录/记忆/选择变化           | 基线含概览、记忆与当前运行范围的记录；先按归属筛选，再物化记录正文，历史详情按需查询 |
+| 执行概览 / 记忆查询        | 单次累计读模型                   | 按归属一次分组，避免每个 E/Memory 重扫完整记录集合；仍随实际历史规模增长             |
+| 执行详情 / 源码            | 所选实体的完整正文               | 按需读取；记录验证使用 ID 查找，保留完整关联检查                                     |
+| 外部交互订阅               | 单个交互的少量状态元数据         | 不传模型请求/反馈正文，不随正文分片频率更新                                          |
+| 对话目录 / 配置 / 接纳状态 | 单次元数据响应                   | 不在正文增量上重复请求；目录当前仍完整读取                                           |
+
+NDJSON 逐新分片扫描，整行只组装一次；客户端默认单行上限为 16 MiB，超限终止消费并释放 reader，发送积压使用有界字节预算与游标队列。客户端保留不可变副本，变化调用单独校验并复用其他调用对象；平面引用数组/Map 的浅复制、恢复基线校验及 Markdown 展示解析仍有与实际数据量相关的成本。回归以序列化次数、扫描次数、对象复用和线中字节预算验证，不使用机器耗时阈值或真实模型。
 
 执行列表按实际登记顺序。边界事件 scopeId 确定计时范围，sequence 与单调 offsetMs 是范围内部时序依据；R 调用和每个 E 分别计时，EOA 共用 E 范围。occurredAt/startedAt 是展示用墙钟。未结束调用没有 durationMs；不得补造耗时。跨 QA 不推断执行依赖，前端使用等宽列；默认调用树按直接 parentId 连接，以父层 attached 关系的 eventSequence 表达同级调用顺序，不以时间反推关系。耗时视图才在轮内按计时比例布局。
 
@@ -122,3 +138,11 @@ ObservationBaseline 的 sequence 固定为本连接的 0，另带独立的 Trans
 消息定位使用 MessageLocator / TranscriptRangeLocator，记录不包含活 Ref。范围可带捕获时的 revision；客户端允许用更新的追加型消息副本读取旧范围，但不能因此扩大原范围。没有加载、加载失败、版本/位置缺失与空消息分别表达。MemoryObservation.sources 同样只提供消息定位符；记忆变更结果保持既有不可变记录。
 
 客户端 TranscriptReplica 在首基线之后检查集合身份、严格连续 revision 和追加/分段边界；重复版本不推进副本。消息连接中断与修订缺口由 TranscriptReceiver 有限退避重建基线，主动停止后须显式再次订阅；策略见客户端文档。基线不能改写已接纳正文或分段前缀，身份/内容冲突及来源失效停止自动恢复。不对未加载集合缓存无限增量。当前端点提供完整集合基线，不实现分页、历史重放、持久化或跨集合事务。
+
+## 有限流式回答
+
+提交反馈首帧为 `{ type: 'baseline', submission, preview? }`，常规进展为 `{ type: 'submission', submission }`，预览增量为 `{ type: 'answer', conversationId, submissionId, change }`。查询与取消控制响应也使用 baseline。正式消息正文仍由独立 Transcript 同步，不由临时预览生成正式消息。
+
+预览每代从 generation 的新值与 revision=1 开始；change 为 started、appended（UTF-16 offset/text）、received、committed（message/consistency）或 discarded。received 只表示该候选完成本层处理，committed 来自 E 成功追加正式回答后的明确来源关联。consistency 为 complete（全文相等）、prefix（可选预览只收到前缀）或 mismatch（正式正文胜出）；不一致不回滚合法业务结果。废弃后再次生成新代，旧流不能写入新代。
+
+预览仅有界保留于本次进程内提交，可在 follow/read 基线恢复，不持久化每个片段。断线只解除消费，不能重新发起模型调用。预览完整性与活动、提交结果、正式内容同步相互独立；流输出接收缺口允许取基线，内容冲突停止该候选自动恢复。

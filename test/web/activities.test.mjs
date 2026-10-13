@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { createDataProjection } from '../../apps/observer/.test-dist/binding/data.js';
 import { createApplication } from '../../apps/observer/.test-dist/binding/application.js';
 import { projectConversationProcess } from '../../apps/observer/.test-dist/binding/activities.js';
-import { projectResponses } from '../../apps/observer/.test-dist/binding/responses.js';
+import { createResponseProjection } from '../../apps/observer/.test-dist/binding/responses.js';
 import { client, transport, submissionSnapshot } from '../client/fixtures.mjs';
 import { installFrames } from './frames.mjs';
+
+const projectResponses = (messages, state) => createResponseProjection()(messages, state);
 
 const startedAt = '2026-10-11T00:00:00.000Z';
 const finishedAt = '2026-10-11T00:00:00.010Z';
@@ -113,7 +115,7 @@ test('frame coalescing keeps runtime facts but only publishes compact results fo
     submit: async (request, receive) => {
       number++;
       let items = calls().map((item) => ({ ...item, contextId: `${item.contextId}-${number}`, ...(item.parentContextId ? { parentContextId: `${item.parentContextId}-${number}` } : {}) }));
-      const delivery = io.delivery(request, (snapshot) => receive({ ...snapshot, activities: activities(items) }));
+      const delivery = io.delivery(request, (frame) => receive(frame.type === 'baseline' ? { ...frame, submission: { ...frame.submission, activities: activities(items) } } : frame.type === 'submission' ? { ...frame, change: { ...frame.change, activities: { calls: items, integrity: { status: 'complete' } } } } : frame));
       delivery.input();
       items = items.map((item) => ({ ...item, status: 'succeeded', finishedAt, ...(item.parentContextId ? { relation: { phase: 'accepted', returned: 'succeeded' } } : {}) }));
       delivery.answer(`回答 ${number}`);

@@ -4,7 +4,7 @@ import type { ChildBindings } from '@capix/server-runtime';
 import { TranscriptResource } from '@capix/server-runtime/content';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ConversationResources, type ModelRequestResources } from '../../resources.js';
-import { Sequence } from '@capix/server-runtime';
+import { Sequence, type InvocationWorkView } from '@capix/server-runtime';
 import type { DeclaredException, InvocationResolution, InvocationView } from '@capix/server-runtime';
 import { sortBy } from 'es-toolkit/array';
 import type { ModelRequest, Selection } from '../../model/types.js';
@@ -23,6 +23,8 @@ import { modelRegenerationInput, prepareRegenerationRequest, type ModelRegenerat
 
 import { documentDescriptor, type TextDocument } from '../../../files/index.js';
 import { loadRequest } from '../../model/request.js';
+import { answerStream, AnswerTextDecoder, type AnswerTextDelta } from './stream.js';
+type AnswerCall = InvocationWorkView<GenerationInput, GenerationOutput, OperationContextView<GenerationInput, GenerationOutput, ConversationResources>, AnswerTextDelta>;
 
 export interface GenerationInput {
   readonly selection: Selection;
@@ -31,7 +33,8 @@ export interface GenerationInput {
   readonly task?: { readonly fileTask: FileTask; readonly instruction: string };
 }
 
-export class GenerateAnswerDefinition extends OperationDefinition<GenerationInput, GenerationOutput, ConversationResources> {
+export class GenerateAnswerDefinition extends OperationDefinition<GenerationInput, GenerationOutput, ConversationResources, Record<string, never>, AnswerTextDelta> {
+  readonly output = answerStream;
   readonly observation;
   private readonly documentEnabled: boolean;
   readonly name = 'answer';
@@ -73,21 +76,21 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     this.prepareRequestDefinition = new PrepareModelRequestDefinition((input, resources) => this.createRequest(input, resources), undefined, options.document ? { input: describeAnswerRequest, output: describeModelRequest } : {});
     this.requestModelDefinition = new RequestModelDefinition(this.purpose, options.document ? { input: describeModelRequest } : {});
     this.acceptOutputDefinition = new AcceptModelOutputDefinition(this.outputContract);
-    this.composition = new Sequence<GenerationInput, InvocationView<unknown, unknown, OperationContextView>>()
+    this.composition = new Sequence<GenerationInput, AnswerCall>()
       .step('context', { use: this.assembleContextDefinition, input: ({ input }) => input.selection })
       .step('request', { use: this.prepareRequestDefinition, input: ({ input, outputs }) => ({ ...outputs.context, memories: input.memories, ...(input.task ? { task: input.task } : {}), ...(input.document ? { document: input.document } : {}) }) })
-      .step('model', { use: this.requestModelDefinition, input: ({ outputs }) => outputs.request })
+      .step('model', { use: this.requestModelDefinition, input: ({ outputs }) => outputs.request, output: ({ parent }) => decodeModelText(parent) })
       .step('acceptance', { use: this.acceptOutputDefinition, input: ({ outputs }) => ({ output: outputs.model }) });
     this.prepareRegenerationDefinition = new PrepareModelRequestDefinition(prepareRegenerationRequest, undefined, options.document ? { input: (input) => ({ ...input, request: describeModelRequest(input.request) }), output: describeModelRequest } : {});
-    this.regenerationComposition = new Sequence<ModelRegenerationEvidence, InvocationView<unknown, unknown, OperationContextView>>()
+    this.regenerationComposition = new Sequence<ModelRegenerationEvidence, AnswerCall>()
       .step('request', { use: this.prepareRegenerationDefinition, input: ({ parent, input }) => modelRegenerationInput(parent, input) })
-      .step('model', { use: this.requestModelDefinition.regeneration.entry, input: ({ input, outputs }) => ({ request: outputs.request, evidence: input }) })
+      .step('model', { use: this.requestModelDefinition.regeneration.entry, input: ({ input, outputs }) => ({ request: outputs.request, evidence: input }), output: ({ parent }) => decodeModelText(parent) })
       .step('acceptance', { use: this.acceptOutputDefinition, input: ({ outputs }) => ({ output: outputs.model }) });
     this.children = Object.freeze([this.prepareRegenerationDefinition, this.assembleContextDefinition, this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition]);
     this.run = { requires: GenerateAnswerDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  private async execute(context: OperationContextView<GenerationInput, GenerationOutput, ConversationResources>, invocation: InvocationView<GenerationInput, GenerationOutput, OperationContextView<GenerationInput, GenerationOutput, ConversationResources>>, children: ChildBindings): Promise<GenerationOutput> {
+  private async execute(context: OperationContextView<GenerationInput, GenerationOutput, ConversationResources>, invocation: AnswerCall, children: ChildBindings): Promise<GenerationOutput> {
     if (Boolean(context.currentInput.document) !== this.documentEnabled) throw new RuntimeError('DOCUMENT_INPUT', '文档证据必须与生成能力的声明一致。');
     if (context.progress.round === 1) return (await this.composition.run(invocation, context.currentInput, children)).acceptance;
     const evidence = this.regenerationEvidence(invocation);
@@ -131,7 +134,7 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
   }
 
   private loadRequest(input: AnswerRequestInput, resources: ModelRequestResources): ModelRequest {
-    return loadRequest(this.prepare(input), this.task, this.outputContract.schema, resources.settings);
+    return { ...loadRequest(this.prepare(input), this.task, this.outputContract.schema, resources.settings), stream: true };
   }
 
   private prepare(input: AnswerRequestInput) {
@@ -152,4 +155,15 @@ function describeAnswerRequest(input: AnswerRequestInput): unknown {
 /** Preserve request identity and capacity, without duplicating document text in call records. */
 function describeModelRequest(request: ModelRequest): unknown {
   return { ...request, messages: request.messages.map(({ role, content }) => ({ role, bytes: Buffer.byteLength(content, 'utf8') })) };
+}
+
+function decodeModelText(invocation: AnswerCall): import('@capix/server-runtime').InvocationOutputReceiver<import('../../model/types.js').ModelOutput, import('../../model/types.js').ModelTextDelta> {
+  const decoder = new AnswerTextDecoder();
+  return {
+    receive: (event): undefined => {
+      if (event.kind !== 'delta') return;
+      const text = decoder.push(event.delta.text);
+      if (text) invocation.output.emit({ text });
+    },
+  };
 }

@@ -231,7 +231,7 @@ export class ConversationQueue {
   }
 
   private reception(submission: ClientSubmission): SubmissionReception {
-    return { transcriptId: this.transcriptId!, changed: () => this.changed(submission) };
+    return { transcriptId: this.transcriptId!, changed: () => this.changed(submission), recoverPreview: (signal) => this.transport.read(submission.id, signal) };
   }
 
   private replace(entry: QueueEntry, submission: ClientSubmission): void {

@@ -1,3 +1,4 @@
+import type { InvocationOutputReceiver } from '../output/contract.js';
 import { definitionResources } from '../binding/resources.js';
 import type { DeclaredCall } from '../definition/signature.js';
 import { InvocationEntry } from '../definition/entry.js';
@@ -18,6 +19,8 @@ export interface SequenceScope<Input, Parent, Outputs> {
 
 export interface SequenceStep<Input, Parent, Outputs, StepInput, StepOutput, AcceptedOutput = StepOutput> {
   readonly use: DeclaredCall<Parent, StepInput, StepOutput> | { readonly requires?: ResourceRequirements; create(parent: Parent, input: StepInput, options?: InvocationRelationOptions): InvocationTarget<StepOutput> | ChildInvocationView<any, StepOutput, any> };
+  /** Explicit passive consumption; sequence ordering still depends only on final child delivery. */
+  readonly output?: (scope: SequenceScope<Input, Parent, Outputs>) => InvocationOutputReceiver<StepOutput, any> | undefined;
   readonly input: (scope: SequenceScope<Input, Parent, Outputs>) => StepInput;
   /** Parent-owned work after successful delivery; its result is available to later steps. */
   readonly accept?: (scope: SequenceScope<Input, Parent, Outputs>, output: StepOutput) => AcceptedOutput | Promise<AcceptedOutput>;
@@ -35,14 +38,14 @@ export class Sequence<Input, Parent extends ParentInvocation | InvocationView, O
 
   step<Key extends string, StepInput, StepOutput, AcceptedOutput = StepOutput>(key: Key extends keyof Outputs ? never : Key, definition: SequenceStep<Input, Parent, Outputs, StepInput, StepOutput, AcceptedOutput>): Sequence<Input, Parent, Outputs & Record<Key, AcceptedOutput>> {
     if (!isNonBlankString(key) || this.entries.some((entry) => entry.key === key)) throw new Error('Sequence work keys must be non-blank and unique');
-    const { use, input: prepare, accept } = definition;
+    const { use, input: prepare, accept, output } = definition;
     const entry: Entry<Input, Parent> = Object.freeze({
       key,
       use,
       async run(parent: Parent, input: Input, outputs: Readonly<Record<string, unknown>>, children?: ChildBindings) {
         const scope = Object.freeze({ parent, input, outputs: outputs as Readonly<Outputs> });
         const target = 'create' in use ? use : resolveDeclared(use, children);
-        const child = target.create(parent, prepare(scope), { key });
+        const child = target.create(parent, prepare(scope), { key, output: output?.(scope) });
 
         await child.run();
         if (children) {

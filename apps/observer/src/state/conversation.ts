@@ -33,8 +33,18 @@ export interface ConversationResponse {
   readonly fileOutput?: FileOutput;
   readonly bodyState: 'unconfirmed' | 'unloaded' | 'pending' | 'available' | 'missing' | 'error';
   readonly body?: ConversationMessage;
+  /** Display source; an unaccepted preview never becomes a formal transcript message. */
+  readonly content?: ConversationResponseContent;
   readonly process?: ConversationProcess;
   readonly notice?: SubmissionNotice;
+}
+
+export interface ConversationResponseContent {
+  readonly key: string;
+  readonly text: string;
+  readonly complete: boolean;
+  readonly reveal: boolean;
+  readonly provisional: boolean;
 }
 
 export interface ConversationProcess {

@@ -1,3 +1,4 @@
+import type { OutputDeclaration } from '../output/contract.js';
 import type { Invocation } from './invocation.js';
 import type { InvocationContext } from '../context/context.js';
 import { Continuation, type InvocationResult, type InvocationResolution } from './result.js';
@@ -16,6 +17,7 @@ export interface InvocationCycleOptions {
   validate?: () => void;
 }
 export interface InvocationWork<Input, Output, Context extends InvocationContext<Input, Output>> {
+  readonly output?: OutputDeclaration<Output, unknown>;
   execute(context: Context, invocation: Invocation<Input, Output, Context>): Output | Promise<Output>;
   accept?(context: Context, output: Output, invocation: Invocation<Input, Output, Context>): Output | Continuation<Input> | Promise<Output | Continuation<Input>>;
   raises?: readonly ExceptionContract<any>[];
@@ -39,6 +41,7 @@ export async function cycle<Input, Output, Context extends InvocationContext<Inp
       context.startRound(round, input);
       options.validate?.();
       invocation.requireHealthy();
+      invocation.openOutput();
       onProcess({ stage: 'execute', type: 'start', input });
       let result: InvocationResult<Output>;
       try {
@@ -49,6 +52,8 @@ export async function cycle<Input, Output, Context extends InvocationContext<Inp
       } catch (error) {
         const failure = invocation.classify(error, 'execute');
         result = { status: 'failed', error: failure.error, failure };
+      } finally {
+        invocation.sealOutput();
       }
       context.receiving(result);
       if (result.status === 'succeeded') onProcess({ stage: 'execute', type: 'return', output: result.output });
@@ -59,7 +64,8 @@ export async function cycle<Input, Output, Context extends InvocationContext<Inp
       invocation.requireHealthy();
       const accepted = result.status === 'failed' ? await handle(invocation, work, result.failure!, onProcess) : await accept(invocation, work, result.output, onProcess);
       invocation.requireHealthy();
-      if (!(accepted instanceof Continuation)) return accepted;
+      if (!(accepted instanceof Continuation)) return invocation.validateOutput(accepted);
+      invocation.discardOutput('continue');
       if (round === work.maxRounds) throw new InvocationStopped('LOCAL_ROUND_LIMIT', '本地执行已达到轮次上限。', { maxRounds: work.maxRounds });
       input = accepted.input;
     }
@@ -86,6 +92,7 @@ async function accept<Input, Output, Context extends InvocationContext<Input, Ou
 }
 
 async function handle<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, work: InvocationWork<Input, Output, Context>, failure: InvocationFailure, onProcess: ProcessSink): Promise<Output | Continuation<Input>> {
+  invocation.discardOutput('exception');
   const exception = failure.error;
   if (failure.kind !== 'exception' || !(exception instanceof DeclaredException) || !work.exceptions?.accepts.includes(exception.contract)) throw exception;
   const context = invocation.context;

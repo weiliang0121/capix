@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { ObservationBaseline, ObservationFrame, ObservationUpdate, ObserverChange, ObservationChange, RecordEntry, ExecutionRecord, RuntimeCallRecord, RecordingArchive } from '@capix/protocol';
+import type { ObservationBaseline, ObservationFrame, ObservationUpdate, ObserverChange, ObservationChange, RecordEntry, RecordingArchive } from '@capix/protocol';
 import type { Transcript, Memories } from '@capix/server-runtime/content';
-import { observeMemory, snapshotValue, type RecordBook, type RecordingInstallation } from '@capix/server-runtime/recording';
+import { observeMemory, snapshotValue, CompositeRecord, ExecutionRecord, RuntimeCallRecord, type BaseRecord, type RecordBook, type RecordingInstallation } from '@capix/server-runtime/recording';
 import type { ChangeConsumer } from '../assembly/changes.js';
-import type { RecordSource } from './record/source.js';
+import type { RecordReceiver, RecordSource } from './record/source.js';
 import { observeOverview } from './overview.js';
 import { bindDelivery } from './delivery.js';
 
@@ -25,7 +25,8 @@ export class ObservationFeed {
     const { consumer, recordSource, recording, transcript, book, memories } = this.observer;
     const scopeId = randomUUID();
     let sequence = 0;
-    const delivery = bindDelivery<readonly RecordEntry[], ObserverChange, ObservationUpdate>(recordSource, {
+    const source = { open: (receiver: RecordReceiver) => recordSource.open(receiver, (book) => activeRecords(book, recording.root.id)) };
+    const delivery = bindDelivery<readonly RecordEntry[], ObserverChange, ObservationUpdate>(source, {
       attach: (sink) => {
         const position = consumer.position;
         this.#connections.add(sink.close);
@@ -46,7 +47,7 @@ export class ObservationFeed {
           transcript: { id: transcript.id, revision: transcript.revision, starts: transcript.segments().map((segment) => segment.start) },
           memories: { id: memories.id, sequence: memories.sequence },
           recorder: { id: source.sourceId, revision: source.revision },
-          entries: activeEntries(source.value, recording.root.id),
+          entries: source.value,
           invocations: [...consumer.invocationEvents],
         };
         return wire(baseline);
@@ -65,29 +66,30 @@ export class ObservationFeed {
 }
 
 /** A running R can be receiving a finished E: retain that whole local subtree until R finishes. */
-function activeEntries(entries: readonly RecordEntry[], rootId?: string): RecordEntry[] {
-  const byId = new Map(entries.map((entry) => [entry.data.id, entry]));
-  const belongsToCurrent = (entry: RecordEntry): boolean => {
+function activeRecords(book: RecordBook, rootId: string): BaseRecord<unknown>[] {
+  const records = [...book.values()];
+  const belongsToCurrent = (record: BaseRecord<unknown>): boolean => {
     const visited = new Set<string>();
-    let current: RecordEntry | undefined = entry;
-    while (current && !visited.has(current.data.id)) {
-      if (current.data.id === rootId) return true;
-      visited.add(current.data.id);
-      current = current.data.parentId ? byId.get(current.data.parentId) : undefined;
+    let current: BaseRecord<unknown> | undefined = record;
+    while (current && !visited.has(current.id)) {
+      if (current.id === rootId) return true;
+      visited.add(current.id);
+      current = current.parentId ? book.get(current.parentId) : undefined;
     }
     return false;
   };
-  const selected = new Set(entries.filter((entry) => entry.data.id === rootId || ((entry.kind === 'runtime-call' || entry.kind === 'execution') && (entry.data as RuntimeCallRecord | ExecutionRecord).status === 'running' && belongsToCurrent(entry))).map((entry) => entry.data.id));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const entry of entries) {
-      if (selected.has(entry.data.id) || !entry.data.parentId || entry.data.parentId === rootId || !selected.has(entry.data.parentId)) continue;
-      selected.add(entry.data.id);
-      changed = true;
+  const selected = new Set<string>([rootId]);
+  const pending: BaseRecord<unknown>[] = records.filter((record) => (record instanceof RuntimeCallRecord || record instanceof ExecutionRecord) && record.status === 'running' && belongsToCurrent(record));
+  for (let record: BaseRecord<unknown> | undefined = pending.pop(); record; record = pending.pop()) {
+    if (selected.has(record.id)) continue;
+    selected.add(record.id);
+    if (!(record instanceof CompositeRecord)) continue;
+    for (const id of record.childIds) {
+      const child = book.get(id);
+      if (child) pending.push(child);
     }
   }
-  return entries.filter((entry) => selected.has(entry.data.id));
+  return records.filter((record) => selected.has(record.id));
 }
 function wire<Value>(value: Value): Value {
   return snapshotValue(JSON.parse(JSON.stringify(value))) as Value;

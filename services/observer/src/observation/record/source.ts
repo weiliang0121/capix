@@ -1,5 +1,5 @@
 import type { RecordChangeEvent, RecordEntry } from '@capix/protocol';
-import { snapshotValue, type Recorder } from '@capix/server-runtime/recording';
+import { snapshotValue, type BaseRecord, type RecordBook, type Recorder } from '@capix/server-runtime/recording';
 import type { ChangeConsumer } from '../../assembly/changes.js';
 
 import { SourceIncomplete, type ObservationSource, type SourceReceiver } from '../delivery.js';
@@ -44,11 +44,12 @@ export class RecordSource implements ObservationSource<readonly RecordEntry[], R
       }
     }
   }
-  open(receiver: RecordReceiver): { baseline: { sourceId: string; revision: number; value: readonly RecordEntry[] }; close(): void } {
+  open(receiver: RecordReceiver, select: (book: RecordBook) => Iterable<BaseRecord<unknown>> = (book) => book.values()): { baseline: { sourceId: string; revision: number; value: readonly RecordEntry[] }; close(): void } {
     this.assertComplete();
     this.consumer.flush();
     this.assertComplete();
-    const entries = [...this.recorder.book.values()].map((record) => ({ kind: record.kind, data: record.toJSON() }));
+    // Select from current identities after the handoff flush, before materializing record bodies.
+    const entries = [...select(this.recorder.book)].map((record) => ({ kind: record.kind, data: record.toJSON() }));
     const baseline = { sourceId: this.recorder.id, revision: this.recorder.revision, value: snapshotValue(entries) as readonly RecordEntry[] };
     this.assertComplete();
     this.#receivers.set(receiver, baseline.revision);

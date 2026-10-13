@@ -99,6 +99,18 @@ export function transport(overrides = {}) {
     const error = await completion;
     if (error) throw error;
   };
+  for (const name of ['submit', 'follow']) {
+    const produce = io[name];
+    io[name] = (request, receive, signal) => produce(request, (value) => receive(value.type ? value : { type: 'baseline', submission: value }), signal);
+  }
+  for (const name of ['read', 'cancel']) {
+    const read = io[name];
+    if (read)
+      io[name] = async (...args) => {
+        const value = await read(...args);
+        return value.type ? value : { type: 'baseline', submission: value };
+      };
+  }
   return io;
 }
 export function deferred() {
@@ -115,12 +127,13 @@ export function submissionSnapshot(id, patch = {}) {
   return { conversationId: 'fixture-conversation', submissionId: id, revision: 0, executions: [], integrity: { status: 'complete' }, ...patch };
 }
 
-/** Explicit test producer of cumulative submission facts, independent of optional entity delivery. */
+/** Explicit test producer of submission changes, independent of optional entity delivery. */
 export function submissionDelivery(request, receive, options = {}) {
   let current = submissionSnapshot(request.submissionId, { conversationId: request.conversationId });
-  const publish = (patch) => {
+  const publish = (patch, change = patch) => {
+    const fromRevision = current.revision;
     current = { ...current, ...patch, revision: current.revision + 1 };
-    receive(current);
+    receive(fromRevision === 0 ? { type: 'baseline', submission: current } : { type: 'submission', conversationId: current.conversationId, submissionId: current.submissionId, fromRevision, revision: current.revision, change });
     return current;
   };
   return {
@@ -133,7 +146,7 @@ export function submissionDelivery(request, receive, options = {}) {
       return publish({ input: range ?? { transcriptId: entity.id, start: entity.end, end: entity.end + request.input.messages.length } });
     },
     execution(contextId = 'context-execution-1') {
-      return publish({ executions: [...current.executions, { contextId }] });
+      return publish({ executions: [...current.executions, { contextId }] }, { executions: [{ contextId }] });
     },
     answer(content = '这是中文回答', index) {
       const entity = options.transcript?.();

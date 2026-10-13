@@ -1,4 +1,4 @@
-import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationAdmission, ConversationSubmissionSnapshot, ConversationSubmissionRequest, MemoryObservation, ObserverOverview, ExecutionRecordSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@capix/protocol';
+import type { ConversationDescriptor, ConversationListResponse, ConfigurationResponse, ConversationAdmission, ConversationSubmissionBaseline, ConversationSubmissionFrame, ConversationSubmissionRequest, MemoryObservation, ObserverOverview, ExecutionRecordSnapshot, ObservationFrame, SourceResponse, TranscriptResponse, TranscriptFrame } from '@capix/protocol';
 
 export interface ConversationTransport {
   config(): Promise<ConfigurationResponse>;
@@ -6,10 +6,10 @@ export interface ConversationTransport {
   createConversation(signal?: AbortSignal): Promise<ConversationDescriptor>;
   conversation(id: string, signal?: AbortSignal): Promise<ConversationDescriptor>;
   admission(conversationId: string, signal?: AbortSignal): Promise<ConversationAdmission>;
-  read(id: string, signal?: AbortSignal): Promise<ConversationSubmissionSnapshot>;
-  cancel(id: string, signal?: AbortSignal): Promise<ConversationSubmissionSnapshot>;
-  submit(request: ConversationSubmissionRequest, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void>;
-  follow(id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void>;
+  read(id: string, signal?: AbortSignal): Promise<ConversationSubmissionBaseline>;
+  cancel(id: string, signal?: AbortSignal): Promise<ConversationSubmissionBaseline>;
+  submit(request: ConversationSubmissionRequest, receive: (frame: ConversationSubmissionFrame) => void, signal: AbortSignal): Promise<void>;
+  follow(id: string, receive: (frame: ConversationSubmissionFrame) => void, signal: AbortSignal): Promise<void>;
 }
 
 export interface ObservationTransport {

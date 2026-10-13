@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { ChangeBuffer, assembleRuntime, RuntimeDefinition, ExecutionDefinition, invocationRecording, bindRecording, Recorder, RecordBook, ExecutionRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix/server-runtime';
+import { ChangeBuffer, assembleRuntime, RuntimeDefinition, ExecutionDefinition, invocationRecording, bindRecording, Recorder, RecordBook, BaseRecord, ExecutionRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix/server-runtime';
 import { ObserverConversations, ObservationFeed, acceptConversationInput, createObserverServer } from '@capix/observer-service';
 import { ObservationReplica, ObservationSequenceError, ClientRuntime } from '@capix/client-runtime';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
@@ -121,7 +121,7 @@ test('record registration captures its child and parent reference together; proc
   );
 });
 
-test('multi-round observation deltas reconstruct records and content locations exactly; completed execution bodies stay out of reconnect baseline', async () => {
+test('multi-round observation deltas reconstruct records and content locations exactly; completed execution bodies stay out of reconnect baseline', async (t) => {
   const environment = fixture();
   const feed = new ObservationFeed(environment);
   const frames = [];
@@ -157,6 +157,12 @@ test('multi-round observation deltas reconstruct records and content locations e
       frames.map((_, index) => frames[0].sequence + index),
     );
     assert.equal(ObservationReplica.receive(replica, frames.at(-1)), replica, 'duplicate delivery is ignored');
+    const materialized = [];
+    const toJSON = BaseRecord.prototype.toJSON;
+    t.mock.method(BaseRecord.prototype, 'toJSON', function () {
+      materialized.push(this);
+      return toJSON.call(this);
+    });
     let baseline;
     const stop = feed.connect((frame) => {
       baseline ??= frame;
@@ -166,6 +172,11 @@ test('multi-round observation deltas reconstruct records and content locations e
     assert.equal(baseline.entries.filter((entry) => entry.kind === 'execution').length, 0);
     assert.equal(baseline.entries[0].kind, 'runtime');
     assert.equal(baseline.memory.items[0].content, 'memory 4');
+    assert.deepEqual(
+      materialized.filter((record) => record.kind !== 'memory').map((record) => record.id),
+      [environment.recording.root.id],
+      'opening must select current records before materializing historical bodies',
+    );
   } finally {
     feed.close();
   }

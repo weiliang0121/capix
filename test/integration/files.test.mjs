@@ -85,7 +85,8 @@ test('HTTP file task reads evidence, creates answer bytes and delivers an indepe
   );
   assert.deepEqual((await readdir(f.root)).sort(), ['answer.md', 'input.txt']);
   const recovered = await f.transport.read(snapshot.submissionId);
-  assert.deepEqual(recovered.fileOutput, snapshot.fileOutput);
+  assert.equal(recovered.type, 'baseline');
+  assert.deepEqual(recovered.submission.fileOutput, snapshot.fileOutput);
 });
 
 test('disabled or invalid file tasks reject before appending input or invoking the model', async (t) => {
@@ -93,7 +94,9 @@ test('disabled or invalid file tasks reject before appending input or invoking t
   assert.equal((await f.transport.config()).files, undefined);
   const response = await fetch(`${f.base}/api/run`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: f.runtime.getSnapshot().conversation.id, submissionId: 'disabled', input: request('read', { sourcePath: 'input.txt' }) }) });
   assert.equal(response.status, 400);
-  assert.equal((await response.json()).result.status, 'rejected');
+  const refusal = await response.json();
+  assert.equal(refusal.type, 'baseline');
+  assert.equal(refusal.submission.result.status, 'rejected');
   assert.equal(f.environment.transcript.length, 0);
   assert.equal(f.calls.length, 0);
   const enabled = await fixture(t);
@@ -173,9 +176,10 @@ test('lost feedback follows the same submission without repeating file creation'
       submit: (input, receive, signal) =>
         io.submit(
           input,
-          (snapshot) => {
-            receive(snapshot);
-            if (!interrupted && snapshot.input && !snapshot.result) {
+          (frame) => {
+            receive(frame);
+            const snapshot = frame.type === 'baseline' ? frame.submission : frame.type === 'submission' ? frame.change : undefined;
+            if (!interrupted && snapshot?.input && !snapshot.result) {
               interrupted = true;
               throw new Error('fixture connection lost');
             }
@@ -209,7 +213,8 @@ test('natural language selects a read-and-save branch with a stable remote task'
   );
   assert.ok(JSON.stringify(f.calls.find((call) => call.purpose === 'answer').request).includes('概括文档，保留重点。'));
   const recovered = await f.transport.read(snapshot.submissionId);
-  assert.deepEqual(recovered.task, snapshot.task);
+  assert.equal(recovered.type, 'baseline');
+  assert.deepEqual(recovered.submission.task, snapshot.task);
 });
 
 for (const explicit of [true, false]) {

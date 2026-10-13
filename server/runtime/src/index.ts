@@ -26,6 +26,7 @@ export * from './interaction/interaction.js';
 // Business-facing context and invocation views, results and shared time.
 export * from './context/view.js';
 export * from './invocation/view.js';
+export type { OutputDeclaration, InvocationOutputWriter, InvocationOutputEvent, InvocationOutputReceiver } from './output/contract.js';
 export * from './invocation/description.js';
 export * from './invocation/identity.js';
 export * from './invocation/progress.js';

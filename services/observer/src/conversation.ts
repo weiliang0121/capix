@@ -24,6 +24,7 @@ export * from './conversation/model/source.js';
 export * from './conversation/model/types.js';
 export * from './conversation/operations/answer/generate.js';
 export * from './conversation/operations/answer/output.js';
+export * from './conversation/operations/answer/stream.js';
 export * from './conversation/operations/history/input.js';
 export * from './conversation/operations/history/output.js';
 export * from './conversation/operations/history/select.js';

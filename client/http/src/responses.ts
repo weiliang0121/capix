@@ -1,6 +1,6 @@
 import { isPlainObject, isString } from 'es-toolkit/predicate';
 import { z } from 'zod';
-import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConversationDescriptor, type ConversationListResponse, type ConversationAdmission, type ConfigurationResponse, type ConversationSubmissionSnapshot, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
+import { invocationProcessStages, invocationProcessActions, validateExecutionRecordSnapshot, type ConversationDescriptor, type ConversationListResponse, type ConversationAdmission, type ConfigurationResponse, type ConversationSubmissionSnapshot, type ConversationSubmissionBaseline, type ConversationSubmissionFrame, type AnswerPreviewSnapshot, type AnswerPreviewChange, type MemoryObservation, type ObserverOverview, type ExecutionRecordSnapshot, type SourceResponse, type TranscriptResponse, type ObservationFrame, type TranscriptUpdate } from '@capix/protocol';
 import { HttpError, type HttpResponseInfo, HttpTransportError } from './errors.js';
 
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -83,6 +83,23 @@ export const submissionResponse = z.object({
   result: z.discriminatedUnion('status', [z.object({ status: z.literal('completed'), retry: z.never().optional() }), z.object({ status: z.literal('cancelled'), retry: z.never().optional() }), z.object({ status: z.literal('failed'), error: conversationFailure, retry: z.never().optional() }), z.object({ status: z.literal('rejected'), error: conversationFailure, retry: z.literal('admission').optional() })]).optional(),
   integrity: z.discriminatedUnion('status', [z.object({ status: z.literal('complete') }), z.object({ status: z.literal('incomplete'), error: conversationFailure })]),
 }) satisfies z.ZodType<ConversationSubmissionSnapshot>;
+
+// Preview payload acceptance belongs to its isolated receiver: a malformed optional
+// candidate must not prevent subsequent formal submission facts from being consumed.
+export const submissionBaselineResponse = z.object({ type: z.literal('baseline'), submission: submissionResponse, preview: z.custom<AnswerPreviewSnapshot>().optional() }) satisfies z.ZodType<ConversationSubmissionBaseline>;
+const submissionChange = z.object({
+  input: submissionResponse.shape.input,
+  answer: submissionResponse.shape.answer,
+  executions: submissionResponse.shape.executions.optional(),
+  activities: conversationActivities.partial().optional(),
+  task: submissionResponse.shape.task,
+  fileOutput: submissionResponse.shape.fileOutput,
+  cancelRequested: submissionResponse.shape.cancelRequested,
+  admission: admissionResponse.nullable().optional(),
+  result: submissionResponse.shape.result,
+  integrity: submissionResponse.shape.integrity.optional(),
+});
+export const submissionFrameResponse = z.discriminatedUnion('type', [submissionBaselineResponse, z.object({ type: z.literal('submission'), conversationId: id, submissionId: id, fromRevision: index, revision: index, change: submissionChange }).refine((frame) => frame.revision > frame.fromRevision), z.object({ type: z.literal('answer'), conversationId: id, submissionId: id, change: z.custom<AnswerPreviewChange>() })]) satisfies z.ZodType<ConversationSubmissionFrame>;
 
 /** Both endpoints use the service error envelope; the HTTP base stays protocol-neutral. */
 export function responseStatusError(info: HttpResponseInfo, body: unknown): HttpError {

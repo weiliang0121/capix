@@ -23,6 +23,16 @@ interface ExecutionProjection {
   answerIndex: number | undefined;
   value: ExecutionSummary;
 }
+interface ObservationProjection {
+  overview: ObserverOverview;
+  rounds: readonly RoundView[];
+  details: AppData['details'];
+  graphs: AppData['graphs'];
+  memory: MemoryView;
+  loading: ObservationState['loading'];
+  error: ObservationState['error'];
+  notice: string | undefined;
+}
 const noMemoryRecords: readonly MemoryRecord[] = [];
 
 function sameMembers(previous: readonly unknown[] | undefined, next: readonly unknown[]): boolean {
@@ -82,7 +92,9 @@ export function createObservationProjection() {
   let graphSources = new Map<string, GraphSource>();
   const projectedCalls = new WeakMap<object, RoundView['calls']>();
   let memory: MemoryView = { items: [] };
+  let output: ObservationProjection | undefined;
   return (state: ObservationState, transcripts: ReadonlyMap<string, TranscriptState>) => {
+    if (state === previous && transcripts === previousTranscripts && output) return output;
     const reset = !previous || previous.overview.executions !== state.overview.executions;
     const snapshots = reset ? [...state.updates.values()] : [...state.updates].filter(([id, snapshot]) => previous?.updates.get(id) !== snapshot).map(([, snapshot]) => snapshot);
     if (reset) rawOverview = state.overview;
@@ -177,6 +189,7 @@ export function createObservationProjection() {
     previousTranscripts = transcripts;
     const uncertain = overview.archives?.filter((archive) => archive.state !== 'sealed').length ?? 0;
     const notice = uncertain ? `${uncertain} 份历史记录来源未完整封存；保留最后已保存事实，不代表仍在执行。` : undefined;
-    return { overview, rounds, details, graphs, memory, loading: state.loading, error: state.error, notice };
+    output = { overview, rounds, details, graphs, memory, loading: state.loading, error: state.error, notice };
+    return output;
   };
 }

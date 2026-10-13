@@ -134,10 +134,12 @@ export class TranscriptReceiver {
           if (!current()) return;
           try {
             if ((!local && frame.type !== 'baseline') || (local && frame.type === 'baseline')) throw new TranscriptSequenceError('消息连接必须提供且仅提供一次初始基线。');
-            const next = TranscriptReplica.receive(local, frame, session.id);
-            const previous = this.replicas.get(next.snapshot.id);
-            const accepted = frame.type === 'baseline' ? TranscriptReplica.receive(previous, frame, session.id) : this.acceptDelta(previous, next, frame);
-            local = next;
+            const previous = this.replicas.get(session.id);
+            // A current baseline is both the connection replica and the retained entity copy.
+            // Only an older baseline needs a separate local copy while its deltas catch up.
+            const next = TranscriptReplica.receive(frame.type === 'baseline' ? previous : local, frame, session.id);
+            const accepted = frame.type === 'baseline' ? next : this.acceptDelta(previous, next, frame);
+            local = frame.type === 'baseline' && next.snapshot.revision > frame.snapshot.revision ? TranscriptReplica.receive(undefined, frame, session.id) : next;
             this.replicas.set(session.id, accepted);
             if (liveSince === undefined) liveSince = Date.now();
             session.sync = { status: 'live' };

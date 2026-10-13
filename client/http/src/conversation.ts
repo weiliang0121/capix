@@ -1,8 +1,8 @@
 import { TranscriptConnectionError, type ConversationTransport, type TranscriptTransport } from '@capix/client-runtime';
-import type { ConversationSubmissionSnapshot, ConversationSubmissionRequest, TranscriptFrame } from '@capix/protocol';
+import type { ConversationSubmissionBaseline, ConversationSubmissionFrame, ConversationSubmissionRequest, TranscriptFrame } from '@capix/protocol';
 import { HttpTransport } from './transport.js';
 import { HttpError, HttpTransportError } from './errors.js';
-import { acceptResponse, conversationResponse, conversationsResponse, configurationResponse, admissionResponse, transcriptResponse, transcriptUpdate, submissionResponse, responseStatusError, parseLine, deliver } from './responses.js';
+import { acceptResponse, conversationResponse, conversationsResponse, configurationResponse, admissionResponse, transcriptResponse, transcriptUpdate, submissionBaselineResponse, submissionFrameResponse, responseStatusError, parseLine, deliver } from './responses.js';
 import { readLines } from './stream.js';
 
 /** Conversation requests and delivery, independent of observation. */
@@ -52,48 +52,61 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
       throw error;
     }
   }
-  async submit(request: ConversationSubmissionRequest, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void> {
+  async submit(request: ConversationSubmissionRequest, receive: (frame: ConversationSubmissionFrame) => void, signal: AbortSignal): Promise<void> {
     await this.feedback('/api/run', request.submissionId, receive, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal }, request.conversationId);
   }
 
-  async follow(id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, signal: AbortSignal): Promise<void> {
+  async follow(id: string, receive: (frame: ConversationSubmissionFrame) => void, signal: AbortSignal): Promise<void> {
     await this.feedback(`/api/submissions/${encodeURIComponent(id)}/follow`, id, receive, { signal });
   }
 
-  async read(id: string, signal?: AbortSignal): Promise<ConversationSubmissionSnapshot> {
+  async read(id: string, signal?: AbortSignal): Promise<ConversationSubmissionBaseline> {
     const value = await this.get(`/api/submissions/${encodeURIComponent(id)}`, signal);
-    return this.acceptSubmission(value, id);
+    return this.acceptBaseline(value, id);
   }
 
-  async cancel(id: string, signal?: AbortSignal): Promise<ConversationSubmissionSnapshot> {
+  async cancel(id: string, signal?: AbortSignal): Promise<ConversationSubmissionBaseline> {
     const response = await this.send(`/api/submissions/${encodeURIComponent(id)}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal });
-    return this.acceptSubmission(parseLine(await response.text()), id);
+    return this.acceptBaseline(parseLine(await response.text()), id);
   }
 
-  private acceptSubmission(value: unknown, id: string, conversationId?: string): ConversationSubmissionSnapshot {
-    const snapshot = acceptResponse(submissionResponse, value, '提交');
-    if (snapshot.submissionId !== id) throw new HttpTransportError('contract', '提交反馈身份不一致。', 'SUBMISSION_MISMATCH');
-    if (conversationId && snapshot.conversationId !== conversationId) throw new HttpTransportError('contract', '提交反馈不属于请求的对话。', 'CONVERSATION_MISMATCH');
-    return snapshot;
+  private acceptFrame(value: unknown, id: string, conversationId?: string): ConversationSubmissionFrame {
+    const frame = acceptResponse(submissionFrameResponse, value, '提交');
+    const identity = frame.type === 'baseline' ? frame.submission : frame;
+    if (identity.submissionId !== id) throw new HttpTransportError('contract', '提交反馈身份不一致。', 'SUBMISSION_MISMATCH');
+    if (conversationId && identity.conversationId !== conversationId) throw new HttpTransportError('contract', '提交反馈不属于请求的对话。', 'CONVERSATION_MISMATCH');
+    return frame;
   }
 
-  private async feedback(path: string, id: string, receive: (snapshot: ConversationSubmissionSnapshot) => void, init: RequestInit, conversationId?: string): Promise<void> {
+  private acceptBaseline(value: unknown, id: string): ConversationSubmissionBaseline {
+    const frame = this.acceptFrame(value, id);
+    if (frame.type !== 'baseline') throw new HttpTransportError('contract', '提交查询缺少完整基线。', 'MISSING_BASELINE');
+    return frame;
+  }
+
+  private async feedback(path: string, id: string, receive: (frame: ConversationSubmissionFrame) => void, init: RequestInit, conversationId?: string): Promise<void> {
     let response: Response;
     try {
       response = await this.send(path, init);
     } catch (error) {
       // A known rejection is a formal cumulative fact even when HTTP uses a non-2xx status.
-      if (!(error instanceof HttpError) || !submissionResponse.safeParse(error.body).success) throw error;
-      const snapshot = this.acceptSubmission(error.body, id, conversationId);
-      deliver(() => receive(snapshot), '提交反馈');
+      if (!(error instanceof HttpError) || !submissionBaselineResponse.safeParse(error.body).success) throw error;
+      const frame = this.acceptFrame(error.body, id, conversationId);
+      if (frame.type !== 'baseline') throw error;
+      const snapshot = frame.submission;
+      deliver(() => receive(frame), '提交反馈');
       if (!snapshot.result && snapshot.integrity.status !== 'incomplete') throw new HttpTransportError('contract', 'HTTP 请求已结束，提交结果仍未确认。', 'INCOMPLETE_STREAM');
       return;
     }
     if (!response.body) throw new HttpTransportError('contract', '服务未返回提交反馈流。', 'MISSING_STREAM');
+    let hasBaseline = false;
     for await (const line of readLines(response.body)) {
-      const snapshot = this.acceptSubmission(parseLine(line), id, conversationId);
-      deliver(() => receive(snapshot), '提交反馈');
-      if (snapshot.result || snapshot.integrity.status === 'incomplete') return;
+      const frame = this.acceptFrame(parseLine(line), id, conversationId);
+      if (!hasBaseline && frame.type !== 'baseline') throw new HttpTransportError('contract', '提交反馈连接缺少完整基线。', 'MISSING_BASELINE');
+      if (frame.type === 'baseline') hasBaseline = true;
+      deliver(() => receive(frame), '提交反馈');
+      const facts = frame.type === 'baseline' ? frame.submission : frame.type === 'submission' ? frame.change : undefined;
+      if (facts?.result || facts?.integrity?.status === 'incomplete') return;
     }
     if (!init.signal?.aborted) throw new HttpTransportError('contract', '提交反馈流提前结束，远端结果仍未确认。', 'INCOMPLETE_STREAM');
   }

@@ -1,3 +1,5 @@
+import { InvocationOutputSection } from '../output/section.js';
+import type { InvocationOutputWriter, InvocationOutputReceiver, InvocationOutputEvent } from '../output/contract.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import { RuntimeErrorHelper } from '../errors/helper.js';
 import { Clock } from '../runtime/clock.js';
@@ -34,6 +36,7 @@ export interface InvocationOptions<Input, Output, Context extends InvocationCont
   started?: InvocationStarted<Input, Output, Context>;
   /** Local receiver for this call and its descendants; independently isolated from ancestors. */
   progress?: ProgressReceiver<InvocationProgress>;
+  output?: InvocationOutputReceiver<Output>;
   /** Side-effect-free guard, checked at setup and before each execute/receive phase. */
   validate?: () => void;
   changes?: InvocationChangeEmitter;
@@ -43,6 +46,8 @@ export interface InvocationOptions<Input, Output, Context extends InvocationCont
 export class Invocation<Input = unknown, Output = unknown, Context extends InvocationContext<Input, Output> = InvocationContext<Input, Output>> {
   readonly hasProgress: boolean;
   #started = false;
+  #outputSection?: InvocationOutputSection<Output>;
+  readonly #outputDelivery?: ProgressChannel<InvocationOutputEvent<Output>>;
   #sequence = 0;
   #eventSequence = 0;
   #resourceSequence = 0;
@@ -52,6 +57,32 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   #fault?: InvocationFailure;
   #classified?: InvocationFailure;
   #failure?: InvocationFailure;
+
+  get outputWriter(): InvocationOutputWriter<unknown> {
+    if (!this.#outputSection) throw new Error('Invocation has no executing output segment');
+    return this.#outputSection.writer;
+  }
+
+  openOutput(): void {
+    this.#outputSection = new InvocationOutputSection(this.context.id, this.context.progress.round, this.options.work.output, { active: () => this.requireActive(), reject: (error) => this.reject(error) }, this.#outputDelivery);
+    this.#outputSection.start();
+  }
+
+  sealOutput(): void {
+    this.#outputSection?.seal();
+  }
+  discardOutput(reason: 'exception' | 'continue' | 'failed'): void {
+    this.#outputSection?.discard(reason);
+  }
+  validateOutput(value: Output): Output {
+    // Acceptance may already have committed a result when it requests cancellation.
+    // Only a new cancellation during declaration validation interrupts this boundary.
+    const cancelledBeforeValidation = this.options.signal.aborted;
+    const output = this.#outputSection ? this.#outputSection.validateResult(value) : value;
+    this.requireHealthy();
+    if (!cancelledBeforeValidation) requireNotCancelled(this.options.signal);
+    return output;
+  }
 
   get failure(): InvocationFailure | undefined {
     return this.#failure;
@@ -114,6 +145,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   constructor(private readonly options: InvocationOptions<Input, Output, Context>) {
     this.#clock = options.clock ?? new Clock();
+    this.#outputDelivery = options.output ? new ProgressChannel(options.output) : undefined;
     this.#progress = options.progress ? new ProgressChannel(options.progress) : undefined;
     this.hasProgress = !!this.#progress || !!options.parent?.invocation.hasProgress;
     this.#identity = Object.freeze(options.identity ? { ...options.identity } : { contextId: options.context.id, level: ('level' in options.context ? options.context.level : 'attempt') as InvocationIdentity['level'], ...(options.parent ? { parentContextId: options.parent.invocation.context.id } : {}) });
@@ -279,6 +311,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     } catch (error) {
       const failure = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.round ? context.progress.phase : 'setup', true);
       const delivered = error instanceof AggregateError ? error : failure.error;
+      this.#outputSection?.discard('failed');
       context.fail(delivered, Object.freeze({ ...failure, error: delivered, ...(error instanceof AggregateError ? { kind: 'error' as const } : {}) }));
       try {
         this.publish({ kind: 'finished', state: context.state });
@@ -289,6 +322,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     }
     // Terminal observation may fail delivery, but never changes the committed work outcome.
     context.complete(output);
+    this.#outputSection?.complete(output);
     this.publish({ kind: 'finished', state: context.state });
     return output;
   }

@@ -1,3 +1,4 @@
+import type { InvocationOutputReceiver } from '../output/contract.js';
 import { checkChildResourceBindings, definitionResources, observationResources, type ChildResourceBinding } from './resources.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
 import type { RuntimeDefinition } from '../definition/runtime.js';
@@ -9,10 +10,12 @@ import { createBoundRuntime, type BoundRuntimeOptions } from '../runtime/create.
 import type { ProgressReceiver } from '../progress/channel.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 
-type AnyExecutionDefinition = ExecutionDefinition<any, any, any, any, any, any>;
+type AnyExecutionDefinition = ExecutionDefinition<any, any, any, any, any, any, any>;
 
 /** Capture per-call inputs and resources from independent supplies at entry and call boundaries. */
 export interface RuntimeCallSource<Input, Options, Source> {
+  output?(input: Input, options: Options): InvocationOutputReceiver<any, any> | undefined;
+  executionOutput?(definition: AnyExecutionDefinition, options: Options): InvocationOutputReceiver<any, any> | undefined;
   validate?(options: Options): void;
   runtime?(input: Input, options: Options): Source;
   entry(input: unknown, options: Options, definition: AnyExecutionDefinition): Source;
@@ -32,7 +35,7 @@ export interface RuntimeAssemblyOptions<Input, Options, Source> extends BoundRun
 }
 
 /** Assemble the reusable R business endpoint from declarations and independent resource supplies. */
-export function assembleRuntime<Input, Output, Resources extends object, Options extends InvocationControls, Source>(definition: RuntimeDefinition<Input, Output, Resources, any>, options: RuntimeAssemblyOptions<Input, Options, Source>) {
+export function assembleRuntime<Input, Output, Resources extends object, Options extends InvocationControls, Source>(definition: RuntimeDefinition<Input, Output, Resources, any, any>, options: RuntimeAssemblyOptions<Input, Options, Source>) {
   const source = options.source;
   for (const observation of options.observations ?? []) observation.check?.(definition);
   const localObservationResources = observationResources(options.observations);
@@ -55,6 +58,7 @@ export function assembleRuntime<Input, Output, Resources extends object, Options
     children: runtime.environment.children(requires, definition.children, 'runtime', definition, childResources),
     validate: source.validate?.bind(source),
     progress: source.progress?.bind(source),
+    output: source.output?.bind(source),
     resources: (input, callOptions) => (source.runtime ? runtimeResources(source.runtime(input, callOptions)) : new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)),
     executionBindings: (_input, callOptions) => ({
       get(executionDefinition) {
@@ -65,6 +69,7 @@ export function assembleRuntime<Input, Output, Resources extends object, Options
           capture: (input) => resourceBindings.capture(source.capture(input, callOptions, executionDefinition)),
           callbacks: source.callbacks?.(executionDefinition, callOptions),
           progress: source.executionProgress?.(executionDefinition, callOptions),
+          output: source.executionOutput?.(executionDefinition, callOptions),
         };
       },
     }),

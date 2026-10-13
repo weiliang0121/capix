@@ -312,7 +312,7 @@ test('model offers separate creation and reading while preserving provider metho
     const reader = context.resources.values.modelReader;
     assert.notEqual(creator, model);
     assert.deepEqual(Object.keys(creator), ['start']);
-    assert.deepEqual(Object.keys(reader), ['wait', 'result']);
+    assert.deepEqual(Object.keys(reader), ['subscribe', 'wait', 'result']);
     assert.equal(creator.privateValue, undefined);
     assert.equal(reader.start, undefined);
     assert.ok(Object.isFrozen(creator));

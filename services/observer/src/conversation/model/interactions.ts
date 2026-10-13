@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { Interaction, InvocationCancelled, RuntimeError, ProgressChannel, isInvocationCancelled, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState, type ProgressReceiver } from '@capix/server-runtime';
 import { ModelSource } from './source.js';
-import type { ModelOutput, ModelRequest, Purpose } from './types.js';
+import type { ModelOutput, ModelRequest, ModelTextDelta, Purpose } from './types.js';
+import { ModelTextBuffer } from './stream.js';
 
 export interface ModelInteractionRequest {
   readonly request: ModelRequest;
@@ -11,11 +12,17 @@ export interface ModelInteractionRequest {
 export interface ModelInteractionRef {
   readonly id: string;
 }
+export interface ModelInteractionControls {
+  readonly signal: AbortSignal;
+  readonly timeoutMs: number;
+}
 export type ModelInteractionResult = { readonly kind: 'received'; readonly interaction: ModelInteractionRef; readonly output: ModelOutput } | { readonly kind: 'pending'; readonly interaction: ModelInteractionRef };
 export interface ModelInteractionCreator {
-  start(request: ModelRequest, purpose: Purpose, controls: { readonly signal: AbortSignal; readonly timeoutMs: number }): ModelInteractionRef;
+  start(request: ModelRequest, purpose: Purpose, controls: ModelInteractionControls): ModelInteractionRef;
 }
 export interface ModelInteractionReader {
+  /** Replay the retained prefix synchronously, then receive this exchange's raw increments. */
+  subscribe(interaction: ModelInteractionRef, receiver: ProgressReceiver<ModelTextDelta>): () => void;
   wait(interaction: ModelInteractionRef, controls: { readonly signal: AbortSignal; readonly waitMs: number }): Promise<ModelInteractionResult>;
   result(interaction: ModelInteractionRef, controls: { readonly signal: AbortSignal }): Promise<ModelOutput>;
 }
@@ -24,7 +31,7 @@ export interface ModelInteractionPersistence extends InteractionPersistence<Mode
 }
 
 const requestSchema = z.strictObject({
-  request: z.strictObject({ model: z.string(), messages: z.array(z.strictObject({ role: z.enum(['system', 'user', 'assistant']), content: z.string() })), response_format: z.strictObject({ type: z.literal('json_object') }), thinking: z.strictObject({ type: z.literal('disabled') }), max_tokens: z.int().positive(), stream: z.literal(false) }),
+  request: z.strictObject({ model: z.string(), messages: z.array(z.strictObject({ role: z.enum(['system', 'user', 'assistant']), content: z.string() })), response_format: z.strictObject({ type: z.literal('json_object') }), thinking: z.strictObject({ type: z.literal('disabled') }), max_tokens: z.int().positive(), stream: z.boolean() }),
   purpose: z.enum(['selection', 'understanding', 'answer', 'memory']),
   timeoutMs: z.int().positive().max(2_147_483_647),
 });
@@ -38,6 +45,7 @@ export class ModelInteractions {
   readonly #interactions = new Map<string, Interaction<ModelInteractionRequest, ModelOutput>>();
   readonly #active = new Set<Interaction<ModelInteractionRequest, ModelOutput>>();
   readonly #signals = new Map<string, AbortSignal>();
+  readonly #streams = new Map<string, ModelTextBuffer>();
   readonly #observers = new Map<string, Set<ProgressChannel<InteractionFact<ModelInteractionRequest, ModelOutput>>>>();
   readonly #retained: number;
   #closed = false;
@@ -69,10 +77,28 @@ export class ModelInteractions {
     this.#closed = true;
     this.#interactions.clear();
     this.#observers.clear();
+    this.#streams.clear();
   }
 
   states(): readonly InteractionState<ModelInteractionRequest, ModelOutput>[] {
     return [...this.#interactions.values()].map((interaction) => interaction.exportState());
+  }
+
+  /** Raw progress belongs to the exchange; ending an A wait does not close this subscription. */
+  subscribe(ref: ModelInteractionRef, receiver: ProgressReceiver<ModelTextDelta>): () => void {
+    const interaction = this.get(ref);
+    const stream = this.#streams.get(ref.id);
+    if (stream) return stream.subscribe(receiver);
+    if (interaction.exportState().request.request.stream) {
+      const unavailable = new ProgressChannel<ModelTextDelta>({
+        receive: () => {
+          throw new RuntimeError('MODEL_STREAM_UNAVAILABLE', '该模型交互没有可恢复的临时输出；完整反馈仍可独立读取。');
+        },
+        failed: receiver.failed?.bind(receiver),
+      });
+      unavailable.publish({ text: '' });
+    }
+    return () => {};
   }
 
   /** Host observation is read-only and never initializes a provider or sends a request. */
@@ -93,22 +119,32 @@ export class ModelInteractions {
     };
   }
 
-  start(request: ModelRequest, purpose: Purpose, controls: { readonly signal: AbortSignal; readonly timeoutMs: number }): ModelInteractionRef {
+  start(request: ModelRequest, purpose: Purpose, controls: ModelInteractionControls): ModelInteractionRef {
     this.requireOpen();
     if (controls.signal.aborted) throw new InvocationCancelled(controls.signal);
     // Provider construction must fail before an exchange is registered as dispatched.
     const provider = this.source.get();
     const interaction = new Interaction({ request, purpose, timeoutMs: controls.timeoutMs }, { contract: modelInteractionContract, persistence: this.options.persistence, observation: { receive: (fact) => this.publish(fact) } });
+    const ref = Object.freeze({ id: interaction.id });
     this.#interactions.set(interaction.id, interaction);
     const timeout = AbortSignal.timeout(controls.timeoutMs);
     const signal = AbortSignal.any([controls.signal, timeout]);
+    const stream = request.stream ? new ModelTextBuffer() : undefined;
+    if (stream) this.#streams.set(interaction.id, stream);
+    const progress = stream
+      ? new ProgressChannel<ModelTextDelta>({
+          receive: (delta) => {
+            if (!signal.aborted) stream.progress.publish(delta);
+          },
+        })
+      : undefined;
     this.#active.add(interaction);
     this.#signals.set(interaction.id, controls.signal);
     try {
       interaction.start(async (fixed) => {
         try {
           if (signal.aborted) throw signal.reason;
-          const output = await provider.invoke(fixed.request, fixed.purpose, signal);
+          const output = await provider.invoke(fixed.request, fixed.purpose, signal, progress);
           if (signal.aborted) throw signal.reason;
           return output;
         } catch (error) {
@@ -116,9 +152,12 @@ export class ModelInteractions {
           if (controls.signal.aborted && signal.reason === controls.signal.reason) throw new InvocationCancelled(controls.signal, { cause: error });
           if (timeout.aborted && signal.reason === timeout.reason) throw new RuntimeError('MODEL_TIMEOUT', '模型调用超过时限。', undefined, { cause: error });
           throw error;
+        } finally {
+          stream?.finish();
         }
       });
     } catch (error) {
+      stream?.finish();
       this.#active.delete(interaction);
       this.#signals.delete(interaction.id);
       throw error;
@@ -128,7 +167,7 @@ export class ModelInteractions {
       this.#signals.delete(interaction.id);
       this.prune();
     });
-    return Object.freeze({ id: interaction.id });
+    return ref;
   }
 
   async wait(ref: ModelInteractionRef, controls: { readonly signal: AbortSignal; readonly waitMs: number }): Promise<ModelInteractionResult> {
@@ -198,6 +237,7 @@ export class ModelInteractions {
       if (completed <= this.#retained) return;
       if (this.#active.has(interaction)) continue;
       this.#interactions.delete(id);
+      this.#streams.delete(id);
       completed -= 1;
     }
   }

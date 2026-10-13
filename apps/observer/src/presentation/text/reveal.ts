@@ -36,14 +36,21 @@ export class TextReveal {
     const complete = previous.complete || source.complete;
     const wasWaiting = this.state.phase !== 'revealing';
     this.source = { text: source.text, complete };
-    if (textChanged) {
+    if (textChanged && !this.immediate) {
       // Already published text may gain a combining mark or an emoji continuation.
-      // Keep its grapheme position, then reveal the whole updated cluster.
-      this.ends = graphemeEnds(source.text);
+      // Only the final cluster can change when a verified prefix is extended.
+      // A split surrogate can become a joining character, so retain its preceding cluster too.
       if (previous.complete || !source.text.startsWith(previous.text)) this.immediate = true;
+      else {
+        const last = previous.text.charCodeAt(previous.text.length - 1);
+        const retained = Math.max(0, this.ends.length - (last >= 0xd800 && last <= 0xdbff ? 2 : 1));
+        const start = this.ends[retained - 1] ?? 0;
+        this.ends.length = retained;
+        for (const segment of segmenter.segment(source.text.slice(start))) this.ends.push(start + segment.index + segment.segment.length);
+        this.visible = Math.min(this.visible, this.ends.length);
+      }
     }
-    if (this.immediate) this.visible = this.ends.length;
-    if (!previous.complete && complete) this.selectFinalRate();
+    if (!this.immediate && !previous.complete && complete) this.selectFinalRate();
     if (wasWaiting || this.immediate) this.pause();
     this.publish();
   }
@@ -85,8 +92,8 @@ export class TextReveal {
   }
 
   private publish(): boolean {
-    const text = this.source.text.slice(0, this.ends[this.visible - 1] ?? 0);
-    const phase = this.visible < this.ends.length ? 'revealing' : this.source.complete ? 'finished' : 'waiting';
+    const text = this.immediate ? this.source.text : this.source.text.slice(0, this.ends[this.visible - 1] ?? 0);
+    const phase = !this.immediate && this.visible < this.ends.length ? 'revealing' : this.source.complete ? 'finished' : 'waiting';
     if (this.state.text === text && this.state.phase === phase) return false;
     this.state = Object.freeze({ text, phase });
     return true;

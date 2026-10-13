@@ -188,7 +188,28 @@ try {
     equal(host.querySelector('.answer-reveal-all'), null, 'skip removed');
     equal(frames.size, 0, 'answer clock retired');
   });
-  results.push('ALL 8 BROWSER CHECKS PASSED');
+  await check('initial active sources remain waiting even without animation and support plain rendering', async () => {
+    await act(async () =>
+      root.render(
+        <TextRevealProvider key="pending-source" keys={['partial']} pendingKeys={['partial']}>
+          <AnswerContent id="partial" content="**纯文本**" complete={false} reveal={false} format="plain" />
+        </TextRevealProvider>,
+      ),
+    );
+    equal(host.querySelector('.answer-content')?.getAttribute('data-presentation'), 'waiting', 'static partial source remains incomplete');
+    equal(host.querySelector('.message-text')?.textContent, '**纯文本**', 'plain content is not Markdown');
+    equal(host.querySelector('strong'), null, 'no accidental Markdown parsing');
+    equal(host.querySelector('.answer-reveal-all'), null, 'waiting has no show-all control');
+    await act(async () =>
+      root.render(
+        <TextRevealProvider key="pending-source" keys={['partial']}>
+          <AnswerContent id="partial" content="**纯文本** 完成" complete reveal={false} format="plain" />
+        </TextRevealProvider>,
+      ),
+    );
+    equal(host.querySelector('.answer-content')?.getAttribute('data-presentation'), 'finished', 'formal completion finishes static source');
+  });
+  results.push(`ALL ${results.length} BROWSER CHECKS PASSED`);
 } catch (error) {
   results.push(`FAIL ${error instanceof Error ? error.stack : String(error)}`);
 } finally {

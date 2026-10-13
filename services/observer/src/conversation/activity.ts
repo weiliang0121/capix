@@ -1,4 +1,4 @@
-import type { ConversationActivities, ConversationActivity } from '@capix/protocol';
+import type { ConversationActivities, ConversationActivity, ConversationActivityChange } from '@capix/protocol';
 import type { InvocationProgress } from '@capix/server-runtime';
 
 const labels = { runtime: '运行', execution: '本轮执行', operation: '操作', attempt: '意图' } as const;
@@ -9,16 +9,18 @@ export class ConversationActivityProjection {
   private readonly calls = new Map<string, ConversationActivity>();
   private readonly sequences = new Map<string, number>();
   private readonly relations = new Map<string, { readonly parentContextId: string; readonly value: NonNullable<ConversationActivity['relation']> }>();
-  private state: ConversationActivities = Object.freeze({ calls: Object.freeze([]), integrity: Object.freeze({ status: 'complete' }) });
+  private readonly positions = new Set<string>();
+  private integrity: ConversationActivities['integrity'] = Object.freeze({ status: 'complete' });
+  private state?: ConversationActivities;
 
-  constructor(private readonly changed: (snapshot: ConversationActivities) => void) {}
+  constructor(private readonly changed: (change: ConversationActivityChange) => void) {}
 
   get snapshot(): ConversationActivities {
-    return this.state;
+    return (this.state ??= Object.freeze({ calls: Object.freeze([...this.calls.values()]), integrity: this.integrity }));
   }
 
   receive(fact: InvocationProgress): undefined {
-    if (this.state.integrity.status === 'incomplete') return;
+    if (this.integrity.status === 'incomplete') return;
     const identity = fact.identity;
     const previousSequence = this.sequences.get(identity.contextId) ?? 0;
     if (fact.eventSequence <= previousSequence) throw new Error('Activity facts must advance their call-local sequence');
@@ -38,8 +40,7 @@ export class ConversationActivityProjection {
       if (fact.phase !== 'attached' && !relation) throw new Error('Activity relation was not attached');
       const value = Object.freeze({ phase: fact.phase, ...(fact.phase === 'returned' ? { returned: fact.status } : relation?.value.returned ? { returned: relation.value.returned } : {}) });
       this.relations.set(childId, { parentContextId: identity.contextId, value });
-      if (child) this.calls.set(childId, Object.freeze({ ...child, relation: value }));
-      this.publish();
+      if (child && (child.relation?.phase !== value.phase || child.relation.returned !== value.returned)) this.install(Object.freeze({ ...child, relation: value }));
       return;
     }
     const relation = this.relations.get(identity.contextId);
@@ -57,30 +58,33 @@ export class ConversationActivityProjection {
     if (previous && previous.status !== 'running') throw new Error('Activity changed after finishing');
     if (fact.kind === 'started') {
       if (previous?.startedAt) throw new Error('Activity started twice');
-      this.calls.set(identity.contextId, Object.freeze({ ...initial, startedAt: fact.occurredAt }));
+      this.install(Object.freeze({ ...initial, startedAt: fact.occurredAt }));
     } else if (fact.kind === 'process') {
       if (!previous?.startedAt || fact.round < previous.round) throw new Error('Activity process has no valid start or round');
-      this.calls.set(identity.contextId, Object.freeze({ ...initial, phase: fact.stage, round: fact.round }));
+      // Multiple boundary actions can describe the same public phase. Their sequence is
+      // still checked above, but they do not change the service projection.
+      if (previous.phase !== fact.stage || previous.round !== fact.round) this.install(Object.freeze({ ...initial, phase: fact.stage, round: fact.round }));
     } else {
-      this.calls.set(identity.contextId, Object.freeze({ ...initial, status: fact.status, finishedAt: fact.occurredAt }));
+      this.install(Object.freeze({ ...initial, status: fact.status, finishedAt: fact.occurredAt }));
     }
-    this.publish();
   }
 
   invalidate(_error: unknown): undefined {
-    if (this.state.integrity.status === 'incomplete') return;
-    this.state = Object.freeze({ ...this.state, integrity: Object.freeze({ status: 'incomplete', error: Object.freeze({ code: 'ACTIVITY_INCOMPLETE', message: '处理过程信息不完整；提交结果和消息同步仍独立更新。' }) }) });
-    this.changed(this.state);
+    if (this.integrity.status === 'incomplete') return;
+    this.integrity = Object.freeze({ status: 'incomplete', error: Object.freeze({ code: 'ACTIVITY_INCOMPLETE', message: '处理过程信息不完整；提交结果和消息同步仍独立更新。' }) });
+    this.state = undefined;
+    this.changed(Object.freeze({ integrity: this.integrity }));
   }
 
   private reserve(id: string): void {
-    if (this.calls.has(id) || this.relations.has(id)) return;
-    const pending = [...this.relations.keys()].filter((key) => !this.calls.has(key)).length;
-    if (this.calls.size + pending >= maximumCalls) throw new Error('Submission activity capacity reached');
+    if (this.positions.has(id)) return;
+    if (this.positions.size >= maximumCalls) throw new Error('Submission activity capacity reached');
+    this.positions.add(id);
   }
 
-  private publish(): void {
-    this.state = Object.freeze({ calls: Object.freeze([...this.calls.values()]), integrity: this.state.integrity });
-    this.changed(this.state);
+  private install(call: ConversationActivity): void {
+    this.calls.set(call.contextId, call);
+    this.state = undefined;
+    this.changed(Object.freeze({ calls: Object.freeze([call]) }));
   }
 }

@@ -1,23 +1,24 @@
 import { z } from 'zod';
-import type { OperationDefinition, ChildBindings, DefinitionEntryInput, DefinitionOutput, DefinitionParentInvocationView } from '@capix/server-runtime';
+import type { OperationDefinition, ChildBindings, DefinitionEntryInput, DefinitionOutput, DefinitionDelta, DefinitionParentInvocationView, InvocationOutputReceiver } from '@capix/server-runtime';
 import type { ConversationCapabilityName, ConversationCapabilityOffer, ConversationDecisionFeedback } from './types.js';
 import { modelTextSchema } from '../model/schema.js';
 
 /** A service-local adapter between selectable arguments and the real declared child. */
 export interface ConversationCapability<State> {
-  readonly use: OperationDefinition<any, any, any, any>;
+  readonly use: OperationDefinition<any, any, any, any, any>;
   readonly offer: ConversationCapabilityOffer;
   available(state: State): boolean;
   validate(value: unknown): boolean;
   run(value: unknown, state: State): Promise<State>;
 }
 
-export function conversationCapability<Arguments, State, Definition extends OperationDefinition<any, any, any, any>>(
+export function conversationCapability<Arguments, State, Definition extends OperationDefinition<any, any, any, any, any>>(
   options: {
     readonly name: ConversationCapabilityName;
     readonly description: string;
     readonly use: Definition;
     readonly key: string;
+    readonly output?: InvocationOutputReceiver<DefinitionOutput<Definition>, DefinitionDelta<Definition>>;
     readonly schema: z.ZodType<Arguments>;
     readonly available: (state: State) => boolean;
     readonly input: (arguments_: Arguments, state: State) => DefinitionEntryInput<Definition>;
@@ -32,7 +33,7 @@ export function conversationCapability<Arguments, State, Definition extends Oper
     available: options.available,
     validate: (value: unknown) => options.schema.safeParse(value).success,
     run: async (value: unknown, state: State) => {
-      const child = children.get(options.use).create(parent, options.input(options.schema.parse(value), state), { key: options.key });
+      const child = children.get(options.use).create(parent, options.input(options.schema.parse(value), state), { key: options.key, output: options.output });
       await child.run();
       return children.accept(child, (delivered) => options.accept(delivered, state));
     },

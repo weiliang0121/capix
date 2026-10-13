@@ -122,7 +122,7 @@ test('unknown submissions and waiting messages both block switching without canc
   assert.equal(f.posts.length, 1);
   assert.equal(f.posts[0].signal.aborted, false);
   const first = f.posts[0];
-  first.receive(submissionSnapshot(first.request.submissionId, { conversationId: 'a', result: { status: 'completed' }, admission: { conversationId: 'a', transcriptId: 'transcript-a', status: 'ready' } }));
+  first.receive({ type: 'baseline', submission: submissionSnapshot(first.request.submissionId, { conversationId: 'a', result: { status: 'completed' }, admission: { conversationId: 'a', transcriptId: 'transcript-a', status: 'ready' } }) });
   await settle();
   await f.runtime.openConversation('b');
   f.runtime.enqueue(input);
@@ -255,7 +255,7 @@ test('a reentrant opening during old feedback shutdown supersedes the committing
   f.runtime.enqueue(input);
   await settle();
   const post = f.posts[0];
-  post.receive(submissionSnapshot(post.request.submissionId, { conversationId: 'a', result: { status: 'completed' } }));
+  post.receive({ type: 'baseline', submission: submissionSnapshot(post.request.submissionId, { conversationId: 'a', result: { status: 'completed' } }) });
   await settle();
   let replacement;
   post.signal.addEventListener(

@@ -1,3 +1,4 @@
+import type { InvocationOutputReceiver } from '../output/contract.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from './clock.js';
 import { bindRuntimeStructureObservation } from '../binding/observation.js';
@@ -28,9 +29,10 @@ import type { ProgressReceiver } from '../progress/channel.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 
 export interface BoundRuntimeBinding<Input, Output, Options, Resources extends object = object> {
-  readonly definition: RuntimeDefinition<Input, Output, Resources, any>;
+  readonly definition: RuntimeDefinition<Input, Output, Resources, any, any>;
   readonly children: BoundChildren;
   validate?(options: Options): void;
+  output?(input: Input, options: Options): InvocationOutputReceiver<Output> | undefined;
   progress?(input: Input, options: Options): ProgressReceiver<InvocationProgress> | undefined;
   resources(input: Input, options: Options): ResourceBindings<Resources>;
   executionBindings(input: Input, options: Options): ExecutionBindingResolver;
@@ -127,6 +129,7 @@ export class BoundRuntime<Input = unknown, Output = unknown, Options extends Inv
             observation: definition.observation,
             work,
             progress: binding.progress?.(input, options),
+            output: binding.output?.(input, options),
           });
         } catch (error) {
           try {

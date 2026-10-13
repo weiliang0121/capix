@@ -1,3 +1,4 @@
+import type { InvocationOutputReceiver } from '../../output/contract.js';
 import type { ProgressReceiver } from '../../progress/channel.js';
 import type { InvocationProgress } from '../progress.js';
 import type { ObservationDeclaration } from '../../definition/observation.js';
@@ -17,6 +18,7 @@ import type { OperationDescription } from '../description.js';
 
 export interface OperationInvocationRequest<Input, Output, Resources extends object = object> {
   readonly progress?: ProgressReceiver<InvocationProgress>;
+  readonly output?: InvocationOutputReceiver<Output>;
   input: Input;
   requires?: ResourceRequirements<Resources>;
   initial?: ResourceRequirements;
@@ -43,7 +45,7 @@ export class OperationInvocationBuilder {
     const identity = { contextId: context.id, level: 'operation' as const, parentContextId: parent.context.id };
     const observation = bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources: context.resources }, this.capabilities.observations, parent.observation);
     const changes = this.capabilities.changes ? new InvocationChangeEmitter({ contextId: context.id, level: 'operation', parentContextId: parent.context.id }, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<Input, Output, OperationContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, progress: request.progress, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, changes, validate: () => this.contextBuilder.check(owner) });
+    const invocation = new Invocation<Input, Output, OperationContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, changes, validate: () => this.contextBuilder.check(owner) });
     attachInvocationResources(invocation, context.resources);
     return invocation;
   }

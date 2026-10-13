@@ -16,6 +16,28 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
   const operations = records.filter((record): record is OperationRecord => record instanceof OperationRecord);
   const attempts = records.filter((record): record is AttemptRecord => record instanceof AttemptRecord);
   const changes = records.filter((record): record is MemoryRecord => record instanceof MemoryRecord);
+  const operationsByExecution = new Map<string, OperationRecord[]>();
+  for (const record of operations) {
+    const own = operationsByExecution.get(record.executionId);
+    if (own) own.push(record);
+    else operationsByExecution.set(record.executionId, [record]);
+  }
+  const operationsById = new Map(operations.map((record) => [record.id, record]));
+  const attemptsByExecution = new Map<string, AttemptRecord[]>();
+  for (const record of attempts) {
+    const executionId = operationsById.get(record.operationId)?.executionId;
+    if (!executionId) continue;
+    const own = attemptsByExecution.get(executionId);
+    if (own) own.push(record);
+    else attemptsByExecution.set(executionId, [record]);
+  }
+  const changesByExecution = new Map<string, MemoryRecord[]>();
+  for (const record of changes) {
+    if (!record.executionId) continue;
+    const own = changesByExecution.get(record.executionId);
+    if (own) own.push(record);
+    else changesByExecution.set(record.executionId, [record]);
+  }
   const observedOffsets = new Map<string, number>();
   const boundaries = new Map<string, { start?: number; end?: number }>();
   for (const record of records) {
@@ -42,8 +64,8 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
   const executions: ExecutionSummary[] = observation.executions.map((execution) => {
     const record = observer.book.get(execution.id);
     if (!(record instanceof ExecutionRecord)) throw new Error('Observed execution record does not exist');
-    const ownOperations = operations.filter((operation) => operation.executionId === record.id);
-    const operationIds = new Set<string>(ownOperations.map((operation) => operation.id));
+    const ownOperations = operationsByExecution.get(record.id) ?? [];
+    const ownAttempts = attemptsByExecution.get(record.id) ?? [];
     const selection = ownOperations.find((operation) => operation.operation === 'selection');
     const captured = selection?.value.input as SelectionInput | undefined;
     const range = executionTranscript(observer.book, record.id);
@@ -54,10 +76,10 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
       ...(archive ? { archive } : {}),
       observedOffsetMs: observedOffsets.get(execution.id) ?? 0,
       ...(isUndefined(call.durationMs) ? {} : { durationMs: call.durationMs }),
-      calls: [call, ...ownOperations.map(summarize), ...attempts.filter((attempt) => operationIds.has(attempt.operationId)).map(summarize)],
+      calls: [call, ...ownOperations.map(summarize), ...ownAttempts.map(summarize)],
       ...(range ? { transcriptRange: range } : {}),
       availableMemoryIds: captured?.memories.map((memory) => memory.id) ?? [],
-      memoryChanges: changes.filter((change) => change.executionId === execution.id).map((change) => ({ id: change.id, memoryId: change.memoryId, operationId: change.operationId, action: change.value.action, change: change.value.change })),
+      memoryChanges: (changesByExecution.get(execution.id) ?? []).map((change) => ({ id: change.id, memoryId: change.memoryId, operationId: change.operationId, action: change.value.action, change: change.value.change })),
     };
   });
   return { transcriptId: observer.transcript.id, messages: observation.messages, executions, ...(observer.recordingArchives?.length ? { archives: observer.recordingArchives } : {}) };

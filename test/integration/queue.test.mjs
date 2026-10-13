@@ -170,9 +170,10 @@ test('HTTP: lost feedback follows the original submission, without reposting it 
         submit: (request, receive, signal) =>
           io.submit(
             request,
-            (snapshot) => {
-              receive(snapshot);
-              if (!interrupted && snapshot.input && !snapshot.result) {
+            (frame) => {
+              receive(frame);
+              const progress = frame.type === 'baseline' ? frame.submission : frame.type === 'submission' ? frame.change : undefined;
+              if (!interrupted && progress?.input && !progress.result) {
                 interrupted = true;
                 throw new Error('test feedback consumer lost its connection');
               }

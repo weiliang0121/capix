@@ -18,7 +18,7 @@ export class BoundOperation<Input, Output, Resources extends object = object> {
   private readonly work: InvocationWork<Input, Output, OperationContext<Input, Output, Resources>>;
   constructor(
     private readonly invocationBuilder: OperationInvocationBuilder,
-    readonly definition: OperationDefinition<Input, Output, Resources, any>,
+    readonly definition: OperationDefinition<Input, Output, Resources, any, any>,
     readonly children: BoundChildren,
     private readonly requires: ResourceRequirements<Resources> = definitionResources(definition) as ResourceRequirements<Resources>,
     private readonly refinements?: readonly ResourceRefinement<Input>[],
@@ -27,7 +27,7 @@ export class BoundOperation<Input, Output, Resources extends object = object> {
   }
   create(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, input: Input, options: InvocationRelationOptions = {}) {
     const { name, label, source } = this.definition;
-    return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: this.definition.run.requires, refinements: this.refinements, observation: this.definition.observation, description: { id: this.id, name, label, source }, work: this.work, key: options.key });
+    return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: this.definition.run.requires, refinements: this.refinements, observation: this.definition.observation, description: { id: this.id, name, label, source }, work: this.work, key: options.key, output: options.output });
   }
   call(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, input: Input): Promise<Output> {
     return this.create(parent, input).run();

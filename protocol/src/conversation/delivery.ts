@@ -1,7 +1,7 @@
 import type { Message } from '../content/message.js';
 import type { ModelSettings } from './settings.js';
 import type { MessageLocator, TranscriptRangeLocator, TranscriptSnapshot } from '../content/transcript.js';
-import type { ConversationActivities } from './activity.js';
+import type { ConversationActivities, ConversationActivityChange } from './activity.js';
 import type { FileTask, FileOutput } from './files.js';
 import type { ConversationTask } from './task.js';
 
@@ -41,6 +41,31 @@ export interface ConversationSubmissionSnapshot {
   /** retry is only granted for definite non-admission under temporary service conditions. */
   readonly result?: { readonly status: 'completed' | 'cancelled' } | { readonly status: 'failed'; readonly error: ConversationFailure } | { readonly status: 'rejected'; readonly error: ConversationFailure; readonly retry?: 'admission' };
   readonly integrity: { readonly status: 'complete' } | { readonly status: 'incomplete'; readonly error: ConversationFailure };
+}
+
+/** Facts installed during a revision interval, captured by their producer rather than snapshot comparison. */
+export interface ConversationSubmissionChange {
+  readonly input?: TranscriptRangeLocator;
+  readonly answer?: MessageLocator;
+  /** Newly attached executions, in attachment order. Overlapping baselines may already contain a prefix. */
+  readonly executions?: readonly { readonly contextId: string }[];
+  readonly activities?: ConversationActivityChange;
+  readonly task?: ConversationTask;
+  readonly fileOutput?: FileOutput;
+  readonly cancelRequested?: true;
+  /** An absent field is unchanged; null explicitly removes a previous admission hint. */
+  readonly admission?: ConversationAdmission | null;
+  readonly result?: ConversationSubmissionSnapshot['result'];
+  readonly integrity?: ConversationSubmissionSnapshot['integrity'];
+}
+
+export interface ConversationSubmissionUpdate {
+  readonly type: 'submission';
+  readonly conversationId: string;
+  readonly submissionId: string;
+  readonly fromRevision: number;
+  readonly revision: number;
+  readonly change: ConversationSubmissionChange;
 }
 
 export interface ConversationRequest {

@@ -9,6 +9,7 @@ import type { AcceptedConversationInput } from './accept.js';
 import { FileResources, type WorkspaceFiles, type FileProgress } from '../files/index.js';
 import type { DocumentProcessingInput } from './operations/document/process.js';
 import type { CreateTextInput } from './attempt/files/create.js';
+import type { AnswerProgress } from './operations/answer/stream.js';
 import { validateSettings } from '../assembly/settings.js';
 
 export interface ConversationRunOptions extends InvocationControls {
@@ -18,6 +19,7 @@ export interface ConversationRunOptions extends InvocationControls {
   /** Optional passive REOA metadata; a failed activity consumer does not disable content progress. */
   activity?: ProgressChannel<InvocationProgress>;
   fileProgress?: ProgressChannel<FileProgress>;
+  answerProgress?: ProgressChannel<AnswerProgress>;
   executionCallbacks?: ExecutionInvocationCallbacks<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources>;
 }
 export interface ConversationEntities {
@@ -73,6 +75,14 @@ export function bindConversation(definition: ConversationRuntimeDefinition, enti
           ? {
               receive: (fact): undefined => {
                 options.activity!.publish(fact);
+              },
+            }
+          : undefined,
+      executionOutput: (current, options) =>
+        current === definition.executionDefinition && options.answerProgress
+          ? {
+              receive: (event): undefined => {
+                if (event.kind === 'delta') options.answerProgress!.publish(event.delta as AnswerProgress);
               },
             }
           : undefined,

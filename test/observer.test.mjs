@@ -149,13 +149,18 @@ test('DeepSeek request uses JSON mode; transport secret is absent from observati
     sent.push(request);
     assert.equal(request.response_format.type, 'json_object');
     assert.equal(request.thinking.type, 'disabled');
+    const content = sent.length === 1 ? '{"historyIndexes":[0,1]}' : sent.length === 2 ? JSON.stringify(reply) : '{"memories":[]}';
+    if (request.stream) {
+      const chunk = { id: 'test-id', model: 'test-provider', choices: [{ index: 0, delta: { content }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } };
+      return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, { headers: { 'Content-Type': 'text/event-stream' } });
+    }
     return Response.json({
       id: 'test-id',
       model: 'test-provider',
       choices: [
         {
           message: {
-            content: sent.length === 1 ? '{"historyIndexes":[0,1]}' : sent.length === 2 ? JSON.stringify(reply) : '{"memories":[]}',
+            content,
           },
           finish_reason: 'stop',
         },

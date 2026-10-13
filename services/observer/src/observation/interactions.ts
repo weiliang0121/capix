@@ -18,7 +18,7 @@ export function callInteractionLinks(environment: Environment, callId: string): 
     const resource = environment.book.get(childId);
     if (!(resource instanceof ResourceRecord) || resource.parentId !== callId || !isPlainObject(resource.value)) continue;
     const value = resource.value;
-    const ref = resource.access === 'model-interaction.create' && resource.phase === 'returned' && value.action === 'start' ? value.output : resource.access === 'model-interaction.read' && resource.phase === 'started' && (value.action === 'wait' || value.action === 'result') ? value.input : undefined;
+    const ref = resource.access === 'model-interaction.create' && resource.phase === 'returned' && value.action === 'start' ? value.output : resource.access === 'model-interaction.read' && resource.phase === 'started' && (value.action === 'wait' || value.action === 'result' || value.action === 'subscribe') ? value.input : undefined;
     if (isPlainObject(ref) && typeof ref.id === 'string' && ref.id) ids.add(ref.id);
   }
   return { callId, interactionIds: [...ids] };

@@ -5,7 +5,7 @@ import { emptyAppData } from '../state/data.js';
 import type { AppData } from '../state/data.js';
 import { createObservationProjection } from './observation.js';
 import { projectSubmission } from './submission.js';
-import { projectResponses } from './responses.js';
+import { createResponseProjection } from './responses.js';
 import { createRevealProjection } from './reveal.js';
 import { errorMessage } from '../lib/errors.js';
 import type { ConversationMessage } from '../state/conversation.js';
@@ -29,15 +29,20 @@ function projectConversationSync(state: ClientState): AppData['conversationSync'
 export function createDataProjection() {
   let projectObservation = createObservationProjection();
   let projectReveal = createRevealProjection();
+  let projectResponses = createResponseProjection();
   let previous: ClientState | undefined;
   let previousOverview: ObserverOverview | undefined;
   let messages: readonly ConversationMessage[] = [];
   let previousContent: readonly ConversationMessage[] | undefined;
+  let previousContextId: string | undefined;
+  let previousExecutions: ObserverOverview['executions'] | undefined;
+  let runningId = '';
   let data: AppData = emptyAppData();
   return (state: ClientState): AppData => {
     if (previous?.conversation && previous.conversation.id !== state.conversation?.id) {
       projectObservation = createObservationProjection();
       projectReveal = createRevealProjection();
+      projectResponses = createResponseProjection();
       previous = undefined;
       previousOverview = undefined;
       previousContent = undefined;
@@ -51,7 +56,11 @@ export function createDataProjection() {
     const result = state.submission?.remote?.result;
     const admissionQueueChanged = result?.status === 'rejected' && result.retry === 'admission' && previous?.queue.waiting !== state.queue.waiting;
     const conversation = content !== previousContent || previous?.submissions !== state.submissions || previous?.submission !== state.submission || previous?.transcripts !== state.transcripts || previous?.queue.blocked !== state.queue.blocked || admissionQueueChanged ? projectResponses(content, state) : data.conversation;
-    const current = observation.overview.executions.find((item) => item.calls.some((call) => call.recordType === 'execution' && call.contextId === state.contextId));
+    if (previousContextId !== state.contextId || previousExecutions !== observation.overview.executions) {
+      runningId = state.contextId ? (observation.overview.executions.find((item) => item.calls.some((call) => call.recordType === 'execution' && call.contextId === state.contextId))?.id ?? '') : '';
+      previousContextId = state.contextId;
+      previousExecutions = observation.overview.executions;
+    }
     const submission = projectSubmission(state);
     data = {
       activeConversation: state.conversation,
@@ -62,7 +71,7 @@ export function createDataProjection() {
       config: state.config,
       busy: state.busy,
       queue: state.queue,
-      runningId: current?.id ?? '',
+      runningId,
       observationLoading: observation.loading,
       observationReconnectable: state.observation.reconnectable,
       observationError: observation.error,

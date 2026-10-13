@@ -8,7 +8,7 @@ function assistant(row: ConversationItem): boolean {
 }
 
 function body(row: ConversationItem) {
-  return row.kind === 'response' ? row.body : row.kind === 'message' && row.message.role === 'assistant' ? row : undefined;
+  return row.kind === 'response' ? (row.content ?? row.body) : row.kind === 'message' && row.message.role === 'assistant' ? row : undefined;
 }
 
 /** Delay new assistant regions while a visible answer plays, never service work or user input. */

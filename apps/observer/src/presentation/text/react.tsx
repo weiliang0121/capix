@@ -11,12 +11,12 @@ interface RevealScope {
 const Scope = createContext<RevealScope | undefined>(undefined);
 
 /** A view-local cache: child remounts retain cursors; opening a view shows its history immediately. */
-export function TextRevealProvider({ keys, children }: { keys: readonly string[]; children: ReactNode }) {
+export function TextRevealProvider({ keys, pendingKeys = [], children }: { keys: readonly string[]; pendingKeys?: readonly string[]; children: ReactNode }) {
   const [scope] = useState<RevealScope>(() => {
     const listeners = new Set<() => void>();
     return {
       players: new Map(),
-      settled: new Set(keys),
+      settled: new Set(keys.filter((key) => !pendingKeys.includes(key))),
       listeners,
       subscribe: (listener) => {
         listeners.add(listener);
@@ -61,7 +61,7 @@ interface Playback {
 function begin(scope: RevealScope | undefined, key: string, source: TextSource, paced: boolean): Playback {
   const reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (!paced || reduced || scope?.settled.has(key)) {
-    scope?.settled.add(key);
+    if (source.complete) scope?.settled.add(key);
     return { key };
   }
   const player = scope?.players.get(key) ?? new TextReveal(source);

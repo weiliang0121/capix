@@ -22,6 +22,19 @@ export const ModelResource = Object.freeze({
     'model-interaction.read',
     (interactions: ModelInteractions, activity): ModelInteractionReader =>
       Object.freeze<ModelInteractionReader>({
+        subscribe: (ref, receiver) => {
+          let detach: (() => void) | undefined;
+          try {
+            return activity.runSync('subscribe', { input: () => ref, output: () => ({ attached: true }) }, () => {
+              detach = interactions.subscribe(ref, receiver);
+              return detach;
+            });
+          } catch (error) {
+            // A strict returned observation can fail after registration, before the caller owns cleanup.
+            detach?.();
+            throw error;
+          }
+        },
         wait: (ref, controls) => activity.runAsync('wait', { input: () => ref, output: (result) => ({ kind: result.kind, interaction: result.interaction }) }, () => interactions.wait(ref, controls)),
         result: (ref, controls) => activity.runAsync('result', { input: () => ref, output: (result) => ({ id: result.id, model: result.model, finishReason: result.finishReason, usage: result.usage }) }, () => interactions.result(ref, controls)),
       }),

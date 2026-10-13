@@ -20,14 +20,15 @@ const input = { transcriptId: 't', start: 0, end: 1 };
 const first = submissionSnapshot('s', { revision: 1, input, executions: [{ contextId: 'e' }] });
 const answer = { ...first, revision: 3, answer: { transcriptId: 't', index: 3 } };
 const completed = { ...answer, revision: 4, result: { status: 'completed' } };
-const lines = (...items) => items.map((item) => JSON.stringify(item)).join('\n');
+const wire = (item) => (item.submissionId ? { type: 'baseline', submission: item } : item);
+const lines = (...items) => items.map((item) => JSON.stringify(wire(item))).join('\n');
 const consume = (text, accept = () => {}) => new ConversationHttpTransport('', async () => new Response(stream(text, 1))).submit({ conversationId: 'fixture-conversation', submissionId: 's', input: { messages: [] } }, accept, new AbortController().signal);
 
 test('cumulative feedback joins UTF-8 and line boundaries independently of record and entity streams', async () => {
   const failed = { ...answer, revision: 4, result: { status: 'failed', error: { code: 'POSTPROCESS', message: '记忆处理失败' } } };
   const received = [];
   await consume(lines(first, answer, failed), (update) => received.push(update));
-  assert.deepEqual(received, [first, answer, failed]);
+  assert.deepEqual(received, [first, answer, failed].map(wire));
 });
 test('feedback requires a terminal fact and keeps delivered facts on premature EOF', async () => {
   const received = [];
@@ -35,13 +36,13 @@ test('feedback requires a terminal fact and keeps delivered facts on premature E
     consume(lines(first, answer), (update) => received.push(update)),
     /提前结束/,
   );
-  assert.deepEqual(received, [first, answer]);
+  assert.deepEqual(received, [first, answer].map(wire));
   await assert.rejects(consume(''), /提前结束/);
 });
 test('feedback accepts revision jumps and nonadjacent answer locators', async () => {
   const received = [];
   await consume(lines(first, answer, completed), (update) => received.push(update));
-  assert.deepEqual(received, [first, answer, completed]);
+  assert.deepEqual(received, [first, answer, completed].map(wire));
 });
 test('feedback rejects mismatched identity and invalid numeric fields', async () => {
   for (const value of [

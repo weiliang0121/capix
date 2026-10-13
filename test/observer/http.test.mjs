@@ -1,5 +1,6 @@
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
+import { submissionSnapshot as submission, submissionSnapshots } from '../fixtures/submissions.mjs';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { request } from 'node:http';
@@ -39,17 +40,19 @@ async function setup(t, model = provider, configured = true, submissionRetention
     const url = new URL(path, base);
     if (['/api/conversation/admission', '/api/executions', '/api/execution', '/api/memory'].includes(url.pathname)) url.searchParams.set('conversationId', conversationId);
     if (url.pathname === '/api/transcript' && !url.searchParams.has('id')) url.searchParams.set('id', observer.transcript.id);
-    return fetch(url).then((response) => response.json());
+    return fetch(url)
+      .then((response) => response.json())
+      .then((value) => (url.pathname.startsWith('/api/submissions/') && !value.code ? submission(value) : value));
   };
   const run = (content = '测试输入', options = {}) => fetch(base + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, ...options.headers }, body: JSON.stringify({ conversationId, submissionId: options.id ?? randomUUID(), input: options.body ?? { messages: [{ role: 'user', content }] } }) });
   return { observer, conversations, conversationId, server, base, get, run };
 }
-const updates = async (response) =>
-  (await response.text())
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
+const updates = async (response) => {
+  const frames = (await response.text()).trim().split('\n').filter(Boolean).map(JSON.parse);
+  assert.equal(frames[0].type, 'baseline');
+  assert.ok(frames.every((frame) => ['baseline', 'submission', 'answer'].includes(frame.type)));
+  return submissionSnapshots(frames);
+};
 
 test('HTTP overview exposes timing and associations without invocation bodies, while detail retains full records', async (t) => {
   const { get, run } = await setup(t);
@@ -123,7 +126,7 @@ test('busy execution rejects another submission without adding messages or inven
     for (const call of overview.executions[0].calls.filter((call) => call.status === 'running')) assert.equal(Object.hasOwn(call, 'durationMs'), false);
     const busy = await run('must not append');
     assert.equal(busy.status, 409);
-    const refused = await busy.json();
+    const refused = submission(await busy.json());
     assert.equal(refused.result.status, 'rejected');
     assert.equal(refused.result.retry, 'admission');
     assert.equal(refused.admission.status, 'busy');
@@ -200,7 +203,7 @@ test('unconfigured service refuses before input and queries never initialize the
   assert.equal(state.error.code, 'KEY_MISSING');
   const response = await run();
   assert.equal(response.status, 503);
-  const refusal = await response.json();
+  const refusal = submission(await response.json());
   assert.equal(refusal.result.status, 'rejected');
   assert.equal(refusal.result.retry, 'admission');
   assert.equal(refusal.admission.status, 'unavailable');
@@ -221,7 +224,7 @@ test('known initialization failure stops later admission without probing or retr
   assert.equal(failed.admission.status, 'unavailable');
   assert.equal(failed.admission.error.code, 'MODEL_INITIALIZATION_FAILED');
   assert.equal(observer.transcript.length, 1);
-  const refused = await (await run()).json();
+  const refused = submission(await (await run()).json());
   assert.equal(refused.result.status, 'rejected');
   assert.equal(refused.result.retry, 'admission');
   assert.equal(observer.transcript.length, 1);
@@ -245,7 +248,7 @@ test('provider credential denial is known unavailable while transient HTTP failu
       assert.equal(failed.admission.status, status === 500 ? 'ready' : 'unavailable');
       if (status !== 500) {
         assert.equal(failed.admission.error.code, `HTTP_${status}`);
-        const refused = await (await run()).json();
+        const refused = submission(await (await run()).json());
         assert.equal(refused.result.status, 'rejected');
         assert.equal(refused.result.retry, 'admission');
         assert.equal(observer.transcript.length, 1);
@@ -285,7 +288,7 @@ test('single-call output length and invalid input leave admission ready', async 
       return { ...raw({}), finishReason: 'length' };
     },
   });
-  const invalid = await (await run('', { body: { messages: [{ role: 'assistant', content: 'invalid final role' }] } })).json();
+  const invalid = submission(await (await run('', { body: { messages: [{ role: 'assistant', content: 'invalid final role' }] } })).json());
   assert.equal(invalid.result.status, 'rejected');
   assert.equal(invalid.result.retry, undefined);
   assert.equal(invalid.admission.status, 'ready');
@@ -318,7 +321,7 @@ test('full feedback retention explicitly refuses fresh work and preserves duplic
   assert.equal((await duplicate.json()).code, 'SUBMISSION_EXISTS');
   const refused = await run('capacity', { id: 'no-slot' });
   assert.equal(refused.status, 503);
-  const snapshot = await refused.json();
+  const snapshot = submission(await refused.json());
   assert.equal(snapshot.result.status, 'rejected');
   assert.equal(snapshot.result.error.code, 'SUBMISSION_CAPACITY');
   assert.equal(snapshot.result.retry, 'admission');
@@ -349,7 +352,7 @@ test('transport validates origin, input and source boundary before accepting wor
   assert.equal((await run('invalid origin', { headers: { Origin: 'https://outside.example' } })).status, 403);
   const invalid = await run('', { body: { messages: [{ role: 'assistant', content: 'invalid final role' }] } });
   assert.equal(invalid.status, 400);
-  assert.equal((await invalid.json()).result.error.code, 'INVALID_INPUT');
+  assert.equal(submission(await invalid.json()).result.error.code, 'INVALID_INPUT');
   assert.equal(observer.transcript.length, 0);
   assert.equal(
     [...observer.book.values()].some((record) => record.kind === 'execution'),
@@ -381,8 +384,8 @@ test('separate HTTP subclasses deliver business content while records remain sep
   const received = [];
   await client.submit(
     { conversationId, submissionId: randomUUID(), input: { messages: [{ role: 'user', content: '测试输入' }] } },
-    (snapshot) => {
-      received.push(snapshot);
+    (frame) => {
+      if (frame.type !== 'answer') received.push(submission(frame, received.at(-1)));
     },
     new AbortController().signal,
   );
@@ -455,7 +458,9 @@ test('answer is delivered before memory finishes, and closing observation does n
   const received = [];
   const run = client.submit(
     { conversationId, submissionId: randomUUID(), input: { messages: [{ role: 'user', content: '问题' }] } },
-    (update) => {
+    (frame) => {
+      if (frame.type === 'answer') return;
+      const update = submission(frame, received.at(-1));
       received.push(update);
       if (update.answer) answerReady();
     },
@@ -613,7 +618,7 @@ test('invalid settings with a valid submission ID are retained as explicit rejec
   const id = randomUUID();
   const response = await run('invalid configuration', { id, body: { messages: [{ role: 'user', content: 'must not append' }], contextBudget: 0 } });
   assert.equal(response.status, 400);
-  const rejected = await response.json();
+  const rejected = submission(await response.json());
   assert.equal(rejected.submissionId, id);
   assert.equal(rejected.result.status, 'rejected');
   assert.equal(rejected.result.error.code, 'INVALID_SETTINGS');
@@ -661,7 +666,7 @@ test('HTTP cancellation retains an answer and waits for non-cooperating work bef
   const delivery = updates(response);
   await entering;
   const client = new ConversationHttpTransport(base);
-  const requested = await client.cancel(id);
+  const requested = submission(await client.cancel(id));
   assert.equal(requested.cancelRequested, true);
   assert.ok(requested.input);
   assert.ok(requested.answer);
@@ -669,11 +674,11 @@ test('HTTP cancellation retains an answer and waits for non-cooperating work bef
   assert.equal(modelSignal.aborted, true);
   assert.equal(observer.runtime.running, true);
   assert.equal(observer.transcript.length, 2);
-  const duplicate = await client.cancel(id);
+  const duplicate = submission(await client.cancel(id));
   assert.deepEqual(duplicate, requested);
   const busy = await run('取消尚未结束不得执行');
   assert.equal(busy.status, 409);
-  assert.equal((await busy.json()).result.error.code, 'RUNTIME_BUSY');
+  assert.equal(submission(await busy.json()).result.error.code, 'RUNTIME_BUSY');
   assert.equal(observer.transcript.length, 2);
   release();
   const frames = await delivery;
@@ -683,8 +688,8 @@ test('HTTP cancellation retains an answer and waits for non-cooperating work bef
   assert.equal(observer.runtime.running, false);
   assert.equal(observer.transcript.length, 2);
   assert.equal(observer.memories.snapshot().length, 0);
-  assert.deepEqual(await client.read(id), terminal);
-  assert.deepEqual(await client.cancel(id), terminal);
+  assert.deepEqual(submission(await client.read(id)), terminal);
+  assert.deepEqual(submission(await client.cancel(id)), terminal);
   assert.equal((await updates(await run('下一次正常输入'))).at(-1).result.status, 'completed');
 });
 
@@ -710,7 +715,13 @@ test('HTTP cancellation signals running model work independently of feedback con
   const client = new ConversationHttpTransport(base);
   await client.cancel(id);
   const frames = [];
-  await client.follow(id, (frame) => frames.push(frame), new AbortController().signal);
+  await client.follow(
+    id,
+    (frame) => {
+      if (frame.type !== 'answer') frames.push(submission(frame, frames.at(-1)));
+    },
+    new AbortController().signal,
+  );
   assert.equal(frames.at(-1).result.status, 'cancelled');
   assert.equal(frames.at(-1).cancelRequested, true);
   assert.equal(observer.runtime.running, false);
@@ -725,7 +736,7 @@ test('unknown cancellation does not reserve an ID or prevent a later POST from e
   const terminal = (await updates(await run('稍后到达的提交', { id }))).at(-1);
   assert.equal(terminal.result.status, 'completed');
   assert.equal(terminal.cancelRequested, undefined);
-  assert.deepEqual(await client.cancel(id), terminal);
+  assert.deepEqual(submission(await client.cancel(id)), terminal);
 });
 
 test('cancel requires same-origin JSON and validates its empty body before changing work', async (t) => {
@@ -753,10 +764,10 @@ for (const fault of [false, true]) {
     const returned = new Promise((resolve) => {
       pending = resolve;
     });
-    let submission;
+    let capturedSubmission;
     const originalStart = ConversationSubmission.prototype.start;
     t.mock.method(ConversationSubmission.prototype, 'start', function (work) {
-      submission = this;
+      capturedSubmission = this;
       return originalStart.call(this, work);
     });
     const { observer, run, get } = await setup(
@@ -780,7 +791,7 @@ for (const fault of [false, true]) {
           observe(fact) {
             if (fact.kind !== 'relation' || fact.change.kind !== 'returned' || fact.change.result.status !== 'succeeded' || fact.change.result.output.kind !== 'pending') return;
             // The public cancellation entry is invoked at the exact synchronous handoff boundary.
-            submission.requestCancellation();
+            capturedSubmission.requestCancellation();
             pending();
             if (fault) throw new Error('handoff observer fault');
           },
@@ -804,7 +815,7 @@ for (const fault of [false, true]) {
       assert.equal((await get('/api/conversation/admission')).status, 'busy');
       const blocked = await run('暂不接纳新的 QA');
       assert.equal(blocked.status, 409);
-      assert.equal((await blocked.json()).result.retry, 'admission');
+      assert.equal(submission(await blocked.json()).result.retry, 'admission');
       assert.equal(observer.transcript.length, 1);
       release();
       await observer.interactions.settled();

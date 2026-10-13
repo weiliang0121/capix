@@ -192,3 +192,13 @@ Transcript 全批预检后追加，Memories 全批预检后逐项落实。捕获
 模型交互宿主把运行信号与 timeout 合并，在资源活动捕获之前规范化：主动取消保留根信号身份，超时为 MODEL_TIMEOUT，网络和解析故障保留真实原因。取消不回滚已经成立的实体更新，也不阻止内核收尾、记录终态和释放占用。活跃读取的宿主取消等待真实发送结束；A1/A2 交接时 R 可能已退出而交互仍在取消收尾，服务提交出口等待同一宿主交互并保持接纳 busy，然后投影 cancelled。内核不感知客户端队列或服务提交协议，也不把独立交互强行附属于调用生命周期。
 
 当前不增加 Thread/TRSA、未完成调用恢复、通用版本仓库、权限、插件注册、动态规划或跨进程重放。每个对话的内容与记录持久化由独立实体端口和服务存储负责，见 [持久化](persistence.md)；不序列化 Invocation / Context，也不让历史记录重新驱动运行。
+
+## 输出声明与单次输出段
+
+`<I, O>` 的 O 继续表示最终交付结果。需要流式过程的声明可额外提供 `OutputDeclaration<O, Delta>`；Delta 和 O 的业务关系由声明及其消费绑定解释，内核不假设二者可直接拼接。普通声明不必增加流。
+
+每次本地 round 建立独立输出段：started → delta* → sealed → completed，或 discarded。只有 execute 的 InvocationWorkView 持有当前段 writer；accept/exceptions 只取得读取视图。execute 无论成功或失败都先封口，进入异常处理或继续执行时废弃旧段，fallback 和正常接纳的最终结果统一经过 result 校验，校验不能偷偷替换对象引用。
+
+ChildBindings 和 Sequence 通过显式 output receiver 绑定子输出，父声明可以按自己的契约转换和再输出；没有祖先自动广播。Runtime 绑定可以选择 R 自身 output 或特定 E 的 executionOutput。消费者按 ProgressChannel 隔离，消费者失败不变成业务重试依据；生产者违反输出声明则是调用错误。completed 只表示本层完成，父层 returned/accepted 与正式内容写入仍是独立事实。旧 writer 被撤销后只能报 OUTPUT_CLOSED，不能写到下一轮或改写已完成调用。
+
+模型适配器只解析供应商 SSE；独立 Interaction 仍只保存完整请求与反馈。RequestModel O 订阅原始临时文本，GenerateAnswer O 解释 JSON content，E 接纳并追加正式消息，服务投影把这些事实转换为 C/S 预览与交接协议。内核不感知模型格式、消息字段或传输协议。

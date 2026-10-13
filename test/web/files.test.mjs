@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createAppStore } from '../../apps/observer/.test-dist/state/store.js';
 import { submitDraft } from '../../apps/observer/.test-dist/binding/submit.js';
-import { projectResponses } from '../../apps/observer/.test-dist/binding/responses.js';
+import { createResponseProjection } from '../../apps/observer/.test-dist/binding/responses.js';
+
+const projectResponses = (messages, state) => createResponseProjection()(messages, state);
 
 const task = { sourcePath: 'notes.md', output: { path: 'summary.md' } };
 

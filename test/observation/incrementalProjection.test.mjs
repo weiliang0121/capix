@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ObservationReplica, ObservationSequenceError } from '@capix/client-runtime';
+import { validateExecutionRecordSnapshot } from '@capix/protocol';
 import { baseline, entriesOf, snapshot } from '../client/fixtures.mjs';
 import { observationFixture } from '../performance/observation.mjs';
 
@@ -72,4 +73,40 @@ test('replacement cannot move a recorded E into a different R and bypass sibling
   const moved = { ...first, data: { ...first.data, parentId: 'runtime-call-execution-1' } };
   assert.throws(() => ObservationReplica.receive(previous, replace(previous, [moved])), /归属不能被替换/);
   assert.equal(previous.entries.get(first.data.id), first);
+});
+
+test('large execution boundaries and owner contexts are checked through indexes without rescanning each call', () => {
+  const value = snapshot('running');
+  let ownerReads = 0;
+  let boundaryReads = 0;
+  const count = 256;
+  for (let index = 0; index < count; index++) {
+    const id = `operation-${index}`;
+    const boundary = { id: `call-${id}`, parentId: id, scopeId: value.execution.id, executionId: value.execution.id, callId: id, sequence: index + 2, occurredAt: value.execution.value.startedAt, offsetMs: 0, value: { type: 'call', scope: 'work' } };
+    const operation = { id, parentId: value.execution.id, executionId: value.execution.id, contextId: `context-${id}`, operationInstanceId: 'operation-instance', operation: 'fixture', label: 'Fixture', source: 'fixture', caller: 'execution', callee: 'operation', status: 'running', childIds: [boundary.id], value: { startedAt: value.execution.value.startedAt, input: null, processes: [], relationChanges: [] } };
+    Object.defineProperty(operation, 'id', {
+      enumerable: true,
+      get() {
+        ownerReads++;
+        return id;
+      },
+    });
+    Object.defineProperty(boundary, 'callId', {
+      enumerable: true,
+      get() {
+        boundaryReads++;
+        return id;
+      },
+    });
+    value.execution.childIds.push(id);
+    value.operations.push(operation);
+    value.events.push(boundary);
+  }
+  validateExecutionRecordSnapshot(value);
+  assert.ok(ownerReads < count * 16, `${ownerReads} owner accesses for ${count} operations`);
+  const frame = baseline({ entries: entriesOf(value) });
+  boundaryReads = 0;
+  const replica = ObservationReplica.receive(undefined, frame);
+  assert.equal(replica.snapshots.get(value.execution.id).operations.length, count);
+  assert.ok(boundaryReads < count * 16, `${boundaryReads} boundary accesses for ${count} operations`);
 });

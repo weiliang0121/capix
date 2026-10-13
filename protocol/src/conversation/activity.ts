@@ -21,3 +21,9 @@ export interface ConversationActivities {
   readonly calls: readonly ConversationActivity[];
   readonly integrity: { readonly status: 'complete' } | { readonly status: 'incomplete'; readonly error: ConversationFailure };
 }
+
+/** Changed call entries only; unchanged calls retain their identity in the replica. */
+export interface ConversationActivityChange {
+  readonly calls?: readonly ConversationActivity[];
+  readonly integrity?: ConversationActivities['integrity'];
+}

@@ -8,9 +8,10 @@ const input = { messages: [{ role: 'user', content: '测试' }] };
 const request = { conversationId: 'fixture-conversation', submissionId: 'submission', input };
 const initial = submissionSnapshot('submission');
 const signal = () => new AbortController().signal;
-const line = (value) => JSON.stringify(value);
-const jsonConversation = (value) => new ConversationHttpTransport('', async () => Response.json(value));
-const jsonObservation = (value) => new ObservationHttpTransport('', async () => Response.json(value));
+const wire = (value) => (value?.submissionId ? { type: 'baseline', submission: value } : value);
+const line = (value) => JSON.stringify(wire(value));
+const jsonConversation = (value) => new ConversationHttpTransport('', async () => Response.json(wire(value)));
+const jsonObservation = (value) => new ObservationHttpTransport('', async () => Response.json(wire(value)));
 
 test('HTTP base supports a different API without Observer endpoints or response types', async () => {
   class CatalogClient extends HttpTransport {
@@ -80,7 +81,7 @@ test('admission query accepts only current service conditions and forwards cance
     const client = new ConversationHttpTransport('http://example.test', async (url, init) => {
       assert.equal(url, 'http://example.test/api/conversation/admission?conversationId=fixture-conversation');
       assert.equal(init.signal, controller.signal);
-      return Response.json(value);
+      return Response.json(wire(value));
     });
     assert.deepEqual(await client.admission('fixture-conversation', controller.signal), value);
   }
@@ -89,10 +90,10 @@ test('admission query accepts only current service conditions and forwards cance
 
 test('temporary non-admission retains a formal retry fact despite the HTTP status', async () => {
   const snapshot = { ...initial, revision: 1, result: { status: 'rejected', error: { code: 'RUNTIME_BUSY', message: 'busy' }, retry: 'admission' }, admission: { conversationId: 'fixture-conversation', transcriptId: 't', status: 'busy' } };
-  const client = new ConversationHttpTransport('', async () => Response.json(snapshot, { status: 409 }));
+  const client = new ConversationHttpTransport('', async () => Response.json(wire(snapshot), { status: 409 }));
   const values = [];
   await client.submit(request, (value) => values.push(value), signal());
-  assert.deepEqual(values, [snapshot]);
+  assert.deepEqual(values, [wire(snapshot)]);
   await assert.rejects(jsonConversation({ ...snapshot, result: { ...snapshot.result, retry: 'always' } }).read('submission'), (error) => error.kind === 'contract');
   await assert.rejects(jsonConversation({ ...snapshot, result: { status: 'failed', error: snapshot.result.error, retry: 'admission' } }).read('submission'), (error) => error.kind === 'contract');
   await assert.rejects(jsonConversation({ ...snapshot, admission: { status: 'ready' } }).read('submission'), (error) => error.kind === 'contract');
@@ -164,11 +165,11 @@ test('HTTP known rejection is accepted as a formal snapshot without replaying su
     calls++;
     assert.deepEqual(JSON.parse(init.body), request);
     assert.equal(init.signal.aborted, false);
-    return Response.json(rejected, { status: 409 });
+    return Response.json(wire(rejected), { status: 409 });
   });
   const values = [];
   await io.submit(request, (value) => values.push(value), signal());
-  assert.deepEqual(values, [rejected]);
+  assert.deepEqual(values, [wire(rejected)]);
   assert.equal(calls, 1);
 });
 
@@ -178,7 +179,7 @@ test('unknown HTTP failures and unavailable follow preserve uncertainty and diag
     io.follow('submission', () => assert.fail('No remote facts'), signal()),
     (error) => error instanceof HttpError && error.code === 'SUBMISSION_UNAVAILABLE' && error.response.status === 404,
   );
-  const other = new ConversationHttpTransport('', async () => Response.json(submissionSnapshot('foreign', { result: { status: 'rejected', error: { code: 'BUSY', message: 'busy' } } }), { status: 409 }));
+  const other = new ConversationHttpTransport('', async () => Response.json(wire(submissionSnapshot('foreign', { result: { status: 'rejected', error: { code: 'BUSY', message: 'busy' } } })), { status: 409 }));
   await assert.rejects(
     other.submit(request, () => assert.fail('foreign'), signal()),
     (error) => error.code === 'SUBMISSION_MISMATCH',
@@ -190,12 +191,12 @@ test('follow and read use the same submission identity and never post again', as
   const requests = [];
   const io = new ConversationHttpTransport('http://example.test', async (url, init) => {
     requests.push([url, init.method ?? 'GET']);
-    return Response.json(terminal);
+    return Response.json(wire(terminal));
   });
   const values = [];
   await io.follow('a/b', (value) => values.push(value), signal());
-  assert.deepEqual(await io.read('a/b'), terminal);
-  assert.deepEqual(values, [terminal]);
+  assert.deepEqual(await io.read('a/b'), wire(terminal));
+  assert.deepEqual(values, [wire(terminal)]);
   assert.deepEqual(requests, [
     ['http://example.test/api/submissions/a%2Fb/follow', 'GET'],
     ['http://example.test/api/submissions/a%2Fb', 'GET'],
@@ -211,10 +212,10 @@ test('cancel posts a separate identity-scoped request and accepts requested or t
     calls.push({ url, method: init.method, body: init.body });
     assert.equal(init.signal, controller.signal);
     assert.equal(init.headers['Content-Type'], 'application/json');
-    return Response.json(calls.length === 1 ? requested : terminal);
+    return Response.json(wire(calls.length === 1 ? requested : terminal));
   });
-  assert.deepEqual(await client.cancel('a/b', controller.signal), requested);
-  assert.deepEqual(await client.cancel('a/b', controller.signal), terminal);
+  assert.deepEqual(await client.cancel('a/b', controller.signal), wire(requested));
+  assert.deepEqual(await client.cancel('a/b', controller.signal), wire(terminal));
   assert.deepEqual(calls, [
     { url: 'http://example.test/api/submissions/a%2Fb/cancel', method: 'POST', body: '{}' },
     { url: 'http://example.test/api/submissions/a%2Fb/cancel', method: 'POST', body: '{}' },
@@ -230,7 +231,7 @@ test('cancel validates identity and cancellation facts and does not invent a res
   const cancelled = { ...initial, revision: 2, cancelRequested: true, result: { status: 'cancelled' } };
   const values = [];
   await jsonConversation(cancelled).follow('submission', (value) => values.push(value), signal());
-  assert.deepEqual(values, [cancelled]);
+  assert.deepEqual(values, [wire(cancelled)]);
 });
 
 test('malformed submission feedback is rejected before delivery', async () => {
@@ -247,9 +248,9 @@ test('submission HTTP boundary accepts bounded activity metadata and strips arbi
   const call = { contextId: 'r', level: 'runtime', label: '运行', status: 'running', phase: 'execute', round: 1, startedAt: '2026-10-11T00:00:00.000Z' };
   const body = { ...initial, activities: { calls: [{ ...call, input: 'private', output: 'private', source: '/private/file' }], integrity: { status: 'complete' } } };
   const accepted = await jsonConversation(body).read('submission');
-  assert.deepEqual(accepted.activities.calls, [call]);
+  assert.deepEqual(accepted.submission.activities.calls, [call]);
   const incomplete = { ...body, activities: { calls: [call], integrity: { status: 'incomplete', error: { code: 'ACTIVITY_INCOMPLETE', message: 'incomplete' } } } };
-  assert.deepEqual((await jsonConversation(incomplete).read('submission')).activities, incomplete.activities);
+  assert.deepEqual((await jsonConversation(incomplete).read('submission')).submission.activities, incomplete.activities);
   for (const invalid of [
     { ...call, round: 3 },
     { ...call, status: 'waiting' },
@@ -301,7 +302,7 @@ test('terminal snapshot ends feedback consumption without requiring socket EOF',
   const io = new ConversationHttpTransport('', async () => new Response(body));
   const values = [];
   await io.submit(request, (value) => values.push(value), signal());
-  assert.deepEqual(values, [terminal]);
+  assert.deepEqual(values, [wire(terminal)]);
   assert.equal(cancelled, true);
   assert.equal(body.locked, false);
 });

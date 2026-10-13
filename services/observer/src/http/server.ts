@@ -183,7 +183,7 @@ export function createObserverServer(options: ObserverServerOptions) {
       const submission = submissions.get(submissionPath[1]!);
       if (!submission) return json(res, 404, { code: 'SUBMISSION_UNAVAILABLE', error: '提交进展不可用；这不表示请求没有执行。' } satisfies ErrorResponse);
       if (submissionPath[2] === '/follow') return followSubmission(submission, res);
-      return json(res, 200, submission.snapshot);
+      return json(res, 200, submission.baseline);
     }
     if (req.method === 'POST' && submissionPath?.[2] === '/cancel') {
       if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' } satisfies ErrorResponse);
@@ -191,7 +191,8 @@ export function createObserverServer(options: ObserverServerOptions) {
       if (!isObject(body) || Object.keys(body).length) throw new RuntimeError('INVALID_INPUT', '取消请求正文必须为空对象。');
       const submission = submissions.get(submissionPath[1]!);
       if (!submission) return json(res, 404, { code: 'SUBMISSION_UNAVAILABLE', error: '提交进展不可用；不能确认取消，也不表示请求没有执行。' } satisfies ErrorResponse);
-      return json(res, 200, submission.requestCancellation());
+      submission.requestCancellation();
+      return json(res, 200, submission.baseline);
     }
     if (req.method === 'POST' && url.pathname === '/api/run') {
       if ((req.headers.origin && req.headers.origin !== url.origin) || !req.headers['content-type']?.startsWith('application/json')) return json(res, 403, { error: '需要同源 JSON 请求。' } satisfies ErrorResponse);
@@ -208,7 +209,7 @@ export function createObserverServer(options: ObserverServerOptions) {
         // This refusal has not run and occupies no retained slot. A lost response remains unknown.
         const refusal = new ConversationSubmission(data.submissionId, conversationId, { admission: () => admission(conversationId) });
         refusal.reject(error, { retry: 'admission' });
-        return json(res, 503, refusal.snapshot);
+        return json(res, 503, refusal.baseline);
       }
       let runSettings: ModelSettings;
       try {
@@ -216,20 +217,20 @@ export function createObserverServer(options: ObserverServerOptions) {
         runSettings = validateSettings({ ...settings, ...(isUndefined(data.input.contextBudget) ? {} : { contextBudget: data.input.contextBudget }) });
       } catch (error) {
         submission.reject(error);
-        return json(res, 400, submission.snapshot);
+        return json(res, 400, submission.baseline);
       }
       if (currentAdmission.status === 'unavailable') {
         submission.reject(new RuntimeError(currentAdmission.error.code, currentAdmission.error.message), { retry: 'admission' });
-        return json(res, 503, submission.snapshot);
+        return json(res, 503, submission.baseline);
       }
       if (currentAdmission.status === 'busy') {
         submission.reject(new RuntimeError('RUNTIME_BUSY', '运行环境正忙，请稍后再提交。'), { retry: 'admission' });
-        return json(res, 409, submission.snapshot);
+        return json(res, 409, submission.baseline);
       }
       submission.start(async (signal) => {
         const observer = conversations.open(conversationId);
         try {
-          return await observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, signal });
+          return await observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, answerProgress: submission.answerProgress, signal });
         } catch (error) {
           // A can return pending before cancellation reaches its parent. Service cancellation
           // still waits for this owner's external cleanup, without extending the ended R call.
@@ -248,7 +249,7 @@ export function createObserverServer(options: ObserverServerOptions) {
         res.off('close', detachWaiting);
       }
       if (res.destroyed) return;
-      if (initial.result?.status === 'rejected') return json(res, initial.result.error.code === 'RUNTIME_BUSY' ? 409 : 400, initial);
+      if (initial.result?.status === 'rejected') return json(res, initial.result.error.code === 'RUNTIME_BUSY' ? 409 : 400, submission.baseline);
       followSubmission(submission, res);
       return;
     }

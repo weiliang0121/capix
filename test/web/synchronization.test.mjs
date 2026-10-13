@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createDataProjection } from '../../apps/observer/.test-dist/binding/data.js';
-import { projectResponses } from '../../apps/observer/.test-dist/binding/responses.js';
+import { createResponseProjection } from '../../apps/observer/.test-dist/binding/responses.js';
 import { client, transport, submissionSnapshot, transcriptSnapshot } from '../client/fixtures.mjs';
+
+const projectResponses = (messages, state) => createResponseProjection()(messages, state);
 
 const transcriptId = 'sync-presentation';
 const content = [

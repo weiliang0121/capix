@@ -107,6 +107,57 @@ test('reconnection preserves formal content and waits for a new baseline without
   assert.equal(f.posts, 1);
 });
 
+test('one current baseline produces one retained message copy and an unchanged reconnect reuses it', async (t) => {
+  const f = fixture(t, { autoBaseline: false });
+  const frame = baseline([message('first'), message('second', 'assistant')]);
+  const map = frame.snapshot.messages.map.bind(frame.snapshot.messages);
+  let copies = 0;
+  Object.defineProperty(frame.snapshot.messages, 'map', {
+    value: (project) => {
+      copies++;
+      return map(project);
+    },
+  });
+  const initialized = f.runtime.initialize();
+  await settle();
+  f.streams[0].send(frame);
+  await initialized;
+  assert.equal(copies, 1);
+  const retained = f.runtime.getSnapshot().messages;
+  f.runtime.stopTranscript('current');
+  const loaded = f.runtime.loadTranscript('current');
+  f.streams[1].send(frame);
+  await loaded;
+  assert.equal(copies, 1);
+  assert.equal(f.runtime.getSnapshot().messages, retained);
+});
+
+test('an older reconnect baseline retains a separate connection position until its deltas catch up', async (t) => {
+  const f = fixture(t, { autoBaseline: false });
+  const initialized = f.runtime.initialize();
+  await settle();
+  f.streams[0].send(baseline([message('first'), message('second', 'assistant')]));
+  await initialized;
+  const retained = f.runtime.getSnapshot().messages;
+  f.runtime.stopTranscript('current');
+  const loaded = f.runtime.loadTranscript('current');
+  f.streams[1].send(baseline([message('first')]));
+  await loaded;
+  assert.equal(f.runtime.getSnapshot().messages, retained);
+  for (const [revision, content, role] of [
+    [2, 'second', 'assistant'],
+    [3, 'third', 'user'],
+  ]) {
+    f.streams[1].send({ type: 'delta', event: { type: 'transcript', transcriptId: 'current', revision, occurredAt: '2026-10-13T00:00:00Z', change: { kind: 'messages-appended', start: revision - 1, messages: [message(content, role)] } } });
+  }
+  await settle();
+  assert.deepEqual(
+    f.runtime.getSnapshot().messages.map((entry) => entry.content),
+    ['first', 'second', 'third'],
+  );
+  assert.equal(f.sync().status, 'live');
+});
+
 test('initial transient failures have a finite budget, reject readiness, and permit an explicit fresh attempt', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const f = fixture(t, { autoBaseline: false });
