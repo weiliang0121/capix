@@ -1,3 +1,4 @@
+import type { CheckpointWriter } from '../checkpoint/contract.js';
 import type { InvocationOutputWriter } from '../output/contract.js';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationContextView } from '../context/view.js';
@@ -30,4 +31,5 @@ export interface ChildInvocationView<Input = unknown, Output = unknown, ContextV
 /** Only execute receives a writer; relation and acceptance views retain read-only call facts. */
 export interface InvocationWorkView<Input = unknown, Output = unknown, ContextView extends InvocationContextView<Input, Output> = InvocationContextView<Input, Output>, Delta = never> extends InvocationView<Input, Output, ContextView> {
   readonly output: InvocationOutputWriter<Delta>;
+  readonly checkpoint?: CheckpointWriter;
 }

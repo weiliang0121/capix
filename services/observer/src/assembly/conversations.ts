@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { RuntimeError } from '@capix/server-runtime';
+import { RuntimeError, type InvocationControls, type CheckpointInstallation } from '@capix/server-runtime';
 import { Transcript, Memories } from '@capix/server-runtime/content';
 import type { ConversationDescriptor, ConversationListResponse, Message } from '@capix/protocol';
 import type { ModelInitialization } from '../conversation/model/types.js';
@@ -25,7 +25,7 @@ export class ObserverConversations {
   constructor(
     private readonly provider: ModelInitialization,
     messages: readonly Message[] = [],
-    private readonly options: { files?: WorkspaceFiles; decision?: ConversationDecisionDefinition; maxDecisionSteps?: number; persistence?: SqliteObserverStore } = {},
+    private readonly options: { files?: WorkspaceFiles; decision?: ConversationDecisionDefinition; maxDecisionSteps?: number; persistence?: SqliteObserverStore; checkpointObservation?: CheckpointInstallation['observation'] } = {},
   ) {
     this.model = new ModelSource(provider);
     this.files = options.files;
@@ -92,6 +92,11 @@ export class ObserverConversations {
     const environment = initializeObserver(this.provider, [], { ...this.options, conversationId: id, content, model: this.model, shared: true });
     this.#environments.set(id, environment);
     return environment;
+  }
+
+  /** Explicit host recovery of one registered root; never automatic replay or a restored Submission. */
+  recover(conversationId: string, rootContextId: string, controls: InvocationControls = {}) {
+    return this.open(conversationId).recover(rootContextId, controls);
   }
 
   peek(id: string): ReturnType<typeof initializeObserver> | undefined {

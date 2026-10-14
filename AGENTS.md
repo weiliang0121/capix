@@ -6,7 +6,7 @@
 - CAPiX 是 C/S 可观测 Agent 框架；Observer 是参考服务和应用，用实际对话及观测验证内核。项目定位、对象角色和名称迁移见 [项目组织](docs/organization.md)。
 - 人参与关键对象、职责与调用关系的设计。按共同确定的小闭环推进，不因目录整理提前建立新平台。用户明确授权整体实施时，完成对应实现、审查、验证与修复。
 - 修改前检查并保留已有文件与未提交工作。核心对象维持自身不变量，helper 组合明确操作；独立生命周期才构成新增实体的依据。
-- 当前持久化恢复各对话的消息、记忆与可选记录，再允许新 QA；独立模型交互保存固定请求与反馈，可按 ID 再次读取，但不恢复旧调用、Context、提交、队列或外部副作用。不推进 TRS、动态调度、外部能力平台或权限系统；这些需另行明确真实需求。不推送、部署或发布，不读取其他项目凭证，不为验证默认调用真实模型。
+- 当前持久化恢复各对话的消息、记忆与可选记录，再允许新 QA；独立模型交互保存固定请求与反馈，可按 ID 再次读取，默认服务不恢复旧调用、Context、提交、队列或外部副作用；可选 checkpoint 的有限内核恢复范围见下文。不推进 TRS、动态调度、外部能力平台或权限系统；这些需另行明确真实需求。不推送、部署或发布，不读取其他项目凭证，不为验证默认调用真实模型。
 
 ## 包与职责边界
 
@@ -18,7 +18,7 @@
 - ClientSubmission 持有单次提交的反馈连接与事实，TranscriptReceiver / ObservationReceiver 各自持有同步生命周期；ClientRuntime 只协调初始化、当前提交、跨来源状态与发布。连接替换先转移本地归属再 abort 旧连接，回调重入后复核身份；停止消费不取消服务端业务。
 - 消息副本与同步连接状态分开。TranscriptReceiver 对明确连接中断和修订缺口有限退避重建基线，主动停止清理定时器；身份/正文冲突、协议错误及来源失效终止自动恢复。基线不能改写既有消息前缀。恢复就绪等待本次有效基线，不复用首次 ready；已初始化客户端的同步波动不重置业务接纳资格或触发重 POST。
 - 服务模型请求、Schema、Provider 适配与配置接纳留在服务。Key 仅由服务端环境获取，不输出、不写记录或传到客户端。模型能力与配置是不同对象。
-- Interaction 独立于 Invocation 与 Recorder，固定请求只发送一次，反馈非破坏读取；局部等待到期不重发。服务 ModelInteractions 持有实体，资源分 create/read；请求模型 O 接纳 A1 pending 后可建立 A2 读取同一交互。Provider 总超时与局部等待分开；宿主取消的交接窗口由服务等待同 owner 交互收尾并维持 busy，R 无需伪装仍在运行。恢复有反馈只读、无反馈明确 unavailable；不引入租约、自动重放或执行恢复。详见 [外部交互](docs/interactions.md)。
+- Interaction 独立于 Invocation 与 Recorder，固定请求只发送一次，反馈非破坏读取；局部等待到期不重发。服务 ModelInteractions 持有实体，资源分 create/read；请求模型 O 接纳 A1 pending 后可建立 A2 读取同一交互。Provider 总超时与局部等待分开；宿主取消的交接窗口由服务等待同 owner 交互收尾并维持 busy，R 无需伪装仍在运行。恢复有反馈只读、无反馈明确 unavailable；Interaction 本身不引入租约、自动重放或执行恢复。详见 [外部交互](docs/interactions.md)。
 - Interaction 的可选观测发布已安装状态与保存失败，消费者故障隔离，不依赖 Recorder。Observer 按 conversationId/callId 的真实资源访问关联提供元数据查询与订阅，不公开任意 ID 的请求/反馈正文。局部等待、外部反馈和父层接纳分别展示；持久化反馈才能称已保存。切换对话/关闭详情解除消费，不重发调用。
 
 ## 运行结构与访问
@@ -32,6 +32,17 @@
 - O/A 可通过 `childResources` 在创建时收窄已供应且已申请的资源；规则由 ResourceOffer.refine 签发，绑定只从输入选择范围，资源自身检查不可扩大。父层和兄弟供给不变，无关资源不重捕获；这不是动态能力注册或调度。
 - BoundChildren 惰性建立直接子结构，Initializer 缓存成功或失败；不引入重置/异步管理器。Sequence 逐项构造输入、运行并接纳结果，各次输出独立。父子关系保存真实返回与接纳事实；returned 不等于 accepted。
 - Context 保留真实 IO/异常引用，局部继续复用同一 Context；子调用每次新建。maxRounds 默认 1，仅允许 1/2。run.accept 只处理正常结果；exceptions.handle 按契约处理已声明异常。内核、绑定、未声明抛错、处理器错误不递归进入异常处理。已归属错误不能被业务 catch 清除。详见 [异常边界](docs/exceptions.md)。
+
+## Checkpoint 的有限恢复
+
+- REOA 声明可选 checkpoint 的 key/version、输入/输出 codec 与具名 points；每点独立 state/check/resume.requires/uses/execute。Invocation 协调捕获和续接，Context 受控安装原身份/round/currentInput；不保存活对象或重放原闭包。未安装保存端口时原路径不变。
+- 当前支持 execute 内明确点与等待／成功子关系；第二轮可保存已由本层处理的前轮子声明异常诊断，仅供只读历史，不重建活异常、不复活失败子调用。CPF 与业务 state 分开。按准确 childContextId、直接归属、声明版本和同级 order 续接，key 不是身份。子成功最终交付独立于较早 CP；保存真实子 round/currentInput。终态不复活，未知或缺失依据不重发。
+- 同步 CheckpointStore 的不可变 image、head revision 与最终交付独立于 Recorder；内存与 SQLite 两种实现。宿主复用同一端口并独占恢复入口，本地防并发不是跨进程租约。每个 image/delivery 8 MiB，严格纯数据边界；不自动迁移声明版本。
+- Transcript 的固定 applyFixed 在真实子接纳范围派生父子身份，业务只提供position和消息。实体将依据／凭据和消息同事务提交，重复同依据返回原位置，不重复发布；异依据冲突。资源端点与 CP writer 绑定本轮，不允许旧端点跨轮使用。
+- 恢复使用新 activityId 的 CheckpointFact：历史 installed 基线与新变化分开；恢复调用事实不写原 Recorder/Invocation changes；实体新变化仍经自身出口发布。不装 Recorder 仍可恢复。观测默认隔离，可显式传播；最终交付提交后通知失败不能修改已固定交付。
+- Memories 固定批次按本 A 身份与效果位置确认，变更与凭据同事务；重复确认不占新顺序。宿主恢复使用原记忆快照，并核对原 E 精确子树中连续的落实凭据及当前正文。WorkspaceFiles 固定创建先保存 pending、同步文件与目录、再保存凭据；已确认只读原结果，pending 明确未知，不从文件存在猜成功或重写。
+- Observer 默认 CP 观测载体提供按 root 查询/订阅的本进程有界元数据，区分正常/恢复活动及 installed 基线，不保留 frame/IO、不替代持久恢复依据；未接 HTTP/UI。
+- Observer 默认为新产生的调用安装 CP（SQLite 复用宿主连接，内存宿主使用 MemoryCheckpointStore），不补写旧任务。内置 R/E、选择、决策、澄清、文件、回答与记忆声明均有明确 CP 边界，保持原输入/配置/范围/直接子身份，不重发已固定交互；二次生成保留原拒绝与次数。子首份 CP/交付缺失、外部反馈未知仍拒绝续接；不把声明覆盖当作任意位置恢复承诺。宿主 `ObserverConversations.recover(conversationId, rootContextId)` 显式续接；核对内容、声明配置、文件工作区指纹及写入凭据，不复播旧提交进展，不自动恢复旧 submission。新对话真实链已用跨进程中断验证；HTTP/客户端恢复入口未接入。详见 [Checkpoint](docs/checkpoints.md)。
 
 ## 内容、记录与变化
 

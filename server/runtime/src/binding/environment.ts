@@ -53,7 +53,8 @@ export class BindingEnvironment {
       // R binds E's supplies independently; its work is not granted every E resource.
       if (level !== 'runtime') checkResourceRequests(requires, resourceRequests(this.resources(definition)));
       const children = definition.level === 'operation' || definition.level === 'execution' ? definition.children : [];
-      for (const child of [...(definition.run.uses ?? children), ...(definition.exceptions?.uses ?? [])]) {
+      const checkpointChildren = Object.values(definition.checkpoint?.points ?? {}).flatMap((point) => [...(point.resume.uses ?? [])]);
+      for (const child of [...(definition.run.uses ?? children), ...(definition.exceptions?.uses ?? []), ...checkpointChildren]) {
         if (!children.includes(child)) throw new Error('Declaration uses a child outside its owner');
       }
       if (definition.level === 'operation' || definition.level === 'execution') {

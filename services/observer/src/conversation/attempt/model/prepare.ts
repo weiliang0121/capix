@@ -1,8 +1,10 @@
+import { modelRequestCodec } from '../../model/checkpoint.js';
+import { checkLeafResult } from '../../operations/checkpoint.js';
 import { invocationRecording, type InvocationRecordDescription } from '@capix/server-runtime/recording';
 import { ModelSettingsResource } from '../../model/resources.js';
 import type { ResourceRequirements } from '@capix/server-runtime';
 import type { ModelRequestResources } from '../../resources.js';
-import { AttemptDefinition, type AttemptContextView } from '@capix/server-runtime';
+import { AttemptDefinition, cloneCheckpointValue, type CheckpointValue, type InvocationWorkView, type InvocationCheckpointDefinition, type AttemptContextView } from '@capix/server-runtime';
 
 import type { ModelRequest } from '../../model/types.js';
 import { checkCapacity } from '../../model/capacity.js';
@@ -11,6 +13,13 @@ import { checkCapacity } from '../../model/capacity.js';
 export class PrepareModelRequestDefinition<Input, Resources extends ModelRequestResources = ModelRequestResources> extends AttemptDefinition<Input, ModelRequest, Resources> {
   readonly observation;
   readonly run;
+  readonly checkpoint: InvocationCheckpointDefinition<Input, ModelRequest, AttemptContextView<Input, ModelRequest, Resources>> = {
+    key: 'observer.prepare-model-request',
+    version: 1,
+    input: { encode: cloneCheckpointValue, decode: (value: CheckpointValue) => cloneCheckpointValue(value) as Input },
+    output: modelRequestCodec,
+    points: { result: { state: modelRequestCodec, check: checkLeafResult, resume: { requires: {}, uses: [], execute: (_context, _invocation, _children, output: ModelRequest) => output } } },
+  };
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request() });
 
   readonly name = 'prepareModelRequest';
@@ -28,10 +37,11 @@ export class PrepareModelRequestDefinition<Input, Resources extends ModelRequest
     this.run = { requires, execute: this.execute.bind(this) };
   }
 
-  private execute(context: AttemptContextView<Input, ModelRequest, Resources>): ModelRequest {
+  private execute(context: AttemptContextView<Input, ModelRequest, Resources>, invocation: InvocationWorkView<Input, ModelRequest, AttemptContextView<Input, ModelRequest, Resources>>): ModelRequest {
     const resources = context.resources.values;
     const request = this.createRequest(context.currentInput, resources);
     checkCapacity(request, resources.settings);
+    invocation.checkpoint?.save('result', request);
     return request;
   }
 }

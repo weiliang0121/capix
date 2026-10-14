@@ -1,3 +1,4 @@
+import { isEqual } from 'es-toolkit/predicate';
 import type { Message, FileTask } from '@capix/protocol';
 import type { Memory, TranscriptRangeReader } from '@capix/server-runtime/content';
 import type { Selection } from '../../model/types.js';
@@ -15,7 +16,7 @@ export interface RequestUnderstandingInput {
 
 /** The last exchange supplements selection so a direct clarification reply has its question. */
 export function understandingHistory(input: RequestUnderstandingInput, range: TranscriptRangeReader) {
-  if (range.length === 0 || range.read(range.end - 1) !== input.message) throw new Error('Execution input must be the final message in its fixed Transcript range');
+  if (range.length === 0 || !isEqual(range.read(range.end - 1), input.message)) throw new Error('Execution input must be the final message in its fixed Transcript range');
   const selected = input.selection.historyIndexes.map((index) => {
     if (!isSafeInteger(index) || index < range.start || index >= range.end - 1) throw new RangeError('Selected message is outside the execution history');
     return index;

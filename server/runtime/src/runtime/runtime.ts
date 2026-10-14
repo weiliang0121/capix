@@ -1,3 +1,4 @@
+import type { CheckpointRestoration } from '../checkpoint/contract.js';
 import type { InvocationOutputReceiver } from '../output/contract.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from './clock.js';
@@ -110,7 +111,15 @@ export class BoundRuntime<Input = unknown, Output = unknown, Options extends Inv
     }
   }
 
-  async run(input: Input, options: Options): Promise<Output> {
+  run(input: Input, options: Options): Promise<Output> {
+    return this.perform({ input }, options);
+  }
+
+  resume(contextId: string, options: Options): Promise<Output> {
+    return this.perform({ contextId }, options);
+  }
+
+  private async perform(request: { input: Input } | { contextId: string }, options: Options): Promise<Output> {
     const binding = this.#binding;
     const work = this.#work;
     if (!binding || !work) throw new Error('Runtime has no assembled work');
@@ -118,19 +127,25 @@ export class BoundRuntime<Input = unknown, Output = unknown, Options extends Inv
       return await this.reserve(() => {
         let invocation;
         try {
-          binding.validate?.(options);
-          const definition = binding.definition;
-          invocation = this.runtimeInvocationBuilder.create(input, {
-            controls: options,
-            resources: binding.resources(input, options),
-            executionBindings: binding.executionBindings(input, options),
-            requires: this.environment.resources(definition) as ResourceRequirements<Resources>,
-            initial: definition.run.requires,
-            observation: definition.observation,
-            work,
-            progress: binding.progress?.(input, options),
-            output: binding.output?.(input, options),
-          });
+          const construct = (input: Input, restore?: CheckpointRestoration) => {
+            binding.validate?.(options);
+            const definition = binding.definition;
+            const initial = restore ? definition.checkpoint?.points[restore.head.image.point]?.resume.requires : definition.run.requires;
+            if (!initial) throw new Error('Checkpoint point is not declared');
+            return this.runtimeInvocationBuilder.create(input, {
+              controls: options,
+              resources: binding.resources(input, options),
+              executionBindings: binding.executionBindings(input, options),
+              requires: this.environment.resources(definition) as ResourceRequirements<Resources>,
+              initial,
+              restore,
+              observation: definition.observation,
+              work,
+              progress: binding.progress?.(input, options),
+              output: binding.output?.(input, options),
+            });
+          };
+          invocation = 'contextId' in request ? this.runtimeInvocationBuilder.restoration(request.contextId, work, (restore) => construct(work.checkpoint!.input.decode(restore.head.image.frame.input), restore)) : construct(request.input);
         } catch (error) {
           try {
             this.publish({ kind: 'entry-failed', error });

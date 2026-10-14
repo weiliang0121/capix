@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isEqual } from 'es-toolkit/predicate';
 import { Interaction, InvocationCancelled, RuntimeError, ProgressChannel, isInvocationCancelled, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState, type ProgressReceiver } from '@capix/server-runtime';
 import { ModelSource } from './source.js';
 import type { ModelOutput, ModelRequest, ModelTextDelta, Purpose } from './types.js';
@@ -20,25 +21,31 @@ export type ModelInteractionResult = { readonly kind: 'received'; readonly inter
 export interface ModelInteractionCreator {
   start(request: ModelRequest, purpose: Purpose, controls: ModelInteractionControls): ModelInteractionRef;
 }
+export interface ModelInteractionExpectation {
+  readonly request: ModelRequest;
+  readonly purpose: Purpose;
+}
 export interface ModelInteractionReader {
   /** Replay the retained prefix synchronously, then receive this exchange's raw increments. */
   subscribe(interaction: ModelInteractionRef, receiver: ProgressReceiver<ModelTextDelta>): () => void;
   wait(interaction: ModelInteractionRef, controls: { readonly signal: AbortSignal; readonly waitMs: number }): Promise<ModelInteractionResult>;
-  result(interaction: ModelInteractionRef, controls: { readonly signal: AbortSignal }): Promise<ModelOutput>;
+  result(interaction: ModelInteractionRef, controls: { readonly signal: AbortSignal; readonly expected?: ModelInteractionExpectation }): Promise<ModelOutput>;
 }
 export interface ModelInteractionPersistence extends InteractionPersistence<ModelInteractionRequest, ModelOutput> {
   read(id: string): InteractionState<unknown, unknown> | undefined;
 }
 
+export const modelRequestSchema = z.strictObject({ model: z.string(), messages: z.array(z.strictObject({ role: z.enum(['system', 'user', 'assistant']), content: z.string() })), response_format: z.strictObject({ type: z.literal('json_object') }), thinking: z.strictObject({ type: z.literal('disabled') }), max_tokens: z.int().positive(), stream: z.boolean() });
+export const modelOutputSchema = z.strictObject({ id: z.string(), model: z.string(), content: z.string(), finishReason: z.string(), usage: z.strictObject({ promptTokens: z.int().nonnegative(), completionTokens: z.int().nonnegative(), totalTokens: z.int().nonnegative() }).nullable() });
+
 const requestSchema = z.strictObject({
-  request: z.strictObject({ model: z.string(), messages: z.array(z.strictObject({ role: z.enum(['system', 'user', 'assistant']), content: z.string() })), response_format: z.strictObject({ type: z.literal('json_object') }), thinking: z.strictObject({ type: z.literal('disabled') }), max_tokens: z.int().positive(), stream: z.boolean() }),
+  request: modelRequestSchema,
   purpose: z.enum(['selection', 'understanding', 'answer', 'memory']),
   timeoutMs: z.int().positive().max(2_147_483_647),
 });
-const outputSchema = z.strictObject({ id: z.string(), model: z.string(), content: z.string(), finishReason: z.string(), usage: z.strictObject({ promptTokens: z.int().nonnegative(), completionTokens: z.int().nonnegative(), totalTokens: z.int().nonnegative() }).nullable() });
 
 /** The stored feedback is the provider envelope, before any business JSON acceptance. */
-export const modelInteractionContract: InteractionContract<ModelInteractionRequest, ModelOutput> = Object.freeze({ key: 'observer.model.v1', request: (value: unknown) => requestSchema.parse(value), reply: (value: unknown) => outputSchema.parse(value) });
+export const modelInteractionContract: InteractionContract<ModelInteractionRequest, ModelOutput> = Object.freeze({ key: 'observer.model.v1', request: (value: unknown) => requestSchema.parse(value), reply: (value: unknown) => modelOutputSchema.parse(value) });
 
 /** Independent external exchanges. An A owns its wait, never this entity or its dispatch. */
 export class ModelInteractions {
@@ -184,8 +191,10 @@ export class ModelInteractions {
     }
   }
 
-  async result(ref: ModelInteractionRef, controls: { readonly signal: AbortSignal }): Promise<ModelOutput> {
+  async result(ref: ModelInteractionRef, controls: { readonly signal: AbortSignal; readonly expected?: ModelInteractionExpectation }): Promise<ModelOutput> {
     const interaction = this.get(ref);
+    const fixed = interaction.exportState().request;
+    if (controls.expected && (fixed.purpose !== controls.expected.purpose || !isEqual(fixed.request, controls.expected.request))) throw new RuntimeError('MODEL_INTERACTION_MISMATCH', '保存的模型交互不属于本次固定请求；不能读取其他调用的反馈。');
     try {
       await waitForSettlement(interaction, controls.signal);
     } catch (error) {

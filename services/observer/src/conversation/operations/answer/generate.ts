@@ -1,13 +1,13 @@
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { modelOutputRejected } from '../../model/rejection.js';
-import type { ChildBindings } from '@capix/server-runtime';
+import type { ChildBindings, ChildInvocationView, InvocationCheckpointDefinition } from '@capix/server-runtime';
 import { TranscriptResource } from '@capix/server-runtime/content';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ConversationResources, type ModelRequestResources } from '../../resources.js';
-import { Sequence, type InvocationWorkView } from '@capix/server-runtime';
-import type { DeclaredException, InvocationResolution, InvocationView } from '@capix/server-runtime';
+import { type InvocationWorkView } from '@capix/server-runtime';
+import { DeclaredException, type InvocationResolution, type InvocationView } from '@capix/server-runtime';
 import { sortBy } from 'es-toolkit/array';
-import type { ModelRequest, Selection } from '../../model/types.js';
+import type { ModelRequest, ModelOutput, Selection } from '../../model/types.js';
 import { OperationDefinition, RuntimeError, type OperationContextView } from '@capix/server-runtime';
 import { type Memory } from '@capix/server-runtime/content';
 import { checkCapacity, estimateCapacity } from '../../model/capacity.js';
@@ -24,7 +24,9 @@ import { modelRegenerationInput, prepareRegenerationRequest, type ModelRegenerat
 import { documentDescriptor, type TextDocument } from '../../../files/index.js';
 import { loadRequest } from '../../model/request.js';
 import { answerStream, AnswerTextDecoder, type AnswerTextDelta } from './stream.js';
+import { answerCheckpointCodecs, checkAnswerAccepted, checkModelWaiting, checkPreparationWaiting, checkAcceptanceWaiting, type AnswerModelWaiting } from './checkpoint.js';
 type AnswerCall = InvocationWorkView<GenerationInput, GenerationOutput, OperationContextView<GenerationInput, GenerationOutput, ConversationResources>, AnswerTextDelta>;
+type AnswerResumeCall = InvocationWorkView<GenerationInput, GenerationOutput, OperationContextView<GenerationInput, GenerationOutput>, AnswerTextDelta>;
 
 export interface GenerationInput {
   readonly selection: Selection;
@@ -51,6 +53,7 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
 
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() } as const);
   readonly run;
+  readonly checkpoint: InvocationCheckpointDefinition<GenerationInput, GenerationOutput, OperationContextView<GenerationInput, GenerationOutput, ConversationResources>, AnswerTextDelta>;
   override readonly maxRounds = 2;
   readonly exceptions = {
     requires: {},
@@ -58,8 +61,6 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     handle: this.handleException.bind(this),
   };
   readonly children;
-  private readonly composition;
-  private readonly regenerationComposition;
   readonly prepareRegenerationDefinition: PrepareModelRequestDefinition<ModelRegenerationInput>;
 
   readonly assembleContextDefinition: AssembleAnswerContextDefinition;
@@ -76,26 +77,92 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     this.prepareRequestDefinition = new PrepareModelRequestDefinition((input, resources) => this.createRequest(input, resources), undefined, options.document ? { input: describeAnswerRequest, output: describeModelRequest } : {});
     this.requestModelDefinition = new RequestModelDefinition(this.purpose, options.document ? { input: describeModelRequest } : {});
     this.acceptOutputDefinition = new AcceptModelOutputDefinition(this.outputContract);
-    this.composition = new Sequence<GenerationInput, AnswerCall>()
-      .step('context', { use: this.assembleContextDefinition, input: ({ input }) => input.selection })
-      .step('request', { use: this.prepareRequestDefinition, input: ({ input, outputs }) => ({ ...outputs.context, memories: input.memories, ...(input.task ? { task: input.task } : {}), ...(input.document ? { document: input.document } : {}) }) })
-      .step('model', { use: this.requestModelDefinition, input: ({ outputs }) => outputs.request, output: ({ parent }) => decodeModelText(parent) })
-      .step('acceptance', { use: this.acceptOutputDefinition, input: ({ outputs }) => ({ output: outputs.model }) });
     this.prepareRegenerationDefinition = new PrepareModelRequestDefinition(prepareRegenerationRequest, undefined, options.document ? { input: (input) => ({ ...input, request: describeModelRequest(input.request) }), output: describeModelRequest } : {});
-    this.regenerationComposition = new Sequence<ModelRegenerationEvidence, AnswerCall>()
-      .step('request', { use: this.prepareRegenerationDefinition, input: ({ parent, input }) => modelRegenerationInput(parent, input) })
-      .step('model', { use: this.requestModelDefinition.regeneration.entry, input: ({ input, outputs }) => ({ request: outputs.request, evidence: input }), output: ({ parent }) => decodeModelText(parent) })
-      .step('acceptance', { use: this.acceptOutputDefinition, input: ({ outputs }) => ({ output: outputs.model }) });
     this.children = Object.freeze([this.prepareRegenerationDefinition, this.assembleContextDefinition, this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition]);
+    this.checkpoint = {
+      key: `observer.generate-answer.${options.document ? 'document' : options.files ? 'files' : 'conversation'}`,
+      version: 2,
+      input: answerCheckpointCodecs.input,
+      output: answerCheckpointCodecs.output,
+      points: {
+        contextWaiting: { state: answerCheckpointCodecs.waiting, check: (frame, state) => checkPreparationWaiting(frame, state, 'context', this.assembleContextDefinition.checkpoint), resume: { requires: {}, uses: [this.assembleContextDefinition, this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition], execute: (context, invocation: AnswerResumeCall, children, state: AnswerModelWaiting) => this.receiveContext(context.currentInput, invocation, children, children.get(this.assembleContextDefinition).resume(invocation, state.childId)) } },
+        requestWaiting: { state: answerCheckpointCodecs.waiting, check: (frame, state) => checkPreparationWaiting(frame, state, 'request', frame.round === 1 ? this.prepareRequestDefinition.checkpoint : this.prepareRegenerationDefinition.checkpoint), resume: { requires: {}, uses: [this.prepareRequestDefinition, this.prepareRegenerationDefinition, this.requestModelDefinition, this.acceptOutputDefinition], execute: (context, invocation: AnswerResumeCall, children, state: AnswerModelWaiting) => this.receiveRequest(invocation, children, children.get(context.progress.round === 1 ? this.prepareRequestDefinition : this.prepareRegenerationDefinition).resume(invocation, state.childId)) } },
+        acceptanceWaiting: { state: answerCheckpointCodecs.waiting, check: (frame, state) => checkAcceptanceWaiting(frame, state, this.requestModelDefinition.checkpoint, this.acceptOutputDefinition.checkpoint), resume: { requires: {}, uses: [this.acceptOutputDefinition], execute: (_context, invocation: AnswerResumeCall, children, state: AnswerModelWaiting) => this.receiveAcceptance(invocation, children, children.get(this.acceptOutputDefinition).resume(invocation, state.childId)) } },
+        modelWaiting: {
+          state: answerCheckpointCodecs.waiting,
+          check: (frame, state) => checkModelWaiting(frame, state, this.requestModelDefinition.checkpoint),
+          resume: {
+            requires: {},
+            uses: [this.requestModelDefinition, this.acceptOutputDefinition],
+            execute: (_context, invocation: AnswerResumeCall, children, state: AnswerModelWaiting) => this.resumeModel(invocation, children, state),
+          },
+        },
+        answerAccepted: {
+          state: answerCheckpointCodecs.output,
+          check: (frame, output) => checkAnswerAccepted(frame, output, this.requestModelDefinition.checkpoint),
+          resume: { requires: {}, uses: [], execute: (_context, _invocation, _children, output: GenerationOutput) => output },
+        },
+      },
+    };
     this.run = { requires: GenerateAnswerDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
   private async execute(context: OperationContextView<GenerationInput, GenerationOutput, ConversationResources>, invocation: AnswerCall, children: ChildBindings): Promise<GenerationOutput> {
     if (Boolean(context.currentInput.document) !== this.documentEnabled) throw new RuntimeError('DOCUMENT_INPUT', '文档证据必须与生成能力的声明一致。');
-    if (context.progress.round === 1) return (await this.composition.run(invocation, context.currentInput, children)).acceptance;
+    if (context.progress.round === 1) {
+      const assembled = children.get(this.assembleContextDefinition).create(invocation, context.currentInput.selection, { key: 'context' });
+      invocation.checkpoint?.save('contextWaiting', { childId: assembled.context.id });
+      return this.receiveContext(context.currentInput, invocation, children, assembled);
+    }
     const evidence = this.regenerationEvidence(invocation);
     if (!evidence) throw new Error('Missing model regeneration evidence');
-    return (await this.regenerationComposition.run(invocation, evidence, children)).acceptance;
+    const request = children.get(this.prepareRegenerationDefinition).create(invocation, modelRegenerationInput(invocation, evidence), { key: 'request' });
+    invocation.checkpoint?.save('requestWaiting', { childId: request.context.id });
+    return this.receiveRequest(invocation, children, request, evidence);
+  }
+
+  private async receiveContext(input: GenerationInput, invocation: AnswerCall | AnswerResumeCall, children: ChildBindings, assembled: ChildInvocationView<Selection, AnswerMessageContext>): Promise<GenerationOutput> {
+    await assembled.run();
+    const context = await children.accept(assembled, (value) => value);
+    const request = children.get(this.prepareRequestDefinition).create(invocation, { ...context, memories: input.memories, ...(input.task ? { task: input.task } : {}), ...(input.document ? { document: input.document } : {}) }, { key: 'request' });
+    invocation.checkpoint?.save('requestWaiting', { childId: request.context.id });
+    return this.receiveRequest(invocation, children, request);
+  }
+
+  private async receiveRequest(invocation: AnswerCall | AnswerResumeCall, children: ChildBindings, request: ChildInvocationView<unknown, ModelRequest>, evidence?: ModelRegenerationEvidence): Promise<GenerationOutput> {
+    await request.run();
+    const prepared = await children.accept(request, (value) => value);
+    // A restored preparation is already checked against the saved rejection and fixed request.
+    const model = evidence ? children.entry(this.requestModelDefinition.regeneration.entry).create(invocation, { request: prepared, evidence }, { key: 'model', output: decodeModelText(invocation) }) : children.get(this.requestModelDefinition).create(invocation, prepared, { key: 'model', output: decodeModelText(invocation) });
+    invocation.checkpoint?.save('modelWaiting', { childId: model.context.id });
+    return this.receiveModel(invocation, children, model);
+  }
+
+  private async receiveModel(invocation: AnswerCall | AnswerResumeCall, children: ChildBindings, model: ChildInvocationView<ModelRequest, ModelOutput>): Promise<GenerationOutput> {
+    await model.run();
+    const output = await children.accept(model, (value) => value);
+    const acceptance = children.get(this.acceptOutputDefinition).create(invocation, { output }, { key: 'acceptance' });
+    invocation.checkpoint?.save('acceptanceWaiting', { childId: acceptance.context.id });
+    return this.receiveAcceptance(invocation, children, acceptance);
+  }
+
+  private async receiveAcceptance(invocation: AnswerCall | AnswerResumeCall, children: ChildBindings, acceptance: ChildInvocationView<ModelAcceptanceInput, GenerationOutput>): Promise<GenerationOutput> {
+    await acceptance.run();
+    const answer = await children.accept(acceptance, (value) => value);
+    invocation.checkpoint?.save('answerAccepted', answer);
+    return answer;
+  }
+
+  private async resumeModel(invocation: AnswerResumeCall, children: ChildBindings, state: AnswerModelWaiting): Promise<GenerationOutput> {
+    try {
+      // Only the exact durable model delivery is consumed; preview and request preparation are not replayed.
+      const model = children.get(this.requestModelDefinition).resume(invocation, state.childId);
+      return await this.receiveModel(invocation, children, model);
+    } catch (error) {
+      // The original activity may already have regenerated after this point. Recovery cannot send again.
+      if (error instanceof DeclaredException && error.contract === modelOutputRejected) throw new RuntimeError('CHECKPOINT_ANSWER_REJECTED', '已保存的模型反馈未通过回答契约；此恢复点不能重新发起模型请求。', undefined, { cause: error });
+      throw error;
+    }
   }
 
   private handleException(context: OperationContextView<GenerationInput, GenerationOutput, Record<string, never>>, exception: DeclaredException, invocation: InvocationView<GenerationInput, GenerationOutput, OperationContextView<GenerationInput, GenerationOutput, Record<string, never>>>): InvocationResolution<GenerationInput, GenerationOutput> {
@@ -157,7 +224,7 @@ function describeModelRequest(request: ModelRequest): unknown {
   return { ...request, messages: request.messages.map(({ role, content }) => ({ role, bytes: Buffer.byteLength(content, 'utf8') })) };
 }
 
-function decodeModelText(invocation: AnswerCall): import('@capix/server-runtime').InvocationOutputReceiver<import('../../model/types.js').ModelOutput, import('../../model/types.js').ModelTextDelta> {
+function decodeModelText(invocation: AnswerCall | AnswerResumeCall): import('@capix/server-runtime').InvocationOutputReceiver<import('../../model/types.js').ModelOutput, import('../../model/types.js').ModelTextDelta> {
   const decoder = new AnswerTextDecoder();
   return {
     receive: (event): undefined => {

@@ -1,12 +1,15 @@
+import { z } from 'zod';
+import { isEqual } from 'es-toolkit/predicate';
+import { checkpointCodec } from '../../checkpoint.js';
+import { selectionInputCodec, selectionCodec, childWaitingCodec, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { ChildBindings } from '@capix/server-runtime';
 import { TranscriptResource } from '@capix/server-runtime/content';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ConversationResources, type ModelRequestResources, type HistoryResources } from '../../resources.js';
-import { Sequence } from '@capix/server-runtime';
-import type { InvocationView } from '@capix/server-runtime';
+import type { InvocationWorkView, InvocationCheckpointDefinition, InvocationCheckpointFrame, ChildInvocationView } from '@capix/server-runtime';
 import type { ModelSettings } from '@capix/protocol';
-import type { Selection } from '../../model/types.js';
+import type { Selection, ModelRequest, ModelOutput } from '../../model/types.js';
 import { OperationDefinition, type OperationContextView } from '@capix/server-runtime';
 import { type TranscriptRangeReader } from '@capix/server-runtime/content';
 import { historyMessages, type SelectionInput } from './input.js';
@@ -35,7 +38,7 @@ export class SelectHistoryDefinition extends OperationDefinition<SelectionInput,
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() } as const);
   readonly run;
   readonly children;
-  private readonly composition;
+  readonly checkpoint: InvocationCheckpointDefinition<SelectionInput, Selection, OperationContextView<SelectionInput, Selection, ConversationResources>>;
 
   readonly prepareRequestDefinition: PrepareModelRequestDefinition<SelectionInput, ModelRequestResources & HistoryResources>;
   readonly requestModelDefinition: RequestModelDefinition;
@@ -46,23 +49,79 @@ export class SelectHistoryDefinition extends OperationDefinition<SelectionInput,
     this.prepareRequestDefinition = new PrepareModelRequestDefinition<SelectionInput, ModelRequestResources & HistoryResources>((input, resources) => loadRequest(selectionPayload(input, historyMessages(resources.history, input.message)), selectionTask, this.outputContract.schema, resources.settings), selectionRequestResources);
     this.requestModelDefinition = new RequestModelDefinition(this.purpose);
     this.acceptOutputDefinition = new AcceptModelOutputDefinition({ schema: this.outputContract.schema, accept: (value, input: ModelAcceptanceInput & { basis: SelectionBasis }) => this.outputContract.accept(value, input.basis) });
-    this.composition = new Sequence<SelectionInput, InvocationView<SelectionInput, Selection, OperationContextView<SelectionInput, Selection, ConversationResources>>>()
-      .step('request', { use: this.prepareRequestDefinition, input: ({ input }) => input })
-      .step('model', { use: this.requestModelDefinition, input: ({ outputs }) => outputs.request })
-      .step('acceptance', {
-        use: this.acceptOutputDefinition,
-        input: ({ parent, outputs }) => {
-          const range = parent.context.resources.values.history;
-          return { output: outputs.model, basis: { start: range.start, end: range.end - 1 } };
-        },
-      });
     this.children = Object.freeze([this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition]);
+    this.checkpoint = {
+      key: 'observer.select-history',
+      version: 1,
+      input: selectionInputCodec,
+      output: selectionCodec,
+      points: {
+        requestWaiting: {
+          state: checkpointCodec(z.strictObject({ childId: z.string().min(1), basis: z.strictObject({ start: z.int().nonnegative(), end: z.int().nonnegative() }) })),
+          check: (frame, state) => {
+            originalCheckpoint(frame);
+            const child = waitingChild(frame, state, 'request', this.prepareRequestDefinition.checkpoint);
+            if (frame.children.length !== 1 || !isEqual(child.input, frame.currentInput) || state.basis.end < state.basis.start) throw new Error('Selection preparation checkpoint changed input');
+          },
+          resume: { requires: {}, uses: this.children, execute: (_context, invocation, children, state: { childId: string; basis: SelectionBasis }) => this.receiveRequest(invocation, children, children.get(this.prepareRequestDefinition).resume(invocation, state.childId), state.basis) },
+        },
+        acceptanceWaiting: {
+          state: childWaitingCodec,
+          check: (frame, state) => {
+            originalCheckpoint(frame);
+            const child = waitingChild(frame, state, 'acceptance', this.acceptOutputDefinition.checkpoint);
+            const model = acceptedChild(frame.children[1]);
+            if (frame.children.length !== 3 || model.key !== 'model' || !isEqual((child.input as { output: unknown }).output, model.state.reception.output)) throw new Error('Selection acceptance checkpoint changed feedback');
+          },
+          resume: { requires: {}, uses: [this.acceptOutputDefinition], execute: (_context, invocation, children, state: { childId: string }) => this.receiveAcceptance(invocation, children, children.get(this.acceptOutputDefinition).resume(invocation, state.childId)) },
+        },
+        modelWaiting: { state: checkpointCodec(z.strictObject({ childId: z.string().min(1), basis: z.strictObject({ start: z.int().nonnegative(), end: z.int().nonnegative() }) })), check: (frame, state) => this.checkWaiting(frame, state), resume: { requires: {}, uses: [this.requestModelDefinition, this.acceptOutputDefinition], execute: (_context, invocation, children, state: { childId: string; basis: SelectionBasis }) => this.receiveModel(invocation, children, children.get(this.requestModelDefinition).resume(invocation, state.childId), state.basis) } },
+        result: {
+          state: selectionCodec,
+          check: (frame, output) => {
+            originalCheckpoint(frame);
+            const accepted = acceptedChild(frame.children.at(-1));
+            if (accepted.key !== 'acceptance' || !isEqual(accepted.state.reception.output, output)) throw new Error('Selection checkpoint differs from accepted result');
+          },
+          resume: { requires: {}, uses: [], execute: (_context, _invocation, _children, output: Selection) => output },
+        },
+      },
+    };
     this.run = { requires: SelectHistoryDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  private async execute(context: OperationContextView<SelectionInput, Selection, ConversationResources>, invocation: InvocationView<SelectionInput, Selection, OperationContextView<SelectionInput, Selection, ConversationResources>>, children: ChildBindings): Promise<Selection> {
-    const outputs = await this.composition.run(invocation, context.currentInput, children);
-    return outputs.acceptance;
+  private async execute(context: OperationContextView<SelectionInput, Selection, ConversationResources>, invocation: InvocationWorkView<SelectionInput, Selection, OperationContextView<SelectionInput, Selection, ConversationResources>>, children: ChildBindings): Promise<Selection> {
+    const request = children.get(this.prepareRequestDefinition).create(invocation, context.currentInput, { key: 'request' });
+    const range = context.resources.values.history;
+    const basis = { start: range.start, end: range.end - 1 };
+    invocation.checkpoint?.save('requestWaiting', { childId: request.context.id, basis });
+    return this.receiveRequest(invocation, children, request, basis);
+  }
+  private async receiveRequest(invocation: InvocationWorkView<SelectionInput, Selection, OperationContextView<SelectionInput, Selection, any>>, children: ChildBindings, request: ChildInvocationView<SelectionInput, ModelRequest>, basis: SelectionBasis): Promise<Selection> {
+    await request.run();
+    const prepared = await children.accept(request, (value) => value);
+    const model = children.get(this.requestModelDefinition).create(invocation, prepared, { key: 'model' });
+    invocation.checkpoint?.save('modelWaiting', { childId: model.context.id, basis });
+    return this.receiveModel(invocation, children, model, basis);
+  }
+  private async receiveModel(invocation: InvocationWorkView<SelectionInput, Selection, OperationContextView<SelectionInput, Selection, any>>, children: ChildBindings, model: ChildInvocationView<ModelRequest, ModelOutput>, basis: SelectionBasis): Promise<Selection> {
+    await model.run();
+    const output = await children.accept(model, (value) => value);
+    const acceptance = children.get(this.acceptOutputDefinition).create(invocation, { output, basis } as ModelAcceptanceInput & { basis: SelectionBasis }, { key: 'acceptance' });
+    invocation.checkpoint?.save('acceptanceWaiting', { childId: acceptance.context.id });
+    return this.receiveAcceptance(invocation, children, acceptance);
+  }
+  private async receiveAcceptance(invocation: InvocationWorkView<SelectionInput, Selection, OperationContextView<SelectionInput, Selection, any>>, children: ChildBindings, acceptance: ChildInvocationView<ModelAcceptanceInput & { basis: SelectionBasis }, Selection>): Promise<Selection> {
+    await acceptance.run();
+    const result = await children.accept(acceptance, (value) => value);
+    invocation.checkpoint?.save('result', result);
+    return result;
+  }
+  private checkWaiting(frame: InvocationCheckpointFrame, state: { childId: string; basis: SelectionBasis }): void {
+    originalCheckpoint(frame);
+    const model = waitingChild(frame, state, 'model', this.requestModelDefinition.checkpoint);
+    const request = acceptedChild(frame.children[0]);
+    if (frame.children.length !== 2 || request.key !== 'request' || !isEqual(request.input, frame.currentInput) || !isEqual(model.input, request.state.reception.output) || state.basis.end < state.basis.start) throw new Error('Selection checkpoint differs from prepared model request');
   }
 }
 

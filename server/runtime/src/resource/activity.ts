@@ -8,6 +8,8 @@ import { RuntimeErrorHelper } from '../errors/helper.js';
 /** Internal call binding only. Business receives the resource endpoint, never this provenance port. */
 export interface ResourceOwner {
   readonly contextId: string;
+  readonly round?: () => number;
+  readonly reception?: () => Readonly<{ parentContextId: string; childContextId: string }>;
   readonly nextSequence?: () => number;
   readonly observation?: EventConsumer<ResourceObservation>;
   readonly transcript?: EventConsumer<TranscriptEvent>;
@@ -70,6 +72,11 @@ export class ResourceActivity {
   }
   validate(): void {
     this.session.validate();
+  }
+  reception(): Readonly<{ parentContextId: string; childContextId: string }> {
+    this.validate();
+    if (!this.session.owner?.reception) throw new Error('Fixed operations require a parent reception binding');
+    return this.session.owner.reception();
   }
   get transcriptObservation(): EventConsumer<TranscriptEvent> | undefined {
     return this.session.owner?.transcript;

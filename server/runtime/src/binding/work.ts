@@ -5,17 +5,18 @@ import type { InvocationWork } from '../invocation/cycle.js';
 import type { BoundChildren } from './children.js';
 import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
 import type { InvocationView, InvocationWorkView } from '../invocation/view.js';
-import type { Invocation } from '../invocation/invocation.js';
+import type { InvocationTarget } from '../invocation/relation.js';
 import type { ChildDefinition } from '../definition/children.js';
 
 /** One assembly, separate views for work and exception declarations. */
 export function bindInvocationWork<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, ExceptionResources extends object>(definition: InvocationDefinition<Input, Output, ContextViewOf<Context>, Resources, ExceptionResources, any>, children: BoundChildren): InvocationWork<Input, Output, Context> {
   type Call = Parameters<InvocationWork<Input, Output, Context>['execute']>[1];
-  const registries = new WeakMap<Call, Map<InvocationView, Invocation<any, any, any>>>();
+  const registries = new WeakMap<Call, Map<InvocationView, InvocationTarget>>();
   const phases = new WeakMap<Call, Map<string, { view: InvocationView<Input, Output, ContextViewOf<Context>>; children: ReturnType<BoundChildren['forInvocation']> }>>();
-  const access = (invocation: Call, phase: 'run' | 'receive' | 'exceptions', requires: ResourceRequirements, uses?: readonly ChildDefinition[]) => {
+  const access = (invocation: Call, phase: 'run' | 'receive' | 'exceptions' | `checkpoint:${string}`, requires: ResourceRequirements, uses?: readonly ChildDefinition[]) => {
     const resources = (invocation.context as Context & { resources: ResourceBindings }).resources;
-    resources.activate(phase === 'receive' ? 'run' : phase, requires);
+    const resourcePhase = phase === 'exceptions' ? 'exceptions' : 'run';
+    resources.activate(resourcePhase, requires);
     let registry = registries.get(invocation);
     if (!registry) {
       registry = new Map();
@@ -30,7 +31,7 @@ export function bindInvocationWork<Input, Output, Context extends InvocationCont
     const key = `${phase}:${round}`;
     let value = calls.get(key);
     if (!value) {
-      const context = invocationContextView(invocation.context, resources.view(requires, phase === 'receive' ? 'run' : phase));
+      const context = invocationContextView(invocation.context, resources.view(requires, resourcePhase));
       const view = Object.freeze({
         context,
         origin: invocation.view.origin,
@@ -41,7 +42,7 @@ export function bindInvocationWork<Input, Output, Context extends InvocationCont
           return invocation.view.sequence;
         },
         children: invocation.view.children,
-        ...(phase === 'run' ? { output: invocation.outputWriter } : {}),
+        ...(phase === 'run' || phase.startsWith('checkpoint:') ? { output: invocation.outputWriter, checkpoint: invocation.checkpointWriter } : {}),
       });
       const validate = () => {
         if (invocation.context.progress.round !== round) throw new Error('Child access belongs to an inactive declaration round');
@@ -57,10 +58,32 @@ export function bindInvocationWork<Input, Output, Context extends InvocationCont
   const exceptions = definition.exceptions;
   children.checkUses(run.uses ?? []);
   children.checkUses(exceptions?.uses ?? []);
+  for (const point of Object.values(definition.checkpoint?.points ?? {})) children.checkUses(point.resume.uses ?? []);
   return {
     output: definition.output,
     maxRounds: definition.maxRounds,
     raises: definition.raises,
+    checkpoint: definition.checkpoint
+      ? {
+          key: definition.checkpoint.key,
+          version: definition.checkpoint.version,
+          input: definition.checkpoint.input,
+          output: definition.checkpoint.output,
+          points: Object.fromEntries(
+            Object.entries(definition.checkpoint.points).map(([name, point]) => [
+              name,
+              {
+                state: point.state,
+                check: point.check,
+                execute: (_context: Context, invocation: Call, state: unknown) => {
+                  const bound = access(invocation, `checkpoint:${name}`, point.resume.requires, point.resume.uses ?? []);
+                  return point.resume.execute(bound.view.context as never, bound.view as never, bound.children, state);
+                },
+              },
+            ]),
+          ),
+        }
+      : undefined,
     execute: (_context, invocation) => {
       const bound = access(invocation, 'run', run.requires, run.uses);
       return run.execute(bound.view.context, bound.view as InvocationWorkView<Input, Output, ContextViewOf<Context>, any>, bound.children);

@@ -4,9 +4,20 @@ import { conversationTitle } from '../conversation/title.js';
 /** Local format migrations preserve existing content; unknown versions never create an empty conversation. */
 export function initializeSchema(database: DatabaseSync): void {
   const version = database.prepare('PRAGMA user_version').get()?.user_version;
-  if (version === 3) return;
+  if (version === 5) return;
+  if (version === 4) {
+    migrateFixedEffects(database);
+    return;
+  }
+  if (version === 3) {
+    migrateTranscriptAppends(database);
+    migrateFixedEffects(database);
+    return;
+  }
   if (version === 1 || version === 2) {
     migrateConversations(database, version === 1);
+    migrateTranscriptAppends(database);
+    migrateFixedEffects(database);
     return;
   }
   if (version !== 0 || database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()) throw new Error('Unsupported Observer persistence schema');
@@ -57,6 +68,58 @@ export function initializeSchema(database: DatabaseSync): void {
     COMMIT;
   `);
   migrateConversations(database);
+  migrateTranscriptAppends(database);
+  migrateFixedEffects(database);
+}
+
+function migrateFixedEffects(database: DatabaseSync): void {
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      CREATE TABLE memory_applies (
+        ordinal INTEGER PRIMARY KEY AUTOINCREMENT,
+        memories_id TEXT NOT NULL REFERENCES memory_sets(id),
+        context_id TEXT NOT NULL,
+        position TEXT NOT NULL,
+        body TEXT NOT NULL CHECK (json_valid(body)),
+        UNIQUE (context_id, position)
+      ) STRICT;
+      CREATE TABLE file_creations (
+        context_id TEXT NOT NULL,
+        position TEXT NOT NULL,
+        body TEXT NOT NULL CHECK (json_valid(body)),
+        PRIMARY KEY (context_id, position)
+      ) STRICT;
+      PRAGMA user_version = 5;
+      COMMIT;
+    `);
+  } catch (error) {
+    if (database.isTransaction) database.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+function migrateTranscriptAppends(database: DatabaseSync): void {
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      CREATE TABLE transcript_appends (
+        transcript_id TEXT NOT NULL REFERENCES transcripts(id),
+        parent_context_id TEXT NOT NULL,
+        child_context_id TEXT NOT NULL,
+        position TEXT NOT NULL,
+        revision INTEGER NOT NULL CHECK (revision > 0),
+        body TEXT NOT NULL CHECK (json_valid(body)),
+        PRIMARY KEY (parent_context_id, child_context_id, position),
+        UNIQUE (transcript_id, revision)
+      ) STRICT;
+      PRAGMA user_version = 4;
+      COMMIT;
+    `);
+  } catch (error) {
+    if (database.isTransaction) database.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 const interactions = `

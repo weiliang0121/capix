@@ -8,6 +8,24 @@ import type { ChildDefinition } from './children.js';
 import type { ExceptionContract, DeclaredException } from '../exception/contract.js';
 import type { ObservationDeclaration } from './observation.js';
 import type { InvocationFact } from '../observation/facts.js';
+import type { CheckpointCodec, CheckpointContract, InvocationCheckpointFrame } from '../checkpoint/contract.js';
+
+/** One explicit continuation, with its own resource and child capability requirements. */
+export interface InvocationCheckpointPoint<Input, Output, ContextView extends InvocationContextView<Input, Output>, State, Resources extends object = Record<string, never>, Delta = never> {
+  readonly state: CheckpointCodec<State>;
+  check?(frame: InvocationCheckpointFrame, state: State): void;
+  readonly resume: {
+    readonly requires: ResourceRequirements<Resources>;
+    readonly uses?: readonly ChildDefinition[];
+    execute(context: ContextViewResources<ContextView, Resources>, invocation: InvocationWorkView<Input, Output, ContextViewResources<ContextView, Resources>, Delta>, children: ChildBindings, state: State): Output | Promise<Output>;
+  };
+}
+
+export interface InvocationCheckpointDefinition<Input, Output, ContextView extends InvocationContextView<Input, Output>, Delta = never> extends CheckpointContract {
+  readonly input: CheckpointCodec<Input>;
+  readonly output: CheckpointCodec<Output>;
+  readonly points: Readonly<Record<string, InvocationCheckpointPoint<Input, Output, ContextView, any, any, Delta>>>;
+}
 
 export interface InvocationRunDefinition<Input, Output, ContextView extends InvocationContextView<Input, Output>, Resources extends object, Delta = never> {
   readonly requires: ResourceRequirements<Resources>;
@@ -33,4 +51,5 @@ export abstract class InvocationDefinition<Input, Output, ContextView extends In
   abstract readonly run: InvocationRunDefinition<Input, Output, ContextView, Resources, Delta>;
   readonly exceptions?: InvocationExceptionDefinition<Input, Output, ContextViewResources<ContextView, ExceptionResources>, ExceptionResources>;
   readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
+  readonly checkpoint?: InvocationCheckpointDefinition<Input, Output, ContextView, Delta>;
 }

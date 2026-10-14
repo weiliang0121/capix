@@ -26,6 +26,17 @@ export class BoundAttempt<Input, Output, Resources extends object = object> {
   create(parent: Invocation<unknown, unknown, OperationContext>, input: Input, options: InvocationRelationOptions = {}) {
     return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: this.definition.run.requires, refinements: this.refinements, observation: this.definition.observation, description: this.definition, work: this.work, key: options.key, output: options.output });
   }
+  resume(parent: Invocation<unknown, unknown, OperationContext>, contextId: string, options: InvocationRelationOptions = {}) {
+    return this.invocationBuilder.restoration(contextId, this.work, parent.context.id, (restore) => {
+      const checkpoint = this.definition.checkpoint!;
+      const point = checkpoint.points[restore.head.image.point];
+      if (!point) throw new Error('Checkpoint point is not declared');
+      const input = checkpoint.input.decode(restore.head.image.frame.input);
+      const description = this.definition;
+      return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: point.resume.requires, refinements: this.refinements, observation: this.definition.observation, description, work: this.work, key: options.key, output: options.output, restore });
+    });
+  }
+
   call(parent: Invocation<unknown, unknown, OperationContext>, input: Input): Promise<Output> {
     return this.create(parent, input).run();
   }

@@ -29,6 +29,18 @@ export class BoundOperation<Input, Output, Resources extends object = object> {
     const { name, label, source } = this.definition;
     return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: this.definition.run.requires, refinements: this.refinements, observation: this.definition.observation, description: { id: this.id, name, label, source }, work: this.work, key: options.key, output: options.output });
   }
+  resume(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, contextId: string, options: InvocationRelationOptions = {}) {
+    return this.invocationBuilder.restoration(contextId, this.work, parent.context.id, (restore) => {
+      const checkpoint = this.definition.checkpoint!;
+      const point = checkpoint.points[restore.head.image.point];
+      if (!point) throw new Error('Checkpoint point is not declared');
+      const input = checkpoint.input.decode(restore.head.image.frame.input);
+      const { name, label, source } = this.definition;
+      const description = { id: this.id, name, label, source };
+      return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.requires, initial: point.resume.requires, refinements: this.refinements, observation: this.definition.observation, description, work: this.work, key: options.key, output: options.output, restore });
+    });
+  }
+
   call(parent: Invocation<unknown, unknown, ExecutionContext> | Invocation<unknown, unknown, OperationContext>, input: Input): Promise<Output> {
     return this.create(parent, input).run();
   }

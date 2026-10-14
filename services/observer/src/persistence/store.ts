@@ -6,12 +6,15 @@ import { RuntimeError } from '@capix/server-runtime';
 import type { InteractionCommit, InteractionState } from '@capix/server-runtime';
 import { snapshotValue } from '@capix/server-runtime/recording';
 import { isEqual } from 'es-toolkit';
-import type { TranscriptState, TranscriptCommit, TranscriptPersistence, MemoriesState, MemoriesCommit, MemoriesPersistence } from '@capix/server-runtime/content';
+import type { TranscriptState, TranscriptCommit, TranscriptPersistence, TranscriptAppendState, MemoriesState, MemoriesCommit, MemoriesPersistence, MemoryApplyState } from '@capix/server-runtime/content';
+import type { FileCreationPersistence, FileCreationState } from '../files/creation.js';
 import type { ConversationDescriptor, ConversationListResponse, ConversationFailure, RecordChangeEvent, RecordEntry, CompositeRecord, RecordingArchive } from '@capix/protocol';
 import type { ObserverInteractionPersistence, ObserverStoredContent, ObserverStoredRecording } from './types.js';
 import { conversationTitle } from '../conversation/title.js';
 import { initializeSchema } from './schema.js';
 import { updateRecord } from './records.js';
+import { SqliteCheckpointStore } from './checkpoints.js';
+import { SqliteConversationCheckpointRuns } from './runs.js';
 
 type Row = Record<string, string | number | bigint | Uint8Array | null>;
 
@@ -20,6 +23,9 @@ export class SqliteObserverStore {
   readonly transcript: TranscriptPersistence = { commit: (change) => this.commitTranscript(change) };
   readonly memories: MemoriesPersistence = { commit: (change) => this.commitMemories(change) };
   readonly interactions: ObserverInteractionPersistence = { create: (state) => this.createInteraction(state), commit: (change) => this.commitInteraction(change), read: (id) => this.readInteraction(id) };
+  readonly checkpoints: SqliteCheckpointStore;
+  readonly checkpointRuns: SqliteConversationCheckpointRuns;
+  readonly fileCreations: FileCreationPersistence = { read: (operation) => this.readFileCreation(operation), create: (state) => this.createFileCreation(state), complete: (state) => this.completeFileCreation(state) };
   readonly #database: DatabaseSync;
   #failure?: ConversationFailure;
   readonly #activeSources = new Set<string>();
@@ -32,6 +38,8 @@ export class SqliteObserverStore {
       // Hold the writer lock across transactions; a second service cannot load an independent writer.
       this.#database.exec('PRAGMA locking_mode = EXCLUSIVE; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE; COMMIT;');
       initializeSchema(this.#database);
+      this.checkpoints = new SqliteCheckpointStore(this.#database);
+      this.checkpointRuns = new SqliteConversationCheckpointRuns(this.#database);
     } catch (error) {
       this.#database.close();
       throw error;
@@ -90,14 +98,14 @@ export class SqliteObserverStore {
   /** Required content is read consistently without querying or decoding historical recording. */
   loadContent(conversationId?: string): ObserverStoredContent | undefined {
     return this.transaction(() => {
-      for (const table of ['conversations', 'conversation_settings', 'transcripts', 'messages', 'memory_sets', 'memories']) {
+      for (const table of ['conversations', 'conversation_settings', 'transcripts', 'messages', 'transcript_appends', 'memory_sets', 'memories', 'memory_applies']) {
         if (this.all(`PRAGMA quick_check(${table})`).some((row) => row.quick_check !== 'ok') || this.get(`PRAGMA foreign_key_check(${table})`)) throw new Error('Stored database integrity check failed');
       }
       if (this.get('SELECT count(*) AS count FROM transcripts')?.count !== this.get('SELECT count(*) AS count FROM conversations')?.count || this.get('SELECT count(*) AS count FROM memory_sets')?.count !== this.get('SELECT count(*) AS count FROM conversations')?.count) throw new Error('Unowned content');
       const metadata = conversationId ? this.get('SELECT transcript_id, memories_id FROM conversations WHERE id = ?', conversationId) : this.get('SELECT transcript_id, memories_id FROM conversations WHERE id = (SELECT default_id FROM conversation_settings WHERE singleton = 1)');
       if (!metadata) {
         if (conversationId) throw new Error('Conversation does not exist');
-        for (const table of ['transcripts', 'messages', 'memory_sets', 'memories']) {
+        for (const table of ['transcripts', 'messages', 'transcript_appends', 'memory_sets', 'memories', 'memory_applies']) {
           if (this.get(`SELECT 1 FROM ${table} LIMIT 1`)) throw new Error('Persistence metadata is missing');
         }
         return undefined;
@@ -107,15 +115,25 @@ export class SqliteObserverStore {
       if (!transcript || !memories || memories.transcript_id !== transcript.id) throw new Error('Stored content identities do not match');
       const messages = this.all('SELECT position, body FROM messages WHERE transcript_id = ? ORDER BY position', transcript.id!);
       if (messages.some((row, index) => row.position !== index)) throw new Error('Stored message indexes are not continuous');
+      const appends = this.all('SELECT transcript_id, parent_context_id, child_context_id, position, revision, body FROM transcript_appends WHERE transcript_id = ? ORDER BY revision', transcript.id!).map((row) => {
+        const state = parse(row.body) as TranscriptAppendState;
+        if (state.request?.transcriptId !== row.transcript_id || state.receipt?.transcriptId !== row.transcript_id || state.request?.operation?.parentContextId !== row.parent_context_id || state.request?.operation?.childContextId !== row.child_context_id || state.request?.operation?.position !== row.position || state.receipt?.revision !== row.revision) throw new Error('Stored transcript append identity does not match');
+        return state;
+      });
       const items = this.all('SELECT id, body FROM memories WHERE collection_id = ? ORDER BY ordinal', memories.id!).map((row) => {
         const data = parse(row.body);
         if (data.id !== row.id) throw new Error('Stored memory identity does not match');
         return data;
       });
+      const applies = this.all('SELECT context_id, position, body FROM memory_applies WHERE memories_id = ? ORDER BY ordinal', memories.id!).map((row) => {
+        const state = parse(row.body) as MemoryApplyState;
+        if (state.request?.memoriesId !== memories.id || state.receipt?.memoriesId !== memories.id || state.request?.operation?.contextId !== row.context_id || state.request?.operation?.position !== row.position) throw new Error('Stored memory apply identity does not match');
+        return state;
+      });
       return {
         version: 1,
-        transcript: { id: transcript.id as string, revision: transcript.revision as number, starts: parse(transcript.starts), messages: messages.map((row) => parse(row.body)) },
-        memories: { id: memories.id as string, transcriptId: transcript.id as string, sequence: memories.sequence as number, items },
+        transcript: { id: transcript.id as string, revision: transcript.revision as number, starts: parse(transcript.starts), messages: messages.map((row) => parse(row.body)), ...(appends.length ? { appends } : {}) },
+        memories: { id: memories.id as string, transcriptId: transcript.id as string, sequence: memories.sequence as number, items, ...(applies.length ? { applies } : {}) },
       };
     });
   }
@@ -164,8 +182,10 @@ export class SqliteObserverStore {
       if (memories.transcriptId !== transcript.id) throw new Error('Memory source does not match transcript');
       this.run('INSERT INTO transcripts(id, revision, starts) VALUES (?, ?, ?)', transcript.id, transcript.revision, encode(transcript.starts));
       for (const [index, message] of transcript.messages.entries()) this.run('INSERT INTO messages(transcript_id, position, body) VALUES (?, ?, ?)', transcript.id, index, encode(message));
+      for (const append of transcript.appends ?? []) this.saveTranscriptAppend(append, transcript.id);
       this.run('INSERT INTO memory_sets(id, transcript_id, sequence) VALUES (?, ?, ?)', memories.id, transcript.id, memories.sequence);
       for (const memory of memories.items) this.run('INSERT INTO memories(id, collection_id, body) VALUES (?, ?, ?)', memory.id, memories.id, encode(memory));
+      for (const apply of memories.applies ?? []) this.saveMemoryApply(apply, memories.id);
       const id = randomUUID();
       const now = Date.now();
       const title = conversationTitle(transcript.messages);
@@ -185,6 +205,10 @@ export class SqliteObserverStore {
       if (change.kind === 'append') {
         if (change.start !== length || !change.messages.length) throw new Error('Transcript append boundary does not match');
         for (const [index, message] of change.messages.entries()) this.run('INSERT INTO messages(transcript_id, position, body) VALUES (?, ?, ?)', change.transcriptId, length + index, encode(message));
+        if (change.fixed) {
+          if (change.fixed.receipt.start !== change.start || change.fixed.receipt.count !== change.messages.length || change.fixed.receipt.revision !== change.revision || !isEqual(change.fixed.request.messages, change.messages)) throw new Error('Fixed append receipt does not match committed messages');
+          this.saveTranscriptAppend(change.fixed, change.transcriptId);
+        }
       } else {
         if (change.start <= starts.at(-1)! || change.start >= length) throw new Error('Transcript segment boundary does not match');
         starts.push(change.start);
@@ -195,11 +219,17 @@ export class SqliteObserverStore {
     });
   }
 
+  private saveTranscriptAppend(state: TranscriptAppendState, transcriptId: string): void {
+    if (state.request.transcriptId !== transcriptId || state.receipt.transcriptId !== transcriptId) throw new Error('Fixed append belongs to another transcript');
+    const operation = state.request.operation;
+    this.run('INSERT INTO transcript_appends(transcript_id, parent_context_id, child_context_id, position, revision, body) VALUES (?, ?, ?, ?, ?, ?)', transcriptId, operation.parentContextId, operation.childContextId, operation.position, state.receipt.revision, encode(state));
+  }
+
   private commitMemories(change: MemoriesCommit): undefined {
     this.requireContent();
     this.transaction(() => {
       const row = this.get('SELECT transcript_id, sequence FROM memory_sets WHERE id = ?', change.memoriesId);
-      if (!row || row.transcript_id !== change.transcriptId || row.sequence !== change.expectedSequence || change.sequence !== change.expectedSequence + change.upserts.length || !change.upserts.length) throw new Error('Memory sequence does not match saved state');
+      if (!row || row.transcript_id !== change.transcriptId || row.sequence !== change.expectedSequence || change.sequence !== change.expectedSequence + change.upserts.length || (!change.upserts.length && !change.fixed)) throw new Error('Memory sequence does not match saved state');
       const ids = new Set<string>();
       for (const memory of change.upserts) {
         if (ids.has(memory.id)) throw new Error('Duplicate memory mutation');
@@ -209,7 +239,50 @@ export class SqliteObserverStore {
         this.run('INSERT INTO memories(id, collection_id, body) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET body = excluded.body', memory.id, change.memoriesId, encode(memory));
       }
       this.run('UPDATE memory_sets SET sequence = ? WHERE id = ?', change.sequence, change.memoriesId);
+      if (change.fixed) {
+        if (
+          change.fixed.receipt.startSequence !== change.expectedSequence ||
+          change.fixed.receipt.sequence !== change.sequence ||
+          !isEqual(
+            change.fixed.receipt.memoryIds,
+            change.upserts.map((memory) => memory.id),
+          )
+        )
+          throw new Error('Fixed memory receipt does not match committed batch');
+        this.saveMemoryApply(change.fixed, change.memoriesId);
+      }
       this.run('UPDATE conversations SET updated_at = ? WHERE memories_id = ?', Date.now(), change.memoriesId);
+    });
+  }
+
+  private saveMemoryApply(state: MemoryApplyState, memoriesId: string): void {
+    if (state.request.memoriesId !== memoriesId || state.receipt.memoriesId !== memoriesId) throw new Error('Fixed memory collection does not match');
+    this.run('INSERT INTO memory_applies(memories_id, context_id, position, body) VALUES (?, ?, ?, ?)', memoriesId, state.request.operation.contextId, state.request.operation.position, encode(state));
+  }
+
+  private readFileCreation(operation: FileCreationState['request']['operation']): FileCreationState | undefined {
+    this.requireContent();
+    return this.transaction(() => {
+      const row = this.get('SELECT body FROM file_creations WHERE context_id = ? AND position = ?', operation.contextId, operation.position);
+      return row ? parse(row.body) : undefined;
+    });
+  }
+
+  private createFileCreation(state: FileCreationState): undefined {
+    this.requireContent();
+    this.transaction(() => {
+      if (state.receipt) throw new Error('File creation must start without a receipt');
+      this.run('INSERT INTO file_creations(context_id, position, body) VALUES (?, ?, ?)', state.request.operation.contextId, state.request.operation.position, encode(state));
+    });
+  }
+
+  private completeFileCreation(state: FileCreationState): undefined {
+    this.requireContent();
+    this.transaction(() => {
+      const row = this.get('SELECT body FROM file_creations WHERE context_id = ? AND position = ?', state.request.operation.contextId, state.request.operation.position);
+      const previous: FileCreationState | undefined = row ? parse(row.body) : undefined;
+      if (!previous || !isEqual(previous.request, state.request) || !state.receipt || (previous.receipt && !isEqual(previous.receipt, state.receipt))) throw new Error('File creation completion does not match fixed request');
+      this.run('UPDATE file_creations SET body = ? WHERE context_id = ? AND position = ?', encode(state), state.request.operation.contextId, state.request.operation.position);
     });
   }
 

@@ -66,7 +66,8 @@ test('Observer retains its E/O/A composition without additional execution record
     ['context', 'request', 'model', 'acceptance'],
   );
   assert.deepEqual(generation.returned.output, answer);
-  assert.equal(generation.reception.output.response.message, environment.transcript.get(1));
+  assert.deepEqual(generation.reception.output.response.message, environment.transcript.get(1));
+  assert.equal(generation.reception.output.receipt.start, 1, 'fixed append identifies the canonical message without retaining its live reference');
   assert.deepEqual(invocation.context.state.output, answer);
 });
 

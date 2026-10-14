@@ -7,3 +7,5 @@ export * from './files/index.js';
 export * from './persistence/index.js';
 
 export * from './assembly/conversations.js';
+
+export * from './conversation/checkpoints.js';

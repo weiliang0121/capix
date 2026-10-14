@@ -1,4 +1,6 @@
-import { OperationDefinition, type ChildBindings, type InvocationView, type OperationContextView } from '@capix/server-runtime';
+import { isEqual } from 'es-toolkit/predicate';
+import { decisionInputCodec, decisionCodec, childWaitingCodec, originalCheckpoint, waitingChild, acceptedChild } from '../operations/checkpoint.js';
+import { OperationDefinition, type ChildBindings, type InvocationWorkView, type InvocationCheckpointDefinition, type OperationContextView } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { ConversationResources } from '../resources.js';
 import { UnderstandRequestDefinition } from '../operations/request/understand.js';
@@ -16,15 +18,61 @@ export class DefaultConversationDecisionDefinition extends OperationDefinition<C
   readonly understandingDefinition?: UnderstandRequestDefinition;
   readonly children;
   readonly run;
+  readonly checkpoint: InvocationCheckpointDefinition<ConversationDecisionInput, ConversationDecision, OperationContextView<ConversationDecisionInput, ConversationDecision, DecisionResources>>;
 
   constructor(options: { readonly files: boolean }) {
     super();
     this.understandingDefinition = options.files ? new UnderstandRequestDefinition({ files: true }) : undefined;
     this.children = Object.freeze(this.understandingDefinition ? [this.understandingDefinition] : []);
+    this.checkpoint = {
+      key: `observer.default-decision.${options.files ? 'files' : 'chat'}`,
+      version: 1,
+      input: decisionInputCodec,
+      output: decisionCodec,
+      points: {
+        understandingWaiting: {
+          state: childWaitingCodec,
+          check: (frame, state) => {
+            originalCheckpoint(frame);
+            waitingChild(frame, state, 'understanding', this.understandingDefinition?.checkpoint);
+            if (frame.children.length !== 1) throw new Error('Decision checkpoint has unexpected child calls');
+          },
+          resume: {
+            requires: {},
+            uses: this.children,
+            execute: async (_context, invocation, children, state: { childId: string }) => {
+              if (!this.understandingDefinition) throw new Error('Understanding is unavailable');
+              const child = children.get(this.understandingDefinition).resume(invocation, state.childId);
+              await child.run();
+              const result = await children.accept(child, decisionFromProposal);
+              invocation.checkpoint?.save('result', result);
+              return result;
+            },
+          },
+        },
+        result: {
+          state: decisionCodec,
+          check: (frame, result) => {
+            originalCheckpoint(frame);
+            if (frame.children.length) {
+              const child = acceptedChild(frame.children[0]);
+              if (frame.children.length !== 1 || child.key !== 'understanding' || !isEqual(child.state.reception.output, result)) throw new Error('Decision checkpoint differs from accepted proposal');
+            }
+          },
+          resume: { requires: {}, uses: [], execute: (_context, _invocation, _children, result: ConversationDecision) => result },
+        },
+      },
+    };
     this.run = { requires: this.understandingDefinition ? UnderstandRequestDefinition.requires : {}, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  private async execute(context: OperationContextView<ConversationDecisionInput, ConversationDecision, DecisionResources>, invocation: InvocationView<ConversationDecisionInput, ConversationDecision, OperationContextView<ConversationDecisionInput, ConversationDecision, DecisionResources>>, children: ChildBindings): Promise<ConversationDecision> {
+  private async execute(context: OperationContextView<ConversationDecisionInput, ConversationDecision, DecisionResources>, invocation: InvocationWorkView<ConversationDecisionInput, ConversationDecision, OperationContextView<ConversationDecisionInput, ConversationDecision, DecisionResources>>, children: ChildBindings): Promise<ConversationDecision> {
+    const result = await this.decide(context, invocation, children);
+    invocation.checkpoint?.save('result', result);
+    return result;
+  }
+
+  private async decide(context: OperationContextView<ConversationDecisionInput, ConversationDecision, DecisionResources>, invocation: InvocationWorkView<ConversationDecisionInput, ConversationDecision, OperationContextView<ConversationDecisionInput, ConversationDecision, DecisionResources>>, children: ChildBindings): Promise<ConversationDecision> {
     const input = context.currentInput;
     const progress = input.progress;
     if (progress.answer) {
@@ -47,6 +95,7 @@ export class DefaultConversationDecisionDefinition extends OperationDefinition<C
       progress: { ...(progress.file ? { file: progress.file.task } : {}), ...(progress.saved ? { saved: { path: progress.saved.path } } : {}) },
     };
     const understanding = children.get(this.understandingDefinition).create(invocation, request, { key: 'understanding' });
+    invocation.checkpoint?.save('understandingWaiting', { childId: understanding.context.id });
     await understanding.run();
     return children.accept(understanding, (proposal) => decisionFromProposal(proposal));
   }

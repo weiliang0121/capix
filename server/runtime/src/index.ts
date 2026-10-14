@@ -58,3 +58,8 @@ export * from './errors/helper.js';
 export * from './value/array.js';
 export * from './value/object.js';
 export * from './value/string.js';
+
+// Explicit checkpoint declarations, persistence and recovery facts.
+export * from './checkpoint/contract.js';
+export * from './checkpoint/value.js';
+export * from './checkpoint/store.js';

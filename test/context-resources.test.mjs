@@ -261,8 +261,8 @@ test('message and memory access preserves entity validation, change publication 
   const before = bind(null).values;
   changes.take();
   const recordCount = [...recorder.book.values()].length;
-  assert.deepEqual(Object.keys(before.messages), ['append']);
-  assert.deepEqual(Object.keys(before.writer), ['apply']);
+  assert.deepEqual(Object.keys(before.messages), ['applyFixed', 'append']);
+  assert.deepEqual(Object.keys(before.writer), ['apply', 'applyFixed']);
   assert.deepEqual(Object.keys(before.usage), ['add']);
   assert.throws(
     () =>

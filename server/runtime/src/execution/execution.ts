@@ -105,4 +105,29 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
       output: combineOutputReceivers(options.output, bindings.output),
     });
   }
+  /** Resume fixed invocation input; entry acceptance and admission are never replayed. */
+  resume(parent: Invocation<unknown, unknown, RuntimeContext>, contextId: string, options: InvocationRelationOptions = {}) {
+    parent.requireActive();
+    this.invocationBuilder.check(parent);
+    return this.invocationBuilder.restoration(contextId, this.work, parent.context.id, (restore) => {
+      const checkpoint = this.definition.checkpoint!;
+      const point = checkpoint.points[restore.head.image.point];
+      if (!point) throw new Error('Checkpoint point is not declared');
+      const input = checkpoint.input.decode(restore.head.image.frame.input);
+      const bindings: ExecutionInvocationBindings<Input, Output, Resources, EntryInput, EntryResources> = parent.context.executionBinding(this.definition);
+      const resources = bindings.capture(input);
+      return this.invocationBuilder.create(parent, input, {
+        key: options.key,
+        description: { id: this.id },
+        requires: this.requires,
+        initial: point.resume.requires,
+        observation: this.definition.observation,
+        establish: () => ({ resources }),
+        work: this.work,
+        progress: bindings.progress,
+        output: combineOutputReceivers(options.output, bindings.output),
+        restore,
+      });
+    });
+  }
 }

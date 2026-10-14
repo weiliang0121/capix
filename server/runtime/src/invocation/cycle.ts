@@ -1,3 +1,4 @@
+import type { InvocationCheckpointWork } from '../checkpoint/work.js';
 import type { OutputDeclaration } from '../output/contract.js';
 import type { Invocation } from './invocation.js';
 import type { InvocationContext } from '../context/context.js';
@@ -18,6 +19,7 @@ export interface InvocationCycleOptions {
 }
 export interface InvocationWork<Input, Output, Context extends InvocationContext<Input, Output>> {
   readonly output?: OutputDeclaration<Output, unknown>;
+  readonly checkpoint?: InvocationCheckpointWork<Input, Output, Context>;
   execute(context: Context, invocation: Invocation<Input, Output, Context>): Output | Promise<Output>;
   accept?(context: Context, output: Output, invocation: Invocation<Input, Output, Context>): Output | Continuation<Input> | Promise<Output | Continuation<Input>>;
   raises?: readonly ExceptionContract<any>[];
@@ -32,13 +34,14 @@ export interface InvocationWork<Input, Output, Context extends InvocationContext
 export async function cycle<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, work: InvocationWork<Input, Output, Context>, options: InvocationCycleOptions): Promise<Output> {
   const context = invocation.context;
   const { signal, onProcess } = options;
-  let input = context.input;
+  let input = invocation.restoring ? context.currentInput : context.input;
+  const initialRound = invocation.restoring ? context.progress.round : 1;
   try {
     if (work.maxRounds !== 1 && work.maxRounds !== 2) throw new InvocationStopped('INVALID_ROUND_LIMIT', '本地调用只允许一轮或两轮执行。');
-    for (let round = 1; round <= work.maxRounds; round++) {
+    for (let round = initialRound; round <= work.maxRounds; round++) {
       invocation.requireHealthy();
       requireNotCancelled(signal);
-      context.startRound(round, input);
+      if (!invocation.restoring || round !== initialRound) context.startRound(round, input);
       options.validate?.();
       invocation.requireHealthy();
       invocation.openOutput();
@@ -46,7 +49,7 @@ export async function cycle<Input, Output, Context extends InvocationContext<Inp
       let result: InvocationResult<Output>;
       try {
         invocation.requireActive();
-        const output = await work.execute(context, invocation);
+        const output = await (invocation.restoring && round === initialRound ? invocation.resumeWork() : work.execute(context, invocation));
         invocation.requireHealthy();
         result = { status: 'succeeded', output };
       } catch (error) {

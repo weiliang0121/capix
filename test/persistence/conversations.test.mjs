@@ -112,10 +112,12 @@ test('v2 single-conversation migration preserves identities, indexes, source own
   const environment = host.open(id);
   await environment.runtime.run({ messages: [{ role: 'user', content: ' \n '.repeat(40) + '原有对话' }] }, { settings });
   const saved = host.persistence.loadContent(id);
+  delete saved.transcript.appends;
+  delete saved.memories.applies;
   const recording = host.persistence.loadRecording(id);
   host.close();
   const database = new DatabaseSync(disk.path);
-  database.exec(`CREATE TABLE metadata(singleton INTEGER PRIMARY KEY, transcript_id TEXT, memories_id TEXT); INSERT INTO metadata SELECT 1, transcript_id, memories_id FROM conversations; DROP TABLE conversation_settings; ALTER TABLE record_sources DROP COLUMN conversation_id; DROP TABLE conversations; PRAGMA user_version = 2;`);
+  database.exec(`CREATE TABLE metadata(singleton INTEGER PRIMARY KEY, transcript_id TEXT, memories_id TEXT); INSERT INTO metadata SELECT 1, transcript_id, memories_id FROM conversations; DROP TABLE conversation_settings; ALTER TABLE record_sources DROP COLUMN conversation_id; DROP TABLE conversation_checkpoint_runs; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE conversations; DROP TABLE transcript_appends; DROP TABLE memory_applies; DROP TABLE file_creations; PRAGMA user_version = 2;`);
   database.close();
   const migrated = disk.open();
   const current = migrated.list();

@@ -14,6 +14,8 @@ import type { MemoriesCommit, MemoriesPersistence, MemoriesState } from './persi
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import { isObject } from '../value/object.js';
 import { combineFaults } from '../observation/error.js';
+import type { MemoryFixedApply, MemoryApplyReceipt, MemoryApplyState } from './apply.js';
+import { RuntimeError } from '../errors/error.js';
 
 export interface MemoriesOptions {
   observation?: EventConsumer<MemoryEvent>;
@@ -37,6 +39,7 @@ export class Memories {
   }
 
   readonly #items = new Map<string, Memory>();
+  readonly #applies = new Map<string, MemoryApplyState>();
   private readonly observation?: EventConsumer<MemoryEvent>;
   private readonly changes?: ChangeCapture<MemoryEvent>;
   private readonly persistence?: MemoriesPersistence;
@@ -61,11 +64,24 @@ export class Memories {
     }
     restored.#id = state.id;
     restored.#sequence = state.sequence;
+    if (state.applies !== undefined) {
+      if (!isArray(state.applies)) throw new TypeError('Invalid persisted memory applies');
+      let previousSequence = 0;
+      for (const saved of state.applies) {
+        const request = restored.acceptFixed(saved.request);
+        const receipt = saved.receipt;
+        if (!isObject(receipt) || receipt.memoriesId !== restored.id || !isSafeInteger(receipt.startSequence) || receipt.startSequence < previousSequence || !isSafeInteger(receipt.sequence) || receipt.sequence < receipt.startSequence || receipt.sequence > state.sequence || !isArray(receipt.memoryIds) || !hasUniqueItems(receipt.memoryIds) || receipt.memoryIds.length !== receipt.sequence - receipt.startSequence || receipt.memoryIds.some((id) => !restored.#items.has(id))) throw new TypeError('Invalid persisted memory apply receipt');
+        const key = applyKey(request);
+        if (restored.#applies.has(key)) throw new TypeError('Duplicate persisted memory apply operation');
+        restored.#applies.set(key, Object.freeze({ request, receipt: Object.freeze({ memoriesId: restored.id, startSequence: receipt.startSequence, sequence: receipt.sequence, memoryIds: Object.freeze([...receipt.memoryIds]) }) }));
+        previousSequence = receipt.sequence;
+      }
+    }
     return restored;
   }
 
   exportState(): MemoriesState {
-    return Object.freeze({ id: this.id, transcriptId: this.transcript.id, sequence: this.#sequence, items: Object.freeze(this.values().map((memory) => Object.freeze(memory.toJSON()))) });
+    return Object.freeze({ id: this.id, transcriptId: this.transcript.id, sequence: this.#sequence, items: Object.freeze(this.values().map((memory) => Object.freeze(memory.toJSON()))), ...(this.#applies.size ? { applies: Object.freeze([...this.#applies.values()]) } : {}) });
   }
 
   get(id: string): Memory | undefined {
@@ -88,7 +104,43 @@ export class Memories {
     }
   }
 
-  private applyBatch(changes: readonly MemoryChange[], provenance: ChangeProvenance<MemoryEvent>): readonly Memory[] {
+  confirmFixed(value: MemoryFixedApply): MemoryApplyReceipt | undefined {
+    const request = this.acceptFixed(value);
+    const saved = this.#applies.get(applyKey(request));
+    if (saved && !isEqual(saved.request, request)) throw new RuntimeError('MEMORY_APPLY_CONFLICT', '固定记忆批次与原操作不一致。');
+    return saved?.receipt;
+  }
+
+  applyFixed(value: MemoryFixedApply, provenance: ChangeProvenance<MemoryEvent> = {}): MemoryApplyReceipt {
+    if (this.#mutating) throw new Error('Memory persistence or change publication cannot reenter mutation');
+    this.#mutating = true;
+    try {
+      const request = this.acceptFixed(value);
+      const receipt = this.confirmFixed(request);
+      if (receipt) return receipt;
+      this.applyBatch(request.changes, provenance, request);
+      return this.#applies.get(applyKey(request))!.receipt;
+    } finally {
+      this.#mutating = false;
+    }
+  }
+
+  private acceptFixed(value: MemoryFixedApply): MemoryFixedApply {
+    if (!isObject(value) || value.contract?.key !== 'memories.apply' || value.contract.version !== 1 || value.memoriesId !== this.id || !isObject(value.operation) || !isNonBlankString(value.operation.contextId) || !isNonBlankString(value.operation.position) || !isArray(value.changes)) throw new TypeError('Invalid fixed memory apply request');
+    const changes = Object.freeze(
+      value.changes.map((change: MemoryChange) => {
+        if (!isObject(change) || !isNonBlankString(change.change) || !isNonEmptyArray(change.sourceIndexes) || !hasUniqueItems(change.sourceIndexes) || (change.action === 'create' ? change.memoryId !== null : change.action !== 'update' || !isNonBlankString(change.memoryId))) throw new TypeError('Invalid fixed memory change');
+        for (const index of change.sourceIndexes) this.transcript.ref(index);
+        const result = Memory.prepare(this.transcript, change.result);
+        const sourceResults = prepareMemoryResultSources(this.transcript, change.sourceResults);
+        if (!change.sourceIndexes.every((index) => result.sourceIndexes.includes(index)) || sourceResults?.some((source) => !result.sourceResults?.some((candidate) => isEqual(source, candidate)))) throw new TypeError('Invalid fixed memory evidence');
+        return Object.freeze({ action: change.action, memoryId: change.memoryId, change: change.change, sourceIndexes: Object.freeze([...change.sourceIndexes]), ...(sourceResults ? { sourceResults } : {}), result }) as MemoryChange;
+      }),
+    );
+    return Object.freeze({ contract: Object.freeze({ key: 'memories.apply', version: 1 }), operation: Object.freeze({ ...value.operation }), memoriesId: this.id, changes });
+  }
+
+  private applyBatch(changes: readonly MemoryChange[], provenance: ChangeProvenance<MemoryEvent>, request?: MemoryFixedApply): readonly Memory[] {
     if (!isArray(changes)) throw new TypeError('Memory changes must be an array');
     const targets = new Set<string>();
     // Preparation includes identities and event bodies; nothing after persistence revalidates user data.
@@ -123,15 +175,17 @@ export class Memories {
       const event: MemoryEvent = Object.freeze({ type: 'memory', memoriesId: this.id, sequence, occurredAt: new Date().toISOString(), ...(provenance.origin ? { origin: Object.freeze({ ...provenance.origin }) } : {}), change: Object.freeze({ action: change.action, memoryId: memory.id, explanation: change.change, sourceIndexes: Object.freeze([...change.sourceIndexes]), ...(sourceResults ? { sourceResults } : {}), result }) });
       mutations.push({ memory, event, created: !previous });
     }
-    if (!mutations.length) return [];
-    const sequence = mutations.at(-1)!.event.sequence;
+    if (!mutations.length && !request) return [];
+    const sequence = mutations.at(-1)?.event.sequence ?? this.#sequence;
     const upserts = Object.freeze(mutations.map(({ memory, event }) => Object.freeze({ id: memory.id, ...event.change.result })));
-    this.commit(Object.freeze({ memoriesId: this.id, transcriptId: this.transcript.id, expectedSequence: this.#sequence, sequence, upserts }));
+    const fixed: MemoryApplyState | undefined = request ? Object.freeze({ request, receipt: Object.freeze({ memoriesId: this.id, startSequence: this.#sequence, sequence, memoryIds: Object.freeze(upserts.map((memory) => memory.id)) }) }) : undefined;
+    this.commit(Object.freeze({ memoriesId: this.id, transcriptId: this.transcript.id, expectedSequence: this.#sequence, sequence, upserts, ...(fixed ? { fixed } : {}) }));
     for (const { memory, event, created } of mutations) {
       if (created) this.#items.set(memory.id, memory);
       else updateMemory(memory, event.change.result);
     }
     this.#sequence = sequence;
+    if (fixed) this.#applies.set(applyKey(fixed.request), fixed);
     const faults: unknown[] = [];
     for (const { event } of mutations) {
       try {
@@ -152,4 +206,8 @@ export class Memories {
       throw new TypeError('Memory persistence must complete synchronously and return undefined');
     }
   }
+}
+
+function applyKey(request: MemoryFixedApply): string {
+  return JSON.stringify([request.operation.contextId, request.operation.position]);
 }

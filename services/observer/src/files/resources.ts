@@ -16,6 +16,7 @@ export interface FileReader {
 }
 export interface FileCreator {
   createText(path: string, text: string, signal?: AbortSignal): Promise<FileReceipt>;
+  createFixed(position: string, path: string, text: string, signal?: AbortSignal): Promise<FileReceipt>;
 }
 export interface FileInspector {
   inspect(task: FileTask, signal?: AbortSignal): Promise<FileTaskInspection>;
@@ -50,6 +51,12 @@ export const FileResources = Object.freeze({
     'workspace-files.create-text',
     (source, activity) =>
       Object.freeze({
+        createFixed: (position: string, path: string, text: string, signal?: AbortSignal) =>
+          activity.runAsync('create-fixed', { input: () => ({ position, path, bytes: Buffer.byteLength(text, 'utf8') }), output: (receipt) => receipt }, () => {
+            if (path !== source.path) throw fileFailure('create', path, 'not-allowed');
+            if (!activity.origin) throw new Error('Fixed file creation requires a calling identity');
+            return source.files.createFixed({ contextId: activity.origin.contextId, position }, path, text, { signal, progress: source.progress });
+          }),
         createText: (path: string, text: string, signal?: AbortSignal) =>
           activity.runAsync('create-text', { input: () => ({ path, bytes: Buffer.byteLength(text, 'utf8') }), output: (receipt) => receipt }, () => {
             if (path !== source.path) throw fileFailure('create', path, 'not-allowed');

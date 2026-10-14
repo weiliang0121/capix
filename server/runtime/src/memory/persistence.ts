@@ -1,4 +1,5 @@
 import type { MemoryContent } from '@capix/protocol';
+import type { MemoryApplyState } from './apply.js';
 
 export interface MemoryState extends MemoryContent {
   readonly id: string;
@@ -10,6 +11,7 @@ export interface MemoriesState {
   readonly transcriptId: string;
   readonly sequence: number;
   readonly items: readonly MemoryState[];
+  readonly applies?: readonly MemoryApplyState[];
 }
 
 /** One validated apply batch. The store preserves existing item positions on update. */
@@ -19,6 +21,7 @@ export interface MemoriesCommit {
   readonly expectedSequence: number;
   readonly sequence: number;
   readonly upserts: readonly MemoryState[];
+  readonly fixed?: MemoryApplyState;
 }
 
 export interface MemoriesPersistence {

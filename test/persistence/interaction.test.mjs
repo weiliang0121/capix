@@ -224,9 +224,11 @@ test('v1 migration preserves conversation content, memory identities and recordi
   environment.close();
   const before = disk.open();
   const expected = before.loadContent();
+  delete expected.transcript.appends;
+  delete expected.memories.applies;
   const expectedRecording = before.loadRecording();
   before.close();
-  disk.edit((database) => database.exec(`CREATE TABLE metadata (singleton INTEGER PRIMARY KEY, transcript_id TEXT, memories_id TEXT); INSERT INTO metadata SELECT 1, transcript_id, memories_id FROM conversations; DROP TABLE conversation_settings; ALTER TABLE record_sources DROP COLUMN conversation_id; DROP TABLE conversations; DROP TABLE interactions; PRAGMA user_version = 1;`));
+  disk.edit((database) => database.exec(`CREATE TABLE metadata (singleton INTEGER PRIMARY KEY, transcript_id TEXT, memories_id TEXT); INSERT INTO metadata SELECT 1, transcript_id, memories_id FROM conversations; DROP TABLE conversation_settings; ALTER TABLE record_sources DROP COLUMN conversation_id; DROP TABLE conversation_checkpoint_runs; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE conversations; DROP TABLE interactions; DROP TABLE transcript_appends; DROP TABLE memory_applies; DROP TABLE file_creations; PRAGMA user_version = 1;`));
   const migrated = disk.open();
   assert.deepEqual(migrated.loadContent(), expected);
   assert.deepEqual(migrated.loadRecording(), expectedRecording);
@@ -234,7 +236,7 @@ test('v1 migration preserves conversation content, memory identities and recordi
   const interaction = create(migrated);
   assert.equal(migrated.interactions.read(interaction.id).delivery, 'prepared');
   migrated.close();
-  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 3));
+  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 5));
 });
 
 test('migration failure keeps v1 and its committed content intact', (t) => {

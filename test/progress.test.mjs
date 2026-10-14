@@ -178,7 +178,7 @@ test('append resource bindings associate separate progress receivers with one en
   second.values.messages.append([{ role: 'assistant', content: 'answer' }]);
   assert.deepEqual(input, [{ transcriptId: transcript.id, start: 0, end: 1, revision: 1 }]);
   assert.deepEqual(answer, [{ transcriptId: transcript.id, start: 1, end: 2, revision: 2 }]);
-  assert.deepEqual(Object.keys(first.values.messages), ['append']);
+  assert.deepEqual(Object.keys(first.values.messages), ['applyFixed', 'append']);
   binding(transcript).values.messages.append([message('bare supply remains valid')]);
   assert.equal(transcript.length, 3);
 });

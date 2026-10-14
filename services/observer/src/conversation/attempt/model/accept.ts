@@ -1,6 +1,9 @@
+import { isEqual } from 'es-toolkit/predicate';
+import { checkLeafResult } from '../../operations/checkpoint.js';
+import { modelOutputSchema } from '../../model/interactions.js';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { modelOutputRejected } from '../../model/rejection.js';
-import { AttemptDefinition, type AttemptContextView, RuntimeError, isNonBlankString } from '@capix/server-runtime';
+import { AttemptDefinition, cloneCheckpointValue, type CheckpointValue, type InvocationWorkView, type InvocationCheckpointDefinition, type AttemptContextView, RuntimeError, isNonBlankString } from '@capix/server-runtime';
 
 import type { ModelOutput } from '../../model/types.js';
 import type { ModelOutputContract } from '../../model/contract.js';
@@ -10,6 +13,7 @@ export interface ModelAcceptanceInput {
 }
 
 export class AcceptModelOutputDefinition<Input extends ModelAcceptanceInput, Output> extends AttemptDefinition<Input, Output> {
+  readonly checkpoint: InvocationCheckpointDefinition<Input, Output, AttemptContextView<Input, Output>>;
   readonly observation = [invocationRecording()];
   static readonly requires = Object.freeze({});
 
@@ -23,13 +27,42 @@ export class AcceptModelOutputDefinition<Input extends ModelAcceptanceInput, Out
 
   constructor(private readonly contract: ModelOutputContract<Input, Output>) {
     super();
+    const input = {
+      encode: cloneCheckpointValue,
+      decode: (value: CheckpointValue) => {
+        const input = cloneCheckpointValue(value) as unknown as Input;
+        modelOutputSchema.parse(input.output);
+        return input;
+      },
+    };
+    const output = { encode: cloneCheckpointValue, decode: (value: CheckpointValue) => cloneCheckpointValue(value) as Output };
+    this.checkpoint = {
+      key: 'observer.accept-model-output',
+      version: 1,
+      input,
+      output,
+      points: {
+        result: {
+          state: output,
+          check: (frame, result) => {
+            checkLeafResult(frame);
+            const basis = input.decode(frame.currentInput);
+            checkCompletion(basis.output);
+            if (!isEqual(this.contract.accept(parseContent(basis.output.content), basis), result)) throw new Error('Accepted model checkpoint differs from declared output');
+          },
+          resume: { requires: {}, uses: [], execute: (_context, _invocation, _children, result: Output) => result },
+        },
+      },
+    };
   }
 
-  private execute(context: AttemptContextView<Input, Output>): Output {
+  private execute(context: AttemptContextView<Input, Output>, invocation: InvocationWorkView<Input, Output, AttemptContextView<Input, Output>>): Output {
     checkCompletion(context.currentInput.output);
     try {
       const value = parseContent(context.currentInput.output.content);
-      return this.contract.accept(value, context.currentInput);
+      const output = this.contract.accept(value, context.currentInput);
+      invocation.checkpoint?.save('result', output);
+      return output;
     } catch (error) {
       if (error instanceof RuntimeError && (error.code === 'INVALID_JSON' || error.code === 'EMPTY_OUTPUT' || error.code === 'OUTPUT_SHAPE')) {
         throw modelOutputRejected.create(error.message, { code: error.code, output: context.currentInput.output }, { cause: error });

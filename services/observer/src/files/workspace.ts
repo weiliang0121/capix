@@ -2,7 +2,9 @@ import { constants, type Stats } from 'node:fs';
 import { lstat, realpath, open, link, unlink, type FileHandle } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve, relative, sep, dirname, join, isAbsolute } from 'node:path';
-import { DeclaredException, InvocationCancelled, type ProgressChannel } from '@capix/server-runtime';
+import { DeclaredException, InvocationCancelled, RuntimeError, type ProgressChannel } from '@capix/server-runtime';
+import { isEqual } from 'es-toolkit/predicate';
+import type { FileCreationOperation, FileCreationState, FileCreationPersistence } from './creation.js';
 import type { FileReceipt, FileTask } from '@capix/protocol';
 import { FileAccessException, fileFailure } from './error.js';
 import { isRelativeFilePath } from './path.js';
@@ -21,23 +23,66 @@ export interface WorkspaceFilesOptions {
   readonly root: string;
   readonly maxReadBytes?: number;
   readonly maxWriteBytes?: number;
+  readonly persistence?: FileCreationPersistence;
 }
 
 /** Host-owned local workspace, not an OS sandbox against concurrent hostile directory mutation. */
 export class WorkspaceFiles {
   readonly configuration: { readonly maxReadBytes: number; readonly maxWriteBytes: number };
+  /** Host continuation identity; public file configuration never exposes the workspace path. */
+  readonly checkpointScope: string;
   readonly #root: string;
   #identity?: DirectoryIdentity;
+  readonly #creations = new Map<string, FileCreationState>();
+  readonly #persistence?: FileCreationPersistence;
 
   constructor(options: WorkspaceFilesOptions) {
     if (typeof options.root !== 'string' || !options.root.trim()) throw new TypeError('A file workspace needs a root directory');
     this.#root = resolve(options.root);
+    this.#persistence = options.persistence;
     const maxReadBytes = options.maxReadBytes ?? 64 * 1024;
     const maxWriteBytes = options.maxWriteBytes ?? 64 * 1024;
     for (const limit of [maxReadBytes, maxWriteBytes]) {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 64 * 1024) throw new RangeError('File limits must be integers between 1 and 65536 bytes');
     }
     this.configuration = Object.freeze({ maxReadBytes, maxWriteBytes });
+    this.checkpointScope = digest(Buffer.from(JSON.stringify({ root: this.#root, maxReadBytes, maxWriteBytes }), 'utf8'));
+  }
+
+  /** The journal fixes intent before filesystem publication. An unresolved intent is never resent. */
+  async createFixed(operation: FileCreationOperation, path: string, text: string, options: { readonly signal?: AbortSignal; readonly progress?: ProgressChannel<FileProgress> } = {}): Promise<FileReceipt> {
+    if (!operation.contextId?.trim() || !operation.position?.trim()) throw new TypeError('File creation requires a fixed operation');
+    this.validatePath('create', path);
+    if (typeof text !== 'string' || text.includes('\0') || Buffer.from(text, 'utf8').toString('utf8') !== text) throw fileFailure('create', path, 'encoding');
+    const bytes = Buffer.byteLength(text, 'utf8');
+    if (bytes > this.configuration.maxWriteBytes) throw fileFailure('create', path, 'too-large');
+    const request = Object.freeze({ operation: Object.freeze({ ...operation }), root: this.#root, path, bytes, digest: digest(Buffer.from(text, 'utf8')) });
+    const key = JSON.stringify([operation.contextId, operation.position]);
+    const previous = this.#persistence ? this.#persistence.read(operation) : this.#creations.get(key);
+    if (previous) {
+      if (!isEqual(previous.request, request)) throw new RuntimeError('FILE_CREATION_CONFLICT', '固定文件创建与原操作不一致。');
+      if (!previous.receipt) throw new RuntimeError('FILE_CREATION_UNCONFIRMED', '文件创建已发起但没有确认凭据，不能自动重复写入。');
+      const receipt = previous.receipt;
+      if (receipt.path !== path || receipt.bytes !== bytes || receipt.digest !== request.digest) throw new RuntimeError('FILE_CREATION_CONFLICT', '文件创建凭据与固定内容不一致。');
+      return Object.freeze({ ...receipt });
+    }
+    requireActive(options.signal);
+    const pending = Object.freeze({ request });
+    const created: unknown = this.#persistence?.create(pending);
+    if (created !== undefined) {
+      void Promise.resolve(created).catch(() => undefined);
+      throw new TypeError('File creation persistence must be synchronous');
+    }
+    this.#creations.set(key, pending);
+    const receipt = await this.createText(path, text, { ...options, durable: true });
+    const complete = Object.freeze({ request, receipt });
+    const committed: unknown = this.#persistence?.complete(complete);
+    if (committed !== undefined) {
+      void Promise.resolve(committed).catch(() => undefined);
+      throw new TypeError('File creation persistence must be synchronous');
+    }
+    this.#creations.set(key, complete);
+    return receipt;
   }
 
   /** Inspect only named paths. Actual read/create recheck independently; no handle survives this call. */
@@ -121,7 +166,7 @@ export class WorkspaceFiles {
     }
   }
 
-  async createText(path: string, text: string, options: { readonly signal?: AbortSignal; readonly progress?: ProgressChannel<FileProgress> } = {}): Promise<FileReceipt> {
+  async createText(path: string, text: string, options: { readonly signal?: AbortSignal; readonly progress?: ProgressChannel<FileProgress>; readonly durable?: boolean } = {}): Promise<FileReceipt> {
     let handle: FileHandle | undefined;
     let stage: string | undefined;
     let publicationAttempted = false;
@@ -140,6 +185,7 @@ export class WorkspaceFiles {
       handle = await open(stagePath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
       stage = stagePath;
       await handle.writeFile(buffer, { signal: options.signal });
+      if (options.durable) await handle.sync();
       const staged = await handle.stat();
       await handle.close();
       handle = undefined;
@@ -150,6 +196,14 @@ export class WorkspaceFiles {
       publicationAttempted = true;
       // Hard-link creation is exclusive and exposes only the already completed file. rename would overwrite.
       await link(stage, location.target);
+      if (options.durable) {
+        const directory = await open(dirname(location.target), constants.O_RDONLY | constants.O_DIRECTORY);
+        try {
+          await directory.sync();
+        } finally {
+          await directory.close();
+        }
+      }
       // This fact precedes cleanup, cancellation delivery and the resource returned observation.
       options.progress?.publish(Object.freeze({ kind: 'created', receipt }));
       return receipt;

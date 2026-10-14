@@ -4,7 +4,8 @@ import { InvocationEntry } from '../definition/entry.js';
 import type { ChildDefinition, DefinitionEntryInput, DefinitionInvocationInput, DefinitionOutput, DefinitionParentInvocationView, DefinitionContextFacts, DefinitionDelta } from '../definition/children.js';
 import type { Invocation } from '../invocation/invocation.js';
 import type { ChildInvocationView, InvocationView } from '../invocation/view.js';
-import type { InvocationRelationOptions } from '../invocation/relation.js';
+import type { InvocationRelationOptions, InvocationTarget } from '../invocation/relation.js';
+import type { CheckpointBinding } from '../checkpoint/work.js';
 
 import type { InvocationOutputReceiver } from '../output/contract.js';
 
@@ -14,11 +15,13 @@ export interface ChildInvocationOptions<Definition extends ChildDefinition> exte
 
 interface StoredChild {
   create(parent: any, input: any, options?: InvocationRelationOptions): Invocation<any, any, any>;
+  resume(parent: any, contextId: string, options?: InvocationRelationOptions): Invocation<any, any, any>;
 }
 
 export interface ChildBinding<Definition extends ChildDefinition> {
   create(parent: DefinitionParentInvocationView<Definition>, input: DefinitionEntryInput<Definition>, options?: ChildInvocationOptions<Definition>): ChildInvocationView<DefinitionInvocationInput<Definition>, DefinitionOutput<Definition>, DefinitionContextFacts<Definition>>;
   call(parent: DefinitionParentInvocationView<Definition>, input: DefinitionEntryInput<Definition>): Promise<DefinitionOutput<Definition>>;
+  resume(parent: DefinitionParentInvocationView<Definition>, contextId: string): ChildInvocationView<DefinitionInvocationInput<Definition>, DefinitionOutput<Definition>, DefinitionContextFacts<Definition>>;
 }
 
 /** A business capability for this parent's declared children only. */
@@ -47,7 +50,7 @@ export class BoundChildren {
   initialized(definition: ChildDefinition): boolean {
     return this.#entries.get(definition)?.initialized ?? false;
   }
-  forInvocation(parent: ParentInvocation & { readonly view: InvocationView; reject(error: unknown, allowException?: boolean): void; requireHealthy(): void }, view: InvocationView = parent.view, uses?: readonly ChildDefinition[], validate?: () => void, calls = new Map<InvocationView, Invocation<any, any, any>>()): ChildBindings {
+  forInvocation(parent: ParentInvocation & { readonly view: InvocationView; reject(error: unknown, allowException?: boolean): void; requireHealthy(): void; restoreChild(contract: CheckpointBinding, contextId: string, create: () => InvocationTarget): InvocationTarget }, view: InvocationView = parent.view, uses?: readonly ChildDefinition[], validate?: () => void, calls = new Map<InvocationView, InvocationTarget>()): ChildBindings {
     const allowed = new Set(uses ?? this.#entries.keys());
     const protect = <Value>(work: () => Value): Value => {
       try {
@@ -80,6 +83,17 @@ export class BoundChildren {
           return Object.freeze({
             create: (actual: DefinitionParentInvocationView<Definition>, input: DefinitionEntryInput<Definition>, options?: ChildInvocationOptions<Definition>) => create(definition, actual, input, options),
             call: (actual: DefinitionParentInvocationView<Definition>, input: DefinitionEntryInput<Definition>) => create(definition, actual, input).run(),
+            resume: (actual: DefinitionParentInvocationView<Definition>, contextId: string) =>
+              protect(() => {
+                if (actual !== view) throw new Error('Child entry belongs to another parent invocation');
+                requireActive();
+                const checkpoint = definition.checkpoint;
+                if (!checkpoint) throw new Error('Child declaration does not support checkpoints');
+                const invocation = parent.restoreChild(checkpoint, contextId, () => this.get(definition).resume(parent, contextId));
+                if (!invocation.callView) throw new Error('Restored child has no public invocation view');
+                calls.set(invocation.callView, invocation);
+                return invocation.callView;
+              }),
           }) as ChildBinding<Definition>;
         }),
       entry: <Definition extends ChildDefinition, EntryInput>(entry: InvocationEntry<Definition, EntryInput>) =>
@@ -96,7 +110,7 @@ export class BoundChildren {
         let rejected: { error: unknown } | undefined;
         try {
           requireActive();
-          const invocation = calls.get(child);
+          const invocation = calls.get(child) as InvocationTarget<Output> | undefined;
           if (!invocation) throw new Error('Invocation is not a child created through this binding');
           return await parent.children.get(invocation).accept(async (delivered) => {
             try {

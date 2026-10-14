@@ -64,6 +64,19 @@ export const TranscriptResource = Object.freeze({
       const transcript = source instanceof Transcript ? source : source.transcript;
       const progress = source instanceof Transcript || !source.progress ? undefined : new ProgressChannel(source.progress);
       return Object.freeze({
+        applyFixed(input: { readonly position: string; readonly messages: readonly Message[] }) {
+          return activity.runSync('applyFixed', { input: () => ({ position: input.position, count: input.messages.length }), output: (receipt) => receipt }, () =>
+            transcript.applyFixed(
+              {
+                contract: { key: 'transcript.append', version: 1 },
+                operation: { ...activity.reception(), position: input.position },
+                transcriptId: transcript.id,
+                messages: input.messages,
+              },
+              { origin: activity.origin, observation: activity.transcriptObservation, progress },
+            ),
+          );
+        },
         append(messages: readonly Message[]) {
           return activity.runSync('append', { input: () => ({ count: messages.length }), output: (result) => ({ transcriptId: transcript.id, indexes: result.map((item) => item.index), revision: transcript.revision }) }, () => {
             const start = transcript.length;

@@ -1,5 +1,5 @@
 import { type ResourceProvider, type ResourceRequest, type ProgressReceiver } from '@capix/server-runtime';
-import { TranscriptResource, MemoryResource, SelectionUsageResource, type Transcript, type Memories, type SelectionUsage, type TranscriptRangeRef, type TranscriptRangeReader, type TranscriptAppendProgress } from '@capix/server-runtime/content';
+import { TranscriptResource, MemoryResource, SelectionUsageResource, type Transcript, type Memories, type SelectionUsage, type TranscriptRangeRef, type TranscriptRangeReader, type TranscriptAppendProgress, type CapturedMemories } from '@capix/server-runtime/content';
 import type { ModelSettings, FileTask, ConversationTask } from '@capix/protocol';
 import { FileResources, type WorkspaceFiles, type FileProgress, type FileResourceSource, type FileReader, type FileCreator, type FileInspector } from '../files/index.js';
 import type { ProgressChannel } from '@capix/server-runtime';
@@ -58,6 +58,7 @@ export interface ConversationResourceSource {
   readonly transcript: Transcript;
   readonly messageProgress?: ProgressReceiver<TranscriptAppendProgress>;
   readonly memories: Memories;
+  readonly memorySnapshot?: CapturedMemories;
   readonly selectionUsage: SelectionUsage;
   readonly model: ModelInteractions;
   readonly files?: WorkspaceFiles;
@@ -77,7 +78,7 @@ export const conversationProviders: readonly ResourceProvider<ConversationResour
   }),
   ModelResource.create.provide((source: ConversationResourceSource) => source.model),
   ModelResource.read.provide((source: ConversationResourceSource) => source.model),
-  MemoryResource.snapshot.provide((source: ConversationResourceSource) => source.memories),
+  MemoryResource.snapshot.provide((source: ConversationResourceSource) => source.memorySnapshot ?? source.memories),
   MemoryResource.apply.provide((source: ConversationResourceSource) => source.memories),
   TranscriptResource.append.provide((source: ConversationResourceSource) => ({ transcript: source.transcript, progress: source.messageProgress })),
   TranscriptResource.segmentation.provide((source: ConversationResourceSource) => source.transcript),

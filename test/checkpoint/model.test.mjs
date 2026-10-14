@@ -1,0 +1,209 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, assembleRuntime } from '@capix/server-runtime';
+import { RequestModelDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
+
+const request = { model: 'fixture', messages: [{ role: 'user', content: 'fixed input' }], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 256, stream: false };
+const output = { id: 'fixture-output', model: 'fixture', content: 'provider envelope before business JSON acceptance', finishReason: 'length', usage: { promptTokens: 3, completionTokens: 4, totalTokens: 7 } };
+const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
+const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };
+
+class CapturedStore extends MemoryCheckpointStore {
+  images = [];
+  save(image, revision) {
+    const head = super.save(image, revision);
+    this.images.push(head.image);
+    return head;
+  }
+}
+
+function parentCheckpoint(key, child) {
+  return {
+    key,
+    version: 1,
+    input: codec,
+    output: codec,
+    points: {
+      waiting: {
+        state: codec,
+        resume: {
+          requires: {},
+          uses: [child],
+          async execute(_context, invocation, children, state) {
+            const call = children.get(child).resume(invocation, state.childId);
+            await call.run();
+            return children.accept(call, (value) => value);
+          },
+        },
+      },
+    },
+  };
+}
+
+function harness(t, provider, store, facts = [], progress = () => {}) {
+  const model = new RequestModelDefinition('answer');
+  const interactions = new ModelInteractions(new ModelSource(provider));
+  t.after(() => interactions.close());
+  class Execution extends ExecutionDefinition {
+    children = [model];
+    checkpoint = parentCheckpoint('fixture.model.execution', model);
+    run = {
+      requires: RequestModelDefinition.requires,
+      async execute(context, invocation, children) {
+        const call = children.get(model).create(invocation, context.input, { key: 'model' });
+        invocation.checkpoint?.save('waiting', { childId: call.context.id });
+        await call.run();
+        return children.accept(call, (value) => value);
+      },
+    };
+  }
+  const execution = new Execution();
+  class Root extends RuntimeDefinition {
+    children = [execution];
+    checkpoint = parentCheckpoint('fixture.model.runtime', execution);
+    run = {
+      requires: {},
+      async execute(context, invocation, children) {
+        const call = children.get(execution).create(invocation, context.input, { key: 'execution' });
+        invocation.checkpoint?.save('waiting', { childId: call.context.id });
+        await call.run();
+        return children.accept(call, (value) => value);
+      },
+    };
+  }
+  const runtime = assembleRuntime(new Root(), {
+    ...(store ? { checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } } : {}),
+    providers: [ModelSettingsResource.snapshot.provide(() => settings), ModelSettingsResource.timeout.provide(() => settings.timeoutMs), ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)],
+    source: { entry: () => null, capture: () => null, progress: () => ({ receive: progress }) },
+  });
+  return { runtime, model };
+}
+
+test('request-model checkpoint is dormant without an installation and keeps the original complete feedback', async (t) => {
+  let calls = 0;
+  const { runtime, model } = harness(t, {
+    invoke: async () => {
+      calls++;
+      return output;
+    },
+  });
+  model.checkpoint.input = { encode: () => assert.fail('checkpoint input codec must remain dormant'), decode: () => assert.fail('not restoring') };
+  const result = await runtime.run(request, {});
+  assert.deepEqual(result, output);
+  assert.equal(calls, 1);
+});
+
+for (const pending of [false, true]) {
+  test(`request-model restores ${pending ? 'followed' : 'direct'} accepted feedback without creating or calling a provider`, async (t) => {
+    let resolve;
+    const deferred = new Promise((accept) => {
+      resolve = accept;
+    });
+    let calls = 0;
+    const store = new CapturedStore();
+    const original = harness(
+      t,
+      {
+        invoke: async () => {
+          calls++;
+          return pending ? deferred : output;
+        },
+      },
+      store,
+      [],
+      (fact) => {
+        if (pending && fact.description?.name === 'requestModel' && fact.kind === 'relation' && fact.phase === 'returned' && fact.relation.key === 'start') resolve(output);
+      },
+    );
+    assert.deepEqual(await original.runtime.run(request, {}), output);
+    assert.equal(calls, 1);
+    const modelImage = store.images.find((image) => image.contract.key === original.model.checkpoint.key && image.point === 'feedbackAccepted');
+    assert.ok(modelImage);
+    assert.equal(modelImage.point, 'feedbackAccepted');
+    assert.deepEqual(modelImage.state, output);
+    assert.deepEqual(modelImage.frame.input, request);
+    assert.deepEqual(
+      modelImage.frame.children.map((child) => child.key),
+      pending ? ['start', 'follow'] : ['start'],
+    );
+    assert.ok(modelImage.frame.children.every((child) => child.state.reception.kind === 'accepted'));
+    const restoredStore = new MemoryCheckpointStore();
+    // These images were captured before terminal delivery; the fixture models loss at that boundary.
+    for (const image of store.images) restoredStore.save(image, restoredStore.read(image.frame.owner.contextId)?.revision ?? 0);
+    let constructions = 0;
+    const facts = [];
+    const restored = harness(
+      t,
+      () => {
+        constructions++;
+        throw new Error('provider unavailable during recovery');
+      },
+      restoredStore,
+      facts,
+    );
+    const root = store.images.find((image) => image.frame.owner.level === 'runtime');
+    const result = await restored.runtime.resume(root.frame.owner.contextId, {});
+    assert.deepEqual(result, output);
+    assert.equal(constructions, 0);
+    assert.equal(calls, 1);
+    assert.ok(facts.some((fact) => fact.kind === 'installed' && fact.contextId === modelImage.frame.owner.contextId));
+    assert.equal(facts.filter((fact) => fact.kind === 'resource').length, 0);
+    assert.equal(facts.filter((fact) => fact.kind === 'activity' && fact.fact.identity.level === 'attempt').length, 0, 'installing completed A facts never re-executes or re-observes those A calls');
+  });
+}
+
+test('request-model checkpoint codecs reject incompatible saved envelopes without business JSON interpretation', () => {
+  const definition = new RequestModelDefinition('answer');
+  const checkpoint = definition.checkpoint;
+  assert.deepEqual(checkpoint.input.decode(checkpoint.input.encode(request)), request);
+  assert.deepEqual(checkpoint.output.decode(checkpoint.output.encode(output)), output);
+  assert.deepEqual(checkpoint.points.feedbackAccepted.state.decode(output), output, 'length and non-JSON content remain complete provider feedback, not an accepted answer');
+  for (const invalid of [
+    { ...request, extra: true },
+    { ...request, max_tokens: '256' },
+    { ...request, messages: [{ role: 'tool', content: 'not supported' }] },
+  ])
+    assert.throws(() => checkpoint.input.decode(invalid));
+  for (const invalid of [
+    { ...output, finishReason: 1 },
+    { ...output, extra: true },
+    { ...output, usage: { ...output.usage, promptTokens: -1 } },
+  ]) {
+    assert.throws(() => checkpoint.output.decode(invalid));
+    assert.throws(() => checkpoint.points.feedbackAccepted.state.decode(invalid));
+  }
+  assert.notEqual(checkpoint.key, new RequestModelDefinition('memory').checkpoint.key);
+});
+
+test('request-model recovery rejects a missing acceptance or mismatched saved output before accessing the model', async (t) => {
+  const store = new CapturedStore();
+  const original = harness(t, { invoke: async () => output }, store);
+  await original.runtime.run(request, {});
+  const rootId = store.images.find((image) => image.frame.owner.level === 'runtime').frame.owner.contextId;
+  for (const mutate of [
+    (image) => {
+      image.frame.children[0].state.reception = { kind: 'pending' };
+    },
+    (image) => {
+      image.state.content = 'unrelated result';
+    },
+  ]) {
+    const restoredStore = new MemoryCheckpointStore();
+    for (const originalImage of store.images) {
+      const image = structuredClone(originalImage);
+      if (image.contract.key === original.model.checkpoint.key && image.point === 'feedbackAccepted') mutate(image);
+      restoredStore.save(image, restoredStore.read(image.frame.owner.contextId)?.revision ?? 0);
+    }
+    let constructions = 0;
+    const restored = harness(
+      t,
+      () => {
+        constructions++;
+        assert.fail('rejected recovery cannot access a model');
+      },
+      restoredStore,
+    );
+    await assert.rejects(restored.runtime.resume(rootId, {}), /accepted child|accepted direct feedback/);
+    assert.equal(constructions, 0);
+  }
+});

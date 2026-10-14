@@ -1,3 +1,10 @@
+import { InvocationCheckpoint } from '../checkpoint/invocation.js';
+import type { CheckpointInstallation, CheckpointRestoration, CheckpointWriter } from '../checkpoint/contract.js';
+import type { CheckpointBinding } from '../checkpoint/work.js';
+import { cloneCheckpointHead } from '../checkpoint/value.js';
+import { checkpointTarget } from '../checkpoint/target.js';
+import type { InvocationTarget } from './relation.js';
+import { isEqual } from 'es-toolkit';
 import { InvocationOutputSection } from '../output/section.js';
 import type { InvocationOutputWriter, InvocationOutputReceiver, InvocationOutputEvent } from '../output/contract.js';
 import { isUndefined } from 'es-toolkit/predicate';
@@ -26,6 +33,8 @@ export type InvocationStarted<Input, Output, Context extends InvocationContext<I
 
 export interface InvocationOptions<Input, Output, Context extends InvocationContext<Input, Output>> {
   context: Context;
+  checkpoints?: CheckpointInstallation;
+  restore?: CheckpointRestoration;
   clock?: Clock;
   parent?: { invocation: ParentInvocation } & InvocationRelationOptions;
   work: InvocationWork<Input, Output, Context>;
@@ -45,6 +54,68 @@ export interface InvocationOptions<Input, Output, Context extends InvocationCont
 /** A single-use structured call owns its Context and progress. Optional observation consumes its typed facts without requiring a particular carrier. */
 export class Invocation<Input = unknown, Output = unknown, Context extends InvocationContext<Input, Output> = InvocationContext<Input, Output>> {
   readonly hasProgress: boolean;
+  readonly #checkpoint?: InvocationCheckpoint<Input, Output, Context>;
+  readonly #resumed = new Map<string, InvocationTarget>();
+  get checkpointBinding(): CheckpointBinding | undefined {
+    return this.options.work.checkpoint;
+  }
+  get checkpointWriter(): CheckpointWriter | undefined {
+    return this.#checkpoint?.writer();
+  }
+  get restoring(): boolean {
+    return !!this.options.restore;
+  }
+  get recovering(): boolean {
+    return this.restoring || !!this.options.parent?.invocation.recovering;
+  }
+  get identity(): InvocationIdentity {
+    return this.#identity;
+  }
+  get maxRounds(): number {
+    return this.options.work.maxRounds;
+  }
+  resumeWork(): Promise<Output> {
+    if (!this.#checkpoint) throw new Error('Checkpoint capability is missing');
+    return this.#checkpoint.resume();
+  }
+  restoreChild(binding: CheckpointBinding, contextId: string, create: () => InvocationTarget): InvocationTarget {
+    try {
+      this.requireActive();
+      if (!this.#checkpoint || !this.restoring) throw new Error('Child continuation requires a restored parent');
+      const saved = this.children.saved(contextId);
+      const resumed = this.#resumed.get(contextId);
+      const contract = saved?.contract ?? resumed?.checkpointBinding;
+      if (!contract || contract.key !== binding.key || contract.version !== binding.version) throw new Error('Child continuation contract or ownership mismatch');
+      if (resumed) return resumed;
+      if (!saved) throw new Error('Child continuation basis is unavailable');
+      if (saved.state.kind === 'failed') throw new Error('Historical failed child cannot be resumed');
+      let child = saved;
+      if (saved.state.kind === 'waiting') {
+        const value = this.#checkpoint.store.read(contextId);
+        if (!value) throw new Error('Waiting child has no durable continuation; execution is unknown');
+        const head = cloneCheckpointHead(value);
+        if (!isEqual(head.image.frame.owner, saved.identity) || !isEqual(head.image.frame.input, saved.input) || !isEqual(head.image.contract, saved.contract)) throw new Error('Child checkpoint differs from parent-owned identity');
+        if (!head.delivery) {
+          const target = create();
+          if (target.context.id !== contextId || this.children.get(target).round !== saved.round) throw new Error('Child continuation did not adopt the saved relationship');
+          this.#resumed.set(contextId, target);
+          this.#checkpoint.childRestored(saved, 'continuation');
+          return target;
+        }
+        if (head.delivery.status !== 'succeeded') throw new Error('Failed or cancelled child cannot be resumed');
+        child = { ...saved, state: { kind: 'returned', output: head.delivery.output, progress: head.delivery.progress, reception: { kind: 'pending' } } };
+      }
+      const target = checkpointTarget(child, binding, this.options.signal);
+      this.children.replaceSaved(child, target);
+      this.#resumed.set(contextId, target);
+      this.#checkpoint.childRestored(child, 'delivery');
+      return target;
+    } catch (error) {
+      this.#checkpoint?.reportFailure('restore', error, contextId);
+      this.reject(error);
+      throw error;
+    }
+  }
   #started = false;
   #outputSection?: InvocationOutputSection<Output>;
   readonly #outputDelivery?: ProgressChannel<InvocationOutputEvent<Output>>;
@@ -128,7 +199,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   readonly #parentRelation?: InvocationRelation;
 
   get observation(): InvocationObservation | undefined {
-    return this.options.observation;
+    return this.recovering ? this.#checkpoint?.observation : this.options.observation;
   }
 
   nextResourceSequence(): number {
@@ -147,7 +218,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     this.#clock = options.clock ?? new Clock();
     this.#outputDelivery = options.output ? new ProgressChannel(options.output) : undefined;
     this.#progress = options.progress ? new ProgressChannel(options.progress) : undefined;
-    this.hasProgress = !!this.#progress || !!options.parent?.invocation.hasProgress;
+    this.hasProgress = !this.recovering && (!!this.#progress || !!options.parent?.invocation.hasProgress);
     this.#identity = Object.freeze(options.identity ? { ...options.identity } : { contextId: options.context.id, level: ('level' in options.context ? options.context.level : 'attempt') as InvocationIdentity['level'], ...(options.parent ? { parentContextId: options.parent.invocation.context.id } : {}) });
     this.children = new InvocationChildren(
       options.context,
@@ -156,6 +227,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       },
       () => this.requireActive(),
       (relation, change) => this.publishRelation(relation, change),
+      options.signal,
     );
     this.origin = Object.freeze({ contextId: options.context.id });
     const context = invocationContextView(options.context);
@@ -183,7 +255,9 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       children: this.children.view,
       run: () => this.run(),
     });
-    this.#parentRelation = options.parent?.invocation.children.attach(this, options.parent);
+    if (options.restore && !options.checkpoints) throw new Error('Checkpoint persistence is missing');
+    this.#checkpoint = options.checkpoints ? new InvocationCheckpoint(this, options.checkpoints, options.work.checkpoint, options.restore) : undefined;
+    this.#parentRelation = options.parent ? (options.restore ? options.parent.invocation.children.adopt(this) : options.parent.invocation.children.attach(this, options.parent)) : undefined;
   }
 
   get context(): Context {
@@ -198,15 +272,25 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     }
     this.#started = true;
     try {
+      this.#checkpoint?.begin();
       const output = await this.execute();
+      this.#checkpoint?.finish({ status: 'succeeded', output });
       this.#parentRelation?.returnedWith({ status: 'succeeded', output });
       return output;
     } catch (error) {
       const classified = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, this.context.status === 'succeeded' ? 'observation' : this.context.progress.phase, true);
-      const delivered = error instanceof AggregateError ? error : classified.error;
-      this.#failure = Object.freeze({ ...classified, ...(error instanceof AggregateError ? { kind: 'error' as const } : {}), error: delivered });
+      let delivered = error instanceof AggregateError ? error : classified.error;
+      try {
+        this.#checkpoint?.finish({ status: isInvocationCancelled(delivered, this.options.signal) ? 'cancelled' : 'failed' });
+      } catch (checkpointError) {
+        delivered = new AggregateError([delivered, checkpointError], 'Invocation failure and terminal checkpoint save failed', { cause: delivered });
+      }
+      this.#failure = Object.freeze({ ...classified, ...(delivered instanceof AggregateError ? { kind: 'error' as const } : {}), error: delivered });
+      if (this.context.status === 'running') this.context.fail(delivered, this.#failure);
       this.#parentRelation?.returnedWith({ status: 'failed', error: delivered, failure: this.#failure });
       throw delivered;
+    } finally {
+      this.#checkpoint?.release();
     }
   }
 
@@ -230,6 +314,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   /** Internal forwarding preserves producer identity and sequence; absent from business views. */
   publishProgress(fact: InvocationProgress): void {
+    if (this.recovering) return;
     this.#progress?.publish(fact);
     this.options.parent?.invocation.publishProgress?.(fact);
   }
@@ -280,7 +365,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       else if (fact.kind === 'relation') captured = { kind: 'relation' as const, identity: fact.relation, phase: fact.change.kind, ...(fact.change.kind === 'returned' ? { status: fact.change.result.status, ...(fact.change.result.status === 'failed' && fact.change.result.failure ? { failure: failureFact(fact.change.result.failure) } : {}) } : {}) };
       else if (fact.kind === 'finished') captured = { kind: 'finished' as const, status: fact.state.status === 'succeeded' ? ('succeeded' as const) : ('failed' as const) };
       else captured = { kind: 'started' as const };
-      this.options.changes?.publish(captured, { sequence: fact.eventSequence, occurredAt: fact.occurredAt });
+      (this.recovering ? undefined : this.options.changes)?.publish(captured, { sequence: fact.eventSequence, occurredAt: fact.occurredAt });
     } catch (error) {
       faults.push(error);
     }
@@ -301,7 +386,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       this.options.parent?.invocation.children.requireHealthy();
       this.options.validate?.();
       this.options.started?.(context, this);
-      this.publish({ kind: 'started', input: context.input });
+      if (!this.restoring) this.publish({ kind: 'started', input: context.input });
       if ('resources' in context) (context.resources as { start(): void }).start();
       output = await cycle(this, this.options.work, {
         signal: this.options.signal,

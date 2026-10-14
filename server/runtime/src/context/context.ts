@@ -11,7 +11,39 @@ export type ContextState<Output> = Readonly<{ status: 'running' } | { status: 's
 
 /** Live invocation state. Values keep their identity; recording policy does not belong here. */
 export class InvocationContext<Input = unknown, Output = unknown> {
-  readonly id = randomUUID();
+  #id: string = randomUUID();
+  get id(): string {
+    return this.#id;
+  }
+
+  /** Identity-only baseline for a saved waiting relationship; no child progress is inferred. */
+  installIdentity(id: string): void {
+    this.requireRunning();
+    if (this.#progress.round !== 0 || !id) throw new Error('Context identity can only be installed before progress');
+    this.#id = id;
+  }
+
+  /** Final delivery baseline: preserves saved progress without inventing an execute result. */
+  installDelivery(frame: { id: string; round: number; currentInput: Input; phase: 'execute' | 'receive' | 'handling' }, output: Output): void {
+    this.installCheckpoint(frame);
+    this.#progress = Object.freeze({ round: frame.round, input: frame.currentInput, phase: frame.phase });
+    this.complete(output);
+  }
+
+  /** A past declared failure remains diagnostic history, never a runnable exception. */
+  installFailure(frame: { id: string; round: number; currentInput: Input; phase: 'execute' | 'receive' | 'handling' }, failure: InvocationFailure): void {
+    this.installCheckpoint(frame);
+    this.#progress = Object.freeze({ round: frame.round, input: frame.currentInput, phase: frame.phase });
+    this.fail(failure.error, failure);
+  }
+
+  /** Construction-only installation; never exposed through ContextView. */
+  installCheckpoint(frame: { id: string; round: number; currentInput: Input }): void {
+    this.requireRunning();
+    if (this.#progress.round !== 0 || !frame.id || !Number.isInteger(frame.round) || frame.round < 1 || frame.round > 2) throw new Error('Invalid checkpoint context installation');
+    this.#id = frame.id;
+    this.#progress = Object.freeze({ round: frame.round, input: frame.currentInput, phase: 'execute' });
+  }
   #state: ContextState<Output> = Object.freeze({ status: 'running' });
 
   #progress: Readonly<{ round: number; input: Input; phase: 'execute' | 'receive' | 'handling'; result?: InvocationResult<Output> }>;

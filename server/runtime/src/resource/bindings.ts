@@ -39,6 +39,7 @@ export class ResourceBindings<Resources extends object = object> {
   /** Each declaration receives a distinct, revocable named view, never this binding. */
   view<SelectedResources extends object>(requires: ResourceRequirements<SelectedResources>, phase = 'run'): Readonly<SelectedResources> {
     const values = {};
+    let round = this.#attached ? this.round() : undefined;
     for (const name of Object.keys(requires)) {
       const request = requires[name as keyof SelectedResources];
       const entry = this.#entries.find((value) => value.offer === request.offer);
@@ -47,8 +48,9 @@ export class ResourceBindings<Resources extends object = object> {
         enumerable: true,
         get: () => {
           try {
-            this.session(phase).validate();
-            return request.read([{ offer: entry.offer, get: () => this.local(entry, phase).endpoint.get() }]);
+            round ??= this.round();
+            this.session(phase, round).validate();
+            return request.read([{ offer: entry.offer, get: () => this.local(entry, phase, round).endpoint.get() }]);
           } catch (error) {
             this.#session.error(error);
             throw error;
@@ -85,7 +87,7 @@ export class ResourceBindings<Resources extends object = object> {
     for (const request of resourceRequests(requires)) {
       const entry = this.#entries.find((value) => value.offer === request.offer);
       if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
-      const local = this.local(entry, phase);
+      const local = this.local(entry, phase, this.round());
       if (entry.timing === 'binding') local.endpoint.get();
     }
   }
@@ -127,27 +129,34 @@ export class ResourceBindings<Resources extends object = object> {
     return this.#entries.some((entry) => entry.offer === request.offer);
   }
 
-  private session(phase: string): ResourceSession {
-    let session = this.#scopes.get(phase);
+  private round(): number {
+    return Math.max(1, this.#session.owner?.round?.() ?? 1);
+  }
+
+  private session(phase: string, round = this.round()): ResourceSession {
+    const key = `${phase}:${round}`;
+    let session = this.#scopes.get(key);
     if (!session) {
       session = this.#session.scope(() => {
         if (phase !== this.#phase) throw new Error('Resource access belongs to an inactive declaration phase');
+        if (round !== this.round()) throw new Error('Resource access belongs to an inactive declaration round');
       });
-      this.#scopes.set(phase, session);
+      this.#scopes.set(key, session);
     }
     return session;
   }
 
-  private local(entry: ResourceValue, phase: string) {
+  private local(entry: ResourceValue, phase: string, round = this.round()) {
     if (this.#attached && !this.#started) throw new Error('Resource access requires a started invocation');
-    let locals = this.#locals.get(phase);
+    const key = `${phase}:${round}`;
+    let locals = this.#locals.get(key);
     if (!locals) {
       locals = new Map();
-      this.#locals.set(phase, locals);
+      this.#locals.set(key, locals);
     }
     const existing = locals.get(entry);
     if (existing) return existing;
-    const activity = new ResourceActivity(this.session(phase), entry.offer.name, entry.supplyId);
+    const activity = new ResourceActivity(this.session(phase, round), entry.offer.name, entry.supplyId);
     const endpoint = new Initializer(() => {
       let captured: unknown;
       let value: unknown;

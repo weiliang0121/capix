@@ -6,6 +6,8 @@ import type { Invocation } from './invocation.js';
 export function attachInvocationResources<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, resources: ResourceBindings): void {
   resources.attach({
     contextId: invocation.context.id,
+    round: () => invocation.context.progress.round,
+    reception: () => invocation.children.reception,
     nextSequence: () => invocation.nextResourceSequence(),
     validate: () => {
       invocation.requireActive();
