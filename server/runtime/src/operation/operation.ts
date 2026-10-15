@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Invocation } from '../invocation/invocation.js';
 import type { ExecutionContext } from '../context/execution.js';
 import type { OperationContext } from '../context/operation.js';
-import type { OperationInvocationBuilder } from '../invocation/operation/builder.js';
+import type { OperationInvocationBuilder } from '../invocation/builders/operation.js';
 import type { OperationBinding } from '../binding/contract.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
 

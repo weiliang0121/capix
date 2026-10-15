@@ -124,3 +124,67 @@ test('failed validation prevents started setup and record registration', async (
   await assert.rejects(invocation.run(), (error) => error === failure);
   assert.equal(invocation.context.state.error, failure);
 });
+
+test('constructing a low-level call does not read stage contracts before started can install acceptance', async () => {
+  const reads = [];
+  const processes = [];
+  const initial = { answer: 'work result' };
+  const accepted = { answer: 'accepted result' };
+  let started = false;
+  let receive;
+  const read = (name) => {
+    assert.equal(started, true, `${name} must not be read during construction`);
+    reads.push(name);
+  };
+  const work = {
+    get maxRounds() {
+      read('maxRounds');
+      return 1;
+    },
+    get output() {
+      read('output');
+      return { result: (value) => value };
+    },
+    get accept() {
+      read('accept');
+      return receive;
+    },
+    get exceptions() {
+      read('exceptions');
+      return undefined;
+    },
+    execute() {
+      assert.equal(this, work);
+      return initial;
+    },
+  };
+  const context = new InvocationContext('input');
+  const invocation = new Invocation({
+    context,
+    signal: signal(),
+    work,
+    started(current, call) {
+      assert.deepEqual(reads, []);
+      assert.equal(current, context);
+      assert.equal(call, invocation);
+      started = true;
+      receive = function (currentContext, output, currentCall) {
+        assert.equal(this, work);
+        assert.equal(currentContext, context);
+        assert.equal(currentCall, invocation);
+        assert.equal(output, initial);
+        return accepted;
+      };
+    },
+    observation: observeCall((fact) => {
+      if (fact.kind === 'process') processes.push(fact.process);
+    }),
+  });
+  assert.deepEqual(reads, []);
+  assert.equal(await invocation.run(), accepted);
+  assert.equal(context.state.output, accepted);
+  for (const key of ['maxRounds', 'output', 'accept']) assert.ok(reads.includes(key));
+  const returned = processes.find((process) => process.stage === 'receive' && process.type === 'return');
+  assert.equal(returned.output, accepted);
+  assert.equal('reuse' in returned, false);
+});

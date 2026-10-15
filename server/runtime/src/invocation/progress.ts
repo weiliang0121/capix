@@ -1,5 +1,5 @@
 import type { InvocationIdentity } from './identity.js';
-import type { InvocationProcess } from './cycle.js';
+import type { InvocationProcess } from './work.js';
 import type { InvocationRelationIdentity, InvocationRelationChange } from '../observation/facts.js';
 
 /** Passive metadata of established work facts. No IO, borrowed entities or diagnostics. */

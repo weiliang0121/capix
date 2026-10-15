@@ -3,7 +3,7 @@ import type { InvocationControls } from '../context/context.js';
 import type { RuntimeContext } from '../context/runtime.js';
 import type { ResourceProvider } from '../resource/offer.js';
 import type { InvocationCapabilities } from '../invocation/capabilities.js';
-import { createInvocationBuilders } from '../invocation/builders.js';
+import { createInvocationBuilders } from '../invocation/builders/create.js';
 import { BoundRuntime } from '../runtime/runtime.js';
 import { bindResources, ResourceBindings, resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
 import { collectObservationProvides, type ChildResourceBinding } from './resources.js';

@@ -34,6 +34,7 @@ export const allowedSources = new Set([
   'server/runtime/src/records/transcript/record.ts',
   'server/runtime/src/records/source.ts',
   'server/runtime/src/invocation/cycle.ts',
+  'server/runtime/src/invocation/work.ts',
   'server/runtime/src/invocation/changes.ts',
   'server/runtime/src/invocation/capabilities.ts',
   'server/runtime/src/invocation/result.ts',

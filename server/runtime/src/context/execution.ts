@@ -1,4 +1,4 @@
-import type { ExecutionContextBuilder } from './execution/builder.js';
+import type { ExecutionContextBuilder } from './builders/execution.js';
 import { InvocationContext, type InvocationControls } from './context.js';
 import { ResourceBindings, type ResourceRequirements } from '../resource/bindings.js';
 import type { RuntimeContext } from './runtime.js';

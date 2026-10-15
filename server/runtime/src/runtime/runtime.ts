@@ -10,7 +10,7 @@ import { RuntimeError } from '../errors/error.js';
 import type { RuntimeBinding } from '../binding/contract.js';
 import type { InvocationControls } from '../context/context.js';
 import type { InvocationCapabilities } from '../invocation/capabilities.js';
-import type { RuntimeInvocationBuilder } from '../invocation/runtime/builder.js';
+import type { RuntimeInvocationBuilder } from '../invocation/builders/runtime.js';
 
 /** Long-lived structure and occupancy; every run owns a separate Context and Invocation. */
 export class BoundRuntime<Input = unknown, Output = unknown, Options extends InvocationControls = InvocationControls, Resources extends object = object> {

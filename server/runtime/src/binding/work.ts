@@ -3,7 +3,7 @@ import type { ContextViewOf } from '../context/view.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationCheckpointWork } from '../checkpoint/work.js';
 import type { DeclaredException } from '../exception/contract.js';
-import type { InvocationWork } from '../invocation/cycle.js';
+import type { InvocationWork } from '../invocation/work.js';
 import type { Invocation } from '../invocation/invocation.js';
 import type { BoundChildren } from './children/bound.js';
 import { ChildBindingsBuilder } from './children/builder.js';

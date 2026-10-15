@@ -7,7 +7,9 @@ import type { InvocationObserver } from '../observation/observer.js';
 import { ObserverSession } from '../observation/session.js';
 import type { CheckpointFact, CheckpointHead, CheckpointInstallation, CheckpointRestoration, CheckpointWriter, CheckpointDelivery, CheckpointChild } from './contract.js';
 import { cloneCheckpointHead, cloneCheckpointImage, cloneCheckpointValue } from './value.js';
-import type { InvocationCheckpointWork } from './work.js';
+import type { CheckpointBinding, InvocationCheckpointWork } from './work.js';
+import type { InvocationTarget } from '../invocation/relation.js';
+import { captureCheckpointChildren, decodeCheckpointChild, resolveCheckpointChild } from './children.js';
 
 type Event = CheckpointFact extends infer F ? (F extends CheckpointFact ? Omit<F, 'activityId' | 'contextId' | 'owner' | 'recovering' | 'sequence' | 'occurredAt'> : never) : never;
 const active = new WeakMap<object, Set<string>>();
@@ -22,11 +24,14 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
   #ready = false;
   #terminal = false;
   #restore?: CheckpointHead;
+  readonly #savedChildren = new Map<string, CheckpointChild>();
+  readonly #resumedChildren = new Map<string, InvocationTarget>();
   readonly #observer?: ObserverSession<{ observe(fact: CheckpointFact): void; available?(): boolean }>;
   constructor(
     private readonly invocation: Invocation<Input, Output, Context>,
     private readonly installation: CheckpointInstallation,
-    private readonly work?: InvocationCheckpointWork<Input, Output, Context>,
+    private readonly work: InvocationCheckpointWork<Input, Output, Context> | undefined,
+    private readonly signal: AbortSignal,
     restore?: CheckpointRestoration,
   ) {
     this.#observer = installation.observation ? new ObserverSession({ observe: (fact: CheckpointFact) => installation.observation!.observe(fact), available: () => true }, installation.observation.failure ?? 'isolate') : undefined;
@@ -50,7 +55,9 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       const image = this.#restore.image;
       if (!work || this.#restore.delivery || image.contract.key !== work.key || image.contract.version !== work.version || !isEqual(image.frame.owner, invocation.identity) || image.frame.round > invocation.maxRounds || !work.points[image.point]) throw new Error('Incompatible checkpoint continuation');
       if (invocation.context.progress.round !== image.frame.round || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.currentInput)), image.frame.currentInput) || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.input)), image.frame.input)) throw new Error('Checkpoint input changed during binding');
-      invocation.children.restore(image.frame);
+      const children = image.frame.children.map((child) => decodeCheckpointChild(child, undefined, signal));
+      invocation.children.install(image.frame.nextChildOrder, children);
+      for (const child of image.frame.children) this.#savedChildren.set(child.identity.contextId, child);
     }
   }
   private emit(event: Event): void {
@@ -111,7 +118,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
           if (!this.#claimed || this.#terminal || context.progress.phase !== 'execute' || context.progress.round !== round) throw new Error('Checkpoint writer is outside its executing round');
           const definition = this.work!.points[point];
           if (!definition) throw new Error('Checkpoint point is not declared');
-          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 1, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input: this.work!.input.encode(context.input), currentInput: this.work!.input.encode(context.currentInput), ...this.invocation.children.capture() }, state: definition.state.encode(state) });
+          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 1, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input: this.work!.input.encode(context.input), currentInput: this.work!.input.encode(context.currentInput), ...captureCheckpointChildren(context, this.invocation.children, this.#savedChildren) }, state: definition.state.encode(state) });
           definition.check?.(image.frame, definition.state.decode(image.state));
           this.emit({ kind: 'captured', checkpointId: image.id, point });
           stage = 'save';
@@ -137,6 +144,32 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     this.emit({ kind: 'continued', checkpointId: image.id, point: image.point });
     return point.execute(this.invocation.context, this.invocation, point.state.decode(image.state));
   }
+  restoreChild(binding: CheckpointBinding, contextId: string, create: () => InvocationTarget): InvocationTarget {
+    if (!this.#restore) throw new Error('Child continuation requires a restored parent');
+    const saved = this.#savedChildren.get(contextId);
+    const resumed = this.#resumedChildren.get(contextId);
+    const contract = saved?.contract ?? resumed?.checkpointBinding;
+    if (!contract || contract.key !== binding.key || contract.version !== binding.version) throw new Error('Child continuation contract or ownership mismatch');
+    if (resumed) return resumed;
+    if (!saved) throw new Error('Child continuation basis is unavailable');
+    const restored = resolveCheckpointChild(saved, saved.state.kind === 'waiting' ? this.installation.store.read(contextId) : undefined);
+    if (restored.kind === 'continuation') {
+      // Construction adopts the placeholder through the child's Invocation constructor.
+      const target = create();
+      if (target.context.id !== contextId || this.invocation.children.get(target).round !== saved.round) throw new Error('Child continuation did not adopt the saved relationship');
+      this.#savedChildren.delete(contextId);
+      this.#resumedChildren.set(contextId, target);
+      this.emit({ kind: 'child-restored', child: saved, mode: 'continuation' });
+      return target;
+    }
+    const child = restored.child;
+    const decoded = decodeCheckpointChild(child, binding, this.signal);
+    this.invocation.children.replaceSaved(contextId, decoded.target, decoded.state);
+    this.#savedChildren.set(contextId, child);
+    this.#resumedChildren.set(contextId, decoded.target);
+    this.emit({ kind: 'child-restored', child, mode: 'delivery' });
+    return decoded.target;
+  }
   finish(result: { status: 'succeeded'; output: Output } | { status: 'failed' | 'cancelled' }): void {
     try {
       this.finalize(result);
@@ -158,11 +191,5 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     } catch {
       /* Consumer is disabled by its session. */
     }
-  }
-  childRestored(child: CheckpointChild, mode: 'continuation' | 'delivery'): void {
-    this.emit({ kind: 'child-restored', child, mode });
-  }
-  get store() {
-    return this.installation.store;
   }
 }

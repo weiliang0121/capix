@@ -93,6 +93,63 @@ test('a cached resumed child cannot be reused through a different declaration co
   assert.equal(runtime.running, false);
 });
 
+for (const reception of ['pending', 'receiving']) {
+  test(`a saved ${reception} child delivers one decoded value through cached lookup and parent reception`, async () => {
+    let decoded = 0;
+    const facts = [];
+    class Child extends ExecutionDefinition {
+      checkpoint = {
+        ...checkpoint('child-a', () => assert.fail('terminal child cannot resume work')),
+        output: {
+          encode: (value) => ({ wire: value.value }),
+          decode(value) {
+            decoded++;
+            return Object.freeze({ value: value.wire });
+          },
+        },
+      };
+      run = { requires: {}, execute: () => assert.fail('terminal child cannot execute work') };
+    }
+    const child = new Child();
+    class Root extends RuntimeDefinition {
+      children = [child];
+      checkpoint = checkpoint(
+        'root',
+        async (_context, invocation, children) => {
+          const call = children.get(child).resume(invocation, 'child-context');
+          assert.equal(children.get(child).resume(invocation, 'child-context'), call);
+          const relation = invocation.children.get(call);
+          const delivered = await call.run();
+          assert.equal(relation.returned.output, delivered);
+          assert.equal(call.context.state.output, delivered);
+          const result = await children.accept(call, (output) => {
+            assert.equal(output, delivered);
+            return output.value + 1;
+          });
+          invocation.checkpoint.save('saved', null);
+          return result;
+        },
+        [child],
+      );
+      run = { requires: {}, execute: () => assert.fail('not running original work') };
+    }
+    const saved = returnedChild();
+    saved.state.output = { wire: 7 };
+    saved.state.reception = { kind: reception };
+    const store = new MemoryCheckpointStore();
+    store.save(savedRoot([saved]), 0);
+    const runtime = assembleRuntime(new Root(), { source, providers: [], checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } });
+    assert.equal(await runtime.resume('root-context', {}), 8);
+    assert.equal(decoded, 1);
+    const captured = store.read('root-context').image.frame.children[0];
+    assert.deepEqual(captured.state.output, { wire: 7 });
+    assert.deepEqual(captured.state.reception, { kind: 'accepted', output: 8 });
+    assert.equal(facts.filter((fact) => fact.kind === 'child-restored').length, 1);
+    const relationFacts = facts.filter((fact) => fact.kind === 'activity' && fact.fact.kind === 'relation').map((fact) => fact.fact.change.kind);
+    assert.deepEqual(relationFacts, ['receiving', 'accepted'], 'baseline installation must not replay child attachment or return');
+  });
+}
+
 test('checkpoint head validation rejects accessors without evaluating them', () => {
   let reads = 0;
   const value = {

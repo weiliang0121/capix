@@ -1,7 +1,7 @@
 import { combineOutputReceivers } from '../output/delivery.js';
 import type { InvocationOutputReceiver } from '../output/contract.js';
 import { randomUUID } from 'node:crypto';
-import type { ExecutionInvocationBuilder, ExecutionInvocationStarted } from '../invocation/execution/builder.js';
+import type { ExecutionInvocationBuilder, ExecutionInvocationStarted } from '../invocation/builders/execution.js';
 import type { ExecutionBinding } from '../binding/contract.js';
 import type { ResourceBindings } from '../resource/bindings.js';
 import type { Invocation } from '../invocation/invocation.js';

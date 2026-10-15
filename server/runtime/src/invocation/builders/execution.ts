@@ -1,5 +1,5 @@
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
-import { prepareCheckpointRestoration } from '../../binding/checkpoint.js';
+import { prepareCheckpointRestoration } from '../../checkpoint/restoration.js';
 import type { InvocationOutputReceiver } from '../../output/contract.js';
 import type { ProgressReceiver } from '../../progress/channel.js';
 import type { InvocationProgress } from '../progress.js';
@@ -11,9 +11,9 @@ import { ResourceBindings, type ResourceRequirements } from '../../resource/bind
 import type { InvocationCapabilities } from '../capabilities.js';
 import { InvocationChangeEmitter } from '../changes.js';
 import { Invocation, type InvocationStarted } from '../invocation.js';
-import type { InvocationWork } from '../cycle.js';
+import type { InvocationWork } from '../work.js';
 import type { ExecutionContext } from '../../context/execution.js';
-import type { ExecutionContextBuilder } from '../../context/execution/builder.js';
+import type { ExecutionContextBuilder } from '../../context/builders/execution.js';
 import type { RuntimeContext } from '../../context/runtime.js';
 
 export type ExecutionInvocationStarted<Input, Output, Resources extends object = object> = InvocationStarted<Input, Output, ExecutionContext<Input, Output, Resources>>;

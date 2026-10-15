@@ -46,6 +46,43 @@ test('declared output preserves final IO and installs terminal state before deli
   assert.equal(events.at(-1).result, 'prefix');
 });
 
+test('a microtask queued by sealed output sees receiving progress and acceptance already started', async () => {
+  let finish;
+  const accepted = new Promise((resolve) => {
+    finish = resolve;
+  });
+  let observed;
+  const checked = new Promise((resolve) => {
+    observed = resolve;
+  });
+  let acceptanceStarted = false;
+  const call = make(
+    {
+      execute: () => 'work result',
+      accept() {
+        acceptanceStarted = true;
+        return accepted;
+      },
+    },
+    {
+      output: {
+        receive(event) {
+          if (event.kind === 'sealed') queueMicrotask(() => observed({ phase: call.context.progress.phase, acceptanceStarted }));
+        },
+      },
+    },
+  );
+  const completion = call.run();
+  try {
+    const state = await checked;
+    assert.equal(state.phase, 'receive');
+    assert.equal(state.acceptanceStarted, true);
+  } finally {
+    finish('accepted result');
+    await completion;
+  }
+});
+
 test('writer is sealed before accept and each continuation receives a different writer', async () => {
   const events = [];
   const writers = [];

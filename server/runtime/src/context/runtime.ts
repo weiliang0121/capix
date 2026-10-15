@@ -1,6 +1,6 @@
 import { InvocationContext, type InvocationControls } from './context.js';
 import { ResourceBindings, type ResourceRequirements } from '../resource/bindings.js';
-import type { RuntimeContextBuilder } from './runtime/builder.js';
+import type { RuntimeContextBuilder } from './builders/runtime.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
 import type { ExecutionInvocationBindings } from '../execution/execution.js';
 import { requireNotCancelled } from '../invocation/cancellation.js';

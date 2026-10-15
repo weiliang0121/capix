@@ -1,137 +1,185 @@
-import type { InvocationCheckpointWork } from '../checkpoint/work.js';
-import type { OutputDeclaration } from '../output/contract.js';
-import type { Invocation } from './invocation.js';
 import type { InvocationContext } from '../context/context.js';
 import { Continuation, type InvocationResult, type InvocationResolution } from './result.js';
 import { InvocationStopped } from './stop.js';
 import { requireNotCancelled } from './cancellation.js';
-import { DeclaredException, type ExceptionContract } from '../exception/contract.js';
-import type { InvocationFailure } from './failure.js';
+import { DeclaredException } from '../exception/contract.js';
+import type { InvocationFailure, InvocationPhase } from './failure.js';
+import type { InvocationCycleWork, InvocationProcess } from './work.js';
+import { InvocationOutputSection } from '../output/section.js';
+import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputWriter } from '../output/contract.js';
+import { ProgressChannel } from '../progress/channel.js';
 import { isNonBlankString } from '../value/string.js';
 import { isObject } from '../value/object.js';
 
-export type InvocationProcess = { stage: 'execute'; type: 'start'; input: unknown } | { stage: 'execute' | 'receive' | 'handling'; type: 'return'; output: unknown } | { stage: 'receive'; type: 'return'; reuse: true } | { stage: 'execute' | 'receive' | 'handling'; type: 'throw'; error: unknown; failure?: InvocationFailure } | { stage: 'receive' | 'handling'; type: 'continue'; input: unknown; reason: string } | { stage: 'handling'; type: 'start' | 'unhandled'; error: unknown; failure?: InvocationFailure } | { stage: 'control'; type: 'stop'; error: unknown; failure?: InvocationFailure };
-type ProcessSink = (process: InvocationProcess) => void;
-export interface InvocationCycleOptions {
-  signal: AbortSignal;
-  onProcess: ProcessSink;
-  validate?: () => void;
-}
-export interface InvocationWork<Input, Output, Context extends InvocationContext<Input, Output>> {
-  readonly output?: OutputDeclaration<Output, unknown>;
-  readonly checkpoint?: InvocationCheckpointWork<Input, Output, Context>;
-  execute(context: Context, invocation: Invocation<Input, Output, Context>): Output | Promise<Output>;
-  accept?(context: Context, output: Output, invocation: Invocation<Input, Output, Context>): Output | Continuation<Input> | Promise<Output | Continuation<Input>>;
-  raises?: readonly ExceptionContract<any>[];
-  exceptions?: {
-    accepts: readonly ExceptionContract<any>[];
-    handle(context: Context, exception: DeclaredException, invocation: Invocation<Input, Output, Context>): InvocationResolution<Input, Output> | Promise<InvocationResolution<Input, Output>>;
-  };
-  maxRounds: 1 | 2;
+/** The cycle shares the call's error authority, without access to its structure or delivery. */
+export interface InvocationCycleControls {
+  healthy(): void;
+  active(): void;
+  reject(error: unknown): void;
+  classify(error: unknown, phase: InvocationPhase, forceError?: boolean): InvocationFailure;
 }
 
-/** Structure decides when facets run; declarations only provide work and explicit handling decisions. */
-export async function cycle<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, work: InvocationWork<Input, Output, Context>, options: InvocationCycleOptions): Promise<Output> {
-  const context = invocation.context;
-  const { signal, onProcess } = options;
-  let input = invocation.restoring ? context.currentInput : context.input;
-  const initialRound = invocation.restoring ? context.progress.round : 1;
-  try {
-    if (work.maxRounds !== 1 && work.maxRounds !== 2) throw new InvocationStopped('INVALID_ROUND_LIMIT', '本地调用只允许一轮或两轮执行。');
-    for (let round = initialRound; round <= work.maxRounds; round++) {
-      invocation.requireHealthy();
-      requireNotCancelled(signal);
-      if (!invocation.restoring || round !== initialRound) context.startRound(round, input);
-      options.validate?.();
-      invocation.requireHealthy();
-      invocation.openOutput();
-      onProcess({ stage: 'execute', type: 'start', input });
-      let result: InvocationResult<Output>;
-      try {
-        invocation.requireActive();
-        const output = await (invocation.restoring && round === initialRound ? invocation.resumeWork() : work.execute(context, invocation));
-        invocation.requireHealthy();
-        result = { status: 'succeeded', output };
-      } catch (error) {
-        const failure = invocation.classify(error, 'execute');
-        result = { status: 'failed', error: failure.error, failure };
-      } finally {
-        invocation.sealOutput();
+export interface InvocationCycleOptions<Output> {
+  readonly signal: AbortSignal;
+  readonly process: (process: InvocationProcess) => void;
+  readonly validate?: () => void;
+  readonly output?: InvocationOutputReceiver<Output>;
+}
+
+/** Local execute/receive/handling rounds and their output segments. Context owns semantic progress. */
+export class InvocationCycle<Input, Output> {
+  #outputSection?: InvocationOutputSection<Output>;
+  readonly #outputDelivery?: ProgressChannel<InvocationOutputEvent<Output>>;
+
+  constructor(
+    private readonly context: InvocationContext<Input, Output>,
+    private readonly work: InvocationCycleWork<Input, Output>,
+    private readonly controls: InvocationCycleControls,
+    private readonly options: InvocationCycleOptions<Output>,
+  ) {
+    this.#outputDelivery = options.output ? new ProgressChannel(options.output) : undefined;
+  }
+
+  get outputWriter(): InvocationOutputWriter<unknown> {
+    if (!this.#outputSection) throw new Error('Invocation has no executing output segment');
+    return this.#outputSection.writer;
+  }
+
+  discardOutput(reason: 'exception' | 'continue' | 'failed'): void {
+    this.#outputSection?.discard(reason);
+  }
+
+  completeOutput(output: Output): void {
+    this.#outputSection?.complete(output);
+  }
+
+  /** A continuation entry replaces only the first execute, preserving installed Context progress. */
+  async run(resume?: () => Promise<Output>): Promise<Output> {
+    let input = resume ? this.context.currentInput : this.context.input;
+    const initialRound = resume ? this.context.progress.round : 1;
+    try {
+      if (this.work.maxRounds !== 1 && this.work.maxRounds !== 2) throw new InvocationStopped('INVALID_ROUND_LIMIT', '本地调用只允许一轮或两轮执行。');
+      for (let round = initialRound; round <= this.work.maxRounds; round++) {
+        const restoredRound = !!resume && round === initialRound;
+        this.enterRound(round, input, restoredRound);
+        const accepted = await this.runRound(restoredRound ? resume : undefined);
+        this.controls.healthy();
+        if (!(accepted instanceof Continuation)) return this.validateOutput(accepted);
+        this.discardOutput('continue');
+        if (round === this.work.maxRounds) throw new InvocationStopped('LOCAL_ROUND_LIMIT', '本地执行已达到轮次上限。', { maxRounds: this.work.maxRounds });
+        input = accepted.input;
       }
-      context.receiving(result);
-      if (result.status === 'succeeded') onProcess({ stage: 'execute', type: 'return', output: result.output });
-      else reportFailure(onProcess, 'execute', result.failure!);
-      invocation.requireHealthy();
-      options.validate?.();
-      requireNotCancelled(signal);
-      invocation.requireHealthy();
-      const accepted = result.status === 'failed' ? await handle(invocation, work, result.failure!, onProcess) : await accept(invocation, work, result.output, onProcess);
-      invocation.requireHealthy();
-      if (!(accepted instanceof Continuation)) return invocation.validateOutput(accepted);
-      invocation.discardOutput('continue');
-      if (round === work.maxRounds) throw new InvocationStopped('LOCAL_ROUND_LIMIT', '本地执行已达到轮次上限。', { maxRounds: work.maxRounds });
-      input = accepted.input;
+      throw new InvocationStopped('INTERNAL_ERROR', '调用没有产生结果。');
+    } catch (error) {
+      if (error instanceof InvocationStopped) this.reportFailure('control', this.controls.classify(error, 'control'));
+      throw error;
     }
-    throw new InvocationStopped('INTERNAL_ERROR', '调用没有产生结果。');
-  } catch (error) {
-    if (error instanceof InvocationStopped) reportFailure(onProcess, 'control', invocation.classify(error, 'control'));
-    throw error;
   }
-}
 
-async function accept<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, work: InvocationWork<Input, Output, Context>, output: Output, onProcess: ProcessSink): Promise<Output | Continuation<Input>> {
-  let accepted: Output | Continuation<Input>;
-  try {
-    accepted = work.accept ? await work.accept(invocation.context, output, invocation) : output;
-    invocation.requireHealthy();
-  } catch (error) {
-    const failure = invocation.classify(error, 'receive');
-    reportFailure(onProcess, 'receive', failure);
-    return handle(invocation, work, failure, onProcess);
+  private enterRound(round: number, input: Input, restored: boolean): void {
+    this.controls.healthy();
+    requireNotCancelled(this.options.signal);
+    if (!restored) this.context.startRound(round, input);
+    this.options.validate?.();
+    this.controls.healthy();
   }
-  if (accepted instanceof Continuation) reportContinuation(onProcess, 'receive', accepted);
-  else onProcess(work.accept ? { stage: 'receive', type: 'return', output: accepted } : { stage: 'receive', type: 'return', reuse: true });
-  return accepted;
-}
 
-async function handle<Input, Output, Context extends InvocationContext<Input, Output>>(invocation: Invocation<Input, Output, Context>, work: InvocationWork<Input, Output, Context>, failure: InvocationFailure, onProcess: ProcessSink): Promise<Output | Continuation<Input>> {
-  invocation.discardOutput('exception');
-  const exception = failure.error;
-  if (failure.kind !== 'exception' || !(exception instanceof DeclaredException) || !work.exceptions?.accepts.includes(exception.contract)) throw exception;
-  const context = invocation.context;
-  context.handling();
-  onProcess({ stage: 'handling', type: 'start', error: exception, failure });
-  let resolution: InvocationResolution<Input, Output>;
-  try {
-    invocation.requireActive();
-    resolution = await work.exceptions.handle(context, exception, invocation);
-    invocation.requireHealthy();
-    if (!isObject(resolution) || !['return', 'continue', 'unhandled'].includes(resolution.kind) || (resolution.kind === 'return' && !Object.hasOwn(resolution, 'output')) || (resolution.kind === 'continue' && (!Object.hasOwn(resolution, 'input') || !isNonBlankString(resolution.reason)))) throw new InvocationStopped('INVALID_EXCEPTION_RESOLUTION', '异常处理返回了无效的处理结果。');
-  } catch (error) {
-    const handlerFailure = invocation.classify(error, 'handling', true);
-    reportFailure(onProcess, 'handling', handlerFailure);
-    throw handlerFailure.error;
+  private async runRound(resume?: () => Promise<Output>): Promise<Output | Continuation<Input>> {
+    this.#outputSection = new InvocationOutputSection(this.context.id, this.context.progress.round, this.work.output, this.controls, this.#outputDelivery);
+    this.#outputSection.start();
+    this.options.process({ stage: 'execute', type: 'start', input: this.context.currentInput });
+    let result: InvocationResult<Output>;
+    try {
+      this.controls.active();
+      const output = await (resume ? resume() : this.work.execute());
+      this.controls.healthy();
+      result = { status: 'succeeded', output };
+    } catch (error) {
+      const failure = this.controls.classify(error, 'execute');
+      result = { status: 'failed', error: failure.error, failure };
+    } finally {
+      this.#outputSection.seal();
+    }
+    // No await between sealing and reception: queued consumers must not retain execute access.
+    return this.receiveWork(result);
   }
-  if (resolution.kind === 'unhandled') {
-    onProcess({ stage: 'handling', type: 'unhandled', error: exception, failure });
-    throw exception;
+
+  private receiveWork(result: InvocationResult<Output>): Promise<Output | Continuation<Input>> {
+    this.context.receiving(result);
+    if (result.status === 'succeeded') this.options.process({ stage: 'execute', type: 'return', output: result.output });
+    else this.reportFailure('execute', result.failure!);
+    this.controls.healthy();
+    this.options.validate?.();
+    requireNotCancelled(this.options.signal);
+    this.controls.healthy();
+    return result.status === 'failed' ? this.handleException(result.failure!) : this.acceptOutput(result.output);
   }
-  if (resolution.kind === 'return') {
-    onProcess({ stage: 'handling', type: 'return', output: resolution.output });
-    return resolution.output;
+
+  private async acceptOutput(output: Output): Promise<Output | Continuation<Input>> {
+    let accepted: Output | Continuation<Input>;
+    try {
+      accepted = this.work.accept ? await this.work.accept(output) : output;
+      this.controls.healthy();
+    } catch (error) {
+      const failure = this.controls.classify(error, 'receive');
+      this.reportFailure('receive', failure);
+      return this.handleException(failure);
+    }
+    if (accepted instanceof Continuation) this.reportContinuation('receive', accepted);
+    else this.options.process(this.work.accept ? { stage: 'receive', type: 'return', output: accepted } : { stage: 'receive', type: 'return', reuse: true });
+    return accepted;
   }
-  const continuation = new Continuation(resolution.input, resolution.reason);
-  reportContinuation(onProcess, 'handling', continuation);
-  return continuation;
-}
-function reportContinuation<Input>(onProcess: ProcessSink, stage: 'receive' | 'handling', continuation: Continuation<Input>): void {
-  if (!isNonBlankString(continuation.reason)) throw new InvocationStopped('INVALID_CONTINUATION', '继续执行必须说明原因。');
-  onProcess({ stage, type: 'continue', input: continuation.input, reason: continuation.reason });
-}
-function reportFailure(onProcess: ProcessSink, stage: 'execute' | 'receive' | 'handling' | 'control', failure: InvocationFailure): void {
-  try {
-    onProcess(stage === 'control' ? { stage, type: 'stop', error: failure.error, failure } : { stage, type: 'throw', error: failure.error, failure });
-  } catch (reportingError) {
-    throw new AggregateError([failure.error, reportingError], 'Failure and its process reporting both failed', { cause: failure.error });
+
+  private async handleException(failure: InvocationFailure): Promise<Output | Continuation<Input>> {
+    this.discardOutput('exception');
+    const exception = failure.error;
+    if (failure.kind !== 'exception' || !(exception instanceof DeclaredException) || !this.work.exceptions?.accepts.includes(exception.contract)) throw exception;
+    this.context.handling();
+    this.options.process({ stage: 'handling', type: 'start', error: exception, failure });
+    let resolution: InvocationResolution<Input, Output>;
+    try {
+      this.controls.active();
+      resolution = await this.work.exceptions.handle(exception);
+      this.controls.healthy();
+      if (!isObject(resolution) || !['return', 'continue', 'unhandled'].includes(resolution.kind) || (resolution.kind === 'return' && !Object.hasOwn(resolution, 'output')) || (resolution.kind === 'continue' && (!Object.hasOwn(resolution, 'input') || !isNonBlankString(resolution.reason)))) throw new InvocationStopped('INVALID_EXCEPTION_RESOLUTION', '异常处理返回了无效的处理结果。');
+    } catch (error) {
+      const handlerFailure = this.controls.classify(error, 'handling', true);
+      this.reportFailure('handling', handlerFailure);
+      throw handlerFailure.error;
+    }
+    if (resolution.kind === 'unhandled') {
+      this.options.process({ stage: 'handling', type: 'unhandled', error: exception, failure });
+      throw exception;
+    }
+    if (resolution.kind === 'return') {
+      this.options.process({ stage: 'handling', type: 'return', output: resolution.output });
+      return resolution.output;
+    }
+    const continuation = new Continuation(resolution.input, resolution.reason);
+    this.reportContinuation('handling', continuation);
+    return continuation;
+  }
+
+  private validateOutput(value: Output): Output {
+    // Acceptance may already have committed a result when it requests cancellation.
+    // Only a new cancellation during declaration validation interrupts this boundary.
+    const cancelledBeforeValidation = this.options.signal.aborted;
+    const output = this.#outputSection ? this.#outputSection.validateResult(value) : value;
+    this.controls.healthy();
+    if (!cancelledBeforeValidation) requireNotCancelled(this.options.signal);
+    return output;
+  }
+
+  private reportContinuation(stage: 'receive' | 'handling', continuation: Continuation<Input>): void {
+    if (!isNonBlankString(continuation.reason)) throw new InvocationStopped('INVALID_CONTINUATION', '继续执行必须说明原因。');
+    this.options.process({ stage, type: 'continue', input: continuation.input, reason: continuation.reason });
+  }
+
+  private reportFailure(stage: 'execute' | 'receive' | 'handling' | 'control', failure: InvocationFailure): void {
+    try {
+      this.options.process(stage === 'control' ? { stage, type: 'stop', error: failure.error, failure } : { stage, type: 'throw', error: failure.error, failure });
+    } catch (reportingError) {
+      throw new AggregateError([failure.error, reportingError], 'Failure and its process reporting both failed', { cause: failure.error });
+    }
   }
 }

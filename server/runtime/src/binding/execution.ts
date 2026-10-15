@@ -1,8 +1,8 @@
 import type { ExecutionContext } from '../context/execution.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
 import { BoundExecution } from '../execution/execution.js';
-import type { InvocationWork } from '../invocation/cycle.js';
-import type { ExecutionInvocationBuilder } from '../invocation/execution/builder.js';
+import type { InvocationWork } from '../invocation/work.js';
+import type { ExecutionInvocationBuilder } from '../invocation/builders/execution.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
 import { BoundChildren } from './children/bound.js';
 import type { ChildBindingOptions } from './contract.js';

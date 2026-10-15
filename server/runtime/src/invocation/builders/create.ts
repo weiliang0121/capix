@@ -1,12 +1,12 @@
-import { RuntimeContextBuilder } from '../context/runtime/builder.js';
-import { ExecutionContextBuilder } from '../context/execution/builder.js';
-import { OperationContextBuilder } from '../context/operation/builder.js';
-import { AttemptContextBuilder } from '../context/attempt/builder.js';
-import type { InvocationCapabilities } from './capabilities.js';
-import { RuntimeInvocationBuilder } from './runtime/builder.js';
-import { ExecutionInvocationBuilder } from './execution/builder.js';
-import { OperationInvocationBuilder } from './operation/builder.js';
-import { AttemptInvocationBuilder } from './attempt/builder.js';
+import { RuntimeContextBuilder } from '../../context/builders/runtime.js';
+import { ExecutionContextBuilder } from '../../context/builders/execution.js';
+import { OperationContextBuilder } from '../../context/builders/operation.js';
+import { AttemptContextBuilder } from '../../context/builders/attempt.js';
+import type { InvocationCapabilities } from '../capabilities.js';
+import { RuntimeInvocationBuilder } from './runtime.js';
+import { ExecutionInvocationBuilder } from './execution.js';
+import { OperationInvocationBuilder } from './operation.js';
+import { AttemptInvocationBuilder } from './attempt.js';
 
 /** Assemble one R's reusable construction chain without retaining any call state. */
 export function createInvocationBuilders(capabilities: InvocationCapabilities = {}) {

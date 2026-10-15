@@ -1,7 +1,7 @@
 import type { ResourceBindings } from '../../resource/bindings.js';
 import type { ExecutionContext } from '../execution.js';
 import { OperationContext } from '../operation.js';
-import type { ExecutionContextBuilder } from '../execution/builder.js';
+import type { ExecutionContextBuilder } from './execution.js';
 
 export class OperationContextBuilder {
   constructor(private readonly executionContextBuilder: ExecutionContextBuilder) {}

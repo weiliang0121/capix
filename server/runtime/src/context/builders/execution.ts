@@ -1,7 +1,7 @@
 import { ExecutionContext } from '../execution.js';
 import type { ResourceBindings } from '../../resource/bindings.js';
 import type { RuntimeContext } from '../runtime.js';
-import type { RuntimeContextBuilder } from '../runtime/builder.js';
+import type { RuntimeContextBuilder } from './runtime.js';
 
 /** Constructs this Runtime's contexts from already established per-call conditions. */
 export class ExecutionContextBuilder {

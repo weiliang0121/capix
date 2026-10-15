@@ -29,7 +29,8 @@ Binder 先解算声明，再建立绑定结构；Binding 表达结构构造所�
 | work.ts         | InvocationWorkBinding                                       | 一个 Bound 位置的固定工作适配；连接运行、接纳、异常与 CP 声明                |
 | access.ts       | InvocationAccess                                            | 一次 Invocation 的子调用映射、阶段/轮次缓存及访问约束                        |
 | observation.ts  | bindInvocationObservation / bindRuntimeStructureObservation | 建立具体调用或 R 结构的观测会话，连接父观测、声明资源及故障策略              |
-| checkpoint.ts   | prepareCheckpointRestoration / 私有 readCheckpoint          | 读取校验与可选构造共用恢复失败观测边界；纯读取校验不负责构造                 |
+
+恢复准备不属于上述绑定辅助。`checkpoint/restoration.ts` 的 `prepareCheckpointRestoration` / 私有 `readCheckpoint` 由 InvocationBuilder 使用：读取校验与可选构造共用恢复失败观测边界，纯读取校验不负责构造，也不解算声明或连接资源。
 
 `observationProvides` 为 undefined 时不启用观察声明资源汇集，空对象则表示已启用、但没有安装方供给。该供给只抵扣观察声明的申请，不抵扣工作或异常处理的申请。资源收窄在便捷构建与正式装配两处检查各有入口约束；直接提供绑定对象不能跳过正式装配检查。
 
@@ -123,6 +124,26 @@ R 装配 REOA 四层 ContextBuilder 与 InvocationBuilder，跨调用复用；�
 
 Invocation 是单次、只能运行一次的结构化调用。它持有实际 Context、局部观测绑定、内部过程及事实顺序与直接子关系，不持有 Record。构造不写调用记录；运行前、每轮 execute、正常接纳和异常处理阶段检查本层和父层活动及正式错误状态。可选记录预设维护自己的本调用句柄和父预设关系；无记录时调用仍完整成立。
 
+调用本体按完整动作组织，避免循环函数反向操作整个 Invocation：
+
+| 对象／文件                                          | 职责与持有状态                                                                                             |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `Invocation` / `invocation.ts`                      | 整次调用启动、工作终态、最终交付与释放；唯一错误归属与事实发布                                             |
+| `InvocationCycle` / `cycle.ts`                      | 本地 execute / receive / handling 与有限继续；持有当前输出段，Context 仍唯一持有语义进度                   |
+| `InvocationWork` / `work.ts`                        | 可复用工作契约与过程事实类型；`connectInvocationWork` 连接本次 Context/Invocation，向 Cycle 提供窄工作入口 |
+| `InvocationChildren` / `children.ts`                | 直接子关系集合、顺序、恢复占位安装与父层异步接纳窗口                                                       |
+| `InvocationRelation` / `relation.ts`                | 单条关系的真实 returned 与 reception；通过 owner 端口使用父层能力                                          |
+| `InvocationCheckpoint` / `checkpoint/invocation.ts` | 本次 CP 活动、保存依据、子续接选择和缓存、最终交付保存                                                     |
+| `checkpoint/children.ts`                            | 子关系的 CP 编解码、可保存性检查和保存依据解释；不修改运行关系集合                                         |
+
+`run → runWork → startWork / InvocationCycle.run` 是正常运行主线。`failWork` 固定工作失败并通知；`failDelivery` 处理整次交付失败。成功 Context 在输出完成与 finished 通知之前固定，之后交付失败不能改写工作结果。CP 最终交付固定后才向父返回，CP 活动在 finally 释放。
+
+Cycle 仅获得本次工作入口、检查与错误归属端口、过程通知和输出交付；不持有真实 Invocation、子关系或 CP 存储。可选续接函数只替换恢复首轮 execute，之后正常接纳／异常处理；若继续下一轮，回到普通 execute。输出段由 Cycle 建立与封口，外层固定成功 Context 后再完成输出。工作连接不提前读取阶段契约、进入业务访问或兑现资源；未声明 accept 保持缺席，保留 reuse 事实。
+
+父子关系恢复使用已经解码的 baseline；Relation 不读取 CP 数据格式或调用 codec。InvocationCheckpoint 维护原始保存依据与已续接目标，通过 Children 的安装入口维护同级顺序与精确目标身份。父层异步接纳窗口只在实际接纳工作期间有效，finally 关闭；它与关系的 receiving/accepted 状态分开。
+
+REOA 构造器按职责集中到 `invocation/builders/{runtime,execution,operation,attempt}.ts` 与 `context/builders/{runtime,execution,operation,attempt}.ts`；`invocation/builders/create.ts` 只组合四层可复用构造链。
+
 业务声明实际收到的是冻结视图，不只是 TypeScript 的 Pick：
 
 - RuntimeContextView、ExecutionContextView、OperationContextView、AttemptContextView：本层 level、id、input/currentInput、progress、state/status、signal、当前声明申请的 resources.values 和 continueWith。运行内容和异常内容分别取得自己的资源别名。
@@ -153,7 +174,7 @@ Binder.bindResolved
   → new InvocationWorkBinding(固定声明, BoundChildren)
   → Binding.work → Bound 持有
 
-Invocation.run → cycle
+Invocation.run → runWork → InvocationCycle.run
   → InvocationWork.execute / accept / exceptions.handle / checkpoint point
   → InvocationWorkBinding.accessFor(本次 Invocation)
   → InvocationAccess.enter(声明阶段)
@@ -162,7 +183,7 @@ Invocation.run → cycle
   → 声明内容执行
 ```
 
-视图与 writer 仍是已有实例的受限端口，不复制生命周期状态。Invocation 的普通视图、子调用视图及工作视图由 `invocation/view.ts` 的具名辅助函数集中构造，sequence/failure 保持实时 getter；只有 execute/CP 续接视图带本轮 output/checkpoint writer。未声明 accept 时工作适配不安装接纳函数，公共循环仍直接复用结果。`invocation/facts.ts` 只转换已产生事实，`checkpoint/children.ts` 只解释已保存子依据；事实顺序、失败归属、恢复目标缓存及父子关系安装仍由 Invocation 控制。
+视图与 writer 仍是已有实例的受限端口，不复制生命周期状态。Invocation 的普通视图、子调用视图及工作视图由 `invocation/view.ts` 的具名辅助函数集中构造，sequence/failure 保持实时 getter；只有 execute/CP 续接视图带本轮 output/checkpoint writer。未声明 accept 时工作适配不安装接纳函数，公共循环仍直接复用结果。`invocation/facts.ts` 只转换已产生事实；事实顺序与失败归属仍由 Invocation 控制。子恢复依据与目标缓存属于 InvocationCheckpoint，直接关系安装属于 InvocationChildren。
 
 Initializer 只支持同步一次建立、递归检查、成功或失败缓存，没有重置、异步调度或统一释放。共享声明不承诺隔离应用自己保存的外部闭包；绑定后修改声明不是动态重配置能力。
 

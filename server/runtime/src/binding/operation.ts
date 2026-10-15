@@ -1,7 +1,7 @@
 import type { OperationContext } from '../context/operation.js';
 import type { OperationDefinition } from '../definition/operation.js';
-import type { InvocationWork } from '../invocation/cycle.js';
-import type { OperationInvocationBuilder } from '../invocation/operation/builder.js';
+import type { InvocationWork } from '../invocation/work.js';
+import type { OperationInvocationBuilder } from '../invocation/builders/operation.js';
 import { BoundOperation } from '../operation/operation.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
 import type { AttemptBinder } from './attempt.js';

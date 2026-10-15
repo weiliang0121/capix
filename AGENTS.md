@@ -32,6 +32,7 @@
 - E entry.accept 接纳输入，accepted 通知后，未取消时 entry.admit 执行分段；entry 关闭后 capture 固定工作配置/原文范围，然后创建 E Context/Invocation。入口阶段属于已有 R，不伪造 E 记录。started 是同步绑定回调，保持 Context 建立后、调用 started 发布前的时机。被动进展通过独立 ProgressChannel 隔离消费者故障，不把反馈回调当作建立钩子；消息落实定位在正式 append 时发布，不读当前集合长度反推。详细顺序见 [运行边界](docs/runtime-boundaries.md)。
 - O/A 可通过 `childResources` 在创建时收窄已供应且已申请的资源；规则由 ResourceOffer.refine 签发，绑定只从输入选择范围，资源自身检查不可扩大。父层和兄弟供给不变，无关资源不重捕获；这不是动态能力注册或调度。
 - BoundChildren 持有已解算子声明与固定 CP 契约，惰性建立直接子结构；已保存成功交付不需要初始化子结构。Initializer 缓存成功或失败；ChildBindingsBuilder 核对阶段范围并构造 InvocationChildBindings，后者提供本次调用的受控入口。InvocationWorkBinding 是 Bound 持有的固定声明适配，实现 InvocationWork 契约；按 Invocation 持有 InvocationAccess，后者管理跨阶段共享的调用映射和阶段/轮次访问缓存，进入阶段即使命中缓存也先激活资源。Builder 不保留本次状态，不提前初始化子结构；视图与 writer 保持受限端口，未声明 accept 不安装默认接纳方法。不引入重置/异步管理器。Sequence 逐项构造输入、运行并接纳结果，各次输出独立。父子关系保存真实返回与接纳事实；returned 不等于 accepted。
+- Invocation 协调整次调用与最终交付，InvocationCycle 持有本地工作周期及输出段，只使用窄工作/控制端口；Context 唯一持有语义进度。CP 编解码、子恢复依据及续接缓存属于 checkpoint，Children/Relation 只安装已解码关系事实并维护直接归属和接纳窗口。
 - Context 保留真实 IO/异常引用，局部继续复用同一 Context；子调用每次新建。maxRounds 默认 1，仅允许 1/2。run.accept 只处理正常结果；exceptions.handle 按契约处理已声明异常。内核、绑定、未声明抛错、处理器错误不递归进入异常处理。已归属错误不能被业务 catch 清除。详见 [异常边界](docs/exceptions.md)。
 
 ## Checkpoint 的有限恢复
@@ -89,7 +90,7 @@
 ## 编码、界面与验证
 
 - 每条变量声明只声明一个变量；循环直接表达继续/结束条件，不使用 while(true) 再内部 break。流读取以 done 结束，异常和提前退出仍释放资源。
-- 类自身 ID 直接生成；不为 ID 创建无意义别名。不为每次检查创建包装层。按概念/动作组织目录，不用连字符机械拼接功能文件名；工具固定文件名除外。
+- 类自身 ID 直接生成；不为 ID 创建无意义别名。不为每次检查创建包装层。目录先表达对象或能力归属，再按实际职责分组；多个构造器使用 `builders/{runtime,execution,operation,attempt}.ts`，文件名可在不同归属下重复。需要独立表达 kind-职责 的文件名使用中划线，不为单个辅助文件建立空泛分类；工具固定文件名保持原名。目录归属不等于创建者或持有者，恢复等职责须保留所处理对象的边界，见 [项目组织](docs/organization.md)。
 - 通用操作优先使用 es-toolkit@1.52.0 公开入口，不建通用 Utils/转发层。标准类型谓词用 predicate/compat；对象身份、严格记录正文、getter 隔离、循环和预算规则保留专用语义。只为真实需求引入深合并或克隆，不用通用函数覆盖正式接纳。
 - RuntimeError 是通用诊断，不是 R 层专属错误。错误格式保留 code/message/name/stack/cause/复合 errors；标准错误字段逐项安全读取并捕获访问异常，允许继承的 name；诊断 detail 不执行 getter/toJSON。保持现有转换预算，不单独创建错误记录或无限错误恢复。错误机制自身损坏属于 bug。
 - Observer 为黑灰主题；10/12/14/16px 字号，主标题20px。问答导航固定块宽并独立滚动；主图轮间等宽，默认按直接归属与同级顺序展示可折叠调用树，耗时作为独立辅助视图。离屏问答按视口卸载，详情按需加载；展开状态保留在应用层。颜色表达稳定操作类别，不映射时间；失败、运行中、选中以文字 tag 表达，不用状态彩色描边覆盖节点含义。累计被选次数用数字和局部短条，不用整块热度填色。上下文聚合关联，不重复消息全文。React + Vite + Tailwind，shadcn 源码组件留在 app 内。保留键盘可访问性，不用原生 title 遮挡节点。

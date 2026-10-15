@@ -1,6 +1,6 @@
 import { ResourceBindings, type ResourceRequirements } from '../resource/bindings.js';
 import type { ExecutionContext } from './execution.js';
-import type { ExecutionContextBuilder } from './execution/builder.js';
+import type { ExecutionContextBuilder } from './builders/execution.js';
 import { InvocationContext } from './context.js';
 
 export class OperationContext<Input = unknown, Output = unknown, Resources extends object = object> extends InvocationContext<Input, Output> {

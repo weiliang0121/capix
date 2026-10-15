@@ -1,7 +1,7 @@
 import type { ResourceBindings } from '../../resource/bindings.js';
 import { AttemptContext } from '../attempt.js';
 import type { OperationContext } from '../operation.js';
-import type { OperationContextBuilder } from '../operation/builder.js';
+import type { OperationContextBuilder } from './operation.js';
 
 export class AttemptContextBuilder {
   constructor(private readonly operationContextBuilder: OperationContextBuilder) {}

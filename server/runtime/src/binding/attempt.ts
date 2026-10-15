@@ -1,8 +1,8 @@
 import { BoundAttempt } from '../attempt/attempt.js';
 import type { AttemptContext } from '../context/attempt.js';
 import type { AttemptDefinition } from '../definition/attempt.js';
-import type { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
-import type { InvocationWork } from '../invocation/cycle.js';
+import type { AttemptInvocationBuilder } from '../invocation/builders/attempt.js';
+import type { InvocationWork } from '../invocation/work.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
 import { BoundChildren } from './children/bound.js';
 import type { ChildBindingOptions } from './contract.js';

@@ -6,7 +6,7 @@ import type { AttemptDefinition } from '../definition/attempt.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
 import type { OperationDefinition } from '../definition/operation.js';
 import type { RuntimeDefinition } from '../definition/runtime.js';
-import type { InvocationWork } from '../invocation/cycle.js';
+import type { InvocationWork } from '../invocation/work.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 import type { InvocationOutputReceiver } from '../output/contract.js';
 import type { ProgressReceiver } from '../progress/channel.js';

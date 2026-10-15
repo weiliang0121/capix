@@ -1,5 +1,5 @@
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
-import { prepareCheckpointRestoration } from '../../binding/checkpoint.js';
+import { prepareCheckpointRestoration } from '../../checkpoint/restoration.js';
 import type { InvocationOutputReceiver } from '../../output/contract.js';
 import type { ProgressReceiver } from '../../progress/channel.js';
 import type { InvocationProgress } from '../progress.js';
@@ -12,10 +12,10 @@ import type { ResourceRefinement } from '../../resource/offer.js';
 import type { InvocationCapabilities } from '../capabilities.js';
 import { InvocationChangeEmitter } from '../changes.js';
 import { Invocation } from '../invocation.js';
-import type { InvocationWork } from '../cycle.js';
+import type { InvocationWork } from '../work.js';
 import type { AttemptContext } from '../../context/attempt.js';
 import type { OperationContext } from '../../context/operation.js';
-import type { AttemptContextBuilder } from '../../context/attempt/builder.js';
+import type { AttemptContextBuilder } from '../../context/builders/attempt.js';
 import type { AttemptDescription } from '../description.js';
 
 export interface AttemptInvocationRequest<Input, Output, Resources extends object = object> {

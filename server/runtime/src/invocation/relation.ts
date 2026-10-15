@@ -1,4 +1,3 @@
-import type { CheckpointChild } from '../checkpoint/contract.js';
 import type { CheckpointBinding } from '../checkpoint/work.js';
 import type { InvocationIdentity } from './identity.js';
 import type { ChildInvocationView } from './view.js';
@@ -27,31 +26,53 @@ export interface InvocationTarget<Output = unknown> {
 
 export type InvocationRelationReception = Readonly<{ status: 'pending' } | { status: 'receiving' } | { status: 'accepted'; output: unknown } | { status: 'failed'; error: unknown }>;
 
+/** Already-decoded relationship facts. Installing them does not replay return or acceptance. */
+export interface InvocationRelationBaseline<Output = unknown> {
+  readonly returned?: InvocationResult<Output>;
+  readonly reception: Exclude<InvocationRelationReception, { status: 'failed' }>;
+}
+
+export interface InvocationRelationOwner {
+  requireHealthy(): void;
+  fail(failure: InvocationFailure): void;
+  publish(relation: InvocationRelation, change: InvocationRelationChange): unknown | undefined;
+  receive<Value>(relation: InvocationRelation, work: () => Promise<Value>): Promise<Value>;
+}
+
+export interface InvocationRelationSetup<Output = unknown> {
+  readonly target: InvocationTarget<Output>;
+  readonly round: number;
+  readonly order: number;
+  readonly key?: string;
+}
+
 /** A direct parent-child relationship, not another invocation or E/O/A execution layer. */
 export class InvocationRelation<Output = unknown> {
   #returned?: InvocationResult<Output>;
   #restoredReception = false;
   readonly view: InvocationRelationView;
   #reception: InvocationRelationReception = Object.freeze({ status: 'pending' });
+  private target: InvocationTarget<Output>;
+  readonly round: number;
+  readonly order: number;
+  readonly key?: string;
 
   constructor(
-    private target: InvocationTarget<Output>,
-    readonly round: number,
-    readonly key?: string,
-    private readonly failed?: (failure: InvocationFailure) => void,
-    private readonly observe?: (change: InvocationRelationChange) => unknown | undefined,
-    private readonly validate?: () => void,
-    readonly order = 0,
-    private readonly receiving?: <Value>(work: () => Promise<Value>) => Promise<Value>,
+    identity: InvocationRelationSetup<Output>,
+    private readonly owner: InvocationRelationOwner,
   ) {
+    this.target = identity.target;
+    this.round = identity.round;
+    this.order = identity.order;
+    this.key = identity.key;
     const relation = this;
     this.view = Object.freeze({
       get invocation() {
         if (!relation.invocation.view) throw new Error('Child invocation has no business view');
         return relation.invocation.view;
       },
-      round,
-      key,
+      round: this.round,
+      key: this.key,
       get returned() {
         return relation.returned;
       },
@@ -66,11 +87,11 @@ export class InvocationRelation<Output = unknown> {
   }
 
   /** Rebuild a saved relationship without emitting new return/acceptance facts. */
-  install(target: InvocationTarget<Output>, state: CheckpointChild['state'], decode: (value: any) => Output): void {
+  install(target: InvocationTarget<Output>, state: InvocationRelationBaseline<Output>): void {
     this.target = target;
-    this.#restoredReception = state.kind === 'returned' && state.reception.kind === 'receiving';
-    this.#returned = state.kind === 'returned' ? Object.freeze({ status: 'succeeded', output: decode(state.output) }) : state.kind === 'failed' ? Object.freeze({ status: 'failed', error: state.error, failure: Object.freeze({ ...state.failure, error: state.error }) }) : undefined;
-    this.#reception = Object.freeze(state.kind === 'returned' ? (state.reception.kind === 'accepted' ? { status: 'accepted', output: state.reception.output } : { status: state.reception.kind }) : { status: 'pending' });
+    this.#restoredReception = state.reception.status === 'receiving';
+    this.#returned = state.returned ? Object.freeze(state.returned) : undefined;
+    this.#reception = Object.freeze(state.reception);
   }
 
   replace(target: InvocationTarget<Output>): void {
@@ -88,37 +109,48 @@ export class InvocationRelation<Output = unknown> {
   returnedWith(result: InvocationResult<Output>): void {
     if (this.#returned) throw new Error('Child invocation has already returned');
     this.#returned = Object.freeze(result);
-    if (result.status === 'failed' && result.failure) this.failed?.(result.failure);
-    this.observe?.({ kind: 'returned', result: this.#returned });
+    if (result.status === 'failed' && result.failure) this.owner.fail(result.failure);
+    this.owner.publish(this, { kind: 'returned', result: this.#returned });
   }
 
   async accept<Value>(work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
-    this.validate?.();
+    const delivered = this.beginReception();
+    const output = await this.receiveWithinParent(delivered, work);
+    // Acceptance is fixed before notification. A later observer failure cannot undo it.
+    this.completeReception(output);
+    return output;
+  }
+
+  private beginReception(): Output {
+    this.owner.requireHealthy();
     if (this.#returned?.status !== 'succeeded') throw new Error('Child invocation has not returned successfully');
     if (this.#reception.status !== 'pending' && !this.#restoredReception) throw new Error('Child result has already entered acceptance');
     this.#restoredReception = false;
     this.#reception = Object.freeze({ status: 'receiving' });
-    const observed = this.observe?.({ kind: 'receiving' });
+    const observed = this.owner.publish(this, { kind: 'receiving' });
     if (observed !== undefined) {
       this.#reception = Object.freeze({ status: 'failed', error: observed });
-      const failed = this.observe?.({ kind: 'failed', error: observed, source: 'observation' });
+      const failed = this.owner.publish(this, { kind: 'failed', error: observed, source: 'observation' });
       throw combineFaults([observed, ...(failed !== undefined ? [failed] : [])]);
     }
-    let output: Value;
+    return this.#returned.output;
+  }
+
+  private async receiveWithinParent<Value>(delivered: Output, work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
     try {
-      this.validate?.();
-      const delivered = this.#returned.output;
-      const execute = async () => work(delivered);
-      output = await (this.receiving ? this.receiving(execute) : execute());
+      this.owner.requireHealthy();
+      return await this.owner.receive(this, async () => work(delivered));
     } catch (error) {
       this.#reception = Object.freeze({ status: 'failed', error });
-      const failed = this.observe?.({ kind: 'failed', error, source: 'work' });
+      const failed = this.owner.publish(this, { kind: 'failed', error, source: 'work' });
       if (failed !== undefined) throw new AggregateError([error, failed], 'Child acceptance and observation both failed', { cause: error });
       throw error;
     }
+  }
+
+  private completeReception(output: unknown): void {
     this.#reception = Object.freeze({ status: 'accepted', output });
-    const accepted = this.observe?.({ kind: 'accepted', output });
+    const accepted = this.owner.publish(this, { kind: 'accepted', output });
     if (accepted !== undefined) throw accepted;
-    return output;
   }
 }

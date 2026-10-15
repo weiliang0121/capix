@@ -1,7 +1,7 @@
 import type { InvocationRelationIdentity } from '@capix/protocol';
 import type { InvocationIdentity } from '../invocation/identity.js';
 import type { ContextState } from '../context/context.js';
-import type { InvocationProcess } from '../invocation/cycle.js';
+import type { InvocationProcess } from '../invocation/work.js';
 import type { InvocationResult } from '../invocation/result.js';
 import type { InvocationFailure } from '../invocation/failure.js';
 

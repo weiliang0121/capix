@@ -1,6 +1,6 @@
 import type { Invocation } from '../invocation/invocation.js';
 import type { OperationContext } from '../context/operation.js';
-import type { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
+import type { AttemptInvocationBuilder } from '../invocation/builders/attempt.js';
 import type { AttemptBinding } from '../binding/contract.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
 
