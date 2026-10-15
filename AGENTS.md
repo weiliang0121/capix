@@ -25,7 +25,8 @@
 
 - 运行时表示活动状态，不等同于 R。`*Definition` 是内容契约；`BoundRuntime/BoundExecution/BoundOperation/BoundAttempt` 是可复用结构；Invocation 与本层 Context 表示单次调用。业务接收 `*ContextView`、InvocationView、ChildBindings，不取得真实 Context 的生命周期修改能力。
 - REOA 声明平级 run/exceptions/observation；绑定只接线与约束访问，不执行业务 Sequence。R 声明 E children 并显式选择、调用和接纳；不假定 R 与 E 唯一对应。E→O，O→O/A，A 不继续分层。原始实体通过正式资源申请使用，不向祖先 Context 取数。
-- BoundRuntime 持有占用和稳定身份，构造器持续复用且不缓存单次信号/输入。每次 run 新建 RuntimeContext/Invocation；占用取得后任何失败都释放。业务不维护第二个 executing 标志，不隐含排队。
+- REOA Binder 负责声明检查、资源与 work 接线，辅助函数处理具体动作；RuntimeBinding/ExecutionBinding/OperationBinding/AttemptBinding 是绑定结果契约，Bound 直接持有结果，不反向装配。RuntimeBinder 每次 bind 建立独立的 ContextBuilder/InvocationBuilder 链，EOA Binder 按父图约束惰性建立子结构；不引入 BindingEnvironment 或通用层级注册管理者。应用继续用 assembleRuntime。
+- BoundRuntime 持有占用和稳定身份，只引用本层 InvocationBuilder。构造器在所属 R 内持续复用且不缓存单次信号/输入。每次 run 新建 RuntimeContext/Invocation；占用取得后任何失败都释放。业务不维护第二个 executing 标志，不隐含排队。
 - 世界由独立实体构成：Transcript、Memories、SelectionUsage、Provider、记录容器等由环境建立。R 只绑定资源访问形式，不成为这些对象的所有者。
 - ResourceOffer 声明公开访问、capture、兑现时机与 describe。绑定按对象身份、唯一供给和声明覆盖检查；业务只取得本阶段资源。资源端点检查所属调用/祖先活动，不能缓存写端点越过调用继续使用。关闭观测不触发描述或提前兑现惰性模型。
 - E entry.accept 接纳输入，accepted 通知后，未取消时 entry.admit 执行分段；entry 关闭后 capture 固定工作配置/原文范围，然后创建 E Context/Invocation。入口阶段属于已有 R，不伪造 E 记录。started 是同步绑定回调，保持 Context 建立后、调用 started 发布前的时机。被动进展通过独立 ProgressChannel 隔离消费者故障，不把反馈回调当作建立钩子；消息落实定位在正式 append 时发布，不读当前集合长度反推。详细顺序见 [运行边界](docs/runtime-boundaries.md)。

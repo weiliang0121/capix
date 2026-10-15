@@ -1,77 +1,76 @@
-import type { InvocationOutputReceiver } from '../output/contract.js';
-import { checkChildResourceBindings, definitionResources, observationResources, type ChildResourceBinding } from './resources.js';
-import type { ExecutionDefinition } from '../definition/execution.js';
 import type { RuntimeDefinition } from '../definition/runtime.js';
 import type { InvocationControls } from '../context/context.js';
-import type { ExecutionInvocationCallbacks } from '../execution/execution.js';
+import type { RuntimeContext } from '../context/runtime.js';
 import type { ResourceProvider } from '../resource/offer.js';
+import type { InvocationCapabilities } from '../invocation/capabilities.js';
+import { createInvocationBuilders } from '../invocation/builders.js';
+import { BoundRuntime } from '../runtime/runtime.js';
 import { bindResources, ResourceBindings, resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
-import { createBoundRuntime, type BoundRuntimeOptions } from '../runtime/create.js';
-import type { ProgressReceiver } from '../progress/channel.js';
-import type { InvocationProgress } from '../invocation/progress.js';
+import { checkChildResourceBindings, collectDefinitionRequirements, collectObservationProvides, type ChildResourceBinding } from './resources.js';
+import { BoundChildren } from './children/bound.js';
+import { bindInvocationWork } from './work.js';
+import { checkChildDeclarations } from './declarations.js';
+import { AttemptBinder } from './attempt.js';
+import { OperationBinder } from './operation.js';
+import { ExecutionBinder } from './execution.js';
+import { bindExecutionSources, type RuntimeCallSource } from './sources.js';
+import type { ChildBindingOptions, RuntimeBinding } from './contract.js';
 
-type AnyExecutionDefinition = ExecutionDefinition<any, any, any, any, any, any, any>;
+export type { RuntimeCallSource } from './sources.js';
 
-/** Capture per-call inputs and resources from independent supplies at entry and call boundaries. */
-export interface RuntimeCallSource<Input, Options, Source> {
-  output?(input: Input, options: Options): InvocationOutputReceiver<any, any> | undefined;
-  executionOutput?(definition: AnyExecutionDefinition, options: Options): InvocationOutputReceiver<any, any> | undefined;
-  validate?(options: Options): void;
-  runtime?(input: Input, options: Options): Source;
-  entry(input: unknown, options: Options, definition: AnyExecutionDefinition): Source;
-  capture(input: unknown, options: Options, definition: AnyExecutionDefinition): Source;
-  callbacks?(definition: AnyExecutionDefinition, options: Options): ExecutionInvocationCallbacks<any, any, any> | undefined;
-  /** One passive receiver for the R call and its complete invocation subtree. */
-  progress?(input: Input, options: Options): ProgressReceiver<InvocationProgress> | undefined;
-  /** Optional E-subtree receiver selected by declaration, independent of the R receiver. */
-  executionProgress?(definition: AnyExecutionDefinition, options: Options): ProgressReceiver<InvocationProgress> | undefined;
-}
-
-/** Supplies and per-call capture functions used to bind one reusable RuntimeDefinition. */
-export interface RuntimeAssemblyOptions<Input, Options, Source> extends BoundRuntimeOptions {
+/** Independent supplies and per-call capture sources for one R declaration. */
+export interface RuntimeBindingOptions<Input, Options, Source> {
   readonly providers: readonly ResourceProvider<Source>[];
   readonly source: RuntimeCallSource<Input, Options, Source>;
   readonly childResources?: readonly ChildResourceBinding[];
 }
 
-/** Assemble the reusable R business endpoint from declarations and independent resource supplies. */
-export function assembleRuntime<Input, Output, Resources extends object, Options extends InvocationControls, Source>(definition: RuntimeDefinition<Input, Output, Resources, any, any>, options: RuntimeAssemblyOptions<Input, Options, Source>) {
-  const source = options.source;
-  for (const observation of options.observations ?? []) observation.check?.(definition);
-  const localObservationResources = observationResources(options.observations);
-  const childResources = Object.freeze([...(options.childResources ?? [])]);
-  checkChildResourceBindings(definition.children, childResources, localObservationResources);
-  const requires = definitionResources(definition, localObservationResources) as ResourceRequirements<Resources>;
-  const runtimeResources = bindResources(requires, options.providers);
-  if (resourceRequests(requires).length && !source.runtime) throw new Error('Runtime resource requests require a runtime source');
-  const executionBindings = new Map(
-    definition.children.map((executionDefinition) => [
-      executionDefinition,
-      {
-        entry: bindResources(executionDefinition.entry?.requires ?? {}, options.providers),
-        capture: bindResources(definitionResources(executionDefinition, localObservationResources), options.providers),
-      },
-    ]),
-  );
-  return createBoundRuntime<Input, Output, Options, Resources>(options, (runtime) => ({
-    definition,
-    children: runtime.environment.children(requires, definition.children, 'runtime', definition, childResources),
-    validate: source.validate?.bind(source),
-    progress: source.progress?.bind(source),
-    output: source.output?.bind(source),
-    resources: (input, callOptions) => (source.runtime ? runtimeResources(source.runtime(input, callOptions)) : new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)),
-    executionBindings: (_input, callOptions) => ({
-      get(executionDefinition) {
-        const resourceBindings = executionBindings.get(executionDefinition);
-        if (!resourceBindings) throw new Error('Execution definition is not declared by this Runtime');
-        return {
-          entry: (input) => resourceBindings.entry(source.entry(input, callOptions, executionDefinition)),
-          capture: (input) => resourceBindings.capture(source.capture(input, callOptions, executionDefinition)),
-          callbacks: source.callbacks?.(executionDefinition, callOptions),
-          progress: source.executionProgress?.(executionDefinition, callOptions),
-          output: source.executionOutput?.(executionDefinition, callOptions),
-        };
-      },
-    }),
-  }));
+export interface RuntimeAssemblyOptions<Input, Options, Source> extends RuntimeBindingOptions<Input, Options, Source>, InvocationCapabilities {}
+
+/** Bind a complete declaration graph before establishing its R structure. */
+export class RuntimeBinder {
+  constructor(private readonly capabilities: InvocationCapabilities = {}) {}
+
+  bind<Input, Output, Resources extends object, Options extends InvocationControls, Source>(definition: RuntimeDefinition<Input, Output, Resources, any, any>, options: RuntimeBindingOptions<Input, Options, Source>): BoundRuntime<Input, Output, Options, Resources> {
+    const source = options.source;
+    for (const observation of this.capabilities.observations ?? []) observation.check?.(definition);
+    const observationProvides = collectObservationProvides(this.capabilities.observations);
+    const childResources = Object.freeze([...(options.childResources ?? [])]);
+    checkChildResourceBindings(definition.children, childResources, observationProvides);
+    const requires = collectDefinitionRequirements(definition, observationProvides) as ResourceRequirements<Resources>;
+    const runtimeResources = bindResources(requires, options.providers);
+    if (resourceRequests(requires).length && !source.runtime) throw new Error('Runtime resource requests require a runtime source');
+    const executionBindings = bindExecutionSources(definition.children, options.providers, source, observationProvides);
+
+    const childOptions: ChildBindingOptions = { observationProvides, observations: this.capabilities.observations, childResources };
+    checkChildDeclarations(requires, definition.children, 'runtime', childOptions, definition);
+    // A reused Binder still creates an independent ownership chain for every R it binds.
+    const invocations = createInvocationBuilders(this.capabilities);
+    const attempts = new AttemptBinder(invocations.attempt, childOptions);
+    const operations = new OperationBinder(invocations.operation, attempts, childOptions);
+    const executions = new ExecutionBinder(invocations.execution, operations, childOptions);
+    const children = new BoundChildren(definition.children, (child) => {
+      if (child.level !== 'execution') throw new Error('Invalid child definition level');
+      return executions.bind(child);
+    });
+    const work = bindInvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>, Resources, any>(definition, children);
+    const binding: RuntimeBinding<Input, Output, Options, Resources> = {
+      definition,
+      children,
+      requires,
+      work,
+      validate: source.validate?.bind(source),
+      progress: source.progress?.bind(source),
+      output: source.output?.bind(source),
+      resources: (input, callOptions) => (source.runtime ? runtimeResources(source.runtime(input, callOptions)) : new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)),
+      executionBindings,
+    };
+    return new BoundRuntime(invocations.runtime, binding, this.capabilities);
+  }
+}
+
+/** Application convenience entry; each call binds an independent R structure. */
+export function assembleRuntime<Input, Output, Resources extends object, Options extends InvocationControls, Source>(definition: RuntimeDefinition<Input, Output, Resources, any, any>, options: RuntimeAssemblyOptions<Input, Options, Source>): BoundRuntime<Input, Output, Options, Resources> {
+  const binder = new RuntimeBinder(options);
+  return binder.bind(definition, options);
 }

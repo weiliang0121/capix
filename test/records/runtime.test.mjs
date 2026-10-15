@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BoundRuntime, RecordingRootRecord, RuntimeCallRecord, bindRecording, Recorder, RecordBook, ExecutionRecord } from '@capix/server-runtime';
+import { BoundRuntime, createInvocationBuilders, RecordingRootRecord, RuntimeCallRecord, bindRecording, Recorder, RecordBook, ExecutionRecord } from '@capix/server-runtime';
 import { subscribeExecutions } from '@capix/observer-service';
 import { createBoundRuntime, createRecordScope, observeCall } from '../fixtures/runtime.mjs';
 
@@ -10,7 +10,8 @@ const call = (runtime, work = identity) => runtime.executionInvocationBuilder.cr
 test('record installation owns the long-lived result while BoundRuntime owns no record or call Context', () => {
   const recorder = new Recorder(new RecordBook());
   const recording = bindRecording(recorder);
-  const runtime = new BoundRuntime({ observations: [recording] });
+  const capabilities = { observations: [recording] };
+  const runtime = new BoundRuntime(createInvocationBuilders(capabilities).runtime, undefined, capabilities);
   assert.equal(runtime.context, undefined);
   assert.equal(runtime.record, undefined);
   assert.equal(runtime.recorder, undefined);

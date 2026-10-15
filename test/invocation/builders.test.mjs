@@ -1,13 +1,40 @@
 import { captureSource } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, ChangeBuffer, bindResources, ResourceOffer, ResourceBindings } from '@capix/server-runtime';
+import { Recorder, RecordBook, ChangeBuffer, bindResources, ResourceOffer, ResourceBindings, createInvocationBuilders } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const operation = { id: 'operation', name: 'work', label: 'Work', source: 'test' };
 const attempt = { name: 'action', label: 'Action', source: 'test', callee: 'processing' };
 const identity = { maxRounds: 1, execute: (context) => context.currentInput };
+
+test('independent construction chains keep R ownership without a bound runtime assembly environment', async () => {
+  const facts = [];
+  const observations = [{ bindInvocation: () => ({ observe: (fact) => facts.push(fact) }) }];
+  const first = createInvocationBuilders({ observations });
+  const foreign = createInvocationBuilders();
+  const description = { id: 'first-runtime' };
+  const parent = first.runtime.create('parent', {
+    description,
+    controls: {},
+    work: {
+      maxRounds: 1,
+      async execute(_context, invocation) {
+        assert.throws(() => foreign.execution.create(invocation, 'wrong owner', { work: identity }), /another Runtime/);
+        assert.equal(invocation.children.values().length, 0);
+        const child = first.execution.create(invocation, 'child output', { work: identity });
+        await child.run();
+        return invocation.children.get(child).accept((output) => output);
+      },
+    },
+  });
+  assert.equal(await parent.run(), 'child output');
+  const runtimeFacts = facts.filter((fact) => fact.identity.level === 'runtime');
+  assert.ok(runtimeFacts.length > 0);
+  assert.ok(runtimeFacts.every((fact) => fact.description === description));
+  assert.ok(facts.some((fact) => fact.identity.level === 'execution' && fact.identity.parentContextId === parent.context.id));
+});
 
 test('reused builders bind each invocation to its own signal, settings and input', async () => {
   const runtime = createBoundRuntime();

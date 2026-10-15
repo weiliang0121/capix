@@ -21,6 +21,9 @@ test('public role entrypoints resolve to the same implementations without requir
   const bound = construction.createBoundRuntime();
   assert.ok(bound instanceof construction.BoundRuntime);
   assert.equal(bound.id.length > 0, true);
+  for (const assembly of ['environment', 'executionInvocationBuilder', 'operationInvocationBuilder', 'attemptInvocationBuilder']) assert.ok(!(assembly in bound));
+  for (const binder of ['RuntimeBinder', 'ExecutionBinder', 'OperationBinder', 'AttemptBinder']) assert.equal(runtime[binder], construction[binder]);
+  assert.ok(!('BindingEnvironment' in construction));
   assert.equal(protocol.validateExecutionRecordSnapshot, recordContract.validateExecutionRecordSnapshot);
   for (const legacy of ['Runtime', 'Execution', 'Operation', 'Attempt', 'ChangeObserver', 'RuntimeRecord']) assert.ok(!(legacy in runtime));
 });

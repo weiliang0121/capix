@@ -1,5 +1,5 @@
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
-import { readCheckpoint } from '../../binding/checkpoint.js';
+import { prepareCheckpointRestoration } from '../../binding/checkpoint.js';
 import type { InvocationOutputReceiver } from '../../output/contract.js';
 import type { ProgressReceiver } from '../../progress/channel.js';
 import type { InvocationProgress } from '../progress.js';
@@ -15,8 +15,10 @@ import type { InvocationFact } from '../../observation/facts.js';
 import { bindInvocationObservation } from '../../binding/observation.js';
 import { InvocationChangeEmitter } from '../changes.js';
 import { attachInvocationResources } from '../resources.js';
+import type { RuntimeDescription } from '../description.js';
 
 export interface RuntimeInvocationRequest<Input, Output, Resources extends object = object> {
+  readonly description: RuntimeDescription;
   readonly restore?: CheckpointRestoration;
   readonly progress?: ProgressReceiver<InvocationProgress>;
   readonly output?: InvocationOutputReceiver<Output>;
@@ -32,7 +34,6 @@ export interface RuntimeInvocationRequest<Input, Output, Resources extends objec
 
 export class RuntimeInvocationBuilder {
   constructor(
-    private readonly runtimeId: string,
     private readonly contextBuilder: RuntimeContextBuilder,
     private readonly capabilities: InvocationCapabilities = {},
   ) {}
@@ -40,7 +41,7 @@ export class RuntimeInvocationBuilder {
   restoration<Input, Output, Resources extends object = object>(contextId: string, work: InvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>>): CheckpointRestoration;
   restoration<Input, Output, Resources extends object, Value>(contextId: string, work: InvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>>, construct: (restoration: CheckpointRestoration) => Value): Value;
   restoration<Input, Output, Resources extends object, Value>(contextId: string, work: InvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>>, construct?: (restoration: CheckpointRestoration) => Value): Value | CheckpointRestoration {
-    return construct ? readCheckpoint(this.capabilities.checkpoints, work.checkpoint, contextId, { level: 'runtime' }, construct) : readCheckpoint(this.capabilities.checkpoints, work.checkpoint, contextId, { level: 'runtime' });
+    return prepareCheckpointRestoration(this.capabilities.checkpoints, work.checkpoint, contextId, { level: 'runtime' }, construct);
   }
 
   create<Input, Output, Resources extends object = object>(input: Input, request: RuntimeInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, RuntimeContext<Input, Output, Resources>> {
@@ -53,9 +54,9 @@ export class RuntimeInvocationBuilder {
     }
     const identity = { contextId: context.id, level: 'runtime' as const };
     const recovering = !!request.restore;
-    const observation = recovering ? undefined : bindInvocationObservation({ identity, description: { id: this.runtimeId }, declarations: request.observation, resources }, this.capabilities.observations);
+    const observation = recovering ? undefined : bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources }, this.capabilities.observations);
     const changes = !recovering && this.capabilities.changes ? new InvocationChangeEmitter(identity, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<Input, Output, RuntimeContext<Input, Output, Resources>>({ context, work: request.work, checkpoints: this.capabilities.checkpoints, restore: request.restore, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: { id: this.runtimeId }, changes, started: request.started });
+    const invocation = new Invocation<Input, Output, RuntimeContext<Input, Output, Resources>>({ context, work: request.work, checkpoints: this.capabilities.checkpoints, restore: request.restore, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, changes, started: request.started });
     attachInvocationResources(invocation, resources);
     return invocation;
   }

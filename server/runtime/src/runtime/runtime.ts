@@ -1,5 +1,4 @@
 import type { CheckpointRestoration } from '../checkpoint/contract.js';
-import type { InvocationOutputReceiver } from '../output/contract.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from './clock.js';
 import { bindRuntimeStructureObservation } from '../binding/observation.js';
@@ -8,66 +7,29 @@ import type { RuntimeStructureFact } from '../observation/facts.js';
 import { randomUUID } from 'node:crypto';
 import { DeclaredException } from '../exception/contract.js';
 import { RuntimeError } from '../errors/error.js';
-import { BindingEnvironment } from '../binding/environment.js';
-import { bindInvocationWork } from '../binding/work.js';
-import { observationResources } from '../binding/resources.js';
-import type { RuntimeDefinition } from '../definition/runtime.js';
-import type { BoundChildren } from '../binding/children/bound.js';
-import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
-import type { RuntimeContext, ExecutionBindingResolver } from '../context/runtime.js';
+import type { RuntimeBinding } from '../binding/contract.js';
 import type { InvocationControls } from '../context/context.js';
 import type { InvocationCapabilities } from '../invocation/capabilities.js';
-import type { InvocationWork } from '../invocation/cycle.js';
-import { RuntimeContextBuilder } from '../context/runtime/builder.js';
-import { RuntimeInvocationBuilder } from '../invocation/runtime/builder.js';
-import { ExecutionContextBuilder } from '../context/execution/builder.js';
-import { ExecutionInvocationBuilder } from '../invocation/execution/builder.js';
-import { OperationContextBuilder } from '../context/operation/builder.js';
-import { OperationInvocationBuilder } from '../invocation/operation/builder.js';
-import { AttemptContextBuilder } from '../context/attempt/builder.js';
-import { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
-import type { ProgressReceiver } from '../progress/channel.js';
-import type { InvocationProgress } from '../invocation/progress.js';
-
-export interface BoundRuntimeBinding<Input, Output, Options, Resources extends object = object> {
-  readonly definition: RuntimeDefinition<Input, Output, Resources, any, any>;
-  readonly children: BoundChildren;
-  validate?(options: Options): void;
-  output?(input: Input, options: Options): InvocationOutputReceiver<Output> | undefined;
-  progress?(input: Input, options: Options): ProgressReceiver<InvocationProgress> | undefined;
-  resources(input: Input, options: Options): ResourceBindings<Resources>;
-  executionBindings(input: Input, options: Options): ExecutionBindingResolver;
-}
+import type { RuntimeInvocationBuilder } from '../invocation/runtime/builder.js';
 
 /** Long-lived structure and occupancy; every run owns a separate Context and Invocation. */
 export class BoundRuntime<Input = unknown, Output = unknown, Options extends InvocationControls = InvocationControls, Resources extends object = object> {
   readonly id = randomUUID();
-  readonly runtimeInvocationBuilder: RuntimeInvocationBuilder;
-  readonly executionInvocationBuilder: ExecutionInvocationBuilder;
-  readonly operationInvocationBuilder: OperationInvocationBuilder;
-  readonly attemptInvocationBuilder: AttemptInvocationBuilder;
-  readonly environment: BindingEnvironment;
-  readonly #binding?: BoundRuntimeBinding<Input, Output, Options, Resources>;
-  readonly #work?: InvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>>;
+  readonly #binding?: RuntimeBinding<Input, Output, Options, Resources>;
   #running = false;
   #sequence = 0;
   readonly #clock: Clock;
   readonly #observation: EventConsumer<RuntimeStructureFact>;
 
-  constructor(options: InvocationCapabilities = {}, assemble?: (runtime: BoundRuntime<Input, Output, Options, Resources>) => BoundRuntimeBinding<Input, Output, Options, Resources>) {
+  constructor(
+    private readonly invocationBuilder: RuntimeInvocationBuilder,
+    binding?: RuntimeBinding<Input, Output, Options, Resources>,
+    options: Pick<InvocationCapabilities, 'clock' | 'observations'> = {},
+  ) {
     this.#clock = options.clock ?? new Clock();
+    this.#binding = binding;
+    // The root's own identity is available here; observe establishment only after binding is complete.
     this.#observation = bindRuntimeStructureObservation(this.id, options.observations);
-    const runtimeContextBuilder = new RuntimeContextBuilder();
-    const executionContextBuilder = new ExecutionContextBuilder(runtimeContextBuilder);
-    const operationContextBuilder = new OperationContextBuilder(executionContextBuilder);
-    const attemptContextBuilder = new AttemptContextBuilder(operationContextBuilder);
-    this.runtimeInvocationBuilder = new RuntimeInvocationBuilder(this.id, runtimeContextBuilder, options);
-    this.executionInvocationBuilder = new ExecutionInvocationBuilder(executionContextBuilder, options);
-    this.operationInvocationBuilder = new OperationInvocationBuilder(operationContextBuilder, options);
-    this.attemptInvocationBuilder = new AttemptInvocationBuilder(attemptContextBuilder, options);
-    this.environment = new BindingEnvironment(this.executionInvocationBuilder, this.operationInvocationBuilder, this.attemptInvocationBuilder, observationResources(options.observations), options.observations);
-    this.#binding = assemble?.(this);
-    if (this.#binding) this.#work = bindInvocationWork(this.#binding.definition, this.#binding.children);
     this.publish({ kind: 'established' });
   }
 
@@ -121,8 +83,8 @@ export class BoundRuntime<Input = unknown, Output = unknown, Options extends Inv
 
   private async perform(request: { input: Input } | { contextId: string }, options: Options): Promise<Output> {
     const binding = this.#binding;
-    const work = this.#work;
-    if (!binding || !work) throw new Error('Runtime has no assembled work');
+    if (!binding) throw new Error('Runtime has no assembled work');
+    const work = binding.work;
     try {
       return await this.reserve(() => {
         let invocation;
@@ -132,11 +94,12 @@ export class BoundRuntime<Input = unknown, Output = unknown, Options extends Inv
             const definition = binding.definition;
             const initial = restore ? definition.checkpoint?.points[restore.head.image.point]?.resume.requires : definition.run.requires;
             if (!initial) throw new Error('Checkpoint point is not declared');
-            return this.runtimeInvocationBuilder.create(input, {
+            return this.invocationBuilder.create(input, {
+              description: { id: this.id },
               controls: options,
               resources: binding.resources(input, options),
               executionBindings: binding.executionBindings(input, options),
-              requires: this.environment.resources(definition) as ResourceRequirements<Resources>,
+              requires: binding.requires,
               initial,
               restore,
               observation: definition.observation,
@@ -145,7 +108,7 @@ export class BoundRuntime<Input = unknown, Output = unknown, Options extends Inv
               output: binding.output?.(input, options),
             });
           };
-          invocation = 'contextId' in request ? this.runtimeInvocationBuilder.restoration(request.contextId, work, (restore) => construct(work.checkpoint!.input.decode(restore.head.image.frame.input), restore)) : construct(request.input);
+          invocation = 'contextId' in request ? this.invocationBuilder.restoration(request.contextId, work, (restore) => construct(work.checkpoint!.input.decode(restore.head.image.frame.input), restore)) : construct(request.input);
         } catch (error) {
           try {
             this.publish({ kind: 'entry-failed', error });

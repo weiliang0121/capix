@@ -10,6 +10,10 @@ import type { ObserverChange } from '@capix/protocol/observer';
 import type { MemoryInput } from '@capix/observer-service/conversation';
 
 const bound: BoundRuntime = createBoundRuntime();
+// @ts-expect-error R is the bound structure, not the owner of its assembly environment.
+bound.environment;
+// @ts-expect-error child call construction is supplied to binders, not exposed by R.
+bound.executionInvocationBuilder;
 const transcript = new Transcript();
 const request: ConversationRequest = { messages: [{ role: 'user', content: 'input' }] };
 declare const context: OperationContextView<string, number, { value: string }>;

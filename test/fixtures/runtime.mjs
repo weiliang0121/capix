@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { RecordingRootHelper, RuntimeCallRecord, InvocationBoundaryRecordHelper, createBoundRuntime as createCoreRuntime, bindRecording, invocationRecording, ResourceBindings, ExecutionRecordHelper } from '@capix/server-runtime';
+import { RecordingRootHelper, RuntimeCallRecord, InvocationBoundaryRecordHelper, BoundRuntime, createInvocationBuilders, bindRecording, invocationRecording, ResourceBindings, ExecutionRecordHelper } from '@capix/server-runtime';
 import { rememberCall } from './calls.mjs';
 
 const states = new WeakMap();
@@ -21,11 +21,21 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
       return invocationRecording;
     };
   }
-  const runtime = createCoreRuntime({ ...options, ...(recorder ? { clock: recorder.clock, observations: [...(options.observations ?? []), recording] } : {}) });
+  const capabilities = { ...options, ...(recorder ? { clock: recorder.clock, observations: [...(options.observations ?? []), recording] } : {}) };
+  const builders = createInvocationBuilders(capabilities);
+  const runtime = new BoundRuntime(builders.runtime, undefined, capabilities);
   const state = { invocationRecordings, recording, recorder, runtime, observe: recorder ? [invocationRecording()] : [] };
   states.set(runtime, state);
   // Kept only on the test fixture to make legacy record assertions explicit.
-  Object.defineProperties(runtime, { recording: { value: recording }, recorder: { value: recorder }, record: { get: () => recording?.root } });
+  Object.defineProperties(runtime, {
+    runtimeInvocationBuilder: { value: builders.runtime },
+    executionInvocationBuilder: { value: builders.execution },
+    operationInvocationBuilder: { value: builders.operation },
+    attemptInvocationBuilder: { value: builders.attempt },
+    recording: { value: recording },
+    recorder: { value: recorder },
+    record: { get: () => recording?.root },
+  });
   const decorate = (invocation) => {
     Object.defineProperty(invocation, 'record', { get: () => invocationRecordings.get(invocation.context.id)?.record });
     return rememberCall(invocation);
@@ -44,7 +54,7 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
       resolve = accept;
       reject = fail;
     });
-    const call = decorate(runtime.runtimeInvocationBuilder.create(null, { controls, resources: new ResourceBindings({}), observation: recorder ? [invocationRecording({ input: () => null, output: () => null })] : [], work: { maxRounds: 1, execute: () => pending } }));
+    const call = decorate(runtime.runtimeInvocationBuilder.create(null, { description: { id: runtime.id }, controls, resources: new ResourceBindings({}), observation: recorder ? [invocationRecording({ input: () => null, output: () => null })] : [], work: { maxRounds: 1, execute: () => pending } }));
     const completion = call.run();
     // Some manual lifecycle fixtures deliberately retain a running parent.
     completion.catch(() => {});

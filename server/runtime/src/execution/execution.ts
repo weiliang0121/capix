@@ -1,15 +1,9 @@
 import { combineOutputReceivers } from '../output/delivery.js';
 import type { InvocationOutputReceiver } from '../output/contract.js';
 import { randomUUID } from 'node:crypto';
-import type { ResourceRequirements } from '../resource/bindings.js';
-import { definitionResources } from '../binding/resources.js';
 import type { ExecutionInvocationBuilder, ExecutionInvocationStarted } from '../invocation/execution/builder.js';
-import type { ExecutionDefinition } from '../definition/execution.js';
-import type { ExecutionContext } from '../context/execution.js';
-import type { InvocationWork } from '../invocation/cycle.js';
-import type { BoundChildren } from '../binding/children/bound.js';
+import type { ExecutionBinding } from '../binding/contract.js';
 import type { ResourceBindings } from '../resource/bindings.js';
-import { bindInvocationWork } from '../binding/work.js';
 import type { Invocation } from '../invocation/invocation.js';
 import type { RuntimeContext } from '../context/runtime.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
@@ -32,14 +26,17 @@ export interface ExecutionInvocationBindings<Input, Output, Resources extends ob
 /** Reusable E structure with fixed entry ordering; every accepted call creates its own ExecutionContext and Invocation. */
 export class BoundExecution<Input, Output, Resources extends object = object, EntryInput = Input, EntryResources extends object = object> {
   readonly id = randomUUID();
-  private readonly work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>>;
   constructor(
     private readonly invocationBuilder: ExecutionInvocationBuilder,
-    readonly definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>,
-    readonly children: BoundChildren,
-    private readonly requires: ResourceRequirements<Resources> = definitionResources(definition) as ResourceRequirements<Resources>,
-  ) {
-    this.work = bindInvocationWork(definition, children);
+    private readonly binding: ExecutionBinding<Input, Output, Resources, EntryInput, EntryResources>,
+  ) {}
+
+  get definition() {
+    return this.binding.definition;
+  }
+
+  get children() {
+    return this.binding.children;
   }
 
   create(parent: Invocation<unknown, unknown, RuntimeContext>, input: EntryInput, options: InvocationRelationOptions = {}) {
@@ -95,11 +92,11 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
     return this.invocationBuilder.create(parent, accepted, {
       key: options.key,
       description: { id: this.id },
-      requires: this.requires,
+      requires: this.binding.requires,
       initial: this.definition.run.requires,
       observation: this.definition.observation,
       establish: () => ({ resources }),
-      work: this.work,
+      work: this.binding.work,
       started: callbacks.started,
       progress: bindings.progress,
       output: combineOutputReceivers(options.output, bindings.output),
@@ -109,7 +106,7 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
   resume(parent: Invocation<unknown, unknown, RuntimeContext>, contextId: string, options: InvocationRelationOptions = {}) {
     parent.requireActive();
     this.invocationBuilder.check(parent);
-    return this.invocationBuilder.restoration(contextId, this.work, parent.context.id, (restore) => {
+    return this.invocationBuilder.restoration(contextId, this.binding.work, parent.context.id, (restore) => {
       const checkpoint = this.definition.checkpoint!;
       const point = checkpoint.points[restore.head.image.point];
       if (!point) throw new Error('Checkpoint point is not declared');
@@ -119,11 +116,11 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
       return this.invocationBuilder.create(parent, input, {
         key: options.key,
         description: { id: this.id },
-        requires: this.requires,
+        requires: this.binding.requires,
         initial: point.resume.requires,
         observation: this.definition.observation,
         establish: () => ({ resources }),
-        work: this.work,
+        work: this.binding.work,
         progress: bindings.progress,
         output: combineOutputReceivers(options.output, bindings.output),
         restore,

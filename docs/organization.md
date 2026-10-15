@@ -10,18 +10,22 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 
 ## 两个维度：层次与角色
 
-REOA 描述结构层次，声明、绑定结构、调用、上下文、视图描述对象角色。名称需要同时说清这两个维度。
+REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下文、视图描述对象角色。名称需要同时说清这两个维度。
 
 | 角色         | R                  | E                    | O                    | A                  | 寿命与权限                                            |
 | ------------ | ------------------ | -------------------- | -------------------- | ------------------ | ----------------------------------------------------- |
 | 声明         | RuntimeDefinition  | ExecutionDefinition  | OperationDefinition  | AttemptDefinition  | 可复用的内容与契约，不保存某次调用状态                |
+| 绑定器       | RuntimeBinder      | ExecutionBinder      | OperationBinder      | AttemptBinder      | 检查声明与关系，连接资源和调用工作，建立 Bound 结构   |
+| 绑定结果     | RuntimeBinding     | ExecutionBinding     | OperationBinding     | AttemptBinding     | Bound 构造所需的接线契约，不是另一个运行对象          |
 | 已绑定结构   | BoundRuntime       | BoundExecution       | BoundOperation       | BoundAttempt       | 绑定位置上的可复用结构，持有稳定身份与声明            |
 | 单次上下文   | RuntimeContext     | ExecutionContext     | OperationContext     | AttemptContext     | 输入、进度、终态、本层资源；内部构造关系              |
 | 业务视图     | RuntimeContextView | ExecutionContextView | OperationContextView | AttemptContextView | 本次处理可用的只读现场与正式端点，不暴露生命周期修改  |
 | 调用         | Invocation         | Invocation           | Invocation           | Invocation         | 统一机制，由具体 Context 保持层级约束，不派生四套循环 |
 | 可选调用记录 | RuntimeCallRecord  | ExecutionRecord      | OperationRecord      | AttemptRecord      | 记录预设对调用事实的解释，不能驱动运行                |
 
-绑定是建立关系的职责，不要求每格再建一个 Binding 包装类。`assembleRuntime` 是普通装配入口；`createBoundRuntime` 和各 Builder 是低层构造能力。`BoundRuntimeBinding` 是构造时返回的接线契约；`RuntimeAssemblyOptions` 是装配参数，`RuntimeCallSource` 描述按次校验、入口/工作资源捕获和回调来源。
+`*Binder` 配合辅助函数完成绑定；`*Binding` 是类型契约，不增加独立生命周期；`Bound*` 直接持有绑定结果，并使用本层 `*InvocationBuilder` 构造调用。调用构造器再协同 `*ContextBuilder` 建立本次上下文。Bound 不通过回调提供构造能力供绑定侧反向装配，也不承担声明资源汇总和 work 绑定。
+
+`assembleRuntime` 是普通装配入口，委托 `RuntimeBinder.bind`；`RuntimeAssemblyOptions` 是装配参数，`RuntimeCallSource` 描述按次校验、入口/工作资源捕获和回调来源。每次 bind 都通过 `createInvocationBuilders` 建立独立 R 的构造链，再连接各层 Binder。低层 `createBoundRuntime` 只创建尚未绑定声明的 R 结构，不隐式附带 EOA 构造器或环境。服务装配继续使用 `assembleRuntime`，无需手工重复这些接线。
 
 `Attempt` 在 REOA 中表示具名叶子动作。一次再次生成可以新建多个 A 调用；它不等于“失败后的第几次重试”。UI 当前使用“意图”标签，不借本轮整理改变层级含义。
 
@@ -100,7 +104,7 @@ ClientRuntime 仍保留其当前名称和能力，不为表现通用性建立空
 | 定义和组合 REOA、异常、资源申请与观察声明 | `@capix/server-runtime`                                                              |
 | 建立或供应独立内容实体                    | `@capix/server-runtime/content`                                                      |
 | 使用内置记录结果、查询与安装              | `@capix/server-runtime/recording`                                                    |
-| 低层 Context/Invocation/Bound 结构构造    | `@capix/server-runtime/construction`                                                 |
+| 低层 Binder/Context/Invocation/Bound 构造 | `@capix/server-runtime/construction`                                                 |
 | 组合参考对话的具体声明                    | `@capix/observer-service/conversation`                                               |
 | 消费参考观测实现                          | `@capix/observer-service/observation`                                                |
 | 建立完整参考环境 / HTTP 宿主              | `@capix/observer-service/assembly`、`/http`                                          |
@@ -113,8 +117,10 @@ ClientRuntime 仍保留其当前名称和能力，不为表现通用性建立空
 | 原名                                                                   | 当前名称或位置                                                                     |
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Runtime / Execution / Operation / Attempt 结构类                       | BoundRuntime / BoundExecution / BoundOperation / BoundAttempt                      |
-| createRuntime / RuntimeCreationOptions                                 | createBoundRuntime / BoundRuntimeOptions                                           |
-| RuntimeBinding / RuntimeSource / RuntimeAssembly                       | BoundRuntimeBinding / RuntimeCallSource / RuntimeAssemblyOptions                   |
+| createRuntime / RuntimeCreationOptions                                 | createBoundRuntime，参数直接使用 InvocationCapabilities                            |
+| BoundRuntimeBinding                                                    | RuntimeBinding，位于 binding/contract.ts，直接传入 BoundRuntime                    |
+| RuntimeSource / RuntimeAssembly                                        | RuntimeCallSource / RuntimeAssemblyOptions                                         |
+| BindingEnvironment                                                     | 各层 Binder 与声明检查、资源接线辅助函数                                           |
 | InvocationScope、REOA Scope                                            | InvocationContextView、REOA ContextView                                            |
 | ScopeOf / ScopeResources / invocationScope                             | ContextViewOf / ContextViewResources / invocationContextView                       |
 | ChangeObserver                                                         | ChangeBuffer                                                                       |

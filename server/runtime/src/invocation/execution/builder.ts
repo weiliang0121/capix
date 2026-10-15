@@ -1,5 +1,5 @@
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
-import { readCheckpoint } from '../../binding/checkpoint.js';
+import { prepareCheckpointRestoration } from '../../binding/checkpoint.js';
 import type { InvocationOutputReceiver } from '../../output/contract.js';
 import type { ProgressReceiver } from '../../progress/channel.js';
 import type { InvocationProgress } from '../progress.js';
@@ -53,7 +53,7 @@ export class ExecutionInvocationBuilder {
   restoration<Input, Output, Resources extends object = object>(contextId: string, work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>>, parentContextId: string): CheckpointRestoration;
   restoration<Input, Output, Resources extends object, Value>(contextId: string, work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>>, parentContextId: string, construct: (restoration: CheckpointRestoration) => Value): Value;
   restoration<Input, Output, Resources extends object, Value>(contextId: string, work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>>, parentContextId: string, construct?: (restoration: CheckpointRestoration) => Value): Value | CheckpointRestoration {
-    return construct ? readCheckpoint(this.capabilities.checkpoints, work.checkpoint, contextId, { level: 'execution', parentContextId }, construct) : readCheckpoint(this.capabilities.checkpoints, work.checkpoint, contextId, { level: 'execution', parentContextId });
+    return prepareCheckpointRestoration(this.capabilities.checkpoints, work.checkpoint, contextId, { level: 'execution', parentContextId }, construct);
   }
 
   create<Input, Output, Resources extends object = object>(parent: Invocation<unknown, unknown, RuntimeContext>, input: Input, request: ExecutionInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, ExecutionContext<Input, Output, Resources>> {

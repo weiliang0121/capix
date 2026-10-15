@@ -1,4 +1,4 @@
-import { definitionResources, ExecutionContext, Transcript, TranscriptRangeRef, ResourceBindings, bindResources, BindingEnvironment, Memories, SelectionUsage } from '@capix/server-runtime';
+import { ExecutionContext, Transcript, TranscriptRangeRef, bindResources, AttemptBinder, OperationBinder, ExecutionBinder, Memories, SelectionUsage } from '@capix/server-runtime';
 
 import { acceptConversationInput, initializeObserver, observeExecution, conversationExecutionRequests, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
 
@@ -29,8 +29,12 @@ export function resourceBindingFor(runtime, provider, provided) {
   };
 }
 export function bindChild(runtime, definition) {
-  const environment = new BindingEnvironment(runtime.executionInvocationBuilder, runtime.operationInvocationBuilder, runtime.attemptInvocationBuilder, runtime.recording?.provides);
-  return environment.children(environment.resources(definition), [definition], 'operation').get(definition);
+  const options = { observationProvides: runtime.recording?.provides };
+  const attempt = new AttemptBinder(runtime.attemptInvocationBuilder, options);
+  const operation = new OperationBinder(runtime.operationInvocationBuilder, attempt, options);
+  if (definition.level === 'attempt') return attempt.bind(definition);
+  if (definition.level === 'operation') return operation.bind(definition);
+  return new ExecutionBinder(runtime.executionInvocationBuilder, operation, options).bind(definition);
 }
 // Construction metadata is captured only by this test fixture, not exposed by a work Context.
 export const sourceFor = (context) => sources.get(context);

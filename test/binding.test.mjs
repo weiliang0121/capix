@@ -1,7 +1,8 @@
 import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExecutionDefinition, OperationDefinition, AttemptDefinition, InvocationEntry, Sequence, ResourceOffer, assembleRuntime, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { ExecutionDefinition, OperationDefinition, AttemptDefinition, InvocationEntry, Sequence, ResourceOffer, assembleRuntime, RuntimeBinder, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { createInvocationBuilders, AttemptBinder, OperationBinder, ExecutionBinder, BoundChildren, BoundExecution, BoundOperation, BoundAttempt } from '@capix/server-runtime/construction';
 
 const resource = new ResourceOffer('test.value', (value) => value, 'binding');
 class Read extends AttemptDefinition {
@@ -65,6 +66,53 @@ test('definitions bind to independent R endpoints; node identity is stable and p
   assert.equal(parent.kind, 'runtime-call');
   assert.equal(firstRecorder.book.get(parent.parentId).kind, 'runtime');
   assert.equal(first.running, false);
+});
+
+test('one RuntimeBinder binds independent roots and rejects transferring a live child entry across them', async () => {
+  const execution = new Main();
+  const definition = runtimeDefinition(execution);
+  const binder = new RuntimeBinder();
+  const calls = [];
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  let previous;
+  execution.run.execute = async (context, invocation, children) => {
+    const child = children.get(execution.operation);
+    if (context.currentInput === 'left') {
+      previous = child;
+      await pending;
+      return context.currentInput;
+    }
+    if (context.currentInput === 'right') {
+      assert.throws(() => previous.create(invocation, 'foreign'), /another parent invocation/);
+      assert.equal(invocation.children.values().length, 0);
+    }
+    return child.call(invocation, context.currentInput);
+  };
+  const options = (value) => ({
+    providers: [resource.provide((source) => source)],
+    source: { entry: () => value, capture: () => value, callbacks: () => ({ started: (_context, invocation) => calls.push(invocation) }) },
+  });
+  const left = binder.bind(definition, options('left-resource'));
+  const right = binder.bind(definition, options('right-resource'));
+  assert.notEqual(left.id, right.id);
+  const leftRun = left.run('left', {});
+  const leftFailure = assert.rejects(leftRun, /another parent invocation/);
+  assert.equal(left.running, true);
+  try {
+    assert.equal(await right.run('right', {}), 'right:right-resource');
+    assert.notEqual(calls[0].context.id, calls[1].context.id);
+    assert.equal(calls[0].children.values().length, 0);
+    assert.equal(calls[1].children.values().length, 1);
+  } finally {
+    release();
+    await leftFailure;
+  }
+  assert.equal(left.running, false);
+  assert.equal(right.running, false);
+  assert.equal(await left.run('next', {}), 'next:left-resource');
 });
 
 test('business views exclude state mutation, records, binding APIs and relation mutation', async () => {
@@ -158,6 +206,48 @@ test('assembly rejects invalid levels and cycles without activating resource pro
   main.children = [main.operation];
   main.operation.children = [main.operation];
   assert.throws(() => bind(main, () => assert.fail('not yet')), /Cyclic child declaration/);
+});
+
+test('nested O structures stay lazy and a shared A declaration is bound independently at each parent position', () => {
+  const shared = new Read();
+  const left = new Work();
+  left.children = [shared];
+  const right = new Work();
+  right.children = [shared];
+  const group = new Work();
+  group.children = [left, right];
+  const main = new Main();
+  main.children = [group];
+  const builders = createInvocationBuilders();
+  const attemptBinder = new AttemptBinder(builders.attempt);
+  const operationBinder = new OperationBinder(builders.operation, attemptBinder);
+  const executionBinder = new ExecutionBinder(builders.execution, operationBinder);
+  const roots = new BoundChildren([main], (definition) => executionBinder.bind(definition));
+
+  assert.equal(roots.initialized(main), false);
+  const execution = roots.get(main);
+  assert.ok(execution instanceof BoundExecution);
+  assert.equal(execution.children.initialized(group), false);
+  const operation = execution.children.get(group);
+  assert.ok(operation instanceof BoundOperation);
+  assert.equal(operation.children.initialized(left), false);
+  assert.equal(operation.children.initialized(right), false);
+
+  const first = operation.children.get(left);
+  assert.ok(first instanceof BoundOperation);
+  assert.equal(first.children.initialized(shared), false);
+  assert.equal(operation.children.initialized(right), false);
+  const firstLeaf = first.children.get(shared);
+  assert.ok(firstLeaf instanceof BoundAttempt);
+  assert.equal(first.children.get(shared), firstLeaf);
+
+  const second = operation.children.get(right);
+  assert.equal(second.children.initialized(shared), false);
+  const secondLeaf = second.children.get(shared);
+  assert.ok(secondLeaf instanceof BoundAttempt);
+  assert.notEqual(firstLeaf, secondLeaf);
+  assert.equal(roots.get(main), execution);
+  assert.equal(execution.children.get(group), operation);
 });
 
 test('E entry ordering is reserve, validate, accept, accepted, admit, capture, started, work', async () => {

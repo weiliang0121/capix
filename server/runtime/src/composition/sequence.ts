@@ -1,5 +1,5 @@
 import type { InvocationOutputReceiver } from '../output/contract.js';
-import { definitionResources } from '../binding/resources.js';
+import { collectDefinitionRequirements } from '../binding/resources.js';
 import type { DeclaredCall } from '../definition/signature.js';
 import { InvocationEntry } from '../definition/entry.js';
 import type { ChildDefinition } from '../definition/children.js';
@@ -66,7 +66,7 @@ export class Sequence<Input, Parent extends ParentInvocation | InvocationView, O
   }
 
   get requests(): readonly ResourceRequest<unknown>[] {
-    return Object.freeze(this.entries.flatMap(({ use }) => resourceRequests(use.run ? definitionResources({ run: use.run, exceptions: use.exceptions }) : (use.requires ?? {}))));
+    return Object.freeze(this.entries.flatMap(({ use }) => resourceRequests(use.run ? collectDefinitionRequirements({ run: use.run, exceptions: use.exceptions }) : (use.requires ?? {}))));
   }
 
   async run(parent: Parent, input: Input, children?: ChildBindings): Promise<Readonly<Outputs>> {
