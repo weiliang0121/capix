@@ -2,7 +2,9 @@ import type { InvocationDefinition } from '../definition/invocation.js';
 import { invocationContextView, type ContextViewOf } from '../context/view.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationWork } from '../invocation/cycle.js';
-import type { BoundChildren } from './children.js';
+import type { BoundChildren } from './children/bound.js';
+import type { ChildBindings } from './children/contract.js';
+import { ChildBindingsBuilder } from './children/builder.js';
 import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
 import type { InvocationView, InvocationWorkView } from '../invocation/view.js';
 import type { InvocationTarget } from '../invocation/relation.js';
@@ -11,8 +13,10 @@ import type { ChildDefinition } from '../definition/children.js';
 /** One assembly, separate views for work and exception declarations. */
 export function bindInvocationWork<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, ExceptionResources extends object>(definition: InvocationDefinition<Input, Output, ContextViewOf<Context>, Resources, ExceptionResources, any>, children: BoundChildren): InvocationWork<Input, Output, Context> {
   type Call = Parameters<InvocationWork<Input, Output, Context>['execute']>[1];
+  const childBindingsBuilder = new ChildBindingsBuilder(children);
+  // Call identity is shared across phases; access constraints belong to each phase and round.
   const registries = new WeakMap<Call, Map<InvocationView, InvocationTarget>>();
-  const phases = new WeakMap<Call, Map<string, { view: InvocationView<Input, Output, ContextViewOf<Context>>; children: ReturnType<BoundChildren['forInvocation']> }>>();
+  const phases = new WeakMap<Call, Map<string, { view: InvocationView<Input, Output, ContextViewOf<Context>>; children: ChildBindings }>>();
   const access = (invocation: Call, phase: 'run' | 'receive' | 'exceptions' | `checkpoint:${string}`, requires: ResourceRequirements, uses?: readonly ChildDefinition[]) => {
     const resources = (invocation.context as Context & { resources: ResourceBindings }).resources;
     const resourcePhase = phase === 'exceptions' ? 'exceptions' : 'run';
@@ -22,14 +26,14 @@ export function bindInvocationWork<Input, Output, Context extends InvocationCont
       registry = new Map();
       registries.set(invocation, registry);
     }
-    let calls = phases.get(invocation);
-    if (!calls) {
-      calls = new Map();
-      phases.set(invocation, calls);
+    let phaseBindings = phases.get(invocation);
+    if (!phaseBindings) {
+      phaseBindings = new Map();
+      phases.set(invocation, phaseBindings);
     }
     const round = invocation.context.progress.round;
     const key = `${phase}:${round}`;
-    let value = calls.get(key);
+    let value = phaseBindings.get(key);
     if (!value) {
       const context = invocationContextView(invocation.context, resources.view(requires, resourcePhase));
       const view = Object.freeze({
@@ -49,8 +53,9 @@ export function bindInvocationWork<Input, Output, Context extends InvocationCont
         const current = invocation.context.progress.phase;
         if (phase === 'exceptions' ? current !== 'handling' : current === 'handling') throw new Error('Child access belongs to an inactive declaration phase');
       };
-      value = { view, children: children.forInvocation(invocation, view, uses, validate, registry) };
-      calls.set(key, value);
+      const childBindings = childBindingsBuilder.build(invocation, { view, uses, validate, calls: registry });
+      value = { view, children: childBindings };
+      phaseBindings.set(key, value);
     }
     return value;
   };

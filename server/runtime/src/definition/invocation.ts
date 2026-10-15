@@ -3,7 +3,7 @@ import type { InvocationContextView, ContextViewResources } from '../context/vie
 import type { InvocationView, InvocationWorkView } from '../invocation/view.js';
 import type { Continuation, InvocationResolution } from '../invocation/result.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
-import type { ChildBindings } from '../binding/children.js';
+import type { ChildBindings } from '../binding/children/contract.js';
 import type { ChildDefinition } from './children.js';
 import type { ExceptionContract, DeclaredException } from '../exception/contract.js';
 import type { ObservationDeclaration } from './observation.js';

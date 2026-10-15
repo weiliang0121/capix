@@ -40,6 +40,8 @@ REOA 描述结构层次，声明、绑定结构、调用、上下文、视图描
 | `ExecutionBindingResolver`                           | 本 R 调用按 E 声明查找上述接线                  |
 | `ChildBinding` / `ChildBindings`                     | 当前父调用及阶段允许使用的子调用能力            |
 | `BoundChildren`                                      | 持续复用、惰性构造的子结构集合                  |
+| `ChildBindingsBuilder`                               | 根据本次调用与阶段约束构造子能力访问 Binding    |
+| `InvocationChildBindings`                            | 内部实现；连接父调用、阶段视图和允许的子结构    |
 | `ChildInvocationView`                                | 可启动这次子调用的业务视图，不是可复用结构      |
 | `DefinitionEntryInput` / `DefinitionInvocationInput` | 入口接纳前的输入 / 接纳后进入调用的输入         |
 | `DefinitionContextFacts` / `ContextFactsOf`          | 去除资源能力的上下文事实视图，不是真实 Context  |

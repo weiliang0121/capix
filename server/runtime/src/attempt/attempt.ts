@@ -7,7 +7,7 @@ import type { AttemptContext } from '../context/attempt.js';
 import type { InvocationWork } from '../invocation/cycle.js';
 import type { AttemptInvocationBuilder } from '../invocation/attempt/builder.js';
 import type { AttemptDefinition } from '../definition/attempt.js';
-import type { BoundChildren } from '../binding/children.js';
+import type { BoundChildren } from '../binding/children/bound.js';
 import { bindInvocationWork } from '../binding/work.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
 

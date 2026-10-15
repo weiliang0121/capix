@@ -4,7 +4,9 @@ export * from './runtime/create.js';
 export * from './execution/execution.js';
 export * from './operation/operation.js';
 export * from './attempt/attempt.js';
-export * from './binding/children.js';
+export * from './binding/children/contract.js';
+export * from './binding/children/bound.js';
+export * from './binding/children/builder.js';
 export * from './binding/environment.js';
 
 export * from './context/context.js';

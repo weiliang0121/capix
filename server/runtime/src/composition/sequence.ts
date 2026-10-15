@@ -3,7 +3,7 @@ import { definitionResources } from '../binding/resources.js';
 import type { DeclaredCall } from '../definition/signature.js';
 import { InvocationEntry } from '../definition/entry.js';
 import type { ChildDefinition } from '../definition/children.js';
-import type { ChildBindings } from '../binding/children.js';
+import type { ChildBindings } from '../binding/children/contract.js';
 import { resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
 import type { ResourceRequest } from '../resource/offer.js';
 import type { ParentInvocation } from '../invocation/children.js';

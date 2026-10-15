@@ -7,7 +7,7 @@ import type { AttemptInvocationBuilder } from '../invocation/attempt/builder.js'
 import type { ResourceRequirements } from '../resource/bindings.js';
 import { checkResourceRequests, resourceRequests } from '../resource/bindings.js';
 import type { ChildDefinition } from '../definition/children.js';
-import { BoundChildren } from './children.js';
+import { BoundChildren } from './children/bound.js';
 import { BoundOperation } from '../operation/operation.js';
 import { BoundAttempt } from '../attempt/attempt.js';
 import { BoundExecution } from '../execution/execution.js';

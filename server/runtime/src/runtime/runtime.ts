@@ -12,7 +12,7 @@ import { BindingEnvironment } from '../binding/environment.js';
 import { bindInvocationWork } from '../binding/work.js';
 import { observationResources } from '../binding/resources.js';
 import type { RuntimeDefinition } from '../definition/runtime.js';
-import type { BoundChildren } from '../binding/children.js';
+import type { BoundChildren } from '../binding/children/bound.js';
 import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
 import type { RuntimeContext, ExecutionBindingResolver } from '../context/runtime.js';
 import type { InvocationControls } from '../context/context.js';

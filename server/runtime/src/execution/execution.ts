@@ -7,7 +7,7 @@ import type { ExecutionInvocationBuilder, ExecutionInvocationStarted } from '../
 import type { ExecutionDefinition } from '../definition/execution.js';
 import type { ExecutionContext } from '../context/execution.js';
 import type { InvocationWork } from '../invocation/cycle.js';
-import type { BoundChildren } from '../binding/children.js';
+import type { BoundChildren } from '../binding/children/bound.js';
 import type { ResourceBindings } from '../resource/bindings.js';
 import { bindInvocationWork } from '../binding/work.js';
 import type { Invocation } from '../invocation/invocation.js';

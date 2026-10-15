@@ -1,5 +1,5 @@
 import type { OperationContextView, InvocationView } from '@capix/server-runtime';
-import { createBoundRuntime, BoundRuntime, type BoundExecution, type ExecutionContext, type InvocationOptions, type ExecutionInvocationBindings } from '@capix/server-runtime/construction';
+import { createBoundRuntime, BoundRuntime, BoundChildren, ChildBindingsBuilder, type Invocation, type BoundExecution, type ExecutionContext, type InvocationOptions, type ExecutionInvocationBindings } from '@capix/server-runtime/construction';
 import { Transcript } from '@capix/server-runtime/content';
 import type { ResourceRecord as ResourceRecordEntity } from '@capix/server-runtime/recording';
 import type { ResourceRecord, ExecutionRecordSnapshot } from '@capix/protocol/recording';
@@ -29,6 +29,17 @@ declare const snapshot: TranscriptSnapshot;
 declare const change: ObserverChange;
 declare const input: MemoryInput;
 void [bound, transcript, request, value, data, detail, origin, snapshot, change, input];
+
+declare const childStructures: BoundChildren;
+declare const parentCall: Invocation;
+const childBuilder = new ChildBindingsBuilder(childStructures);
+const childBindings = childBuilder.build(parentCall, { view: parentCall.view, calls: new Map() });
+// @ts-expect-error reusable structures no longer construct call-scoped access themselves
+childStructures.forInvocation(parentCall);
+// @ts-expect-error bindings do not expose the internal invocation or shared registry
+childBindings.parent;
+// @ts-expect-error the caller must provide the registry shared by this invocation's phases
+childBuilder.build(parentCall, { view: parentCall.view });
 
 // Different input, output and resource shapes verify the shared parameter order.
 type ExecutionResources = { label: string };

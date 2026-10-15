@@ -91,7 +91,7 @@ Invocation 默认固定到原 deployment；应用需保持端点对应的代码�
 | Submission           | 有界进程内 Map，不跨重启                                       | 若承诺同一工作继续，需持久身份与状态，不能只改 follow |
 | 文件保存             | 发布文件后返回凭据；未与数据库推进状态共用事务                 | 发布结果如何核实，同一次效果如何识别                  |
 
-代码入口：[Invocation.run](../server/runtime/src/invocation/invocation.ts)（193 行）、[Context](../server/runtime/src/context/context.ts)（13 行）、[Sequence.run](../server/runtime/src/composition/sequence.ts)（72 行）、[E.execute](../services/observer/src/conversation/execution.ts)（69–125 行）、[bindResources（资源捕获）](../server/runtime/src/resource/bindings.ts)（207 行）、[BoundChildren](../server/runtime/src/binding/children.ts)（35 行）、[Submission 保留](../services/observer/src/conversation/submission.ts)（294 行）。行号对应本文基线。
+代码入口：[Invocation.run](../server/runtime/src/invocation/invocation.ts)（193 行）、[Context](../server/runtime/src/context/context.ts)（13 行）、[Sequence.run](../server/runtime/src/composition/sequence.ts)（72 行）、[E.execute](../services/observer/src/conversation/execution.ts)（69–125 行）、[bindResources（资源捕获）](../server/runtime/src/resource/bindings.ts)（207 行）、[BoundChildren](../server/runtime/src/binding/children/bound.ts)（原 binding/children.ts，35 行）、[Submission 保留](../services/observer/src/conversation/submission.ts)（294 行）。行号对应本文基线。
 
 `key: 'decision'` 会在 E 循环中多次出现，当前随机 Context ID、结构 ID、资源 supplyId 也各有原职责。不能直接挑一个字段作为持久步骤身份。若选择重放，通常需要逻辑工作、组合位置、迭代位置与声明版本的匹配规则；这些可以是内部地址，不必变成新的 REOA 层级或大量公共实体。
 

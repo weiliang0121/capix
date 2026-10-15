@@ -102,6 +102,10 @@ Invocation 是单次、只能运行一次的结构化调用。它持有实际 Co
 
 BindingEnvironment 在装配时沿轻量声明检查 R→E、E→O、O→O/A、无环、已开启声明的总资源覆盖及各自 uses 归属，不建立未使用的子结构，不访问实体或调用模型。BoundChildren 为每个直接声明保留 Initializer，首次实际创建子调用时建立该绑定位置的结构。同一位置复用稳定 O 身份，不同 R 或不同父位置独立。
 
+子能力访问按三个职责组织，源码位于 `binding/children/`：`bound.ts` 的 BoundChildren 只持有可复用子结构；`builder.ts` 的 ChildBindingsBuilder 核对本阶段 uses、固定允许集合、连接本次依赖；`binding.ts` 的 InvocationChildBindings 实现 get/entry、创建/恢复和接纳入口，内部真实引用使用私有字段，业务只获得冻结的 ChildBindings 表面。公开业务类型在 `contract.ts`。低层构造使用 `new ChildBindingsBuilder(boundChildren).build(parent, { view, uses, validate, calls })`，不再通过 BoundChildren.forInvocation 构造访问对象。
+
+bindInvocationWork 复用一个 Builder；每次 Invocation 的 calls 映射在各阶段之间共享，阶段 Binding 按 phase/round 缓存。Builder 不保留本次父调用、视图或映射，构造 Binding 与 get 子入口都不初始化子结构。允许集合约束新建/恢复入口；接纳通过共享映射确认真实直接子调用，不要求接纳阶段重新取得创建权限。entry 接纳后再次检查活动性；结构检查失败归属为错误，业务接纳自身抛出的声明异常仍按原契约处理。恢复已有成功交付不强制建立子结构。
+
 Initializer 只支持同步一次建立、递归检查、成功或失败缓存，没有重置、异步调度或统一释放。共享声明不承诺隔离应用自己保存的外部闭包；绑定后修改声明不是动态重配置能力。
 
 InvocationChildren 是直接父子运行关系，与 Recorder 无关。关系记录子 Context 状态、run 返回/抛错以及父层接收状态；成功 Context 与交付失败可以同时存在，例如终态记录失败。直接 call 不声称父层已接收，只有明确的组合 accept 才推进 reception。`children.accept(child, delivered => accepted)` 的 delivered 来自该直接子调用保存的真实成功返回，类型跟随 child；不能接纳异父、未返回、失败或已经接纳的调用。父层可以将真实交付加工成自己的接纳结果，returned 与 accepted 不必相等。

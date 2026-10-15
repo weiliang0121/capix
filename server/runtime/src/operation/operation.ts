@@ -8,7 +8,7 @@ import type { OperationContext } from '../context/operation.js';
 import type { InvocationWork } from '../invocation/cycle.js';
 import type { OperationInvocationBuilder } from '../invocation/operation/builder.js';
 import type { OperationDefinition } from '../definition/operation.js';
-import type { BoundChildren } from '../binding/children.js';
+import type { BoundChildren } from '../binding/children/bound.js';
 import { bindInvocationWork } from '../binding/work.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
 
