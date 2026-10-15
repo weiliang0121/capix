@@ -3,10 +3,10 @@ import type { ExecutionDefinition } from '../definition/execution.js';
 import type { ExecutionInvocationCallbacks } from '../execution/execution.js';
 import type { ExecutionBindingResolver } from '../context/runtime.js';
 import type { ResourceProvider } from '../resource/offer.js';
-import { bindResources, type ResourceRequirements } from '../resource/bindings.js';
+import { bindResources } from '../resource/bindings.js';
 import type { ProgressReceiver } from '../progress/channel.js';
 import type { InvocationProgress } from '../invocation/progress.js';
-import { collectDefinitionRequirements } from './resources.js';
+import type { ResolvedExecution } from './declarations.js';
 
 type AnyExecutionDefinition = ExecutionDefinition<any, any, any, any, any, any, any>;
 
@@ -26,12 +26,12 @@ export interface RuntimeCallSource<Input, Options, Source> {
 }
 
 /** Bind supply lookup now; capture actual resources only at each E entry and work boundary. */
-export function bindExecutionSources<Input, Options, Source>(definitions: readonly AnyExecutionDefinition[], providers: readonly ResourceProvider<Source>[], source: RuntimeCallSource<Input, Options, Source>, observationProvides?: ResourceRequirements): (input: Input, options: Options) => ExecutionBindingResolver {
+export function bindExecutionSources<Input, Options, Source>(definitions: readonly ResolvedExecution[], providers: readonly ResourceProvider<Source>[], source: RuntimeCallSource<Input, Options, Source>): (input: Input, options: Options) => ExecutionBindingResolver {
   const supplies = new Map(
-    definitions.map((definition) => {
-      const entry = bindResources(definition.entry?.requires ?? {}, providers);
-      const capture = bindResources(collectDefinitionRequirements(definition, observationProvides), providers);
-      return [definition, { entry, capture }];
+    definitions.map((resolved) => {
+      const entry = bindResources(resolved.declaration.entry?.requires ?? {}, providers);
+      const capture = bindResources(resolved.requires, providers);
+      return [resolved.definition, { entry, capture }];
     }),
   );
   return (_input, options) => ({

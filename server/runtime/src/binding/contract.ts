@@ -26,6 +26,7 @@ export interface ChildBindingOptions {
 
 export interface RuntimeBinding<Input, Output, Options, Resources extends object = object> {
   readonly definition: RuntimeDefinition<Input, Output, Resources, any, any>;
+  readonly declaration: RuntimeDefinition<Input, Output, Resources, any, any>;
   readonly children: BoundChildren;
   readonly requires: ResourceRequirements<Resources>;
   readonly work: InvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>>;
@@ -38,6 +39,7 @@ export interface RuntimeBinding<Input, Output, Options, Resources extends object
 
 export interface ExecutionBinding<Input, Output, Resources extends object, EntryInput, EntryResources extends object> {
   readonly definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>;
+  readonly declaration: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>;
   readonly children: BoundChildren;
   readonly requires: ResourceRequirements<Resources>;
   readonly work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>>;
@@ -45,6 +47,7 @@ export interface ExecutionBinding<Input, Output, Resources extends object, Entry
 
 export interface OperationBinding<Input, Output, Resources extends object> {
   readonly definition: OperationDefinition<Input, Output, Resources, any, any>;
+  readonly declaration: OperationDefinition<Input, Output, Resources, any, any>;
   readonly children: BoundChildren;
   readonly requires: ResourceRequirements<Resources>;
   readonly refinements?: readonly ResourceRefinement<Input>[];
@@ -53,6 +56,7 @@ export interface OperationBinding<Input, Output, Resources extends object> {
 
 export interface AttemptBinding<Input, Output, Resources extends object> {
   readonly definition: AttemptDefinition<Input, Output, Resources, any, any>;
+  readonly declaration: AttemptDefinition<Input, Output, Resources, any, any>;
   readonly children: BoundChildren;
   readonly requires: ResourceRequirements<Resources>;
   readonly refinements?: readonly ResourceRefinement<Input>[];

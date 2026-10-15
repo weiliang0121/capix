@@ -40,8 +40,7 @@ function parentCheckpoint(key, child) {
   };
 }
 
-function harness(t, provider, store, facts = [], progress = () => {}) {
-  const model = new RequestModelDefinition('answer');
+function harness(t, provider, store, facts = [], progress = () => {}, model = new RequestModelDefinition('answer')) {
   const interactions = new ModelInteractions(new ModelSource(provider));
   t.after(() => interactions.close());
   class Execution extends ExecutionDefinition {
@@ -81,13 +80,21 @@ function harness(t, provider, store, facts = [], progress = () => {}) {
 
 test('request-model checkpoint is dormant without an installation and keeps the original complete feedback', async (t) => {
   let calls = 0;
-  const { runtime, model } = harness(t, {
-    invoke: async () => {
-      calls++;
-      return output;
-    },
-  });
+  const model = new RequestModelDefinition('answer');
   model.checkpoint.input = { encode: () => assert.fail('checkpoint input codec must remain dormant'), decode: () => assert.fail('not restoring') };
+  const { runtime } = harness(
+    t,
+    {
+      invoke: async () => {
+        calls++;
+        return output;
+      },
+    },
+    undefined,
+    [],
+    undefined,
+    model,
+  );
   const result = await runtime.run(request, {});
   assert.deepEqual(result, output);
   assert.equal(calls, 1);

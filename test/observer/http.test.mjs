@@ -12,6 +12,7 @@ import { BoundRuntime, ProgressChannel, defineObservation } from '@capix/server-
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { ConversationSubmission, createObserverServer, ObserverConversations, bindConversation, ConversationRuntimeDefinition, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
+import { withRuntimeDefinition } from '../fixtures/assembly.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -20,10 +21,10 @@ const provider = {
     return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'memory' ? { memories: [] } : { kind: 'answer', content: '测试回答' });
   },
 };
-async function setup(t, model = provider, configured = true, submissionRetention, configuration = settings) {
+async function setup(t, model = provider, configured = true, submissionRetention, configuration = settings, configureDefinition) {
   const conversations = new ObserverConversations(model);
   const conversationId = conversations.list().defaultConversationId;
-  const observer = conversations.open(conversationId);
+  const observer = withRuntimeDefinition(configureDefinition, () => conversations.open(conversationId));
   const server = createObserverServer({ conversations, settings: configuration, configured, submissionRetention });
   assert.equal(server.listening, false, 'service construction must not start listening');
   server.listen(0, '127.0.0.1');
@@ -336,10 +337,11 @@ test('full feedback retention explicitly refuses fresh work and preserves duplic
 });
 
 test('failure before a complete execution record produces a terminal transport error, never silent success', async (t) => {
-  const { run, observer } = await setup(t);
-  observer.definition.executionDefinition.entry.admit = () => {
-    throw new Error('private diagnostic must not be an HTTP message');
-  };
+  const { run } = await setup(t, provider, true, undefined, settings, (definition) => {
+    definition.executionDefinition.entry.admit = () => {
+      throw new Error('private diagnostic must not be an HTTP message');
+    };
+  });
   const stream = await updates(await run());
   assert.equal(stream.at(-1).input.end, 1);
   assert.equal(stream.at(-1).result.status, 'failed');
@@ -789,24 +791,26 @@ for (const fault of [false, true]) {
       true,
       undefined,
       { ...settings, timeoutMs: 1000 },
+      (definition) => {
+        const model = definition.executionDefinition.operationDefinitions.selection.requestModelDefinition;
+        model.observation = [
+          ...model.observation,
+          defineObservation(
+            {
+              requires: {},
+              observe(fact) {
+                if (fact.kind !== 'relation' || fact.change.kind !== 'returned' || fact.change.result.status !== 'succeeded' || fact.change.result.output.kind !== 'pending') return;
+                // The public cancellation entry is invoked at the exact synchronous handoff boundary.
+                capturedSubmission.requestCancellation();
+                pending();
+                if (fault) throw new Error('handoff observer fault');
+              },
+            },
+            { failure: 'propagate' },
+          ),
+        ];
+      },
     );
-    const model = observer.definition.executionDefinition.operationDefinitions.selection.requestModelDefinition;
-    model.observation = [
-      ...model.observation,
-      defineObservation(
-        {
-          requires: {},
-          observe(fact) {
-            if (fact.kind !== 'relation' || fact.change.kind !== 'returned' || fact.change.result.status !== 'succeeded' || fact.change.result.output.kind !== 'pending') return;
-            // The public cancellation entry is invoked at the exact synchronous handoff boundary.
-            capturedSubmission.requestCancellation();
-            pending();
-            if (fault) throw new Error('handoff observer fault');
-          },
-        },
-        { failure: 'propagate' },
-      ),
-    ];
     const id = randomUUID();
     const stream = updates(await run('交接处取消', { id }));
     try {

@@ -11,14 +11,11 @@ import type { InvocationView, InvocationWorkView } from '../invocation/view.js';
 import type { InvocationTarget } from '../invocation/relation.js';
 import type { ChildDefinition } from '../definition/children.js';
 
-/** One assembly, separate views for work and exception declarations. */
+/** Adapt a fixed declaration at its Bound position; per-call access remains local to each invocation. */
 export function bindInvocationWork<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, ExceptionResources extends object>(definition: InvocationDefinition<Input, Output, ContextViewOf<Context>, Resources, ExceptionResources, any>, children: BoundChildren): InvocationWork<Input, Output, Context> {
   const access = bindInvocationAccess<Input, Output, Context>(children);
   const run = definition.run;
   const exceptions = definition.exceptions;
-  children.checkUses(run.uses ?? []);
-  children.checkUses(exceptions?.uses ?? []);
-  for (const point of Object.values(definition.checkpoint?.points ?? {})) children.checkUses(point.resume.uses ?? []);
   return {
     output: definition.output,
     maxRounds: definition.maxRounds,

@@ -6,10 +6,10 @@ import type { InvocationCapabilities } from '../invocation/capabilities.js';
 import { createInvocationBuilders } from '../invocation/builders.js';
 import { BoundRuntime } from '../runtime/runtime.js';
 import { bindResources, ResourceBindings, resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
-import { checkChildResourceBindings, collectDefinitionRequirements, collectObservationProvides, type ChildResourceBinding } from './resources.js';
+import { collectObservationProvides, type ChildResourceBinding } from './resources.js';
 import { BoundChildren } from './children/bound.js';
 import { bindInvocationWork } from './work.js';
-import { checkChildDeclarations } from './declarations.js';
+import { resolveDeclaration } from './declarations.js';
 import { AttemptBinder } from './attempt.js';
 import { OperationBinder } from './operation.js';
 import { ExecutionBinder } from './execution.js';
@@ -33,29 +33,29 @@ export class RuntimeBinder {
 
   bind<Input, Output, Resources extends object, Options extends InvocationControls, Source>(definition: RuntimeDefinition<Input, Output, Resources, any, any>, options: RuntimeBindingOptions<Input, Options, Source>): BoundRuntime<Input, Output, Options, Resources> {
     const source = options.source;
-    for (const observation of this.capabilities.observations ?? []) observation.check?.(definition);
     const observationProvides = collectObservationProvides(this.capabilities.observations);
     const childResources = Object.freeze([...(options.childResources ?? [])]);
-    checkChildResourceBindings(definition.children, childResources, observationProvides);
-    const requires = collectDefinitionRequirements(definition, observationProvides) as ResourceRequirements<Resources>;
+    const childOptions: ChildBindingOptions = { observationProvides, observations: this.capabilities.observations, childResources };
+    const resolved = resolveDeclaration(definition, childOptions);
+    const declaration = resolved.declaration;
+    const requires = resolved.requires as ResourceRequirements<Resources>;
     const runtimeResources = bindResources(requires, options.providers);
     if (resourceRequests(requires).length && !source.runtime) throw new Error('Runtime resource requests require a runtime source');
-    const executionBindings = bindExecutionSources(definition.children, options.providers, source, observationProvides);
+    const executionBindings = bindExecutionSources(resolved.children, options.providers, source);
 
-    const childOptions: ChildBindingOptions = { observationProvides, observations: this.capabilities.observations, childResources };
-    checkChildDeclarations(requires, definition.children, 'runtime', childOptions, definition);
     // A reused Binder still creates an independent ownership chain for every R it binds.
     const invocations = createInvocationBuilders(this.capabilities);
     const attempts = new AttemptBinder(invocations.attempt, childOptions);
     const operations = new OperationBinder(invocations.operation, attempts, childOptions);
     const executions = new ExecutionBinder(invocations.execution, operations, childOptions);
-    const children = new BoundChildren(definition.children, (child) => {
+    const children = new BoundChildren(resolved.children, (child) => {
       if (child.level !== 'execution') throw new Error('Invalid child definition level');
-      return executions.bind(child);
+      return executions.bindResolved(child);
     });
-    const work = bindInvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>, Resources, any>(definition, children);
+    const work = bindInvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>, Resources, any>(declaration, children);
     const binding: RuntimeBinding<Input, Output, Options, Resources> = {
       definition,
+      declaration,
       children,
       requires,
       work,

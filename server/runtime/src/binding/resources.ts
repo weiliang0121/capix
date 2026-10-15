@@ -29,33 +29,6 @@ export function bindChildResources<Definition extends RefinableDefinition>(defin
   return Object.freeze({ definition, refinements: Object.freeze([...refinements]) });
 }
 
-export function checkChildResourceBindings(definitions: readonly ChildDefinition[], bindings: readonly ChildResourceBinding[], observationProvides?: ResourceRequirements): void {
-  if (!bindings.length) return;
-  const declared = new Set<ChildDefinition>();
-  const visit = (children: readonly ChildDefinition[]) => {
-    for (const definition of children) {
-      if (declared.has(definition)) continue;
-      declared.add(definition);
-      if (definition.level !== 'attempt') visit(definition.children);
-    }
-  };
-  visit(definitions);
-  const bound = new Set<ChildDefinition>();
-  for (const binding of bindings) {
-    if (!declared.has(binding.definition) || (binding.definition.level !== 'operation' && binding.definition.level !== 'attempt')) throw new Error('Resource refinement requires a declared operation or attempt');
-    if (bound.has(binding.definition)) throw new Error('Duplicate child resource binding');
-    bound.add(binding.definition);
-    const offers = new Set(resourceRequests(collectDefinitionRequirements(binding.definition, observationProvides)).map((request) => request.offer));
-    const refined = new Set<ResourceRequest<unknown>['offer']>();
-    for (const refinement of binding.refinements) {
-      if (!isResourceRefinement(refinement)) throw new Error('Resource refinement was not issued by an offer');
-      if (!offers.has(refinement.offer)) throw new Error(`Refined resource is not requested: ${refinement.offer.name}`);
-      if (refined.has(refinement.offer)) throw new Error(`Duplicate resource refinement: ${refinement.offer.name}`);
-      refined.add(refinement.offer);
-    }
-  }
-}
-
 /**
  * Collect supply requirements across declaration phases; this does not resolve resource values.
  * Undefined observationProvides disables observation requirements; an empty map enables them without local supplies.

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { defineObservation } from '@capix/server-runtime';
 import { ObserverConversations, SqliteObserverStore, createObserverServer } from '@capix/observer-service';
 import { ObservationHttpTransport } from '@capix/client-http';
+import { withRuntimeDefinition } from '../fixtures/assembly.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 2000 };
 const output = (value) => ({ id: 'provider-feedback', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -17,10 +18,10 @@ function deferred() {
   });
   return { promise, resolve };
 }
-async function setup(t, provider, options = {}) {
+async function setup(t, provider, options = {}, configureDefinition) {
   const conversations = new ObserverConversations(provider, [], options);
   const id = conversations.list().defaultConversationId;
-  const observer = conversations.open(id);
+  const observer = withRuntimeDefinition(configureDefinition, () => conversations.open(id));
   const server = createObserverServer({ conversations, settings, configured: true });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -39,24 +40,30 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
   t.after(() => answer.resolve(output({ kind: 'answer', content: 'cleanup' })));
   const pending = deferred();
   let sends = 0;
-  const { conversations, observer, id, base, transport } = await setup(t, {
-    async invoke(_request, purpose) {
-      if (purpose === 'selection') return output({ historyIndexes: [] });
-      if (purpose === 'memory') return output({ memories: [] });
-      sends += 1;
-      return answer.promise;
-    },
-  });
-  const model = observer.definition.executionDefinition.operationDefinitions.generation.requestModelDefinition;
-  model.observation = [
-    ...model.observation,
-    defineObservation({
-      requires: {},
-      observe(fact) {
-        if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'succeeded' && fact.change.result.output.kind === 'pending') pending.resolve();
+  const { conversations, observer, id, base, transport } = await setup(
+    t,
+    {
+      async invoke(_request, purpose) {
+        if (purpose === 'selection') return output({ historyIndexes: [] });
+        if (purpose === 'memory') return output({ memories: [] });
+        sends += 1;
+        return answer.promise;
       },
-    }),
-  ];
+    },
+    {},
+    (definition) => {
+      const model = definition.executionDefinition.operationDefinitions.generation.requestModelDefinition;
+      model.observation = [
+        ...model.observation,
+        defineObservation({
+          requires: {},
+          observe(fact) {
+            if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'succeeded' && fact.change.result.output.kind === 'pending') pending.resolve();
+          },
+        }),
+      ];
+    },
+  );
   const running = observer.runtime.run({ messages: [{ role: 'user', content: 'sensitive prompt never in metadata' }] }, { settings });
   // Avoid depending on network or provider timing: wait for the actual local A1 deadline fact.
   await pending.promise;

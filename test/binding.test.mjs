@@ -2,7 +2,7 @@ import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/d
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ExecutionDefinition, OperationDefinition, AttemptDefinition, InvocationEntry, Sequence, ResourceOffer, assembleRuntime, RuntimeBinder, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
-import { createInvocationBuilders, AttemptBinder, OperationBinder, ExecutionBinder, BoundChildren, BoundExecution, BoundOperation, BoundAttempt } from '@capix/server-runtime/construction';
+import { createInvocationBuilders, resolveDeclaration, AttemptBinder, OperationBinder, ExecutionBinder, BoundChildren, BoundExecution, BoundOperation, BoundAttempt } from '@capix/server-runtime/construction';
 
 const resource = new ResourceOffer('test.value', (value) => value, 'binding');
 class Read extends AttemptDefinition {
@@ -222,7 +222,7 @@ test('nested O structures stay lazy and a shared A declaration is bound independ
   const attemptBinder = new AttemptBinder(builders.attempt);
   const operationBinder = new OperationBinder(builders.operation, attemptBinder);
   const executionBinder = new ExecutionBinder(builders.execution, operationBinder);
-  const roots = new BoundChildren([main], (definition) => executionBinder.bind(definition));
+  const roots = new BoundChildren([resolveDeclaration(main)], (resolved) => executionBinder.bindResolved(resolved));
 
   assert.equal(roots.initialized(main), false);
   const execution = roots.get(main);

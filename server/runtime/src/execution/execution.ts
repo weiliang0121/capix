@@ -44,7 +44,7 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
     this.invocationBuilder.check(parent);
     const bindings: ExecutionInvocationBindings<Input, Output, Resources, EntryInput, EntryResources> = parent.context.executionBinding(this.definition);
     const callbacks = bindings.callbacks ?? {};
-    const entry = this.definition.entry;
+    const entry = this.binding.declaration.entry;
     const stage = <Value>(name: 'accept' | 'notification' | 'admit' | 'capture', work: () => Value): Value => {
       let value: Value;
       try {
@@ -93,8 +93,8 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
       key: options.key,
       description: { id: this.id },
       requires: this.binding.requires,
-      initial: this.definition.run.requires,
-      observation: this.definition.observation,
+      initial: this.binding.declaration.run.requires,
+      observation: this.binding.declaration.observation,
       establish: () => ({ resources }),
       work: this.binding.work,
       started: callbacks.started,
@@ -107,7 +107,7 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
     parent.requireActive();
     this.invocationBuilder.check(parent);
     return this.invocationBuilder.restoration(contextId, this.binding.work, parent.context.id, (restore) => {
-      const checkpoint = this.definition.checkpoint!;
+      const checkpoint = this.binding.declaration.checkpoint!;
       const point = checkpoint.points[restore.head.image.point];
       if (!point) throw new Error('Checkpoint point is not declared');
       const input = checkpoint.input.decode(restore.head.image.frame.input);
@@ -118,7 +118,7 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
         description: { id: this.id },
         requires: this.binding.requires,
         initial: point.resume.requires,
-        observation: this.definition.observation,
+        observation: this.binding.declaration.observation,
         establish: () => ({ resources }),
         work: this.binding.work,
         progress: bindings.progress,

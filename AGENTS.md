@@ -25,13 +25,13 @@
 
 - 运行时表示活动状态，不等同于 R。`*Definition` 是内容契约；`BoundRuntime/BoundExecution/BoundOperation/BoundAttempt` 是可复用结构；Invocation 与本层 Context 表示单次调用。业务接收 `*ContextView`、InvocationView、ChildBindings，不取得真实 Context 的生命周期修改能力。
 - REOA 声明平级 run/exceptions/observation；绑定只接线与约束访问，不执行业务 Sequence。R 声明 E children 并显式选择、调用和接纳；不假定 R 与 E 唯一对应。E→O，O→O/A，A 不继续分层。原始实体通过正式资源申请使用，不向祖先 Context 取数。
-- REOA Binder 负责声明检查、资源与 work 接线，辅助函数处理具体动作；RuntimeBinding/ExecutionBinding/OperationBinding/AttemptBinding 是绑定结果契约，Bound 直接持有结果，不反向装配。RuntimeBinder 每次 bind 建立独立的 ContextBuilder/InvocationBuilder 链，EOA Binder 按父图约束惰性建立子结构；不引入 BindingEnvironment 或通用层级注册管理者。应用继续用 assembleRuntime。
+- REOA Binder 负责声明解算、资源与 work 接线，辅助函数处理具体动作；RuntimeBinding/ExecutionBinding/OperationBinding/AttemptBinding 是绑定结果契约，Bound 直接持有结果，不反向装配。resolveDeclaration 提前解算全树，固定内核字段、函数入口与各父位置的结果；EOA Binder.bindResolved 消费结果惰性建立子结构，普通 bind 则先解算给定子树。原声明只保留身份与宿主定位，修改结构需要重装配；原业务实例及方法 receiver 不冻结。RuntimeBinder 每次 bind 建立独立的 ContextBuilder/InvocationBuilder 链，不引入 BindingEnvironment 或通用层级注册管理者。应用继续用 assembleRuntime。
 - BoundRuntime 持有占用和稳定身份，只引用本层 InvocationBuilder。构造器在所属 R 内持续复用且不缓存单次信号/输入。每次 run 新建 RuntimeContext/Invocation；占用取得后任何失败都释放。业务不维护第二个 executing 标志，不隐含排队。
 - 世界由独立实体构成：Transcript、Memories、SelectionUsage、Provider、记录容器等由环境建立。R 只绑定资源访问形式，不成为这些对象的所有者。
 - ResourceOffer 声明公开访问、capture、兑现时机与 describe。绑定按对象身份、唯一供给和声明覆盖检查；业务只取得本阶段资源。资源端点检查所属调用/祖先活动，不能缓存写端点越过调用继续使用。关闭观测不触发描述或提前兑现惰性模型。
 - E entry.accept 接纳输入，accepted 通知后，未取消时 entry.admit 执行分段；entry 关闭后 capture 固定工作配置/原文范围，然后创建 E Context/Invocation。入口阶段属于已有 R，不伪造 E 记录。started 是同步绑定回调，保持 Context 建立后、调用 started 发布前的时机。被动进展通过独立 ProgressChannel 隔离消费者故障，不把反馈回调当作建立钩子；消息落实定位在正式 append 时发布，不读当前集合长度反推。详细顺序见 [运行边界](docs/runtime-boundaries.md)。
 - O/A 可通过 `childResources` 在创建时收窄已供应且已申请的资源；规则由 ResourceOffer.refine 签发，绑定只从输入选择范围，资源自身检查不可扩大。父层和兄弟供给不变，无关资源不重捕获；这不是动态能力注册或调度。
-- BoundChildren 惰性建立直接子结构，Initializer 缓存成功或失败；ChildBindingsBuilder 核对阶段范围并构造 InvocationChildBindings，后者提供本次调用的受控入口。调用映射按 Invocation 共享，访问 Binding 按阶段/轮次缓存；Builder 不保留本次状态，不提前初始化子结构。不引入重置/异步管理器。Sequence 逐项构造输入、运行并接纳结果，各次输出独立。父子关系保存真实返回与接纳事实；returned 不等于 accepted。
+- BoundChildren 持有已解算子声明与固定 CP 契约，惰性建立直接子结构；已保存成功交付不需要初始化子结构。Initializer 缓存成功或失败；ChildBindingsBuilder 核对阶段范围并构造 InvocationChildBindings，后者提供本次调用的受控入口。调用映射按 Invocation 共享，访问 Binding 按阶段/轮次缓存；Builder 不保留本次状态，不提前初始化子结构。不引入重置/异步管理器。Sequence 逐项构造输入、运行并接纳结果，各次输出独立。父子关系保存真实返回与接纳事实；returned 不等于 accepted。
 - Context 保留真实 IO/异常引用，局部继续复用同一 Context；子调用每次新建。maxRounds 默认 1，仅允许 1/2。run.accept 只处理正常结果；exceptions.handle 按契约处理已声明异常。内核、绑定、未声明抛错、处理器错误不递归进入异常处理。已归属错误不能被业务 catch 清除。详见 [异常边界](docs/exceptions.md)。
 
 ## Checkpoint 的有限恢复

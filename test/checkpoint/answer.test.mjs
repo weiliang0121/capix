@@ -47,8 +47,7 @@ function parentCheckpoint(key, child) {
   };
 }
 
-function harness(t, provider, store, events = [], facts = []) {
-  const generation = new GenerateAnswerDefinition();
+function harness(t, provider, store, events = [], facts = [], generation = new GenerateAnswerDefinition()) {
   const interactions = new ModelInteractions(new ModelSource(provider));
   t.after(() => interactions.close());
   const transcript = new Transcript([{ role: 'user', content: '你好' }]);
@@ -97,8 +96,9 @@ function restoreWrites(writes) {
 }
 
 test('answer checkpoint codecs remain dormant when checkpoints are not installed', async (t) => {
-  const original = harness(t, { invoke: async () => feedback() });
-  original.generation.checkpoint.input = { encode: () => assert.fail('checkpoint capture is not installed'), decode: () => assert.fail('not restoring') };
+  const generation = new GenerateAnswerDefinition();
+  generation.checkpoint.input = { encode: () => assert.fail('checkpoint capture is not installed'), decode: () => assert.fail('not restoring') };
+  const original = harness(t, { invoke: async () => feedback() }, undefined, [], [], generation);
   assert.deepEqual(await original.runtime.run(input, {}), answer);
 });
 

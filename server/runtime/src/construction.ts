@@ -12,6 +12,7 @@ export * from './binding/execution.js';
 export * from './binding/operation.js';
 export * from './binding/attempt.js';
 export * from './binding/contract.js';
+export * from './binding/declarations.js';
 
 export * from './context/context.js';
 export * from './context/runtime.js';

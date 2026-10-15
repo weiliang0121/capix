@@ -112,7 +112,7 @@ export class InvocationChildBindings implements ChildBindings {
       this.#requireOwner(actual);
       this.#checkActive();
       this.#requireDeclared(definition);
-      const checkpoint = definition.checkpoint;
+      const checkpoint = this.#children.checkpoint(definition);
       if (!checkpoint) throw new Error('Child declaration does not support checkpoints');
       // A saved final delivery does not need a bound child structure or a new invocation.
       const invocation = this.#parent.restoreChild(checkpoint, contextId, () => this.#children.get(definition).resume(this.#parent, contextId));

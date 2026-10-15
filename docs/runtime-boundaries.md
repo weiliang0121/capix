@@ -15,15 +15,16 @@
 
 `run` 声明 execute 与可选的正常输出 accept；`exceptions` 声明可接纳的异常契约、所需能力及处理内容；`observation` 是接收类型化事实、申请独立端口的同步声明数组。记录 IO 描述通过 `invocationRecording({ input, output })` 预设完成。它们是所属声明中的平级部分，不是 run 引用的附属处理器。`raises` 与 `maxRounds` 是所属结构的交付与轮次约束。错误收敛由内核固定，不增加第四类可替换声明。详见 [异常与错误边界](exceptions.md)。
 
-Binder 完成绑定，Binding 表达绑定结果，Bound 持有结果并提供调用入口，InvocationBuilder 构造本次 Invocation/Context。四层的绑定结果契约集中在 `binding/contract.ts`；它们不是额外的运行对象。Bound 不执行声明检查与接线，服务只把已装配 R 作为业务运行入口。
+Binder 先解算声明，再建立绑定结构；Binding 表达结构构造所需的接线结果，Bound 持有结果并提供调用入口，InvocationBuilder 构造本次 Invocation/Context。四层的绑定结果契约集中在 `binding/contract.ts`；它们不是额外的运行对象。Bound 不执行声明检查与接线，服务只把已装配 R 作为业务运行入口。
 
 `binding/` 的辅助函数按具体职责协作：
 
 | 文件            | 辅助操作                                                    | 生效边界                                                                      |
 | --------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| declarations.ts | checkChildDeclarations                                      | 装配与惰性子绑定时检查父子层级、资源覆盖、uses 和无环关系                     |
+| declarations.ts | resolveDeclaration                                          | 装配时解算全树并保留按父位置的结果，检查层级、资源覆盖、uses、收窄和无环关系  |
+| snapshot.ts     | snapshotDefinition                                          | 固定内核解释字段、容器及函数入口，保留原业务方法 receiver，不冻结业务实例     |
 | resources.ts    | collectDefinitionRequirements / collectObservationProvides  | 收集声明申请与安装方供给声明，不捕获实体或创建访问端点                        |
-| resources.ts    | bindChildResources / checkChildResourceBindings             | 前者检查并固定收窄规则，后者在装配入口核验规则及声明归属                      |
+| resources.ts    | bindChildResources                                          | 固定资源签发的收窄规则；声明解算再核验规则的申请及归属                        |
 | sources.ts      | bindExecutionSources                                        | 装配时绑定供给查找；E 进入 entry/capture 时才捕获本次来源                     |
 | work.ts         | bindInvocationWork / 私有 bindInvocationAccess              | 前者连接运行、接纳、异常与 CP 声明；后者按 Invocation、阶段与轮次维护访问视图 |
 | observation.ts  | bindInvocationObservation / bindRuntimeStructureObservation | 建立具体调用或 R 结构的观测会话，连接父观测、声明资源及故障策略               |
@@ -34,14 +35,16 @@ Binder 完成绑定，Binding 表达绑定结果，Bound 持有结果并提供�
 ```text
 assembleRuntime(definition, options)
   → RuntimeBinder.bind
-      → 检查完整声明图与供给，连接按次来源
+      → resolveDeclaration：解算完整声明图，保存各绑定位置的固定结果
+      → 根据解算结果匹配供给，连接按次来源（不取得资源值）
       → createInvocationBuilders：建立本 R 独立的 Context/Invocation 构造链
       → 连接 AttemptBinder → OperationBinder → ExecutionBinder
       → RuntimeBinding → BoundRuntime
 
 首次使用某个子声明
   → BoundChildren 的本位置 Initializer
-  → 对应 Binder.bind → Binding → Bound
+  → 对应 Binder.bindResolved(本位置解算结果) → Binding → Bound
+  → 不再读取原声明、递归检查子树或重新汇集资源申请
 
 每次调用
   → Bound.run/create → InvocationBuilder.create → ContextBuilder.create → Invocation
@@ -63,6 +66,8 @@ await runtime.run({ messages: newMessages }, { settings, signal, progress });
 上面是服务装配示例。progress 是宿主为本次请求建立的 `ProgressChannel<ConversationProgress>`，输入、回答和调用映射共同使用它；任一来源消费失败后统一停用，下一次请求使用独立通道。环境建立 ModelSource 与 ModelInteractions，`bindConversation` 只绑定正式创建/读取资源；模型与配置不是同一对象，配置是固定数据，模型供给是可兑现的调用能力。读取已有交互不兑现惰性 Provider。
 
 `createBoundRuntime(capabilities)` 是未绑定声明的低层 R 结构入口，只构造 R 的 ContextBuilder/InvocationBuilder，不隐式建立 EOA 构造器、环境或内容实体。完整业务装配用 `assembleRuntime`，它将声明、独立供给及本次来源交给 RuntimeBinder。省略 observations 时关闭调用观测；显式空数组启用声明但不附加预设；[recording] 提供记录预设的本调用端口。开启后缺资源是装配错误，局部供给只满足观测声明，不能泄漏给工作和异常处理。
+
+声明解算和资源兑现分开：Provider 对应在装配时确定；source.runtime/entry/capture、按输入收窄、Context/Invocation 身份及调用观测会话仍在调用边界建立。资源 timing:binding 指按次供给建立时捕获材料、阶段激活时兑现端点，不表示提前到声明解算时。
 
 RuntimeBinder 可复用，每次 bind 仍建立一套独立的 ContextBuilder 身份链及各层 InvocationBuilder；不同 R 不能借用彼此的父调用。BoundRuntime 自己生成稳定 ID，在每次请求中交给 RuntimeInvocationBuilder 作为 description；Builder 不持有半成品 R，也不缓存本次信号或输入。R 的结构观测随 BoundRuntime 的身份建立，时机在完整静态绑定之后，绑定失败不会先发出 established。
 
@@ -132,9 +137,11 @@ Invocation 是单次、只能运行一次的结构化调用。它持有实际 Co
 
 ## 直接子调用、组合与有限再次生成
 
-RuntimeBinder 在装配时使用 `checkChildDeclarations` 沿轻量声明检查 R→E、E→O、O→O/A、无环、已开启声明的总资源覆盖及各自 uses 归属，不建立未使用的子结构，不访问实体或调用模型。BoundChildren 为每个直接声明保留 Initializer，首次实际创建子调用时由对应 Binder 建立该绑定位置的结构。同一位置复用稳定 O 身份，不同 R 或不同父位置独立。
+RuntimeBinder 在装配时使用 `resolveDeclaration` 解算 R→E、E→O、O→O/A 全树，检查无环、资源覆盖、阶段 uses、收窄和观测约束，并保留每个父位置的结果。不会建立未使用的 Bound 子结构、访问实体或调用模型。BoundChildren 保存原声明身份、固定 CP 契约与本位置的 Initializer；业务取得子入口仍不初始化结构，首次 create/call 才由对应 Binder.bindResolved 消费已解算结果。同一位置复用稳定 O 身份，不同 R 或不同父位置独立。已有成功 CP 交付可以直接按固定契约读取，不需建立 Bound 子结构。
 
-声明检查辅助函数以固定层级表表达允许关系；EOA Binder 分别准备资源申请、子结构、收窄规则和已绑定 work，再建立 Bound 结构。OperationBinder 只对直接 O/A 分派，不引入环境或通用注册管理者。声明树在装配及惰性建立下层集合时继续按原顺序校验。低层 EOA Binder 的本层归属与观察父关系依赖父声明图的检查；单独调用 bind 不代表已核验祖先关系，普通装配统一从 RuntimeBinder 开始。
+`ResolvedRuntime/Execution/Operation/Attempt` 是固定解算结果，不是新增生命周期实体。原 `definition` 只保留身份与宿主定位；`declaration` 固定内核读取的结构字段、资源申请、执行/异常/观测函数、E entry、输出与 CP codec/续接契约。Binding 与运行工作统一消费该固定结果。绑定后修改原声明结构不改变既有 Bound，重新装配才采用新结构；原业务实例不被深度冻结，方法仍使用原 receiver，闭包或业务字段变化不被快照承诺覆盖。
+
+EOA Binder.bind 用于独立声明入口，先解算给定子树再委托 bindResolved；来自父图的惰性路径直接使用 bindResolved，不重复解算。每个 Bound 建立自己的 BoundChildren、工作适配和按 Invocation 缓存的访问视图，不以 Definition 为全局缓存键共享活动状态。独立子树没有隐含祖先授权；普通装配从 RuntimeBinder 开始。OperationBinder 只对直接 O/A 分派，不引入环境或通用注册管理者。
 
 子能力访问按三个职责组织，源码位于 `binding/children/`：`bound.ts` 的 BoundChildren 只持有可复用子结构；`builder.ts` 的 ChildBindingsBuilder 核对本阶段 uses、固定允许集合、连接本次依赖；`binding.ts` 的 InvocationChildBindings 实现 get/entry、创建/恢复和接纳入口，内部真实引用使用私有字段，业务只获得冻结的 ChildBindings 表面。公开业务类型在 `contract.ts`。低层构造使用 `new ChildBindingsBuilder(boundChildren).build(parent, { view, uses, validate, calls })`，不再通过 BoundChildren.forInvocation 构造访问对象。
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ExceptionContract, InvocationEntry, MemoryCheckpointStore, assembleRuntime } from '@capix/server-runtime';
-import { BoundChildren, ChildBindingsBuilder, Invocation, InvocationContext, RuntimeContext } from '@capix/server-runtime/construction';
+import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, RuntimeContext } from '@capix/server-runtime/construction';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 function operation(execute = (context) => context.currentInput) {
@@ -145,8 +145,8 @@ for (const boundary of ['phase', 'round']) {
 test('building access and obtaining an endpoint stay lazy, and a reused builder keeps invocation state separate', async () => {
   const definition = operation();
   let initialized = 0;
-  const bound = new BoundChildren([definition], (actual) => {
-    assert.equal(actual, definition);
+  const bound = new BoundChildren([resolveDeclaration(definition)], (actual) => {
+    assert.equal(actual.definition, definition);
     initialized++;
     return {
       create(parent, input) {
@@ -199,7 +199,7 @@ test('building access and obtaining an endpoint stay lazy, and a reused builder 
 test('a builder rejects an unknown declaration before any lazy child structure is initialized', () => {
   const declared = operation();
   const unknown = operation();
-  const bound = new BoundChildren([declared], () => assert.fail('invalid grants must not initialize any child'));
+  const bound = new BoundChildren([resolveDeclaration(declared)], () => assert.fail('invalid grants must not initialize any child'));
   const builder = new ChildBindingsBuilder(bound);
   const parent = new Invocation({ context: new InvocationContext(null), signal: new AbortController().signal, work: { maxRounds: 1, execute: () => null } });
   assert.throws(() => builder.build(parent, { view: parent.view, uses: [unknown], calls: new Map() }), /outside|not declared/);
@@ -236,7 +236,7 @@ test('resuming a saved final child delivery keeps its bound structure uninitiali
     run: { requires: {}, execute: () => assert.fail('final child work cannot execute again') },
     checkpoint: { key: 'test.lazy.final-child', version: 1, input: codec, output: codec, points: { saved: { state: codec, resume: { requires: {}, execute: () => assert.fail('final child work cannot resume') } } } },
   };
-  const bound = new BoundChildren([definition], () => assert.fail('final delivery must not initialize the child structure'));
+  const bound = new BoundChildren([resolveDeclaration(definition)], () => assert.fail('final delivery must not initialize the child structure'));
   const builder = new ChildBindingsBuilder(bound);
   const store = new MemoryCheckpointStore();
   const childIdentity = { contextId: 'child-context', level: 'execution', parentContextId: 'parent-context' };

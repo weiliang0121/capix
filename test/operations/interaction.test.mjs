@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { defineObservation, isInvocationCancelled } from '@capix/server-runtime';
 import { initializeObserver, ModelInteractions, ModelSource } from '@capix/observer-service';
+import { withRuntimeDefinition } from '../fixtures/assembly.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const request = { model: 'fixture', messages: [], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 1, stream: false };
@@ -31,20 +32,22 @@ function memoryPersistence() {
     },
   };
 }
-function conversation(provider) {
+function conversation(provider, configureDefinition) {
   const calls = [];
-  const environment = initializeObserver({
-    invoke: async (input, purpose, signal) => {
-      calls.push({ input, purpose, signal });
-      if (purpose === 'selection') return output('{"historyIndexes":[]}');
-      if (purpose === 'memory') return output('{"memories":[]}');
-      return provider(input, signal);
-    },
-  });
+  const environment = withRuntimeDefinition(configureDefinition, () =>
+    initializeObserver({
+      invoke: async (input, purpose, signal) => {
+        calls.push({ input, purpose, signal });
+        if (purpose === 'selection') return output('{"historyIndexes":[]}');
+        if (purpose === 'memory') return output('{"memories":[]}');
+        return provider(input, signal);
+      },
+    }),
+  );
   return { ...environment, calls };
 }
-function watchPending(environment, callback, options) {
-  const definition = environment.definition.executionDefinition.operationDefinitions.generation.requestModelDefinition;
+function watchPending(runtimeDefinition, callback, options) {
+  const definition = runtimeDefinition.executionDefinition.operationDefinitions.generation.requestModelDefinition;
   definition.observation = [
     ...definition.observation,
     defineObservation(
@@ -61,12 +64,15 @@ function watchPending(environment, callback, options) {
 
 test('production request O accepts A1 pending and creates A2 which reads the same exchange without a second send', async () => {
   const response = deferred();
-  const environment = conversation(() => response.promise);
   let pending = 0;
-  watchPending(environment, () => {
-    pending += 1;
-    response.resolve(output(JSON.stringify(answer)));
-  });
+  const environment = conversation(
+    () => response.promise,
+    (definition) =>
+      watchPending(definition, () => {
+        pending += 1;
+        response.resolve(output(JSON.stringify(answer)));
+      }),
+  );
   let execution;
   assert.deepEqual(
     await environment.runtime.run(
@@ -195,9 +201,11 @@ test('local wait expiry leaves the external request alive and supports multiple 
 test('cancellation joins an uncooperative provider before the active invocation releases occupancy', async () => {
   const response = deferred();
   const controller = new AbortController();
-  const environment = conversation(() => response.promise);
   const pending = deferred();
-  watchPending(environment, () => pending.resolve());
+  const environment = conversation(
+    () => response.promise,
+    (definition) => watchPending(definition, () => pending.resolve()),
+  );
   const running = environment.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings, signal: controller.signal });
   const rejected = assert.rejects(running, (error) => isInvocationCancelled(error, controller.signal));
   await pending.promise;
@@ -215,13 +223,16 @@ test('cancellation joins an uncooperative provider before the active invocation 
 
 test('a parent observation fault does not erase or replay an already-started independent exchange', async () => {
   const response = deferred();
-  const environment = conversation(() => response.promise);
-  watchPending(
-    environment,
-    () => {
-      throw new Error('parent observer fault');
-    },
-    { failure: 'propagate' },
+  const environment = conversation(
+    () => response.promise,
+    (definition) =>
+      watchPending(
+        definition,
+        () => {
+          throw new Error('parent observer fault');
+        },
+        { failure: 'propagate' },
+      ),
   );
   await assert.rejects(environment.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause?.message === 'parent observer fault');
   assert.equal(environment.runtime.running, false);

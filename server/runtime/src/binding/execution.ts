@@ -6,9 +6,8 @@ import type { ExecutionInvocationBuilder } from '../invocation/execution/builder
 import type { ResourceRequirements } from '../resource/bindings.js';
 import { BoundChildren } from './children/bound.js';
 import type { ChildBindingOptions } from './contract.js';
-import { checkChildDeclarations } from './declarations.js';
 import type { OperationBinder } from './operation.js';
-import { collectDefinitionRequirements } from './resources.js';
+import { resolveDeclaration, type ResolvedExecution } from './declarations.js';
 import { bindInvocationWork } from './work.js';
 
 /** Bind an E already checked in its parent declaration graph; O structures remain lazy and local. */
@@ -20,13 +19,19 @@ export class ExecutionBinder {
   ) {}
 
   bind<Input, Output, Resources extends object, EntryInput, EntryResources extends object>(definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>): BoundExecution<Input, Output, Resources, EntryInput, EntryResources> {
-    const requires = collectDefinitionRequirements(definition, this.options.observationProvides) as ResourceRequirements<Resources>;
-    checkChildDeclarations(requires, definition.children, 'execution', this.options, definition);
-    const children = new BoundChildren(definition.children, (child) => {
+    return this.bindResolved(resolveDeclaration(definition, this.options));
+  }
+
+  /** Consume this position's resolved graph without reading or checking the original declaration again. */
+  bindResolved<Input, Output, Resources extends object, EntryInput, EntryResources extends object>(resolved: ResolvedExecution<Input, Output, Resources, EntryInput, EntryResources>): BoundExecution<Input, Output, Resources, EntryInput, EntryResources> {
+    const definition = resolved.definition;
+    const declaration = resolved.declaration;
+    const requires = resolved.requires as ResourceRequirements<Resources>;
+    const children = new BoundChildren(resolved.children, (child) => {
       if (child.level !== 'operation') throw new Error('Invalid child definition level');
-      return this.operations.bind(child);
+      return this.operations.bindResolved(child);
     });
-    const work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>> = bindInvocationWork(definition, children);
-    return new BoundExecution(this.invocationBuilder, { definition, children, requires, work });
+    const work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>> = bindInvocationWork(declaration, children);
+    return new BoundExecution(this.invocationBuilder, { definition, declaration, children, requires, work });
   }
 }

@@ -23,7 +23,9 @@ REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下
 | 调用         | Invocation         | Invocation           | Invocation           | Invocation         | 统一机制，由具体 Context 保持层级约束，不派生四套循环 |
 | 可选调用记录 | RuntimeCallRecord  | ExecutionRecord      | OperationRecord      | AttemptRecord      | 记录预设对调用事实的解释，不能驱动运行                |
 
-`*Binder` 配合辅助函数完成绑定；`*Binding` 是类型契约，不增加独立生命周期；`Bound*` 直接持有绑定结果，并使用本层 `*InvocationBuilder` 构造调用。调用构造器再协同 `*ContextBuilder` 建立本次上下文。Bound 不通过回调提供构造能力供绑定侧反向装配，也不承担声明资源汇总和 work 绑定。
+`*Binder` 配合辅助函数先解算声明，再建立绑定结构；`*Binding` 是类型契约，不增加独立生命周期；`Bound*` 直接持有绑定结果，并使用本层 `*InvocationBuilder` 构造调用。调用构造器再协同 `*ContextBuilder` 建立本次上下文。Bound 不通过回调提供构造能力供绑定侧反向装配，也不承担声明资源汇总和 work 绑定。
+
+`resolveDeclaration` 生成按父位置的 `Resolved*` 结果；`snapshotDefinition` 固定内核解释的字段与函数入口，保留原声明身份和业务方法 receiver。BoundChildren 根据结果惰性建立子结构，不在首次调用时重新解算。解算结果是构造依据，没有独立运行生命周期。
 
 `assembleRuntime` 是普通装配入口，委托 `RuntimeBinder.bind`；`RuntimeAssemblyOptions` 是装配参数，`RuntimeCallSource` 描述按次校验、入口/工作资源捕获和回调来源。每次 bind 都通过 `createInvocationBuilders` 建立独立 R 的构造链，再连接各层 Binder。低层 `createBoundRuntime` 只创建尚未绑定声明的 R 结构，不隐式附带 EOA 构造器或环境。服务装配继续使用 `assembleRuntime`，无需手工重复这些接线。
 
