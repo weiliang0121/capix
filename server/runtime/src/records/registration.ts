@@ -1,6 +1,6 @@
-import type { RecordBook } from './container/book.js';
+import type { RecordBook } from './book.js';
 import type { BaseRecord } from './record.js';
-import type { RecordTree } from './tree.js';
+import type { RecordTree } from './tree/tree.js';
 import { removeRegistration, prepareAttachment } from './tree/access.js';
 
 /** One synchronous registration, including its direct relation. */

@@ -1,9 +1,9 @@
 /** Low-level REOA structure and call construction. Prefer assembleRuntime for application assembly. */
-export * from './runtime/runtime.js';
-export * from './runtime/create.js';
-export * from './execution/execution.js';
-export * from './operation/operation.js';
-export * from './attempt/attempt.js';
+export * from './structure/runtime.js';
+export * from './structure/create.js';
+export * from './structure/execution.js';
+export * from './structure/operation.js';
+export * from './structure/attempt.js';
 export * from './binding/children/contract.js';
 export * from './binding/children/bound.js';
 export * from './binding/children/builder.js';

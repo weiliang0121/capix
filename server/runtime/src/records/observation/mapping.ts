@@ -1,0 +1,20 @@
+import type { MemoryEvent, TranscriptEvent, RecordedInvocationResult } from '@capix/protocol';
+import { RuntimeErrorHelper } from '../../errors/helper.js';
+import { failureFact } from '../../invocation/failure.js';
+import type { InvocationResult } from '../../invocation/result.js';
+import { MemoryRecord } from '../memory/record.js';
+import type { RecordChangeSource } from '../source.js';
+import { TranscriptRecord } from '../transcript/record.js';
+import type { InvocationRecordDescription } from './declaration.js';
+
+export function recordedResult(result: InvocationResult<unknown>, description?: InvocationRecordDescription): RecordedInvocationResult {
+  if (result.status === 'succeeded') return { status: 'succeeded', output: description?.output ? description.output(result.output) : result.output };
+  return { status: 'failed', error: RuntimeErrorHelper.format(result.error), ...(result.failure ? { failure: failureFact(result.failure) } : {}) };
+}
+export function transcriptRecord(event: TranscriptEvent, source?: RecordChangeSource): TranscriptRecord {
+  const change = event.change;
+  return new TranscriptRecord({ transcriptId: event.transcriptId, revision: event.revision, occurredAt: event.occurredAt, ...(source ? { source } : {}) }, change.kind === 'messages-appended' ? { action: 'append', start: change.start, end: change.start + change.messages.length } : { action: 'segment', previousStart: change.previousStart, start: change.start, end: change.end });
+}
+export function memoryRecord(event: MemoryEvent, source?: RecordChangeSource): MemoryRecord {
+  return new MemoryRecord({ memoriesId: event.memoriesId, memoryId: event.change.memoryId, sequence: event.sequence, ...(source ? { source } : {}) }, { action: event.change.action, change: event.change.explanation, sourceIndexes: event.change.sourceIndexes, ...(event.change.sourceResults ? { sourceResults: event.change.sourceResults } : {}), result: event.change.result });
+}

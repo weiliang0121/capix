@@ -3,10 +3,10 @@ import type { RecordChangeEvent, RecordMutation } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import { captureChange } from '../changes/publish.js';
 import { snapshotValue } from './value/snapshot.js';
-import { Clock } from '../runtime/clock.js';
-import { RecordBook } from './container/book.js';
+import { Clock } from '../clock.js';
+import { RecordBook } from './book.js';
 import type { BaseRecord } from './record.js';
-import { RecordTree } from './tree.js';
+import { RecordTree } from './tree/tree.js';
 import { RecordRegistration } from './registration.js';
 import { writeRecord } from './error.js';
 

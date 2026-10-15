@@ -4,7 +4,7 @@ import type { CheckpointBinding } from '../checkpoint/work.js';
 import type { InvocationTarget } from './relation.js';
 import type { InvocationOutputWriter, InvocationOutputReceiver } from '../output/contract.js';
 import { isUndefined } from 'es-toolkit/predicate';
-import { Clock } from '../runtime/clock.js';
+import { Clock } from '../clock.js';
 import { DeclaredException } from '../exception/contract.js';
 import { InvocationStopped } from './stop.js';
 import { isInvocationCancelled, requireNotCancelled } from './cancellation.js';
@@ -21,7 +21,7 @@ import { combineFaults } from '../observation/error.js';
 import { invocationChange, invocationProgress } from './facts.js';
 import { InvocationCycle } from './cycle.js';
 import { connectInvocationWork, type InvocationWork } from './work.js';
-import { ProgressChannel, type ProgressReceiver } from '../progress/channel.js';
+import { ProgressChannel, type ProgressReceiver } from '../progress.js';
 import type { InvocationProgress } from './progress.js';
 
 /** Synchronous setup after validation, before progress, observation and work. Throws stop the call unchanged. */

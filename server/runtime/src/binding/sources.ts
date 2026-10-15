@@ -1,10 +1,10 @@
 import type { InvocationOutputReceiver } from '../output/contract.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
-import type { ExecutionInvocationCallbacks } from '../execution/execution.js';
+import type { ExecutionInvocationCallbacks } from '../structure/execution.js';
 import type { ExecutionBindingResolver } from '../context/runtime.js';
 import type { ResourceProvider } from '../resource/offer.js';
 import { bindResources } from '../resource/bindings.js';
-import type { ProgressReceiver } from '../progress/channel.js';
+import type { ProgressReceiver } from '../progress.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 import type { ResolvedExecution } from './declarations.js';
 

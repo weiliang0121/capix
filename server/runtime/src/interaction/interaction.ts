@@ -4,7 +4,7 @@ import { RuntimeErrorHelper } from '../errors/helper.js';
 import { isNonBlankString } from '../value/string.js';
 import type { InteractionFact, InteractionFeedback, InteractionOptions, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
 import { captureInteractionValue, sameInteractionValue } from './value.js';
-import { ProgressChannel } from '../progress/channel.js';
+import { ProgressChannel } from '../progress.js';
 
 /** One fixed external exchange. Invocation waiters neither own its delivery nor consume its reply. */
 export class Interaction<Request, Reply> {

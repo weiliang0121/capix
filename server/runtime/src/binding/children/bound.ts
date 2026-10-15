@@ -1,4 +1,4 @@
-import { Initializer } from '../../initialization/initializer.js';
+import { Initializer } from '../../initializer.js';
 import type { ChildDefinition } from '../../definition/children.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { InvocationRelationOptions } from '../../invocation/relation.js';

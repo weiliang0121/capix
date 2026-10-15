@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ResourceActivity, ResourceSession, type ResourceOwner } from './activity.js';
-import { Initializer } from '../initialization/initializer.js';
+import { Initializer } from '../initializer.js';
 import { ResourceRequest, applyResourceRefinement, isResourceRefinement, type ResourceProvider, type ResourceValue, type ResourceRefinement } from './offer.js';
 
 export type ResourceRequirements<Resources extends object = object> = { readonly [Key in keyof Resources]: ResourceRequest<Resources[Key]> };

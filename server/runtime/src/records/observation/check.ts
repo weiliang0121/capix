@@ -1,6 +1,6 @@
-import type { ObservationDeclarationScope } from '../definition/observation.js';
-import type { ResourceIdentity } from '../resource/offer.js';
-import { resourceRequests } from '../resource/bindings.js';
+import type { ObservationDeclarationScope } from '../../definition/observation.js';
+import type { ResourceIdentity } from '../../resource/offer.js';
+import { resourceRequests } from '../../resource/bindings.js';
 
 /** Configured gaps are rejected before execution; runtime observer failure has a separate policy. */
 export function checkRecordingDeclaration(definition: ObservationDeclarationScope, parent: ObservationDeclarationScope | undefined, writer: ResourceIdentity): void {

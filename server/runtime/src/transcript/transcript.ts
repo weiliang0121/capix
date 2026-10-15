@@ -1,4 +1,4 @@
-import { publishFact, type ChangeProvenance } from '../observation/publish.js';
+import { publishFact, type ChangeProvenance } from '../changes/publish.js';
 import type { EventConsumer } from '../observation/observer.js';
 import { randomUUID } from 'node:crypto';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
@@ -8,7 +8,7 @@ import { MessageRef, TranscriptRangeRef } from './ref.js';
 import type { Message } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';
 import { createTranscriptEvent, type TranscriptEvent } from './event.js';
-import type { ProgressChannel } from '../progress/channel.js';
+import type { ProgressChannel } from '../progress.js';
 import type { TranscriptAppendProgress } from './progress.js';
 import type { TranscriptCommit, TranscriptPersistence, TranscriptState } from './persistence.js';
 import type { TranscriptAppendOperation, TranscriptAppendReceipt, TranscriptAppendState, TranscriptFixedAppend } from './append.js';

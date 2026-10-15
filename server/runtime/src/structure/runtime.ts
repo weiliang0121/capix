@@ -1,6 +1,6 @@
 import type { CheckpointRestoration } from '../checkpoint/contract.js';
 import { isUndefined } from 'es-toolkit/predicate';
-import { Clock } from './clock.js';
+import { Clock } from '../clock.js';
 import { bindRuntimeStructureObservation } from '../binding/observation.js';
 import type { EventConsumer } from '../observation/observer.js';
 import type { RuntimeStructureFact } from '../observation/facts.js';

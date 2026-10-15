@@ -1,6 +1,8 @@
 # 记录机制与特化处理
 
-Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 Clock。Recorder 本身不分派记录类型，具体关系规则位于 records/tree/relation.ts，不处理 Context、业务正文或 ExecutionRecordSnapshot。
+记录观测预设位于 `records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping/check 只提供映射与声明检查。`RecordBook` 位于 `records/book.ts`；`records/restoration/` 仍只负责只读历史载体的恢复。
+
+Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 Clock。Recorder 本身不分派记录类型，树本体与关系辅助集中在 records/tree/，具体关系规则位于 records/tree/relation.ts，不处理 Context、业务正文或 ExecutionRecordSnapshot。
 
 通用基类使用 BaseRecord，树形记录共用 CompositeRecord；RecordingRootRecord 表达一次记录安装的跨调用范围，InvocationRecord 统一 REOA 的调用正文与状态，ResourceRecord 表达正式资源访问事实。RecordingRootRecord 当前只保留创建时间与下级引用；不把记录登记、某次调用结束或实例释放等同于整个运行数据范围结束。
 

@@ -1,11 +1,11 @@
-import type { BaseRecord } from '../record.js';
-import { removeRegistration } from '../tree/access.js';
+import type { BaseRecord } from './record.js';
+import { removeRegistration } from './tree/access.js';
 import type { RecordEntry } from '@capix/protocol';
 import { isPlainObject } from 'es-toolkit/predicate';
-import { snapshotValue } from '../value/snapshot.js';
-import { restoreEntry } from '../restoration/entry.js';
-import { checkRestoredTree } from '../restoration/tree.js';
-import { sealHistorical } from '../restoration/access.js';
+import { snapshotValue } from './value/snapshot.js';
+import { restoreEntry } from './restoration/entry.js';
+import { checkRestoredTree } from './restoration/tree.js';
+import { sealHistorical } from './restoration/access.js';
 
 export interface RecordBookState {
   readonly entries: readonly RecordEntry[];

@@ -3,7 +3,7 @@ import { InvocationRecordHelper } from '../invocation/helper.js';
 
 import type { Recorder } from '../recorder.js';
 import type { RuntimeErrorValue } from '@capix/protocol';
-import type { RecordBook } from '../container/book.js';
+import type { RecordBook } from '../book.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord, type AttemptRecordOptions } from './record.js';

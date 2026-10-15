@@ -1,5 +1,5 @@
 import type { TranscriptChange } from '@capix/protocol';
-import type { Clock } from '../../runtime/clock.js';
+import type { Clock } from '../../clock.js';
 import { TranscriptRecord, type TranscriptRecordOptions } from './record.js';
 
 export class TranscriptRecordHelper {

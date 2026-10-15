@@ -7,7 +7,7 @@ import type { InvocationFailure, InvocationPhase } from './failure.js';
 import type { InvocationCycleWork, InvocationProcess } from './work.js';
 import { InvocationOutputSection } from '../output/section.js';
 import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputWriter } from '../output/contract.js';
-import { ProgressChannel } from '../progress/channel.js';
+import { ProgressChannel } from '../progress.js';
 import { isNonBlankString } from '../value/string.js';
 import { isObject } from '../value/object.js';
 

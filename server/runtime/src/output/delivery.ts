@@ -1,4 +1,4 @@
-import { ProgressChannel } from '../progress/channel.js';
+import { ProgressChannel } from '../progress.js';
 import type { InvocationOutputReceiver } from './contract.js';
 
 /** Explicit receivers remain independent even when installed on the same invocation. */

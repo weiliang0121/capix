@@ -1,4 +1,4 @@
-import { publishFact, type ChangeProvenance } from '../observation/publish.js';
+import { publishFact, type ChangeProvenance } from '../changes/publish.js';
 import type { EventConsumer } from '../observation/observer.js';
 import type { MemoryEvent } from '@capix/protocol';
 import type { ChangeCapture } from '../changes/capture.js';

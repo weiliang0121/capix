@@ -17,7 +17,7 @@ export * from './binding/resources.js';
 export { ResourceOffer, type ResourceRequest, type ResourceProvider, type ResourceRefinement } from './resource/offer.js';
 export * from './resource/bindings.js';
 export { ResourceActivity, type ResourceInteractionDescription, type ResourceOwner } from './resource/activity.js';
-export * from './initialization/initializer.js';
+export * from './initializer.js';
 
 // Independent external interactions; waiting invocations do not own delivery or retained feedback.
 export * from './interaction/contract.js';
@@ -31,21 +31,21 @@ export * from './invocation/description.js';
 export * from './invocation/identity.js';
 export * from './invocation/progress.js';
 export { InvocationCancelled, isInvocationCancelled } from './invocation/cancellation.js';
-export * from './progress/channel.js';
+export * from './progress.js';
 export type { InvocationResult, Continuation, InvocationResolution } from './invocation/result.js';
 export type { InvocationFailure, InvocationPhase } from './invocation/failure.js';
-export * from './runtime/clock.js';
+export * from './clock.js';
 
 // Live facts and observation installations, independent of the recording preset.
 export * from './changes/capture.js';
 export * from './changes/buffer.js';
 export * from './changes/error.js';
+export { publishFact, type ChangeProvenance } from './changes/publish.js';
 export * from './invocation/changes.js';
 export * from './observation/facts.js';
 export * from './observation/observer.js';
 export * from './observation/invocation.js';
 export * from './observation/error.js';
-export * from './observation/publish.js';
 
 // Explicit public subpaths also remain available from the grouped root surface.
 export * from './construction.js';

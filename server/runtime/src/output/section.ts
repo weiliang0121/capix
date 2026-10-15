@@ -1,4 +1,4 @@
-import { ProgressChannel } from '../progress/channel.js';
+import { ProgressChannel } from '../progress.js';
 import { RuntimeError } from '../errors/error.js';
 import type { InvocationOutputEvent, InvocationOutputWriter, OutputDeclaration } from './contract.js';
 

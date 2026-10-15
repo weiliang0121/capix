@@ -9,7 +9,7 @@ import type { RuntimeDefinition } from '../definition/runtime.js';
 import type { InvocationWork } from '../invocation/work.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 import type { InvocationOutputReceiver } from '../output/contract.js';
-import type { ProgressReceiver } from '../progress/channel.js';
+import type { ProgressReceiver } from '../progress.js';
 import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
 import type { ResourceRefinement } from '../resource/offer.js';
 import type { BoundChildren } from './children/bound.js';

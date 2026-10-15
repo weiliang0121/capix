@@ -1,5 +1,5 @@
 import type { MemoryRecordValue } from '@capix/protocol';
-import type { RecordBook } from '../container/book.js';
+import type { RecordBook } from '../book.js';
 import { MemoryRecord, type MemoryRecordOptions } from './record.js';
 
 /** Record ownership is resolved here, never added to the live memory or its input. */

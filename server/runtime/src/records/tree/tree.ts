@@ -1,9 +1,9 @@
 import { isUndefined } from 'es-toolkit/predicate';
-import type { RecordBook } from './container/book.js';
-import type { BaseRecord } from './record.js';
-import { CompositeRecord } from './composite.js';
-import { replaceChildren, prepareAttachment } from './tree/access.js';
-import { checkRelation } from './tree/relation.js';
+import type { RecordBook } from '../book.js';
+import type { BaseRecord } from '../record.js';
+import { CompositeRecord } from '../composite.js';
+import { replaceChildren, prepareAttachment } from './access.js';
+import { checkRelation } from './relation.js';
 
 /** Traverses the relations stored on records; owns no second node or edge collection. */
 export class RecordTree {

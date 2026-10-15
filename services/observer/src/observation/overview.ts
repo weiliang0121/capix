@@ -57,7 +57,7 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
   const summarize = (record: ObservedCallRecord): InvocationSummary => {
     const timing = boundaries.get(record.id);
     const common = { id: record.id, contextId: record.contextId, status: record.status, offsetMs: timing?.start ?? 0, ...(!isUndefined(timing?.start) && !isUndefined(timing?.end) ? { durationMs: timing!.end! - timing!.start! } : {}) };
-    if (record instanceof ExecutionRecord) return { ...common, recordType: 'execution', name: 'execution', label: '执行调用', source: 'server/runtime/src/execution/execution.ts · BoundExecution.create' };
+    if (record instanceof ExecutionRecord) return { ...common, recordType: 'execution', name: 'execution', label: '执行调用', source: 'server/runtime/src/structure/execution.ts · BoundExecution.create' };
     if (record instanceof OperationRecord) return { ...common, recordType: 'operation', parentId: record.parentOperationId ?? record.executionId, name: record.operation, label: record.label, source: record.source };
     return { ...common, recordType: 'attempt', parentId: record.operationId, name: record.name, label: record.label, source: record.source };
   };

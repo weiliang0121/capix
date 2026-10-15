@@ -1,7 +1,7 @@
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
 import { prepareCheckpointRestoration } from '../../checkpoint/restoration.js';
 import type { InvocationOutputReceiver } from '../../output/contract.js';
-import type { ProgressReceiver } from '../../progress/channel.js';
+import type { ProgressReceiver } from '../../progress.js';
 import type { InvocationProgress } from '../progress.js';
 import { Invocation, type InvocationStarted } from '../invocation.js';
 import type { InvocationWork } from '../work.js';

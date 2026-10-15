@@ -8,7 +8,7 @@ import type { Invocation } from '../invocation/invocation.js';
 import type { RuntimeContext } from '../context/runtime.js';
 import type { InvocationRelationOptions } from '../invocation/relation.js';
 import { attachInvocationResources } from '../invocation/resources.js';
-import type { ProgressReceiver } from '../progress/channel.js';
+import type { ProgressReceiver } from '../progress.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 
 export interface ExecutionInvocationCallbacks<Input, Output, Resources extends object> {

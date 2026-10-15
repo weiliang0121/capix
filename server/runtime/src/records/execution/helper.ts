@@ -1,15 +1,15 @@
 import type { InvocationFailureFact } from '@capix/protocol';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 import type { Recorder } from '../recorder.js';
-import { InvocationBoundaryRecordHelper } from '../invocation-boundary/helper.js';
+import { InvocationBoundaryRecordHelper } from '../invocation/boundary/helper.js';
 import type { RuntimeErrorValue, ExecutionValue, ExecutionRecordSnapshot } from '@capix/protocol';
 
-import type { RecordBook } from '../container/book.js';
+import type { RecordBook } from '../book.js';
 import { OperationRecordHelper } from '../operation/helper.js';
 import { AttemptRecord } from '../attempt/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { ExecutionRecord } from './record.js';
-import { RuntimeCallRecord } from '../runtime-call/record.js';
+import { RuntimeCallRecord } from '../runtime/record.js';
 import { ResourceRecord } from '../resource/record.js';
 
 /** Execution-specific recording operations. All managed objects are explicit arguments. */

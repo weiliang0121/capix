@@ -1,14 +1,14 @@
 import { isUndefined } from 'es-toolkit/predicate';
-import type { RecordBook } from '../container/book.js';
+import type { RecordBook } from '../book.js';
 import type { BaseRecord } from '../record.js';
 import { CompositeRecord } from '../composite.js';
-import { RuntimeCallRecord } from '../runtime-call/record.js';
+import { RuntimeCallRecord } from '../runtime/record.js';
 import { RecordingRootRecord } from '../root/record.js';
 import { InvocationRecord } from '../invocation/record.js';
 import { ExecutionRecord } from '../execution/record.js';
 import { OperationRecord } from '../operation/record.js';
 import { AttemptRecord } from '../attempt/record.js';
-import { InvocationBoundaryRecord } from '../invocation-boundary/record.js';
+import { InvocationBoundaryRecord } from '../invocation/boundary/record.js';
 import { MemoryRecord } from '../memory/record.js';
 import { TranscriptRecord } from '../transcript/record.js';
 import { ResourceRecord } from '../resource/record.js';

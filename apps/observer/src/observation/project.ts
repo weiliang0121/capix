@@ -33,7 +33,7 @@ export function projectExecution(facts: ExecutionRecordSnapshot): Trace {
     caller: 'caller',
     callee: 'execution',
     label: '执行调用',
-    source: 'server/runtime/src/execution/execution.ts · BoundExecution.create',
+    source: 'server/runtime/src/structure/execution.ts · BoundExecution.create',
     ...result(execution.id, execution.value, execution.status),
   };
   const operations = new Map(facts.operations.map((operation) => [operation.id, operation]));

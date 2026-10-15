@@ -1,6 +1,6 @@
 import type { ExecutionContext } from '../context/execution.js';
 import type { ExecutionDefinition } from '../definition/execution.js';
-import { BoundExecution } from '../execution/execution.js';
+import { BoundExecution } from '../structure/execution.js';
 import type { InvocationWork } from '../invocation/work.js';
 import type { ExecutionInvocationBuilder } from '../invocation/builders/execution.js';
 import type { ResourceRequirements } from '../resource/bindings.js';

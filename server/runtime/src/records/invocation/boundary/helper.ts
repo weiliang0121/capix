@@ -1,11 +1,11 @@
 import { sortBy } from 'es-toolkit/array';
 import { isFinite } from 'es-toolkit/compat';
 import type { InvocationBoundaryValue } from '@capix/protocol';
-import type { Recorder } from '../recorder.js';
-import type { RecordBook } from '../container/book.js';
-import { ExecutionRecord } from '../execution/record.js';
-import { RuntimeCallRecord } from '../runtime-call/record.js';
-import { InvocationRecord } from '../invocation/record.js';
+import type { Recorder } from '../../recorder.js';
+import type { RecordBook } from '../../book.js';
+import { ExecutionRecord } from '../../execution/record.js';
+import { RuntimeCallRecord } from '../../runtime/record.js';
+import { InvocationRecord } from '../record.js';
 import { InvocationBoundaryRecord } from './record.js';
 
 /** An R invocation record owns its timing range; an E record subtree shares a separate range. */

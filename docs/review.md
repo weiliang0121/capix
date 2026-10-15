@@ -2,6 +2,8 @@
 
 > 这是已实施迭代的设计与审查材料，包含当时的缺口、伪代码和迁移过程；不作为当前公开 API 清单。当前定位与命名见 [项目组织](organization.md)，运行契约见 [运行边界](runtime-boundaries.md)，记录与交付见 [记录机制](recording.md) 和 [增量观测](observation-increments.md)。
 
+源码导航随目录治理指向当前对应文件；下文行为描述与行号仍属于文中注明的历史基线。
+
 ## 本次基线与边界
 
 2026-10-08，基线提交 `d3b2544`：`refactor: separate runtime declarations bindings and execution structures`。
@@ -92,7 +94,7 @@ HTTP → ObserverBinding.converse/submit
 
 ### 1. R 的创建仍暗含内容实体创建
 
-[runtime/create.ts](../server/runtime/src/runtime/create.ts) 创建 Transcript、Memories 和 SelectionUsage，再将三者放入 [RuntimeContext](../server/runtime/src/context/runtime.ts)。[Observer 环境](../services/observer/src/assembly/environment.ts) 反过来从 `runtime.context` 取回消息集合。
+[runtime/create.ts](../server/runtime/src/structure/create.ts) 创建 Transcript、Memories 和 SelectionUsage，再将三者放入 [RuntimeContext](../server/runtime/src/context/runtime.ts)。[Observer 环境](../services/observer/src/assembly/environment.ts) 反过来从 `runtime.context` 取回消息集合。
 
 ```ts
 // 当前关系的摘要，省略记录和变化接线。
@@ -108,7 +110,7 @@ return new Runtime(context, options);
 
 ### 2. 声明、绑定和运行结构尚未对齐
 
-[Runtime.run](../server/runtime/src/runtime/runtime.ts) 当前只接受回调并取得占用；[BoundRuntimeBinding.execution](../server/runtime/src/binding/runtime.ts) 实际完成查声明、检查资源与子图、创建 E 结构和绑定。
+[Runtime.run](../server/runtime/src/structure/runtime.ts) 当前只接受回调并取得占用；[BoundRuntimeBinding.execution](../server/runtime/src/binding/runtime.ts) 实际完成查声明、检查资源与子图、创建 E 结构和绑定。
 
 ```ts
 // 当前 API 的职责摘要。
@@ -119,7 +121,7 @@ executionBinding.submit(accept, options); // 真正使用声明和绑定发起�
 
 `execution(key)` 看似获取节点，实际重新建立节点；`Runtime.run` 看似执行业务结构，实际只负责排他。这是命名和对象持有关系一起错位。
 
-[Execution](../server/runtime/src/execution/execution.ts)、[Operation](../server/runtime/src/operation/operation.ts)、[Attempt](../server/runtime/src/attempt/attempt.ts) 主要转发给 Builder；定义、资源和子项主要放在对应 Binding。O 另有被观测使用的稳定实例 ID。
+[Execution](../server/runtime/src/structure/execution.ts)、[Operation](../server/runtime/src/structure/operation.ts)、[Attempt](../server/runtime/src/structure/attempt.ts) 主要转发给 Builder；定义、资源和子项主要放在对应 Binding。O 另有被观测使用的稳定实例 ID。
 
 建议让运行实例成为明确的节点：持有落实后的绑定、直接子节点及自身构造器。绑定负责产生这个节点需要的装配结果，不再与 Structure 并列暴露两套可运行入口。应重分现有对象职责，而不是额外增加 Runner 或另一套节点包装。
 

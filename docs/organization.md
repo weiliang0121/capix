@@ -39,19 +39,21 @@ REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下
 
 当前运行包的目录可按下面的方式阅读：
 
-| 目录                                               | 主要组织依据               | 边界                                                                               |
-| -------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------- |
-| `context/`                                         | 单次上下文对象             | 本层 IO、状态、不变量与业务视图；`builders/` 负责建立与归属检查                    |
-| `invocation/`                                      | 单次调用机制               | 生命周期、局部循环、实际子关系与交付；`builders/` 负责组合本次 Context、资源与能力 |
-| `definition/`                                      | 内容声明契约               | REOA、运行、异常、观测等声明；不持有某次调用状态                                   |
-| `binding/`                                         | 声明到结构及调用的接线职责 | Binder 与资源、来源、观测、工作访问等绑定；不执行业务编排                          |
-| `binding/children/`                                | 子结构访问能力             | BoundChildren、构造器、阶段访问 Binding 与业务契约共同形成一个接缝                 |
-| `checkpoint/`                                      | 保存与续接能力             | 契约、存储端口、恢复依据、调用协调与子关系编解码；不是全系统恢复目录               |
-| `transcript/`、`memory/`、`interaction/`           | 独立实体域                 | 实体、不变量、变化与访问形式，按各自生命周期组织                                   |
-| `resource/`                                        | 正式访问机制               | 声明可申请形式并兑现受控访问，不拥有被访问的实体                                   |
-| `records/`                                         | 可选记录预设域             | 记录实体、登记、查询、观测解释与历史载体恢复                                       |
-| `observation/`、`changes/`、`progress/`、`output/` | 各自独立的运行机制         | 可选观察、必要捕获、被动进展、声明输出分别保留失败与生命周期语义                   |
-| `errors/`、`exception/`                            | 诊断处理与业务异常契约     | 两者职责不同，不因名称相近合并                                                     |
+`structure/` 集中四层 Bound 结构及低层创建入口，与 `definition/`、`binding/` 平级。层级由各目录内的 runtime/execution/operation/attempt 文件表达；对象角色由外层目录表达。
+
+| 目录                                                 | 主要组织依据               | 边界                                                                               |
+| ---------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------- |
+| `context/`                                           | 单次上下文对象             | 本层 IO、状态、不变量与业务视图；`builders/` 负责建立与归属检查                    |
+| `invocation/`                                        | 单次调用机制               | 生命周期、局部循环、实际子关系与交付；`builders/` 负责组合本次 Context、资源与能力 |
+| `definition/`                                        | 内容声明契约               | REOA、运行、异常、观测等声明；不持有某次调用状态                                   |
+| `binding/`                                           | 声明到结构及调用的接线职责 | Binder 与资源、来源、观测、工作访问等绑定；不执行业务编排                          |
+| `binding/children/`                                  | 子结构访问能力             | BoundChildren、构造器、阶段访问 Binding 与业务契约共同形成一个接缝                 |
+| `checkpoint/`                                        | 保存与续接能力             | 契约、存储端口、恢复依据、调用协调与子关系编解码；不是全系统恢复目录               |
+| `transcript/`、`memory/`、`interaction/`             | 独立实体域                 | 实体、不变量、变化与访问形式，按各自生命周期组织                                   |
+| `resource/`                                          | 正式访问机制               | 声明可申请形式并兑现受控访问，不拥有被访问的实体                                   |
+| `records/`                                           | 可选记录预设域             | 记录实体、登记、查询、观测解释与历史载体恢复                                       |
+| `observation/`、`changes/`、`progress.ts`、`output/` | 各自独立的运行机制         | 可选观察、必要捕获、被动进展、声明输出分别保留失败与生命周期语义                   |
+| `errors/`、`exception/`                              | 诊断处理与业务异常契约     | 两者职责不同，不因名称相近合并                                                     |
 
 因此，`context/builders/operation.ts` 与 `invocation/builders/operation.ts` 可以同名：外层确定所构造的对象，`builders` 表达职责，文件确定 O 层。`invocation/builders/create.ts` 只组合四层构造链。不再同时保留同义的 `invocation/builders.ts` 或四个单文件层级目录。
 
@@ -59,22 +61,30 @@ REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下
 
 - `binding/children/` 规定本次阶段允许访问哪些子结构；`invocation/children.ts` 保存实际发生的子调用、顺序与接纳关系。二者不能合成一个含义模糊的 Children 管理者。
 - `binding/work.ts` 把声明适配为工作入口，`binding/access.ts` 兑现阶段资源与子能力访问；`invocation/work.ts` 是调用机制消费的工作契约。InvocationAccess 虽随单次调用建立，其职责仍属于绑定。
-- `definition/observation.ts` 是声明，`binding/observation.ts` 是接线，`observation/` 是运行机制，`records/observation.ts` 是记录预设。共同涉及观测，不意味着应该都搬进同一目录。
+- `definition/observation.ts` 是声明，`binding/observation.ts` 是接线，`observation/` 是运行机制，`records/observation/` 是记录预设。共同涉及观测，不意味着应该都搬进同一目录。
 - `checkpoint/invocation.ts` 协调单次调用的保存与续接；`checkpoint/restoration.ts` 读取、核验续接依据并处理恢复准备失败。它们属于恢复能力，不因接收 Invocation 或构造回调就归入调用或绑定目录。
 - `records/restoration/` 恢复只读历史记录载体，不恢复调用、资源或业务执行；`records/value/` 检查严格记录正文，不是通用对象工具。两者必须保留记录域的限定。
+- `records/invocation/boundary/` 放调用边界记录及其辅助操作，以目录层级表达调用域与边界种类，不把两者拼成连字符目录名。这里的归属不改变记录类的继承关系、记录树关系或协议判别值。
+- `records/runtime/` 是 R 层调用记录，与 execution/operation/attempt 对齐；安装根仍属于 `records/root/`。类名 RuntimeCallRecord 和协议 kind 保持原义。
+- `selection/{usage,resource}.ts` 保存独立的历史选择计数及其正式访问形式。SelectionUsage 按消息对象身份计数，但不持有 Transcript；环境创建并供应它，不能因统计对象是消息就视为消息集合的内部状态。这里不承担历史选择的业务编排。
 
-目前仍存在的组织接缝，先明确而不机械迁移：
+本轮已落地的目录归属：
 
-| 当前位置                                           | 实际问题                                                            | 后续整理方向                                                                                       |
-| -------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `runtime/`、`execution/`、`operation/`、`attempt/` | 主要只放 Bound 结构，沿用早期按 REOA 层级分目录，路径未表达结构角色 | 可统一为 `structure/{runtime,execution,operation,attempt}.ts`，不能收进 binding 混淆绑定动作与结果 |
-| `runtime/clock.ts`                                 | Clock 被调用、记录与内容记录辅助共同使用，并非 R 私有能力           | 与 Bound 目录整理时移为共享 `clock.ts`，不增设单文件目录                                           |
-| `records/container/book.ts`                        | container 只有 RecordBook，不存在通用容器族                         | 可直接归入 `records/book.ts`                                                                       |
-| `records/tree.ts` 与 `records/tree/`               | 树本体与本域辅助操作分在目录内外                                    | 可集中到现有 `records/tree/`                                                                       |
-| `records/observation.ts`                           | 同文件包含声明辅助、安装对象、单次记录对象与事实映射                | 可按已有职责形成 `records/observation/`，不新增管理对象                                            |
-| `observation/publish.ts`                           | 同时连接必要捕获和可选观察，关闭观察后仍有职责                      | 应按生产者的变化发布接缝审视，与现有 changes 发布辅助共同整理                                      |
+| 位置                                                 | 负责的对象／职责                                                            |
+| ---------------------------------------------------- | --------------------------------------------------------------------------- |
+| `structure/{runtime,execution,operation,attempt}.ts` | 可复用 Bound 结构；`structure/create.ts` 提供低层 R 创建入口，不代替 Binder |
+| `clock.ts`、`initializer.ts`、`progress.ts`          | 共享时钟、同步惰性初始化、被动进展交付；不归属于 R 或其他单个调用对象       |
+| `records/book.ts`                                    | RecordBook 的引用集合及历史载体安装，不使用空泛 container 分类              |
+| `records/tree/{tree,access,relation}.ts`             | RecordTree 本体、受控访问和直接关系规则集中归属                             |
+| `records/observation/declaration.ts`                 | 记录描述契约、正式写端点申请与预设声明辅助                                  |
+| `records/observation/installation.ts`                | 跨调用复用的 RecordingInstallation 与安装辅助                               |
+| `records/observation/invocation.ts`                  | 单次 InvocationRecording、局部记录句柄与父子关联                            |
+| `records/observation/{mapping,check}.ts`             | 无状态事实映射与预设声明约束检查                                            |
+| `changes/publish.ts`                                 | 生产者将已落实变化送入必要捕获和可选观察；分别尝试后汇总故障                |
 
-单文件目录不能只按文件数量删除。例如 `records/runtime-call/`、`records/resource/` 与其他记录种类使用一致的分类，孤立扁平化会产生两套查找规则；`progress/` 目前虽然仅有 channel，也不能因此并入 observation 并混同被动进展与可选观测。目录调整本身不新增实体、改变失败语义或扩大公开入口。
+记录预设的分拆只分开现有职责；本次记录状态仍由 InvocationRecording 维护，安装状态仍由 RecordingInstallation 维护。声明中的记录资源只以类型依赖 InvocationRecording，单次记录也只以类型依赖安装对象，避免因拆文件形成运行依赖环。映射辅助不持有 Recorder 或新增状态。公共 `/recording` 出口保持原有符号，不把内部映射函数扩大为公共 API。
+
+单文件目录不能只按文件数量删除。`records/runtime/`、`records/resource/` 与其他记录种类使用一致的分类；`composition/sequence.ts` 明确属于可选业务组合，`exception/contract.ts` 则限定声明异常契约。它们有实际语义边界，保留。Clock、Initializer、ProgressChannel 则是独立共享对象，直接文件足以表达归属，不需要空泛分类层。目录调整不新增实体、改变失败语义或扩大公开入口。
 
 ## 类型、参数与对象角色
 

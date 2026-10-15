@@ -2,7 +2,7 @@ import type { OperationContext } from '../context/operation.js';
 import type { OperationDefinition } from '../definition/operation.js';
 import type { InvocationWork } from '../invocation/work.js';
 import type { OperationInvocationBuilder } from '../invocation/builders/operation.js';
-import { BoundOperation } from '../operation/operation.js';
+import { BoundOperation } from '../structure/operation.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
 import type { AttemptBinder } from './attempt.js';
 import { BoundChildren } from './children/bound.js';

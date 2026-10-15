@@ -1,4 +1,4 @@
-import type { ProgressReceiver } from '../progress/channel.js';
+import type { ProgressReceiver } from '../progress.js';
 
 /** Output production belongs to the declaration; accepting it is not a consumer's decision. */
 export interface OutputDeclaration<Result, Delta = never> {

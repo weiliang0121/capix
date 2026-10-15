@@ -1,7 +1,7 @@
-import type { RecordBook } from '../container/book.js';
+import type { RecordBook } from '../book.js';
 import { CompositeRecord } from '../composite.js';
 import { InvocationRecord } from '../invocation/record.js';
-import { InvocationBoundaryRecord } from '../invocation-boundary/record.js';
+import { InvocationBoundaryRecord } from '../invocation/boundary/record.js';
 import { ResourceRecord } from '../resource/record.js';
 import { checkRelation } from '../tree/relation.js';
 

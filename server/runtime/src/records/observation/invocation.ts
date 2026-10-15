@@ -1,122 +1,25 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import { pick } from 'es-toolkit/object';
-import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedInvocationResult, RecordedRelationChange, InvocationOrigin, InvocationRelationIdentity } from '@capix/protocol';
-import type { EventConsumer, InvocationObserver } from '../observation/observer.js';
-import type { InvocationObservationSetup, ObservationInstallation } from '../binding/observation.js';
-import type { ObservationDeclarationScope } from '../definition/observation.js';
-import type { InvocationFact, ResourceObservation } from '../observation/facts.js';
-import { ObservationError } from '../observation/error.js';
-import { defineObservation } from '../definition/observation.js';
-import { ResourceOffer } from '../resource/offer.js';
-import { bindResources, resourceRequests, type ResourceBindings } from '../resource/bindings.js';
-import { RuntimeErrorHelper } from '../errors/helper.js';
-import { failureFact } from '../invocation/failure.js';
-import type { InvocationResult } from '../invocation/result.js';
-import { Recorder } from './recorder.js';
-import type { ConcreteInvocationRecord } from './invocation/record.js';
-import { InvocationRecordHelper } from './invocation/helper.js';
-import { InvocationBoundaryRecordHelper } from './invocation-boundary/helper.js';
-import { RecordingRootHelper } from './root/helper.js';
-import { RuntimeCallRecord } from './runtime-call/record.js';
-import { ExecutionRecord } from './execution/record.js';
-import { OperationRecord } from './operation/record.js';
-import { AttemptRecord } from './attempt/record.js';
-import { ResourceRecord } from './resource/record.js';
-import { TranscriptRecord } from './transcript/record.js';
-import { MemoryRecord } from './memory/record.js';
-import type { RecordChangeSource } from './source.js';
-import { checkRecordingDeclaration } from './observation-check.js';
-
-export interface InvocationRecordDescription<Input = unknown, Output = unknown> {
-  readonly input?: (input: Input) => unknown;
-  readonly output?: (output: Output) => unknown;
-  /** Parent acceptance may produce a different value from the child's returned output. */
-  readonly relationAccepted?: (output: unknown, relation: InvocationRelationIdentity) => unknown;
-}
-export interface InvocationRecordWriter {
-  observe(fact: InvocationFact, description?: InvocationRecordDescription): undefined;
-}
-
-/** Only observation declarations may request this locally supplied writer. */
-export const InvocationRecordAccess = new ResourceOffer<InvocationRecording, InvocationRecordWriter>('observation.call-record', (recording, activity) =>
-  Object.freeze({
-    observe(fact: InvocationFact, description?: InvocationRecordDescription): undefined {
-      activity.validate();
-      recording.observeDescribed(fact, description);
-      return undefined;
-    },
-  }),
-);
-
-/** Call records are produced here, not by an implicit Invocation recording path. */
-export function invocationRecording<Input = unknown, Output = unknown>(description: InvocationRecordDescription<Input, Output> = {}, options: { failure?: 'isolate' | 'propagate' } = {}) {
-  const mapped: InvocationRecordDescription = {
-    ...(description.input ? { input: (input: unknown) => description.input!(input as Input) } : {}),
-    ...(description.output ? { output: (output: unknown) => description.output!(output as Output) } : {}),
-    ...(description.relationAccepted ? { relationAccepted: description.relationAccepted } : {}),
-  };
-  return defineObservation<InvocationFact, { record: InvocationRecordWriter }>(
-    {
-      requires: { record: InvocationRecordAccess.request() },
-      observe(fact, ports) {
-        return ports.record.observe(fact, mapped);
-      },
-    },
-    options,
-  );
-}
-
-export interface RecordingOptions {
-  readonly failure?: 'isolate' | 'propagate';
-  readonly invalidate?: (error: unknown) => void;
-}
-
-/** One optional record installation. Shared output does not share per-call state. */
-export class RecordingInstallation implements ObservationInstallation {
-  readonly root;
-  readonly provides = Object.freeze({ record: InvocationRecordAccess.request() });
-  readonly transcript: EventConsumer<TranscriptEvent> = this.consumer((event) => this.recorder.add(transcriptRecord(event)));
-  readonly memory: EventConsumer<MemoryEvent> = this.consumer((event) => this.recorder.add(memoryRecord(event)));
-  readonly failure: 'isolate' | 'propagate';
-  constructor(
-    readonly recorder: Recorder,
-    private readonly options: RecordingOptions = {},
-  ) {
-    this.root = RecordingRootHelper.create(recorder);
-    this.failure = options.failure ?? 'isolate';
-  }
-  check(definition: ObservationDeclarationScope, parent?: ObservationDeclarationScope): void {
-    checkRecordingDeclaration(definition, parent, InvocationRecordAccess.request().offer);
-  }
-  bindInvocation(setup: InvocationObservationSetup, parent?: InvocationObserver): InvocationRecording {
-    if (parent && !(parent instanceof InvocationRecording)) throw new Error('Recording parent belongs to another observation capability');
-    return new InvocationRecording(this, setup, parent);
-  }
-  invalidate(error: unknown): void {
-    this.options.invalidate?.(error);
-  }
-  private consumer<Event>(work: (event: Event) => unknown): EventConsumer<Event> {
-    let active = true;
-    return {
-      publish: (event) => {
-        if (!active) return undefined;
-        try {
-          work(event);
-          return undefined;
-        } catch (cause) {
-          active = false;
-          const error = new ObservationError(cause);
-          this.invalidate(error);
-          return this.failure === 'propagate' ? error : undefined;
-        }
-      },
-    };
-  }
-}
-
-export function bindRecording(recorder: Recorder, options: RecordingOptions = {}): RecordingInstallation {
-  return new RecordingInstallation(recorder, options);
-}
+import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedRelationChange, InvocationOrigin } from '@capix/protocol';
+import type { InvocationObservationSetup } from '../../binding/observation.js';
+import { RuntimeErrorHelper } from '../../errors/helper.js';
+import { failureFact } from '../../invocation/failure.js';
+import type { InvocationFact, ResourceObservation } from '../../observation/facts.js';
+import type { InvocationObserver } from '../../observation/observer.js';
+import { bindResources, resourceRequests, type ResourceBindings } from '../../resource/bindings.js';
+import { AttemptRecord } from '../attempt/record.js';
+import { ExecutionRecord } from '../execution/record.js';
+import { InvocationBoundaryRecordHelper } from '../invocation/boundary/helper.js';
+import { InvocationRecordHelper } from '../invocation/helper.js';
+import type { ConcreteInvocationRecord } from '../invocation/record.js';
+import { OperationRecord } from '../operation/record.js';
+import type { Recorder } from '../recorder.js';
+import { ResourceRecord } from '../resource/record.js';
+import { RuntimeCallRecord } from '../runtime/record.js';
+import type { RecordChangeSource } from '../source.js';
+import { InvocationRecordAccess, type InvocationRecordDescription, type InvocationRecordWriter } from './declaration.js';
+import type { RecordingInstallation } from './installation.js';
+import { memoryRecord, recordedResult, transcriptRecord } from './mapping.js';
 
 /** A local handle, never registered by Context ID in a global collection. */
 export class InvocationRecording implements InvocationObserver {
@@ -292,16 +195,4 @@ export class InvocationRecording implements InvocationObserver {
       throw error;
     }
   }
-}
-
-function recordedResult(result: InvocationResult<unknown>, description?: InvocationRecordDescription): RecordedInvocationResult {
-  if (result.status === 'succeeded') return { status: 'succeeded', output: description?.output ? description.output(result.output) : result.output };
-  return { status: 'failed', error: RuntimeErrorHelper.format(result.error), ...(result.failure ? { failure: failureFact(result.failure) } : {}) };
-}
-function transcriptRecord(event: TranscriptEvent, source?: RecordChangeSource): TranscriptRecord {
-  const change = event.change;
-  return new TranscriptRecord({ transcriptId: event.transcriptId, revision: event.revision, occurredAt: event.occurredAt, ...(source ? { source } : {}) }, change.kind === 'messages-appended' ? { action: 'append', start: change.start, end: change.start + change.messages.length } : { action: 'segment', previousStart: change.previousStart, start: change.start, end: change.end });
-}
-function memoryRecord(event: MemoryEvent, source?: RecordChangeSource): MemoryRecord {
-  return new MemoryRecord({ memoriesId: event.memoriesId, memoryId: event.change.memoryId, sequence: event.sequence, ...(source ? { source } : {}) }, { action: event.change.action, change: event.change.explanation, sourceIndexes: event.change.sourceIndexes, ...(event.change.sourceResults ? { sourceResults: event.change.sourceResults } : {}), result: event.change.result });
 }

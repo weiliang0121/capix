@@ -6,8 +6,8 @@ export * from './transcript/append.js';
 export * from './transcript/progress.js';
 export type { TranscriptEvent } from './transcript/event.js';
 export * from './transcript/resource.js';
-export { SelectionUsage } from './transcript/usage.js';
-export * from './transcript/usage-resource.js';
+export { SelectionUsage } from './selection/usage.js';
+export * from './selection/resource.js';
 
 export * from './memory/change.js';
 export * from './memory/apply.js';

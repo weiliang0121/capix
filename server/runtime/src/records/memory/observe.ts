@@ -1,5 +1,5 @@
 import type { MemoryObservation } from '@capix/protocol';
-import type { RecordBook } from '../container/book.js';
+import type { RecordBook } from '../book.js';
 import { MemoryRecord } from './record.js';
 import type { Memories } from '../../memory/memories.js';
 

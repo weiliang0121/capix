@@ -1,4 +1,4 @@
-import { BoundAttempt } from '../attempt/attempt.js';
+import { BoundAttempt } from '../structure/attempt.js';
 import type { AttemptContext } from '../context/attempt.js';
 import type { AttemptDefinition } from '../definition/attempt.js';
 import type { AttemptInvocationBuilder } from '../invocation/builders/attempt.js';

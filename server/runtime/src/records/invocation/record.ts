@@ -1,4 +1,4 @@
-import type { RuntimeCallRecord } from '../runtime-call/record.js';
+import type { RuntimeCallRecord } from '../runtime/record.js';
 import type { ExecutionRecord } from '../execution/record.js';
 import type { OperationRecord } from '../operation/record.js';
 import type { AttemptRecord } from '../attempt/record.js';
