@@ -47,6 +47,8 @@ REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下
 | `ChildBinding` / `ChildBindings`                     | 当前父调用及阶段允许使用的子调用能力            |
 | `BoundChildren`                                      | 持续复用、惰性构造的子结构集合                  |
 | `ChildBindingsBuilder`                               | 根据本次调用与阶段约束构造子能力访问 Binding    |
+| `InvocationWorkBinding`                              | 跨调用复用的声明适配，实现 InvocationWork 契约  |
+| `InvocationAccess`                                   | 一次调用的子调用映射、阶段访问与轮次缓存        |
 | `InvocationChildBindings`                            | 内部实现；连接父调用、阶段视图和允许的子结构    |
 | `ChildInvocationView`                                | 可启动这次子调用的业务视图，不是可复用结构      |
 | `DefinitionEntryInput` / `DefinitionInvocationInput` | 入口接纳前的输入 / 接纳后进入调用的输入         |

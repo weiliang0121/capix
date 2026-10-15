@@ -1,108 +1,78 @@
-import type { InvocationDefinition } from '../definition/invocation.js';
-import { invocationContextView, type ContextViewOf } from '../context/view.js';
+import type { InvocationCheckpointDefinition, InvocationCheckpointPoint, InvocationDefinition } from '../definition/invocation.js';
+import type { ContextViewOf } from '../context/view.js';
 import type { InvocationContext } from '../context/context.js';
+import type { InvocationCheckpointWork } from '../checkpoint/work.js';
+import type { DeclaredException } from '../exception/contract.js';
 import type { InvocationWork } from '../invocation/cycle.js';
 import type { Invocation } from '../invocation/invocation.js';
 import type { BoundChildren } from './children/bound.js';
-import type { ChildBindings } from './children/contract.js';
 import { ChildBindingsBuilder } from './children/builder.js';
-import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
-import type { InvocationView, InvocationWorkView } from '../invocation/view.js';
-import type { InvocationTarget } from '../invocation/relation.js';
-import type { ChildDefinition } from '../definition/children.js';
+import { InvocationAccess } from './access.js';
 
-/** Adapt a fixed declaration at its Bound position; per-call access remains local to each invocation. */
-export function bindInvocationWork<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, ExceptionResources extends object>(definition: InvocationDefinition<Input, Output, ContextViewOf<Context>, Resources, ExceptionResources, any>, children: BoundChildren): InvocationWork<Input, Output, Context> {
-  const access = bindInvocationAccess<Input, Output, Context>(children);
-  const run = definition.run;
-  const exceptions = definition.exceptions;
-  return {
-    output: definition.output,
-    maxRounds: definition.maxRounds,
-    raises: definition.raises,
-    checkpoint: definition.checkpoint
-      ? {
-          key: definition.checkpoint.key,
-          version: definition.checkpoint.version,
-          input: definition.checkpoint.input,
-          output: definition.checkpoint.output,
-          points: Object.fromEntries(
-            Object.entries(definition.checkpoint.points).map(([name, point]) => [
-              name,
-              {
-                state: point.state,
-                check: point.check,
-                execute: (_context: Context, invocation: Invocation<Input, Output, Context>, state: unknown) => {
-                  const bound = access(invocation, `checkpoint:${name}`, point.resume.requires, point.resume.uses ?? []);
-                  return point.resume.execute(bound.view.context as never, bound.view as never, bound.children, state);
-                },
-              },
-            ]),
-          ),
-        }
-      : undefined,
-    execute: (_context, invocation) => {
-      const bound = access(invocation, 'run', run.requires, run.uses);
-      return run.execute(bound.view.context, bound.view as InvocationWorkView<Input, Output, ContextViewOf<Context>, any>, bound.children);
-    },
-    accept: run.accept
-      ? (_context, output, invocation) => {
-          const bound = access(invocation, 'receive', run.requires, run.uses);
-          return run.accept!(bound.view.context, output, bound.view, bound.children);
-        }
-      : undefined,
-    exceptions: exceptions
-      ? {
-          accepts: exceptions.accepts,
-          handle: (_context, exception, invocation) => {
-            const bound = access(invocation, 'exceptions', exceptions.requires, exceptions.uses ?? []);
-            return exceptions.handle(bound.view.context as never, exception, bound.view as never, bound.children);
-          },
-        }
-      : undefined,
-  };
-}
+/** Fixed declaration adaptation at one Bound position; each invocation gets its own access state. */
+export class InvocationWorkBinding<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, ExceptionResources extends object> implements InvocationWork<Input, Output, Context> {
+  readonly output: InvocationWork<Input, Output, Context>['output'];
+  readonly maxRounds: 1 | 2;
+  readonly raises: InvocationWork<Input, Output, Context>['raises'];
+  readonly checkpoint?: InvocationCheckpointWork<Input, Output, Context>;
+  readonly accept?: InvocationWork<Input, Output, Context>['accept'];
+  readonly exceptions?: InvocationWork<Input, Output, Context>['exceptions'];
+  readonly #childBindingsBuilder: ChildBindingsBuilder;
+  readonly #accesses = new WeakMap<Invocation<Input, Output, Context>, InvocationAccess<Input, Output, Context>>();
 
-/** One call registry spans phases; resource/child views stay local to each declaration phase and round. */
-function bindInvocationAccess<Input, Output, Context extends InvocationContext<Input, Output>>(children: BoundChildren) {
-  const childBindingsBuilder = new ChildBindingsBuilder(children);
-  type PhaseBinding = { view: InvocationView<Input, Output, ContextViewOf<Context>>; children: ChildBindings };
-  const bindings = new WeakMap<Invocation<Input, Output, Context>, { calls: Map<InvocationView, InvocationTarget>; phases: Map<string, PhaseBinding> }>();
-  return (invocation: Invocation<Input, Output, Context>, phase: 'run' | 'receive' | 'exceptions' | `checkpoint:${string}`, requires: ResourceRequirements, uses?: readonly ChildDefinition[]) => {
-    const resources = (invocation.context as Context & { resources: ResourceBindings }).resources;
-    const resourcePhase = phase === 'exceptions' ? 'exceptions' : 'run';
-    resources.activate(resourcePhase, requires);
-    let callBindings = bindings.get(invocation);
-    if (!callBindings) {
-      callBindings = { calls: new Map(), phases: new Map() };
-      bindings.set(invocation, callBindings);
+  constructor(
+    private readonly declaration: InvocationDefinition<Input, Output, ContextViewOf<Context>, Resources, ExceptionResources, any>,
+    children: BoundChildren,
+  ) {
+    this.#childBindingsBuilder = new ChildBindingsBuilder(children);
+    this.output = declaration.output;
+    this.maxRounds = declaration.maxRounds;
+    this.raises = declaration.raises;
+    // Absence means reuse the execute result; do not install a default acceptance method.
+    this.accept = declaration.run.accept ? this.receive.bind(this) : undefined;
+    this.exceptions = declaration.exceptions ? { accepts: declaration.exceptions.accepts, handle: this.handle.bind(this) } : undefined;
+    this.checkpoint = declaration.checkpoint ? this.bindCheckpoint(declaration.checkpoint) : undefined;
+  }
+
+  execute(_context: Context, invocation: Invocation<Input, Output, Context>) {
+    const run = this.declaration.run;
+    const access = this.accessFor(invocation).enter('run', run.requires, run.uses);
+    return run.execute(access.view.context, access.view, access.children);
+  }
+
+  private receive(_context: Context, output: Output, invocation: Invocation<Input, Output, Context>) {
+    const run = this.declaration.run;
+    const access = this.accessFor(invocation).enter('receive', run.requires, run.uses);
+    return run.accept!(access.view.context, output, access.view, access.children);
+  }
+
+  private handle(_context: Context, exception: DeclaredException, invocation: Invocation<Input, Output, Context>) {
+    const exceptions = this.declaration.exceptions!;
+    const access = this.accessFor(invocation).enter('exceptions', exceptions.requires, exceptions.uses ?? []);
+    return exceptions.handle(access.view.context as never, exception, access.view as never, access.children);
+  }
+
+  private resume(pointName: string, point: InvocationCheckpointPoint<Input, Output, ContextViewOf<Context>, any, any, any>, invocation: Invocation<Input, Output, Context>, state: unknown) {
+    const resume = point.resume;
+    const access = this.accessFor(invocation).enter(`checkpoint:${pointName}`, resume.requires, resume.uses ?? []);
+    return resume.execute(access.view.context as never, access.view as never, access.children, state);
+  }
+
+  private accessFor(invocation: Invocation<Input, Output, Context>): InvocationAccess<Input, Output, Context> {
+    let access = this.#accesses.get(invocation);
+    if (!access) {
+      access = new InvocationAccess(invocation, this.#childBindingsBuilder);
+      this.#accesses.set(invocation, access);
     }
-    const round = invocation.context.progress.round;
-    const key = `${phase}:${round}`;
-    let binding = callBindings.phases.get(key);
-    if (!binding) {
-      const context = invocationContextView(invocation.context, resources.view(requires, resourcePhase));
-      const view = Object.freeze({
-        context,
-        origin: invocation.view.origin,
-        get failure() {
-          return invocation.view.failure;
-        },
-        get sequence() {
-          return invocation.view.sequence;
-        },
-        children: invocation.view.children,
-        ...(phase === 'run' || phase.startsWith('checkpoint:') ? { output: invocation.outputWriter, checkpoint: invocation.checkpointWriter } : {}),
-      });
-      const validate = () => {
-        if (invocation.context.progress.round !== round) throw new Error('Child access belongs to an inactive declaration round');
-        const current = invocation.context.progress.phase;
-        if (phase === 'exceptions' ? current !== 'handling' : current === 'handling') throw new Error('Child access belongs to an inactive declaration phase');
-      };
-      const childBindings = childBindingsBuilder.build(invocation, { view, uses, validate, calls: callBindings.calls });
-      binding = { view, children: childBindings };
-      callBindings.phases.set(key, binding);
+    return access;
+  }
+
+  private bindCheckpoint(checkpoint: InvocationCheckpointDefinition<Input, Output, ContextViewOf<Context>, any>): InvocationCheckpointWork<Input, Output, Context> {
+    const points: [string, InvocationCheckpointWork<Input, Output, Context>['points'][string]][] = [];
+    for (const [name, point] of Object.entries(checkpoint.points)) {
+      const execute = (_context: Context, invocation: Invocation<Input, Output, Context>, state: unknown) => this.resume(name, point, invocation, state);
+      points.push([name, { state: point.state, check: point.check, execute }]);
     }
-    return binding;
-  };
+    return { key: checkpoint.key, version: checkpoint.version, input: checkpoint.input, output: checkpoint.output, points: Object.fromEntries(points) };
+  }
 }

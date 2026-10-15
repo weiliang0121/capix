@@ -1,21 +1,19 @@
 import { InvocationCheckpoint } from '../checkpoint/invocation.js';
 import type { CheckpointInstallation, CheckpointRestoration, CheckpointWriter } from '../checkpoint/contract.js';
 import type { CheckpointBinding } from '../checkpoint/work.js';
-import { cloneCheckpointHead } from '../checkpoint/value.js';
+import { resolveCheckpointChild } from '../checkpoint/children.js';
 import { checkpointTarget } from '../checkpoint/target.js';
 import type { InvocationTarget } from './relation.js';
-import { isEqual } from 'es-toolkit';
 import { InvocationOutputSection } from '../output/section.js';
 import type { InvocationOutputWriter, InvocationOutputReceiver, InvocationOutputEvent } from '../output/contract.js';
 import { isUndefined } from 'es-toolkit/predicate';
-import { RuntimeErrorHelper } from '../errors/helper.js';
 import { Clock } from '../runtime/clock.js';
 import { DeclaredException } from '../exception/contract.js';
 import { InvocationStopped } from './stop.js';
 import { isInvocationCancelled, requireNotCancelled } from './cancellation.js';
 import type { InvocationFailure, InvocationPhase } from './failure.js';
 import { invocationContextView, type ContextFactsOf } from '../context/view.js';
-import type { InvocationView, ChildInvocationView } from './view.js';
+import { invocationView, childInvocationView, type InvocationView, type ChildInvocationView } from './view.js';
 import { InvocationChildren, type ParentInvocation } from './children.js';
 import type { InvocationRelation, InvocationRelationOptions } from './relation.js';
 import type { InvocationChangeEmitter } from './changes.js';
@@ -23,7 +21,7 @@ import type { InvocationContext } from '../context/context.js';
 import type { InvocationObservation } from '../observation/invocation.js';
 import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDescription, InvocationRelationIdentity, InvocationRelationChange, ExecutionEntryChange } from '../observation/facts.js';
 import { combineFaults } from '../observation/error.js';
-import { failureFact } from './failure.js';
+import { invocationChange, invocationProgress } from './facts.js';
 import { cycle, type InvocationWork } from './cycle.js';
 import { ProgressChannel, type ProgressReceiver } from '../progress/channel.js';
 import type { InvocationProgress } from './progress.js';
@@ -88,23 +86,15 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       if (!contract || contract.key !== binding.key || contract.version !== binding.version) throw new Error('Child continuation contract or ownership mismatch');
       if (resumed) return resumed;
       if (!saved) throw new Error('Child continuation basis is unavailable');
-      if (saved.state.kind === 'failed') throw new Error('Historical failed child cannot be resumed');
-      let child = saved;
-      if (saved.state.kind === 'waiting') {
-        const value = this.#checkpoint.store.read(contextId);
-        if (!value) throw new Error('Waiting child has no durable continuation; execution is unknown');
-        const head = cloneCheckpointHead(value);
-        if (!isEqual(head.image.frame.owner, saved.identity) || !isEqual(head.image.frame.input, saved.input) || !isEqual(head.image.contract, saved.contract)) throw new Error('Child checkpoint differs from parent-owned identity');
-        if (!head.delivery) {
-          const target = create();
-          if (target.context.id !== contextId || this.children.get(target).round !== saved.round) throw new Error('Child continuation did not adopt the saved relationship');
-          this.#resumed.set(contextId, target);
-          this.#checkpoint.childRestored(saved, 'continuation');
-          return target;
-        }
-        if (head.delivery.status !== 'succeeded') throw new Error('Failed or cancelled child cannot be resumed');
-        child = { ...saved, state: { kind: 'returned', output: head.delivery.output, progress: head.delivery.progress, reception: { kind: 'pending' } } };
+      const restored = resolveCheckpointChild(saved, saved.state.kind === 'waiting' ? this.#checkpoint.store.read(contextId) : undefined);
+      if (restored.kind === 'continuation') {
+        const target = create();
+        if (target.context.id !== contextId || this.children.get(target).round !== saved.round) throw new Error('Child continuation did not adopt the saved relationship');
+        this.#resumed.set(contextId, target);
+        this.#checkpoint.childRestored(saved, 'continuation');
+        return target;
       }
+      const child = restored.child;
       const target = checkpointTarget(child, binding, this.options.signal);
       this.children.replaceSaved(child, target);
       this.#resumed.set(contextId, target);
@@ -232,8 +222,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     this.origin = Object.freeze({ contextId: options.context.id });
     const context = invocationContextView(options.context);
     const invocation = this;
-    this.view = Object.freeze({
-      context,
+    const source = {
       origin: this.origin,
       get sequence() {
         return invocation.sequence;
@@ -242,19 +231,9 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
         return invocation.failure;
       },
       children: this.children.view,
-    });
-    this.callView = Object.freeze({
-      context,
-      origin: this.origin,
-      get sequence() {
-        return invocation.sequence;
-      },
-      get failure() {
-        return invocation.failure;
-      },
-      children: this.children.view,
-      run: () => this.run(),
-    });
+    };
+    this.view = invocationView(source, context);
+    this.callView = childInvocationView(source, context, () => this.run());
     if (options.restore && !options.checkpoints) throw new Error('Checkpoint persistence is missing');
     this.#checkpoint = options.checkpoints ? new InvocationCheckpoint(this, options.checkpoints, options.work.checkpoint, options.restore) : undefined;
     this.#parentRelation = options.parent ? (options.restore ? options.parent.invocation.children.adopt(this) : options.parent.invocation.children.attach(this, options.parent)) : undefined;
@@ -319,52 +298,17 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     this.options.parent?.invocation.publishProgress?.(fact);
   }
 
-  private progress(fact: InvocationFact): void {
-    if (!this.hasProgress || fact.kind === 'entry') return;
-    const description: { name?: string; label?: string } = {};
-    // Descriptions are optional metadata. Accessors and proxies must not run work
-    // or introduce a new failure through the passive outlet.
-    try {
-      if (fact.description) {
-        for (const key of ['name', 'label'] as const) {
-          const property = Object.getOwnPropertyDescriptor(fact.description, key);
-          if (property && 'value' in property && typeof property.value === 'string') description[key] = property.value;
-        }
-      }
-    } catch {
-      // A hostile description cannot prevent publication of the underlying fact.
-    }
-    const identity = Object.freeze({ contextId: fact.identity.contextId, level: fact.identity.level, ...(fact.identity.parentContextId ? { parentContextId: fact.identity.parentContextId } : {}) });
-    const base = { identity, eventSequence: fact.eventSequence, occurredAt: fact.occurredAt, ...(Object.keys(description).length ? { description: Object.freeze(description) } : {}) };
-    if (fact.kind === 'started') this.publishProgress(Object.freeze({ ...base, kind: 'started' }));
-    else if (fact.kind === 'process') this.publishProgress(Object.freeze({ ...base, kind: 'process', processSequence: fact.processSequence, round: fact.round, stage: fact.process.stage, action: fact.process.type }));
-    else if (fact.kind === 'relation') {
-      const relation = Object.freeze({ parentContextId: fact.relation.parentContextId, childContextId: fact.relation.childContextId, parentRound: fact.relation.parentRound, ...(fact.relation.key ? { key: fact.relation.key } : {}) });
-      if (fact.change.kind === 'returned') {
-        const result = fact.change.result;
-        const status = result.status === 'succeeded' ? 'succeeded' : isInvocationCancelled(result.error, this.options.signal) ? 'cancelled' : 'failed';
-        this.publishProgress(Object.freeze({ ...base, kind: 'relation', relation, phase: 'returned', status }));
-      } else this.publishProgress(Object.freeze({ ...base, kind: 'relation', relation, phase: fact.change.kind }));
-    } else {
-      const state = fact.state;
-      const status = state.status === 'succeeded' ? 'succeeded' : state.status === 'failed' && isInvocationCancelled(state.error, this.options.signal) ? 'cancelled' : 'failed';
-      this.publishProgress(Object.freeze({ ...base, kind: 'finished', status }));
-    }
-  }
-
   private publish(change: InvocationChange): void {
     const identity = this.#identity;
     const fact: InvocationFact = Object.freeze({ ...change, identity, description: this.options.description, eventSequence: ++this.#eventSequence, occurredAt: this.#clock.now(), monotonicTime: this.#clock.tick() });
     // A passive consumer sees the established fact even if strict observation fails next.
-    this.progress(fact);
+    if (this.hasProgress) {
+      const progress = invocationProgress(fact, this.options.signal);
+      if (progress) this.publishProgress(progress);
+    }
     const faults: unknown[] = [];
     try {
-      let captured;
-      if (fact.kind === 'process') captured = { kind: 'process' as const, processSequence: fact.processSequence, round: fact.round, stage: fact.process.stage, action: fact.process.type };
-      else if (fact.kind === 'entry') captured = { kind: 'entry' as const, target: fact.target, instanceId: fact.instanceId, ...(fact.key ? { key: fact.key } : {}), stage: fact.stage, status: fact.status, ...(fact.status === 'failed' ? { error: RuntimeErrorHelper.format(fact.error) } : {}) };
-      else if (fact.kind === 'relation') captured = { kind: 'relation' as const, identity: fact.relation, phase: fact.change.kind, ...(fact.change.kind === 'returned' ? { status: fact.change.result.status, ...(fact.change.result.status === 'failed' && fact.change.result.failure ? { failure: failureFact(fact.change.result.failure) } : {}) } : {}) };
-      else if (fact.kind === 'finished') captured = { kind: 'finished' as const, status: fact.state.status === 'succeeded' ? ('succeeded' as const) : ('failed' as const) };
-      else captured = { kind: 'started' as const };
+      const captured = invocationChange(fact);
       (this.recovering ? undefined : this.options.changes)?.publish(captured, { sequence: fact.eventSequence, occurredAt: fact.occurredAt });
     } catch (error) {
       faults.push(error);

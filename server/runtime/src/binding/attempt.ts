@@ -7,7 +7,7 @@ import type { ResourceRequirements } from '../resource/bindings.js';
 import { BoundChildren } from './children/bound.js';
 import type { ChildBindingOptions } from './contract.js';
 import { resolveDeclaration, type ResolvedAttempt } from './declarations.js';
-import { bindInvocationWork } from './work.js';
+import { InvocationWorkBinding } from './work.js';
 
 /** Bind an A already checked in its parent declaration graph; leaves expose no child construction. */
 export class AttemptBinder {
@@ -29,7 +29,7 @@ export class AttemptBinder {
       throw new Error('Attempts cannot have children');
     });
     const refinements = resolved.refinements;
-    const work: InvocationWork<Input, Output, AttemptContext<Input, Output, Resources>> = bindInvocationWork(declaration, children);
+    const work: InvocationWork<Input, Output, AttemptContext<Input, Output, Resources>> = new InvocationWorkBinding(declaration, children);
     return new BoundAttempt(this.invocationBuilder, { definition, declaration, children, requires, refinements, work });
   }
 }

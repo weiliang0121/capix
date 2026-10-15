@@ -8,7 +8,7 @@ import { BoundChildren } from './children/bound.js';
 import type { ChildBindingOptions } from './contract.js';
 import type { OperationBinder } from './operation.js';
 import { resolveDeclaration, type ResolvedExecution } from './declarations.js';
-import { bindInvocationWork } from './work.js';
+import { InvocationWorkBinding } from './work.js';
 
 /** Bind an E already checked in its parent declaration graph; O structures remain lazy and local. */
 export class ExecutionBinder {
@@ -31,7 +31,7 @@ export class ExecutionBinder {
       if (child.level !== 'operation') throw new Error('Invalid child definition level');
       return this.operations.bindResolved(child);
     });
-    const work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>> = bindInvocationWork(declaration, children);
+    const work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>> = new InvocationWorkBinding(declaration, children);
     return new BoundExecution(this.invocationBuilder, { definition, declaration, children, requires, work });
   }
 }

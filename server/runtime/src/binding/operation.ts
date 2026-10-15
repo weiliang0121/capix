@@ -8,7 +8,7 @@ import type { AttemptBinder } from './attempt.js';
 import { BoundChildren } from './children/bound.js';
 import type { ChildBindingOptions } from './contract.js';
 import { resolveDeclaration, type ResolvedOperation, type ResolvedChild } from './declarations.js';
-import { bindInvocationWork } from './work.js';
+import { InvocationWorkBinding } from './work.js';
 
 /** Bind an O already checked in its parent declaration graph and delegate its direct O/A structures. */
 export class OperationBinder {
@@ -29,7 +29,7 @@ export class OperationBinder {
     const requires = resolved.requires as ResourceRequirements<Resources>;
     const children = new BoundChildren(resolved.children, (child) => this.bindChild(child));
     const refinements = resolved.refinements;
-    const work: InvocationWork<Input, Output, OperationContext<Input, Output, Resources>> = bindInvocationWork(declaration, children);
+    const work: InvocationWork<Input, Output, OperationContext<Input, Output, Resources>> = new InvocationWorkBinding(declaration, children);
     return new BoundOperation(this.invocationBuilder, { definition, declaration, children, requires, refinements, work });
   }
 

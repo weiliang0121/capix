@@ -8,7 +8,7 @@ import { BoundRuntime } from '../runtime/runtime.js';
 import { bindResources, ResourceBindings, resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
 import { collectObservationProvides, type ChildResourceBinding } from './resources.js';
 import { BoundChildren } from './children/bound.js';
-import { bindInvocationWork } from './work.js';
+import { InvocationWorkBinding } from './work.js';
 import { resolveDeclaration } from './declarations.js';
 import { AttemptBinder } from './attempt.js';
 import { OperationBinder } from './operation.js';
@@ -52,7 +52,7 @@ export class RuntimeBinder {
       if (child.level !== 'execution') throw new Error('Invalid child definition level');
       return executions.bindResolved(child);
     });
-    const work = bindInvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>, Resources, any>(declaration, children);
+    const work = new InvocationWorkBinding<Input, Output, RuntimeContext<Input, Output, Resources>, Resources, any>(declaration, children);
     const binding: RuntimeBinding<Input, Output, Options, Resources> = {
       definition,
       declaration,

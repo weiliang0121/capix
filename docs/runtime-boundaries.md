@@ -17,18 +17,19 @@
 
 Binder 先解算声明，再建立绑定结构；Binding 表达结构构造所需的接线结果，Bound 持有结果并提供调用入口，InvocationBuilder 构造本次 Invocation/Context。四层的绑定结果契约集中在 `binding/contract.ts`；它们不是额外的运行对象。Bound 不执行声明检查与接线，服务只把已装配 R 作为业务运行入口。
 
-`binding/` 的辅助函数按具体职责协作：
+`binding/` 的实现对象与辅助函数按具体职责协作：
 
-| 文件            | 辅助操作                                                    | 生效边界                                                                      |
-| --------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| declarations.ts | resolveDeclaration                                          | 装配时解算全树并保留按父位置的结果，检查层级、资源覆盖、uses、收窄和无环关系  |
-| snapshot.ts     | snapshotDefinition                                          | 固定内核解释字段、容器及函数入口，保留原业务方法 receiver，不冻结业务实例     |
-| resources.ts    | collectDefinitionRequirements / collectObservationProvides  | 收集声明申请与安装方供给声明，不捕获实体或创建访问端点                        |
-| resources.ts    | bindChildResources                                          | 固定资源签发的收窄规则；声明解算再核验规则的申请及归属                        |
-| sources.ts      | bindExecutionSources                                        | 装配时绑定供给查找；E 进入 entry/capture 时才捕获本次来源                     |
-| work.ts         | bindInvocationWork / 私有 bindInvocationAccess              | 前者连接运行、接纳、异常与 CP 声明；后者按 Invocation、阶段与轮次维护访问视图 |
-| observation.ts  | bindInvocationObservation / bindRuntimeStructureObservation | 建立具体调用或 R 结构的观测会话，连接父观测、声明资源及故障策略               |
-| checkpoint.ts   | prepareCheckpointRestoration / 私有 readCheckpoint          | 读取校验与可选构造共用恢复失败观测边界；纯读取校验不负责构造                  |
+| 文件            | 辅助操作                                                    | 生效边界                                                                     |
+| --------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| declarations.ts | resolveDeclaration                                          | 装配时解算全树并保留按父位置的结果，检查层级、资源覆盖、uses、收窄和无环关系 |
+| snapshot.ts     | snapshotDefinition                                          | 固定内核解释字段、容器及函数入口，保留原业务方法 receiver，不冻结业务实例    |
+| resources.ts    | collectDefinitionRequirements / collectObservationProvides  | 收集声明申请与安装方供给声明，不捕获实体或创建访问端点                       |
+| resources.ts    | bindChildResources                                          | 固定资源签发的收窄规则；声明解算再核验规则的申请及归属                       |
+| sources.ts      | bindExecutionSources                                        | 装配时绑定供给查找；E 进入 entry/capture 时才捕获本次来源                    |
+| work.ts         | InvocationWorkBinding                                       | 一个 Bound 位置的固定工作适配；连接运行、接纳、异常与 CP 声明                |
+| access.ts       | InvocationAccess                                            | 一次 Invocation 的子调用映射、阶段/轮次缓存及访问约束                        |
+| observation.ts  | bindInvocationObservation / bindRuntimeStructureObservation | 建立具体调用或 R 结构的观测会话，连接父观测、声明资源及故障策略              |
+| checkpoint.ts   | prepareCheckpointRestoration / 私有 readCheckpoint          | 读取校验与可选构造共用恢复失败观测边界；纯读取校验不负责构造                 |
 
 `observationProvides` 为 undefined 时不启用观察声明资源汇集，空对象则表示已启用、但没有安装方供给。该供给只抵扣观察声明的申请，不抵扣工作或异常处理的申请。资源收窄在便捷构建与正式装配两处检查各有入口约束；直接提供绑定对象不能跳过正式装配检查。
 
@@ -145,7 +146,23 @@ EOA Binder.bind 用于独立声明入口，先解算给定子树再委托 bindRe
 
 子能力访问按三个职责组织，源码位于 `binding/children/`：`bound.ts` 的 BoundChildren 只持有可复用子结构；`builder.ts` 的 ChildBindingsBuilder 核对本阶段 uses、固定允许集合、连接本次依赖；`binding.ts` 的 InvocationChildBindings 实现 get/entry、创建/恢复和接纳入口，内部真实引用使用私有字段，业务只获得冻结的 ChildBindings 表面。公开业务类型在 `contract.ts`。低层构造使用 `new ChildBindingsBuilder(boundChildren).build(parent, { view, uses, validate, calls })`，不再通过 BoundChildren.forInvocation 构造访问对象。
 
-bindInvocationWork 通过同文件的 bindInvocationAccess 复用一个 Builder；一个 WeakMap 按 Invocation 同时持有共享 calls 映射和按 phase/round 缓存的访问 Binding。资源每次进入阶段仍须 activate，缓存命中不能跳过；访问阶段 run/receive/checkpoint 使用 run 资源阶段，exceptions 使用 exceptions 资源阶段。Builder 不保留本次父调用、视图或映射，构造 Binding 与 get 子入口都不初始化子结构。允许集合约束新建/恢复入口；接纳通过共享映射确认真实直接子调用，不要求接纳阶段重新取得创建权限。entry 接纳后再次检查活动性；结构检查失败归属为错误，业务接纳自身抛出的声明异常仍按原契约处理。恢复已有成功交付不强制建立子结构。
+InvocationWorkBinding 实现内核接受的 InvocationWork 契约，由每个 Bound 的 Binding 持有并跨调用复用；它持有固定声明、ChildBindingsBuilder 与按 Invocation 缓存的 InvocationAccess。InvocationAccess 每次调用一份，显式持有跨阶段共享的 calls 映射和按 phase/round 缓存的访问结果。调用内核只依赖 InvocationWork 契约，不反向依赖这两个绑定实现。资源每次进入阶段仍须 activate，缓存命中不能跳过；访问阶段 run/receive/checkpoint 使用 run 资源阶段，exceptions 使用 exceptions 资源阶段。Builder 不保留本次父调用、视图或映射，构造 Binding 与 get 子入口都不初始化子结构。允许集合约束新建/恢复入口；接纳通过共享映射确认真实直接子调用，不要求接纳阶段重新取得创建权限。entry 接纳后再次检查活动性；结构检查失败归属为错误，业务接纳自身抛出的声明异常仍按原契约处理。恢复已有成功交付不强制建立子结构。
+
+```text
+Binder.bindResolved
+  → new InvocationWorkBinding(固定声明, BoundChildren)
+  → Binding.work → Bound 持有
+
+Invocation.run → cycle
+  → InvocationWork.execute / accept / exceptions.handle / checkpoint point
+  → InvocationWorkBinding.accessFor(本次 Invocation)
+  → InvocationAccess.enter(声明阶段)
+      → ResourceBindings.activate（每次进入，包括命中缓存）
+      → 本阶段、轮次的 ContextView / InvocationView / ChildBindings
+  → 声明内容执行
+```
+
+视图与 writer 仍是已有实例的受限端口，不复制生命周期状态。Invocation 的普通视图、子调用视图及工作视图由 `invocation/view.ts` 的具名辅助函数集中构造，sequence/failure 保持实时 getter；只有 execute/CP 续接视图带本轮 output/checkpoint writer。未声明 accept 时工作适配不安装接纳函数，公共循环仍直接复用结果。`invocation/facts.ts` 只转换已产生事实，`checkpoint/children.ts` 只解释已保存子依据；事实顺序、失败归属、恢复目标缓存及父子关系安装仍由 Invocation 控制。
 
 Initializer 只支持同步一次建立、递归检查、成功或失败缓存，没有重置、异步调度或统一释放。共享声明不承诺隔离应用自己保存的外部闭包；绑定后修改声明不是动态重配置能力。
 

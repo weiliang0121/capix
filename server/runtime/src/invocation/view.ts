@@ -33,3 +33,33 @@ export interface InvocationWorkView<Input = unknown, Output = unknown, ContextVi
   readonly output: InvocationOutputWriter<Delta>;
   readonly checkpoint?: CheckpointWriter;
 }
+
+/** Read-only call facts; constructing a view never requires the live Invocation. */
+export type InvocationViewSource = Pick<InvocationView, 'origin' | 'sequence' | 'failure' | 'children'>;
+type ContextOutput<Context extends InvocationContextView<any, any>> = Extract<Context['state'], { status: 'succeeded' }>['output'];
+
+function viewProperties<Context extends InvocationContextView<any, any>>(source: InvocationViewSource, context: Context) {
+  return {
+    context,
+    origin: source.origin,
+    get sequence() {
+      return source.sequence;
+    },
+    get failure() {
+      return source.failure;
+    },
+    children: source.children,
+  };
+}
+
+export function invocationView<Context extends InvocationContextView<any, any>>(source: InvocationViewSource, context: Context): InvocationView<Context['input'], ContextOutput<Context>, Context> {
+  return Object.freeze(viewProperties(source, context));
+}
+
+export function childInvocationView<Context extends InvocationContextView<any, any>>(source: InvocationViewSource, context: Context, run: () => Promise<ContextOutput<Context>>): ChildInvocationView<Context['input'], ContextOutput<Context>, Context> {
+  return Object.freeze(Object.assign(viewProperties(source, context), { run }));
+}
+
+export function invocationWorkView<Context extends InvocationContextView<any, any>, Delta>(source: InvocationViewSource, context: Context, writers: { readonly output: InvocationOutputWriter<Delta>; readonly checkpoint?: CheckpointWriter }): InvocationWorkView<Context['input'], ContextOutput<Context>, Context, Delta> {
+  return Object.freeze(Object.assign(viewProperties(source, context), writers));
+}
