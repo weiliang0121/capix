@@ -1,3 +1,4 @@
+import { restoreCheckpointContinuation } from '../../checkpoint/continuation.js';
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
 import { prepareCheckpointRestoration } from '../../checkpoint/restoration.js';
 import type { InvocationOutputReceiver } from '../../output/contract.js';
@@ -50,7 +51,7 @@ export class RuntimeInvocationBuilder {
     if (request.restore) {
       if (!request.work.checkpoint) throw new Error('Checkpoint declaration is missing');
       const frame = request.restore.head.image.frame;
-      context.installCheckpoint({ id: frame.owner.contextId, round: frame.round, currentInput: request.work.checkpoint.input.decode(frame.currentInput) });
+      context.installCheckpoint({ id: frame.owner.contextId, round: frame.round, currentInput: request.work.checkpoint.input.decode(frame.currentInput), continuation: restoreCheckpointContinuation(frame) });
     }
     const identity = { contextId: context.id, level: 'runtime' as const };
     const recovering = !!request.restore;

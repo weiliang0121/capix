@@ -15,26 +15,26 @@ function assemble(child, execute) {
 test('parent acceptance receives the exact delivery of the selected child, independently of acceptance order', async () => {
   const first = { value: 1 };
   const second = { value: 2 };
-  const child = operation((context) => context.currentInput);
-  const runtime = assemble(child, async (_context, parent, children) => {
-    const firstCall = children.get(child).create(parent, first);
-    const secondCall = children.get(child).create(parent, second);
+  const child = operation((work) => work.input);
+  const runtime = assemble(child, async (work) => {
+    const firstCall = work.children.create(child, first);
+    const secondCall = work.children.create(child, second);
     await firstCall.run();
     await secondCall.run();
-    const secondAccepted = await children.accept(secondCall, async (delivered) => {
+    const secondAccepted = await secondCall.accept(async (delivered) => {
       assert.equal(delivered, second);
-      assert.equal(parent.children.get(secondCall).reception.status, 'receiving');
+      assert.equal(work.children.facts.get(secondCall.ref).reception.status, 'receiving');
       await Promise.resolve();
       return { accepted: delivered.value * 10 };
     });
-    const firstAccepted = await children.accept(firstCall, (delivered) => {
+    const firstAccepted = await firstCall.accept((delivered) => {
       assert.equal(delivered, first);
       return { accepted: delivered.value * 10 };
     });
-    assert.equal(parent.children.get(firstCall).returned.output, first);
-    assert.equal(parent.children.get(secondCall).returned.output, second);
-    assert.equal(parent.children.get(firstCall).reception.output, firstAccepted);
-    assert.equal(parent.children.get(secondCall).reception.output, secondAccepted);
+    assert.equal(work.children.facts.get(firstCall.ref).returned.output, first);
+    assert.equal(work.children.facts.get(secondCall.ref).returned.output, second);
+    assert.equal(work.children.facts.get(firstCall.ref).reception.value, firstAccepted);
+    assert.equal(work.children.facts.get(secondCall.ref).reception.value, secondAccepted);
     return [firstAccepted, secondAccepted];
   });
   assert.deepEqual(await runtime.run(null, {}), [{ accepted: 10 }, { accepted: 20 }]);
@@ -42,14 +42,14 @@ test('parent acceptance receives the exact delivery of the selected child, indep
 
 test('parent acceptance rejects a child that has not returned without invoking the receiver', async () => {
   const child = operation(() => assert.fail('child must remain unstarted'));
-  const runtime = assemble(child, async (_context, parent, children) => {
-    const call = children.get(child).create(parent, null);
+  const runtime = assemble(child, async (work) => {
+    const call = work.children.create(child, null);
     await assert.rejects(
-      children.accept(call, () => assert.fail('no delivery')),
+      call.accept(() => assert.fail('no delivery')),
       /has not returned successfully/,
     );
-    assert.equal(parent.children.get(call).returned, undefined);
-    assert.equal(parent.children.get(call).reception.status, 'pending');
+    assert.equal(work.children.facts.get(call.ref).returned, undefined);
+    assert.equal(work.children.facts.get(call.ref).reception.status, 'pending');
   });
   await assert.rejects(runtime.run(null, {}), /has not returned successfully/);
 });
@@ -57,16 +57,17 @@ test('parent acceptance rejects a child that has not returned without invoking t
 test('parent acceptance cannot consume another parent invocation child', async () => {
   const child = operation(() => 'delivered');
   let retained;
-  const owner = assemble(child, async (_context, parent, children) => {
-    retained = children.get(child).create(parent, null);
-    await retained.run();
-    return children.accept(retained, (delivered) => delivered);
+  const owner = assemble(child, async (work) => {
+    const call = work.children.create(child, null);
+    retained = call.ref;
+    await call.run();
+    return call.accept();
   });
   assert.equal(await owner.run(null, {}), 'delivered');
-  const other = assemble(child, async (_context, _parent, children) => {
-    return children.accept(retained, () => assert.fail('foreign delivery'));
+  const other = assemble(child, async (work) => {
+    return work.children.open(retained).accept(() => assert.fail('foreign delivery'));
   });
-  await assert.rejects(other.run(null, {}), /not a child created through this binding/);
+  await assert.rejects(other.run(null, {}), /foreign child reference/);
 });
 
 test('failed child delivery cannot be accepted after the parent catches its rejection', async () => {
@@ -74,15 +75,15 @@ test('failed child delivery cannot be accepted after the parent catches its reje
   const child = operation(() => {
     throw failure;
   });
-  const runtime = assemble(child, async (_context, parent, children) => {
-    const call = children.get(child).create(parent, null);
+  const runtime = assemble(child, async (work) => {
+    const call = work.children.create(child, null);
     await assert.rejects(call.run(), (error) => error === failure);
     await assert.rejects(
-      children.accept(call, () => assert.fail('failed delivery')),
+      call.accept(() => assert.fail('failed delivery')),
       (error) => error === failure,
     );
-    assert.equal(parent.children.get(call).returned.status, 'failed');
-    assert.equal(parent.children.get(call).reception.status, 'pending');
+    assert.equal(work.children.facts.get(call.ref).returned.status, 'failed');
+    assert.equal(work.children.facts.get(call.ref).reception.status, 'pending');
   });
   await assert.rejects(runtime.run(null, {}), (error) => error === failure);
 });
@@ -91,19 +92,19 @@ test('a successful delivery enters parent acceptance only once', async () => {
   const delivery = { value: 1 };
   const child = operation(() => delivery);
   let received = 0;
-  const runtime = assemble(child, async (_context, parent, children) => {
-    const call = children.get(child).create(parent, null);
+  const runtime = assemble(child, async (work) => {
+    const call = work.children.create(child, null);
     await call.run();
-    const output = await children.accept(call, (delivered) => {
+    const output = await call.accept((delivered) => {
       received++;
       assert.equal(delivered, delivery);
       return delivered.value;
     });
     await assert.rejects(
-      children.accept(call, () => received++),
+      call.accept(() => received++),
       /already entered acceptance/,
     );
-    assert.deepEqual(parent.children.get(call).reception, { status: 'accepted', output });
+    assert.deepEqual(work.children.facts.get(call.ref).reception, { status: 'accepted', value: output });
   });
   await assert.rejects(runtime.run(null, {}), /already entered acceptance/);
   assert.equal(received, 1);

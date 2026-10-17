@@ -1,28 +1,28 @@
-import type { ChildDefinition } from '../../definition/children.js';
-import type { InvocationTarget } from '../../invocation/relation.js';
-import type { InvocationView } from '../../invocation/view.js';
+import type { ChildCalls, ChildDefinition, ResumeChildCalls } from '../../definition/children.js';
 import type { BoundChildren } from './bound.js';
 import { InvocationChildBindings, type ChildBindingsParent } from './binding.js';
-import type { ChildBindings } from './contract.js';
+import { InvocationChildReferences } from './references.js';
 
 export interface ChildBindingsBuildOptions {
-  readonly view: InvocationView;
   readonly uses?: readonly ChildDefinition[];
-  readonly validate?: () => void;
-  /** One registry per parent invocation, shared by all of its phase bindings. */
-  readonly calls: Map<InvocationView, InvocationTarget>;
+  readonly validate: () => void;
+  readonly references: InvocationChildReferences;
+  readonly restoring?: boolean;
 }
 
-/** Resolve the allowed structures and wire one invocation phase without initializing children. */
+/** Resolve phase authority without initializing the reusable child structures. */
 export class ChildBindingsBuilder {
-  constructor(private readonly children: BoundChildren) {}
+  constructor(readonly children: BoundChildren) {}
 
-  build(parent: ChildBindingsParent, options: ChildBindingsBuildOptions): ChildBindings {
+  references(parent: ChildBindingsParent): InvocationChildReferences {
+    return new InvocationChildReferences(parent, this.children);
+  }
+
+  build(parent: ChildBindingsParent, options: ChildBindingsBuildOptions): ChildCalls | ResumeChildCalls {
     try {
       const definitions = options.uses ?? this.children.definitions();
       this.children.checkUses(definitions);
-      const allowed = new Set(definitions);
-      return new InvocationChildBindings({ children: this.children, parent, view: options.view, allowed, validate: options.validate, calls: options.calls });
+      return new InvocationChildBindings({ children: this.children, parent, allowed: new Set(definitions), validate: options.validate, references: options.references, restoring: options.restoring ?? false }).port;
     } catch (error) {
       parent.reject(error);
       throw error;

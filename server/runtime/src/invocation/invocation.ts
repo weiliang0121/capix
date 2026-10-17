@@ -23,6 +23,7 @@ import { InvocationCycle } from './cycle.js';
 import { connectInvocationWork, type InvocationWork } from './work.js';
 import { ProgressChannel, type ProgressReceiver } from '../progress.js';
 import type { InvocationProgress } from './progress.js';
+import type { InvocationExceptionOrigin, InvocationPropagationScope } from './provenance.js';
 
 /** Synchronous setup after validation, before progress, observation and work. Throws stop the call unchanged. */
 export type InvocationStarted<Input, Output, Context extends InvocationContext<Input, Output>> = (context: Context, invocation: Invocation<Input, Output, Context>) => void;
@@ -67,6 +68,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   readonly view: InvocationView<Input, Output, ContextFactsOf<Context>>;
   readonly callView: ChildInvocationView<Input, Output, ContextFactsOf<Context>>;
   readonly #parentRelation?: InvocationRelation;
+  #parentDeliveryScope?: InvocationPropagationScope;
 
   constructor(private readonly options: InvocationOptions<Input, Output, Context>) {
     this.#clock = options.clock ?? new Clock();
@@ -80,6 +82,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       },
       () => this.requireActive(),
       (relation, change) => this.publishRelation(relation, change),
+      (error, origin) => this.classify(error, this.context.progress.phase, false, origin),
     );
     this.origin = Object.freeze({ contextId: options.context.id });
     const context = invocationContextView(options.context);
@@ -110,7 +113,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
         signal: options.signal,
         validate: options.validate,
         output: options.output,
-        process: (process) => this.publish({ kind: 'process', process, processSequence: this.nextSequence(), round: options.context.progress.round }),
+        process: (process, round = options.context.progress.round) => this.publish({ kind: 'process', process, processSequence: this.nextSequence(), round }),
       },
     );
     this.#checkpoint = options.checkpoints ? new InvocationCheckpoint(this, options.checkpoints, options.work.checkpoint, options.signal, options.restore) : undefined;
@@ -131,6 +134,10 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   get failure(): InvocationFailure | undefined {
     return this.#failure;
+  }
+
+  get exceptionOrigin(): InvocationExceptionOrigin | undefined {
+    return this.#cycle.exceptionFailure?.origin;
   }
 
   get outputWriter(): InvocationOutputWriter<unknown> {
@@ -168,6 +175,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       throw error;
     }
     this.#started = true;
+    this.#parentDeliveryScope = this.options.parent?.invocation.children.captureDelivery();
     try {
       this.#checkpoint?.begin();
       const output = await this.runWork();
@@ -209,7 +217,12 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   private failWork(error: unknown): never {
     const context = this.context;
-    const failure = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.round ? context.progress.phase : 'setup', true);
+    // A handler may inspect or reject repair children before declining its original
+    // exception. That handled failure remains authoritative; a later diagnostic
+    // classification does not replace it, while structural faults remain sticky.
+    const handled = this.#cycle.exceptionFailure;
+    const failure = this.#fault ?? (handled && handled.error === error ? handled : this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.round ? context.progress.phase : 'setup', true));
+    this.#classified = failure;
     const delivered = error instanceof AggregateError ? error : failure.error;
     this.#cycle.discardOutput('failed');
     context.fail(delivered, Object.freeze({ ...failure, error: delivered, ...(error instanceof AggregateError ? { kind: 'error' as const } : {}) }));
@@ -232,7 +245,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     this.#failure = Object.freeze({ ...classified, ...(delivered instanceof AggregateError ? { kind: 'error' as const } : {}), error: delivered });
     if (this.context.status === 'running') this.context.fail(delivered, this.#failure);
     this.#parentRelation?.returnedWith({ status: 'failed', error: delivered, failure: this.#failure });
-    throw delivered;
+    throw this.#parentRelation && this.#parentDeliveryScope ? this.options.parent!.invocation.children.deliverReturn(this.#parentRelation, delivered, this.#failure, this.#parentDeliveryScope) : delivered;
   }
 
   requireHealthy(): void {
@@ -251,29 +264,36 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     this.classify(error, this.context.progress.phase, !allowException);
   }
 
-  classify(error: unknown, phase: InvocationPhase, forceError = false): InvocationFailure {
+  classify(error: unknown, phase: InvocationPhase, forceError = false, origin?: InvocationExceptionOrigin): InvocationFailure {
     if (this.#fault) {
       // A structural report can add a second cause; retain it without allowing
       // caught business code to replace an already-owned failure.
       if (error instanceof AggregateError && (error.errors.includes(this.#fault.error) || error.cause === this.#fault.error)) this.#fault = Object.freeze({ ...this.#fault, error });
       return this.#fault;
     }
-    if (!forceError && this.#classified && this.#classified.error === error) return this.#classified;
-    const declared = !forceError && error instanceof DeclaredException;
-    const delivered = this.children.values().some((relation) => relation.returned?.status === 'failed' && relation.returned.error === error && relation.returned.failure?.kind === 'exception');
-    const allowed = declared && (this.options.work.raises?.includes(error.contract) || delivered);
-    const actual = forceError && error instanceof DeclaredException ? new InvocationStopped(phase === 'handling' ? 'EXCEPTION_HANDLER_FAILED' : 'INVOCATION_FAILED', '结构处理抛出的异常不能再次进入业务处理。', undefined, { cause: error }) : declared && !allowed ? new InvocationStopped('UNDECLARED_EXCEPTION', '工作产生了未声明的异常。', { contract: error.contract.name }, { cause: error }) : error;
-    const failure: InvocationFailure = Object.freeze({ kind: allowed ? 'exception' : 'error', phase, contextId: this.context.id, ...(allowed ? { contract: error.contract.name } : {}), error: actual });
+    let propagation;
+    try {
+      propagation = this.children.resolveDelivery(error);
+    } catch (invalid) {
+      error = invalid;
+      forceError = true;
+    }
+    const exception = propagation?.exception ?? error;
+    const declared = !forceError && exception instanceof DeclaredException;
+    const allowed = declared && (!!propagation || this.options.work.raises?.includes(exception.contract));
+    const actual = forceError && exception instanceof DeclaredException ? new InvocationStopped(phase === 'handling' ? 'EXCEPTION_HANDLER_FAILED' : 'INVOCATION_FAILED', '结构处理抛出的异常不能再次进入业务处理。', undefined, { cause: exception }) : declared && !allowed ? new InvocationStopped('UNDECLARED_EXCEPTION', '工作产生了未声明的异常。', { contract: exception.contract.name }, { cause: exception }) : exception;
+    const source = propagation?.origin ?? origin ?? Object.freeze({ kind: 'self' as const, phase: phase === 'receive' ? ('accept' as const) : ('execute' as const) });
+    const failure: InvocationFailure = Object.freeze({ kind: allowed ? 'exception' : 'error', phase, contextId: this.context.id, ...(allowed ? { contract: exception.contract.name, origin: source } : {}), error: actual });
     this.#classified = failure;
     if (failure.kind === 'error') this.#fault = failure;
     return failure;
   }
 
-  restoreChild(binding: CheckpointBinding, contextId: string, create: () => InvocationTarget): InvocationTarget {
+  restoreChild(position: number, contextId: string, create: () => InvocationTarget): InvocationTarget {
     try {
       this.requireActive();
       if (!this.#checkpoint) throw new Error('Child continuation requires a restored parent');
-      return this.#checkpoint.restoreChild(binding, contextId, create);
+      return this.#checkpoint.restoreChild(position, contextId, create);
     } catch (error) {
       this.#checkpoint?.reportFailure('restore', error, contextId);
       this.reject(error);

@@ -20,6 +20,7 @@ export function checkpointTarget(child: CheckpointChild, binding?: CheckpointBin
   const run = async () => {
     if (child.state.kind === 'failed') throw new Error('Historical failed child cannot execute or deliver again');
     if (child.state.kind !== 'returned') throw new Error('Saved child has no final delivery; explicitly resume its declared checkpoint');
+    if (child.state.reception.kind === 'failed') throw new Error('Historical failed reception cannot execute or deliver again');
     return output;
   };
   const view = Object.freeze({

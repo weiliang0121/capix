@@ -24,26 +24,26 @@ test('peer declarations share fixed supplies but have separate aliases and phase
     raises = [rejected];
     run = {
       requires: { value: shared.request() },
-      execute(context) {
-        assert.deepEqual(Object.keys(context.resources.values), ['value']);
-        assert.equal(context.resources.values.value.read(), 7);
-        if (context.progress.round === 1) {
+      execute(work) {
+        assert.deepEqual(Object.keys(work.resources), ['value']);
+        assert.equal(work.resources.value.read(), 7);
+        if (work.round === 1) {
           assert.equal(late, 0);
           throw rejected.create('expected', { at: 1 });
         }
-        return context.currentInput;
+        return work.input;
       },
     };
     maxRounds = 2;
     exceptions = {
       requires: { recovered: shared.request(), late: recovery.request() },
       accepts: [rejected],
-      handle(context, exception) {
-        assert.equal(exception.contract, rejected);
-        assert.deepEqual(Object.keys(context.resources.values), ['recovered', 'late']);
-        assert.equal(context.resources.values.recovered.read(), 7);
-        assert.equal(context.resources.values.late.read(), 9);
-        return { kind: 'continue', input: context.currentInput + 1, reason: 'resolved' };
+      handle(work) {
+        assert.equal(work.exception.contract, rejected);
+        assert.deepEqual(Object.keys(work.resources), ['recovered', 'late']);
+        assert.equal(work.resources.recovered.read(), 7);
+        assert.equal(work.resources.late.read(), 9);
+        return work.continue(work.input + 1, 'resolved');
       },
     };
   }
@@ -112,7 +112,7 @@ test('a caught child error blocks later child entry admission and reception work
   }
   const good = new Good();
   const bad = new Bad();
-  const entry = new InvocationEntry(good, (_parent, input) => {
+  const entry = new InvocationEntry(good, ({ input }) => {
     entryEffects++;
     return input;
   });
@@ -120,16 +120,16 @@ test('a caught child error blocks later child entry admission and reception work
     children = [good, bad];
     run = {
       requires: {},
-      async execute(_context, invocation, children) {
-        const completed = children.get(good).create(invocation, null);
+      async execute(work) {
+        const completed = work.children.create(good, null);
         assert.equal(await completed.run(), 'done');
-        await assert.rejects(children.get(bad).call(invocation, null), (error) => error === failure);
+        await assert.rejects(work.children.create(bad, null).run(), (error) => error === failure);
         assert.throws(
-          () => children.entry(entry).create(invocation, null),
+          () => work.children.entry(entry, null),
           (error) => error === failure,
         );
         await assert.rejects(
-          children.accept(completed, () => {
+          completed.accept(() => {
             receptionEffects++;
             return 'accepted';
           }),
@@ -151,17 +151,17 @@ test('retained work endpoints cannot be used during exception handling even if i
     raises = [rejected];
     run = {
       requires: { value: resource.request() },
-      execute(context) {
-        saved = context.resources.values.value;
+      execute(work) {
+        saved = work.resources.value;
         throw rejected.create('expected', null);
       },
     };
     exceptions = {
       requires: {},
       accepts: [rejected],
-      handle() {
+      handle(work) {
         assert.throws(() => saved.read(), /inactive declaration phase/);
-        return { kind: 'return', output: 'not allowed' };
+        return work.return('not allowed');
       },
     };
   }
@@ -190,9 +190,9 @@ test('child use grants are separate for run and handler, and invalid ownership f
     exceptions = {
       requires: {},
       accepts: [rejected],
-      handle(_context, _exception, _invocation, children) {
-        children.get(child);
-        return { kind: 'return', output: 'not allowed' };
+      handle(work) {
+        work.children.create(child, null);
+        return work.return('not allowed');
       },
     };
   }
@@ -210,8 +210,8 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
   class Main extends ExecutionDefinition {
     run = {
       requires: {},
-      execute(context) {
-        assert.equal(context.currentInput, input);
+      execute(work) {
+        assert.equal(work.input, input);
         return output;
       },
     };
@@ -260,7 +260,7 @@ test('exception content can perform declared child work using only its granted r
     name = 'repair';
     label = 'repair';
     source = 'test';
-    run = { requires: { value: resource.request() }, execute: (context) => context.resources.values.value };
+    run = { requires: { value: resource.request() }, execute: (work) => work.resources.value };
   }
   const child = new Repair();
   class Main extends ExecutionDefinition {
@@ -277,8 +277,10 @@ test('exception content can perform declared child work using only its granted r
       requires: { repair: resource.request() },
       uses: [child],
       accepts: [rejected],
-      async handle(_context, _exception, invocation, children) {
-        return { kind: 'return', output: await children.get(child).call(invocation, null) };
+      async handle(work) {
+        const call = work.children.create(child, null);
+        await call.run();
+        return work.return(await call.accept());
       },
     };
   }
@@ -312,10 +314,10 @@ test('handler resource failure exits as an error without repeating work or handl
     exceptions = {
       requires: { repair: resource.request() },
       accepts: [rejected],
-      handle(context) {
+      handle(work) {
         handlings++;
-        context.resources.values.repair;
-        return { kind: 'continue', input: null, reason: 'impossible' };
+        work.resources.repair;
+        return work.continue(null, 'impossible');
       },
     };
   }
@@ -354,13 +356,13 @@ for (const position of ['capture', 'expose']) {
     );
     class Main extends ExecutionDefinition {
       raises = [rejected];
-      run = { requires: { value: resource.request() }, execute: (context) => context.resources.values.value };
+      run = { requires: { value: resource.request() }, execute: (work) => work.resources.value };
       exceptions = {
         requires: {},
         accepts: [rejected],
-        handle: () => {
+        handle: (work) => {
           handled++;
-          return { kind: 'return', output: 'incorrect' };
+          return work.return('incorrect');
         },
       };
     }

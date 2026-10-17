@@ -1,5 +1,6 @@
+import { z } from 'zod';
 import { invocationRecording } from '@capix/server-runtime/recording';
-import { RuntimeDefinition, type RuntimeContextView, type InvocationWorkView, type ChildBindings, type InvocationCheckpointDefinition } from '@capix/server-runtime';
+import { RuntimeDefinition, checkpointPoint, childReference, type RuntimeWork } from '@capix/server-runtime';
 import type { GenerationOutput } from '@capix/protocol';
 import { SelectHistoryDefinition } from './operations/history/select.js';
 import { GenerateAnswerDefinition } from './operations/answer/generate.js';
@@ -10,7 +11,7 @@ import { DefaultConversationDecisionDefinition } from './decision/default.js';
 import type { ConversationDecisionDefinition } from './decision/types.js';
 import { CheckFileTaskDefinition } from './operations/preflight/check.js';
 import { ConversationExecutionDefinition, type ConversationOperationDefinitions } from './execution.js';
-import { checkpointCodec, checkpointChild, conversationCheckpointInput, conversationCheckpointOutput } from './checkpoint.js';
+import { checkpointCodec, conversationCheckpointInput, conversationCheckpointOutput } from './checkpoint.js';
 
 export interface ConversationDefinitionOptions {
   readonly files?: boolean;
@@ -25,37 +26,33 @@ export class ConversationRuntimeDefinition extends RuntimeDefinition<unknown, Ge
   readonly children;
   readonly filesEnabled;
   readonly customDecision;
-  readonly checkpoint: InvocationCheckpointDefinition<unknown, GenerationOutput, RuntimeContextView<unknown, GenerationOutput>>;
+  readonly checkpoint;
+  readonly executionWaiting;
   constructor(options: ConversationDefinitionOptions = {}) {
     super();
     this.filesEnabled = Boolean(options.files);
     this.customDecision = options.decision !== undefined;
     this.executionDefinition = createConversationExecution(options);
     this.children = [this.executionDefinition];
-    this.checkpoint = {
-      key: 'observer.conversation.runtime',
-      version: 1,
-      input: conversationCheckpointInput,
-      output: conversationCheckpointOutput,
-      points: {
-        executionWaiting: {
-          state: checkpointCodec(checkpointChild),
-          check: (frame, state) => {
-            const child = frame.children[0];
-            if (frame.children.length !== 1 || !child || child.identity.contextId !== state.childId || child.key !== 'conversation' || child.contract?.key !== 'observer.conversation.execution') throw new Error('Conversation checkpoint must identify its direct execution');
-          },
-          resume: {
-            requires: {},
-            uses: this.children,
-            execute: async (_context, invocation, children, state) => {
-              const child = children.get(this.executionDefinition).resume(invocation, state.childId);
-              await child.run();
-              return children.accept(child, (delivered) => delivered);
-            },
-          },
+    this.executionWaiting = checkpointPoint<'runtime', unknown, GenerationOutput>()({
+      name: 'executionWaiting',
+      state: checkpointCodec(z.strictObject({})),
+      references: { execution: childReference(this.executionDefinition) },
+      check: (_state, facts) => {
+        const child = facts.references.execution;
+        if (facts.children.values().length !== 1 || child.key !== 'conversation') throw new Error('Conversation checkpoint must identify its direct execution');
+      },
+      resume: {
+        requires: {},
+        uses: this.children,
+        execute: async (work, _state, saved) => {
+          const child = work.children.resume(saved.execution);
+          await child.run();
+          return child.accept();
         },
       },
-    };
+    });
+    this.checkpoint = { key: 'observer.conversation.runtime', version: 2, input: conversationCheckpointInput, output: conversationCheckpointOutput, points: [this.executionWaiting] };
     this.run = {
       requires: {},
       uses: this.children,
@@ -63,11 +60,11 @@ export class ConversationRuntimeDefinition extends RuntimeDefinition<unknown, Ge
     };
   }
   readonly run;
-  private async execute(context: RuntimeContextView<unknown, GenerationOutput>, invocation: InvocationWorkView<unknown, GenerationOutput, RuntimeContextView<unknown, GenerationOutput>>, children: ChildBindings): Promise<GenerationOutput> {
-    const child = children.get(this.executionDefinition).create(invocation, context.currentInput, { key: 'conversation' });
-    invocation.checkpoint?.save('executionWaiting', { childId: child.context.id });
+  private async execute(work: RuntimeWork<unknown, GenerationOutput>): Promise<GenerationOutput> {
+    const child = work.children.create(this.executionDefinition, work.input, { key: 'conversation' });
+    work.checkpoint?.save(this.executionWaiting, {}, { execution: child.ref });
     await child.run();
-    return children.accept(child, (delivered) => delivered);
+    return child.accept();
   }
 }
 

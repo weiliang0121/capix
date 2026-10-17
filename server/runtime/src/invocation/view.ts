@@ -1,5 +1,3 @@
-import type { CheckpointWriter } from '../checkpoint/contract.js';
-import type { InvocationOutputWriter } from '../output/contract.js';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationContextView } from '../context/view.js';
 import type { InvocationResult } from './result.js';
@@ -28,12 +26,6 @@ export interface ChildInvocationView<Input = unknown, Output = unknown, ContextV
   run(): Promise<Output>;
 }
 
-/** Only execute receives a writer; relation and acceptance views retain read-only call facts. */
-export interface InvocationWorkView<Input = unknown, Output = unknown, ContextView extends InvocationContextView<Input, Output> = InvocationContextView<Input, Output>, Delta = never> extends InvocationView<Input, Output, ContextView> {
-  readonly output: InvocationOutputWriter<Delta>;
-  readonly checkpoint?: CheckpointWriter;
-}
-
 /** Read-only call facts; constructing a view never requires the live Invocation. */
 export type InvocationViewSource = Pick<InvocationView, 'origin' | 'sequence' | 'failure' | 'children'>;
 type ContextOutput<Context extends InvocationContextView<any, any>> = Extract<Context['state'], { status: 'succeeded' }>['output'];
@@ -58,8 +50,4 @@ export function invocationView<Context extends InvocationContextView<any, any>>(
 
 export function childInvocationView<Context extends InvocationContextView<any, any>>(source: InvocationViewSource, context: Context, run: () => Promise<ContextOutput<Context>>): ChildInvocationView<Context['input'], ContextOutput<Context>, Context> {
   return Object.freeze(Object.assign(viewProperties(source, context), { run }));
-}
-
-export function invocationWorkView<Context extends InvocationContextView<any, any>, Delta>(source: InvocationViewSource, context: Context, writers: { readonly output: InvocationOutputWriter<Delta>; readonly checkpoint?: CheckpointWriter }): InvocationWorkView<Context['input'], ContextOutput<Context>, Context, Delta> {
-  return Object.freeze(Object.assign(viewProperties(source, context), writers));
 }

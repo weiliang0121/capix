@@ -5,6 +5,8 @@ import type { InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
 import { InvocationRelation, type InvocationRelationOptions, type InvocationTarget, type InvocationRelationBaseline, type InvocationRelationOwner, type InvocationRelationSetup } from './relation.js';
 import type { InvocationProgress } from './progress.js';
+import { DeclaredException } from '../exception/contract.js';
+import { InvocationProvenance, type InvocationPropagationScope, type InvocationExceptionOrigin } from './provenance.js';
 
 export interface ParentInvocation {
   readonly context: InvocationContext;
@@ -27,12 +29,15 @@ export class InvocationChildren implements InvocationRelationOwner {
   #nextOrder = 0;
   #receptions?: AsyncLocalStorage<{ childContextId: string; active: boolean }>;
   readonly view: InvocationView['children'];
+  readonly #provenance: InvocationProvenance;
   constructor(
     private readonly context: InvocationContext,
     private readonly failed?: (failure: InvocationFailure) => void,
     private readonly validate?: () => void,
     private readonly observe?: (identity: InvocationRelationIdentity, change: InvocationRelationChange) => unknown | undefined,
+    private readonly classifyFailure?: (error: unknown, origin: InvocationExceptionOrigin) => InvocationFailure,
   ) {
+    this.#provenance = new InvocationProvenance(context);
     this.view = Object.freeze({
       get: (invocation: InvocationView) => {
         const relation = this.values().find((item) => item.invocation.view === invocation || item.invocation.callView === invocation);
@@ -45,6 +50,32 @@ export class InvocationChildren implements InvocationRelationOwner {
       },
       values: () => Object.freeze(this.values().map((relation) => relation.view)),
     });
+  }
+  captureDelivery(): InvocationPropagationScope {
+    return this.#provenance.capture();
+  }
+  resolveDelivery(error: unknown) {
+    return this.#provenance.resolve(error);
+  }
+  private origin(relation: InvocationRelation, kind: 'child-return' | 'child-reception'): InvocationExceptionOrigin {
+    return Object.freeze({ kind, child: Object.freeze({ parentContextId: this.context.id, childContextId: relation.invocation.context.id, parentRound: relation.round, order: relation.order }) });
+  }
+  deliverReturn(relation: InvocationRelation, error: unknown, failure: InvocationFailure, scope: InvocationPropagationScope): unknown {
+    return failure.kind === 'exception' && error instanceof DeclaredException ? this.#provenance.deliver(scope, error, this.origin(relation, 'child-return')) : error;
+  }
+  receptionFailure(relation: InvocationRelation, error: unknown, scope: InvocationPropagationScope): { error: unknown; failure: InvocationFailure; delivery: unknown } {
+    let delivered = error;
+    try {
+      this.#provenance.require(scope, error);
+      this.#provenance.resolve(error);
+    } catch (invalid) {
+      delivered = invalid;
+    }
+    const origin = this.origin(relation, 'child-reception');
+    const failure = this.classifyFailure?.(delivered, origin) ?? Object.freeze({ kind: 'error' as const, contextId: this.context.id, phase: this.context.progress.phase, error: delivered });
+    if (failure.kind !== 'exception' || !(failure.error instanceof DeclaredException)) return { error: failure.error, failure, delivery: failure.error };
+    const propagated = this.#provenance.resolve(delivered);
+    return { error: failure.error, failure, delivery: propagated ? delivered : this.#provenance.deliver(scope, failure.error, origin) };
   }
   get reception(): Readonly<{ parentContextId: string; childContextId: string }> {
     this.requireHealthy();
@@ -65,8 +96,8 @@ export class InvocationChildren implements InvocationRelationOwner {
     const identity = Object.freeze({ parentContextId: this.context.id, childContextId: relation.invocation.context.id, parentRound: relation.round, ...(relation.key ? { key: relation.key } : {}) });
     return this.observe?.(identity, change);
   }
-  private relation<Output>(target: InvocationTarget<Output>, round: number, order: number, key?: string): InvocationRelation<Output> {
-    return new InvocationRelation({ target, round, order, key }, this);
+  private relation<Output>(target: InvocationTarget<Output>, round: number, order: number, key?: string, declarationPosition?: number): InvocationRelation<Output> {
+    return new InvocationRelation({ target, round, order, key, declarationPosition }, this);
   }
   async receive<Value>(relation: InvocationRelation, work: () => Promise<Value>): Promise<Value> {
     const childContextId = relation.invocation.context.id;
@@ -82,7 +113,7 @@ export class InvocationChildren implements InvocationRelationOwner {
     this.context.requireRunning();
     this.requireHealthy();
     if (this.#items.has(target.context.id)) throw new Error('Child invocation is already attached');
-    const relation = this.relation(target, this.context.progress.round, this.#nextOrder++, options.key);
+    const relation = this.relation(target, this.context.progress.round, this.#nextOrder++, options.key, options.declarationPosition);
     this.#items.set(target.context.id, relation);
     this.publish(relation, { kind: 'attached' });
     this.requireHealthy();
@@ -114,7 +145,7 @@ export class InvocationChildren implements InvocationRelationOwner {
     if (this.#items.size || this.#nextOrder) throw new Error('Child baseline already installed');
     this.#nextOrder = nextOrder;
     for (const child of children) {
-      const relation = this.relation(child.target, child.round, child.order, child.key);
+      const relation = this.relation(child.target, child.round, child.order, child.key, child.declarationPosition);
       relation.install(child.target, child.state);
       this.#items.set(child.target.context.id, relation);
       this.#installed.add(child.target.context.id);

@@ -5,7 +5,7 @@ import { RuntimeDefinition, ExecutionDefinition, OperationDefinition, ResourceOf
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 
 function checkpoint(key, execute, requires = {}, uses = []) {
-  return { key, version: 1, input: codec, output: codec, points: { saved: { state: codec, resume: { requires, uses, execute } } } };
+  return { key, version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { requires, uses, execute } }] };
 }
 
 function head(key, contextId, level, state, children = [], parentContextId) {
@@ -13,11 +13,12 @@ function head(key, contextId, level, state, children = [], parentContextId) {
     revision: 1,
     image: {
       id: `checkpoint-${contextId}`,
-      formatVersion: 1,
+      formatVersion: 2,
       contract: { key, version: 1 },
       point: 'saved',
       frame: { owner: { contextId, level, ...(parentContextId ? { parentContextId } : {}) }, round: 1, phase: 'execute', input: { original: contextId }, currentInput: { original: contextId }, nextChildOrder: children.length, children },
       state,
+      references: {},
     },
   };
 }
@@ -51,9 +52,9 @@ test('checkpoint declarations do not change normal execution when persistence is
     checkpoint = checkpoint('test.optional', () => assert.fail('not resuming'));
     run = {
       requires: {},
-      execute(context, invocation) {
-        assert.equal(invocation.checkpoint, undefined);
-        return context.input;
+      execute(work) {
+        assert.equal(work.checkpoint, undefined);
+        return work.initialInput;
       },
     };
   }
@@ -77,13 +78,12 @@ test('a checkpoint continuation exposes only its declared resources, and install
   class Root extends RuntimeDefinition {
     checkpoint = checkpoint(
       'test.resources',
-      (context, invocation, children, state) => {
-        assert.equal(context.id, 'root-1');
-        assert.equal(context.progress.round, 1);
-        assert.deepEqual(context.input, { original: 'root-1' });
-        assert.deepEqual(Object.keys(context.resources.values), ['continuation']);
-        assert.equal(context.resources.values.continuation.read(), 7);
-        assert.equal(invocation.origin.contextId, context.id);
+      (work, state) => {
+        assert.equal('id' in work, false);
+        assert.equal(work.round, 1);
+        assert.deepEqual(work.initialInput, { original: 'root-1' });
+        assert.deepEqual(Object.keys(work.resources), ['continuation']);
+        assert.equal(work.resources.continuation.read(), 7);
         return state.answer;
       },
       { continuation: continuation.request() },
@@ -106,8 +106,8 @@ test('a checkpoint continuation exposes only its declared resources, and install
 test('resuming a direct E child bypasses entry and original submission callbacks', async () => {
   let captures = 0;
   class Child extends ExecutionDefinition {
-    checkpoint = checkpoint('test.child', (context, _invocation, _children, state) => {
-      assert.deepEqual(context.input, { original: 'child-1' });
+    checkpoint = checkpoint('test.child', (work, state) => {
+      assert.deepEqual(work.initialInput, { original: 'child-1' });
       return state.answer;
     });
     entry = { requires: {}, accept: () => assert.fail('entry acceptance must not repeat'), admit: () => assert.fail('entry admission must not repeat') };
@@ -118,17 +118,17 @@ test('resuming a direct E child bypasses entry and original submission callbacks
     children = [child];
     checkpoint = checkpoint(
       'test.parent',
-      async (_context, invocation, children) => {
-        const restored = children.get(child).resume(invocation, 'child-1');
+      async (work) => {
+        const restored = work.children.resume(work.children.facts.requireUnique(child, { parentRound: 1 }).ref);
         assert.equal(await restored.run(), 'fixed response');
-        return children.accept(restored, (result) => `accepted ${result}`);
+        return restored.accept((result) => `accepted ${result}`);
       },
       {},
       [child],
     );
     run = { requires: {}, execute: () => assert.fail('parent execute must not repeat') };
   }
-  const relation = { identity: { contextId: 'child-1', level: 'execution', parentContextId: 'parent-1' }, contract: { key: 'test.child', version: 1 }, round: 1, order: 0, key: 'selected-execution', input: { original: 'child-1' }, state: { kind: 'waiting' } };
+  const relation = { target: { position: 0 }, identity: { contextId: 'child-1', level: 'execution', parentContextId: 'parent-1' }, contract: { key: 'test.child', version: 1 }, round: 1, order: 0, key: 'selected-execution', input: { original: 'child-1' }, state: { kind: 'waiting' } };
   const store = storeOf(head('test.parent', 'parent-1', 'runtime', {}, [relation]), head('test.child', 'child-1', 'execution', { answer: 'fixed response' }, [], 'parent-1'));
   const runtime = assemble(new Root(), {
     checkpoints: { store },
@@ -201,17 +201,17 @@ test('restored work and newly created descendants use the recovery observation s
   const facts = [];
   const resource = new ResourceOffer('test.checkpoint.observed', (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }));
   class Child extends ExecutionDefinition {
-    run = { requires: { value: resource.request() }, execute: (context) => context.resources.values.value.read() };
+    run = { requires: { value: resource.request() }, execute: (work) => work.resources.value.read() };
   }
   const child = new Child();
   class Root extends RuntimeDefinition {
     children = [child];
     checkpoint = checkpoint(
       'test.observation',
-      async (_context, invocation, children) => {
-        const next = children.get(child).create(invocation, {});
+      async (work) => {
+        const next = work.children.create(child, {});
         await next.run();
-        return children.accept(next, (output) => output);
+        return next.accept((output) => output);
       },
       {},
       [child],

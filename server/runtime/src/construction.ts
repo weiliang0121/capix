@@ -4,7 +4,6 @@ export * from './structure/create.js';
 export * from './structure/execution.js';
 export * from './structure/operation.js';
 export * from './structure/attempt.js';
-export * from './binding/children/contract.js';
 export * from './binding/children/bound.js';
 export * from './binding/children/builder.js';
 export * from './binding/runtime.js';
@@ -33,3 +32,10 @@ export * from './invocation/builders/attempt.js';
 export * from './invocation/children.js';
 export * from './invocation/relation.js';
 export type { InvocationCapabilities } from './invocation/capabilities.js';
+
+export * from './checkpoint/work.js';
+export * from './checkpoint/facts.js';
+export * from './checkpoint/continuation.js';
+export { inspectChildCallFailure } from './invocation/provenance.js';
+
+export { savedCheckpointFacts } from './binding/checkpoint.js';

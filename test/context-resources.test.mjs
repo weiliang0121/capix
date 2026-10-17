@@ -4,7 +4,7 @@ import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence } from '@capix/server-runtime';
+import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence, defineAttempt } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { bindConversation, ConversationRuntimeDefinition, GenerateAnswerDefinition } from '@capix/observer-service';
 
@@ -25,9 +25,9 @@ test('Observer narrows resources at each action, captures fixed values and expir
   const views = [];
   const inspect = (current) => {
     const execute = current.run.execute;
-    current.run.execute = function (context, ...args) {
-      views.push({ definition: current, resources: { ...context.resources.values } });
-      return execute.call(this, context, ...args);
+    current.run.execute = function (work) {
+      views.push({ definition: current, resources: { ...work.resources } });
+      return execute.call(this, work);
     };
     for (const child of current.children ?? []) inspect(child);
   };
@@ -183,11 +183,12 @@ test('publication supplies the access form; construction only binds the source a
 test('sequence preserves distinct offers even when children use the same alias', () => {
   const one = new ResourceOffer('one', (source) => source);
   const two = new ResourceOffer('two', (source) => source);
-  const create = () => {
+  const execute = () => {
     throw new Error('must not execute during assembly');
   };
-  const first = { requires: { value: one.request() }, create };
-  const second = { requires: { value: two.request() }, create };
+  const metadata = { name: 'test', label: 'test', source: 'test', callee: 'test' };
+  const first = defineAttempt()({ ...metadata, run: { requires: { value: one.request() }, execute } });
+  const second = defineAttempt()({ ...metadata, run: { requires: { value: two.request() }, execute } });
   const sequence = new Sequence().step('first', { use: first, input: () => null }).step('second', { use: second, input: () => null });
   assert.equal(sequence.steps[0].use, first);
   assert.equal(sequence.steps[1].use, second);
@@ -307,9 +308,9 @@ test('model offers separate creation and reading while preserving provider metho
   };
   const definition = new ConversationRuntimeDefinition();
   const execute = definition.executionDefinition.run.execute;
-  definition.executionDefinition.run.execute = function (context, ...args) {
-    const creator = context.resources.values.modelCreator;
-    const reader = context.resources.values.modelReader;
+  definition.executionDefinition.run.execute = function (work) {
+    const creator = work.resources.modelCreator;
+    const reader = work.resources.modelReader;
     assert.notEqual(creator, model);
     assert.deepEqual(Object.keys(creator), ['start']);
     assert.deepEqual(Object.keys(reader), ['subscribe', 'wait', 'result']);
@@ -317,9 +318,9 @@ test('model offers separate creation and reading while preserving provider metho
     assert.equal(reader.start, undefined);
     assert.ok(Object.isFrozen(creator));
     assert.ok(Object.isFrozen(reader));
-    assert.equal(context.settings, undefined);
-    assert.equal(context.transcriptRange, undefined);
-    return execute.call(this, context, ...args);
+    assert.equal(work.settings, undefined);
+    assert.equal(work.transcriptRange, undefined);
+    return execute.call(this, work);
   };
   const runtime = bindConversation(definition, entities, new ModelInteractions(new ModelSource(model)));
   await runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });

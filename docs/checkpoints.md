@@ -1,6 +1,6 @@
 # REOA Checkpoint 与执行恢复设计
 
-状态：2026-10-15，有限内核与 Observer 全部内置能力声明已接入 CP；支持声明边界上的宿主显式续接。第 0 节说明当前 API 与限制；其后保留设计推演，伪代码解释职责，不代替源码契约。自动恢复、旧提交交付与恢复 UI 尚未接入。
+状态：2026-10-17，有限内核与 Observer 全部内置能力声明已接入 CP；支持声明边界上的宿主显式续接。第 0 节说明当前 API 与限制；其后保留设计推演，伪代码解释职责，不代替源码契约。自动恢复、旧提交交付与恢复 UI 尚未接入。
 
 恢复的目标是：某次 REOA 工作中断后，依据已经保存的事实和声明的续接入口，继续推进该工作。重新建立 Invocation、Context 和资源访问是实现手段；不恢复原 Promise、闭包、调用栈，也不反序列化 Bound 结构。
 
@@ -12,17 +12,23 @@
 
 内核 CP 保持可选；Observer 默认给新产生的调用安装保存端口。新建对话正常聊天即可产生真实 CP，已有对话之后的新调用采用相同规则，不给过去的任务补写 CP。启动不扫描或自动继续旧 QA，没有新增 HTTP 恢复接口或界面恢复按钮。
 
-| 入口                                                             | 当前行为                                                                                                                                           |
-| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `InvocationDefinition.checkpoint`                                | 声明稳定 `key/version`、输入/输出 codec、具名 `points`；每点独立声明 `state` codec、`check(frame,state)` 和 `resume { requires, uses, execute }`。 |
-| `assembleRuntime(..., { checkpoints: { store, observation? } })` | 注入同步保存端口和可选 CP 观察者。未安装时 `invocation.checkpoint` 为 undefined，原流程不变。                                                      |
-| `invocation.checkpoint.save(point,state)`                        | 仅当前 execute 工作轮可用；固定输入、round、直接子关系与声明状态，检查后提交不可变 CP。保存失败属于结构故障。                                      |
-| `BoundRuntime.resume(contextId, options)`                        | 核对当前 head、版本和工作归属，重建本次活动与资源访问，进入声明点；遵守 R 占用边界。                                                               |
-| `children.get(definition).resume(parent, childContextId)`        | 开放子 CP 建立续接；固定成功交付提供结果视图。缺失或明确失败/取消拒绝，不退化为重新发起。                                                          |
-| `TranscriptResource.append.applyFixed({position,messages})`      | 真实子接纳中由绑定取得父子身份；实体核对固定依据并返回原凭据，重复确认不再次追加。                                                                 |
-| `MemoryResource.apply.applyFixed({position,changes})`            | 由资源端点取得当前 A 身份；整个批次与凭据同事务保存，重复确认不修改记忆或占用新顺序。                                                              |
+| 入口                                                             | 当前行为                                                                                                                                                            |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `InvocationDefinition.checkpoint`                                | 声明稳定 `key/version`、输入/输出 codec、`points` 数组；每点独立声明 name、`state` codec、引用槽位及 `check(state,facts)` 和 `resume { requires, uses, execute }`。 |
+| `assembleRuntime(..., { checkpoints: { store, observation? } })` | 注入同步保存端口和可选 CP 观察者。未安装时 `work.checkpoint` 为 undefined，原流程不变。                                                                             |
+| `work.checkpoint.save(point,state,refs)`                         | 仅当前 execute 工作轮可用；固定输入、round、直接子关系与声明状态，检查后提交不可变 CP。保存失败属于结构故障。                                                       |
+| `BoundRuntime.resume(contextId, options)`                        | 核对当前 head、版本和工作归属，重建本次活动与资源访问，进入声明点；遵守 R 占用边界。                                                                                |
+| `work.children.resume(saved.ref)`                                | 开放子 CP 建立续接；固定成功交付提供结果视图。缺失或明确失败/取消拒绝，不退化为重新发起。                                                                           |
+| `TranscriptResource.append.applyFixed({position,messages})`      | 真实子接纳中由绑定取得父子身份；实体核对固定依据并返回原凭据，重复确认不再次追加。                                                                                  |
+| `MemoryResource.apply.applyFixed({position,changes})`            | 由资源端点取得当前 A 身份；整个批次与凭据同事务保存，重复确认不修改记忆或占用新顺序。                                                                               |
 
 资源端点与 CP writer 保持 phase/round 访问窗口。直接子接纳通过私有异步范围关联固定操作，支持并行接纳；逸出已结束接纳的回调不能借用后续接纳身份。没有增加新的恢复编排器或通用 resume/run/accept 预设，声明共享自己的正常阶段函数，Invocation 仍处理父子运行机制。
+
+作者恢复点使用 `checkpointPoint<Level, Input, Output>()`，具名点通过对象注册和保存；跨进程再以所属契约和点名核验。resume 接收本阶段 Work、已解码业务 state 和准确引用槽位，正常和恢复均经相同的 child.run/accept 接缝。完整作者用法见 [定义作者契约](definition-author-contract.md)。
+
+当前格式为 **Frame v2**：完整直接子关系与业务 state/refs 分开保存，包含已接纳 continuation，以及与该继续来源精确对应的前轮已处理接纳异常诊断。子声明由父 checkpoint key/version 与去重后的固定声明位置关联，不依赖 JS 身份、key 或同名契约。新进程必须提供兼容声明；同版本任意改动业务实现不在可检测承诺内。
+
+v1 CP 明确拒绝恢复，不自动迁移或重发。Observer 内置声明已同步提升版本；历史消息、记忆和可选记录继续读取。第 1 节以后的历史推演保留当时伪代码，不作为当前作者 API。
 
 ### 0.1 内核事实与保存
 

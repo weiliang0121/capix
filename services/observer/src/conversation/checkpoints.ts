@@ -118,16 +118,17 @@ export function validateConversationCheckpointReceipt(run: ConversationCheckpoin
   if (!saved || typeof saved !== 'object' || Array.isArray(saved) || !('progress' in saved)) return;
   const progress = executionProgressSchema.parse(saved.progress);
   if (!progress.answer) return;
-  if (head.image.frame.owner.contextId !== run.executionContextId || head.image.frame.owner.parentContextId !== run.rootContextId || !progress.responseChildId || !progress.receipt) throw new RuntimeError('CHECKPOINT_CONTENT_CHANGED', '恢复的父子归属与对话不一致。');
-  const receipt = transcript.confirmFixed({ contract: { key: 'transcript.append', version: 1 }, operation: { parentContextId: run.executionContextId, childContextId: progress.responseChildId, position: 'answer' }, transcriptId: transcript.id, messages: [{ role: 'assistant', content: progress.answer.content }] });
+  const response = head.image.frame.children.find((child) => child.order === progress.responseOrder);
+  if (head.image.frame.owner.contextId !== run.executionContextId || head.image.frame.owner.parentContextId !== run.rootContextId || !response || response.identity.parentContextId !== run.executionContextId || response.state.kind !== 'returned' || response.state.reception.kind !== 'accepted' || !progress.receipt) throw new RuntimeError('CHECKPOINT_CONTENT_CHANGED', '恢复的父子归属与对话不一致。');
+  const receipt = transcript.confirmFixed({ contract: { key: 'transcript.append', version: 1 }, operation: { parentContextId: run.executionContextId, childContextId: response.identity.contextId, position: 'answer' }, transcriptId: transcript.id, messages: [{ role: 'assistant', content: progress.answer.content }] });
   if (!receipt || !isEqual(receipt, progress.receipt)) throw new RuntimeError('CHECKPOINT_CONTENT_CHANGED', '已接纳回答缺少一致的消息写入凭据。');
 }
 
 /** Cross-check host ownership against both kernel heads before binding current resources. */
 export function validateConversationCheckpointHeads(run: ConversationCheckpointRun, root: CheckpointHead | undefined, execution: CheckpointHead | undefined): void {
   const child = root?.image.frame.children[0];
-  const state = root?.image.state;
-  if (!root || !execution || root.image.frame.owner.contextId !== run.rootContextId || root.image.frame.owner.level !== 'runtime' || root.image.frame.owner.parentContextId !== undefined || root.image.frame.children.length !== 1 || child?.identity.contextId !== run.executionContextId || child.identity.parentContextId !== run.rootContextId || !state || typeof state !== 'object' || Array.isArray(state) || !('childId' in state) || state.childId !== run.executionContextId || execution.image.frame.owner.contextId !== run.executionContextId || execution.image.frame.owner.parentContextId !== run.rootContextId || execution.image.frame.owner.level !== 'execution') throw new RuntimeError('CHECKPOINT_CONTENT_CHANGED', '恢复调用身份与对话登记不一致。');
+  const reference = root?.image.references.execution;
+  if (!root || !execution || root.image.frame.owner.contextId !== run.rootContextId || root.image.frame.owner.level !== 'runtime' || root.image.frame.owner.parentContextId !== undefined || root.image.frame.children.length !== 1 || child?.identity.contextId !== run.executionContextId || child.identity.parentContextId !== run.rootContextId || !reference || !('contextId' in reference) || reference.contextId !== run.executionContextId || execution.image.frame.owner.contextId !== run.executionContextId || execution.image.frame.owner.parentContextId !== run.rootContextId || execution.image.frame.owner.level !== 'execution') throw new RuntimeError('CHECKPOINT_CONTENT_CHANGED', '恢复调用身份与对话登记不一致。');
 }
 
 /** Admit only fixed memory batches owned by this exact E subtree, never arbitrary later edits. */

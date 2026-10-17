@@ -1,13 +1,13 @@
 import { isEqual } from 'es-toolkit/predicate';
 import { cloneCheckpointValue } from '@capix/server-runtime';
-import { understandingInputCodec, childWaitingCodec, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
-import { OperationDefinition, type ChildBindings, type ChildInvocationView, type InvocationWorkView, type InvocationCheckpointDefinition, type OperationContextView } from '@capix/server-runtime';
+import { understandingInputCodec, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
+import { OperationDefinition, checkpointPoint, childReference, type OperationWork, type ChildCall } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { TranscriptResource } from '@capix/server-runtime/content';
 import { sortBy } from 'es-toolkit/array';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ConversationResources, ModelRequestResources, HistoryResources } from '../../resources.js';
-import type { ModelRequest, ModelOutput } from '../../model/types.js';
+import type { ModelRequest } from '../../model/types.js';
 import { loadRequest } from '../../model/request.js';
 import { checkCapacity, estimateCapacity } from '../../model/capacity.js';
 import { PrepareModelRequestDefinition } from '../../attempt/model/prepare.js';
@@ -34,7 +34,8 @@ export class UnderstandRequestDefinition extends OperationDefinition<RequestUnde
   static readonly requires = Object.freeze({ ...requestResources, timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
   readonly run;
   readonly children;
-  readonly checkpoint: InvocationCheckpointDefinition<RequestUnderstandingInput, RequestProposal, OperationContextView<RequestUnderstandingInput, RequestProposal, ConversationResources>>;
+  readonly checkpoint;
+  readonly points;
   private readonly filesEnabled: boolean;
   readonly prepareRequestDefinition: PrepareModelRequestDefinition<RequestUnderstandingInput, ModelRequestResources & HistoryResources>;
   readonly requestModelDefinition = new RequestModelDefinition('understanding');
@@ -46,79 +47,82 @@ export class UnderstandRequestDefinition extends OperationDefinition<RequestUnde
     this.prepareRequestDefinition = new PrepareModelRequestDefinition((input, resources) => this.createRequest(input, resources), requestResources);
     this.children = Object.freeze([this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition]);
     const proposalCodec = { encode: (value: RequestProposal) => cloneCheckpointValue(requestOutputContract.accept(value)), decode: (value: unknown) => requestOutputContract.accept(value) };
-    this.checkpoint = {
-      key: `observer.understand-request.${options.files ? 'files' : 'chat'}`,
-      version: 1,
-      input: understandingInputCodec,
-      output: proposalCodec,
-      points: {
-        requestWaiting: {
-          state: childWaitingCodec,
-          check: (frame, state) => {
-            originalCheckpoint(frame);
-            const child = waitingChild(frame, state, 'request', this.prepareRequestDefinition.checkpoint);
-            if (frame.children.length !== 1 || !isEqual(child.input, frame.currentInput)) throw new Error('Understanding preparation checkpoint changed input');
-          },
-          resume: { requires: {}, uses: this.children, execute: (_context, invocation, children, state: { childId: string }) => this.receiveRequest(invocation, children, children.get(this.prepareRequestDefinition).resume(invocation, state.childId)) },
+    const point = checkpointPoint<'operation', RequestUnderstandingInput, RequestProposal>();
+    this.points = {
+      requestWaiting: point({
+        name: 'requestWaiting',
+        state: emptyCheckpointState,
+        references: { child: childReference(this.prepareRequestDefinition) },
+        check: (_state, facts) => {
+          originalCheckpoint(facts);
+          const child = waitingChild(facts, facts.references.child, 'request');
+          if (facts.children.values().length !== 1 || !isEqual(child.input, facts.input)) throw new Error('Understanding preparation checkpoint changed input');
         },
-        acceptanceWaiting: {
-          state: childWaitingCodec,
-          check: (frame, state) => {
-            originalCheckpoint(frame);
-            const child = waitingChild(frame, state, 'acceptance', this.acceptOutputDefinition.checkpoint);
-            const model = acceptedChild(frame.children[1]);
-            if (frame.children.length !== 3 || model.key !== 'model' || !isEqual(child.input, { output: model.state.reception.output })) throw new Error('Understanding acceptance checkpoint changed feedback');
-          },
-          resume: { requires: {}, uses: [this.acceptOutputDefinition], execute: (_context, invocation, children, state: { childId: string }) => this.receiveAcceptance(invocation, children, children.get(this.acceptOutputDefinition).resume(invocation, state.childId)) },
+        resume: { uses: this.children, execute: (work, _state, saved) => this.receiveRequest(work, work.children.resume(saved.child)) },
+      }),
+      acceptanceWaiting: point({
+        name: 'acceptanceWaiting',
+        state: emptyCheckpointState,
+        references: { child: childReference(this.acceptOutputDefinition) },
+        check: (_state, facts) => {
+          originalCheckpoint(facts);
+          const child = waitingChild(facts, facts.references.child, 'acceptance');
+          const model = acceptedChild(facts.children.requireUnique(this.requestModelDefinition, { parentRound: 1 }));
+          if (facts.children.values().length !== 3 || model.key !== 'model' || !isEqual(child.input, { output: model.reception.value })) throw new Error('Understanding acceptance checkpoint changed feedback');
         },
-        modelWaiting: {
-          state: childWaitingCodec,
-          check: (frame, state) => {
-            originalCheckpoint(frame);
-            const model = waitingChild(frame, state, 'model', this.requestModelDefinition.checkpoint);
-            const request = acceptedChild(frame.children[0]);
-            if (frame.children.length !== 2 || request.key !== 'request' || !isEqual(request.input, frame.currentInput) || !isEqual(model.input, request.state.reception.output)) throw new Error('Understanding checkpoint differs from prepared model request');
-          },
-          resume: { requires: {}, uses: [this.requestModelDefinition, this.acceptOutputDefinition], execute: (_context, invocation, children, state: { childId: string }) => this.receiveModel(invocation, children, children.get(this.requestModelDefinition).resume(invocation, state.childId)) },
+        resume: { uses: [this.acceptOutputDefinition], execute: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.child)) },
+      }),
+      modelWaiting: point({
+        name: 'modelWaiting',
+        state: emptyCheckpointState,
+        references: { child: childReference(this.requestModelDefinition) },
+        check: (_state, facts) => {
+          originalCheckpoint(facts);
+          const model = waitingChild(facts, facts.references.child, 'model');
+          const request = acceptedChild(facts.children.requireUnique(this.prepareRequestDefinition, { parentRound: 1 }));
+          if (facts.children.values().length !== 2 || request.key !== 'request' || !isEqual(request.input, facts.input) || !isEqual(model.input, request.reception.value)) throw new Error('Understanding checkpoint differs from prepared model request');
         },
-        result: {
-          state: proposalCodec,
-          check: (frame, output) => {
-            originalCheckpoint(frame);
-            const child = acceptedChild(frame.children.at(-1));
-            if (child.key !== 'acceptance' || !isEqual(child.state.reception.output, output)) throw new Error('Understanding checkpoint differs from accepted proposal');
-          },
-          resume: { requires: {}, uses: [], execute: (_context, _invocation, _children, output: RequestProposal) => output },
+        resume: { uses: [this.requestModelDefinition, this.acceptOutputDefinition], execute: (work, _state, saved) => this.receiveModel(work, work.children.resume(saved.child)) },
+      }),
+      result: point({
+        name: 'result',
+        state: proposalCodec,
+        references: {},
+        check: (output, facts) => {
+          originalCheckpoint(facts);
+          const child = acceptedChild(facts.children.requireUnique(this.acceptOutputDefinition, { parentRound: 1 }));
+          if (child.key !== 'acceptance' || !isEqual(child.reception.value, output)) throw new Error('Understanding checkpoint differs from accepted proposal');
         },
-      },
+        resume: { execute: (_work, output) => output },
+      }),
     };
+    this.checkpoint = { key: `observer.understand-request.${options.files ? 'files' : 'chat'}`, version: 2, input: understandingInputCodec, output: proposalCodec, points: Object.values(this.points) };
     this.run = { requires: UnderstandRequestDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  private async execute(context: OperationContextView<RequestUnderstandingInput, RequestProposal, ConversationResources>, invocation: InvocationWorkView<RequestUnderstandingInput, RequestProposal, OperationContextView<RequestUnderstandingInput, RequestProposal, ConversationResources>>, children: ChildBindings): Promise<RequestProposal> {
-    const request = children.get(this.prepareRequestDefinition).create(invocation, context.currentInput, { key: 'request' });
-    invocation.checkpoint?.save('requestWaiting', { childId: request.context.id });
-    return this.receiveRequest(invocation, children, request);
+  private async execute(work: OperationWork<RequestUnderstandingInput, RequestProposal, object>): Promise<RequestProposal> {
+    const request = work.children.create(this.prepareRequestDefinition, work.input, { key: 'request' });
+    work.checkpoint?.save(this.points.requestWaiting, null, { child: request.ref });
+    return this.receiveRequest(work, request);
   }
-
-  private async receiveRequest(invocation: InvocationWorkView<RequestUnderstandingInput, RequestProposal, OperationContextView<RequestUnderstandingInput, RequestProposal, any>>, children: ChildBindings, request: ChildInvocationView<RequestUnderstandingInput, ModelRequest>): Promise<RequestProposal> {
+  private async receiveRequest(work: OperationWork<RequestUnderstandingInput, RequestProposal, object>, request: ChildCall<PrepareModelRequestDefinition<RequestUnderstandingInput, ModelRequestResources & HistoryResources>>): Promise<RequestProposal> {
     await request.run();
-    const prepared = await children.accept(request, (value) => value);
-    const model = children.get(this.requestModelDefinition).create(invocation, prepared, { key: 'model' });
-    invocation.checkpoint?.save('modelWaiting', { childId: model.context.id });
-    return this.receiveModel(invocation, children, model);
+    const prepared = await request.accept();
+    const model = work.children.create(this.requestModelDefinition, prepared, { key: 'model' });
+    work.checkpoint?.save(this.points.modelWaiting, null, { child: model.ref });
+    return this.receiveModel(work, model);
   }
-  private async receiveModel(invocation: InvocationWorkView<RequestUnderstandingInput, RequestProposal, OperationContextView<RequestUnderstandingInput, RequestProposal, any>>, children: ChildBindings, model: ChildInvocationView<ModelRequest, ModelOutput>): Promise<RequestProposal> {
+  private async receiveModel(work: OperationWork<RequestUnderstandingInput, RequestProposal, object>, model: ChildCall<RequestModelDefinition>): Promise<RequestProposal> {
     await model.run();
-    const output = await children.accept(model, (value) => value);
-    const acceptance = children.get(this.acceptOutputDefinition).create(invocation, { output } as ModelAcceptanceInput, { key: 'acceptance' });
-    invocation.checkpoint?.save('acceptanceWaiting', { childId: acceptance.context.id });
-    return this.receiveAcceptance(invocation, children, acceptance);
+    const output = await model.accept();
+    const acceptance = work.children.create(this.acceptOutputDefinition, { output }, { key: 'acceptance' });
+    work.checkpoint?.save(this.points.acceptanceWaiting, null, { child: acceptance.ref });
+    return this.receiveAcceptance(work, acceptance);
   }
-  private async receiveAcceptance(invocation: InvocationWorkView<RequestUnderstandingInput, RequestProposal, OperationContextView<RequestUnderstandingInput, RequestProposal, any>>, children: ChildBindings, acceptance: ChildInvocationView<ModelAcceptanceInput, RequestProposal>): Promise<RequestProposal> {
+  private async receiveAcceptance(work: OperationWork<RequestUnderstandingInput, RequestProposal, object>, acceptance: ChildCall<AcceptModelOutputDefinition<ModelAcceptanceInput, RequestProposal>>): Promise<RequestProposal> {
     await acceptance.run();
-    const result = await children.accept(acceptance, (value) => value);
-    invocation.checkpoint?.save('result', result);
+    const result = await acceptance.accept();
+    work.checkpoint?.save(this.points.result, result, {});
     return result;
   }
 

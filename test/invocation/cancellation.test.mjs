@@ -166,11 +166,11 @@ test('cancellation blocks new children before entry and releases Runtime occupan
   let parent;
   const bound = runtime(
     new Main(
-      (_context, invocation, children) => {
-        parent = invocation;
+      (work) => {
+        parent = work;
         controller.abort();
         try {
-          children.get(execution).create(invocation, null);
+          work.children.create(execution, null);
         } catch {}
         return 'caught but not recovered';
       },
@@ -178,7 +178,7 @@ test('cancellation blocks new children before entry and releases Runtime occupan
     ),
   );
   await assert.rejects(bound.run(null, { signal: controller.signal }), (error) => isInvocationCancelled(error, controller.signal));
-  assert.equal(parent.children.values().length, 0);
+  assert.equal(parent.children.facts.values().length, 0);
   assert.equal(bound.running, false);
 });
 
@@ -191,12 +191,12 @@ test('a returned child is not accepted after parent cancellation', async () => {
   let acceptances = 0;
   const bound = runtime(
     new Main(
-      async (_context, invocation, children) => {
-        const child = children.get(execution).create(invocation, null);
+      async (work) => {
+        const child = work.children.create(execution, null);
         await child.run();
-        relation = invocation.children.get(child);
+        relation = work.children.facts.get(child.ref);
         controller.abort();
-        return children.accept(child, () => acceptances++);
+        return child.accept(() => acceptances++);
       },
       { children: [execution] },
     ),
@@ -214,8 +214,8 @@ test('cached resource endpoints stop later writes but preserve already establish
   const offer = new ResourceOffer('test.write', (_source, activity) => ({ append: (value) => activity.runSync('append', {}, () => writes.push(value)) }));
   const bound = runtime(
     new Main(
-      (context) => {
-        const endpoint = context.resources.values.writer;
+      (work) => {
+        const endpoint = work.resources.writer;
         endpoint.append('before');
         controller.abort();
         try {

@@ -51,10 +51,10 @@ function executionRuntime(execute, { changes, recording, accept, parentAccept } 
     observation = recording ? [invocationRecording()] : undefined;
     run = {
       requires: {},
-      execute: async (context, invocation, children) => {
-        const child = children.get(execution).create(invocation, context.currentInput, { key: 'test' });
+      execute: async (work) => {
+        const child = work.children.create(execution, work.input, { key: 'test' });
         const output = await child.run();
-        return children.accept(child, () => (parentAccept ? parentAccept(output) : output));
+        return child.accept(() => (parentAccept ? parentAccept(output) : output));
       },
     };
   }

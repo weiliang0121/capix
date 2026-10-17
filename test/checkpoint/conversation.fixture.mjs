@@ -10,7 +10,7 @@ const save = persistence.checkpoints.save.bind(persistence.checkpoints);
 persistence.checkpoints.save = (image, revision) => {
   const result = save(image, revision);
   if (image.contract.key === 'observer.request-model.answer' && image.point === 'feedbackAccepted') crash('feedback');
-  if (image.contract.key === 'observer.conversation.execution' && image.point === 'answerAccepted') crash('accepted');
+  if (image.contract.key === 'observer.conversation.execution' && image.point === 'capabilityAccepted.answer') crash('accepted');
   return result;
 };
 const finish = persistence.checkpoints.finish.bind(persistence.checkpoints);

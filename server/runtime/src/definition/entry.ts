@@ -1,19 +1,33 @@
-import type { invocationSignature } from './signature.js';
-import type { DefinitionOutput } from './children.js';
-import type { ChildDefinition, DefinitionEntryInput, DefinitionParentInvocationView } from './children.js';
-import type { InvocationRelationOptions } from '../invocation/relation.js';
+import type { ChildDefinition, ChildFacts, DefinitionEntryInput } from './children.js';
+import type { ContinuationFact } from './work.js';
 
-/** An explicit alternative input contract; it cannot construct a call on its own. */
+export interface ChildEntryFacts {
+  readonly round: 1 | 2;
+  readonly continuation?: ContinuationFact;
+  readonly children: ChildFacts;
+}
+export interface ChildEntryInput<Input> {
+  readonly input: Input;
+  readonly facts: ChildEntryFacts;
+  readonly key?: string;
+}
+
+/** An alternative input contract; binding owns admission and the real parent identity. */
 export class InvocationEntry<Definition extends ChildDefinition, EntryInput> {
-  declare readonly [invocationSignature]?: (parent: DefinitionParentInvocationView<Definition>, input: EntryInput) => DefinitionOutput<Definition>;
   constructor(
     readonly definition: Definition,
-    readonly accept: (parent: DefinitionParentInvocationView<Definition>, input: EntryInput, options: InvocationRelationOptions) => DefinitionEntryInput<Definition>,
-  ) {}
+    readonly accept: (request: ChildEntryInput<EntryInput>) => DefinitionEntryInput<Definition>,
+  ) {
+    Object.freeze(this);
+  }
   get run() {
     return this.definition.run;
   }
   get exceptions() {
     return this.definition.exceptions;
   }
+}
+
+export function defineChildEntry<Definition extends ChildDefinition, Input>(definition: Definition, entry: { readonly accept: (request: ChildEntryInput<Input>) => NoInfer<DefinitionEntryInput<Definition>> }): InvocationEntry<Definition, Input> {
+  return new InvocationEntry(definition, entry.accept.bind(entry));
 }

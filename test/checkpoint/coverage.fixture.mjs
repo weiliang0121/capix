@@ -29,9 +29,9 @@ persistence.checkpoints.save = (image, revision) => {
   if (key === 'observer.conversation.execution') {
     if (image.point === 'selectionAccepted') crash('selectionAccepted');
     if (image.point === 'decisionAccepted') crash('decisionAccepted');
-    if (image.point === 'answerAccepted') crash('answerAccepted');
-    if (image.point === 'capabilityAccepted' && image.state.progress.file && !image.state.progress.answer) crash('preflightAccepted');
-    if (image.point === 'capabilityAccepted' && image.state.progress.saved) crash('fileAccepted');
+    if (image.point === 'capabilityAccepted.answer' || image.point === 'capabilityAccepted.document') crash('answerAccepted');
+    if (image.point.startsWith('capabilityAccepted.') && image.state.progress.file && !image.state.progress.answer) crash('preflightAccepted');
+    if (image.point.startsWith('capabilityAccepted.') && image.state.progress.saved) crash('fileAccepted');
     if (image.point === 'completed') crash('completed');
   }
   return result;

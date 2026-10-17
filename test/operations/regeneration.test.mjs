@@ -196,18 +196,19 @@ test('regeneration declaration rejects invalid evidence and missing feedback bef
       const capability = behavior.requestModelDefinition.regeneration;
       assert.equal(capability.declaration.maxAdditionalCalls, 1);
       assert.deepEqual(capability.declaration.rejectionCodes, ['INVALID_JSON', 'EMPTY_OUTPUT', 'OUTPUT_SHAPE']);
-      t.mock.method(behavior.exceptions, 'handle', function (context, exception, invocation, bindings) {
-        const children = invocation.children.values();
-        const evidence = { previous: children[2], rejection: children[3] };
-        const invalid = { previous: children[1], rejection: children[3] };
-        assert.equal(capability.allows(invocation, evidence), true);
-        assert.equal(capability.allows(invocation, invalid), false);
+      t.mock.method(behavior.exceptions, 'handle', function (work) {
+        const children = work.children.facts.values();
+        const facts = { round: work.round, continuation: work.continuation, children: work.children.facts };
+        const evidence = { previous: children[2].ref, rejection: children[3].ref };
+        const invalid = { previous: children[1].ref, rejection: children[3].ref };
+        assert.equal(capability.allows(facts, evidence), true);
+        assert.equal(capability.allows(facts, invalid), false);
         // Pure declaration contract checks do not invoke a formal child endpoint.
-        assert.throws(() => capability.entry.accept(invocation, { request: f.calls[1].request, evidence: invalid }, { key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
-        assert.throws(() => capability.entry.accept(invocation, { request: f.calls[1].request, evidence }, { key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
-        assert.equal(invocation.children.values().length, 4);
+        assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[1].request, evidence: invalid }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
+        assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[1].request, evidence }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
+        assert.equal(work.children.facts.values().length, 4);
         checked = true;
-        return handle(context, exception, invocation, bindings);
+        return handle(work);
       });
     },
   });
@@ -219,10 +220,11 @@ test('parent may decline an eligible regeneration without changing child capabil
   const f = fixture([output('bad')], {
     configureDefinition(definition) {
       const behavior = definition.executionDefinition.operationDefinitions.generation;
-      t.mock.method(behavior.exceptions, 'handle', function (_context, _exception, invocation) {
-        const children = invocation.children.values();
-        assert.equal(behavior.requestModelDefinition.regeneration.allows(invocation, { previous: children[2], rejection: children[3] }), true);
-        return { kind: 'unhandled' };
+      t.mock.method(behavior.exceptions, 'handle', function (work) {
+        const children = work.children.facts.values();
+        const facts = { round: work.round, continuation: work.continuation, children: work.children.facts };
+        assert.equal(behavior.requestModelDefinition.regeneration.allows(facts, { previous: children[2].ref, rejection: children[3].ref }), true);
+        return work.unhandled;
       });
     },
   });

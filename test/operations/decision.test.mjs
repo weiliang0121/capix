@@ -112,6 +112,6 @@ test('a function decision uses the same operation contract and supports asynchro
 
 test('decision output parsing failures do not become another model decision in the same call', async () => {
   const requests = [];
-  await assert.rejects(decide({ proposal: 'not JSON', requests }), (error) => error.code === 'MODEL_OUTPUT_REJECTED');
+  await assert.rejects(decide({ proposal: 'not JSON', requests }), (error) => error.exception?.code === 'MODEL_OUTPUT_REJECTED');
   assert.equal(requests.length, 1);
 });

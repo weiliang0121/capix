@@ -1,5 +1,5 @@
 import { callFor, recordFor } from '../fixtures/lifecycle.mjs';
-import { ExecutionRecordHelper } from '@capix/server-runtime';
+import { ExecutionRecordHelper, ChildCallFailure } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { TestOperation } from '../fixtures/operation.mjs';
@@ -33,7 +33,7 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
     invoke(lifecycleFor(runtime).attempt(operation, attempt, input), () => {
       throw failure;
     }),
-    (error) => error === failure,
+    (error) => error instanceof ChildCallFailure && error.exception === failure,
   );
   assert.equal(operation.status, 'running');
   const secondLifecycle = lifecycleFor(runtime).attempt(operation, attempt, input);

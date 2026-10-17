@@ -1,5 +1,6 @@
 import type { InvocationFailure } from './failure.js';
-export type InvocationResult<Output> = Readonly<{ status: 'succeeded'; output: Output } | { status: 'failed'; error: unknown; failure?: InvocationFailure }>;
+import type { RuntimeErrorValue } from '@capix/protocol';
+export type InvocationResult<Output> = Readonly<{ status: 'succeeded'; output: Output } | { status: 'failed'; error: unknown; failure?: InvocationFailure; diagnostic?: RuntimeErrorValue }>;
 
 /** Explicit local continuation; no identity, lifecycle or execution of its own. */
 export class Continuation<Input> {

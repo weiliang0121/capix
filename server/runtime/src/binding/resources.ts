@@ -10,7 +10,7 @@ interface ResourceDeclarations {
   readonly run: { readonly requires: ResourceRequirements };
   readonly exceptions?: { readonly requires: ResourceRequirements };
   readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
-  readonly checkpoint?: { readonly points: Readonly<Record<string, { readonly resume: { readonly requires: ResourceRequirements } }>> };
+  readonly checkpoint?: { readonly points: readonly { readonly name: string; readonly resume: { readonly requires: ResourceRequirements } }[] };
 }
 
 /** Declaration identity locates a trusted assembly rule; content never receives this binding. */
@@ -39,8 +39,8 @@ export function collectDefinitionRequirements(definition: ResourceDeclarations, 
   const observationOffers = new Set(resourceRequests(observationProvides ?? {}).map((request) => request.offer));
   for (const [name, request] of Object.entries(definition.run.requires)) requires[`run.${name}`] = request;
   for (const [name, request] of Object.entries(definition.exceptions?.requires ?? {})) requires[`exceptions.${name}`] = request;
-  for (const [point, declaration] of Object.entries(definition.checkpoint?.points ?? {})) {
-    for (const [name, request] of Object.entries(declaration.resume.requires)) requires[`checkpoint.${point}.${name}`] = request;
+  for (const point of definition.checkpoint?.points ?? []) {
+    for (const [name, request] of Object.entries(point.resume.requires)) requires[`checkpoint.${point.name}.${name}`] = request;
   }
   for (const [index, declaration] of (observationProvides ? (definition.observation ?? []) : []).entries()) {
     for (const [name, request] of Object.entries(declaration.requires)) {

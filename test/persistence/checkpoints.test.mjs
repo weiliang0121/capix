@@ -27,11 +27,12 @@ function fixture(t) {
 function image(id = 'cp-1', contextId = 'context-1') {
   return {
     id,
-    formatVersion: 1,
+    formatVersion: 2,
     contract: { key: 'fixture.request-model', version: 1 },
     point: 'feedback-accepted',
     frame: { owner: { contextId, level: 'operation', parentContextId: 'parent-1' }, round: 1, phase: 'execute', input: { model: 'fixture', content: 'fixed input' }, currentInput: { model: 'fixture', content: 'fixed input' }, nextChildOrder: 0, children: [] },
     state: { output: { content: 'fixed output' } },
+    references: {},
   };
 }
 

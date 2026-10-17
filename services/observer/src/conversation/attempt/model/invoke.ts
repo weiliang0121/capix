@@ -1,7 +1,7 @@
 import { invocationRecording, type InvocationRecordDescription } from '@capix/server-runtime/recording';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../resources.js';
-import { AttemptDefinition, type InvocationWorkView, type InvocationCheckpointDefinition, type AttemptContextView } from '@capix/server-runtime';
+import { AttemptDefinition, checkpointPoint, type AttemptWork, type InvocationCheckpointDefinition } from '@capix/server-runtime';
 import { interactionRefCodec, interactionResultCodec, modelRequestCodec } from '../../model/checkpoint.js';
 import { checkLeafResult } from '../../operations/checkpoint.js';
 import { checkCapacity } from '../../model/capacity.js';
@@ -18,53 +18,47 @@ export class InvokeModelDefinition extends AttemptDefinition<ModelRequest, Model
     },
   };
   readonly observation;
-  readonly checkpoint: InvocationCheckpointDefinition<ModelRequest, ModelInteractionResult, AttemptContextView<ModelRequest, ModelInteractionResult, ModelCallResources>, ModelInteractionRef>;
+  readonly checkpoint: InvocationCheckpointDefinition<ModelRequest, ModelInteractionResult, 'attempt', ModelInteractionRef>;
   static readonly requires = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
   readonly run = { requires: InvokeModelDefinition.requires, execute: this.execute.bind(this) };
   readonly name = 'invokeModel';
   readonly label = '发起模型调用';
   readonly source = 'services/observer/src/conversation/attempt/model/invoke.ts · InvokeModelDefinition';
   readonly callee = 'provider';
+  private readonly resultPoint = checkpointPoint<'attempt', ModelRequest, ModelInteractionResult, ModelInteractionRef>()({ name: 'result', state: interactionResultCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
+  private readonly interactionStartedPoint = checkpointPoint<'attempt', ModelRequest, ModelInteractionResult, ModelInteractionRef>()({
+    name: 'interactionStarted',
+    state: interactionRefCodec,
+    references: {},
+    check: (_state, facts) => checkLeafResult(facts),
+    resume: {
+      requires: { modelReader: ModelResource.read.request() },
+      execute: async (work, interaction) => {
+        const output = await work.resources.modelReader.result(interaction, { signal: work.signal, expected: { request: work.input, purpose: this.purpose } });
+        const result: ModelInteractionResult = { kind: 'received', interaction, output };
+        work.checkpoint?.save(this.resultPoint, result, {});
+        return result;
+      },
+    },
+  });
 
   constructor(
     private readonly purpose: Purpose,
     description: InvocationRecordDescription<ModelRequest, ModelOutput> = {},
   ) {
     super();
-    this.checkpoint = {
-      key: `observer.invoke-model.${purpose}`,
-      version: 1,
-      input: modelRequestCodec,
-      output: interactionResultCodec,
-      points: {
-        interactionStarted: {
-          state: interactionRefCodec,
-          check: checkLeafResult,
-          resume: {
-            requires: { modelReader: ModelResource.read.request() },
-            uses: [],
-            execute: async (context, invocation, _children, interaction: ModelInteractionRef) => {
-              const output = await context.resources.values.modelReader.result(interaction, { signal: context.signal, expected: { request: context.currentInput, purpose: this.purpose } });
-              const result: ModelInteractionResult = { kind: 'received', interaction, output };
-              invocation.checkpoint?.save('result', result);
-              return result;
-            },
-          },
-        },
-        result: { state: interactionResultCodec, check: checkLeafResult, resume: { requires: {}, uses: [], execute: (_context, _invocation, _children, result: ModelInteractionResult) => result } },
-      },
-    };
+    this.checkpoint = { key: `observer.invoke-model.${purpose}`, version: 1, input: modelRequestCodec, output: interactionResultCodec, points: [this.interactionStartedPoint, this.resultPoint] };
     this.observation = [invocationRecording<ModelRequest, ModelInteractionResult>({ input: description.input, output: (result) => (result.kind === 'received' ? { ...result, output: description.output ? description.output(result.output) : result.output } : result) })];
   }
 
-  private async execute(context: AttemptContextView<ModelRequest, ModelInteractionResult, ModelCallResources>, invocation: InvocationWorkView<ModelRequest, ModelInteractionResult, AttemptContextView<ModelRequest, ModelInteractionResult, ModelCallResources>, ModelInteractionRef>): Promise<ModelInteractionResult> {
-    const { timeoutMs, settings, modelCreator, modelReader } = context.resources.values;
-    checkCapacity(context.currentInput, settings);
-    const interaction = modelCreator.start(context.currentInput, this.purpose, { signal: context.signal, timeoutMs });
-    invocation.checkpoint?.save('interactionStarted', interaction);
-    invocation.output.emit(interaction);
-    const result = await modelReader.wait(interaction, { signal: context.signal, waitMs: Math.max(1, Math.floor(timeoutMs / 2)) });
-    invocation.checkpoint?.save('result', result);
+  private async execute(work: AttemptWork<ModelRequest, ModelInteractionResult, ModelCallResources, ModelInteractionRef>): Promise<ModelInteractionResult> {
+    const { timeoutMs, settings, modelCreator, modelReader } = work.resources;
+    checkCapacity(work.input, settings);
+    const interaction = modelCreator.start(work.input, this.purpose, { signal: work.signal, timeoutMs });
+    work.checkpoint?.save(this.interactionStartedPoint, interaction, {});
+    work.output.emit(interaction);
+    const result = await modelReader.wait(interaction, { signal: work.signal, waitMs: Math.max(1, Math.floor(timeoutMs / 2)) });
+    work.checkpoint?.save(this.resultPoint, result, {});
     return result;
   }
 }

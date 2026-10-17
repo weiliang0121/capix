@@ -52,7 +52,7 @@ export class RuntimeBinder {
       if (child.level !== 'execution') throw new Error('Invalid child definition level');
       return executions.bindResolved(child);
     });
-    const work = new InvocationWorkBinding<Input, Output, RuntimeContext<Input, Output, Resources>, Resources, any>(declaration, children);
+    const work = new InvocationWorkBinding<Input, Output, RuntimeContext<Input, Output, Resources>, Resources, any, 'runtime'>(declaration, children);
     const binding: RuntimeBinding<Input, Output, Options, Resources> = {
       definition,
       declaration,

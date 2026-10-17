@@ -1,3 +1,4 @@
+import { restoreCheckpointContinuation } from '../../checkpoint/continuation.js';
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
 import { prepareCheckpointRestoration } from '../../checkpoint/restoration.js';
 import type { InvocationOutputReceiver } from '../../output/contract.js';
@@ -28,6 +29,7 @@ export interface ExecutionInvocationRequest<Input, Output, Resources extends obj
   readonly progress?: ProgressReceiver<InvocationProgress>;
   readonly output?: InvocationOutputReceiver<Output>;
   key?: string;
+  readonly declarationPosition?: number;
   description?: InvocationDescription;
   requires?: ResourceRequirements<Resources>;
   initial?: ResourceRequirements;
@@ -65,13 +67,13 @@ export class ExecutionInvocationBuilder {
     if (request.restore) {
       if (!request.work.checkpoint) throw new Error('Checkpoint declaration is missing');
       const frame = request.restore.head.image.frame;
-      context.installCheckpoint({ id: frame.owner.contextId, round: frame.round, currentInput: request.work.checkpoint.input.decode(frame.currentInput) });
+      context.installCheckpoint({ id: frame.owner.contextId, round: frame.round, currentInput: request.work.checkpoint.input.decode(frame.currentInput), continuation: restoreCheckpointContinuation(frame) });
     }
     const identity = { contextId: context.id, level: 'execution' as const, parentContextId: parent.context.id };
     const recovering = !!request.restore || parent.recovering;
     const observation = recovering ? undefined : bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources }, this.capabilities.observations, parent.observation);
     const changes = !recovering && this.capabilities.changes ? new InvocationChangeEmitter(identity, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<Input, Output, ExecutionContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key }, context, work: request.work, checkpoints: this.capabilities.checkpoints, restore: request.restore, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, started: request.started, changes, validate: () => this.check(parent) });
+    const invocation = new Invocation<Input, Output, ExecutionContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key, declarationPosition: request.declarationPosition }, context, work: request.work, checkpoints: this.capabilities.checkpoints, restore: request.restore, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, started: request.started, changes, validate: () => this.check(parent) });
     attachInvocationResources(invocation, context.resources);
     return invocation;
   }

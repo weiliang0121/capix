@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, assembleRuntime } from '@capix/server-runtime';
+import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, checkpointPoint, childReference, assembleRuntime } from '@capix/server-runtime';
 import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
 import { SelectHistoryDefinition, UnderstandRequestDefinition, DefaultConversationDecisionDefinition, FunctionConversationDecisionDefinition, CheckFileTaskDefinition, ProcessDocumentDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 import { FileResources } from '@capix/observer-service/assembly';
@@ -35,20 +35,22 @@ function parentCheckpoint(key, child) {
     version: 1,
     input: codec,
     output: codec,
-    points: {
-      waiting: {
+    points: [
+      checkpointPoint()({
+        name: 'waiting',
         state: codec,
+        references: { child: childReference(child) },
         resume: {
           requires: {},
           uses: [child],
-          async execute(_context, invocation, children, state) {
-            const call = children.get(child).resume(invocation, state.childId);
+          async execute(work, _state, saved) {
+            const call = work.children.resume(saved.child);
             await call.run();
-            return children.accept(call, (value) => value);
+            return call.accept();
           },
         },
-      },
-    },
+      }),
+    ],
   };
 }
 function assemble(operation, store, providers) {
@@ -57,11 +59,11 @@ function assemble(operation, store, providers) {
     checkpoint = parentCheckpoint('fixture.operations.e', operation);
     run = {
       requires: operation.run.requires,
-      async execute(context, invocation, children) {
-        const call = children.get(operation).create(invocation, context.input, { key: 'operation' });
-        invocation.checkpoint.save('waiting', { childId: call.context.id });
+      execute: async (work) => {
+        const call = work.children.create(operation, work.input, { key: 'operation' });
+        work.checkpoint.save(this.checkpoint.points[0], {}, { child: call.ref });
         await call.run();
-        return children.accept(call, (value) => value);
+        return call.accept();
       },
     };
   }
@@ -71,11 +73,11 @@ function assemble(operation, store, providers) {
     checkpoint = parentCheckpoint('fixture.operations.r', execution);
     run = {
       requires: {},
-      async execute(context, invocation, children) {
-        const call = children.get(execution).create(invocation, context.input, { key: 'execution' });
-        invocation.checkpoint.save('waiting', { childId: call.context.id });
+      execute: async (work) => {
+        const call = work.children.create(execution, work.input, { key: 'execution' });
+        work.checkpoint.save(this.checkpoint.points[0], {}, { child: call.ref });
         await call.run();
-        return children.accept(call, (value) => value);
+        return call.accept();
       },
     };
   }

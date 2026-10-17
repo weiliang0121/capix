@@ -141,7 +141,7 @@ test('an accepted E checkpoint cannot claim a missing fixed append receipt', () 
   const run = copyConversationCheckpointRun(basis(transcript, memories));
   const request = { contract: { key: 'transcript.append', version: 1 }, operation: { parentContextId: 'execution', childContextId: 'generation', position: 'answer' }, transcriptId: transcript.id, messages: [{ role: 'assistant', content: 'answer' }] };
   const receipt = { transcriptId: transcript.id, start: 1, count: 1, revision: 2 };
-  const head = { image: { point: 'answerAccepted', frame: { owner: { contextId: 'execution', parentContextId: 'root' } }, state: { childId: 'generation', selection: { historyIndexes: [] }, step: 1, checkedCandidates: [], progress: { answer: { kind: 'answer', content: 'answer' }, response: { index: 1, message: { role: 'assistant', content: 'answer' } }, receipt, responseChildId: 'generation' } } } };
+  const head = { image: { point: 'answerAccepted', frame: { owner: { contextId: 'execution', parentContextId: 'root' }, children: [{ identity: { contextId: 'generation', parentContextId: 'execution' }, order: 0, state: { kind: 'returned', reception: { kind: 'accepted' } } }] }, state: { childId: 'generation', selection: { historyIndexes: [] }, step: 1, checkedCandidates: [], progress: { answer: { kind: 'answer', content: 'answer' }, response: { index: 1, message: { role: 'assistant', content: 'answer' } }, receipt, responseOrder: 0 } } } };
   assert.throws(() => validateConversationCheckpointReceipt(run, transcript, head), { code: 'CHECKPOINT_CONTENT_CHANGED' });
   assert.deepEqual(transcript.applyFixed(request), receipt);
   validateConversationCheckpointReceipt(run, transcript, head);
@@ -174,12 +174,12 @@ test('host association must match the exact R and E heads', () => {
   const transcript = new Transcript([{ role: 'user', content: 'hello' }]);
   const run = copyConversationCheckpointRun(basis(transcript, new Memories(transcript)));
   const child = { identity: { contextId: 'execution', parentContextId: 'root' } };
-  const root = { image: { frame: { owner: { contextId: 'root', level: 'runtime' }, children: [child] }, state: { childId: 'execution' } } };
+  const root = { image: { frame: { owner: { contextId: 'root', level: 'runtime' }, children: [child] }, references: { execution: { contextId: 'execution' } }, state: null } };
   const execution = { image: { frame: { owner: { contextId: 'execution', parentContextId: 'root', level: 'execution' } } } };
   validateConversationCheckpointHeads(run, root, execution);
-  root.image.state.childId = 'different';
+  root.image.references.execution.contextId = 'different';
   assert.throws(() => validateConversationCheckpointHeads(run, root, execution), { code: 'CHECKPOINT_CONTENT_CHANGED' });
-  root.image.state.childId = 'execution';
+  root.image.references.execution.contextId = 'execution';
   execution.image.frame.owner.parentContextId = 'different';
   assert.throws(() => validateConversationCheckpointHeads(run, root, execution), { code: 'CHECKPOINT_CONTENT_CHANGED' });
 });

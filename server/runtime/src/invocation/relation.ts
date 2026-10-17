@@ -8,10 +8,14 @@ import type { InvocationFailure } from './failure.js';
 import type { InvocationRelationView, InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationResult } from './result.js';
+import type { InvocationPropagationScope } from './provenance.js';
+import type { RuntimeErrorValue } from '@capix/protocol';
 
 export interface InvocationRelationOptions {
   /** Work position in a composition, not the reusable behavior's identity. */
   key?: string;
+  /** Fixed declaration position in the owning parent's resolved children. */
+  declarationPosition?: number;
   output?: InvocationOutputReceiver<any, any>;
 }
 
@@ -24,12 +28,12 @@ export interface InvocationTarget<Output = unknown> {
   readonly identity?: InvocationIdentity;
 }
 
-export type InvocationRelationReception = Readonly<{ status: 'pending' } | { status: 'receiving' } | { status: 'accepted'; output: unknown } | { status: 'failed'; error: unknown }>;
+export type InvocationRelationReception = Readonly<{ status: 'pending' } | { status: 'receiving' } | { status: 'accepted'; output: unknown } | { status: 'failed'; error: unknown; failure?: InvocationFailure; diagnostic?: RuntimeErrorValue }>;
 
 /** Already-decoded relationship facts. Installing them does not replay return or acceptance. */
 export interface InvocationRelationBaseline<Output = unknown> {
   readonly returned?: InvocationResult<Output>;
-  readonly reception: Exclude<InvocationRelationReception, { status: 'failed' }>;
+  readonly reception: InvocationRelationReception;
 }
 
 export interface InvocationRelationOwner {
@@ -37,6 +41,8 @@ export interface InvocationRelationOwner {
   fail(failure: InvocationFailure): void;
   publish(relation: InvocationRelation, change: InvocationRelationChange): unknown | undefined;
   receive<Value>(relation: InvocationRelation, work: () => Promise<Value>): Promise<Value>;
+  captureDelivery(): InvocationPropagationScope;
+  receptionFailure(relation: InvocationRelation, error: unknown, scope: InvocationPropagationScope): { error: unknown; failure: InvocationFailure; delivery: unknown };
 }
 
 export interface InvocationRelationSetup<Output = unknown> {
@@ -44,6 +50,7 @@ export interface InvocationRelationSetup<Output = unknown> {
   readonly round: number;
   readonly order: number;
   readonly key?: string;
+  readonly declarationPosition?: number;
 }
 
 /** A direct parent-child relationship, not another invocation or E/O/A execution layer. */
@@ -56,6 +63,7 @@ export class InvocationRelation<Output = unknown> {
   readonly round: number;
   readonly order: number;
   readonly key?: string;
+  readonly declarationPosition?: number;
 
   constructor(
     identity: InvocationRelationSetup<Output>,
@@ -65,6 +73,7 @@ export class InvocationRelation<Output = unknown> {
     this.round = identity.round;
     this.order = identity.order;
     this.key = identity.key;
+    this.declarationPosition = identity.declarationPosition;
     const relation = this;
     this.view = Object.freeze({
       get invocation() {
@@ -114,8 +123,9 @@ export class InvocationRelation<Output = unknown> {
   }
 
   async accept<Value>(work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
+    const scope = this.owner.captureDelivery();
     const delivered = this.beginReception();
-    const output = await this.receiveWithinParent(delivered, work);
+    const output = await this.receiveWithinParent(delivered, work, scope);
     // Acceptance is fixed before notification. A later observer failure cannot undo it.
     this.completeReception(output);
     return output;
@@ -136,15 +146,16 @@ export class InvocationRelation<Output = unknown> {
     return this.#returned.output;
   }
 
-  private async receiveWithinParent<Value>(delivered: Output, work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
+  private async receiveWithinParent<Value>(delivered: Output, work: (delivered: Output) => Value | Promise<Value>, scope: InvocationPropagationScope): Promise<Value> {
     try {
       this.owner.requireHealthy();
       return await this.owner.receive(this, async () => work(delivered));
     } catch (error) {
-      this.#reception = Object.freeze({ status: 'failed', error });
-      const failed = this.owner.publish(this, { kind: 'failed', error, source: 'work' });
-      if (failed !== undefined) throw new AggregateError([error, failed], 'Child acceptance and observation both failed', { cause: error });
-      throw error;
+      const rejected = this.owner.receptionFailure(this, error, scope);
+      this.#reception = Object.freeze({ status: 'failed', error: rejected.error, failure: rejected.failure });
+      const failed = this.owner.publish(this, { kind: 'failed', error: rejected.error, source: 'work' });
+      if (failed !== undefined) throw new AggregateError([rejected.error, failed], 'Child acceptance and observation both failed', { cause: rejected.error });
+      throw rejected.delivery;
     }
   }
 

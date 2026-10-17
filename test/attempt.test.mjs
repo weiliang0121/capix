@@ -1,6 +1,6 @@
 import { AttemptFixture, OperationFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
-import { ExecutionRecordHelper } from '@capix/server-runtime';
+import { ExecutionRecordHelper, ChildCallFailure } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -40,7 +40,7 @@ test('one Attempt instance creates independent contexts per call and leaves pare
   const operationLifecycle = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), 'input');
   const operation = operationLifecycle.begin();
 
-  await assert.rejects(attempt.call(callFor(operation), 'invalid'), (error) => error === failure);
+  await assert.rejects(attempt.call(callFor(operation), 'invalid'), (error) => error instanceof ChildCallFailure && error.exception === failure);
   assert.equal(operation.status, 'running');
   assert.equal(await attempt.call(callFor(operation), 'accepted'), 'accepted');
   assert.ok(contexts.every((context) => context instanceof AttemptContext && context.signal === operation.signal && context.operationContext === undefined));

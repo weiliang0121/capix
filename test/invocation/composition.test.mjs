@@ -1,31 +1,23 @@
-import { bindInvocationObservation, defineObservation, ResourceBindings } from '@capix/server-runtime';
-import { OperationFixture } from '../fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, Invocation, OperationContext, Recorder, RecordBook } from '@capix/server-runtime';
-import { createBoundRuntime } from '../fixtures/runtime.mjs';
-import { TestAttempt } from '../fixtures/attempt.mjs';
+import { Sequence, defineAttempt, defineOperation, defineExecution, assembleRuntime, Recorder, RecordBook, bindRecording, defineObservation } from '@capix/server-runtime';
+import { runtimeDefinition, recordDefinitions, recordedCall } from '../fixtures/declarations.mjs';
 
-class ComposedOperation extends OperationFixture {
-  name = 'composed';
-  label = 'Composed';
-  source = 'test';
-  constructor(runtime, composition) {
-    super(runtime.operationInvocationBuilder);
-    this.composition = composition;
-  }
-  execute(context, invocation) {
-    return this.composition.run(invocation, context.currentInput);
-  }
+const metadata = { name: 'composed', label: 'Composed', source: 'test', callee: 'test' };
+function attempt(name, execute = (value) => value) {
+  return defineAttempt()({ ...metadata, name, run: { execute: (work) => execute(work.input) } });
 }
-
-function root(runtime, composition, input = 1) {
-  return runtime.executionInvocationBuilder.create(input, {
-    context: { settings: {} },
-    work: { maxRounds: 1, execute: (context, invocation) => composition.run(invocation, context.currentInput) },
-  });
+function composed(sequence) {
+  return defineOperation()({ ...metadata, children: [...new Set(sequence.steps.map((step) => step.use))], run: { execute: (work) => sequence.run(work.input, work.children) } });
 }
-
+function install(composition, recorder) {
+  const calls = [];
+  const execution = defineExecution()({ children: [...new Set(composition.steps.map((step) => step.use))], run: { execute: (work) => composition.run(work.input, work.children) } });
+  const definition = runtimeDefinition(execution);
+  if (recorder) recordDefinitions(definition);
+  const runtime = assembleRuntime(definition, { providers: [], observations: recorder ? [bindRecording(recorder)] : [], source: { entry: () => null, capture: () => null, callbacks: () => ({ started: (_context, call) => calls.push(call) }) } });
+  return { calls, runtime };
+}
 function deferred() {
   let resolve;
   const promise = new Promise((accept) => {
@@ -35,19 +27,19 @@ function deferred() {
 }
 
 test('parent owns a child before it runs and distinguishes its return from parent acceptance', async () => {
-  const runtime = createBoundRuntime();
   const entered = deferred();
   const release = deferred();
-  const inner = new Sequence().step('leaf', { use: new TestAttempt(runtime, 'leaf', (input) => input + 1), input: ({ input }) => input });
-  const operation = new ComposedOperation(runtime, inner);
+  const inner = new Sequence().step('leaf', { use: attempt('leaf', (input) => input + 1), input: ({ input }) => input });
+  const operation = composed(inner);
+  let installed;
   const composition = new Sequence().step('work', {
     use: operation,
-    input: ({ input, parent }) => {
-      assert.equal(parent.children.values().length, 0);
+    input: ({ input }) => {
+      assert.equal(installed.calls[0].children.values().length, 0);
       return input;
     },
-    async accept({ parent }, output) {
-      const child = parent.children.values()[0];
+    async accept(_scope, output) {
+      const child = installed.calls[0].children.values()[0];
       assert.equal(child.key, 'work');
       assert.equal(child.invocation.context.status, 'succeeded');
       assert.deepEqual(child.returned, { status: 'succeeded', output: { leaf: 2 } });
@@ -57,9 +49,10 @@ test('parent owns a child before it runs and distinguishes its return from paren
       return output.leaf * 2;
     },
   });
-  const invocation = root(runtime, composition);
-  const running = invocation.run();
+  installed = install(composition);
+  const running = installed.runtime.run(1, {});
   await entered.promise;
+  const invocation = installed.calls[0];
   assert.equal(invocation.context.status, 'running');
   release.resolve();
   assert.deepEqual(await running, { work: 4 });
@@ -70,33 +63,18 @@ test('parent owns a child before it runs and distinguishes its return from paren
 });
 
 test('child failure keeps accepted predecessors and prevents later child creation', async () => {
-  const runtime = createBoundRuntime();
   const error = new Error('second failed');
-  let observed;
-  const first = new TestAttempt(runtime, 'first', (input) => {
-    assert.equal(observed.children.values()[0].invocation.context.status, 'running');
-    return input;
-  });
-  const failure = new TestAttempt(runtime, 'failure', () => {
+  const first = attempt('first');
+  const failure = attempt('failure', () => {
     throw error;
   });
   const sequence = new Sequence()
-    .step('first', {
-      use: first,
-      input: ({ parent, input }) => {
-        observed = parent;
-        return input;
-      },
-    })
+    .step('first', { use: first, input: ({ input }) => input })
     .step('second', { use: failure, input: ({ outputs }) => outputs.first })
-    .step('third', {
-      use: first,
-      input: () => {
-        assert.fail('must not prepare later input');
-      },
-    });
-  const invocation = root(runtime, new Sequence().step('operation', { use: new ComposedOperation(runtime, sequence), input: ({ input }) => input }));
-  await assert.rejects(invocation.run(), (value) => value === error);
+    .step('third', { use: first, input: () => assert.fail('must not prepare later input') });
+  const installed = install(new Sequence().step('operation', { use: composed(sequence), input: ({ input }) => input }));
+  await assert.rejects(installed.runtime.run(1, {}), (value) => value === error);
+  const observed = installed.calls[0].children.values()[0].invocation;
   assert.equal(observed.children.values().length, 2);
   assert.equal(observed.children.values()[0].reception.status, 'accepted');
   const failed = observed.children.values()[1].returned;
@@ -108,11 +86,9 @@ test('child failure keeps accepted predecessors and prevents later child creatio
 });
 
 test('parent acceptance failure retains successful child and does not start next work or retry', async () => {
-  const runtime = createBoundRuntime();
   let effects = 0;
   const error = new Error('parent append failed');
-  const inner = new Sequence().step('leaf', { use: new TestAttempt(runtime, 'leaf', () => ++effects), input: () => null });
-  const use = new ComposedOperation(runtime, inner);
+  const use = composed(new Sequence().step('leaf', { use: attempt('leaf', () => ++effects), input: () => null }));
   const sequence = new Sequence()
     .step('first', {
       use,
@@ -122,97 +98,90 @@ test('parent acceptance failure retains successful child and does not start next
       },
     })
     .step('second', { use, input: () => null });
-  const invocation = root(runtime, sequence);
-  await assert.rejects(invocation.run(), (value) => value === error);
+  const installed = install(sequence);
+  await assert.rejects(installed.runtime.run(1, {}), (value) => value === error);
   assert.equal(effects, 1);
-  const children = invocation.children.values();
+  const children = installed.calls[0].children.values();
   assert.equal(children.length, 1);
   assert.equal(children[0].invocation.context.status, 'succeeded');
   assert.equal(children[0].returned.status, 'succeeded');
-  assert.deepEqual(children[0].reception, { status: 'failed', error });
+  assert.equal(children[0].reception.status, 'failed');
+  assert.equal(children[0].reception.error, error);
+  assert.equal(children[0].reception.failure.kind, 'error');
 });
 
-test('shared behavior and composition retain independent nested O/O/A relationships per call', async () => {
-  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
-  const leaf = new TestAttempt(runtime, 'identity');
-  const inner = new ComposedOperation(runtime, new Sequence().step('leaf', { use: leaf, input: ({ input }) => input }));
-  const outer = new ComposedOperation(runtime, new Sequence().step('inner', { use: inner, input: ({ input }) => input }));
-  const sequence = new Sequence().step('outer', { use: outer, input: ({ input }) => input });
-  const first = root(runtime, sequence, 'one');
-  const second = root(runtime, sequence, 'two');
-  assert.deepEqual(await first.run(), { outer: { inner: { leaf: 'one' } } });
-  assert.deepEqual(await second.run(), { outer: { inner: { leaf: 'two' } } });
+test('shared definitions and composition retain independent O/O/A relationships per call', async () => {
+  const recorder = new Recorder(new RecordBook());
+  const leaf = attempt('identity');
+  const inner = composed(new Sequence().step('leaf', { use: leaf, input: ({ input }) => input }));
+  const outer = composed(new Sequence().step('inner', { use: inner, input: ({ input }) => input }));
+  const installed = install(new Sequence().step('outer', { use: outer, input: ({ input }) => input }), recorder);
+  assert.deepEqual(await installed.runtime.run('one', {}), { outer: { inner: { leaf: 'one' } } });
+  assert.deepEqual(await installed.runtime.run('two', {}), { outer: { inner: { leaf: 'two' } } });
+  const [first, second] = installed.calls;
   const outerCall = first.children.values()[0].invocation;
   const innerCall = outerCall.children.values()[0].invocation;
   const leafCall = innerCall.children.values()[0].invocation;
-  assert.equal(outerCall.record.parentId, first.record.id);
-  assert.equal(innerCall.record.parentId, outerCall.record.id);
-  assert.equal(leafCall.record.parentId, innerCall.record.id);
+  assert.equal(recordedCall(recorder, outerCall).parentId, recordedCall(recorder, first).id);
+  assert.equal(recordedCall(recorder, innerCall).parentId, recordedCall(recorder, outerCall).id);
+  assert.equal(recordedCall(recorder, leafCall).parentId, recordedCall(recorder, innerCall).id);
   assert.notEqual(outerCall, second.children.values()[0].invocation);
   assert.equal(outerCall.children.values().length, 1);
 });
 
-test('direct calls also attach, without pretending parent acceptance took place', async () => {
-  const runtime = createBoundRuntime();
-  const operation = new ComposedOperation(runtime, new Sequence());
-  const invocation = runtime.executionInvocationBuilder.create(null, {
-    context: { settings: {} },
-    work: { maxRounds: 1, execute: (_context, parent) => operation.call(parent, null) },
+test('direct calls attach and return without pretending parent acceptance took place', async () => {
+  const operation = composed(new Sequence());
+  let saved;
+  let facts;
+  const execution = defineExecution()({
+    children: [operation],
+    run: {
+      execute(work) {
+        facts = work.children.facts;
+        saved = work.children.create(operation, null);
+        return saved.run();
+      },
+    },
   });
-  await invocation.run();
-  const child = invocation.children.values()[0];
+  const runtime = assembleRuntime(runtimeDefinition(execution), { providers: [], source: { entry: () => null, capture: () => null } });
+  await runtime.run(null, {});
+  const child = facts.get(saved.ref);
   assert.equal(child.key, undefined);
   assert.equal(child.returned.status, 'succeeded');
   assert.equal(child.reception.status, 'pending');
-  assert.throws(() => operation.create(invocation, null), /already ended/);
+  await assert.rejects(saved.accept(), /already ended/);
 });
 
 test('a terminal reporting failure remains a failed delivery with a succeeded child context', async () => {
-  const runtime = createBoundRuntime();
   const error = new Error('finish record failed');
-  const use = {
-    create(parent, input, options) {
-      return new Invocation({
-        parent: { invocation: parent, key: options.key },
-        context: new OperationContext(parent.context, input),
-        signal: parent.context.signal,
-        work: { maxRounds: 1, execute: () => 'completed' },
-        observation: bindInvocationObservation(
-          {
-            identity: { level: 'operation', contextId: 'delivery-probe' },
-            resources: new ResourceBindings({}),
-            declarations: [
-              defineObservation(
-                {
-                  requires: {},
-                  observe(fact) {
-                    if (fact.kind === 'finished') throw error;
-                  },
-                },
-                { failure: 'propagate' },
-              ),
-            ],
+  const use = defineOperation()({
+    ...metadata,
+    observation: [
+      defineObservation(
+        {
+          requires: {},
+          observe(fact) {
+            if (fact.kind === 'finished') throw error;
           },
-          [],
-        ),
-      });
-    },
-  };
-  const invocation = root(runtime, new Sequence().step('work', { use, input: () => null }));
-  await assert.rejects(invocation.run(), (observed) => observed.code === 'OBSERVATION_FAILED' && observed.cause === error);
-  const child = invocation.children.values()[0];
+        },
+        { failure: 'propagate' },
+      ),
+    ],
+    run: { execute: () => 'completed' },
+  });
+  const installed = install(new Sequence().step('work', { use, input: () => null }));
+  await assert.rejects(installed.runtime.run(null, {}), (observed) => observed.code === 'OBSERVATION_FAILED' && observed.cause === error);
+  const child = installed.calls[0].children.values()[0];
   assert.equal(child.invocation.context.status, 'succeeded');
   assert.equal(child.invocation.context.state.output, 'completed');
   assert.equal(child.returned.status, 'failed');
   assert.equal(child.reception.status, 'pending');
 });
 
-test('input preparation failure creates no child and repeated work positions produce separate calls', async () => {
-  const runtime = createBoundRuntime();
-  const use = new ComposedOperation(runtime, new Sequence());
+test('input preparation failure creates no child and repeated positions produce separate calls', async () => {
+  const use = composed(new Sequence());
   const error = new Error('cannot prepare input');
-  const failed = root(
-    runtime,
+  const failed = install(
     new Sequence().step('work', {
       use,
       input: () => {
@@ -220,12 +189,12 @@ test('input preparation failure creates no child and repeated work positions pro
       },
     }),
   );
-  await assert.rejects(failed.run(), (value) => value === error);
-  assert.equal(failed.children.values().length, 0);
+  await assert.rejects(failed.runtime.run(1, {}), (value) => value === error);
+  assert.equal(failed.calls[0].children.values().length, 0);
   const sequence = new Sequence().step('one', { use, input: () => null }).step('two', { use, input: () => null });
-  const invocation = root(runtime, sequence);
-  await invocation.run();
-  const children = invocation.children.values();
+  const installed = install(sequence);
+  await installed.runtime.run(1, {});
+  const children = installed.calls[0].children.values();
   assert.deepEqual(
     children.map((child) => child.key),
     ['one', 'two'],

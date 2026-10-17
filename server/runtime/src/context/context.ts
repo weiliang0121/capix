@@ -1,6 +1,8 @@
 import type { InvocationFailure } from '../invocation/failure.js';
 import { randomUUID } from 'node:crypto';
 import { Continuation, type InvocationResult } from '../invocation/result.js';
+import type { InvocationContinuationFact } from '../invocation/continuation.js';
+import { isNonBlankString } from '../value/string.js';
 
 /** Per-invocation controls; application settings and resource selection belong to binding. */
 export interface InvocationControls {
@@ -38,13 +40,15 @@ export class InvocationContext<Input = unknown, Output = unknown> {
   }
 
   /** Construction-only installation; never exposed through ContextView. */
-  installCheckpoint(frame: { id: string; round: number; currentInput: Input }): void {
+  installCheckpoint(frame: { id: string; round: number; currentInput: Input; continuation?: InvocationContinuationFact }): void {
     this.requireRunning();
     if (this.#progress.round !== 0 || !frame.id || !Number.isInteger(frame.round) || frame.round < 1 || frame.round > 2) throw new Error('Invalid checkpoint context installation');
     this.#id = frame.id;
     this.#progress = Object.freeze({ round: frame.round, input: frame.currentInput, phase: 'execute' });
+    this.#continuation = frame.continuation ? Object.freeze({ ...frame.continuation }) : undefined;
   }
   #state: ContextState<Output> = Object.freeze({ status: 'running' });
+  #continuation?: InvocationContinuationFact;
 
   #progress: Readonly<{ round: number; input: Input; phase: 'execute' | 'receive' | 'handling'; result?: InvocationResult<Output> }>;
 
@@ -57,6 +61,18 @@ export class InvocationContext<Input = unknown, Output = unknown> {
   }
   get currentInput(): Input {
     return this.#progress.input;
+  }
+
+  get continuation(): InvocationContinuationFact | undefined {
+    return this.#continuation;
+  }
+
+  /** The next round and its accepted reason become visible in one synchronous transition. */
+  installContinuation(input: Input, fact: InvocationContinuationFact): void {
+    this.requireRunning();
+    if (this.#progress.round !== 1 || fact.fromRound !== 1 || !isNonBlankString(fact.reason) || (fact.stage === 'handling' ? this.#progress.phase !== 'handling' || !fact.origin : fact.stage !== 'accept' || this.#progress.phase !== 'receive' || fact.origin !== undefined)) throw new Error('Invalid accepted continuation');
+    this.#continuation = Object.freeze({ ...fact });
+    this.#progress = Object.freeze({ round: 2, input, phase: 'execute' });
   }
 
   startRound(round: number, input: Input): void {

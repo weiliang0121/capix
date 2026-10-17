@@ -25,7 +25,7 @@
 
 ## 运行结构与访问
 
-- 运行时表示活动状态，不等同于 R。`*Definition` 是内容契约；`BoundRuntime/BoundExecution/BoundOperation/BoundAttempt` 是可复用结构；Invocation 与本层 Context 表示单次调用。业务接收 `*ContextView`、InvocationView、ChildBindings，不取得真实 Context 的生命周期修改能力。
+- 运行时表示活动状态，不等同于 R。`*Definition` 是内容契约；`BoundRuntime/BoundExecution/BoundOperation/BoundAttempt` 是可复用结构；Invocation 与本层 Context 表示单次调用。定义可用 `define*` 工厂或具名类组织；处理函数只接收阶段 Work，不取得 Context/Invocation。Work 暴露本阶段资源与动作，成功输出保持原引用。
 - REOA 声明平级 run/exceptions/observation；绑定只接线与约束访问，不执行业务 Sequence。R 声明 E children 并显式选择、调用和接纳；不假定 R 与 E 唯一对应。E→O，O→O/A，A 不继续分层。原始实体通过正式资源申请使用，不向祖先 Context 取数。
 - REOA Binder 负责声明解算、资源与 work 接线，辅助函数处理具体动作；RuntimeBinding/ExecutionBinding/OperationBinding/AttemptBinding 是绑定结果契约，Bound 直接持有结果，不反向装配。resolveDeclaration 提前解算全树，固定内核字段、函数入口与各父位置的结果；EOA Binder.bindResolved 消费结果惰性建立子结构，普通 bind 则先解算给定子树。原声明只保留身份与宿主定位，修改结构需要重装配；原业务实例及方法 receiver 不冻结。RuntimeBinder 每次 bind 建立独立的 ContextBuilder/InvocationBuilder 链，不引入 BindingEnvironment 或通用层级注册管理者。应用继续用 assembleRuntime。
 - BoundRuntime 持有占用和稳定身份，只引用本层 InvocationBuilder。构造器在所属 R 内持续复用且不缓存单次信号/输入。每次 run 新建 RuntimeContext/Invocation；占用取得后任何失败都释放。业务不维护第二个 executing 标志，不隐含排队。
@@ -33,14 +33,14 @@
 - ResourceOffer 声明公开访问、capture、兑现时机与 describe。绑定按对象身份、唯一供给和声明覆盖检查；业务只取得本阶段资源。资源端点检查所属调用/祖先活动，不能缓存写端点越过调用继续使用。关闭观测不触发描述或提前兑现惰性模型。
 - E entry.accept 接纳输入，accepted 通知后，未取消时 entry.admit 执行分段；entry 关闭后 capture 固定工作配置/原文范围，然后创建 E Context/Invocation。入口阶段属于已有 R，不伪造 E 记录。started 是同步绑定回调，保持 Context 建立后、调用 started 发布前的时机。被动进展通过独立 ProgressChannel 隔离消费者故障，不把反馈回调当作建立钩子；消息落实定位在正式 append 时发布，不读当前集合长度反推。详细顺序见 [运行边界](docs/runtime-boundaries.md)。
 - O/A 可通过 `childResources` 在创建时收窄已供应且已申请的资源；规则由 ResourceOffer.refine 签发，绑定只从输入选择范围，资源自身检查不可扩大。父层和兄弟供给不变，无关资源不重捕获；这不是动态能力注册或调度。
-- BoundChildren 持有已解算子声明与固定 CP 契约，惰性建立直接子结构；已保存成功交付不需要初始化子结构。Initializer 缓存成功或失败；ChildBindingsBuilder 核对阶段范围并构造 InvocationChildBindings，后者提供本次调用的受控入口。InvocationWorkBinding 是 Bound 持有的固定声明适配，实现 InvocationWork 契约；按 Invocation 持有 InvocationAccess，后者管理跨阶段共享的调用映射和阶段/轮次访问缓存，进入阶段即使命中缓存也先激活资源。Builder 不保留本次状态，不提前初始化子结构；视图与 writer 保持受限端口，未声明 accept 不安装默认接纳方法。不引入重置/异步管理器。Sequence 逐项构造输入、运行并接纳结果，各次输出独立。父子关系保存真实返回与接纳事实；returned 不等于 accepted。
+- BoundChildren 持有已解算子声明与固定 CP 契约，惰性建立直接子结构；已保存成功交付不需要初始化子结构。Initializer 缓存成功或失败；ChildBindingsBuilder 核对阶段范围并构造 InvocationChildBindings，后者签发阶段 ChildCalls/ChildCall；opaque ChildReference 可跨本父调用的阶段/轮次保存，通过当前 work.children.open 重新取得动作。事实查询不需要 uses，创建/启动/恢复需要。InvocationWorkBinding 是 Bound 持有的固定声明适配，实现 InvocationWork 契约；按 Invocation 持有 InvocationAccess，后者管理跨阶段共享的引用认证，进入阶段先激活资源并签发当前阶段/轮次 Work。Builder 不保留本次状态，不提前初始化子结构；Work、子句柄与 writer 保持受限端口，未声明 accept 不安装默认接纳方法。不引入重置/异步管理器。Sequence 逐项构造输入、运行并接纳结果，各次输出独立。父子关系保存真实返回与接纳事实；returned 不等于 accepted。
 - Invocation 协调整次调用与最终交付，InvocationCycle 持有本地工作周期及输出段，只使用窄工作/控制端口；Context 唯一持有语义进度。CP 编解码、子恢复依据及续接缓存属于 checkpoint，Children/Relation 只安装已解码关系事实并维护直接归属和接纳窗口。
-- Context 保留真实 IO/异常引用，局部继续复用同一 Context；子调用每次新建。maxRounds 默认 1，仅允许 1/2。run.accept 只处理正常结果；exceptions.handle 按契约处理已声明异常。内核、绑定、未声明抛错、处理器错误不递归进入异常处理。已归属错误不能被业务 catch 清除。详见 [异常边界](docs/exceptions.md)。
+- Context 保留真实 IO/异常引用，局部继续复用同一 Context；子调用每次新建。maxRounds 默认 1，仅允许 1/2。run.accept 只处理正常结果；exceptions.handle 按契约处理已声明异常。子 run/accept 通过独立 ChildCallFailure 交付已声明异常；原样 rethrow 保持来源，抛出解包原异常按 self/raises 判断，处理器仍接收原异常。来源凭据绑定父、阶段、轮次及关系，不扫描错误对象。Continue/Resolution 由当前 Work 签发，内核接纳后原子安装 continuation/round/currentInput。内核、绑定、未声明抛错、处理器错误不递归进入异常处理。已归属错误不能被业务 catch 清除。详见 [异常边界](docs/exceptions.md)。
 
 ## Checkpoint 的有限恢复
 
-- REOA 声明可选 checkpoint 的 key/version、输入/输出 codec 与具名 points；每点独立 state/check/resume.requires/uses/execute。Invocation 协调捕获和续接，Context 受控安装原身份/round/currentInput；不保存活对象或重放原闭包。未安装保存端口时原路径不变。
-- 当前支持 execute 内明确点与等待／成功子关系；第二轮可保存已由本层处理的前轮子声明异常诊断，仅供只读历史，不重建活异常、不复活失败子调用。CPF 与业务 state 分开。按准确 childContextId、直接归属、声明版本和同级 order 续接，key 不是身份。子成功最终交付独立于较早 CP；保存真实子 round/currentInput。终态不复活，未知或缺失依据不重发。
+- REOA 声明可选 checkpoint 的 key/version、输入/输出 codec 与显式注册的具名 point 对象数组；每点独立 state/references/check(state,facts)/resume.requires/uses/execute(work,state,saved)。Work.checkpoint.save 按点派生 state/refs 类型，真实点身份由绑定检查。Invocation 协调捕获和续接，Context 受控安装原身份/round/currentInput；不保存活对象或重放原闭包。未安装保存端口时原路径不变。
+- 当前支持 execute 内明确点与等待／成功子关系；第二轮可保存已由本层处理的前轮子声明异常诊断，仅供只读历史，不重建活异常、不复活失败子调用。Frame v2 与业务 state/refs 分开；完整 Frame 保存全部直接关系，refs 是经认证的关注子集。跨进程按父契约版本与直接子声明首次出现去重位置关联；改动位置/含义需升版本。v1 不自动迁移，既有内容/记录读取不受影响。按准确 childContextId、直接归属、声明版本和同级 order 续接，key 不是身份。子成功最终交付独立于较早 CP；保存真实子 round/currentInput。终态不复活，未知或缺失依据不重发。
 - 同步 CheckpointStore 的不可变 image、head revision 与最终交付独立于 Recorder；内存与 SQLite 两种实现。宿主复用同一端口并独占恢复入口，本地防并发不是跨进程租约。每个 image/delivery 8 MiB，严格纯数据边界；不自动迁移声明版本。
 - Transcript 的固定 applyFixed 在真实子接纳范围派生父子身份，业务只提供position和消息。实体将依据／凭据和消息同事务提交，重复同依据返回原位置，不重复发布；异依据冲突。资源端点与 CP writer 绑定本轮，不允许旧端点跨轮使用。
 - 恢复使用新 activityId 的 CheckpointFact：历史 installed 基线与新变化分开；恢复调用事实不写原 Recorder/Invocation changes；实体新变化仍经自身出口发布。不装 Recorder 仍可恢复。观测默认隔离，可显式传播；最终交付提交后通知失败不能修改已固定交付。
@@ -73,7 +73,7 @@
 - ConversationRequest {messages} 是服务对话输入，不是通用 E 契约。正式接纳 1–501 条消息，末条为 user；忙碌返回409，不追加输入。回答追加后发 answer，记忆后处理前可见；completed 等 R.run 返回后发送。后处理失败保留回答。
 - ConversationRuntimeDefinition / ConversationExecutionDefinition 组织选择、生成、记忆提取。业务复杂度在具体声明，绑定固定资源来源。消息同步与观测 Feed 独立连接/关闭；不观测仍能正常对话。
 - 选择历史后，E 通过可替换决策 O 在已声明能力间有限推进，默认最多 8 步（允许 1–16）；目录含真实子声明的公开参数与可用条件，内部资源和输入仍由具体能力构造。默认策略仅在目标未定或候选需修正时调用理解模型；已接纳结果直接驱动下一步。文件预检 O/A 只检查命名路径元数据，显式 fileTask 跳过理解但不跳过预检；根内绝对候选可规范为相对路径。候选错误可同轮修正，真实异常不能回灌模型无限处理。task 仅在正式分支或澄清结论发布一次；回答先落实再保存，完成依赖真实交付与保存凭据，记忆是固定收尾。没有跨 QA 挂起或动态能力注册。
-- 有限流式输出由 `output: OutputDeclaration<Result, Delta>` 声明，execute 的 InvocationWorkView 只获得本轮 writer；退出 execute 即封口，继续或异常处理废弃旧段，最终结果统一校验但保持原引用。Delta 不自动向祖先转发，也不进入 Recorder、Transcript 或持久化；显式绑定消费者故障隔离。
+- 有限流式输出由 `output: OutputDeclaration<Result, Delta>` 声明，execute 的 Work 只获得本轮 writer；退出 execute 即封口，继续或异常处理废弃旧段，最终结果统一校验但保持原引用。Delta 不自动向祖先转发，也不进入 Recorder、Transcript 或持久化；显式绑定消费者故障隔离。
 - 当前仅回答/文档正文启用模型 SSE。模型交互持有有界临时原始前缀，RequestModel O 通过资源订阅跨越首次等待与后续读取，finally 解除消费。GenerateAnswer O 解码声明的 JSON content；完整返回仍须 finishReason/JSON/Schema/父层接纳。E 正式 append 后以实际候选来源和消息位置交接，不按文本或最后一次模型调用猜测身份。预览不一致不否定合法正式消息。
 - 只有 GenerateAnswerDefinition 明确支持一次再次生成：完整模型返回被 INVALID_JSON/EMPTY_OUTPUT/OUTPUT_SHAPE 拒绝时，依据直接子调用证据与声明契约继续。第二轮只准备反馈请求、调用及接纳，不重复选择、上下文组装或回答追加。超时、网络、取消、非 stop 返回、捕获/记录错误不自动重试。
 - 模型输出契约使用固定 Zod 严格 Schema，与 JSON Schema 同源；不 coerce/trim/default 掩盖非法输出。结构校验与动态引用/来源/容量规则分别由能力负责。选择保留模型优先级；请求装载按优先级保留完整前缀，第一条超限就失败，不跳过长消息凑容量。字节容量估算不是精确 tokenizer。

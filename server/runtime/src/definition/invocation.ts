@@ -1,55 +1,39 @@
+import type { InvocationLevel } from '@capix/protocol';
 import type { OutputDeclaration } from '../output/contract.js';
-import type { InvocationContextView, ContextViewResources } from '../context/view.js';
-import type { InvocationView, InvocationWorkView } from '../invocation/view.js';
-import type { Continuation, InvocationResolution } from '../invocation/result.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
-import type { ChildBindings } from '../binding/children/contract.js';
 import type { ChildDefinition } from './children.js';
-import type { ExceptionContract, DeclaredException } from '../exception/contract.js';
+import type { ExceptionContract } from '../exception/contract.js';
 import type { ObservationDeclaration } from './observation.js';
 import type { InvocationFact } from '../observation/facts.js';
-import type { CheckpointCodec, CheckpointContract, InvocationCheckpointFrame } from '../checkpoint/contract.js';
+import type { InvocationCheckpointDefinition } from './checkpoint.js';
+import type { AcceptWork, Continue, ExecuteWork, HandleWork, Resolution } from './work.js';
+import type { invocationSignature, InvocationSignature } from './signature.js';
 
-/** One explicit continuation, with its own resource and child capability requirements. */
-export interface InvocationCheckpointPoint<Input, Output, ContextView extends InvocationContextView<Input, Output>, State, Resources extends object = Record<string, never>, Delta = never> {
-  readonly state: CheckpointCodec<State>;
-  check?(frame: InvocationCheckpointFrame, state: State): void;
-  readonly resume: {
-    readonly requires: ResourceRequirements<Resources>;
-    readonly uses?: readonly ChildDefinition[];
-    execute(context: ContextViewResources<ContextView, Resources>, invocation: InvocationWorkView<Input, Output, ContextViewResources<ContextView, Resources>, Delta>, children: ChildBindings, state: State): Output | Promise<Output>;
-  };
-}
+export type { InvocationCheckpointPoint, InvocationCheckpointDefinition } from './checkpoint.js';
 
-export interface InvocationCheckpointDefinition<Input, Output, ContextView extends InvocationContextView<Input, Output>, Delta = never> extends CheckpointContract {
-  readonly input: CheckpointCodec<Input>;
-  readonly output: CheckpointCodec<Output>;
-  readonly points: Readonly<Record<string, InvocationCheckpointPoint<Input, Output, ContextView, any, any, Delta>>>;
-}
-
-export interface InvocationRunDefinition<Input, Output, ContextView extends InvocationContextView<Input, Output>, Resources extends object, Delta = never> {
+export interface InvocationRunDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Delta = never, Allowed extends ChildDefinition = ChildDefinition> {
   readonly requires: ResourceRequirements<Resources>;
   /** Omitted means all children declared by this owner. */
-  readonly uses?: readonly ChildDefinition[];
-  execute(context: ContextView, invocation: InvocationWorkView<Input, Output, ContextView, Delta>, children: ChildBindings): Output | Promise<Output>;
-  accept?(context: ContextView, output: Output, invocation: InvocationView<Input, Output, ContextView>, children: ChildBindings): Output | Continuation<Input> | Promise<Output | Continuation<Input>>;
+  readonly uses?: readonly Allowed[];
+  execute(work: ExecuteWork<Level, Input, Output, Resources, Allowed, Delta>): Output | Promise<Output>;
+  accept?(work: AcceptWork<Level, Input, Output, Resources, Allowed>): Output | Continue<Input> | Promise<Output | Continue<Input>>;
 }
 
-export interface InvocationExceptionDefinition<Input, Output, ContextView extends InvocationContextView<Input, Output>, Resources extends object> {
+export interface InvocationExceptionDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Allowed extends ChildDefinition = ChildDefinition> {
   readonly requires: ResourceRequirements<Resources>;
-  /** An exception handler receives no child call capabilities unless explicitly declared. */
-  readonly uses?: readonly ChildDefinition[];
-  readonly accepts: readonly ExceptionContract<any>[];
-  handle(context: ContextView, exception: DeclaredException, invocation: InvocationView<Input, Output, ContextView>, children: ChildBindings): InvocationResolution<Input, Output> | Promise<InvocationResolution<Input, Output>>;
+  readonly uses?: readonly Allowed[];
+  readonly accepts: readonly ExceptionContract<unknown>[];
+  handle(work: HandleWork<Level, Input, Output, Resources, Allowed>): Resolution<Input, Output> | Promise<Resolution<Input, Output>>;
 }
 
-/** Owner declaration: work, handling and description are peers; none owns the others. */
-export abstract class InvocationDefinition<Input, Output, ContextView extends InvocationContextView<Input, Output>, Resources extends object, ExceptionResources extends object = Record<string, never>, Delta = never> {
+/** Work, handling and observation are peers. No handler receives an internal invocation. */
+export abstract class InvocationDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, ExceptionResources extends object = Record<string, never>, Delta = never, EntryInput = Input> {
+  declare readonly [invocationSignature]?: InvocationSignature<Input, Output, EntryInput, Delta>;
   readonly maxRounds: 1 | 2 = 1;
-  readonly raises: readonly ExceptionContract<any>[] = [];
+  readonly raises: readonly ExceptionContract<unknown>[] = [];
   readonly output?: OutputDeclaration<Output, Delta>;
-  abstract readonly run: InvocationRunDefinition<Input, Output, ContextView, Resources, Delta>;
-  readonly exceptions?: InvocationExceptionDefinition<Input, Output, ContextViewResources<ContextView, ExceptionResources>, ExceptionResources>;
+  abstract readonly run: InvocationRunDefinition<Input, Output, Level, Resources, Delta>;
+  readonly exceptions?: InvocationExceptionDefinition<Input, Output, Level, ExceptionResources>;
   readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
-  readonly checkpoint?: InvocationCheckpointDefinition<Input, Output, ContextView, Delta>;
+  readonly checkpoint?: InvocationCheckpointDefinition<Input, Output, Level, Delta>;
 }

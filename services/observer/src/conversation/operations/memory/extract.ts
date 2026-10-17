@@ -1,15 +1,13 @@
 import { invocationRecording } from '@capix/server-runtime/recording';
-import type { ChildBindings } from '@capix/server-runtime';
 import { MemoryResource } from '@capix/server-runtime/content';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ModelCallResources, type MemoryWriteResources } from '../../resources.js';
-import type { InvocationWorkView, InvocationCheckpointDefinition, ChildInvocationView, InvocationCheckpointFrame } from '@capix/server-runtime';
+import { checkpointPoint, childReference, type OperationWork, type ChildCall, type CheckpointFacts, type ChildFact } from '@capix/server-runtime';
 import { isEqual } from 'es-toolkit/predicate';
 import { memoryCheckpointInput, memoryCheckpointOutput } from './checkpoint.js';
-import { originalCheckpoint, waitingChild, acceptedChild, childWaitingCodec } from '../checkpoint.js';
-import type { ModelRequest, ModelOutput } from '../../model/types.js';
+import { originalCheckpoint, waitingChild, acceptedChild, emptyCheckpointState } from '../checkpoint.js';
 import { modelOutputSchema } from '../../model/interactions.js';
-import { OperationDefinition, type OperationContextView } from '@capix/server-runtime';
+import { OperationDefinition } from '@capix/server-runtime';
 import { PrepareModelRequestDefinition } from '../../attempt/model/prepare.js';
 import { RequestModelDefinition } from '../model/request.js';
 import { AcceptModelOutputDefinition, type ModelAcceptanceInput } from '../../attempt/model/accept.js';
@@ -20,8 +18,7 @@ import type { MemoryInput } from './input.js';
 import { memoryOutputContract, type MemoryExtraction } from './output.js';
 import { loadRequest } from '../../model/request.js';
 
-type MemoryContext = OperationContextView<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources>;
-type MemoryCall = InvocationWorkView<MemoryInput, MemoryExtraction, MemoryContext>;
+type MemoryWork = OperationWork<MemoryInput, MemoryExtraction, object>;
 
 export class ExtractMemoryDefinition extends OperationDefinition<MemoryInput, MemoryExtraction, ModelCallResources & MemoryWriteResources> {
   readonly observation = [invocationRecording()];
@@ -40,7 +37,8 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request(), memoryWriter: MemoryResource.apply.request() } as const);
   readonly run;
   readonly children;
-  readonly checkpoint: InvocationCheckpointDefinition<MemoryInput, MemoryExtraction, MemoryContext>;
+  readonly checkpoint;
+  readonly points;
 
   readonly prepareRequestDefinition: PrepareModelRequestDefinition<MemoryInput>;
   readonly requestModelDefinition: RequestModelDefinition;
@@ -54,18 +52,14 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     this.acceptOutputDefinition = new AcceptModelOutputDefinition({ schema: this.outputContract.schema, accept: (value, input: ModelAcceptanceInput & { basis: MemoryInput }) => this.outputContract.accept(value, input.basis) });
     this.applyMemoryDefinition = new ApplyMemoryDefinition();
     this.children = Object.freeze([this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition, this.applyMemoryDefinition]);
-    this.checkpoint = {
-      key: 'observer.extract-memory',
-      version: 1,
-      input: memoryCheckpointInput,
-      output: memoryCheckpointOutput,
-      points: {
-        requestWaiting: { state: childWaitingCodec, check: (frame, state) => this.check(frame, state, 'request'), resume: { requires: ExtractMemoryDefinition.requires, uses: this.children, execute: (context, invocation, children, state: { childId: string }) => this.receiveRequest(context, invocation, children, children.get(this.prepareRequestDefinition).resume(invocation, state.childId)) } },
-        modelWaiting: { state: childWaitingCodec, check: (frame, state) => this.check(frame, state, 'model'), resume: { requires: ExtractMemoryDefinition.requires, uses: this.children, execute: (context, invocation, children, state: { childId: string }) => this.receiveModel(context, invocation, children, children.get(this.requestModelDefinition).resume(invocation, state.childId)) } },
-        acceptanceWaiting: { state: childWaitingCodec, check: (frame, state) => this.check(frame, state, 'acceptance'), resume: { requires: ExtractMemoryDefinition.requires, uses: this.children, execute: (context, invocation, children, state: { childId: string }) => this.receiveAcceptance(invocation, children, children.get(this.acceptOutputDefinition).resume(invocation, state.childId)) } },
-        applicationWaiting: { state: childWaitingCodec, check: (frame, state) => this.check(frame, state, 'application'), resume: { requires: ExtractMemoryDefinition.requires, uses: this.children, execute: (_context, invocation, children, state: { childId: string }) => this.receiveApplication(children, children.get(this.applyMemoryDefinition).resume(invocation, state.childId)) } },
-      },
+    const point = checkpointPoint<'operation', MemoryInput, MemoryExtraction>();
+    this.points = {
+      requestWaiting: point({ name: 'requestWaiting', state: emptyCheckpointState, references: { child: childReference(this.prepareRequestDefinition) }, check: (_state, facts) => this.check(facts, facts.references.child, 'request'), resume: { uses: this.children, execute: (work, _state, saved) => this.receiveRequest(work, work.children.resume(saved.child)) } }),
+      modelWaiting: point({ name: 'modelWaiting', state: emptyCheckpointState, references: { child: childReference(this.requestModelDefinition) }, check: (_state, facts) => this.check(facts, facts.references.child, 'model'), resume: { uses: [this.requestModelDefinition, this.acceptOutputDefinition, this.applyMemoryDefinition], execute: (work, _state, saved) => this.receiveModel(work, work.children.resume(saved.child)) } }),
+      acceptanceWaiting: point({ name: 'acceptanceWaiting', state: emptyCheckpointState, references: { child: childReference(this.acceptOutputDefinition) }, check: (_state, facts) => this.check(facts, facts.references.child, 'acceptance'), resume: { uses: [this.acceptOutputDefinition, this.applyMemoryDefinition], execute: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.child)) } }),
+      applicationWaiting: point({ name: 'applicationWaiting', state: emptyCheckpointState, references: { child: childReference(this.applyMemoryDefinition) }, check: (_state, facts) => this.check(facts, facts.references.child, 'application'), resume: { uses: [this.applyMemoryDefinition], execute: (work, _state, saved) => this.receiveApplication(work.children.resume(saved.child)) } }),
     };
+    this.checkpoint = { key: 'observer.extract-memory', version: 2, input: memoryCheckpointInput, output: memoryCheckpointOutput, points: Object.values(this.points) };
     this.run = { requires: ExtractMemoryDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
@@ -73,61 +67,65 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     return { currentIndexes: input.currentIndexes, messages: input.messages.map(({ index, message }) => ({ index, role: message.role, content: message.content })), memories: input.memories, ...(input.results ? { results: input.results } : {}) };
   }
 
-  private async execute(context: MemoryContext, invocation: MemoryCall, children: ChildBindings): Promise<MemoryExtraction> {
-    const child = children.get(this.prepareRequestDefinition).create(invocation, context.currentInput, { key: 'request' });
-    invocation.checkpoint?.save('requestWaiting', { childId: child.context.id });
-    return this.receiveRequest(context, invocation, children, child);
+  private async execute(work: MemoryWork): Promise<MemoryExtraction> {
+    const child = work.children.create(this.prepareRequestDefinition, work.input, { key: 'request' });
+    work.checkpoint?.save(this.points.requestWaiting, null, { child: child.ref });
+    return this.receiveRequest(work, child);
   }
 
-  private async receiveRequest(context: MemoryContext, invocation: MemoryCall, children: ChildBindings, child: ChildInvocationView<MemoryInput, ModelRequest>): Promise<MemoryExtraction> {
+  private async receiveRequest(work: MemoryWork, child: ChildCall<PrepareModelRequestDefinition<MemoryInput>>): Promise<MemoryExtraction> {
     await child.run();
-    const request = await children.accept(child, (value) => value);
-    const model = children.get(this.requestModelDefinition).create(invocation, request, { key: 'model' });
-    invocation.checkpoint?.save('modelWaiting', { childId: model.context.id });
-    return this.receiveModel(context, invocation, children, model);
+    const request = await child.accept();
+    const model = work.children.create(this.requestModelDefinition, request, { key: 'model' });
+    work.checkpoint?.save(this.points.modelWaiting, null, { child: model.ref });
+    return this.receiveModel(work, model);
   }
 
-  private async receiveModel(context: MemoryContext, invocation: MemoryCall, children: ChildBindings, child: ChildInvocationView<ModelRequest, ModelOutput>): Promise<MemoryExtraction> {
+  private async receiveModel(work: MemoryWork, child: ChildCall<RequestModelDefinition>): Promise<MemoryExtraction> {
     await child.run();
-    const output = await children.accept(child, (value) => value);
-    const acceptance = children.get(this.acceptOutputDefinition).create(invocation, { output, basis: context.currentInput }, { key: 'acceptance' });
-    invocation.checkpoint?.save('acceptanceWaiting', { childId: acceptance.context.id });
-    return this.receiveAcceptance(invocation, children, acceptance);
+    const output = await child.accept();
+    const acceptance = work.children.create(this.acceptOutputDefinition, { output, basis: work.input }, { key: 'acceptance' });
+    work.checkpoint?.save(this.points.acceptanceWaiting, null, { child: acceptance.ref });
+    return this.receiveAcceptance(work, acceptance);
   }
 
-  private async receiveAcceptance(invocation: MemoryCall, children: ChildBindings, child: ChildInvocationView<ModelAcceptanceInput & { basis: MemoryInput }, MemoryExtraction>): Promise<MemoryExtraction> {
+  private async receiveAcceptance(work: MemoryWork, child: ChildCall<AcceptModelOutputDefinition<ModelAcceptanceInput & { basis: MemoryInput }, MemoryExtraction>>): Promise<MemoryExtraction> {
     await child.run();
-    const output = await children.accept(child, (value) => value);
-    const application = children.get(this.applyMemoryDefinition).create(invocation, output, { key: 'application' });
-    invocation.checkpoint?.save('applicationWaiting', { childId: application.context.id });
-    return this.receiveApplication(children, application);
+    const output = await child.accept();
+    const application = work.children.create(this.applyMemoryDefinition, output, { key: 'application' });
+    work.checkpoint?.save(this.points.applicationWaiting, null, { child: application.ref });
+    return this.receiveApplication(application);
   }
 
-  private async receiveApplication(children: ChildBindings, child: ChildInvocationView<MemoryExtraction, MemoryExtraction>): Promise<MemoryExtraction> {
+  private async receiveApplication(child: ChildCall<ApplyMemoryDefinition>): Promise<MemoryExtraction> {
     await child.run();
-    return children.accept(child, (value) => value);
+    return child.accept();
   }
 
-  private check(frame: InvocationCheckpointFrame, state: { childId: string }, key: 'request' | 'model' | 'acceptance' | 'application'): void {
-    originalCheckpoint(frame);
+  private check(facts: CheckpointFacts<MemoryInput>, selected: ChildFact, key: 'request' | 'model' | 'acceptance' | 'application'): void {
+    originalCheckpoint(facts);
     const positions = ['request', 'model', 'acceptance', 'application'];
     const index = positions.indexOf(key);
     const definitions = [this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition, this.applyMemoryDefinition];
-    const current = waitingChild(frame, state, key, definitions[index]!.checkpoint);
-    if (frame.children.length !== index + 1) throw new Error('Memory extraction checkpoint has an incompatible stage');
-    for (let position = 0; position < index; position++) {
-      const previous = acceptedChild(frame.children[position]);
-      if (previous.key !== positions[position] || !isEqual(previous.state.output, previous.state.reception.output)) throw new Error('Memory extraction checkpoint has incompatible preparation');
+    const current = waitingChild(facts, selected, key);
+    const children = facts.children.values();
+    if (children.length !== index + 1) throw new Error('Memory extraction checkpoint has an incompatible stage');
+    for (let position = 0; position <= index; position++) {
+      const child = facts.children.require(definitions[position]!, children[position]!.ref);
+      if (child.key !== positions[position]) throw new Error('Memory extraction checkpoint changed the direct child declaration');
+      if (position < index) {
+        const previous = acceptedChild(child);
+        if (!isEqual(previous.returned.output, previous.reception.value)) throw new Error('Memory extraction checkpoint has incompatible preparation');
+      }
     }
-    const request = frame.children[0]!;
-    if (!isEqual(request.input, frame.currentInput)) throw new Error('Memory extraction request lost its fixed basis');
-    if (index > 0 && !isEqual(frame.children[1]!.input, acceptedChild(request).state.reception.output)) throw new Error('Memory model request differs from preparation');
-    if (index > 1 && !isEqual(frame.children[2]!.input, { output: acceptedChild(frame.children[1]).state.reception.output, basis: frame.currentInput })) throw new Error('Memory acceptance lost its original basis');
-    if (index > 2 && !isEqual(current.input, acceptedChild(frame.children[2]).state.reception.output)) throw new Error('Memory application differs from accepted proposal');
+    const request = children[0]!;
+    if (!isEqual(request.input, facts.input)) throw new Error('Memory extraction request lost its fixed basis');
+    if (index > 0 && !isEqual(children[1]!.input, acceptedChild(request).reception.value)) throw new Error('Memory model request differs from preparation');
+    if (index > 1 && !isEqual(children[2]!.input, { output: acceptedChild(children[1]).reception.value, basis: facts.input })) throw new Error('Memory acceptance lost its original basis');
+    if (index > 2 && !isEqual(current.input, acceptedChild(children[2]).reception.value)) throw new Error('Memory application differs from accepted proposal');
     if (index > 2) {
-      const feedback = modelOutputSchema.parse(acceptedChild(frame.children[1]).state.reception.output);
-      const basis = memoryCheckpointInput.decode(frame.currentInput);
-      if (feedback.finishReason !== 'stop' || !isEqual(memoryOutputContract.accept(JSON.parse(feedback.content), basis), current.input)) throw new Error('Memory application checkpoint does not match its validated model output');
+      const feedback = modelOutputSchema.parse(acceptedChild(children[1]).reception.value);
+      if (feedback.finishReason !== 'stop' || !isEqual(memoryOutputContract.accept(JSON.parse(feedback.content), facts.input), current.input)) throw new Error('Memory application checkpoint does not match its validated model output');
     }
   }
 }

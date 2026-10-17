@@ -166,7 +166,9 @@ test('default limit is one total round and explicit local handling is capped at 
     assert.equal(context.status, 'failed');
     assert.equal(record.value.processes.at(-1).type, 'stop');
     assert.equal(record.value.processes.at(-1).error.code, 'LOCAL_ROUND_LIMIT');
-    assert.equal(record.value.processes.at(-2).reason, '仍未满足要求');
+    const continuations = record.value.processes.filter((process) => process.type === 'continue');
+    assert.equal(continuations.length, limit - 1);
+    for (const continuation of continuations) assert.equal(continuation.reason, '仍未满足要求');
   }
 });
 

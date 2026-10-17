@@ -1,157 +1,118 @@
-import type { CheckpointBinding } from '../../checkpoint/work.js';
-import type { ChildDefinition, DefinitionEntryInput, DefinitionInvocationInput, DefinitionOutput, DefinitionParentInvocationView, DefinitionContextFacts } from '../../definition/children.js';
+import type { ChildCall, ChildCalls, ChildDefinition, ChildOptions, ChildReference, DefinitionEntryInput, DefinitionOutput, ResumeChildCalls } from '../../definition/children.js';
 import type { InvocationEntry } from '../../definition/entry.js';
-import type { ParentInvocation } from '../../invocation/children.js';
-import type { InvocationRelationOptions, InvocationTarget } from '../../invocation/relation.js';
-import type { ChildInvocationView, InvocationView } from '../../invocation/view.js';
+import type { Invocation } from '../../invocation/invocation.js';
+import { ChildCallFailure } from '../../invocation/provenance.js';
 import type { BoundChildren } from './bound.js';
-import type { ChildBinding, ChildBindings, ChildInvocationOptions } from './contract.js';
+import type { InvocationChildReferences } from './references.js';
 
-export interface ChildBindingsParent extends ParentInvocation {
-  readonly view: InvocationView;
-  reject(error: unknown, allowException?: boolean): void;
-  requireHealthy(): void;
-  restoreChild(contract: CheckpointBinding, contextId: string, create: () => InvocationTarget): InvocationTarget;
-}
+export type ChildBindingsParent = Invocation<any, any, any>;
 
-interface InvocationChildBindingsOptions {
+interface ChildAccessOptions {
   readonly children: BoundChildren;
   readonly parent: ChildBindingsParent;
-  readonly view: InvocationView;
   readonly allowed: ReadonlySet<ChildDefinition>;
-  readonly validate?: () => void;
-  readonly calls: Map<InvocationView, InvocationTarget>;
+  readonly validate: () => void;
+  readonly references: InvocationChildReferences;
+  readonly restoring: boolean;
 }
 
-/** One phase's child access. Internal references never appear on the business surface. */
-export class InvocationChildBindings implements ChildBindings {
-  readonly #children: BoundChildren;
-  readonly #parent: ChildBindingsParent;
-  readonly #view: InvocationView;
-  readonly #allowed: ReadonlySet<ChildDefinition>;
-  readonly #validate?: () => void;
-  readonly #calls: Map<InvocationView, InvocationTarget>;
+/** Phase-bound actions over this parent's authenticated, phase-independent references. */
+export class InvocationChildBindings {
+  readonly port: ChildCalls | ResumeChildCalls;
 
-  constructor(binding: InvocationChildBindingsOptions) {
-    this.#children = binding.children;
-    this.#parent = binding.parent;
-    this.#view = binding.view;
-    this.#allowed = binding.allowed;
-    this.#validate = binding.validate;
-    this.#calls = binding.calls;
-    Object.freeze(this);
-  }
-
-  readonly get = <Definition extends ChildDefinition>(definition: Definition): ChildBinding<Definition> => {
-    try {
-      this.#requireDeclared(definition);
-      return Object.freeze({
-        create: (actual: DefinitionParentInvocationView<Definition>, input: DefinitionEntryInput<Definition>, options?: ChildInvocationOptions<Definition>) => this.#create(definition, actual, input, options),
-        call: (actual: DefinitionParentInvocationView<Definition>, input: DefinitionEntryInput<Definition>) => this.#create(definition, actual, input).run(),
-        resume: (actual: DefinitionParentInvocationView<Definition>, contextId: string) => this.#resume(definition, actual, contextId),
-      }) as ChildBinding<Definition>;
-    } catch (error) {
-      this.#parent.reject(error);
-      throw error;
-    }
-  };
-
-  readonly entry = <Definition extends ChildDefinition, EntryInput>(entry: InvocationEntry<Definition, EntryInput>) =>
-    Object.freeze({
-      create: (actual: DefinitionParentInvocationView<Definition>, input: EntryInput, options: ChildInvocationOptions<Definition> = {}) => this.#createEntry(entry, actual, input, options),
+  constructor(private readonly options: ChildAccessOptions) {
+    this.port = Object.freeze({
+      create: this.create.bind(this),
+      entry: this.entry.bind(this),
+      open: this.open.bind(this),
+      facts: options.references.facts,
+      ...(options.restoring ? { resume: this.resume.bind(this) } : {}),
     });
+  }
 
-  readonly accept = async <Output, Value>(child: ChildInvocationView<unknown, Output>, work: (delivered: NoInfer<Output>) => Value | Promise<Value>): Promise<Value> => {
-    let rejected: { error: unknown } | undefined;
-    try {
-      this.#checkActive();
-      const invocation = this.#calls.get(child) as InvocationTarget<Output> | undefined;
-      if (!invocation) throw new Error('Invocation is not a child created through this binding');
-      return await this.#parent.children.get(invocation).accept(async (delivered) => {
-        // Access failures belong to the binding, not to the declared reception work.
-        this.#checkActive();
-        try {
-          return await work(delivered);
-        } catch (error) {
-          rejected = { error };
-          throw error;
-        }
-      });
-    } catch (error) {
-      this.#parent.reject(error, !!rejected && rejected.error === error);
-      throw error;
-    }
-  };
+  private create<D extends ChildDefinition>(definition: D, input: DefinitionEntryInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
+    return this.guard(() => {
+      this.requireAllowed(definition);
+      const child = this.options.children.get(definition).create(this.options.parent, input, { ...options, declarationPosition: this.options.children.position(definition) });
+      return this.handle(this.options.references.forTarget(definition, child));
+    });
+  }
 
-  readonly requireActive = (): void => {
-    try {
-      this.#checkActive();
-    } catch (error) {
-      this.#parent.reject(error);
-      throw error;
-    }
-  };
+  private entry<D extends ChildDefinition, Input>(entry: InvocationEntry<D, Input>, input: Input, options: ChildOptions<D> = {}): ChildCall<D> {
+    return this.guard(() => {
+      const definition = entry.definition;
+      this.requireAllowed(definition);
+      const parent = this.options.parent;
+      const accepted = entry.accept({ input, key: options.key, facts: { round: parent.context.progress.round as 1 | 2, continuation: this.options.references.continuation(parent.context.continuation), children: this.options.references.facts } });
+      return this.create(definition, accepted, options);
+    });
+  }
 
-  #create(definition: ChildDefinition, actual: InvocationView, input: unknown, options?: InvocationRelationOptions) {
+  private open<D extends ChildDefinition>(ref: ChildReference<D>): ChildCall<D> {
+    return this.guard(() => this.handle(ref));
+  }
+
+  private resume<D extends ChildDefinition>(ref: ChildReference<D>): ChildCall<D> {
+    return this.guard(() => {
+      if (!this.options.restoring) throw new Error('Child resume is available only in a checkpoint resume phase');
+      const entry = this.options.references.require(ref);
+      this.requireAllowed(entry.definition);
+      const position = this.options.children.position(entry.definition);
+      const contextId = entry.relation.invocation.context.id;
+      this.options.parent.restoreChild(position, contextId, () => this.options.children.get(entry.definition).resume(this.options.parent, contextId, { declarationPosition: position }));
+      return this.handle(ref);
+    });
+  }
+
+  private handle<D extends ChildDefinition>(ref: ChildReference<D>): ChildCall<D> {
+    const entry = this.options.references.require(ref);
+    const relation = entry.relation;
+    return Object.freeze({
+      ref,
+      ...(relation.key !== undefined ? { key: relation.key } : {}),
+      run: () =>
+        this.perform(async () => {
+          // Reading a saved delivery starts no new work. Every real start still requires uses.
+          if (!relation.returned) this.requireAllowed(entry.definition);
+          return (await relation.invocation.run()) as DefinitionOutput<D>;
+        }),
+      accept: <Value = DefinitionOutput<D>>(receive?: (output: DefinitionOutput<D>) => Value | Promise<Value>): Promise<Value> =>
+        this.perform(() =>
+          relation.accept((output) => {
+            this.checkActive();
+            return receive ? receive(output as DefinitionOutput<D>) : (output as Value);
+          }),
+        ),
+    });
+  }
+
+  private requireAllowed(definition: ChildDefinition): void {
+    if (!this.options.allowed.has(definition)) throw new Error('Child definition is not declared in this phase uses');
+  }
+
+  private checkActive(): void {
+    this.options.parent.requireHealthy();
+    this.options.validate();
+    this.options.parent.context.requireActive();
+  }
+
+  private guard<T>(action: () => T): T {
     try {
-      this.#requireOwner(actual);
-      this.#checkActive();
-      this.#requireDeclared(definition);
-      const child = this.#children.get(definition);
-      const invocation = child.create(this.#parent, input, options);
-      this.#calls.set(invocation.callView, invocation);
-      return invocation.callView;
+      this.checkActive();
+      return action();
     } catch (error) {
-      this.#parent.reject(error);
+      this.options.parent.reject(error);
       throw error;
     }
   }
 
-  #resume(definition: ChildDefinition, actual: InvocationView, contextId: string): ChildInvocationView {
+  private async perform<T>(action: () => T | Promise<T>): Promise<T> {
     try {
-      this.#requireOwner(actual);
-      this.#checkActive();
-      this.#requireDeclared(definition);
-      const checkpoint = this.#children.checkpoint(definition);
-      if (!checkpoint) throw new Error('Child declaration does not support checkpoints');
-      // A saved final delivery does not need a bound child structure or a new invocation.
-      const invocation = this.#parent.restoreChild(checkpoint, contextId, () => this.#children.get(definition).resume(this.#parent, contextId));
-      if (!invocation.callView) throw new Error('Restored child has no public invocation view');
-      this.#calls.set(invocation.callView, invocation);
-      return invocation.callView;
+      this.checkActive();
+      return await action();
     } catch (error) {
-      this.#parent.reject(error);
+      this.options.parent.reject(error, error instanceof ChildCallFailure);
       throw error;
     }
-  }
-
-  #createEntry<Definition extends ChildDefinition, EntryInput>(entry: InvocationEntry<Definition, EntryInput>, actual: DefinitionParentInvocationView<Definition>, input: EntryInput, options: ChildInvocationOptions<Definition>): ChildInvocationView<DefinitionInvocationInput<Definition>, DefinitionOutput<Definition>, DefinitionContextFacts<Definition>> {
-    let accepted: DefinitionEntryInput<Definition>;
-    try {
-      this.#requireOwner(actual);
-      this.#checkActive();
-      this.#requireDeclared(entry.definition);
-      accepted = entry.accept(actual, input, options);
-    } catch (error) {
-      this.#parent.reject(error);
-      throw error;
-    }
-    // Entry acceptance can change activity; construction checks it again.
-    return this.#create(entry.definition, actual, accepted, options) as ChildInvocationView<DefinitionInvocationInput<Definition>, DefinitionOutput<Definition>, DefinitionContextFacts<Definition>>;
-  }
-
-  #requireDeclared(definition: ChildDefinition): void {
-    if (!this.#allowed.has(definition)) throw new Error('Child definition is not declared in this binding');
-  }
-
-  #requireOwner(actual: InvocationView): void {
-    if (actual !== this.#view) throw new Error('Child entry belongs to another parent invocation');
-  }
-
-  #checkActive(): void {
-    this.#parent.requireHealthy();
-    this.#validate?.();
-    this.#parent.context.requireRunning();
-    if ('requireActive' in this.#parent.context) (this.#parent.context as { requireActive(): void }).requireActive();
   }
 }

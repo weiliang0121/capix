@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { checkpointCodec } from '../../checkpoint.js';
 import { checkLeafResult, textDocumentCodec } from '../../operations/checkpoint.js';
-import { AttemptDefinition, type InvocationCheckpointDefinition, type InvocationWorkView, type AttemptContextView } from '@capix/server-runtime';
+import { AttemptDefinition, checkpointPoint, type InvocationCheckpointDefinition, type AttemptWork } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { FileAccessException, FileResources, documentDescriptor, type FileReader, type TextDocument } from '../../../files/index.js';
 
@@ -12,18 +12,13 @@ export class ReadTextDefinition extends AttemptDefinition<{ readonly path: strin
   readonly callee = 'filesystem';
   readonly raises = [FileAccessException];
   readonly observation = [invocationRecording<{ readonly path: string }, TextDocument>({ output: documentDescriptor })];
-  readonly checkpoint: InvocationCheckpointDefinition<{ readonly path: string }, TextDocument, AttemptContextView<{ readonly path: string }, TextDocument, { readonly reader: FileReader }>> = {
-    key: 'observer.read-text',
-    version: 1,
-    input: checkpointCodec(z.strictObject({ path: z.string().min(1) })),
-    output: textDocumentCodec,
-    points: { result: { state: textDocumentCodec, check: checkLeafResult, resume: { requires: {}, uses: [], execute: (_context, _invocation, _children, result: TextDocument) => result } } },
-  };
+  private readonly resultPoint = checkpointPoint<'attempt', { readonly path: string }, TextDocument>()({ name: 'result', state: textDocumentCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
+  readonly checkpoint: InvocationCheckpointDefinition<{ readonly path: string }, TextDocument, 'attempt'> = { key: 'observer.read-text', version: 1, input: checkpointCodec(z.strictObject({ path: z.string().min(1) })), output: textDocumentCodec, points: [this.resultPoint] };
   readonly run = {
     requires: { reader: FileResources.readText.request() },
-    execute: async (context: AttemptContextView<{ readonly path: string }, TextDocument, { readonly reader: FileReader }>, invocation: InvocationWorkView<{ readonly path: string }, TextDocument, AttemptContextView<{ readonly path: string }, TextDocument, { readonly reader: FileReader }>>) => {
-      const result = await context.resources.values.reader.readText(context.currentInput.path, context.signal);
-      invocation.checkpoint?.save('result', result);
+    execute: async (work: AttemptWork<{ readonly path: string }, TextDocument, { readonly reader: FileReader }>) => {
+      const result = await work.resources.reader.readText(work.input.path, work.signal);
+      work.checkpoint?.save(this.resultPoint, result, {});
       return result;
     },
   };

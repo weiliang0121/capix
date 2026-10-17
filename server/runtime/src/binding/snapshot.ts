@@ -4,7 +4,8 @@ import type { OperationDefinition } from '../definition/operation.js';
 import type { AttemptDefinition } from '../definition/attempt.js';
 import type { InvocationDefinition, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/invocation.js';
 import type { ObservationDeclaration } from '../definition/observation.js';
-import type { InvocationContextView } from '../context/view.js';
+import type { InvocationLevel } from '@capix/protocol';
+import type { CheckpointReferenceSlots } from '../definition/checkpoint.js';
 import type { CheckpointCodec } from '../checkpoint/contract.js';
 
 // Heterogeneous traversal erases only the pairing already retained by the overloads.
@@ -29,7 +30,7 @@ export function snapshotDefinition(definition: AnyDefinition): AnyDefinition {
   }
 }
 
-function snapshotInvocation<Input, Output, ContextView extends InvocationContextView<Input, Output>, Resources extends object, ExceptionResources extends object, Delta>(definition: InvocationDefinition<Input, Output, ContextView, Resources, ExceptionResources, Delta>): InvocationDefinition<Input, Output, ContextView, Resources, ExceptionResources, Delta> {
+function snapshotInvocation<Input, Output, Level extends InvocationLevel, Resources extends object, ExceptionResources extends object, Delta>(definition: InvocationDefinition<Input, Output, Level, Resources, ExceptionResources, Delta>): InvocationDefinition<Input, Output, Level, Resources, ExceptionResources, Delta> {
   const run = definition.run;
   const exceptions = definition.exceptions;
   const output = definition.output;
@@ -56,21 +57,31 @@ function snapshotCodec<Value>(codec: CheckpointCodec<Value>): CheckpointCodec<Va
   return Object.freeze({ encode: codec.encode.bind(codec), decode: codec.decode.bind(codec) });
 }
 
-function snapshotCheckpoint<Input, Output, ContextView extends InvocationContextView<Input, Output>, Delta>(checkpoint: InvocationCheckpointDefinition<Input, Output, ContextView, Delta>): InvocationCheckpointDefinition<Input, Output, ContextView, Delta> {
+function snapshotCheckpoint<Input, Output, Level extends InvocationLevel, Delta>(checkpoint: InvocationCheckpointDefinition<Input, Output, Level, Delta>): InvocationCheckpointDefinition<Input, Output, Level, Delta> {
   return Object.freeze({
     key: checkpoint.key,
     version: checkpoint.version,
     input: snapshotCodec(checkpoint.input),
     output: snapshotCodec(checkpoint.output),
-    points: Object.freeze(Object.fromEntries(Object.entries(checkpoint.points).map(([name, point]) => [name, snapshotCheckpointPoint(point)]))),
+    points: Object.freeze(checkpoint.points.map(snapshotCheckpointPoint)),
   });
 }
 
-function snapshotCheckpointPoint<Input, Output, ContextView extends InvocationContextView<Input, Output>, State, Resources extends object, Delta>(point: InvocationCheckpointPoint<Input, Output, ContextView, State, Resources, Delta>): InvocationCheckpointPoint<Input, Output, ContextView, State, Resources, Delta> {
+const pointOrigins = new WeakMap<object, object>();
+
+export function originalCheckpointPoint(point: object): object {
+  return pointOrigins.get(point) ?? point;
+}
+
+function snapshotCheckpointPoint<Input, Output, Level extends InvocationLevel, State, Resources extends object, Slots extends CheckpointReferenceSlots, Allowed extends import('../definition/children.js').ChildDefinition, Delta>(point: InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta>): InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta> {
   const resume = point.resume;
-  return Object.freeze({
+  const fixed = Object.freeze({
+    name: point.name,
     state: snapshotCodec(point.state),
+    references: Object.freeze(Object.fromEntries(Object.entries(point.references).map(([name, slot]) => [name, Object.freeze({ ...slot })]))) as Slots,
     check: point.check?.bind(point),
     resume: Object.freeze({ requires: Object.freeze({ ...resume.requires }), uses: resume.uses ? Object.freeze([...resume.uses]) : undefined, execute: resume.execute.bind(resume) }),
   });
+  pointOrigins.set(fixed, originalCheckpointPoint(point));
+  return fixed;
 }

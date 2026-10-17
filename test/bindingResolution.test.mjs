@@ -22,12 +22,12 @@ function assemble(definition, options = {}) {
 test('declaration checks finish once per binding position before any call and never repeat during lazy construction', async () => {
   const checked = [];
   const called = [];
-  const leaf = attempt('leaf', { requires: {}, execute: (context) => context.currentInput });
-  const shared = operation('shared', [leaf], { requires: {}, execute: (context, invocation, children) => children.get(leaf).call(invocation, context.currentInput) });
-  const parent = (name) => operation(name, [shared], { requires: {}, execute: (context, invocation, children) => children.get(shared).call(invocation, context.currentInput) });
+  const leaf = attempt('leaf', { requires: {}, execute: (context) => context.input });
+  const shared = operation('shared', [leaf], { requires: {}, execute: (context) => context.children.create(leaf, context.input).run() });
+  const parent = (name) => operation(name, [shared], { requires: {}, execute: (context) => context.children.create(shared, context.input).run() });
   const left = parent('left');
   const right = parent('right');
-  const main = execution([left, right], { requires: {}, execute: (context, invocation, children) => children.get(context.currentInput === 'right' ? right : left).call(invocation, context.currentInput) });
+  const main = execution([left, right], { requires: {}, execute: (context) => context.children.create(context.input === 'right' ? right : left, context.input).run() });
   const definition = runtimeDefinition(main);
   const runtime = assemble(definition, {
     observations: [
@@ -79,10 +79,10 @@ test('resolved children, resource aliases and work functions stay fixed while de
   const newResource = new ResourceOffer('test.resolution.replacement', (value) => value);
   const originalRequires = { value: oldResource.request() };
   const replacementRequires = { replacement: newResource.request() };
-  const originalLeaf = attempt('original-leaf', { requires: originalRequires, execute: (context) => `${context.currentInput}:${context.resources.values.value}` });
-  const originalOperation = operation('original-operation', [originalLeaf], { requires: originalRequires, uses: [originalLeaf], execute: (context, invocation, children) => children.get(originalLeaf).call(invocation, context.currentInput) });
-  const replacementLeaf = attempt('replacement-leaf', { requires: replacementRequires, execute: (context) => `${context.currentInput}:${context.resources.values.replacement}` });
-  const replacementOperation = operation('replacement-operation', [replacementLeaf], { requires: replacementRequires, uses: [replacementLeaf], execute: (context, invocation, children) => children.get(replacementLeaf).call(invocation, context.currentInput) });
+  const originalLeaf = attempt('original-leaf', { requires: originalRequires, execute: (context) => `${context.input}:${context.resources.value}` });
+  const originalOperation = operation('original-operation', [originalLeaf], { requires: originalRequires, uses: [originalLeaf], execute: (context) => context.children.create(originalLeaf, context.input).run() });
+  const replacementLeaf = attempt('replacement-leaf', { requires: replacementRequires, execute: (context) => `${context.input}:${context.resources.replacement}` });
+  const replacementOperation = operation('replacement-operation', [replacementLeaf], { requires: replacementRequires, uses: [replacementLeaf], execute: (context) => context.children.create(replacementLeaf, context.input).run() });
   class Main extends ExecutionDefinition {
     #prefix = 'initial';
     children = [originalOperation];
@@ -90,8 +90,8 @@ test('resolved children, resource aliases and work functions stay fixed while de
     setPrefix(value) {
       this.#prefix = value;
     }
-    execute(context, invocation, children) {
-      return children.get(originalOperation).call(invocation, `${this.#prefix}:${context.currentInput}`);
+    execute(context) {
+      return context.children.create(originalOperation, `${this.#prefix}:${context.input}`).run();
     }
   }
   const main = new Main();
@@ -112,7 +112,7 @@ test('resolved children, resource aliases and work functions stay fixed while de
   main.children.splice(0, 1, replacementOperation);
   main.run.uses.splice(0, 1, replacementOperation);
   main.run.requires = replacementRequires;
-  main.run.execute = (context, invocation, children) => children.get(replacementOperation).call(invocation, `replacement:${context.currentInput}`);
+  main.run.execute = (context) => context.children.create(replacementOperation, `replacement:${context.input}`).run();
   originalRequires.value = newResource.request();
   originalOperation.children.length = 0;
   originalOperation.run.uses.length = 0;
@@ -131,7 +131,7 @@ test('fixed run callbacks keep their original receiver without freezing its busi
     requires: {},
     execute(context) {
       this.calls++;
-      return `${this.calls}:${context.currentInput}`;
+      return `${this.calls}:${context.input}`;
     },
   };
   const definition = runtimeDefinition(execution([], run));
@@ -158,7 +158,7 @@ test('E entry requirements and callbacks are fixed before lazy construction and 
       admitted.push(`${this.prefix}:${input}`);
     },
   };
-  const main = execution([], { requires: {}, execute: (context) => context.currentInput });
+  const main = execution([], { requires: {}, execute: (context) => context.input });
   main.entry = entry;
   const definition = runtimeDefinition(main);
   const options = {
@@ -197,7 +197,7 @@ test('observation declarations are fixed before lazy construction while consumer
       if (fact.kind === 'started') replacementStarts++;
     },
   };
-  const main = execution([], { requires: {}, execute: (context) => context.currentInput });
+  const main = execution([], { requires: {}, execute: (context) => context.input });
   main.observation = [observation];
   const definition = runtimeDefinition(main);
   const existing = assemble(definition, { observations: [] });
@@ -216,16 +216,16 @@ test('checkpoint contracts, codecs and continuation callbacks use the same fixed
   const resume = {
     requires: {},
     calls: 0,
-    execute(_context, _invocation, _children, state) {
+    execute(_work, state) {
       this.calls++;
       return state.answer;
     },
   };
-  const point = { state: codec, check: () => true, resume };
-  const checkpoint = { key: 'test.resolution.checkpoint', version: 1, input: codec, output: codec, points: { saved: point } };
+  const point = { name: 'saved', references: {}, state: codec, check: () => true, resume };
+  const checkpoint = { key: 'test.resolution.checkpoint', version: 1, input: codec, output: codec, points: [point] };
   const definition = { level: 'runtime', maxRounds: 1, raises: [], children: [], checkpoint, run: { requires: {}, execute: () => assert.fail('normal work cannot replay during restoration') } };
   const store = new MemoryCheckpointStore();
-  const save = (contextId) => store.save({ id: `image-${contextId}`, formatVersion: 1, contract: { key: checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: { answer: 'original continuation' } }, 0);
+  const save = (contextId) => store.save({ id: `image-${contextId}`, formatVersion: 2, contract: { key: checkpoint.key, version: 1 }, point: 'saved', references: {}, frame: { owner: { contextId, level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: { answer: 'original continuation' } }, 0);
   save('original-root');
   save('new-root');
   const existing = assemble(definition, { checkpoints: { store } });
@@ -234,7 +234,7 @@ test('checkpoint contracts, codecs and continuation callbacks use the same fixed
   point.check = () => assert.fail('mutated point check must not run');
   resume.execute = () => assert.fail('mutated continuation must not run');
   resume.requires.unavailable = new ResourceOffer('test.resolution.checkpoint-missing', (value) => value).request();
-  checkpoint.points.saved = { state: codec, resume: { requires: {}, execute: () => 'new continuation' } };
+  checkpoint.points[0] = { name: 'saved', references: {}, state: codec, resume: { requires: {}, execute: () => 'new continuation' } };
   checkpoint.version = 2;
   assert.equal(await existing.resume('original-root', {}), 'original continuation');
   assert.equal(resume.calls, 1);

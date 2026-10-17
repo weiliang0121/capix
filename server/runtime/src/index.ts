@@ -1,5 +1,9 @@
 // Declarations and business composition.
 export * from './definition/invocation.js';
+export * from './definition/work.js';
+export * from './definition/factory.js';
+export * from './definition/checkpoint.js';
+export { ChildCallFailure } from './invocation/provenance.js';
 export * from './definition/runtime.js';
 export * from './definition/execution.js';
 export * from './definition/operation.js';

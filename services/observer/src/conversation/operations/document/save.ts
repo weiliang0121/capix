@@ -1,12 +1,10 @@
-import { OperationDefinition, type OperationContextView, type InvocationWorkView, type ChildBindings, type InvocationCheckpointDefinition, type ChildInvocationView } from '@capix/server-runtime';
+import { OperationDefinition, checkpointPoint, childReference, type OperationWork, type ChildCall } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { FileReceipt } from '@capix/protocol';
 import { FileResources, type FileCreator } from '../../../files/index.js';
 import { CreateTextDefinition, createTextCheckpointInput, fileReceiptCheckpoint, type CreateTextInput } from '../../attempt/files/create.js';
-import { checkpointCodec, checkpointChild } from '../../checkpoint.js';
+import { emptyCheckpointState, originalCheckpoint, waitingChild } from '../checkpoint.js';
 import { isEqual } from 'es-toolkit/predicate';
-
-type SaveContext = OperationContextView<CreateTextInput, FileReceipt, { readonly creator: FileCreator }>;
 
 /** Persist an already accepted answer. Saving never regenerates or appends the answer. */
 export class SaveResultDefinition extends OperationDefinition<CreateTextInput, FileReceipt, { readonly creator: FileCreator }> {
@@ -18,31 +16,26 @@ export class SaveResultDefinition extends OperationDefinition<CreateTextInput, F
   readonly children = [this.createDefinition];
   static readonly requires = Object.freeze({ creator: FileResources.createText.request() });
   readonly run = { requires: SaveResultDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
-  readonly checkpoint: InvocationCheckpointDefinition<CreateTextInput, FileReceipt, SaveContext> = {
-    key: 'observer.save-result',
-    version: 1,
-    input: createTextCheckpointInput,
-    output: fileReceiptCheckpoint,
-    points: {
-      creationWaiting: {
-        state: checkpointCodec(checkpointChild),
-        check: (frame, state) => {
-          const child = frame.children[0];
-          if (frame.round !== 1 || !isEqual(frame.input, frame.currentInput) || frame.children.length !== 1 || !child || child.identity.contextId !== state.childId || child.key !== 'create' || child.contract?.key !== this.createDefinition.checkpoint.key || child.contract.version !== this.createDefinition.checkpoint.version || child.state.kind !== 'waiting' || !isEqual(child.input, frame.currentInput)) throw new Error('File save checkpoint must identify its fixed creation child');
-        },
-        resume: { requires: SaveResultDefinition.requires, uses: this.children, execute: (_context, invocation, children, state: { childId: string }) => this.receive(children.get(this.createDefinition).resume(invocation, state.childId), children) },
-      },
+  readonly creationWaiting = checkpointPoint<'operation', CreateTextInput, FileReceipt>()({
+    name: 'creationWaiting',
+    state: emptyCheckpointState,
+    references: { child: childReference(this.createDefinition) },
+    check: (_state, facts) => {
+      originalCheckpoint(facts);
+      const child = waitingChild(facts, facts.references.child, 'create');
+      if (facts.children.values().length !== 1 || !isEqual(child.input, facts.input)) throw new Error('File save checkpoint must identify its fixed creation child');
     },
-  };
+    resume: { uses: this.children, execute: (work, _state, saved) => this.receive(work.children.resume(saved.child)) },
+  });
+  readonly checkpoint = { key: 'observer.save-result', version: 2, input: createTextCheckpointInput, output: fileReceiptCheckpoint, points: [this.creationWaiting] };
 
-  private async execute(context: SaveContext, invocation: InvocationWorkView<CreateTextInput, FileReceipt, SaveContext>, children: ChildBindings): Promise<FileReceipt> {
-    const child = children.get(this.createDefinition).create(invocation, context.currentInput, { key: 'create' });
-    invocation.checkpoint?.save('creationWaiting', { childId: child.context.id });
-    return this.receive(child, children);
+  private async execute(work: OperationWork<CreateTextInput, FileReceipt, object>): Promise<FileReceipt> {
+    const child = work.children.create(this.createDefinition, work.input, { key: 'create' });
+    work.checkpoint?.save(this.creationWaiting, null, { child: child.ref });
+    return this.receive(child);
   }
-
-  private async receive(child: ChildInvocationView<CreateTextInput, FileReceipt>, children: ChildBindings): Promise<FileReceipt> {
-    const receipt = await child.run();
-    return children.accept(child, () => receipt);
+  private async receive(child: ChildCall<CreateTextDefinition>): Promise<FileReceipt> {
+    await child.run();
+    return child.accept();
   }
 }

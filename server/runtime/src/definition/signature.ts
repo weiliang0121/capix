@@ -1,9 +1,8 @@
-import type { ResourceRequirements } from '../resource/bindings.js';
-
-/** Type-only call signature: definitions cannot create or run invocations. */
+/** Type-only declaration signature: definitions cannot create or run invocations. */
 export declare const invocationSignature: unique symbol;
-export interface DeclaredCall<Parent, Input, Output> {
-  readonly [invocationSignature]?: (parent: Parent, input: Input) => Output;
-  readonly run: { readonly requires: ResourceRequirements };
-  readonly exceptions?: { readonly requires: ResourceRequirements };
+export interface InvocationSignature<Input, Output, EntryInput = Input, Delta = never> {
+  readonly input: Input;
+  readonly output: Output;
+  readonly entry: EntryInput;
+  readonly delta: Delta;
 }

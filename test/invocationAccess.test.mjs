@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ResourceOffer, MemoryCheckpointStore, assembleRuntime } from '@capix/server-runtime';
+import { ResourceOffer, MemoryCheckpointStore, checkpointPoint, assembleRuntime } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function assemble(definition, options = {}) {
@@ -14,15 +14,14 @@ test('assembled work preserves absent acceptance as a reuse fact instead of inse
     let accepted = 0;
     const run = {
       requires: {},
-      execute(context, invocation, children) {
-        for (const key of ['access', 'work', 'invocation', 'options']) assert.equal(key in invocation, false);
-        for (const key of ['access', 'work', 'invocation', 'complete']) assert.equal(key in context, false);
-        for (const key of ['access', 'work', 'parent', 'calls']) assert.equal(key in children, false);
+      execute(work) {
+        for (const key of ['access', 'invocation', 'options', 'context', 'complete']) assert.equal(key in work, false);
+        for (const key of ['access', 'work', 'parent', 'calls']) assert.equal(key in work.children, false);
         return output;
       },
     };
     if (explicit) {
-      run.accept = (_context, value) => {
+      run.accept = ({ delivered: value }) => {
         accepted++;
         assert.equal(value, output);
         return value;
@@ -77,7 +76,7 @@ test('overlapping calls through one bound O retain independent access and child 
     callee: 'test',
     maxRounds: 1,
     raises: [],
-    run: { requires: {}, execute: (context) => new Promise((resolve) => pending.set(context.currentInput, resolve)) },
+    run: { requires: {}, execute: (work) => new Promise((resolve) => pending.set(work.input, resolve)) },
   };
   const operation = {
     level: 'operation',
@@ -89,24 +88,24 @@ test('overlapping calls through one bound O retain independent access and child 
     children: [leaf],
     run: {
       requires,
-      async execute(context, invocation, children) {
-        const owner = context.resources.values.owner;
-        const call = children.get(leaf).create(invocation, context.currentInput);
-        scopes.set(context.id, { context, invocation, children, owner });
-        calls.set(context.id, call);
+      async execute(work) {
+        const owner = work.resources.owner;
+        const call = work.children.create(leaf, work.input);
+        scopes.set(work.input, { work, owner });
+        calls.set(work.input, call.ref);
         return call.run();
       },
-      accept(context, output, invocation, children) {
-        const previous = scopes.get(context.id);
-        assert.notEqual(context, previous.context);
-        assert.notEqual(invocation, previous.invocation);
-        assert.notEqual(children, previous.children);
-        assert.equal(context.resources.values.owner, previous.owner);
-        assert.equal(context.resources.values.owner.touch(), previous.owner.token);
-        return children.accept(calls.get(context.id), (value) => {
-          assert.equal(value, output);
-          assert.equal(invocation.children.get(calls.get(context.id)).reception.status, 'receiving');
-          accepted.push(context.currentInput);
+      accept(work) {
+        const previous = scopes.get(work.input);
+        assert.notEqual(work, previous.work);
+        assert.notEqual(work.children, previous.work.children);
+        assert.equal(work.resources.owner, previous.owner);
+        assert.equal(work.resources.owner.touch(), previous.owner.token);
+        const ref = calls.get(work.input);
+        return work.children.open(ref).accept((value) => {
+          assert.equal(value, work.delivered);
+          assert.equal(work.children.facts.get(ref).reception.status, 'receiving');
+          accepted.push(work.input);
           return value;
         });
       },
@@ -119,10 +118,9 @@ test('overlapping calls through one bound O retain independent access and child 
     children: [operation],
     run: {
       requires,
-      async execute(_context, invocation, children) {
-        const entry = children.get(operation);
-        const first = entry.create(invocation, 'first');
-        const second = entry.create(invocation, 'second');
+      async execute(work) {
+        const first = work.children.create(operation, 'first');
+        const second = work.children.create(operation, 'second');
         const firstResult = first.run();
         const secondResult = second.run();
         firstResult.catch(() => {});
@@ -136,8 +134,8 @@ test('overlapping calls through one bound O retain independent access and child 
           assert.deepEqual(accepted, ['second']);
           pending.get('first')({ answer: 'first result' });
           await firstResult;
-          const firstOutput = await children.accept(first, (value) => value);
-          const secondOutput = await children.accept(second, (value) => value);
+          const firstOutput = await first.accept();
+          const secondOutput = await second.accept();
           return [firstOutput.answer, secondOutput.answer];
         } finally {
           for (const resolve of pending.values()) resolve({ answer: 'cleanup' });
@@ -176,16 +174,16 @@ test('checkpoint continuation hands its child delivery to normal acceptance with
       requires: { normal: normal.request() },
       uses: [],
       execute: () => assert.fail('normal execute must not replay'),
-      accept(context, output, invocation, children) {
-        assert.notEqual(invocation, previous.invocation);
-        assert.notEqual(children, previous.children);
-        assert.deepEqual(Object.keys(context.resources.values), ['normal']);
+      accept(work) {
+        assert.notEqual(work, previous);
+        assert.notEqual(work.children, previous.children);
+        assert.deepEqual(Object.keys(work.resources), ['normal']);
         assert.deepEqual(realized, ['continuation']);
-        assert.equal(context.resources.values.normal, 'normal access');
-        assert.equal(invocation.checkpoint, undefined);
-        assert.equal(invocation.output, undefined);
-        return children.accept(call, (value) => {
-          assert.equal(value, output);
+        assert.equal(work.resources.normal, 'normal access');
+        assert.equal(work.checkpoint, undefined);
+        assert.equal(work.output, undefined);
+        return work.children.open(call.ref).accept((value) => {
+          assert.equal(value, work.delivered);
           return value.answer;
         });
       },
@@ -195,28 +193,30 @@ test('checkpoint continuation hands its child delivery to normal acceptance with
       version: 1,
       input: codec,
       output: codec,
-      points: {
-        saved: {
+      points: [
+        checkpointPoint()({
+          name: 'saved',
           state: codec,
+          references: {},
           resume: {
             requires: { continuation: continuation.request() },
             uses: [child],
-            execute(context, invocation, children) {
+            execute(work) {
               assert.deepEqual(realized, []);
-              assert.deepEqual(Object.keys(context.resources.values), ['continuation']);
-              assert.equal(context.resources.values.continuation, 'continuation access');
-              assert.ok(invocation.checkpoint);
-              previous = { invocation, children };
-              call = children.get(child).create(invocation, null);
+              assert.deepEqual(Object.keys(work.resources), ['continuation']);
+              assert.equal(work.resources.continuation, 'continuation access');
+              assert.ok(work.checkpoint);
+              previous = work;
+              call = work.children.create(child, null);
               return call.run();
             },
           },
-        },
-      },
+        }),
+      ],
     },
   };
   const store = new MemoryCheckpointStore();
-  store.save({ id: 'saved-access', formatVersion: 1, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'restored-access', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null }, 0);
+  store.save({ id: 'saved-access', formatVersion: 2, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'restored-access', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   const runtime = assemble(definition, { checkpoints: { store }, providers: [normal.provide(() => null), continuation.provide(() => null)], source: { runtime: () => null, entry: () => null, capture: () => null } });
   assert.deepEqual(realized, []);
   assert.equal(await runtime.resume('restored-access', {}), 'child output');

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtemp, rm, unlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, assembleRuntime } from '@capix/server-runtime';
+import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, checkpointPoint, childReference, assembleRuntime } from '@capix/server-runtime';
 import { Transcript, Memories, MemoryResource } from '@capix/server-runtime/content';
 import { ExtractMemoryDefinition, SaveResultDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 import { WorkspaceFiles, FileResources } from '@capix/observer-service/assembly';
@@ -31,31 +31,33 @@ function harness(operation, providers, store, requires = operation.run.requires)
     version: 1,
     input: codec,
     output: codec,
-    points: {
-      waiting: {
+    points: [
+      checkpointPoint()({
+        name: 'waiting',
         state: codec,
+        references: { child: childReference(child) },
         resume: {
           requires: {},
           uses: [child],
-          async execute(_context, invocation, children, state) {
-            const call = children.get(child).resume(invocation, state.childId);
+          async execute(work, _state, saved) {
+            const call = work.children.resume(saved.child);
             await call.run();
-            return children.accept(call, (value) => value);
+            return call.accept();
           },
         },
-      },
-    },
+      }),
+    ],
   });
   class Execution extends ExecutionDefinition {
     children = [operation];
     checkpoint = checkpoint('effects.execution', operation);
     run = {
       requires,
-      async execute(context, invocation, children) {
-        const call = children.get(operation).create(invocation, context.currentInput, { key: 'operation' });
-        invocation.checkpoint.save('waiting', { childId: call.context.id });
+      execute: async (work) => {
+        const call = work.children.create(operation, work.input, { key: 'operation' });
+        work.checkpoint.save(this.checkpoint.points[0], {}, { child: call.ref });
         await call.run();
-        return children.accept(call, (value) => value);
+        return call.accept();
       },
     };
   }
@@ -65,11 +67,11 @@ function harness(operation, providers, store, requires = operation.run.requires)
     checkpoint = checkpoint('effects.runtime', execution);
     run = {
       requires: {},
-      async execute(context, invocation, children) {
-        const call = children.get(execution).create(invocation, context.currentInput, { key: 'execution' });
-        invocation.checkpoint.save('waiting', { childId: call.context.id });
+      execute: async (work) => {
+        const call = work.children.create(execution, work.input, { key: 'execution' });
+        work.checkpoint.save(this.checkpoint.points[0], {}, { child: call.ref });
         await call.run();
-        return children.accept(call, (value) => value);
+        return call.accept();
       },
     };
   }

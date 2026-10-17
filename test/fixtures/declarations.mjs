@@ -10,10 +10,10 @@ export function runtimeDefinition(execution) {
     run: {
       requires: {},
       uses: [execution],
-      async execute(context, invocation, children) {
-        const child = children.get(execution).create(invocation, context.currentInput, { key: 'execution' });
+      async execute(work) {
+        const child = work.children.create(execution, work.input, { key: 'execution' });
         const output = await child.run();
-        return children.accept(child, () => output);
+        return child.accept(() => output);
       },
     },
   };

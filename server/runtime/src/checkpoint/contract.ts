@@ -14,14 +14,35 @@ export interface CheckpointContract {
   readonly version: number;
 }
 
+/** Persistent association is scoped by the owning checkpoint contract/version. */
+export interface CheckpointReference {
+  readonly contextId: string;
+  readonly parentContextId: string;
+  readonly parentRound: number;
+  readonly order: number;
+  readonly target: { readonly position: number };
+}
+
+export type CheckpointReferences = Readonly<Record<string, CheckpointReference | readonly CheckpointReference[]>>;
+
+export interface CheckpointContinuation {
+  readonly fromRound: 1;
+  readonly stage: 'accept' | 'handling';
+  readonly reason: string;
+  readonly origin?: { readonly kind: 'self'; readonly phase: 'execute' | 'accept' } | { readonly kind: 'child-return' | 'child-reception'; readonly child: CheckpointReference };
+}
+
+export type CheckpointChildReception = { readonly kind: 'pending' | 'receiving' } | { readonly kind: 'accepted'; readonly output?: CheckpointValue } | { readonly kind: 'failed'; readonly error: CheckpointValue; readonly failure: InvocationFailureFact & { readonly kind: 'exception'; readonly contract: string } };
+
 export interface CheckpointChild {
   readonly identity: InvocationIdentity;
+  readonly target: { readonly position: number };
   readonly contract?: CheckpointContract;
   readonly round: number;
   readonly order: number;
   readonly key?: string;
   readonly input: CheckpointValue;
-  readonly state: { readonly kind: 'waiting' } | { readonly kind: 'returned'; readonly output: CheckpointValue; readonly progress: { readonly round: number; readonly currentInput: CheckpointValue; readonly phase: 'execute' | 'receive' | 'handling' }; readonly reception: { readonly kind: 'pending' | 'receiving' } | { readonly kind: 'accepted'; readonly output?: CheckpointValue } } | { readonly kind: 'failed'; readonly error: CheckpointValue; readonly failure: InvocationFailureFact & { readonly kind: 'exception'; readonly contract: string }; readonly progress: { readonly round: number; readonly currentInput: CheckpointValue; readonly phase: 'execute' | 'receive' | 'handling' } };
+  readonly state: { readonly kind: 'waiting' } | { readonly kind: 'returned'; readonly output: CheckpointValue; readonly progress: { readonly round: number; readonly currentInput: CheckpointValue; readonly phase: 'execute' | 'receive' | 'handling' }; readonly reception: CheckpointChildReception } | { readonly kind: 'failed'; readonly error: CheckpointValue; readonly failure: InvocationFailureFact & { readonly kind: 'exception'; readonly contract: string }; readonly progress: { readonly round: number; readonly currentInput: CheckpointValue; readonly phase: 'execute' | 'receive' | 'handling' } };
 }
 
 export interface InvocationCheckpointFrame {
@@ -32,15 +53,17 @@ export interface InvocationCheckpointFrame {
   readonly currentInput: CheckpointValue;
   readonly nextChildOrder: number;
   readonly children: readonly CheckpointChild[];
+  readonly continuation?: CheckpointContinuation;
 }
 
 export interface CheckpointImage {
   readonly id: string;
-  readonly formatVersion: 1;
+  readonly formatVersion: 2;
   readonly contract: CheckpointContract;
   readonly point: string;
   readonly frame: InvocationCheckpointFrame;
   readonly state: CheckpointValue;
+  readonly references: CheckpointReferences;
 }
 
 export type CheckpointDelivery = { readonly status: 'succeeded'; readonly output: CheckpointValue; readonly progress: { readonly round: number; readonly currentInput: CheckpointValue; readonly phase: 'execute' | 'receive' | 'handling' } } | { readonly status: 'failed' | 'cancelled' };
@@ -76,7 +99,7 @@ export interface CheckpointInstallation {
 }
 
 export interface CheckpointWriter {
-  save(point: string, state: unknown): CheckpointImage;
+  save(point: string, state: unknown, references?: CheckpointReferences): CheckpointImage;
 }
 
 /** Internal construction data; never accepted from a business invocation view. */

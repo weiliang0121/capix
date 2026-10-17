@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Transcript } from '@capix/server-runtime/content';
+import { ChildCallFailure } from '@capix/server-runtime';
 import { UnderstandRequestDefinition, requestOutputContract } from '@capix/observer-service';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { bindChild, resourceBindingFor } from '../fixtures/observer.mjs';
@@ -128,7 +129,7 @@ test('a provided capability directory controls file availability at this decisio
 
 test('malformed model output is rejected without automatic regeneration', async () => {
   const requests = [];
-  await assert.rejects(understand({ proposal: 'not JSON', requests }), (error) => error.code === 'MODEL_OUTPUT_REJECTED');
+  await assert.rejects(understand({ proposal: 'not JSON', requests }), (error) => error instanceof ChildCallFailure && error.exception.code === 'MODEL_OUTPUT_REJECTED');
   assert.equal(requests.length, 1);
 });
 

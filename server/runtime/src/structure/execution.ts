@@ -91,6 +91,7 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
     const resources = stage('capture', () => bindings.capture(accepted));
     return this.invocationBuilder.create(parent, accepted, {
       key: options.key,
+      declarationPosition: options.declarationPosition,
       description: { id: this.id },
       requires: this.binding.requires,
       initial: this.binding.declaration.run.requires,
@@ -108,13 +109,14 @@ export class BoundExecution<Input, Output, Resources extends object = object, En
     this.invocationBuilder.check(parent);
     return this.invocationBuilder.restoration(contextId, this.binding.work, parent.context.id, (restore) => {
       const checkpoint = this.binding.declaration.checkpoint!;
-      const point = checkpoint.points[restore.head.image.point];
+      const point = checkpoint.points.find((point) => point.name === restore.head.image.point);
       if (!point) throw new Error('Checkpoint point is not declared');
       const input = checkpoint.input.decode(restore.head.image.frame.input);
       const bindings: ExecutionInvocationBindings<Input, Output, Resources, EntryInput, EntryResources> = parent.context.executionBinding(this.definition);
       const resources = bindings.capture(input);
       return this.invocationBuilder.create(parent, input, {
         key: options.key,
+        declarationPosition: options.declarationPosition,
         description: { id: this.id },
         requires: this.binding.requires,
         initial: point.resume.requires,

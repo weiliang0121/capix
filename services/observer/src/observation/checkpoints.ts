@@ -31,7 +31,7 @@ export interface CheckpointChildSummary {
   readonly order: number;
   readonly key?: string;
   readonly state: CheckpointChild['state']['kind'];
-  readonly reception?: 'pending' | 'receiving' | 'accepted';
+  readonly reception?: 'pending' | 'receiving' | 'accepted' | 'failed';
 }
 export interface CheckpointInstalledSummary {
   readonly round: number;

@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { RuntimeDefinition, ExecutionDefinition, OperationDefinition, AttemptDefinition, TranscriptResource, Transcript, Memories, assembleRuntime } from '@capix/server-runtime';
+import { RuntimeDefinition, ExecutionDefinition, OperationDefinition, AttemptDefinition, TranscriptResource, Transcript, Memories, assembleRuntime, childReference } from '@capix/server-runtime';
 import { SqliteCheckpointStore, SqliteObserverStore } from '@capix/observer-service';
 
 const [path, mode, boundary] = process.argv.slice(2);
@@ -18,8 +18,8 @@ const crash = (name) => {
   if (mode === 'start' && boundary === name) process.exit(74);
 };
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
-const point = (execute, requires = {}, uses = []) => ({ state: codec, resume: { requires, uses, execute } });
-const cp = (key, points) => ({ key, version: 1, input: codec, output: codec, points });
+const point = (execute, requires = {}, uses = [], references = {}) => ({ state: codec, references, resume: { requires, uses, execute } });
+const cp = (key, points) => ({ key, version: 1, input: codec, output: codec, points: Object.entries(points).map(([name, value]) => ({ name, ...value })) });
 class Model extends AttemptDefinition {
   name = 'model';
   label = 'model';
@@ -38,14 +38,14 @@ class Request extends OperationDefinition {
   label = 'request';
   source = 'test';
   children = [model];
-  checkpoint = cp('chain.request', { feedback: point((_context, _invocation, _children, state) => state.output) });
+  checkpoint = cp('chain.request', { feedback: point((_work, state) => state.output) });
   run = {
     requires: {},
-    execute: async (_context, invocation, children) => {
-      const request = children.get(model).create(invocation, { prompt: 'question' });
+    execute: async (work) => {
+      const request = work.children.create(model, { prompt: 'question' });
       await request.run();
-      const output = await children.accept(request, (value) => value);
-      invocation.checkpoint.save('feedback', { output });
+      const output = await request.accept((value) => value);
+      work.checkpoint.save(this.checkpoint.points[0], { output }, {});
       crash('feedback');
       return output;
     },
@@ -53,29 +53,38 @@ class Request extends OperationDefinition {
 }
 const request = new Request();
 const requires = { messages: TranscriptResource.append.request() };
-async function consume(context, invocation, children, child, allowCrash) {
+async function consume(work, child, allowCrash, points) {
   await child.run();
   if (allowCrash) crash('delivery');
-  const output = await children.accept(child, (value) => {
-    invocation.checkpoint.save('reception', { childId: child.context.id });
-    const receipt = context.resources.values.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: value.content }] });
+  const output = await child.accept((value) => {
+    work.checkpoint.save(
+      points.find((point) => point.name === 'reception'),
+      null,
+      { child: child.ref },
+    );
+    const receipt = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: value.content }] });
     if (allowCrash) crash('entity');
     return { receipt, answer: value.content };
   });
-  invocation.checkpoint.save('accepted', { output });
+  work.checkpoint.save(
+    points.find((point) => point.name === 'accepted'),
+    { output },
+    {},
+  );
   if (allowCrash) crash('accepted');
   return output;
 }
-const resume = (context, invocation, children, state) => consume(context, invocation, children, children.get(request).resume(invocation, state.childId), false);
+const resume = (work, _state, saved) => consume(work, work.children.resume(saved.child), false, executionPoints);
+const executionPoints = cp('chain.execution', { waiting: point(resume, requires, [request], { child: childReference(request) }), reception: point(resume, requires, [request], { child: childReference(request) }), accepted: point((_work, state) => state.output) }).points;
 class Conversation extends ExecutionDefinition {
   children = [request];
-  checkpoint = cp('chain.execution', { waiting: point(resume, requires, [request]), reception: point(resume, requires, [request]), accepted: point((_context, _invocation, _children, state) => state.output) });
+  checkpoint = { key: 'chain.execution', version: 1, input: codec, output: codec, points: executionPoints };
   run = {
     requires,
-    execute: async (context, invocation, children) => {
-      const child = children.get(request).create(invocation, { prompt: 'question' }, { key: 'answer' });
-      invocation.checkpoint.save('waiting', { childId: child.context.id });
-      return consume(context, invocation, children, child, true);
+    execute: async (work) => {
+      const child = work.children.create(request, { prompt: 'question' }, { key: 'answer' });
+      work.checkpoint.save(this.checkpoint.points[0], null, { child: child.ref });
+      return consume(work, child, true, executionPoints);
     },
   };
 }
@@ -84,28 +93,33 @@ class Root extends RuntimeDefinition {
   children = [conversation];
   checkpoint = cp('chain.runtime', {
     waiting: point(
-      async (_context, invocation, children, state) => {
-        const child = children.get(conversation).resume(invocation, state.childId);
+      async (work, _state, saved) => {
+        const child = work.children.resume(saved.child);
         await child.run();
-        return children.accept(child, (output) => output);
+        return child.accept((output) => output);
       },
       {},
       [conversation],
+      { child: childReference(conversation) },
     ),
   });
   run = {
     requires: {},
-    execute: async (context, invocation, children) => {
-      put('rootId', context.id);
-      const child = children.get(conversation).create(invocation, { question: 'question' });
-      invocation.checkpoint.save('waiting', { childId: child.context.id });
+    execute: async (work) => {
+      const child = work.children.create(conversation, { question: 'question' });
+      work.checkpoint.save(this.checkpoint.points[0], null, { child: child.ref });
       await child.run();
-      return children.accept(child, (output) => output);
+      return child.accept((output) => output);
     },
   };
 }
 const facts = [];
 const store = new SqliteCheckpointStore(database);
+const save = store.save.bind(store);
+store.save = (image, revision) => {
+  if (image.frame.owner.level === 'runtime') put('rootId', image.frame.owner.contextId);
+  return save(image, revision);
+};
 const runtime = assembleRuntime(new Root(), { checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } }, providers: [TranscriptResource.append.provide(() => transcript)], source: { runtime: () => null, entry: () => null, capture: () => null } });
 const output = mode === 'start' ? await runtime.run({ question: 'question' }, {}) : await runtime.resume(saved('rootId'), {});
 process.stdout.write(JSON.stringify({ output, messages: transcript.exportState().messages, appends: transcript.exportState().appends, calls: Number(saved('modelCalls')), terminal: store.read(saved('rootId')).delivery, restoredChildren: facts.filter((fact) => fact.kind === 'child-restored').map((fact) => ({ mode: fact.mode, contextId: fact.child.identity.contextId, state: fact.child.state.kind })), recovery: facts.filter((fact) => fact.kind === 'installed').map((fact) => ({ activityId: fact.activityId, contextId: fact.contextId, children: fact.frame.children.length })) }));

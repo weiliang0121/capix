@@ -61,7 +61,16 @@ export function resolveDeclaration(definition: BindingDefinition, options: Child
     const requires = collectDefinitionRequirements(declaration, options.observationProvides);
     if (parent && parent.level !== 'runtime') checkResourceRequests(parent.requires, resourceRequests(requires));
     const definitions: readonly ChildDefinition[] = declaration.level === 'attempt' ? [] : declaration.children;
-    const checkpointUses = Object.values(declaration.checkpoint?.points ?? {}).flatMap((point) => [...(point.resume.uses ?? [])]);
+    const points = declaration.checkpoint?.points ?? [];
+    const names = new Set<string>();
+    for (const point of points) {
+      if (!point.name || names.has(point.name)) throw new Error('Checkpoint points need distinct registered names');
+      names.add(point.name);
+      for (const slot of Object.values(point.references as import('../definition/checkpoint.js').CheckpointReferenceSlots)) {
+        if (!definitions.includes(slot.definition)) throw new Error('Checkpoint reference targets a child outside its owner');
+      }
+    }
+    const checkpointUses = points.flatMap((point) => [...(point.resume.uses ?? [])]);
     for (const child of [...(declaration.run.uses ?? definitions), ...(declaration.exceptions?.uses ?? []), ...checkpointUses]) {
       if (!definitions.includes(child)) throw new Error('Declaration uses a child outside its owner');
     }

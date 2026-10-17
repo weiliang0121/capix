@@ -12,18 +12,20 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 
 ## 两个维度：层次与角色
 
-REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下文、视图描述对象角色。名称需要同时说清这两个维度。
+REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下文、阶段 Work 描述对象角色。名称需要同时说清这两个维度。
 
-| 角色         | R                  | E                    | O                    | A                  | 寿命与权限                                            |
-| ------------ | ------------------ | -------------------- | -------------------- | ------------------ | ----------------------------------------------------- |
-| 声明         | RuntimeDefinition  | ExecutionDefinition  | OperationDefinition  | AttemptDefinition  | 可复用的内容与契约，不保存某次调用状态                |
-| 绑定器       | RuntimeBinder      | ExecutionBinder      | OperationBinder      | AttemptBinder      | 检查声明与关系，连接资源和调用工作，建立 Bound 结构   |
-| 绑定结果     | RuntimeBinding     | ExecutionBinding     | OperationBinding     | AttemptBinding     | Bound 构造所需的接线契约，不是另一个运行对象          |
-| 已绑定结构   | BoundRuntime       | BoundExecution       | BoundOperation       | BoundAttempt       | 绑定位置上的可复用结构，持有稳定身份与声明            |
-| 单次上下文   | RuntimeContext     | ExecutionContext     | OperationContext     | AttemptContext     | 输入、进度、终态、本层资源；内部构造关系              |
-| 业务视图     | RuntimeContextView | ExecutionContextView | OperationContextView | AttemptContextView | 本次处理可用的只读现场与正式端点，不暴露生命周期修改  |
-| 调用         | Invocation         | Invocation           | Invocation           | Invocation         | 统一机制，由具体 Context 保持层级约束，不派生四套循环 |
-| 可选调用记录 | RuntimeCallRecord  | ExecutionRecord      | OperationRecord      | AttemptRecord      | 记录预设对调用事实的解释，不能驱动运行                |
+| 角色         | R                 | E                   | O                   | A                 | 寿命与权限                                            |
+| ------------ | ----------------- | ------------------- | ------------------- | ----------------- | ----------------------------------------------------- |
+| 声明         | RuntimeDefinition | ExecutionDefinition | OperationDefinition | AttemptDefinition | 可复用的内容与契约，不保存某次调用状态                |
+| 绑定器       | RuntimeBinder     | ExecutionBinder     | OperationBinder     | AttemptBinder     | 检查声明与关系，连接资源和调用工作，建立 Bound 结构   |
+| 绑定结果     | RuntimeBinding    | ExecutionBinding    | OperationBinding    | AttemptBinding    | Bound 构造所需的接线契约，不是另一个运行对象          |
+| 已绑定结构   | BoundRuntime      | BoundExecution      | BoundOperation      | BoundAttempt      | 绑定位置上的可复用结构，持有稳定身份与声明            |
+| 单次上下文   | RuntimeContext    | ExecutionContext    | OperationContext    | AttemptContext    | 输入、进度、终态、本层资源；内部构造关系              |
+| 作者工作入口 | RuntimeWork       | ExecutionWork       | OperationWork       | AttemptWork       | 本阶段输入、资源及正式动作；不暴露内部调用对象        |
+| 调用         | Invocation        | Invocation          | Invocation          | Invocation        | 统一机制，由具体 Context 保持层级约束，不派生四套循环 |
+| 可选调用记录 | RuntimeCallRecord | ExecutionRecord     | OperationRecord     | AttemptRecord     | 记录预设对调用事实的解释，不能驱动运行                |
+
+作者侧的定义可用 `defineRuntime / defineExecution / defineOperation / defineAttempt` 工厂，也可用既有 Definition 类组织；两者采用相同 Work 契约。`ChildCall` 是阶段行动句柄，`ChildReference` 是准确关系引用，`ChildFact` 是只读事实；它们不替代内部 Invocation、Context 或 Bound。独立恢复点由 `checkpointPoint` 构造，注册到所属定义后才能保存。具体边界见 [定义作者契约](definition-author-contract.md)。
 
 `*Binder` 配合辅助函数先解算声明，再建立绑定结构；`*Binding` 是类型契约，不增加独立生命周期；`Bound*` 直接持有绑定结果，并使用本层 `*InvocationBuilder` 构造调用。调用构造器再协同 `*ContextBuilder` 建立本次上下文。Bound 不通过回调提供构造能力供绑定侧反向装配，也不承担声明资源汇总和 work 绑定。
 
@@ -45,11 +47,11 @@ REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下
 
 | 目录                                                 | 主要组织依据               | 边界                                                                               |
 | ---------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------- |
-| `context/`                                           | 单次上下文对象             | 本层 IO、状态、不变量与业务视图；`builders/` 负责建立与归属检查                    |
+| `context/`                                           | 单次上下文对象             | 本层 IO、状态、不变量与低层只读视图；`builders/` 负责建立与归属检查                |
 | `invocation/`                                        | 单次调用机制               | 生命周期、局部循环、实际子关系与交付；`builders/` 负责组合本次 Context、资源与能力 |
 | `definition/`                                        | 内容声明契约               | REOA、运行、异常、观测等声明；不持有某次调用状态                                   |
 | `binding/`                                           | 声明到结构及调用的接线职责 | Binder 与资源、来源、观测、工作访问等绑定；不执行业务编排                          |
-| `binding/children/`                                  | 子结构访问能力             | BoundChildren、构造器、阶段访问 Binding 与业务契约共同形成一个接缝                 |
+| `binding/children/`                                  | 子结构访问能力             | BoundChildren、构造器、阶段行动句柄与跨阶段引用形成访问接缝                        |
 | `checkpoint/`                                        | 保存与续接能力             | 契约、存储端口、恢复依据、调用协调与子关系编解码；不是全系统恢复目录               |
 | `transcript/`、`memory/`、`interaction/`             | 独立实体域                 | 实体、不变量、变化与访问形式，按各自生命周期组织                                   |
 | `resource/`                                          | 正式访问机制               | 声明可申请形式并兑现受控访问，不拥有被访问的实体                                   |
@@ -90,29 +92,30 @@ REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下
 
 ## 类型、参数与对象角色
 
-主类型表达层次与角色：`ExecutionDefinition` 是 E 的内容声明，`BoundExecution` 是已绑定且可复用的 E 结构，`ExecutionContext` 是某次 E 调用的内部状态，`ExecutionContextView` 是业务可用的本层视图。`Invocation` 负责通用单次调用机制；执行过程中的 execute/receive/handling 是调用阶段，不是新的 REOA 层次。
+主类型表达层次与角色：`ExecutionDefinition` 是 E 的内容声明，`BoundExecution` 是已绑定且可复用的 E 结构，`ExecutionContext` 是某次 E 调用的内部状态，`ExecutionWork` 是业务处理阶段的入口，`ExecutionContextView` 留给低层只读解释。`Invocation` 负责通用单次调用机制；执行过程中的 execute/receive/handling 是调用阶段，不是新的 REOA 层次。
 
 辅助类型也使用同一规则：
 
-| 名称                                                 | 实际内容                                        |
-| ---------------------------------------------------- | ----------------------------------------------- |
-| `InvocationControls`                                 | 调用控制参数，目前为 signal；不是一个 Context   |
-| `ExecutionInvocationBindings`                        | 本次 E 的入口资源、工作资源及回调接线           |
-| `ExecutionBindingResolver`                           | 本 R 调用按 E 声明查找上述接线                  |
-| `ChildBinding` / `ChildBindings`                     | 当前父调用及阶段允许使用的子调用能力            |
-| `BoundChildren`                                      | 持续复用、惰性构造的子结构集合                  |
-| `ChildBindingsBuilder`                               | 根据本次调用与阶段约束构造子能力访问 Binding    |
-| `InvocationWorkBinding`                              | 跨调用复用的声明适配，实现 InvocationWork 契约  |
-| `InvocationAccess`                                   | 一次调用的子调用映射、阶段访问与轮次缓存        |
-| `InvocationChildBindings`                            | 内部实现；连接父调用、阶段视图和允许的子结构    |
-| `ChildInvocationView`                                | 可启动这次子调用的业务视图，不是可复用结构      |
-| `DefinitionEntryInput` / `DefinitionInvocationInput` | 入口接纳前的输入 / 接纳后进入调用的输入         |
-| `DefinitionContextFacts` / `ContextFactsOf`          | 去除资源能力的上下文事实视图，不是真实 Context  |
-| `InvocationFact` / `InvocationEvent`                 | 同步借用值的观测事实 / 可捕获与传输的变化元数据 |
-| `InvocationObservation` / `InvocationRecording`      | 单次调用的观测绑定状态 / 可选记录预设           |
-| `RuntimeStructureFact`                               | 可复用 R 结构的建立、占用和释放事实             |
+| 名称                                                 | 实际内容                                           |
+| ---------------------------------------------------- | -------------------------------------------------- |
+| `InvocationControls`                                 | 调用控制参数，目前为 signal；不是一个 Context      |
+| `ExecutionInvocationBindings`                        | 本次 E 的入口资源、工作资源及回调接线              |
+| `ExecutionBindingResolver`                           | 本 R 调用按 E 声明查找上述接线                     |
+| `ChildCall` / `ChildCalls`                           | 当前阶段的子行动句柄 / 创建与接纳入口              |
+| `ChildReference` / `ChildFact`                       | 本父范围内可跨阶段保留的准确引用 / 只读关系事实    |
+| `BoundChildren`                                      | 持续复用、惰性构造的子结构集合                     |
+| `ChildBindingsBuilder`                               | 根据本次调用与阶段约束构造子能力访问 Binding       |
+| `InvocationWorkBinding`                              | 跨调用复用的声明适配，实现 InvocationWork 契约     |
+| `InvocationAccess`                                   | 一次调用的引用登记与阶段行动访问                   |
+| `InvocationChildBindings`                            | 内部实现；连接父调用、阶段视图和允许的子结构       |
+| `ChildInvocationView`                                | 低层只读子调用端口，不再传给业务处理函数           |
+| `DefinitionEntryInput` / `DefinitionInvocationInput` | 入口接纳前的输入 / 接纳后进入调用的输入            |
+| `CheckpointFacts`                                    | 已解码的本层保存事实与全部直接关系，不含内部 Frame |
+| `InvocationFact` / `InvocationEvent`                 | 同步借用值的观测事实 / 可捕获与传输的变化元数据    |
+| `InvocationObservation` / `InvocationRecording`      | 单次调用的观测绑定状态 / 可选记录预设              |
+| `RuntimeStructureFact`                               | 可复用 R 结构的建立、占用和释放事实                |
 
-泛型按实际含义命名：`Input`、`Output`、`Resources`、`EntryInput`、`EntryResources`、`ExceptionResources`。真实上下文使用 `Context`，业务视图使用 `ContextView`；资源来源使用 `Source`，不称为 parent。Sequence 的 `Outputs` 是逐步骤的结果集合，与资源集合不同。
+泛型按实际含义命名：`Input`、`Output`、`Resources`、`EntryInput`、`EntryResources`、`ExceptionResources`。真实上下文使用 `Context`，作者阶段使用 `Work`，结构层级使用 `Level`；资源来源使用 `Source`，不称为 parent。Sequence 的 `Outputs` 是逐步骤的结果集合，与资源集合不同。
 
 `Invocation` 与 `InvocationWork` 都使用 `<Input, Output, Context>`。`BoundExecution`、`ExecutionDefinition`、`ExecutionInvocationBindings` 的共同前缀均为 `<Input, Output, Resources, EntryInput, EntryResources>`。不以 I/O/R 等缩写同时暗示输入输出和 REOA 层次。
 

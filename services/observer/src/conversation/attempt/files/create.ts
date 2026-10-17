@@ -1,4 +1,4 @@
-import { AttemptDefinition, type AttemptContextView, type InvocationWorkView, type InvocationCheckpointDefinition } from '@capix/server-runtime';
+import { AttemptDefinition, checkpointPoint, type AttemptWork, type InvocationCheckpointDefinition } from '@capix/server-runtime';
 import { z } from 'zod';
 import { checkpointCodec } from '../../checkpoint.js';
 import { checkLeafResult } from '../../operations/checkpoint.js';
@@ -20,21 +20,16 @@ export class CreateTextDefinition extends AttemptDefinition<CreateTextInput, Fil
   readonly raises = [FileAccessException];
   readonly observation = [invocationRecording<CreateTextInput, FileReceipt>({ input: ({ path, text }) => ({ path, bytes: Buffer.byteLength(text, 'utf8') }) })];
   static readonly requires = Object.freeze({ creator: FileResources.createText.request() });
-  readonly checkpoint: InvocationCheckpointDefinition<CreateTextInput, FileReceipt, AttemptContextView<CreateTextInput, FileReceipt, { readonly creator: FileCreator }>> = {
-    key: 'observer.create-text',
-    version: 1,
-    input: createTextCheckpointInput,
-    output: fileReceiptCheckpoint,
-    points: { prepared: { state: checkpointCodec(z.null()), check: checkLeafResult, resume: { requires: CreateTextDefinition.requires, uses: [], execute: (context) => this.create(context) } } },
-  };
+  private readonly preparedPoint = checkpointPoint<'attempt', CreateTextInput, FileReceipt>()({ name: 'prepared', state: checkpointCodec(z.null()), references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { requires: CreateTextDefinition.requires, execute: (work) => this.create(work) } });
+  readonly checkpoint: InvocationCheckpointDefinition<CreateTextInput, FileReceipt, 'attempt'> = { key: 'observer.create-text', version: 1, input: createTextCheckpointInput, output: fileReceiptCheckpoint, points: [this.preparedPoint] };
   readonly run = {
     requires: CreateTextDefinition.requires,
-    execute: (context: AttemptContextView<CreateTextInput, FileReceipt, { readonly creator: FileCreator }>, invocation: InvocationWorkView<CreateTextInput, FileReceipt, AttemptContextView<CreateTextInput, FileReceipt, { readonly creator: FileCreator }>>) => {
-      invocation.checkpoint?.save('prepared', null);
-      return this.create(context);
+    execute: (work: AttemptWork<CreateTextInput, FileReceipt, { readonly creator: FileCreator }>) => {
+      work.checkpoint?.save(this.preparedPoint, null, {});
+      return this.create(work);
     },
   };
-  private create(context: AttemptContextView<CreateTextInput, FileReceipt, { readonly creator: FileCreator }>): Promise<FileReceipt> {
-    return context.resources.values.creator.createFixed('result', context.currentInput.path, context.currentInput.text, context.signal);
+  private create(work: AttemptWork<CreateTextInput, FileReceipt, { readonly creator: FileCreator }>): Promise<FileReceipt> {
+    return work.resources.creator.createFixed('result', work.input.path, work.input.text, work.signal);
   }
 }

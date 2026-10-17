@@ -13,8 +13,8 @@ test('Sequence binds declared output explicitly while final parent acceptance re
     output = output;
     run = {
       requires: {},
-      execute(_context, invocation) {
-        invocation.output.emit('child text');
+      execute(work) {
+        work.output.emit('child text');
         return 'result';
       },
     };
@@ -22,33 +22,38 @@ test('Sequence binds declared output explicitly while final parent acceptance re
   const execution = new (class extends ExecutionDefinition {
     output = output;
     children = [operation];
-    composition = new Sequence().step('source', {
-      use: operation,
-      input: () => null,
-      output: ({ parent }) => ({
-        receive(event) {
-          if (event.kind === 'delta') {
-            phases.push('delta');
-            parent.output.emit(event.delta.toUpperCase());
-          }
-          if (event.kind === 'completed') phases.push('child-completed');
-        },
-      }),
-      accept: (_scope, value) => {
-        phases.push('parent-accept');
-        return value;
+    run = {
+      requires: {},
+      async execute(work) {
+        const composition = new Sequence().step('source', {
+          use: operation,
+          input: () => null,
+          output: () => ({
+            receive(event) {
+              if (event.kind === 'delta') {
+                phases.push('delta');
+                work.output.emit(event.delta.toUpperCase());
+              }
+              if (event.kind === 'completed') phases.push('child-completed');
+            },
+          }),
+          accept: (_scope, value) => {
+            phases.push('parent-accept');
+            return value;
+          },
+        });
+        return (await composition.run(work.input, work.children)).source;
       },
-    });
-    run = { requires: {}, execute: async (context, invocation, children) => (await this.composition.run(invocation, context.input, children)).source };
+    };
   })();
   const runtime = new (class extends RuntimeDefinition {
     children = [execution];
     run = {
       requires: {},
-      async execute(_context, invocation, children) {
-        const child = children.get(execution).create(invocation, null);
+      async execute(work) {
+        const child = work.children.create(execution, null);
         await child.run();
-        return children.accept(child, (value) => value);
+        return child.accept();
       },
     };
   })();

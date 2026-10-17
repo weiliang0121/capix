@@ -1,17 +1,31 @@
 import type { Invocation } from '../invocation/invocation.js';
 import type { InvocationContext } from '../context/context.js';
-import type { CheckpointCodec, CheckpointContract, InvocationCheckpointFrame } from './contract.js';
+import type { CheckpointCodec, CheckpointContract, CheckpointReferences, InvocationCheckpointFrame } from './contract.js';
+import type { InvocationLevel } from '@capix/protocol';
+import type { DecodedCheckpointFrame } from './facts.js';
+
+export interface CheckpointChildBinding {
+  readonly level: InvocationLevel;
+  readonly binding?: CheckpointBinding;
+}
+
+export interface CheckpointReferenceSlot {
+  readonly cardinality: 'one' | 'many';
+  readonly position: number;
+}
 
 export interface InvocationCheckpointWork<Input, Output, Context extends InvocationContext<Input, Output>> extends CheckpointContract {
   readonly input: CheckpointCodec<Input>;
   readonly output: CheckpointCodec<Output>;
+  readonly children?: readonly CheckpointChildBinding[];
   readonly points: Readonly<
     Record<
       string,
       {
         readonly state: CheckpointCodec<any>;
-        check?(frame: InvocationCheckpointFrame, state: any): void;
-        execute(context: Context, invocation: Invocation<Input, Output, Context>, state: any): Output | Promise<Output>;
+        readonly references?: Readonly<Record<string, CheckpointReferenceSlot>>;
+        check?(frame: InvocationCheckpointFrame, state: any, references: CheckpointReferences, decoded: DecodedCheckpointFrame): void;
+        execute(context: Context, invocation: Invocation<Input, Output, Context>, state: any, references: CheckpointReferences): Output | Promise<Output>;
       }
     >
   >;

@@ -330,12 +330,12 @@ function composeLevel(Base, child, label, receives, explicit = false) {
     children = child ? [child] : [];
     run = {
       requires: {},
-      execute: async (_context, invocation, children) => {
-        assert.ok(invocation.output);
-        invocation.output.emit(label);
+      execute: async (work) => {
+        assert.ok(work.output);
+        work.output.emit(label);
         if (!child) return label;
-        const call = children.get(child).create(
-          invocation,
+        const call = work.children.create(
+          child,
           'input',
           explicit
             ? {
@@ -348,11 +348,11 @@ function composeLevel(Base, child, label, receives, explicit = false) {
             : undefined,
         );
         await call.run();
-        return children.accept(call, (result) => result);
+        return call.accept();
       },
-      accept: (_context, value, invocation) => {
-        assert.equal('output' in invocation, false);
-        return value;
+      accept: (work) => {
+        assert.equal('output' in work, false);
+        return work.delivered;
       },
     };
   })();
@@ -452,17 +452,17 @@ test('bound fallback has no writer and remains subject to the declared result co
     raises = [rejected];
     run = {
       requires: {},
-      execute(_context, invocation) {
-        invocation.output.emit('tentative');
+      execute(work) {
+        work.output.emit('tentative');
         throw rejected.create('fallback', {});
       },
     };
     exceptions = {
       requires: {},
       accepts: [rejected],
-      handle(_context, _error, invocation) {
-        assert.equal('output' in invocation, false);
-        return { kind: 'return', output: 'fallback' };
+      handle(work) {
+        assert.equal('output' in work, false);
+        return work.return('fallback');
       },
     };
   })();
@@ -506,8 +506,8 @@ test('one failing explicit E output consumer does not disable its other binding'
     children = [execution];
     run = {
       requires: {},
-      async execute(_context, invocation, children) {
-        const child = children.get(execution).create(invocation, 'input', {
+      async execute(work) {
+        const child = work.children.create(execution, 'input', {
           output: {
             receive() {
               throw new Error('one consumer failed');
@@ -515,7 +515,7 @@ test('one failing explicit E output consumer does not disable its other binding'
           },
         });
         await child.run();
-        return children.accept(child, (value) => value);
+        return child.accept();
       },
     };
   })();
@@ -605,13 +605,13 @@ test('a previous work view cannot create children after the invocation moves to 
     run = {
       requires: {},
       uses: this.children,
-      execute(context, invocation, children) {
-        if (context.progress.round === 1) saved = { invocation, children };
-        else assert.throws(() => saved.children.get(child).create(saved.invocation, 'stale'), /inactive declaration round/);
+      execute(work) {
+        if (work.round === 1) saved = work;
+        else assert.throws(() => saved.children.create(child, 'stale'), /inactive declaration round/);
         return 'work';
       },
-      accept(context, value) {
-        return context.progress.round === 1 ? context.continueWith('next', 'continue') : value;
+      accept(work) {
+        return work.round === 1 ? work.continue('next', 'continue') : work.delivered;
       },
     };
   })();
@@ -633,24 +633,25 @@ for (const handled of [false, true]) {
       run = {
         requires: {},
         uses: this.children,
-        async execute(_context, invocation, children) {
-          saved = children.get(child).create(invocation, 'input');
-          const output = await saved.run();
+        async execute(work) {
+          const call = work.children.create(child, 'input');
+          saved = call.ref;
+          const output = await call.run();
           if (handled) throw rejected.create('use existing result', {});
           return output;
         },
-        async accept(_context, _value, invocation, children) {
-          assert.equal('output' in invocation, false);
-          return children.accept(saved, (result) => result);
+        async accept(work) {
+          assert.equal('output' in work, false);
+          return work.children.open(saved).accept();
         },
       };
       exceptions = {
         requires: {},
         uses: this.children,
         accepts: [rejected],
-        async handle(_context, _error, invocation, children) {
-          assert.equal('output' in invocation, false);
-          return { kind: 'return', output: await children.accept(saved, (result) => result) };
+        async handle(work) {
+          assert.equal('output' in work, false);
+          return work.return(await work.children.open(saved).accept());
         },
       };
     })();

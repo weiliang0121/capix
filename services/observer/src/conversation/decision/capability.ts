@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { OperationDefinition, ChildBindings, DefinitionEntryInput, DefinitionOutput, DefinitionDelta, DefinitionParentInvocationView, InvocationOutputReceiver, ChildInvocationView } from '@capix/server-runtime';
+import type { OperationDefinition, ChildCalls, DefinitionEntryInput, DefinitionOutput, DefinitionDelta, InvocationOutputReceiver, ChildCall } from '@capix/server-runtime';
 import type { ConversationCapabilityName, ConversationCapabilityOffer, ConversationDecisionFeedback } from './types.js';
 import { modelTextSchema } from '../model/schema.js';
 
@@ -9,9 +9,8 @@ export interface ConversationCapability<State> {
   readonly offer: ConversationCapabilityOffer;
   available(state: State): boolean;
   validate(value: unknown): boolean;
-  create(value: unknown, state: State): ChildInvocationView<any, any>;
-  resume(contextId: string): ChildInvocationView<any, any>;
-  accept(child: ChildInvocationView<any, any>, state: State): Promise<State>;
+  create(value: unknown, state: State): ChildCall<any>;
+  accept(child: ChildCall<any>, state: State): Promise<State>;
 }
 
 export function conversationCapability<Arguments, State, Definition extends OperationDefinition<any, any, any, any, any>>(
@@ -24,19 +23,20 @@ export function conversationCapability<Arguments, State, Definition extends Oper
     readonly schema: z.ZodType<Arguments>;
     readonly available: (state: State) => boolean;
     readonly input: (arguments_: Arguments, state: State) => DefinitionEntryInput<Definition>;
-    readonly accept: (delivered: DefinitionOutput<Definition>, state: State, child: ChildInvocationView<any, DefinitionOutput<Definition>>) => State;
+    readonly accept: (delivered: DefinitionOutput<Definition>, state: State, child: ChildCall<Definition>) => State;
   },
-  parent: DefinitionParentInvocationView<Definition>,
-  children: ChildBindings,
+  children: ChildCalls,
 ): ConversationCapability<State> {
   return Object.freeze({
     use: options.use,
     offer: Object.freeze({ name: options.name, description: options.description, arguments: z.toJSONSchema(options.schema) }),
     available: options.available,
     validate: (value: unknown) => options.schema.safeParse(value).success,
-    create: (value: unknown, state: State) => children.get(options.use).create(parent, options.input(options.schema.parse(value), state), { key: options.key, output: options.output }),
-    resume: (contextId: string) => children.get(options.use).resume(parent, contextId),
-    accept: (child: ChildInvocationView<any, any>, state: State) => children.accept(child, (delivered) => options.accept(delivered, state, child)),
+    create: (value: unknown, state: State) => children.create(options.use, options.input(options.schema.parse(value), state), { key: options.key, output: options.output }),
+    accept: (child: ChildCall<any>, state: State) => {
+      const selected = children.open(children.facts.require(options.use, child.ref).ref);
+      return selected.accept((delivered) => options.accept(delivered, state, selected));
+    },
   });
 }
 

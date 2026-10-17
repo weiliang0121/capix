@@ -265,7 +265,7 @@ test('failed record delivery exposes error category without live failure objects
     },
   });
   const context = call.context;
-  await assert.rejects(call.run(), (error) => error === exception);
+  await assert.rejects(call.run(), (error) => error.exception === exception && error.cause === exception);
   const snapshot = ExecutionRecordHelper.snapshot(runtime.recorder, call.record.id);
   validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(snapshot.execution.value.failure, { kind: 'exception', phase: 'execute', contextId: context.id, contract: rejected.name });

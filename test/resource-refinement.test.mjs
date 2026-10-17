@@ -34,7 +34,7 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
     run: {
       requires: { bounded: offer.request() },
       execute(context) {
-        const endpoint = context.resources.values.bounded;
+        const endpoint = context.resources.bounded;
         endpoints.push(endpoint);
         return endpoint.read();
       },
@@ -50,11 +50,11 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
     children: [attempt],
     run: {
       requires,
-      async execute(context, invocation, children) {
-        const endpoint = context.resources.values.bounded;
+      async execute(context) {
+        const endpoint = context.resources.bounded;
         const own = endpoint.read();
         endpoints.push(endpoint);
-        const output = await children.get(attempt).call(invocation, context.currentInput);
+        const output = await context.children.create(attempt, context.input).run();
         return { own, output, after: endpoint.read() };
       },
     },
@@ -66,11 +66,11 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
     children: [operation],
     run: {
       requires,
-      async execute(context, invocation, children) {
-        const before = context.resources.values.bounded.read();
+      async execute(context) {
+        const before = context.resources.bounded.read();
         const results = [];
-        for (const input of context.currentInput) results.push(await children.get(operation).call(invocation, input));
-        return { before, results, after: context.resources.values.bounded.read() };
+        for (const input of context.input) results.push(await context.children.create(operation, input).run());
+        return { before, results, after: context.resources.bounded.read() };
       },
     },
   };

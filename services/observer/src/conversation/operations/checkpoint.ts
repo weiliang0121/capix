@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isEqual } from 'es-toolkit/predicate';
-import type { CheckpointChild, CheckpointContract, InvocationCheckpointFrame } from '@capix/server-runtime';
+import type { ChildFact, CheckpointFacts } from '@capix/server-runtime';
 import { checkpointCodec } from '../checkpoint.js';
 import { modelIndexesSchema, modelTextSchema } from '../model/schema.js';
 
@@ -21,7 +21,7 @@ export const preflightSchema = z.discriminatedUnion('kind', [z.strictObject({ ki
 export const decisionSchema = z.union([z.strictObject({ kind: z.literal('invoke'), capability: z.literal('checkFile'), arguments: preflightInputSchema }), z.strictObject({ kind: z.literal('invoke'), capability: z.enum(['answer', 'document', 'save']), arguments: z.strictObject({}) }), z.strictObject({ kind: z.literal('finish'), conclusion: z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('settled') }), z.strictObject({ kind: z.literal('clarify'), question: modelTextSchema }), z.strictObject({ kind: z.literal('unsupported'), explanation: modelTextSchema })]) })]);
 const delivery = z.discriminatedUnion('capability', [z.strictObject({ capability: z.literal('checkFile'), output: preflightSchema }), z.strictObject({ capability: z.enum(['answer', 'document']), output: generationSchema }), z.strictObject({ capability: z.literal('save'), output: fileReceiptSchema })]);
 export const decisionInputSchema = z.strictObject({ request: understandingInputSchema, progress: z.strictObject({ file: z.strictObject({ kind: z.literal('ready'), task: fileTaskSchema, instruction: modelTextSchema }).optional(), answer: generationSchema.optional(), saved: fileReceiptSchema.optional() }), latest: delivery.optional(), available: z.array(capability.extend({ name: z.enum(['checkFile', 'answer', 'document', 'save']) })), feedback: feedback.optional() });
-export const childWaitingCodec = checkpointCodec(z.strictObject({ childId: modelTextSchema }));
+export const emptyCheckpointState = checkpointCodec(z.null());
 export const selectionCodec = checkpointCodec(selectionSchema);
 export const selectionInputCodec = checkpointCodec(selectionInputSchema);
 export const understandingInputCodec = checkpointCodec(understandingInputSchema);
@@ -33,19 +33,18 @@ export const inspectionCodec = checkpointCodec(inspectionSchema);
 export const textDocumentCodec = checkpointCodec(fileReceiptSchema.extend({ text: z.string() }));
 export const fileTaskCodec = checkpointCodec(fileTaskSchema);
 
-export function originalCheckpoint(frame: InvocationCheckpointFrame): void {
-  if (frame.round !== 1 || !isEqual(frame.input, frame.currentInput)) throw new Error('Operation checkpoint must preserve its original input and round');
+export function originalCheckpoint(facts: Pick<CheckpointFacts<unknown>, 'round' | 'initialInput' | 'input'>): void {
+  if (facts.round !== 1 || !isEqual(facts.initialInput, facts.input)) throw new Error('Operation checkpoint must preserve its original input and round');
 }
-export function acceptedChild(child: CheckpointChild | undefined): CheckpointChild & { state: Extract<CheckpointChild['state'], { kind: 'returned' }> & { reception: { kind: 'accepted'; output: unknown } } } {
-  if (!child || child.state.kind !== 'returned' || child.state.reception.kind !== 'accepted' || !Object.hasOwn(child.state.reception, 'output')) throw new Error('Checkpoint requires an accepted direct child');
-  return child as ReturnType<typeof acceptedChild>;
+export function acceptedChild<Definition>(child: ChildFact<Definition> | undefined) {
+  if (!child || child.returned?.status !== 'succeeded' || child.reception.status !== 'accepted') throw new Error('Checkpoint requires an accepted direct child');
+  return Object.freeze({ ...child, returned: child.returned, reception: child.reception });
 }
-export function waitingChild(frame: InvocationCheckpointFrame, state: { childId: string }, key: string, contract: CheckpointContract | undefined): CheckpointChild {
-  const child = frame.children.at(-1);
-  if (!child || child.identity.contextId !== state.childId || child.key !== key || child.state.kind !== 'waiting' || !contract || child.contract?.key !== contract.key || child.contract.version !== contract.version) throw new Error('Checkpoint must identify its exact waiting child');
+export function waitingChild<Definition>(facts: Pick<CheckpointFacts<unknown>, 'children'>, child: ChildFact<Definition>, key: string): ChildFact<Definition> {
+  if (facts.children.values().at(-1)?.ref !== child.ref || child.key !== key || child.returned || child.reception.status !== 'pending') throw new Error('Checkpoint must identify its exact waiting child');
   return child;
 }
-export function checkLeafResult(frame: InvocationCheckpointFrame): void {
-  originalCheckpoint(frame);
-  if (frame.children.length) throw new Error('Leaf result cannot contain child calls');
+export function checkLeafResult(facts: CheckpointFacts<unknown>): void {
+  originalCheckpoint(facts);
+  if (facts.children.values().length) throw new Error('Leaf result cannot contain child calls');
 }

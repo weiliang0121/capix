@@ -10,8 +10,19 @@ class Answer extends OperationDefinition {
   run = { requires: {}, execute: () => 'fixed answer' };
 }
 
-function assemble(execution, transcript) {
-  return assembleRuntime(runtimeDefinition(execution), { providers: [TranscriptResource.append.provide(() => transcript)], source: { entry: () => null, capture: () => null } });
+function assemble(execution, transcript, progress = []) {
+  return assembleRuntime(runtimeDefinition(execution), {
+    providers: [TranscriptResource.append.provide(() => transcript)],
+    source: {
+      entry: () => null,
+      capture: () => null,
+      progress: () => ({
+        receive: (fact) => {
+          progress.push(fact);
+        },
+      }),
+    },
+  });
 }
 
 test('fixed transcript writes require a real direct-child reception and cannot be swallowed', async () => {
@@ -19,8 +30,8 @@ test('fixed transcript writes require a real direct-child reception and cannot b
   class Main extends ExecutionDefinition {
     run = {
       requires: { messages: TranscriptResource.append.request() },
-      execute(context) {
-        assert.throws(() => context.resources.values.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'not accepted' }] }), /active direct-child reception/);
+      execute(work) {
+        assert.throws(() => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'not accepted' }] }), /active direct-child reception/);
         return 'caught';
       },
     };
@@ -32,27 +43,26 @@ test('fixed transcript writes require a real direct-child reception and cannot b
 test('fixed transcript writes derive parent and child identity from the actual reception', async () => {
   const transcript = new Transcript();
   const answer = new Answer();
-  let parentId;
-  let childId;
+  const progress = [];
   class Main extends ExecutionDefinition {
     children = [answer];
     run = {
       requires: { messages: TranscriptResource.append.request() },
-      async execute(context, invocation, children) {
-        parentId = context.id;
-        const child = children.get(answer).create(invocation, null);
-        childId = child.context.id;
+      async execute(work) {
+        const child = work.children.create(answer, null);
         await child.run();
-        return children.accept(child, (content) => {
-          const first = context.resources.values.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
-          const confirmed = context.resources.values.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+        return child.accept((content) => {
+          const first = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+          const confirmed = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
           assert.equal(first, confirmed);
           return confirmed;
         });
       },
     };
   }
-  const receipt = await assemble(new Main(), transcript).run(null, {});
+  const receipt = await assemble(new Main(), transcript, progress).run(null, {});
+  const parentId = progress.find((f) => f.kind === 'started' && f.identity.level === 'execution').identity.contextId;
+  const childId = progress.find((f) => f.kind === 'started' && f.identity.level === 'operation').identity.contextId;
   assert.deepEqual(receipt, { transcriptId: transcript.id, start: 0, count: 1, revision: 1 });
   assert.deepEqual(transcript.exportState().appends[0].request.operation, { parentContextId: parentId, childContextId: childId, position: 'answer' });
   assert.equal(transcript.length, 1);
@@ -64,33 +74,32 @@ for (const stale of [undefined, 'endpoint', 'view']) {
     const answer = new Answer();
     let firstEndpoint;
     let firstValues;
-    const childrenIds = [];
+    const progress = [];
     class Main extends ExecutionDefinition {
       children = [answer];
       maxRounds = 2;
       run = {
         requires: { messages: TranscriptResource.append.request() },
-        async execute(context, invocation, children) {
-          const endpoint = context.resources.values.messages;
-          if (context.progress.round === 1) {
+        async execute(work) {
+          const endpoint = work.resources.messages;
+          if (work.round === 1) {
             firstEndpoint = endpoint;
-            firstValues = context.resources.values;
+            firstValues = work.resources;
           } else assert.notEqual(endpoint, firstEndpoint);
-          const child = children.get(answer).create(invocation, null);
-          childrenIds.push(child.context.id);
+          const child = work.children.create(answer, null);
           await child.run();
-          return children.accept(child, (content) => {
-            if (stale && context.progress.round === 2) {
+          return child.accept((content) => {
+            if (stale && work.round === 2) {
               const retained = stale === 'view' ? firstValues.messages : firstEndpoint;
               return retained.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
             }
             return endpoint.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
           });
         },
-        accept: (context, output) => (context.progress.round === 1 ? context.continueWith(context.input, 'second round') : output),
+        accept: (work) => (work.round === 1 ? work.continue(work.initialInput, 'second round') : work.delivered),
       };
     }
-    const execution = assemble(new Main(), transcript).run(null, {});
+    const execution = assemble(new Main(), transcript, progress).run(null, {});
     if (stale) {
       await assert.rejects(execution, /inactive declaration round/);
       assert.equal(transcript.length, 1);
@@ -99,7 +108,7 @@ for (const stale of [undefined, 'endpoint', 'view']) {
       assert.equal(transcript.length, 2);
       assert.deepEqual(
         transcript.exportState().appends.map((saved) => saved.request.operation.childContextId),
-        childrenIds,
+        progress.filter((f) => f.kind === 'started' && f.identity.level === 'operation').map((f) => f.identity.contextId),
       );
     }
   });
@@ -145,51 +154,55 @@ test('a checkpoint writer retained from a previous round cannot save the current
   let writer;
   class Root extends RuntimeDefinition {
     maxRounds = 2;
-    checkpoint = { key: 'test.round-writer', version: 1, input: codec, output: codec, points: { saved: { state: codec, resume: { requires: {}, execute: () => null } } } };
+    checkpoint = { key: 'test.round-writer', version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { requires: {}, execute: () => null } }] };
     run = {
       requires: {},
-      execute(context, invocation) {
-        if (context.progress.round === 1) writer = invocation.checkpoint;
-        else assert.throws(() => writer.save('saved', null), /outside its executing round/);
+      execute: (work) => {
+        if (work.round === 1) writer = work.checkpoint;
+        else assert.throws(() => writer.save(this.checkpoint.points[0], null, {}), /inactive declaration|outside its executing round/);
         return null;
       },
-      accept: (context, output) => (context.progress.round === 1 ? context.continueWith(context.input, 'next') : output),
+      accept: (work) => (work.round === 1 ? work.continue(work.initialInput, 'next') : work.delivered),
     };
   }
   const runtime = assembleRuntime(new Root(), { checkpoints: { store }, providers: [], source: { entry: () => null, capture: () => null } });
-  await assert.rejects(runtime.run(null, {}), /outside its executing round/);
+  await assert.rejects(runtime.run(null, {}), /inactive declaration|outside its executing round/);
   assert.equal(runtime.running, false);
 });
 
 test('parallel fixed appends bind each effect to its own asynchronous reception', async () => {
+  const progress = [];
   const transcript = new Transcript();
   const answer = new Answer();
   class Main extends ExecutionDefinition {
     children = [answer];
     run = {
       requires: { messages: TranscriptResource.append.request() },
-      async execute(context, invocation, children) {
-        const first = children.get(answer).create(invocation, null);
-        const second = children.get(answer).create(invocation, null);
+      async execute(work) {
+        const first = work.children.create(answer, null);
+        const second = work.children.create(answer, null);
         await first.run();
         await second.run();
         const gate = Promise.withResolvers();
-        const accepting = children.accept(first, async (content) => {
+        const accepting = first.accept(async (content) => {
           await gate.promise;
-          return context.resources.values.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+          return work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
         });
-        await children.accept(second, (content) => context.resources.values.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }));
+        await second.accept((content) => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }));
         gate.resolve();
         await accepting;
         assert.deepEqual(
           transcript.exportState().appends.map((item) => item.request.operation.childContextId),
-          [second.context.id, first.context.id],
+          progress
+            .filter((f) => f.kind === 'started' && f.identity.level === 'operation')
+            .map((f) => f.identity.contextId)
+            .reverse(),
         );
         return 'accepted';
       },
     };
   }
-  assert.equal(await assemble(new Main(), transcript).run(null, {}), 'accepted');
+  assert.equal(await assemble(new Main(), transcript, progress).run(null, {}), 'accepted');
   assert.equal(transcript.length, 2);
 });
 

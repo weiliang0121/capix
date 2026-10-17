@@ -5,11 +5,13 @@ import type { InvocationContext } from '../context/context.js';
 import { InvocationObservation } from '../observation/invocation.js';
 import type { InvocationObserver } from '../observation/observer.js';
 import { ObserverSession } from '../observation/session.js';
-import type { CheckpointFact, CheckpointHead, CheckpointInstallation, CheckpointRestoration, CheckpointWriter, CheckpointDelivery, CheckpointChild } from './contract.js';
+import type { CheckpointFact, CheckpointHead, CheckpointInstallation, CheckpointRestoration, CheckpointWriter, CheckpointDelivery, CheckpointChild, CheckpointReferences } from './contract.js';
 import { cloneCheckpointHead, cloneCheckpointImage, cloneCheckpointValue } from './value.js';
-import type { CheckpointBinding, InvocationCheckpointWork } from './work.js';
+import type { InvocationCheckpointWork } from './work.js';
 import type { InvocationTarget } from '../invocation/relation.js';
 import { captureCheckpointChildren, decodeCheckpointChild, resolveCheckpointChild } from './children.js';
+import { checkpointChildBinding, checkCheckpointReferences, decodeCheckpointFrame } from './facts.js';
+import { captureCheckpointContinuation, restoreCheckpointContinuation } from './continuation.js';
 
 type Event = CheckpointFact extends infer F ? (F extends CheckpointFact ? Omit<F, 'activityId' | 'contextId' | 'owner' | 'recovering' | 'sequence' | 'occurredAt'> : never) : never;
 const active = new WeakMap<object, Set<string>>();
@@ -55,7 +57,9 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       const image = this.#restore.image;
       if (!work || this.#restore.delivery || image.contract.key !== work.key || image.contract.version !== work.version || !isEqual(image.frame.owner, invocation.identity) || image.frame.round > invocation.maxRounds || !work.points[image.point]) throw new Error('Incompatible checkpoint continuation');
       if (invocation.context.progress.round !== image.frame.round || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.currentInput)), image.frame.currentInput) || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.input)), image.frame.input)) throw new Error('Checkpoint input changed during binding');
-      const children = image.frame.children.map((child) => decodeCheckpointChild(child, undefined, signal));
+      if (!isEqual(invocation.context.continuation, restoreCheckpointContinuation(image.frame))) throw new Error('Checkpoint continuation changed during binding');
+      checkCheckpointReferences(image.frame, image.references, work.points[image.point]!.references);
+      const children = image.frame.children.map((child) => decodeCheckpointChild(child, checkpointChildBinding(child, work.children), signal));
       invocation.children.install(image.frame.nextChildOrder, children);
       for (const child of image.frame.children) this.#savedChildren.set(child.identity.contextId, child);
     }
@@ -98,7 +102,9 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     const current = this.installation.store.read(this.invocation.context.id);
     if (!current || current.delivery || current.revision !== this.#restore.revision || current.image.id !== image.id) throw new Error('Checkpoint head changed before continuation');
     const point = this.work!.points[image.point]!;
-    point.check?.(image.frame, point.state.decode(image.state));
+    const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children);
+    checkCheckpointReferences(image.frame, image.references, point.references);
+    point.check?.(image.frame, point.state.decode(image.state), image.references, decoded);
     this.emit({ kind: 'installed', checkpointId: image.id, point: image.point, frame: image.frame });
     this.#ready = true;
   }
@@ -110,7 +116,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     if (!this.work) return undefined;
     const round = this.invocation.context.progress.round;
     return Object.freeze({
-      save: (point: string, state: unknown) => {
+      save: (point: string, state: unknown, references: CheckpointReferences = {}) => {
         let stage: 'capture' | 'save' = 'capture';
         try {
           this.invocation.requireActive();
@@ -118,8 +124,12 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
           if (!this.#claimed || this.#terminal || context.progress.phase !== 'execute' || context.progress.round !== round) throw new Error('Checkpoint writer is outside its executing round');
           const definition = this.work!.points[point];
           if (!definition) throw new Error('Checkpoint point is not declared');
-          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 1, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input: this.work!.input.encode(context.input), currentInput: this.work!.input.encode(context.currentInput), ...captureCheckpointChildren(context, this.invocation.children, this.#savedChildren) }, state: definition.state.encode(state) });
-          definition.check?.(image.frame, definition.state.decode(image.state));
+          const children = captureCheckpointChildren(context, this.invocation.children, this.#savedChildren);
+          const continuation = captureCheckpointContinuation(context.continuation, children.children);
+          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 2, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input: this.work!.input.encode(context.input), currentInput: this.work!.input.encode(context.currentInput), ...children, ...(continuation ? { continuation } : {}) }, state: definition.state.encode(state), references });
+          const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children);
+          checkCheckpointReferences(image.frame, image.references, definition.references);
+          definition.check?.(image.frame, definition.state.decode(image.state), image.references, decoded);
           this.emit({ kind: 'captured', checkpointId: image.id, point });
           stage = 'save';
           this.#head = cloneCheckpointHead(this.installation.store.save(image, this.#head?.revision ?? 0));
@@ -142,21 +152,25 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     const image = this.#restore.image;
     const point = this.work.points[image.point]!;
     this.emit({ kind: 'continued', checkpointId: image.id, point: image.point });
-    return point.execute(this.invocation.context, this.invocation, point.state.decode(image.state));
+    return point.execute(this.invocation.context, this.invocation, point.state.decode(image.state), image.references);
   }
-  restoreChild(binding: CheckpointBinding, contextId: string, create: () => InvocationTarget): InvocationTarget {
+  restoreChild(position: number, contextId: string, create: () => InvocationTarget): InvocationTarget {
     if (!this.#restore) throw new Error('Child continuation requires a restored parent');
     const saved = this.#savedChildren.get(contextId);
     const resumed = this.#resumedChildren.get(contextId);
-    const contract = saved?.contract ?? resumed?.checkpointBinding;
-    if (!contract || contract.key !== binding.key || contract.version !== binding.version) throw new Error('Child continuation contract or ownership mismatch');
-    if (resumed) return resumed;
+    if (resumed) {
+      if (this.invocation.children.get(resumed).declarationPosition !== position) throw new Error('Child continuation declaration position or ownership mismatch');
+      return resumed;
+    }
     if (!saved) throw new Error('Child continuation basis is unavailable');
+    if (saved.target.position !== position) throw new Error('Child continuation declaration position or ownership mismatch');
+    const binding = checkpointChildBinding(saved, this.work?.children);
     const restored = resolveCheckpointChild(saved, saved.state.kind === 'waiting' ? this.installation.store.read(contextId) : undefined);
     if (restored.kind === 'continuation') {
       // Construction adopts the placeholder through the child's Invocation constructor.
       const target = create();
-      if (target.context.id !== contextId || this.invocation.children.get(target).round !== saved.round) throw new Error('Child continuation did not adopt the saved relationship');
+      const relation = this.invocation.children.get(target);
+      if (target.context.id !== contextId || relation.round !== saved.round || relation.order !== saved.order || relation.declarationPosition !== saved.target.position) throw new Error('Child continuation did not adopt the saved relationship');
       this.#savedChildren.delete(contextId);
       this.#resumedChildren.set(contextId, target);
       this.emit({ kind: 'child-restored', child: saved, mode: 'continuation' });

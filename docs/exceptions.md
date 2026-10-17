@@ -11,10 +11,10 @@ const definition = {
   run: {
     requires: {/* 当前工作需要的正式资源访问 */},
     uses: [model, acceptOutput],
-    execute(context, invocation, children) {
+    execute(work) {
       /* 本层工作及组合 */
     },
-    accept(context, output, invocation, children) {
+    accept(work) {
       /* 可选的正常结果接纳 */
     },
   },
@@ -22,8 +22,8 @@ const definition = {
     requires: {/* 处理时需要的正式资源访问 */},
     uses: [],
     accepts: [outputRejected],
-    handle(context, exception, invocation, children) {
-      return { kind: 'continue', input: context.currentInput, reason: '重新构造模型反馈请求' };
+    handle(work) {
+      return work.continue(work.input, '重新构造模型反馈请求');
     },
   },
   observation: [
@@ -39,7 +39,7 @@ const definition = {
 
 静态装配检查正常工作与异常处理所需资源的总覆盖，但运行时分别提供各自的具名资源和子调用端点。`run.uses` 缺省沿用所属节点的子声明，`exceptions.uses` 缺省为空。相同资源供应可以共享固定捕获，两个阶段的活端点分别受当前阶段约束，保存旧端点也不能跨阶段使用。已有 `timing: binding` 供应仍按其契约固定创建时事实；`timing: access` 的异常专用供应在正常路径不兑现。
 
-子调用关系公开身份、输入、结果和进度等事实，不公开子层的资源端点。资源只从本层本阶段绑定的 ContextView 进入业务。
+子调用关系公开身份、输入、结果和进度等事实，不公开子层的资源端点。资源只从本层本阶段绑定的 Work 进入业务。
 
 ## 异常与错误
 
@@ -54,9 +54,17 @@ const definition = {
 
 契约按对象身份匹配；相同名字不表示相同契约。异常事实保留运行中的值和 cause，正式记录再按自己的正文规则捕获，不用错误字符串推断处理资格。
 
-处理器返回 `return`、`continue` 或 `unhandled`。`return` 明确提供本层输出；`continue` 仍受所属调用一轮或两轮的限制，并说明原因；`unhandled` 交还原异常。处理器可以使用声明过的业务资源及子调用，并非只能提出无副作用建议。
+处理器返回本阶段签发的 `work.return(output)`、`work.continue(input, reason)` 或 `work.unhandled`，不能自造同形控制对象。`return` 明确提供本层输出；`continue` 仍受所属调用一轮或两轮的限制，并说明原因；`unhandled` 交还原异常。处理器可以使用声明过的业务资源及子调用，并非只能提出无副作用建议。
 
 错误结算只落实当前 Context 终态、调用返回以及可选记录/通知，不再调用业务处理器。结算路径自身损坏属于实现缺陷；当前固定边界保留原失败与登记失败的诊断，但不建立递归补救机制，不承诺进程崩溃后的保证。
+
+## 子交付异常的准确来源
+
+直接子 `run / accept` 的声明异常通过独立 `ChildCallFailure` 交付；其 `exception` 和 `cause` 保留原始异常。每笔交付有自己的父关系、阶段及轮次依据，同一异常对象被多个并行子调用复用也不会串源。业务原样 catch/rethrow 该交付对象会保留来源；`exceptions.handle(work)` 收到的仍是原始异常，`work.origin` 给出已核验的 self、child-return 或 child-reception。
+
+这改变了直接 catch 的对象身份及 `instanceof DeclaredException`；需要读取原异常时使用 `ChildCallFailure.exception`。主动解包再抛出原异常会按本层 self 异常检查 raises，不保留子来源；复制或包装交付对象也不靠扫描关系、最近异常或 cause 猜测来源。处理器中新发生的失败按实际失败交付，不能误用先前进入处理器的来源。
+
+继续事实只在决定被内核接纳并进入下一轮时安装，记录 reason、来源和前后轮次；第二轮可读取，但不能凭事实重新获得旧阶段句柄。有限恢复只保存原异常的诊断和准确关系，不复活历史异常对象。
 
 ## 归属、状态与已产生的事实
 

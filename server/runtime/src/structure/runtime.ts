@@ -92,7 +92,7 @@ export class BoundRuntime<Input = unknown, Output = unknown, Options extends Inv
           const construct = (input: Input, restore?: CheckpointRestoration) => {
             binding.validate?.(options);
             const definition = binding.declaration;
-            const initial = restore ? definition.checkpoint?.points[restore.head.image.point]?.resume.requires : definition.run.requires;
+            const initial = restore ? definition.checkpoint?.points.find((point) => point.name === restore.head.image.point)?.resume.requires : definition.run.requires;
             if (!initial) throw new Error('Checkpoint point is not declared');
             return this.invocationBuilder.create(input, {
               description: { id: this.id },

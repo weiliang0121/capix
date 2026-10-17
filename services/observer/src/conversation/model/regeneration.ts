@@ -1,13 +1,22 @@
-import { modelOutputRejected, type ModelOutputRejection } from './rejection.js';
-import { DeclaredException, RuntimeError, isObject, type InvocationView, type InvocationRelationView, type OperationContextView, type ExecutionContextView } from '@capix/server-runtime';
+import { modelOutputRejected } from './rejection.js';
+import { RuntimeError, isObject, type ChildReference, type ChildFacts, type ContinuationFact } from '@capix/server-runtime';
+import { isEqual } from 'es-toolkit';
 import type { ModelOutput, ModelRequest } from './types.js';
+import type { RequestModelDefinition } from '../operations/model/request.js';
+import type { AcceptModelOutputDefinition, ModelAcceptanceInput } from '../attempt/model/accept.js';
+import { z } from 'zod';
 
-export type ModelParentInvocationView = InvocationView<unknown, unknown, Omit<OperationContextView, 'resources'>> | InvocationView<unknown, unknown, Omit<ExecutionContextView, 'resources'>>;
+/** Read-only parent facts also used by the capability's alternate input entry. */
+export interface ModelParentFacts {
+  readonly round: 1 | 2;
+  readonly continuation?: ContinuationFact;
+  readonly children: ChildFacts;
+}
 
-/** Live evidence from one parent's direct children; never serialized as model input. */
+/** Certified references, never embedded in the model request or acceptance input. */
 export interface ModelRegenerationEvidence {
-  previous: InvocationRelationView;
-  rejection: InvocationRelationView;
+  readonly previous: ChildReference<RequestModelDefinition>;
+  readonly rejection: ChildReference<AcceptModelOutputDefinition<ModelAcceptanceInput, any>>;
 }
 
 export interface ModelRegenerationInput {
@@ -23,35 +32,32 @@ export const modelRegenerationDeclaration = Object.freeze({
   rejectionCodes: Object.freeze(['INVALID_JSON', 'EMPTY_OUTPUT', 'OUTPUT_SHAPE']),
 } as const);
 
-/** Recheck actual delivery and direct ownership, not just the parent's proposed reason. */
-export function allowsModelRegeneration(parent: ModelParentInvocationView, evidence: ModelRegenerationEvidence): boolean {
-  const { previous, rejection } = evidence;
-  const children = parent.children.values();
-  if (parent.context.status !== 'running' || parent.context.signal.aborted) return false;
-  if (!children.includes(previous) || !children.includes(rejection) || children.indexOf(previous) >= children.indexOf(rejection)) return false;
-  if (!previous.key || previous.round !== 1 || rejection.round !== previous.round) return false;
-  if (parent.context.progress.round !== previous.round && parent.context.progress.round !== previous.round + 1) return false;
-  if (children.filter((child) => child.key === previous.key).length > modelRegenerationDeclaration.maxAdditionalCalls) return false;
-  if (previous.returned?.status !== 'succeeded' || previous.invocation.context.status !== 'succeeded' || previous.reception.status !== 'accepted') return false;
-  if (rejection.returned?.status !== 'failed' || rejection.invocation.context.status !== 'failed' || rejection.reception.status !== 'pending') return false;
-  const error = rejection.returned.error;
-  if (!(error instanceof DeclaredException) || error.contract !== modelOutputRejected) return false;
-  const rejected = error.facts as ModelOutputRejection;
-  if (!modelRegenerationDeclaration.rejectionCodes.some((code) => code === rejected.code)) return false;
-  const acceptance = rejection.invocation.context.input;
-  if (!isObject(acceptance) || acceptance.output !== previous.returned.output || rejected.output !== previous.returned.output) return false;
-  // The evidence comes from the model/acceptance positions of this composition.
-  const output = previous.returned.output;
-  return isObject(output) && output.finishReason === 'stop';
+const rejectionDiagnostic = z.looseObject({ message: z.string(), detail: z.looseObject({ code: z.enum(modelRegenerationDeclaration.rejectionCodes), output: z.unknown() }) });
+
+/** Recheck exact references and declared model identity, not a key or latest failure. */
+export function allowsModelRegeneration(parent: ModelParentFacts, evidence: ModelRegenerationEvidence, model: RequestModelDefinition): boolean {
+  const previous = parent.children.list(model).find((child) => child.ref === evidence.previous);
+  const rejection = parent.children.values().find((child) => child.ref === evidence.rejection);
+  if (!previous || !rejection) return false;
+  if (previous.order >= rejection.order || previous.parentRound !== 1 || rejection.parentRound !== 1) return false;
+  if (parent.children.list(model).length > modelRegenerationDeclaration.maxAdditionalCalls) return false;
+  if (previous.returned?.status !== 'succeeded' || previous.reception.status !== 'accepted') return false;
+  if (rejection.returned?.status !== 'failed' || rejection.returned.failure?.kind !== 'exception' || rejection.returned.failure.contract !== modelOutputRejected.name || rejection.reception.status !== 'pending') return false;
+  if (parent.round === 2 && (parent.continuation?.stage !== 'handling' || parent.continuation.origin?.kind !== 'child-return' || parent.continuation.origin.child !== rejection.ref)) return false;
+  const diagnostic = rejectionDiagnostic.safeParse(rejection.returned.diagnostic);
+  if (!diagnostic.success) return false;
+  const acceptance = rejection.input;
+  if (!isObject(acceptance) || !isEqual(acceptance.output, previous.returned.output)) return false;
+  return previous.returned.output.finishReason === 'stop';
 }
 
-export function modelRegenerationInput(parent: ModelParentInvocationView, evidence: ModelRegenerationEvidence): ModelRegenerationInput {
-  if (!allowsModelRegeneration(parent, evidence)) throw new RuntimeError('MODEL_REGENERATION_NOT_ALLOWED', '本次模型调用不满足再次生成的声明与条件。');
-  const result = evidence.previous.returned!;
-  const rejection = evidence.rejection.returned!;
-  if (result.status !== 'succeeded' || rejection.status !== 'failed') throw new Error('Regeneration evidence changed');
-  const error = rejection.error as DeclaredException<ModelOutputRejection>;
-  return { request: evidence.previous.invocation.context.input as ModelRequest, output: result.output as ModelOutput, error: { code: error.facts.code, message: error.message } };
+export function modelRegenerationInput(parent: ModelParentFacts, evidence: ModelRegenerationEvidence, model: RequestModelDefinition): ModelRegenerationInput {
+  if (!allowsModelRegeneration(parent, evidence, model)) throw new RuntimeError('MODEL_REGENERATION_NOT_ALLOWED', '本次模型调用不满足再次生成的声明与条件。');
+  const previous = parent.children.require(model, evidence.previous);
+  const rejection = parent.children.get(evidence.rejection);
+  if (previous.returned?.status !== 'succeeded' || rejection.returned?.status !== 'failed') throw new Error('Regeneration evidence changed');
+  const diagnostic = rejectionDiagnostic.parse(rejection.returned.diagnostic);
+  return { request: previous.input, output: previous.returned.output, error: { code: diagnostic.detail.code, message: diagnostic.message } };
 }
 
 export function prepareRegenerationRequest(input: ModelRegenerationInput): ModelRequest {

@@ -41,7 +41,7 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 
 - `*Definition` 声明契约与内容；`run`、`exceptions`、`observation` 是平级部分。
 - `Bound*` 是可复用的绑定结构，不是一次调用。R 当前持有占用，拒绝同时提交；每次 `run` 建立新的 R Context/Invocation，再由 R 声明选择和接纳 E。
-- `Invocation` 统一调用过程、直接子关系和顺序；`*Context` 保存本次现场。业务只取得 `*ContextView`、`InvocationView` 和自己声明的资源端点。
+- `Invocation` 统一调用过程、直接子关系和顺序；`*Context` 保存本次现场。定义作者只取得本阶段 `Work`、具名资源和受控子调用句柄，不接触内部 Context/Invocation。作者契约见 [定义作者接口](docs/definition-author-contract.md)。
 - 独立实体由环境建立。R 绑定其访问形式，不拥有整个实体世界；调用工作不取得原实体或记录容器。
 - 观测消费类型化事实，记录是内置的可选结果形式。没有记录，业务调用与内容变化仍然成立。
 

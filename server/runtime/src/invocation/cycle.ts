@@ -10,6 +10,7 @@ import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputW
 import { ProgressChannel } from '../progress.js';
 import { isNonBlankString } from '../value/string.js';
 import { isObject } from '../value/object.js';
+import type { InvocationContinuationFact } from './continuation.js';
 
 /** The cycle shares the call's error authority, without access to its structure or delivery. */
 export interface InvocationCycleControls {
@@ -21,7 +22,7 @@ export interface InvocationCycleControls {
 
 export interface InvocationCycleOptions<Output> {
   readonly signal: AbortSignal;
-  readonly process: (process: InvocationProcess) => void;
+  readonly process: (process: InvocationProcess, round?: number) => void;
   readonly validate?: () => void;
   readonly output?: InvocationOutputReceiver<Output>;
 }
@@ -30,6 +31,8 @@ export interface InvocationCycleOptions<Output> {
 export class InvocationCycle<Input, Output> {
   #outputSection?: InvocationOutputSection<Output>;
   readonly #outputDelivery?: ProgressChannel<InvocationOutputEvent<Output>>;
+  #exceptionFailure?: InvocationFailure;
+  #continuation?: InvocationContinuationFact;
 
   constructor(
     private readonly context: InvocationContext<Input, Output>,
@@ -43,6 +46,10 @@ export class InvocationCycle<Input, Output> {
   get outputWriter(): InvocationOutputWriter<unknown> {
     if (!this.#outputSection) throw new Error('Invocation has no executing output segment');
     return this.#outputSection.writer;
+  }
+
+  get exceptionFailure(): InvocationFailure | undefined {
+    return this.#exceptionFailure;
   }
 
   discardOutput(reason: 'exception' | 'continue' | 'failed'): void {
@@ -67,6 +74,13 @@ export class InvocationCycle<Input, Output> {
         if (!(accepted instanceof Continuation)) return this.validateOutput(accepted);
         this.discardOutput('continue');
         if (round === this.work.maxRounds) throw new InvocationStopped('LOCAL_ROUND_LIMIT', '本地执行已达到轮次上限。', { maxRounds: this.work.maxRounds });
+        if (!this.#continuation || !isNonBlankString(accepted.reason)) throw new InvocationStopped('INVALID_CONTINUATION', '继续执行必须说明原因。');
+        this.controls.healthy();
+        requireNotCancelled(this.options.signal);
+        this.context.installContinuation(accepted.input, this.#continuation);
+        // This reports the accepted transition from the previous round. Notification
+        // failure cannot erase the next round and continuation already installed.
+        this.options.process({ stage: this.#continuation.stage === 'accept' ? 'receive' : 'handling', type: 'continue', input: accepted.input, reason: accepted.reason }, round);
         input = accepted.input;
       }
       throw new InvocationStopped('INTERNAL_ERROR', '调用没有产生结果。');
@@ -79,12 +93,14 @@ export class InvocationCycle<Input, Output> {
   private enterRound(round: number, input: Input, restored: boolean): void {
     this.controls.healthy();
     requireNotCancelled(this.options.signal);
-    if (!restored) this.context.startRound(round, input);
+    if (!restored && round === 1) this.context.startRound(round, input);
     this.options.validate?.();
     this.controls.healthy();
   }
 
   private async runRound(resume?: () => Promise<Output>): Promise<Output | Continuation<Input>> {
+    this.#continuation = undefined;
+    this.#exceptionFailure = undefined;
     this.#outputSection = new InvocationOutputSection(this.context.id, this.context.progress.round, this.work.output, this.controls, this.#outputDelivery);
     this.#outputSection.start();
     this.options.process({ stage: 'execute', type: 'start', input: this.context.currentInput });
@@ -125,7 +141,7 @@ export class InvocationCycle<Input, Output> {
       this.reportFailure('receive', failure);
       return this.handleException(failure);
     }
-    if (accepted instanceof Continuation) this.reportContinuation('receive', accepted);
+    if (accepted instanceof Continuation) this.#continuation = Object.freeze({ fromRound: 1, stage: 'accept', reason: accepted.reason });
     else this.options.process(this.work.accept ? { stage: 'receive', type: 'return', output: accepted } : { stage: 'receive', type: 'return', reuse: true });
     return accepted;
   }
@@ -134,6 +150,7 @@ export class InvocationCycle<Input, Output> {
     this.discardOutput('exception');
     const exception = failure.error;
     if (failure.kind !== 'exception' || !(exception instanceof DeclaredException) || !this.work.exceptions?.accepts.includes(exception.contract)) throw exception;
+    this.#exceptionFailure = failure;
     this.context.handling();
     this.options.process({ stage: 'handling', type: 'start', error: exception, failure });
     let resolution: InvocationResolution<Input, Output>;
@@ -156,7 +173,7 @@ export class InvocationCycle<Input, Output> {
       return resolution.output;
     }
     const continuation = new Continuation(resolution.input, resolution.reason);
-    this.reportContinuation('handling', continuation);
+    this.#continuation = Object.freeze({ fromRound: 1, stage: 'handling', reason: continuation.reason, origin: failure.origin });
     return continuation;
   }
 
@@ -168,11 +185,6 @@ export class InvocationCycle<Input, Output> {
     this.controls.healthy();
     if (!cancelledBeforeValidation) requireNotCancelled(this.options.signal);
     return output;
-  }
-
-  private reportContinuation(stage: 'receive' | 'handling', continuation: Continuation<Input>): void {
-    if (!isNonBlankString(continuation.reason)) throw new InvocationStopped('INVALID_CONTINUATION', '继续执行必须说明原因。');
-    this.options.process({ stage, type: 'continue', input: continuation.input, reason: continuation.reason });
   }
 
   private reportFailure(stage: 'execute' | 'receive' | 'handling' | 'control', failure: InvocationFailure): void {

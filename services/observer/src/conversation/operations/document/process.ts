@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { isEqual } from 'es-toolkit/predicate';
 import { checkpointCodec } from '../../checkpoint.js';
 import { answerCheckpointCodecs } from '../answer/checkpoint.js';
-import { selectionSchema, memorySchema, fileTaskSchema, childWaitingCodec, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
-import { OperationDefinition, type OperationContextView, type InvocationWorkView, type ChildBindings, type ChildInvocationView, type InvocationCheckpointDefinition } from '@capix/server-runtime';
+import { selectionSchema, memorySchema, fileTaskSchema, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
+import { OperationDefinition, checkpointPoint, childReference, type OperationWork, type ChildCall, type ChildDefinition } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { GenerationOutput } from '@capix/protocol';
 import { FileResources, documentDescriptor, type TextDocument, type FileReader } from '../../../files/index.js';
@@ -11,7 +11,7 @@ import { GenerateAnswerDefinition, type GenerationInput } from '../answer/genera
 import { ReadTextDefinition } from '../../attempt/files/read.js';
 import type { ConversationResources } from '../../resources.js';
 import { answerStream, type AnswerGenerationEvent } from '../answer/stream.js';
-type DocumentCall = InvocationWorkView<DocumentProcessingInput, GenerationOutput, OperationContextView<DocumentProcessingInput, GenerationOutput, DocumentProcessingResources>, AnswerGenerationEvent>;
+type DocumentWork = OperationWork<DocumentProcessingInput, GenerationOutput, object, ChildDefinition, AnswerGenerationEvent>;
 
 export interface DocumentProcessingInput extends GenerationInput {
   readonly sourcePath: string;
@@ -31,70 +31,76 @@ export class ProcessDocumentDefinition extends OperationDefinition<DocumentProce
   readonly generationDefinition = new GenerateAnswerDefinition({ document: true, files: true });
   readonly children = [this.readDefinition, this.generationDefinition];
   static readonly requires = Object.freeze({ ...GenerateAnswerDefinition.requires, reader: FileResources.readText.request() });
-  readonly checkpoint: InvocationCheckpointDefinition<DocumentProcessingInput, GenerationOutput, OperationContextView<DocumentProcessingInput, GenerationOutput, DocumentProcessingResources>, AnswerGenerationEvent> = {
+  readonly points = {
+    reading: checkpointPoint<'operation', DocumentProcessingInput, GenerationOutput, AnswerGenerationEvent>()({
+      name: 'reading',
+      state: emptyCheckpointState,
+      references: { child: childReference(this.readDefinition) },
+      check: (_state, facts) => {
+        originalCheckpoint(facts);
+        const child = waitingChild(facts, facts.references.child, 'read');
+        if (facts.children.values().length !== 1 || !isEqual(child.input, { path: facts.input.sourcePath })) throw new Error('Document checkpoint changed source path');
+      },
+      resume: { uses: this.children, execute: (work, _state, saved) => this.receiveDocument(work, work.children.resume(saved.child)) },
+    }),
+    generating: checkpointPoint<'operation', DocumentProcessingInput, GenerationOutput, AnswerGenerationEvent>()({
+      name: 'generating',
+      state: emptyCheckpointState,
+      references: { child: childReference(this.generationDefinition) },
+      check: (_state, facts) => {
+        originalCheckpoint(facts);
+        const child = waitingChild(facts, facts.references.child, 'generation');
+        const read = acceptedChild(facts.children.requireUnique(this.readDefinition, { parentRound: 1 }));
+        if (facts.children.values().length !== 2 || read.key !== 'read' || !isEqual(read.reception.value, read.returned.output) || !isEqual(child.input, this.generationInput(facts.input, read.returned.output))) throw new Error('Document checkpoint changed fixed document');
+      },
+      resume: { uses: [this.generationDefinition], execute: (work, _state, saved) => this.receiveGeneration(work, work.children.resume(saved.child)) },
+    }),
+    result: checkpointPoint<'operation', DocumentProcessingInput, GenerationOutput, AnswerGenerationEvent>()({
+      name: 'result',
+      state: answerCheckpointCodecs.output,
+      references: {},
+      check: (output, facts) => {
+        originalCheckpoint(facts);
+        const child = acceptedChild(facts.children.requireUnique(this.generationDefinition, { parentRound: 1 }));
+        if (facts.children.values().length !== 2 || child.key !== 'generation' || !isEqual(child.reception.value, output)) throw new Error('Document checkpoint differs from accepted generation');
+      },
+      resume: { execute: (_work, output) => output },
+    }),
+  };
+  readonly checkpoint = {
     key: 'observer.process-document',
-    version: 1,
+    version: 2,
     input: checkpointCodec(z.strictObject({ sourcePath: z.string().min(1), selection: selectionSchema, memories: z.array(memorySchema), task: z.strictObject({ fileTask: fileTaskSchema, instruction: z.string().min(1) }).optional() })),
     output: answerCheckpointCodecs.output,
-    points: {
-      reading: {
-        state: childWaitingCodec,
-        check: (frame, state) => {
-          originalCheckpoint(frame);
-          const child = waitingChild(frame, state, 'read', this.readDefinition.checkpoint);
-          if (frame.children.length !== 1 || !isEqual(child.input, { path: (frame.currentInput as { sourcePath: string }).sourcePath })) throw new Error('Document checkpoint changed source path');
-        },
-        resume: { requires: {}, uses: this.children, execute: (context, invocation, children, state: { childId: string }) => this.receiveDocument(context.currentInput, invocation, children, children.get(this.readDefinition).resume(invocation, state.childId)) },
-      },
-      generating: {
-        state: childWaitingCodec,
-        check: (frame, state) => {
-          originalCheckpoint(frame);
-          const child = waitingChild(frame, state, 'generation', this.generationDefinition.checkpoint);
-          const read = acceptedChild(frame.children[0]);
-          const input = frame.currentInput as unknown as DocumentProcessingInput;
-          if (frame.children.length !== 2 || read.key !== 'read' || !isEqual(child.input, this.generationInput(input, read.state.reception.output as unknown as TextDocument))) throw new Error('Document checkpoint changed fixed document');
-        },
-        resume: { requires: {}, uses: [this.generationDefinition], execute: (_context, invocation, children, state: { childId: string }) => this.receiveGeneration(invocation, children, children.get(this.generationDefinition).resume(invocation, state.childId)) },
-      },
-      result: {
-        state: answerCheckpointCodecs.output,
-        check: (frame, output) => {
-          originalCheckpoint(frame);
-          const child = acceptedChild(frame.children[1]);
-          if (frame.children.length !== 2 || child.key !== 'generation' || !isEqual(child.state.reception.output, output)) throw new Error('Document checkpoint differs from accepted generation');
-        },
-        resume: { requires: {}, uses: [], execute: (_context, _invocation, _children, output: GenerationOutput) => output },
-      },
-    },
+    points: Object.values(this.points),
   };
   readonly run = { requires: ProcessDocumentDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
-  private async execute(context: OperationContextView<DocumentProcessingInput, GenerationOutput, DocumentProcessingResources>, invocation: DocumentCall, children: ChildBindings): Promise<GenerationOutput> {
-    const read = children.get(this.readDefinition).create(invocation, { path: context.currentInput.sourcePath }, { key: 'read' });
-    invocation.checkpoint?.save('reading', { childId: read.context.id });
-    return this.receiveDocument(context.currentInput, invocation, children, read);
+  private async execute(work: DocumentWork): Promise<GenerationOutput> {
+    const read = work.children.create(this.readDefinition, { path: work.input.sourcePath }, { key: 'read' });
+    work.checkpoint?.save(this.points.reading, null, { child: read.ref });
+    return this.receiveDocument(work, read);
   }
   private generationInput(input: DocumentProcessingInput, document: TextDocument): GenerationInput {
     return { selection: input.selection, memories: input.memories, ...(input.task ? { task: input.task } : {}), document };
   }
-  private async receiveDocument(input: DocumentProcessingInput, invocation: InvocationWorkView<DocumentProcessingInput, GenerationOutput, OperationContextView<DocumentProcessingInput, GenerationOutput, any>, AnswerGenerationEvent>, children: ChildBindings, read: ChildInvocationView<{ readonly path: string }, TextDocument>): Promise<GenerationOutput> {
+  private async receiveDocument(work: DocumentWork, read: ChildCall<ReadTextDefinition>): Promise<GenerationOutput> {
     await read.run();
-    const document = await children.accept(read, (value) => value);
-    const generation = children.get(this.generationDefinition).create(invocation, this.generationInput(input, document), {
+    const document = await read.accept();
+    const generation = work.children.create(this.generationDefinition, this.generationInput(work.input, document), {
       key: 'generation',
       output: {
         receive: (event) => {
-          invocation.output.emit(event);
+          work.output.emit(event);
         },
       },
     });
-    invocation.checkpoint?.save('generating', { childId: generation.context.id });
-    return this.receiveGeneration(invocation, children, generation);
+    work.checkpoint?.save(this.points.generating, null, { child: generation.ref });
+    return this.receiveGeneration(work, generation);
   }
-  private async receiveGeneration(invocation: InvocationWorkView<DocumentProcessingInput, GenerationOutput, OperationContextView<DocumentProcessingInput, GenerationOutput, any>, AnswerGenerationEvent>, children: ChildBindings, generation: ChildInvocationView<GenerationInput, GenerationOutput>): Promise<GenerationOutput> {
+  private async receiveGeneration(work: DocumentWork, generation: ChildCall<GenerateAnswerDefinition>): Promise<GenerationOutput> {
     await generation.run();
-    const output = await children.accept(generation, (value) => value);
-    invocation.checkpoint?.save('result', output);
+    const output = await generation.accept();
+    work.checkpoint?.save(this.points.result, output, {});
     return output;
   }
 }

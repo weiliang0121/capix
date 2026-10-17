@@ -179,13 +179,13 @@ test('conversation binding selects its declared E instead of giving every R chil
   definition.run = {
     requires: {},
     uses: definition.children,
-    execute: async (context, invocation, children) => {
-      const unrelated = children.get(other).create(invocation, context.currentInput, { key: 'unrelated' });
+    execute: async (work) => {
+      const unrelated = work.children.create(other, work.input, { key: 'unrelated' });
       await unrelated.run();
-      children.accept(unrelated, () => undefined);
-      const selected = children.get(definition.executionDefinition).create(invocation, context.currentInput, { key: 'conversation' });
+      await unrelated.accept(() => undefined);
+      const selected = work.children.create(definition.executionDefinition, work.input, { key: 'conversation' });
       const output = await selected.run();
-      return children.accept(selected, () => output);
+      return selected.accept(() => output);
     },
   };
   const runtime = bindConversation(definition, environment, new ModelInteractions(new ModelSource(provider)));

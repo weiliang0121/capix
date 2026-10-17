@@ -217,7 +217,7 @@ test('append commit reaches its local receiver before resource returned observat
 
 test('assembly selects local execution progress by declaration and each run receives a separate identity', async () => {
   class Echo extends ExecutionDefinition {
-    run = { requires: {}, execute: (context) => context.currentInput };
+    run = { requires: {}, execute: (work) => work.input };
   }
   const execution = new Echo();
   const facts = [];
@@ -257,10 +257,10 @@ function delegated(child) {
   return {
     requires: {},
     uses: [child],
-    async execute(context, invocation, children) {
-      const call = children.get(child).create(invocation, context.currentInput, { key: 'child' });
+    async execute(work) {
+      const call = work.children.create(child, work.input, { key: 'child' });
       const result = await call.run();
-      return children.accept(call, () => result);
+      return call.accept(() => result);
     },
   };
 }
@@ -271,7 +271,7 @@ function hierarchy() {
     label = '测试能力';
     source = 'private-source';
     callee = 'private-provider';
-    run = { requires: {}, execute: (context) => context.currentInput };
+    run = { requires: {}, execute: (work) => work.input };
   })();
   const operation = new (class extends OperationDefinition {
     name = 'compose';

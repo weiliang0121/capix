@@ -28,7 +28,7 @@ export const executionProgressSchema = z.strictObject({
   latest: z.union([z.strictObject({ capability: z.literal('checkFile'), output: fileResult }), z.strictObject({ capability: z.enum(['answer', 'document']), output: answerSchema }), z.strictObject({ capability: z.literal('save'), output: fileReceipt })]).optional(),
   response: z.strictObject({ index: z.int().nonnegative(), message }).optional(),
   receipt: receipt.optional(),
-  responseChildId: z.string().min(1).optional(),
+  responseOrder: z.int().nonnegative().optional(),
 });
 export const executionContinuationSchema = z.strictObject({
   selection: z.strictObject({ historyIndexes: z.array(z.int().nonnegative()) }),
@@ -37,10 +37,10 @@ export const executionContinuationSchema = z.strictObject({
   checkedCandidates: z.array(z.string()).max(16),
   feedback: feedback.optional(),
 });
-export const executionWaitingState = checkpointCodec(executionContinuationSchema.extend({ childId: z.string().min(1) }));
-export const executionDecisionState = checkpointCodec(executionContinuationSchema.extend({ childId: z.string().min(1), choice: acceptedDecisionSchema }));
-export const executionCapabilityState = checkpointCodec(executionContinuationSchema.extend({ childId: z.string().min(1), capability: z.enum(['checkFile', 'answer', 'document', 'save']), arguments: z.unknown() }));
-export const executionAcceptedState = checkpointCodec(executionContinuationSchema.extend({ childId: z.string().min(1) }));
+export const executionWaitingState = checkpointCodec(executionContinuationSchema);
+export const executionDecisionState = checkpointCodec(executionContinuationSchema.extend({ choice: acceptedDecisionSchema }));
+export const executionCapabilityState = checkpointCodec(executionContinuationSchema.extend({ capability: z.enum(['checkFile', 'answer', 'document', 'save']), arguments: z.unknown() }));
+export const executionAcceptedState = checkpointCodec(executionContinuationSchema);
 export type ExecutionProgress = z.infer<typeof executionProgressSchema>;
 export type ExecutionContinuation = z.infer<typeof executionContinuationSchema>;
 export type ExecutionWaitingState = ReturnType<typeof executionWaitingState.decode>;

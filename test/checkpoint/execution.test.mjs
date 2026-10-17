@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { resolveDeclaration, BoundChildren, decodeCheckpointFrame, savedCheckpointFacts } from '@capix/server-runtime/construction';
 import { initializeObserver, WorkspaceFiles } from '@capix/observer-service/assembly';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 1000 };
@@ -26,36 +27,44 @@ async function captureExecution(t, fileTask) {
     return result;
   };
   await environment.runtime.run({ messages: [{ role: 'user', content: '整理资料' }], ...(fileTask ? { fileTask } : {}) }, { settings });
-  return { checkpoint: environment.definition.executionDefinition.checkpoint, images };
+  const definition = environment.definition.executionDefinition;
+  const resolved = resolveDeclaration(definition, {});
+  const children = new BoundChildren(resolved.children, () => assert.fail('validation must not initialize children'));
+  const check = (image) => {
+    const point = definition.checkpoint.points.find((point) => point.name === image.point);
+    const decoded = decodeCheckpointFrame(image.frame, definition.checkpoint, children.checkpointLayout());
+    point.check?.(point.state.decode(image.state), savedCheckpointFacts(decoded, image.references, children));
+  };
+  return { check, images };
 }
 
 test('an accepted answer cannot be relabelled as completed before memory reception', async (t) => {
-  const { checkpoint, images } = await captureExecution(t);
-  const answerAccepted = images.find((image) => image.point === 'answerAccepted');
+  const { check, images } = await captureExecution(t);
+  const answerAccepted = images.find((image) => image.point === 'capabilityAccepted.answer');
   const completed = images.find((image) => image.point === 'completed');
   assert.ok(answerAccepted);
   assert.ok(completed);
   assert.ok(!answerAccepted.frame.children.some((child) => child.key === 'extraction'));
-  assert.doesNotThrow(() => checkpoint.points.answerAccepted.check(answerAccepted.frame, answerAccepted.state));
-  assert.doesNotThrow(() => checkpoint.points.completed.check(completed.frame, completed.state));
+  assert.doesNotThrow(() => check(answerAccepted));
+  assert.doesNotThrow(() => check(completed));
   // The former generic progress check accepted this valid earlier state and skipped memory work.
-  assert.throws(() => checkpoint.points.completed.check(answerAccepted.frame, answerAccepted.state), /must identify its exact declared child/);
+  assert.throws(() => check({ ...answerAccepted, point: 'completed', references: completed.references }), /Saved child reference|exactly one|completed|extraction/i);
 });
 
 test('capability continuation preserves the input selected by its accepted decision and progress', async (t) => {
-  const { checkpoint, images } = await captureExecution(t, { sourcePath: 'source.md', output: { path: 'result.md' } });
-  const waiting = images.filter((image) => image.point === 'capabilityWaiting');
+  const { check, images } = await captureExecution(t, { sourcePath: 'source.md', output: { path: 'result.md' } });
+  const waiting = images.filter((image) => image.point.startsWith('capabilityWaiting.'));
   assert.deepEqual(
     waiting.map((image) => image.state.capability),
     ['checkFile', 'document', 'save'],
   );
   for (const image of waiting) {
-    assert.doesNotThrow(() => checkpoint.points.capabilityWaiting.check(image.frame, image.state));
+    assert.doesNotThrow(() => check(image));
     const changed = structuredClone(image);
     const child = changed.frame.children.at(-1);
     if (image.state.capability === 'checkFile') child.input.instruction = '不属于已接纳候选的指令';
     else if (image.state.capability === 'document') child.input.sourcePath = 'different.md';
     else child.input.text = '不属于已接纳回答的正文';
-    assert.throws(() => checkpoint.points.capabilityWaiting.check(changed.frame, changed.state), /Capability continuation changed its fixed input/, image.state.capability);
+    assert.throws(() => check(changed), /Capability continuation changed its fixed input/, image.state.capability);
   }
 });

@@ -9,7 +9,7 @@ function restore(definition, { round = 1, currentInput = { stage: 'saved' } } = 
   const store = new MemoryCheckpointStore();
   const events = [];
   const contextId = `restored-round-${round}`;
-  store.save({ id: 'saved-image', formatVersion: 1, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, level: 'runtime' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [] }, state: { source: 'durable' } }, 0);
+  store.save({ id: 'saved-image', formatVersion: 2, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, level: 'runtime' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [], ...(round === 2 ? { continuation: { fromRound: 1, stage: 'accept', reason: 'saved continuation' } } : {}) }, state: { source: 'durable' }, references: {} }, 0);
   const runtime = assembleRuntime(definition, {
     providers: [],
     checkpoints: { store },
@@ -41,30 +41,30 @@ for (const continuation of ['accept', 'exception']) {
       output,
       run: {
         requires: {},
-        execute(context, invocation) {
-          execution.push({ kind: 'normal', id: context.id, round: context.progress.round });
-          assert.equal(context.progress.round, 2);
-          assert.deepEqual(context.input, { stage: 'original' });
-          assert.equal(context.currentInput, nextInput);
+        execute(work) {
+          execution.push({ kind: 'normal', id: undefined, round: work.round });
+          assert.equal(work.round, 2);
+          assert.deepEqual(work.initialInput, { stage: 'original' });
+          assert.equal(work.input, nextInput);
           assert.throws(() => writers[0].emit('stale preview'), { code: 'OUTPUT_CLOSED' });
-          writers.push(invocation.output);
-          invocation.output.emit('new preview');
-          invocation.checkpoint.save('saved', { source: 'second round' });
+          writers.push(work.output);
+          work.output.emit('new preview');
+          work.checkpoint.save(definition.checkpoint.points[0], { source: 'second round' }, {});
           return final;
         },
-        accept(context, value) {
+        accept(work) {
           assert.throws(() => writers.at(-1).emit('after execute'), { code: 'OUTPUT_CLOSED' });
-          return context.progress.round === 1 ? context.continueWith(nextInput, 'advance after restored work') : value;
+          return work.round === 1 ? work.continue(nextInput, 'advance after restored work') : work.delivered;
         },
       },
       exceptions: {
         requires: {},
         accepts: [rejected],
-        handle(context) {
+        handle(work) {
           assert.equal(continuation, 'exception');
-          assert.equal(context.progress.round, 1);
+          assert.equal(work.round, 1);
           assert.throws(() => writers[0].emit('after rejection'), { code: 'OUTPUT_CLOSED' });
-          return { kind: 'continue', input: nextInput, reason: 'advance after restored rejection' };
+          return work.continue(nextInput, 'advance after restored rejection');
         },
       },
       checkpoint: {
@@ -72,31 +72,33 @@ for (const continuation of ['accept', 'exception']) {
         version: 1,
         input: codec,
         output: codec,
-        points: {
-          saved: {
+        points: [
+          {
+            name: 'saved',
+            references: {},
             state: codec,
             resume: {
               requires: {},
-              execute(context, invocation, _children, state) {
-                execution.push({ kind: 'restored', id: context.id, round: context.progress.round });
-                assert.deepEqual(context.input, { stage: 'original' });
-                assert.deepEqual(context.currentInput, { stage: 'saved' });
+              execute(work, state) {
+                execution.push({ kind: 'restored', id: undefined, round: work.round });
+                assert.deepEqual(work.initialInput, { stage: 'original' });
+                assert.deepEqual(work.input, { stage: 'saved' });
                 assert.deepEqual(state, { source: 'durable' });
-                writers.push(invocation.output);
-                invocation.output.emit('restored preview');
+                writers.push(work.output);
+                work.output.emit('restored preview');
                 if (continuation === 'exception') throw rejected.create('restore needs correction', {});
                 return { answer: 'restored result' };
               },
             },
           },
-        },
+        ],
       },
     };
     const { runtime, store, events, contextId } = restore(definition);
     assert.equal(await runtime.resume(contextId, {}), final);
     assert.deepEqual(execution, [
-      { kind: 'restored', id: contextId, round: 1 },
-      { kind: 'normal', id: contextId, round: 2 },
+      { kind: 'restored', id: undefined, round: 1 },
+      { kind: 'normal', id: undefined, round: 2 },
     ]);
     assert.notEqual(writers[0], writers[1]);
     assert.throws(() => writers[1].emit('after completion'), { code: 'OUTPUT_CLOSED' });
@@ -139,22 +141,24 @@ test('restoring an existing second round preserves its round and current input w
       version: 1,
       input: codec,
       output: codec,
-      points: {
-        saved: {
+      points: [
+        {
+          name: 'saved',
+          references: {},
           state: codec,
           resume: {
             requires: {},
-            execute(context, invocation) {
+            execute(work) {
               resumes++;
-              assert.equal(context.progress.round, 2);
-              assert.deepEqual(context.input, { stage: 'original' });
-              assert.deepEqual(context.currentInput, currentInput);
-              invocation.output.emit('second round preview');
+              assert.equal(work.round, 2);
+              assert.deepEqual(work.initialInput, { stage: 'original' });
+              assert.deepEqual(work.input, currentInput);
+              work.output.emit('second round preview');
               return 'resumed final';
             },
           },
         },
-      },
+      ],
     },
   };
   const { runtime, store, events, contextId } = restore(definition, { round: 2, currentInput });

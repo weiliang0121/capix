@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, InvocationEntry, MemoryCheckpointStore, assembleRuntime } from '@capix/server-runtime';
+import { ExceptionContract, InvocationEntry, MemoryCheckpointStore, checkpointPoint, assembleRuntime } from '@capix/server-runtime';
 import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, RuntimeContext } from '@capix/server-runtime/construction';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
-function operation(execute = (context) => context.currentInput) {
+function operation(execute = (work) => work.input) {
   return { level: 'operation', name: 'child', label: 'Child', source: 'test', children: [], maxRounds: 1, raises: [], run: { requires: {}, execute } };
 }
 
@@ -13,35 +13,35 @@ function assemble(child, run, options = {}) {
   return assembleRuntime(runtimeDefinition(execution), { providers: [], source: { entry: () => null, capture: () => null } });
 }
 
-test('run and acceptance bindings share the exact child delivery across their distinct views', async () => {
+test('run and acceptance share an exact child reference across distinct Work actions', async () => {
   const delivered = { value: 7 };
   const child = operation(() => delivered);
   let call;
-  let executionBindings;
-  let executionView;
+  let executing;
+  let facts;
   const runtime = assemble(child, {
-    async execute(_context, invocation, children) {
-      executionBindings = children;
-      executionView = invocation;
-      call = children.get(child).create(invocation, null);
+    async execute(work) {
+      executing = work;
+      facts = work.children.facts;
+      call = work.children.create(child, null);
       return call.run();
     },
-    accept(_context, output, invocation, children) {
-      assert.equal(output, delivered);
-      assert.notEqual(children, executionBindings);
-      assert.notEqual(invocation, executionView);
-      assert.equal(invocation.children.get(call).reception.status, 'pending');
-      return children.accept(call, (value) => {
+    accept(work) {
+      assert.equal(work.delivered, delivered);
+      assert.notEqual(work, executing);
+      assert.notEqual(work.children, executing.children);
+      assert.equal(work.children.facts.get(call.ref).reception.status, 'pending');
+      return work.children.open(call.ref).accept((value) => {
         assert.equal(value, delivered);
         return value.value * 2;
       });
     },
   });
   assert.equal(await runtime.run(null, {}), 14);
-  assert.equal(executionView.children.get(call).reception.status, 'accepted');
+  assert.equal(facts.get(call.ref).reception.status, 'accepted');
 });
 
-test('a handler with no child creation grants can accept a child delivered during run', async () => {
+test('a handler with no creation grants can accept an earlier delivery through its current handle', async () => {
   const rejected = new ExceptionContract('test.childBinding.receive');
   const delivered = { answer: 'retained' };
   const child = operation(() => delivered);
@@ -50,8 +50,8 @@ test('a handler with no child creation grants can accept a child delivered durin
     child,
     {
       uses: [child],
-      async execute(_context, invocation, children) {
-        call = children.get(child).create(invocation, null);
+      async execute(work) {
+        call = work.children.create(child, null);
         await call.run();
         throw rejected.create('continue by accepting the existing delivery', {});
       },
@@ -62,11 +62,12 @@ test('a handler with no child creation grants can accept a child delivered durin
         requires: {},
         uses: [],
         accepts: [rejected],
-        handle(_context, _exception, _invocation, children) {
-          return children.accept(call, (value) => {
+        async handle(work) {
+          const answer = await work.children.open(call.ref).accept((value) => {
             assert.equal(value, delivered);
-            return { kind: 'return', output: value.answer };
+            return value.answer;
           });
+          return work.return(answer);
         },
       },
     },
@@ -74,31 +75,31 @@ test('a handler with no child creation grants can accept a child delivered durin
   assert.equal(await runtime.run(null, {}), 'retained');
 });
 
-test('one reusable binding does not share its child call registry between parent invocations', async () => {
+test('one reusable binding rejects a reference from a previous parent activity', async () => {
   const child = operation();
   let previous;
   let foreignReceipts = 0;
   const runtime = assemble(child, {
-    async execute(context, invocation, children) {
-      if (previous) {
-        return children.accept(previous, () => {
+    async execute(work) {
+      if (previous)
+        return work.children.open(previous).accept(() => {
           foreignReceipts++;
           return 'foreign';
         });
-      }
-      previous = children.get(child).create(invocation, context.currentInput);
-      await previous.run();
-      return children.accept(previous, (value) => value);
+      const call = work.children.create(child, work.input);
+      previous = call.ref;
+      await call.run();
+      return call.accept();
     },
   });
   assert.equal(await runtime.run('first', {}), 'first');
-  await assert.rejects(runtime.run('second', {}), /not a child created through this binding/);
+  await assert.rejects(runtime.run('second', {}), /foreign child reference/);
   assert.equal(foreignReceipts, 0);
 });
 
 for (const boundary of ['phase', 'round']) {
   for (const action of ['create', 'accept']) {
-    test(`a retained child binding cannot ${action} across an expired ${boundary}`, async () => {
+    test(`a retained child handle cannot ${action} across an expired ${boundary}`, async () => {
       const rejected = new ExceptionContract(`test.childBinding.${boundary}.${action}`);
       let calls = 0;
       let receptions = 0;
@@ -108,8 +109,8 @@ for (const boundary of ['phase', 'round']) {
         return 'delivered';
       });
       const useRetained = () => {
-        if (action === 'create') return retained.children.get(child).create(retained.invocation, null);
-        return retained.children.accept(retained.call, () => {
+        if (action === 'create') return retained.children.create(child, null);
+        return retained.call.accept(() => {
           receptions++;
           return 'accepted';
         });
@@ -117,16 +118,16 @@ for (const boundary of ['phase', 'round']) {
       const runtime = assemble(
         child,
         {
-          async execute(context, invocation, children) {
-            if (context.progress.round === 2) return useRetained();
-            const call = children.get(child).create(invocation, null);
+          async execute(work) {
+            if (work.round === 2) return useRetained();
+            const call = work.children.create(child, null);
             await call.run();
-            retained = { children, invocation, call };
+            retained = { children: work.children, call };
             if (boundary === 'phase') throw rejected.create('switch to handler', {});
             return 'next';
           },
-          accept(context, output) {
-            return context.progress.round === 1 ? context.continueWith('next', 'verify previous access expires') : output;
+          accept(work) {
+            return work.round === 1 ? work.continue('next', 'verify previous access expires') : work.delivered;
           },
         },
         {
@@ -149,8 +150,8 @@ test('building access and obtaining an endpoint stay lazy, and a reused builder 
     assert.equal(actual.definition, definition);
     initialized++;
     return {
-      create(parent, input) {
-        return new Invocation({ parent: { invocation: parent }, context: new InvocationContext(input), signal: new AbortController().signal, work: { maxRounds: 1, execute: (context) => context.currentInput } });
+      create(parent, input, options) {
+        return new Invocation({ parent: { invocation: parent, ...options }, context: new InvocationContext(input), signal: new AbortController().signal, work: { maxRounds: 1, execute: (context) => context.currentInput } });
       },
       resume() {
         assert.fail('normal access must not resume a child');
@@ -162,29 +163,25 @@ test('building access and obtaining an endpoint stay lazy, and a reused builder 
   const parents = [];
   for (const input of ['first', 'second']) {
     const parent = new Invocation({
-      context: new InvocationContext(input),
+      context: new RuntimeContext(input),
       signal: new AbortController().signal,
       work: {
         maxRounds: 1,
         async execute(context, invocation) {
-          const registry = new Map();
+          const references = builder.references(invocation);
           const allowed = [definition];
-          const bindings = builder.build(invocation, { view: invocation.view, uses: allowed, calls: registry });
+          const bindings = builder.build(invocation, { validate: () => context.requireRunning(), uses: allowed, references });
           accessObjects.push(bindings);
           assert.ok(Object.isFrozen(bindings));
           for (const field of ['parent', 'view', 'validate', 'calls', 'allowed', 'bound']) assert.equal(field in bindings, false);
-          const endpoint = bindings.get(definition);
-          assert.ok(Object.isFrozen(endpoint));
-          assert.equal('parent' in endpoint, false);
-          assert.equal('calls' in endpoint, false);
           assert.equal(initialized, input === 'first' ? 0 : 1);
           allowed.length = 0;
           // Editing the input array cannot revoke or widen the already-built access object.
-          const call = bindings.get(definition).create(invocation.view, context.currentInput);
+          const call = bindings.create(definition, context.currentInput);
           assert.equal(initialized, 1);
           assert.equal(await call.run(), input);
-          const reception = builder.build(invocation, { view: invocation.view, uses: [], calls: registry });
-          return reception.accept(call, (value) => value);
+          const reception = builder.build(invocation, { validate: () => context.requireRunning(), uses: [], references });
+          return reception.open(call.ref).accept();
         },
       },
     });
@@ -202,7 +199,7 @@ test('a builder rejects an unknown declaration before any lazy child structure i
   const bound = new BoundChildren([resolveDeclaration(declared)], () => assert.fail('invalid grants must not initialize any child'));
   const builder = new ChildBindingsBuilder(bound);
   const parent = new Invocation({ context: new InvocationContext(null), signal: new AbortController().signal, work: { maxRounds: 1, execute: () => null } });
-  assert.throws(() => builder.build(parent, { view: parent.view, uses: [unknown], calls: new Map() }), /outside|not declared/);
+  assert.throws(() => builder.build(parent, { validate: () => {}, uses: [unknown], references: builder.references(parent) }), /outside|not declared/);
   assert.equal(bound.initialized(declared), false);
 });
 
@@ -210,15 +207,15 @@ test('alternative entry acceptance can cancel its parent without creating or sta
   const controller = new AbortController();
   let accepted = 0;
   const child = operation(() => assert.fail('cancelled input must not start child work'));
-  const entry = new InvocationEntry(child, (_invocation, input) => {
+  const entry = new InvocationEntry(child, ({ input }) => {
     accepted++;
     controller.abort();
     return input;
   });
   const runtime = assemble(child, {
-    execute(_context, invocation, children) {
-      assert.throws(() => children.entry(entry).create(invocation, 'input'), /取消/);
-      assert.equal(invocation.children.values().length, 0);
+    execute(work) {
+      assert.throws(() => work.children.entry(entry, 'input'), /取消/);
+      assert.equal(work.children.facts.values().length, 0);
       return 'caught';
     },
   });
@@ -234,23 +231,24 @@ test('resuming a saved final child delivery keeps its bound structure uninitiali
     maxRounds: 1,
     raises: [],
     run: { requires: {}, execute: () => assert.fail('final child work cannot execute again') },
-    checkpoint: { key: 'test.lazy.final-child', version: 1, input: codec, output: codec, points: { saved: { state: codec, resume: { requires: {}, execute: () => assert.fail('final child work cannot resume') } } } },
+    checkpoint: { key: 'test.lazy.final-child', version: 1, input: codec, output: codec, points: [checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { execute: () => assert.fail('final child work cannot resume') } })] },
   };
   const bound = new BoundChildren([resolveDeclaration(definition)], () => assert.fail('final delivery must not initialize the child structure'));
   const builder = new ChildBindingsBuilder(bound);
   const store = new MemoryCheckpointStore();
   const childIdentity = { contextId: 'child-context', level: 'execution', parentContextId: 'parent-context' };
   const childContract = { key: definition.checkpoint.key, version: 1 };
-  store.save({ id: 'child-cp', formatVersion: 1, contract: childContract, point: 'saved', frame: { owner: childIdentity, round: 1, phase: 'execute', input: 'child', currentInput: 'child', nextChildOrder: 0, children: [] }, state: null }, 0);
+  store.save({ id: 'child-cp', formatVersion: 2, contract: childContract, point: 'saved', frame: { owner: childIdentity, round: 1, phase: 'execute', input: 'child', currentInput: 'child', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   store.finish('child-context', 1, { status: 'succeeded', output: { answer: 'saved' }, progress: { round: 1, phase: 'receive', currentInput: 'child' } });
   const saved = store.save(
     {
       id: 'parent-cp',
-      formatVersion: 1,
+      formatVersion: 2,
       contract: { key: 'test.lazy.parent', version: 1 },
       point: 'waiting',
-      frame: { owner: { contextId: 'parent-context', level: 'runtime' }, round: 1, phase: 'execute', input: 'parent', currentInput: 'parent', nextChildOrder: 1, children: [{ identity: childIdentity, contract: childContract, round: 1, order: 0, input: 'child', state: { kind: 'waiting' } }] },
+      frame: { owner: { contextId: 'parent-context', level: 'runtime' }, round: 1, phase: 'execute', input: 'parent', currentInput: 'parent', nextChildOrder: 1, children: [{ identity: childIdentity, target: { position: 0 }, contract: childContract, round: 1, order: 0, input: 'child', state: { kind: 'waiting' } }] },
       state: null,
+      references: {},
     },
     0,
   );
@@ -269,18 +267,20 @@ test('resuming a saved final child delivery keeps its bound structure uninitiali
         version: 1,
         input: codec,
         output: codec,
+        children: bound.checkpointLayout(),
         points: {
           waiting: {
             state: codec,
             async execute(_context, invocation) {
-              const bindings = builder.build(invocation, { view: invocation.view, uses: [definition], calls: new Map() });
-              const endpoint = bindings.get(definition);
-              const resumed = endpoint.resume(invocation.view, 'child-context');
+              const references = builder.references(invocation);
+              const bindings = builder.build(invocation, { validate: () => invocation.context.requireRunning(), uses: [definition], references, restoring: true });
+              const ref = references.facts.requireUnique(definition, { parentRound: 1 }).ref;
+              const resumed = bindings.resume(ref);
               assert.equal(bound.initialized(definition), false);
-              assert.equal(endpoint.resume(invocation.view, 'child-context'), resumed);
+              assert.equal(bindings.resume(ref).ref, resumed.ref);
               const delivered = await resumed.run();
               assert.deepEqual(delivered, { answer: 'saved' });
-              return bindings.accept(resumed, (value) => {
+              return resumed.accept((value) => {
                 assert.equal(value, delivered);
                 return value.answer;
               });

@@ -19,11 +19,11 @@ class Main extends RuntimeDefinition {
 }
 
 function forward(definition, onRuntime) {
-  return async (context, invocation, children) => {
-    onRuntime?.(context, invocation);
-    const child = children.get(definition).create(invocation, context.currentInput, { key: 'chosen' });
-    const output = await child.run();
-    return children.accept(child, () => output);
+  return async (work) => {
+    onRuntime?.(work);
+    const child = work.children.create(definition, work.input, { key: 'chosen' });
+    await child.run();
+    return child.accept();
   };
 }
 
@@ -37,34 +37,37 @@ function probe() {
 }
 
 test('R calls have independent contexts and ordinary E child relationships', async () => {
-  const contexts = [];
   const parents = [];
-  const execution = new TestExecutionDefinition((context) => context.currentInput * 2);
+  const execution = new TestExecutionDefinition((work) => work.input * 2);
   const main = new Main(
     [execution],
-    forward(execution, (context, invocation) => {
-      contexts.push(context);
-      parents.push(invocation);
-      assert.equal(context.level, 'runtime');
-      assert.equal('execution' in context, false);
+    forward(execution, (work) => {
+      parents.push(work);
+      assert.equal('context' in work, false);
+      assert.equal('execution' in work, false);
     }),
   );
   const observation = probe();
   const runtime = assemble(main, { observations: [observation.installation] });
   assert.equal(await runtime.run(2, {}), 4);
   assert.equal(await runtime.run(3, {}), 6);
-  assert.notEqual(contexts[0].id, contexts[1].id);
-  assert.equal(contexts[0].status, 'succeeded');
-  assert.equal(contexts[1].status, 'succeeded');
+  assert.notEqual(parents[0], parents[1]);
+  const starts = observation.facts.filter((fact) => fact.kind === 'started' && fact.identity.level === 'runtime');
+  const finishes = observation.facts.filter((fact) => fact.kind === 'finished' && fact.identity.level === 'runtime');
+  assert.notEqual(starts[0].identity.contextId, starts[1].identity.contextId);
+  assert.deepEqual(
+    finishes.map((fact) => fact.state.status),
+    ['succeeded', 'succeeded'],
+  );
   assert.equal(runtime.running, false);
-  for (const parent of parents) {
-    const [relation] = parent.children.values();
+  for (const [index, parent] of parents.entries()) {
+    const [relation] = parent.children.facts.values();
     assert.equal(relation.key, 'chosen');
-    assert.equal(relation.round, 1);
+    assert.equal(relation.parentRound, 1);
     assert.equal(relation.returned.status, 'succeeded');
     assert.equal(relation.reception.status, 'accepted');
-    const childStart = observation.facts.find((fact) => fact.identity.contextId === relation.invocation.context.id && fact.kind === 'started');
-    assert.equal(childStart.identity.parentContextId, parent.context.id);
+    const childStart = observation.facts.find((fact) => fact.kind === 'started' && fact.identity.level === 'execution' && fact.identity.parentContextId === starts[index].identity.contextId);
+    assert.ok(childStart);
   }
 });
 
@@ -77,13 +80,13 @@ test('one Runtime rejects overlapping submissions and releases occupancy after f
   const started = new Promise((resolve) => {
     entered = resolve;
   });
-  const execution = new TestExecutionDefinition(async (context) => {
-    if (context.currentInput === 'wait') {
+  const execution = new TestExecutionDefinition(async (work) => {
+    if (work.input === 'wait') {
       entered();
       await waiting;
       throw new Error('work failed');
     }
-    return context.currentInput;
+    return work.input;
   });
   const runtime = assemble(new Main([execution], forward(execution)));
   const first = runtime.run('wait', {});
@@ -113,11 +116,11 @@ test('R chooses from declared E nodes without entering the unused E', async () =
     },
   });
   const runtime = assemble(
-    new Main([first, second], async (context, invocation, children) => {
-      const selected = context.currentInput === 1 ? first : second;
-      const child = children.get(selected).create(invocation, context.currentInput);
+    new Main([first, second], async (work) => {
+      const selected = work.input === 1 ? first : second;
+      const child = work.children.create(selected, work.input);
       const output = await child.run();
-      return children.accept(child, () => output);
+      return child.accept(() => output);
     }),
   );
   assert.equal(await runtime.run(2, {}), 'second');
@@ -130,9 +133,9 @@ test('an undeclared E is a structural error even when R work catches it', async 
   const allowed = new TestExecutionDefinition(() => 'allowed');
   const hidden = new TestExecutionDefinition(() => assert.fail('must not execute'));
   const runtime = assemble(
-    new Main([allowed], async (_context, invocation, children) => {
+    new Main([allowed], async (work) => {
       try {
-        children.get(hidden).create(invocation, null);
+        work.children.create(hidden, null);
       } catch {}
       return 'ignored';
     }),
@@ -153,15 +156,15 @@ test('E admission failure belongs to R before any E context or relation exists',
   const runtime = assemble(
     new Main(
       [execution],
-      forward(execution, (_context, invocation) => {
-        parent = invocation;
+      forward(execution, (work) => {
+        parent = work;
       }),
     ),
     { observations: [observation.installation] },
   );
   await assert.rejects(runtime.run(null, {}), /bad input/);
-  assert.equal(parent.context.status, 'failed');
-  assert.equal(parent.children.values().length, 0);
+  assert.equal(observation.facts.find((fact) => fact.kind === 'finished' && fact.identity.level === 'runtime').state.status, 'failed');
+  assert.equal(parent.children.facts.values().length, 0);
   assert.equal(
     observation.facts.some((fact) => fact.identity.level === 'execution'),
     false,
@@ -173,9 +176,9 @@ test('E admission and capture retain their order inside the R call', async () =>
   const order = [];
   const messages = [];
   const execution = new TestExecutionDefinition(
-    (context) => {
+    (work) => {
       order.push('execute');
-      return context.currentInput;
+      return work.input;
     },
     {
       requires: {},
@@ -250,12 +253,12 @@ test('cancellation after E admission retains accepted input without running E wo
 
 test('E supplies are fulfilled without exposing them to R work', async () => {
   const secret = new ResourceOffer('test.secret', (source) => source);
-  const execution = new TestExecutionDefinition((context) => context.resources.values.secret);
+  const execution = new TestExecutionDefinition((work) => work.resources.secret);
   execution.run.requires = { secret: secret.request() };
   const runtime = assemble(
     new Main(
       [execution],
-      forward(execution, (context) => assert.deepEqual(Object.keys(context.resources.values), [])),
+      forward(execution, (work) => assert.deepEqual(Object.keys(work.resources), [])),
     ),
     {
       providers: [secret.provide((source) => source)],
@@ -267,22 +270,24 @@ test('E supplies are fulfilled without exposing them to R work', async () => {
 
 test('R acceptance failure preserves the completed E outcome', async () => {
   let relation;
+  const observation = probe();
   const execution = new TestExecutionDefinition(() => 2);
   const runtime = assemble(
-    new Main([execution], async (_context, invocation, children) => {
-      const child = children.get(execution).create(invocation, null);
+    new Main([execution], async (work) => {
+      const child = work.children.create(execution, null);
       await child.run();
-      relation = invocation.children.get(child);
-      return children.accept(child, () => {
+      relation = () => work.children.facts.get(child.ref);
+      return child.accept(() => {
         throw new Error('parent acceptance');
       });
     }),
+    { observations: [observation.installation] },
   );
   await assert.rejects(runtime.run(null, {}), /parent acceptance/);
-  assert.equal(relation.returned.status, 'succeeded');
-  assert.equal(relation.returned.output, 2);
-  assert.equal(relation.invocation.context.status, 'succeeded');
-  assert.equal(relation.reception.status, 'failed');
+  assert.equal(relation().returned.status, 'succeeded');
+  assert.equal(relation().returned.output, 2);
+  assert.equal(observation.facts.find((fact) => fact.kind === 'finished' && fact.identity.level === 'execution').state.status, 'succeeded');
+  assert.equal(relation().reception.status, 'failed');
 });
 
 test('R handles a declared E exception through the ordinary child relationship', async () => {
@@ -294,36 +299,39 @@ test('R handles a declared E exception through the ordinary child relationship',
   execution.raises = [rejected];
   const definition = new Main(
     [execution],
-    forward(execution, (_context, invocation) => {
-      parent = invocation;
+    forward(execution, (work) => {
+      parent = work;
     }),
   );
   definition.exceptions = {
     requires: {},
     accepts: [rejected],
-    handle: (_context, exception, invocation) => {
-      const [relation] = invocation.children.values();
+    handle: (work) => {
+      const [relation] = work.children.facts.values();
       assert.equal(relation.returned.failure.kind, 'exception');
-      assert.equal(relation.returned.error, exception);
+      assert.equal(relation.returned.diagnostic.message, work.exception.message);
       assert.equal(relation.reception.status, 'pending');
-      return { kind: 'return', output: 'handled' };
+      assert.equal(work.origin.kind, 'child-return');
+      assert.equal(work.origin.child, relation.ref);
+      return work.return('handled');
     },
   };
   const runtime = assemble(definition);
   assert.equal(await runtime.run(null, {}), 'handled');
-  assert.equal(parent.context.status, 'succeeded');
-  assert.equal(parent.children.values()[0].returned.status, 'failed');
+  assert.equal(parent.children.facts.values()[0].returned.status, 'failed');
 });
 
 test('R reports actual terminal observation failure while preserving successful work', async () => {
   let parent;
   let fail = true;
+  let finished;
   const execution = new TestExecutionDefinition(() => 'output');
   const installation = {
     failure: 'propagate',
     bindInvocation: () => ({
       observe(fact) {
         if (fail && fact.identity.level === 'runtime' && fact.kind === 'finished') {
+          finished = fact.state;
           fail = false;
           throw new Error('terminal observation');
         }
@@ -333,15 +341,15 @@ test('R reports actual terminal observation failure while preserving successful 
   const runtime = assemble(
     new Main(
       [execution],
-      forward(execution, (_context, invocation) => {
-        parent = invocation;
+      forward(execution, (work) => {
+        parent = work;
       }),
     ),
     { observations: [installation] },
   );
   await assert.rejects(runtime.run(null, {}), { code: 'OBSERVATION_FAILED' });
-  assert.equal(parent.context.status, 'succeeded');
-  assert.equal(parent.children.values()[0].reception.status, 'accepted');
+  assert.equal(finished.status, 'succeeded');
+  assert.equal(parent.children.facts.values()[0].reception.status, 'accepted');
   assert.equal(runtime.running, false);
   assert.equal(await runtime.run(null, {}), 'output');
 });
@@ -413,7 +421,7 @@ test('observation installations cannot satisfy work or exception-handler resourc
 test('E entry stages publish parent-owned facts before E context creation', async () => {
   const observed = probe();
   const changes = [];
-  const execution = new TestExecutionDefinition((context) => context.currentInput, { requires: {}, accept: (input) => input + 1, admit() {} });
+  const execution = new TestExecutionDefinition((work) => work.input, { requires: {}, accept: (input) => input + 1, admit() {} });
   const runtime = assemble(new Main([execution], forward(execution)), {
     observations: [observed.installation],
     changes: {
@@ -540,13 +548,13 @@ test('parent retains child failure and returned-observation failure without repl
   const execution = new TestExecutionDefinition(() => {
     throw original;
   });
-  const definition = new Main([execution], async (context, invocation, children) => {
-    const child = children.get(execution).create(invocation, context.currentInput);
+  const definition = new Main([execution], async (work) => {
+    const child = work.children.create(execution, work.input);
     try {
       await child.run();
     } catch (error) {
       childError = error;
-      relation = invocation.children.get(child);
+      relation = () => work.children.facts.get(child.ref);
       throw error;
     }
   });
@@ -569,8 +577,8 @@ test('parent retains child failure and returned-observation failure without repl
     return true;
   });
   assert.equal(childError, original);
-  assert.equal(relation.returned.status, 'failed');
-  assert.equal(relation.returned.error, original);
-  assert.equal(relation.reception.status, 'pending');
+  assert.equal(relation().returned.status, 'failed');
+  assert.equal(relation().returned.diagnostic.message, original.message);
+  assert.equal(relation().reception.status, 'pending');
   assert.equal(runtime.running, false);
 });

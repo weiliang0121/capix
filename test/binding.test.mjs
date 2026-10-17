@@ -11,8 +11,8 @@ class Read extends AttemptDefinition {
   source = 'test';
   callee = 'test';
   run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
-  execute(context) {
-    return `${context.currentInput}:${context.resources.values.value}`;
+  execute(work) {
+    return `${work.input}:${work.resources.value}`;
   }
 }
 class Work extends OperationDefinition {
@@ -23,16 +23,18 @@ class Work extends OperationDefinition {
   leaf = new Read();
   children = [this.leaf];
   sequence = new Sequence().step('read', { use: this.leaf, input: ({ input }) => input });
-  async execute(context, invocation, children) {
-    return (await this.sequence.run(invocation, context.currentInput, children)).read;
+  async execute(work) {
+    return (await this.sequence.run(work.input, work.children)).read;
   }
 }
 class Main extends ExecutionDefinition {
   run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
   operation = new Work();
   children = [this.operation];
-  execute(context, invocation, children) {
-    return children.get(this.operation).call(invocation, context.currentInput);
+  async execute(work) {
+    const child = work.children.create(this.operation, work.input);
+    await child.run();
+    return child.accept();
   }
 }
 function bind(main, source, options = {}) {
@@ -68,7 +70,7 @@ test('definitions bind to independent R endpoints; node identity is stable and p
   assert.equal(first.running, false);
 });
 
-test('one RuntimeBinder binds independent roots and rejects transferring a live child entry across them', async () => {
+test('one RuntimeBinder binds independent roots and rejects foreign child references', async () => {
   const execution = new Main();
   const definition = runtimeDefinition(execution);
   const binder = new RuntimeBinder();
@@ -78,107 +80,102 @@ test('one RuntimeBinder binds independent roots and rejects transferring a live 
     release = resolve;
   });
   let previous;
-  execution.run.execute = async (context, invocation, children) => {
-    const child = children.get(execution.operation);
-    if (context.currentInput === 'left') {
-      previous = child;
-      await pending;
-      return context.currentInput;
-    }
-    if (context.currentInput === 'right') {
-      assert.throws(() => previous.create(invocation, 'foreign'), /another parent invocation/);
-      assert.equal(invocation.children.values().length, 0);
-    }
-    return child.call(invocation, context.currentInput);
-  };
-  const options = (value) => ({
-    providers: [resource.provide((source) => source)],
-    source: { entry: () => value, capture: () => value, callbacks: () => ({ started: (_context, invocation) => calls.push(invocation) }) },
+  let established;
+  const ready = new Promise((resolve) => {
+    established = resolve;
   });
+  execution.run.execute = async (work) => {
+    if (work.input === 'right') return work.children.open(previous).run();
+    const child = work.children.create(execution.operation, work.input);
+    await child.run();
+    if (work.input === 'left') {
+      previous = child.ref;
+      established();
+      await pending;
+    }
+    return child.accept();
+  };
+  const options = (value) => ({ providers: [resource.provide((source) => source)], source: { entry: () => value, capture: () => value, callbacks: () => ({ started: (_context, invocation) => calls.push(invocation) }) } });
   const left = binder.bind(definition, options('left-resource'));
   const right = binder.bind(definition, options('right-resource'));
   assert.notEqual(left.id, right.id);
   const leftRun = left.run('left', {});
-  const leftFailure = assert.rejects(leftRun, /another parent invocation/);
-  assert.equal(left.running, true);
+  await ready;
+  assert.ok(previous);
   try {
-    assert.equal(await right.run('right', {}), 'right:right-resource');
+    assert.equal(left.running, true);
+    await assert.rejects(right.run('right', {}), /foreign child reference/);
     assert.notEqual(calls[0].context.id, calls[1].context.id);
-    assert.equal(calls[0].children.values().length, 0);
-    assert.equal(calls[1].children.values().length, 1);
+    assert.equal(calls[0].children.values().length, 1);
+    assert.equal(calls[1].children.values().length, 0);
   } finally {
     release();
-    await leftFailure;
   }
+  assert.equal(await leftRun, 'left:left-resource');
   assert.equal(left.running, false);
   assert.equal(right.running, false);
   assert.equal(await left.run('next', {}), 'next:left-resource');
 });
 
-test('business views exclude state mutation, records, binding APIs and relation mutation', async () => {
+test('business Work and child facts exclude lifecycle, binding and relation mutation', async () => {
   const definition = new Main();
   const original = definition.operation.run.execute;
-  definition.operation.run.execute = async function (context, invocation, children) {
-    assert.equal(context.complete, undefined);
-    assert.equal(context.fail, undefined);
-    assert.equal(context.startRound, undefined);
-    assert.equal(context.resources.select, undefined);
-    assert.equal(invocation.record, undefined);
-    assert.equal(invocation.source, undefined);
-    assert.equal(invocation.run, undefined);
-    assert.equal(invocation.children.attach, undefined);
-    assert.ok(Object.isFrozen(context));
-    const result = await original.call(this, context, invocation, children);
-    const relation = invocation.children.values()[0];
-    assert.equal(relation.accept, undefined);
-    assert.equal(relation.returnedWith, undefined);
-    assert.equal(relation.invocation.context.complete, undefined);
-    assert.equal(relation.invocation.context.resources, undefined);
-    assert.equal(relation.invocation.record, undefined);
-    assert.equal(relation.invocation.run, undefined);
-    assert.equal(invocation.children.get(relation.invocation), relation);
-    assert.equal(relation.reception.status, 'accepted');
-    assert.equal(invocation.origin.contextId, context.id);
+  definition.operation.run.execute = async function (work) {
+    for (const name of ['context', 'invocation', 'complete', 'fail', 'startRound', 'record', 'source', 'run']) assert.equal(work[name], undefined);
+    assert.equal(work.resources.select, undefined);
+    assert.equal(work.children.attach, undefined);
+    assert.ok(Object.isFrozen(work));
+    const result = await original.call(this, work);
+    const fact = work.children.facts.values()[0];
+    for (const name of ['invocation', 'accept', 'returnedWith', 'context', 'record', 'run']) assert.equal(fact[name], undefined);
+    assert.ok(Object.isFrozen(fact));
+    assert.equal(work.children.facts.get(fact.ref).ref, fact.ref);
+    assert.equal(fact.reception.status, 'accepted');
     return result;
   };
   assert.equal(await bind(definition, () => 'value').run('input', {}), 'input:value');
 });
 
 test('plain definitions use the same fixed structures without class inheritance', async () => {
-  const child = { level: 'operation', name: 'length', label: 'Length', source: 'test', children: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (context) => context.currentInput.length } };
-  const execution = { level: 'execution', children: [child], maxRounds: 1, raises: [], run: { requires: {}, execute: (context, invocation, children) => children.get(child).call(invocation, context.currentInput) } };
+  const child = { level: 'operation', name: 'length', label: 'Length', source: 'test', children: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (work) => work.input.length } };
+  const execution = {
+    level: 'execution',
+    children: [child],
+    maxRounds: 1,
+    raises: [],
+    run: {
+      requires: {},
+      execute: async (work) => {
+        const call = work.children.create(child, work.input);
+        await call.run();
+        return call.accept();
+      },
+    },
+  };
   const runtime = assembleRuntime(runtimeDefinition(execution), { providers: [], source: { entry: () => null, capture: () => null } });
   assert.equal(await runtime.run('hello', {}), 5);
 });
 
-test('a call-scoped child entry cannot be transferred to another parent', async () => {
+test('a completed parent cannot keep using its old creation or alternative-entry actions', async () => {
   const definition = new Main();
   let previous;
-  let previousAlternative;
-  let previousInvocation;
   let accepted = 0;
-  const alternative = new InvocationEntry(definition.operation, (_parent, input) => {
+  const alternative = new InvocationEntry(definition.operation, ({ input }) => {
     accepted++;
     return input;
   });
-  definition.run.execute = async function (context, invocation, children) {
-    const child = children.get(definition.operation);
-    if (previous) {
-      assert.throws(() => previous.create(invocation, 'wrong'), /another parent invocation/);
-      assert.throws(() => previousAlternative.create(invocation, 'wrong'), /another parent invocation/);
-      assert.equal(accepted, 0);
-      assert.equal(invocation.children.values().length, 0);
-    }
-    previous = child;
-    previousAlternative = children.entry(alternative);
-    previousInvocation = invocation;
-    return child.call(invocation, context.currentInput);
+  definition.run.execute = async function (work) {
+    previous = work.children;
+    const child = work.children.create(definition.operation, work.input);
+    await child.run();
+    return child.accept();
   };
   const runtime = bind(definition, () => 'resource');
   await runtime.run('first', {});
-  await runtime.run('second', {});
-  assert.throws(() => previousAlternative.create(previousInvocation, 'ended'), /already ended/);
+  assert.throws(() => previous.create(definition.operation, 'ended'), /already ended/);
+  assert.throws(() => previous.entry(alternative, 'ended'), /already ended/);
   assert.equal(accepted, 0);
+  assert.equal(await runtime.run('second', {}), 'second:resource');
 });
 
 test('undeclared entries fail before admission and attachment', async () => {
@@ -189,10 +186,10 @@ test('undeclared entries fail before admission and attachment', async () => {
     accepted = true;
     return 'wrong';
   });
-  definition.run.execute = (_context, invocation, children) => {
-    assert.throws(() => children.get(unknown), /not declared/);
-    assert.throws(() => children.entry(alternative).create(invocation, null), /not declared/);
-    assert.equal(invocation.children.values().length, 0);
+  definition.run.execute = (work) => {
+    assert.throws(() => work.children.create(unknown, null), /not declared/);
+    assert.throws(() => work.children.entry(alternative, null), /not declared/);
+    assert.equal(work.children.facts.values().length, 0);
     return 'done';
   };
   await assert.rejects(bind(definition, () => 'value').run(null, {}), /not declared/);
@@ -261,9 +258,9 @@ test('E entry ordering is reserve, validate, accept, accepted, admit, capture, s
     },
     admit: () => order.push('admit'),
   };
-  execution.run.execute = (context) => {
+  execution.run.execute = (work) => {
     order.push('work');
-    return context.currentInput;
+    return work.input;
   };
   const runtime = assembleRuntime(runtimeDefinition(execution), {
     providers: [resource.provide((value) => value)],

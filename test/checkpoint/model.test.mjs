@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, assembleRuntime } from '@capix/server-runtime';
+import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, checkpointPoint, childReference, assembleRuntime } from '@capix/server-runtime';
 import { RequestModelDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 const request = { model: 'fixture', messages: [{ role: 'user', content: 'fixed input' }], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 256, stream: false };
@@ -23,20 +23,22 @@ function parentCheckpoint(key, child) {
     version: 1,
     input: codec,
     output: codec,
-    points: {
-      waiting: {
+    points: [
+      checkpointPoint()({
+        name: 'waiting',
         state: codec,
+        references: { child: childReference(child) },
         resume: {
           requires: {},
           uses: [child],
-          async execute(_context, invocation, children, state) {
-            const call = children.get(child).resume(invocation, state.childId);
+          async execute(work, _state, saved) {
+            const call = work.children.resume(saved.child);
             await call.run();
-            return children.accept(call, (value) => value);
+            return call.accept();
           },
         },
-      },
-    },
+      }),
+    ],
   };
 }
 
@@ -48,11 +50,11 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
     checkpoint = parentCheckpoint('fixture.model.execution', model);
     run = {
       requires: RequestModelDefinition.requires,
-      async execute(context, invocation, children) {
-        const call = children.get(model).create(invocation, context.input, { key: 'model' });
-        invocation.checkpoint?.save('waiting', { childId: call.context.id });
+      execute: async (work) => {
+        const call = work.children.create(model, work.input, { key: 'model' });
+        work.checkpoint?.save(this.checkpoint.points[0], {}, { child: call.ref });
         await call.run();
-        return children.accept(call, (value) => value);
+        return call.accept();
       },
     };
   }
@@ -62,11 +64,11 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
     checkpoint = parentCheckpoint('fixture.model.runtime', execution);
     run = {
       requires: {},
-      async execute(context, invocation, children) {
-        const call = children.get(execution).create(invocation, context.input, { key: 'execution' });
-        invocation.checkpoint?.save('waiting', { childId: call.context.id });
+      execute: async (work) => {
+        const call = work.children.create(execution, work.input, { key: 'execution' });
+        work.checkpoint?.save(this.checkpoint.points[0], {}, { child: call.ref });
         await call.run();
-        return children.accept(call, (value) => value);
+        return call.accept();
       },
     };
   }
@@ -164,7 +166,7 @@ test('request-model checkpoint codecs reject incompatible saved envelopes withou
   const checkpoint = definition.checkpoint;
   assert.deepEqual(checkpoint.input.decode(checkpoint.input.encode(request)), request);
   assert.deepEqual(checkpoint.output.decode(checkpoint.output.encode(output)), output);
-  assert.deepEqual(checkpoint.points.feedbackAccepted.state.decode(output), output, 'length and non-JSON content remain complete provider feedback, not an accepted answer');
+  assert.deepEqual(definition.feedbackAccepted.state.decode(output), output, 'length and non-JSON content remain complete provider feedback, not an accepted answer');
   for (const invalid of [
     { ...request, extra: true },
     { ...request, max_tokens: '256' },
@@ -177,7 +179,7 @@ test('request-model checkpoint codecs reject incompatible saved envelopes withou
     { ...output, usage: { ...output.usage, promptTokens: -1 } },
   ]) {
     assert.throws(() => checkpoint.output.decode(invalid));
-    assert.throws(() => checkpoint.points.feedbackAccepted.state.decode(invalid));
+    assert.throws(() => definition.feedbackAccepted.state.decode(invalid));
   }
   assert.notEqual(checkpoint.key, new RequestModelDefinition('memory').checkpoint.key);
 });
@@ -210,7 +212,7 @@ test('request-model recovery rejects a missing acceptance or mismatched saved ou
       },
       restoredStore,
     );
-    await assert.rejects(restored.runtime.resume(rootId, {}), /accepted child|accepted direct feedback/);
+    await assert.rejects(restored.runtime.resume(rootId, {}), /accepted child|direct feedback/);
     assert.equal(constructions, 0);
   }
 });

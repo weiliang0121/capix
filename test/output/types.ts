@@ -1,4 +1,4 @@
-import { AttemptDefinition, OperationDefinition, type AttemptContextView, type OperationContextView, type InvocationWorkView, type InvocationView, type ChildBindings, type OutputDeclaration } from '@capix/server-runtime';
+import { AttemptDefinition, OperationDefinition, type AttemptWork, type OperationWork, type AcceptWork, type ChildCalls, type OutputDeclaration } from '@capix/server-runtime';
 
 const text: OutputDeclaration<string, string> = {
   result(value) {
@@ -18,16 +18,16 @@ class Leaf extends AttemptDefinition<string, string, Record<string, never>, Reco
   readonly output = text;
   readonly run = {
     requires: {},
-    execute(context: AttemptContextView<string, string>, invocation: InvocationWorkView<string, string, AttemptContextView<string, string>, string>) {
-      invocation.output.emit(context.input);
+    execute(work: AttemptWork<string, string, Record<string, never>, string>) {
+      work.output.emit(work.input);
       // @ts-expect-error only declared string deltas may be emitted
-      invocation.output.emit(42);
-      return context.input;
+      work.output.emit(42);
+      return work.input;
     },
-    accept(_context: AttemptContextView<string, string>, result: string, invocation: InvocationView<string, string, AttemptContextView<string, string>>) {
+    accept(work: AcceptWork<'attempt', string, string, Record<string, never>>) {
       // @ts-expect-error reception does not own a writer
-      invocation.output.emit('late');
-      return result;
+      work.output.emit('late');
+      return work.delivered;
     },
   };
 }
@@ -40,28 +40,28 @@ class Parent extends OperationDefinition<string, string, Record<string, never>, 
   readonly output = text;
   readonly run = {
     requires: {},
-    execute: async (context: OperationContextView<string, string>, invocation: InvocationWorkView<string, string, OperationContextView<string, string>, string>, children: ChildBindings) => {
-      const call = children.get(this.leaf).create(invocation, context.input, {
+    execute: async (work: OperationWork<string, string, Record<string, never>, Leaf, string>) => {
+      const call = work.children.create(this.leaf, work.input, {
         output: {
           receive(event) {
             if (event.kind === 'delta') {
               const value: string = event.delta;
-              invocation.output.emit(value);
+              work.output.emit(value);
             }
           },
         },
       });
-      // @ts-expect-error child views do not have producing endpoints
+      // @ts-expect-error child calls do not have producing endpoints
       call.output.emit('borrow');
-      return call.run();
+      await call.run();
+      return call.accept();
     },
   };
 }
 void new Parent();
 declare const typed: AttemptDefinition<string, string, Record<string, never>, Record<string, never>, string>;
-declare const owner: InvocationView<unknown, unknown, OperationContextView>;
-declare const children: ChildBindings;
-children.get(typed).create(owner, 'input', {
+declare const children: ChildCalls<typeof typed>;
+children.create(typed, 'input', {
   output: {
     receive(event) {
       if (event.kind === 'delta') {
