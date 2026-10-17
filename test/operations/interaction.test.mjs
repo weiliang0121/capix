@@ -44,7 +44,7 @@ function conversation(provider, configureDefinition) {
       },
     }),
   );
-  return { ...environment, calls };
+  return { environment, calls };
 }
 function watchPending(runtimeDefinition, callback, options) {
   const definition = runtimeDefinition.executionDefinition.operationDefinitions.generation.requestModelDefinition;
@@ -65,7 +65,7 @@ function watchPending(runtimeDefinition, callback, options) {
 test('production request O accepts A1 pending and creates A2 which reads the same exchange without a second send', async () => {
   const response = deferred();
   let pending = 0;
-  const environment = conversation(
+  const { environment, calls } = conversation(
     () => response.promise,
     (definition) =>
       watchPending(definition, () => {
@@ -89,7 +89,7 @@ test('production request O accepts A1 pending and creates A2 which reads the sam
     answer,
   );
   assert.equal(pending, 1);
-  assert.equal(environment.calls.filter((call) => call.purpose === 'answer').length, 1);
+  assert.equal(calls.filter((call) => call.purpose === 'answer').length, 1);
   const generation = execution.children.values().find((child) => child.key === 'generation').invocation;
   const model = generation.children.values().find((child) => child.key === 'model').invocation;
   const [first, follow] = model.children.values();
@@ -106,7 +106,7 @@ test('production request O accepts A1 pending and creates A2 which reads the sam
 });
 
 test('a fast provider reply completes the initial A without creating a follow call', async () => {
-  const environment = conversation(async () => output(JSON.stringify(answer)));
+  const { environment, calls } = conversation(async () => output(JSON.stringify(answer)));
   let execution;
   await environment.runtime.run(
     { messages: [{ role: 'user', content: '你好' }] },
@@ -202,7 +202,7 @@ test('cancellation joins an uncooperative provider before the active invocation 
   const response = deferred();
   const controller = new AbortController();
   const pending = deferred();
-  const environment = conversation(
+  const { environment, calls } = conversation(
     () => response.promise,
     (definition) => watchPending(definition, () => pending.resolve()),
   );
@@ -223,7 +223,7 @@ test('cancellation joins an uncooperative provider before the active invocation 
 
 test('a parent observation fault does not erase or replay an already-started independent exchange', async () => {
   const response = deferred();
-  const environment = conversation(
+  const { environment, calls } = conversation(
     () => response.promise,
     (definition) =>
       watchPending(
@@ -242,7 +242,7 @@ test('a parent observation fault does not erase or replay an already-started ind
   await environment.interactions.settled();
   const saved = environment.interactions.states().find((state) => state.request.purpose === 'answer');
   assert.equal(saved.feedback.payload.content, JSON.stringify(answer));
-  assert.equal(environment.calls.filter((call) => call.purpose === 'answer').length, 1);
+  assert.equal(calls.filter((call) => call.purpose === 'answer').length, 1);
   assert.equal(environment.transcript.length, 1);
   environment.close();
 });

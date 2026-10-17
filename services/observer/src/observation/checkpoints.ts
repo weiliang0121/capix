@@ -1,5 +1,28 @@
-import { RuntimeError, RuntimeErrorHelper, type CheckpointFact, type CheckpointChild, type InvocationIdentity, type InvocationCheckpointFrame } from '@capix/server-runtime';
+import { RuntimeError, RuntimeErrorHelper, type CheckpointInstallation, type CheckpointFact, type CheckpointChild, type InvocationIdentity, type InvocationCheckpointFrame } from '@capix/server-runtime';
 import type { ConversationCheckpointRuns } from '../conversation/checkpoints.js';
+
+/** Install the service projection and an optional additional synchronous consumer. */
+export function bindCheckpointObservation(observation: CheckpointObservation, additional?: CheckpointInstallation['observation']): NonNullable<CheckpointInstallation['observation']> {
+  let active = additional;
+  return {
+    failure: additional?.failure ?? 'isolate',
+    observe(fact) {
+      observation.observe(fact);
+      const consumer = active;
+      if (!consumer) return;
+      try {
+        const returned: unknown = consumer.observe(fact);
+        if (returned && typeof (returned as PromiseLike<unknown>).then === 'function') {
+          void Promise.resolve(returned).catch(() => undefined);
+          throw new TypeError('Checkpoint observation must be synchronous');
+        }
+      } catch (error) {
+        active = undefined;
+        if (consumer.failure === 'propagate') throw error;
+      }
+    },
+  };
+}
 
 /** Host observation metadata; this is deliberately not a public C/S protocol or a saved checkpoint. */
 export interface CheckpointChildSummary {

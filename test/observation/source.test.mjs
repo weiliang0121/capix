@@ -78,6 +78,51 @@ test('source invalidation terminates each receiver once and never delivers later
   }
 });
 
+test('closing a record source ends its receivers without invalidating facts or closing content consumption', () => {
+  const { consumer, source, add } = fixture();
+  const events = [];
+  const consumed = [];
+  consumer.subscribe((event) => consumed.push(event));
+  const receiver = {
+    change: () => events.push('change'),
+    incomplete: () => assert.fail('normal closure is not missing evidence'),
+    closed: () => events.push('closed'),
+  };
+  try {
+    source.open(receiver);
+    source.close();
+    source.close();
+    add();
+    consumer.flush();
+    assert.deepEqual(events, ['closed']);
+    assert.equal(consumed.length, 1);
+    assert.throws(() => source.open(receiver), /Record source is closed/);
+  } finally {
+    consumer.close();
+  }
+});
+
+test('closing the record source also detaches the feed from supplementary content changes', async () => {
+  const environment = initializeObserver({ invoke: () => assert.fail('no model required') });
+  const feed = new ObservationFeed(environment);
+  const frames = [];
+  try {
+    feed.connect((frame) => frames.push(frame));
+    environment.recordSource.close();
+    environment.transcript.append({ role: 'user', content: 'content remains independent' });
+    environment.consumer.flush();
+    await settle();
+    assert.deepEqual(
+      frames.map((frame) => frame.type),
+      ['baseline'],
+    );
+    assert.equal(environment.transcript.length, 1);
+  } finally {
+    feed.close();
+    environment.close();
+  }
+});
+
 test('record delivery discards queued healthy changes on invalidation while message delivery remains live', async () => {
   const environment = initializeObserver({ invoke: () => assert.fail('no model required') });
   const feed = new ObservationFeed(environment);

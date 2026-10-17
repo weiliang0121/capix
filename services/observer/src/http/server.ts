@@ -13,7 +13,7 @@ import { SourceIncomplete } from '../observation/record/source.js';
 import { observationWriter } from './observation-writer.js';
 import { observeOverview } from '../observation/overview.js';
 import { executionArchive } from '../observation/archive.js';
-import { validateSettings } from '../assembly/settings.js';
+import { validateSettings } from '../conversation/model/settings.js';
 import { allowedSources } from './source.js';
 import { ConversationSubmission, createSubmissionStore, type SubmissionRetention } from '../conversation/submission.js';
 import { followSubmission } from './submission.js';

@@ -79,6 +79,39 @@ test('a structural non-record source delegates baseline, queue-only batching, an
   assert.equal(frames.length, 2);
 });
 
+test('source closure during opening releases the returned subscription without attaching delivery', () => {
+  const frames = [];
+  let releases = 0;
+  const value = {
+    open(receiver) {
+      receiver.closed();
+      return { baseline: { sourceId: 'closed', revision: 0, value: 0 }, close: () => releases++ };
+    },
+  };
+  const delivery = bindDelivery(value, options(frames, { attach: () => assert.fail('source already closed') }));
+  assert.equal(delivery.closed, true);
+  assert.equal(releases, 1);
+  assert.deepEqual(frames, []);
+});
+
+test('a failed late release after source closure stays local to the closed delivery', () => {
+  const frames = [];
+  const value = {
+    open(receiver) {
+      receiver.closed();
+      return {
+        baseline: { sourceId: 'closed', revision: 0, value: 0 },
+        close() {
+          throw new Error('Release failed');
+        },
+      };
+    },
+  };
+  const delivery = bindDelivery(value, options(frames));
+  assert.equal(delivery.closed, true);
+  assert.deepEqual(frames, []);
+});
+
 test('invalidation during baseline projection suppresses that healthy baseline and is delivered once', async () => {
   const counter = source();
   const frames = [];

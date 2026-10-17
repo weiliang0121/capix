@@ -10,12 +10,13 @@ export class RecordSource implements ObservationSource<readonly RecordEntry[], R
   readonly #receivers = new Map<RecordReceiver, number>();
   readonly #unsubscribe: () => void;
   #failure?: SourceIncomplete;
+  #closed = false;
   constructor(
     private readonly recorder: Recorder,
     private readonly consumer: ChangeConsumer,
   ) {
     this.#unsubscribe = consumer.subscribe((change) => {
-      if (change.type !== 'record' || change.recorderId !== recorder.id || this.#failure) return;
+      if (change.type !== 'record' || change.recorderId !== recorder.id || this.#failure || this.#closed) return;
       for (const [receiver, revision] of this.#receivers) {
         if (change.revision <= revision) continue;
         this.#receivers.set(receiver, change.revision);
@@ -29,9 +30,24 @@ export class RecordSource implements ObservationSource<readonly RecordEntry[], R
   }
   assertComplete(): void {
     if (this.#failure) throw this.#failure;
+    if (this.#closed) throw new Error('Record source is closed');
+  }
+  close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#unsubscribe();
+    const receivers = [...this.#receivers.keys()];
+    this.#receivers.clear();
+    for (const receiver of receivers) {
+      try {
+        receiver.closed?.();
+      } catch {
+        /* One connection cannot prevent the others from releasing their subscriptions. */
+      }
+    }
   }
   invalidate(error: unknown): void {
-    if (this.#failure) return;
+    if (this.#failure || this.#closed) return;
     this.#failure = new SourceIncomplete(this.recorder.id, '记录来源已不完整，不能继续提供完整的观测基线或增量。', { cause: error });
     this.#unsubscribe();
     const receivers = [...this.#receivers.keys()];

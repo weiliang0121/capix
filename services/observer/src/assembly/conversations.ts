@@ -8,8 +8,9 @@ import { ModelSource } from '../conversation/model/source.js';
 import type { WorkspaceFiles } from '../files/index.js';
 import type { ConversationDecisionDefinition } from '../conversation/decision/types.js';
 import type { SqliteObserverStore } from '../persistence/store.js';
-import { initializeObserver } from './environment.js';
-import { restoreConversationContent, type ConversationContent } from './content.js';
+import { initializeObserver } from './initialize.js';
+import type { ObserverEnvironment } from './environment.js';
+import { ConversationContent } from './content.js';
 
 /** Service-owned association of conversations, content and optional running/observed environments. */
 export class ObserverConversations {
@@ -18,7 +19,7 @@ export class ObserverConversations {
   readonly persistence?: SqliteObserverStore;
   readonly #descriptors = new Map<string, ConversationDescriptor>();
   readonly #content = new Map<string, ConversationContent>();
-  readonly #environments = new Map<string, ReturnType<typeof initializeObserver>>();
+  readonly #environments = new Map<string, ObserverEnvironment>();
   readonly #defaultId: string;
   #closed = false;
 
@@ -70,9 +71,12 @@ export class ObserverConversations {
   content(id: string): ConversationContent {
     this.get(id);
     const known = this.#content.get(id);
-    if (known) return known;
+    if (known) {
+      if (known.closed) throw new RuntimeError('SERVICE_CLOSED', '对话内容同步已关闭。');
+      return known;
+    }
     const saved = this.persistence!.loadContent(id);
-    const content = restoreConversationContent(saved, [], this.persistence);
+    const content = new ConversationContent({ saved, persistence: this.persistence });
     this.#content.set(id, content);
     return content;
   }
@@ -85,10 +89,13 @@ export class ObserverConversations {
   }
 
   /** Explicit observation or execution initializes only this conversation's runtime binding. */
-  open(id: string): ReturnType<typeof initializeObserver> {
+  open(id: string): ObserverEnvironment {
     const content = this.content(id);
     const known = this.#environments.get(id);
-    if (known) return known;
+    if (known) {
+      if (known.closed) throw new RuntimeError('SERVICE_CLOSED', '该对话的运行环境已关闭。');
+      return known;
+    }
     const environment = initializeObserver(this.provider, [], { ...this.options, conversationId: id, content, model: this.model, shared: true });
     this.#environments.set(id, environment);
     return environment;
@@ -99,25 +106,43 @@ export class ObserverConversations {
     return this.open(conversationId).recover(rootContextId, controls);
   }
 
-  peek(id: string): ReturnType<typeof initializeObserver> | undefined {
+  peek(id: string): ObserverEnvironment | undefined {
     this.get(id);
-    return this.#environments.get(id);
+    const environment = this.#environments.get(id);
+    if (environment?.closed) throw new RuntimeError('SERVICE_CLOSED', '该对话的运行环境已关闭。');
+    return environment;
   }
 
   get active(): boolean {
-    return [...this.#environments.values()].some((environment) => environment.runtime.running || environment.interactions.active);
+    return [...this.#environments.values()].some((environment) => environment.active);
   }
 
   close(): void {
     if (this.#closed) return;
     if (this.active) throw new Error('Cannot close conversations with active work');
-    for (const environment of this.#environments.values()) environment.close();
-    for (const content of this.#content.values()) {
-      content.transcripts.close();
-      content.consumer.close();
-    }
-    this.persistence?.close();
     this.#closed = true;
+    const failures: unknown[] = [];
+    for (const environment of this.#environments.values()) {
+      try {
+        environment.close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    for (const content of this.#content.values()) {
+      try {
+        content.close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    try {
+      this.persistence?.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length) throw new AggregateError(failures, 'Observer conversations cleanup failed');
   }
 
   private createContent(messages: readonly Message[]): ConversationDescriptor {
@@ -126,7 +151,7 @@ export class ObserverConversations {
     const now = Date.now();
     const descriptor = this.persistence ? this.persistence.createConversation({ transcript: transcript.exportState(), memories: memories.exportState() }) : Object.freeze({ id: randomUUID(), title: conversationTitle(transcript.snapshot()), transcriptId: transcript.id, createdAt: now, updatedAt: now });
     const saved = { version: 1 as const, transcript: transcript.exportState(), memories: memories.exportState() };
-    const content = restoreConversationContent(saved, [], this.persistence);
+    const content = new ConversationContent({ saved, persistence: this.persistence });
     this.#descriptors.set(descriptor.id, descriptor);
     this.#content.set(descriptor.id, content);
     if (!this.persistence)

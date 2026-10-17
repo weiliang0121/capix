@@ -4,7 +4,7 @@ import { isEqual } from 'es-toolkit';
 import { RuntimeError, cloneCheckpointValue, type CheckpointStore, type CheckpointHead } from '@capix/server-runtime';
 import type { ModelSettings, TranscriptRangeLocator } from '@capix/protocol';
 import type { Transcript, Memories } from '@capix/server-runtime/content';
-import { validateSettings } from '../assembly/settings.js';
+import { validateSettings } from './model/settings.js';
 import { executionProgressSchema, conversationCheckpointOutput } from './checkpoint.js';
 import { memorySchema } from './operations/checkpoint.js';
 

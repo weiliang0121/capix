@@ -2,14 +2,14 @@ import type { CallInteractionLinks, InteractionObservation, InteractionUpdate } 
 import { RuntimeError, RuntimeErrorHelper, type InteractionFact, type InteractionRead, type InteractionState } from '@capix/server-runtime';
 import { CompositeRecord, ResourceRecord } from '@capix/server-runtime/recording';
 import { isPlainObject } from 'es-toolkit/predicate';
-import type { initializeObserver } from '../assembly/environment.js';
+import type { ObserverEnvironment } from '../assembly/environment.js';
 import type { ModelInteractionRequest } from '../conversation/model/interactions.js';
 import type { ModelOutput } from '../conversation/model/types.js';
 
-type Environment = ReturnType<typeof initializeObserver>;
+type InteractionEnvironment = Pick<ObserverEnvironment, 'recordSource' | 'book' | 'persistence' | 'interactions'>;
 
 /** The call grants access through its direct, recorded resource usage. No global ID guessing. */
-export function callInteractionLinks(environment: Environment, callId: string): CallInteractionLinks {
+export function callInteractionLinks(environment: InteractionEnvironment, callId: string): CallInteractionLinks {
   environment.recordSource.assertComplete();
   const call = environment.book.get(callId);
   if (!(call instanceof CompositeRecord) || !['runtime-call', 'execution', 'operation', 'attempt'].includes(call.kind)) throw new RuntimeError('CALL_NOT_FOUND', '找不到指定对话中的调用。');
@@ -25,7 +25,7 @@ export function callInteractionLinks(environment: Environment, callId: string): 
 }
 
 /** A cumulative metadata projection; it follows entity facts, never a call's completion status. */
-export function observeCallInteraction(environment: Environment, callId: string, id: string, receive: (frame: InteractionUpdate) => void): () => void {
+export function observeCallInteraction(environment: InteractionEnvironment, callId: string, id: string, receive: (frame: InteractionUpdate) => void): () => void {
   if (!callInteractionLinks(environment, callId).interactionIds.includes(id)) throw new RuntimeError('INTERACTION_NOT_FOUND', '该调用未关联指定的外部交互。');
   const retained = environment.persistence ? 'persistent' : 'memory';
   let active = true;

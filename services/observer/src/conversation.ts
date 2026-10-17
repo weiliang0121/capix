@@ -20,6 +20,7 @@ export * from './conversation/model/rejection.js';
 export * from './conversation/model/request.js';
 export * from './conversation/model/resources.js';
 export * from './conversation/model/schema.js';
+export * from './conversation/model/settings.js';
 export * from './conversation/model/source.js';
 export * from './conversation/model/types.js';
 export * from './conversation/operations/answer/generate.js';

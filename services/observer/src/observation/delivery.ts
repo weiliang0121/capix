@@ -18,6 +18,8 @@ export interface SourceBaseline<BaselineValue> {
 export interface SourceReceiver<Change> {
   change(change: { readonly revision: number; readonly value: Change }): void;
   incomplete(error: SourceIncomplete): void;
+  /** The source owner ended its lifetime; this is not evidence of missing facts. */
+  closed?(): void;
 }
 export interface ObservationSource<BaselineValue, Change> {
   /** A consistent baseline handoff; a failed opening leaves no subscription. */
@@ -119,6 +121,7 @@ export function bindDelivery<BaselineValue, Change, Frame>(source: ObservationSo
   try {
     const opened = source.open({
       change: ({ value }) => connection.enqueue(value),
+      closed: () => connection.close(),
       incomplete: (error) => {
         if (closed || incomplete) return;
         incomplete = error;
@@ -127,7 +130,14 @@ export function bindDelivery<BaselineValue, Change, Frame>(source: ObservationSo
       },
     });
     closeSource = opened.close;
-    if (!incomplete) {
+    if (closed) {
+      try {
+        closeSource();
+      } catch {
+        /* A late release follows the same isolation rule as connection.close(). */
+      }
+    }
+    if (!closed && !incomplete) {
       const detach = options.attach?.(connection);
       if (closed) detach?.();
       else if (detach) closeAdditional = detach;

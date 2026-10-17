@@ -2,7 +2,7 @@ import { isSafeInteger } from 'es-toolkit/compat';
 import { ObserverConversations } from './assembly/conversations.js';
 import { DeepSeekProvider } from './assembly/provider.js';
 import { createObserverServer } from './http/server.js';
-import { validateSettings } from './assembly/settings.js';
+import { validateSettings } from './conversation/model/settings.js';
 import { WorkspaceFiles } from './files/index.js';
 import { SqliteObserverStore } from './persistence/store.js';
 import { resolve, relative, isAbsolute, sep } from 'node:path';

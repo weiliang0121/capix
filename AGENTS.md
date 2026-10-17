@@ -15,6 +15,7 @@
 - server/runtime 提供 REOA 结构、声明/绑定、Invocation/Context、资源、异常和类型化观测出口；内容实体与可选记录预设暂同包，分别有 `/content` 与 `/recording` 入口。低层构造有 `/construction` 入口；根入口按职责分组，不为减少导出数量建立门面。
 - `structure/` 放可复用 Bound REOA，`binding/` 放 Binder 与接线，`context/`、`invocation/` 分别持有单次对象及各自 builders。Clock、Initializer、ProgressChannel 是共享能力，直接位于包内根文件；记录预设的声明、安装、单次句柄及映射集中在 `records/observation/`，历史记录恢复仍归 `records/restoration/`。生产者变化发布归 `changes/publish.ts`，不因可选观察端口而归属观测。
 - services/observer 的 conversation 提供业务 R/E/O/A、模型契约和绑定、消息同步；observation 提供来源/记录投影/观测交付；assembly 建立独立实体和共享消费；http 负责宿主交付。不得让 conversation 依赖环境初始化来取得隐式对象。
+- 服务声明树在环境装配时创建，绑定源 ConversationCallSource 按次承担 validate/entry/capture/started；模型配置接纳属于 conversation/model。ConversationContent 持有内容同步，ObserverEnvironment 持有已安装运行与观测，initializeObserver 只负责建立；注入内容由宿主关闭，环境只解除自身观察。关闭耗尽清理后报告错误，不把正常关闭标记为来源不完整，不自动复用或重建已关闭环境。流程见 [服务装配](docs/service-assembly.md)。
 - ClientRuntime 保持无 UI：以 conversation/transcripts/observation 具名装配，初始化配置与消息同步，观测显式开启。当前依赖对话和 Observer 契约，不宣称已是任意业务的通用客户端。client/http 只做收发与协议接纳；app binding 投影后写入 Store，React 消费读模型与明确 props。内部接纳、会话协调与公开快照分开；每条增量照常消费，微任务合并发布，命令门控使用即时内部状态。正文可用性与服务结果、连接健康分别表达；app binding 按浏览器帧合并投影，一次写 Store。
 - ClientSubmission 持有单次提交的反馈连接与事实，TranscriptReceiver / ObservationReceiver 各自持有同步生命周期；ClientRuntime 只协调初始化、当前提交、跨来源状态与发布。连接替换先转移本地归属再 abort 旧连接，回调重入后复核身份；停止消费不取消服务端业务。
 - 消息副本与同步连接状态分开。TranscriptReceiver 对明确连接中断和修订缺口有限退避重建基线，主动停止清理定时器；身份/正文冲突、协议错误及来源失效终止自动恢复。基线不能改写既有消息前缀。恢复就绪等待本次有效基线，不复用首次 ready；已初始化客户端的同步波动不重置业务接纳资格或触发重 POST。
