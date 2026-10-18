@@ -1,3 +1,4 @@
+import { ActiveContent } from '@capix/observer-service';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -46,7 +47,7 @@ async function fixture(t, decide, options = {}) {
       ? (() => {
           const transcript = new Transcript();
           const memories = new Memories(transcript);
-          const entities = { transcript, memories, selectionUsage: new SelectionUsage(), files };
+          const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage(), files };
           const definition = new ConversationRuntimeDefinition({ files: true, decision, maxDecisionSteps: config.maxDecisionSteps });
           return { ...entities, runtime: bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider))) };
         })()
@@ -93,7 +94,7 @@ for (const recording of [true, false]) {
     assert.deepEqual(await f.run('你好'), answer);
     assert.deepEqual(
       f.modelCalls.map((call) => call.purpose),
-      ['selection', 'answer', 'memory'],
+      ['answer', 'memory'],
     );
     assert.equal(f.inputs.length, 2);
     assert.equal(f.inputs[1].latest.capability, 'answer');
@@ -282,7 +283,7 @@ test('decision limit stops unresolved proposals without inventing an answer or r
   assert.equal(f.environment.runtime.running, false);
   assert.deepEqual(
     f.modelCalls.map((call) => call.purpose),
-    ['selection'],
+    [],
   );
 });
 
@@ -293,7 +294,7 @@ test('actual child failures terminate execution rather than requesting another d
   assert.equal(f.inputs.length, 1);
   assert.deepEqual(
     f.modelCalls.map((call) => call.purpose),
-    ['selection', 'answer'],
+    ['answer'],
   );
   assert.equal(f.environment.transcript.length, 1);
   assert.equal(f.environment.runtime.running, false);
@@ -324,7 +325,7 @@ for (const checked of [false, true]) {
     assert.equal(f.inputs.length, checked ? 2 : 1);
     assert.deepEqual(
       f.modelCalls.map((call) => call.purpose),
-      ['selection'],
+      [],
     );
     assert.equal(f.environment.transcript.length, 1);
     assert.deepEqual(await readdir(f.root), ['input.txt']);
@@ -387,7 +388,7 @@ test('decision, preflight and selected work remain real recorded calls with acce
   const direct = snapshot.operations.filter((record) => !record.parentOperationId);
   assert.deepEqual(
     direct.map((record) => record.operation),
-    ['selection', 'conversationDecision', 'checkFileTask', 'conversationDecision', 'processDocument', 'conversationDecision', 'saveResult', 'conversationDecision', 'memory'],
+    ['prepareContext', 'conversationDecision', 'checkFileTask', 'conversationDecision', 'processDocument', 'conversationDecision', 'saveResult', 'conversationDecision', 'memory'],
   );
   const preflight = direct.find((record) => record.operation === 'checkFileTask');
   assert.ok(snapshot.attempts.some((record) => record.operationId === preflight.id && record.callee === 'filesystem'));

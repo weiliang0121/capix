@@ -15,7 +15,7 @@ function setup(t) {
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   return join(directory, 'observer.sqlite');
 }
-const boundaries = ['selectionResult', 'selectionAccepted', 'understandingFeedback', 'decisionResult', 'decisionAccepted', 'preflightResult', 'preflightAccepted', 'readResult', 'interactionFeedback', 'answerFeedback', 'answerCommitted', 'answerAccepted', 'filePrepared', 'fileCommitted', 'fileAccepted', 'memoryFeedback', 'memoryPrepared', 'memoryCommitted', 'completed'];
+const boundaries = ['preparationResult', 'preparationAccepted', 'understandingFeedback', 'decisionResult', 'decisionAccepted', 'preflightResult', 'preflightAccepted', 'readResult', 'interactionFeedback', 'answerFeedback', 'answerCommitted', 'answerAccepted', 'filePrepared', 'fileCommitted', 'fileAccepted', 'memoryFeedback', 'memoryPrepared', 'memoryCommitted', 'completed'];
 for (const boundary of boundaries)
   test(`file conversation continues ${boundary} through accepted file and memory effects exactly once`, (t) => {
     const path = setup(t);
@@ -28,7 +28,7 @@ for (const boundary of boundaries)
     assert.equal(result.result.content, '整理后的正文。');
     assert.deepEqual(
       result.calls.map((call) => call.purpose),
-      ['selection', 'understanding', 'answer', 'memory'],
+      ['understanding', 'answer', 'memory'],
     );
     assert.equal(result.transcript.messages.length, 2);
     assert.equal(result.transcript.appends.length, 1);
@@ -60,7 +60,7 @@ for (const boundary of ['decisionResult', 'answerCommitted', 'decisionAccepted']
     assert.equal(result.transcript.appends.length, 1);
     assert.deepEqual(
       result.calls.map((call) => call.purpose),
-      ['selection', 'understanding'],
+      ['understanding'],
     );
   });
 test('second generation continues the saved second model result without a third model request', (t) => {
@@ -73,7 +73,7 @@ test('second generation continues the saved second model result without a third 
   assert.equal(result.error, undefined, JSON.stringify(result.error));
   assert.deepEqual(
     result.calls.map((call) => call.purpose),
-    ['selection', 'answer', 'answer', 'memory'],
+    ['answer', 'answer', 'memory'],
   );
   assert.equal(result.transcript.messages.length, 2);
 });
@@ -88,6 +88,6 @@ test('unconfirmed file publication is not retried or promoted to a saved result'
   assert.equal(result.file, null);
   assert.deepEqual(
     result.calls.map((call) => call.purpose),
-    ['selection', 'understanding', 'answer'],
+    ['understanding', 'answer'],
   );
 });

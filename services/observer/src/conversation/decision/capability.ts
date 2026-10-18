@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { OperationDefinition, ChildCalls, DefinitionEntryInput, DefinitionOutput, DefinitionDelta, InvocationOutputReceiver, ChildCall } from '@capix/server-runtime';
+import type { OperationDefinition, ChildCalls, DefinitionInput, DefinitionOutput, DefinitionDelta, InvocationOutputReceiver, ChildCall } from '@capix/server-runtime';
 import type { ConversationCapabilityName, ConversationCapabilityOffer, ConversationDecisionFeedback } from './types.js';
 import { modelTextSchema } from '../model/schema.js';
 
@@ -22,7 +22,7 @@ export function conversationCapability<Arguments, State, Definition extends Oper
     readonly output?: InvocationOutputReceiver<DefinitionOutput<Definition>, DefinitionDelta<Definition>>;
     readonly schema: z.ZodType<Arguments>;
     readonly available: (state: State) => boolean;
-    readonly input: (arguments_: Arguments, state: State) => DefinitionEntryInput<Definition>;
+    readonly input: (arguments_: Arguments, state: State) => DefinitionInput<Definition>;
     readonly accept: (delivered: DefinitionOutput<Definition>, state: State, child: ChildCall<Definition>) => State;
   },
   children: ChildCalls,

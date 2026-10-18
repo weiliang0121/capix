@@ -1,4 +1,4 @@
-import type { ChildCall, ChildCalls, ChildDefinition, ChildOptions, ChildReference, DefinitionEntryInput, DefinitionOutput, ResumeChildCalls } from '../../definition/children.js';
+import type { ChildCall, ChildCalls, ChildDefinition, ChildOptions, ChildReference, DefinitionInput, DefinitionOutput, ResumeChildCalls } from '../../definition/children.js';
 import type { InvocationEntry } from '../../definition/entry.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import { ChildCallFailure } from '../../invocation/provenance.js';
@@ -30,7 +30,7 @@ export class InvocationChildBindings {
     });
   }
 
-  private create<D extends ChildDefinition>(definition: D, input: DefinitionEntryInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
+  private create<D extends ChildDefinition>(definition: D, input: DefinitionInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
     return this.guard(() => {
       this.requireAllowed(definition);
       const child = this.options.children.get(definition).create(this.options.parent, input, { ...options, declarationPosition: this.options.children.position(definition) });

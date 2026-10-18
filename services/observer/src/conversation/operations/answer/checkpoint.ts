@@ -6,13 +6,14 @@ import { modelIndexesSchema, modelTextSchema } from '../../model/schema.js';
 import { modelRequestSchema, modelOutputSchema } from '../../model/interactions.js';
 import { prepareRegenerationRequest, type ModelRegenerationInput } from '../../model/regeneration.js';
 import { answerOutputContract } from './output.js';
+import { answerMessageContextSchema } from '../checkpoint.js';
 import type { GenerationInput, GenerateAnswerDefinition } from './generate.js';
 
 const receipt = z.strictObject({ path: modelTextSchema, bytes: z.int().nonnegative(), digest: modelTextSchema });
 const fileOutput = z.strictObject({ path: modelTextSchema });
 const task = z.union([z.strictObject({ sourcePath: modelTextSchema, output: fileOutput.optional() }), z.strictObject({ output: fileOutput })]);
 const inputSchema = z.strictObject({
-  selection: z.strictObject({ historyIndexes: modelIndexesSchema() }),
+  context: answerMessageContextSchema,
   memories: z.array(z.strictObject({ id: modelTextSchema, topic: modelTextSchema, content: modelTextSchema, sourceIndexes: modelIndexesSchema(1), sourceResults: z.array(z.strictObject({ id: modelTextSchema, kind: z.literal('file-created'), answerIndex: z.int().nonnegative(), receipt })).optional() })),
   document: receipt.extend({ text: z.string() }).optional(),
   task: z.strictObject({ fileTask: task, instruction: modelTextSchema }).optional(),
@@ -58,7 +59,7 @@ function modelChild(facts: Facts, definitions: Definitions): ChildFact {
   const original = facts.children.values().filter((child) => child.parentRound === 1);
   const context = accepted(requireDefinition(facts, definitions.assembleContextDefinition, original[0]));
   const request = accepted(requireDefinition(facts, definitions.prepareRequestDefinition, original[1]));
-  if (context.key !== 'context' || request.key !== 'request' || !isEqual(context.input, facts.initialInput.selection) || !isEqual(request.returned.output, request.reception.value)) throw new Error('Answer checkpoint has incompatible preparation');
+  if (context.key !== 'context' || request.key !== 'request' || !isEqual(context.input, facts.initialInput.context) || !isEqual(context.returned.output, facts.initialInput.context) || !isEqual(context.reception.value, context.returned.output) || !isEqual(request.returned.output, request.reception.value)) throw new Error('Answer checkpoint has incompatible preparation');
   const current = facts.children.values().filter((child) => child.parentRound === facts.round);
   let model: ChildFact;
   if (facts.round === 1) model = requireDefinition(facts, definitions.requestModelDefinition, current[2]);
@@ -96,12 +97,12 @@ export function checkPreparationWaiting(facts: Facts, child: ChildFact, key: 'co
   const input = facts.initialInput;
   if (key === 'context') {
     requireDefinition(facts, definitions.assembleContextDefinition, child);
-    if (facts.round !== 1 || current.length !== 1 || !isEqual(child.input, input.selection)) throw new Error('Answer context checkpoint changed selection');
+    if (facts.round !== 1 || current.length !== 1 || !isEqual(child.input, input.context)) throw new Error('Answer context checkpoint changed fixed material');
   } else if (facts.round === 1) {
     requireDefinition(facts, definitions.prepareRequestDefinition, child);
     const assembled = accepted(requireDefinition(facts, definitions.assembleContextDefinition, current[0]));
     const context = assembled.reception.value as Record<string, unknown>;
-    if (current.length !== 2 || assembled.key !== 'context' || !isEqual(child.input, { ...context, memories: input.memories, ...(input.task ? { task: input.task } : {}), ...(input.document ? { document: input.document } : {}) })) throw new Error('Answer request checkpoint changed fixed preparation');
+    if (current.length !== 2 || assembled.key !== 'context' || !isEqual(assembled.input, input.context) || !isEqual(assembled.returned.output, input.context) || !isEqual(assembled.reception.value, assembled.returned.output) || !isEqual(child.input, { ...context, memories: input.memories, ...(input.task ? { task: input.task } : {}), ...(input.document ? { document: input.document } : {}) })) throw new Error('Answer request checkpoint changed fixed preparation');
   } else {
     requireDefinition(facts, definitions.prepareRegenerationDefinition, child);
     if (current.length !== 1) throw new Error('Answer regeneration preparation has unexpected child calls');
@@ -122,7 +123,7 @@ function checkRegenerationBasis(facts: Facts, basis: ModelRegenerationInput, def
   const request = accepted(requireDefinition(facts, definitions.prepareRequestDefinition, original[1]));
   const previous = accepted(requireDefinition(facts, definitions.requestModelDefinition, original[2]));
   const rejection = requireDefinition(facts, definitions.acceptOutputDefinition, original[3]);
-  if (original.length !== 4 || assembled.key !== 'context' || !isEqual(assembled.input, facts.initialInput.selection) || request.key !== 'request' || previous.key !== 'model' || !isEqual(previous.input, request.reception.value) || !isEqual(previous.returned.output, previous.reception.value) || rejection.key !== 'acceptance' || rejection.returned?.status !== 'failed' || rejection.returned.failure?.contract !== 'MODEL_OUTPUT_REJECTED' || !isEqual(rejection.input, { output: previous.reception.value }) || facts.continuation?.origin?.kind !== 'child-return' || facts.continuation.origin.child !== rejection.ref) throw new Error('Answer regeneration checkpoint has incompatible rejection history');
+  if (original.length !== 4 || assembled.key !== 'context' || !isEqual(assembled.input, facts.initialInput.context) || !isEqual(assembled.returned.output, facts.initialInput.context) || !isEqual(assembled.reception.value, assembled.returned.output) || request.key !== 'request' || previous.key !== 'model' || !isEqual(previous.input, request.reception.value) || !isEqual(previous.returned.output, previous.reception.value) || rejection.key !== 'acceptance' || rejection.returned?.status !== 'failed' || rejection.returned.failure?.contract !== 'MODEL_OUTPUT_REJECTED' || !isEqual(rejection.input, { output: previous.reception.value }) || facts.continuation?.origin?.kind !== 'child-return' || facts.continuation.origin.child !== rejection.ref) throw new Error('Answer regeneration checkpoint has incompatible rejection history');
   const diagnostic = z.looseObject({ message: z.string(), detail: z.looseObject({ code: z.enum(['INVALID_JSON', 'EMPTY_OUTPUT', 'OUTPUT_SHAPE']) }) }).parse(rejection.returned.diagnostic);
   if (modelOutputSchema.parse(previous.returned.output).finishReason !== 'stop' || !isEqual(basis.request, previous.input) || !isEqual(basis.output, previous.reception.value) || basis.error?.code !== diagnostic.detail.code || basis.error.message !== diagnostic.message) throw new Error('Answer regeneration preparation changed accepted rejection evidence');
 }

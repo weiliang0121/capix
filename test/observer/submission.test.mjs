@@ -2,7 +2,7 @@ import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
-import { ProgressChannel } from '@capix/server-runtime';
+import { ProgressChannel, defineExecution } from '@capix/server-runtime';
 import { ConversationSubmission, createSubmissionStore, bindConversation, ConversationRuntimeDefinition, ConversationExecutionDefinition, acceptMessages } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 
@@ -174,18 +174,17 @@ test('active discovery follows the service lifetime even when projection fails, 
 test('conversation binding selects its declared E instead of giving every R child the same public meaning', async () => {
   const environment = createEnvironment();
   const definition = new ConversationRuntimeDefinition();
-  const other = new ConversationExecutionDefinition(definition.executionDefinition.operationDefinitions);
+  const other = defineExecution()({ children: [], run: { execute: () => null } });
+  const originalRun = definition.run;
   definition.children = [other, definition.executionDefinition];
   definition.run = {
-    requires: {},
+    ...originalRun,
     uses: definition.children,
     execute: async (work) => {
       const unrelated = work.children.create(other, work.input, { key: 'unrelated' });
       await unrelated.run();
       await unrelated.accept(() => undefined);
-      const selected = work.children.create(definition.executionDefinition, work.input, { key: 'conversation' });
-      const output = await selected.run();
-      return selected.accept(() => output);
+      return originalRun.execute(work);
     },
   };
   const runtime = bindConversation(definition, environment, new ModelInteractions(new ModelSource(provider)));
@@ -198,13 +197,13 @@ test('conversation binding selects its declared E instead of giving every R chil
       },
     }),
   });
-  assert.equal(environment.transcript.length, 4);
+  assert.equal(environment.transcript.length, 2);
   assert.deepEqual(
     received.map((fact) => fact.kind),
     ['input', 'execution', 'task', 'answer'],
   );
-  assert.equal(received[0].range.start, 2);
-  assert.equal(received.at(-1).range.start, 3);
+  assert.equal(received[0].range.start, 0);
+  assert.equal(received.at(-1).range.start, 1);
 });
 
 test('async delivery listeners are isolated and readiness cancellation only detaches that waiter', async () => {

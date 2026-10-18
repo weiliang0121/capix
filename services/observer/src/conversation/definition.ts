@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import { invocationRecording } from '@capix/server-runtime/recording';
-import { RuntimeDefinition, checkpointPoint, childReference, type RuntimeWork } from '@capix/server-runtime';
+import { RuntimeDefinition, checkpointPoint, childReference, type RuntimeWork, type ResourceRequirements } from '@capix/server-runtime';
 import type { GenerationOutput } from '@capix/protocol';
-import { SelectHistoryDefinition } from './operations/history/select.js';
+import { PrepareConversationContextDefinition } from './operations/context/prepare.js';
+import { MaintainConversationContentDefinition, type ContextMaintenancePolicy } from './operations/context/maintain.js';
+import { acceptConversationRequest } from './accept.js';
+import { conversationRuntimeRequests, type ConversationRuntimeResources } from './resources.js';
 import { GenerateAnswerDefinition } from './operations/answer/generate.js';
 import { ExtractMemoryDefinition } from './operations/memory/extract.js';
 import { ProcessDocumentDefinition } from './operations/document/process.js';
@@ -17,21 +20,25 @@ export interface ConversationDefinitionOptions {
   readonly files?: boolean;
   readonly decision?: ConversationDecisionDefinition;
   readonly maxDecisionSteps?: number;
+  readonly maintenance?: ContextMaintenancePolicy;
+  readonly maintenanceResources?: ResourceRequirements;
 }
 
 /** Business declarations contain no live environment or model provider. */
-export class ConversationRuntimeDefinition extends RuntimeDefinition<unknown, GenerationOutput> {
+export class ConversationRuntimeDefinition extends RuntimeDefinition<unknown, GenerationOutput, ConversationRuntimeResources> {
   readonly observation = [invocationRecording()];
   readonly executionDefinition;
   readonly children;
   readonly filesEnabled;
   readonly customDecision;
+  readonly customMaintenance;
   readonly checkpoint;
   readonly executionWaiting;
   constructor(options: ConversationDefinitionOptions = {}) {
     super();
     this.filesEnabled = Boolean(options.files);
     this.customDecision = options.decision !== undefined;
+    this.customMaintenance = options.maintenance !== undefined;
     this.executionDefinition = createConversationExecution(options);
     this.children = [this.executionDefinition];
     this.executionWaiting = checkpointPoint<'runtime', unknown, GenerationOutput>()({
@@ -52,16 +59,17 @@ export class ConversationRuntimeDefinition extends RuntimeDefinition<unknown, Ge
         },
       },
     });
-    this.checkpoint = { key: 'observer.conversation.runtime', version: 2, input: conversationCheckpointInput, output: conversationCheckpointOutput, points: [this.executionWaiting] };
+    this.checkpoint = { key: 'observer.conversation.runtime', version: 3, input: conversationCheckpointInput, output: conversationCheckpointOutput, points: [this.executionWaiting] };
     this.run = {
-      requires: {},
+      requires: conversationRuntimeRequests,
       uses: this.children,
       execute: this.execute.bind(this),
     };
   }
   readonly run;
-  private async execute(work: RuntimeWork<unknown, GenerationOutput>): Promise<GenerationOutput> {
-    const child = work.children.create(this.executionDefinition, work.input, { key: 'conversation' });
+  private async execute(work: RuntimeWork<unknown, GenerationOutput, ConversationRuntimeResources>): Promise<GenerationOutput> {
+    const accepted = acceptConversationRequest(work.input, work.resources.messages.append, this.filesEnabled);
+    const child = work.children.create(this.executionDefinition, accepted, { key: 'conversation' });
     work.checkpoint?.save(this.executionWaiting, {}, { execution: child.ref });
     await child.run();
     return child.accept();
@@ -71,11 +79,12 @@ export class ConversationRuntimeDefinition extends RuntimeDefinition<unknown, Ge
 /** Construct the reusable business tree once; binding and per-call resources come later. */
 function createConversationExecution(options: ConversationDefinitionOptions): ConversationExecutionDefinition {
   const files = Boolean(options.files);
-  const selection = new SelectHistoryDefinition();
+  const maintenance = options.maintenance ? new MaintainConversationContentDefinition(options.maintenance, options.maintenanceResources) : undefined;
+  const preparation = new PrepareConversationContextDefinition(maintenance);
   const generation = new GenerateAnswerDefinition({ files });
   const extraction = new ExtractMemoryDefinition();
   const decision = options.decision ?? new DefaultConversationDecisionDefinition({ files });
-  const operations: ConversationOperationDefinitions = { selection, generation, extraction, decision };
+  const operations: ConversationOperationDefinitions = { preparation, generation, extraction, decision, ...(maintenance ? { maintenance } : {}) };
   if (!files) return new ConversationExecutionDefinition(operations, { maxDecisionSteps: options.maxDecisionSteps });
   const preflight = new CheckFileTaskDefinition();
   const document = new ProcessDocumentDefinition();

@@ -96,28 +96,28 @@ REOA 描述结构层次，声明、绑定器、已绑定结构、调用、上下
 
 辅助类型也使用同一规则：
 
-| 名称                                                 | 实际内容                                           |
-| ---------------------------------------------------- | -------------------------------------------------- |
-| `InvocationControls`                                 | 调用控制参数，目前为 signal；不是一个 Context      |
-| `ExecutionInvocationBindings`                        | 本次 E 的入口资源、工作资源及回调接线              |
-| `ExecutionBindingResolver`                           | 本 R 调用按 E 声明查找上述接线                     |
-| `ChildCall` / `ChildCalls`                           | 当前阶段的子行动句柄 / 创建与接纳入口              |
-| `ChildReference` / `ChildFact`                       | 本父范围内可跨阶段保留的准确引用 / 只读关系事实    |
-| `BoundChildren`                                      | 持续复用、惰性构造的子结构集合                     |
-| `ChildBindingsBuilder`                               | 根据本次调用与阶段约束构造子能力访问 Binding       |
-| `InvocationWorkBinding`                              | 跨调用复用的声明适配，实现 InvocationWork 契约     |
-| `InvocationAccess`                                   | 一次调用的引用登记与阶段行动访问                   |
-| `InvocationChildBindings`                            | 内部实现；连接父调用、阶段视图和允许的子结构       |
-| `ChildInvocationView`                                | 低层只读子调用端口，不再传给业务处理函数           |
-| `DefinitionEntryInput` / `DefinitionInvocationInput` | 入口接纳前的输入 / 接纳后进入调用的输入            |
-| `CheckpointFacts`                                    | 已解码的本层保存事实与全部直接关系，不含内部 Frame |
-| `InvocationFact` / `InvocationEvent`                 | 同步借用值的观测事实 / 可捕获与传输的变化元数据    |
-| `InvocationObservation` / `InvocationRecording`      | 单次调用的观测绑定状态 / 可选记录预设              |
-| `RuntimeStructureFact`                               | 可复用 R 结构的建立、占用和释放事实                |
+| 名称                                            | 实际内容                                           |
+| ----------------------------------------------- | -------------------------------------------------- |
+| `InvocationControls`                            | 调用控制参数，目前为 signal；不是一个 Context      |
+| `ExecutionInvocationBindings`                   | 本次 E 的普通输入资源捕获、进展与回调接线          |
+| `ExecutionBindingResolver`                      | 本 R 调用按 E 声明查找上述接线                     |
+| `ChildCall` / `ChildCalls`                      | 当前阶段的子行动句柄 / 创建与接纳入口              |
+| `ChildReference` / `ChildFact`                  | 本父范围内可跨阶段保留的准确引用 / 只读关系事实    |
+| `BoundChildren`                                 | 持续复用、惰性构造的子结构集合                     |
+| `ChildBindingsBuilder`                          | 根据本次调用与阶段约束构造子能力访问 Binding       |
+| `InvocationWorkBinding`                         | 跨调用复用的声明适配，实现 InvocationWork 契约     |
+| `InvocationAccess`                              | 一次调用的引用登记与阶段行动访问                   |
+| `InvocationChildBindings`                       | 内部实现；连接父调用、阶段视图和允许的子结构       |
+| `ChildInvocationView`                           | 低层只读子调用端口，不再传给业务处理函数           |
+| `DefinitionInput`                               | 声明的普通调用输入，不再区分 E 专属入口输入        |
+| `CheckpointFacts`                               | 已解码的本层保存事实与全部直接关系，不含内部 Frame |
+| `InvocationFact` / `InvocationEvent`            | 同步借用值的观测事实 / 可捕获与传输的变化元数据    |
+| `InvocationObservation` / `InvocationRecording` | 单次调用的观测绑定状态 / 可选记录预设              |
+| `RuntimeStructureFact`                          | 可复用 R 结构的建立、占用和释放事实                |
 
-泛型按实际含义命名：`Input`、`Output`、`Resources`、`EntryInput`、`EntryResources`、`ExceptionResources`。真实上下文使用 `Context`，作者阶段使用 `Work`，结构层级使用 `Level`；资源来源使用 `Source`，不称为 parent。Sequence 的 `Outputs` 是逐步骤的结果集合，与资源集合不同。
+泛型按实际含义命名：`Input`、`Output`、`Resources`、`ExceptionResources`、`Delta`。真实上下文使用 `Context`，作者阶段使用 `Work`，结构层级使用 `Level`；资源来源使用 `Source`，不称为 parent。Sequence 的 `Outputs` 是逐步骤的结果集合，与资源集合不同。显式 InvocationEntry 的 EntryInput 只表示该子输入适配的输入，不再是 E 定义的通用类型维度。
 
-`Invocation` 与 `InvocationWork` 都使用 `<Input, Output, Context>`。`BoundExecution`、`ExecutionDefinition`、`ExecutionInvocationBindings` 的共同前缀均为 `<Input, Output, Resources, EntryInput, EntryResources>`。不以 I/O/R 等缩写同时暗示输入输出和 REOA 层次。
+`Invocation` 与 `InvocationWork` 都使用 `<Input, Output, Context>`。`BoundExecution`、`ExecutionDefinition`、`ExecutionInvocationBindings` 的共同前缀均为 `<Input, Output, Resources>`；ExecutionDefinition 后续参数表达 ExceptionResources 与 Delta。不以 I/O/R 等缩写同时暗示输入输出和 REOA 层次。P02 移除 E 专属 entry 的职责与材料准备见 [活跃材料](active-content.md)。
 
 变量和成员同样表达持有对象：`executionDefinition` 持有声明，`executionInvocationBuilder` 持有一个构造器，`executionBindings` 持有接线。服务的 `SelectHistoryDefinition`、`GenerateAnswerDefinition` 等是具体 O/A 声明；`BoundConversationRuntime` 是装配结果，`ConversationRunOptions` 是 `run` 的参数。记录构造参数使用 `*RecordOptions`，不再与业务 `*Definition` 混用。客户端的 `invocationEvents` 存放已接收事件，不持有服务端调用实例。
 

@@ -7,15 +7,14 @@ import { Transcript } from '@capix/server-runtime';
 const settings = { model: 'test', contextBudget: 100000, maxOutputTokens: 256, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
 
-test('heat counts accepted selection calls, not attempts, execution success or observation reads', async () => {
-  let indexes = [1, 0];
+test('reference counts follow accepted active material, independently of generation success and observation reads', async () => {
   let failGeneration = false;
   let inspectDuringGeneration = () => {};
   const environment = initializeObserver(
     {
       async invoke(_request, purpose) {
         if (purpose === 'memory') return raw({ memories: [] });
-        if (purpose === 'selection') return raw({ historyIndexes: indexes });
+        assert.notEqual(purpose, 'selection');
         inspectDuringGeneration();
         if (failGeneration) throw new Error('generation failed');
         return raw({ kind: 'answer', content: '回复' });
@@ -46,7 +45,8 @@ test('heat counts accepted selection calls, not attempts, execution success or o
   };
   const first = await run('在哪里？');
   inspectDuringGeneration = () => {};
-  indexes = [0];
+  const active = environment.content.active;
+  active.apply({ basis: active.capture().basis, messageIndexes: [0], memoryIds: [] });
   failGeneration = true;
   const second = await run('再确认一下。');
   assert.equal(second.execution.status, 'failed');
@@ -54,30 +54,26 @@ test('heat counts accepted selection calls, not attempts, execution success or o
     project().messages.map((item) => item.count),
     [2, 1, 0, 0, 0],
   );
-  indexes = [];
+  active.apply({ basis: active.capture().basis, messageIndexes: [], memoryIds: [] });
   failGeneration = false;
   await run('换一个话题。');
-  indexes = [0, 0];
-  const invalid = await run('无效重复索引');
-  assert.equal(invalid.execution.status, 'failed');
+  assert.throws(() => active.apply({ basis: active.capture().basis, messageIndexes: [0, 0], memoryIds: [] }), /unique/);
   const view = project();
   assert.deepEqual(view, project());
-  assert.equal(view.executions.length, 4);
-  assert.deepEqual(view.executions[0].selections[0].indexes, [1, 0]);
+  assert.equal(view.executions.length, 3);
+  assert.deepEqual(view.executions[0].selections[0].indexes, [0, 1]);
   assert.equal(view.executions[0].id, first.execution.id);
-  assert.equal(view.executions[0].selections[0].operationId, first.operations.find((item) => item.operation === 'selection').id);
+  assert.equal(view.executions[0].selections[0].operationId, first.operations.find((item) => item.operation === 'prepareContext').id);
   assert.deepEqual(view.executions[2].selections[0].indexes, []);
-  assert.equal(view.executions[3].selections[0].status, 'failed');
-  assert.equal(view.executions[3].selections[0].indexes, undefined);
   assert.deepEqual(
     view.messages.map((item) => item.count),
-    [2, 1, 0, 0, 0, 0, 0, 0],
+    [2, 1, 0, 0, 0, 0, 0],
   );
   assert.equal(view.messages[0].message, undefined);
   assert.equal(view.transcriptId, environment.transcript.id);
   view.executions[0].selections[0].indexes.push(99);
   view.messages[0].count = 500;
-  assert.deepEqual(project().executions[0].selections[0].indexes, [1, 0]);
+  assert.deepEqual(project().executions[0].selections[0].indexes, [0, 1]);
   assert.equal(project().messages[0].count, 2);
 });
 

@@ -5,7 +5,7 @@ import { defineRuntime, defineExecution, defineOperation, defineAttempt, defineC
 const metadata = { name: 'test', label: 'Test', source: 'test', callee: 'test' };
 const codec = { encode: (value) => value, decode: (value) => value };
 
-test('actual factories bind R/E/O/A, preserve entry and function receivers without executing at definition time', async () => {
+test('actual factories bind R/E/O/A, preserve alternate input and function receivers without executing at definition time', async () => {
   let executions = 0;
   const resource = new ResourceOffer('test.factory.value', () => 4);
   const run = {
@@ -50,11 +50,6 @@ test('actual factories bind R/E/O/A, preserve entry and function receivers witho
   });
   const execution = defineExecution()({
     children: [operation],
-    entry: {
-      accept(input) {
-        return input.number;
-      },
-    },
     run: {
       requires: { value: resource.request() },
       async execute(work) {
@@ -69,13 +64,13 @@ test('actual factories bind R/E/O/A, preserve entry and function receivers witho
     run: {
       requires: { value: resource.request() },
       async execute(work) {
-        const child = work.children.create(execution, work.input);
+        const child = work.children.create(execution, work.input.number);
         await child.run();
         return child.accept();
       },
     },
   });
-  const runtime = assembleRuntime(root, { providers: [resource.provide(() => null)], source: { runtime: () => null, entry: () => null, capture: () => null } });
+  const runtime = assembleRuntime(root, { providers: [resource.provide(() => null)], source: { runtime: () => null, capture: () => null } });
   assert.equal(await runtime.run({ number: 5 }, {}), 28);
   assert.equal(executions, 1);
 });
@@ -106,7 +101,7 @@ test('point factories retain real identity and save optional typed checkpoints i
     },
   });
   const store = new MemoryCheckpointStore();
-  const runtime = assembleRuntime(root, { providers: [], source: { runtime: () => null, entry: () => null, capture: () => null }, checkpoints: { store } });
+  const runtime = assembleRuntime(root, { providers: [], source: { runtime: () => null, capture: () => null }, checkpoints: { store } });
   assert.equal(await runtime.run('saved', {}), 'saved');
   assert.equal(pointContent.checks, 1);
   assert.equal(point.name, 'prepared');

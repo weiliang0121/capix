@@ -15,7 +15,7 @@ test('one initialized world preserves messages and records while reusing its exe
       requests.push({ request, signal });
       if (purpose === 'memory') return raw({ memories: [] });
       const input = JSON.parse(request.messages[1].content);
-      if (input.message.content === 'failure' && purpose === 'selection') throw new Error('expected failure');
+      if (input.message.content === 'failure' && purpose === 'answer') throw new Error('expected failure');
       return raw(purpose === 'memory' ? { memories: [] } : purpose === 'selection' ? { historyIndexes: input.history.map((message) => message.index) } : { kind: 'answer', content: `reply ${input.message.content}` });
     },
   };
@@ -43,10 +43,10 @@ test('one initialized world preserves messages and records while reusing its exe
   );
   assert.deepEqual(
     requests.map(({ request }) => request.model),
-    ['0', '0', '0', '1', '2', '2', '2'],
+    ['0', '0', '1', '2', '2'],
   );
   assert.deepEqual(
-    JSON.parse(requests[4].request.messages[1].content).history.map((message) => message.content),
+    JSON.parse(requests[3].request.messages[1].content).history.map((message) => message.content),
     ['initial', 'first', 'reply first', 'failure'],
   );
   const operationIds = snapshots[0].operations.map((record) => record.operationInstanceId);
@@ -129,7 +129,7 @@ test('a cancelled call does not leave its signal on the reusable model operation
   }
   assert.deepEqual(
     signals.map((signal) => signal.aborted),
-    [false, false, false],
+    [false, false],
   );
 });
 
@@ -155,7 +155,7 @@ test('configuration updates and Transcript appends take effect only in the next 
   }
   assert.deepEqual(
     requests.map((request) => request.model),
-    ['A', 'A', 'A', 'B', 'B', 'B'],
+    ['A', 'A', 'B', 'B'],
   );
   assert.deepEqual(
     snapshots.map((snapshot) => resourceFact(snapshot, 'model-settings.snapshot').model),
@@ -166,7 +166,7 @@ test('configuration updates and Transcript appends take effect only in the next 
     [1, 4],
   );
   assert.equal(JSON.parse(requests[0].messages[1].content).history.length, 0);
-  assert.equal(JSON.parse(requests[3].messages[1].content).history.length, 3);
+  assert.equal(JSON.parse(requests[2].messages[1].content).history.length, 3);
   for (const snapshot of snapshots) {
     assert.ok(snapshot.operations.every((record) => record.executionId === snapshot.execution.id));
     assert.ok([...snapshot.operations, ...snapshot.attempts].every((record) => !Object.hasOwn(record.value, 'settings') && !Object.hasOwn(record.value, 'transcriptRange')));

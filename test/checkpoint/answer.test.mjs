@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, checkpointPoint, childReference, assembleRuntime } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
 import { GenerateAnswerDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };
-const input = { selection: { historyIndexes: [] }, memories: [] };
+const input = { context: { message: { role: 'user', content: '你好' }, selectedMessages: [] }, memories: [] };
 const answer = { kind: 'answer', content: '已固定的回答' };
 const feedback = (content = JSON.stringify(answer)) => ({ id: 'fixture-output', model: 'fixture', content, finishReason: 'stop', usage: null });
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
@@ -52,7 +51,6 @@ function parentCheckpoint(key, child) {
 function harness(t, provider, store, events = [], facts = [], generation = new GenerateAnswerDefinition()) {
   const interactions = new ModelInteractions(new ModelSource(provider));
   t.after(() => interactions.close());
-  const transcript = new Transcript([{ role: 'user', content: '你好' }]);
   class Execution extends ExecutionDefinition {
     children = [generation];
     checkpoint = parentCheckpoint('fixture.answer.execution', generation);
@@ -82,8 +80,8 @@ function harness(t, provider, store, events = [], facts = [], generation = new G
   }
   const runtime = assembleRuntime(new Root(), {
     ...(store ? { checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } } : {}),
-    providers: [ModelSettingsResource.snapshot.provide(() => settings), ModelSettingsResource.timeout.provide(() => settings.timeoutMs), TranscriptResource.fixedRange.provide(() => transcript.segments()[0]), ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)],
-    source: { entry: () => null, capture: () => null },
+    providers: [ModelSettingsResource.snapshot.provide(() => settings), ModelSettingsResource.timeout.provide(() => settings.timeoutMs), ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)],
+    source: { capture: () => null },
   });
   return { runtime, generation };
 }
@@ -238,7 +236,7 @@ test('answer checkpoint codecs preserve declared optional input and reject extra
   assert.deepEqual(checkpoint.input.encode({ ...input, task: undefined, document: undefined }), input);
   assert.deepEqual(checkpoint.input.decode(checkpoint.input.encode(input)), input);
   assert.throws(() => checkpoint.input.decode({ ...input, extra: true }));
-  assert.throws(() => checkpoint.input.decode({ ...input, selection: { historyIndexes: [0, 0] } }));
+  assert.throws(() => checkpoint.input.decode({ ...input, context: { ...input.context, selectedMessages: [0, 0].map((index) => ({ index, message: input.context.message })) } }));
   assert.throws(() => checkpoint.output.decode({ kind: 'answer', content: '' }));
   let accesses = 0;
   const withGetter = {

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { cloneCheckpointValue, type CheckpointCodec } from '@capix/server-runtime';
 import { answerOutputContract } from './operations/answer/output.js';
 import type { GenerationOutput } from '@capix/protocol';
+import { preparedConversationContextSchema } from './operations/context/schema.js';
 
 /** Service data contracts, shared by the actual R/E continuation declarations. */
 export function checkpointCodec<Value>(schema: z.ZodType<Value>): CheckpointCodec<Value> {
@@ -12,7 +13,7 @@ export const conversationCheckpointOutput: CheckpointCodec<GenerationOutput> = {
 export const checkpointChild = z.strictObject({ childId: z.string().min(1) });
 const message = z.strictObject({ role: z.enum(['user', 'assistant']), content: z.string().min(1) });
 const outputFile = z.strictObject({ path: z.string().min(1) });
-export const acceptedCheckpointInput = checkpointCodec(z.strictObject({ message, fileTask: z.union([z.strictObject({ sourcePath: z.string().min(1), output: outputFile.optional() }), z.strictObject({ output: outputFile })]).optional() }));
+export const acceptedCheckpointInput = checkpointCodec(z.strictObject({ message, messageIndex: z.int().nonnegative(), fileTask: z.union([z.strictObject({ sourcePath: z.string().min(1), output: outputFile.optional() }), z.strictObject({ output: outputFile })]).optional() }));
 export const answerSchema = z.strictObject({ kind: z.enum(['answer', 'unknown', 'needs-info']), content: z.string().min(1) });
 const receipt = z.strictObject({ transcriptId: z.string().min(1), start: z.int().nonnegative(), count: z.literal(1), revision: z.int().nonnegative() });
 const fileReceipt = z.strictObject({ path: z.string().min(1), bytes: z.int().nonnegative(), digest: z.string().min(1) });
@@ -31,7 +32,7 @@ export const executionProgressSchema = z.strictObject({
   responseOrder: z.int().nonnegative().optional(),
 });
 export const executionContinuationSchema = z.strictObject({
-  selection: z.strictObject({ historyIndexes: z.array(z.int().nonnegative()) }),
+  prepared: preparedConversationContextSchema,
   progress: executionProgressSchema,
   step: z.int().min(0).max(16),
   checkedCandidates: z.array(z.string()).max(16),

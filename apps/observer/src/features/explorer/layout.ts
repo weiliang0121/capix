@@ -82,8 +82,8 @@ export function layoutInvocations(execution: Pick<RoundView, 'calls' | 'observed
     const parents = ancestors(call);
     const operations = parents.filter((parent) => parent.recordType === 'operation');
     const owner = call.recordType === 'operation' ? call : operations[0];
-    const named = [owner, ...operations].find((item) => item && ['selection', 'answer', 'memory'].includes(item.name));
-    const family = (named?.name ?? 'neutral') as CallFamily;
+    const named = [owner, ...operations].find((item) => item && ['selection', 'prepareContext', 'maintainContext', 'answer', 'memory'].includes(item.name));
+    const family: CallFamily = named?.name === 'prepareContext' || named?.name === 'maintainContext' ? 'selection' : ((named?.name ?? 'neutral') as CallFamily);
     const left = span ? Math.min(1, Math.max(0, (call.offsetMs - start) / span)) : 0;
     const recordedDuration = call.durationMs ?? Math.max(0, observedEnd - call.offsetMs);
     return { call, left, width: span ? Math.min(1 - left, Math.max(0, recordedDuration / span)) : 0, lane: call.recordType === 'attempt' ? Math.max(0, operations.length - 1) : operations.length, family };

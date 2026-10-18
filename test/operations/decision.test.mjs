@@ -17,7 +17,7 @@ async function decide({ definition = new DefaultConversationDecisionDefinition({
   const message = transcript.get(0);
   const runtime = createBoundRuntime();
   const operation = bindChild(runtime, definition);
-  const input = { request: { message, selection: { historyIndexes: [] }, memories: [], ...(fileTask ? { fileTask } : {}) }, progress, available: offers, ...(latest ? { latest } : {}), ...(feedback ? { feedback } : {}) };
+  const input = { request: { message, history: [], memories: [], ...(fileTask ? { fileTask } : {}) }, progress, available: offers, ...(latest ? { latest } : {}), ...(feedback ? { feedback } : {}) };
   const resourceBinding = resourceBindingFor(runtime, {
     async invoke(request, purpose) {
       assert.equal(purpose, 'understanding');

@@ -7,7 +7,7 @@ const codec = { encode: (value) => structuredClone(value), decode: (value) => st
 const rejected = new ExceptionContract('AUTHOR_CONTROL_FIXTURE');
 
 function runtime(definition, store) {
-  return assembleRuntime(definition, { providers: [], source: { entry: () => null, capture: () => null }, ...(store ? { checkpoints: { store } } : {}) });
+  return assembleRuntime(definition, { providers: [], source: { capture: () => null }, ...(store ? { checkpoints: { store } } : {}) });
 }
 
 // The construction entry can produce the real mechanism control value. It is not

@@ -236,7 +236,7 @@ test('v1 migration preserves conversation content, memory identities and recordi
   const interaction = create(migrated);
   assert.equal(migrated.interactions.read(interaction.id).delivery, 'prepared');
   migrated.close();
-  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 5));
+  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6));
 });
 
 test('migration failure keeps v1 and its committed content intact', (t) => {

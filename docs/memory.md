@@ -3,15 +3,15 @@
 ## 当前串行运行链路
 
 ```text
-M(n-1) + Q(n) + H → SelectHistoryDefinition → S(n)
-M(n-1) + Q(n) + S(n) → GenerateAnswerDefinition → A(n)
-M(n-1) + Q(n) + A(n) + 可见原文 + 已接纳的保存凭据 → ExtractMemoryDefinition → M(n)
-M(n)              → 下一轮 SelectHistoryDefinition
+正式输入 + ActiveContent → prepareContext O（可先维护）→ 固定消息 / 记忆材料
+固定材料                 → 决策 / GenerateAnswerDefinition → 正式回答
+固定记忆 + 本轮 QA + 固定历史 + 已接纳的保存凭据 → ExtractMemoryDefinition → 记忆落实
+已落实内容               → 可选 after-content 维护 → 下次准备时捕获
 ```
 
-H 只有当前段内此前的原始用户/助手消息，不含记忆。ConversationExecutionDefinition.run.execute 在每轮开始取得 previousMemories（当前 Transcript 下 Memory.toJSON 的正文快照），用于筛选、回答和提取。记忆正文已有不可变语义，后续 Memory.update 不会改写这次捕获的内容。回答可以依据记忆有限继承旧段理解；提取的可见原文只有本轮 QA 和当前段筛选原文，不沿来源读取旧段。成功落实的更新在下一次执行开始读取，不从记录中恢复或查询运行输入。
+E 的准备 O 在可选维护之后捕获活跃消息及记忆值。该输出是本次理解、回答和提取的唯一基础材料，不从 E 建立时的旧固定范围或当前实体再次装载。记忆正文已有不可变语义，后续 Memory.update 不会改写已经捕获的内容；当前工作继续使用原快照，下次准备才读取届时活跃的内容。材料不从记录恢复或查询。
 
-SelectHistoryDefinition 输出仍只是当前段的原文索引。其 OperationRecord 输入明确显示 message/memories；PrepareModelRequestDefinition 输出保存实际发给模型的 message/memories/history。历史与记忆均计入容量检查；下一轮开始前必要时切换消息段，详见 [消息分段](transcript.md)。不移除记忆，记忆本身超限仍失败。模型的理解与索引选择质量不由 Schema 保证。
+默认 `prepareContext` 输出 `material/context/selection`；其中 selection 只为观测保留实际材料索引，不表示运行了模型筛选。理解请求接收固定 history，回答接收固定 context，提取使用同一份历史与记忆，并加入本轮正式 QA 和已接纳结果。所有请求检查完整实际材料的容量，不自动分段、截断或丢弃记忆；超限明确失败。显式维护策略可让消息或记忆退出活跃索引，不要求生成替代内容，也不删除实体。详见 [活跃材料与维护](active-content.md)。
 
 ## 两种对象
 
@@ -51,9 +51,9 @@ MemoryRecord extends BaseRecord<{
 ## 提取与落实
 
 ```text
-选择 → 组装 → 生成 → 追加正式 assistant 消息
+准备固定材料 → 决策 / 组装 → 生成 → 追加正式 assistant 消息
                          ↓
-当前记忆 + 本轮QA + 当前段筛选候选原文 + 本轮已接纳保存结果（如有）
+固定活跃记忆 + 本轮 QA + 固定历史原文 + 本轮已接纳保存结果（如有）
                          ↓
 ExtractMemoryDefinition
   → PrepareModelRequestDefinition：准备请求并检查容量
@@ -113,7 +113,7 @@ MemoryResultSource {
 
 记忆仍是可取舍的理解，提取可以返回空数组；本功能不保证每次保存生成记忆，也不承担全部操作事实的可靠留存。记忆提取失败不撤销已创建的文件或正式回答。没有增加通用证据系统或新的受理/审查实体；持久化只保存已经正式接纳的内容和来源，见 [持久化](persistence.md)。
 
-提取请求装载当前记忆内容及来源索引，不沿引用加载来源原文，不消费 MemoryRecord。原文仍只增不改删。筛选候选是提取可用证据，不宣称全部用于回答。更新完整正文仍可能遗漏条件或错误理解；结构校验不证明变化说明与语义正确。
+提取请求装载当前记忆内容及来源索引，不沿引用加载来源原文，不消费 MemoryRecord。原文仍只增不改删。固定历史是提取可用依据，不宣称模型实际使用了每条材料。更新完整正文仍可能遗漏条件或错误理解；结构校验不证明变化说明与语义正确。
 
 ## 归属与边界
 
@@ -126,7 +126,7 @@ MemoryResultSource {
 
 无 Recorder 时事实照常变化，不产生记录。接纳及批次预检查失败不改变记忆。整批预检查通过后，先经可选 persistence 端口提交，再整批安装内存状态，最后逐项通知；提交失败不改变内存。通知异常发生在整个批次成立之后，仍尝试其余项的事实发布，按安装的 isolate/propagate 处理并保留真实变更，不虚构回滚。已经生成的回答同样不会被删除。请求超预算直接失败，不自动裁剪、重试或压缩。
 
-Memories.exportState / restore 保存并静默恢复集合和 Memory 身份、sequence、正文及来源。没有实现记忆召回、关系组织、并发更新、旧执行恢复、用户审核或记录补偿。
+Memories.exportState / restore 保存并静默恢复集合和 Memory 身份、sequence、正文及来源。没有实现记忆召回、关系组织、并发更新、用户审核或记录补偿。有限 CP 恢复只核对原快照和准确子树中的固定落实凭据，见 [Checkpoint](checkpoints.md)。
 
 ## 观测展示
 
@@ -136,12 +136,12 @@ QA 是一次 E 调用的观测视角，不新增运行实体。导航对应执�
 
 ## 提取目标与表达边界
 
-提取目标是维护准确、可延续的理解：吸收有效信息，修正过时认识，保留有效条件与不确定性，减少无意义重复。如何划分、采用什么粒度、是否综合已有理解由模型判断，不预设主题分类或抽象层级，也不为“记忆之记忆”增加一种实体。现有结构和索引校验保留；create/update 是当前可落实的操作范围，不是对模型知识组织方式的要求。当前尚无退役、删除或合并旧记忆的操作，不宣称结果一定达到最优收敛。
+提取目标是维护准确、可延续的理解：吸收有效信息，修正过时认识，保留有效条件与不确定性，减少无意义重复。如何划分、采用什么粒度、是否综合已有理解由模型判断，不预设主题分类或抽象层级，也不为“记忆之记忆”增加一种实体。现有结构和索引校验保留；create/update 是当前可落实的操作范围，不是对模型知识组织方式的要求。当前尚无删除或合并旧记忆的实体操作；退出活跃索引只改变后续材料成员，不销毁 Memory。维护策略与提取策略都不保证语义一定达到最优收敛。
 
 运行与内容生命周期的完整边界见 [runtime-boundaries.md](runtime-boundaries.md)。
 
 ## 变化捕获
 
-Memories 可注入 ChangeCapture<MemoryEvent>。整批语义检查完成后，每个有效变更先固定不可变事件，再落实内容并推进 sequence，再分别尝试必要捕获与可选观察；记录预设消费观察事实生成 MemoryRecord。空批次、无变化和预检查失败不占序号；必要捕获失败或 propagate 观察失败保留已经落实的项并停止剩余处理；isolate 观察失败停用对应观察者，业务可继续。两者都不声称跨项回滚。
+Memories 可注入 ChangeCapture<MemoryEvent>。整批语义检查并固定不可变事件后，先提交并安装整个批次，再逐项尝试必要捕获与可选观察；记录预设消费观察事实生成 MemoryRecord。空批次、无变化和预检查失败不占序号。必要捕获失败或 propagate 观察失败保留已经落实的完整批次，仍尝试剩余通知后报告错误；isolate 观察失败停用对应观察者，业务可继续。通知不构成跨项事务或回滚。
 
 MemoryEvent 与 MemoryRecord 通过 memoriesId/sequence 对应；前者同步当前事实，后者提供变化依据及调用归属。客户端分别更新当前记忆与历史记录，不重复落实内容。无 Recorder 时仍可捕获变化，无捕获器时仍可正常使用记忆。网络交付规则见 [观测增量](observation-increments.md)。

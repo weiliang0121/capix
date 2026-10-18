@@ -7,10 +7,9 @@ import type { InvocationEntry } from './entry.js';
 import type { InvocationFailureFact, RuntimeErrorValue } from '@capix/protocol';
 
 // Heterogeneous storage erases IO; all public lookup and call sites retain the concrete definition.
-export type ChildDefinition = ExecutionDefinition<any, any, any, any, any, any, any> | OperationDefinition<any, any, any, any, any> | AttemptDefinition<any, any, any, any, any>;
-type Signature<Definition> = Definition extends { readonly [invocationSignature]?: infer S } ? NonNullable<S> : InvocationSignature<unknown, unknown, unknown, unknown>;
-export type DefinitionEntryInput<Definition> = Signature<Definition> extends { readonly entry: infer Input } ? Input : unknown;
-export type DefinitionInvocationInput<Definition> = Signature<Definition> extends { readonly input: infer Input } ? Input : unknown;
+export type ChildDefinition = ExecutionDefinition<any, any, any, any, any> | OperationDefinition<any, any, any, any, any> | AttemptDefinition<any, any, any, any, any>;
+type Signature<Definition> = Definition extends { readonly [invocationSignature]?: infer S } ? NonNullable<S> : InvocationSignature<unknown, unknown, unknown>;
+export type DefinitionInput<Definition> = Signature<Definition> extends { readonly input: infer Input } ? Input : unknown;
 export type DefinitionOutput<Definition> = Signature<Definition> extends { readonly output: infer Output } ? Output : unknown;
 
 export type DefinitionDelta<Definition> = Signature<Definition> extends { readonly delta: infer Delta } ? Delta : never;
@@ -35,10 +34,10 @@ export interface ChildFact<Definition = unknown> {
   readonly key?: string;
   readonly parentRound: 1 | 2;
   readonly order: number;
-  readonly input: DefinitionInvocationInput<Definition>;
+  readonly input: DefinitionInput<Definition>;
   readonly returned: ChildReturnFact<DefinitionOutput<Definition>> | undefined;
   readonly reception: { readonly status: 'pending' | 'receiving' } | { readonly status: 'accepted'; readonly value: unknown } | { readonly status: 'failed'; readonly diagnostic: RuntimeErrorValue; readonly failure?: InvocationFailureFact };
-  readonly progress?: { readonly round: 1 | 2; readonly currentInput: DefinitionInvocationInput<Definition>; readonly phase: 'execute' | 'receive' | 'handling' };
+  readonly progress?: { readonly round: 1 | 2; readonly currentInput: DefinitionInput<Definition>; readonly phase: 'execute' | 'receive' | 'handling' };
 }
 
 export interface ChildFacts {
@@ -55,7 +54,7 @@ export interface ChildOptions<Definition extends ChildDefinition> {
 }
 
 export interface ChildCalls<Allowed extends ChildDefinition = ChildDefinition> {
-  create<Definition extends Allowed>(definition: Definition, input: NoInfer<DefinitionEntryInput<Definition>>, options?: ChildOptions<Definition>): ChildCall<Definition>;
+  create<Definition extends Allowed>(definition: Definition, input: NoInfer<DefinitionInput<Definition>>, options?: ChildOptions<Definition>): ChildCall<Definition>;
   entry<Definition extends Allowed, Input>(entry: InvocationEntry<Definition, Input>, input: NoInfer<Input>, options?: ChildOptions<Definition>): ChildCall<Definition>;
   open<Definition extends ChildDefinition>(reference: ChildReference<Definition>): ChildCall<Definition>;
   readonly facts: ChildFacts;

@@ -7,7 +7,7 @@ import { requireNotCancelled } from '../invocation/cancellation.js';
 
 /** Per-call construction access; only internal E construction can use these bindings. */
 export interface ExecutionBindingResolver {
-  get(definition: ExecutionDefinition<any, any, any, any, any, any, any>): ExecutionInvocationBindings<any, any, any, any, any>;
+  get(definition: ExecutionDefinition<any, any, any, any, any>): ExecutionInvocationBindings<any, any, any>;
 }
 
 export class RuntimeContext<Input = unknown, Output = unknown, Resources extends object = object> extends InvocationContext<Input, Output> {
@@ -37,7 +37,7 @@ export class RuntimeContext<Input = unknown, Output = unknown, Resources extends
     this.requireRunning();
     requireNotCancelled(this.signal);
   }
-  executionBinding(definition: ExecutionDefinition<any, any, any, any, any, any, any>): ExecutionInvocationBindings<any, any, any, any, any> {
+  executionBinding(definition: ExecutionDefinition<any, any, any, any, any>): ExecutionInvocationBindings<any, any, any> {
     this.requireActive();
     if (!this.#executionBindings) throw new Error('Runtime call has no execution construction binding');
     return this.#executionBindings.get(definition);

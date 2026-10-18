@@ -1,4 +1,4 @@
-import { ModelInteractions, ModelSource } from '@capix/observer-service';
+import { ModelInteractions, ModelSource, ActiveContent } from '@capix/observer-service';
 import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -60,7 +60,7 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
     assert.equal(facts.execution.status, 'succeeded');
     assert.deepEqual(
       facts.operations.map((item) => item.operation),
-      ['selection', 'requestModel', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
+      ['prepareContext', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
     );
     const decisions = facts.operations.filter((item) => item.operation === 'conversationDecision');
     assert.deepEqual(
@@ -72,15 +72,15 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
       'ordinary routing does not make additional model calls',
     );
   }
-  assert.equal(requests.length, 9);
-  for (let index = 0; index < requests.length; index += 3) {
+  assert.equal(requests.length, 6);
+  for (let index = 0; index < requests.length; index += 2) {
     const selection = JSON.parse(requests[index].request.messages[1].content);
-    const extraction = JSON.parse(requests[index + 2].request.messages[1].content);
+    const extraction = JSON.parse(requests[index + 1].request.messages[1].content);
     assert.deepEqual(selection.memories, extraction.memories);
   }
-  assert.deepEqual(first.operations.find((record) => record.operation === 'selection').value.input.memories, []);
-  assert.equal(second.operations.find((record) => record.operation === 'selection').value.input.memories[0].content, '用户聚餐预算200元。');
-  assert.equal(third.operations.find((record) => record.operation === 'selection').value.input.memories[0].content, '用户聚餐预算150元。');
+  assert.deepEqual(readOutput(first.operations.find((record) => record.operation === 'prepareContext').value).material.memories, []);
+  assert.equal(readOutput(second.operations.find((record) => record.operation === 'prepareContext').value).material.memories[0].content, '用户聚餐预算200元。');
+  assert.equal(readOutput(third.operations.find((record) => record.operation === 'prepareContext').value).material.memories[0].content, '用户聚餐预算150元。');
   assert.equal(environment.memories.get(memory.id), memory);
   assert.equal(environment.memories.values().length, 2);
   assert.equal(memory.content, '用户聚餐预算150元。');
@@ -162,7 +162,7 @@ test('failed extraction leaves current memory and its records unchanged and keep
   assert.equal(environment.transcript.current('assistant').content, '正式回答');
   assert.equal(memory.content, '200');
   assert.equal(MemoryRecordHelper.find(environment.book, memory.id).length, 1);
-  assert.equal(purposes.length, 6);
+  assert.equal(purposes.length, 4);
 });
 
 test('memory changes without records preserve identity, isolate scopes and reject complete invalid batches', () => {
@@ -196,7 +196,7 @@ test('recording observes the actual changed fact; registration failure propagate
   const memories = new Memories(transcript, { observation: recording.memory });
   const execution = bindConversation(
     new ConversationRuntimeDefinition(),
-    { transcript, memories, selectionUsage: new SelectionUsage() },
+    { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
     new ModelInteractions(
       new ModelSource({
         async invoke(_request, purpose) {
@@ -272,13 +272,13 @@ test('memory capacity overflow stops postprocessing without truncating evidence 
     },
   });
   const facts = await run(environment, '请回答。', { ...settings, contextBudget: 16000 });
-  assert.deepEqual(purposes, ['selection', 'answer']);
+  assert.deepEqual(purposes, ['answer']);
   assert.equal(facts.operations.at(-1).value.error.code, 'CAPACITY_EXCEEDED');
   assert.equal(environment.transcript.length, 2);
   assert.equal(environment.memories.values().length, 0);
 });
 
-test('selection capacity includes previous memories and rejects overflow before any provider call', async () => {
+test('answer capacity includes active memories and rejects overflow before any provider call', async () => {
   const environment = initializeObserver({
     async invoke() {
       assert.fail('oversized selection must not call provider');
@@ -288,8 +288,8 @@ test('selection capacity includes previous memories and rejects overflow before 
   const memory = environment.memories.apply([{ action: 'create', memoryId: null, change: '接纳初始记忆', sourceIndexes: [0], result: content('大量理解', '历史条件。'.repeat(10000), [0]) }])[0];
   const facts = await run(environment, '继续', { ...settings, contextBudget: 2000 });
   assert.equal(facts.execution.status, 'failed');
-  assert.equal(facts.operations.length, 1);
-  assert.equal(facts.operations[0].value.error.code, 'CAPACITY_EXCEEDED');
-  assert.equal(facts.operations[0].value.input.memories[0].content, memory.content);
+  const answer = facts.operations.find((operation) => operation.operation === 'answer');
+  assert.equal(answer.value.error.code, 'CAPACITY_EXCEEDED');
+  assert.equal(answer.value.input.memories[0].content, memory.content);
   assert.equal(environment.transcript.length, 3);
 });

@@ -27,7 +27,7 @@ for (const boundary of ['feedback', 'delivery', 'entity', 'accepted', 'execution
     assert.deepEqual(value.result, { kind: 'answer', content: '真实对话恢复的回答。' });
     assert.deepEqual(
       value.calls.map((call) => call.purpose),
-      ['selection', 'answer', 'memory'],
+      ['answer', 'memory'],
     );
     assert.ok(value.calls.every((call) => call.model === 'fixed-model'));
     assert.deepEqual(
@@ -55,7 +55,7 @@ for (const boundary of ['memory', 'pending']) {
     assert.ok(value.error);
     assert.deepEqual(
       value.calls.map((call) => call.purpose),
-      boundary === 'memory' ? ['selection', 'answer', 'memory'] : ['selection', 'answer'],
+      boundary === 'memory' ? ['answer', 'memory'] : ['answer'],
     );
     assert.equal(value.transcript.messages.length, boundary === 'memory' ? 2 : 1);
   });
@@ -69,7 +69,7 @@ test('subsequent conversation input prevents older checkpoint continuation', (t)
   assert.equal(value.error.code, 'CHECKPOINT_CONTENT_CHANGED');
   assert.deepEqual(
     value.calls.map((call) => call.purpose),
-    ['selection', 'answer'],
+    ['answer'],
   );
   assert.equal(value.transcript.messages.length, 2);
 });

@@ -62,8 +62,7 @@ export class InvocationRecording implements InvocationObserver {
       else if (fact.kind === 'relation') {
         if (!this.#record && fact.change.kind === 'attached') this.#pendingAttachments.push({ ...fact, identity: { ...fact.identity }, relation: { ...fact.relation }, change: { kind: 'attached' } });
         else this.relation(fact);
-      } else if (fact.kind === 'entry') return;
-      else this.finish(fact);
+      } else this.finish(fact);
     });
   }
   resource(fact: ResourceObservation): void {

@@ -1,12 +1,11 @@
-import { isEqual } from 'es-toolkit/predicate';
 import type { Message, FileTask } from '@capix/protocol';
-import type { Memory, TranscriptRangeReader } from '@capix/server-runtime/content';
-import type { Selection } from '../../model/types.js';
-import { isSafeInteger } from 'es-toolkit/compat';
+import type { Memory } from '@capix/server-runtime/content';
+import type { AnswerMessageContext } from '../../attempt/context/assemble.js';
+import { activeHistorySchema } from '../checkpoint.js';
 
 export interface RequestUnderstandingInput {
   readonly message: Readonly<Message>;
-  readonly selection: Selection;
+  readonly history: AnswerMessageContext['selectedMessages'];
   readonly memories: readonly ReturnType<Memory['toJSON']>[];
   readonly fileTask?: FileTask;
   readonly available?: readonly { readonly name: string; readonly description: string; readonly arguments: Readonly<Record<string, unknown>> }[];
@@ -14,14 +13,7 @@ export interface RequestUnderstandingInput {
   readonly progress?: { readonly file?: FileTask; readonly saved?: { readonly path: string } };
 }
 
-/** The last exchange supplements selection so a direct clarification reply has its question. */
-export function understandingHistory(input: RequestUnderstandingInput, range: TranscriptRangeReader) {
-  if (range.length === 0 || !isEqual(range.read(range.end - 1), input.message)) throw new Error('Execution input must be the final message in its fixed Transcript range');
-  const selected = input.selection.historyIndexes.map((index) => {
-    if (!isSafeInteger(index) || index < range.start || index >= range.end - 1) throw new RangeError('Selected message is outside the execution history');
-    return index;
-  });
-  const recent = Array.from({ length: Math.min(2, range.length - 1) }, (_, offset) => range.end - 2 - offset);
-  const indexes = [...new Set([...recent, ...selected])];
-  return indexes.map((index) => Object.freeze({ index, ...range.read(index) }));
+/** The parent supplies the complete fixed active material; no implicit history expansion. */
+export function understandingHistory(input: RequestUnderstandingInput) {
+  return activeHistorySchema.parse(input.history).map(({ index, message }) => Object.freeze({ index, ...message }));
 }

@@ -12,13 +12,13 @@ import type { ConversationBindingOptions, ConversationEntities, ConversationRunO
 import { conversationCheckpointConfiguration, validateConversationCheckpointRestoration } from './checkpoint.js';
 import { activityProgress, answerProgress, executionProgress, messageProgress, taskProgress } from './progress.js';
 
-type AnyExecutionDefinition = ExecutionDefinition<any, any, any, any, any, any, any>;
+type AnyExecutionDefinition = ExecutionDefinition<any, any, any, any, any>;
 interface ConversationCallCapture {
   input?: TranscriptAppendProgress;
   transcript?: ConversationCheckpointRun['transcript'];
 }
 
-/** One reusable binding source; each run's entry/capture/started facts have their own slot. */
+/** One reusable binding source; each run's input/capture/started facts have their own slot. */
 export class ConversationCallSource implements RuntimeCallSource<unknown, ConversationRunOptions, ConversationResourceSource> {
   readonly #captures = new WeakMap<ConversationRunOptions, ConversationCallCapture>();
 
@@ -45,8 +45,8 @@ export class ConversationCallSource implements RuntimeCallSource<unknown, Conver
     this.#captures.set(options, {});
   }
 
-  entry(_input: unknown, options: ConversationRunOptions, current: AnyExecutionDefinition): ConversationResourceSource {
-    return this.resources(options, 'input', current === this.definition.executionDefinition);
+  runtime(_input: unknown, options: ConversationRunOptions): ConversationResourceSource {
+    return this.resources(options, 'input', true);
   }
 
   capture(input: unknown, options: ConversationRunOptions, current: AnyExecutionDefinition): ConversationResourceSource {
@@ -54,7 +54,10 @@ export class ConversationCallSource implements RuntimeCallSource<unknown, Conver
     const accepted = selected ? (input as AcceptedConversationInput) : undefined;
     const restored = options.checkpointRun;
     const transcript = this.entities.transcript;
-    const range = new TranscriptRangeRef(transcript, restored?.transcript.start ?? transcript.activeStart, restored?.transcript.end ?? transcript.length);
+    const inputRange = this.#captures.get(options)?.input;
+    if (selected && (!accepted || !Number.isSafeInteger(accepted.messageIndex) || accepted.messageIndex < 0 || !isEqual(transcript.get(accepted.messageIndex), accepted.message))) throw new Error('Execution input must identify an accepted source message');
+    if (selected && !restored && (!inputRange || inputRange.end - 1 !== accepted!.messageIndex)) throw new Error('Execution input differs from the actual accepted input range');
+    const range = new TranscriptRangeRef(transcript, restored?.transcript.start ?? 0, restored?.transcript.end ?? (selected ? accepted!.messageIndex + 1 : transcript.length));
     if (selected && this.capabilities.checkpointRuns && !restored) {
       const capture = this.#captures.get(options);
       if (!capture?.input) throw new Error('Checkpoint construction requires the actual accepted input range');
@@ -66,7 +69,6 @@ export class ConversationCallSource implements RuntimeCallSource<unknown, Conver
   callbacks(current: AnyExecutionDefinition, options: ConversationRunOptions): ExecutionInvocationCallbacks<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources> | undefined {
     if (current !== this.definition.executionDefinition) return;
     return {
-      accepted: options.executionCallbacks?.accepted,
       started: (context, invocation) => {
         this.started(options, context.id, invocation.identity.parentContextId);
         options.executionCallbacks?.started?.(context, invocation);
@@ -88,7 +90,7 @@ export class ConversationCallSource implements RuntimeCallSource<unknown, Conver
 
   private resources(options: ConversationRunOptions, kind: 'input' | 'answer', selected: boolean): ConversationResourceSource {
     const restored = options.checkpointRun;
-    const captureInput = selected && kind === 'input' && (options.progress || this.capabilities.checkpointRuns) ? (range: TranscriptAppendProgress) => this.captureInput(options, range) : undefined;
+    const captureInput = selected && kind === 'input' ? (range: TranscriptAppendProgress) => this.captureInput(options, range) : undefined;
     return {
       ...this.entities,
       ...(restored?.memories.items ? { memorySnapshot: { memoriesId: this.entities.memories.id, sequence: restored.memories.sequence, items: restored.memories.items } } : {}),

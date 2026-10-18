@@ -52,10 +52,11 @@ function projectExecutionSummary(snapshot: ExecutionRecordSnapshot, existing: Ob
   const durationMs = calls.find((call) => call.recordType === 'execution')?.durationMs;
   const range = executionResources(snapshot).transcriptRange;
   const inputIndex = range ? range.end - 1 : (existing?.inputIndex ?? fallbackInputIndex);
-  const selections = snapshot.operations.filter((operation) => operation.operation === 'selection');
+  const selections = snapshot.operations.filter((operation) => operation.operation === 'selection' || operation.operation === 'prepareContext');
   const response = snapshot.operations.find((operation) => operation.operation === 'answer' && operation.status === 'succeeded');
   const responseValue = response ? object(readOutput(response.value)) : {};
-  const memoryInput = object(selections[0]?.value.input).memories;
+  const preparation = selections.find((operation) => operation.operation === 'prepareContext' && operation.status === 'succeeded');
+  const memoryInput = preparation ? object(object(readOutput(preparation.value)).material).memories : object(selections[0]?.value.input).memories;
   const item: ObserverOverview['executions'][number] = {
     id: snapshot.execution.id,
     ...(snapshot.archive ? { archive: snapshot.archive } : {}),
@@ -66,7 +67,8 @@ function projectExecutionSummary(snapshot: ExecutionRecordSnapshot, existing: Ob
     inputIndex,
     calls,
     selections: selections.map((operation) => {
-      const indexes = operation.status === 'succeeded' ? object(readOutput(operation.value)).historyIndexes : undefined;
+      const output = operation.status === 'succeeded' ? object(readOutput(operation.value)) : {};
+      const indexes = operation.operation === 'prepareContext' ? object(output.selection).historyIndexes : output.historyIndexes;
       return { operationId: operation.id, status: operation.status, ...(isArray(indexes) && indexes.every(isNumber) ? { indexes } : {}) };
     }),
     availableMemoryIds: isArray(memoryInput) ? memoryInput.map((memory) => object(memory).id).filter(isString) : [],

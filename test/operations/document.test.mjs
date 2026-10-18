@@ -1,3 +1,4 @@
+import { ActiveContent } from '@capix/observer-service';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -45,7 +46,7 @@ async function fixture(t, { recorded = true, answers = [answer], memoryFailure =
   const recording = recorder ? bindRecording(recorder, { failure: recordingFailure }) : undefined;
   const transcript = new Transcript([], { observation: recording?.transcript });
   const memories = new Memories(transcript, { observation: recording?.memory });
-  const entities = { transcript, memories, files, selectionUsage: new SelectionUsage() };
+  const entities = { transcript, memories, active: new ActiveContent(transcript, memories), files, selectionUsage: new SelectionUsage() };
   const definition = new ConversationRuntimeDefinition({ files: true });
   const runtime = bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider)), { observations: recording ? [recording] : undefined });
   const progress = [];
@@ -94,15 +95,15 @@ for (const recorded of [true, false]) {
     );
     assert.deepEqual(
       f.calls.map((call) => call.purpose),
-      ['selection', 'answer', 'memory'],
+      ['answer', 'memory'],
     );
-    assert.ok(f.calls[1].request.messages.some((message) => message.content.includes(sourceText)));
+    assert.ok(f.calls[0].request.messages.some((message) => message.content.includes(sourceText)));
     assert.equal(f.transcript.length, 2);
     assert.equal(f.transcript.get(1).content, answer.content);
     const children = f.invocation().children.values();
     assert.deepEqual(
       children.map((child) => child.key),
-      ['selection', 'decision', 'preflight', 'decision', 'generation', 'decision', 'save', 'decision', 'extraction'],
+      ['preparation', 'decision', 'preflight', 'decision', 'generation', 'decision', 'save', 'decision', 'extraction'],
     );
     assert.deepEqual(
       children
@@ -128,7 +129,7 @@ test('model output regeneration reuses read evidence and creates only once', asy
   assert.deepEqual(f.counts(), { reads: 1, writes: 1 });
   assert.deepEqual(
     f.calls.map((call) => call.purpose),
-    ['selection', 'answer', 'answer', 'memory'],
+    ['answer', 'answer', 'memory'],
   );
   assert.equal(JSON.stringify([...f.recorder.book.values()].map((record) => record.toJSON())).includes(sourceText), false);
 });
@@ -157,9 +158,10 @@ test('malformed file tasks fail before accepting transcript input or reading fil
 
 test('disabled file capability rejects before accepting input', async () => {
   const transcript = new Transcript();
+  const memories = new Memories(transcript);
   const runtime = bindConversation(
     new ConversationRuntimeDefinition(),
-    { transcript, memories: new Memories(transcript), selectionUsage: new SelectionUsage() },
+    { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
     new ModelInteractions(
       new ModelSource(() => {
         throw new Error('must not initialize provider');
@@ -220,11 +222,12 @@ test('cancellation immediately after confirmed publication preserves file fact b
 
 test('declared file support requires the bound workspace entity', () => {
   const transcript = new Transcript();
+  const memories = new Memories(transcript);
   assert.throws(
     () =>
       bindConversation(
         new ConversationRuntimeDefinition({ files: true }),
-        { transcript, memories: new Memories(transcript), selectionUsage: new SelectionUsage() },
+        { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
         new ModelInteractions(
           new ModelSource(() => {
             throw new Error('unused');
@@ -256,7 +259,7 @@ test('record consumer failure after publication cannot erase or repeat the commi
   assert.deepEqual(f.counts(), { reads: 1, writes: 1 });
 });
 
-for (const interruption of ['cancel-after-input', 'accepted-callback-fault']) {
+for (const interruption of ['cancel-after-input', 'started-callback-fault']) {
   test(`${interruption} before task selection has no invented file execution fact`, async (t) => {
     const f = await fixture(t);
     const submission = new ConversationSubmission(interruption);
@@ -281,8 +284,8 @@ for (const interruption of ['cancel-after-input', 'accepted-callback-fault']) {
         progress,
         fileProgress: submission.fileProgress,
         executionCallbacks: {
-          accepted() {
-            if (interruption === 'accepted-callback-fault') throw new Error('binding callback failed');
+          started() {
+            if (interruption === 'started-callback-fault') throw new Error('binding callback failed');
           },
         },
       }),

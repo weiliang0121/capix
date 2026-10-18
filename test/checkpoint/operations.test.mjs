@@ -81,7 +81,7 @@ function assemble(operation, store, providers) {
       },
     };
   }
-  return assembleRuntime(new R(), { checkpoints: { store }, providers, source: { entry: () => null, capture: () => null } });
+  return assembleRuntime(new R(), { checkpoints: { store }, providers, source: { capture: () => null } });
 }
 function environment(t, options = {}) {
   const transcript = new Transcript([{ role: 'user', content: '处理文件' }]);
@@ -109,7 +109,7 @@ function environment(t, options = {}) {
   };
   const providers = [ModelSettingsResource.snapshot.provide(() => settings), ModelSettingsResource.timeout.provide(() => options.timeoutMs ?? settings.timeoutMs), TranscriptResource.fixedRange.provide(() => transcript.segments()[0]), ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions), FileResources.readText.provide(() => ({ files, path: 'notes.md' })), FileResources.inspect.provide(() => ({ files }))];
   const selection = { message: transcript.get(0), memories: [] };
-  const understanding = { ...selection, selection: { historyIndexes: [] } };
+  const understanding = { ...selection, history: [] };
   const decision = {
     request: understanding,
     progress: {},
@@ -125,7 +125,7 @@ for (const scenario of ['selection', 'understanding', 'decision', 'preflight', '
   test(`${scenario} declaration resumes a fixed child/result without repeating completed model or file work`, async (t) => {
     const env = environment(t);
     const create = () => (scenario === 'selection' ? new SelectHistoryDefinition() : scenario === 'understanding' ? new UnderstandRequestDefinition({ files: true }) : scenario === 'decision' ? new DefaultConversationDecisionDefinition({ files: true }) : scenario === 'preflight' ? new CheckFileTaskDefinition() : scenario === 'document' ? new ProcessDocumentDefinition() : new FunctionConversationDecisionDefinition(() => ({ kind: 'invoke', capability: 'answer', arguments: {} })));
-    const input = scenario === 'selection' ? env.selection : scenario === 'understanding' ? env.understanding : scenario === 'decision' || scenario === 'function' ? env.decision : scenario === 'preflight' ? { task: { sourcePath: 'notes.md' }, instruction: '读取' } : { sourcePath: 'notes.md', selection: { historyIndexes: [] }, memories: [] };
+    const input = scenario === 'selection' ? env.selection : scenario === 'understanding' ? env.understanding : scenario === 'decision' || scenario === 'function' ? env.decision : scenario === 'preflight' ? { task: { sourcePath: 'notes.md' }, instruction: '读取' } : { sourcePath: 'notes.md', context: { message: env.selection.message, selectedMessages: [] }, memories: [] };
     const store = new CapturedStore();
     const expected = await assemble(create(), store, env.providers).run(input, {});
     const count = { ...env.counters };
@@ -152,7 +152,7 @@ test('unknown file read is not repeated when its result has no durable checkpoin
   const env = environment(t);
   const store = new CapturedStore();
   const create = () => new ProcessDocumentDefinition();
-  await assemble(create(), store, env.providers).run({ sourcePath: 'notes.md', selection: { historyIndexes: [] }, memories: [] }, {});
+  await assemble(create(), store, env.providers).run({ sourcePath: 'notes.md', context: { message: env.selection.message, selectedMessages: [] }, memories: [] }, {});
   const boundary = store.writes.findIndex((write) => write.image?.point === 'reading');
   const restored = assemble(create(), restore(store.writes.slice(0, boundary + 1)), env.providers);
   await assert.rejects(restored.resume(store.writes[0].image.frame.owner.contextId, {}), /no durable continuation/);
@@ -177,17 +177,21 @@ for (const stage of ['preparation', 'acceptance']) {
     });
   }
 }
-for (const kind of ['selection', 'understanding']) {
-  test(`${kind} recognizes restored message value in a fixed history range and rejects different input`, async (t) => {
-    const env = environment(t);
-    const create = () => (kind === 'selection' ? new SelectHistoryDefinition() : new UnderstandRequestDefinition({ files: true }));
-    const input = structuredClone(kind === 'selection' ? env.selection : env.understanding);
-    await assemble(create(), new CapturedStore(), env.providers).run(input, {});
-    assert.equal(env.counters.model, 1);
-    await assert.rejects(assemble(create(), new CapturedStore(), env.providers).run({ ...input, message: { role: 'user', content: '不同输入' } }, {}), /final message/);
-    assert.equal(env.counters.model, 1);
-  });
-}
+test('the optional selection operation still verifies its message against the fixed Transcript range', async (t) => {
+  const env = environment(t);
+  const input = structuredClone(env.selection);
+  await assemble(new SelectHistoryDefinition(), new CapturedStore(), env.providers).run(input, {});
+  assert.equal(env.counters.model, 1);
+  await assert.rejects(assemble(new SelectHistoryDefinition(), new CapturedStore(), env.providers).run({ ...input, message: { role: 'user', content: '不同输入' } }, {}), /final message/);
+  assert.equal(env.counters.model, 1);
+});
+
+test('understanding consumes its fixed input without comparing it to current Transcript content', async (t) => {
+  const env = environment(t);
+  const input = { ...structuredClone(env.understanding), message: { role: 'user', content: '已经固定的旧输入' }, history: [{ index: 42, message: { role: 'assistant', content: '已经固定的旧材料' } }] };
+  assert.deepEqual(await assemble(new UnderstandRequestDefinition({ files: true }), new CapturedStore(), env.providers).run(input, {}), { kind: 'reply' });
+  assert.equal(env.counters.model, 1);
+});
 
 test('missing model interaction feedback cannot be replaced by another model request', async (t) => {
   const env = environment(t);

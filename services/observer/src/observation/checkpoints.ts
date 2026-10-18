@@ -209,7 +209,6 @@ function project(fact: CheckpointFact, limit: number) {
   const base = { action: value.kind, eventSequence: value.eventSequence, ...description };
   if (value.kind === 'process') return Object.freeze({ ...base, round: value.round, stage: value.process.stage, process: value.process.type });
   if (value.kind === 'relation') return Object.freeze({ ...base, childContextId: value.relation.childContextId, parentRound: value.relation.parentRound, ...(value.relation.key ? { key: value.relation.key } : {}), phase: value.change.kind, ...(value.change.kind === 'returned' ? { status: value.change.result.status } : {}) });
-  if (value.kind === 'entry') return Object.freeze({ ...base, stage: value.stage, status: value.status });
   if (value.kind === 'finished') return Object.freeze({ ...base, status: value.state.status });
   return Object.freeze(base);
 }

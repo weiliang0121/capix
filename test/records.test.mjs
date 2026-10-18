@@ -255,9 +255,9 @@ test('Observer execution observes execution, operations and boundaries from the 
   assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations', 'resources', 'runtimeCall', 'runtimeEvents']);
   assert.deepEqual(
     facts.operations.map((record) => record.operation),
-    ['selection', 'requestModel', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
+    ['prepareContext', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
   );
-  assert.equal(facts.attempts.length, 11);
+  assert.equal(facts.attempts.length, 8);
   const sequence = projectExecution(facts).callSequence;
   assert.deepEqual(
     sequence.participants.map((p) => p.id),
@@ -273,7 +273,7 @@ test('Observer execution observes execution, operations and boundaries from the 
     assert.equal(call.target, attempt.callee);
   }
   const expectedActions = {
-    selection: ['prepareModelRequest', 'acceptModelOutput'],
+    prepareContext: [],
     answer: ['assembleContext', 'prepareModelRequest', 'acceptModelOutput'],
     memory: ['prepareModelRequest', 'acceptModelOutput', 'applyMemory'],
     requestModel: ['invokeModel'],
@@ -285,6 +285,10 @@ test('Observer execution observes execution, operations and boundaries from the 
       attempts.map((attempt) => attempt.name),
       expectedActions[operation.operation],
     );
+    if (operation.operation === 'prepareContext') {
+      assert.ok(readOutput(operation.value).material.basis);
+      continue;
+    }
     if (operation.operation === 'conversationDecision') {
       assert.ok(['invoke', 'finish'].includes(readOutput(operation.value).kind));
       assert.ok(facts.execution.value.relationChanges.some((entry) => entry.identity.childContextId === operation.contextId && entry.change.kind === 'accepted'));
@@ -306,11 +310,14 @@ test('Observer execution observes execution, operations and boundaries from the 
     assert.deepEqual(readOutput(operation.value), readOutput(attempts.at(-1).value));
     if (operation.operation === 'memory') assert.deepEqual(attempts.at(-1).value.input, readOutput(acceptance.value));
   }
-  const select = facts.operations.find((op) => op.operation === 'selection');
+  const preparation = facts.operations.find((op) => op.operation === 'prepareContext');
   const answer = facts.operations.find((op) => op.operation === 'answer');
   const assembled = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'assembleContext');
-  assert.deepEqual(assembled.value.input, readOutput(select.value));
-  assert.deepEqual(answer.value.input, { selection: readOutput(select.value), memories: [] });
+  assert.equal('context' in readOutput(preparation.value), false);
+  assert.deepEqual(readOutput(preparation.value).material.messageIndexes, [0, 1]);
+  assert.deepEqual(readOutput(preparation.value).selection, { historyIndexes: [0] });
+  assert.deepEqual(assembled.value.input, { message: { role: 'user', content: input.content }, selectedMessages: [{ index: 0, message: input.history[0] }] });
+  assert.deepEqual(answer.value.input, { context: assembled.value.input, memories: [] });
   assert.deepEqual(readOutput(facts.execution.value), readOutput(answer.value));
   for (const op of facts.operations) {
     assert.equal(op.executionId, facts.execution.id);
@@ -323,7 +330,7 @@ test('Observer execution observes execution, operations and boundaries from the 
     view.callSequence.calls.filter((call) => call.recordType === 'operation').map((call) => call.id),
     facts.operations.map((record) => record.id),
   );
-  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'attempt').length, 11);
+  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'attempt').length, 8);
   assert.deepEqual(view.result, { kind: 'answer', content: '海盐项目' });
 });
 

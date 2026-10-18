@@ -36,42 +36,35 @@ test('segments preserve absolute identities and previously captured ranges', () 
   assert.equal(transcript.segments()[1].end, 4);
 });
 
-test('capacity opens a new segment; all three model calls use memory without reloading archived originals', async () => {
-  const requests = [];
+test('default active material does not segment or truncate history to satisfy capacity', async () => {
+  let requests = 0;
   const environment = initializeObserver({
-    async invoke(request, purpose) {
-      const input = JSON.parse(request.messages[1].content);
-      requests.push({ input, purpose });
-      assert.equal(input.memories[0].content, '培训周五15点。');
-      if (purpose === 'selection') {
-        assert.deepEqual(input.history, []);
-        return reply({ historyIndexes: [] });
-      }
-      if (purpose === 'answer') {
-        assert.deepEqual(input.history, []);
-        return reply({ kind: 'answer', content: '周五15点。' });
-      }
-      assert.deepEqual(
-        input.messages.map((item) => item.index),
-        [2, 3],
-      );
-      const target = input.memories[0];
-      return reply({ memories: [{ action: 'update', memoryId: target.id, change: '补充用户本次确认', sourceIndexes: [2], result: { topic: target.topic, content: '培训周五15点，本轮继续确认此安排。', sourceIndexes: [0, 2] } }] });
+    invoke: async () => {
+      requests++;
+      assert.fail('oversized material must fail before provider dispatch');
     },
   });
   environment.transcript.append({ role: 'user', content: '培训周五15点。' + '原始说明。'.repeat(6000) }, { role: 'assistant', content: '收到。' });
   const original = environment.transcript.ref(0);
   const memory = environment.memories.apply([{ action: 'create', memoryId: null, change: '接纳初始记忆', sourceIndexes: [0], result: { topic: '培训', content: '培训周五15点。', sourceIndexes: [0] } }])[0];
-  const input = { messages: [{ role: 'user', content: '培训几点？' }] };
-  const facts = await observeExecution(environment.runtime, environment.recording, input, { settings });
-  assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
-  assert.equal(facts.resources.find((fact) => fact.parentId === facts.execution.id && fact.access === 'transcript.fixedRange' && fact.phase === 'available').value.start, 2);
-  assert.equal(environment.transcript.activeStart, 2);
-  assert.equal(environment.transcript.length, 4);
+  const facts = await observeExecution(environment.runtime, environment.recording, { messages: [{ role: 'user', content: '培训几点？' }] }, { settings });
+  assert.equal(facts.execution.status, 'failed');
+  assert.match(JSON.stringify(facts.execution.value.error), /CAPACITY_EXCEEDED/);
+  assert.equal(facts.resources.find((fact) => fact.parentId === facts.execution.id && fact.access === 'transcript.fixedRange' && fact.phase === 'available').value.start, 0);
+  assert.equal(environment.transcript.activeStart, 0);
+  assert.equal(environment.transcript.length, 3, 'accepted input remains a formal message');
   assert.equal(original.read(), environment.transcript.get(0));
-  assert.deepEqual(memory.sourceIndexes, [0, 2]);
-  assert.equal(requests.length, 3);
-  assert.equal(requests[0].input.memories[0].content, '培训周五15点。');
+  assert.deepEqual(memory.sourceIndexes, [0]);
+  assert.equal(requests, 0);
+  const material = environment.content.active.capture();
+  assert.deepEqual(
+    material.messages.map(({ index }) => index),
+    [0, 1, 2],
+  );
+  assert.deepEqual(
+    material.memories.map(({ id }) => id),
+    [memory.id],
+  );
 });
 
 test('only an update target may retain its own archived sources; fresh evidence stays in the active input', () => {
@@ -96,43 +89,35 @@ test('only an update target may retain its own archived sources; fresh evidence 
     );
 });
 
-for (const retained of [2, 1, 0]) {
-  test(`capacity retains ${retained} recent complete pairs without copying messages`, async () => {
-    const environment = initializeObserver({
-      async invoke(request, purpose) {
-        if (purpose === 'selection') {
-          const input = JSON.parse(request.messages[1].content);
-          assert.deepEqual(
-            input.history.map((message) => message.index),
-            Array.from({ length: retained * 2 }, (_, offset) => 6 - retained * 2 + offset),
-          );
-          return reply({ historyIndexes: [] });
-        }
-        return reply(purpose === 'answer' ? { kind: 'answer', content: '继续。' } : { memories: [] });
-      },
-    });
-    const large = 'large context '.repeat(5000);
-    environment.transcript.append({ role: 'user', content: large }, { role: 'assistant', content: 'old' }, { role: 'user', content: retained < 2 ? large : 'previous input' }, { role: 'assistant', content: 'previous output' }, { role: 'user', content: retained < 1 ? large : 'recent input' }, { role: 'assistant', content: 'recent output' });
-    const originals = environment.transcript.snapshot();
-    const oldContext = contextWithSource(originals[4], { settings, transcript: environment.transcript });
-    const input = { messages: [{ role: 'user', content: '继续刚才那个' }] };
-    const facts = await observeExecution(environment.runtime, environment.recording, input, { settings });
-    assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
-    const start = 6 - retained * 2;
-    assert.equal(facts.resources.find((fact) => fact.parentId === facts.execution.id && fact.access === 'transcript.fixedRange' && fact.phase === 'available').value.start, start);
-    assert.equal(environment.transcript.activeStart, start);
-    assert.deepEqual(
-      environment.transcript.segments().map(({ start, end }) => [start, end]),
-      [
-        [0, start],
-        [start, 8],
-      ],
-    );
-    assert.equal(sourceFor(oldContext).transcriptRange.start, 0);
-    assert.equal(sourceFor(oldContext).transcriptRange.end, 6);
-    for (const [index, message] of originals.entries()) assert.equal(environment.transcript.get(index), message);
+test('explicitly filtering active membership preserves original messages and transcript segments', async () => {
+  const requests = [];
+  const environment = initializeObserver({
+    async invoke(request, purpose) {
+      requests.push({ purpose, input: JSON.parse(request.messages[1].content) });
+      return reply(purpose === 'answer' ? { kind: 'answer', content: '继续。' } : { memories: [] });
+    },
   });
-}
+  environment.transcript.append({ role: 'user', content: 'large context '.repeat(5000) }, { role: 'assistant', content: 'old' }, { role: 'user', content: 'recent input' }, { role: 'assistant', content: 'recent output' });
+  const originals = environment.transcript.snapshot();
+  const before = environment.content.active.capture();
+  environment.content.active.apply({ basis: before.basis, messageIndexes: [2, 3], memoryIds: [] });
+  const facts = await observeExecution(environment.runtime, environment.recording, { messages: [{ role: 'user', content: '继续刚才那个' }] }, { settings });
+  assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
+  assert.deepEqual(
+    requests.map(({ purpose }) => purpose),
+    ['answer', 'memory'],
+  );
+  assert.deepEqual(
+    requests[0].input.history.map(({ index }) => index),
+    [2, 3],
+  );
+  assert.equal(environment.transcript.activeStart, 0);
+  assert.deepEqual(
+    environment.transcript.segments().map(({ start, end }) => [start, end]),
+    [[0, 6]],
+  );
+  for (const [index, message] of originals.entries()) assert.equal(environment.transcript.get(index), message);
+});
 
 test('retention stops at incomplete messages and never pulls a pair back out of an archived segment', async () => {
   const { segmentCandidates } = await import('@capix/observer-service');

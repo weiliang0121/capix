@@ -75,7 +75,8 @@ export function projectExecution(facts: ExecutionRecordSnapshot): Trace {
   calls.sort((a, b) => (starts.get(a.id)?.sequence ?? Number.MAX_SAFE_INTEGER) - (starts.get(b.id)?.sequence ?? Number.MAX_SAFE_INTEGER));
   const groups = new Map<string, Trace['nodes'][number]['group']>();
   for (const call of calls) {
-    const group = call.operation?.startsWith('selection') ? 'selection' : call.operation?.startsWith('answer') ? 'answer' : call.operation?.startsWith('memory') ? 'memory' : ((call.parentId ? groups.get(call.parentId) : undefined) ?? 'flow');
+    const operation = call.operation;
+    const group = operation && ['selection', 'prepareContext', 'maintainContext'].some((name) => operation === name || operation.startsWith(`${name}.`)) ? 'selection' : operation?.startsWith('answer') ? 'answer' : operation?.startsWith('memory') ? 'memory' : ((call.parentId ? groups.get(call.parentId) : undefined) ?? 'flow');
     groups.set(call.id, group);
   }
   return {

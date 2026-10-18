@@ -4,16 +4,16 @@
 
 ## 从哪里开始阅读
 
-| 入口                                                        | 负责什么                                     | 不在这里处理什么           |
-| ----------------------------------------------------------- | -------------------------------------------- | -------------------------- |
-| `assembly/conversations.ts`：ObserverConversations          | 服务宿主的对话目录、共享对象与按对话缓存     | 单次业务编排               |
-| `assembly/content.ts`：ConversationContent                  | 对话内容及其变化消费、消息同步、内容观测安装 | REOA 声明与运行            |
-| `assembly/initialize.ts`：initializeObserver                | 一次具体环境的建立、接线与失败清理           | 后续每次提交的状态         |
-| `assembly/environment.ts`：ObserverEnvironment              | 已安装环境的身份、恢复入口与关闭             | 创建声明树或执行业务路径   |
-| `conversation/definition.ts`：ConversationRuntimeDefinition | 构造默认业务声明树，声明 R 如何调用并接纳 E  | 实体创建、Provider 初始化  |
-| `conversation/binding.ts`：bindConversation                 | 把声明、资源供给、观测与 checkpoint 接到内核 | 运行时的输入接纳和动态编排 |
-| `conversation/binding/source.ts`：ConversationCallSource    | 按次校验、入口资源、工作范围捕获和建立回调   | 修改业务决策、消费模型结果 |
-| `conversation/execution.ts` 与具体 O/A 声明                 | 选择、决策、子能力调用和父层接纳             | 环境缓存与关闭             |
+| 入口                                                        | 负责什么                                       | 不在这里处理什么           |
+| ----------------------------------------------------------- | ---------------------------------------------- | -------------------------- |
+| `assembly/conversations.ts`：ObserverConversations          | 服务宿主的对话目录、共享对象与按对话缓存       | 单次业务编排               |
+| `assembly/content.ts`：ConversationContent                  | 对话内容、活跃索引、变化消费与内容同步         | REOA 声明与运行            |
+| `assembly/initialize.ts`：initializeObserver                | 一次具体环境的建立、接线与失败清理             | 后续每次提交的状态         |
+| `assembly/environment.ts`：ObserverEnvironment              | 已安装环境的身份、恢复入口与关闭               | 创建声明树或执行业务路径   |
+| `conversation/definition.ts`：ConversationRuntimeDefinition | 构造默认业务声明树，声明 R 如何调用并接纳 E    | 实体创建、Provider 初始化  |
+| `conversation/binding.ts`：bindConversation                 | 把声明、资源供给、观测与 checkpoint 接到内核   | 运行时的输入接纳和动态编排 |
+| `conversation/binding/source.ts`：ConversationCallSource    | 按次校验、R 资源供给、E 配置定位捕获和建立回调 | 修改业务决策、消费模型结果 |
+| `conversation/execution.ts` 与具体 O/A 声明                 | 材料准备、决策、子能力调用和父层接纳           | 环境缓存与关闭             |
 
 `ConversationContent`、`ObserverEnvironment` 是已有生命周期的具名对象。它们不是新的 REOA 层次，也不是通用环境平台。服务只需要一个明确的来源实现，不重复建立一套 R/E/O/A Binder 或 InvocationBuilder。
 
@@ -32,7 +32,7 @@ sequenceDiagram
     Note over Host: 共享 ModelSource，Provider 尚未初始化
     App->>Host: content(conversationId)
     Host->>Content: 首次加载 / 创建内容及同步
-    Content-->>App: Transcript / Memories / TranscriptFeed
+    Content-->>App: Transcript / Memories / ActiveContent / TranscriptFeed
     App->>Host: open(conversationId)
     Host->>Init: 传入已有内容与共享 ModelSource
     Init->>Init: 加载记录，建立记录安装
@@ -53,17 +53,18 @@ sequenceDiagram
 
 ## 对象的归属与存活
 
-| 对象                                               | 建立时机                                 | 持有与关闭                               |
-| -------------------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| ModelSource / Provider                             | 宿主创建 Source；模型访问时创建 Provider | 多对话共享 Source，关闭单个环境不销毁它  |
-| SQLite / WorkspaceFiles                            | 启动装配                                 | 宿主持有；文件工作区仍可跨对话共享       |
-| Transcript / Memories                              | 创建或首次加载对话内容                   | 独立内容实体，不归属于 R                 |
-| ConversationContent                                | 对话内容装配                             | 宿主拥有内容同步生命周期；单环境可以借用 |
-| 声明树、BoundRuntime、SelectionUsage               | 首次装配具体对话环境                     | 环境期复用；SelectionUsage 仍是独立实体  |
-| ModelInteractions、记录安装、RecordSource、CP 观测 | 首次装配具体对话环境                     | 环境关闭时解除和关闭                     |
-| ConversationCallSource                             | `bindConversation`                       | 绑定期复用，每次 options 有独立捕获槽    |
-| Invocation / Context、业务推进 state               | 每次调用                                 | 单次调用和本层状态，不存入可复用声明     |
-| Submission 与反馈连接                              | HTTP 受理 / 跟随                         | 服务交付层持有，连接不拥有上述实体       |
+| 对象                                               | 建立时机                                 | 持有与关闭                                       |
+| -------------------------------------------------- | ---------------------------------------- | ------------------------------------------------ |
+| ModelSource / Provider                             | 宿主创建 Source；模型访问时创建 Provider | 多对话共享 Source，关闭单个环境不销毁它          |
+| SQLite / WorkspaceFiles                            | 启动装配                                 | 宿主持有；文件工作区仍可跨对话共享               |
+| Transcript / Memories                              | 创建或首次加载对话内容                   | 独立内容实体，不归属于 R                         |
+| ActiveContent                                      | 对话内容创建或恢复                       | ConversationContent 持有的索引，无独立身份或关闭 |
+| ConversationContent                                | 对话内容装配                             | 宿主拥有内容同步生命周期；单环境可以借用         |
+| 声明树、BoundRuntime、SelectionUsage               | 首次装配具体对话环境                     | 环境期复用；SelectionUsage 仍是独立实体          |
+| ModelInteractions、记录安装、RecordSource、CP 观测 | 首次装配具体对话环境                     | 环境关闭时解除和关闭                             |
+| ConversationCallSource                             | `bindConversation`                       | 绑定期复用，每次 options 有独立捕获槽            |
+| Invocation / Context、业务推进 state               | 每次调用                                 | 单次调用和本层状态，不存入可复用声明             |
+| Submission 与反馈连接                              | HTTP 受理 / 跟随                         | 服务交付层持有，连接不拥有上述实体               |
 
 `initializeObserver` 独立使用时拥有自己创建的内容；传入 `content` 时只借用它。`shared` 只表达数据库连接由调用方持有。`ObserverConversations` 以借用内容、共享数据库的方式建立每个环境，最终统一关闭内容和数据库。
 
@@ -75,28 +76,37 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant R as BoundRuntime
+    participant R as BoundRuntime / R 声明
     participant Source as ConversationCallSource
-    participant Entry as E entry
     participant Entity as Transcript / Memories
     participant Build as 内核调用构造器
-    participant Work as E/O/A 业务声明
-    R->>Source: validate(options)
-    Note over Source: 校验配置 / 恢复依据，建立本次捕获槽
-    R->>Source: entry(input, options, E声明)
-    Source-->>Entry: 入口阶段资源来源
-    Entry->>Entity: 接纳输入并正式 append
-    Entity-->>Source: 实际输入位置
-    Note over Entry: accepted 回调；未取消时 admit 分段
-    Entry->>Source: capture(acceptedInput, options, E声明)
-    Source-->>Build: 固定配置、原文范围及工作资源来源
+    participant E as E 业务声明
+    participant Prep as prepareContext O
+    participant Active as ActiveContent
+    R->>Source: validate(options)，runtime(input, options)
+    Source-->>R: 本次 R 资源来源
+    R->>Entity: 校验后正式 append 输入
+    Entity-->>Source: 实际输入位置与被动进展
+    R->>Build: create(E, message / messageIndex)
+    Build->>Source: capture(普通 E 输入, options, E声明)
+    Source-->>Build: 固定配置、原文定位与工作资源来源
     Build->>Build: 创建 E Context / Invocation
     Build->>Source: started(context, invocation)
     Source->>Source: 登记 CP 本次依据，再通知宿主 started
-    Build->>Work: 运行已声明业务
+    Build->>E: 启动 E 的普通 run.execute
+    E->>Prep: 创建并运行准备调用
+    opt 已配置维护
+        Prep->>Prep: 调用 before-request 维护 O 并接纳
+    end
+    Prep->>Active: capture()
+    Active-->>Prep: 不可变消息、记忆值及复合依据
+    Prep-->>E: 固定 material / context / selection
+    E->>E: 决策与能力推进，消费同一份固定材料
 ```
 
-入口属于已有 R。E 的输入完成接纳和分段后才固定工作范围；不得把原文范围或本次配置提前缓存到环境或声明构造器里。CP 登记使用正式 append 返回的位置、固定范围和真实父子调用身份，不读当前集合长度猜测输入归属。
+R 的输入接纳是服务声明中的普通资源动作。E 使用普通输入；内核不再提供 E 专属 `entry.accept/admit`。CP 登记使用正式 append 返回的位置、固定定位和真实父子调用身份，不读当前集合长度猜测输入归属。
+
+配置和原文定位在创建 E 时固定，材料在维护之后由准备 O 固定。默认没有维护策略，也没有自动分段、模型历史选择或容量截断；完整材料超限在请求构造时明确失败。可选 `maintenance` / `maintenanceResources` 由装配传给普通 O，见 [活跃材料与维护](active-content.md)。
 
 `binding/progress.ts` 只适配被动进展：消息落实、任务选择、REOA 状态与候选正文各走既有通道。调用进入/退出、子层接纳和消息落实仍由原生产者决定。`started` 是同步建立钩子；被动进展不替代这个时机。
 
@@ -104,7 +114,7 @@ sequenceDiagram
 
 宿主 `environment.recover(rootContextId)` 先检查环境开放、无活动工作以及恢复登记。实际进入内核的 `source.validate` 再检查登记身份和当前依据。两者复用 `binding/checkpoint.ts` 的配置、head、内容与凭据核验，保留两个核对时机，避免直接使用 `runtime.resume` 绕过检查。
 
-恢复输入沿用已保存配置、原文范围和记忆快照。该流程不重发旧 Submission 的输入/started/回答通知，不重演 entry，也不改变 CP point/version、调用恢复粒度或实体固定写入契约。详细承诺仍见 [Checkpoint](checkpoints.md)。
+恢复输入沿用已保存配置、原文定位和已准备的不可变材料，不用当前活跃索引替换旧快照。R 续接不重复 append，不重发旧 Submission 的输入/started/回答通知。本次结构变化将 Observer R/E 契约分别提升为 3/4，旧版本明确拒绝；自定义维护的宿主恢复尚未开放，索引落实也没有固定效果凭据。详细承诺见 [Checkpoint](checkpoints.md)。
 
 ## 失败与关闭
 
@@ -114,4 +124,4 @@ sequenceDiagram
 - 宿主关闭依次处理所有环境、所有内容和数据库。某次封存或清理失败不会跳过后续清理；最终抛出原错误或聚合诊断。
 - 关闭属于服务宿主生命周期，不为内核 BoundRuntime 新增关闭状态，也不提供撤销所有已交出的低层对象引用的机制。调用方在环境关闭后不得继续使用保存的运行入口。
 
-本轮保持业务编排与 C/S 协议不变。后续若要开放环境重新安装、动态声明替换或更细的 Provider 关闭约定，应由实际使用需求推动，不能从这次对象命名推导出这些能力已经成立。
+本轮改变默认材料准备链路，保留既有 C/S 接纳、回答和终态语义。后续若要开放环境重新安装、动态声明替换或更细的 Provider 关闭约定，应由实际使用需求推动，不能从这次对象命名推导出这些能力已经成立。

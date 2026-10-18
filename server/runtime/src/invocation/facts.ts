@@ -1,5 +1,4 @@
 import type { InvocationEvent } from '@capix/protocol';
-import { RuntimeErrorHelper } from '../errors/helper.js';
 import type { InvocationFact } from '../observation/facts.js';
 import { isInvocationCancelled } from './cancellation.js';
 import { failureFact } from './failure.js';
@@ -7,7 +6,6 @@ import type { InvocationProgress } from './progress.js';
 
 /** Project established facts without publishing, sequencing or changing their producer. */
 export function invocationProgress(fact: InvocationFact, signal: AbortSignal): InvocationProgress | undefined {
-  if (fact.kind === 'entry') return undefined;
   const description: { name?: string; label?: string } = {};
   // Optional descriptions must not execute getters or break passive progress.
   try {
@@ -38,7 +36,6 @@ export function invocationProgress(fact: InvocationFact, signal: AbortSignal): I
 
 export function invocationChange(fact: InvocationFact): InvocationEvent['change'] {
   if (fact.kind === 'process') return { kind: 'process', processSequence: fact.processSequence, round: fact.round, stage: fact.process.stage, action: fact.process.type };
-  if (fact.kind === 'entry') return { kind: 'entry', target: fact.target, instanceId: fact.instanceId, ...(fact.key ? { key: fact.key } : {}), stage: fact.stage, status: fact.status, ...(fact.status === 'failed' ? { error: RuntimeErrorHelper.format(fact.error) } : {}) };
   if (fact.kind === 'relation') return { kind: 'relation', identity: fact.relation, phase: fact.change.kind, ...(fact.change.kind === 'returned' ? { status: fact.change.result.status, ...(fact.change.result.status === 'failed' && fact.change.result.failure ? { failure: failureFact(fact.change.result.failure) } : {}) } : {}) };
   if (fact.kind === 'finished') return { kind: 'finished', status: fact.state.status === 'succeeded' ? 'succeeded' : 'failed' };
   return { kind: 'started' };

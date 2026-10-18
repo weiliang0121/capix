@@ -95,18 +95,18 @@ const runtimeDefinition: RuntimeDefinition<string, number> = {
     },
   },
 };
-const runtime = assembleRuntime(runtimeDefinition, { providers: [], source: { entry: () => null, capture: (_input, _options: { signal?: AbortSignal }) => null } });
+const runtime = assembleRuntime(runtimeDefinition, { providers: [], source: { capture: (_input, _options: { signal?: AbortSignal }) => null } });
 const rootOutput: Promise<number> = runtime.run('input', {});
 void rootOutput;
 // @ts-expect-error R input retains its own declared contract
 runtime.run(42, {});
 // @ts-expect-error R cannot register A as an E
-assembleRuntime({ ...runtimeDefinition, children: [leaf] }, { providers: [], source: { entry: () => null, capture: () => null } });
+assembleRuntime({ ...runtimeDefinition, children: [leaf] }, { providers: [], source: { capture: () => null } });
 // @ts-expect-error R cannot call O directly
 runtimeWork.children.create(length, 'input');
 // @ts-expect-error E cannot be a direct child of O
 operation.children.create(execution, 'input');
-// @ts-expect-error E entry input retains its concrete type
+// @ts-expect-error E input retains its concrete type
 runtimeWork.children.create(execution, 42);
 // @ts-expect-error content cannot mutate its lifecycle
 parent.complete('done');

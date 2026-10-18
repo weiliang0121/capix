@@ -149,12 +149,12 @@ test('new R assemblies share independently owned entities without absorbing thei
   const run = async (runtime, text) => observeExecution(runtime, environment.recording, { messages: [{ role: 'user', content: text }] }, { settings });
   const first = await run(environment.runtime, '我在北京');
   const memory = environment.memories.values()[0];
-  const next = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)), { observations: [environment.recording], changes: environment.changes });
+  const next = bindConversation(new ConversationRuntimeDefinition(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)), { observations: [environment.recording], changes: environment.changes });
   const second = await run(next, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.memories.get(memory.id), memory);
   assert.equal(environment.selectionUsage.get(environment.transcript.get(0)), 1);
-  assert.equal(second.operations[0].value.input.memories[0].id, memory.id);
+  assert.equal(second.operations.find((operation) => operation.operation === 'memory').value.input.memories[0].id, memory.id);
   const observation = observeOverview(environment);
   assert.equal(observation.executions.length, 2);
   assert.equal(environment.transcript.current('assistant').content, '已了解');

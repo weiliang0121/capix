@@ -1,5 +1,9 @@
 /** Explicit source inspection boundary; never expose arbitrary project files. */
 export const allowedSources = new Set([
+  'services/observer/src/conversation/operations/context/prepare.ts',
+  'services/observer/src/conversation/operations/context/maintain.ts',
+  'services/observer/src/conversation/content/active.ts',
+  'services/observer/src/conversation/content/resource.ts',
   'services/observer/src/conversation/decision/default.ts',
   'services/observer/src/conversation/decision/function.ts',
   'services/observer/src/conversation/operations/preflight/check.ts',

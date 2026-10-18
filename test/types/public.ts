@@ -8,6 +8,36 @@ import type { InvocationOrigin } from '@capix/protocol/invocation';
 import type { TranscriptSnapshot } from '@capix/protocol/content';
 import type { ObserverChange } from '@capix/protocol/observer';
 import type { MemoryInput } from '@capix/observer-service/conversation';
+import { defineOperation } from '@capix/server-runtime';
+import { ActiveContentResource, MaintainConversationContentDefinition, PrepareConversationContextDefinition, type ContextMaintenanceInput, type ContextMaintenanceDecision, type ContextMaintenancePolicy } from '@capix/observer-service/conversation';
+
+const maintenancePolicy = defineOperation<ContextMaintenanceInput, ContextMaintenanceDecision>()({
+  name: 'explicit-policy',
+  label: 'Explicit policy',
+  source: 'test',
+  children: [],
+  run: {
+    requires: { active: ActiveContentResource.read.request() },
+    execute(work) {
+      const current = work.resources.active.capture();
+      const phase: 'before-request' | 'after-content' = work.input.phase;
+      // @ts-expect-error A read offer does not grant index installation.
+      work.resources.active.apply({});
+      // @ts-expect-error An undeclared model port is not inferred from surrounding supplies.
+      work.resources.model.invoke();
+      void phase;
+      return { basis: current.basis, messageIndexes: current.messages.map((item) => item.index), memoryIds: current.memories.map((item) => item.id) };
+    },
+  },
+});
+const maintenance = new MaintainConversationContentDefinition(maintenancePolicy, { active: ActiveContentResource.read.request() });
+const preparation = new PrepareConversationContextDefinition(maintenance);
+const functionalPolicy: ContextMaintenancePolicy = ({ material }) => ({ basis: material.basis, messageIndexes: [], memoryIds: [] });
+// @ts-expect-error Maintenance decisions must carry a fixed source basis.
+const ungroundedPolicy: ContextMaintenancePolicy = () => ({ messageIndexes: [], memoryIds: [] });
+// @ts-expect-error Preparation consumes an ordinary accepted input, including its formal message index.
+const missingPosition: Parameters<typeof preparation.run.execute>[0]['input'] = { message: { role: 'user', content: 'input' } };
+void [functionalPolicy, ungroundedPolicy, missingPosition];
 
 const bound: BoundRuntime = createBoundRuntime();
 // @ts-expect-error R is the bound structure, not the owner of its assembly environment.
@@ -46,7 +76,6 @@ childBuilder.build(parentCall, { validate: () => parentCall.requireActive() });
 
 // Different input, output and resource shapes verify the shared parameter order.
 type ExecutionResources = { label: string };
-type EntryResources = { prefix: string };
 type CallContext = ExecutionContext<string, number, ExecutionResources>;
 const work: InvocationOptions<string, number, CallContext>['work'] = {
   maxRounds: 1,
@@ -56,10 +85,11 @@ const work: InvocationOptions<string, number, CallContext>['work'] = {
     return label.length + input.length;
   },
 };
-declare const reusable: BoundExecution<string, number, ExecutionResources, { text: string }, EntryResources>;
+declare const reusable: BoundExecution<string, number, ExecutionResources>;
 // @ts-expect-error A reusable E structure is not the state of one E invocation.
 const callContext: CallContext = reusable;
-declare const invocationBindings: ExecutionInvocationBindings<string, number, ExecutionResources, { text: string }, EntryResources>;
-const prefix: string = invocationBindings.entry({ text: 'input' }).values.prefix;
+declare const invocationBindings: ExecutionInvocationBindings<string, number, ExecutionResources>;
+// @ts-expect-error E bindings do not contain a separate entry resource scope.
+invocationBindings.entry({ text: 'input' });
 const label: string = invocationBindings.capture('accepted input').values.label;
-void [work, callContext, prefix, label];
+void [work, callContext, label];

@@ -1,4 +1,4 @@
-import type { ChildDefinition, ChildFacts, DefinitionEntryInput } from './children.js';
+import type { ChildDefinition, ChildFacts, DefinitionInput } from './children.js';
 import type { ContinuationFact } from './work.js';
 
 export interface ChildEntryFacts {
@@ -16,7 +16,7 @@ export interface ChildEntryInput<Input> {
 export class InvocationEntry<Definition extends ChildDefinition, EntryInput> {
   constructor(
     readonly definition: Definition,
-    readonly accept: (request: ChildEntryInput<EntryInput>) => DefinitionEntryInput<Definition>,
+    readonly accept: (request: ChildEntryInput<EntryInput>) => DefinitionInput<Definition>,
   ) {
     Object.freeze(this);
   }
@@ -28,6 +28,6 @@ export class InvocationEntry<Definition extends ChildDefinition, EntryInput> {
   }
 }
 
-export function defineChildEntry<Definition extends ChildDefinition, Input>(definition: Definition, entry: { readonly accept: (request: ChildEntryInput<Input>) => NoInfer<DefinitionEntryInput<Definition>> }): InvocationEntry<Definition, Input> {
+export function defineChildEntry<Definition extends ChildDefinition, Input>(definition: Definition, entry: { readonly accept: (request: ChildEntryInput<Input>) => NoInfer<DefinitionInput<Definition>> }): InvocationEntry<Definition, Input> {
   return new InvocationEntry(definition, entry.accept.bind(entry));
 }

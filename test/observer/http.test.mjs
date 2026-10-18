@@ -98,7 +98,7 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
   const path = snapshot.operations[0].source.split(' · ')[0];
   const source = await get('/api/source?file=' + encodeURIComponent(path));
   assert.equal(source.path, path);
-  assert.match(source.content, /class SelectHistory/);
+  assert.match(source.content, /class PrepareConversationContext/);
   for (const call of execution.calls) {
     const file = call.source.split(' · ')[0];
     const resolved = await get('/api/source?file=' + encodeURIComponent(file));
@@ -114,7 +114,7 @@ test('busy execution rejects another submission without adding messages or inven
   });
   const { get, run, observer } = await setup(t, {
     async invoke(request, purpose) {
-      if (purpose === 'selection') await pending;
+      if (purpose === 'answer') await pending;
       return provider.invoke(request, purpose);
     },
   });
@@ -338,7 +338,8 @@ test('full feedback retention explicitly refuses fresh work and preserves duplic
 
 test('failure before a complete execution record produces a terminal transport error, never silent success', async (t) => {
   const { run } = await setup(t, provider, true, undefined, settings, (definition) => {
-    definition.executionDefinition.entry.admit = () => {
+    definition.run.execute = (work) => {
+      work.resources.messages.append(work.input.messages);
       throw new Error('private diagnostic must not be an HTTP message');
     };
   });
@@ -404,7 +405,7 @@ test('separate HTTP subclasses deliver business content while records remain sep
   );
   assert.deepEqual(await observation.memory(conversationId), { items: [] });
   const path = last.operations[0].source.split(' · ')[0];
-  assert.match((await observation.source(path)).content, /class SelectHistory/);
+  assert.match((await observation.source(path)).content, /class PrepareConversationContext/);
 });
 
 test('real HTTP headless client uses conversation only for two rounds without any observation requests', async (t) => {
@@ -551,7 +552,7 @@ test('disconnecting submission delivery does not cancel work; reconnect reads th
   const { base, run, get, observer, conversations, conversationId } = await setup(t, {
     async invoke(request, purpose) {
       calls.push(purpose);
-      if (purpose === 'selection') await gate;
+      if (purpose === 'answer') await gate;
       return provider.invoke(request, purpose);
     },
   });
@@ -579,7 +580,7 @@ test('disconnecting submission delivery does not cancel work; reconnect reads th
   assert.equal(frames.at(-1).result.status, 'completed');
   assert.deepEqual(frames.at(-1).input, pending.input);
   assert.equal(frames.at(-1).answer.index, 1);
-  assert.deepEqual(calls, ['selection', 'answer', 'memory']);
+  assert.deepEqual(calls, ['answer', 'memory']);
   assert.deepEqual(await get(`/api/submissions/${id}`), frames.at(-1));
   assert.equal(observer.transcript.length, 2);
   assert.equal((await get(`/api/conversations/${conversationId}/submission`)).submission, undefined);
@@ -784,7 +785,7 @@ for (const fault of [false, true]) {
       t,
       {
         async invoke(request, purpose) {
-          if (purpose === 'selection') await gate;
+          if (purpose === 'answer') await gate;
           return provider.invoke(request, purpose);
         },
       },
@@ -792,7 +793,7 @@ for (const fault of [false, true]) {
       undefined,
       { ...settings, timeoutMs: 1000 },
       (definition) => {
-        const model = definition.executionDefinition.operationDefinitions.selection.requestModelDefinition;
+        const model = definition.executionDefinition.operationDefinitions.generation.requestModelDefinition;
         model.observation = [
           ...model.observation,
           defineObservation(

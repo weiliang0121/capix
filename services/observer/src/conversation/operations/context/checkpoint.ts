@@ -1,0 +1,11 @@
+import { checkpointCodec } from '../../checkpoint.js';
+import type { ActiveContentSelection, ActiveContentSnapshot } from '../../content/active.js';
+import type { ContextMaintenanceInput, ContextMaintenanceRequest, PreparedConversationContext } from './types.js';
+import { activeContentSelectionSchema, activeContentSnapshotSchema, contextMaintenanceRequestSchema, contextMaintenanceInputSchema, preparedConversationContextSchema, maintenanceAcceptedSchema, maintenanceCompletedSchema } from './schema.js';
+export const preparedConversationContextCodec = checkpointCodec<PreparedConversationContext>(preparedConversationContextSchema);
+export const activeContentSnapshotCodec = checkpointCodec<ActiveContentSnapshot>(activeContentSnapshotSchema);
+export const contextMaintenanceRequestCodec = checkpointCodec<ContextMaintenanceRequest>(contextMaintenanceRequestSchema);
+export const contextMaintenanceInputCodec = checkpointCodec<ContextMaintenanceInput>(contextMaintenanceInputSchema);
+export const activeContentSelectionCodec = checkpointCodec<ActiveContentSelection>(activeContentSelectionSchema);
+export const maintenanceAcceptedCodec = checkpointCodec(maintenanceAcceptedSchema);
+export const maintenanceCompletedCodec = checkpointCodec(maintenanceCompletedSchema);

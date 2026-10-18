@@ -5,7 +5,7 @@ import type { Selection } from '../conversation/model/types.js';
 import { type RecordBook, ExecutionRecord, OperationRecord } from '@capix/server-runtime/recording';
 import { type Transcript } from '@capix/server-runtime/content';
 
-/** Recompute heat from accepted selection outcomes; never mutate messages or drive loading. */
+/** Count fixed active-material references; legacy selection records remain readable. */
 export function observeSelection(book: RecordBook, transcript: Transcript): SelectionObservation {
   const messages = transcript.snapshot().map((_message, index) => ({ index, count: 0 }));
   const executions = new Map<string, SelectionObservation['executions'][number]>();
@@ -16,11 +16,13 @@ export function observeSelection(book: RecordBook, transcript: Transcript): Sele
     executions.set(record.id, { id: record.id, startedAt: record.value.startedAt, status: record.status, inputIndex: range.end - 1, selections: [] });
   }
   for (const record of book.values()) {
-    if (!(record instanceof OperationRecord) || record.operation !== 'selection') continue;
+    if (!(record instanceof OperationRecord) || (record.operation !== 'selection' && record.operation !== 'prepareContext')) continue;
     const execution = executions.get(record.executionId);
     if (!execution) continue;
     // This concrete operation's succeeded output has already passed its output contract.
-    const indexes = record.status === 'succeeded' ? [...(readOutput(record.value) as Selection).historyIndexes] : undefined;
+    const output = record.status === 'succeeded' ? readOutput(record.value) : undefined;
+    const selected = record.operation === 'prepareContext' ? (output as { readonly selection: Selection } | undefined)?.selection : (output as Selection | undefined);
+    const indexes = selected ? [...selected.historyIndexes] : undefined;
     execution.selections.push({ operationId: record.id, status: record.status, ...(indexes ? { indexes } : {}) });
     for (const index of indexes ?? []) messages[index]!.count++;
   }

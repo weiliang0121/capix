@@ -25,7 +25,10 @@ function fixture(messages = []) {
           round++;
           return raw({ historyIndexes: round > 1 ? input.history.slice(0, 2).map((entry) => entry.index) : [] });
         }
-        if (purpose === 'answer') return round === 3 ? { ...raw({}), content: 'invalid model output' } : raw({ kind: 'answer', content: `answer ${round}` });
+        if (purpose === 'answer') {
+          round = ['first', 'second', 'third', 'fourth'].indexOf(environment.transcript.current('user').content) + 1;
+          return round === 3 ? { ...raw({}), content: 'invalid model output' } : raw({ kind: 'answer', content: `answer ${round}` });
+        }
         const id = environment.memories.values()[0]?.id ?? null;
         return raw({ memories: [memoryChange(`memory ${round}`, id, [environment.transcript.length - 2, environment.transcript.length - 1])] });
       },

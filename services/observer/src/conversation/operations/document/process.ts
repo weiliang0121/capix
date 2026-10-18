@@ -2,21 +2,21 @@ import { z } from 'zod';
 import { isEqual } from 'es-toolkit/predicate';
 import { checkpointCodec } from '../../checkpoint.js';
 import { answerCheckpointCodecs } from '../answer/checkpoint.js';
-import { selectionSchema, memorySchema, fileTaskSchema, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
+import { answerMessageContextSchema, memorySchema, fileTaskSchema, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
 import { OperationDefinition, checkpointPoint, childReference, type OperationWork, type ChildCall, type ChildDefinition } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { GenerationOutput } from '@capix/protocol';
 import { FileResources, documentDescriptor, type TextDocument, type FileReader } from '../../../files/index.js';
 import { GenerateAnswerDefinition, type GenerationInput } from '../answer/generate.js';
 import { ReadTextDefinition } from '../../attempt/files/read.js';
-import type { ConversationResources } from '../../resources.js';
+import type { ModelCallResources } from '../../resources.js';
 import { answerStream, type AnswerGenerationEvent } from '../answer/stream.js';
 type DocumentWork = OperationWork<DocumentProcessingInput, GenerationOutput, object, ChildDefinition, AnswerGenerationEvent>;
 
 export interface DocumentProcessingInput extends GenerationInput {
   readonly sourcePath: string;
 }
-export interface DocumentProcessingResources extends ConversationResources {
+export interface DocumentProcessingResources extends ModelCallResources {
   readonly reader: FileReader;
 }
 
@@ -69,8 +69,8 @@ export class ProcessDocumentDefinition extends OperationDefinition<DocumentProce
   };
   readonly checkpoint = {
     key: 'observer.process-document',
-    version: 2,
-    input: checkpointCodec(z.strictObject({ sourcePath: z.string().min(1), selection: selectionSchema, memories: z.array(memorySchema), task: z.strictObject({ fileTask: fileTaskSchema, instruction: z.string().min(1) }).optional() })),
+    version: 3,
+    input: checkpointCodec(z.strictObject({ sourcePath: z.string().min(1), context: answerMessageContextSchema, memories: z.array(memorySchema), task: z.strictObject({ fileTask: fileTaskSchema, instruction: z.string().min(1) }).optional() })),
     output: answerCheckpointCodecs.output,
     points: Object.values(this.points),
   };
@@ -81,7 +81,7 @@ export class ProcessDocumentDefinition extends OperationDefinition<DocumentProce
     return this.receiveDocument(work, read);
   }
   private generationInput(input: DocumentProcessingInput, document: TextDocument): GenerationInput {
-    return { selection: input.selection, memories: input.memories, ...(input.task ? { task: input.task } : {}), document };
+    return { context: input.context, memories: input.memories, ...(input.task ? { task: input.task } : {}), document };
   }
   private async receiveDocument(work: DocumentWork, read: ChildCall<ReadTextDefinition>): Promise<GenerationOutput> {
     await read.run();

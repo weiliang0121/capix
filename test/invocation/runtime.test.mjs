@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import { RuntimeDefinition, ExecutionDefinition, ExceptionContract, ResourceOffer, assembleRuntime } from '@capix/server-runtime';
 
 class TestExecutionDefinition extends ExecutionDefinition {
-  constructor(execute, entry) {
+  constructor(execute) {
     super();
     this.run = { requires: {}, execute };
-    this.entry = entry;
   }
 }
 
@@ -28,7 +27,7 @@ function forward(definition, onRuntime) {
 }
 
 function assemble(definition, options = {}) {
-  return assembleRuntime(definition, { providers: [], source: { entry: () => undefined, capture: () => undefined }, ...options });
+  return assembleRuntime(definition, { providers: [], source: { capture: () => undefined }, ...options });
 }
 
 function probe() {
@@ -99,29 +98,18 @@ test('one Runtime rejects overlapping submissions and releases occupancy after f
   assert.equal(await runtime.run('next', {}), 'next');
 });
 
-test('R chooses from declared E nodes without entering the unused E', async () => {
+test('R chooses from declared E nodes without capturing unused E supplies', async () => {
   const chosen = [];
-  const first = new TestExecutionDefinition(() => 'first', {
-    requires: {},
-    accept: (input) => {
-      chosen.push('first');
-      return input;
-    },
-  });
-  const second = new TestExecutionDefinition(() => 'second', {
-    requires: {},
-    accept: (input) => {
-      chosen.push('second');
-      return input;
-    },
-  });
+  const first = new TestExecutionDefinition(() => 'first');
+  const second = new TestExecutionDefinition(() => 'second');
   const runtime = assemble(
     new Main([first, second], async (work) => {
       const selected = work.input === 1 ? first : second;
       const child = work.children.create(selected, work.input);
-      const output = await child.run();
-      return child.accept(() => output);
+      await child.run();
+      return child.accept();
     }),
+    { source: { capture: (_input, _options, definition) => chosen.push(definition === first ? 'first' : 'second') } },
   );
   assert.equal(await runtime.run(2, {}), 'second');
   assert.deepEqual(chosen, ['second']);
@@ -144,22 +132,15 @@ test('an undeclared E is a structural error even when R work catches it', async 
   assert.equal(runtime.running, false);
 });
 
-test('E admission failure belongs to R before any E context or relation exists', async () => {
+test('R input preparation failure belongs to R before any E context or relation exists', async () => {
   let parent;
-  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'), {
-    requires: {},
-    accept: () => {
-      throw new Error('bad input');
-    },
-  });
+  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'));
   const observation = probe();
   const runtime = assemble(
-    new Main(
-      [execution],
-      forward(execution, (work) => {
-        parent = work;
-      }),
-    ),
+    new Main([execution], (work) => {
+      parent = work;
+      throw new Error('bad input');
+    }),
     { observations: [observation.installation] },
   );
   await assert.rejects(runtime.run(null, {}), /bad input/);
@@ -172,82 +153,70 @@ test('E admission failure belongs to R before any E context or relation exists',
   assert.equal(runtime.running, false);
 });
 
-test('E admission and capture retain their order inside the R call', async () => {
+test('R prepares ordinary E input before E capture and construction', async () => {
   const order = [];
   const messages = [];
-  const execution = new TestExecutionDefinition(
-    (work) => {
-      order.push('execute');
-      return work.input;
-    },
-    {
-      requires: {},
-      accept: (input) => {
-        order.push('accept');
-        messages.push(input);
-        return { content: input };
-      },
-      admit: () => {
-        order.push('admit');
-      },
-    },
-  );
+  const execution = new TestExecutionDefinition((work) => {
+    order.push('execute');
+    return work.input;
+  });
   const runtime = assemble(
-    new Main(
-      [execution],
-      forward(execution, () => order.push('R')),
-    ),
+    new Main([execution], async (work) => {
+      order.push('R');
+      messages.push(work.input);
+      order.push('append');
+      const child = work.children.create(execution, { content: work.input });
+      await child.run();
+      return child.accept();
+    }),
     {
       source: {
-        entry: () => {
-          order.push('entry');
-          return undefined;
-        },
-        capture: () => {
+        capture: (input) => {
           order.push('capture');
           assert.deepEqual(messages, ['input']);
-          return undefined;
+          assert.deepEqual(input, { content: 'input' });
         },
-        callbacks: () => ({ accepted: () => order.push('accepted'), started: () => order.push('started') }),
+        callbacks: () => ({ started: () => order.push('started') }),
       },
     },
   );
   assert.deepEqual(await runtime.run('input', {}), { content: 'input' });
-  assert.deepEqual(order, ['R', 'entry', 'accept', 'accepted', 'admit', 'capture', 'started', 'execute']);
+  assert.deepEqual(order, ['R', 'append', 'capture', 'started', 'execute']);
 });
 
-test('cancellation before R work does not enter E admission or append input', async () => {
-  let accepted = 0;
-  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'), {
-    requires: {},
-    accept: (input) => {
-      accepted++;
-      return input;
-    },
-  });
-  const runtime = assemble(new Main([execution], forward(execution)));
-  const controller = new AbortController();
-  controller.abort();
-  await assert.rejects(runtime.run('input', { signal: controller.signal }));
-  assert.equal(accepted, 0);
+test('cancellation before R work does not prepare or append input', async () => {
+  let prepared = 0;
+  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'));
+  const runtime = assemble(
+    new Main([execution], (work) => {
+      prepared++;
+      return forward(execution)(work);
+    }),
+  );
+  await assert.rejects(runtime.run('input', { signal: AbortSignal.abort() }));
+  assert.equal(prepared, 0);
   assert.equal(runtime.running, false);
 });
 
-test('cancellation after E admission retains accepted input without running E work', async () => {
+test('cancellation after R content preparation retains content without creating E', async () => {
   const messages = [];
   const controller = new AbortController();
-  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'), {
-    requires: {},
-    accept: (input) => {
-      messages.push(input);
+  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'));
+  const observed = probe();
+  const runtime = assemble(
+    new Main([execution], (work) => {
+      messages.push(work.input);
       controller.abort();
-      return input;
-    },
-    admit: () => assert.fail('cancelled admission must not segment'),
-  });
-  const runtime = assemble(new Main([execution], forward(execution)));
+      return forward(execution)(work);
+    }),
+    { observations: [observed.installation], source: { capture: () => assert.fail('cancelled parent cannot capture E') } },
+  );
   await assert.rejects(runtime.run('input', { signal: controller.signal }));
   assert.deepEqual(messages, ['input']);
+  assert.equal(
+    observed.facts.some((fact) => fact.identity.level === 'execution'),
+    false,
+  );
   assert.equal(runtime.running, false);
 });
 
@@ -262,7 +231,7 @@ test('E supplies are fulfilled without exposing them to R work', async () => {
     ),
     {
       providers: [secret.provide((source) => source)],
-      source: { entry: () => 'value', capture: () => 'value' },
+      source: { capture: () => 'value' },
     },
   );
   assert.equal(await runtime.run(null, {}), 'value');
@@ -354,18 +323,19 @@ test('R reports actual terminal observation failure while preserving successful 
   assert.equal(await runtime.run(null, {}), 'output');
 });
 
-test('E entry failures cannot masquerade as a declared E work exception', async () => {
-  const rejected = new ExceptionContract('ENTRY_REJECTED');
-  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'), {
-    requires: {},
-    accept: () => {
-      throw rejected.create('invalid', {});
-    },
-  });
+test('E capture failures cannot masquerade as a declared E work exception', async () => {
+  const rejected = new ExceptionContract('CAPTURE_REJECTED');
+  const execution = new TestExecutionDefinition(() => assert.fail('must not execute'));
   execution.raises = [rejected];
   const definition = new Main([execution], forward(execution));
-  definition.exceptions = { requires: {}, accepts: [rejected], handle: () => assert.fail('entry errors are structural') };
-  const runtime = assemble(definition);
+  definition.exceptions = { requires: {}, accepts: [rejected], handle: () => assert.fail('capture errors are structural') };
+  const runtime = assemble(definition, {
+    source: {
+      capture: () => {
+        throw rejected.create('invalid', {});
+      },
+    },
+  });
   await assert.rejects(runtime.run(null, {}), { code: 'INVOCATION_FAILED' });
   assert.equal(runtime.running, false);
 });
@@ -418,109 +388,78 @@ test('observation installations cannot satisfy work or exception-handler resourc
   }
 });
 
-test('E entry stages publish parent-owned facts before E context creation', async () => {
+test('ordinary R input preparation creates only real R/E invocation facts', async () => {
   const observed = probe();
   const changes = [];
-  const execution = new TestExecutionDefinition((work) => work.input, { requires: {}, accept: (input) => input + 1, admit() {} });
-  const runtime = assemble(new Main([execution], forward(execution)), {
-    observations: [observed.installation],
-    changes: {
-      capture: (event) => {
-        changes.push(event);
-      },
-    },
-    source: { entry: () => undefined, capture: () => undefined, callbacks: () => ({ accepted() {} }) },
-  });
-  assert.equal(await runtime.run(1, {}), 2);
-  const entries = observed.facts.filter((fact) => fact.kind === 'entry');
-  assert.deepEqual(
-    entries.map((fact) => [fact.stage, fact.status]),
-    [
-      ['accept', 'accepted'],
-      ['notification', 'accepted'],
-      ['admit', 'accepted'],
-      ['capture', 'accepted'],
-    ],
+  const execution = new TestExecutionDefinition((work) => work.input);
+  const runtime = assemble(
+    new Main([execution], async (work) => {
+      const child = work.children.create(execution, work.input + 1);
+      await child.run();
+      return child.accept();
+    }),
+    { observations: [observed.installation], changes: { capture: (event) => changes.push(event) } },
   );
-  assert.equal(new Set(entries.map((fact) => fact.instanceId)).size, 1);
+  assert.equal(await runtime.run(1, {}), 2);
+  assert.equal(
+    observed.facts.some((fact) => fact.kind === 'entry'),
+    false,
+  );
   const eStarted = observed.facts.find((fact) => fact.kind === 'started' && fact.identity.level === 'execution');
-  for (const fact of entries) {
-    assert.equal(fact.identity.contextId, eStarted.identity.parentContextId);
-    assert.equal(fact.identity.level, 'runtime');
-    assert.equal(fact.key, 'chosen');
-    assert.equal(fact.instanceId, eStarted.description.id);
-    assert.equal('input' in fact, false);
-  }
-  assert.equal(changes.filter((event) => event.change.kind === 'entry').length, 4);
+  assert.equal(eStarted.input, 2);
+  assert.equal(
+    changes.some((event) => event.change.kind === 'entry'),
+    false,
+  );
   assert.equal(
     changes.filter((event) => event.level === 'runtime').every((event, index, values) => index === 0 || event.sequence === values[index - 1].sequence + 1),
     true,
   );
 });
 
-for (const stage of ['accept', 'notification', 'admit', 'capture']) {
-  test(`E ${stage} failure reports that stage without inventing an E invocation`, async () => {
-    const observed = probe();
-    const failure = new Error(`${stage} failed`);
-    const fail = () => {
-      throw failure;
-    };
-    const execution = new TestExecutionDefinition(() => assert.fail('unreachable'), { requires: {}, accept: stage === 'accept' ? fail : (input) => input, admit: stage === 'admit' ? fail : () => undefined });
-    const runtime = assemble(new Main([execution], forward(execution)), {
-      observations: [observed.installation],
-      source: { entry: () => undefined, capture: stage === 'capture' ? fail : () => undefined, callbacks: () => ({ accepted: stage === 'notification' ? fail : () => undefined }) },
-    });
-    await assert.rejects(runtime.run(null, {}), (error) => error === failure);
-    const entries = observed.facts.filter((fact) => fact.kind === 'entry');
-    assert.equal(entries.at(-1).stage, stage);
-    assert.equal(entries.at(-1).status, 'failed');
-    assert.equal(entries.at(-1).error, failure);
-    assert.equal(
-      observed.facts.some((fact) => fact.kind === 'started' && fact.identity.level === 'execution'),
-      false,
-    );
-    assert.equal(
-      observed.facts.some((fact) => fact.kind === 'relation'),
-      false,
-    );
-    if (stage === 'notification') assert.equal(entries[0].status, 'accepted');
-  });
-}
-
-test('entry observation propagation preserves accepted fact and does not publish a false entry failure', async () => {
-  let notifications = 0;
+test('capture failure records R failure without inventing an E invocation', async () => {
   const observed = probe();
-  const failure = new Error('observer failed');
+  const failure = new Error('capture failed');
   const execution = new TestExecutionDefinition(() => assert.fail('unreachable'));
   const runtime = assemble(new Main([execution], forward(execution)), {
-    observations: [
-      {
-        failure: 'propagate',
-        bindInvocation: () => ({
-          observe: (fact) => {
-            if (fact.kind === 'entry') throw failure;
-          },
-        }),
-      },
-      observed.installation,
-    ],
+    observations: [observed.installation],
     source: {
-      entry: () => undefined,
-      capture: () => undefined,
-      callbacks: () => ({
-        accepted: () => {
-          notifications++;
-        },
-      }),
+      capture: () => {
+        throw failure;
+      },
     },
   });
-  await assert.rejects(runtime.run(null, {}), (error) => error.cause === failure);
-  assert.equal(notifications, 0);
-  assert.deepEqual(
-    observed.facts.filter((fact) => fact.kind === 'entry').map((fact) => fact.status),
-    ['accepted'],
+  await assert.rejects(runtime.run(null, {}), (error) => error === failure);
+  assert.equal(
+    observed.facts.some((fact) => fact.kind === 'started' && fact.identity.level === 'execution'),
+    false,
   );
-  assert.equal(observed.facts.find((fact) => fact.kind === 'finished').state.status, 'failed');
+  assert.equal(
+    observed.facts.some((fact) => fact.kind === 'relation'),
+    false,
+  );
+  assert.equal(observed.facts.find((fact) => fact.kind === 'finished').state.error, failure);
+});
+
+test('R prepares content once and calls several E with ordinary independent inputs', async () => {
+  const appended = [];
+  const captured = [];
+  const execution = new TestExecutionDefinition((work) => work.input.value);
+  const runtime = assemble(
+    new Main([execution], async (work) => {
+      appended.push(work.input);
+      const first = work.children.create(execution, { value: work.input + 1 });
+      await first.run();
+      const accepted = await first.accept();
+      const second = work.children.create(execution, { value: accepted + 1 });
+      await second.run();
+      return second.accept();
+    }),
+    { source: { capture: (input) => captured.push(input) } },
+  );
+  assert.equal(await runtime.run(1, {}), 3);
+  assert.deepEqual(appended, [1]);
+  assert.deepEqual(captured, [{ value: 2 }, { value: 3 }]);
 });
 
 test('enabled observation installations check actual static parent declarations', () => {

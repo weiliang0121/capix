@@ -41,7 +41,7 @@ function bind(main, source, options = {}) {
   const definition = runtimeDefinition(main);
   const observations = options.recorder ? [bindRecording(options.recorder, { failure: 'propagate' })] : undefined;
   if (observations) recordDefinitions(definition);
-  return assembleRuntime(definition, { observations, providers: [resource.provide((value) => value)], source: { entry: () => source(), capture: () => source(), callbacks: (_definition, options) => options.execution } });
+  return assembleRuntime(definition, { observations, providers: [resource.provide((value) => value)], source: { capture: () => source(), callbacks: (_definition, options) => options.execution } });
 }
 
 test('definitions bind to independent R endpoints; node identity is stable and per-call state is separate', async () => {
@@ -95,7 +95,7 @@ test('one RuntimeBinder binds independent roots and rejects foreign child refere
     }
     return child.accept();
   };
-  const options = (value) => ({ providers: [resource.provide((source) => source)], source: { entry: () => value, capture: () => value, callbacks: () => ({ started: (_context, invocation) => calls.push(invocation) }) } });
+  const options = (value) => ({ providers: [resource.provide((source) => source)], source: { capture: () => value, callbacks: () => ({ started: (_context, invocation) => calls.push(invocation) }) } });
   const left = binder.bind(definition, options('left-resource'));
   const right = binder.bind(definition, options('right-resource'));
   assert.notEqual(left.id, right.id);
@@ -152,7 +152,7 @@ test('plain definitions use the same fixed structures without class inheritance'
       },
     },
   };
-  const runtime = assembleRuntime(runtimeDefinition(execution), { providers: [], source: { entry: () => null, capture: () => null } });
+  const runtime = assembleRuntime(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
   assert.equal(await runtime.run('hello', {}), 5);
 });
 
@@ -247,61 +247,53 @@ test('nested O structures stay lazy and a shared A declaration is bound independ
   assert.equal(execution.children.get(group), operation);
 });
 
-test('E entry ordering is reserve, validate, accept, accepted, admit, capture, started, work', async () => {
+test('E construction follows R reservation, validation, ordinary input preparation, capture and started', async () => {
   const order = [];
   const execution = new Main();
-  execution.entry = {
-    requires: {},
-    accept: (input) => {
-      order.push('accept');
-      return input;
-    },
-    admit: () => order.push('admit'),
-  };
   execution.run.execute = (work) => {
     order.push('work');
     return work.input;
   };
-  const runtime = assembleRuntime(runtimeDefinition(execution), {
+  const definition = runtimeDefinition(execution);
+  definition.run.execute = async (work) => {
+    order.push('prepare');
+    const child = work.children.create(execution, { text: work.input });
+    await child.run();
+    return child.accept();
+  };
+  const runtime = assembleRuntime(definition, {
     providers: [resource.provide((value) => value)],
     source: {
       validate: () => {
         assert.equal(runtime.running, true);
         order.push('validate');
       },
-      entry: () => 'value',
       callbacks: (_definition, options) => options.execution,
-      capture: () => {
+      capture: (input) => {
         order.push('capture');
+        assert.deepEqual(input, { text: 'input' });
         return 'value';
       },
     },
   });
-  await runtime.run('input', { execution: { accepted: () => order.push('accepted'), started: () => order.push('started') } });
-  assert.deepEqual(order, ['validate', 'accept', 'accepted', 'admit', 'capture', 'started', 'work']);
+  assert.deepEqual(await runtime.run('input', { execution: { started: () => order.push('started') } }), { text: 'input' });
+  assert.deepEqual(order, ['validate', 'prepare', 'capture', 'started', 'work']);
   assert.equal(runtime.running, false);
 });
 
-test('pre-cancelled R skips E admission; capture failure releases R reservation', async () => {
-  const order = [];
+test('pre-cancelled R skips E capture; capture failure releases R reservation', async () => {
+  let captures = 0;
   const execution = new Main();
-  execution.entry = {
-    requires: {},
-    accept: (input) => {
-      order.push('accept');
-      return input;
-    },
-    admit: () => order.push('admit'),
-  };
-  const runtime = bind(execution, () => 'value');
-  await assert.rejects(runtime.run('input', { signal: AbortSignal.abort(), execution: { accepted: () => order.push('accepted') } }), /取消/);
-  assert.deepEqual(order, []);
+  const runtime = bind(execution, () => {
+    captures++;
+    return 'value';
+  });
+  await assert.rejects(runtime.run('input', { signal: AbortSignal.abort() }), /取消/);
+  assert.equal(captures, 0);
   const failure = new Error('capture failed');
   const broken = assembleRuntime(runtimeDefinition(execution), {
     providers: [resource.provide((value) => value)],
     source: {
-      entry: () => 'value',
-      callbacks: (_definition, options) => options.execution,
       capture: () => {
         throw failure;
       },
@@ -311,37 +303,30 @@ test('pre-cancelled R skips E admission; capture failure releases R reservation'
   assert.equal(broken.running, false);
 });
 
-test('entry endpoints expire before work and also expire when acceptance fails', async () => {
-  const access = new ResourceOffer('test.entry', (_source, activity) => ({ touch: () => activity.runSync('touch', {}, () => 'value') }));
-  for (const fails of [false, true]) {
-    let saved;
-    const main = new Main();
-    main.entry = {
-      requires: { access: access.request() },
-      accept(input, resources) {
-        saved = resources.access;
-        assert.equal(saved.touch(), 'value');
-        if (fails) throw new Error('entry failed');
-        return input;
-      },
-      admit() {
-        assert.equal(saved.touch(), 'value');
-      },
-    };
-    main.run.execute = () => 'done';
-    const runtime = assembleRuntime(runtimeDefinition(main), {
-      providers: [access.provide(() => null), resource.provide(() => 'value')],
-      source: {
-        entry: () => null,
-        capture: () => {
-          assert.throws(() => saved.touch(), /entry access has ended/);
-          return null;
-        },
-      },
-    });
-    if (fails) await assert.rejects(runtime.run('input', {}), /entry failed/);
-    else await assert.rejects(runtime.run('input', {}), /entry access has ended/);
-    assert.throws(() => saved.touch(), fails ? /entry failed/ : /entry access has ended/);
-    assert.equal(runtime.running, false);
-  }
+test('R resource endpoints remain scoped to R while E receives its own resource window', async () => {
+  const access = new ResourceOffer('test.input', (_source, activity) => ({ touch: () => activity.runSync('touch', {}, () => 'value') }));
+  let saved;
+  const main = new Main();
+  main.run.execute = () => {
+    assert.equal(saved.touch(), 'value');
+    return 'done';
+  };
+  const definition = runtimeDefinition(main);
+  definition.run = {
+    requires: { access: access.request() },
+    async execute(work) {
+      saved = work.resources.access;
+      const input = saved.touch();
+      const child = work.children.create(main, input);
+      await child.run();
+      return child.accept();
+    },
+  };
+  const runtime = assembleRuntime(definition, {
+    providers: [access.provide(() => null), resource.provide(() => 'value')],
+    source: { runtime: () => null, capture: () => null },
+  });
+  assert.equal(await runtime.run('input', {}), 'done');
+  assert.throws(() => saved.touch(), /ended/);
+  assert.equal(runtime.running, false);
 });

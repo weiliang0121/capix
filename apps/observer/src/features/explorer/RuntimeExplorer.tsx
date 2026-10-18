@@ -213,7 +213,7 @@ export function RuntimeExplorer({ rounds, graphs, loadExecution, matches, select
           </nav>
           <div className="explorer-legend">
             <div>
-              <span className="explorer-family-key explorer-family-selection">选择</span>
+              <span className="explorer-family-key explorer-family-selection">材料</span>
               <span className="explorer-family-key explorer-family-answer">回答</span>
               <span className="explorer-family-key explorer-family-memory">记忆</span>
             </div>

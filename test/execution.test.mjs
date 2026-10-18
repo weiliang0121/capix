@@ -38,8 +38,8 @@ test('one Execution and Operation can be called again after success and failure 
     }
   }
   const execution = new EchoExecution(runtime.executionInvocationBuilder);
-  const first = { value: 'first' },
-    last = { value: 'last' };
+  const first = { value: 'first' };
+  const last = { value: 'last' };
   assert.equal(snapshots.length, 0);
   assert.equal(await execution.call(first, { settings }), first);
   await assert.rejects(execution.call({ fail: true }, { settings }), (error) => error === failure);
@@ -76,6 +76,6 @@ test('bindConversation, ConversationRuntimeDefinition returns answers without a 
   }
   assert.deepEqual(
     requests.map((request) => request.model),
-    ['one', 'one', 'one', 'two', 'two', 'two'],
+    ['one', 'one', 'two', 'two'],
   );
 });

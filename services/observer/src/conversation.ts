@@ -48,3 +48,9 @@ export { FunctionConversationDecisionDefinition } from './conversation/decision/
 export { CheckFileTaskDefinition } from './conversation/operations/preflight/check.js';
 export { InspectFileTaskDefinition } from './conversation/attempt/files/check.js';
 export type { FilePreflightInput, FilePreflightOutput } from './conversation/operations/preflight/types.js';
+
+export * from './conversation/content/active.js';
+export * from './conversation/content/resource.js';
+export * from './conversation/operations/context/prepare.js';
+export * from './conversation/operations/context/maintain.js';
+export * from './conversation/content/usage.js';

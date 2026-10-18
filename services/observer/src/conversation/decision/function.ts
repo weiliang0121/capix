@@ -16,7 +16,7 @@ export class FunctionConversationDecisionDefinition extends OperationDefinition<
   readonly resultPoint = checkpointPoint<'operation', ConversationDecisionInput, ConversationDecision>()({ name: 'result', state: proposalCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
   readonly checkpoint: InvocationCheckpointDefinition<ConversationDecisionInput, ConversationDecision, 'operation'> = {
     key: 'observer.function-decision',
-    version: 2,
+    version: 3,
     input: decisionInputCodec,
     output: proposalCodec,
     points: [this.resultPoint],

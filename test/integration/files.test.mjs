@@ -210,7 +210,7 @@ test('natural language selects a read-and-save branch with a stable remote task'
   assert.equal(await readFile(join(f.root, 'natural.md'), 'utf8'), '文件摘要。');
   assert.deepEqual(
     f.calls.map((call) => call.purpose),
-    ['selection', 'understanding', 'answer', 'memory'],
+    ['understanding', 'answer', 'memory'],
   );
   assert.ok(JSON.stringify(f.calls.find((call) => call.purpose === 'answer').request).includes('概括文档，保留重点。'));
   const recovered = await f.transport.read(snapshot.submissionId);
@@ -247,7 +247,7 @@ for (const proposal of [
     assert.equal(snapshot.fileOutput, undefined);
     assert.deepEqual(
       f.calls.map((call) => call.purpose),
-      ['selection', 'understanding'],
+      ['understanding'],
     );
     assert.deepEqual(await readdir(f.root), ['input.txt']);
   });

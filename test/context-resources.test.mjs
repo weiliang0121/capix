@@ -47,18 +47,20 @@ test('Observer narrows resources at each action, captures fixed values and expir
   );
   const firstViews = [...views];
   const entry = firstViews.find((view) => view.definition === definition.executionDefinition).resources;
-  const selection = firstViews.find((view) => view.definition === definition.executionDefinition.operationDefinitions.selection).resources;
+  const preparation = firstViews.find((view) => view.definition === definition.executionDefinition.operationDefinitions.preparation).resources;
+  const generation = firstViews.find((view) => view.definition === definition.executionDefinition.operationDefinitions.generation).resources;
   assert.equal(entry.history.locate().end, 1);
-  assert.equal(selection.history.locate().end, 1);
-  assert.notEqual(entry.history, selection.history);
-  assert.equal(selection.history.transcript, undefined);
-  assert.equal(selection.settings, entry.settings);
-  assert.equal(selection.timeoutMs, 1000);
+  assert.deepEqual(Object.keys(preparation), ['activeContent']);
+  assert.equal(preparation.activeContent.transcript, undefined);
+  assert.equal(generation.history, undefined, 'generation consumes fixed input material, not a live history reader');
+  assert.equal(generation.settings, entry.settings);
+  assert.equal(generation.timeoutMs, 1000);
   assert.throws(() => entry.history.read(0), /running|ended/i);
+  assert.throws(() => preparation.activeContent.capture(), /running|ended/i);
   assert.equal(first.record, undefined);
   assert.deepEqual(
     first.children.values().map((relation) => relation.key),
-    ['selection', 'decision', 'generation', 'decision', 'extraction'],
+    ['preparation', 'decision', 'generation', 'decision', 'extraction'],
   );
   const decisions = firstViews.filter((view) => view.definition === definition.executionDefinition.operationDefinitions.decision);
   assert.equal(decisions.length, 2);
@@ -85,7 +87,7 @@ test('nested operations cannot implicitly bypass their direct parent for executi
     source = 'test';
     execute(_context, invocation) {
       wrapper = invocation;
-      return generation.call(invocation, { selection: { historyIndexes: [] }, memories: [] });
+      return generation.call(invocation, { context: { message: { role: 'user', content: 'input' }, selectedMessages: [] }, memories: [] });
     }
   }
   const operation = new NarrowOperation(runtime.operationInvocationBuilder);

@@ -7,7 +7,7 @@
 | 层次 | 声明                                                                 | 绑定职责                                             | 固定结构                                          |
 | ---- | -------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------- |
 | R    | RuntimeDefinition：E 子声明及 run/exceptions/observation             | RuntimeBinder：检查供给与声明图、连接来源与 E Binder | BoundRuntime → RuntimeInvocationBuilder；持有占用 |
-| E    | ExecutionDefinition：entry、O 声明及平级 run/exceptions/observation  | ExecutionBinder：绑定工作与资源申请、连接 O Binder   | BoundExecution → ExecutionInvocationBuilder       |
+| E    | ExecutionDefinition：O 声明及平级 run/exceptions/observation         | ExecutionBinder：绑定工作与资源申请、连接 O Binder   | BoundExecution → ExecutionInvocationBuilder       |
 | O    | OperationDefinition：描述、O/A 声明及平级 run/exceptions/observation | OperationBinder：绑定工作、直接子结构与资源收窄      | BoundOperation → OperationInvocationBuilder       |
 | A    | AttemptDefinition：描述及平级 run/exceptions/observation             | AttemptBinder：绑定叶子工作、资源申请与收窄          | BoundAttempt → AttemptInvocationBuilder           |
 
@@ -25,7 +25,7 @@ Binder 先解算声明，再建立绑定结构；Binding 表达结构构造所�
 | snapshot.ts     | snapshotDefinition                                          | 固定内核解释字段、容器及函数入口，保留原业务方法 receiver，不冻结业务实例    |
 | resources.ts    | collectDefinitionRequirements / collectObservationProvides  | 收集声明申请与安装方供给声明，不捕获实体或创建访问端点                       |
 | resources.ts    | bindChildResources                                          | 固定资源签发的收窄规则；声明解算再核验规则的申请及归属                       |
-| sources.ts      | bindExecutionSources                                        | 装配时绑定供给查找；E 进入 entry/capture 时才捕获本次来源                    |
+| sources.ts      | bindExecutionSources                                        | 装配时绑定供给查找；创建 E 时才 capture 本次配置、定位及资源来源             |
 | work.ts         | InvocationWorkBinding                                       | 一个 Bound 位置的固定工作适配；连接运行、接纳、异常与 CP 声明                |
 | access.ts       | InvocationAccess                                            | 一次 Invocation 的子调用映射、跨阶段引用、阶段/轮次行动窗口及访问约束        |
 | observation.ts  | bindInvocationObservation / bindRuntimeStructureObservation | 建立具体调用或 R 结构的观测会话，连接父观测、声明资源及故障策略              |
@@ -56,11 +56,12 @@ assembleRuntime(definition, options)
 const recording = bindRecording(recorder, { failure: 'isolate', invalidate: (error) => source.invalidate(error) });
 const transcript = new Transcript(messages, { observation: recording.transcript, changes });
 const memories = new Memories(transcript, { observation: recording.memory, changes });
+const active = new ActiveContent(transcript, memories);
 const selectionUsage = new SelectionUsage();
 const model = new ModelSource(provider);
 const interactions = new ModelInteractions(model);
 const definition = new ConversationRuntimeDefinition();
-const runtime = bindConversation(definition, { transcript, memories, selectionUsage }, interactions, { observations: [recording], changes });
+const runtime = bindConversation(definition, { transcript, memories, active, selectionUsage }, interactions, { observations: [recording], changes });
 
 await runtime.run({ messages: newMessages }, { settings, signal, progress });
 ```
@@ -69,7 +70,7 @@ await runtime.run({ messages: newMessages }, { settings, signal, progress });
 
 `createBoundRuntime(capabilities)` 是未绑定声明的低层 R 结构入口，只构造 R 的 ContextBuilder/InvocationBuilder，不隐式建立 EOA 构造器、环境或内容实体。完整业务装配用 `assembleRuntime`，它将声明、独立供给及本次来源交给 RuntimeBinder。省略 observations 时关闭调用观测；显式空数组启用声明但不附加预设；[recording] 提供记录预设的本调用端口。开启后缺资源是装配错误，局部供给只满足观测声明，不能泄漏给工作和异常处理。
 
-声明解算和资源兑现分开：Provider 对应在装配时确定；source.runtime/entry/capture、按输入收窄、Context/Invocation 身份及调用观测会话仍在调用边界建立。资源 timing:binding 指按次供给建立时捕获材料、阶段激活时兑现端点，不表示提前到声明解算时。
+声明解算和资源兑现分开：Provider 对应在装配时确定；source.runtime/capture、按输入收窄、Context/Invocation 身份及调用观测会话仍在调用边界建立。资源 timing:binding 指按次供给建立时捕获材料、阶段激活时兑现端点，不表示提前到声明解算时。
 
 RuntimeBinder 可复用，每次 bind 仍建立一套独立的 ContextBuilder 身份链及各层 InvocationBuilder；不同 R 不能借用彼此的父调用。BoundRuntime 自己生成稳定 ID，在每次请求中交给 RuntimeInvocationBuilder 作为 description；Builder 不持有半成品 R，也不缓存本次信号或输入。R 的结构观测随 BoundRuntime 的身份建立，时机在完整静态绑定之后，绑定失败不会先发出 established。
 
@@ -77,32 +78,34 @@ BoundRuntime 实例维护占用与稳定 ID；每次 run 建立独立 RuntimeCon
 
 RecordingRootRecord 是记录预设的跨调用根，RuntimeCallRecord 表达一次 R 调用。归属为根 → R 调用 → E → O/A。它们与真实 BoundRuntime/Context 身份分开；一次 R 调用结束不关闭实例根或独立实体。
 
-## E 的入口与工作
+## R/E 的普通输入与材料准备
 
-ExecutionDefinition 可声明 `entry: { requires, accept, admit? }`。accept 和 admit 是业务内容；固定 BoundExecution 结构只控制时机和访问窗口。未声明 entry 的通用定义直接使用提交输入。
+R/E 使用相同的普通调用输入机制；`ExecutionDefinition` 不再声明专属 `entry`，也没有 `EntryInput/EntryResources` 类型参数。通用内核不决定如何接纳对话消息。Observer 的 R 通过正式 append 资源接纳服务输入，把所得 `{ message, messageIndex, fileTask? }` 作为普通输入传给所选 E。
 
 一次服务调用的顺序为：
 
 ```text
 R 占用
-  → source.validate 检查入口参数
+  → source.validate 检查运行配置，source.runtime 提供 R 的资源来源
   → 建立 R Context / Invocation，开始 R 工作
-  → 选择已声明 E，建立 entry 资源
-  → entry.accept 正式接纳输入，实体写入点发布被动提交进展
-  → accepted 建立回调（仍是严格绑定钩子）
-  → 未取消时 entry.admit 执行分段策略
-  → 关闭 entry 访问窗口
-  → 捕获工作配置、固定历史范围与其他供给
+  → R 检查服务输入并正式 append；实体发布真实输入位置与被动进展
+  → R 选择已声明 E，用正式 message / messageIndex 创建子调用
+  → source.capture 固定本次模型配置、原文定位与工作资源来源
   → 建立 E Context / Invocation
   → started 建立回调 → 被动 started 进展 → 调用 started 变化 → 开始记录
-  → 启动运行阶段资源 → run.execute / run.accept
-  → 已声明的运行异常按契约进入 exceptions.handle
+  → E 调用 prepareContext O
+      → 如配置维护，运行 before-request 维护 O 并接纳结果
+      → capture 活跃消息与记忆的不可变值，形成唯一工作材料
+  → E 决策、能力调用、回答落实与记忆收尾
+  → 如配置维护，在本次内容结果成立后运行 after-content 维护 O
   → E 终态 → R 收到真实返回并接纳 → R 终态及实际交付 → 释放占用
 ```
 
-entry 只能得到自己申请的访问形式；其端点在 accept/admit 窗口结束后失效，失败也通过 finally 关闭。入口事实归已有 R 调用，不虚构 E Context 或 E 记录。R 开始工作前已取消时不进入 E、不追加消息；接纳后取消保留已落实内容，在检查点停止。
+正式输入写入属于已经建立的 R；不虚构 E Context 或 E 记录。R 开始工作前已取消时不追加消息；接纳后取消保留已落实内容，在合法调用边界停止。输入已接纳但 E 尚未建立时失败，消息落实事实和 R 的失败共同表达结果，不需要额外的 E 入口事实或 accepted 绑定回调。
 
-配置与固定历史范围在 capture 时决定，运行和记录使用同一来源，不能到记录或投影阶段重新读取当前配置、当前集合长度。Context 建立之前失败明确返回，不伪造 E 记录。输入校验失败不部分追加；若内容已经落实、捕获或记录随后失败，不承诺回滚。
+**配置与定位的捕获，不等于工作材料的捕获。** E 的 `source.capture` 固定模型配置与 `[0, messageIndex + 1)` 原文定位，供来源及恢复核验使用；它不决定历史的活跃集合。`prepareContext` 在维护之后读取 `ActiveContent`，把消息值、记忆值和复合版本依据固定在输出中。后续理解、回答和记忆提取只消费这份输出，不通过旧固定范围再次挑选或装载模型材料。资源的 `timing: 'access'` 保证捕获发生在明确调用处。
+
+未配置维护时不裁剪、不自动分段，也不调用历史选择模型。实际请求携带全部固定材料，并执行完整容量检查；超限明确失败，已落实输入保留。维护是服务业务 O，可使用普通函数或子 O 策略，不是内核递归触发的内容钩子。详细契约见 [活跃材料与维护](active-content.md)。
 
 started 是绑定侧同步回调，在 Context 已建立、Record 尚未登记时运行。它可以取得本次身份，但此时不能兑现工作资源。它属于建立机制，异常原样传播并释放 R 占用；服务反馈不使用这个严格钩子。消息索引由实体写入点获得，不在 started 中读取当前集合长度。
 
@@ -110,7 +113,7 @@ started 是绑定侧同步回调，在 Context 已建立、Record 尚未登记�
 
 ProgressChannel 是本次绑定提供的窄同步出口，不依赖 Recorder 或 C/S 协议。InvocationProgress 只表达 started / finished 和不可变调用身份，finished 的 status 是 Context 事实，不保证随后的捕获、观测或最终调用交付成功。四层 Builder 可接入；服务通过 RuntimeCallSource.progress 按实际 E 声明选择关联对象。
 
-Transcript 的 append 在整批消息落实并更新 revision 后发布 TranscriptAppendProgress `{ transcriptId, start, end, revision }`，然后执行必要变化捕获及可选观测。资源供给可用 `{ transcript, progress }` 为入口写入和回答写入安装不同接收端；业务声明仍只取得正式 append 能力。无需 Record，也不能事后比较快照推断写入。
+Transcript 的 append 在整批消息落实并更新 revision 后发布 TranscriptAppendProgress `{ transcriptId, start, end, revision }`，然后执行必要变化捕获及可选观测。资源供给可用 `{ transcript, progress }` 为输入写入和回答写入安装不同接收端；业务声明仍只取得正式 append 能力。无需 Record，也不能事后比较快照推断写入。
 
 进展接收失败停用对应出口并报告 failure；同步抛错、意外异步返回及失败报告错误均不得进入 Context、Invocation 或业务异常处理。它与必要 ChangeCapture 的严格职责、观测声明的可选 propagate 策略不同。进展是反馈依据，无法完整接收时由服务标记解释不完整；已成立事实不回滚，也不重做业务。
 
@@ -161,13 +164,13 @@ Work 不暴露 Context ID、生命周期方法、Invocation、Recorder 或原实
 
 RuntimeBinder 在装配时使用 `resolveDeclaration` 解算 R→E、E→O、O→O/A 全树，检查无环、资源覆盖、阶段 uses、收窄和观测约束，并保留每个父位置的结果。不会建立未使用的 Bound 子结构、访问实体或调用模型。BoundChildren 保存原声明身份、固定 CP 契约与本位置的 Initializer；业务取得子入口仍不初始化结构，首次 create 才由对应 Binder.bindResolved 消费已解算结果。同一位置复用稳定 O 身份，不同 R 或不同父位置独立。已有成功 CP 交付可以直接按固定契约读取，不需建立 Bound 子结构。
 
-`ResolvedRuntime/Execution/Operation/Attempt` 是固定解算结果，不是新增生命周期实体。原 `definition` 只保留身份与宿主定位；`declaration` 固定内核读取的结构字段、资源申请、执行/异常/观测函数、E entry、输出与 CP codec/续接契约。Binding 与运行工作统一消费该固定结果。绑定后修改原声明结构不改变既有 Bound，重新装配才采用新结构；原业务实例不被深度冻结，方法仍使用原 receiver，闭包或业务字段变化不被快照承诺覆盖。
+`ResolvedRuntime/Execution/Operation/Attempt` 是固定解算结果，不是新增生命周期实体。原 `definition` 只保留身份与宿主定位；`declaration` 固定内核读取的结构字段、资源申请、执行/异常/观测函数、输出与 CP codec/续接契约。Binding 与运行工作统一消费该固定结果。绑定后修改原声明结构不改变既有 Bound，重新装配才采用新结构；原业务实例不被深度冻结，方法仍使用原 receiver，闭包或业务字段变化不被快照承诺覆盖。
 
 EOA Binder.bind 用于独立声明入口，先解算给定子树再委托 bindResolved；来自父图的惰性路径直接使用 bindResolved，不重复解算。每个 Bound 建立自己的 BoundChildren、工作适配和按 Invocation 缓存的访问视图，不以 Definition 为全局缓存键共享活动状态。独立子树没有隐含祖先授权；普通装配从 RuntimeBinder 开始。OperationBinder 只对直接 O/A 分派，不引入环境或通用注册管理者。
 
 子能力接缝集中在 `binding/children/`：`bound.ts` 保存解算后的子声明和惰性结构，`builder.ts` 核对阶段 uses 并建立访问，`binding.ts` 提供阶段行动句柄，`references.ts` 持有本父调用跨阶段共享的准确引用和事实查询。作者类型归 `definition/children.ts`，没有第二套绑定侧同义契约。
 
-InvocationWorkBinding 把固定声明适配为内核 InvocationWork。每次 Invocation 具有一份 InvocationAccess 和引用登记；每次进入阶段重新激活所需资源、建立带阶段/round 校验的 Work。Builder 不保留本次状态，构造访问也不提前建立子结构。entry 先固定目标，再接纳输入、复核活动性、创建该目标，回调不能更换已核验的子声明。
+InvocationWorkBinding 把固定声明适配为内核 InvocationWork。每次 Invocation 具有一份 InvocationAccess 和引用登记；每次进入阶段重新激活所需资源、建立带阶段/round 校验的 Work。Builder 不保留本次状态，构造访问也不提前建立子结构。`InvocationEntry` 是调用方显式声明的子输入适配，不是已移除的 E 专属入口；它先固定目标，再接纳输入、复核活动性、创建该目标，回调不能更换已核验的子声明。
 
 ```text
 Binder.bindResolved
@@ -190,7 +193,7 @@ InvocationChildren 是直接父子运行关系，与 Recorder 无关。关系记
 
 O/A 需要在执行中确定更小资源范围时，可信装配可配置 `childResources: [bindChildResources(definition, [offer.refine(input => selection)])]`。创建子调用前，根据该调用的输入派生供给；ResourceOffer 的 refine 检查并返回收窄后的捕获，内核只允许处理该子声明已经申请、父层已经供应的 offer。新供给有独立 supplyId，不修改父层或兄弟，不重捕获无关模型或原文。规则不是业务编排，也不能自行增加资源；endpoint 继续受调用活动与声明阶段约束。
 
-Observer 的 E 在选择历史后运行有限决策循环。决策 O 交付 `invoke { capability, arguments }` 或 `finish { conclusion }` 提案；E 检查公开能力、参数、当前阶段和完成条件，再调用真实子声明。当前能力条目为 checkFile、answer、document、save，条目引用真实子声明，并分别提供参数 Schema、可用条件、内部输入构造和真实输出接纳。决策 O、选择历史与记忆收尾不进入可选目录。目录是本次 E 组合的派生信息，不是第二个全局注册表。
+Observer 的 E 在接纳准备 O 的固定活跃材料后运行有限决策循环。决策 O 交付 `invoke { capability, arguments }` 或 `finish { conclusion }` 提案；E 检查公开能力、参数、当前阶段和完成条件，再调用真实子声明。当前能力条目为 checkFile、answer、document、save，条目引用真实子声明，并分别提供参数 Schema、可用条件、内部输入构造和真实输出接纳。决策 O、材料准备、可选维护与记忆收尾不进入可选目录。目录是本次 E 组合的派生信息，不是第二个全局注册表。
 
 默认决策 O 将已知交付直接转为下一步：预检通过后处理正文、回答落实后按已选目标保存、保存凭据接纳后结束。只有目标尚未确定或候选需要修正时，内部理解 O 才使用模型；函数决策 O 无模型资源，也使用同一交付契约。可通过 `ConversationRuntimeDefinition({ decision })` 替换声明；专门的决策模型同样可提供一个 O，在其内部通过 A 接入。E 不知道具体 Prompt 或模型类型。
 
@@ -222,11 +225,11 @@ ResourceOffer 由资源所属模块公开来源、访问接口、binding/access 
 
 ResourceBindings 持有供给与本次端点：
 
-- capture 的结果或失败可由父子申请共享；配置、历史范围、记忆快照按 binding 时机固定，模型按 access 时机兑现。
+- capture 的结果或失败可由父子申请共享；配置、原文定位按 binding 时机固定；默认工作材料由准备 O 显式 capture，模型按 access 时机兑现。
 - 每次调用通过 select 得到本地供给范围与事实会话，再 attach 本次归属；运行和异常阶段分别兑现受阶段约束的端点，共享本次资源顺序与固定捕获，不能共享包含父调用来源的 writer 闭包。
 - Invocation started 发布后 start 只激活 run 请求；进入异常处理时才激活 exceptions 请求。相同调用内同一供给的 bound/available 不因阶段切换重复登记；惰性项目不会因为记录而提前建立。
 - 普通业务只使用本阶段的 work.resources；保存下来的正式实体方法仍检查当前阶段、本次调用及祖先活动性。正式错误成立之后也不能继续读写实体或启动子调用。已经取得的纯数据快照不因此失效。
-- entry 使用独立短窗口 restrict，归已有 R 调用，不混入工作资源的生命周期。
+- R 的输入追加使用正常 execute 阶段的资源窗口；不再为 E 专门创建 entry 窗口。显式 InvocationEntry 输入适配沿用当前父 Work 的资源与活动约束。
 
 业务访问端点自动附加 origin 与本次实体观察端口。实体自行审查、落实并发布变化；必要捕获与可选消费独立分发。记录预设解释事件形成记录，实体不持有 Recorder 或记录身份。同一实体发布期间拒绝重入变更。
 
@@ -236,12 +239,12 @@ ResourceBindings 持有供给与本次端点：
 | -------------------------------- | ------------------------- | -------------------------------------------- |
 | 配置 snapshot/timeout            | 固定配置或字段值          | 本次采用的值，不等于模型实际请求             |
 | Transcript fixedRange            | locate/read/entries/slice | 原文 UID、固定区间与版本；不内嵌原文集合     |
-| Transcript append / segmentation | append / current、start   | 正式访问及变化关联，entry 不伪造调用归属     |
+| Transcript append / segmentation | append / current、start   | 正式访问及变化关联，输入追加归实际 R 调用    |
 | Memory snapshot / apply          | 固定正文 / 提案落实       | 所见版本或实际变化事实；不返回 Memory 实例   |
 | SelectionUsage record            | add                       | 正式统计写入，不暴露统计实体                 |
 | Model create / read              | start / wait / result     | 交互身份、访问摘要；请求与反馈由交互契约固定 |
 
-E 记录不再认识 settings/transcriptRange。资源访问事实解释可见范围，选择 O 的结果解释实际选择，模型 A 的输入解释实际请求，不能互相替代。
+E 记录不再认识 settings/transcriptRange。资源访问事实解释定位和访问；准备 O 的结果解释实际活跃材料，模型 A 的输入解释实际请求，不能互相替代。显式使用选择 O 时，其结果仍只代表该次选择。
 
 ## 异常、错误与已成立事实
 

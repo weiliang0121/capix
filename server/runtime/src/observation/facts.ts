@@ -19,17 +19,7 @@ export interface InvocationDescription {
 
 export type InvocationRelationChange = { readonly kind: 'attached' } | { readonly kind: 'returned'; readonly result: InvocationResult<unknown> } | { readonly kind: 'receiving' } | { readonly kind: 'accepted'; readonly output: unknown } | { readonly kind: 'failed'; readonly error: unknown; readonly source: 'work' | 'observation'; readonly failure?: InvocationFailure };
 
-/** Entry progress belongs to the parent call before a child Context exists. */
-export type ExecutionEntryChange = Readonly<
-  {
-    target: 'execution';
-    instanceId: string;
-    key?: string;
-    stage: 'accept' | 'notification' | 'admit' | 'capture';
-  } & ({ status: 'accepted' } | { status: 'failed'; error: unknown })
->;
-
-export type InvocationChange = { readonly kind: 'started'; readonly input: unknown } | { readonly kind: 'process'; readonly process: InvocationProcess; readonly processSequence: number; readonly round: number } | ({ readonly kind: 'entry' } & ExecutionEntryChange) | { readonly kind: 'relation'; readonly relation: InvocationRelationIdentity; readonly change: InvocationRelationChange } | { readonly kind: 'finished'; readonly state: ContextState<unknown> };
+export type InvocationChange = { readonly kind: 'started'; readonly input: unknown } | { readonly kind: 'process'; readonly process: InvocationProcess; readonly processSequence: number; readonly round: number } | { readonly kind: 'relation'; readonly relation: InvocationRelationIdentity; readonly change: InvocationRelationChange } | { readonly kind: 'finished'; readonly state: ContextState<unknown> };
 
 /** Borrowed values are only valid during synchronous observation. This is not a wire DTO. */
 export type InvocationFact = InvocationChange & {

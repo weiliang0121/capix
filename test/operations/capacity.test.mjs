@@ -35,44 +35,38 @@ async function generate(input, contextBudget = settings.contextBudget, requests 
   const resourceBinding = resourceBindingFor(runtime, provider);
   const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
   const transcript = new Transcript([...history, input.message]);
-  const selection = { historyIndexes: input.selectedMessages.map((item) => item.index) };
-  await invoke(lifecycleFor(runtime).execution({ input: transcript.current('user'), transcript, resourceBinding, settings: { ...settings, contextBudget } }), (context) => operation.call(callFor(context), { selection, memories: [] }));
+  await invoke(lifecycleFor(runtime).execution({ input: transcript.current('user'), transcript, resourceBinding, settings: { ...settings, contextBudget } }), (context) => operation.call(callFor(context), { context: input, memories: [] }));
   return requests[0];
 }
 
-test('generation fits the priority prefix, stops at the first overflow and restores chronological order', async () => {
+test('generation preserves complete active history in its declared order and rejects overflow before model invocation', async () => {
   const full = await generate(input);
   assert.deepEqual(
     JSON.parse(full.messages[1].content).history.map((item) => item.index),
-    [0, 1, 2],
+    [2, 0, 1],
   );
-  const prefix = withHistory(full, [0, 2]);
-  const exactBudget = required(prefix);
-  const exact = await generate(input, exactBudget);
-  assert.deepEqual(exact, prefix);
-  assert.equal(estimateCapacity(exact, { ...settings, contextBudget: exactBudget }).required, exactBudget);
-
-  const truncated = await generate(input, exactBudget - 1);
-  assert.deepEqual(JSON.parse(truncated.messages[1].content).history, [{ index: 2, ...selectedMessages[0].message }]);
-  // The smaller third item would fit, but must not replace the second item.
-  assert.ok(required(withHistory(full, [1, 2])) < exactBudget - 1);
+  const exactBudget = required(full);
+  assert.deepEqual(await generate(input, exactBudget), full);
+  assert.equal(estimateCapacity(full, { ...settings, contextBudget: exactBudget }).required, exactBudget);
+  const requests = [];
+  await assert.rejects(generate(input, exactBudget - 1, requests), (error) => error.code === 'CAPACITY_EXCEEDED' && error.detail.required === exactBudget && error.detail.fits === false);
+  assert.equal(requests.length, 0);
   assert.deepEqual(
     input.selectedMessages.map((item) => item.index),
     [2, 0, 1],
   );
-  assert.deepEqual(JSON.parse(truncated.messages[1].content).message, message);
 });
 
-test('an oversized first selection fails before invoking the model instead of falling back to no history', async () => {
+test('a partial prefix fitting the budget does not authorize dropping the rest of active material', async () => {
   const full = await generate(input);
-  const budget = required(withHistory(full, [2])) - 1;
-  assert.ok(required(withHistory(full, [])) < budget);
+  const budget = required(withHistory(full, [2]));
+  assert.ok(budget < required(full));
   const requests = [];
-  await assert.rejects(generate(input, budget, requests), (error) => error.code === 'CAPACITY_EXCEEDED' && error.detail.required === budget + 1 && error.detail.fits === false);
+  await assert.rejects(generate(input, budget, requests), (error) => error.code === 'CAPACITY_EXCEEDED');
   assert.equal(requests.length, 0);
 });
 
-test('empty selection can fit exactly; fixed request content and output reserve cannot be truncated', async () => {
+test('empty active history can fit exactly; fixed request content and output reserve cannot be truncated', async () => {
   const empty = { message, selectedMessages: [] };
   const full = await generate(empty);
   const budget = required(full);
@@ -82,7 +76,7 @@ test('empty selection can fit exactly; fixed request content and output reserve 
   assert.equal(requests.length, 0);
 });
 
-test('the observed execution preserves ranking, records actual requests and accounts for full selection request capacity', async () => {
+test('the observed execution uses fixed active material without a selection-model pass', async () => {
   const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
   const current = createInput({ content: message.content, history });
   const requests = [];
@@ -90,34 +84,36 @@ test('the observed execution preserves ranking, records actual requests and acco
     async invoke(request, purpose) {
       requests.push(request);
       if (purpose === 'memory') return output({ memories: [] });
-      if (purpose === 'selection') {
-        assert.match(request.messages[0].content, /从高到低/);
-        return output({ historyIndexes: [2, 0, 1] });
-      }
+      assert.notEqual(purpose, 'selection');
       return output({ kind: 'answer', content: '完成' });
     },
   });
   assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
-  assert.equal(requests.length, 3);
-  assert.deepEqual(
-    facts.operations.map((record) => record.operation),
-    ['selection', 'requestModel', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
+  assert.equal(requests.length, 2);
+  assert.equal(
+    facts.operations.some((record) => record.operation === 'selection'),
+    false,
   );
-  assert.deepEqual(readOutput(facts.operations.find((record) => record.operation === 'selection').value).historyIndexes, [2, 0, 1]);
   for (const decision of facts.operations.filter((record) => record.operation === 'conversationDecision')) {
-    assert.deepEqual(decision.value.input.request.selection.historyIndexes, [2, 0, 1]);
+    assert.deepEqual(
+      decision.value.input.request.history.map((item) => item.index),
+      [0, 1, 2],
+    );
     assert.equal(
       facts.attempts.some((record) => record.operationId === decision.id),
       false,
-      'routing consumes accepted ranking without another model request',
+      'routing consumes fixed active material without another model request',
     );
   }
   const generation = facts.operations.find((record) => record.operation === 'answer');
-  assert.deepEqual(generation.value.input.selection.historyIndexes, [2, 0, 1]);
-  const prepared = facts.attempts.find((record) => record.operationId === generation.id && record.name === 'prepareModelRequest');
-  assert.deepEqual(readOutput(prepared.value), requests[1]);
   assert.deepEqual(
-    JSON.parse(requests[1].messages[1].content).history.map((item) => item.index),
+    generation.value.input.context.selectedMessages.map((item) => item.index),
+    [0, 1, 2],
+  );
+  const prepared = facts.attempts.find((record) => record.operationId === generation.id && record.name === 'prepareModelRequest');
+  assert.deepEqual(readOutput(prepared.value), requests[0]);
+  assert.deepEqual(
+    JSON.parse(requests[0].messages[1].content).history.map((item) => item.index),
     [0, 1, 2],
   );
   assert.ok(JSON.parse(requests[0].messages[1].content).history.every((item) => !('selectionCount' in item)));
@@ -126,12 +122,15 @@ test('the observed execution preserves ranking, records actual requests and acco
     { ...settings, contextBudget: 256 },
     {
       async invoke() {
-        assert.fail('Oversized selection request must not invoke the model');
+        assert.fail('Oversized active material must not invoke the model');
       },
     },
   );
   assert.equal(rejected.execution.status, 'failed');
   assert.equal(rejected.execution.value.error.code, 'CAPACITY_EXCEEDED');
   assert.ok(rejected.execution.value.error.detail.required > 1);
-  assert.equal(rejected.operations.length, 1);
+  assert.equal(
+    rejected.operations.some((record) => record.operation === 'requestModel'),
+    false,
+  );
 });

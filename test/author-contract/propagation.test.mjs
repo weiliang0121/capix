@@ -25,7 +25,7 @@ function runtime(operation) {
       },
     },
   });
-  return assembleRuntime(root, { providers: [], source: { entry: () => null, capture: () => null } });
+  return assembleRuntime(root, { providers: [], source: { capture: () => null } });
 }
 const attempt = (execute, raises = []) => defineAttempt()({ ...metadata, callee: 'fixture', raises, run: { execute } });
 

@@ -41,11 +41,11 @@ async function execute(failAt) {
 test('Observer retains its E/O/A composition without additional execution records', async () => {
   const { invocation, error, calls, environment } = await execute();
   assert.equal(error, undefined);
-  assert.deepEqual(calls, ['selection', 'answer', 'memory']);
+  assert.deepEqual(calls, ['answer', 'memory']);
   const children = invocation.children.values();
   assert.deepEqual(
     children.map((child) => child.key),
-    ['selection', 'decision', 'generation', 'decision', 'extraction'],
+    ['preparation', 'decision', 'generation', 'decision', 'extraction'],
   );
   assert.deepEqual(
     children.map((child) => child.reception.status),
@@ -78,7 +78,7 @@ test('memory failure preserves the delivered answer and completed generation rel
   assert.equal(error.cause.code, 'MODEL_OUTPUT_REJECTED');
   assert.equal(error.cause.cause.code, 'INVALID_JSON');
   assert.equal(error.cause.facts.code, 'INVALID_JSON');
-  assert.deepEqual(calls, ['selection', 'answer', 'memory']);
+  assert.deepEqual(calls, ['answer', 'memory']);
   assert.equal(environment.transcript.length, 2);
   assert.equal(environment.transcript.get(1).content, answer.content);
   const children = invocation.children.values();
@@ -105,12 +105,12 @@ test('invalid model output stays available through the actual child invocation w
   const { invocation, error, calls, environment } = await execute('answer');
   assert.equal(error.code, 'UNHANDLED_EXCEPTION');
   assert.ok(error.cause instanceof DeclaredException);
-  assert.deepEqual(calls, ['selection', 'answer', 'answer']);
+  assert.deepEqual(calls, ['answer', 'answer']);
   assert.equal(environment.transcript.length, 1);
   const children = invocation.children.values();
   assert.deepEqual(
     children.map((child) => child.key),
-    ['selection', 'decision', 'generation'],
+    ['preparation', 'decision', 'generation'],
   );
   const generation = children.find((child) => child.key === 'generation').invocation.children.values();
   const models = generation.filter((child) => child.key === 'model');

@@ -114,7 +114,7 @@ test('v3 migration preserves prior messages and adds no fictitious operation rec
   assert.equal(restored.confirmFixed(request(restored)), undefined);
   assert.equal(restored.applyFixed(request(restored)).start, 1);
   migrated.close();
-  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 5));
+  disk.edit((database) => assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6));
 });
 
 test('saved fixed receipt identity and actual message body are checked independently', (t) => {

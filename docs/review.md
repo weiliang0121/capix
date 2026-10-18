@@ -432,6 +432,8 @@ HTTP 解析传输格式和配置；E 入口接收明确的普通提交数据。�
 
 以上阶段已实施：R 的唯一占用迁入 RContext，本调用写端点绑定来源，最小运行来源进入跨端契约，E.entry.accept/admit 保留中间交付通知。第四项随后确认采用 ResourceRecord 与实体 UID 定位，正文和消费改造已包含在本轮实现中。
 
+> 后续修订：以上为当时实施总结。当前占用由 BoundRuntime 持有；P02 已移除 E.entry.accept/admit，由 R 普通资源追加输入、真实内容进展解释接纳、prepareContext O 固定活跃材料。当前规则见 [运行边界](runtime-boundaries.md) 与 [活跃材料](active-content.md)，不以本段历史名称重新约束实现。
+
 现有测试优先适配而非另建验收体系：
 
 - `test/environment.test.mjs`、`test/initialization.test.mjs`、`test/binding.test.mjs`：实体接线、惰性、定义复用和直接父绑定限制。

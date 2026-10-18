@@ -59,7 +59,7 @@ export function RoundGraph({ round, graph, index, width, selected, mode, expande
       <button type="button" className="round-graph-context" onClick={() => inspect(round.id)} aria-label={`查看 ${qaName(index)} 的输入和上下文`}>
         <p>{round.inputContent}</p>
         <div>
-          <span>历史 {round.context.selectionComplete ? `${round.context.selectedCount} 条选中` : '待选择'}</span>
+          <span>历史 {round.context.selectionComplete ? `${round.context.selectedCount} 条纳入` : '待准备'}</span>
           <span>记忆 {round.availableMemoryIds.length} 个可见</span>
           <span>{round.response?.index !== undefined ? '回答已落实' : '暂无回答定位'}</span>
           {round.memoryChanges.length > 0 && <span>记忆变化 {round.memoryChanges.length} 项</span>}

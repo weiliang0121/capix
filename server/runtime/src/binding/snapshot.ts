@@ -1,5 +1,5 @@
 import type { RuntimeDefinition } from '../definition/runtime.js';
-import type { ExecutionDefinition, ExecutionEntry } from '../definition/execution.js';
+import type { ExecutionDefinition } from '../definition/execution.js';
 import type { OperationDefinition } from '../definition/operation.js';
 import type { AttemptDefinition } from '../definition/attempt.js';
 import type { InvocationDefinition, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/invocation.js';
@@ -9,11 +9,11 @@ import type { CheckpointReferenceSlots } from '../definition/checkpoint.js';
 import type { CheckpointCodec } from '../checkpoint/contract.js';
 
 // Heterogeneous traversal erases only the pairing already retained by the overloads.
-type AnyDefinition = RuntimeDefinition<any, any, any, any, any> | ExecutionDefinition<any, any, any, any, any, any, any> | OperationDefinition<any, any, any, any, any> | AttemptDefinition<any, any, any, any, any>;
+type AnyDefinition = RuntimeDefinition<any, any, any, any, any> | ExecutionDefinition<any, any, any, any, any> | OperationDefinition<any, any, any, any, any> | AttemptDefinition<any, any, any, any, any>;
 
 /** Fix interpreted contracts and method entries without copying or freezing business instances. */
 export function snapshotDefinition<Input, Output, Resources extends object, ExceptionResources extends object, Delta>(definition: RuntimeDefinition<Input, Output, Resources, ExceptionResources, Delta>): RuntimeDefinition<Input, Output, Resources, ExceptionResources, Delta>;
-export function snapshotDefinition<Input, Output, Resources extends object, EntryInput, EntryResources extends object, ExceptionResources extends object, Delta>(definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, ExceptionResources, Delta>): ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, ExceptionResources, Delta>;
+export function snapshotDefinition<Input, Output, Resources extends object, ExceptionResources extends object, Delta>(definition: ExecutionDefinition<Input, Output, Resources, ExceptionResources, Delta>): ExecutionDefinition<Input, Output, Resources, ExceptionResources, Delta>;
 export function snapshotDefinition<Input, Output, Resources extends object, ExceptionResources extends object, Delta>(definition: OperationDefinition<Input, Output, Resources, ExceptionResources, Delta>): OperationDefinition<Input, Output, Resources, ExceptionResources, Delta>;
 export function snapshotDefinition<Input, Output, Resources extends object, ExceptionResources extends object, Delta>(definition: AttemptDefinition<Input, Output, Resources, ExceptionResources, Delta>): AttemptDefinition<Input, Output, Resources, ExceptionResources, Delta>;
 export function snapshotDefinition(definition: AnyDefinition): AnyDefinition;
@@ -22,7 +22,7 @@ export function snapshotDefinition(definition: AnyDefinition): AnyDefinition {
     case 'runtime':
       return Object.freeze({ ...snapshotInvocation(definition), level: definition.level, children: Object.freeze([...definition.children]) });
     case 'execution':
-      return Object.freeze({ ...snapshotInvocation(definition), level: definition.level, children: Object.freeze([...definition.children]), entry: definition.entry ? snapshotEntry(definition.entry) : undefined });
+      return Object.freeze({ ...snapshotInvocation(definition), level: definition.level, children: Object.freeze([...definition.children]) });
     case 'operation':
       return Object.freeze({ ...snapshotInvocation(definition), level: definition.level, children: Object.freeze([...definition.children]), name: definition.name, label: definition.label, source: definition.source });
     case 'attempt':
@@ -43,10 +43,6 @@ function snapshotInvocation<Input, Output, Level extends InvocationLevel, Resour
     observation: definition.observation ? Object.freeze(definition.observation.map(snapshotObservation)) : undefined,
     checkpoint: definition.checkpoint ? snapshotCheckpoint(definition.checkpoint) : undefined,
   });
-}
-
-function snapshotEntry<EntryInput, Input, EntryResources extends object>(entry: ExecutionEntry<EntryInput, Input, EntryResources>): ExecutionEntry<EntryInput, Input, EntryResources> {
-  return Object.freeze({ requires: Object.freeze({ ...entry.requires }), accept: entry.accept.bind(entry), admit: entry.admit?.bind(entry) });
 }
 
 function snapshotObservation<Fact>(declaration: ObservationDeclaration<Fact>): ObservationDeclaration<Fact> {

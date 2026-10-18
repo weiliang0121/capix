@@ -1,11 +1,12 @@
 import { isUndefined } from 'es-toolkit/predicate';
-import type { ExecutionSummary, InvocationSummary, ObserverOverview, RecordingArchive } from '@capix/protocol';
+import { readOutput, type ExecutionSummary, type InvocationSummary, type ObserverOverview, type RecordingArchive } from '@capix/protocol';
 import { AttemptRecord, InvocationBoundaryRecord, ExecutionRecord, MemoryRecord, OperationRecord, type RecordBook } from '@capix/server-runtime/recording';
 import { type Transcript } from '@capix/server-runtime/content';
 import { executionTranscript } from './evidence.js';
 import { inspectExecutions } from './inspect.js';
 import { executionArchive } from './archive.js';
 import type { SelectionInput } from '../conversation/operations/history/input.js';
+import type { describePreparedConversationContext } from '../conversation/content/observation.js';
 
 type ObservedCallRecord = ExecutionRecord | OperationRecord | AttemptRecord;
 
@@ -66,8 +67,10 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
     if (!(record instanceof ExecutionRecord)) throw new Error('Observed execution record does not exist');
     const ownOperations = operationsByExecution.get(record.id) ?? [];
     const ownAttempts = attemptsByExecution.get(record.id) ?? [];
-    const selection = ownOperations.find((operation) => operation.operation === 'selection');
-    const captured = selection?.value.input as SelectionInput | undefined;
+    const preparation = ownOperations.find((operation) => operation.operation === 'prepareContext');
+    const prepared = preparation?.status === 'succeeded' ? (readOutput(preparation.value) as ReturnType<typeof describePreparedConversationContext>) : undefined;
+    const legacySelection = ownOperations.find((operation) => operation.operation === 'selection');
+    const captured = legacySelection?.value.input as SelectionInput | undefined;
     const range = executionTranscript(observer.book, record.id);
     const call = summarize(record);
     const archive = executionArchive(observer.book, observer.recordingArchives, record.id);
@@ -78,7 +81,7 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
       ...(isUndefined(call.durationMs) ? {} : { durationMs: call.durationMs }),
       calls: [call, ...ownOperations.map(summarize), ...ownAttempts.map(summarize)],
       ...(range ? { transcriptRange: range } : {}),
-      availableMemoryIds: captured?.memories.map((memory) => memory.id) ?? [],
+      availableMemoryIds: (prepared?.material.memories ?? captured?.memories)?.map((memory) => memory.id) ?? [],
       memoryChanges: (changesByExecution.get(execution.id) ?? []).map((change) => ({ id: change.id, memoryId: change.memoryId, operationId: change.operationId, action: change.value.action, change: change.value.change })),
     };
   });

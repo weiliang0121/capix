@@ -14,7 +14,7 @@ const save = persistence.checkpoints.save.bind(persistence.checkpoints);
 persistence.checkpoints.save = (image, revision) => {
   const result = save(image, revision);
   const key = image.contract.key;
-  if (key === 'observer.select-history' && image.point === 'result') crash('selectionResult');
+  if (key === 'observer.prepare-context' && image.point === 'completed') crash('preparationResult');
   if (key === 'observer.request-model.understanding' && image.point === 'feedbackAccepted') crash('understandingFeedback');
   if (key.startsWith('observer.default-decision') && image.point === 'result') crash('decisionResult');
   if (key === 'observer.file-preflight' && image.point === 'result') crash('preflightResult');
@@ -27,7 +27,7 @@ persistence.checkpoints.save = (image, revision) => {
   if (key === 'observer.apply-memory' && image.point === 'prepared') crash('memoryPrepared');
   if (key === 'observer.create-text' && image.point === 'prepared') crash('filePrepared');
   if (key === 'observer.conversation.execution') {
-    if (image.point === 'selectionAccepted') crash('selectionAccepted');
+    if (image.point === 'preparationAccepted') crash('preparationAccepted');
     if (image.point === 'decisionAccepted') crash('decisionAccepted');
     if (image.point === 'capabilityAccepted.answer' || image.point === 'capabilityAccepted.document') crash('answerAccepted');
     if (image.point.startsWith('capabilityAccepted.') && image.state.progress.file && !image.state.progress.answer) crash('preflightAccepted');

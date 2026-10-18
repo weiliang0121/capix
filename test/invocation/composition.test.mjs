@@ -15,7 +15,7 @@ function install(composition, recorder) {
   const execution = defineExecution()({ children: [...new Set(composition.steps.map((step) => step.use))], run: { execute: (work) => composition.run(work.input, work.children) } });
   const definition = runtimeDefinition(execution);
   if (recorder) recordDefinitions(definition);
-  const runtime = assembleRuntime(definition, { providers: [], observations: recorder ? [bindRecording(recorder)] : [], source: { entry: () => null, capture: () => null, callbacks: () => ({ started: (_context, call) => calls.push(call) }) } });
+  const runtime = assembleRuntime(definition, { providers: [], observations: recorder ? [bindRecording(recorder)] : [], source: { capture: () => null, callbacks: () => ({ started: (_context, call) => calls.push(call) }) } });
   return { calls, runtime };
 }
 function deferred() {
@@ -143,7 +143,7 @@ test('direct calls attach and return without pretending parent acceptance took p
       },
     },
   });
-  const runtime = assembleRuntime(runtimeDefinition(execution), { providers: [], source: { entry: () => null, capture: () => null } });
+  const runtime = assembleRuntime(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
   await runtime.run(null, {});
   const child = facts.get(saved.ref);
   assert.equal(child.key, undefined);

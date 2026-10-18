@@ -15,7 +15,7 @@
 - server/runtime 提供 REOA 结构、声明/绑定、Invocation/Context、资源、异常和类型化观测出口；内容实体与可选记录预设暂同包，分别有 `/content` 与 `/recording` 入口。低层构造有 `/construction` 入口；根入口按职责分组，不为减少导出数量建立门面。
 - `structure/` 放可复用 Bound REOA，`binding/` 放 Binder 与接线，`context/`、`invocation/` 分别持有单次对象及各自 builders。Clock、Initializer、ProgressChannel 是共享能力，直接位于包内根文件；记录预设的声明、安装、单次句柄及映射集中在 `records/observation/`，历史记录恢复仍归 `records/restoration/`。生产者变化发布归 `changes/publish.ts`，不因可选观察端口而归属观测。
 - services/observer 的 conversation 提供业务 R/E/O/A、模型契约和绑定、消息同步；observation 提供来源/记录投影/观测交付；assembly 建立独立实体和共享消费；http 负责宿主交付。不得让 conversation 依赖环境初始化来取得隐式对象。
-- 服务声明树在环境装配时创建，绑定源 ConversationCallSource 按次承担 validate/entry/capture/started；模型配置接纳属于 conversation/model。ConversationContent 持有内容同步，ObserverEnvironment 持有已安装运行与观测，initializeObserver 只负责建立；注入内容由宿主关闭，环境只解除自身观察。关闭耗尽清理后报告错误，不把正常关闭标记为来源不完整，不自动复用或重建已关闭环境。流程见 [服务装配](docs/service-assembly.md)。
+- 服务声明树在环境装配时创建，绑定源 ConversationCallSource 按次承担 validate/runtime/capture/started；模型配置接纳属于 conversation/model。ConversationContent 持有内容同步与无独立身份的 ActiveContent 索引，ObserverEnvironment 持有已安装运行与观测，initializeObserver 只负责建立；注入内容由宿主关闭，环境只解除自身观察。关闭耗尽清理后报告错误，不把正常关闭标记为来源不完整，不自动复用或重建已关闭环境。流程见 [服务装配](docs/service-assembly.md)。
 - ClientRuntime 保持无 UI：以 conversation/transcripts/observation 具名装配，初始化配置与消息同步，观测显式开启。当前依赖对话和 Observer 契约，不宣称已是任意业务的通用客户端。client/http 只做收发与协议接纳；app binding 投影后写入 Store，React 消费读模型与明确 props。内部接纳、会话协调与公开快照分开；每条增量照常消费，微任务合并发布，命令门控使用即时内部状态。正文可用性与服务结果、连接健康分别表达；app binding 按浏览器帧合并投影，一次写 Store。
 - ClientSubmission 持有单次提交的反馈连接与事实，TranscriptReceiver / ObservationReceiver 各自持有同步生命周期；ClientRuntime 只协调初始化、当前提交、跨来源状态与发布。连接替换先转移本地归属再 abort 旧连接，回调重入后复核身份；停止消费不取消服务端业务。
 - 消息副本与同步连接状态分开。TranscriptReceiver 对明确连接中断和修订缺口有限退避重建基线，主动停止清理定时器；身份/正文冲突、协议错误及来源失效终止自动恢复。基线不能改写既有消息前缀。恢复就绪等待本次有效基线，不复用首次 ready；已初始化客户端的同步波动不重置业务接纳资格或触发重 POST。
@@ -31,7 +31,7 @@
 - BoundRuntime 持有占用和稳定身份，只引用本层 InvocationBuilder。构造器在所属 R 内持续复用且不缓存单次信号/输入。每次 run 新建 RuntimeContext/Invocation；占用取得后任何失败都释放。业务不维护第二个 executing 标志，不隐含排队。
 - 世界由独立实体构成：Transcript、Memories、SelectionUsage、Provider、记录容器等由环境建立。R 只绑定资源访问形式，不成为这些对象的所有者。
 - ResourceOffer 声明公开访问、capture、兑现时机与 describe。绑定按对象身份、唯一供给和声明覆盖检查；业务只取得本阶段资源。资源端点检查所属调用/祖先活动，不能缓存写端点越过调用继续使用。关闭观测不触发描述或提前兑现惰性模型。
-- E entry.accept 接纳输入，accepted 通知后，未取消时 entry.admit 执行分段；entry 关闭后 capture 固定工作配置/原文范围，然后创建 E Context/Invocation。入口阶段属于已有 R，不伪造 E 记录。started 是同步绑定回调，保持 Context 建立后、调用 started 发布前的时机。被动进展通过独立 ProgressChannel 隔离消费者故障，不把反馈回调当作建立钩子；消息落实定位在正式 append 时发布，不读当前集合长度反推。详细顺序见 [运行边界](docs/runtime-boundaries.md)。
+- R/E 使用普通调用输入，ExecutionDefinition 不带专属 entry 或 EntryInput/EntryResources。Observer 的 R 通过正式 append 资源接纳服务输入，把 message/messageIndex 传给 E；输入进展由真实追加发布。E 创建时 capture 固定模型配置和原文定位，不固定模型材料；prepareContext O 在可选维护之后 capture 活跃材料。输入已落实但 E 未建立的失败保留 R 及内容事实，不伪造 E 记录。started 仍是 Context 建立后、调用 started 发布前的同步绑定回调；被动 ProgressChannel 隔离消费者故障。显式 InvocationEntry 子输入适配仍保留，不等于 E 专属 entry。详细顺序见 [运行边界](docs/runtime-boundaries.md)。
 - O/A 可通过 `childResources` 在创建时收窄已供应且已申请的资源；规则由 ResourceOffer.refine 签发，绑定只从输入选择范围，资源自身检查不可扩大。父层和兄弟供给不变，无关资源不重捕获；这不是动态能力注册或调度。
 - BoundChildren 持有已解算子声明与固定 CP 契约，惰性建立直接子结构；已保存成功交付不需要初始化子结构。Initializer 缓存成功或失败；ChildBindingsBuilder 核对阶段范围并构造 InvocationChildBindings，后者签发阶段 ChildCalls/ChildCall；opaque ChildReference 可跨本父调用的阶段/轮次保存，通过当前 work.children.open 重新取得动作。事实查询不需要 uses，创建/启动/恢复需要。InvocationWorkBinding 是 Bound 持有的固定声明适配，实现 InvocationWork 契约；按 Invocation 持有 InvocationAccess，后者管理跨阶段共享的引用认证，进入阶段先激活资源并签发当前阶段/轮次 Work。Builder 不保留本次状态，不提前初始化子结构；Work、子句柄与 writer 保持受限端口，未声明 accept 不安装默认接纳方法。不引入重置/异步管理器。Sequence 逐项构造输入、运行并接纳结果，各次输出独立。父子关系保存真实返回与接纳事实；returned 不等于 accepted。
 - Invocation 协调整次调用与最终交付，InvocationCycle 持有本地工作周期及输出段，只使用窄工作/控制端口；Context 唯一持有语义进度。CP 编解码、子恢复依据及续接缓存属于 checkpoint，Children/Relation 只安装已解码关系事实并维护直接归属和接纳窗口。
@@ -46,12 +46,14 @@
 - 恢复使用新 activityId 的 CheckpointFact：历史 installed 基线与新变化分开；恢复调用事实不写原 Recorder/Invocation changes；实体新变化仍经自身出口发布。不装 Recorder 仍可恢复。观测默认隔离，可显式传播；最终交付提交后通知失败不能修改已固定交付。
 - Memories 固定批次按本 A 身份与效果位置确认，变更与凭据同事务；重复确认不占新顺序。宿主恢复使用原记忆快照，并核对原 E 精确子树中连续的落实凭据及当前正文。WorkspaceFiles 固定创建先保存 pending、同步文件与目录、再保存凭据；已确认只读原结果，pending 明确未知，不从文件存在猜成功或重写。
 - Observer 默认 CP 观测载体提供按 root 查询/订阅的本进程有界元数据，区分正常/恢复活动及 installed 基线，不保留 frame/IO、不替代持久恢复依据；未接 HTTP/UI。
-- Observer 默认为新产生的调用安装 CP（SQLite 复用宿主连接，内存宿主使用 MemoryCheckpointStore），不补写旧任务。内置 R/E、选择、决策、澄清、文件、回答与记忆声明均有明确 CP 边界，保持原输入/配置/范围/直接子身份，不重发已固定交互；二次生成保留原拒绝与次数。子首份 CP/交付缺失、外部反馈未知仍拒绝续接；不把声明覆盖当作任意位置恢复承诺。宿主 `ObserverConversations.recover(conversationId, rootContextId)` 显式续接；核对内容、声明配置、文件工作区指纹及写入凭据，不复播旧提交进展，不自动恢复旧 submission。新对话真实链已用跨进程中断验证；HTTP/客户端恢复入口未接入。详见 [Checkpoint](docs/checkpoints.md)。
+- Observer 默认为新产生的调用安装 CP（SQLite 复用宿主连接，内存宿主使用 MemoryCheckpointStore），不补写旧任务。内置 R/E、材料准备、决策、澄清、文件、回答与记忆声明均有明确 CP 边界，保持原输入/配置/范围/直接子身份，不重发已固定交互；二次生成保留原拒绝与次数。子首份 CP/交付缺失、外部反馈未知仍拒绝续接；不把声明覆盖当作任意位置恢复承诺。宿主 `ObserverConversations.recover(conversationId, rootContextId)` 显式续接；核对内容、声明配置、文件工作区指纹及写入凭据，不复播旧提交进展，不自动恢复旧 submission。新对话真实链已用跨进程中断验证；HTTP/客户端恢复入口未接入。详见 [Checkpoint](docs/checkpoints.md)。
+- P02 后 Observer R/E 的 CP 契约为 version 3/4，旧版本明确拒绝，Frame 仍为 v2。准备结果及 E 进度保存原消息/记忆值，恢复不改用当前活跃索引；R 续接不重复输入 append，首份 R CP 之前的追加窗口不承诺恢复。自定义决策与维护尚无完整版本化宿主恢复契约，暂拒宿主恢复。维护预设局部 CP 已验证，但 ActiveContent.apply 无固定操作凭据；落实后尚无 completed CP 时，旧依据冲突明确拒绝，不猜测成功。
 
 ## 内容、记录与变化
 
 - Transcript 自行接纳并复制冻结消息，只有正式 append/startSegment 改变集合；消息 index 稳定，批量预检查失败不部分追加。Ref/RangeRef 是内部实体访问，记录只保存 UID、范围及版本，不持有活引用。原文仅含正式 user/assistant，不把选择输出当消息。详见 [原文与分段](docs/transcript.md)。
-- Memories 独占 create/update 正式落实；先检查整批目标、内容和来源，再变更。更新保留 Memory 身份，无变化不占顺序号。业务依据从本轮固定快照、可见原文和 E 已接纳的保存凭据取得，不从 MemoryRecord 恢复。消息索引来源保留，文件创建来源以不可变 sourceResults 补充；模型只引用服务提供的 ID，不能构造凭据。历史创建不保证文件现状，也不强制每次保存形成记忆。下一轮使用更新后的记忆；当前不引入长期画像、召回、证据平台或记忆关系图。详见 [记忆](docs/memory.md)。
+- ActiveContent 是 ConversationContent 持有的消息索引/记忆 ID 索引，无独立 UID 或生命周期；退出活跃集合不删除实体，也不要求替代内容。capture 保存不可变消息/记忆值及 transcriptId/memoriesId/indexRevision/transcriptRevision/memorySequence 复合依据，apply 精确检查依据与成员。源追加/新记忆默认纳入，更新不自动重新纳入已退出的记忆；SQLite v6 将新成员和源变更同事务保存。业务经 read/manage 正式资源访问，不持有实体。详见 [活跃材料](docs/active-content.md)。
+- Memories 独占 create/update 正式落实；先检查整批目标、内容和来源，再变更。更新保留 Memory 身份，无变化不占顺序号。业务依据从本轮固定快照、可见原文和 E 已接纳的保存凭据取得，不从 MemoryRecord 恢复。消息索引来源保留，文件创建来源以不可变 sourceResults 补充；模型只引用服务提供的 ID，不能构造凭据。历史创建不保证文件现状，也不强制每次保存形成记忆。下次材料捕获使用届时活跃的记忆；当前不引入长期画像、召回、证据平台或记忆关系图。详见 [记忆](docs/memory.md)。
 - 记录是预设的可选观测结果，不是观测唯一载体。Invocation、资源和内容生产者不依赖 Recorder；不装记录时运行仍成立。RecordingInstallation 持有 RecordingRootRecord；RuntimeCallRecord 是单次 R 调用。记录树为根→R调用→E→O/A。保留现有 wire kind:'runtime'，不因代码改名改变协议。
 - Recorder 组合 RecordBook、RecordTree、同步登记与通知；Book 只持有引用并拒绝重复 ID。Tree 依据直接 parentId/childIds 查询，不重建调用索引。登记同步维护父子引用，失败只清理本次登记，不回滚业务事实。记录正文复制/检查/冻结，拒绝活实体、函数、循环等不受支持内容。
 - InvocationRecording 局部持有调用记录句柄与父预设，不建立全局 Context→Record 查询。processes 与 relationChanges 分开；resultOf 只引用本记录直接正文，不跨轮/记录成链。InvocationBoundaryRecord 描述工作边界，不冒充实际交付。ResourceRecord 是写入载体的资源数据，ResourceObservation 才是实时观测事实。详见 [记录机制](docs/recording.md)。
@@ -71,12 +73,13 @@
 - 单轮失败或取消不暂停、清空后续消息；已确认结束后依据服务接纳事实自动推进。等待项只提供撤销，不要求用户暂停或恢复队列。服务明确未接纳且声明 retry:admission 时，保留同一本地项与顺序，确认可接纳后使用新提交身份尝试；结果未知只查询或跟随原身份，不能重 POST。
 - 取消通过 submission 独立控制接口传给 R.run；cancelRequested 不等于 cancelled，运行真正退出才发布终态。停止当前只影响当前项，等待项仍自动处理。InvocationCancelled 绑定具体控制信号，已归属故障优先；既成内容保留，收尾不受取消阻断，不以 Promise.race 提前释放运行。
 - ConversationRequest {messages} 是服务对话输入，不是通用 E 契约。正式接纳 1–501 条消息，末条为 user；忙碌返回409，不追加输入。回答追加后发 answer，记忆后处理前可见；completed 等 R.run 返回后发送。后处理失败保留回答。
-- ConversationRuntimeDefinition / ConversationExecutionDefinition 组织选择、生成、记忆提取。业务复杂度在具体声明，绑定固定资源来源。消息同步与观测 Feed 独立连接/关闭；不观测仍能正常对话。
-- 选择历史后，E 通过可替换决策 O 在已声明能力间有限推进，默认最多 8 步（允许 1–16）；目录含真实子声明的公开参数与可用条件，内部资源和输入仍由具体能力构造。默认策略仅在目标未定或候选需修正时调用理解模型；已接纳结果直接驱动下一步。文件预检 O/A 只检查命名路径元数据，显式 fileTask 跳过理解但不跳过预检；根内绝对候选可规范为相对路径。候选错误可同轮修正，真实异常不能回灌模型无限处理。task 仅在正式分支或澄清结论发布一次；回答先落实再保存，完成依赖真实交付与保存凭据，记忆是固定收尾。没有跨 QA 挂起或动态能力注册。
+- ConversationRuntimeDefinition / ConversationExecutionDefinition 组织输入接纳、材料准备、决策、生成与记忆提取。业务复杂度在具体声明，绑定固定资源来源。消息同步与观测 Feed 独立连接/关闭；不观测仍能正常对话。
+- 准备并接纳固定活跃材料后，E 通过可替换决策 O 在已声明能力间有限推进，默认最多 8 步（允许 1–16）；目录含真实子声明的公开参数与可用条件，内部资源和输入仍由具体能力构造。默认策略仅在目标未定或候选需修正时调用理解模型；已接纳结果直接驱动下一步。文件预检 O/A 只检查命名路径元数据，显式 fileTask 跳过理解但不跳过预检；根内绝对候选可规范为相对路径。候选错误可同轮修正，真实异常不能回灌模型无限处理。task 仅在正式分支或澄清结论发布一次；回答先落实再保存，完成依赖真实交付与保存凭据，记忆是固定收尾。没有跨 QA 挂起或动态能力注册。
+- 默认链不调用模型选择历史、不自动分段或裁剪。prepareContext O 是实际材料唯一捕获点，理解/回答/提取消费其固定值；原文 fixedRange 只用于定位，材料计数通过核对真实消息的窄资源写入 SelectionUsage。可选 maintenance 为普通函数或 O 策略，由维护 O 在 before-request / after-content 的明确边界调用一次；策略可显式申请资源并组合子能力，不因内部内容变化递归触发。未配置不创建空维护调用；后处理失败保留正式回答。
 - 有限流式输出由 `output: OutputDeclaration<Result, Delta>` 声明，execute 的 Work 只获得本轮 writer；退出 execute 即封口，继续或异常处理废弃旧段，最终结果统一校验但保持原引用。Delta 不自动向祖先转发，也不进入 Recorder、Transcript 或持久化；显式绑定消费者故障隔离。
 - 当前仅回答/文档正文启用模型 SSE。模型交互持有有界临时原始前缀，RequestModel O 通过资源订阅跨越首次等待与后续读取，finally 解除消费。GenerateAnswer O 解码声明的 JSON content；完整返回仍须 finishReason/JSON/Schema/父层接纳。E 正式 append 后以实际候选来源和消息位置交接，不按文本或最后一次模型调用猜测身份。预览不一致不否定合法正式消息。
-- 只有 GenerateAnswerDefinition 明确支持一次再次生成：完整模型返回被 INVALID_JSON/EMPTY_OUTPUT/OUTPUT_SHAPE 拒绝时，依据直接子调用证据与声明契约继续。第二轮只准备反馈请求、调用及接纳，不重复选择、上下文组装或回答追加。超时、网络、取消、非 stop 返回、捕获/记录错误不自动重试。
-- 模型输出契约使用固定 Zod 严格 Schema，与 JSON Schema 同源；不 coerce/trim/default 掩盖非法输出。结构校验与动态引用/来源/容量规则分别由能力负责。选择保留模型优先级；请求装载按优先级保留完整前缀，第一条超限就失败，不跳过长消息凑容量。字节容量估算不是精确 tokenizer。
+- 只有 GenerateAnswerDefinition 明确支持一次再次生成：完整模型返回被 INVALID_JSON/EMPTY_OUTPUT/OUTPUT_SHAPE 拒绝时，依据直接子调用证据与声明契约继续。第二轮只准备反馈请求、调用及接纳，不重复材料准备、上下文组装或回答追加。超时、网络、取消、非 stop 返回、捕获/记录错误不自动重试。
+- 模型输出契约使用固定 Zod 严格 Schema，与 JSON Schema 同源；不 coerce/trim/default 掩盖非法输出。结构校验与动态引用/来源/容量规则分别由能力负责。默认请求完整装载本次固定活跃材料并检查总容量，超限明确失败，不通过隐式截断凑容量；独立 SelectHistory 只在显式装配时运行。字节容量估算不是精确 tokenizer。
 - GET /api/executions 为轻量概览，详情按需读取 ExecutionRecordSnapshot。原文独立基线与增量同步，客户端组合引用和已加载正文。未加载/缺失/错误/空值分开。来源失效不改写业务结果。详见 [协议](docs/protocol.md)、[客户端](docs/client-runtime.md)。
 
 ## 提交与反馈生命周期

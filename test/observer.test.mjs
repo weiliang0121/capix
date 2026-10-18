@@ -49,29 +49,29 @@ async function run(provider, options = settings) {
   const trace = await runObserver(structuredClone(input), options, provider, (t) => records.push(t));
   return { trace, records };
 }
-test('three actual model stages produce a causal trace and selected original content', async () => {
-  const provider = scripted([output('{"historyIndexes":[1,0]}'), output(JSON.stringify(reply))]);
+test('fixed preparation and two model stages produce a causal trace with active original content', async () => {
+  const provider = scripted([output(JSON.stringify(reply))]);
   const { trace, records } = await run(provider);
   assert.equal(trace.status, 'succeeded');
   assert.deepEqual(trace.result, reply);
-  assert.equal(provider.calls.length, 3);
-  for (const [index, contract] of [selectionOutputContract, answerOutputContract, memoryOutputContract].entries()) {
+  assert.equal(provider.calls.length, 2);
+  for (const [index, contract] of [answerOutputContract, memoryOutputContract].entries()) {
     assert.ok(provider.calls[index].request.messages[0].content.includes(JSON.stringify(contract.schema)));
   }
   assert.deepEqual(
-    JSON.parse(provider.calls[1].request.messages[1].content).history.map((m) => m.index),
+    JSON.parse(provider.calls[0].request.messages[1].content).history.map((m) => m.index),
     [0, 1],
   );
-  assert.equal(trace.nodes.filter((node) => node.operation !== 'conversationDecision').length, 18);
+  assert.equal(trace.nodes.filter((node) => node.operation !== 'conversationDecision').length, 14);
   assert.equal(trace.nodes.filter((node) => node.operation === 'conversationDecision').length, 2);
   assert.equal(
     trace.nodes.some((node) => node.operation === 'input'),
     false,
   );
   assert.ok(trace.nodes.every((n) => n.status === 'passed' && n.durationMs >= 0));
-  assert.ok(records.some((t) => t.nodes.find((n) => n.operation === 'requestModel.invokeModel' && n.group === 'selection')?.status === 'running'));
+  assert.ok(records.some((t) => t.nodes.find((n) => n.operation === 'requestModel.invokeModel' && n.group === 'answer')?.status === 'running'));
   assert.equal(records[0].nodes[0].status, 'running');
-  for (const stage of ['selection', 'answer', 'memory']) {
+  for (const stage of ['answer', 'memory']) {
     const owner = trace.nodes.find((node) => node.operation === stage);
     const request = trace.nodes.find((node) => node.operation === 'requestModel' && node.parentId === owner.id);
     assert.equal(request.group, stage);
@@ -84,23 +84,15 @@ test('three actual model stages produce a causal trace and selected original con
   }, TypeError);
   assert.equal(records[0].facts.execution.status, 'running');
 });
-test('invalid indexes halt before assembly and second call', async () => {
-  const provider = scripted([output('{"historyIndexes":[0,8]}')]);
-  const { trace } = await run(provider);
-  assert.equal(trace.error.code, 'INDEX_OUT_OF_RANGE');
-  assert.equal(provider.calls.length, 1);
-  assert.equal(trace.nodes.find((n) => n.operation === 'selection.acceptModelOutput').status, 'failed');
-  assert.equal(
-    trace.nodes.find((n) => n.operation === 'answer.invokeModel'),
-    undefined,
-  );
+test('the standalone selection contract still rejects indexes outside its supplied range', () => {
+  assert.throws(() => selectionOutputContract.accept({ historyIndexes: [0, 8] }, { start: 0, end: 3 }), { code: 'INDEX_OUT_OF_RANGE' });
 });
 test('capacity failure prevents all model calls and preserves capacity evidence', async () => {
   const provider = scripted([]);
   const { trace } = await run(provider, { ...settings, contextBudget: 256 });
   assert.equal(trace.error.code, 'CAPACITY_EXCEEDED');
   assert.equal(provider.calls.length, 0);
-  const capacity = trace.nodes.find((n) => n.operation === 'selection.prepareModelRequest');
+  const capacity = trace.nodes.find((n) => n.operation === 'answer.prepareModelRequest');
   assert.equal(Object.hasOwn(capacity, 'output'), false);
   assert.equal(capacity.error.detail.fits, false);
   assert.equal(capacity.error.detail.exact, false);
@@ -112,8 +104,8 @@ test('malformed, duplicate and truncated results fail at the corresponding bound
     ['{"historyIndexes":[]}', 'length', 'INCOMPLETE_OUTPUT', 'acceptModelOutput'],
     ['', 'stop', 'EMPTY_OUTPUT', 'acceptModelOutput'],
   ]) {
-    const { trace } = await run(scripted([output(raw, finish)]));
-    const accepted = trace.nodes.find((n) => n.operation === `selection.${stage}`);
+    const { trace } = await run(scripted([output(raw, finish), output(raw, finish)]));
+    const accepted = trace.nodes.filter((n) => n.operation === `answer.${stage}`).at(-1);
     assert.equal(accepted.status, 'failed');
     assert.deepEqual(trace.error, accepted.error);
     if (code === 'INCOMPLETE_OUTPUT') {
@@ -128,7 +120,7 @@ test('malformed, duplicate and truncated results fail at the corresponding bound
   }
 });
 test('answer classification is validated but does not invent task success', async () => {
-  const provider = scripted([output('{"historyIndexes":[]}'), output('{"kind":"tool","content":"x"}'), output('{"kind":"tool","content":"x"}')]);
+  const provider = scripted([output('{"kind":"tool","content":"x"}'), output('{"kind":"tool","content":"x"}')]);
   const { trace } = await run(provider);
   assert.equal(trace.error.code, 'MODEL_OUTPUT_REJECTED');
   assert.equal(trace.error.cause.code, 'OUTPUT_SHAPE');
@@ -137,7 +129,7 @@ test('answer classification is validated but does not invent task success', asyn
   assert.equal(accepted.status, 'failed');
   assert.deepEqual(accepted.error.cause.detail.issues[0].path, ['kind']);
   assert.deepEqual(JSON.parse(JSON.stringify(trace)).error.cause.detail.issues, accepted.error.cause.detail.issues);
-  assert.equal(provider.calls.length, 3);
+  assert.equal(provider.calls.length, 2);
   assert.equal(trace.result, undefined);
 });
 test('DeepSeek request uses JSON mode; transport secret is absent from observations', async () => {
@@ -149,7 +141,7 @@ test('DeepSeek request uses JSON mode; transport secret is absent from observati
     sent.push(request);
     assert.equal(request.response_format.type, 'json_object');
     assert.equal(request.thinking.type, 'disabled');
-    const content = sent.length === 1 ? '{"historyIndexes":[0,1]}' : sent.length === 2 ? JSON.stringify(reply) : '{"memories":[]}';
+    const content = sent.length === 1 ? JSON.stringify(reply) : '{"memories":[]}';
     if (request.stream) {
       const chunk = { id: 'test-id', model: 'test-provider', choices: [{ index: 0, delta: { content }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } };
       return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, { headers: { 'Content-Type': 'text/event-stream' } });
@@ -170,9 +162,9 @@ test('DeepSeek request uses JSON mode; transport secret is absent from observati
   });
   const { trace, records } = await run(provider);
   assert.equal(trace.status, 'succeeded');
-  assert.equal(sent.length, 3);
+  assert.equal(sent.length, 2);
   assert.equal(JSON.stringify(records).includes('test-secret-do-not-log'), false);
-  assert.equal(trace.nodes.find((n) => n.operation === 'requestModel.invokeModel' && n.group === 'selection').output.output.usage.totalTokens, 15);
+  assert.equal(trace.nodes.find((n) => n.operation === 'requestModel.invokeModel' && n.group === 'answer').output.output.usage.totalTokens, 15);
 });
 test('provider HTTP errors remain explicit and never retry', async () => {
   let calls = 0;
@@ -207,9 +199,9 @@ test('Transcript rejects invalid messages before execution or model calls begin'
 });
 
 test('Named action sequence records nested call and return boundaries rather than adjacent stage edges', async () => {
-  const { trace } = await run(scripted([output('{"historyIndexes":[0,1]}'), output(JSON.stringify(reply))]));
+  const { trace } = await run(scripted([output(JSON.stringify(reply))]));
   const { calls, events } = trace.callSequence;
-  assert.equal(calls.filter((call) => call.operation !== 'conversationDecision').length, 18);
+  assert.equal(calls.filter((call) => call.operation !== 'conversationDecision').length, 14);
   const decisions = calls.filter((call) => call.operation === 'conversationDecision');
   assert.equal(decisions.length, 2);
   assert.ok(decisions.every((call) => call.parentId === calls.find((parent) => parent.operation === 'execution').id));
@@ -231,7 +223,7 @@ test('Named action sequence records nested call and return boundaries rather tha
     }
   });
   assert.equal(active.size, 0);
-  const selection = calls.find((call) => call.operation === 'selection');
+  const selection = calls.find((call) => call.operation === 'answer');
   const request = calls.find((call) => call.operation === 'requestModel' && call.parentId === selection.id);
   const invoke = calls.find((call) => call.operation === 'requestModel.invokeModel' && call.parentId === request.id);
   assert.equal(invoke.parentId, request.id);
@@ -239,7 +231,7 @@ test('Named action sequence records nested call and return boundaries rather tha
   assert.equal(invoke.caller, 'operation');
   assert.equal(invoke.callee, 'attempt');
   assert.equal(invoke.target, 'provider');
-  const firstEnd = events.find((e) => e.callId === calls.find((c) => c.operation === 'selection').id && e.value.type === 'return');
+  const firstEnd = events.find((e) => e.callId === calls.find((c) => c.operation === 'prepareContext').id && e.value.type === 'return');
   const secondStart = events.find((e) => e.callId === calls.find((c) => c.operation === 'answer').id && e.value.type === 'call');
   assert.ok(firstEnd.sequence < secondStart.sequence);
   const decisionStart = events.find((event) => event.callId === decisions[0].id && event.value.type === 'call');
@@ -248,16 +240,16 @@ test('Named action sequence records nested call and return boundaries rather tha
 });
 
 test('failure propagates through calls, is caught by Observer execution, and never creates skipped calls', async () => {
-  const { trace } = await run(scripted([output('{"historyIndexes":[8]}')]));
+  const { trace } = await run(scripted([output('', 'length')]));
   const { calls, events } = trace.callSequence;
   assert.deepEqual(
     events.filter((e) => e.value.type === 'throw').map((e) => calls.find((c) => c.id === e.callId).operation),
-    ['selection.acceptModelOutput', 'selection', 'execution'],
+    ['answer.acceptModelOutput', 'answer', 'execution'],
   );
   assert.equal(events.at(-1).callId, calls.find((c) => c.operation === 'execution').id);
   assert.equal(events.at(-1).value.type, 'throw');
   assert.equal(calls.find((c) => c.operation === 'execution').status, 'failed');
-  assert.ok(!calls.some((c) => c.operation === 'answer' || c.operation === 'assemble'));
+  assert.ok(!calls.some((c) => c.operation === 'memory'));
 });
 
 test('sequence ordering follows completion when calls overlap', async () => {
@@ -296,14 +288,14 @@ test('Observer execution uses its captured configuration even when caller settin
         mutable.model = 'changed';
         mutable.contextBudget = 1;
         mutable.maxOutputTokens = 1;
-        return output('{"historyIndexes":[0,1]}');
+        return output(JSON.stringify(reply));
       }
       return output(JSON.stringify(reply));
     },
   };
   const facts = await observeFixture(createInput(input), mutable, provider);
   assert.equal(facts.execution.status, 'succeeded');
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 2);
   assert.ok(requests.every((request) => request.model === settings.model && request.max_tokens === settings.maxOutputTokens));
   assert.deepEqual(resourceFact(facts, 'model-settings.snapshot'), settings);
 });

@@ -135,7 +135,7 @@ test('a replacement client follows the original HTTP submission, receives its cu
     second.getSnapshot().messages.map((message) => message.content),
     ['接回原提交', '正在回答，正式结果'],
   );
-  assert.deepEqual(calls, ['selection', 'answer', 'memory']);
+  assert.deepEqual(calls, ['answer', 'memory']);
   assert.equal(host.requests.filter((request) => request.path === '/api/run').length, 1);
   assert.ok(host.requests.some((request) => request.path === `/api/submissions/${id}/follow` && request.method === 'GET'));
   assert.ok(host.requests.some((request) => request.path === `/api/submissions/${id}/cancel` && request.method === 'POST'));
@@ -180,7 +180,7 @@ test('a stored submission finished while detached is read by its original ID eve
     second.getSnapshot().messages.map((message) => message.content),
     ['接回原提交', '离线时已完成'],
   );
-  assert.deepEqual(calls, ['selection', 'answer', 'memory']);
+  assert.deepEqual(calls, ['answer', 'memory']);
   assert.equal(host.requests.filter((request) => request.path === '/api/run').length, 1);
   assert.equal(host.requests.filter((request) => request.path === `/api/submissions/${id}/follow`).length, 0, 'a known terminal baseline needs no live follow');
   assert.equal(tracking.load().submissionId, undefined);

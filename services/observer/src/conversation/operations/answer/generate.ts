@@ -1,14 +1,12 @@
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { modelOutputRejected } from '../../model/rejection.js';
 import { checkpointPoint, childReference, ChildCallFailure, type ChildCall, type ChildDefinition, type OperationWork, type ResumeWork, type HandleWork, type Resolution, type ChildReference } from '@capix/server-runtime';
-import { TranscriptResource } from '@capix/server-runtime/content';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
-import { type ConversationResources, type ModelRequestResources } from '../../resources.js';
-import { sortBy } from 'es-toolkit/array';
-import type { ModelRequest, ModelOutput, Selection } from '../../model/types.js';
+import { type ModelCallResources, type ModelRequestResources } from '../../resources.js';
+import type { ModelRequest, ModelOutput } from '../../model/types.js';
 import { OperationDefinition, RuntimeError } from '@capix/server-runtime';
 import { type Memory } from '@capix/server-runtime/content';
-import { checkCapacity, estimateCapacity } from '../../model/capacity.js';
+import { checkCapacity } from '../../model/capacity.js';
 import type { GenerationOutput, FileTask } from '@capix/protocol';
 import { answerOutputContract } from './output.js';
 import { AssembleAnswerContextDefinition, type AnswerMessageContext } from '../../attempt/context/assemble.js';
@@ -26,13 +24,13 @@ import { answerCheckpointCodecs, checkAnswerAccepted, checkModelWaiting, checkPr
 type AnswerWork = OperationWork<GenerationInput, GenerationOutput, object, ChildDefinition, AnswerTextDelta> | ResumeWork<'operation', GenerationInput, GenerationOutput, object, ChildDefinition, AnswerTextDelta>;
 
 export interface GenerationInput {
-  readonly selection: Selection;
+  readonly context: AnswerMessageContext;
   readonly memories: readonly ReturnType<Memory['toJSON']>[];
   readonly document?: TextDocument;
   readonly task?: { readonly fileTask: FileTask; readonly instruction: string };
 }
 
-export class GenerateAnswerDefinition extends OperationDefinition<GenerationInput, GenerationOutput, ConversationResources, Record<string, never>, AnswerTextDelta> {
+export class GenerateAnswerDefinition extends OperationDefinition<GenerationInput, GenerationOutput, ModelCallResources, Record<string, never>, AnswerTextDelta> {
   readonly output = answerStream;
   readonly observation;
   private readonly documentEnabled: boolean;
@@ -42,13 +40,13 @@ export class GenerateAnswerDefinition extends OperationDefinition<GenerationInpu
   protected readonly purpose = 'answer';
   protected readonly outputContract = answerOutputContract;
   protected readonly task: string;
-  private static readonly answerTask = `结合当前 message、所选 history 和已有 memories，用中文直接完成用户本次请求。history 是当前消息段的部分原文；memories 是可用于延续交流的已有理解，旧段原文可能不可见。依据足够时正常回答，缺失的细节不要补造。
+  private static readonly answerTask = `结合当前 message、活跃 history 和已有 memories，用中文直接完成用户本次请求。history 是父层固定的活跃原文；memories 是可用于延续交流的已有理解，旧段原文可能不可见。依据足够时正常回答，缺失的细节不要补造。
 按信息的对象、适用条件和时效判断依据，当前明确的补充与纠正优先；记忆和助手先前的回答都不自动成为已验证事实。保留尚未消解的冲突与不确定性，不把建议当作确认、局部条件当作普遍偏好。
 记忆中的 sourceResults 若包含 file-created，它是系统接纳的历史创建凭据，可说明当时保存的路径与内容指纹，但不保证文件当前仍存在或内容未变，也不能替代本轮实际读取。
 如果提供 task，task.instruction 是父层已经接纳的本轮内容处理目标，可能包含上一轮澄清的必要信息；task.fileTask 是确定的文件范围，不能扩大。不要把保存目标路径当成已经保存的事实。
 kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少用户可补充的必要信息，content 给出具体澄清问题；unknown 为缺乏知识或实际能力，content 如实说明。content 是直接呈现给用户的正文。`;
 
-  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() } as const);
+  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() } as const);
   readonly run;
   readonly checkpoint;
   readonly contextWaiting;
@@ -89,14 +87,14 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     this.acceptanceWaiting = point({ name: 'acceptanceWaiting', state: answerCheckpointCodecs.waiting, references: { acceptance: childReference(this.acceptOutputDefinition) }, check: (_state, facts) => checkAcceptanceWaiting(facts, facts.references.acceptance, this), resume: { requires: {}, uses: [this.acceptOutputDefinition], execute: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.acceptance)) } });
     this.modelWaiting = point({ name: 'modelWaiting', state: answerCheckpointCodecs.waiting, references: { model: childReference(this.requestModelDefinition) }, check: (_state, facts) => checkModelWaiting(facts, facts.references.model, this), resume: { requires: {}, uses: [this.requestModelDefinition, this.acceptOutputDefinition], execute: (work, _state, saved) => this.resumeModel(work, saved.model) } });
     this.answerAccepted = point({ name: 'answerAccepted', state: answerCheckpointCodecs.output, references: { acceptance: childReference(this.acceptOutputDefinition) }, check: (output, facts) => checkAnswerAccepted(facts, output, this), resume: { requires: {}, uses: [], execute: (_work, output) => output } });
-    this.checkpoint = { key: `observer.generate-answer.${options.document ? 'document' : options.files ? 'files' : 'conversation'}`, version: 3, input: answerCheckpointCodecs.input, output: answerCheckpointCodecs.output, points: [this.contextWaiting, this.requestWaiting, this.regenerationWaiting, this.modelWaiting, this.acceptanceWaiting, this.answerAccepted] };
+    this.checkpoint = { key: `observer.generate-answer.${options.document ? 'document' : options.files ? 'files' : 'conversation'}`, version: 4, input: answerCheckpointCodecs.input, output: answerCheckpointCodecs.output, points: [this.contextWaiting, this.requestWaiting, this.regenerationWaiting, this.modelWaiting, this.acceptanceWaiting, this.answerAccepted] };
     this.run = { requires: GenerateAnswerDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  private async execute(work: OperationWork<GenerationInput, GenerationOutput, ConversationResources, ChildDefinition, AnswerTextDelta>): Promise<GenerationOutput> {
+  private async execute(work: OperationWork<GenerationInput, GenerationOutput, ModelCallResources, ChildDefinition, AnswerTextDelta>): Promise<GenerationOutput> {
     if (Boolean(work.input.document) !== this.documentEnabled) throw new RuntimeError('DOCUMENT_INPUT', '文档证据必须与生成能力的声明一致。');
     if (work.round === 1) {
-      const assembled = work.children.create(this.assembleContextDefinition, work.input.selection, { key: 'context' });
+      const assembled = work.children.create(this.assembleContextDefinition, work.input.context, { key: 'context' });
       work.checkpoint?.save(this.contextWaiting, {}, { context: assembled.ref });
       return this.receiveContext(work, assembled);
     }
@@ -170,20 +168,8 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
   }
 
   protected createRequest(input: AnswerRequestInput, resources: ModelRequestResources): ModelRequest {
-    const selectedMessages: AnswerMessageContext['selectedMessages'][number][] = [];
-    let request = this.loadRequest({ ...input, selectedMessages }, resources);
+    const request = this.loadRequest(input, resources);
     checkCapacity(request, resources.settings);
-
-    for (const selected of input.selectedMessages) {
-      selectedMessages.push(selected);
-      const candidate = this.loadRequest({ ...input, selectedMessages }, resources);
-      if (!estimateCapacity(candidate, resources.settings).fits) {
-        // Never replace a higher-priority message with smaller, lower-priority ones.
-        if (selectedMessages.length === 1) checkCapacity(candidate, resources.settings);
-        break;
-      }
-      request = candidate;
-    }
     return request;
   }
 
@@ -192,7 +178,7 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
   }
 
   private prepare(input: AnswerRequestInput) {
-    return { message: input.message, memories: input.memories, ...(input.task ? { task: input.task } : {}), ...(input.document ? { document: input.document } : {}), history: sortBy(input.selectedMessages, ['index']).map(({ index, message }) => ({ index, ...message })) };
+    return { message: input.message, memories: input.memories, ...(input.task ? { task: input.task } : {}), ...(input.document ? { document: input.document } : {}), history: input.selectedMessages.map(({ index, message }) => ({ index, ...message })) };
   }
 }
 

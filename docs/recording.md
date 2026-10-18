@@ -51,7 +51,7 @@ Invocation.failure 是运行中的最终交付事实，不依赖记录存在。C
 
 Memories 和 Transcript 负责审查与落实内容，自身不依赖 Recorder。内部 ChangeProvenance 提供 origin.contextId 和类型化观察端口；资源绑定将本调用观察端口传入，实体将正式事件交给必要捕获与可选观察。无调用的独立实体变更可使用环境默认端口。
 
-记录安装从已发生事件构造 TranscriptRecord / MemoryRecord。RecordChangeSource 只存在于记录特化中，由本次记录句柄和父预设推导，实体不接收 callId/executionId，也不反查 Context。E entry 尚未建立 E 时归已有 R 调用。
+记录安装从已发生事件构造 TranscriptRecord / MemoryRecord。RecordChangeSource 只存在于记录特化中，由本次记录句柄和父预设推导，实体不接收 callId/executionId，也不反查 Context。服务输入由 R 的普通 append 资源正式写入，归已经存在的 R 调用；此时尚未建立 E，不伪造 E 记录。
 
 TranscriptRecord 正文保存追加或分段范围，不重复原文。消息 UID 和绝对 index 用于跨端定位；TranscriptRangeRef/MessageRef 只可在内部实体适配中使用，不能进入记录正文。snapshotValue 对普通记录数据执行复制、检查、冻结，不再识别并保留这些实体引用。
 

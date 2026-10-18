@@ -144,12 +144,12 @@ test('two clients keep explicit conversation targets, isolated content and recor
   );
   await next.runtime.submit(request('beta again'));
   await until(() => next.runtime.getSnapshot().messages.length === 4);
-  const selection = restarted.calls.find((call) => call.purpose === 'selection');
+  const answer = restarted.calls.find((call) => call.purpose === 'answer');
   assert.deepEqual(
-    selection.input.memories.map((memory) => memory.content),
+    answer.input.memories.map((memory) => memory.content),
     ['beta'],
   );
-  assert.ok(!JSON.stringify(selection.input).includes('alpha'));
+  assert.ok(!JSON.stringify(answer.input).includes('alpha'));
   await next.runtime.openConversation(alpha.id);
   assert.equal(next.runtime.getSnapshot().messages.length, 2);
   const detail = await next.observation.execution(alpha.id, alphaExecution);

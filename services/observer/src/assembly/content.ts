@@ -5,6 +5,7 @@ import { ChangeConsumer } from './changes.js';
 import { TranscriptFeed } from '../conversation/transcript/feed.js';
 import type { ObserverStoredContent } from '../persistence/types.js';
 import type { SqliteObserverStore } from '../persistence/store.js';
+import { ActiveContent } from '../conversation/content/active.js';
 
 export interface ContentObservation {
   readonly transcript: EventConsumer<TranscriptEvent>;
@@ -15,6 +16,7 @@ export interface ContentObservation {
 export class ConversationContent {
   readonly transcript: Transcript;
   readonly memories: Memories;
+  readonly active: ActiveContent;
   readonly changes = new ChangeBuffer<ObserverChange>();
   readonly consumer = new ChangeConsumer(this.changes);
   readonly transcripts: TranscriptFeed;
@@ -25,9 +27,16 @@ export class ConversationContent {
     const { saved, persistence } = options;
     const transcriptObservation: EventConsumer<TranscriptEvent> = { publish: (event) => this.#observation?.transcript.publish(event) };
     const memoryObservation: EventConsumer<MemoryEvent> = { publish: (event) => this.#observation?.memory.publish(event) };
+    const changes = {
+      capture: (event: TranscriptEvent | MemoryEvent) => {
+        this.active?.synchronize();
+        this.changes.capture(event);
+      },
+    };
     try {
-      this.transcript = saved ? Transcript.restore(saved.transcript, { changes: this.changes, observation: transcriptObservation, persistence: persistence?.transcript }) : new Transcript(options.messages ?? [], { changes: this.changes, observation: transcriptObservation });
-      this.memories = saved ? Memories.restore(saved.memories, this.transcript, { changes: this.changes, observation: memoryObservation, persistence: persistence?.memories }) : new Memories(this.transcript, { changes: this.changes, observation: memoryObservation });
+      this.transcript = saved ? Transcript.restore(saved.transcript, { changes, observation: transcriptObservation, persistence: persistence?.transcript }) : new Transcript(options.messages ?? [], { changes, observation: transcriptObservation });
+      this.memories = saved ? Memories.restore(saved.memories, this.transcript, { changes, observation: memoryObservation, persistence: persistence?.memories }) : new Memories(this.transcript, { changes, observation: memoryObservation });
+      this.active = new ActiveContent(this.transcript, this.memories, { saved: saved?.active, persistence: persistence?.activeContent });
     } catch (error) {
       let failure = error;
       try {

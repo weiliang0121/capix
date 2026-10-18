@@ -16,7 +16,7 @@ import type { InvocationRelation, InvocationRelationOptions } from './relation.j
 import type { InvocationChangeEmitter } from './changes.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationObservation } from '../observation/invocation.js';
-import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDescription, InvocationRelationIdentity, InvocationRelationChange, ExecutionEntryChange } from '../observation/facts.js';
+import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDescription, InvocationRelationIdentity, InvocationRelationChange } from '../observation/facts.js';
 import { combineFaults } from '../observation/error.js';
 import { invocationChange, invocationProgress } from './facts.js';
 import { InvocationCycle } from './cycle.js';
@@ -307,11 +307,6 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   private nextSequence(): number {
     return ++this.#sequence;
-  }
-
-  /** Internal parent-owned entry outlet, omitted from the business invocation view. */
-  publishEntry(change: ExecutionEntryChange): void {
-    this.publish({ kind: 'entry', ...change });
   }
 
   /** Internal forwarding preserves producer identity and sequence; absent from business views. */

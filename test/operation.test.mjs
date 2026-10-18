@@ -211,7 +211,7 @@ test('one selection operation can overlap calls without mixing their history bou
   assert.equal(Object.hasOwn(op, 'context'), false);
 });
 
-test('assembly attempt consumes explicit sources and needs no recorder', async () => {
+test('assembly attempt consumes fixed input material and needs no recorder', async () => {
   const message = createInput({
     content: 'x',
     history: [
@@ -219,21 +219,21 @@ test('assembly attempt consumes explicit sources and needs no recorder', async (
       { role: 'assistant', content: 'excluded' },
     ],
   });
-  const input = { historyIndexes: [0] };
+  const input = { message, selectedMessages: [{ index: 0, message: transcriptFor(message).get(0) }] };
   const attempt = bindChild(runtime, new AssembleAnswerContextDefinition());
-  const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message), resourceBinding: bindResources({ history: TranscriptResource.fixedRange.request() }, [TranscriptResource.fixedRange.provide((parent) => parent.transcriptRange)]) }), (execution) =>
+  const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message), resourceBinding: bindResources({}, []) }), (execution) =>
     runtime.operationInvocationBuilder
       .create(callFor(execution), {
         input,
-        requires: { history: TranscriptResource.fixedRange.request() },
+        requires: {},
         description: new TestOperation(runtime),
         work: { maxRounds: 1, execute: (_context, invocation) => attempt.call(invocation, input) },
       })
       .run(),
   );
-  assert.equal(result.message, message);
+  assert.deepEqual(result.message, message);
   assert.equal(Object.hasOwn(result.selectedMessages[0], 'transcript'), false);
-  assert.equal(result.selectedMessages[0].message, transcriptFor(message).get(0));
+  assert.deepEqual(result.selectedMessages[0].message, transcriptFor(message).get(0));
   assert.deepEqual(
     result.selectedMessages.map((ref) => ref.index),
     [0],

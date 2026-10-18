@@ -5,6 +5,7 @@ import type { ConversationExecutionResources } from '../resources.js';
 import type { ConversationProgress } from '../progress.js';
 import type { AcceptedConversationInput } from '../accept.js';
 import type { WorkspaceFiles, FileProgress } from '../../files/index.js';
+import type { ActiveContent } from '../content/active.js';
 import type { AnswerProgress } from '../operations/answer/stream.js';
 import type { ConversationCheckpointRun, ConversationCheckpointRuns } from '../checkpoints.js';
 
@@ -22,6 +23,7 @@ export interface ConversationRunOptions extends InvocationControls {
 }
 
 export interface ConversationEntities {
+  active: ActiveContent;
   transcript: Transcript;
   memories: Memories;
   selectionUsage: SelectionUsage;

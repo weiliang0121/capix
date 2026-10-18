@@ -154,7 +154,7 @@ class Main extends RuntimeDefinition {
 }
 
 function runtime(definition, providers = []) {
-  return assembleRuntime(definition, { providers, source: { runtime: () => null, entry: () => undefined, capture: () => undefined } });
+  return assembleRuntime(definition, { providers, source: { runtime: () => null, capture: () => undefined } });
 }
 
 test('cancellation blocks new children before entry and releases Runtime occupancy', async () => {

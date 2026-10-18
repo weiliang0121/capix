@@ -79,24 +79,27 @@ test('checkpoint installation reuses the host SQLite connection and recovers met
   next.close();
 });
 
-test('capture keeps an accepted batch separately from a later active segment', async () => {
+test('capture preserves the full accepted history when capacity checking rejects the request', async () => {
   const host = new ObserverConversations(provider);
   const conversation = host.create();
   const environment = host.open(conversation.id);
-  await environment.runtime.run(
-    {
-      messages: [
-        { role: 'user', content: 'large'.repeat(20000) },
-        { role: 'assistant', content: 'old' },
-        { role: 'user', content: 'short' },
-      ],
-    },
-    { settings },
+  await assert.rejects(
+    environment.runtime.run(
+      {
+        messages: [
+          { role: 'user', content: 'large'.repeat(20000) },
+          { role: 'assistant', content: 'old' },
+          { role: 'user', content: 'short' },
+        ],
+      },
+      { settings },
+    ),
+    { code: 'CAPACITY_EXCEEDED' },
   );
   const [run] = environment.checkpointRuns.list(conversation.id);
   assert.equal(run.input.start, 0);
   assert.equal(run.input.end, 3);
-  assert.equal(run.transcript.start, 2);
+  assert.equal(run.transcript.start, 0);
   assert.equal(run.transcript.end, 3);
   host.close();
 });
@@ -174,14 +177,23 @@ test('host association must match the exact R and E heads', () => {
   const transcript = new Transcript([{ role: 'user', content: 'hello' }]);
   const run = copyConversationCheckpointRun(basis(transcript, new Memories(transcript)));
   const child = { identity: { contextId: 'execution', parentContextId: 'root' } };
-  const root = { image: { frame: { owner: { contextId: 'root', level: 'runtime' }, children: [child] }, references: { execution: { contextId: 'execution' } }, state: null } };
-  const execution = { image: { frame: { owner: { contextId: 'execution', parentContextId: 'root', level: 'execution' } } } };
-  validateConversationCheckpointHeads(run, root, execution);
+  const root = { image: { contract: { key: 'observer.conversation.runtime', version: 3 }, frame: { input: { messages: [{ role: 'user', content: 'hello' }] }, owner: { contextId: 'root', level: 'runtime' }, children: [child] }, references: { execution: { contextId: 'execution' } }, state: null } };
+  const execution = { image: { contract: { key: 'observer.conversation.execution', version: 4 }, frame: { input: { message: { role: 'user', content: 'hello' }, messageIndex: 0 }, owner: { contextId: 'execution', parentContextId: 'root', level: 'execution' } } } };
+  validateConversationCheckpointHeads(run, root, execution, transcript);
+  execution.image.frame.input.messageIndex = 1;
+  assert.throws(() => validateConversationCheckpointHeads(run, root, execution, transcript), { code: 'CHECKPOINT_CONTENT_CHANGED' });
+  execution.image.frame.input.messageIndex = 0;
+  root.image.contract.version = 2;
+  assert.throws(() => validateConversationCheckpointHeads(run, root, execution, transcript), { code: 'CHECKPOINT_DECLARATION_CHANGED' });
+  root.image.contract.version = 3;
+  root.image.frame.input.messages[0].content = 'different';
+  assert.throws(() => validateConversationCheckpointHeads(run, root, execution, transcript), { code: 'CHECKPOINT_CONTENT_CHANGED' });
+  root.image.frame.input.messages[0].content = 'hello';
   root.image.references.execution.contextId = 'different';
-  assert.throws(() => validateConversationCheckpointHeads(run, root, execution), { code: 'CHECKPOINT_CONTENT_CHANGED' });
+  assert.throws(() => validateConversationCheckpointHeads(run, root, execution, transcript), { code: 'CHECKPOINT_CONTENT_CHANGED' });
   root.image.references.execution.contextId = 'execution';
   execution.image.frame.owner.parentContextId = 'different';
-  assert.throws(() => validateConversationCheckpointHeads(run, root, execution), { code: 'CHECKPOINT_CONTENT_CHANGED' });
+  assert.throws(() => validateConversationCheckpointHeads(run, root, execution, transcript), { code: 'CHECKPOINT_CONTENT_CHANGED' });
 });
 
 test('fixed final E delivery permits already committed memory without rerunning E', () => {

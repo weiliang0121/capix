@@ -11,7 +11,7 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 - [异常与错误](docs/exceptions.md)：声明异常和内核错误的不同处理出口。
 - [记录机制](docs/recording.md)、[增量观测](docs/observation-increments.md)：可选记录预设、变化生产、来源完整性与交付。
 - [跨端协议](docs/protocol.md)、[客户端运行能力](docs/client-runtime.md)：独立对话交付、实体同步、观测接收、应用绑定与 Store。
-- [消息与分段](docs/transcript.md)、[运行记忆](docs/memory.md)：内容实体的当前行为。
+- [消息与分段](docs/transcript.md)、[运行记忆](docs/memory.md)、[活跃材料与维护](docs/active-content.md)：内容实体、单次材料与维护边界。
 - [对话身份与切换](docs/conversations.md)：新建、历史、明确提交目标与资源归属。
 - [对话持久化](docs/persistence.md)：内容提交、历史记录与重启边界。
 - [外部交互](docs/interactions.md)：独立请求与反馈、A 的本地等待、再次读取和持久化边界。

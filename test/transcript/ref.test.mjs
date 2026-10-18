@@ -49,7 +49,6 @@ test('resource facts hold plain range locators; calls consume selected content a
         if (purpose === 'memory') return reply({ memories: [] });
         if (requests.length === 1) {
           transcriptFor(input).append({ role: 'user', content: 'later unrelated message' });
-          return reply({ historyIndexes: [0] });
         }
         return reply({ kind: 'answer', content: '她负责海盐项目' });
       },
@@ -62,12 +61,15 @@ test('resource facts hold plain range locators; calls consume selected content a
   assert.equal(facts.execution.status, 'succeeded');
   assert.deepEqual(
     facts.operations.map((record) => record.operation),
-    ['selection', 'requestModel', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
+    ['prepareContext', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
   );
-  assert.equal(facts.attempts.length, 11);
+  assert.equal(facts.attempts.length, 8);
   assert.equal(facts.events.length, 2 * (1 + facts.operations.length + facts.attempts.length));
   for (const decision of facts.operations.filter((record) => record.operation === 'conversationDecision')) {
-    assert.deepEqual(decision.value.input.request.selection.historyIndexes, [0]);
+    assert.deepEqual(
+      decision.value.input.request.history.map((item) => item.index),
+      [0],
+    );
     assert.equal(JSON.stringify(decision.value.input).includes('later unrelated message'), false);
   }
   assert.deepEqual(facts.execution.value.input, input);
@@ -84,7 +86,7 @@ test('resource facts hold plain range locators; calls consume selected content a
   const assembled = readOutput(facts.attempts.find((record) => record.name === 'assembleContext').value);
   assert.deepEqual(assembled.message, input);
   assert.deepEqual(assembled.selectedMessages, [{ index: 0, message: transcript.get(0) }]);
-  assert.deepEqual(JSON.parse(requests[1].messages[1].content), { message: input, memories: [], history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });
+  assert.deepEqual(JSON.parse(requests[0].messages[1].content), { message: input, memories: [], history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });
   const browser = JSON.parse(JSON.stringify(facts));
   validateExecutionRecordSnapshot(browser);
   assert.deepEqual(browser.execution.value.input, input);

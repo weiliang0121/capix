@@ -8,15 +8,14 @@ import type { ProgressReceiver } from '../progress.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 import type { ResolvedExecution } from './declarations.js';
 
-type AnyExecutionDefinition = ExecutionDefinition<any, any, any, any, any, any, any>;
+type AnyExecutionDefinition = ExecutionDefinition<any, any, any, any, any>;
 
-/** Capture per-call inputs and resources from independent supplies at entry and call boundaries. */
+/** Capture per-call inputs and resources from independent supplies at ordinary call boundaries. */
 export interface RuntimeCallSource<Input, Options, Source> {
   output?(input: Input, options: Options): InvocationOutputReceiver<any, any> | undefined;
   executionOutput?(definition: AnyExecutionDefinition, options: Options): InvocationOutputReceiver<any, any> | undefined;
   validate?(options: Options): void;
   runtime?(input: Input, options: Options): Source;
-  entry(input: unknown, options: Options, definition: AnyExecutionDefinition): Source;
   capture(input: unknown, options: Options, definition: AnyExecutionDefinition): Source;
   callbacks?(definition: AnyExecutionDefinition, options: Options): ExecutionInvocationCallbacks<any, any, any> | undefined;
   /** One passive receiver for the R call and its complete invocation subtree. */
@@ -25,13 +24,12 @@ export interface RuntimeCallSource<Input, Options, Source> {
   executionProgress?(definition: AnyExecutionDefinition, options: Options): ProgressReceiver<InvocationProgress> | undefined;
 }
 
-/** Bind supply lookup now; capture actual resources only at each E entry and work boundary. */
+/** Bind supply lookup now; capture actual resources only at each E call boundary. */
 export function bindExecutionSources<Input, Options, Source>(definitions: readonly ResolvedExecution[], providers: readonly ResourceProvider<Source>[], source: RuntimeCallSource<Input, Options, Source>): (input: Input, options: Options) => ExecutionBindingResolver {
   const supplies = new Map(
     definitions.map((resolved) => {
-      const entry = bindResources(resolved.declaration.entry?.requires ?? {}, providers);
       const capture = bindResources(resolved.requires, providers);
-      return [resolved.definition, { entry, capture }];
+      return [resolved.definition, { capture }];
     }),
   );
   return (_input, options) => ({
@@ -39,7 +37,6 @@ export function bindExecutionSources<Input, Options, Source>(definitions: readon
       const supply = supplies.get(definition);
       if (!supply) throw new Error('Execution definition is not declared by this Runtime');
       return {
-        entry: (input) => supply.entry(source.entry(input, options, definition)),
         capture: (input) => supply.capture(source.capture(input, options, definition)),
         callbacks: source.callbacks?.(definition, options),
         progress: source.executionProgress?.(definition, options),

@@ -286,11 +286,10 @@ defineOperation<ReadInput, number>()({
   },
 });
 
-export const execution = defineExecution<ReadInput, string, { readonly request: string }>()({
+export const execution = defineExecution<ReadInput, string>()({
   ...metadata,
   name: 'execution',
   children: [operation],
-  entry: { accept: (input) => ({ path: input.request }) },
   run: {
     execute: async (work) => {
       const child = work.children.create(operation, work.input);
@@ -306,9 +305,9 @@ defineRuntime<string, string>()({
   children: [execution],
   run: {
     execute: async (work) => {
-      const child = work.children.create(execution, { request: work.input });
-      // @ts-expect-error E entry input is distinct from E's accepted internal input.
-      work.children.create(execution, { path: work.input });
+      const child = work.children.create(execution, { path: work.input });
+      // @ts-expect-error E receives its ordinary input, with no separate entry input.
+      work.children.create(execution, { request: work.input });
       expectType<ReadInput>(work.children.facts.get(child.ref).input);
       await child.run();
       return child.accept();
@@ -323,10 +322,9 @@ defineAttempt<string, string>()({
   children: [count],
   run: { execute: (work) => work.input },
 });
-defineExecution<string, string, string>()({
+defineExecution<string, string>()({
   ...metadata,
   name: 'bad-E-child',
-  entry: { accept: (input) => input },
   // @ts-expect-error E allows O, not A directly.
   children: [readText],
   run: { execute: (work) => work.input },
@@ -515,4 +513,12 @@ defineOperation<ReadInput, string>()({
     // @ts-expect-error Identical I/O does not make an R point an O point.
     points: [wrongLevelPoint],
   },
+});
+
+// @ts-expect-error E has no separate entry-input generic.
+defineExecution<string, string, { request: string }>();
+defineExecution<string, string>()({
+  run: { execute: (work) => work.input },
+  // @ts-expect-error Input preparation belongs to ordinary parent work, not an E entry lifecycle.
+  entry: { accept: (input: string) => input },
 });

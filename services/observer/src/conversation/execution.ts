@@ -3,25 +3,27 @@ import { invocationRecording } from '@capix/server-runtime/recording';
 import { ExecutionDefinition, RuntimeError, checkpointPoint, childReference, type ExecutionWork, type ResumeWork, type ChildDefinition, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@capix/server-runtime';
 import { isEqual } from 'es-toolkit';
 import type { GenerationOutput, ConversationTask } from '@capix/protocol';
-import { conversationExecutionRequests, conversationEntryRequests, type ConversationExecutionResources, type ConversationEntryResources } from './resources.js';
+import { conversationExecutionRequests, type ConversationExecutionResources } from './resources.js';
 import { prepareMemoryInput } from './operations/memory/input.js';
-import type { SelectHistoryDefinition } from './operations/history/select.js';
+import type { PrepareConversationContextDefinition, PreparedConversationContext } from './operations/context/prepare.js';
+import type { MaintainConversationContentDefinition } from './operations/context/maintain.js';
+import type { ActiveContentSnapshot } from './content/active.js';
+import { describeActiveContent, describePreparedConversationContext } from './content/observation.js';
 import type { ExtractMemoryDefinition } from './operations/memory/extract.js';
-import { acceptConversationRequest, type AcceptedConversationInput } from './accept.js';
-import { prepareConversationSegment } from './admission.js';
+import { type AcceptedConversationInput } from './accept.js';
 import type { GenerateAnswerDefinition } from './operations/answer/generate.js';
 import { answerStream, type AnswerProgress, type AnswerGenerationEvent } from './operations/answer/stream.js';
 import { ProcessDocumentDefinition } from './operations/document/process.js';
 import { SaveResultDefinition } from './operations/document/save.js';
 import { CheckFileTaskDefinition } from './operations/preflight/check.js';
-import type { Selection } from './model/types.js';
 import { modelTextSchema } from './model/schema.js';
 import type { ConversationDecisionDefinition } from './decision/types.js';
 import { acceptConversationDecision, conversationCapability, reviseDecision, type ConversationCapability } from './decision/capability.js';
 import { checkpointCodec, decisionAcceptanceSchema, executionProgressSchema, acceptedCheckpointInput, conversationCheckpointOutput, executionWaitingState, executionDecisionState, executionCapabilityState, executionAcceptedState, type ExecutionProgress, type ExecutionContinuation, type ExecutionWaitingState, type ExecutionDecisionState, type ExecutionCapabilityState } from './checkpoint.js';
 
 export interface ConversationOperationDefinitions {
-  readonly selection: SelectHistoryDefinition;
+  readonly preparation: PrepareConversationContextDefinition;
+  readonly maintenance?: MaintainConversationContentDefinition;
   readonly generation: GenerateAnswerDefinition;
   readonly extraction: ExtractMemoryDefinition;
   readonly decision: ConversationDecisionDefinition;
@@ -39,20 +41,30 @@ const output = z.strictObject({ path });
 const fileArguments = z.strictObject({ task: z.union([z.strictObject({ sourcePath: path, output: output.optional() }), z.strictObject({ output })]), instruction: modelTextSchema });
 
 /** E admits decisions and child deliveries. All evolving business state belongs to this call. */
-export class ConversationExecutionDefinition extends ExecutionDefinition<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources, unknown, ConversationEntryResources, Record<string, never>, AnswerProgress> {
+export class ConversationExecutionDefinition extends ExecutionDefinition<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources, Record<string, never>, AnswerProgress> {
   readonly output = { result: answerStream.result, delta: (value: unknown) => value as AnswerProgress };
-  readonly observation = [invocationRecording<AcceptedConversationInput, GenerationOutput>({ input: ({ message, fileTask }) => ({ ...message, ...(fileTask ? { fileTask } : {}) }) })];
+  readonly observation = [
+    invocationRecording<AcceptedConversationInput, GenerationOutput>({
+      input: ({ message, fileTask }) => ({ ...message, ...(fileTask ? { fileTask } : {}) }),
+      relationAccepted: (output, relation) => {
+        if (relation.key === 'preparation') return describePreparedConversationContext(output as PreparedConversationContext);
+        if (relation.key === 'maintenance') return describeActiveContent(output as ActiveContentSnapshot);
+        return output;
+      },
+    }),
+  ];
   readonly run;
-  readonly entry;
   readonly children;
   readonly maxDecisionSteps: number;
   readonly checkpoint;
-  readonly selectionWaiting;
-  readonly selectionAccepted;
+  readonly preparationWaiting;
+  readonly preparationAccepted;
   readonly decisionWaiting;
   readonly decisionAccepted;
   readonly extractionWaiting;
   readonly completed;
+  readonly maintenanceWaiting;
+  readonly maintenanceCompleted;
   readonly capabilityWaiting = new Map<string, Point>();
   readonly capabilityAccepted = new Map<string, Point>();
 
@@ -66,31 +78,26 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
     this.maxDecisionSteps = options.maxDecisionSteps ?? 8;
     if (!Number.isSafeInteger(this.maxDecisionSteps) || this.maxDecisionSteps < 1 || this.maxDecisionSteps > 16) throw new RangeError('Decision steps must be an integer between 1 and 16');
     this.children = Object.freeze(Object.values(operationDefinitions).filter((definition) => definition !== undefined));
-    this.entry = {
-      requires: conversationEntryRequests,
-      accept: (input: unknown, resources: ConversationEntryResources) => acceptConversationRequest(input, resources.messages.append, Boolean(operationDefinitions.document)),
-      admit: (input: AcceptedConversationInput, resources: ConversationEntryResources) => prepareConversationSegment(input.message, resources),
-    };
-    this.run = { requires: { ...conversationExecutionRequests, ...(operationDefinitions.preflight ? CheckFileTaskDefinition.requires : {}), ...(operationDefinitions.document ? ProcessDocumentDefinition.requires : {}), ...(operationDefinitions.save ? SaveResultDefinition.requires : {}) }, uses: this.children, execute: this.execute.bind(this) };
+    this.run = { requires: { ...conversationExecutionRequests, ...operationDefinitions.preparation.run.requires, ...(operationDefinitions.maintenance?.run.requires ?? {}), ...(operationDefinitions.preflight ? CheckFileTaskDefinition.requires : {}), ...(operationDefinitions.document ? ProcessDocumentDefinition.requires : {}), ...(operationDefinitions.save ? SaveResultDefinition.requires : {}) }, uses: this.children, execute: this.execute.bind(this) };
     const point = checkpointPoint<'execution', AcceptedConversationInput, GenerationOutput, AnswerProgress>();
-    this.selectionWaiting = point({
-      name: 'selectionWaiting',
+    this.preparationWaiting = point({
+      name: 'preparationWaiting',
       state: checkpointCodec(z.strictObject({})),
-      references: { active: childReference(operationDefinitions.selection) },
+      references: { active: childReference(operationDefinitions.preparation) },
       check: (_state, facts) => {
-        const child = this.checkChild(facts, facts.references.active, 'selection', operationDefinitions.selection);
-        if (facts.children.values().length !== 1 || !isEqual((child.input as { message?: unknown }).message, facts.input.message)) throw new Error('Selection continuation changed the admitted message');
+        const child = this.checkChild(facts, facts.references.active, 'preparation', operationDefinitions.preparation);
+        if (facts.children.values().length !== 1 || !isEqual(child.input, facts.input)) throw new Error('Preparation continuation changed the admitted input');
       },
-      resume: { requires: this.run.requires, uses: this.children, execute: (work, _state, saved) => this.receiveSelection(work, work.children.resume(saved.active)) },
+      resume: { requires: this.run.requires, uses: this.children, execute: (work, _state, saved) => this.receivePreparation(work, work.children.resume(saved.active)) },
     });
-    this.selectionAccepted = point({
-      name: 'selectionAccepted',
+    this.preparationAccepted = point({
+      name: 'preparationAccepted',
       state: executionAcceptedState,
-      references: { active: childReference(operationDefinitions.selection) },
+      references: { active: childReference(operationDefinitions.preparation) },
       check: (state, facts) => {
         this.checkProgress(facts, state, facts.references.active);
-        this.checkChild(facts, facts.references.active, 'selection', operationDefinitions.selection, 'accepted');
-        if (facts.children.values().length !== 1) throw new Error('Selection continuation contains later work');
+        this.checkChild(facts, facts.references.active, 'preparation', operationDefinitions.preparation, 'accepted');
+        if (facts.children.values().length !== 1) throw new Error('Preparation continuation contains later work');
       },
       resume: { requires: this.run.requires, uses: this.children, execute: (work, state) => this.advance(work, state) },
     });
@@ -173,38 +180,63 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
         if (!state.progress.answer) throw new Error('Completed conversation requires its answer');
         this.checkSettledDecision(facts);
       },
-      resume: { requires: {}, uses: [], execute: (_work, state) => state.progress.answer! },
+      resume: { requires: this.run.requires, uses: this.children, execute: (work, state) => this.finishContent(work, state) },
     });
-    this.checkpoint = { key: 'observer.conversation.execution', version: 3, input: acceptedCheckpointInput, output: conversationCheckpointOutput, points: [this.selectionWaiting, this.selectionAccepted, this.decisionWaiting, this.decisionAccepted, ...this.capabilityWaiting.values(), ...this.capabilityAccepted.values(), this.extractionWaiting, this.completed] };
+    const maintenance = operationDefinitions.maintenance;
+    this.maintenanceWaiting = maintenance
+      ? point({
+          name: 'maintenanceWaiting',
+          state: executionAcceptedState,
+          references: { active: childReference(maintenance) },
+          check: (state, facts) => {
+            this.checkProgress(facts, state, facts.references.active);
+            this.checkMaintenance(facts, state, facts.references.active);
+          },
+          resume: { requires: this.run.requires, uses: this.children, execute: (work, state, saved) => this.receiveMaintenance(work, state, work.children.resume(saved.active)) },
+        })
+      : undefined;
+    this.maintenanceCompleted = maintenance
+      ? point({
+          name: 'maintenanceCompleted',
+          state: executionAcceptedState,
+          references: { active: childReference(maintenance) },
+          check: (state, facts) => {
+            this.checkProgress(facts, state, facts.references.active);
+            this.checkMaintenance(facts, state, facts.references.active, 'accepted');
+          },
+          resume: { requires: {}, uses: [], execute: (_work, state) => state.progress.answer! },
+        })
+      : undefined;
+    this.checkpoint = { key: 'observer.conversation.execution', version: 4, input: acceptedCheckpointInput, output: conversationCheckpointOutput, points: [this.preparationWaiting, this.preparationAccepted, this.decisionWaiting, this.decisionAccepted, ...this.capabilityWaiting.values(), ...this.capabilityAccepted.values(), this.extractionWaiting, this.completed, ...(this.maintenanceWaiting ? [this.maintenanceWaiting] : []), ...(this.maintenanceCompleted ? [this.maintenanceCompleted] : [])] };
   }
 
   private async execute(work: Work): Promise<GenerationOutput> {
-    const child = work.children.create(this.operationDefinitions.selection, { message: work.input.message, memories: work.resources.memories }, { key: 'selection' });
-    work.checkpoint?.save(this.selectionWaiting, {}, { active: child.ref });
-    return this.receiveSelection(work, child);
+    const child = work.children.create(this.operationDefinitions.preparation, work.input, { key: 'preparation' });
+    work.checkpoint?.save(this.preparationWaiting, {}, { active: child.ref });
+    return this.receivePreparation(work, child);
   }
 
-  private async receiveSelection(work: Work, child: ChildCall<SelectHistoryDefinition>): Promise<GenerationOutput> {
+  private async receivePreparation(work: Work, child: ChildCall<PrepareConversationContextDefinition>): Promise<GenerationOutput> {
     await child.run();
-    const selection = await child.accept((delivered) => {
-      work.resources.selectionUsage.add(delivered.historyIndexes.map((index) => work.resources.history.read(index)));
+    const prepared = await child.accept((delivered) => {
+      work.resources.selectionUsage.add(delivered.context.selectedMessages);
       return delivered;
     });
-    const state = { selection, progress: {}, step: 0, checkedCandidates: [] };
-    work.checkpoint?.save(this.selectionAccepted, state, { active: child.ref });
+    const state = { prepared, progress: {}, step: 0, checkedCandidates: [] };
+    work.checkpoint?.save(this.preparationAccepted, state, { active: child.ref });
     return this.advance(work, state);
   }
 
   private async advance(work: Work, state: ExecutionContinuation): Promise<GenerationOutput> {
-    state = { selection: state.selection, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates, ...(state.feedback ? { feedback: state.feedback } : {}) };
+    state = { prepared: state.prepared, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates, ...(state.feedback ? { feedback: state.feedback } : {}) };
     if (state.step >= this.maxDecisionSteps) throw new RuntimeError('DECISION_LIMIT', '本轮决策未能在限定步数内完成，已落实的消息和文件保留。');
     const { message, fileTask } = work.input;
     const progress = state.progress;
-    const capabilities = this.capabilities(work, state.selection);
+    const capabilities = this.capabilities(work, state.prepared);
     const child = work.children.create(
       this.operationDefinitions.decision,
       {
-        request: { message, selection: structuredClone(state.selection), memories: structuredClone(work.resources.memories), ...(fileTask ? { fileTask: structuredClone(fileTask) } : {}) },
+        request: { message, history: structuredClone(state.prepared.context.selectedMessages), memories: structuredClone(state.prepared.material.memories), ...(fileTask ? { fileTask: structuredClone(fileTask) } : {}) },
         ...structuredClone({ progress: { ...(progress.file ? { file: progress.file } : {}), ...(progress.answer ? { answer: progress.answer } : {}), ...(progress.saved ? { saved: progress.saved } : {}) }, ...(progress.latest ? { latest: progress.latest } : {}), available: [...capabilities.values()].filter((entry) => entry.available(progress)).map((entry) => entry.offer), ...(state.feedback ? { feedback: state.feedback } : {}) }),
       },
       { key: 'decision' },
@@ -216,7 +248,7 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
 
   private async receiveDecision(work: Work, state: ExecutionWaitingState, child: ChildCall<any>): Promise<GenerationOutput> {
     await child.run();
-    const capabilities = this.capabilities(work, state.selection);
+    const capabilities = this.capabilities(work, state.prepared);
     const accepted = await child.accept((delivered) => {
       const checked = new Set(state.checkedCandidates);
       let progress = state.progress;
@@ -242,23 +274,23 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
     const choice = state.choice;
     if (choice.kind === 'revise') return this.advance(work, { ...state, step: state.step + 1, feedback: choice.feedback });
     if (choice.kind === 'finish') {
-      if (choice.conclusion.kind !== 'settled') return state.progress.answer!;
-      const child = work.children.create(this.operationDefinitions.extraction, prepareMemoryInput(work.resources.history, state.progress.response!, state.selection.historyIndexes, work.resources.memories, { saved: state.progress.saved }), { key: 'extraction' });
-      const waiting = { selection: state.selection, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates };
+      if (choice.conclusion.kind !== 'settled') return this.finishContent(work, state);
+      const child = work.children.create(this.operationDefinitions.extraction, prepareMemoryInput({ index: work.input.messageIndex, message: work.input.message }, state.progress.response!, state.prepared.context.selectedMessages, state.prepared.material.memories, { saved: state.progress.saved }), { key: 'extraction' });
+      const waiting = { prepared: state.prepared, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates };
       work.checkpoint?.save(this.extractionWaiting, waiting, { active: child.ref });
       return this.receiveExtraction(work, waiting, child);
     }
-    const capability = this.capabilities(work, state.selection).get(choice.capability)!;
+    const capability = this.capabilities(work, state.prepared).get(choice.capability)!;
     const child = capability.create(choice.arguments, state.progress);
-    const waiting: ExecutionCapabilityState = { selection: state.selection, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates, capability: choice.capability, arguments: choice.arguments };
+    const waiting: ExecutionCapabilityState = { prepared: state.prepared, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates, capability: choice.capability, arguments: choice.arguments };
     work.checkpoint?.save(this.capabilityWaiting.get(choice.capability)!, waiting, { active: child.ref });
     return this.receiveCapability(work, waiting, child, capability);
   }
 
-  private async receiveCapability(work: Work, state: ExecutionCapabilityState, child: ChildCall<any>, capability = this.capabilities(work, state.selection).get(state.capability)!): Promise<GenerationOutput> {
+  private async receiveCapability(work: Work, state: ExecutionCapabilityState, child: ChildCall<any>, capability = this.capabilities(work, state.prepared).get(state.capability)!): Promise<GenerationOutput> {
     await child.run();
     const progress = await capability.accept(child, state.progress);
-    const next = { selection: state.selection, progress, step: state.step + 1, checkedCandidates: state.checkedCandidates };
+    const next = { prepared: state.prepared, progress, step: state.step + 1, checkedCandidates: state.checkedCandidates };
     work.checkpoint?.save(this.capabilityAccepted.get(state.capability)!, next, { active: child.ref });
     return this.advance(work, next);
   }
@@ -267,7 +299,38 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
     await child.run();
     await child.accept((delivered) => delivered);
     work.checkpoint?.save(this.completed, state, { active: child.ref });
+    return this.finishContent(work, state);
+  }
+
+  private async finishContent(work: Work, state: ExecutionContinuation): Promise<GenerationOutput> {
+    const maintenance = this.operationDefinitions.maintenance;
+    if (!maintenance) return state.progress.answer!;
+    const settled = { prepared: state.prepared, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates };
+    const child = work.children.create(maintenance, { phase: 'after-content' }, { key: 'maintenance' });
+    work.checkpoint?.save(this.maintenanceWaiting!, settled, { active: child.ref });
+    return this.receiveMaintenance(work, settled, child);
+  }
+
+  private async receiveMaintenance(work: Work, state: ExecutionContinuation, child: ChildCall<MaintainConversationContentDefinition>): Promise<GenerationOutput> {
+    await child.run();
+    await child.accept();
+    work.checkpoint?.save(this.maintenanceCompleted!, state, { active: child.ref });
     return state.progress.answer!;
+  }
+
+  private checkMaintenance(facts: Facts, state: ExecutionContinuation, active: ChildFact, status: 'waiting' | 'accepted' = 'waiting'): void {
+    const maintenance = this.operationDefinitions.maintenance;
+    if (!maintenance || !state.progress.answer) throw new Error('Maintenance continuation requires its accepted answer');
+    const child = this.checkChild(facts, active, 'maintenance', maintenance, status);
+    if (!isEqual(child.input, { phase: 'after-content' })) throw new Error('Maintenance continuation changed its boundary');
+    const previous = facts.children.values().at(-2);
+    if (!previous || previous.reception.status !== 'accepted') throw new Error('Maintenance must follow accepted content work');
+    if (previous.key === 'extraction') facts.children.require(this.operationDefinitions.extraction, previous.ref);
+    else {
+      const decision = facts.children.require(this.operationDefinitions.decision, previous.ref);
+      const choice = decisionAcceptanceSchema.parse(decision.reception.status === 'accepted' ? decision.reception.value : undefined).choice;
+      if (choice.kind !== 'finish' || choice.conclusion.kind === 'settled') throw new Error('Maintenance cannot skip memory extraction');
+    }
   }
 
   private appendAnswer(work: Work, answer: GenerationOutput, childOrder: number): Pick<ExecutionProgress, 'answer' | 'response' | 'receipt' | 'responseOrder'> {
@@ -278,10 +341,10 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
     return { answer, response: work.resources.messages.append([{ role: 'assistant', content: answer.content }])[0]! };
   }
 
-  private capabilities(work: Work, selection: Selection): ReadonlyMap<string, ConversationCapability<ExecutionProgress>> {
+  private capabilities(work: Work, prepared: PreparedConversationContext): ReadonlyMap<string, ConversationCapability<ExecutionProgress>> {
     const resources = work.resources;
     const definitions = this.operationDefinitions;
-    const input = (state: ExecutionProgress) => ({ selection, memories: resources.memories, ...(state.file ? { task: { fileTask: state.file.task, instruction: state.file.instruction } } : {}) });
+    const input = (state: ExecutionProgress) => ({ context: prepared.context, memories: prepared.material.memories, ...(state.file ? { task: { fileTask: state.file.task, instruction: state.file.instruction } } : {}) });
     const selectTask = (state: ExecutionProgress) => {
       const task: ConversationTask = state.file ? { kind: 'file', task: state.file.task } : { kind: 'reply' };
       resources.tasks.select(task);
@@ -397,8 +460,7 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
 
   private checkCapabilityInput(facts: Facts, state: ExecutionCapabilityState, actual: unknown): void {
     const progress = state.progress;
-    const selection = facts.children.requireUnique(this.operationDefinitions.selection, { parentRound: 1 });
-    const generation = { selection: state.selection, memories: selection.input.memories, ...(progress.file ? { task: { fileTask: progress.file.task, instruction: progress.file.instruction } } : {}) };
+    const generation = { context: state.prepared.context, memories: state.prepared.material.memories, ...(progress.file ? { task: { fileTask: progress.file.task, instruction: progress.file.instruction } } : {}) };
     let expected: unknown;
     if (state.capability === 'checkFile') expected = state.arguments;
     else if (state.capability === 'save') {
@@ -416,12 +478,12 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
 
   private checkProgress(facts: Facts, state: ExecutionContinuation, active: ChildFact): void {
     const all = facts.children.values();
-    const selection = facts.children.requireUnique(this.operationDefinitions.selection, { parentRound: 1 });
+    const selection = facts.children.requireUnique(this.operationDefinitions.preparation, { parentRound: 1 });
     const last = all.at(-1);
-    if (facts.round !== 1 || !isEqual(facts.initialInput, facts.input) || state.step > this.maxDecisionSteps || !last || last.ref !== active.ref || all[0]?.ref !== selection.ref || selection.key !== 'selection' || selection.returned?.status !== 'succeeded' || selection.reception.status !== 'accepted' || !isEqual(selection.returned.output, state.selection) || !isEqual(selection.reception.value, state.selection)) throw new Error('Conversation continuation differs from its accepted history selection');
+    if (facts.round !== 1 || !isEqual(facts.initialInput, facts.input) || state.step > this.maxDecisionSteps || !last || last.ref !== active.ref || all[0]?.ref !== selection.ref || selection.key !== 'preparation' || selection.returned?.status !== 'succeeded' || selection.reception.status !== 'accepted' || !isEqual(selection.returned.output, state.prepared) || !isEqual(selection.reception.value, state.prepared)) throw new Error('Conversation continuation differs from its accepted fixed material');
     const decisions = facts.children.list(this.operationDefinitions.decision);
     const count = decisions.length;
-    const expectedStep = last.key === 'selection' ? 0 : last.key === 'decision' || last.key === 'extraction' || !last.returned ? count - 1 : count;
+    const expectedStep = last.key === 'preparation' ? 0 : last.key === 'decision' || last.key === 'extraction' || last.key === 'maintenance' || !last.returned ? count - 1 : count;
     if (state.step !== expectedStep) throw new Error('Conversation continuation has an inconsistent decision budget');
     let expectedProgress: ExecutionProgress = {};
     let expectedCandidates: string[] = [];

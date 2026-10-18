@@ -2,7 +2,7 @@ import { isResourceRefinement, type ResourceRequest, type ResourceRefinement } f
 import { resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
 import type { ObservationDeclaration } from '../definition/observation.js';
 import type { InvocationFact } from '../observation/facts.js';
-import type { ChildDefinition, DefinitionInvocationInput } from '../definition/children.js';
+import type { ChildDefinition, DefinitionInput } from '../definition/children.js';
 
 type RefinableDefinition = Exclude<ChildDefinition, { readonly level: 'execution' }>;
 
@@ -19,7 +19,7 @@ export interface ChildResourceBinding {
   readonly refinements: readonly ResourceRefinement<any>[];
 }
 
-export function bindChildResources<Definition extends RefinableDefinition>(definition: Definition, refinements: readonly ResourceRefinement<NoInfer<DefinitionInvocationInput<Definition>>>[]): ChildResourceBinding {
+export function bindChildResources<Definition extends RefinableDefinition>(definition: Definition, refinements: readonly ResourceRefinement<NoInfer<DefinitionInput<Definition>>>[]): ChildResourceBinding {
   const offers = new Set<ResourceRequest<unknown>['offer']>();
   for (const refinement of refinements) {
     if (!isResourceRefinement(refinement)) throw new Error('Resource refinement was not issued by an offer');

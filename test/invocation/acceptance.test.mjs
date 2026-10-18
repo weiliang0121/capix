@@ -9,7 +9,7 @@ function operation(execute) {
 
 function assemble(child, execute) {
   const execution = { level: 'execution', children: [child], maxRounds: 1, raises: [], run: { requires: {}, execute } };
-  return assembleRuntime(runtimeDefinition(execution), { providers: [], source: { entry: () => null, capture: () => null } });
+  return assembleRuntime(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
 }
 
 test('parent acceptance receives the exact delivery of the selected child, independently of acceptance order', async () => {

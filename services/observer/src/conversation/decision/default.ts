@@ -4,12 +4,12 @@ import { isEqual } from 'es-toolkit/predicate';
 import { decisionInputCodec, decisionCodec } from '../operations/checkpoint.js';
 import { OperationDefinition, checkpointPoint, childReference, type OperationWork, type InvocationCheckpointDefinition } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
-import type { ConversationResources } from '../resources.js';
+import type { ModelCallResources } from '../resources.js';
 import { UnderstandRequestDefinition } from '../operations/request/understand.js';
 import type { RequestProposal } from '../operations/request/output.js';
 import type { ConversationDecision, ConversationDecisionInput } from './types.js';
 
-type DecisionResources = ConversationResources | Record<string, never>;
+type DecisionResources = ModelCallResources | Record<string, never>;
 
 /** Known deliveries choose the next step directly; only an unresolved request needs a model. */
 export class DefaultConversationDecisionDefinition extends OperationDefinition<ConversationDecisionInput, ConversationDecision, DecisionResources> {
@@ -66,7 +66,7 @@ export class DefaultConversationDecisionDefinition extends OperationDefinition<C
           },
         })
       : undefined;
-    this.checkpoint = { key: `observer.default-decision.${options.files ? 'files' : 'chat'}`, version: 2, input: decisionInputCodec, output: decisionCodec, points: [...(this.understandingPoint ? [this.understandingPoint] : []), resultPoint] };
+    this.checkpoint = { key: `observer.default-decision.${options.files ? 'files' : 'chat'}`, version: 3, input: decisionInputCodec, output: decisionCodec, points: [...(this.understandingPoint ? [this.understandingPoint] : []), resultPoint] };
     this.run = { requires: this.understandingDefinition ? UnderstandRequestDefinition.requires : {}, uses: this.children, execute: this.execute.bind(this) };
   }
 

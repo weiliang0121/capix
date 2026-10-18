@@ -109,9 +109,9 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                       {detail.error && <DataBlock title="执行失败" value={detail.error} />}
                       {detail.failure && <DataBlock title="失败归属" value={detail.failure} />}
                       <section className="selection-detail">
-                        <h3>本轮历史选择</h3>
+                        <h3>本轮历史材料</h3>
                         {qa?.selections.map((selection) => (
-                          <p key={selection.operationId}>{selection.indexes ? selection.indexes.map((index) => `[${index}]`).join(' → ') || '未选择历史' : statusLabels[qa.archive && selection.status === 'running' ? 'unresolved' : selection.status]}</p>
+                          <p key={selection.operationId}>{selection.indexes ? selection.indexes.map((index) => `[${index}]`).join(' → ') || '未纳入历史' : statusLabels[qa.archive && selection.status === 'running' ? 'unresolved' : selection.status]}</p>
                         ))}
                       </section>
                       <Button variant="outline" onClick={() => onInspect(detail.id, detail.id)}>

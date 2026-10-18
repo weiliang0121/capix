@@ -44,7 +44,7 @@ function storeOf(...initial) {
 }
 
 function assemble(definition, options = {}) {
-  return assembleRuntime(definition, { providers: [], source: { entry: () => null, capture: () => null }, ...options });
+  return assembleRuntime(definition, { providers: [], source: { capture: () => null }, ...options });
 }
 
 test('checkpoint declarations do not change normal execution when persistence is absent', async () => {
@@ -94,7 +94,7 @@ test('a checkpoint continuation exposes only its declared resources, and install
   const runtime = assemble(new Root(), {
     checkpoints: { store },
     providers: [normal.provide(() => null), continuation.provide(() => 7)],
-    source: { runtime: () => null, entry: () => null, capture: () => null },
+    source: { runtime: () => null, capture: () => null },
   });
   assert.equal(await runtime.resume('root-1', {}), 'saved answer');
   assert.equal(resumed, 1);
@@ -103,14 +103,13 @@ test('a checkpoint continuation exposes only its declared resources, and install
   assert.equal(resumed, 1);
 });
 
-test('resuming a direct E child bypasses entry and original submission callbacks', async () => {
+test('resuming a direct E child uses fixed input without repeating parent preparation or original started callbacks', async () => {
   let captures = 0;
   class Child extends ExecutionDefinition {
     checkpoint = checkpoint('test.child', (work, state) => {
       assert.deepEqual(work.initialInput, { original: 'child-1' });
       return state.answer;
     });
-    entry = { requires: {}, accept: () => assert.fail('entry acceptance must not repeat'), admit: () => assert.fail('entry admission must not repeat') };
     run = { requires: {}, execute: () => assert.fail('child execute must not repeat') };
   }
   const child = new Child();
@@ -133,13 +132,12 @@ test('resuming a direct E child bypasses entry and original submission callbacks
   const runtime = assemble(new Root(), {
     checkpoints: { store },
     source: {
-      entry: () => assert.fail('entry source must not repeat'),
       capture: (input) => {
         captures++;
         assert.deepEqual(input, { original: 'child-1' });
         return null;
       },
-      callbacks: () => ({ accepted: () => assert.fail('original submission admission callback must not repeat'), started: () => assert.fail('original submission started callback must not repeat') }),
+      callbacks: () => ({ started: () => assert.fail('original submission started callback must not repeat') }),
     },
   });
   assert.equal(await runtime.resume('parent-1', {}), 'accepted fixed response');
@@ -187,7 +185,6 @@ test('restoration rejects incompatible ownership and contract before constructin
           captures++;
           return null;
         },
-        entry: () => null,
         capture: () => null,
       },
     });
@@ -304,7 +301,7 @@ for (const stage of ['point', 'codec', 'capture']) {
           return null;
         }),
       ],
-      source: { runtime: () => null, entry: () => null, capture: () => null },
+      source: { runtime: () => null, capture: () => null },
     });
     await assert.rejects(runtime.resume('root-1', {}), stage === 'point' ? /point is not declared/ : (error) => error === expected);
     assert.equal(facts.length, 1);

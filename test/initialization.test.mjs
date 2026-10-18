@@ -1,5 +1,5 @@
 import { runtimeDefinition } from './fixtures/declarations.mjs';
-import { captureSource, resourceBindingFor } from './fixtures/observer.mjs';
+import { captureSource } from './fixtures/observer.mjs';
 import { createEnvironment } from './fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -35,18 +35,18 @@ test('unused operations and model providers stay inactive; bound O identities su
   const first = operations(env);
   assert.deepEqual(
     first.map((operation) => operation.operation),
-    ['selection', 'requestModel'],
+    ['prepareContext', 'conversationDecision', 'answer', 'requestModel'],
   );
-  assert.equal(first[1].parentId, first[0].id);
+  assert.equal(first[3].parentId, first[2].id);
   assert.equal(
     attempts(env).some((record) => record.name === 'acceptModelOutput'),
     false,
   );
   fail = false;
   await run(env);
-  const selection = operations(env).filter((record) => record.operation === 'selection');
-  assert.equal(selection.length, 2);
-  assert.equal(selection[0].operationInstanceId, selection[1].operationInstanceId);
+  const answers = operations(env).filter((record) => record.operation === 'answer');
+  assert.equal(answers.length, 2);
+  assert.equal(answers[0].operationInstanceId, answers[1].operationInstanceId);
   assert.equal(env.modelCreations(), 1);
   assert.equal(env.transcript.current('assistant').content, answer.content);
 });
@@ -55,7 +55,10 @@ test('capacity rejection does not invoke later actions or instantiate a model pr
   const env = environment(() => assert.fail('must not invoke'));
   await assert.rejects(run(env, { ...settings, contextBudget: 256, maxOutputTokens: 64 }), (error) => error.code === 'CAPACITY_EXCEEDED');
   assert.equal(env.modelCreations(), 0);
-  assert.equal(operations(env).length, 1);
+  assert.deepEqual(
+    operations(env).map((operation) => operation.operation),
+    ['prepareContext', 'conversationDecision', 'answer'],
+  );
   assert.equal(
     attempts(env).some((record) => record.name === 'invokeModel'),
     false,
@@ -128,7 +131,7 @@ test('declarations are checked before resource access or invocation construction
             return 'value';
           }),
         ],
-        source: { entry: () => null, capture: () => null },
+        source: { capture: () => null },
       }),
     /not provided/,
   );
@@ -177,11 +180,12 @@ test('lazy access never shifts the capture point of configuration, history or me
   const { runtime, transcript, memories } = createEnvironment({ messages: [{ role: 'user', content: '培训周五' }] });
   const change = { action: 'create', memoryId: null, change: '确认时间', sourceIndexes: [0], result: { topic: '培训', content: '周五', sourceIndexes: [0] } };
   const memory = memories.apply([change])[0];
-  const resources = resourceBindingFor(runtime, { invoke: () => assert.fail('unused') }, { transcript, memories });
+  const requires = { settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), memories: MemoryResource.snapshot.request() };
+  const resources = bindResources(requires, [ModelSettingsResource.snapshot.provide((source) => source.settings), TranscriptResource.fixedRange.provide((source) => source.transcriptRange), MemoryResource.snapshot.provide(() => memories)]);
   const configuration = { ...settings };
   const root = runtime.executionInvocationBuilder.create(null, {
     context: {},
-    requires: { settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), memories: MemoryResource.snapshot.request() },
+    requires,
     establish: () => ({ resources: resources(captureSource({ settings: configuration, transcript })) }),
     work: {
       maxRounds: 1,

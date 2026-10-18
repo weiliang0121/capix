@@ -1,3 +1,4 @@
+import { ActiveContent } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
@@ -106,7 +107,8 @@ test('full declared streaming chain stays within a wire budget and client recons
   );
   t.after(() => interactions.close());
   const transcript = new Transcript();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), { transcript, memories: new Memories(transcript), selectionUsage: new SelectionUsage() }, interactions);
+  const memories = new Memories(transcript);
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() }, interactions);
   const client = new ClientSubmission('volume-conversation', { messages: [{ role: 'user', content: '模拟问题' }] });
   const submission = new ConversationSubmission(client.id, client.conversationId, { admission: () => ({ conversationId: client.conversationId, transcriptId: transcript.id, status: runtime.running ? 'busy' : 'ready' }) });
   const frames = [];

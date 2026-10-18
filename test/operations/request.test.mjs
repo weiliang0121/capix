@@ -11,7 +11,7 @@ const settings = { model: 'fixture', contextBudget: 100000, maxOutputTokens: 102
 const raw = (value) => ({ id: 'fixture', model: 'fixture', content: typeof value === 'string' ? value : JSON.stringify(value), finishReason: 'stop', usage: null });
 const file = (task = { sourcePath: 'notes.md', output: { path: 'translation.md' } }) => ({ kind: 'file', task, instruction: '把 notes.md 翻译成白话文。' });
 
-async function understand({ messages = [{ role: 'user', content: '请翻译 notes.md 并保存为 translation.md' }], selection = [], files = true, proposal = file(), memories = [], available, feedback, progress, contextBudget = settings.contextBudget, requests = [] } = {}) {
+async function understand({ messages = [{ role: 'user', content: '请翻译 notes.md 并保存为 translation.md' }], history, files = true, proposal = file(), memories = [], available, feedback, progress, contextBudget = settings.contextBudget, requests = [] } = {}) {
   const transcript = new Transcript(messages);
   const message = transcript.get(transcript.length - 1);
   const runtime = createBoundRuntime();
@@ -24,7 +24,7 @@ async function understand({ messages = [{ role: 'user', content: '请翻译 note
       return raw(proposal);
     },
   });
-  const input = { message, selection: { historyIndexes: selection }, memories, ...(available ? { available } : {}), ...(feedback ? { feedback } : {}), ...(progress ? { progress } : {}) };
+  const input = { message, history: history ?? messages.slice(0, -1).map((message, index) => ({ index, message })), memories, ...(available ? { available } : {}), ...(feedback ? { feedback } : {}), ...(progress ? { progress } : {}) };
   const result = await invoke(lifecycleFor(runtime).execution({ input: message, transcript, resourceBinding, settings: { ...settings, contextBudget } }), (context) => operation.call(callFor(context), input));
   return { result, requests, definition, transcript };
 }
@@ -65,7 +65,7 @@ test('request understanding only proposes a candidate, leaving path eligibility 
   assert.ok(Object.values(definition.run.requires).every((request) => !request.offer.name.startsWith('workspace-files')));
 });
 
-test('recent clarification remains visible even if the history selection misses it', async () => {
+test('understanding uses exactly the fixed active material without implicit recent-history expansion', async () => {
   const messages = [
     { role: 'user', content: '旧话题' },
     { role: 'assistant', content: '旧回答' },
@@ -73,11 +73,11 @@ test('recent clarification remains visible even if the history selection misses 
     { role: 'assistant', content: '保存为什么文件名？' },
     { role: 'user', content: 'translation.md' },
   ];
-  const { requests } = await understand({ messages, selection: [0] });
+  const { requests } = await understand({ messages, history: [2, 0].map((index) => ({ index, message: messages[index] })) });
   const payload = JSON.parse(requests[0].messages[1].content);
   assert.deepEqual(
     payload.history,
-    [0, 2, 3].map((index) => ({ index, ...messages[index] })),
+    [2, 0].map((index) => ({ index, ...messages[index] })),
   );
   assert.deepEqual(payload.message, messages.at(-1));
   assert.equal(payload.capabilities.files.createText, true);
@@ -133,10 +133,24 @@ test('malformed model output is rejected without automatic regeneration', async 
   assert.equal(requests.length, 1);
 });
 
-test('understanding rejects selected references outside the current fixed history before invoking the model', async () => {
-  for (const selection of [[-1], [0], [100], [0.5]]) {
+test('understanding rejects invalid or duplicate material indexes before invoking the model', async () => {
+  for (const indexes of [[-1], [0.5], [0, 0]]) {
     const requests = [];
-    await assert.rejects(understand({ selection, requests }), /outside/);
+    const history = indexes.map((index) => ({ index, message: { role: 'user', content: '材料' } }));
+    await assert.rejects(understand({ history, requests }));
     assert.equal(requests.length, 0);
   }
+});
+
+test('understanding refuses an oversized complete active history instead of silently truncating it', async () => {
+  const history = [{ index: 10, message: { role: 'assistant', content: '完整背景'.repeat(600) } }];
+  const { requests: complete } = await understand({ history });
+  const required = Buffer.byteLength(JSON.stringify(complete[0]), 'utf8') + 256 + complete[0].max_tokens;
+  const requests = [];
+  await assert.rejects(understand({ history, contextBudget: required - 1, requests }), (error) => error.code === 'CAPACITY_EXCEEDED');
+  assert.equal(requests.length, 0);
+  assert.deepEqual(
+    JSON.parse(complete[0].messages[1].content).history,
+    history.map(({ index, message }) => ({ index, ...message })),
+  );
 });

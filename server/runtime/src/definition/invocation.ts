@@ -27,8 +27,8 @@ export interface InvocationExceptionDefinition<Input, Output, Level extends Invo
 }
 
 /** Work, handling and observation are peers. No handler receives an internal invocation. */
-export abstract class InvocationDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, ExceptionResources extends object = Record<string, never>, Delta = never, EntryInput = Input> {
-  declare readonly [invocationSignature]?: InvocationSignature<Input, Output, EntryInput, Delta>;
+export abstract class InvocationDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, ExceptionResources extends object = Record<string, never>, Delta = never> {
+  declare readonly [invocationSignature]?: InvocationSignature<Input, Output, Delta>;
   readonly maxRounds: 1 | 2 = 1;
   readonly raises: readonly ExceptionContract<unknown>[] = [];
   readonly output?: OutputDeclaration<Output, Delta>;

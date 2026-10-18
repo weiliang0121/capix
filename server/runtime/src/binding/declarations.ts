@@ -24,7 +24,7 @@ export interface ResolvedDeclaration<Definition extends BindingDefinition, Child
   readonly refinements?: readonly ResourceRefinement<any>[];
 }
 export type ResolvedRuntime<Input = any, Output = any, Resources extends object = any> = ResolvedDeclaration<RuntimeDefinition<Input, Output, Resources, any, any>, ResolvedExecution>;
-export type ResolvedExecution<Input = any, Output = any, Resources extends object = any, EntryInput = any, EntryResources extends object = any> = ResolvedDeclaration<ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>, ResolvedOperation>;
+export type ResolvedExecution<Input = any, Output = any, Resources extends object = any> = ResolvedDeclaration<ExecutionDefinition<Input, Output, Resources, any, any>, ResolvedOperation>;
 export type ResolvedOperation<Input = any, Output = any, Resources extends object = any> = ResolvedDeclaration<OperationDefinition<Input, Output, Resources, any, any>, ResolvedOperation | ResolvedAttempt>;
 export type ResolvedAttempt<Input = any, Output = any, Resources extends object = any> = ResolvedDeclaration<AttemptDefinition<Input, Output, Resources, any, any>, never>;
 export type ResolvedChild = ResolvedExecution | ResolvedOperation | ResolvedAttempt;
@@ -39,7 +39,7 @@ const childLevels: Readonly<Record<InvocationLevel, readonly ChildDefinition['le
 
 /** Resolve the whole supplied graph once. A standalone child has no implied ancestor grants. */
 export function resolveDeclaration<Input, Output, Resources extends object>(definition: RuntimeDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedRuntime<Input, Output, Resources>;
-export function resolveDeclaration<Input, Output, Resources extends object, EntryInput, EntryResources extends object>(definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>, options?: ChildBindingOptions): ResolvedExecution<Input, Output, Resources, EntryInput, EntryResources>;
+export function resolveDeclaration<Input, Output, Resources extends object>(definition: ExecutionDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedExecution<Input, Output, Resources>;
 export function resolveDeclaration<Input, Output, Resources extends object>(definition: OperationDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedOperation<Input, Output, Resources>;
 export function resolveDeclaration<Input, Output, Resources extends object>(definition: AttemptDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedAttempt<Input, Output, Resources>;
 export function resolveDeclaration(definition: BindingDefinition, options?: ChildBindingOptions): ResolvedNode;

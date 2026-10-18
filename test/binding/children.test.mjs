@@ -10,7 +10,7 @@ function operation(execute = (work) => work.input) {
 
 function assemble(child, run, options = {}) {
   const execution = { level: 'execution', children: [child], maxRounds: 1, raises: [], ...options, run: { requires: {}, ...run } };
-  return assembleRuntime(runtimeDefinition(execution), { providers: [], source: { entry: () => null, capture: () => null } });
+  return assembleRuntime(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
 }
 
 test('run and acceptance share an exact child reference across distinct Work actions', async () => {

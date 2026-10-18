@@ -12,8 +12,9 @@ export function projectDetail(snapshot: ExecutionRecordSnapshot, memory: MemoryO
   const trace = projectExecution(snapshot);
   const calls = trace.callSequence.calls.map((call) => (call.id === snapshot.execution.id ? { ...call, parentId: snapshot.runtimeCall.id } : call));
   const memoryAt = (call?: CallSpan): CallMemory => {
-    const owner = call?.recordType === 'attempt' ? snapshot.operations.find((item) => item.id === call.parentId) : call?.recordType === 'operation' ? snapshot.operations.find((item) => item.id === call.id) : snapshot.operations.find((item) => item.operation === 'selection');
-    const input = isPlainObject(owner?.value.input) ? owner.value.input : {};
+    const owner = call?.recordType === 'attempt' ? snapshot.operations.find((item) => item.id === call.parentId) : call?.recordType === 'operation' ? snapshot.operations.find((item) => item.id === call.id) : snapshot.operations.find((item) => item.operation === 'prepareContext' || item.operation === 'selection');
+    const output = owner?.operation === 'prepareContext' && owner.status === 'succeeded' ? readOutput(owner.value) : undefined;
+    const input = isPlainObject(output) && isPlainObject(output.material) ? output.material : isPlainObject(owner?.value.input) ? owner.value.input : {};
     const incoming = isArray(input.memories) ? input.memories.filter(isPlainObject).map((item, index) => ({ id: isString(item.id) ? item.id : String(index), topic: String(item.topic ?? ''), content: String(item.content ?? ''), sourceIndexes: isArray(item.sourceIndexes) ? item.sourceIndexes.filter(isNumber) : [], ...(item.sourceResults === undefined ? {} : { sourceResults: projectMemoryResults(item.sourceResults) }) })) : [];
     const changes = memoryRecords.filter((record) => !call || call.recordType === 'execution' || record.operationId === owner?.id);
     return { incoming, changes };

@@ -10,14 +10,14 @@ const settings = { model: 'test', contextBudget: 100000, maxOutputTokens: 256, t
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
 
 for (const fails of [false, true]) {
-  test(`selection is recorded without appending messages when generation ${fails ? 'fails' : 'succeeds'}`, async () => {
+  test(`active-material preparation is recorded without appending messages when generation ${fails ? 'fails' : 'succeeds'}`, async () => {
     const requests = [];
     const environment = initializeObserver({
       async invoke(request, purpose) {
         requests.push(request);
         if (purpose === 'memory') return raw({ memories: [] });
         assert.deepEqual(environment.transcript.snapshot(), messagesBefore);
-        if (purpose === 'selection') return raw({ historyIndexes: [1, 0] });
+        assert.notEqual(purpose, 'selection');
         assert.deepEqual(
           JSON.parse(request.messages[1].content).history.map(({ index }) => index),
           [0, 1],
@@ -35,10 +35,10 @@ for (const fails of [false, true]) {
     };
     const messagesBefore = input.messages;
     const facts = await observeExecution(environment.runtime, environment.recording, input, { settings, transcript: environment.transcript });
-    const selection = facts.operations.find((operation) => operation.operation === 'selection');
+    const selection = facts.operations.find((operation) => operation.operation === 'prepareContext');
     assert.equal(selection.status, 'succeeded');
-    assert.deepEqual(readOutput(selection.value), { historyIndexes: [1, 0] });
-    assert.equal(requests.length, fails ? 2 : 3);
+    assert.deepEqual(readOutput(selection.value).selection, { historyIndexes: [0, 1] });
+    assert.equal(requests.length, fails ? 1 : 2);
     assert.equal(facts.execution.status, fails ? 'failed' : 'succeeded');
     assert.equal(resourceFact(facts, 'transcript.fixedRange').end, 3);
     assert.deepEqual(environment.transcript.snapshot(), fails ? messagesBefore : [...messagesBefore, { role: 'assistant', content: '在南楼201。' }]);
@@ -54,7 +54,6 @@ test('message counts accumulate independently and never enter model requests', a
   const transcript = entities.transcript;
   const original = transcript.get(0);
   const requests = [];
-  let indexes = [0];
   let fails = false;
   const runtime = bindConversation(
     new ConversationRuntimeDefinition(),
@@ -67,10 +66,8 @@ test('message counts accumulate independently and never enter model requests', a
           if (purpose === 'memory') return raw({ memories: [] });
           assert.deepEqual(Object.keys(loaded.message).sort(), ['content', 'role']);
           assert.ok(loaded.history.every((item) => JSON.stringify(Object.keys(item).sort()) === JSON.stringify(['content', 'index', 'role'])));
-          if (purpose === 'selection') {
-            requests.push(loaded);
-            return raw({ historyIndexes: indexes });
-          }
+          assert.equal(purpose, 'answer');
+          requests.push(loaded);
           assert.ok(loaded.history.every((item) => !('selectionCount' in item)));
           if (fails) throw new Error('generation failed');
           return raw({ kind: 'answer', content: '测试回复' });
@@ -89,12 +86,12 @@ test('message counts accumulate independently and never enter model requests', a
   assert.equal(requests.length, 2);
   assert.equal(entities.selectionUsage.get(original), 2);
   fails = false;
-  indexes = [0, 0];
-  await assert.rejects(run());
+  const snapshot = entities.active.capture();
+  assert.throws(() => entities.active.apply({ basis: snapshot.basis, messageIndexes: [0, 0], memoryIds: [] }), /unique/);
   assert.equal(entities.selectionUsage.get(original), 2);
-  indexes = [];
+  entities.active.apply({ basis: snapshot.basis, messageIndexes: [], memoryIds: [] });
   await run();
-  assert.equal(requests.length, 4);
+  assert.equal(requests.length, 3);
   assert.equal(entities.selectionUsage.get(original), 2);
   assert.deepEqual(original, { role: 'user', content: '我在北京' });
   assert.equal(transcript.get(0), original);

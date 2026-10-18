@@ -18,12 +18,12 @@ export class ExecutionBinder {
     private readonly options: ChildBindingOptions = {},
   ) {}
 
-  bind<Input, Output, Resources extends object, EntryInput, EntryResources extends object>(definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>): BoundExecution<Input, Output, Resources, EntryInput, EntryResources> {
+  bind<Input, Output, Resources extends object>(definition: ExecutionDefinition<Input, Output, Resources, any, any>): BoundExecution<Input, Output, Resources> {
     return this.bindResolved(resolveDeclaration(definition, this.options));
   }
 
   /** Consume this position's resolved graph without reading or checking the original declaration again. */
-  bindResolved<Input, Output, Resources extends object, EntryInput, EntryResources extends object>(resolved: ResolvedExecution<Input, Output, Resources, EntryInput, EntryResources>): BoundExecution<Input, Output, Resources, EntryInput, EntryResources> {
+  bindResolved<Input, Output, Resources extends object>(resolved: ResolvedExecution<Input, Output, Resources>): BoundExecution<Input, Output, Resources> {
     const definition = resolved.definition;
     const declaration = resolved.declaration;
     const requires = resolved.requires as ResourceRequirements<Resources>;

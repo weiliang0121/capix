@@ -16,7 +16,7 @@ function execution(children, run) {
 }
 
 function assemble(definition, options = {}) {
-  return assembleRuntime(definition, { providers: [], source: { entry: () => null, capture: () => null }, ...options });
+  return assembleRuntime(definition, { providers: [], source: { capture: () => null }, ...options });
 }
 
 test('declaration checks finish once per binding position before any call and never repeat during lazy construction', async () => {
@@ -145,40 +145,32 @@ test('fixed run callbacks keep their original receiver without freezing its busi
   assert.equal(await assemble(definition).run('three', {}), 'replacement');
 });
 
-test('E entry requirements and callbacks are fixed before lazy construction and retain the original entry receiver', async () => {
-  const value = new ResourceOffer('test.resolution.entry', (source) => source);
-  const admitted = [];
-  const entry = {
-    prefix: 'entry',
+test('E captures resources after ordinary R input preparation and fixes its declared run receiver', async () => {
+  const value = new ResourceOffer('test.resolution.value', (source) => source);
+  const run = {
+    prefix: 'original',
     requires: { value: value.request() },
-    accept(input, resources) {
-      return `${this.prefix}:${input}:${resources.value}`;
-    },
-    admit(input) {
-      admitted.push(`${this.prefix}:${input}`);
+    execute(work) {
+      return `${this.prefix}:${work.input}:${work.resources.value}`;
     },
   };
-  const main = execution([], { requires: {}, execute: (context) => context.input });
-  main.entry = entry;
+  const main = execution([], run);
   const definition = runtimeDefinition(main);
   const options = {
     providers: [value.provide((source) => source)],
     source: {
-      entry(_input, _options, declared) {
+      capture(input, _options, declared) {
         assert.equal(declared, main);
-        return 'resource';
+        return `resource:${input}`;
       },
-      capture: () => null,
     },
   };
   const existing = assemble(definition, options);
-  entry.prefix = 'live';
-  entry.requires.value = new ResourceOffer('test.resolution.unavailable', (source) => source).request();
-  entry.accept = () => assert.fail('mutated original entry must not run');
-  entry.admit = () => assert.fail('mutated original admission must not run');
-  main.entry = { requires: {}, accept: (input) => `new:${input}` };
-  assert.equal(await existing.run('one', {}), 'live:one:resource');
-  assert.deepEqual(admitted, ['live:live:one:resource']);
+  run.prefix = 'live';
+  run.requires.value = new ResourceOffer('test.resolution.unavailable', (source) => source).request();
+  run.execute = () => assert.fail('mutated original run must not execute');
+  main.run = { requires: {}, execute: (work) => `new:${work.input}` };
+  assert.equal(await existing.run('one', {}), 'live:one:resource:one');
   assert.equal(await assemble(definition, options).run('two', {}), 'new:two');
 });
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { MemoryCheckpointStore, ProgressChannel } from '@capix/server-runtime';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
-import { bindConversation, ConversationRuntimeDefinition, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
+import { ActiveContent, bindConversation, ConversationRuntimeDefinition, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
 import { MemoryConversationCheckpointRuns } from '@capix/observer-service/assembly';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -10,7 +10,8 @@ const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536
 function binding() {
   const requests = [];
   const transcript = new Transcript();
-  const entities = { transcript, memories: new Memories(transcript), selectionUsage: new SelectionUsage() };
+  const memories = new Memories(transcript);
+  const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() };
   const model = new ModelInteractions(
     new ModelSource({
       async invoke(request, purpose) {
@@ -50,10 +51,10 @@ test('conversation source resets capture for reused options and registers CP bef
   );
   assert.notEqual(starts[0].rootContextId, starts[1].rootContextId);
   assert.equal(entities.transcript.length, 4);
-  assert.equal(requests.length, 6);
+  assert.equal(requests.length, 4);
 });
 
-test('a failed admitted entry cannot leak its input capture or progress channel into the next call', async (t) => {
+test('a failed execution start cannot leak its input capture or progress channel into the next call', async (t) => {
   const { runtime, entities, model, capabilities } = binding();
   t.after(() => model.close());
   const events = [];
@@ -65,21 +66,21 @@ test('a failed admitted entry cannot leak its input capture or progress channel 
       },
     }),
     executionCallbacks: {
-      accepted: () => {
-        throw new Error('host admission callback failed');
+      started: () => {
+        throw new Error('host start callback failed');
       },
     },
   };
-  await assert.rejects(runtime.run({ messages: [{ role: 'user', content: 'admitted only' }] }, options), /host admission callback failed/);
+  await assert.rejects(runtime.run({ messages: [{ role: 'user', content: 'admitted only' }] }, options), /host start callback failed/);
   assert.deepEqual(
     events.map((event) => event.kind),
     ['input'],
   );
-  assert.equal(capabilities.checkpointRuns.list('conversation').length, 0);
+  assert.equal(capabilities.checkpointRuns.list('conversation').length, 1);
   options.progress = undefined;
   options.executionCallbacks = undefined;
   await runtime.run({ messages: [{ role: 'user', content: 'new request' }] }, options);
-  const [run] = capabilities.checkpointRuns.list('conversation');
+  const run = capabilities.checkpointRuns.list('conversation').at(-1);
   assert.deepEqual(run.input, { transcriptId: entities.transcript.id, start: 1, end: 2, revision: 2 });
   assert.equal(run.transcript.end, 2);
   assert.equal(entities.transcript.length, 3);
@@ -97,6 +98,6 @@ test('conversation binding rechecks registered restoration configuration without
   const changed = bindConversation(new ConversationRuntimeDefinition({ maxDecisionSteps: 4 }), entities, model, capabilities);
   await assert.rejects(changed.run({ messages: [{ role: 'user', content: 'must not append' }] }, { settings, checkpointRun: run }), { code: 'CHECKPOINT_CONFIGURATION_CHANGED' });
   assert.equal(entities.transcript.length, 2);
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 2);
   assert.equal(changed.running, false);
 });

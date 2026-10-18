@@ -58,6 +58,11 @@ function summarize(call: CallDetail, accepted: unknown): string | undefined {
   }
   if ((name === 'saveResult' || name === 'createText' || name === 'readText') && isString(output.path) && Number.isSafeInteger(output.bytes) && isString(output.digest)) return `${name === 'readText' ? '已读取' : '已创建'} ${output.path} · ${output.bytes} 字节`;
   if (name === 'selection' && Array.isArray(output.historyIndexes) && output.historyIndexes.every(Number.isSafeInteger)) return `选中 ${output.historyIndexes.length} 条历史`;
+  if (name === 'prepareContext') {
+    const selection = object(output.selection);
+    if (Array.isArray(selection.historyIndexes) && selection.historyIndexes.every(Number.isSafeInteger)) return `已准备 ${selection.historyIndexes.length} 条历史`;
+  }
+  if (name === 'maintainContext' && Array.isArray(output.messageIndexes) && Array.isArray(output.memories)) return `活跃材料：${output.messageIndexes.length} 条消息 · ${output.memories.length} 个记忆`;
   if ((name === 'answer' || name === 'processDocument') && isString(output.content)) {
     if (output.kind === 'answer') return `已生成 ${output.content.length} 字符`;
     if (output.kind === 'needs-info') return '返回补充信息请求';

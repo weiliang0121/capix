@@ -1,6 +1,6 @@
 import { ExecutionContext, Transcript, TranscriptRangeRef, bindResources, AttemptBinder, OperationBinder, ExecutionBinder, Memories, SelectionUsage } from '@capix/server-runtime';
 
-import { acceptConversationInput, initializeObserver, observeExecution, conversationExecutionRequests, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
+import { ActiveContent, acceptConversationInput, initializeObserver, observeExecution, conversationExecutionRequests, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
 
 const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);
@@ -23,6 +23,7 @@ export function resourceBindingFor(runtime, provider, provided) {
     let entities = provided ?? worlds.get(transcript);
     if (!entities) {
       entities = { transcript, memories: new Memories(transcript, { observation: runtime.recording?.memory }), selectionUsage: new SelectionUsage() };
+      entities.active = new ActiveContent(transcript, entities.memories);
       worlds.set(transcript, entities);
     }
     return binding({ ...source, ...entities, model, delivery: () => {} });

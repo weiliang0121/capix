@@ -37,9 +37,9 @@ export interface RuntimeBinding<Input, Output, Options, Resources extends object
   executionBindings(input: Input, options: Options): ExecutionBindingResolver;
 }
 
-export interface ExecutionBinding<Input, Output, Resources extends object, EntryInput, EntryResources extends object> {
-  readonly definition: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>;
-  readonly declaration: ExecutionDefinition<Input, Output, Resources, EntryInput, EntryResources, any, any>;
+export interface ExecutionBinding<Input, Output, Resources extends object> {
+  readonly definition: ExecutionDefinition<Input, Output, Resources, any, any>;
+  readonly declaration: ExecutionDefinition<Input, Output, Resources, any, any>;
   readonly children: BoundChildren;
   readonly requires: ResourceRequirements<Resources>;
   readonly work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>>;

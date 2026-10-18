@@ -15,11 +15,11 @@ export function acceptConversationInput(transcript: Transcript, value: unknown):
   return acceptMessages(value, (messages) => {
     const start = transcript.length;
     transcript.append(...messages);
-    return messages.map((_, offset) => ({ message: transcript.get(start + offset)! }));
-  });
+    return messages.map((_, offset) => ({ index: start + offset, message: transcript.get(start + offset)! }));
+  }).message;
 }
 
-export function acceptMessages(value: unknown, append: (messages: readonly Message[]) => readonly { message: Readonly<Message> }[]): Readonly<Message> {
+export function acceptMessages<Receipt extends { readonly message: Readonly<Message> }>(value: unknown, append: (messages: readonly Message[]) => readonly Receipt[]): Receipt {
   if (!isObject(value) || !isNonEmptyArray(value.messages) || value.messages.length > 501) {
     throw new ConversationInputError('需要 1–501 条新消息，最后一条必须是 user 消息。');
   }
@@ -32,19 +32,20 @@ export function acceptMessages(value: unknown, append: (messages: readonly Messa
     if (!isObject(message) || (message.role !== 'user' && message.role !== 'assistant') || !isNonBlankString(message.content)) throw new ConversationInputError('消息必须包含 user/assistant 角色和非空 content。');
     return { role: message.role, content: message.content } satisfies Message;
   });
-  return append(messages).at(-1)!.message;
+  return append(messages).at(-1)!;
 }
 
 export interface AcceptedConversationInput {
   readonly message: Readonly<Message>;
+  readonly messageIndex: number;
   readonly fileTask?: FileTask;
 }
 
 /** Validate optional capability instructions before appending any formal message. */
-export function acceptConversationRequest(value: unknown, append: (messages: readonly Message[]) => readonly { message: Readonly<Message> }[], filesEnabled: boolean): AcceptedConversationInput {
+export function acceptConversationRequest(value: unknown, append: (messages: readonly Message[]) => readonly { readonly index: number; readonly message: Readonly<Message> }[], filesEnabled: boolean): AcceptedConversationInput {
   const fileTask = acceptFileTask(isObject(value) ? value.fileTask : undefined, filesEnabled);
-  const message = acceptMessages(value, append);
-  return Object.freeze({ message, ...(fileTask ? { fileTask } : {}) });
+  const accepted = acceptMessages(value, append);
+  return Object.freeze({ message: accepted.message, messageIndex: accepted.index, ...(fileTask ? { fileTask } : {}) });
 }
 
 function acceptFileTask(value: unknown, enabled: boolean): FileTask | undefined {

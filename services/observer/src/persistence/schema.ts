@@ -1,23 +1,31 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { conversationTitle } from '../conversation/title.js';
+import { initialActiveContent } from '../conversation/content/active.js';
 
 /** Local format migrations preserve existing content; unknown versions never create an empty conversation. */
 export function initializeSchema(database: DatabaseSync): void {
   const version = database.prepare('PRAGMA user_version').get()?.user_version;
-  if (version === 5) return;
+  if (version === 6) return;
+  if (version === 5) {
+    migrateActiveContent(database);
+    return;
+  }
   if (version === 4) {
     migrateFixedEffects(database);
+    migrateActiveContent(database);
     return;
   }
   if (version === 3) {
     migrateTranscriptAppends(database);
     migrateFixedEffects(database);
+    migrateActiveContent(database);
     return;
   }
   if (version === 1 || version === 2) {
     migrateConversations(database, version === 1);
     migrateTranscriptAppends(database);
     migrateFixedEffects(database);
+    migrateActiveContent(database);
     return;
   }
   if (version !== 0 || database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()) throw new Error('Unsupported Observer persistence schema');
@@ -70,6 +78,33 @@ export function initializeSchema(database: DatabaseSync): void {
   migrateConversations(database);
   migrateTranscriptAppends(database);
   migrateFixedEffects(database);
+  migrateActiveContent(database);
+}
+
+function migrateActiveContent(database: DatabaseSync): void {
+  try {
+    database.exec(`BEGIN IMMEDIATE;
+      CREATE TABLE IF NOT EXISTS active_content (
+        transcript_id TEXT PRIMARY KEY REFERENCES transcripts(id),
+        memories_id TEXT NOT NULL UNIQUE REFERENCES memory_sets(id),
+        revision INTEGER NOT NULL CHECK (revision >= 0),
+        body TEXT NOT NULL CHECK (json_valid(body))
+      ) STRICT;`);
+    for (const row of database.prepare('SELECT transcripts.id AS transcript_id, transcripts.starts, memory_sets.id AS memories_id FROM transcripts JOIN memory_sets ON memory_sets.transcript_id = transcripts.id WHERE NOT EXISTS (SELECT 1 FROM active_content WHERE active_content.transcript_id = transcripts.id)').all()) {
+      const starts: number[] = JSON.parse(row.starts as string);
+      const length = database.prepare('SELECT count(*) AS count FROM messages WHERE transcript_id = ?').get(row.transcript_id!)!.count as number;
+      const ids = database
+        .prepare('SELECT id FROM memories WHERE collection_id = ? ORDER BY ordinal')
+        .all(row.memories_id!)
+        .map((memory) => memory.id as string);
+      const state = initialActiveContent(row.transcript_id as string, row.memories_id as string, starts.at(-1)!, length, ids);
+      database.prepare('INSERT INTO active_content(transcript_id, memories_id, revision, body) VALUES (?, ?, ?, ?)').run(state.transcriptId, state.memoriesId, state.revision, JSON.stringify(state));
+    }
+    database.exec('PRAGMA user_version = 6; COMMIT;');
+  } catch (error) {
+    if (database.isTransaction) database.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 function migrateFixedEffects(database: DatabaseSync): void {

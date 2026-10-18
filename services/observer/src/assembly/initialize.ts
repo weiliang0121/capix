@@ -11,6 +11,8 @@ import { CheckpointObservation, bindCheckpointObservation } from '../observation
 import { ModelSource } from '../conversation/model/source.js';
 import { ModelInteractions } from '../conversation/model/interactions.js';
 import type { WorkspaceFiles } from '../files/index.js';
+import type { ContextMaintenancePolicy } from '../conversation/operations/context/maintain.js';
+import type { ResourceRequirements } from '@capix/server-runtime';
 import type { ConversationDecisionDefinition } from '../conversation/decision/types.js';
 import { ConversationContent } from './content.js';
 import { ObserverEnvironment } from './environment.js';
@@ -21,6 +23,8 @@ export interface ObserverInitializationOptions {
   readonly files?: WorkspaceFiles;
   readonly decision?: ConversationDecisionDefinition;
   readonly maxDecisionSteps?: number;
+  readonly maintenance?: ContextMaintenancePolicy;
+  readonly maintenanceResources?: ResourceRequirements;
   readonly persistence?: SqliteObserverStore;
   readonly checkpointObservation?: CheckpointInstallation['observation'];
   readonly conversationId?: string;
@@ -99,9 +103,9 @@ export function initializeObserver(provider: ModelInitialization, messages: read
         recordSource.invalidate(error);
       },
     });
-    const { transcript, memories } = content;
+    const { transcript, memories, active } = content;
     const selectionUsage = new SelectionUsage();
-    const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps });
+    const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps, maintenance: options.maintenance, maintenanceResources: options.maintenanceResources });
     const model = options.model ?? new ModelSource(provider);
     interactions = new ModelInteractions(model, { persistence: persistence?.interactions });
     const checkpoints = persistence?.checkpoints ?? new MemoryCheckpointStore();
@@ -109,7 +113,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
     const conversationId = options.conversationId ?? persistence?.conversationForTranscript(transcript.id)?.id ?? transcript.id;
     const observation = new CheckpointObservation(conversationId, checkpointRuns);
     checkpointObservation = observation;
-    const runtime = bindConversation(definition, { transcript, memories, selectionUsage, files: options.files }, interactions, { observations: [recording], changes, checkpoints: { store: checkpoints, observation: bindCheckpointObservation(observation, options.checkpointObservation) }, checkpointRuns, conversationId });
+    const runtime = bindConversation(definition, { transcript, memories, active, selectionUsage, files: options.files }, interactions, { observations: [recording], changes, checkpoints: { store: checkpoints, observation: bindCheckpointObservation(observation, options.checkpointObservation) }, checkpointRuns, conversationId });
     releaseObservation = content.observe(recording);
     // Fresh in-memory input is a real append after observation binds; restored content stays silent.
     if (!options.content && !persistence) transcript.append(...messages);

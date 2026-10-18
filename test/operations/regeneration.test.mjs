@@ -1,3 +1,4 @@
+import { ActiveContent } from '@capix/observer-service';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -27,7 +28,7 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
   const recording = recorder ? bindRecording(recorder, { failure: recordingFailure }) : undefined;
   const transcript = new Transcript([], { observation: recording?.transcript });
   const memories = new Memories(transcript, { observation: recording?.memory });
-  const entities = { transcript, memories, selectionUsage: new SelectionUsage() };
+  const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() };
   const definition = new ConversationRuntimeDefinition();
   configureDefinition?.(definition);
   const environment = { ...entities, definition, recording, book: recorder?.book, runtime: bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider)), { observations: recording ? [recording] : undefined }) };
@@ -66,12 +67,12 @@ for (const [raw, code] of [
     assert.deepEqual(await f.run(), answer);
     assert.deepEqual(
       f.calls.map((call) => call.purpose),
-      ['selection', 'answer', 'answer', 'memory'],
+      ['answer', 'answer', 'memory'],
     );
     assert.equal(f.transcript.length, 2);
     assert.equal(f.transcript.get(1).content, answer.content);
-    const original = f.calls[1].request;
-    const repeated = f.calls[2].request;
+    const original = f.calls[0].request;
+    const repeated = f.calls[1].request;
     assert.deepEqual(repeated.messages.slice(0, -2), original.messages);
     assert.deepEqual(repeated.messages.at(-2), { role: 'assistant', content: raw });
     assert.ok(repeated.messages.at(-1).content.includes(code));
@@ -109,7 +110,7 @@ test('second invalid response stops with its original error and leaves both fail
   await assert.rejects(f.run(), (error) => error.code === 'UNHANDLED_EXCEPTION' && error.cause.facts.code === 'INVALID_JSON');
   assert.deepEqual(
     f.calls.map((call) => call.purpose),
-    ['selection', 'answer', 'answer'],
+    ['answer', 'answer'],
   );
   assert.equal(f.transcript.length, 1);
   const generation = f.generation();
@@ -126,7 +127,7 @@ for (const failure of [new RuntimeError('NETWORK_ERROR', 'network'), new Runtime
     await assert.rejects(f.run());
     assert.deepEqual(
       f.calls.map((call) => call.purpose),
-      ['selection', 'answer'],
+      ['answer'],
     );
     assert.equal(f.generation().context.progress.round, 1);
   });
@@ -143,7 +144,7 @@ test('cancellation after receiving a malformed result prevents regeneration', as
   await assert.rejects(f.run(), (error) => error.code === 'INVOCATION_CANCELLED');
   assert.deepEqual(
     f.calls.map((call) => call.purpose),
-    ['selection', 'answer'],
+    ['answer'],
   );
 });
 
@@ -152,7 +153,7 @@ test('feedback capacity overflow stops before a second external call without tru
   await assert.rejects(f.run(), (error) => error.code === 'CAPACITY_EXCEEDED');
   assert.deepEqual(
     f.calls.map((call) => call.purpose),
-    ['selection', 'answer'],
+    ['answer'],
   );
   const children = f.generation().children.values();
   assert.equal(children.at(-1).key, 'request');
@@ -182,7 +183,7 @@ test('record failure cannot be classified as an output rejection or trigger a se
   await assert.rejects(f.run(), (error) => error instanceof AggregateError);
   assert.deepEqual(
     f.calls.map((call) => call.purpose),
-    ['selection', 'answer'],
+    ['answer'],
   );
   assert.equal(f.generation().context.progress.round, 1);
 });
@@ -204,8 +205,8 @@ test('regeneration declaration rejects invalid evidence and missing feedback bef
         assert.equal(capability.allows(facts, evidence), true);
         assert.equal(capability.allows(facts, invalid), false);
         // Pure declaration contract checks do not invoke a formal child endpoint.
-        assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[1].request, evidence: invalid }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
-        assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[1].request, evidence }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
+        assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[0].request, evidence: invalid }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
+        assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[0].request, evidence }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
         assert.equal(work.children.facts.values().length, 4);
         checked = true;
         return handle(work);
@@ -231,6 +232,6 @@ test('parent may decline an eligible regeneration without changing child capabil
   await assert.rejects(f.run(), (error) => error.code === 'UNHANDLED_EXCEPTION' && error.cause.facts.code === 'INVALID_JSON');
   assert.deepEqual(
     f.calls.map((call) => call.purpose),
-    ['selection', 'answer'],
+    ['answer'],
   );
 });

@@ -10,7 +10,7 @@ function hasFailure(node: CallGraphNode): boolean {
 }
 
 function family(node: CallGraphNode): string {
-  if (node.name === 'selection') return 'selection';
+  if (node.name && ['selection', 'prepareContext', 'maintainContext'].includes(node.name)) return 'selection';
   if (node.name === 'answer' || node.name === 'processDocument') return 'answer';
   if (node.name === 'memory') return 'memory';
   return 'neutral';
