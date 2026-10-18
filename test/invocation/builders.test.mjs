@@ -216,11 +216,12 @@ test('shared builder capabilities produce independent call event scopes across n
   assert.notEqual(laterParent, scopes.get(root.context.id)[0].parentContextId);
 });
 
-test('a completed ancestor stops an awaiting child before acceptance without exposing parent contexts', async () => {
+test('a started child checks its own activity instead of reinterpreting manually changed ancestor state', async () => {
   const runtime = createBoundRuntime();
   const root = runtime.executionInvocationBuilder.create('root', { context: { settings }, work: identity });
   const parent = runtime.operationInvocationBuilder.create(root, { input: 'parent', description: operation, work: identity });
   const nested = runtime.operationInvocationBuilder.create(parent, { input: 'nested', description: operation, work: identity });
+  let accepted = 0;
   let resume;
   const leaf = runtime.attemptInvocationBuilder.create(nested, {
     input: 'leaf',
@@ -231,16 +232,22 @@ test('a completed ancestor stops an awaiting child before acceptance without exp
         new Promise((resolve) => {
           resume = resolve;
         }),
-      accept: () => assert.fail('an ended ancestor must prevent acceptance'),
+      accept: (_context, output) => {
+        accepted++;
+        return output;
+      },
     },
   });
   const pending = leaf.run();
+  // Deliberate construction-level state mutation isolates local activity checks.
+  // Normal Invocation completion separately waits for its actual started children.
   parent.context.complete('ended while leaf awaited');
   resume('external result');
-  await assert.rejects(pending, /ended/);
-  assert.equal(leaf.context.status, 'failed');
+  assert.equal(await pending, 'external result');
+  assert.equal(accepted, 1);
+  assert.equal(leaf.context.status, 'succeeded');
   assert.equal(leaf.context.progress.result.output, 'external result');
   assert.equal(nested.context.status, 'running');
   assert.equal(leaf.context.operationContext, undefined);
-  assert.throws(() => nested.context.requireActive(), /ended/);
+  assert.doesNotThrow(() => nested.context.requireActive());
 });

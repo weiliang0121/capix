@@ -19,16 +19,16 @@ Binder 先解算声明，再建立绑定结构；Binding 表达结构构造所�
 
 `binding/` 的实现对象与辅助函数按具体职责协作：
 
-| 文件            | 辅助操作                                                    | 生效边界                                                                     |
-| --------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| declarations.ts | resolveDeclaration                                          | 装配时解算全树并保留按父位置的结果，检查层级、资源覆盖、uses、收窄和无环关系 |
-| snapshot.ts     | snapshotDefinition                                          | 固定内核解释字段、容器及函数入口，保留原业务方法 receiver，不冻结业务实例    |
-| resources.ts    | collectDefinitionRequirements / collectObservationProvides  | 收集声明申请与安装方供给声明，不捕获实体或创建访问端点                       |
-| resources.ts    | bindChildResources                                          | 固定资源签发的收窄规则；声明解算再核验规则的申请及归属                       |
-| sources.ts      | bindExecutionSources                                        | 装配时绑定供给查找；创建 E 时才 capture 本次配置、定位及资源来源             |
-| work.ts         | InvocationWorkBinding                                       | 一个 Bound 位置的固定工作适配；连接运行、接纳、异常与 CP 声明                |
-| access.ts       | InvocationAccess                                            | 一次 Invocation 的子调用映射、跨阶段引用、阶段/轮次行动窗口及访问约束        |
-| observation.ts  | bindInvocationObservation / bindRuntimeStructureObservation | 建立具体调用或 R 结构的观测会话，连接父观测、声明资源及故障策略              |
+| 文件            | 辅助操作                                                                           | 生效边界                                                                  |
+| --------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| declarations.ts | resolveDeclaration                                                                 | 装配时解算全树并保留按父位置的结果，检查层级、供给、uses、收窄和无环关系  |
+| snapshot.ts     | snapshotDefinition                                                                 | 固定内核解释字段、容器及函数入口，保留原业务方法 receiver，不冻结业务实例 |
+| resources.ts    | collectDefinitionRequirements / collectResourceSupply / collectObservationProvides | 收集声明申请与安装方供给声明，不捕获实体或创建访问端点                    |
+| resources.ts    | bindChildResources                                                                 | 固定资源签发的收窄规则；声明解算再核验规则的申请及归属                    |
+| sources.ts      | bindExecutionSources                                                               | 装配时绑定供给查找；创建 E 时才 capture 本次配置、定位及资源来源          |
+| work.ts         | InvocationWorkBinding                                                              | 一个 Bound 位置的固定工作适配；连接运行、接纳、异常与 CP 声明             |
+| access.ts       | InvocationAccess                                                                   | 一次 Invocation 的子调用映射、跨阶段引用、阶段/轮次行动窗口及访问约束     |
+| observation.ts  | bindInvocationObservation / bindRuntimeStructureObservation                        | 建立具体调用或 R 结构的观测会话，连接父观测、声明资源及故障策略           |
 
 恢复准备不属于上述绑定辅助。`checkpoint/restoration.ts` 的 `prepareCheckpointRestoration` / 私有 `readCheckpoint` 由 InvocationBuilder 使用：读取校验与可选构造共用恢复失败观测边界，纯读取校验不负责构造，也不解算声明或连接资源。
 
@@ -123,27 +123,38 @@ Conversation 绑定选择哪些调用与实体写入属于本次请求，产生�
 
 ## Context、Invocation 与作者 Work
 
-R 装配 REOA 四层 ContextBuilder 与 InvocationBuilder，跨调用复用；构造器不保存本次输入、信号或 Context。R 建立本次信号，EOA 沿直接关系使用同一信号。Context 私有保存直接父级或 E 构造器身份，供归属和活动检查使用，不向业务公开祖先取数入口。
+R 装配 REOA 四层 ContextBuilder 与 InvocationBuilder，跨调用复用；构造器不保存本次输入、信号或 Context。R 建立本次信号，EOA 沿直接关系使用同一信号。Context 保存固定的构造器归属和本次控制信号，不保存祖先 Context。构造和真实启动时验证父归属/活动；已启动子依靠自身窗口及固定信号继续，不随着父 phase/round 变化重新解算资源或 Work。
 
-Invocation 是单次、只能运行一次的结构化调用。它持有实际 Context、局部观测绑定、内部过程及事实顺序与直接子关系，不持有 Record。构造不写调用记录；运行前、每轮 execute、正常接纳和异常处理阶段检查本层和父层活动及正式错误状态。可选记录预设维护自己的本调用句柄和父预设关系；无记录时调用仍完整成立。
+Invocation 是单次、只能运行一次的结构化调用。它持有实际 Context、局部观测绑定、内部过程及事实顺序与直接子关系，不持有 Record。构造不写调用记录；运行前验证直接父的启动资格；每轮 execute、正常接纳和异常处理检查本层活动及正式错误状态。可选记录预设维护自己的本调用句柄和父预设关系；无记录时调用仍完整成立。
 
 调用本体按完整动作组织，避免循环函数反向操作整个 Invocation：
 
 | 对象／文件                                          | 职责与持有状态                                                                                             |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `Invocation` / `invocation.ts`                      | 整次调用启动、工作终态、最终交付与释放；唯一错误归属与事实发布                                             |
+| `InvocationControl` / `control.ts`                  | 单次启动与本层活动窗口开闭；不持有资源、关系表或第二套 Context 进度                                        |
 | `InvocationCycle` / `cycle.ts`                      | 本地 execute / receive / handling 与有限继续；持有当前输出段，Context 仍唯一持有语义进度                   |
 | `InvocationWork` / `work.ts`                        | 可复用工作契约与过程事实类型；`connectInvocationWork` 连接本次 Context/Invocation，向 Cycle 提供窄工作入口 |
-| `InvocationChildren` / `children.ts`                | 直接子关系集合、顺序、恢复占位安装与父层异步接纳窗口                                                       |
+| `InvocationChildren` / `children.ts`                | 直接子关系集合、顺序、恢复占位安装、已启动子活动与父层异步接纳窗口                                         |
 | `InvocationRelation` / `relation.ts`                | 单条关系的真实 returned 与 reception；通过 owner 端口使用父层能力                                          |
 | `InvocationCheckpoint` / `checkpoint/invocation.ts` | 本次 CP 活动、保存依据、子续接选择和缓存、最终交付保存                                                     |
 | `checkpoint/children.ts`                            | 子关系的 CP 编解码、可保存性检查和保存依据解释；不修改运行关系集合                                         |
 
-`run → runWork → startWork / InvocationCycle.run` 是正常运行主线。`failWork` 固定工作失败并通知；`failDelivery` 处理整次交付失败。成功 Context 在输出完成与 finished 通知之前固定，之后交付失败不能改写工作结果。CP 最终交付固定后才向父返回，CP 活动在 finally 释放。
+`run → deliver → runWork → startWork / InvocationCycle.run` 是正常运行主线。`failWork` 固定工作失败并通知；`failDelivery` 处理整次交付失败。成功 Context 在输出完成与 finished 通知之前固定，之后交付失败不能改写工作结果。CP 最终交付固定后才向父返回，CP 活动在 finally 释放。
 
 Cycle 仅获得本次工作入口、检查与错误归属端口、过程通知和输出交付；不持有真实 Invocation、子关系或 CP 存储。可选续接函数只替换恢复首轮 execute，之后正常接纳／异常处理；若继续下一轮，回到普通 execute。输出段由 Cycle 建立与封口，外层固定成功 Context 后再完成输出。工作连接不提前读取阶段契约、进入业务访问或兑现资源；未声明 accept 保持缺席，保留 reuse 事实。
 
 父子关系恢复使用已经解码的 baseline；Relation 不读取 CP 数据格式或调用 codec。InvocationCheckpoint 维护原始保存依据与已续接目标，通过 Children 的安装入口维护同级顺序与精确目标身份。父层异步接纳窗口只在实际接纳工作期间有效，finally 关闭；它与关系的 receiving/accepted 状态分开。
+
+活动收尾遵守下列固定规则：
+
+- execute/accept/handler 离开前排空已开始的子接纳回调，回调仍使用其原阶段的 Work；execute 正文返回即封口输出，不因收尾延长输出窗口。
+- 最终交付前关闭本层新工作，再等待已启动的子调用真实退出。未启动的关系及已返回未接纳的事实不构成等待项，不自动接纳结果。
+- 父正常结束、未处理声明异常或技术错误不隐式停止兄弟；取消通过既有固定信号传播，仍等待实际执行体/finally 退出。忽略信号的代码不会被强行宣告结束。
+- 晚到声明异常仅形成子返回事实；只有业务将交付错误带入当前阶段时才核验传播凭据。旧阶段错误不能跨阶段重抛。技术错误的归属仍然严格，业务 catch 不能清除。
+- 收尾不等待 Interaction，不自动补建恢复点。CP 只使用原有可保存关系；恢复建立新的活动窗口，不复活旧端点或旧 Promise。
+
+这轮没有增加公共 stop/wait、选择性兄弟取消、跨阶段异常再签发或租约。`create/run/accept` 继续是作者动作，内部收尾不是业务接纳策略。
 
 REOA 构造器按职责集中到 `invocation/builders/{runtime,execution,operation,attempt}.ts` 与 `context/builders/{runtime,execution,operation,attempt}.ts`；`invocation/builders/create.ts` 只组合四层可复用构造链。
 
@@ -162,7 +173,7 @@ Work 不暴露 Context ID、生命周期方法、Invocation、Recorder 或原实
 
 ## 直接子调用、组合与有限再次生成
 
-RuntimeBinder 在装配时使用 `resolveDeclaration` 解算 R→E、E→O、O→O/A 全树，检查无环、资源覆盖、阶段 uses、收窄和观测约束，并保留每个父位置的结果。不会建立未使用的 Bound 子结构、访问实体或调用模型。BoundChildren 保存原声明身份、固定 CP 契约与本位置的 Initializer；业务取得子入口仍不初始化结构，首次 create 才由对应 Binder.bindResolved 消费已解算结果。同一位置复用稳定 O 身份，不同 R 或不同父位置独立。已有成功 CP 交付可以直接按固定契约读取，不需建立 Bound 子结构。
+RuntimeBinder 在装配时使用 `resolveDeclaration` 解算 R→E、E→O、O→O/A 全树，检查无环、子树供给、阶段 uses、收窄和观测约束，并保留每个父位置的结果。不会建立未使用的 Bound 子结构、访问实体或调用模型。BoundChildren 保存原声明身份、固定 CP 契约与本位置的 Initializer；业务取得子入口仍不初始化结构，首次 create 才由对应 Binder.bindResolved 消费已解算结果。同一位置复用稳定 O 身份，不同 R 或不同父位置独立。已有成功 CP 交付可以直接按固定契约读取，不需建立 Bound 子结构。
 
 `ResolvedRuntime/Execution/Operation/Attempt` 是固定解算结果，不是新增生命周期实体。原 `definition` 只保留身份与宿主定位；`declaration` 固定内核读取的结构字段、资源申请、执行/异常/观测函数、输出与 CP codec/续接契约。Binding 与运行工作统一消费该固定结果。绑定后修改原声明结构不改变既有 Bound，重新装配才采用新结构；原业务实例不被深度冻结，方法仍使用原 receiver，闭包或业务字段变化不被快照承诺覆盖。
 
@@ -191,7 +202,7 @@ Initializer 只支持同步一次建立、递归检查、成功或失败缓存�
 
 InvocationChildren 是直接父子运行关系，与 Recorder 无关。关系记录子 Context 状态、run 返回/抛错以及父层接收状态；成功 Context 与交付失败可以同时存在，例如终态记录失败。子 run 不声称父层已接收，只有明确的组合 accept 才推进 reception。`child.accept(delivered => accepted)` 的 delivered 来自该直接子调用保存的真实成功返回，类型跟随 child；不能接纳异父、未返回、失败或已经接纳的调用。父层可以将真实交付加工成自己的接纳结果，returned 与 accepted 不必相等。
 
-O/A 需要在执行中确定更小资源范围时，可信装配可配置 `childResources: [bindChildResources(definition, [offer.refine(input => selection)])]`。创建子调用前，根据该调用的输入派生供给；ResourceOffer 的 refine 检查并返回收窄后的捕获，内核只允许处理该子声明已经申请、父层已经供应的 offer。新供给有独立 supplyId，不修改父层或兄弟，不重捕获无关模型或原文。规则不是业务编排，也不能自行增加资源；endpoint 继续受调用活动与声明阶段约束。
+O/A 需要在执行中确定更小资源范围时，可信装配可配置 `childResources: [bindChildResources(definition, [offer.refine(input => selection)])]`。创建子调用前，根据该调用的输入派生供给；ResourceOffer 的 refine 检查并返回收窄后的捕获，内核只允许处理该子树已申请、内部管道已供应的 offer；透传父层不必把它加入自己的 requires。新供给有独立 supplyId，不修改父层或兄弟，不重捕获无关模型或原文。规则不是业务编排，也不能自行增加资源；endpoint 继续受调用活动与声明阶段约束。
 
 Observer 的 E 在接纳准备 O 的固定活跃材料后运行有限决策循环。决策 O 交付 `invoke { capability, arguments }` 或 `finish { conclusion }` 提案；E 检查公开能力、参数、当前阶段和完成条件，再调用真实子声明。当前能力条目为 checkFile、answer、document、save，条目引用真实子声明，并分别提供参数 Schema、可用条件、内部输入构造和真实输出接纳。决策 O、材料准备、可选维护与记忆收尾不进入可选目录。目录是本次 E 组合的派生信息，不是第二个全局注册表。
 
@@ -223,12 +234,14 @@ Sequence 是不可变顺序定义，step 包含 key、use、input 与可选 acce
 
 ResourceOffer 由资源所属模块公开来源、访问接口、binding/access 时机、capture 和可记录 describe。能力通过 request 正式申请，装配通过 provide 供应独立实体。项目对象身份控制匹配，名称标识资源事实和诊断；同名项目不能冒充。Sequence.requests 收集全部申请，不按本地别名覆盖。
 
+每个解算位置区分本层各阶段申请 `requires` 和内部子树供给 `supply`。后者按 offer 身份聚合，不把子层别名或访问资格暴露给父 Work；供给聚合止于 R→E 来源边界，各 E 继续独立 capture。供给缺失、重复及伪造收窄仍在绑定时拒绝。纯透传本身不会产生本层的资源使用事实。
+
 ResourceBindings 持有供给与本次端点：
 
 - capture 的结果或失败可由父子申请共享；配置、原文定位按 binding 时机固定；默认工作材料由准备 O 显式 capture，模型按 access 时机兑现。
 - 每次调用通过 select 得到本地供给范围与事实会话，再 attach 本次归属；运行和异常阶段分别兑现受阶段约束的端点，共享本次资源顺序与固定捕获，不能共享包含父调用来源的 writer 闭包。
-- Invocation started 发布后 start 只激活 run 请求；进入异常处理时才激活 exceptions 请求。相同调用内同一供给的 bound/available 不因阶段切换重复登记；惰性项目不会因为记录而提前建立。
-- 普通业务只使用本阶段的 work.resources；保存下来的正式实体方法仍检查当前阶段、本次调用及祖先活动性。正式错误成立之后也不能继续读写实体或启动子调用。已经取得的纯数据快照不因此失效。
+- Invocation started 发布后 start 只激活当前入口请求（普通 run 或恢复点）；进入异常处理时才激活 exceptions 请求。正常 execute→accept 共享本轮正常端点；CP resume 使用独立窗口，离开时关闭，正常 accept 必须使用自己签发的资源。相同调用内同一供给的 bound/available 不因阶段切换重复登记；惰性项目不会因为记录而提前建立。
+- 普通业务只使用本阶段的 work.resources；保存下来的正式实体方法仍检查当前阶段、本次调用及固定控制信号，不递归查询祖先的可变状态。正式错误成立之后也不能继续读写实体或启动子调用。已经取得的纯数据快照不因此失效。
 - R 的输入追加使用正常 execute 阶段的资源窗口；不再为 E 专门创建 entry 窗口。显式 InvocationEntry 输入适配沿用当前父 Work 的资源与活动约束。
 
 业务访问端点自动附加 origin 与本次实体观察端口。实体自行审查、落实并发布变化；必要捕获与可选消费独立分发。记录预设解释事件形成记录，实体不持有 Recorder 或记录身份。同一实体发布期间拒绝重入变更。
@@ -274,7 +287,7 @@ Transcript 全批预检后追加，Memories 全批预检后逐项落实。捕获
 
 运行取消通过本次 R 的 InvocationControls.signal 传递到 E/O/A。新子调用、父层接纳及业务资源活动复用公共活动检查；先保留已归属错误，再检查取消。InvocationCancelled 绑定本次 signal 身份，isInvocationCancelled 只识别这个明确交付，不遍历 cause 或仅比较 code。Context、Invocation 和调用方保持同一交付原因；独立错误与复合故障不能被并发取消覆盖。
 
-模型交互宿主把运行信号与 timeout 合并，在资源活动捕获之前规范化：主动取消保留根信号身份，超时为 MODEL_TIMEOUT，网络和解析故障保留真实原因。取消不回滚已经成立的实体更新，也不阻止内核收尾、记录终态和释放占用。活跃读取的宿主取消等待真实发送结束；A1/A2 交接时 R 可能已退出而交互仍在取消收尾，服务提交出口等待同一宿主交互并保持接纳 busy，然后投影 cancelled。内核不感知客户端队列或服务提交协议，也不把独立交互强行附属于调用生命周期。
+模型交互使用独立 Provider timeout，调用 signal 仅终止本次 wait/result 等待。取消不回滚已经成立的实体更新，也不阻止内核收尾、记录终态和释放占用；不向 Provider 传递调用取消，不等独立发送结束才投影 cancelled。外部反馈晚到仍可保存，但不复活原 A、不改写原提交；新 A 可按原 ID 读取，不重发。环境 close 仍拒绝活动交互，宿主可先显式等待 settled() 再关闭；宿主恢复入口只受 R 调用占用及既有恢复核验约束。
 
 当前不增加 Thread/TRSA、未完成调用恢复、通用版本仓库、权限、插件注册、动态规划或跨进程重放。每个对话的内容与记录持久化由独立实体端口和服务存储负责，见 [持久化](persistence.md)；不序列化 Invocation / Context，也不让历史记录重新驱动运行。
 

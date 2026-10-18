@@ -100,6 +100,7 @@ export class BoundRuntime<Input = unknown, Output = unknown, Options extends Inv
               resources: binding.resources(input, options),
               executionBindings: binding.executionBindings(input, options),
               requires: binding.requires,
+              supply: binding.supply,
               initial,
               restore,
               observation: definition.observation,

@@ -105,7 +105,14 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
     const access = this.accessFor(invocation).enter(`checkpoint:${point.name}`, point.resume.requires, point.resume.uses ?? []);
     const registry = this.accessFor(invocation).references;
     const saved = Object.freeze(Object.fromEntries(Object.entries(references).map(([name, value]) => [name, Array.isArray(value) ? Object.freeze(value.map((ref) => registry.fromSaved(ref))) : registry.fromSaved(value as CheckpointReference)])));
-    return authorOutput(await point.resume.execute(this.executionWork(invocation, access) as never, state, saved as import('../definition/checkpoint.js').SavedReferences<any>));
+    try {
+      return authorOutput(await point.resume.execute(this.executionWork(invocation, access) as never, state, saved as import('../definition/checkpoint.js').SavedReferences<any>));
+    } finally {
+      invocation.sealOutput();
+      const settling = invocation.children.settleAcceptances();
+      if (settling) await settling;
+      access.close();
+    }
   }
 
   private childPort(access: ReturnType<InvocationAccess<Input, Output, Context>['enter']>) {

@@ -8,7 +8,7 @@ const output = { id: 'fixture', model: 'fixture', content: '{}', finishReason: '
 function model(provider) {
   const interactions = new ModelInteractions(new ModelSource(provider));
   const resources = bindResources({ creator: ModelResource.create.request(), reader: ModelResource.read.request() }, [ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)])(null).values;
-  return { invoke: (request, purpose, controls) => resources.reader.result(resources.creator.start(request, purpose, controls), controls) };
+  return { interactions, invoke: (request, purpose, controls) => resources.reader.result(resources.creator.start(request, purpose, { timeoutMs: controls.timeoutMs }), controls) };
 }
 
 test('provider fetch and body abort preserve the native cause and exact control identity', async () => {
@@ -54,28 +54,22 @@ test('concurrent abort does not relabel an independent fetch or decoding failure
   }
 });
 
-test('model resource normalizes merged cancellation to the caller signal before resource capture', async () => {
-  for (const normalized of [false, true]) {
-    const controller = new AbortController();
-    const endpoint = model({
-      invoke: async (_request, _purpose, signal) => {
-        controller.abort();
-        throw normalized ? new InvocationCancelled(signal) : signal.reason;
-      },
-    });
-    await assert.rejects(endpoint.invoke(request, 'answer', { signal: controller.signal, timeoutMs: 1000 }), (error) => isInvocationCancelled(error, controller.signal));
-  }
-});
-
-test('provider return after cancellation is stopped at the model acceptance boundary', async () => {
+test('model resource cancellation uses the reader signal without aborting provider work', async () => {
   const controller = new AbortController();
+  let external;
   const endpoint = model({
-    invoke: async () => {
+    invoke: async (_request, _purpose, signal) => {
+      external = signal;
       controller.abort();
       return output;
     },
   });
   await assert.rejects(endpoint.invoke(request, 'answer', { signal: controller.signal, timeoutMs: 1000 }), (error) => isInvocationCancelled(error, controller.signal));
+  await endpoint.interactions.settled();
+  assert.notEqual(external, controller.signal);
+  assert.equal(external.aborted, false);
+  assert.deepEqual(endpoint.interactions.states()[0].feedback.payload, output);
+  endpoint.interactions.close();
 });
 
 test('model timeout is a failure distinct from parent cancellation and retains its cause', async () => {
@@ -90,18 +84,44 @@ test('model timeout is a failure distinct from parent cancellation and retains i
   }
 });
 
-test('resource adaptation does not hide a fault or a composite error just because cancellation raced it', async () => {
+test('an already available interaction failure takes precedence over a cancelled reader', async () => {
   for (const composite of [false, true]) {
     const controller = new AbortController();
     const cause = new Error('independent failure');
-    let thrown;
-    const endpoint = model({
-      invoke: async (_request, _purpose, signal) => {
-        controller.abort();
-        thrown = composite ? new AggregateError([new InvocationCancelled(signal), cause]) : cause;
-        throw thrown;
-      },
-    });
-    await assert.rejects(endpoint.invoke(request, 'answer', { signal: controller.signal, timeoutMs: 1000 }), (error) => error === thrown && !isInvocationCancelled(error, controller.signal));
+    const external = AbortSignal.abort(new Error('independent provider stop'));
+    const thrown = composite ? new AggregateError([new InvocationCancelled(external), cause]) : cause;
+    const host = new ModelInteractions(
+      new ModelSource({
+        invoke: async () => {
+          throw thrown;
+        },
+      }),
+    );
+    const ref = host.start(request, 'answer', { timeoutMs: 1000 });
+    await host.settled();
+    controller.abort();
+    for (const method of ['wait', 'result']) {
+      await assert.rejects(method === 'wait' ? host.wait(ref, { signal: controller.signal, waitMs: 10 }) : host.result(ref, { signal: controller.signal }), (error) => error === thrown && !isInvocationCancelled(error, controller.signal));
+    }
+    host.close();
   }
+});
+
+test('a later independent failure is retained without reviving a cancelled wait', async () => {
+  let fail;
+  const response = new Promise((_resolve, reject) => {
+    fail = reject;
+  });
+  const controller = new AbortController();
+  const cause = new Error('late provider failure');
+  const host = new ModelInteractions(new ModelSource({ invoke: () => response }));
+  const ref = host.start(request, 'answer', { timeoutMs: 1000 });
+  const waiting = assert.rejects(host.result(ref, { signal: controller.signal }), (error) => isInvocationCancelled(error, controller.signal));
+  controller.abort();
+  await waiting;
+  assert.equal(host.active, true);
+  fail(cause);
+  await host.settled();
+  await assert.rejects(host.result(ref, { signal: new AbortController().signal }), (error) => error === cause);
+  host.close();
 });

@@ -28,7 +28,7 @@ export interface RuntimeCallSource<Input, Options, Source> {
 export function bindExecutionSources<Input, Options, Source>(definitions: readonly ResolvedExecution[], providers: readonly ResourceProvider<Source>[], source: RuntimeCallSource<Input, Options, Source>): (input: Input, options: Options) => ExecutionBindingResolver {
   const supplies = new Map(
     definitions.map((resolved) => {
-      const capture = bindResources(resolved.requires, providers);
+      const capture = bindResources(resolved.supply, providers);
       return [resolved.definition, { capture }];
     }),
   );

@@ -13,9 +13,9 @@ import type { ExtractMemoryDefinition } from './operations/memory/extract.js';
 import { type AcceptedConversationInput } from './accept.js';
 import type { GenerateAnswerDefinition } from './operations/answer/generate.js';
 import { answerStream, type AnswerProgress, type AnswerGenerationEvent } from './operations/answer/stream.js';
-import { ProcessDocumentDefinition } from './operations/document/process.js';
-import { SaveResultDefinition } from './operations/document/save.js';
-import { CheckFileTaskDefinition } from './operations/preflight/check.js';
+import type { ProcessDocumentDefinition } from './operations/document/process.js';
+import type { SaveResultDefinition } from './operations/document/save.js';
+import type { CheckFileTaskDefinition } from './operations/preflight/check.js';
 import { modelTextSchema } from './model/schema.js';
 import type { ConversationDecisionDefinition } from './decision/types.js';
 import { acceptConversationDecision, conversationCapability, reviseDecision, type ConversationCapability } from './decision/capability.js';
@@ -78,7 +78,7 @@ export class ConversationExecutionDefinition extends ExecutionDefinition<Accepte
     this.maxDecisionSteps = options.maxDecisionSteps ?? 8;
     if (!Number.isSafeInteger(this.maxDecisionSteps) || this.maxDecisionSteps < 1 || this.maxDecisionSteps > 16) throw new RangeError('Decision steps must be an integer between 1 and 16');
     this.children = Object.freeze(Object.values(operationDefinitions).filter((definition) => definition !== undefined));
-    this.run = { requires: { ...conversationExecutionRequests, ...operationDefinitions.preparation.run.requires, ...(operationDefinitions.maintenance?.run.requires ?? {}), ...(operationDefinitions.preflight ? CheckFileTaskDefinition.requires : {}), ...(operationDefinitions.document ? ProcessDocumentDefinition.requires : {}), ...(operationDefinitions.save ? SaveResultDefinition.requires : {}) }, uses: this.children, execute: this.execute.bind(this) };
+    this.run = { requires: conversationExecutionRequests, uses: this.children, execute: this.execute.bind(this) };
     const point = checkpointPoint<'execution', AcceptedConversationInput, GenerationOutput, AnswerProgress>();
     this.preparationWaiting = point({
       name: 'preparationWaiting',

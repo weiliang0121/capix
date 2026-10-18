@@ -21,14 +21,15 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
   }
 
   enter(phase: AccessPhase, requires: ResourceRequirements, uses?: readonly ChildDefinition[]) {
-    const resourcePhase = phase === 'exceptions' ? 'exceptions' : 'run';
+    const resourcePhase = phase === 'receive' ? 'run' : phase;
     this.#resources.activate(resourcePhase, requires);
     const context = this.invocation.context;
     const round = context.progress.round;
+    let open = true;
     const validate = () => {
       try {
-        this.invocation.requireHealthy();
-        context.requireRunning();
+        this.invocation.requireActive();
+        if (!open) throw new Error('Work access window is closed');
         if (context.progress.round !== round) throw new Error('Work belongs to an inactive declaration round');
         const expected = phase === 'exceptions' ? 'handling' : phase === 'receive' ? 'receive' : 'execute';
         if (context.progress.phase !== expected) throw new Error('Work belongs to an inactive declaration phase');
@@ -46,6 +47,10 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
       signal: (context as Context & { signal: AbortSignal }).signal,
       ...(context.continuation ? { continuation: this.references.continuation(context.continuation) } : {}),
     };
-    return { base: Object.freeze(base), children, validate };
+    const close = () => {
+      open = false;
+      this.#resources.close(resourcePhase);
+    };
+    return { base: Object.freeze(base), children, validate, close };
   }
 }

@@ -5,7 +5,7 @@ import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ConversationAdmission, ConversationSubmissionDiscovery, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse, InteractionUpdate } from '@capix/protocol';
 import { ExecutionRecord, ExecutionRecordHelper, observeMemory } from '@capix/server-runtime/recording';
-import { isObject, isInvocationCancelled, RuntimeError } from '@capix/server-runtime';
+import { isObject, RuntimeError } from '@capix/server-runtime';
 import type { ObserverConversations } from '../assembly/conversations.js';
 import { transcriptSnapshot } from '../conversation/transcript/feed.js';
 import { ObservationFeed } from '../observation/feed.js';
@@ -63,7 +63,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     if (!configured) return Object.freeze({ conversationId, transcriptId, status: 'unavailable', error: Object.freeze({ code: 'KEY_MISSING', message: '服务端尚未配置模型凭据；请配置并重启。' }) });
     const failure = conversations.model.failure;
     if (failure) return Object.freeze({ conversationId, transcriptId, status: 'unavailable', error: failure });
-    return Object.freeze({ conversationId, transcriptId, status: observer?.runtime.running || observer?.interactions.cancelling || !submissions.available ? 'busy' : 'ready' });
+    return Object.freeze({ conversationId, transcriptId, status: observer?.runtime.running || !submissions.available ? 'busy' : 'ready' });
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -235,14 +235,7 @@ export function createObserverServer(options: ObserverServerOptions) {
       }
       submission.start(async (signal) => {
         const observer = conversations.open(conversationId);
-        try {
-          return await observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, answerProgress: submission.answerProgress, signal });
-        } catch (error) {
-          // A can return pending before cancellation reaches its parent. Service cancellation
-          // still waits for this owner's external cleanup, without extending the ended R call.
-          if (isInvocationCancelled(error, signal)) await observer.interactions.settled({ owner: signal });
-          throw error;
-        }
+        return observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, answerProgress: submission.answerProgress, signal });
       });
       // This controller only detaches the initial HTTP waiter; it is never passed to runtime.run.
       const waiting = new AbortController();

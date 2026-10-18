@@ -293,37 +293,51 @@ test('cancellation is idempotent and waits for work to settle instead of releasi
 test('only runtime-confirmed cancellation terminates as cancelled and keeps committed content', async () => {
   const environment = createEnvironment();
   let entered;
+  let release;
+  let providerSignal;
   const entering = new Promise((resolve) => {
     entered = resolve;
   });
-  const runtime = bindConversation(
-    new ConversationRuntimeDefinition(),
-    environment,
-    new ModelInteractions(
-      new ModelSource({
-        async invoke(_request, _purpose, signal) {
-          entered();
-          return new Promise((_resolve, reject) => {
-            if (signal.aborted) reject(signal.reason);
-            else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-          });
-        },
-      }),
-    ),
+  const response = new Promise((resolve) => {
+    release = resolve;
+  });
+  const interactions = new ModelInteractions(
+    new ModelSource({
+      async invoke(_request, _purpose, signal) {
+        providerSignal = signal;
+        entered();
+        await response;
+        return provider.invoke(_request, _purpose);
+      },
+    }),
   );
+  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, interactions);
   const submission = new ConversationSubmission('confirmed-cancel', 'conversation');
-  submission.start((signal) => runtime.run(input, { settings, progress: submission.progress, activity: submission.activity, signal }));
-  await entering;
-  submission.requestCancellation();
-  const result = await complete(submission);
-  assert.equal(result.result.status, 'cancelled');
-  assert.equal(result.cancelRequested, true);
-  assert.equal(result.input.end, 1);
-  assert.equal(result.activities.integrity.status, 'complete');
-  assert.equal(result.activities.calls.find((call) => call.level === 'runtime').status, 'cancelled');
-  assert.ok(result.activities.calls.some((call) => call.level === 'attempt' && call.status === 'cancelled'));
-  assert.equal(environment.transcript.length, 1);
-  assert.equal(runtime.running, false);
+  try {
+    submission.start((signal) => runtime.run(input, { settings, progress: submission.progress, activity: submission.activity, signal }));
+    await entering;
+    submission.requestCancellation();
+    const result = await complete(submission);
+    assert.equal(result.result.status, 'cancelled');
+    assert.equal(result.cancelRequested, true);
+    assert.equal(result.input.end, 1);
+    assert.equal(result.activities.integrity.status, 'complete');
+    assert.equal(result.activities.calls.find((call) => call.level === 'runtime').status, 'cancelled');
+    assert.ok(result.activities.calls.some((call) => call.level === 'attempt' && call.status === 'cancelled'));
+    assert.equal(environment.transcript.length, 1);
+    assert.equal(runtime.running, false);
+    assert.equal(providerSignal.aborted, false);
+    assert.equal(interactions.active, true);
+    release();
+    await interactions.settled();
+    assert.equal(interactions.active, false);
+    assert.equal(environment.transcript.length, 1);
+    assert.equal(submission.snapshot.result.status, 'cancelled');
+  } finally {
+    release();
+    await interactions.settled();
+    interactions.close();
+  }
 });
 
 test('an independent failure after a cancellation request remains a failure', async () => {

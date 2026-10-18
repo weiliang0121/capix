@@ -27,10 +27,11 @@ export class OperationBinder {
     const definition = resolved.definition;
     const declaration = resolved.declaration;
     const requires = resolved.requires as ResourceRequirements<Resources>;
+    const supply = resolved.supply;
     const children = new BoundChildren(resolved.children, (child) => this.bindChild(child));
     const refinements = resolved.refinements;
     const work: InvocationWork<Input, Output, OperationContext<Input, Output, Resources>> = new InvocationWorkBinding(declaration, children);
-    return new BoundOperation(this.invocationBuilder, { definition, declaration, children, requires, refinements, work });
+    return new BoundOperation(this.invocationBuilder, { definition, declaration, children, requires, supply, refinements, work });
   }
 
   private bindChild(resolved: ResolvedChild) {

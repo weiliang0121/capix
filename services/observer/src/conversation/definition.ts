@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { invocationRecording } from '@capix/server-runtime/recording';
-import { RuntimeDefinition, checkpointPoint, childReference, type RuntimeWork, type ResourceRequirements } from '@capix/server-runtime';
+import { RuntimeDefinition, checkpointPoint, childReference, type RuntimeWork } from '@capix/server-runtime';
 import type { GenerationOutput } from '@capix/protocol';
 import { PrepareConversationContextDefinition } from './operations/context/prepare.js';
 import { MaintainConversationContentDefinition, type ContextMaintenancePolicy } from './operations/context/maintain.js';
@@ -21,7 +21,6 @@ export interface ConversationDefinitionOptions {
   readonly decision?: ConversationDecisionDefinition;
   readonly maxDecisionSteps?: number;
   readonly maintenance?: ContextMaintenancePolicy;
-  readonly maintenanceResources?: ResourceRequirements;
 }
 
 /** Business declarations contain no live environment or model provider. */
@@ -79,7 +78,7 @@ export class ConversationRuntimeDefinition extends RuntimeDefinition<unknown, Ge
 /** Construct the reusable business tree once; binding and per-call resources come later. */
 function createConversationExecution(options: ConversationDefinitionOptions): ConversationExecutionDefinition {
   const files = Boolean(options.files);
-  const maintenance = options.maintenance ? new MaintainConversationContentDefinition(options.maintenance, options.maintenanceResources) : undefined;
+  const maintenance = options.maintenance ? new MaintainConversationContentDefinition(options.maintenance) : undefined;
   const preparation = new PrepareConversationContextDefinition(maintenance);
   const generation = new GenerateAnswerDefinition({ files });
   const extraction = new ExtractMemoryDefinition();

@@ -54,7 +54,7 @@ export class InvokeModelDefinition extends AttemptDefinition<ModelRequest, Model
   private async execute(work: AttemptWork<ModelRequest, ModelInteractionResult, ModelCallResources, ModelInteractionRef>): Promise<ModelInteractionResult> {
     const { timeoutMs, settings, modelCreator, modelReader } = work.resources;
     checkCapacity(work.input, settings);
-    const interaction = modelCreator.start(work.input, this.purpose, { signal: work.signal, timeoutMs });
+    const interaction = modelCreator.start(work.input, this.purpose, { timeoutMs });
     work.checkpoint?.save(this.interactionStartedPoint, interaction, {});
     work.output.emit(interaction);
     const result = await modelReader.wait(interaction, { signal: work.signal, waitMs: Math.max(1, Math.floor(timeoutMs / 2)) });

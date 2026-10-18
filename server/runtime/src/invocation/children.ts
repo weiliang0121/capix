@@ -30,6 +30,8 @@ export class InvocationChildren implements InvocationRelationOwner {
   #receptions?: AsyncLocalStorage<{ childContextId: string; active: boolean }>;
   readonly view: InvocationView['children'];
   readonly #provenance: InvocationProvenance;
+  readonly #calls = new Set<Promise<void>>();
+  readonly #acceptances = new Set<Promise<void>>();
   constructor(
     private readonly context: InvocationContext,
     private readonly failed?: (failure: InvocationFailure) => void,
@@ -98,6 +100,46 @@ export class InvocationChildren implements InvocationRelationOwner {
   }
   private relation<Output>(target: InvocationTarget<Output>, round: number, order: number, key?: string, declarationPosition?: number): InvocationRelation<Output> {
     return new InvocationRelation({ target, round, order, key, declarationPosition }, this);
+  }
+  run<Value>(target: InvocationTarget<Value>, work: () => Promise<Value>): Promise<Value> {
+    // Start admission is checked inside the child's delivery boundary, so a rejected
+    // start still fixes that call's failed Context and returned relationship.
+    this.get(target);
+    return this.track(this.#calls, work);
+  }
+  accepting<Value>(work: () => Promise<Value>): Promise<Value> {
+    this.requireHealthy();
+    return this.track(this.#acceptances, work);
+  }
+  /** Join real activities, not pending relationships or saved facts. Rejections retain their normal delivery. */
+  async settle(): Promise<void> {
+    while (this.#calls.size || this.#acceptances.size) await Promise.all([...this.#calls, ...this.#acceptances]);
+  }
+  settleAcceptances(): Promise<void> | undefined {
+    if (!this.#acceptances.size) return;
+    return this.drainAcceptances();
+  }
+  private async drainAcceptances(): Promise<void> {
+    while (this.#acceptances.size) await Promise.all(this.#acceptances);
+  }
+  private track<Value>(activities: Set<Promise<void>>, work: () => Promise<Value>): Promise<Value> {
+    let release!: () => void;
+    const settled = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    activities.add(settled);
+    const complete = () => {
+      activities.delete(settled);
+      release();
+    };
+    try {
+      const result = work();
+      void result.then(complete, complete);
+      return result;
+    } catch (error) {
+      complete();
+      throw error;
+    }
   }
   async receive<Value>(relation: InvocationRelation, work: () => Promise<Value>): Promise<Value> {
     const childContextId = relation.invocation.context.id;

@@ -30,7 +30,7 @@ export function bindChildResources<Definition extends RefinableDefinition>(defin
 }
 
 /**
- * Collect supply requirements across declaration phases; this does not resolve resource values.
+ * Collect this declaration's requirements across phases; this does not resolve resource values.
  * Undefined observationProvides disables observation requirements; an empty map enables them without local supplies.
  * Installed observation supplies cover only observation requests, never run/exception/checkpoint requests.
  */
@@ -48,6 +48,20 @@ export function collectDefinitionRequirements(definition: ResourceDeclarations, 
     }
   }
   return Object.freeze(requires);
+}
+
+/** Internal supply routing retains offer identities, independently of each phase's local aliases. */
+export function collectResourceSupply(requirements: readonly ResourceRequirements[]): ResourceRequirements {
+  const supply: Record<string, ResourceRequest<unknown>> = {};
+  const offers = new Set<ResourceRequest<unknown>['offer']>();
+  for (const requires of requirements) {
+    for (const request of resourceRequests(requires)) {
+      if (offers.has(request.offer)) continue;
+      offers.add(request.offer);
+      supply[`supply.${offers.size - 1}`] = request;
+    }
+  }
+  return Object.freeze(supply);
 }
 
 /** Collect installed observation offers; preserve undefined (disabled) versus an empty enabled installation. */

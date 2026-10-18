@@ -9,10 +9,7 @@ export function attachInvocationResources<Input, Output, Context extends Invocat
     round: () => invocation.context.progress.round,
     reception: () => invocation.children.reception,
     nextSequence: () => invocation.nextResourceSequence(),
-    validate: () => {
-      invocation.requireActive();
-      if ('requireActive' in invocation.context) (invocation.context as { requireActive(): void }).requireActive();
-    },
+    validate: () => invocation.requireActive(),
     observation: invocation.observation?.resource,
     transcript: invocation.observation?.transcript,
     memory: invocation.observation?.memory,

@@ -30,7 +30,7 @@ const maintenancePolicy = defineOperation<ContextMaintenanceInput, ContextMainte
     },
   },
 });
-const maintenance = new MaintainConversationContentDefinition(maintenancePolicy, { active: ActiveContentResource.read.request() });
+const maintenance = new MaintainConversationContentDefinition(maintenancePolicy);
 const preparation = new PrepareConversationContextDefinition(maintenance);
 const functionalPolicy: ContextMaintenancePolicy = ({ material }) => ({ basis: material.basis, messageIndexes: [], memoryIds: [] });
 // @ts-expect-error Maintenance decisions must carry a fixed source basis.
@@ -91,5 +91,9 @@ const callContext: CallContext = reusable;
 declare const invocationBindings: ExecutionInvocationBindings<string, number, ExecutionResources>;
 // @ts-expect-error E bindings do not contain a separate entry resource scope.
 invocationBindings.entry({ text: 'input' });
-const label: string = invocationBindings.capture('accepted input').values.label;
+const captured = invocationBindings.capture('accepted input');
+// @ts-expect-error Captured supply is not a local resource view; aliases are declared when selecting a call's resources.
+captured.values.label;
+declare const labelRequest: import('@capix/server-runtime').ResourceRequest<string>;
+const label: string = captured.select({ label: labelRequest }).values.label;
 void [work, callContext, label];

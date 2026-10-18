@@ -196,21 +196,35 @@ test('HTTP: lost feedback follows the original submission, without reposting it 
   assert.equal(f.calls, 2);
 });
 
-test('HTTP: cancelling the active answer preserves input and automatically processes the remaining queue after actual exit', async (t) => {
+test('HTTP: cancelling an answer advances the queue while the original external feedback remains independent', async (t) => {
+  const gate = deferred();
+  let firstSignal;
   const f = await fixture(t, async (number, signal) => {
-    if (number === 1)
-      await new Promise((resolve, reject) => {
-        if (signal.aborted) reject(signal.reason);
-        else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-      });
+    if (number === 1) {
+      firstSignal = signal;
+      await gate.promise;
+      return output({ kind: 'answer', content: 'late cancelled answer' });
+    }
     return output({ kind: 'answer', content: 'next answer' });
   });
   const first = f.runtime.enqueue(input('cancel this'));
   f.runtime.enqueue(input('keep this'));
-  await until(() => f.calls === 1);
-  await f.runtime.cancelSubmission(first.id);
-  await until(() => f.posts.length === 2 && f.runtime.getSnapshot().submission?.remote?.result?.status === 'completed');
-  assert.equal([...f.runtime.getSnapshot().submissions.values()][0].remote.result.status, 'cancelled');
+  try {
+    await until(() => f.calls === 1);
+    await f.runtime.cancelSubmission(first.id);
+    await until(() => f.posts.length === 2 && f.runtime.getSnapshot().submission?.remote?.result?.status === 'completed');
+    assert.equal([...f.runtime.getSnapshot().submissions.values()][0].remote.result.status, 'cancelled');
+    assert.equal(firstSignal.aborted, false);
+    assert.equal(f.environment.interactions.active, true);
+    assert.deepEqual(
+      f.environment.transcript.snapshot().map((message) => message.content),
+      ['cancel this', 'keep this', 'next answer'],
+    );
+  } finally {
+    gate.resolve();
+    await f.environment.interactions.settled();
+  }
+  assert.equal(f.environment.interactions.states().filter((state) => state.request.purpose === 'answer' && state.feedback).length, 2);
   assert.deepEqual(
     f.environment.transcript.snapshot().map((message) => message.content),
     ['cancel this', 'keep this', 'next answer'],

@@ -175,7 +175,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                   <DataBlock title="调用关联" value={{ contextId: call?.contextId ?? detail.contextId, executionRecordId: detail.id, parentRecordId: call?.parentId, operationInstanceId: call?.operationInstanceId }} />
                   {call?.recordType !== 'runtime' && (
                     <div className="detail-grid">
-                      <DataBlock title="本次配置快照" value={detail.settings} />
+                      <section>{detail.settingsState === 'available' ? <DataBlock title="本次执行的配置快照" value={detail.settings} /> : <p className="empty-note">{detail.settingsState === 'multiple' ? '本次执行使用了多个配置供给，请查看对应调用的资源事实。' : detail.settingsState === 'inconsistent' ? '同一配置供给的记录不一致，无法展示统一快照。' : '本次执行尚无已记录的配置访问。'}</p>}</section>
                       <DataBlock title="固定消息范围" value={detail.transcriptRange} />
                     </div>
                   )}

@@ -61,6 +61,7 @@ function fixture(t, answer, options = {}) {
     frames,
     completed,
     calls,
+    interactions,
     runtime,
     start(value = input) {
       submission.start((signal) => runtime.run(value, { settings, signal, answerProgress: submission.answerProgress, progress: submission.progress, fileProgress: submission.fileProgress }));
@@ -143,15 +144,20 @@ test('accepted regeneration starts a clean preview generation rather than append
 
 test('cancellation discards partial preview without appending or saving a partial assistant message', async (t) => {
   const started = deferred();
-  const f = fixture(t, async ({ signal, progress }) => {
-    progress.publish({ text: '{"kind":"answer","content":"尚未完成' });
-    started.resolve();
-    await new Promise((_resolve, reject) => {
-      if (signal.aborted) reject(signal.reason);
-      else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-    });
-    return envelope({ kind: 'answer', content: 'unreachable' });
-  });
+  const release = deferred();
+  let externalSignal;
+  const f = fixture(
+    t,
+    async ({ signal, progress }) => {
+      externalSignal = signal;
+      progress.publish({ text: '{"kind":"answer","content":"尚未完成' });
+      started.resolve();
+      await release.promise;
+      progress.publish({ text: '的回答"}' });
+      return envelope({ kind: 'answer', content: '尚未完成的回答' });
+    },
+    { release: release.resolve },
+  );
   f.start();
   await f.milestone(started.promise);
   assert.equal(f.submission.baseline.preview.text, '尚未完成');
@@ -160,6 +166,13 @@ test('cancellation discards partial preview without appending or saving a partia
   assert.equal(f.submission.baseline.preview.state, 'discarded');
   assert.equal(f.submission.baseline.preview.reason, 'cancelled');
   assert.equal(f.submission.snapshot.answer, undefined);
+  assert.equal(f.transcript.length, 1);
+  assert.equal(externalSignal.aborted, false);
+  assert.equal(f.interactions.active, true);
+  release.resolve();
+  await f.interactions.settled();
+  assert.equal(f.interactions.states().find((state) => state.request.purpose === 'answer').feedback.payload.content, JSON.stringify({ kind: 'answer', content: '尚未完成的回答' }));
+  assert.equal(f.submission.baseline.preview.state, 'discarded');
   assert.equal(f.transcript.length, 1);
 });
 

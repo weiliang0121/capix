@@ -23,10 +23,11 @@ export class ResourceBindings<Resources extends object = object> {
   #attached = false;
   #started = false;
   #phase = 'run';
+  readonly #closed = new Set<string>();
 
-  constructor(requires: ResourceRequirements<Resources>, available: readonly ResourceValue[] = [], initial: ResourceRequirements = requires) {
+  constructor(requires: ResourceRequirements<Resources>, available: readonly ResourceValue[] = [], initial: ResourceRequirements = requires, supply: ResourceRequirements = requires) {
     const entries: ResourceValue[] = [];
-    for (const request of resourceRequests(requires)) {
+    for (const request of resourceRequests(supply)) {
       const entry = available.find((value) => value.offer === request.offer);
       if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
       if (!entries.includes(entry)) entries.push(entry);
@@ -74,11 +75,11 @@ export class ResourceBindings<Resources extends object = object> {
     this.#scopes.clear();
   }
 
-  /** Start only the normal-work access; handler-only endpoints remain unrealized. */
-  start(): void {
+  /** Activate only the current entry's resources; other phase endpoints remain unrealized. */
+  start(phase = 'run'): void {
     if (this.#started) throw new Error('Resource access has already started');
     this.#started = true;
-    this.activate('run', this.#initial);
+    this.activate(phase, this.#initial);
   }
 
   activate(phase: string, requires: ResourceRequirements): void {
@@ -92,9 +93,14 @@ export class ResourceBindings<Resources extends object = object> {
     }
   }
 
-  select<SelectedResources extends object, Input = unknown>(requires: ResourceRequirements<SelectedResources>, initial: ResourceRequirements = requires, selection?: { readonly input: Input; readonly refinements: readonly ResourceRefinement<Input>[] }): ResourceBindings<SelectedResources> {
-    if (!selection?.refinements.length) return new ResourceBindings(requires, this.#entries, initial);
-    const selected = new ResourceBindings(requires, this.#entries, initial);
+  /** Permanently revoke an exclusive phase window without recapturing its supply. */
+  close(phase: string): void {
+    this.#closed.add(`${phase}:${this.round()}`);
+  }
+
+  select<SelectedResources extends object, Input = unknown>(requires: ResourceRequirements<SelectedResources>, initial: ResourceRequirements = requires, selection?: { readonly input: Input; readonly refinements: readonly ResourceRefinement<Input>[]; readonly supply?: ResourceRequirements }): ResourceBindings<SelectedResources> {
+    if (!selection?.refinements.length) return new ResourceBindings(requires, this.#entries, initial, selection?.supply);
+    const selected = new ResourceBindings(requires, this.#entries, initial, selection?.supply);
     const refinements = new Map<ResourceValue['offer'], ResourceRefinement<Input>>();
     for (const refinement of selection.refinements) {
       if (!isResourceRefinement(refinement)) throw new Error('Resource refinement was not issued by an offer');
@@ -108,7 +114,7 @@ export class ResourceBindings<Resources extends object = object> {
       const captured = applyResourceRefinement(refinement, entry.offer, entry.capture(), selection.input);
       return Object.freeze({ ...entry, supplyId: randomUUID(), capture: () => captured, get: () => captured });
     });
-    return new ResourceBindings(requires, entries, initial);
+    return new ResourceBindings(requires, entries, initial, selection?.supply);
   }
 
   /** Combine supply captures for a distinct declaration, without exposing another declaration's endpoints. */
@@ -138,6 +144,7 @@ export class ResourceBindings<Resources extends object = object> {
     let session = this.#scopes.get(key);
     if (!session) {
       session = this.#session.scope(() => {
+        if (this.#closed.has(key)) throw new Error('Resource access window is closed');
         if (phase !== this.#phase) throw new Error('Resource access belongs to an inactive declaration phase');
         if (round !== this.round()) throw new Error('Resource access belongs to an inactive declaration round');
       });

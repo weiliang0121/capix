@@ -12,7 +12,6 @@ import { ModelSource } from '../conversation/model/source.js';
 import { ModelInteractions } from '../conversation/model/interactions.js';
 import type { WorkspaceFiles } from '../files/index.js';
 import type { ContextMaintenancePolicy } from '../conversation/operations/context/maintain.js';
-import type { ResourceRequirements } from '@capix/server-runtime';
 import type { ConversationDecisionDefinition } from '../conversation/decision/types.js';
 import { ConversationContent } from './content.js';
 import { ObserverEnvironment } from './environment.js';
@@ -24,7 +23,6 @@ export interface ObserverInitializationOptions {
   readonly decision?: ConversationDecisionDefinition;
   readonly maxDecisionSteps?: number;
   readonly maintenance?: ContextMaintenancePolicy;
-  readonly maintenanceResources?: ResourceRequirements;
   readonly persistence?: SqliteObserverStore;
   readonly checkpointObservation?: CheckpointInstallation['observation'];
   readonly conversationId?: string;
@@ -105,7 +103,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
     });
     const { transcript, memories, active } = content;
     const selectionUsage = new SelectionUsage();
-    const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps, maintenance: options.maintenance, maintenanceResources: options.maintenanceResources });
+    const definition = new ConversationRuntimeDefinition({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps, maintenance: options.maintenance });
     const model = options.model ?? new ModelSource(provider);
     interactions = new ModelInteractions(model, { persistence: persistence?.interactions });
     const checkpoints = persistence?.checkpoints ?? new MemoryCheckpointStore();

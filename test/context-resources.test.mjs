@@ -53,7 +53,8 @@ test('Observer narrows resources at each action, captures fixed values and expir
   assert.deepEqual(Object.keys(preparation), ['activeContent']);
   assert.equal(preparation.activeContent.transcript, undefined);
   assert.equal(generation.history, undefined, 'generation consumes fixed input material, not a live history reader');
-  assert.equal(generation.settings, entry.settings);
+  assert.deepEqual(Object.keys(entry).sort(), ['history', 'messages', 'selectionUsage', 'tasks']);
+  assert.deepEqual(generation.settings, settings);
   assert.equal(generation.timeoutMs, 1000);
   assert.throws(() => entry.history.read(0), /running|ended/i);
   assert.throws(() => preparation.activeContent.capture(), /running|ended/i);
@@ -71,10 +72,11 @@ test('Observer narrows resources at each action, captures fixed values and expir
   views.length = 0;
   await runtime.run({ messages: [{ role: 'user', content: '继续' }] }, { settings: { ...settings, timeoutMs: 2000 } });
   assert.equal(views[0].resources.history.end, 3);
-  assert.equal(views[0].resources.timeoutMs, 2000);
-  assert.equal(entry.timeoutMs, 1000);
+  const nextGeneration = views.find((view) => view.definition === definition.executionDefinition.operationDefinitions.generation).resources;
+  assert.equal(nextGeneration.timeoutMs, 2000);
+  assert.equal(generation.timeoutMs, 1000);
   assert.equal(entry.history.end, 1);
-  assert.notEqual(views[0].resources.settings, entry.settings);
+  assert.notEqual(nextGeneration.settings, generation.settings);
 });
 
 test('nested operations cannot implicitly bypass their direct parent for execution resources', async () => {
@@ -309,8 +311,9 @@ test('model offers separate creation and reading while preserving provider metho
     return invoke(...args);
   };
   const definition = new ConversationRuntimeDefinition();
-  const execute = definition.executionDefinition.run.execute;
-  definition.executionDefinition.run.execute = function (work) {
+  const generation = definition.executionDefinition.operationDefinitions.generation;
+  const execute = generation.run.execute;
+  generation.run.execute = function (work) {
     const creator = work.resources.modelCreator;
     const reader = work.resources.modelReader;
     assert.notEqual(creator, model);

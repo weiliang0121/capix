@@ -106,12 +106,22 @@ export class InvocationChildBindings {
     }
   }
 
-  private async perform<T>(action: () => T | Promise<T>): Promise<T> {
+  private perform<T>(action: () => T | Promise<T>): Promise<T> {
+    const delivery = this.deliver(action);
+    // Owned activities are joined by the parent even when the author does not await
+    // this handle. Observe rejection without replacing the promise's failed result.
+    void delivery.catch(() => {});
+    return delivery;
+  }
+
+  private async deliver<T>(action: () => T | Promise<T>): Promise<T> {
     try {
       this.checkActive();
       return await action();
     } catch (error) {
-      this.options.parent.reject(error, error instanceof ChildCallFailure);
+      // A child failure is authenticated when business propagates it into a parent
+      // phase, not merely because delivery arrives after that phase has advanced.
+      if (!(error instanceof ChildCallFailure)) this.options.parent.reject(error);
       throw error;
     }
   }

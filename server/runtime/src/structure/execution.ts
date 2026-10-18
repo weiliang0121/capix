@@ -14,7 +14,7 @@ export interface ExecutionInvocationCallbacks<Input, Output, Resources extends o
   started?: ExecutionInvocationStarted<Input, Output, Resources>;
 }
 export interface ExecutionInvocationBindings<Input, Output, Resources extends object> {
-  capture(input: Input): ResourceBindings<Resources>;
+  capture(input: Input): ResourceBindings;
   readonly callbacks?: ExecutionInvocationCallbacks<Input, Output, Resources>;
   readonly progress?: ProgressReceiver<InvocationProgress>;
   readonly output?: InvocationOutputReceiver<Output>;
@@ -47,6 +47,7 @@ export class BoundExecution<Input, Output, Resources extends object = object> {
       declarationPosition: options.declarationPosition,
       description: { id: this.id },
       requires: this.binding.requires,
+      supply: this.binding.supply,
       initial: this.binding.declaration.run.requires,
       observation: this.binding.declaration.observation,
       establish: () => ({ resources }),
@@ -72,6 +73,7 @@ export class BoundExecution<Input, Output, Resources extends object = object> {
         declarationPosition: options.declarationPosition,
         description: { id: this.id },
         requires: this.binding.requires,
+        supply: this.binding.supply,
         initial: point.resume.requires,
         observation: this.binding.declaration.observation,
         establish: () => ({ resources }),

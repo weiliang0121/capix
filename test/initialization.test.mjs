@@ -105,6 +105,7 @@ test('an initializer retains failure and rejects recursive creation without impl
 
 test('declarations are checked before resource access or invocation construction', () => {
   const resource = new ResourceOffer('test.dependency', (value) => value);
+  const unrelated = new ResourceOffer('test.unrelated', (value) => value);
   class Work extends OperationDefinition {
     name = 'test';
     label = 'test';
@@ -126,14 +127,14 @@ test('declarations are checked before resource access or invocation construction
     () =>
       assembleRuntime(runtimeDefinition(new Root()), {
         providers: [
-          resource.provide(() => {
+          unrelated.provide(() => {
             supplied++;
             return 'value';
           }),
         ],
         source: { capture: () => null },
       }),
-    /not provided/,
+    /Expected one resource provider/,
   );
   assert.equal(supplied, 0);
 });

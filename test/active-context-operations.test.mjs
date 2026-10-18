@@ -58,7 +58,7 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
     children = [operation];
     checkpoint = checkpoint('active.fixture.e', operation);
     run = {
-      requires: operation.run.requires,
+      requires: {},
       async execute(work) {
         const child = work.children.create(operation, work.input);
         work.checkpoint.save(thisCheckpoint.points[0], null, { child: child.ref });
@@ -156,7 +156,7 @@ test('a composed maintenance O may write content and choose from the new explici
       },
     };
   }
-  const material = await runtime(new MaintainConversationContentDefinition(new Policy(), requires), content).run({ phase: 'after-content' }, {});
+  const material = await runtime(new MaintainConversationContentDefinition(new Policy()), content).run({ phase: 'after-content' }, {});
   assert.equal(calls, 1);
   assert.deepEqual(material.messages, []);
   assert.equal(material.memories[0].content, 'new understanding');

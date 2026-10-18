@@ -16,7 +16,7 @@ export class BoundAttempt<Input, Output, Resources extends object = object> {
   }
 
   create(parent: Invocation<unknown, unknown, OperationContext>, input: Input, options: InvocationRelationOptions = {}) {
-    return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.binding.requires, initial: this.binding.declaration.run.requires, refinements: this.binding.refinements, observation: this.binding.declaration.observation, description: this.binding.declaration, work: this.binding.work, key: options.key, declarationPosition: options.declarationPosition, output: options.output });
+    return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.binding.requires, supply: this.binding.supply, initial: this.binding.declaration.run.requires, refinements: this.binding.refinements, observation: this.binding.declaration.observation, description: this.binding.declaration, work: this.binding.work, key: options.key, declarationPosition: options.declarationPosition, output: options.output });
   }
   resume(parent: Invocation<unknown, unknown, OperationContext>, contextId: string, options: InvocationRelationOptions = {}) {
     return this.invocationBuilder.restoration(contextId, this.binding.work, parent.context.id, (restore) => {
@@ -25,7 +25,7 @@ export class BoundAttempt<Input, Output, Resources extends object = object> {
       if (!point) throw new Error('Checkpoint point is not declared');
       const input = checkpoint.input.decode(restore.head.image.frame.input);
       const description = this.binding.declaration;
-      return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.binding.requires, initial: point.resume.requires, refinements: this.binding.refinements, observation: this.binding.declaration.observation, description, work: this.binding.work, key: options.key, declarationPosition: options.declarationPosition, output: options.output, restore });
+      return this.invocationBuilder.create<Input, Output, Resources>(parent, { input, requires: this.binding.requires, supply: this.binding.supply, initial: point.resume.requires, refinements: this.binding.refinements, observation: this.binding.declaration.observation, description, work: this.binding.work, key: options.key, declarationPosition: options.declarationPosition, output: options.output, restore });
     });
   }
 

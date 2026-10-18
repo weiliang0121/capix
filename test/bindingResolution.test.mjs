@@ -64,14 +64,27 @@ test('declaration checks finish once per binding position before any call and ne
   assert.equal(new Set(sharedCalls.map((call) => call.contextId)).size, 3);
 });
 
-test('a shared child is checked against each parent resource boundary without realizing supplies', () => {
+test('a shared child keeps its supply at each parent position without granting it to the parent', async () => {
   const value = new ResourceOffer('test.resolution.parent-scope', (source) => source, 'binding');
   const requires = { value: value.request() };
-  const shared = attempt('shared', { requires, execute: () => null });
-  const left = operation('left', [shared], { requires, execute: () => null });
-  const right = operation('right', [shared], { requires: {}, execute: () => null });
-  const main = execution([left, right], { requires, execute: () => null });
-  assert.throws(() => assemble(runtimeDefinition(main), { providers: [value.provide(() => assert.fail('assembly must not capture resources'))] }), /Child resource request is not provided/);
+  let captures = 0;
+  const shared = attempt('shared', { requires, execute: (work) => work.resources.value });
+  const parent = (name) =>
+    operation(name, [shared], {
+      requires: {},
+      execute(work) {
+        assert.deepEqual(Object.keys(work.resources), []);
+        return work.children.create(shared, work.input).run();
+      },
+    });
+  const left = parent('left');
+  const right = parent('right');
+  const main = execution([left, right], { requires: {}, execute: (work) => Promise.all([work.children.create(left, null).run(), work.children.create(right, null).run()]) });
+  const runtime = assemble(runtimeDefinition(main), { providers: [value.provide(() => ++captures)] });
+  assert.equal(captures, 0);
+  assert.deepEqual(await runtime.run(null, {}), [1, 1]);
+  assert.equal(captures, 1);
+  assert.throws(() => assemble(runtimeDefinition(main)), /Expected one resource provider/);
 });
 
 test('resolved children, resource aliases and work functions stay fixed while declaration instances remain live', async () => {

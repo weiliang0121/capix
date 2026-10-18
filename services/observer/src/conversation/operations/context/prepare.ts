@@ -34,7 +34,7 @@ export class PrepareConversationContextDefinition extends OperationDefinition<Ac
   constructor(readonly maintenance?: MaintainConversationContentDefinition) {
     super();
     this.children = Object.freeze(maintenance ? [maintenance] : []);
-    const requires = Object.freeze({ ...maintenance?.run.requires, ...PrepareConversationContextDefinition.requires });
+    const requires = PrepareConversationContextDefinition.requires;
     const point = checkpointPoint<'operation', AcceptedConversationInput, PreparedConversationContext>();
     this.waiting = maintenance
       ? point({

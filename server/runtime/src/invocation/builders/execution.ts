@@ -21,7 +21,7 @@ export type ExecutionInvocationStarted<Input, Output, Resources extends object =
 
 /** Construction's input contract; application resource sources stay in binding. */
 export interface ExecutionInvocationEnvironment<Resources extends object> {
-  readonly resources: ResourceBindings<Resources>;
+  readonly resources: ResourceBindings;
 }
 
 export interface ExecutionInvocationRequest<Input, Output, Resources extends object = object> {
@@ -33,6 +33,7 @@ export interface ExecutionInvocationRequest<Input, Output, Resources extends obj
   description?: InvocationDescription;
   requires?: ResourceRequirements<Resources>;
   initial?: ResourceRequirements;
+  readonly supply?: ResourceRequirements;
   observation?: readonly ObservationDeclaration<InvocationFact>[];
   establish?: (input: Input) => ExecutionInvocationEnvironment<Resources>;
   validate?: () => void;
@@ -48,7 +49,7 @@ export class ExecutionInvocationBuilder {
   ) {}
 
   check(parent: Invocation<unknown, unknown, RuntimeContext>): void {
-    parent.requireHealthy();
+    parent.requireActive();
     this.contextBuilder.check(parent.context);
   }
 
@@ -62,7 +63,7 @@ export class ExecutionInvocationBuilder {
     this.check(parent);
     request.validate?.();
     const environment = request.establish?.(input);
-    const resources = (environment?.resources ?? new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)).select(request.requires ?? ({} as ResourceRequirements<Resources>), request.initial);
+    const resources = (environment?.resources ?? new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)).select(request.requires ?? ({} as ResourceRequirements<Resources>), request.initial, { input, refinements: [], supply: request.supply });
     const context = this.contextBuilder.create<Input, Output, Resources>(parent.context, input, resources);
     if (request.restore) {
       if (!request.work.checkpoint) throw new Error('Checkpoint declaration is missing');
@@ -73,7 +74,7 @@ export class ExecutionInvocationBuilder {
     const recovering = !!request.restore || parent.recovering;
     const observation = recovering ? undefined : bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources }, this.capabilities.observations, parent.observation);
     const changes = !recovering && this.capabilities.changes ? new InvocationChangeEmitter(identity, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<Input, Output, ExecutionContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key, declarationPosition: request.declarationPosition }, context, work: request.work, checkpoints: this.capabilities.checkpoints, restore: request.restore, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, started: request.started, changes, validate: () => this.check(parent) });
+    const invocation = new Invocation<Input, Output, ExecutionContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key, declarationPosition: request.declarationPosition }, context, work: request.work, checkpoints: this.capabilities.checkpoints, restore: request.restore, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, started: request.started, changes });
     attachInvocationResources(invocation, context.resources);
     return invocation;
   }

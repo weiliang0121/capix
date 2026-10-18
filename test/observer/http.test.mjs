@@ -651,7 +651,7 @@ test('invalid settings with a valid submission ID are retained as explicit rejec
   assert.equal(runtime.getSnapshot().submission.remote.result.status, 'completed');
 });
 
-test('HTTP cancellation retains an answer and waits for non-cooperating work before releasing runtime', async (t) => {
+test('HTTP cancellation retains an answer while memory feedback completes independently', async (t) => {
   let entered;
   const entering = new Promise((resolve) => {
     entered = resolve;
@@ -681,18 +681,10 @@ test('HTTP cancellation retains an answer and waits for non-cooperating work bef
   assert.equal(requested.cancelRequested, true);
   assert.ok(requested.input);
   assert.ok(requested.answer);
-  assert.equal(requested.result, undefined);
-  assert.equal(modelSignal.aborted, true);
-  assert.equal(observer.runtime.running, true);
-  assert.equal(observer.transcript.length, 2);
-  const duplicate = submission(await client.cancel(id));
-  assert.deepEqual(duplicate, requested);
-  const busy = await run('取消尚未结束不得执行');
-  assert.equal(busy.status, 409);
-  assert.equal(submission(await busy.json()).result.error.code, 'RUNTIME_BUSY');
-  assert.equal(observer.transcript.length, 2);
-  release();
+  assert.equal(modelSignal.aborted, false);
   const frames = await delivery;
+  assert.equal(observer.interactions.active, true);
+  assert.equal((await client.admission(observer.conversationId)).status, 'ready');
   const terminal = frames.at(-1);
   assert.equal(terminal.result.status, 'cancelled');
   assert.deepEqual(terminal.answer, requested.answer);
@@ -701,22 +693,34 @@ test('HTTP cancellation retains an answer and waits for non-cooperating work bef
   assert.equal(observer.memories.snapshot().length, 0);
   assert.deepEqual(submission(await client.read(id)), terminal);
   assert.deepEqual(submission(await client.cancel(id)), terminal);
+  release();
+  await observer.interactions.settled();
+  assert.ok(observer.interactions.states().find((state) => state.request.purpose === 'memory').feedback);
+  assert.equal(observer.memories.snapshot().length, 0, 'late feedback is retained without resuming business acceptance');
   assert.equal((await updates(await run('下一次正常输入'))).at(-1).result.status, 'completed');
 });
 
-test('HTTP cancellation signals running model work independently of feedback connection lifetime', async (t) => {
+test('HTTP cancellation ends local work without cancelling external delivery or a detached feedback connection', async (t) => {
   let entered;
   const entering = new Promise((resolve) => {
     entered = resolve;
   });
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let externalSignal;
   const { base, run, observer } = await setup(t, {
-    async invoke(_request, _purpose, signal) {
+    async invoke(request, purpose, signal) {
+      externalSignal = signal;
       entered();
-      return new Promise((_resolve, reject) => {
-        if (signal.aborted) reject(signal.reason);
-        else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-      });
+      await gate;
+      return provider.invoke(request, purpose);
     },
+  });
+  t.after(async () => {
+    release();
+    await observer.interactions.settled();
   });
   const id = randomUUID();
   const response = await run('取消调用', { id });
@@ -736,6 +740,12 @@ test('HTTP cancellation signals running model work independently of feedback con
   assert.equal(frames.at(-1).result.status, 'cancelled');
   assert.equal(frames.at(-1).cancelRequested, true);
   assert.equal(observer.runtime.running, false);
+  assert.equal(observer.transcript.length, 1);
+  assert.equal(observer.interactions.active, true);
+  assert.equal(externalSignal.aborted, false);
+  release();
+  await observer.interactions.settled();
+  assert.ok(observer.interactions.states()[0].feedback);
   assert.equal(observer.transcript.length, 1);
 });
 
@@ -765,7 +775,7 @@ test('cancel requires same-origin JSON and validates its empty body before chang
 });
 
 for (const fault of [false, true]) {
-  test(`cancellation between A1 return and A2 creation ${fault ? 'preserves the structural failure' : 'drains before the service terminal result'}`, async (t) => {
+  test(`cancellation between A1 return and A2 creation ${fault ? 'preserves the structural failure' : 'ends local work without draining the provider'}`, async (t) => {
     let release;
     const gate = new Promise((resolve) => {
       release = resolve;
@@ -781,11 +791,12 @@ for (const fault of [false, true]) {
       capturedSubmission = this;
       return originalStart.call(this, work);
     });
+    let answerCalls = 0;
     const { observer, run, get } = await setup(
       t,
       {
         async invoke(request, purpose) {
-          if (purpose === 'answer') await gate;
+          if (purpose === 'answer' && ++answerCalls === 1) await gate;
           return provider.invoke(request, purpose);
         },
       },
@@ -819,24 +830,23 @@ for (const fault of [false, true]) {
       const interim = await get(`/api/submissions/${id}`);
       assert.equal(observer.runtime.running, false, 'the R invocation has genuinely ended');
       assert.equal(observer.interactions.active, true);
-      assert.equal(observer.interactions.cancelling, true);
       assert.equal(interim.cancelRequested, true);
       if (fault) {
         assert.equal(interim.result.status, 'failed');
         assert.notEqual(interim.result.status, 'cancelled');
-      } else assert.equal(interim.result, undefined, 'service cancellation is still draining its external owner');
-      assert.equal((await get('/api/conversation/admission')).status, 'busy');
-      const blocked = await run('暂不接纳新的 QA');
-      assert.equal(blocked.status, 409);
-      assert.equal(submission(await blocked.json()).result.retry, 'admission');
-      assert.equal(observer.transcript.length, 1);
+      } else assert.equal(interim.result.status, 'cancelled');
+      assert.equal((await get('/api/conversation/admission')).status, 'ready');
+      const next = await run('外部仍在执行时开始下一次 QA');
+      assert.equal(next.status, 200);
+      assert.equal((await updates(next)).at(-1).result.status, 'completed');
+      assert.equal(observer.transcript.length, 3);
       release();
       await observer.interactions.settled();
       const completed = (await stream).at(-1);
       assert.equal(completed.result.status, fault ? 'failed' : 'cancelled');
       assert.equal((await get('/api/conversation/admission')).status, 'ready');
-      assert.equal(observer.interactions.cancelling, false);
-      assert.equal(observer.transcript.length, 1);
+      assert.equal(observer.interactions.states().filter((state) => state.request.purpose === 'answer' && state.feedback).length, 2);
+      assert.equal(observer.transcript.length, 3);
     } finally {
       release();
       await observer.interactions.settled();

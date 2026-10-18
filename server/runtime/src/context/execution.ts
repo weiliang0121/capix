@@ -10,24 +10,24 @@ export class ExecutionContext<Input = unknown, Output = unknown, Resources exten
   }
   readonly signal: AbortSignal;
   readonly resources: ResourceBindings<Resources>;
-  readonly #contextBuilder?: ExecutionContextBuilder;
-  readonly #parentContext?: RuntimeContext;
+  readonly #constructionOwner?: ExecutionContextBuilder;
 
   constructor(input: Input, controls: InvocationControls = {}, contextBuilder?: ExecutionContextBuilder, resources?: ResourceBindings<Resources>, parentContext?: RuntimeContext) {
     super(input);
-    this.#contextBuilder = contextBuilder;
-    this.#parentContext = parentContext;
+    this.#constructionOwner = contextBuilder;
     this.signal = parentContext?.signal ?? controls.signal ?? new AbortController().signal;
     this.resources = resources ?? new ResourceBindings({} as ResourceRequirements<Resources>);
     Object.freeze(this);
   }
 
   belongsTo(contextBuilder: ExecutionContextBuilder): boolean {
-    return !this.#contextBuilder || this.#contextBuilder === contextBuilder;
+    return !this.#constructionOwner || this.#constructionOwner === contextBuilder;
+  }
+  get constructionOwner(): ExecutionContextBuilder | undefined {
+    return this.#constructionOwner;
   }
   requireActive(): void {
     this.requireRunning();
-    this.#parentContext?.requireActive();
     requireNotCancelled(this.signal);
   }
 }

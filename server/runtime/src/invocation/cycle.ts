@@ -18,6 +18,7 @@ export interface InvocationCycleControls {
   active(): void;
   reject(error: unknown): void;
   classify(error: unknown, phase: InvocationPhase, forceError?: boolean): InvocationFailure;
+  settleAcceptances(): Promise<void> | undefined;
 }
 
 export interface InvocationCycleOptions<Output> {
@@ -32,6 +33,7 @@ export class InvocationCycle<Input, Output> {
   #outputSection?: InvocationOutputSection<Output>;
   readonly #outputDelivery?: ProgressChannel<InvocationOutputEvent<Output>>;
   #exceptionFailure?: InvocationFailure;
+  #exitFailure?: InvocationFailure;
   #continuation?: InvocationContinuationFact;
 
   constructor(
@@ -50,6 +52,14 @@ export class InvocationCycle<Input, Output> {
 
   get exceptionFailure(): InvocationFailure | undefined {
     return this.#exceptionFailure;
+  }
+
+  get exitFailure(): InvocationFailure | undefined {
+    return this.#exitFailure;
+  }
+
+  sealOutput(): void {
+    this.#outputSection?.seal();
   }
 
   discardOutput(reason: 'exception' | 'continue' | 'failed'): void {
@@ -101,6 +111,7 @@ export class InvocationCycle<Input, Output> {
   private async runRound(resume?: () => Promise<Output>): Promise<Output | Continuation<Input>> {
     this.#continuation = undefined;
     this.#exceptionFailure = undefined;
+    this.#exitFailure = undefined;
     this.#outputSection = new InvocationOutputSection(this.context.id, this.context.progress.round, this.work.output, this.controls, this.#outputDelivery);
     this.#outputSection.start();
     this.options.process({ stage: 'execute', type: 'start', input: this.context.currentInput });
@@ -114,13 +125,16 @@ export class InvocationCycle<Input, Output> {
       const failure = this.controls.classify(error, 'execute');
       result = { status: 'failed', error: failure.error, failure };
     } finally {
-      this.#outputSection.seal();
+      this.sealOutput();
+      const settling = this.controls.settleAcceptances();
+      if (settling) await settling;
     }
-    // No await between sealing and reception: queued consumers must not retain execute access.
+    // Active receptions finish in their issuing phase; output has already been sealed.
     return this.receiveWork(result);
   }
 
   private receiveWork(result: InvocationResult<Output>): Promise<Output | Continuation<Input>> {
+    if (result.status === 'failed') this.#exitFailure = result.failure;
     this.context.receiving(result);
     if (result.status === 'succeeded') this.options.process({ stage: 'execute', type: 'return', output: result.output });
     else this.reportFailure('execute', result.failure!);
@@ -135,9 +149,14 @@ export class InvocationCycle<Input, Output> {
     let accepted: Output | Continuation<Input>;
     try {
       accepted = this.work.accept ? await this.work.accept(output) : output;
+      const settling = this.controls.settleAcceptances();
+      if (settling) await settling;
       this.controls.healthy();
     } catch (error) {
+      const settling = this.controls.settleAcceptances();
+      if (settling) await settling;
       const failure = this.controls.classify(error, 'receive');
+      this.#exitFailure = failure;
       this.reportFailure('receive', failure);
       return this.handleException(failure);
     }
@@ -157,10 +176,15 @@ export class InvocationCycle<Input, Output> {
     try {
       this.controls.active();
       resolution = await this.work.exceptions.handle(exception);
+      const settling = this.controls.settleAcceptances();
+      if (settling) await settling;
       this.controls.healthy();
       if (!isObject(resolution) || !['return', 'continue', 'unhandled'].includes(resolution.kind) || (resolution.kind === 'return' && !Object.hasOwn(resolution, 'output')) || (resolution.kind === 'continue' && (!Object.hasOwn(resolution, 'input') || !isNonBlankString(resolution.reason)))) throw new InvocationStopped('INVALID_EXCEPTION_RESOLUTION', '异常处理返回了无效的处理结果。');
     } catch (error) {
+      const settling = this.controls.settleAcceptances();
+      if (settling) await settling;
       const handlerFailure = this.controls.classify(error, 'handling', true);
+      this.#exitFailure = handlerFailure;
       this.reportFailure('handling', handlerFailure);
       throw handlerFailure.error;
     }

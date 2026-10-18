@@ -39,8 +39,9 @@ export class RuntimeBinder {
     const resolved = resolveDeclaration(definition, childOptions);
     const declaration = resolved.declaration;
     const requires = resolved.requires as ResourceRequirements<Resources>;
-    const runtimeResources = bindResources(requires, options.providers);
-    if (resourceRequests(requires).length && !source.runtime) throw new Error('Runtime resource requests require a runtime source');
+    const supply = resolved.supply;
+    const runtimeResources = bindResources(supply, options.providers);
+    if (resourceRequests(supply).length && !source.runtime) throw new Error('Runtime resource requests require a runtime source');
     const executionBindings = bindExecutionSources(resolved.children, options.providers, source);
 
     // A reused Binder still creates an independent ownership chain for every R it binds.
@@ -58,11 +59,12 @@ export class RuntimeBinder {
       declaration,
       children,
       requires,
+      supply,
       work,
       validate: source.validate?.bind(source),
       progress: source.progress?.bind(source),
       output: source.output?.bind(source),
-      resources: (input, callOptions) => (source.runtime ? runtimeResources(source.runtime(input, callOptions)) : new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)),
+      resources: (input, callOptions) => (source.runtime ? runtimeResources(source.runtime(input, callOptions)) : new ResourceBindings({})),
       executionBindings,
     };
     return new BoundRuntime(invocations.runtime, binding, this.capabilities);

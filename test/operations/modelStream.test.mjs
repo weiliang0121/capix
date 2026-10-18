@@ -178,7 +178,7 @@ test('host replays a prefix and keeps one raw-progress route across expired A wa
     },
   );
   const signal = new AbortController().signal;
-  const ref = host.start(request, 'answer', { signal, timeoutMs: 1000 });
+  const ref = host.start(request, 'answer', { timeoutMs: 1000 });
   await first.promise;
   const close = host.subscribe(ref, {
     receive: (delta) => {
@@ -221,7 +221,7 @@ test('raw prefix capacity and subscriber failure do not reject the independently
       },
     }),
   );
-  const ref = host.start(request, 'answer', { signal, timeoutMs: 1000 });
+  const ref = host.start(request, 'answer', { timeoutMs: 1000 });
   host.subscribe(ref, {
     receive: () => {
       consumerCalls += 1;
@@ -274,7 +274,7 @@ test('strict subscribe-return observation failure detaches the registered consum
     }),
   );
   const signal = new AbortController().signal;
-  const ref = host.start(request, 'answer', { signal, timeoutMs: 1000 });
+  const ref = host.start(request, 'answer', { timeoutMs: 1000 });
   await first.promise;
   const binding = bindResources({ reader: ModelResource.read.request() }, [ModelResource.read.provide(() => host)])(null);
   binding.attach({
@@ -317,7 +317,7 @@ test('host stream timeout is unavailable rather than a partial reply', async () 
       ),
   );
   const host = new ModelInteractions(new ModelSource(provider));
-  const ref = host.start(request, 'answer', { signal, timeoutMs: 1 });
+  const ref = host.start(request, 'answer', { timeoutMs: 1 });
   const keepAlive = setTimeout(() => {}, 1000);
   try {
     await assert.rejects(host.result(ref, { signal }), { code: 'MODEL_TIMEOUT' });

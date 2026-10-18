@@ -213,7 +213,7 @@ for (const mismatch of ['request', 'purpose']) {
     const saved = store.writes[boundary].image;
     const request = mismatch === 'request' ? { ...saved.frame.currentInput, model: 'different-model' } : saved.frame.currentInput;
     const purpose = mismatch === 'purpose' ? 'answer' : 'selection';
-    const unrelated = env.interactions.start(request, purpose, { signal: new AbortController().signal, timeoutMs: 1000 });
+    const unrelated = env.interactions.start(request, purpose, { timeoutMs: 1000 });
     await env.interactions.result(unrelated, { signal: new AbortController().signal });
     const writes = structuredClone(store.writes.slice(0, boundary + 1));
     writes[boundary].image.state = unrelated;

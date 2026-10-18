@@ -104,7 +104,7 @@ export class ObserverEnvironment {
 
   async recover(rootContextId: string, controls: InvocationControls = {}) {
     if (this.#closed) throw new RuntimeError('SERVICE_CLOSED', '服务已关闭。');
-    if (this.active) throw new RuntimeError('RUNTIME_BUSY', '当前环境正在执行，请等待本次调用结束。');
+    if (this.runtime.running) throw new RuntimeError('RUNTIME_BUSY', '当前环境正在执行，请等待本次调用结束。');
     const run = this.checkpointRuns.read(this.conversationId, rootContextId);
     if (!run) throw new RuntimeError('CHECKPOINT_NOT_FOUND', '未找到该对话的恢复依据。');
     validateConversationCheckpointRestoration(run, { configuration: conversationCheckpointConfiguration(this.definition, this.files), transcript: this.transcript, memories: this.memories, checkpoints: this.checkpoints });

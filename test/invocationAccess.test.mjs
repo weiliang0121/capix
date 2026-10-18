@@ -223,3 +223,150 @@ test('checkpoint continuation hands its child delivery to normal acceptance with
   assert.deepEqual(realized, ['continuation', 'normal']);
   assert.equal(store.read('restored-access').delivery.output, 'child output');
 });
+
+test('a restored point closes retained resource views, endpoints and checkpoint actions before normal acceptance', async (t) => {
+  for (const retained of ['view', 'endpoint', 'checkpoint']) {
+    await t.test(retained, async () => {
+      const offer = new ResourceOffer(`test.resume-window.${retained}`, (_source, activity) => ({ read: () => activity.runSync('read', {}, () => 'fixed value') }));
+      const codec = { encode: (value) => value, decode: (value) => value };
+      let oldWork;
+      let oldEndpoint;
+      let fixed;
+      const point = checkpointPoint()({
+        name: 'saved',
+        state: codec,
+        references: {},
+        resume: {
+          requires: { data: offer.request() },
+          execute(work) {
+            oldWork = work;
+            oldEndpoint = work.resources.data;
+            fixed = oldEndpoint.read();
+            return fixed;
+          },
+        },
+      });
+      const definition = {
+        level: 'runtime',
+        maxRounds: 1,
+        raises: [],
+        children: [],
+        run: {
+          requires: { data: offer.request() },
+          execute: () => assert.fail('normal execute must not replay'),
+          accept(work) {
+            assert.equal(fixed, 'fixed value');
+            assert.notEqual(work.resources.data, oldEndpoint);
+            assert.equal(work.resources.data.read(), fixed);
+            const attempt = retained === 'view' ? () => oldWork.resources.data : retained === 'endpoint' ? () => oldEndpoint.read() : () => oldWork.checkpoint.save(point, null, {});
+            assert.throws(attempt, /window is closed/);
+            return work.delivered;
+          },
+        },
+        checkpoint: { key: `resume-window.${retained}`, version: 1, input: codec, output: codec, points: [point] },
+      };
+      const store = new MemoryCheckpointStore();
+      store.save({ id: `image-${retained}`, formatVersion: 2, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: `call-${retained}`, level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+      const runtime = assemble(definition, { checkpoints: { store }, providers: [offer.provide(() => null)], source: { runtime: () => null, capture: () => null } });
+      // Catching an illegal port use cannot erase the already-owned kernel fault.
+      await assert.rejects(runtime.resume(`call-${retained}`, {}), /window is closed/);
+    });
+  }
+});
+
+test('execute and restored point bodies seal output while entered reception retains its phase resources', async (t) => {
+  for (const mode of ['normal', 'restored']) {
+    await t.test(mode, { timeout: 3000 }, async () => {
+      const gate = Promise.withResolvers();
+      const bodyReturned = Promise.withResolvers();
+      const events = [];
+      const reads = [];
+      const final = { answer: 'final' };
+      const codec = { encode: (value) => value, decode: (value) => value };
+      const resource = new ResourceOffer(`test.output-reception-window.${mode}`, (_source, activity) => ({
+        read: () => activity.runSync('read', {}, () => 'phase resource'),
+      }));
+      const child = { level: 'execution', maxRounds: 1, raises: [], children: [], run: { requires: {}, execute: () => 'child result' } };
+      let reception;
+      let receptionFinished = false;
+      let settled = false;
+      async function execute(work) {
+        const endpoint = work.resources.data;
+        work.output.emit('body');
+        const call = work.children.create(child, null);
+        await call.run();
+        reception = call.accept(async (value) => {
+          await gate.promise;
+          reads.push(endpoint.read(), work.resources.data.read());
+          assert.throws(() => work.output.emit('late preview'), { code: 'OUTPUT_CLOSED' });
+          receptionFinished = true;
+          return value;
+        });
+        bodyReturned.resolve();
+        return final;
+      }
+      const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { requires: { data: resource.request() }, uses: [child], execute } });
+      const definition = {
+        level: 'runtime',
+        maxRounds: 1,
+        raises: [],
+        children: [child],
+        output: { result: (value) => value, delta: (value) => value },
+        run: {
+          requires: { data: resource.request() },
+          uses: [child],
+          execute,
+          accept(work) {
+            assert.equal(receptionFinished, true);
+            return work.delivered;
+          },
+        },
+        checkpoint: { key: `output-reception-window.${mode}`, version: 1, input: codec, output: codec, points: [point] },
+      };
+      const store = new MemoryCheckpointStore();
+      if (mode === 'restored') store.save({ id: 'output-window-image', formatVersion: 2, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'output-window-call', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+      const runtime = assemble(definition, {
+        checkpoints: { store },
+        providers: [resource.provide(() => null)],
+        source: {
+          runtime: () => null,
+          capture: () => null,
+          output: () => ({
+            receive(event) {
+              events.push(event);
+            },
+          }),
+        },
+      });
+      const completion = mode === 'restored' ? runtime.resume('output-window-call', {}) : runtime.run(null, {});
+      void completion.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      try {
+        await bodyReturned.promise;
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(settled, false);
+        assert.equal(receptionFinished, false);
+        assert.deepEqual(
+          events.map((event) => event.kind),
+          ['started', 'delta', 'sealed'],
+        );
+      } finally {
+        gate.resolve();
+      }
+      assert.equal(await completion, final);
+      assert.equal(await reception, 'child result');
+      assert.deepEqual(reads, ['phase resource', 'phase resource']);
+      assert.deepEqual(
+        events.map((event) => event.kind),
+        ['started', 'delta', 'sealed', 'completed'],
+      );
+      assert.equal(events.at(-1).result, final);
+    });
+  }
+});

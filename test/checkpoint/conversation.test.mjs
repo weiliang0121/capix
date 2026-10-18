@@ -73,3 +73,21 @@ test('subsequent conversation input prevents older checkpoint continuation', (t)
   );
   assert.equal(value.transcript.messages.length, 2);
 });
+
+test('an independent active interaction does not block verified recovery or allow concurrent root recovery', (t) => {
+  const path = setup(t);
+  assert.equal(invoke(path, 'start', 'feedback').status, 74);
+  const recovered = invoke(path, 'restore-active', 'feedback');
+  assert.equal(recovered.status, 0, recovered.stderr);
+  const value = JSON.parse(recovered.stdout);
+  assert.equal(value.error, undefined, JSON.stringify(value.error));
+  assert.equal(value.result.content, '真实对话恢复的回答。');
+  assert.equal(value.activeAfterRecovery, true);
+  assert.equal(value.concurrentRecovery, 'RUNTIME_BUSY');
+  assert.equal(value.independentFeedback.payload.content, 'independent feedback');
+  assert.deepEqual(
+    value.calls.map((call) => call.purpose),
+    ['answer', 'memory'],
+  );
+  assert.equal(value.transcript.appends.length, 1);
+});

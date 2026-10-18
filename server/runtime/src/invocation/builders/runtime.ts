@@ -24,10 +24,11 @@ export interface RuntimeInvocationRequest<Input, Output, Resources extends objec
   readonly progress?: ProgressReceiver<InvocationProgress>;
   readonly output?: InvocationOutputReceiver<Output>;
   readonly controls: InvocationControls;
-  readonly resources?: ResourceBindings<Resources>;
+  readonly resources?: ResourceBindings;
   readonly executionBindings?: ExecutionBindingResolver;
   readonly requires?: ResourceRequirements<Resources>;
   readonly initial?: ResourceRequirements;
+  readonly supply?: ResourceRequirements;
   readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
   readonly work: InvocationWork<Input, Output, RuntimeContext<Input, Output, Resources>>;
   readonly started?: InvocationStarted<Input, Output, RuntimeContext<Input, Output, Resources>>;
@@ -46,7 +47,7 @@ export class RuntimeInvocationBuilder {
   }
 
   create<Input, Output, Resources extends object = object>(input: Input, request: RuntimeInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, RuntimeContext<Input, Output, Resources>> {
-    const resources = (request.resources ?? new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)).select(request.requires ?? ({} as ResourceRequirements<Resources>), request.initial);
+    const resources = (request.resources ?? new ResourceBindings<Resources>({} as ResourceRequirements<Resources>)).select(request.requires ?? ({} as ResourceRequirements<Resources>), request.initial, { input, refinements: [], supply: request.supply });
     const context = this.contextBuilder.create<Input, Output, Resources>(input, request.controls, resources, request.executionBindings);
     if (request.restore) {
       if (!request.work.checkpoint) throw new Error('Checkpoint declaration is missing');

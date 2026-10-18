@@ -38,6 +38,7 @@ export interface InvocationRelationBaseline<Output = unknown> {
 
 export interface InvocationRelationOwner {
   requireHealthy(): void;
+  accepting<Value>(work: () => Promise<Value>): Promise<Value>;
   fail(failure: InvocationFailure): void;
   publish(relation: InvocationRelation, change: InvocationRelationChange): unknown | undefined;
   receive<Value>(relation: InvocationRelation, work: () => Promise<Value>): Promise<Value>;
@@ -122,7 +123,15 @@ export class InvocationRelation<Output = unknown> {
     this.owner.publish(this, { kind: 'returned', result: this.#returned });
   }
 
-  async accept<Value>(work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
+  accept<Value>(work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
+    try {
+      return this.owner.accepting(() => this.acceptResult(work));
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+
+  private async acceptResult<Value>(work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
     const scope = this.owner.captureDelivery();
     const delivered = this.beginReception();
     const output = await this.receiveWithinParent(delivered, work, scope);

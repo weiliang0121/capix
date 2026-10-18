@@ -25,11 +25,12 @@ export class AttemptBinder {
     const definition = resolved.definition;
     const declaration = resolved.declaration;
     const requires = resolved.requires as ResourceRequirements<Resources>;
+    const supply = resolved.supply;
     const children = new BoundChildren([], () => {
       throw new Error('Attempts cannot have children');
     });
     const refinements = resolved.refinements;
     const work: InvocationWork<Input, Output, AttemptContext<Input, Output, Resources>> = new InvocationWorkBinding(declaration, children);
-    return new BoundAttempt(this.invocationBuilder, { definition, declaration, children, requires, refinements, work });
+    return new BoundAttempt(this.invocationBuilder, { definition, declaration, children, requires, supply, refinements, work });
   }
 }

@@ -27,11 +27,12 @@ export class ExecutionBinder {
     const definition = resolved.definition;
     const declaration = resolved.declaration;
     const requires = resolved.requires as ResourceRequirements<Resources>;
+    const supply = resolved.supply;
     const children = new BoundChildren(resolved.children, (child) => {
       if (child.level !== 'operation') throw new Error('Invalid child definition level');
       return this.operations.bindResolved(child);
     });
     const work: InvocationWork<Input, Output, ExecutionContext<Input, Output, Resources>> = new InvocationWorkBinding(declaration, children);
-    return new BoundExecution(this.invocationBuilder, { definition, declaration, children, requires, work });
+    return new BoundExecution(this.invocationBuilder, { definition, declaration, children, requires, supply, work });
   }
 }

@@ -67,7 +67,7 @@ capture 返回冻结值，不返回以后可能读到新内容的句柄。消息
 
 `ActiveContentResource.read` 只提供 capture；manage 提供 capture/apply。两者在 access 时通过当前调用的受控端点访问，不在 E 资源绑定时提前读取材料。绑定供应 ActiveContent 引用，业务只取得声明申请的端点。索引与必要内容同步独立于 Recorder，关闭观测不会停止索引更新。
 
-`maintenance` 接受普通函数，或普通 `OperationDefinition<ContextMaintenanceInput, ActiveContentSelection, ...>`。输入包含 phase、当前 material 和本次 settings。普通函数适合纯数据规则；需要模型或其他能力时提供 O，并通过 `maintenanceResources` 显式传递已供应资源的申请。它继续遵守 E→O、O→O/A 的位置规则，不要求内核认识维护业务。
+`maintenance` 接受普通函数，或普通 `OperationDefinition<ContextMaintenanceInput, ActiveContentSelection, ...>`。输入包含 phase、当前 material 和本次 settings。普通函数适合纯数据规则；需要模型或其他能力时提供 O，由该 O 的声明直接申请资源。绑定解算保留子树供给；维护 O 和准备 O 不为透传而申请子层资源。它继续遵守 E→O、O→O/A 的位置规则，不要求内核认识维护业务。
 
 以下是程序化装配示例。保留最近十二条只是一项显式业务策略，**不是框架默认行为，也不保证下次请求容量充足**：
 

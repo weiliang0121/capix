@@ -14,7 +14,6 @@ export interface ModelInteractionRef {
   readonly id: string;
 }
 export interface ModelInteractionControls {
-  readonly signal: AbortSignal;
   readonly timeoutMs: number;
 }
 export type ModelInteractionResult = { readonly kind: 'received'; readonly interaction: ModelInteractionRef; readonly output: ModelOutput } | { readonly kind: 'pending'; readonly interaction: ModelInteractionRef };
@@ -51,7 +50,6 @@ export const modelInteractionContract: InteractionContract<ModelInteractionReque
 export class ModelInteractions {
   readonly #interactions = new Map<string, Interaction<ModelInteractionRequest, ModelOutput>>();
   readonly #active = new Set<Interaction<ModelInteractionRequest, ModelOutput>>();
-  readonly #signals = new Map<string, AbortSignal>();
   readonly #streams = new Map<string, ModelTextBuffer>();
   readonly #observers = new Map<string, Set<ProgressChannel<InteractionFact<ModelInteractionRequest, ModelOutput>>>>();
   readonly #retained: number;
@@ -69,14 +67,9 @@ export class ModelInteractions {
     return this.#active.size > 0;
   }
 
-  /** A cancelled host may still be draining an external call after its REOA invocation ended. */
-  get cancelling(): boolean {
-    return [...this.#signals.values()].some((signal) => signal.aborted);
-  }
-
   /** Host-only shutdown coordination. It neither resends nor abandons running exchanges. */
-  async settled(options: { readonly owner?: AbortSignal } = {}): Promise<void> {
-    await Promise.all([...this.#active].filter((interaction) => options.owner === undefined || this.#signals.get(interaction.id) === options.owner).map((interaction) => interaction.settled()));
+  async settled(): Promise<void> {
+    await Promise.all([...this.#active].map((interaction) => interaction.settled()));
   }
 
   close(): void {
@@ -128,14 +121,12 @@ export class ModelInteractions {
 
   start(request: ModelRequest, purpose: Purpose, controls: ModelInteractionControls): ModelInteractionRef {
     this.requireOpen();
-    if (controls.signal.aborted) throw new InvocationCancelled(controls.signal);
     // Provider construction must fail before an exchange is registered as dispatched.
     const provider = this.source.get();
     const interaction = new Interaction({ request, purpose, timeoutMs: controls.timeoutMs }, { contract: modelInteractionContract, persistence: this.options.persistence, observation: { receive: (fact) => this.publish(fact) } });
     const ref = Object.freeze({ id: interaction.id });
     this.#interactions.set(interaction.id, interaction);
-    const timeout = AbortSignal.timeout(controls.timeoutMs);
-    const signal = AbortSignal.any([controls.signal, timeout]);
+    const signal = AbortSignal.timeout(controls.timeoutMs);
     const stream = request.stream ? new ModelTextBuffer() : undefined;
     if (stream) this.#streams.set(interaction.id, stream);
     const progress = stream
@@ -146,7 +137,6 @@ export class ModelInteractions {
         })
       : undefined;
     this.#active.add(interaction);
-    this.#signals.set(interaction.id, controls.signal);
     try {
       interaction.start(async (fixed) => {
         try {
@@ -156,9 +146,7 @@ export class ModelInteractions {
           return output;
         } catch (error) {
           if (!isInvocationCancelled(error, signal) && !(signal.aborted && error === signal.reason)) throw error;
-          if (controls.signal.aborted && signal.reason === controls.signal.reason) throw new InvocationCancelled(controls.signal, { cause: error });
-          if (timeout.aborted && signal.reason === timeout.reason) throw new RuntimeError('MODEL_TIMEOUT', '模型调用超过时限。', undefined, { cause: error });
-          throw error;
+          throw new RuntimeError('MODEL_TIMEOUT', '模型调用超过时限。', undefined, { cause: error });
         } finally {
           stream?.finish();
         }
@@ -166,12 +154,10 @@ export class ModelInteractions {
     } catch (error) {
       stream?.finish();
       this.#active.delete(interaction);
-      this.#signals.delete(interaction.id);
       throw error;
     }
     void interaction.settled().then(() => {
       this.#active.delete(interaction);
-      this.#signals.delete(interaction.id);
       this.prune();
     });
     return ref;
@@ -208,9 +194,9 @@ export class ModelInteractions {
     return result.feedback.payload;
   }
 
-  private async cancelled(interaction: Interaction<ModelInteractionRequest, ModelOutput>, signal: AbortSignal, error: unknown): Promise<never> {
-    // Only the dispatch owner's cancellation joins its external cleanup. An independent reader can leave immediately.
-    if (this.#signals.get(interaction.id) === signal) await interaction.settled();
+  private cancelled(interaction: Interaction<ModelInteractionRequest, ModelOutput>, signal: AbortSignal, error: unknown): never {
+    // Only failures already available to this reader take precedence over its local stop.
+    // A later dispatch result belongs to the independent interaction, never this ended wait.
     const result = interaction.read();
     if (result.kind === 'unavailable' && !isInvocationCancelled(result.error, signal)) throw result.error;
     throw new InvocationCancelled(signal, { cause: error });

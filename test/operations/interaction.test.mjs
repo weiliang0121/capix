@@ -139,7 +139,7 @@ test('feedback survives A interpretation and can be read by another host without
     { persistence },
   );
   const signal = new AbortController().signal;
-  const ref = host.start(request, 'answer', { signal, timeoutMs: 1000 });
+  const ref = host.start(request, 'answer', { timeoutMs: 1000 });
   assert.equal((await host.result(ref, { signal })).content, 'not business JSON');
   assert.equal((await host.result(ref, { signal })).content, 'not business JSON');
   host.close();
@@ -160,7 +160,7 @@ test('a restored pending exchange reports unavailable and never sends implicitly
   const persistence = memoryPersistence();
   const signal = new AbortController().signal;
   const original = new ModelInteractions(new ModelSource({ invoke: () => response.promise }), { persistence });
-  const ref = original.start(request, 'answer', { signal, timeoutMs: 1000 });
+  const ref = original.start(request, 'answer', { timeoutMs: 1000 });
   const saved = structuredClone(persistence.read(ref.id));
   const restored = new ModelInteractions(
     new ModelSource(() => {
@@ -188,7 +188,7 @@ test('local wait expiry leaves the external request alive and supports multiple 
       },
     }),
   );
-  const ref = host.start(request, 'answer', { signal: root.signal, timeoutMs: 1000 });
+  const ref = host.start(request, 'answer', { timeoutMs: 1000 });
   assert.equal((await host.wait(ref, { signal: root.signal, waitMs: 1 })).kind, 'pending');
   assert.equal(externalSignal.aborted, false);
   const first = host.result(ref, { signal: root.signal });
@@ -198,7 +198,7 @@ test('local wait expiry leaves the external request alive and supports multiple 
   host.close();
 });
 
-test('cancellation joins an uncooperative provider before the active invocation releases occupancy', async () => {
+test('cancellation ends the invocation while its independent provider saves a late feedback', async () => {
   const response = deferred();
   const controller = new AbortController();
   const pending = deferred();
@@ -210,11 +210,16 @@ test('cancellation joins an uncooperative provider before the active invocation 
   const rejected = assert.rejects(running, (error) => isInvocationCancelled(error, controller.signal));
   await pending.promise;
   controller.abort();
-  await Promise.resolve();
-  assert.equal(environment.runtime.running, true);
-  assert.equal(environment.interactions.active, true);
-  response.resolve(output(JSON.stringify(answer)));
   await rejected;
+  assert.equal(environment.runtime.running, false);
+  assert.equal(environment.interactions.active, true);
+  assert.equal(calls.find((call) => call.purpose === 'answer').signal.aborted, false);
+  assert.throws(() => environment.close(), /active external interactions/);
+  response.resolve(output(JSON.stringify(answer)));
+  await environment.interactions.settled();
+  const saved = environment.interactions.states().find((state) => state.request.purpose === 'answer');
+  assert.equal(saved.feedback.payload.content, JSON.stringify(answer));
+  assert.equal(calls.filter((call) => call.purpose === 'answer').length, 1);
   assert.equal(environment.runtime.running, false);
   assert.equal(environment.interactions.active, false);
   assert.equal(environment.transcript.length, 1);
@@ -259,15 +264,15 @@ test('completed retention is bounded; an evicted in-memory reference cannot caus
     }),
     { retained: 1 },
   );
-  const first = host.start(request, 'answer', { signal, timeoutMs: 1000 });
+  const first = host.start(request, 'answer', { timeoutMs: 1000 });
   await host.result(first, { signal });
-  const second = host.start(request, 'answer', { signal, timeoutMs: 1000 });
+  const second = host.start(request, 'answer', { timeoutMs: 1000 });
   await host.result(second, { signal });
   assert.equal(host.states().length, 1);
   await assert.rejects(host.result(first, { signal }), { code: 'MODEL_INTERACTION_UNKNOWN' });
   assert.equal(sends, 2);
   host.close();
-  assert.throws(() => host.start(request, 'answer', { signal, timeoutMs: 1000 }), { code: 'MODEL_INTERACTIONS_CLOSED' });
+  assert.throws(() => host.start(request, 'answer', { timeoutMs: 1000 }), { code: 'MODEL_INTERACTIONS_CLOSED' });
 });
 
 test('an independent reader may cancel without stopping or waiting for the dispatch owner', async () => {
@@ -284,7 +289,7 @@ test('an independent reader may cancel without stopping or waiting for the dispa
         },
       }),
     );
-    const ref = host.start(request, 'answer', { signal: owner.signal, timeoutMs: 1000 });
+    const ref = host.start(request, 'answer', { timeoutMs: 1000 });
     const reading = method === 'wait' ? host.wait(ref, { signal: reader.signal, waitMs: 1000 }) : host.result(ref, { signal: reader.signal });
     const rejected = assert.rejects(reading, (error) => isInvocationCancelled(error, reader.signal));
     reader.abort();
@@ -297,23 +302,66 @@ test('an independent reader may cancel without stopping or waiting for the dispa
   }
 });
 
-test('host cancellation draining is derived from ownership and never waits for another owner', async () => {
+test('host shutdown joins all independent exchanges without tying them to reader cancellation', async () => {
   const first = deferred();
   const second = deferred();
-  const firstOwner = new AbortController();
-  const secondOwner = new AbortController();
+  const reader = new AbortController();
   let calls = 0;
   const host = new ModelInteractions(new ModelSource({ invoke: () => (++calls === 1 ? first.promise : second.promise) }));
-  host.start(request, 'answer', { signal: firstOwner.signal, timeoutMs: 1000 });
-  const secondRef = host.start(request, 'answer', { signal: secondOwner.signal, timeoutMs: 1000 });
-  await Promise.resolve();
-  firstOwner.abort();
-  assert.equal(host.cancelling, true);
+  const firstRef = host.start(request, 'answer', { timeoutMs: 1000 });
+  const secondRef = host.start(request, 'answer', { timeoutMs: 1000 });
+  const reading = host.result(firstRef, { signal: reader.signal });
+  const rejected = assert.rejects(reading, (error) => isInvocationCancelled(error, reader.signal));
+  reader.abort();
+  await rejected;
+  assert.throws(() => host.close(), { code: 'MODEL_INTERACTIONS_ACTIVE' });
+  let settled = false;
+  const draining = host.settled().then(() => {
+    settled = true;
+  });
   first.resolve(output('{}'));
-  await host.settled({ owner: firstOwner.signal });
+  await host.result(firstRef, { signal: new AbortController().signal });
+  assert.equal(settled, false);
   assert.equal(host.active, true);
-  assert.equal(host.cancelling, false);
   second.resolve(output('{}'));
-  assert.equal((await host.result(secondRef, { signal: secondOwner.signal })).content, '{}');
+  await draining;
+  assert.equal((await host.result(secondRef, { signal: new AbortController().signal })).content, '{}');
+  assert.equal(settled, true);
   host.close();
+});
+
+test('cancelled readers leave a durable late reply for a new host without replaying the send', async () => {
+  for (const method of ['wait', 'result']) {
+    const response = deferred();
+    const persistence = memoryPersistence();
+    const reader = new AbortController();
+    let sends = 0;
+    let externalSignal;
+    const host = new ModelInteractions(
+      new ModelSource({
+        invoke: (_request, _purpose, signal) => {
+          sends += 1;
+          externalSignal = signal;
+          return response.promise;
+        },
+      }),
+      { persistence },
+    );
+    const ref = host.start(request, 'answer', { timeoutMs: 1000 });
+    const reading = method === 'wait' ? host.wait(ref, { signal: reader.signal, waitMs: 1000 }) : host.result(ref, { signal: reader.signal });
+    const rejected = assert.rejects(reading, (error) => isInvocationCancelled(error, reader.signal));
+    reader.abort();
+    await rejected;
+    assert.equal(externalSignal.aborted, false);
+    assert.equal(persistence.read(ref.id).feedback, undefined);
+    response.resolve(output('late retained feedback'));
+    await host.settled();
+    assert.equal(persistence.read(ref.id).feedback.payload.content, 'late retained feedback');
+    host.close();
+    const restored = new ModelInteractions(new ModelSource(() => assert.fail('reading cannot initialize provider')), { persistence });
+    const feedback = await restored.result(ref, { signal: new AbortController().signal, expected: { request, purpose: 'answer' } });
+    assert.equal(feedback.content, 'late retained feedback');
+    assert.equal(sends, 1);
+    restored.close();
+  }
 });

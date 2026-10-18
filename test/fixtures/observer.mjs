@@ -1,6 +1,8 @@
 import { ExecutionContext, Transcript, TranscriptRangeRef, bindResources, AttemptBinder, OperationBinder, ExecutionBinder, Memories, SelectionUsage } from '@capix/server-runtime';
+import { resolveDeclaration } from '@capix/server-runtime/construction';
+import assert from 'node:assert/strict';
 
-import { ActiveContent, acceptConversationInput, initializeObserver, observeExecution, conversationExecutionRequests, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
+import { ConversationRuntimeDefinition, ActiveContent, acceptConversationInput, initializeObserver, observeExecution, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
 
 const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);
@@ -16,7 +18,8 @@ export function contextWithSource(input, options, parent) {
 }
 export function resourceBindingFor(runtime, provider, provided) {
   const model = new ModelInteractions(new ModelSource(provider));
-  const binding = bindResources(conversationExecutionRequests, conversationProviders);
+  const supply = resolveDeclaration(new ConversationRuntimeDefinition()).children[0].supply;
+  const binding = bindResources(supply, conversationProviders);
   const worlds = new WeakMap();
   return (source) => {
     const transcript = source.transcriptRange?.transcript ?? new Transcript();
@@ -55,5 +58,12 @@ export function observeFixture(input, settings, provider, publish, signal) {
 }
 
 export function resourceFact(snapshot, access) {
-  return snapshot.resources.find((fact) => fact.parentId === snapshot.execution.id && fact.access === access && fact.phase === 'available')?.value;
+  const owners = new Set([snapshot.execution.id, ...snapshot.operations.map((call) => call.id), ...snapshot.attempts.map((call) => call.id)]);
+  const facts = snapshot.resources.filter((fact) => owners.has(fact.parentId) && fact.access === access && fact.phase === 'available');
+  const first = facts[0];
+  for (const fact of facts) {
+    assert.equal(fact.supplyId, first.supplyId, 'fixture expects one observed supply');
+    assert.deepEqual(fact.value, first.value, 'one captured supply must retain its value');
+  }
+  return first?.value;
 }

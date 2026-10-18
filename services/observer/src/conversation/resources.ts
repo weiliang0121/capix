@@ -1,7 +1,7 @@
 import { type ResourceProvider, type ResourceRequest, type ProgressReceiver } from '@capix/server-runtime';
 import { TranscriptResource, MemoryResource, SelectionUsageResource, type Transcript, type Memories, type SelectionUsage, type TranscriptRangeRef, type TranscriptRangeReader, type TranscriptAppendProgress, type CapturedMemories } from '@capix/server-runtime/content';
 import type { ModelSettings, FileTask, ConversationTask } from '@capix/protocol';
-import { FileResources, type WorkspaceFiles, type FileProgress, type FileResourceSource, type FileReader, type FileCreator, type FileInspector } from '../files/index.js';
+import { FileResources, type WorkspaceFiles, type FileProgress, type FileResourceSource } from '../files/index.js';
 import type { ProgressChannel } from '@capix/server-runtime';
 import { ConversationTaskResource, type TaskSelection } from './task.js';
 import { ModelSettingsResource, ModelResource } from './model/resources.js';
@@ -26,26 +26,14 @@ export interface ConversationResources extends ModelCallResources, HistoryResour
 export interface MemoryWriteResources {
   readonly memoryWriter: Offered<typeof MemoryResource.apply>;
 }
-export interface ConversationExecutionResources extends ConversationResources, MemoryWriteResources {
-  readonly activeContent: Offered<typeof ActiveContentResource.read>;
-  readonly activeContentManager: Offered<typeof ActiveContentResource.manage>;
+export interface ConversationExecutionResources extends HistoryResources {
   readonly messages: Offered<typeof TranscriptResource.append>;
   readonly selectionUsage: Offered<typeof ConversationMaterialUsageResource>;
   readonly tasks: TaskSelection;
-  readonly reader?: FileReader;
-  readonly creator?: FileCreator;
-  readonly inspector?: FileInspector;
 }
 
 export const conversationExecutionRequests = Object.freeze({
-  settings: ModelSettingsResource.snapshot.request(),
-  timeoutMs: ModelSettingsResource.timeout.request(),
   history: TranscriptResource.fixedRange.request(),
-  modelCreator: ModelResource.create.request(),
-  modelReader: ModelResource.read.request(),
-  activeContent: ActiveContentResource.read.request(),
-  activeContentManager: ActiveContentResource.manage.request(),
-  memoryWriter: MemoryResource.apply.request(),
   messages: TranscriptResource.append.request(),
   selectionUsage: ConversationMaterialUsageResource.request(),
   tasks: ConversationTaskResource.request(),

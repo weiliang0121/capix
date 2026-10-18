@@ -46,6 +46,7 @@ export interface ExecutionDetail {
   contextId: string;
   resources: readonly ResourceRecord[];
   settings: unknown;
+  settingsState: 'available' | 'unavailable' | 'multiple' | 'inconsistent';
   transcriptRange: unknown;
   inputContent: string;
   answer: string;

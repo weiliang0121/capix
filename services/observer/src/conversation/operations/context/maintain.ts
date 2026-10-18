@@ -1,4 +1,4 @@
-import { OperationDefinition, checkpointPoint, childReference, type ChildCall, type OperationWork, type ResourceRequirements } from '@capix/server-runtime';
+import { OperationDefinition, checkpointPoint, childReference, type ChildCall, type OperationWork } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { ModelSettings } from '@capix/protocol';
 import { isEqual } from 'es-toolkit';
@@ -33,13 +33,10 @@ export class MaintainConversationContentDefinition extends OperationDefinition<C
   readonly accepted;
   readonly completed;
 
-  constructor(
-    private readonly policy: ContextMaintenancePolicy,
-    through: ResourceRequirements = {},
-  ) {
+  constructor(private readonly policy: ContextMaintenancePolicy) {
     super();
     this.children = Object.freeze(typeof policy === 'function' ? [] : [policy]);
-    const requires = Object.freeze({ ...through, ...MaintainConversationContentDefinition.requires });
+    const requires = MaintainConversationContentDefinition.requires;
     const point = checkpointPoint<'operation', ContextMaintenanceRequest, ActiveContentSnapshot>();
     this.waiting =
       typeof policy === 'function' || !policy.checkpoint

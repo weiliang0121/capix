@@ -26,6 +26,7 @@ export interface OperationInvocationRequest<Input, Output, Resources extends obj
   input: Input;
   requires?: ResourceRequirements<Resources>;
   initial?: ResourceRequirements;
+  readonly supply?: ResourceRequirements;
   refinements?: readonly ResourceRefinement<Input>[];
   observation?: readonly ObservationDeclaration<InvocationFact>[];
   key?: string;
@@ -51,7 +52,7 @@ export class OperationInvocationBuilder {
     parent.requireActive();
     this.contextBuilder.check(owner);
     const requires = request.requires ?? ({} as ResourceRequirements<Resources>);
-    const resources = owner.resources.select(requires, request.initial, { input: request.input, refinements: request.refinements ?? [] });
+    const resources = owner.resources.select(requires, request.initial, { input: request.input, refinements: request.refinements ?? [], supply: request.supply });
     const context = this.contextBuilder.create<Input, Output, Resources>(owner, request.input, resources);
     if (request.restore) {
       if (!request.work.checkpoint) throw new Error('Checkpoint declaration is missing');
@@ -62,7 +63,7 @@ export class OperationInvocationBuilder {
     const recovering = !!request.restore || parent.recovering;
     const observation = recovering ? undefined : bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources: context.resources }, this.capabilities.observations, parent.observation);
     const changes = !recovering && this.capabilities.changes ? new InvocationChangeEmitter({ contextId: context.id, level: 'operation', parentContextId: parent.context.id }, this.capabilities.changes) : undefined;
-    const invocation = new Invocation<Input, Output, OperationContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key, declarationPosition: request.declarationPosition }, context, work: request.work, checkpoints: this.capabilities.checkpoints, restore: request.restore, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, changes, validate: () => this.contextBuilder.check(owner) });
+    const invocation = new Invocation<Input, Output, OperationContext<Input, Output, Resources>>({ parent: { invocation: parent, key: request.key, declarationPosition: request.declarationPosition }, context, work: request.work, checkpoints: this.capabilities.checkpoints, restore: request.restore, progress: request.progress, output: request.output, clock: this.capabilities.clock, signal: context.signal, observation, identity, description: request.description, changes });
     attachInvocationResources(invocation, context.resources);
     return invocation;
   }

@@ -7,7 +7,8 @@ import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from '../clock.js';
 import { DeclaredException } from '../exception/contract.js';
 import { InvocationStopped } from './stop.js';
-import { isInvocationCancelled, requireNotCancelled } from './cancellation.js';
+import { isInvocationCancelled } from './cancellation.js';
+import { InvocationControl } from './control.js';
 import type { InvocationFailure, InvocationPhase } from './failure.js';
 import { invocationContextView, type ContextFactsOf } from '../context/view.js';
 import { invocationView, childInvocationView, type InvocationView, type ChildInvocationView } from './view.js';
@@ -52,7 +53,7 @@ export interface InvocationOptions<Input, Output, Context extends InvocationCont
 export class Invocation<Input = unknown, Output = unknown, Context extends InvocationContext<Input, Output> = InvocationContext<Input, Output>> {
   readonly hasProgress: boolean;
   readonly #checkpoint?: InvocationCheckpoint<Input, Output, Context>;
-  #started = false;
+  readonly #control: InvocationControl;
   readonly #cycle: InvocationCycle<Input, Output>;
   #sequence = 0;
   #eventSequence = 0;
@@ -71,6 +72,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   #parentDeliveryScope?: InvocationPropagationScope;
 
   constructor(private readonly options: InvocationOptions<Input, Output, Context>) {
+    this.#control = new InvocationControl(options.signal);
     this.#clock = options.clock ?? new Clock();
     this.#progress = options.progress ? new ProgressChannel(options.progress) : undefined;
     this.hasProgress = !this.recovering && (!!this.#progress || !!options.parent?.invocation.hasProgress);
@@ -108,6 +110,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
         healthy: () => this.requireHealthy(),
         reject: (error) => this.reject(error),
         classify: (error, phase, forceError) => this.classify(error, phase, forceError),
+        settleAcceptances: () => this.children.settleAcceptances(),
       },
       {
         signal: options.signal,
@@ -144,6 +147,11 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     return this.#cycle.outputWriter;
   }
 
+  /** A restored execute body may end before its active receptions have drained. */
+  sealOutput(): void {
+    this.#cycle.sealOutput();
+  }
+
   get checkpointBinding(): CheckpointBinding | undefined {
     return this.options.work.checkpoint;
   }
@@ -168,14 +176,18 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     return this.recovering ? this.#checkpoint?.observation : this.options.observation;
   }
 
-  async run(): Promise<Output> {
-    if (this.#started) {
-      const error = new Error('Invocation has already started');
+  run(): Promise<Output> {
+    try {
+      this.#control.start();
+      this.#parentDeliveryScope = this.options.parent?.invocation.children.captureDelivery();
+      return this.options.parent ? this.options.parent.invocation.children.run(this, () => this.deliver()) : this.deliver();
+    } catch (error) {
       this.options.parent?.invocation.children.reject(error);
-      throw error;
+      return Promise.reject(error);
     }
-    this.#started = true;
-    this.#parentDeliveryScope = this.options.parent?.invocation.children.captureDelivery();
+  }
+
+  private async deliver(): Promise<Output> {
     try {
       this.#checkpoint?.begin();
       const output = await this.runWork();
@@ -185,6 +197,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     } catch (error) {
       return this.failDelivery(error);
     } finally {
+      this.#control.close();
       this.#checkpoint?.release();
     }
   }
@@ -196,6 +209,16 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     try {
       this.startWork();
       output = await this.#cycle.run(this.restoring ? () => this.#checkpoint!.resume() : undefined);
+    } catch (error) {
+      this.#control.close();
+      await this.children.settle();
+      return this.failWork(error);
+    }
+    this.#control.close();
+    await this.children.settle();
+    // A child's already-owned fault remains authoritative even if its caller did not await it.
+    try {
+      this.requireHealthy();
     } catch (error) {
       return this.failWork(error);
     }
@@ -212,7 +235,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     this.options.validate?.();
     this.options.started?.(context, this);
     if (!this.restoring) this.publish({ kind: 'started', input: context.input });
-    if ('resources' in context) (context.resources as { start(): void }).start();
+    if ('resources' in context) (context.resources as { start(phase: string): void }).start(this.options.restore ? `checkpoint:${this.options.restore.head.image.point}` : 'run');
   }
 
   private failWork(error: unknown): never {
@@ -221,7 +244,8 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     // exception. That handled failure remains authoritative; a later diagnostic
     // classification does not replace it, while structural faults remain sticky.
     const handled = this.#cycle.exceptionFailure;
-    const failure = this.#fault ?? (handled && handled.error === error ? handled : this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.round ? context.progress.phase : 'setup', true));
+    const exit = this.#cycle.exitFailure;
+    const failure = this.#fault ?? (handled && handled.error === error ? handled : exit && exit.error === error ? exit : this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.round ? context.progress.phase : 'setup', true));
     this.#classified = failure;
     const delivered = error instanceof AggregateError ? error : failure.error;
     this.#cycle.discardOutput('failed');
@@ -256,7 +280,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   requireActive(): void {
     this.requireHealthy();
     this.context.requireRunning();
-    requireNotCancelled(this.options.signal);
+    this.#control.requireActive();
   }
 
   /** Internal endpoint boundary. Once an error occurs, work cannot turn it into success. */
