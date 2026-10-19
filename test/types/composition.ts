@@ -1,4 +1,4 @@
-import { Sequence, InvocationEntry, type OperationDefinition, type AttemptDefinition, type ChildCalls, type OperationWork, type ExecutionWork, type RuntimeWork, assembleRuntime, type ExecutionDefinition, type RuntimeDefinition } from '@capix/server-runtime';
+import { Sequence, InvocationEntry, defineOperation, defineRuntime, type OperationDefinition, type AttemptDefinition, type ChildCalls, type OperationWork, type ExecutionWork, type RuntimeWork, assembleRuntime, type ExecutionDefinition, type RuntimeDefinition } from '@capix/server-runtime';
 import { bindChildResources, type ResourceRefinement } from '@capix/server-runtime';
 
 const bounded = new ResourceOffer<{ readonly allowed: readonly string[] }, readonly string[], { readonly allowed: readonly string[] }, string>('bounded', (source) => source.allowed, 'access', { refine: (source, selected) => ({ allowed: source.allowed.filter((value) => value === selected) }) });
@@ -69,8 +69,10 @@ children.open(parent);
 const acceptedAlternative: Promise<number> = operation.children.entry(alternative, 1).accept((delivered) => delivered.length);
 void acceptedAlternative;
 
-const objectDefinition: OperationDefinition<string, number> = {
-  level: 'operation',
+// @ts-expect-error raw object syntax has no checked declaration signature; use the factory or a named class
+const rawDefinition: OperationDefinition<string, number> = { level: 'operation', name: 'raw', label: 'raw', source: 'test', children: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (work) => work.input.length } };
+void rawDefinition;
+const objectDefinition: OperationDefinition<string, number> = defineOperation<string, number>()({
   name: 'length',
   label: 'length',
   source: 'test',
@@ -78,11 +80,10 @@ const objectDefinition: OperationDefinition<string, number> = {
   maxRounds: 1,
   raises: [],
   run: { requires: {}, execute: (work) => work.input.length },
-};
+});
 const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string>().step('length', { use: objectDefinition, input: ({ input }) => input }).run('hello', children);
 void objectOutput;
-const runtimeDefinition: RuntimeDefinition<string, number> = {
-  level: 'runtime',
+const runtimeDefinition: RuntimeDefinition<string, number> = defineRuntime<string, number>()({
   children: [execution],
   maxRounds: 1,
   raises: [],
@@ -94,7 +95,7 @@ const runtimeDefinition: RuntimeDefinition<string, number> = {
       return child.accept();
     },
   },
-};
+});
 const runtime = assembleRuntime(runtimeDefinition, { providers: [], source: { capture: (_input, _options: { signal?: AbortSignal }) => null } });
 const rootOutput: Promise<number> = runtime.run('input', {});
 void rootOutput;
@@ -136,7 +137,7 @@ const exceptions: InvocationExceptionDefinition<string, string, 'operation', { r
     return work.return(repair);
   },
 };
-const composed: OperationDefinition<string, string, { value: number }, { repair: string }> = { level: 'operation', name: 'typed', label: 'typed', source: 'test', children: [], maxRounds: 1, raises: [issue], run, exceptions };
+const composed: OperationDefinition<string, string, { value: number }, { repair: string }> = defineOperation<string, string>()({ name: 'typed', label: 'typed', source: 'test', children: [], maxRounds: 1, raises: [issue], run: { ...run, uses: [] }, exceptions: { ...exceptions, uses: [] } });
 const composedResult: Promise<string> = children.create(composed, 'input').run();
 void composedResult;
 const childFact = operation.children.facts.get(operation.children.create(leaf, 'input').ref);

@@ -5,8 +5,8 @@ import type { AttemptDefinition } from '../definition/attempt.js';
 import type { InvocationDefinition, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/invocation.js';
 import type { ObservationDeclaration } from '../definition/observation.js';
 import type { InvocationLevel } from '@capix/protocol';
-import type { CheckpointReferenceSlots } from '../definition/checkpoint.js';
 import type { CheckpointCodec } from '../checkpoint/contract.js';
+import type { invocationSignature } from '../definition/signature.js';
 
 // Heterogeneous traversal erases only the pairing already retained by the overloads.
 type AnyDefinition = RuntimeDefinition<any, any, any, any, any> | ExecutionDefinition<any, any, any, any, any> | OperationDefinition<any, any, any, any, any> | AttemptDefinition<any, any, any, any, any>;
@@ -26,6 +26,7 @@ export function snapshotDefinition(definition: AnyDefinition): AnyDefinition {
     case 'operation':
       return Object.freeze({ ...snapshotInvocation(definition), level: definition.level, children: Object.freeze([...definition.children]), name: definition.name, label: definition.label, source: definition.source });
     case 'attempt':
+      if (definition.children !== undefined) throw new Error('Attempts cannot declare children');
       return Object.freeze({ ...snapshotInvocation(definition), level: definition.level, name: definition.name, label: definition.label, source: definition.source, callee: definition.callee });
   }
 }
@@ -34,7 +35,7 @@ function snapshotInvocation<Input, Output, Level extends InvocationLevel, Resour
   const run = definition.run;
   const exceptions = definition.exceptions;
   const output = definition.output;
-  return Object.freeze({
+  const fixed = Object.freeze({
     maxRounds: definition.maxRounds,
     raises: Object.freeze([...(definition.raises ?? [])]),
     output: output ? Object.freeze({ result: output.result.bind(output), delta: output.delta?.bind(output) }) : undefined,
@@ -42,7 +43,10 @@ function snapshotInvocation<Input, Output, Level extends InvocationLevel, Resour
     exceptions: exceptions ? Object.freeze({ requires: Object.freeze({ ...exceptions.requires }), uses: exceptions.uses ? Object.freeze([...exceptions.uses]) : undefined, accepts: Object.freeze([...exceptions.accepts]), handle: exceptions.handle.bind(exceptions) }) : undefined,
     observation: definition.observation ? Object.freeze(definition.observation.map(snapshotObservation)) : undefined,
     checkpoint: definition.checkpoint ? snapshotCheckpoint(definition.checkpoint) : undefined,
-  });
+  } satisfies Omit<InvocationDefinition<Input, Output, Level, Resources, ExceptionResources, Delta>, typeof invocationSignature>);
+  // All runtime fields are checked above. Preserve the input's type-only I/O
+  // witness without creating a symbol value or treating it as runtime identity.
+  return fixed as typeof fixed & Pick<InvocationDefinition<Input, Output, Level, Resources, ExceptionResources, Delta>, typeof invocationSignature>;
 }
 
 function snapshotObservation<Fact>(declaration: ObservationDeclaration<Fact>): ObservationDeclaration<Fact> {
@@ -69,7 +73,7 @@ export function originalCheckpointPoint(point: object): object {
   return pointOrigins.get(point) ?? point;
 }
 
-function snapshotCheckpointPoint<Input, Output, Level extends InvocationLevel, State, Resources extends object, Slots extends CheckpointReferenceSlots, Allowed extends import('../definition/children.js').ChildrenOf<Level>, Delta>(point: InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta>): InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta> {
+function snapshotCheckpointPoint<Input, Output, Level extends InvocationLevel, State, Resources extends object, Slots extends InvocationCheckpointPoint<Input, Output, Level, State>['references'], Allowed extends import('../definition/children.js').ChildContractsOf<Level>, Delta>(point: InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta>): InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta> {
   const resume = point.resume;
   const fixed = Object.freeze({
     name: point.name,

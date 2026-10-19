@@ -160,7 +160,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
           state: point.state,
           references: Object.fromEntries(
             Object.entries(point.references).map(([name, slot]) => {
-              const reference = slot as { definition: import('../definition/children.js').ChildDefinition; many: boolean };
+              const reference = slot as { definition: import('../definition/children.js').ChildContract; many: boolean };
               return [name, { cardinality: reference.many ? ('many' as const) : ('one' as const), position: this.children.position(reference.definition) }];
             }),
           ),

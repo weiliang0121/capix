@@ -32,7 +32,8 @@ class InvalidExecution extends ExecutionDefinition<string, number> {
   readonly run: InvocationRunDefinition<string, number, 'execution', Record<string, never>> = {
     requires: {},
     execute(work) {
-      return work.children.create(attempt, work.input).run();
+      work.children.create(attempt, work.input);
+      return 0;
     },
   };
 }

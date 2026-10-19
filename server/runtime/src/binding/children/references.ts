@@ -1,4 +1,4 @@
-import type { ChildDefinition, ChildReference, ChildFact, ChildFacts } from '../../definition/children.js';
+import type { ChildContract, ChildReference, ChildFact, ChildFacts } from '../../definition/children.js';
 import type { ExceptionOrigin, ContinuationFact } from '../../definition/work.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { InvocationRelation, InvocationTarget } from '../../invocation/relation.js';
@@ -11,7 +11,7 @@ import { isInvocationCancelled } from '../../invocation/cancellation.js';
 import type { BoundChildren } from './bound.js';
 
 interface ReferenceEntry {
-  readonly definition: ChildDefinition;
+  readonly definition: ChildContract;
   readonly relation: InvocationRelation;
   readonly ref: ChildReference;
 }
@@ -27,19 +27,19 @@ export class InvocationChildReferences {
     private readonly children: BoundChildren,
   ) {
     this.facts = Object.freeze({
-      get: <D extends ChildDefinition>(ref: ChildReference<D>) => this.fact(this.require(ref)) as ChildFact<D>,
-      require: <D extends ChildDefinition>(definition: D, ref: ChildReference) => {
+      get: <D extends ChildContract>(ref: ChildReference<D>) => this.fact(this.require(ref)) as ChildFact<D>,
+      require: <D extends ChildContract>(definition: D, ref: ChildReference) => {
         const entry = this.require(ref);
         if (entry.definition !== definition) return this.reject(new Error('Child reference belongs to a different declaration'));
         return this.fact(entry) as ChildFact<D>;
       },
-      list: <D extends ChildDefinition>(definition: D, query?: { parentRound?: 1 | 2 }) =>
+      list: <D extends ChildContract>(definition: D, query?: { parentRound?: 1 | 2 }) =>
         Object.freeze(
           this.values()
             .filter((entry) => entry.definition === definition && (query?.parentRound === undefined || entry.relation.round === query.parentRound))
             .map((entry) => this.fact(entry) as ChildFact<D>),
         ),
-      requireUnique: <D extends ChildDefinition>(definition: D, query: { parentRound: 1 | 2 }) => {
+      requireUnique: <D extends ChildContract>(definition: D, query: { parentRound: 1 | 2 }) => {
         const matches = this.facts.list(definition, query);
         if (matches.length !== 1) return this.reject(new Error('Expected exactly one direct child fact'));
         return matches[0]!;
@@ -48,7 +48,7 @@ export class InvocationChildReferences {
     });
   }
 
-  forTarget<D extends ChildDefinition>(definition: D, target: InvocationTarget): ChildReference<D> {
+  forTarget<D extends ChildContract>(definition: D, target: InvocationTarget): ChildReference<D> {
     const relation = this.parent.children.get(target);
     const entry = this.entry(relation);
     if (entry.definition !== definition) return this.reject(new Error('Child declaration position differs from its binding'));

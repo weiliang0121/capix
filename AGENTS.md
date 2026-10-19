@@ -26,6 +26,7 @@
 ## 运行结构与访问
 
 - 运行时表示活动状态，不等同于 R。`*Definition` 是内容契约；`BoundRuntime/BoundExecution/BoundOperation/BoundAttempt` 是可复用结构；Invocation 与本层 Context 表示单次调用。定义可用 `define*` 工厂或具名类组织；处理函数只接收阶段 Work，不取得 Context/Invocation。Work 暴露本阶段资源与动作，成功输出保持原引用。
+- 注册与资源解算使用完整 ChildDefinition；调用、facts、refs 只消费同一对象的 DefinitionContract 层级及 I/O/Delta 签名。签名见证为必需的类型信息，Input 保持不变关系，不生成运行字段，也不替代身份检查；对象式定义经 define* 形成。A 的 children 在类型和绑定时均拒绝，不能静默忽略。Sequence 累积步骤 Uses，显式标注非空序列时须保留第三泛型；宽化 Uses 不免除阶段端口检查。
 - REOA 声明平级 run/exceptions/observation；绑定只接线与约束访问，不执行业务 Sequence。R 声明 E children 并显式选择、调用和接纳；不假定 R 与 E 唯一对应。E→O，O→O/A，A 不继续分层。固定位置表同时约束 Binder 和 ChildLevel/ChildrenOf；裸 Work、基础 run/exceptions、CP point 的 Allowed 不得超过所属层级，工厂进一步从 children/uses 推导。本阶段行动集合不限制历史 facts/open；准确身份与阶段资格仍在运行期检查。阶段资源从 requires 推导，helper 参数不能补出隐式申请。原始实体通过正式资源申请使用，不向祖先 Context 取数。
 - REOA Binder 负责声明解算、资源与 work 接线，辅助函数处理具体动作；RuntimeBinding/ExecutionBinding/OperationBinding/AttemptBinding 是绑定结果契约，Bound 直接持有结果，不反向装配。resolveDeclaration 提前解算全树，固定内核字段、函数入口与各父位置的结果；EOA Binder.bindResolved 消费结果惰性建立子结构，普通 bind 则先解算给定子树。原声明只保留身份与宿主定位，修改结构需要重装配；原业务实例及方法 receiver 不冻结。RuntimeBinder 每次 bind 建立独立的 ContextBuilder/InvocationBuilder 链，不引入 BindingEnvironment 或通用层级注册管理者。应用继续用 assembleRuntime。
 - BoundRuntime 持有占用和稳定身份，只引用本层 InvocationBuilder。构造器在所属 R 内持续复用且不缓存单次信号/输入。每次 run 新建 RuntimeContext/Invocation；占用取得后任何失败都释放。业务不维护第二个 executing 标志，不隐含排队。

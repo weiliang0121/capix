@@ -1,0 +1,221 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+
+const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
+const entry = fileURLToPath(new URL('./types/checkpoint-contract.ts', import.meta.url));
+const source = `
+import { checkpointPoint, childReference, childReferences, defineAttempt, defineExecution, defineOperation, defineRuntime } from '@capix/server-runtime';
+import type { AuthorCheckpointWriter, CheckpointCodec, CheckpointPointOwner, ChildReference, ChildReferenceSlot, DefinitionContract, InvocationCheckpointDefinition, InvocationCheckpointPoint, ResourceRequest } from '@capix/server-runtime';
+
+type Input = { readonly query: string };
+type Output = { readonly answer: string };
+type State = { readonly cursor: number };
+type ChildInput = { readonly path: string };
+type ChildOutput = { readonly text: string };
+declare const inputCodec: CheckpointCodec<Input>;
+declare const outputCodec: CheckpointCodec<Output>;
+declare const stateCodec: CheckpointCodec<State>;
+declare const pathCodec: CheckpointCodec<{ readonly path: string }>;
+declare const numberCodec: CheckpointCodec<number>;
+declare const checkOutput: (value: unknown) => Output;
+declare const checkDelta: (value: unknown) => string;
+declare const lookup: ResourceRequest<{ readonly at: (cursor: number) => string }>;
+declare const writer: AuthorCheckpointWriter<'operation', Input, Output, string>;
+
+const metadata = { label: 'test', source: 'test', callee: 'test' };
+const read = defineAttempt<ChildInput, ChildOutput>()({ ...metadata, name: 'read', run: { execute: work => ({ text: work.input.path }) } });
+const wrongRead = defineAttempt<{ readonly path: number }, ChildOutput>()({ ...metadata, name: 'wrong-read', run: { execute: work => ({ text: String(work.input.path) }) } });
+const nested = defineOperation<ChildInput, ChildOutput>()({ ...metadata, name: 'nested', run: { execute: work => ({ text: work.input.path }) } });
+const execution = defineExecution<Input, Output>()({ run: { execute: work => ({ answer: work.input.query }) } });
+declare const readRef: ChildReference<typeof read>;
+declare const wrongReadRef: ChildReference<typeof wrongRead>;
+declare const nestedRef: ChildReference<typeof nested>;
+
+const waiting = checkpointPoint<'operation', Input, Output, string>()({
+  name: 'waiting', state: stateCodec,
+  references: { one: childReference(read), batch: childReferences(read) },
+  check(state, facts) {
+    const cursor: number = state.cursor;
+    const input: Input = facts.input;
+    const initial: Input = facts.initialInput;
+    const single: ChildInput = facts.references.one.input;
+    const many: readonly ChildInput[] = facts.references.batch.map(fact => fact.input);
+    // @ts-expect-error state is fixed by the codec
+    const wrongState: string = state.cursor;
+    // @ts-expect-error check is fact-only, not a phase Work
+    facts.resources;
+  },
+  resume: { requires: { lookup }, uses: [read], execute(work, state, saved) {
+    const path: string = work.resources.lookup.at(state.cursor);
+    const restored = work.children.resume(saved.one);
+    const result: Promise<ChildOutput> = restored.run();
+    const single: ChildReference<typeof read> = saved.one;
+    const many: readonly ChildReference<typeof read>[] = saved.batch;
+    work.output.emit(path);
+    work.children.create(read, { path });
+    work.children.facts.get(nestedRef);
+    work.children.open(nestedRef);
+    // @ts-expect-error resources are inferred solely from requires
+    work.resources.other;
+    // @ts-expect-error the resource method keeps its real argument type
+    work.resources.lookup.at('bad');
+    // @ts-expect-error uses does not include nested
+    work.children.create(nested, { path });
+    // @ts-expect-error historical access does not grant resume rights
+    work.children.resume(nestedRef);
+    // @ts-expect-error point Delta is string
+    work.output.emit(1);
+    // @ts-expect-error saved one is not an array
+    const wrongMany: readonly ChildReference<typeof read>[] = saved.one;
+    // @ts-expect-error saved batch is not a single reference
+    const wrongSingle: ChildReference<typeof read> = saved.batch;
+    return { answer: path };
+  } },
+});
+
+const settled = checkpointPoint<'operation', Input, Output, string>()({
+  name: 'settled', state: pathCodec, references: { prior: childReference(nested) },
+  resume: { execute(work, state, saved) {
+    work.children.open(saved.prior);
+    work.children.facts.get(saved.prior);
+    // @ts-expect-error omitted requires stays empty
+    work.resources.lookup;
+    // @ts-expect-error omitted uses stays empty
+    work.children.create(nested, { path: state.path });
+    // @ts-expect-error a saved reference does not add an action grant
+    work.children.resume(saved.prior);
+    return { answer: state.path };
+  } },
+});
+
+const leafPoint = checkpointPoint<'attempt', Input, Output>()({
+  name: 'leaf', state: numberCodec, references: {},
+  resume: { execute(work, state) {
+    const count: number = state;
+    // @ts-expect-error A has no children surface
+    work.children;
+    // @ts-expect-error no Delta means no output writer
+    work.output;
+    return { answer: work.input.query };
+  } },
+});
+const executionPoint = checkpointPoint<'execution', Input, Output>()({ name: 'e', state: numberCodec, references: { child: childReference(nested) }, resume: { uses: [nested], execute: work => ({ answer: work.input.query }) } });
+const runtimePoint = checkpointPoint<'runtime', Input, Output>()({ name: 'r', state: numberCodec, references: { child: childReference(execution) }, resume: { uses: [execution], execute: work => ({ answer: work.input.query }) } });
+// Slots and resume actions need only the original child's shallow signature.
+const shallowRead: DefinitionContract<'attempt', ChildInput, ChildOutput> = read;
+const shallowPoint = checkpointPoint<'operation', Input, Output, string>()({ name: 'shallow', state: numberCodec, references: { child: childReference(shallowRead) }, resume: { uses: [shallowRead], async execute(work, state, saved) {
+  const result: ChildOutput = await work.children.resume(saved.child).run();
+  return { answer: result.text };
+} } });
+
+const checkpoint: InvocationCheckpointDefinition<Input, Output, 'operation', string> = { key: 'op', version: 1, input: inputCodec, output: outputCodec, points: [waiting, settled, shallowPoint] };
+defineOperation<Input, Output>()({ ...metadata, name: 'operation', children: [read, nested], output: { result: checkOutput, delta: checkDelta }, checkpoint, run: { execute: work => ({ answer: work.input.query }) } });
+defineAttempt<Input, Output>()({ ...metadata, name: 'leaf', checkpoint: { key: 'a', version: 1, input: inputCodec, output: outputCodec, points: [leafPoint] }, run: { execute: work => ({ answer: work.input.query }) } });
+defineExecution<Input, Output>()({ children: [nested], checkpoint: { key: 'e', version: 1, input: inputCodec, output: outputCodec, points: [executionPoint] }, run: { execute: work => ({ answer: work.input.query }) } });
+defineRuntime<Input, Output>()({ children: [execution], checkpoint: { key: 'r', version: 1, input: inputCodec, output: outputCodec, points: [runtimePoint] }, run: { execute: work => ({ answer: work.input.query }) } });
+
+writer.save(waiting, { cursor: 1 }, { one: readRef, batch: [readRef, readRef] });
+writer.save(settled, { path: 'done' }, { prior: nestedRef });
+// @ts-expect-error save cannot widen State from its value
+writer.save(waiting, { cursor: 'bad' }, { one: readRef, batch: [readRef] });
+// @ts-expect-error state from another point is not interchangeable
+writer.save(waiting, { path: 'bad' }, { one: readRef, batch: [readRef] });
+// @ts-expect-error required slot is missing
+writer.save(waiting, { cursor: 1 }, { one: readRef });
+// @ts-expect-error single slot does not accept multiple refs
+writer.save(waiting, { cursor: 1 }, { one: [readRef], batch: [readRef] });
+// @ts-expect-error ref I/O must match the slot's child
+writer.save(waiting, { cursor: 1 }, { one: wrongReadRef, batch: [readRef] });
+// @ts-expect-error refs from another point do not expand this point
+writer.save(settled, { path: 'done' }, { one: readRef });
+
+// @ts-expect-error owner level differs
+const wrongLevel: CheckpointPointOwner<'execution', Input, Output, string> = waiting;
+// @ts-expect-error owner input differs
+const wrongInput: CheckpointPointOwner<'operation', { readonly query: number }, Output, string> = waiting;
+// @ts-expect-error owner output differs
+const wrongOutput: CheckpointPointOwner<'operation', Input, { readonly answer: number }, string> = waiting;
+// @ts-expect-error owner does not support the point's Delta
+const wrongDelta: CheckpointPointOwner<'operation', Input, Output, number> = waiting;
+// @ts-expect-error point cannot be registered with a different owner level
+const wrongParent: InvocationCheckpointDefinition<Input, Output, 'execution', string> = checkpoint;
+// @ts-expect-error checkpoint cannot override the parent's declared I/O
+defineOperation<Input, { readonly answer: number }>()({ ...metadata, name: 'wrong-owner', checkpoint, run: { execute: () => ({ answer: 1 }) } });
+// @ts-expect-error checkpoint cannot invent an output Delta for its owner
+defineOperation<Input, Output>()({ ...metadata, name: 'missing-output', checkpoint, run: { execute: () => ({ answer: '' }) } });
+// @ts-expect-error resume output follows owner O
+checkpointPoint<'operation', Input, Output>()({ name: 'bad-output', state: numberCodec, references: {}, resume: { execute: () => ({ answer: 1 }) } });
+// @ts-expect-error check annotation cannot change codec State
+checkpointPoint<'operation', Input, Output>()({ name: 'bad-check', state: numberCodec, references: {}, check: (state: string) => {}, resume: { execute: () => ({ answer: '' }) } });
+// @ts-expect-error resume annotation cannot change codec State
+checkpointPoint<'operation', Input, Output>()({ name: 'bad-state', state: numberCodec, references: {}, resume: { execute: (work, state: string) => ({ answer: '' }) } });
+
+// Factory and explicit interfaces share the same direct-child level rules.
+// @ts-expect-error A has no direct children for references
+checkpointPoint<'attempt', Input, Output>()({ name: 'bad-a-ref', state: numberCodec, references: { child: childReference(read) }, resume: { execute: () => ({ answer: '' }) } });
+// @ts-expect-error E cannot refer directly to A
+checkpointPoint<'execution', Input, Output>()({ name: 'bad-e-ref', state: numberCodec, references: { child: childReference(read) }, resume: { execute: () => ({ answer: '' }) } });
+// @ts-expect-error R cannot refer directly to A
+checkpointPoint<'runtime', Input, Output>()({ name: 'bad-r-ref', state: numberCodec, references: { child: childReference(read) }, resume: { execute: () => ({ answer: '' }) } });
+// @ts-expect-error O cannot refer directly to E
+checkpointPoint<'operation', Input, Output>()({ name: 'bad-o-ref', state: numberCodec, references: { child: childReference(execution) }, resume: { execute: () => ({ answer: '' }) } });
+// @ts-expect-error explicit E point cannot widen its slots to A
+type BadExecutionPoint = InvocationCheckpointPoint<Input, Output, 'execution', number, {}, { child: ChildReferenceSlot<typeof read, false> }>;
+// @ts-expect-error explicit A point cannot declare a child slot
+type BadAttemptPoint = InvocationCheckpointPoint<Input, Output, 'attempt', number, {}, { child: ChildReferenceSlot<typeof read, false> }>;
+// @ts-expect-error A cannot declare uses
+checkpointPoint<'attempt', Input, Output>()({ name: 'bad-a-uses', state: numberCodec, references: {}, resume: { uses: [read], execute: () => ({ answer: '' }) } });
+// @ts-expect-error E cannot resume A directly
+checkpointPoint<'execution', Input, Output>()({ name: 'bad-e-uses', state: numberCodec, references: {}, resume: { uses: [read], execute: () => ({ answer: '' }) } });
+
+const explicit: InvocationCheckpointPoint<Input, Output, 'operation', number> = {
+  name: 'explicit-defaults', state: numberCodec, references: {}, resume: { requires: {}, execute(work) {
+    work.children.open(readRef);
+    work.children.facts.get(readRef);
+    // @ts-expect-error explicit point action defaults match the empty resume uses
+    work.children.create(read, { path: '' });
+    // @ts-expect-error explicit point cannot resume without a declared action grant
+    work.children.resume(readRef);
+    return { answer: work.input.query };
+  } },
+};
+
+// A point may use a subset of an owner's output capability.
+const noDelta = checkpointPoint<'operation', Input, Output>()({ name: 'no-delta', state: numberCodec, references: {}, resume: { execute: () => ({ answer: '' }) } });
+const widerDeltaOwner: CheckpointPointOwner<'operation', Input, Output, string | number> = waiting;
+const noDeltaForStreamOwner: CheckpointPointOwner<'operation', Input, Output, string> = noDelta;
+
+// Object identity and parent/point registration still require binding checks.
+const sameShapedUnregisteredPoint = checkpointPoint<'operation', Input, Output, string>()({ name: 'elsewhere', state: stateCodec, references: { one: childReference(read), batch: childReferences(read) }, resume: { execute: () => ({ answer: '' }) } });
+writer.save(sameShapedUnregisteredPoint, { cursor: 1 }, { one: readRef, batch: [readRef] });
+`;
+
+function diagnosticsFor(text) {
+  const host = ts.createCompilerHost(options);
+  const getSourceFile = host.getSourceFile;
+  host.getSourceFile = (name, languageVersion, onError, shouldCreateNewSourceFile) => (name === entry ? ts.createSourceFile(name, text, languageVersion, true) : getSourceFile(name, languageVersion, onError, shouldCreateNewSourceFile));
+  return ts.getPreEmitDiagnostics(ts.createProgram([entry], options, host));
+}
+
+function format(diagnostics) {
+  return ts.formatDiagnosticsWithColorAndContext(diagnostics, { getCanonicalFileName: (file) => file, getCurrentDirectory: () => process.cwd(), getNewLine: () => '\n' });
+}
+
+test('checkpoint authors retain exact point state, references, owner and independent resume capabilities', () => {
+  const diagnostics = diagnosticsFor(source);
+  assert.equal(diagnostics.length, 0, format(diagnostics));
+});
+
+test('checkpoint type boundaries reject author errors without suppression directives', () => {
+  const lines = source.split('\n');
+  const expectedLines = lines.flatMap((line, index) => (line.includes('@ts-expect-error') ? [index + 1] : []));
+  const diagnostics = diagnosticsFor(lines.map((line) => (line.includes('@ts-expect-error') ? '' : line)).join('\n'));
+  assert.ok(
+    diagnostics.every((diagnostic) => diagnostic.file?.fileName === entry),
+    'negative fixtures must fail at the author usage, not in production declarations',
+  );
+  const actualLines = [...new Set(diagnostics.map((diagnostic) => diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start).line))];
+  assert.deepEqual(actualLines, expectedLines, format(diagnostics));
+});

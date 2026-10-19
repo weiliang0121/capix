@@ -63,12 +63,12 @@ export function resolveDeclaration(definition: BindingDefinition, options: Child
       if (!point.name || names.has(point.name)) throw new Error('Checkpoint points need distinct registered names');
       names.add(point.name);
       for (const slot of Object.values(point.references as import('../definition/checkpoint.js').CheckpointReferenceSlots)) {
-        if (!definitions.includes(slot.definition)) throw new Error('Checkpoint reference targets a child outside its owner');
+        if (!definitions.some((definition) => definition === slot.definition)) throw new Error('Checkpoint reference targets a child outside its owner');
       }
     }
     const checkpointUses = points.flatMap((point) => [...(point.resume.uses ?? [])]);
     for (const child of [...(declaration.run.uses ?? definitions), ...(declaration.exceptions?.uses ?? []), ...checkpointUses]) {
-      if (!definitions.includes(child)) throw new Error('Declaration uses a child outside its owner');
+      if (!definitions.some((definition) => definition === child)) throw new Error('Declaration uses a child outside its owner');
     }
     const selected = current.level === 'runtime' ? undefined : refinements.get(current);
     const node = { level: declaration.level, definition: current, declaration, requires, refinements: selected };

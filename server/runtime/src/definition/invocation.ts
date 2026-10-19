@@ -1,7 +1,7 @@
 import type { InvocationLevel } from '@capix/protocol';
 import type { OutputDeclaration } from '../output/contract.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
-import type { ChildrenOf } from './children.js';
+import type { ChildContractsOf } from './children.js';
 import type { ExceptionContract } from '../exception/contract.js';
 import type { ObservationDeclaration } from './observation.js';
 import type { InvocationFact } from '../observation/facts.js';
@@ -11,7 +11,7 @@ import type { invocationSignature, InvocationSignature } from './signature.js';
 
 export type { InvocationCheckpointPoint, InvocationCheckpointDefinition } from './checkpoint.js';
 
-export interface InvocationRunDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Delta = never, Allowed extends ChildrenOf<Level> = ChildrenOf<Level>> {
+export interface InvocationRunDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Delta = never, Allowed extends ChildContractsOf<Level> = ChildContractsOf<Level>> {
   readonly requires: ResourceRequirements<Resources>;
   /** Omitted means all children declared by this owner. */
   readonly uses?: readonly Allowed[];
@@ -19,7 +19,7 @@ export interface InvocationRunDefinition<Input, Output, Level extends Invocation
   accept?(work: AcceptWork<Level, Input, Output, Resources, Allowed>): Output | Continue<Input> | Promise<Output | Continue<Input>>;
 }
 
-export interface InvocationExceptionDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Allowed extends ChildrenOf<Level> = ChildrenOf<Level>> {
+export interface InvocationExceptionDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Allowed extends ChildContractsOf<Level> = ChildContractsOf<Level>> {
   readonly requires: ResourceRequirements<Resources>;
   readonly uses?: readonly Allowed[];
   readonly accepts: readonly ExceptionContract<unknown>[];
@@ -28,7 +28,7 @@ export interface InvocationExceptionDefinition<Input, Output, Level extends Invo
 
 /** Work, handling and observation are peers. No handler receives an internal invocation. */
 export abstract class InvocationDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, ExceptionResources extends object = Record<string, never>, Delta = never> {
-  declare readonly [invocationSignature]?: InvocationSignature<Input, Output, Delta>;
+  declare readonly [invocationSignature]: InvocationSignature<Input, Output, Delta>;
   readonly maxRounds: 1 | 2 = 1;
   readonly raises: readonly ExceptionContract<unknown>[] = [];
   readonly output?: OutputDeclaration<Output, Delta>;

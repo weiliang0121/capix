@@ -1,5 +1,5 @@
-import type { ChildCall, ChildCalls, ChildDefinition, ChildOptions, ChildReference, DefinitionInput, DefinitionOutput, ResumeChildCalls } from '../../definition/children.js';
-import type { InvocationEntry } from '../../definition/entry.js';
+import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, DefinitionInput, DefinitionOutput, ResumeChildCalls } from '../../definition/children.js';
+import type { ChildEntry } from '../../definition/entry.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import { ChildCallFailure } from '../../invocation/provenance.js';
 import type { BoundChildren } from './bound.js';
@@ -10,7 +10,7 @@ export type ChildBindingsParent = Invocation<any, any, any>;
 interface ChildAccessOptions {
   readonly children: BoundChildren;
   readonly parent: ChildBindingsParent;
-  readonly allowed: ReadonlySet<ChildDefinition>;
+  readonly allowed: ReadonlySet<ChildContract>;
   readonly validate: () => void;
   readonly references: InvocationChildReferences;
   readonly restoring: boolean;
@@ -30,7 +30,7 @@ export class InvocationChildBindings {
     });
   }
 
-  private create<D extends ChildDefinition>(definition: D, input: DefinitionInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
+  private create<D extends ChildContract>(definition: D, input: DefinitionInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
     return this.guard(() => {
       this.requireAllowed(definition);
       const child = this.options.children.get(definition).create(this.options.parent, input, { ...options, declarationPosition: this.options.children.position(definition) });
@@ -38,7 +38,7 @@ export class InvocationChildBindings {
     });
   }
 
-  private entry<D extends ChildDefinition, Input>(entry: InvocationEntry<D, Input>, input: Input, options: ChildOptions<D> = {}): ChildCall<D> {
+  private entry<D extends ChildContract, Input>(entry: ChildEntry<D, Input>, input: Input, options: ChildOptions<D> = {}): ChildCall<D> {
     return this.guard(() => {
       const definition = entry.definition;
       this.requireAllowed(definition);
@@ -48,11 +48,11 @@ export class InvocationChildBindings {
     });
   }
 
-  private open<D extends ChildDefinition>(ref: ChildReference<D>): ChildCall<D> {
+  private open<D extends ChildContract>(ref: ChildReference<D>): ChildCall<D> {
     return this.guard(() => this.handle(ref));
   }
 
-  private resume<D extends ChildDefinition>(ref: ChildReference<D>): ChildCall<D> {
+  private resume<D extends ChildContract>(ref: ChildReference<D>): ChildCall<D> {
     return this.guard(() => {
       if (!this.options.restoring) throw new Error('Child resume is available only in a checkpoint resume phase');
       const entry = this.options.references.require(ref);
@@ -64,7 +64,7 @@ export class InvocationChildBindings {
     });
   }
 
-  private handle<D extends ChildDefinition>(ref: ChildReference<D>): ChildCall<D> {
+  private handle<D extends ChildContract>(ref: ChildReference<D>): ChildCall<D> {
     const entry = this.options.references.require(ref);
     const relation = entry.relation;
     return Object.freeze({
@@ -86,7 +86,7 @@ export class InvocationChildBindings {
     });
   }
 
-  private requireAllowed(definition: ChildDefinition): void {
+  private requireAllowed(definition: ChildContract): void {
     if (!this.options.allowed.has(definition)) throw new Error('Child definition is not declared in this phase uses');
   }
 

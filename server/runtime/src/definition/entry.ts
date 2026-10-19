@@ -1,4 +1,4 @@
-import type { ChildDefinition, ChildFacts, DefinitionInput } from './children.js';
+import type { ChildContract, ChildDefinition, ChildFacts, DefinitionInput } from './children.js';
 import type { ContinuationFact } from './work.js';
 
 export interface ChildEntryFacts {
@@ -12,8 +12,14 @@ export interface ChildEntryInput<Input> {
   readonly key?: string;
 }
 
+/** Invocation-facing input adaptation; assembly helpers retain the complete definition. */
+export interface ChildEntry<Definition extends ChildContract, Input> {
+  readonly definition: Definition;
+  readonly accept: (request: ChildEntryInput<Input>) => DefinitionInput<Definition>;
+}
+
 /** An alternative input contract; binding owns admission and the real parent identity. */
-export class InvocationEntry<Definition extends ChildDefinition, EntryInput> {
+export class InvocationEntry<Definition extends ChildDefinition, EntryInput> implements ChildEntry<Definition, EntryInput> {
   constructor(
     readonly definition: Definition,
     readonly accept: (request: ChildEntryInput<EntryInput>) => DefinitionInput<Definition>,

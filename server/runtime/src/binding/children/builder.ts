@@ -1,10 +1,10 @@
-import type { ChildCalls, ChildDefinition, ResumeChildCalls } from '../../definition/children.js';
+import type { ChildCalls, ChildContract, ResumeChildCalls } from '../../definition/children.js';
 import type { BoundChildren } from './bound.js';
 import { InvocationChildBindings, type ChildBindingsParent } from './binding.js';
 import { InvocationChildReferences } from './references.js';
 
 export interface ChildBindingsBuildOptions {
-  readonly uses?: readonly ChildDefinition[];
+  readonly uses?: readonly ChildContract[];
   readonly validate: () => void;
   readonly references: InvocationChildReferences;
   readonly restoring?: boolean;

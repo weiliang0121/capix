@@ -1,5 +1,5 @@
 import type { InvocationContext } from '../context/context.js';
-import type { ChildDefinition } from '../definition/children.js';
+import type { ChildContract } from '../definition/children.js';
 import type { Invocation } from '../invocation/invocation.js';
 import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
 import type { ChildBindingsBuilder } from './children/builder.js';
@@ -20,7 +20,7 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
     this.references = childBindingsBuilder.references(invocation);
   }
 
-  enter(phase: AccessPhase, requires: ResourceRequirements, uses?: readonly ChildDefinition[]) {
+  enter(phase: AccessPhase, requires: ResourceRequirements, uses?: readonly ChildContract[]) {
     const resourcePhase = phase === 'receive' ? 'run' : phase;
     this.#resources.activate(resourcePhase, requires);
     const context = this.invocation.context;

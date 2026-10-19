@@ -1,19 +1,28 @@
 import { z } from 'zod';
-import type { OperationDefinition, ChildCalls, DefinitionInput, DefinitionOutput, DefinitionDelta, InvocationOutputReceiver, ChildCall } from '@capix/server-runtime';
+import type { ChildContractsOf, ChildCalls, ChildOptions, DefinitionInput, DefinitionOutput, DefinitionDelta, InvocationOutputReceiver, ChildCall } from '@capix/server-runtime';
 import type { ConversationCapabilityName, ConversationCapabilityOffer, ConversationDecisionFeedback } from './types.js';
 import { modelTextSchema } from '../model/schema.js';
 
+// The E catalog is heterogeneous. Each adapter captures its concrete Definition,
+// validates selectable arguments and constructs that child's exact input before calling.
+type CapabilityContract = ChildContractsOf<'execution'>;
+
 /** A service-local adapter between selectable arguments and the real declared child. */
 export interface ConversationCapability<State> {
-  readonly use: OperationDefinition<any, any, any, any, any>;
+  readonly use: CapabilityContract;
   readonly offer: ConversationCapabilityOffer;
   available(state: State): boolean;
   validate(value: unknown): boolean;
-  create(value: unknown, state: State): ChildCall<any>;
-  accept(child: ChildCall<any>, state: State): Promise<State>;
+  create(value: unknown, state: State): ChildCall<CapabilityContract>;
+  accept(child: ChildCall<CapabilityContract>, state: State): Promise<State>;
 }
 
-export function conversationCapability<Arguments, State, Definition extends OperationDefinition<any, any, any, any, any>>(
+/** This adapter creates one declared capability; historical lookup does not grant creation. */
+interface CapabilityCalls<Definition extends CapabilityContract> extends Pick<ChildCalls, 'open' | 'facts'> {
+  readonly create: (definition: Definition, input: DefinitionInput<Definition>, options?: ChildOptions<Definition>) => ChildCall<Definition>;
+}
+
+export function conversationCapability<Arguments, State, Definition extends CapabilityContract>(
   options: {
     readonly name: ConversationCapabilityName;
     readonly description: string;
@@ -25,7 +34,7 @@ export function conversationCapability<Arguments, State, Definition extends Oper
     readonly input: (arguments_: Arguments, state: State) => DefinitionInput<Definition>;
     readonly accept: (delivered: DefinitionOutput<Definition>, state: State, child: ChildCall<Definition>) => State;
   },
-  children: ChildCalls,
+  children: CapabilityCalls<NoInfer<Definition>>,
 ): ConversationCapability<State> {
   return Object.freeze({
     use: options.use,
@@ -33,7 +42,7 @@ export function conversationCapability<Arguments, State, Definition extends Oper
     available: options.available,
     validate: (value: unknown) => options.schema.safeParse(value).success,
     create: (value: unknown, state: State) => children.create(options.use, options.input(options.schema.parse(value), state), { key: options.key, output: options.output }),
-    accept: (child: ChildCall<any>, state: State) => {
+    accept: (child: ChildCall<CapabilityContract>, state: State) => {
       const selected = children.open(children.facts.require(options.use, child.ref).ref);
       return selected.accept((delivered) => options.accept(delivered, state, selected));
     },

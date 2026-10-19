@@ -1,5 +1,5 @@
 import { Initializer } from '../../initializer.js';
-import type { ChildDefinition } from '../../definition/children.js';
+import type { ChildContract, ChildDefinition } from '../../definition/children.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { InvocationRelationOptions } from '../../invocation/relation.js';
 import type { CheckpointBinding } from '../../checkpoint/work.js';
@@ -12,20 +12,20 @@ interface StoredChild {
 
 /** Reusable child structures; no parent invocation or phase access is retained here. */
 export class BoundChildren {
-  readonly #entries: ReadonlyMap<ChildDefinition, { readonly level: ChildDefinition['level']; readonly value: Initializer<StoredChild>; readonly checkpoint?: CheckpointBinding }>;
+  readonly #entries: ReadonlyMap<ChildContract, { readonly level: ChildDefinition['level']; readonly value: Initializer<StoredChild>; readonly checkpoint?: CheckpointBinding }>;
   readonly #definitions: readonly ChildDefinition[];
 
   constructor(children: readonly ResolvedChild[], create: (child: ResolvedChild) => StoredChild) {
     this.#entries = new Map(children.map((child) => [child.definition, { level: child.declaration.level, value: new Initializer(() => create(child)), checkpoint: child.declaration.checkpoint }]));
-    this.#definitions = Object.freeze([...this.#entries.keys()]);
+    this.#definitions = Object.freeze([...new Set(children.map((child) => child.definition))]);
   }
 
   definitions(): readonly ChildDefinition[] {
     return this.#definitions;
   }
 
-  position(definition: ChildDefinition): number {
-    const position = this.#definitions.indexOf(definition);
+  position(definition: ChildContract): number {
+    const position = this.#definitions.findIndex((candidate) => candidate === definition);
     if (position < 0) throw new Error('Child definition is not declared in this binding');
     return position;
   }
@@ -41,23 +41,23 @@ export class BoundChildren {
     return Object.freeze([...this.#entries.values()].map((entry) => Object.freeze({ level: entry.level, binding: entry.checkpoint })));
   }
 
-  get<Definition extends ChildDefinition>(definition: Definition): StoredChild {
+  get<Definition extends ChildContract>(definition: Definition): StoredChild {
     const entry = this.#entries.get(definition);
     if (!entry) throw new Error('Child definition is not declared in this binding');
     return entry.value.get();
   }
 
-  checkpoint(definition: ChildDefinition): CheckpointBinding | undefined {
+  checkpoint(definition: ChildContract): CheckpointBinding | undefined {
     const entry = this.#entries.get(definition);
     if (!entry) throw new Error('Child definition is not declared in this binding');
     return entry.checkpoint;
   }
 
-  checkUses(definitions: readonly ChildDefinition[]): void {
+  checkUses(definitions: readonly ChildContract[]): void {
     for (const definition of definitions) if (!this.#entries.has(definition)) throw new Error('Declaration uses a child outside its owner');
   }
 
-  initialized(definition: ChildDefinition): boolean {
+  initialized(definition: ChildContract): boolean {
     return this.#entries.get(definition)?.value.initialized ?? false;
   }
 }

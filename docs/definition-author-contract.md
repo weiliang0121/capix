@@ -6,6 +6,10 @@
 
 > **后续 P02 修订（2026-10-18）：** 本文保留 v6 的实施基线，其中 E 专属 `entry.accept/admit`、EntryInput/EntryResources 及相应验收项已被替代。当前 R/E 使用普通调用输入，服务 R 正式追加输入，材料准备/维护作为普通 O；显式 InvocationEntry 子输入适配仍保留。现行边界见 [运行边界](runtime-boundaries.md) 与 [活跃材料](active-content.md)，修订依据见 [P02 实施记录](codex-type-factorization.md#14-p02-最小闭环的实施结果)。其他 Work、交付错误、引用与 Frame v2 契约保持原义。
 
+> **后续元信息议题（2026-10-19，仅设计收敛）：** 声明元信息辅助理解，正式契约决定合法范围，catalog 的显式选择键关联真实声明。共同描述、可选源码及记录兼容的规则与实施门槛见 [§17 设计闭环](codex-type-factorization.md#17-声明元信息能力契约与候选目录的设计闭环)。本文件的 name/label/source/callee 仍描述已实施接口，不把该设计伪代码当作当前 API。
+
+> **后续 P06 类型整理（2026-10-19，已实施）：** 完整注册与浅消费签名分开，阶段／CP 推导保留所属范围；签名与 Input 不变约束、Sequence Uses、A children 拒绝等静态兼容边界见 [§19 实施记录](codex-type-factorization.md#19-p06-受限类型整理实施2026-10-19)。对象式定义使用已有 `define*`，具名类继续支持。D05 的接纳值与 Frame v2 未在本轮改为新接纳契约。
+
 ## 1. 目标、范围与收敛决定
 
 **定义作者表达业务决定，内核核验自己掌握的身份、归属和活动边界。作者不必为了调用一个子能力，先理解并传递驱动自己的 Invocation。**

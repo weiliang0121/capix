@@ -327,7 +327,7 @@ function composeLevel(Base, child, label, receives, explicit = false) {
     source = 'test';
     callee = 'test';
     output = contract;
-    children = child ? [child] : [];
+    children = Base === AttemptDefinition ? undefined : child ? [child] : [];
     run = {
       requires: {},
       execute: async (work) => {
