@@ -1,7 +1,7 @@
 import type { InvocationLevel } from '@capix/protocol';
 import type { OutputDeclaration } from '../output/contract.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
-import type { ChildDefinition } from './children.js';
+import type { ChildrenOf } from './children.js';
 import type { ExceptionContract } from '../exception/contract.js';
 import type { ObservationDeclaration } from './observation.js';
 import type { InvocationFact } from '../observation/facts.js';
@@ -11,7 +11,7 @@ import type { invocationSignature, InvocationSignature } from './signature.js';
 
 export type { InvocationCheckpointPoint, InvocationCheckpointDefinition } from './checkpoint.js';
 
-export interface InvocationRunDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Delta = never, Allowed extends ChildDefinition = ChildDefinition> {
+export interface InvocationRunDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Delta = never, Allowed extends ChildrenOf<Level> = ChildrenOf<Level>> {
   readonly requires: ResourceRequirements<Resources>;
   /** Omitted means all children declared by this owner. */
   readonly uses?: readonly Allowed[];
@@ -19,7 +19,7 @@ export interface InvocationRunDefinition<Input, Output, Level extends Invocation
   accept?(work: AcceptWork<Level, Input, Output, Resources, Allowed>): Output | Continue<Input> | Promise<Output | Continue<Input>>;
 }
 
-export interface InvocationExceptionDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Allowed extends ChildDefinition = ChildDefinition> {
+export interface InvocationExceptionDefinition<Input, Output, Level extends InvocationLevel, Resources extends object, Allowed extends ChildrenOf<Level> = ChildrenOf<Level>> {
   readonly requires: ResourceRequirements<Resources>;
   readonly uses?: readonly Allowed[];
   readonly accepts: readonly ExceptionContract<unknown>[];

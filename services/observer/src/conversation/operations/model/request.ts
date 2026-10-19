@@ -1,7 +1,7 @@
 import { invocationRecording, type InvocationRecordDescription } from '@capix/server-runtime/recording';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../resources.js';
-import { defineChildEntry, OperationDefinition, RuntimeError, checkpointPoint, childReference, childReferences, type OperationWork, type ResumeWork, type ChildReference, type CheckpointFacts, type ChildFact, type ChildDefinition } from '@capix/server-runtime';
+import { defineChildEntry, OperationDefinition, RuntimeError, checkpointPoint, childReference, childReferences, type OperationWork, type ResumeWork, type ChildReference, type CheckpointFacts, type ChildFact, type ChildrenOf } from '@capix/server-runtime';
 import { allowsModelRegeneration, modelRegenerationDeclaration, modelRegenerationInput, prepareRegenerationRequest, type ModelParentFacts, type ModelRegenerationEvidence } from '../../model/regeneration.js';
 import { isEqual } from 'es-toolkit/predicate';
 import type { ModelRequest, ModelOutput, Purpose, ModelTextDelta } from '../../model/types.js';
@@ -11,7 +11,7 @@ import { modelRequestCodec as requestCodec, modelFeedbackCodec as outputCodec } 
 import { checkpointCodec } from '../../checkpoint.js';
 import { z } from 'zod';
 
-type ModelWork = OperationWork<ModelRequest, ModelOutput, object, ChildDefinition, ModelTextDelta> | ResumeWork<'operation', ModelRequest, ModelOutput, object, ChildDefinition, ModelTextDelta>;
+type ModelWork = OperationWork<ModelRequest, ModelOutput, object, ChildrenOf<'operation'>, ModelTextDelta> | ResumeWork<'operation', ModelRequest, ModelOutput, object, ChildrenOf<'operation'>, ModelTextDelta>;
 const emptyState = checkpointCodec(z.strictObject({}));
 
 /** One external request with bounded local waits; following never regenerates or resends. */
@@ -123,7 +123,7 @@ export class RequestModelDefinition extends OperationDefinition<ModelRequest, Mo
     this.run = { requires: RequestModelDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  private async execute(work: OperationWork<ModelRequest, ModelOutput, ModelCallResources, ChildDefinition, ModelTextDelta>): Promise<ModelOutput> {
+  private async execute(work: OperationWork<ModelRequest, ModelOutput, ModelCallResources, ChildrenOf<'operation'>, ModelTextDelta>): Promise<ModelOutput> {
     let detach = () => {};
     const initial = work.children.create(this.invokeDefinition, work.input, {
       key: 'start',

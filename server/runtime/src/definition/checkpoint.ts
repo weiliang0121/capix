@@ -1,14 +1,9 @@
 import type { InvocationLevel } from '@capix/protocol';
 import type { CheckpointCodec, CheckpointContract } from '../checkpoint/contract.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
-import type { ResourceRequest } from '../resource/offer.js';
-import type { ChildDefinition, ChildFact, ChildFacts, ChildReference } from './children.js';
+import type { ResourceRequests, ResourcesOf } from '../resource/offer.js';
+import type { ChildDefinition, ChildrenOf, ChildFact, ChildFacts, ChildReference } from './children.js';
 import type { ContinuationFact, ResumeWork } from './work.js';
-
-export type ResourceRequests = Readonly<Record<string, ResourceRequest<unknown>>>;
-export type ResourcesOf<Requires extends ResourceRequests> = { readonly [Key in keyof Requires]: Requires[Key] extends ResourceRequest<infer Value> ? Value : never };
-export type ChildLevel<Level extends InvocationLevel> = Level extends 'runtime' ? 'execution' : Level extends 'execution' ? 'operation' : Level extends 'operation' ? 'operation' | 'attempt' : never;
-export type ChildrenOf<Level extends InvocationLevel> = Extract<ChildDefinition, { readonly level: ChildLevel<Level> }>;
 
 export interface ChildReferenceSlot<Definition extends ChildDefinition = ChildDefinition, Many extends boolean = boolean> {
   readonly definition: Definition;
@@ -40,7 +35,7 @@ export interface CheckpointPointOwner<Level extends InvocationLevel, Input, Outp
   readonly [checkpointOwner]?: (owner: { readonly level: Level; readonly input: Input; readonly output: Output }) => { readonly level: Level; readonly input: Input; readonly output: Output; readonly delta: Delta };
 }
 
-export interface InvocationCheckpointPoint<Input, Output, Level extends InvocationLevel, State, Resources extends object = Record<string, never>, Slots extends CheckpointReferenceSlots = CheckpointReferenceSlots, Allowed extends ChildDefinition = ChildDefinition, Delta = never> extends CheckpointPointOwner<Level, Input, Output, Delta> {
+export interface InvocationCheckpointPoint<Input, Output, Level extends InvocationLevel, State, Resources extends object = Record<string, never>, Slots extends CheckpointReferenceSlots = CheckpointReferenceSlots, Allowed extends ChildrenOf<Level> = ChildrenOf<Level>, Delta = never> extends CheckpointPointOwner<Level, Input, Output, Delta> {
   readonly name: string;
   readonly state: CheckpointCodec<State>;
   readonly references: Slots;
@@ -71,7 +66,7 @@ interface PointOptions<Level extends InvocationLevel, Input, Output, State, Slot
   readonly resume: {
     readonly requires?: Requires;
     readonly uses?: Uses;
-    readonly execute: (work: ResumeWork<Level, Input, Output, ResourcesOf<Requires>, Uses[number], Delta>, state: State, saved: SavedReferences<Slots>) => Output | Promise<Output>;
+    readonly execute: (work: ResumeWork<Level, Input, Output, ResourcesOf<NoInfer<Requires>>, Uses[number], Delta>, state: State, saved: SavedReferences<Slots>) => Output | Promise<Output>;
   };
 }
 

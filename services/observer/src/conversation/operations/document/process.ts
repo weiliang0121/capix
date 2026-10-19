@@ -3,7 +3,7 @@ import { isEqual } from 'es-toolkit/predicate';
 import { checkpointCodec } from '../../checkpoint.js';
 import { answerCheckpointCodecs } from '../answer/checkpoint.js';
 import { answerMessageContextSchema, memorySchema, fileTaskSchema, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
-import { OperationDefinition, checkpointPoint, childReference, type OperationWork, type ChildCall, type ChildDefinition } from '@capix/server-runtime';
+import { OperationDefinition, checkpointPoint, childReference, type OperationWork, type ChildCall, type ChildrenOf } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { GenerationOutput } from '@capix/protocol';
 import { FileResources, documentDescriptor, type TextDocument, type FileReader } from '../../../files/index.js';
@@ -11,7 +11,7 @@ import { GenerateAnswerDefinition, type GenerationInput } from '../answer/genera
 import { ReadTextDefinition } from '../../attempt/files/read.js';
 import type { ModelCallResources } from '../../resources.js';
 import { answerStream, type AnswerGenerationEvent } from '../answer/stream.js';
-type DocumentWork = OperationWork<DocumentProcessingInput, GenerationOutput, object, ChildDefinition, AnswerGenerationEvent>;
+type DocumentWork = OperationWork<DocumentProcessingInput, GenerationOutput, object, ChildrenOf<'operation'>, AnswerGenerationEvent>;
 
 export interface DocumentProcessingInput extends GenerationInput {
   readonly sourcePath: string;

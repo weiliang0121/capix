@@ -52,7 +52,11 @@ test('definitions bind to independent R endpoints; node identity is stable and p
   const first = bind(definition, () => value, { recorder: firstRecorder });
   const second = bind(definition, () => 'right', { recorder: secondRecorder });
   const calls = [];
-  const callbacks = { started: (_context, invocation) => calls.push(invocation) };
+  const callbacks = {
+    started: (_context, invocation) => {
+      calls.push(invocation);
+    },
+  };
   assert.equal(definition.runtime, undefined);
   assert.equal(definition.operation.id, undefined);
   assert.equal(first.context, undefined);
@@ -95,7 +99,17 @@ test('one RuntimeBinder binds independent roots and rejects foreign child refere
     }
     return child.accept();
   };
-  const options = (value) => ({ providers: [resource.provide((source) => source)], source: { capture: () => value, callbacks: () => ({ started: (_context, invocation) => calls.push(invocation) }) } });
+  const options = (value) => ({
+    providers: [resource.provide((source) => source)],
+    source: {
+      capture: () => value,
+      callbacks: () => ({
+        started: (_context, invocation) => {
+          calls.push(invocation);
+        },
+      }),
+    },
+  });
   const left = binder.bind(definition, options('left-resource'));
   const right = binder.bind(definition, options('right-resource'));
   assert.notEqual(left.id, right.id);
@@ -276,7 +290,16 @@ test('E construction follows R reservation, validation, ordinary input preparati
       },
     },
   });
-  assert.deepEqual(await runtime.run('input', { execution: { started: () => order.push('started') } }), { text: 'input' });
+  assert.deepEqual(
+    await runtime.run('input', {
+      execution: {
+        started: () => {
+          order.push('started');
+        },
+      },
+    }),
+    { text: 'input' },
+  );
   assert.deepEqual(order, ['validate', 'prepare', 'capture', 'started', 'work']);
   assert.equal(runtime.running, false);
 });

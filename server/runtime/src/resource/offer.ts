@@ -27,6 +27,9 @@ export class ResourceRequest<Value> {
     return value as Value;
   }
 }
+export type ResourceRequests = Readonly<Record<string, ResourceRequest<unknown>>>;
+export type ResourcesOf<Requires extends ResourceRequests> = { readonly [Key in keyof Requires]: Requires[Key] extends ResourceRequest<infer Value> ? Value : never };
+
 export interface ResourceProvider<Source> {
   readonly offer: ResourceIdentity;
   readonly timing: 'binding' | 'access';

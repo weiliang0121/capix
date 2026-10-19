@@ -71,7 +71,7 @@ export class ConversationCallSource implements RuntimeCallSource<unknown, Conver
     return {
       started: (context, invocation) => {
         this.started(options, context.id, invocation.identity.parentContextId);
-        options.executionCallbacks?.started?.(context, invocation);
+        return options.executionCallbacks?.started?.(context, invocation);
       },
     };
   }

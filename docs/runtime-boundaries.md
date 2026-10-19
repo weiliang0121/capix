@@ -109,6 +109,8 @@ R 占用
 
 started 是绑定侧同步回调，在 Context 已建立、Record 尚未登记时运行。它可以取得本次身份，但此时不能兑现工作资源。它属于建立机制，异常原样传播并释放 R 占用；服务反馈不使用这个严格钩子。消息索引由实体写入点获得，不在 started 中读取当前集合长度。
 
+`InvocationStarted` 必须同步返回 `undefined`；运行期也拒绝其他返回值，包括 Promise，失败发生在 started 事实和业务工作之前。误传异步回调的迟到拒绝会被消费，但已开始的副作用无法撤销；这里不提供异步登记或回滚。Observer 组合 CP 登记与宿主回调时透传宿主返回值，不能吞掉异步结果。一个调用局部继续不重复登记；续接旧 E 不重复登记，恢复活动中新建的 E 仍正常登记。
+
 ## 被动运行进展与服务解释
 
 ProgressChannel 是本次绑定提供的窄同步出口，不依赖 Recorder 或 C/S 协议。InvocationProgress 只表达 started / finished 和不可变调用身份，finished 的 status 是 Context 事实，不保证随后的捕获、观测或最终调用交付成功。四层 Builder 可接入；服务通过 RuntimeCallSource.progress 按实际 E 声明选择关联对象。
@@ -166,6 +168,10 @@ REOA 构造器按职责集中到 `invocation/builders/{runtime,execution,operati
 - `ChildFacts` 按准确引用或声明查询全部直接关系，保留 returned 与 reception 的区别及真实对象身份。facts 不授予行动权限；`uses` 只约束创建、真实启动和恢复，接纳已有本父关系不要求重新申请创建权限。
 
 Work 不暴露 Context ID、生命周期方法、Invocation、Recorder 或原实体。继续执行由内核接纳 opaque 提案后，原子安装新轮次、输入和 `ContinuationFact`；仅调用 `work.continue` 不改变进度。普通业务对象即便含 `kind: 'continue'` 也仍是业务数据。
+
+层级上限与本阶段行动集合分别表达：`ChildrenOf<Level>` 根据 `definition/level.ts` 中的现行位置表派生，Binder 使用同一表检查真实声明。裸 Work、具名类的 run/exceptions 与独立恢复点都以该层级上限约束 `Allowed`；工厂继续从 children/uses 推导更窄的集合。未显式携带注册集合的 helper 只证明层级，不证明对象身份。`facts` 与 `open` 保持独立的历史关系访问，不能因本阶段 uses 为空而禁止读取已保存交付；真实启动仍需运行期资格检查。
+
+`ResourceRequests / ResourcesOf` 归资源申请契约；普通工厂不再通过 checkpoint 文件取得这些通用类型。工厂与恢复点的阶段资源类型只从 requires 推导，处理函数参数不反向补出资源申请。没有 requires 的具名 helper 可直接使用空资源 Work；需要资源的 helper 必须有相符的正式申请。
 
 低层构造、观测与扩展者仍可使用 Context/Invocation 及其只读视图；它们不再是业务作者处理函数的参数。这是接口分层，不是第三方代码沙箱。完整作者契约及类型、来源、持久引用验证见 [定义作者契约](definition-author-contract.md)。
 

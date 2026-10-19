@@ -27,7 +27,7 @@ import type { InvocationProgress } from './progress.js';
 import type { InvocationExceptionOrigin, InvocationPropagationScope } from './provenance.js';
 
 /** Synchronous setup after validation, before progress, observation and work. Throws stop the call unchanged. */
-export type InvocationStarted<Input, Output, Context extends InvocationContext<Input, Output>> = (context: Context, invocation: Invocation<Input, Output, Context>) => void;
+export type InvocationStarted<Input, Output, Context extends InvocationContext<Input, Output>> = (context: Context, invocation: Invocation<Input, Output, Context>) => undefined;
 
 export interface InvocationOptions<Input, Output, Context extends InvocationContext<Input, Output>> {
   context: Context;
@@ -233,7 +233,12 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     const context = this.context;
     this.options.parent?.invocation.children.requireHealthy();
     this.options.validate?.();
-    this.options.started?.(context, this);
+    const registered: unknown = this.options.started?.(context, this);
+    if (registered !== undefined) {
+      // Reject async setup without letting a late rejection escape the failed call.
+      void Promise.resolve(registered).catch(() => undefined);
+      throw new TypeError('Invocation started callbacks must return undefined synchronously');
+    }
     if (!this.restoring) this.publish({ kind: 'started', input: context.input });
     if ('resources' in context) (context.resources as { start(phase: string): void }).start(this.options.restore ? `checkpoint:${this.options.restore.head.image.point}` : 'run');
   }

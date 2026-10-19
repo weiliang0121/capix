@@ -144,6 +144,57 @@ test('resuming a direct E child uses fixed input without repeating parent prepar
   assert.equal(captures, 1);
 });
 
+test('a new E created within recovery still registers its new call before work', async () => {
+  const order = [];
+  let identity;
+  class Child extends ExecutionDefinition {
+    run = {
+      requires: {},
+      execute(work) {
+        order.push('execute');
+        return work.input;
+      },
+    };
+  }
+  const child = new Child();
+  class Root extends RuntimeDefinition {
+    children = [child];
+    checkpoint = checkpoint(
+      'test.parent-new-child',
+      async (work) => {
+        const next = work.children.create(child, 'new work');
+        await next.run();
+        return next.accept();
+      },
+      {},
+      [child],
+    );
+    run = { requires: {}, execute: () => assert.fail('parent execute must not repeat') };
+  }
+  const runtime = assemble(new Root(), {
+    checkpoints: { store: storeOf(head('test.parent-new-child', 'parent-1', 'runtime', {})) },
+    source: {
+      capture() {
+        order.push('capture');
+        return null;
+      },
+      callbacks: () => ({
+        started(context, invocation) {
+          order.push('started');
+          identity = invocation.identity;
+          assert.equal(context.id, identity.contextId);
+          assert.equal(invocation.restoring, false);
+          assert.equal(invocation.recovering, true);
+        },
+      }),
+    },
+  });
+  assert.equal(await runtime.resume('parent-1', {}), 'new work');
+  assert.deepEqual(order, ['capture', 'started', 'execute']);
+  assert.equal(identity.parentContextId, 'parent-1');
+  assert.notEqual(identity.contextId, 'parent-1');
+});
+
 test('checkpoint-only resources and children must be covered during assembly', () => {
   const missing = new ResourceOffer('test.checkpoint.missing', (value) => value);
   class Root extends RuntimeDefinition {

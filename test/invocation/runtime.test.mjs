@@ -176,7 +176,11 @@ test('R prepares ordinary E input before E capture and construction', async () =
           assert.deepEqual(messages, ['input']);
           assert.deepEqual(input, { content: 'input' });
         },
-        callbacks: () => ({ started: () => order.push('started') }),
+        callbacks: () => ({
+          started: () => {
+            order.push('started');
+          },
+        }),
       },
     },
   );

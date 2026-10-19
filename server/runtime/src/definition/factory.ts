@@ -3,8 +3,9 @@ import type { OutputDeclaration } from '../output/contract.js';
 import type { ExceptionContract } from '../exception/contract.js';
 import type { InvocationFact } from '../observation/facts.js';
 import type { ObservationDeclaration } from './observation.js';
-import type { ChildDefinition } from './children.js';
-import type { ChildrenOf, InvocationCheckpointDefinition, ResourceRequests, ResourcesOf } from './checkpoint.js';
+import type { ChildDefinition, ChildrenOf } from './children.js';
+import type { InvocationCheckpointDefinition } from './checkpoint.js';
+import type { ResourceRequests, ResourcesOf } from '../resource/offer.js';
 import type { AcceptWork, Continue, ExecuteWork, HandleWork, Resolution } from './work.js';
 import type { RuntimeDefinition } from './runtime.js';
 import type { ExecutionDefinition } from './execution.js';
@@ -23,14 +24,14 @@ interface DefinitionOptions<Level extends InvocationLevel, Input, Output, Childr
   readonly run: {
     readonly requires?: Requires;
     readonly uses?: Uses;
-    readonly execute: (work: ExecuteWork<Level, Input, Output, ResourcesOf<Requires>, RunAllowed<Children, Uses>, Delta>) => Output | Promise<Output>;
-    readonly accept?: (work: AcceptWork<Level, Input, Output, ResourcesOf<Requires>, RunAllowed<Children, Uses>>) => Output | Continue<Input> | Promise<Output | Continue<Input>>;
+    readonly execute: (work: ExecuteWork<Level, Input, Output, ResourcesOf<NoInfer<Requires>>, RunAllowed<Children, Uses>, Delta>) => Output | Promise<Output>;
+    readonly accept?: (work: AcceptWork<Level, Input, Output, ResourcesOf<NoInfer<Requires>>, RunAllowed<Children, Uses>>) => Output | Continue<Input> | Promise<Output | Continue<Input>>;
   };
   readonly exceptions?: {
     readonly requires?: ExceptionRequires;
     readonly uses?: ExceptionUses;
     readonly accepts: readonly ExceptionContract<unknown>[];
-    readonly handle: (work: HandleWork<Level, Input, Output, ResourcesOf<ExceptionRequires>, ExceptionUses[number]>) => Resolution<Input, Output> | Promise<Resolution<Input, Output>>;
+    readonly handle: (work: HandleWork<Level, Input, Output, ResourcesOf<NoInfer<ExceptionRequires>>, ExceptionUses[number]>) => Resolution<Input, Output> | Promise<Resolution<Input, Output>>;
   };
 }
 

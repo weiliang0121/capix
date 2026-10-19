@@ -125,6 +125,85 @@ test('failed validation prevents started setup and record registration', async (
   assert.equal(invocation.context.state.error, failure);
 });
 
+test('started rejects returned values before publishing started or entering work', async () => {
+  for (const returned of [false, 0, 'registered', {}]) {
+    const facts = [];
+    const invocation = new Invocation({
+      context: new InvocationContext('input'),
+      signal: signal(),
+      started: () => returned,
+      progress: {
+        receive(fact) {
+          facts.push(fact);
+        },
+      },
+      work: { maxRounds: 1, execute: () => assert.fail('invalid setup must prevent work') },
+    });
+    await assert.rejects(invocation.run(), /started callbacks must return undefined synchronously/);
+    assert.equal(invocation.context.status, 'failed');
+    assert.equal(invocation.context.progress.round, 0);
+    assert.equal(invocation.failure.phase, 'setup');
+    assert.deepEqual(
+      facts.map(({ kind }) => kind),
+      ['finished'],
+    );
+  }
+});
+
+test('async started is rejected immediately and its late failure is consumed', async () => {
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  let completed = false;
+  const invocation = new Invocation({
+    context: new InvocationContext('input'),
+    signal: signal(),
+    async started() {
+      await pending;
+      completed = true;
+      throw new Error('late setup failure');
+    },
+    work: { maxRounds: 1, execute: () => assert.fail('async setup must prevent work') },
+  });
+  try {
+    await assert.rejects(invocation.run(), /started callbacks must return undefined synchronously/);
+    assert.equal(completed, false);
+    assert.equal(invocation.context.status, 'failed');
+    assert.equal(invocation.context.progress.round, 0);
+  } finally {
+    release();
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(completed, true);
+  assert.match(invocation.context.state.error.message, /synchronously/);
+});
+
+test('started registers a single invocation once across its local continuation', async () => {
+  let registrations = 0;
+  const inputs = [];
+  const invocation = new Invocation({
+    context: new InvocationContext(0),
+    signal: signal(),
+    started() {
+      registrations++;
+    },
+    work: {
+      maxRounds: 2,
+      execute(context) {
+        inputs.push(context.currentInput);
+        return context.currentInput + 1;
+      },
+      accept(context, output) {
+        return context.progress.round === 1 ? context.continueWith(output, 'advance once') : output;
+      },
+    },
+  });
+  assert.equal(await invocation.run(), 2);
+  assert.equal(registrations, 1);
+  assert.deepEqual(inputs, [0, 1]);
+});
+
 test('constructing a low-level call does not read stage contracts before started can install acceptance', async () => {
   const reads = [];
   const processes = [];

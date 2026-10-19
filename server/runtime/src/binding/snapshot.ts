@@ -69,7 +69,7 @@ export function originalCheckpointPoint(point: object): object {
   return pointOrigins.get(point) ?? point;
 }
 
-function snapshotCheckpointPoint<Input, Output, Level extends InvocationLevel, State, Resources extends object, Slots extends CheckpointReferenceSlots, Allowed extends import('../definition/children.js').ChildDefinition, Delta>(point: InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta>): InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta> {
+function snapshotCheckpointPoint<Input, Output, Level extends InvocationLevel, State, Resources extends object, Slots extends CheckpointReferenceSlots, Allowed extends import('../definition/children.js').ChildrenOf<Level>, Delta>(point: InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta>): InvocationCheckpointPoint<Input, Output, Level, State, Resources, Slots, Allowed, Delta> {
   const resume = point.resume;
   const fixed = Object.freeze({
     name: point.name,

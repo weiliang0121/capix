@@ -1,6 +1,6 @@
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { modelOutputRejected } from '../../model/rejection.js';
-import { checkpointPoint, childReference, ChildCallFailure, type ChildCall, type ChildDefinition, type OperationWork, type ResumeWork, type HandleWork, type Resolution, type ChildReference } from '@capix/server-runtime';
+import { checkpointPoint, childReference, ChildCallFailure, type ChildCall, type ChildrenOf, type OperationWork, type ResumeWork, type HandleWork, type Resolution, type ChildReference } from '@capix/server-runtime';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ModelCallResources, type ModelRequestResources } from '../../resources.js';
 import type { ModelRequest, ModelOutput } from '../../model/types.js';
@@ -21,7 +21,7 @@ import { documentDescriptor, type TextDocument } from '../../../files/index.js';
 import { loadRequest } from '../../model/request.js';
 import { answerStream, AnswerTextDecoder, type AnswerTextDelta } from './stream.js';
 import { answerCheckpointCodecs, checkAnswerAccepted, checkModelWaiting, checkPreparationWaiting, checkAcceptanceWaiting } from './checkpoint.js';
-type AnswerWork = OperationWork<GenerationInput, GenerationOutput, object, ChildDefinition, AnswerTextDelta> | ResumeWork<'operation', GenerationInput, GenerationOutput, object, ChildDefinition, AnswerTextDelta>;
+type AnswerWork = OperationWork<GenerationInput, GenerationOutput, object, ChildrenOf<'operation'>, AnswerTextDelta> | ResumeWork<'operation', GenerationInput, GenerationOutput, object, ChildrenOf<'operation'>, AnswerTextDelta>;
 
 export interface GenerationInput {
   readonly context: AnswerMessageContext;
@@ -91,7 +91,7 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     this.run = { requires: GenerateAnswerDefinition.requires, uses: this.children, execute: this.execute.bind(this) };
   }
 
-  private async execute(work: OperationWork<GenerationInput, GenerationOutput, ModelCallResources, ChildDefinition, AnswerTextDelta>): Promise<GenerationOutput> {
+  private async execute(work: OperationWork<GenerationInput, GenerationOutput, ModelCallResources, ChildrenOf<'operation'>, AnswerTextDelta>): Promise<GenerationOutput> {
     if (Boolean(work.input.document) !== this.documentEnabled) throw new RuntimeError('DOCUMENT_INPUT', '文档证据必须与生成能力的声明一致。');
     if (work.round === 1) {
       const assembled = work.children.create(this.assembleContextDefinition, work.input.context, { key: 'context' });
@@ -138,7 +138,7 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     return answer;
   }
 
-  private async resumeModel(work: ResumeWork<'operation', GenerationInput, GenerationOutput, object, ChildDefinition, AnswerTextDelta>, reference: ChildReference<RequestModelDefinition>): Promise<GenerationOutput> {
+  private async resumeModel(work: ResumeWork<'operation', GenerationInput, GenerationOutput, object, ChildrenOf<'operation'>, AnswerTextDelta>, reference: ChildReference<RequestModelDefinition>): Promise<GenerationOutput> {
     try {
       return await this.receiveModel(work, work.children.resume(reference));
     } catch (error) {

@@ -90,6 +90,48 @@ test('a failed execution start cannot leak its input capture or progress channel
   );
 });
 
+test('conversation source preserves async host setup failure instead of starting model work', async (t) => {
+  const { runtime, entities, model, capabilities, requests } = binding();
+  t.after(() => model.close());
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  let finished = false;
+  try {
+    await assert.rejects(
+      runtime.run(
+        { messages: [{ role: 'user', content: 'accepted input' }] },
+        {
+          settings,
+          executionCallbacks: {
+            async started(context, invocation) {
+              const registered = capabilities.checkpointRuns.read('conversation', invocation.identity.parentContextId);
+              assert.equal(registered.executionContextId, context.id);
+              await pending;
+              finished = true;
+              throw new Error('late host setup failure');
+            },
+          },
+        },
+      ),
+      /started callbacks must return undefined synchronously/,
+    );
+    assert.equal(finished, false);
+    assert.equal(requests.length, 0);
+    assert.equal(entities.transcript.length, 1);
+    assert.equal(capabilities.checkpointRuns.list('conversation').length, 1);
+    assert.equal(runtime.running, false);
+  } finally {
+    release();
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(finished, true);
+  await runtime.run({ messages: [{ role: 'user', content: 'next input' }] }, { settings });
+  assert.equal(entities.transcript.length, 3);
+  assert.equal(requests.length, 2);
+});
+
 test('conversation binding rechecks registered restoration configuration without relying on host admission', async (t) => {
   const { runtime, entities, model, capabilities, requests } = binding();
   t.after(() => model.close());

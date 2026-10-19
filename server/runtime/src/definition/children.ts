@@ -4,10 +4,12 @@ import type { AttemptDefinition } from './attempt.js';
 import type { invocationSignature, InvocationSignature } from './signature.js';
 import type { InvocationOutputReceiver } from '../output/contract.js';
 import type { InvocationEntry } from './entry.js';
-import type { InvocationFailureFact, RuntimeErrorValue } from '@capix/protocol';
+import type { InvocationFailureFact, RuntimeErrorValue, InvocationLevel } from '@capix/protocol';
+import type { ChildLevel } from './level.js';
 
 // Heterogeneous storage erases IO; all public lookup and call sites retain the concrete definition.
 export type ChildDefinition = ExecutionDefinition<any, any, any, any, any> | OperationDefinition<any, any, any, any, any> | AttemptDefinition<any, any, any, any, any>;
+export type ChildrenOf<Level extends InvocationLevel> = Extract<ChildDefinition, { readonly level: ChildLevel<Level> }>;
 type Signature<Definition> = Definition extends { readonly [invocationSignature]?: infer S } ? NonNullable<S> : InvocationSignature<unknown, unknown, unknown>;
 export type DefinitionInput<Definition> = Signature<Definition> extends { readonly input: infer Input } ? Input : unknown;
 export type DefinitionOutput<Definition> = Signature<Definition> extends { readonly output: infer Output } ? Output : unknown;

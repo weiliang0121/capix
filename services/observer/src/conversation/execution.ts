@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { invocationRecording } from '@capix/server-runtime/recording';
-import { ExecutionDefinition, RuntimeError, checkpointPoint, childReference, type ExecutionWork, type ResumeWork, type ChildDefinition, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@capix/server-runtime';
+import { ExecutionDefinition, RuntimeError, checkpointPoint, childReference, type ExecutionWork, type ResumeWork, type ChildDefinition, type ChildrenOf, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@capix/server-runtime';
 import { isEqual } from 'es-toolkit';
 import type { GenerationOutput, ConversationTask } from '@capix/protocol';
 import { conversationExecutionRequests, type ConversationExecutionResources } from './resources.js';
@@ -32,7 +32,7 @@ export interface ConversationOperationDefinitions {
   readonly save?: SaveResultDefinition;
 }
 
-type Work = ExecutionWork<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources, ChildDefinition, AnswerProgress> | ResumeWork<'execution', AcceptedConversationInput, GenerationOutput, ConversationExecutionResources, ChildDefinition, AnswerProgress>;
+type Work = ExecutionWork<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources, ChildrenOf<'execution'>, AnswerProgress> | ResumeWork<'execution', AcceptedConversationInput, GenerationOutput, ConversationExecutionResources, ChildrenOf<'execution'>, AnswerProgress>;
 type Facts = CheckpointFacts<AcceptedConversationInput>;
 type Point = InvocationCheckpointPoint<AcceptedConversationInput, GenerationOutput, 'execution', any, any, any, any, AnswerProgress>;
 const emptyArguments = z.strictObject({});

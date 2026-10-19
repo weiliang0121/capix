@@ -9,6 +9,7 @@ import { resourceRequests, type ResourceRequirements } from '../resource/binding
 import { isResourceRefinement, type ResourceRefinement } from '../resource/offer.js';
 import type { ChildBindingOptions } from './contract.js';
 import { collectDefinitionRequirements, collectResourceSupply, type ChildResourceBinding } from './resources.js';
+import { childLevels } from '../definition/level.js';
 import { snapshotDefinition } from './snapshot.js';
 
 type AnyRuntimeDefinition = RuntimeDefinition<any, any, any, any, any>;
@@ -32,13 +33,6 @@ export type ResolvedAttempt<Input = any, Output = any, Resources extends object 
 export type ResolvedChild = ResolvedExecution | ResolvedOperation | ResolvedAttempt;
 type ResolvedNode = ResolvedRuntime | ResolvedChild;
 
-const childLevels: Readonly<Record<InvocationLevel, readonly ChildDefinition['level'][]>> = {
-  runtime: ['execution'],
-  execution: ['operation'],
-  operation: ['operation', 'attempt'],
-  attempt: [],
-};
-
 /** Resolve the whole supplied graph once; R and each E keep separate resource capture boundaries. */
 export function resolveDeclaration<Input, Output, Resources extends object>(definition: RuntimeDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedRuntime<Input, Output, Resources>;
 export function resolveDeclaration<Input, Output, Resources extends object>(definition: ExecutionDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedExecution<Input, Output, Resources>;
@@ -57,7 +51,8 @@ export function resolveDeclaration(definition: BindingDefinition, options: Child
   const visit = (current: BindingDefinition, parent?: { readonly level: InvocationLevel; readonly definition: BindingDefinition }): ResolvedNode => {
     if (path.has(current)) throw new Error('Cyclic child declaration');
     if (!isFunction(current.run?.execute)) throw new Error('Child definition requires execute');
-    if (!Object.hasOwn(childLevels, current.level) || (parent && !childLevels[parent.level].includes(current.level as ChildDefinition['level']))) throw new Error('Invalid child definition level');
+    const allowed: readonly InvocationLevel[] | undefined = parent && childLevels[parent.level];
+    if (!Object.hasOwn(childLevels, current.level) || (allowed && !allowed.includes(current.level))) throw new Error('Invalid child definition level');
     const declaration = snapshotDefinition(current);
     for (const observation of options.observations ?? []) observation.check?.(current, parent?.definition);
     const requires = collectDefinitionRequirements(declaration, options.observationProvides);

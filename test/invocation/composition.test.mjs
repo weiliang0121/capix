@@ -15,7 +15,18 @@ function install(composition, recorder) {
   const execution = defineExecution()({ children: [...new Set(composition.steps.map((step) => step.use))], run: { execute: (work) => composition.run(work.input, work.children) } });
   const definition = runtimeDefinition(execution);
   if (recorder) recordDefinitions(definition);
-  const runtime = assembleRuntime(definition, { providers: [], observations: recorder ? [bindRecording(recorder)] : [], source: { capture: () => null, callbacks: () => ({ started: (_context, call) => calls.push(call) }) } });
+  const runtime = assembleRuntime(definition, {
+    providers: [],
+    observations: recorder ? [bindRecording(recorder)] : [],
+    source: {
+      capture: () => null,
+      callbacks: () => ({
+        started: (_context, call) => {
+          calls.push(call);
+        },
+      }),
+    },
+  });
   return { calls, runtime };
 }
 function deferred() {
