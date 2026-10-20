@@ -1,5 +1,5 @@
 import { Initializer } from '../../initializer.js';
-import type { ChildContract, ChildDefinition } from '../../definition/children.js';
+import type { ChildContract, ChildCallable } from '../../definition/children.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { InvocationRelationOptions } from '../../invocation/relation.js';
 import type { CheckpointBinding } from '../../checkpoint/work.js';
@@ -12,15 +12,15 @@ interface StoredChild {
 
 /** Reusable child structures; no parent invocation or phase access is retained here. */
 export class BoundChildren {
-  readonly #entries: ReadonlyMap<ChildContract, { readonly kind: ChildDefinition['kind']; readonly value: Initializer<StoredChild>; readonly checkpoint?: CheckpointBinding }>;
-  readonly #definitions: readonly ChildDefinition[];
+  readonly #entries: ReadonlyMap<ChildContract, { readonly kind: ChildCallable['kind']; readonly value: Initializer<StoredChild>; readonly checkpoint?: CheckpointBinding }>;
+  readonly #definitions: readonly ChildCallable[];
 
   constructor(children: readonly ResolvedChild[], create: (child: ResolvedChild) => StoredChild) {
     this.#entries = new Map(children.map((child) => [child.definition, { kind: child.declaration.kind, value: new Initializer(() => create(child)), checkpoint: child.declaration.checkpoint }]));
     this.#definitions = Object.freeze([...new Set(children.map((child) => child.definition))]);
   }
 
-  definitions(): readonly ChildDefinition[] {
+  definitions(): readonly ChildCallable[] {
     return this.#definitions;
   }
 
@@ -30,7 +30,7 @@ export class BoundChildren {
     return position;
   }
 
-  at(position: number): ChildDefinition {
+  at(position: number): ChildCallable {
     const definition = this.#definitions[position];
     if (!Number.isSafeInteger(position) || !definition) throw new Error('Child declaration position is not registered');
     return definition;

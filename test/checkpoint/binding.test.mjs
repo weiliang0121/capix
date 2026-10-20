@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SceneDefinition, GroupDefinition, ResourceOffer, bindCallSource } from '@capix/server-runtime';
+import { Scene, Group, ResourceOffer, bindCallSource } from '@capix/server-runtime';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 
@@ -49,7 +49,7 @@ function assemble(definition, options = {}) {
 }
 
 test('checkpoint declarations do not change normal execution when persistence is absent', async () => {
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     checkpoint = checkpoint('test.optional', () => assert.fail('not resuming'));
     run = {
       requires: {},
@@ -76,7 +76,7 @@ test('a checkpoint continuation exposes only its declared resources, and install
     },
     'binding',
   );
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     checkpoint = checkpoint(
       'test.resources',
       (work, state) => {
@@ -106,7 +106,7 @@ test('a checkpoint continuation exposes only its declared resources, and install
 
 test('resuming a direct member uses fixed input without repeating parent preparation or original started callbacks', async () => {
   let captures = 0;
-  class Child extends GroupDefinition {
+  class Child extends Group {
     checkpoint = checkpoint('test.child', (work, state) => {
       assert.deepEqual(work.initialInput, { original: 'child-1' });
       return state.answer;
@@ -114,7 +114,7 @@ test('resuming a direct member uses fixed input without repeating parent prepara
     run = { requires: {}, execute: () => assert.fail('child execute must not repeat') };
   }
   const child = new Child();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [child];
     checkpoint = checkpoint(
       'test.parent',
@@ -150,7 +150,7 @@ test('resuming a direct member uses fixed input without repeating parent prepara
 test('a new member created within recovery still registers its new call before work', async () => {
   const order = [];
   let identity;
-  class Child extends GroupDefinition {
+  class Child extends Group {
     run = {
       requires: {},
       execute(work) {
@@ -160,7 +160,7 @@ test('a new member created within recovery still registers its new call before w
     };
   }
   const child = new Child();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [child];
     checkpoint = checkpoint(
       'test.parent-new-child',
@@ -200,23 +200,23 @@ test('a new member created within recovery still registers its new call before w
 
 test('checkpoint-only resources and children must be covered during assembly', () => {
   const missing = new ResourceOffer('test.checkpoint.missing', (value) => value);
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     checkpoint = checkpoint('test.invalid-resource', () => null, { missing: missing.request() });
     run = { requires: {}, execute: () => null };
   }
   assert.throws(() => assemble(new Root()), /Expected one resource provider/);
-  class Unknown extends GroupDefinition {
+  class Unknown extends Group {
     name = 'unknown';
     label = 'unknown';
     source = 'test';
     run = { requires: {}, execute: () => null };
   }
   const unknown = new Unknown();
-  class BadChild extends GroupDefinition {
+  class BadChild extends Group {
     checkpoint = checkpoint('test.invalid-child', () => null, {}, [unknown]);
     run = { requires: {}, execute: () => null };
   }
-  class BadRoot extends SceneDefinition {
+  class BadRoot extends Scene {
     members = [new BadChild()];
     run = { requires: {}, execute: () => null };
   }
@@ -226,7 +226,7 @@ test('checkpoint-only resources and children must be covered during assembly', (
 test('restoration rejects incompatible ownership and contract before constructing resource captures', async () => {
   let captures = 0;
   const resource = new ResourceOffer('test.checkpoint.guard', (value) => value);
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     checkpoint = checkpoint('test.guard', () => null, { value: resource.request() });
     run = { requires: {}, execute: () => assert.fail('not running') };
   }
@@ -250,11 +250,11 @@ test('restoration rejects incompatible ownership and contract before constructin
 test('restored work and newly created descendants use the recovery observation source', async () => {
   const facts = [];
   const resource = new ResourceOffer('test.checkpoint.observed', (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }));
-  class Child extends GroupDefinition {
+  class Child extends Group {
     run = { requires: { value: resource.request() }, execute: (work) => work.resources.value.read() };
   }
   const child = new Child();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [child];
     checkpoint = checkpoint(
       'test.observation',
@@ -286,7 +286,7 @@ for (const failure of [undefined, 'propagate']) {
   test(`read rejection emits one restore failure and ${failure ? 'preserves both strict faults' : 'isolates observer faults'}`, async () => {
     const observerError = new Error('failure observer failed');
     const facts = [];
-    class Root extends SceneDefinition {
+    class Root extends Scene {
       checkpoint = checkpoint('test.expected', () => assert.fail('incompatible work must not run'));
       run = { requires: {}, execute: () => assert.fail('not normal execution') };
     }
@@ -328,7 +328,7 @@ for (const stage of ['point', 'codec', 'capture']) {
     const expected = new Error(`${stage} unavailable`);
     const facts = [];
     const resource = new ResourceOffer(`test.restore.${stage}`, () => assert.fail('unavailable work must not expose a resource'), 'binding');
-    class Root extends SceneDefinition {
+    class Root extends Scene {
       checkpoint = {
         ...checkpoint('test.construction', () => assert.fail('not resuming'), { resource: resource.request() }),
         input:

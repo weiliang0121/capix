@@ -1,8 +1,8 @@
-import { Sequence, InvocationEntry, defineGroup, defineScene, type GroupDefinition, type NodeDefinition, type ChildCalls, type GroupWork, type SceneWork, Driver, type SceneDefinition } from '@capix/server-runtime';
+import { Sequence, InvocationEntry, defineGroup, defineScene, type Group, type Node, type ChildCalls, type GroupWork, type SceneWork, Driver, Scene } from '@capix/server-runtime';
 import { bindChildResources, type ResourceRefinement } from '@capix/server-runtime';
 
 const bounded = new ResourceOffer<{ readonly allowed: readonly string[] }, readonly string[], { readonly allowed: readonly string[] }, string>('bounded', (source) => source.allowed, 'access', { refine: (source, selected) => ({ allowed: source.allowed.filter((value) => value === selected) }) });
-declare const fileOperation: GroupDefinition<{ readonly path: string }, string>;
+declare const fileOperation: Group<{ readonly path: string }, string>;
 bindChildResources(fileOperation, [bounded.refine<{ readonly path: string }>((input) => input.path)]);
 // @ts-expect-error only a resource offer can issue the nominal refinement contract
 const forgedRefinement: ResourceRefinement<{ readonly path: string }> = { offer: bounded.request().offer };
@@ -14,14 +14,14 @@ issuedRefinement.apply = () => ({ allowed: ['outside'] });
 bindChildResources(fileOperation, [bounded.refine<number>((input) => String(input))]);
 // @ts-expect-error selection must use the contract defined by the resource
 bounded.refine<{ readonly path: string }>(() => 42);
-declare const fileExecution: GroupDefinition<{ readonly path: string }, string>;
+declare const fileExecution: Group<{ readonly path: string }, string>;
 // Any member binding can explicitly refine its subtree supply.
 bindChildResources(fileExecution, [bounded.refine<{ readonly path: string }>((input) => input.path)]);
 
-declare const length: GroupDefinition<string, number>;
-declare const format: GroupDefinition<number, string>;
-declare const leaf: NodeDefinition<string, string>;
-declare const execution: GroupDefinition<string, number>;
+declare const length: Group<string, number>;
+declare const format: Group<number, string>;
+declare const leaf: Node<string, string>;
+declare const execution: Group<string, number>;
 declare const parent: GroupWork<string, number, {}, typeof length | typeof format>;
 declare const operation: GroupWork<string, string, {}, typeof leaf>;
 declare const runtimeWork: SceneWork<string, number, {}, typeof execution>;
@@ -70,9 +70,9 @@ const acceptedAlternative: Promise<number> = operation.children.entry(alternativ
 void acceptedAlternative;
 
 // @ts-expect-error raw object syntax has no checked declaration signature; use the factory or a named class
-const rawDefinition: GroupDefinition<string, number> = { kind: 'group', name: 'raw', label: 'raw', source: 'test', members: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (work) => work.input.length } };
+const rawDefinition: Group<string, number> = { kind: 'group', name: 'raw', label: 'raw', source: 'test', members: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (work) => work.input.length } };
 void rawDefinition;
-const objectDefinition: GroupDefinition<string, number> = defineGroup<string, number>()({
+const objectDefinition: Group<string, number> = defineGroup<string, number>()({
   name: 'length',
   label: 'length',
   source: 'test',
@@ -83,7 +83,7 @@ const objectDefinition: GroupDefinition<string, number> = defineGroup<string, nu
 });
 const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string>().step('length', { use: objectDefinition, input: ({ input }) => input }).run('hello', children);
 void objectOutput;
-const runtimeDefinition: SceneDefinition<string, number> = defineScene<string, number>()({
+const runtimeDefinition: Scene<string, number> = defineScene<string, number>()({
   members: [execution],
   maxRounds: 1,
   raises: [],
@@ -103,7 +103,9 @@ void rootOutput;
 // @ts-expect-error R input retains its own declared contract
 driver.run(bound, 42, {});
 // A Scene can directly register a Node.
-driver.bind({ ...runtimeDefinition, members: [leaf] }, { providers: [], source: { capture: () => null } });
+const leafScene = new Scene<string, number>({ run: { execute: (work) => work.input.length } });
+leafScene.add(leaf);
+driver.bind(leafScene, { providers: [], source: { capture: () => null } });
 // Structurally equal signatures are permitted; binding still checks exact identity.
 runtimeWork.children.create(length, 'input');
 // @ts-expect-error E cannot be a direct child of O
@@ -138,7 +140,7 @@ const exceptions: InvocationExceptionDefinition<string, string, 'group', { repai
     return work.return(repair);
   },
 };
-const composed: GroupDefinition<string, string, { value: number }, { repair: string }> = defineGroup<string, string>()({ name: 'typed', label: 'typed', source: 'test', members: [], maxRounds: 1, raises: [issue], run: { ...run, uses: [] }, exceptions: { ...exceptions, uses: [] } });
+const composed: Group<string, string, { value: number }, { repair: string }> = defineGroup<string, string>()({ name: 'typed', label: 'typed', source: 'test', members: [], maxRounds: 1, raises: [issue], run: { ...run, uses: [] }, exceptions: { ...exceptions, uses: [] } });
 const composedResult: Promise<string> = children.create(composed, 'input').run();
 void composedResult;
 const childFact = operation.children.facts.get(operation.children.create(leaf, 'input').ref);

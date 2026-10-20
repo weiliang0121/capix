@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NodeDefinition, defineNode, defineGroup, defineScene } from '@capix/server-runtime';
+import { Node, defineNode, defineGroup, defineScene } from '@capix/server-runtime';
 
 const metadata = { name: 'test', label: 'test', source: 'test', callee: 'test' };
 function assemble(leaf) {
@@ -42,7 +42,7 @@ function assemble(leaf) {
 for (const children of [[], [defineNode()({ ...metadata, run: { execute: (work) => work.input } })]]) {
   test(`binding rejects an A with ${children.length} declared children before any work runs`, () => {
     let called = 0;
-    class InvalidLeaf extends NodeDefinition {
+    class InvalidLeaf extends Node {
       name = 'invalid';
       label = 'invalid';
       source = 'test';
@@ -51,14 +51,13 @@ for (const children of [[], [defineNode()({ ...metadata, run: { execute: (work) 
       run = { requires: {}, execute: () => ++called };
     }
     assert.throws(() => assemble(new InvalidLeaf()), /Nodes cannot declare members/);
-    const literal = defineNode()({ ...metadata, members: children, run: { execute: () => ++called } });
-    assert.throws(() => assemble(literal), /Nodes cannot declare members/);
+    assert.throws(() => defineNode()({ ...metadata, members: children, run: { execute: () => ++called } }), /Node cannot have members/);
     assert.equal(called, 0);
   });
 }
 
 test('a class and its complete factory path retain the receiver and original output reference without recording', async () => {
-  class Reader extends NodeDefinition {
+  class Reader extends Node {
     name = 'read';
     label = 'read';
     source = 'test';

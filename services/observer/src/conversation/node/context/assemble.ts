@@ -3,7 +3,7 @@ import { checkpointCodec } from '../../checkpoint.js';
 import { answerMessageContextSchema, checkLeafResult } from '../../group/checkpoint.js';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { Message } from '@capix/protocol';
-import { type NodeWork, NodeDefinition, checkpointPoint } from '@capix/server-runtime';
+import { type NodeWork, Node, checkpointPoint } from '@capix/server-runtime';
 
 /** Fixed material captured by the parent after active-content maintenance. */
 export interface AnswerMessageContext {
@@ -14,25 +14,25 @@ export interface AnswerMessageContext {
 const contextCodec = checkpointCodec<AnswerMessageContext>(answerMessageContextSchema);
 
 /** Check the supplied material; never re-read a mutable Transcript or active index. */
-export class AssembleAnswerContextDefinition extends NodeDefinition<AnswerMessageContext, AnswerMessageContext> {
-  readonly observation = [invocationRecording()];
-  readonly name = 'assembleContext';
-  readonly label = '确认消息材料';
-  readonly source = 'services/observer/src/conversation/node/context/assemble.ts · AssembleAnswerContextDefinition';
-  readonly callee = 'processing';
+export class AssembleAnswerContext extends Node<AnswerMessageContext, AnswerMessageContext> {
+  private readonly resultPoint;
 
-  private readonly resultPoint = checkpointPoint<'node', AnswerMessageContext, AnswerMessageContext>()({
-    name: 'result',
-    state: contextCodec,
-    references: {},
-    check: (result, facts) => {
-      checkLeafResult(facts);
-      if (!isEqual(result, facts.input)) throw new Error('Fixed message material changed during assembly');
-    },
-    resume: { execute: (_work, result) => result },
-  });
-  readonly checkpoint = { key: 'observer.assemble-answer-context', version: 2, input: contextCodec, output: contextCodec, points: [this.resultPoint] };
-  readonly run = { requires: {}, execute: this.execute.bind(this) };
+  constructor() {
+    super();
+
+    this.resultPoint = checkpointPoint<'node', AnswerMessageContext, AnswerMessageContext>()({
+      name: 'result',
+      state: contextCodec,
+      references: {},
+      check: (result, facts) => {
+        checkLeafResult(facts);
+        if (!isEqual(result, facts.input)) throw new Error('Fixed message material changed during assembly');
+      },
+      resume: { execute: (_work, result) => result },
+    });
+
+    this.setDefinition({ observation: [invocationRecording()], name: 'assembleContext', label: '确认消息材料', source: 'services/observer/src/conversation/node/context/assemble.ts · AssembleAnswerContext', callee: 'processing', checkpoint: { key: 'observer.assemble-answer-context', version: 2, input: contextCodec, output: contextCodec, points: [this.resultPoint] }, run: { requires: {}, execute: this.execute.bind(this) } });
+  }
 
   private execute(work: NodeWork<AnswerMessageContext, AnswerMessageContext>): AnswerMessageContext {
     const parsed = answerMessageContextSchema.parse(work.input);

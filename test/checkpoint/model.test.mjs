@@ -1,8 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
-import { RequestModelDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
+import { Scene, Group, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
+import { RequestModel, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 const request = { model: 'fixture', messages: [{ role: 'user', content: 'fixed input' }], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 256, stream: false };
 const output = { id: 'fixture-output', model: 'fixture', content: 'provider envelope before business JSON acceptance', finishReason: 'length', usage: { promptTokens: 3, completionTokens: 4, totalTokens: 7 } };
@@ -43,14 +43,14 @@ function parentCheckpoint(key, child) {
   };
 }
 
-function harness(t, provider, store, facts = [], progress = () => {}, model = new RequestModelDefinition('answer')) {
+function harness(t, provider, store, facts = [], progress = () => {}, model = new RequestModel('answer')) {
   const interactions = new ModelInteractions(new ModelSource(provider));
   t.after(() => interactions.close());
-  class Execution extends GroupDefinition {
+  class Execution extends Group {
     members = [model];
     checkpoint = parentCheckpoint('fixture.model.execution', model);
     run = {
-      requires: RequestModelDefinition.requires,
+      requires: RequestModel.requires,
       execute: async (work) => {
         const call = work.children.create(model, work.input, { key: 'model' });
         work.checkpoint?.save(this.checkpoint.points[0], {}, { child: call.ref });
@@ -60,7 +60,7 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
     };
   }
   const execution = new Execution();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [execution];
     checkpoint = parentCheckpoint('fixture.model.runtime', execution);
     run = {
@@ -83,7 +83,7 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
 
 test('request-model checkpoint is dormant without an installation and keeps the original complete feedback', async (t) => {
   let calls = 0;
-  const model = new RequestModelDefinition('answer');
+  const model = new RequestModel('answer');
   model.checkpoint.input = { encode: () => assert.fail('checkpoint input codec must remain dormant'), decode: () => assert.fail('not restoring') };
   const { runtime } = harness(
     t,
@@ -163,7 +163,7 @@ for (const pending of [false, true]) {
 }
 
 test('request-model checkpoint codecs reject incompatible saved envelopes without business JSON interpretation', () => {
-  const definition = new RequestModelDefinition('answer');
+  const definition = new RequestModel('answer');
   const checkpoint = definition.checkpoint;
   assert.deepEqual(checkpoint.input.decode(checkpoint.input.encode(request)), request);
   assert.deepEqual(checkpoint.output.decode(checkpoint.output.encode(output)), output);
@@ -182,7 +182,7 @@ test('request-model checkpoint codecs reject incompatible saved envelopes withou
     assert.throws(() => checkpoint.output.decode(invalid));
     assert.throws(() => definition.feedbackAccepted.state.decode(invalid));
   }
-  assert.notEqual(checkpoint.key, new RequestModelDefinition('memory').checkpoint.key);
+  assert.notEqual(checkpoint.key, new RequestModel('memory').checkpoint.key);
 });
 
 test('request-model recovery rejects a missing acceptance or mismatched saved output before accessing the model', async (t) => {

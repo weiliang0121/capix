@@ -35,10 +35,10 @@ function rejects(source, codes, withinService = false) {
 
 const capabilitySetup = `
 import {z} from 'zod';
-import type {ChildCalls, GroupDefinition} from '@capix/server-runtime';
+import type {ChildCalls, Group} from '@capix/server-runtime';
 import {conversationCapability} from './capability.js';
-declare const read: GroupDefinition<{ path: string }, { content: string }, {}, {}, { text: string }>;
-declare const summary: GroupDefinition<{ text: string }, { summary: string }>;
+declare const read: Group<{ path: string }, { content: string }, {}, {}, { text: string }>;
+declare const summary: Group<{ text: string }, { summary: string }>;
 declare const readOnly: ChildCalls<typeof read>;
 declare const both: ChildCalls<typeof read | typeof summary>;
 interface State { text: string }
@@ -88,10 +88,10 @@ conversationCapability({ ...options, output: { receive: (event) => { if (event.k
 });
 
 const sequenceSetup = `
-import {Sequence, InvocationEntry, type ChildCalls, type ChildDefinition, type GroupDefinition} from '@capix/server-runtime';
-declare const read: GroupDefinition<{ path: string }, { content: string }, {}, {}, { text: string }>;
-declare const summary: GroupDefinition<{ text: string }, { summary: string }>;
-declare const exists: GroupDefinition<{ path: string }, { exists: boolean }>;
+import {Sequence, InvocationEntry, type ChildCalls, type ChildCallable, type Group} from '@capix/server-runtime';
+declare const read: Group<{ path: string }, { content: string }, {}, {}, { text: string }>;
+declare const summary: Group<{ text: string }, { summary: string }>;
+declare const exists: Group<{ path: string }, { exists: boolean }>;
 declare const readOnly: ChildCalls<typeof read>;
 declare const both: ChildCalls<typeof read | typeof summary>;
 declare const all: ChildCalls<typeof read | typeof summary | typeof exists>;
@@ -128,14 +128,14 @@ test('explicit Sequence annotations retain the used declarations instead of eras
 const explicit: Sequence<string, { read: { content: string }; summary: number }, typeof read | typeof summary> = sequence;
 const result: Promise<Readonly<{ read: { content: string }; summary: number }>> = explicit.run('notes.md', both);
 declare const unrestricted: ChildCalls;
-const widened: Sequence<string, { read: { content: string }; summary: number }, ChildDefinition> = sequence;
+const widened: Sequence<string, { read: { content: string }; summary: number }, ChildCallable> = sequence;
 widened.run('notes.md', unrestricted);
 void result;
 `);
   rejects(
     `${sequenceSetup}
 const erased: Sequence<string, { read: { content: string }; summary: number }> = sequence;
-const widened: Sequence<string, { read: { content: string }; summary: number }, ChildDefinition> = sequence;
+const widened: Sequence<string, { read: { content: string }; summary: number }, ChildCallable> = sequence;
 widened.run('notes.md', readOnly);
 `,
     [2322, 2345],
@@ -158,16 +158,16 @@ void unionOutput; void dispatch;
 
 test('output-only helpers infer the returned value without the whole declaration tree', () => {
   accepts(`
-import type {ChildCall, GroupDefinition} from '@capix/server-runtime';
-declare const call: ChildCall<GroupDefinition<{ path: string }, { content: string }>>;
+import type {ChildCall, Group} from '@capix/server-runtime';
+declare const call: ChildCall<Group<{ path: string }, { content: string }>>;
 function receive<Output>(port: { readonly run: () => Promise<Output> }): Promise<Output> { return port.run(); }
 const result: Promise<{ content: string }> = receive(call);
 void result;
 `);
   rejects(
     `
-import type {ChildCall, GroupDefinition} from '@capix/server-runtime';
-declare const call: ChildCall<GroupDefinition<{ path: string }, { content: string }>>;
+import type {ChildCall, Group} from '@capix/server-runtime';
+declare const call: ChildCall<Group<{ path: string }, { content: string }>>;
 function receive<Output>(port: { readonly run: () => Promise<Output> }): Promise<Output> { return port.run(); }
 const wrong: Promise<{ summary: string }> = receive(call);
 `,

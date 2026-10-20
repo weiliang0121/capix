@@ -1,5 +1,5 @@
 /** Low-level callable construction. Applications normally bind a Scene and use its Driver. */
-export * from './structure/callable.js';
+export * from './structure/bound.js';
 export * from './binding/children/bound.js';
 export * from './binding/children/builder.js';
 export * from './binding/receptions.js';
@@ -10,7 +10,6 @@ export * from './binding/declarations.js';
 export * from './binding/work.js';
 export * from './context/context.js';
 export * from './context/callable.js';
-export * from './context/builders/callable.js';
 export * from './invocation/invocation.js';
 export * from './invocation/builders/callable.js';
 export * from './invocation/children.js';

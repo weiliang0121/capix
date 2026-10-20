@@ -1,6 +1,6 @@
 import { type Driver, bindChildResources } from '@capix/server-runtime';
 import type { ModelInteractions } from './model/interactions.js';
-import type { ConversationSceneDefinition } from './scene.js';
+import type { ConversationStructure } from './scene.js';
 import { conversationProviders, conversationFileProviders } from './resources.js';
 import { FileResources } from '../files/index.js';
 import type { DocumentProcessingInput } from './group/document/process.js';
@@ -11,17 +11,17 @@ import { ConversationCallSource } from './binding/source.js';
 export type { ConversationRunOptions, ConversationEntities, ConversationBindingOptions } from './binding/contract.js';
 
 /** Bind fixed declarations and independent supplies. Per-call capture belongs to the source. */
-export function bindConversation(driver: Driver, definition: ConversationSceneDefinition, entities: ConversationEntities, model: ModelInteractions, capabilities: ConversationBindingOptions = {}) {
-  if (definition.filesEnabled && !entities.files) throw new Error('File-enabled conversation requires a workspace file entity');
-  const operations = definition.taskDefinition.operationDefinitions;
-  const source = new ConversationCallSource(definition, entities, model, capabilities, driver.checkpointStore);
-  return driver.bind(definition, {
-    childResources: [...(operations.document ? [bindChildResources(operations.document, [FileResources.readText.refine((input: DocumentProcessingInput) => input.sourcePath)])] : []), ...(operations.save ? [bindChildResources(operations.save, [FileResources.createText.refine((input: CreateTextInput) => input.path)])] : [])],
-    providers: [...conversationProviders, ...(definition.filesEnabled ? conversationFileProviders : [])],
+export function bindConversation(driver: Driver, structure: ConversationStructure, entities: ConversationEntities, model: ModelInteractions, capabilities: ConversationBindingOptions = {}) {
+  const { scene, conversation, document, save } = structure;
+  if (scene.filesEnabled && !entities.files) throw new Error('File-enabled conversation requires a workspace file entity');
+  const source = new ConversationCallSource(scene, entities, model, capabilities, driver.checkpointStore);
+  return driver.bind(scene, {
+    childResources: [...(document ? [bindChildResources(document, [FileResources.readText.refine((input: DocumentProcessingInput) => input.sourcePath)])] : []), ...(save ? [bindChildResources(save, [FileResources.createText.refine((input: CreateTextInput) => input.path)])] : [])],
+    providers: [...conversationProviders, ...(scene.filesEnabled ? conversationFileProviders : [])],
     source,
     bindings: [
       {
-        definition: definition.taskDefinition,
+        definition: conversation,
         capture: (input, options) => source.captureTask(input, options),
         started: (options) => source.startedTask(options),
         output: (options) => source.taskOutput(options),
@@ -29,4 +29,4 @@ export function bindConversation(driver: Driver, definition: ConversationSceneDe
     ],
   });
 }
-export type ConversationScene = ReturnType<typeof bindConversation>;
+export type BoundConversationScene = ReturnType<typeof bindConversation>;

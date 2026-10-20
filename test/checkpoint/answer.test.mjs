@@ -1,8 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
-import { GenerateAnswerDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
+import { Scene, Group, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
+import { GenerateAnswer, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };
 const input = { context: { message: { role: 'user', content: '你好' }, selectedMessages: [] }, memories: [] };
@@ -49,14 +49,14 @@ function parentCheckpoint(key, child) {
   };
 }
 
-function harness(t, provider, store, events = [], facts = [], generation = new GenerateAnswerDefinition()) {
+function harness(t, provider, store, events = [], facts = [], generation = new GenerateAnswer()) {
   const interactions = new ModelInteractions(new ModelSource(provider));
   t.after(() => interactions.close());
-  class Execution extends GroupDefinition {
+  class Execution extends Group {
     members = [generation];
     checkpoint = parentCheckpoint('fixture.answer.execution', generation);
     run = {
-      requires: GenerateAnswerDefinition.requires,
+      requires: GenerateAnswer.requires,
       execute: async (work) => {
         const call = work.children.create(generation, work.input, { key: 'generation', output: { receive: (event) => void events.push(event) } });
         work.checkpoint?.save(this.checkpoint.points[0], {}, { child: call.ref });
@@ -66,7 +66,7 @@ function harness(t, provider, store, events = [], facts = [], generation = new G
     };
   }
   const execution = new Execution();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [execution];
     checkpoint = parentCheckpoint('fixture.answer.runtime', execution);
     run = {
@@ -97,7 +97,7 @@ function restoreWrites(writes) {
 }
 
 test('answer checkpoint codecs remain dormant when checkpoints are not installed', async (t) => {
-  const generation = new GenerateAnswerDefinition();
+  const generation = new GenerateAnswer();
   generation.checkpoint.input = { encode: () => assert.fail('checkpoint capture is not installed'), decode: () => assert.fail('not restoring') };
   const original = harness(t, { invoke: async () => feedback() }, undefined, [], [], generation);
   assert.deepEqual(await original.runtime.run(input, {}), answer);
@@ -232,7 +232,7 @@ test('answer recovery refuses a child without durable feedback instead of issuin
 });
 
 test('answer checkpoint codecs preserve declared optional input and reject extra fields or invalid output', () => {
-  const definition = new GenerateAnswerDefinition();
+  const definition = new GenerateAnswer();
   const checkpoint = definition.checkpoint;
   assert.deepEqual(checkpoint.input.encode({ ...input, task: undefined, document: undefined }), input);
   assert.deepEqual(checkpoint.input.decode(checkpoint.input.encode(input)), input);
@@ -249,7 +249,7 @@ test('answer checkpoint codecs preserve declared optional input and reject extra
   };
   assert.throws(() => checkpoint.input.encode(withGetter), /accessor/);
   assert.equal(accesses, 0);
-  assert.notEqual(checkpoint.key, new GenerateAnswerDefinition({ document: true }).checkpoint.key);
+  assert.notEqual(checkpoint.key, new GenerateAnswer({ document: true }).checkpoint.key);
 });
 
 test('answer continuation checks the exact child identity and accepted output before running', async (t) => {
@@ -281,16 +281,16 @@ for (const stage of ['context', 'request', 'regenerationRequest', 'acceptance'])
     assert.ok(boundary > 0);
     let calls = 0;
     let recoveredRejection = false;
-    const generation = new GenerateAnswerDefinition();
+    const generation = new GenerateAnswer();
     if (stage === 'regenerationRequest') {
       const resume = generation.regenerationWaiting.resume.execute;
       generation.regenerationWaiting.resume.execute = (work, state, refs) => {
-        const rejection = work.children.facts.require(generation.acceptOutputDefinition, work.continuation.origin.child);
+        const rejection = work.children.facts.require(generation.acceptOutput, work.continuation.origin.child);
         assert.equal(rejection.returned.status, 'failed');
         assert.equal(rejection.returned.diagnostic.code, 'MODEL_OUTPUT_REJECTED');
         assert.equal(rejection.returned.diagnostic.detail.code, 'INVALID_JSON');
-        const previous = work.children.facts.requireUnique(generation.requestModelDefinition, { parentRound: 1 });
-        const evidence = generation.requestModelDefinition.regeneration.input({ round: work.round, continuation: work.continuation, children: work.children.facts }, { previous: previous.ref, rejection: rejection.ref });
+        const previous = work.children.facts.requireUnique(generation.requestModel, { parentRound: 1 });
+        const evidence = generation.requestModel.regeneration.input({ round: work.round, continuation: work.continuation, children: work.children.facts }, { previous: previous.ref, rejection: rejection.ref });
         assert.equal(evidence.error.code, 'INVALID_JSON');
         recoveredRejection = true;
         return resume(work, state, refs);

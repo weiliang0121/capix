@@ -1,10 +1,10 @@
-import { GroupDefinition, defineGroup, defineChildEntry } from '@capix/server-runtime';
-import type { NodeDefinition, SceneDefinition, SceneWork, GroupWork, NodeWork, AcceptWork, HandleWork, ResumeWork, InvocationRunDefinition, InvocationExceptionDefinition, InvocationCheckpointPoint, ChildReference, ChildEntryInput } from '@capix/server-runtime';
+import { Group, defineGroup, defineChildEntry } from '@capix/server-runtime';
+import type { Node, Scene, SceneWork, GroupWork, NodeWork, AcceptWork, HandleWork, ResumeWork, InvocationRunDefinition, InvocationExceptionDefinition, InvocationCheckpointPoint, ChildReference, ChildEntryInput } from '@capix/server-runtime';
 
-declare const scene: SceneDefinition<string, number>;
-declare const execution: GroupDefinition<string, number>;
-declare const operation: GroupDefinition<string, number>;
-declare const attempt: NodeDefinition<string, number>;
+declare const scene: Scene<string, number>;
+declare const execution: Group<string, number>;
+declare const operation: Group<string, number>;
+declare const attempt: Node<string, number>;
 declare const rootWork: SceneWork<string, number>;
 declare const executionWork: GroupWork<string, number>;
 declare const operationWork: GroupWork<string, number>;
@@ -29,7 +29,7 @@ type InvalidRun = InvocationRunDefinition<string, number, 'group', Record<string
 type InvalidException = InvocationExceptionDefinition<string, number, 'group', Record<string, never>, typeof scene>;
 type InvalidPoint = InvocationCheckpointPoint<string, number, 'group', number, Record<string, never>, Record<string, never>, typeof scene>;
 
-class InvalidExecution extends GroupDefinition<string, number> {
+class InvalidExecution extends Group<string, number> {
   readonly members = [operation];
   readonly run: InvocationRunDefinition<string, number, 'group', Record<string, never>, never, typeof operation> = {
     requires: {},

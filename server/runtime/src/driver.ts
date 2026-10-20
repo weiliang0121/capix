@@ -7,13 +7,12 @@ import type { DriverFact } from './observation/facts.js';
 import { DeclaredException } from './exception/contract.js';
 import { requireNotCancelled } from './invocation/cancellation.js';
 import { RuntimeError } from './errors/error.js';
-import type { BoundCallable } from './structure/callable.js';
+import type { BoundCallable } from './structure/bound.js';
 import type { InvocationControls } from './context/context.js';
 import type { InvocationCapabilities } from './invocation/capabilities.js';
 import { CallableBinder, type CallableBindingOptions } from './binding/callable.js';
-import type { AnyCallableDefinition } from './binding/declarations.js';
-import type { DefinitionInput, DefinitionOutput } from './definition/signature.js';
-import type { ResourcesOf } from './resource/offer.js';
+import type { AnyCallable } from './binding/declarations.js';
+import type { CallableInput, CallableOutput } from './definition/signature.js';
 import type { CheckpointStore } from './checkpoint/contract.js';
 
 type DriverChange = { kind: 'established' } | ({ boundId: string } & ({ kind: 'acquired' | 'released' } | { kind: 'rejected'; reason: 'busy'; error: unknown } | { kind: 'entry-failed'; error: unknown }));
@@ -49,8 +48,8 @@ export class Driver {
     return this.#checkpointStore;
   }
 
-  bind<Definition extends AnyCallableDefinition, Options, Source>(definition: Definition, options: CallableBindingOptions<NoInfer<DefinitionInput<Definition>>, Options, Source>): BoundCallable<DefinitionInput<Definition>, DefinitionOutput<Definition>, ResourcesOf<Definition['run']['requires']>, Options> {
-    const bound = this.#binder.bind(definition, options);
+  bind<Structure extends AnyCallable, Options, Source>(structure: Structure, options: CallableBindingOptions<NoInfer<CallableInput<Structure>>, Options, Source>): BoundCallable<CallableInput<Structure>, CallableOutput<Structure>, object, Options> {
+    const bound = this.#binder.bind(structure, options);
     this.#entries.set(bound, { running: false });
     return bound;
   }

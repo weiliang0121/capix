@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Transcript } from '@capix/server-runtime/content';
 import { ChildCallFailure } from '@capix/server-runtime';
-import { UnderstandRequestDefinition, requestOutputContract } from '@capix/observer-service';
+import { UnderstandRequest, requestOutputContract } from '@capix/observer-service';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { bindChild, resourceBindingFor } from '../fixtures/observer.mjs';
 import { callFor, lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
@@ -15,7 +15,7 @@ async function understand({ messages = [{ role: 'user', content: '请翻译 note
   const transcript = new Transcript(messages);
   const message = transcript.get(transcript.length - 1);
   const runtime = createBoundRuntime();
-  const definition = new UnderstandRequestDefinition({ files });
+  const definition = new UnderstandRequest({ files });
   const operation = bindChild(runtime, definition);
   const resourceBinding = resourceBindingFor(runtime, {
     async invoke(request, purpose) {

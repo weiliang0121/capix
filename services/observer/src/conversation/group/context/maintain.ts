@@ -1,4 +1,4 @@
-import { GroupDefinition, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { ModelSettings } from '@capix/protocol';
 import { isEqual } from 'es-toolkit';
@@ -20,23 +20,18 @@ interface MaintenanceResources {
 type MaintenanceWork = GroupWork<ContextMaintenanceRequest, ActiveContentSnapshot, MaintenanceResources>;
 
 /** One explicit maintenance boundary. Its own source writes remain facts, but never recursively schedule itself. */
-export class MaintainConversationContentDefinition extends GroupDefinition<ContextMaintenanceRequest, ActiveContentSnapshot, MaintenanceResources> {
-  readonly name = 'maintainContext';
-  readonly label = '维护活跃材料';
-  readonly source = 'services/observer/src/conversation/group/context/maintain.ts · MaintainConversationContentDefinition';
-  readonly observation = [invocationRecording<ContextMaintenanceRequest, ActiveContentSnapshot>({ output: describeActiveContent })];
+export class MaintainConversationContent extends Group<ContextMaintenanceRequest, ActiveContentSnapshot, MaintenanceResources> {
   static readonly requires = Object.freeze({ activeContentManager: ActiveContentResource.manage.request(), settings: ModelSettingsResource.snapshot.request() });
-  readonly members;
-  readonly run;
-  readonly checkpoint;
+
   readonly waiting;
   readonly accepted;
   readonly completed;
 
   constructor(private readonly policy: ContextMaintenancePolicy) {
     super();
-    this.members = Object.freeze(typeof policy === 'function' ? [] : [policy]);
-    const requires = MaintainConversationContentDefinition.requires;
+
+    if (typeof policy !== 'function') this.add(policy);
+    const requires = MaintainConversationContent.requires;
     const point = checkpointPoint<'group', ContextMaintenanceRequest, ActiveContentSnapshot>();
     this.waiting =
       typeof policy === 'function' || !policy.checkpoint
@@ -67,7 +62,7 @@ export class MaintainConversationContentDefinition extends GroupDefinition<Conte
         }
       },
       // No fixed-effect receipt exists for this index yet. A changed basis is refused, even if the target happens to match.
-      resume: { requires: MaintainConversationContentDefinition.requires, execute: (work, state) => this.install(work, state.input, state.decision) },
+      resume: { requires: MaintainConversationContent.requires, execute: (work, state) => this.install(work, state.input, state.decision) },
     });
     this.completed = point({
       name: 'completed',
@@ -86,8 +81,8 @@ export class MaintainConversationContentDefinition extends GroupDefinition<Conte
       },
       resume: { execute: (_work, state) => state.material },
     });
-    this.checkpoint = { key: 'observer.maintain-context', version: 1, input: contextMaintenanceRequestCodec, output: activeContentSnapshotCodec, points: this.waiting ? [this.waiting, this.accepted, this.completed] : [this.accepted, this.completed] };
-    this.run = { requires, uses: this.members, execute: this.execute.bind(this) };
+
+    this.setDefinition({ name: 'maintainContext', label: '维护活跃材料', source: 'services/observer/src/conversation/group/context/maintain.ts · MaintainConversationContent', observation: [invocationRecording<ContextMaintenanceRequest, ActiveContentSnapshot>({ output: describeActiveContent })], run: { requires, uses: this.members, execute: this.execute.bind(this) }, checkpoint: { key: 'observer.maintain-context', version: 1, input: contextMaintenanceRequestCodec, output: activeContentSnapshotCodec, points: this.waiting ? [this.waiting, this.accepted, this.completed] : [this.accepted, this.completed] } });
   }
 
   private async execute(work: MaintenanceWork): Promise<ActiveContentSnapshot> {

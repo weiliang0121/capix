@@ -1,51 +1,47 @@
-import type { SceneDefinition } from '../definition/scene.js';
-import type { GroupDefinition } from '../definition/group.js';
-import type { NodeDefinition } from '../definition/node.js';
-import type { CallableDefinition, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
+import type { CallableDescription, InvocationRunDefinition, InvocationExceptionDefinition, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
 import type { ObservationDeclaration } from '../definition/observation.js';
 import type { CallableKind } from '@capix/protocol';
 import type { CheckpointCodec } from '../checkpoint/contract.js';
-import type { invocationSignature } from '../definition/signature.js';
-import type { DefinitionReceptions, ReceptionDefinition } from '../definition/reception.js';
-import type { ChildContract } from '../definition/children.js';
+import type { ReceptionDefinition } from '../definition/reception.js';
+import type { ChildContract, ChildCallable } from '../definition/children.js';
+import type { ExceptionContract } from '../exception/contract.js';
+import type { AnyCallable } from './declarations.js';
 
-type AnyDefinition = SceneDefinition<any, any, any, any, any> | GroupDefinition<any, any, any, any, any> | NodeDefinition<any, any, any, any, any>;
+/** Fixed execution configuration. It has no author setters or callable identity. */
+export interface CallableSnapshot<Input = any, Output = any, Kind extends CallableKind = any, Resources extends object = any, ExceptionResources extends object = any, Delta = any> extends Omit<CallableDescription<Input, Output, Kind, Delta>, 'kind' | 'members'> {
+  readonly kind: Kind;
+  readonly maxRounds: 1 | 2;
+  readonly raises: readonly ExceptionContract<unknown>[];
+  readonly run: InvocationRunDefinition<Input, Output, Kind, Resources, Delta>;
+  readonly exceptions?: InvocationExceptionDefinition<Input, Output, Kind, ExceptionResources>;
+  readonly members?: readonly ChildCallable[];
+}
 
 /** Freeze interpreted contracts and member identity while preserving business receivers. */
-export function snapshotDefinition<Definition extends AnyDefinition>(definition: Definition): Definition {
+export function snapshotDefinition(definition: AnyCallable): CallableSnapshot {
   const members = 'members' in definition ? definition.members : undefined;
   if (definition.kind === 'node' && members !== undefined) throw new Error('Nodes cannot declare members');
   if (definition.kind === 'node' && definition.receptions !== undefined) throw new Error('Nodes cannot declare receptions');
-  const fixed = {
-    ...snapshotInvocation<any, any, any, any, any, any>(definition),
+  const run = definition.run;
+  if (!run || typeof run.execute !== 'function') throw new Error('Callable definition requires execute');
+  const exceptions = definition.exceptions;
+  const output = definition.output;
+  return Object.freeze({
     kind: definition.kind,
     name: definition.name,
     label: definition.label,
     source: definition.source,
     callee: definition.callee,
-    ...(members ? { members: Object.freeze([...members]) } : {}),
-  };
-  return Object.freeze(fixed) as Definition;
-}
-
-function snapshotInvocation<Input, Output, Kind extends CallableKind, Resources extends object, ExceptionResources extends object, Delta>(definition: CallableDefinition<Input, Output, Kind, Resources, ExceptionResources, Delta>): CallableDefinition<Input, Output, Kind, Resources, ExceptionResources, Delta> {
-  const run = definition.run;
-  const exceptions = definition.exceptions;
-  const output = definition.output;
-  const fixed = Object.freeze({
-    kind: definition.kind,
-    maxRounds: definition.maxRounds,
+    maxRounds: definition.maxRounds ?? 1,
     raises: Object.freeze([...(definition.raises ?? [])]),
     output: output ? Object.freeze({ result: output.result.bind(output), delta: output.delta?.bind(output) }) : undefined,
     run: Object.freeze({ requires: Object.freeze({ ...run.requires }), uses: run.uses ? Object.freeze([...run.uses]) : undefined, execute: run.execute.bind(run), accept: run.accept?.bind(run) }),
     exceptions: exceptions ? Object.freeze({ requires: Object.freeze({ ...exceptions.requires }), uses: exceptions.uses ? Object.freeze([...exceptions.uses]) : undefined, accepts: Object.freeze([...exceptions.accepts]), handle: exceptions.handle.bind(exceptions) }) : undefined,
     observation: definition.observation ? Object.freeze(definition.observation.map(snapshotObservation)) : undefined,
-    checkpoint: definition.checkpoint ? snapshotCheckpoint(definition.checkpoint) : undefined,
-    receptions: definition.receptions ? (Object.freeze(definition.receptions.map(snapshotReception)) as DefinitionReceptions<Kind>) : undefined,
-  } satisfies Omit<CallableDefinition<Input, Output, Kind, Resources, ExceptionResources, Delta>, typeof invocationSignature>);
-  // All runtime fields are checked above. Preserve the input's type-only I/O
-  // witness without creating a symbol value or treating it as runtime identity.
-  return fixed as typeof fixed & Pick<CallableDefinition<Input, Output, Kind, Resources, ExceptionResources, Delta>, typeof invocationSignature>;
+    checkpoint: definition.checkpoint ? snapshotCheckpoint<any, any, any, any>(definition.checkpoint) : undefined,
+    receptions: definition.receptions ? Object.freeze(definition.receptions.map(snapshotReception)) : undefined,
+    ...(members ? { members: Object.freeze([...members]) } : {}),
+  });
 }
 
 const receptionOrigins = new WeakMap<object, object>();

@@ -3,7 +3,7 @@ import { Clock, Driver, MemoryCheckpointStore, RuntimeError, type CheckpointInst
 import { RecordBook, Recorder, bindRecording } from '@capix/server-runtime/recording';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import type { Message, RecordingArchive } from '@capix/protocol';
-import { ConversationSceneDefinition } from '../conversation/scene.js';
+import { createConversationStructure } from '../conversation/scene.js';
 import { bindConversation } from '../conversation/binding.js';
 import { MemoryConversationCheckpointRuns } from '../conversation/checkpoints.js';
 import { RecordSource } from '../observation/record/source.js';
@@ -12,7 +12,7 @@ import { ModelSource } from '../conversation/model/source.js';
 import { ModelInteractions } from '../conversation/model/interactions.js';
 import type { WorkspaceFiles } from '../files/index.js';
 import type { ContextMaintenancePolicy } from '../conversation/group/context/maintain.js';
-import type { ConversationDecisionDefinition } from '../conversation/decision/types.js';
+import type { ConversationDecisionGroup } from '../conversation/decision/types.js';
 import { ConversationContent } from './content.js';
 import { ObserverEnvironment } from './environment.js';
 import type { SqliteObserverStore } from '../persistence/store.js';
@@ -20,7 +20,7 @@ import type { SqliteObserverStore } from '../persistence/store.js';
 /** Independent entity lifetimes are established here; R only binds their published access. */
 export interface ObserverInitializationOptions {
   readonly files?: WorkspaceFiles;
-  readonly decision?: ConversationDecisionDefinition;
+  readonly decision?: ConversationDecisionGroup;
   readonly maxDecisionSteps?: number;
   readonly maintenance?: ContextMaintenancePolicy;
   readonly persistence?: SqliteObserverStore;
@@ -103,7 +103,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
     });
     const { transcript, memories, active } = content;
     const selectionUsage = new SelectionUsage();
-    const definition = new ConversationSceneDefinition({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps, maintenance: options.maintenance });
+    const structure = createConversationStructure({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps, maintenance: options.maintenance });
     const model = options.model ?? new ModelSource(provider);
     interactions = new ModelInteractions(model, { persistence: persistence?.interactions });
     const checkpoints = persistence?.checkpoints ?? new MemoryCheckpointStore();
@@ -112,11 +112,11 @@ export function initializeObserver(provider: ModelInitialization, messages: read
     const observation = new CheckpointObservation(conversationId, checkpointRuns);
     checkpointObservation = observation;
     const driver = new Driver({ clock, observations: [recording], changes, checkpoints: { store: checkpoints, observation: bindCheckpointObservation(observation, options.checkpointObservation) } });
-    const scene = bindConversation(driver, definition, { transcript, memories, active, selectionUsage, files: options.files }, interactions, { checkpointRuns, conversationId });
+    const scene = bindConversation(driver, structure, { transcript, memories, active, selectionUsage, files: options.files }, interactions, { checkpointRuns, conversationId });
     releaseObservation = content.observe(recording);
     // Fresh in-memory input is a real append after observation binds; restored content stays silent.
     if (!options.content && !persistence) transcript.append(...messages);
-    return new ObserverEnvironment({ conversationId, content, selectionUsage, files: options.files, model, interactions, book, clock, recorder, recording, driver, scene, definition, recordSource, recordingArchives, persistence, checkpoints, checkpointRuns, checkpointObservation: observation }, { ownsContent: !options.content, ownsPersistence: !options.shared, releaseObservation });
+    return new ObserverEnvironment({ conversationId, content, selectionUsage, files: options.files, model, interactions, book, clock, recorder, recording, driver, scene, definition: structure.scene, structure, recordSource, recordingArchives, persistence, checkpoints, checkpointRuns, checkpointObservation: observation }, { ownsContent: !options.content, ownsPersistence: !options.shared, releaseObservation });
   } catch (error) {
     const failures: unknown[] = [error];
     const releases = [

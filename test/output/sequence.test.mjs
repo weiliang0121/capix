@@ -1,13 +1,13 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, SceneDefinition, GroupDefinition, bindCallSource } from '@capix/server-runtime';
+import { Sequence, Scene, Group, bindCallSource } from '@capix/server-runtime';
 
 const output = { result: (value) => value, delta: (value) => value };
 
 test('Sequence binds declared output explicitly while final parent acceptance remains independent', async () => {
   const phases = [];
-  const operation = new (class extends GroupDefinition {
+  const operation = new (class extends Group {
     name = 'source';
     label = 'source';
     source = 'test';
@@ -20,7 +20,7 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       },
     };
   })();
-  const execution = new (class extends GroupDefinition {
+  const execution = new (class extends Group {
     output = output;
     members = [operation];
     run = {
@@ -47,7 +47,7 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       },
     };
   })();
-  const runtime = new (class extends SceneDefinition {
+  const runtime = new (class extends Scene {
     members = [execution];
     run = {
       requires: {},

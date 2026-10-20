@@ -1,16 +1,16 @@
 import { isEqual } from 'es-toolkit/predicate';
 import { cloneCheckpointValue } from '@capix/server-runtime';
 import { understandingInputCodec, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
-import { GroupDefinition, checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources, ModelRequestResources } from '../../resources.js';
 import type { ModelRequest } from '../../model/types.js';
 import { loadRequest } from '../../model/request.js';
 import { checkCapacity } from '../../model/capacity.js';
-import { PrepareModelRequestDefinition } from '../../node/model/prepare.js';
-import { RequestModelDefinition } from '../model/request.js';
-import { AcceptModelOutputDefinition, type ModelAcceptanceInput } from '../../node/model/accept.js';
+import { PrepareModelRequest } from '../../node/model/prepare.js';
+import { RequestModel } from '../model/request.js';
+import { AcceptModelOutput, type ModelAcceptanceInput } from '../../node/model/accept.js';
 import { understandingHistory, type RequestUnderstandingInput } from './input.js';
 import { requestOutputContract, type RequestProposal } from './output.js';
 
@@ -24,33 +24,30 @@ fileTask 若存在，是用户在专门入口明确指定的完整约束，来�
 
 const requestResources = Object.freeze({ settings: ModelSettingsResource.snapshot.request() });
 
-export class UnderstandRequestDefinition extends GroupDefinition<RequestUnderstandingInput, RequestProposal, ModelCallResources> {
-  readonly observation = [invocationRecording()];
-  readonly name = 'understanding';
-  readonly label = '理解请求';
-  readonly source = 'services/observer/src/conversation/group/request/understand.ts · UnderstandRequestDefinition';
+export class UnderstandRequest extends Group<RequestUnderstandingInput, RequestProposal, ModelCallResources> {
   static readonly requires = Object.freeze({ ...requestResources, timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
-  readonly run;
-  readonly members;
-  readonly checkpoint;
+
   readonly points;
   private readonly filesEnabled: boolean;
-  readonly prepareRequestDefinition: PrepareModelRequestDefinition<RequestUnderstandingInput, ModelRequestResources>;
-  readonly requestModelDefinition = new RequestModelDefinition('understanding');
-  readonly acceptOutputDefinition = new AcceptModelOutputDefinition<ModelAcceptanceInput, RequestProposal>(requestOutputContract);
+  readonly prepareRequest: PrepareModelRequest<RequestUnderstandingInput, ModelRequestResources>;
+  readonly requestModel;
+  readonly acceptOutput;
 
   constructor(options: { readonly files: boolean }) {
     super();
+
+    this.requestModel = new RequestModel('understanding');
+    this.acceptOutput = new AcceptModelOutput<ModelAcceptanceInput, RequestProposal>(requestOutputContract);
     this.filesEnabled = options.files;
-    this.prepareRequestDefinition = new PrepareModelRequestDefinition((input, resources) => this.createRequest(input, resources), requestResources);
-    this.members = Object.freeze([this.prepareRequestDefinition, this.requestModelDefinition, this.acceptOutputDefinition]);
+    this.prepareRequest = new PrepareModelRequest((input, resources) => this.createRequest(input, resources), requestResources);
+    this.add(this.prepareRequest, this.requestModel, this.acceptOutput);
     const proposalCodec = { encode: (value: RequestProposal) => cloneCheckpointValue(requestOutputContract.accept(value)), decode: (value: unknown) => requestOutputContract.accept(value) };
     const point = checkpointPoint<'group', RequestUnderstandingInput, RequestProposal>();
     this.points = {
       requestWaiting: point({
         name: 'requestWaiting',
         state: emptyCheckpointState,
-        references: { child: childReference(this.prepareRequestDefinition) },
+        references: { child: childReference(this.prepareRequest) },
         check: (_state, facts) => {
           originalCheckpoint(facts);
           const child = waitingChild(facts, facts.references.child, 'request');
@@ -61,26 +58,26 @@ export class UnderstandRequestDefinition extends GroupDefinition<RequestUndersta
       acceptanceWaiting: point({
         name: 'acceptanceWaiting',
         state: emptyCheckpointState,
-        references: { child: childReference(this.acceptOutputDefinition) },
+        references: { child: childReference(this.acceptOutput) },
         check: (_state, facts) => {
           originalCheckpoint(facts);
           const child = waitingChild(facts, facts.references.child, 'acceptance');
-          const model = acceptedChild(facts.children.requireUnique(this.requestModelDefinition, { parentRound: 1 }));
+          const model = acceptedChild(facts.children.requireUnique(this.requestModel, { parentRound: 1 }));
           if (facts.children.values().length !== 3 || model.key !== 'model' || !isEqual(child.input, { output: model.reception.value })) throw new Error('Understanding acceptance checkpoint changed feedback');
         },
-        resume: { uses: [this.acceptOutputDefinition], execute: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.child)) },
+        resume: { uses: [this.acceptOutput], execute: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.child)) },
       }),
       modelWaiting: point({
         name: 'modelWaiting',
         state: emptyCheckpointState,
-        references: { child: childReference(this.requestModelDefinition) },
+        references: { child: childReference(this.requestModel) },
         check: (_state, facts) => {
           originalCheckpoint(facts);
           const model = waitingChild(facts, facts.references.child, 'model');
-          const request = acceptedChild(facts.children.requireUnique(this.prepareRequestDefinition, { parentRound: 1 }));
+          const request = acceptedChild(facts.children.requireUnique(this.prepareRequest, { parentRound: 1 }));
           if (facts.children.values().length !== 2 || request.key !== 'request' || !isEqual(request.input, facts.input) || !isEqual(model.input, request.reception.value)) throw new Error('Understanding checkpoint differs from prepared model request');
         },
-        resume: { uses: [this.requestModelDefinition, this.acceptOutputDefinition], execute: (work, _state, saved) => this.receiveModel(work, work.children.resume(saved.child)) },
+        resume: { uses: [this.requestModel, this.acceptOutput], execute: (work, _state, saved) => this.receiveModel(work, work.children.resume(saved.child)) },
       }),
       result: point({
         name: 'result',
@@ -88,36 +85,36 @@ export class UnderstandRequestDefinition extends GroupDefinition<RequestUndersta
         references: {},
         check: (output, facts) => {
           originalCheckpoint(facts);
-          const child = acceptedChild(facts.children.requireUnique(this.acceptOutputDefinition, { parentRound: 1 }));
+          const child = acceptedChild(facts.children.requireUnique(this.acceptOutput, { parentRound: 1 }));
           if (child.key !== 'acceptance' || !isEqual(child.reception.value, output)) throw new Error('Understanding checkpoint differs from accepted proposal');
         },
         resume: { execute: (_work, output) => output },
       }),
     };
-    this.checkpoint = { key: `observer.understand-request.${options.files ? 'files' : 'chat'}`, version: 3, input: understandingInputCodec, output: proposalCodec, points: Object.values(this.points) };
-    this.run = { requires: UnderstandRequestDefinition.requires, uses: this.members, execute: this.execute.bind(this) };
+
+    this.setDefinition({ observation: [invocationRecording()], name: 'understanding', label: '理解请求', source: 'services/observer/src/conversation/group/request/understand.ts · UnderstandRequest', run: { requires: UnderstandRequest.requires, uses: this.members, execute: this.execute.bind(this) }, checkpoint: { key: `observer.understand-request.${options.files ? 'files' : 'chat'}`, version: 3, input: understandingInputCodec, output: proposalCodec, points: Object.values(this.points) } });
   }
 
   private async execute(work: GroupWork<RequestUnderstandingInput, RequestProposal, object>): Promise<RequestProposal> {
-    const request = work.children.create(this.prepareRequestDefinition, work.input, { key: 'request' });
+    const request = work.children.create(this.prepareRequest, work.input, { key: 'request' });
     work.checkpoint?.save(this.points.requestWaiting, null, { child: request.ref });
     return this.receiveRequest(work, request);
   }
-  private async receiveRequest(work: GroupWork<RequestUnderstandingInput, RequestProposal, object>, request: ChildCall<PrepareModelRequestDefinition<RequestUnderstandingInput, ModelRequestResources>>): Promise<RequestProposal> {
+  private async receiveRequest(work: GroupWork<RequestUnderstandingInput, RequestProposal, object>, request: ChildCall<PrepareModelRequest<RequestUnderstandingInput, ModelRequestResources>>): Promise<RequestProposal> {
     await request.run();
     const prepared = await request.accept();
-    const model = work.children.create(this.requestModelDefinition, prepared, { key: 'model' });
+    const model = work.children.create(this.requestModel, prepared, { key: 'model' });
     work.checkpoint?.save(this.points.modelWaiting, null, { child: model.ref });
     return this.receiveModel(work, model);
   }
-  private async receiveModel(work: GroupWork<RequestUnderstandingInput, RequestProposal, object>, model: ChildCall<RequestModelDefinition>): Promise<RequestProposal> {
+  private async receiveModel(work: GroupWork<RequestUnderstandingInput, RequestProposal, object>, model: ChildCall<RequestModel>): Promise<RequestProposal> {
     await model.run();
     const output = await model.accept();
-    const acceptance = work.children.create(this.acceptOutputDefinition, { output }, { key: 'acceptance' });
+    const acceptance = work.children.create(this.acceptOutput, { output }, { key: 'acceptance' });
     work.checkpoint?.save(this.points.acceptanceWaiting, null, { child: acceptance.ref });
     return this.receiveAcceptance(work, acceptance);
   }
-  private async receiveAcceptance(work: GroupWork<RequestUnderstandingInput, RequestProposal, object>, acceptance: ChildCall<AcceptModelOutputDefinition<ModelAcceptanceInput, RequestProposal>>): Promise<RequestProposal> {
+  private async receiveAcceptance(work: GroupWork<RequestUnderstandingInput, RequestProposal, object>, acceptance: ChildCall<AcceptModelOutput<ModelAcceptanceInput, RequestProposal>>): Promise<RequestProposal> {
     await acceptance.run();
     const result = await acceptance.accept();
     work.checkpoint?.save(this.points.result, result, {});

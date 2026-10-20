@@ -5,20 +5,21 @@ import type { ResourceRefinement } from '../resource/offer.js';
 import type { BoundChildren } from './children/bound.js';
 import type { ObservationInstallation } from './observation.js';
 import type { ChildResourceBinding } from './resources.js';
-import type { AnyCallableDefinition } from './declarations.js';
-import type { ChildDefinition } from '../definition/children.js';
+import type { AnyCallable } from './declarations.js';
+import type { CallableSnapshot } from './snapshot.js';
+import type { ChildCallable } from '../definition/children.js';
 
 /** Assembly conditions are fixed once and shared by the single callable binder. */
 export interface ChildBindingOptions {
   readonly observationProvides?: ResourceRequirements;
   readonly observations?: readonly ObservationInstallation[];
   readonly childResources?: readonly ChildResourceBinding[];
-  readonly sources?: readonly ChildDefinition[];
+  readonly sources?: readonly ChildCallable[];
 }
 
 export interface CallableBinding<Input, Output, Resources extends object> {
-  readonly definition: AnyCallableDefinition;
-  readonly declaration: AnyCallableDefinition;
+  readonly definition: AnyCallable;
+  readonly declaration: CallableSnapshot;
   readonly children: BoundChildren;
   readonly composite: boolean;
   readonly requires: ResourceRequirements<Resources>;

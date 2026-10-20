@@ -2,7 +2,7 @@ import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { ChangeBuffer, SceneDefinition, GroupDefinition, invocationRecording, bindRecording, Recorder, RecordBook, BaseRecord, CallableRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix/server-runtime';
+import { ChangeBuffer, Scene, Group, invocationRecording, bindRecording, Recorder, RecordBook, BaseRecord, CallableRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix/server-runtime';
 import { ObserverConversations, ObservationFeed, acceptConversationInput, createObserverServer } from '@capix/observer-service';
 import { ObservationReplica, ObservationSequenceError, ClientRuntime } from '@capix/client-runtime';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
@@ -45,12 +45,12 @@ async function run(environment, content) {
 }
 
 function executionRuntime(execute, { changes, recording, accept, parentAccept } = {}) {
-  class E extends GroupDefinition {
+  class E extends Group {
     observation = recording ? [invocationRecording({ role: 'conversation-task' })] : undefined;
     run = { requires: {}, execute, ...(accept ? { accept } : {}) };
   }
   const execution = new E();
-  class R extends SceneDefinition {
+  class R extends Scene {
     members = [execution];
     observation = recording ? [invocationRecording()] : undefined;
     run = {

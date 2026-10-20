@@ -2,7 +2,7 @@ import { Driver } from '@capix/server-runtime';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ConversationSubmission, ConversationSceneDefinition, bindConversation } from '@capix/observer-service';
+import { ConversationSubmission, createConversationStructure, bindConversation } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
@@ -34,7 +34,7 @@ test('submission exposes live REOA calls and parent acceptance without installin
   const driver = new Driver();
   const scene = bindConversation(
     driver,
-    new ConversationSceneDefinition(),
+    createConversationStructure(),
     environment,
     new ModelInteractions(
       new ModelSource({
@@ -86,7 +86,7 @@ test('activity keeps failed child and new retry identities while the parent succ
   const driver = new Driver();
   const scene = bindConversation(
     driver,
-    new ConversationSceneDefinition(),
+    createConversationStructure(),
     createEnvironment(),
     new ModelInteractions(
       new ModelSource({
@@ -118,7 +118,7 @@ test('activity source failure is independent of committed content and actual sub
   const driver = new Driver();
   const scene = bindConversation(
     driver,
-    new ConversationSceneDefinition(),
+    createConversationStructure(),
     environment,
     new ModelInteractions(
       new ModelSource({

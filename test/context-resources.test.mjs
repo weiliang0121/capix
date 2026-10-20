@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence, defineNode } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
-import { bindConversation, ConversationSceneDefinition, GenerateAnswerDefinition } from '@capix/observer-service';
+import { bindConversation, createConversationStructure, GenerateAnswer } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 
@@ -22,17 +22,20 @@ function provider() {
 
 test('Observer narrows resources at each action, captures fixed values and expires live endpoints with the call', async () => {
   const entities = createEnvironment();
-  const definition = new ConversationSceneDefinition();
+  const definition = createConversationStructure();
   const views = [];
   const inspect = (current) => {
     const execute = current.run.execute;
-    current.run.execute = function (work) {
-      views.push({ definition: current, resources: { ...work.resources } });
-      return execute.call(this, work);
-    };
+    current.setRun({
+      ...current.run,
+      execute(work) {
+        views.push({ definition: current, resources: { ...work.resources } });
+        return execute.call(this, work);
+      },
+    });
     for (const child of current.members ?? []) inspect(child);
   };
-  inspect(definition.taskDefinition);
+  inspect(definition.conversation);
   const driver = new Driver();
   const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider())));
   let first;
@@ -49,9 +52,9 @@ test('Observer narrows resources at each action, captures fixed values and expir
     },
   );
   const firstViews = [...views];
-  const entry = firstViews.find((view) => view.definition === definition.taskDefinition).resources;
-  const preparation = firstViews.find((view) => view.definition === definition.taskDefinition.operationDefinitions.preparation).resources;
-  const generation = firstViews.find((view) => view.definition === definition.taskDefinition.operationDefinitions.generation).resources;
+  const entry = firstViews.find((view) => view.definition === definition.conversation).resources;
+  const preparation = firstViews.find((view) => view.definition === definition.preparation).resources;
+  const generation = firstViews.find((view) => view.definition === definition.generation).resources;
   assert.equal(entry.history.locate().end, 1);
   assert.deepEqual(Object.keys(preparation), ['activeContent']);
   assert.equal(preparation.activeContent.transcript, undefined);
@@ -66,7 +69,7 @@ test('Observer narrows resources at each action, captures fixed values and expir
     first.children.values().map((relation) => relation.key),
     ['preparation', 'decision', 'generation', 'decision', 'extraction'],
   );
-  const decisions = firstViews.filter((view) => view.definition === definition.taskDefinition.operationDefinitions.decision);
+  const decisions = firstViews.filter((view) => view.definition === definition.decision);
   assert.equal(decisions.length, 2);
   assert.ok(
     decisions.every((view) => Object.keys(view.resources).length === 0),
@@ -75,7 +78,7 @@ test('Observer narrows resources at each action, captures fixed values and expir
   views.length = 0;
   await driver.run(scene, { messages: [{ role: 'user', content: '继续' }] }, { settings: { ...settings, timeoutMs: 2000 } });
   assert.equal(views[0].resources.history.end, 3);
-  const nextGeneration = views.find((view) => view.definition === definition.taskDefinition.operationDefinitions.generation).resources;
+  const nextGeneration = views.find((view) => view.definition === definition.generation).resources;
   assert.equal(nextGeneration.timeoutMs, 2000);
   assert.equal(generation.timeoutMs, 1000);
   assert.equal(entry.history.end, 1);
@@ -84,7 +87,7 @@ test('Observer narrows resources at each action, captures fixed values and expir
 
 test('nested operations cannot implicitly bypass their direct parent for execution resources', async () => {
   const runtime = createBoundRuntime();
-  const generation = bindChild(runtime, new GenerateAnswerDefinition());
+  const generation = bindChild(runtime, new GenerateAnswer());
   let wrapper;
   class NarrowOperation extends OperationFixture {
     name = 'narrow';
@@ -313,23 +316,26 @@ test('model offers separate creation and reading while preserving provider metho
     assert.equal(this, model);
     return invoke(...args);
   };
-  const definition = new ConversationSceneDefinition();
-  const generation = definition.taskDefinition.operationDefinitions.generation;
+  const definition = createConversationStructure();
+  const generation = definition.generation;
   const execute = generation.run.execute;
-  generation.run.execute = function (work) {
-    const creator = work.resources.modelCreator;
-    const reader = work.resources.modelReader;
-    assert.notEqual(creator, model);
-    assert.deepEqual(Object.keys(creator), ['start']);
-    assert.deepEqual(Object.keys(reader), ['subscribe', 'wait', 'result']);
-    assert.equal(creator.privateValue, undefined);
-    assert.equal(reader.start, undefined);
-    assert.ok(Object.isFrozen(creator));
-    assert.ok(Object.isFrozen(reader));
-    assert.equal(work.settings, undefined);
-    assert.equal(work.transcriptRange, undefined);
-    return execute.call(this, work);
-  };
+  generation.setRun({
+    ...generation.run,
+    execute(work) {
+      const creator = work.resources.modelCreator;
+      const reader = work.resources.modelReader;
+      assert.notEqual(creator, model);
+      assert.deepEqual(Object.keys(creator), ['start']);
+      assert.deepEqual(Object.keys(reader), ['subscribe', 'wait', 'result']);
+      assert.equal(creator.privateValue, undefined);
+      assert.equal(reader.start, undefined);
+      assert.ok(Object.isFrozen(creator));
+      assert.ok(Object.isFrozen(reader));
+      assert.equal(work.settings, undefined);
+      assert.equal(work.transcriptRange, undefined);
+      return execute.call(this, work);
+    },
+  });
   const driver = new Driver();
   const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(model)));
   await driver.run(scene, { messages: [{ role: 'user', content: '你好' }] }, { settings });

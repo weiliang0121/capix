@@ -1,7 +1,7 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, InvocationCancelled, RuntimeError, ProgressChannel, Transcript, TranscriptResource, bindResources, GroupDefinition, NodeDefinition, bindCallSource } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationCancelled, RuntimeError, ProgressChannel, Transcript, TranscriptResource, bindResources, Group, Node, bindCallSource } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 const message = (content) => ({ role: 'user', content });
@@ -217,7 +217,7 @@ test('append commit reaches its local receiver before resource returned observat
 });
 
 test('assembly selects local execution progress by declaration and each run receives a separate identity', async () => {
-  class Echo extends GroupDefinition {
+  class Echo extends Group {
     run = { requires: {}, execute: (work) => work.input };
   }
   const execution = new Echo();
@@ -271,21 +271,21 @@ function delegated(child) {
 }
 
 function hierarchy() {
-  const attempt = new (class extends NodeDefinition {
+  const attempt = new (class extends Node {
     name = 'echo';
     label = '测试能力';
     source = 'private-source';
     callee = 'private-provider';
     run = { requires: {}, execute: (work) => work.input };
   })();
-  const operation = new (class extends GroupDefinition {
+  const operation = new (class extends Group {
     name = 'compose';
     label = '组合工作';
     source = 'private-operation-source';
     members = [attempt];
     run = delegated(attempt);
   })();
-  const execution = new (class extends GroupDefinition {
+  const execution = new (class extends Group {
     members = [operation];
     run = delegated(operation);
   })();

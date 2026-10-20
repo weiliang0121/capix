@@ -6,7 +6,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { bindConversation, ConversationSceneDefinition, ConversationSubmission, WorkspaceFiles } from '@capix/observer-service';
+import { bindConversation, createConversationStructure, ConversationSubmission, WorkspaceFiles } from '@capix/observer-service';
 import { ProgressChannel } from '@capix/server-runtime';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import { Recorder, RecordBook, bindRecording } from '@capix/server-runtime/recording';
@@ -48,7 +48,7 @@ async function fixture(t, { recorded = true, answers = [answer], memoryFailure =
   const transcript = new Transcript([], { observation: recording?.transcript });
   const memories = new Memories(transcript, { observation: recording?.memory });
   const entities = { transcript, memories, active: new ActiveContent(transcript, memories), files, selectionUsage: new SelectionUsage() };
-  const definition = new ConversationSceneDefinition({ files: true });
+  const definition = createConversationStructure({ files: true });
   const driver = new Driver({ observations: recording ? [recording] : undefined });
   const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
   const progress = [];
@@ -166,7 +166,7 @@ test('disabled file capability rejects before accepting input', async () => {
   const driver = new Driver();
   const scene = bindConversation(
     driver,
-    new ConversationSceneDefinition(),
+    createConversationStructure(),
     { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
     new ModelInteractions(
       new ModelSource(() => {
@@ -234,7 +234,7 @@ test('declared file support requires the bound workspace entity', () => {
     () =>
       bindConversation(
         driver,
-        new ConversationSceneDefinition({ files: true }),
+        createConversationStructure({ files: true }),
         { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
         new ModelInteractions(
           new ModelSource(() => {

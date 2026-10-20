@@ -4,39 +4,33 @@ import { invocationRecording, type InvocationRecordDescription } from '@capix/se
 import { ModelSettingsResource } from '../../model/resources.js';
 import type { ResourceRequirements } from '@capix/server-runtime';
 import type { ModelRequestResources } from '../../resources.js';
-import { NodeDefinition, checkpointPoint, cloneCheckpointValue, type CheckpointValue, type InvocationCheckpointDefinition, type NodeWork } from '@capix/server-runtime';
+import { Node, checkpointPoint, cloneCheckpointValue, type CheckpointValue } from '@capix/server-runtime';
 
 import type { ModelRequest } from '../../model/types.js';
 import { checkCapacity } from '../../model/capacity.js';
 
 /** Build the operation-specific request and verify capacity before sending it. */
-export class PrepareModelRequestDefinition<Input, Resources extends ModelRequestResources = ModelRequestResources> extends NodeDefinition<Input, ModelRequest, Resources> {
-  readonly observation;
-  readonly run;
-  private readonly resultPoint = checkpointPoint<'node', Input, ModelRequest>()({ name: 'result', state: modelRequestCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, output) => output } });
-  readonly checkpoint: InvocationCheckpointDefinition<Input, ModelRequest, 'node'> = { key: 'observer.prepare-model-request', version: 1, input: { encode: cloneCheckpointValue, decode: (value: CheckpointValue) => cloneCheckpointValue(value) as Input }, output: modelRequestCodec, points: [this.resultPoint] };
+export class PrepareModelRequest<Input, Resources extends ModelRequestResources = ModelRequestResources> extends Node<Input, ModelRequest, Resources> {
   static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request() });
 
-  readonly name = 'prepareModelRequest';
-  readonly label = '准备模型请求';
-  readonly source = 'services/observer/src/conversation/node/model/prepare.ts · PrepareModelRequestDefinition';
-  readonly callee = 'processing';
-
-  constructor(
-    private readonly createRequest: (input: Input, resources: Resources) => ModelRequest,
-    requires: ResourceRequirements<Resources> = PrepareModelRequestDefinition.requires as ResourceRequirements<Resources>,
-    description: InvocationRecordDescription<Input, ModelRequest> = {},
-  ) {
-    super();
-    this.observation = [invocationRecording(description)];
-    this.run = { requires, execute: this.execute.bind(this) };
-  }
-
-  private execute(work: NodeWork<Input, ModelRequest, Resources>): ModelRequest {
-    const resources = work.resources;
-    const request = this.createRequest(work.input, resources);
-    checkCapacity(request, resources.settings);
-    work.checkpoint?.save(this.resultPoint, request, {});
-    return request;
+  constructor(createRequest: (input: Input, resources: Resources) => ModelRequest, requires: ResourceRequirements<Resources> = PrepareModelRequest.requires as ResourceRequirements<Resources>, description: InvocationRecordDescription<Input, ModelRequest> = {}) {
+    const resultPoint = checkpointPoint<'node', Input, ModelRequest>()({ name: 'result', state: modelRequestCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, output) => output } });
+    super({
+      observation: [invocationRecording(description)],
+      run: {
+        requires,
+        execute(work) {
+          const request = createRequest(work.input, work.resources);
+          checkCapacity(request, work.resources.settings);
+          work.checkpoint?.save(resultPoint, request, {});
+          return request;
+        },
+      },
+      checkpoint: { key: 'observer.prepare-model-request', version: 1, input: { encode: cloneCheckpointValue, decode: (value: CheckpointValue) => cloneCheckpointValue(value) as Input }, output: modelRequestCodec, points: [resultPoint] },
+      name: 'prepareModelRequest',
+      label: '准备模型请求',
+      source: 'services/observer/src/conversation/node/model/prepare.ts · PrepareModelRequest',
+      callee: 'processing',
+    });
   }
 }

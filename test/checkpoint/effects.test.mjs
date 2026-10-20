@@ -4,9 +4,9 @@ import { test } from 'node:test';
 import { mkdtemp, rm, unlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
+import { Scene, Group, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
 import { Transcript, Memories, MemoryResource } from '@capix/server-runtime/content';
-import { ExtractMemoryDefinition, SaveResultDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
+import { ExtractMemory, SaveResult, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 import { WorkspaceFiles, FileResources } from '@capix/observer-service/assembly';
 
 const codec = { encode: structuredClone, decode: structuredClone };
@@ -49,7 +49,7 @@ function harness(operation, providers, store, requires = operation.run.requires)
       }),
     ],
   });
-  class Execution extends GroupDefinition {
+  class Execution extends Group {
     members = [operation];
     checkpoint = checkpoint('effects.execution', operation);
     run = {
@@ -63,7 +63,7 @@ function harness(operation, providers, store, requires = operation.run.requires)
     };
   }
   const execution = new Execution();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [execution];
     checkpoint = checkpoint('effects.runtime', execution);
     run = {
@@ -103,7 +103,7 @@ test('extract-memory resumes a committed application from its old waiting CP wit
   const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
   const providers = (entity) => [MemoryResource.apply.provide(() => entity), ModelSettingsResource.snapshot.provide(() => settings), ModelSettingsResource.timeout.provide(() => settings.timeoutMs), ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)];
   const store = new CaptureStore();
-  const original = harness(new ExtractMemoryDefinition(), providers(memories), store);
+  const original = harness(new ExtractMemory(), providers(memories), store);
   assert.deepEqual(await original.run(input, {}), output);
   assert.equal(requests, 1);
   const snapshot = store.snapshots.get('observer.apply-memory:prepared');
@@ -115,7 +115,7 @@ test('extract-memory resumes a committed application from its old waiting CP wit
       },
     },
   });
-  const restored = harness(new ExtractMemoryDefinition(), providers(restoredMemories), snapshot);
+  const restored = harness(new ExtractMemory(), providers(restoredMemories), snapshot);
   assert.deepEqual(await restored.resume(rootId(store), {}), output);
   assert.equal(requests, 1);
   assert.equal(restoredMemories.sequence, 1);
@@ -129,12 +129,12 @@ test('save-result resumes a committed fixed file receipt from the old creation C
   const store = new CaptureStore();
   const providers = [FileResources.createText.provide(() => ({ files, path: 'result.md' }))];
   const input = { path: 'result.md', text: 'fixed result' };
-  const original = harness(new SaveResultDefinition(), providers, store);
+  const original = harness(new SaveResult(), providers, store);
   const receipt = await original.run(input, {});
   const snapshot = store.snapshots.get('observer.create-text:prepared');
   assert.ok(snapshot);
   await unlink(join(root, 'result.md'));
-  const restored = harness(new SaveResultDefinition(), providers, snapshot);
+  const restored = harness(new SaveResult(), providers, snapshot);
   assert.deepEqual(await restored.resume(rootId(store), {}), receipt);
   await assert.rejects(readFile(join(root, 'result.md')), { code: 'ENOENT' });
 });

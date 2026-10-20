@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NodeDefinition, defineNode, defineGroup, reception, resolveDeclaration } from '@capix/server-runtime';
+import { Node, defineNode, defineGroup, reception, resolveDeclaration } from '@capix/server-runtime';
 
 const metadata = { name: 'test', label: 'test', source: 'test', callee: 'local' };
 const identity = { check: (value) => value, encode: (value) => value, decode: (value) => value };
@@ -33,7 +33,7 @@ test('separate contracts for one child and the same contract in separate parents
 
 for (const receptions of [[], [reception(child, identity)]]) {
   test(`A rejects a reception registry of size ${receptions.length} in class and factory forms`, () => {
-    class InvalidLeaf extends NodeDefinition {
+    class InvalidLeaf extends Node {
       name = 'invalid';
       label = 'invalid';
       source = 'test';

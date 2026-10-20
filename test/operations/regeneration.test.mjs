@@ -1,8 +1,9 @@
+import { reconfigure } from '../fixtures/assembly.mjs';
 import { ActiveContent } from '@capix/observer-service';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindConversation, ConversationSceneDefinition } from '@capix/observer-service';
+import { bindConversation, createConversationStructure } from '@capix/observer-service';
 import { Driver, RuntimeError, CallableRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix/server-runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -29,7 +30,7 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
   const transcript = new Transcript([], { observation: recording?.transcript });
   const memories = new Memories(transcript, { observation: recording?.memory });
   const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() };
-  const definition = new ConversationSceneDefinition();
+  const definition = createConversationStructure();
   configureDefinition?.(definition);
   const driver = new Driver({ observations: recording ? [recording] : undefined });
   const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
@@ -195,24 +196,29 @@ test('regeneration declaration rejects invalid evidence and missing feedback bef
   let checked = false;
   const f = fixture([output('bad'), output(JSON.stringify(answer))], {
     configureDefinition(definition) {
-      const behavior = definition.taskDefinition.operationDefinitions.generation;
+      const behavior = definition.generation;
       const handle = behavior.exceptions.handle;
-      const capability = behavior.requestModelDefinition.regeneration;
+      const capability = behavior.requestModel.regeneration;
       assert.equal(capability.declaration.maxAdditionalCalls, 1);
       assert.deepEqual(capability.declaration.rejectionCodes, ['INVALID_JSON', 'EMPTY_OUTPUT', 'OUTPUT_SHAPE']);
-      t.mock.method(behavior.exceptions, 'handle', function (work) {
-        const children = work.children.facts.values();
-        const facts = { round: work.round, continuation: work.continuation, children: work.children.facts };
-        const evidence = { previous: children[2].ref, rejection: children[3].ref };
-        const invalid = { previous: children[1].ref, rejection: children[3].ref };
-        assert.equal(capability.allows(facts, evidence), true);
-        assert.equal(capability.allows(facts, invalid), false);
-        // Pure declaration contract checks do not invoke a formal child endpoint.
-        assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[0].request, evidence: invalid }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
-        assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[0].request, evidence }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
-        assert.equal(work.children.facts.values().length, 4);
-        checked = true;
-        return handle(work);
+      reconfigure(behavior, {
+        exceptions: {
+          ...behavior.exceptions,
+          handle(work) {
+            const children = work.children.facts.values();
+            const facts = { round: work.round, continuation: work.continuation, children: work.children.facts };
+            const evidence = { previous: children[2].ref, rejection: children[3].ref };
+            const invalid = { previous: children[1].ref, rejection: children[3].ref };
+            assert.equal(capability.allows(facts, evidence), true);
+            assert.equal(capability.allows(facts, invalid), false);
+            // Pure declaration contract checks do not invoke a formal child endpoint.
+            assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[0].request, evidence: invalid }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
+            assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[0].request, evidence }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
+            assert.equal(work.children.facts.values().length, 4);
+            checked = true;
+            return handle(work);
+          },
+        },
       });
     },
   });
@@ -223,12 +229,17 @@ test('regeneration declaration rejects invalid evidence and missing feedback bef
 test('parent may decline an eligible regeneration without changing child capability', async (t) => {
   const f = fixture([output('bad')], {
     configureDefinition(definition) {
-      const behavior = definition.taskDefinition.operationDefinitions.generation;
-      t.mock.method(behavior.exceptions, 'handle', function (work) {
-        const children = work.children.facts.values();
-        const facts = { round: work.round, continuation: work.continuation, children: work.children.facts };
-        assert.equal(behavior.requestModelDefinition.regeneration.allows(facts, { previous: children[2].ref, rejection: children[3].ref }), true);
-        return work.unhandled;
+      const behavior = definition.generation;
+      reconfigure(behavior, {
+        exceptions: {
+          ...behavior.exceptions,
+          handle(work) {
+            const children = work.children.facts.values();
+            const facts = { round: work.round, continuation: work.continuation, children: work.children.facts };
+            assert.equal(behavior.requestModel.regeneration.allows(facts, { previous: children[2].ref, rejection: children[3].ref }), true);
+            return work.unhandled;
+          },
+        },
       });
     },
   });

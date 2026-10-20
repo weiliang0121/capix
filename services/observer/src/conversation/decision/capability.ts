@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ChildContractsOf, ChildCalls, ChildOptions, DefinitionInput, DefinitionOutput, DefinitionDelta, InvocationOutputReceiver, ChildCall } from '@capix/server-runtime';
+import type { ChildContractsOf, ChildCalls, ChildOptions, CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver, ChildCall } from '@capix/server-runtime';
 import type { ConversationCapabilityName, ConversationCapabilityOffer, ConversationDecisionFeedback } from './types.js';
 import { modelTextSchema } from '../model/schema.js';
 
@@ -23,7 +23,7 @@ export interface ConversationCapability<State> {
 
 /** This adapter creates one declared capability; historical lookup does not grant creation. */
 interface CapabilityCalls<Definition extends CapabilityContract> extends Pick<ChildCalls, 'open' | 'facts'> {
-  readonly create: (definition: Definition, input: DefinitionInput<Definition>, options?: ChildOptions<Definition>) => ChildCall<Definition>;
+  readonly create: (definition: Definition, input: CallableInput<Definition>, options?: ChildOptions<Definition>) => ChildCall<Definition>;
 }
 
 export function conversationCapability<Arguments, State, Definition extends CapabilityContract>(
@@ -32,11 +32,11 @@ export function conversationCapability<Arguments, State, Definition extends Capa
     readonly description: string;
     readonly use: Definition;
     readonly key: string;
-    readonly output?: InvocationOutputReceiver<DefinitionOutput<Definition>, DefinitionDelta<Definition>>;
+    readonly output?: InvocationOutputReceiver<CallableOutput<Definition>, CallableDelta<Definition>>;
     readonly schema: z.ZodType<Arguments>;
     readonly available: (state: State) => boolean;
-    readonly input: (arguments_: Arguments, state: State) => DefinitionInput<Definition>;
-    readonly accept: (delivered: DefinitionOutput<Definition>, state: State, child: ChildCall<Definition>) => State;
+    readonly input: (arguments_: Arguments, state: State) => CallableInput<Definition>;
+    readonly accept: (delivered: CallableOutput<Definition>, state: State, child: ChildCall<Definition>) => State;
   },
   children: CapabilityCalls<NoInfer<Definition>>,
 ): ConversationCapability<State> {

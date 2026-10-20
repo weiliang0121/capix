@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Transcript } from '@capix/server-runtime/content';
-import { DefaultConversationDecisionDefinition, FunctionConversationDecisionDefinition } from '@capix/observer-service';
+import { DefaultConversationDecision, FunctionConversationDecision } from '@capix/observer-service';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { bindChild, resourceBindingFor } from '../fixtures/observer.mjs';
 import { callFor, lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
@@ -12,7 +12,7 @@ const available = ['checkFile', 'answer', 'document', 'save'].map(offer);
 const answer = { kind: 'answer', content: '已生成正文。' };
 const file = (task = { sourcePath: 'notes.md', output: { path: 'result.md' } }) => ({ kind: 'ready', task, instruction: '翻译为白话文。' });
 
-async function decide({ definition = new DefaultConversationDecisionDefinition({ files: true }), progress = {}, latest, feedback, fileTask, proposal = { kind: 'reply' }, requests = [], offers = available } = {}) {
+async function decide({ definition = new DefaultConversationDecision({ files: true }), progress = {}, latest, feedback, fileTask, proposal = { kind: 'reply' }, requests = [], offers = available } = {}) {
   const transcript = new Transcript([{ role: 'user', content: '把 notes.md 翻译为白话文，保存为 result.md' }]);
   const message = transcript.get(0);
   const runtime = createBoundRuntime();
@@ -88,7 +88,7 @@ test('default decision maps model proposals without claiming that proposed file 
 });
 
 test('disabled file mode has no model child or resource requests', async () => {
-  const definition = new DefaultConversationDecisionDefinition({ files: false });
+  const definition = new DefaultConversationDecision({ files: false });
   assert.deepEqual(definition.members, []);
   assert.deepEqual(definition.run.requires, {});
   const { result, requests } = await decide({ definition });
@@ -98,7 +98,7 @@ test('disabled file mode has no model child or resource requests', async () => {
 
 test('a function decision uses the same operation contract and supports asynchronous policies', async () => {
   const inputs = [];
-  const definition = new FunctionConversationDecisionDefinition(async (input) => {
+  const definition = new FunctionConversationDecision(async (input) => {
     inputs.push(input);
     return { kind: 'invoke', capability: 'answer', arguments: {} };
   });

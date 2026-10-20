@@ -283,8 +283,9 @@ test('call construction scopes are authenticated to their exact bound installati
 
 test('binding rejects node members, undeclared source targets and duplicate registrations', () => {
   const node = defineNode()({ run: { execute: () => null } });
-  const illegal = { ...node, members: [] };
+  const illegal = Object.assign(node, { members: [] });
   assert.throws(() => install(defineScene()({ members: [illegal], run: delegate(illegal) })), /Nodes cannot declare members/);
+  delete node.members;
   const scene = defineScene()({ members: [node], run: delegate(node) });
   const other = defineNode()({ run: { execute: () => null } });
   assert.throws(() => install(scene, { bindings: [{ definition: other, capture: () => null }] }), /registered member/);

@@ -3,7 +3,7 @@ import { checkLeafResult } from '../../group/checkpoint.js';
 import { modelOutputSchema } from '../../model/interactions.js';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { modelOutputRejected } from '../../model/rejection.js';
-import { NodeDefinition, checkpointPoint, cloneCheckpointValue, type CheckpointValue, type CheckpointCodec, type InvocationCheckpointPoint, type InvocationCheckpointDefinition, type NodeWork, RuntimeError, isNonBlankString } from '@capix/server-runtime';
+import { Node, checkpointPoint, cloneCheckpointValue, type CheckpointValue, type CheckpointCodec, type InvocationCheckpointPoint, type NodeWork, RuntimeError, isNonBlankString } from '@capix/server-runtime';
 
 import type { ModelOutput } from '../../model/types.js';
 import type { ModelOutputContract } from '../../model/contract.js';
@@ -12,22 +12,14 @@ export interface ModelAcceptanceInput {
   readonly output: ModelOutput;
 }
 
-export class AcceptModelOutputDefinition<Input extends ModelAcceptanceInput, Output> extends NodeDefinition<Input, Output> {
-  readonly checkpoint: InvocationCheckpointDefinition<Input, Output, 'node'>;
+export class AcceptModelOutput<Input extends ModelAcceptanceInput, Output> extends Node<Input, Output> {
   private readonly resultPoint: InvocationCheckpointPoint<Input, Output, 'node', Output, Record<string, never>, {}, never>;
-  readonly observation = [invocationRecording()];
+
   static readonly requires = Object.freeze({});
-
-  readonly raises = [modelOutputRejected];
-  readonly run = { requires: AcceptModelOutputDefinition.requires, execute: this.execute.bind(this) };
-
-  readonly name = 'acceptModelOutput';
-  readonly label = '接纳模型结果';
-  readonly source = 'services/observer/src/conversation/node/model/accept.ts · AcceptModelOutputDefinition';
-  readonly callee = 'processing';
 
   constructor(private readonly contract: ModelOutputContract<Input, Output>) {
     super();
+
     const input = {
       encode: cloneCheckpointValue,
       decode: (value: CheckpointValue) => {
@@ -49,7 +41,8 @@ export class AcceptModelOutputDefinition<Input extends ModelAcceptanceInput, Out
       },
       resume: { requires: {}, execute: (_work, result) => result },
     });
-    this.checkpoint = { key: 'observer.accept-model-output', version: 1, input, output, points: [this.resultPoint] };
+
+    this.setDefinition({ checkpoint: { key: 'observer.accept-model-output', version: 1, input, output, points: [this.resultPoint] }, observation: [invocationRecording()], raises: [modelOutputRejected], run: { requires: AcceptModelOutput.requires, execute: this.execute.bind(this) }, name: 'acceptModelOutput', label: '接纳模型结果', source: 'services/observer/src/conversation/node/model/accept.ts · AcceptModelOutput', callee: 'processing' });
   }
 
   private execute(work: NodeWork<Input, Output>): Output {

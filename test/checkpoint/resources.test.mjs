@@ -1,10 +1,10 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SceneDefinition, GroupDefinition, InvocationContext, InvocationChildren, Transcript, TranscriptResource, MemoryCheckpointStore } from '@capix/server-runtime';
+import { Scene, Group, InvocationContext, InvocationChildren, Transcript, TranscriptResource, MemoryCheckpointStore } from '@capix/server-runtime';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
-class Answer extends GroupDefinition {
+class Answer extends Group {
   name = 'answer';
   label = 'answer';
   source = 'test';
@@ -27,7 +27,7 @@ function assemble(execution, transcript, progress = []) {
 
 test('fixed transcript writes require a real direct-child reception and cannot be swallowed', async () => {
   const transcript = new Transcript();
-  class Main extends GroupDefinition {
+  class Main extends Group {
     run = {
       requires: { messages: TranscriptResource.append.request() },
       execute(work) {
@@ -44,7 +44,7 @@ test('fixed transcript writes derive parent and child identity from the actual r
   const transcript = new Transcript();
   const answer = new Answer();
   const progress = [];
-  class Main extends GroupDefinition {
+  class Main extends Group {
     members = [answer];
     run = {
       requires: { messages: TranscriptResource.append.request() },
@@ -75,7 +75,7 @@ for (const stale of [undefined, 'endpoint', 'view']) {
     let firstEndpoint;
     let firstValues;
     const progress = [];
-    class Main extends GroupDefinition {
+    class Main extends Group {
       members = [answer];
       maxRounds = 2;
       run = {
@@ -152,7 +152,7 @@ test('a checkpoint writer retained from a previous round cannot save the current
   const codec = { encode: (value) => value, decode: (value) => value };
   const store = new MemoryCheckpointStore();
   let writer;
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     maxRounds = 2;
     checkpoint = { key: 'test.round-writer', version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { requires: {}, execute: () => null } }] };
     run = {
@@ -174,7 +174,7 @@ test('parallel fixed appends bind each effect to its own asynchronous reception'
   const progress = [];
   const transcript = new Transcript();
   const answer = new Answer();
-  class Main extends GroupDefinition {
+  class Main extends Group {
     members = [answer];
     run = {
       requires: { messages: TranscriptResource.append.request() },

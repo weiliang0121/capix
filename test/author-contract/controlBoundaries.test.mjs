@@ -193,8 +193,11 @@ test('lazy child checkpoint layout retains the resolved level after original dec
     },
   });
   const installed = runtime(root, new MemoryCheckpointStore());
-  // The author object remains mutable for business use. Already resolved kernel
-  // fields must not be read from it again while lazily creating the E structure.
-  operation.kind = 'attempt';
+  // Kind is fixed at construction. Business configuration remains replaceable,
+  // but lazy binding must continue to use the original checkpoint layout and work.
+  assert.throws(() => {
+    operation.kind = 'node';
+  }, /read only/);
+  operation.setRun({ execute: () => 'changed after binding' });
   assert.equal(await installed.run('input', {}), 'delivered');
 });

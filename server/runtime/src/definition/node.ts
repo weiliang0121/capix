@@ -1,7 +1,4 @@
-import { CallableDefinition } from './callable.js';
+import type { CallableDefinition, EmptyResources } from './callable.js';
 
-/** Reusable node definition; call state is owned by Invocation. */
-export abstract class NodeDefinition<Input, Output, Resources extends object = Record<string, never>, ExceptionResources extends object = Record<string, never>, Delta = never> extends CallableDefinition<Input, Output, 'node', Resources, ExceptionResources, Delta> {
-  readonly kind = 'node' as const;
-  declare readonly members?: never;
-}
+/** Business configuration for a Node; no member or child-call capability is introduced. */
+export interface NodeDefinition<Input, Output, Resources extends object = EmptyResources, ExceptionResources extends object = EmptyResources, Delta = never> extends CallableDefinition<Input, Output, 'node', Resources, ExceptionResources, Delta> {}

@@ -2,32 +2,27 @@ import { z } from 'zod';
 import { checkpointCodec } from '../checkpoint.js';
 import { isEqual } from 'es-toolkit/predicate';
 import { decisionInputCodec, decisionCodec } from '../group/checkpoint.js';
-import { GroupDefinition, checkpointPoint, childReference, type GroupWork, type InvocationCheckpointDefinition } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, type GroupWork } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { ModelCallResources } from '../resources.js';
-import { UnderstandRequestDefinition } from '../group/request/understand.js';
+import { UnderstandRequest } from '../group/request/understand.js';
 import type { RequestProposal } from '../group/request/output.js';
 import type { ConversationDecision, ConversationDecisionInput } from './types.js';
 
 type DecisionResources = ModelCallResources | Record<string, never>;
 
 /** Known deliveries choose the next step directly; only an unresolved request needs a model. */
-export class DefaultConversationDecisionDefinition extends GroupDefinition<ConversationDecisionInput, ConversationDecision, DecisionResources> {
-  readonly name = 'conversationDecision';
-  readonly label = '决定下一步';
-  readonly source = 'services/observer/src/conversation/decision/default.ts · DefaultConversationDecisionDefinition';
-  readonly observation = [invocationRecording()];
-  readonly understandingDefinition?: UnderstandRequestDefinition;
-  readonly members;
-  readonly run;
+export class DefaultConversationDecision extends Group<ConversationDecisionInput, ConversationDecision, DecisionResources> {
+  readonly understanding?: UnderstandRequest;
+
   readonly resultPoint;
   readonly understandingPoint;
-  readonly checkpoint: InvocationCheckpointDefinition<ConversationDecisionInput, ConversationDecision, 'group'>;
 
   constructor(options: { readonly files: boolean }) {
     super();
-    this.understandingDefinition = options.files ? new UnderstandRequestDefinition({ files: true }) : undefined;
-    this.members = Object.freeze(this.understandingDefinition ? [this.understandingDefinition] : []);
+
+    this.understanding = options.files ? new UnderstandRequest({ files: true }) : undefined;
+    if (this.understanding) this.add(this.understanding);
     const resultPoint = checkpointPoint<'group', ConversationDecisionInput, ConversationDecision>()({
       name: 'result',
       state: decisionCodec,
@@ -37,14 +32,14 @@ export class DefaultConversationDecisionDefinition extends GroupDefinition<Conve
         const calls = facts.children.values();
         if (calls.length) {
           const child = calls[0]!;
-          if (!this.understandingDefinition || calls.length !== 1 || child.key !== 'understanding' || child.returned?.status !== 'succeeded' || child.reception.status !== 'accepted' || !isEqual(child.reception.value, result)) throw new Error('Decision checkpoint differs from accepted proposal');
-          facts.children.require(this.understandingDefinition, child.ref);
+          if (!this.understanding || calls.length !== 1 || child.key !== 'understanding' || child.returned?.status !== 'succeeded' || child.reception.status !== 'accepted' || !isEqual(child.reception.value, result)) throw new Error('Decision checkpoint differs from accepted proposal');
+          facts.children.require(this.understanding, child.ref);
         }
       },
       resume: { execute: (_work, result) => result },
     });
     this.resultPoint = resultPoint;
-    const understanding = this.understandingDefinition;
+    const understanding = this.understanding;
     this.understandingPoint = understanding
       ? checkpointPoint<'group', ConversationDecisionInput, ConversationDecision>()({
           name: 'understandingWaiting',
@@ -66,8 +61,8 @@ export class DefaultConversationDecisionDefinition extends GroupDefinition<Conve
           },
         })
       : undefined;
-    this.checkpoint = { key: `observer.default-decision.${options.files ? 'files' : 'chat'}`, version: 3, input: decisionInputCodec, output: decisionCodec, points: [...(this.understandingPoint ? [this.understandingPoint] : []), resultPoint] };
-    this.run = { requires: this.understandingDefinition ? UnderstandRequestDefinition.requires : {}, uses: this.members, execute: this.execute.bind(this) };
+
+    this.setDefinition({ name: 'conversationDecision', label: '决定下一步', source: 'services/observer/src/conversation/decision/default.ts · DefaultConversationDecision', observation: [invocationRecording()], run: { requires: this.understanding ? UnderstandRequest.requires : {}, uses: this.members, execute: this.execute.bind(this) }, checkpoint: { key: `observer.default-decision.${options.files ? 'files' : 'chat'}`, version: 3, input: decisionInputCodec, output: decisionCodec, points: [...(this.understandingPoint ? [this.understandingPoint] : []), resultPoint] } });
   }
 
   private async execute(work: GroupWork<ConversationDecisionInput, ConversationDecision, DecisionResources>): Promise<ConversationDecision> {
@@ -87,7 +82,7 @@ export class DefaultConversationDecisionDefinition extends GroupDefinition<Conve
     if (check?.kind === 'needs-input') return { kind: 'finish', conclusion: { kind: 'clarify', question: check.question } };
     const feedback = input.feedback ?? (check?.kind === 'revise' ? { code: check.reason, message: check.feedback } : undefined);
     if (progress.file && !feedback) return { kind: 'invoke', capability: progress.file.task.sourcePath ? 'document' : 'answer', arguments: {} };
-    if (!this.understandingDefinition) {
+    if (!this.understanding) {
       if (input.request.fileTask) return { kind: 'finish', conclusion: { kind: 'unsupported', explanation: '当前服务未启用工作目录文件处理，无法执行本次文件操作。' } };
       return { kind: 'invoke', capability: 'answer', arguments: {} };
     }
@@ -98,7 +93,7 @@ export class DefaultConversationDecisionDefinition extends GroupDefinition<Conve
       ...(feedback ? { feedback } : {}),
       progress: { ...(progress.file ? { file: progress.file.task } : {}), ...(progress.saved ? { saved: { path: progress.saved.path } } : {}) },
     };
-    const understanding = work.children.create(this.understandingDefinition, request, { key: 'understanding' });
+    const understanding = work.children.create(this.understanding, request, { key: 'understanding' });
     if (!this.understandingPoint) throw new Error('Understanding checkpoint is unavailable');
     work.checkpoint?.save(this.understandingPoint, null, { understanding: understanding.ref });
     await understanding.run();

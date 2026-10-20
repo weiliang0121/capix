@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { Invocation, InvocationContext, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix/server-runtime';
 import { Driver, defineNode } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
-import { initializeObserver, bindConversation, ConversationSceneDefinition, observeExecution, observeOverview, acceptConversationInput } from '@capix/observer-service';
+import { initializeObserver, bindConversation, createConversationStructure, observeExecution, observeOverview, acceptConversationInput } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const createRecorder = (book = new RecordBook()) => new Recorder(book);
@@ -154,7 +154,7 @@ test('separate drivers and bindings share entities without absorbing their lifet
   const first = await run(environment.driver, environment.scene, '我在北京');
   const memory = environment.memories.values()[0];
   const driver = new Driver({ observations: [environment.recording], changes: environment.changes });
-  const next = bindConversation(driver, new ConversationSceneDefinition(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)));
+  const next = bindConversation(driver, createConversationStructure(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)));
   const second = await run(driver, next, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.memories.get(memory.id), memory);

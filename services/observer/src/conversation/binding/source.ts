@@ -2,7 +2,7 @@ import { isEqual } from 'es-toolkit';
 import type { CallableInvocationCallbacks, CallableCallSource, CheckpointStore } from '@capix/server-runtime';
 import { TranscriptRangeRef, type TranscriptAppendProgress } from '@capix/server-runtime/content';
 import type { GenerationOutput } from '@capix/protocol';
-import type { ConversationSceneDefinition } from '../scene.js';
+import type { ConversationScene } from '../scene.js';
 import type { ModelInteractions } from '../model/interactions.js';
 import { validateSettings } from '../model/settings.js';
 import type { AcceptedConversationInput } from '../accept.js';
@@ -22,7 +22,7 @@ export class ConversationCallSource implements CallableCallSource<unknown, Conve
   readonly #captures = new WeakMap<ConversationRunOptions, ConversationCallCapture>();
 
   constructor(
-    private readonly definition: ConversationSceneDefinition,
+    private readonly definition: ConversationScene,
     private readonly entities: ConversationEntities,
     private readonly model: ModelInteractions,
     private readonly capabilities: ConversationBindingOptions,

@@ -12,8 +12,8 @@ import { ClientRuntime } from '@capix/client-runtime';
 import { ProgressChannel, defineObservation } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
-import { ConversationSubmission, createObserverServer, ObserverConversations, bindConversation, ConversationSceneDefinition, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
-import { withRuntimeDefinition } from '../fixtures/assembly.mjs';
+import { ConversationSubmission, createObserverServer, ObserverConversations, bindConversation, createConversationStructure, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
+import { withRuntimeDefinition, reconfigure } from '../fixtures/assembly.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -340,10 +340,13 @@ test('full feedback retention explicitly refuses fresh work and preserves duplic
 
 test('failure before a complete execution record produces a terminal transport error, never silent success', async (t) => {
   const { run } = await setup(t, provider, true, undefined, settings, (definition) => {
-    definition.run.execute = (work) => {
-      work.resources.messages.append(work.input.messages);
-      throw new Error('private diagnostic must not be an HTTP message');
-    };
+    definition.setRun({
+      ...definition.run,
+      execute: (work) => {
+        work.resources.messages.append(work.input.messages);
+        throw new Error('private diagnostic must not be an HTTP message');
+      },
+    });
   });
   const stream = await updates(await run());
   assert.equal(stream.at(-1).input.end, 1);
@@ -486,7 +489,7 @@ test('answer is delivered before memory finishes, and closing observation does n
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
   const entities = createEnvironment();
   const driver = new Driver();
-  const scene = bindConversation(driver, new ConversationSceneDefinition(), entities, new ModelInteractions(new ModelSource(provider)));
+  const scene = bindConversation(driver, createConversationStructure(), entities, new ModelInteractions(new ModelSource(provider)));
   const received = [];
   const output = await driver.run(
     scene,
@@ -807,24 +810,26 @@ for (const fault of [false, true]) {
       true,
       undefined,
       { ...settings, timeoutMs: 1000 },
-      (definition) => {
-        const model = definition.taskDefinition.operationDefinitions.generation.requestModelDefinition;
-        model.observation = [
-          ...model.observation,
-          defineObservation(
-            {
-              requires: {},
-              observe(fact) {
-                if (fact.kind !== 'relation' || fact.change.kind !== 'returned' || fact.change.result.status !== 'succeeded' || fact.change.result.output.kind !== 'pending') return;
-                // The public cancellation entry is invoked at the exact synchronous handoff boundary.
-                capturedSubmission.requestCancellation();
-                pending();
-                if (fault) throw new Error('handoff observer fault');
+      (_scene, { generation }) => {
+        const model = generation.requestModel;
+        reconfigure(model, {
+          observation: [
+            ...model.observation,
+            defineObservation(
+              {
+                requires: {},
+                observe(fact) {
+                  if (fact.kind !== 'relation' || fact.change.kind !== 'returned' || fact.change.result.status !== 'succeeded' || fact.change.result.output.kind !== 'pending') return;
+                  // The public cancellation entry is invoked at the exact synchronous handoff boundary.
+                  capturedSubmission.requestCancellation();
+                  pending();
+                  if (fault) throw new Error('handoff observer fault');
+                },
               },
-            },
-            { failure: 'propagate' },
-          ),
-        ];
+              { failure: 'propagate' },
+            ),
+          ],
+        });
       },
     );
     const id = randomUUID();

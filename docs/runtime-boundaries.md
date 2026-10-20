@@ -11,21 +11,20 @@ Scene 与 Group 都声明自己的普通输入、输出、run 和 members；Node
 | CallableBinder            | 解算固定声明图，核验成员位置、资源、阶段 uses、接纳和 CP 契约 |
 | CallableBinding           | Bound 所需接线契约，不增加运行实体                            |
 | BoundCallable             | 保存本位置身份、固定工作和惰性成员，提供构造入口              |
-| CallableInvocationBuilder | 用同一机制建立任何 kind 的单次调用                            |
-| CallableContextBuilder    | 建立本次状态并核验构造归属                                    |
+| CallableInvocationBuilder | 持有安装归属，用同一机制建立任何 kind 的 Context 和调用       |
 | Driver                    | 宿主入口、占用、实际结束后释放                                |
 
-原声明用于身份与方法 receiver。解算固定内核字段、容器和函数入口，不冻结业务实例。修改结构须重新装配；惰性建立成员时不重新读取原声明或解算子树。Initializer 缓存成功或失败，不静默重试。
+原 Node/Group/Scene 结构用于注册身份，普通 Definition 配置没有独立身份。成员经 add 组织，业务配置经构造器或 setDefinition 安装；setRun 替换完整阶段。绑定时生成独立 CallableSnapshot，仅保存固定执行契约，不伪装成仍有 add/setter 的作者结构。业务方法 receiver 保留。解算固定内核字段、容器和函数入口，不冻结业务实例。修改结构须重新装配；惰性建立成员时不重新读取原声明或解算子树。Initializer 缓存成功或失败，不静默重试。
 
 ```text
 new Driver(capabilities)
   → 固定机制接入，建立 CallableBinder
 
-Driver.bind(definition, bindingOptions)
+Driver.bind(structure, bindingOptions)
   → CallableBinder.bind
       → resolveDeclaration：全树静态检查及按位置解算
       → bindCallableSources：来源、供给与明确成员绑定
-      → 建立共同 CallableContextBuilder / CallableInvocationBuilder
+      → new CallableInvocationBuilder(capabilities)，作为本次绑定的共同构造依据
       → BoundCallable（成员仍惰性）
   → 登记 BoundCallable 归属与独立占用
 
@@ -38,6 +37,8 @@ Driver.run(bound, input, options)
 ```
 
 BoundCallable 归属于创建它的 Driver；跨 Driver、伪造结构及直接由独立 Binder 创建的结构均不能通过这个入口运行。每个绑定独立占用，使用 `Driver.isRunning(bound)` 查询；同一个 Driver 的其他绑定不受此入口忙碌影响。占用不在 Context，Context 不保存另一个 executing 标记。构造、业务、观测任一失败都释放；内部等待队列不由 Driver 隐式建立。Driver 的入口活动观测包含 driverId 与 boundId，结构尚未产生调用时也能明确归属。
+
+CallableInvocationBuilder 直接构造 CallableContext，将自身作为固定安装归属。建立子调用时，资源选择前后均核对父活动及归属，因为资源收窄会执行宿主逻辑，可能同步触发取消。子 Context 只继承父信号，不保留父对象。不同 bind 即使来自同一 Driver，也不共享构造归属。
 
 ## 来源、供应与访问窗口
 
@@ -67,7 +68,7 @@ await driver.run(boundScene, input, options);
 
 ## Observer 的输入与材料
 
-服务的 ConversationSceneDefinition 通过正式 append 资源落实输入，然后把 `{message,messageIndex,fileTask?}` 作为普通输入交给 ConversationTaskDefinition。Task 是普通 Group；内核没有 E 专属 entry、EntryInput 或按层固定的资源准备。
+服务的 ConversationScene 通过正式 append 资源落实输入，然后把 `{message,messageIndex,fileTask?}` 作为普通输入交给 ConversationGroup。Task 是普通 Group；内核没有 E 专属 entry、EntryInput 或按层固定的资源准备。
 
 ```mermaid
 sequenceDiagram

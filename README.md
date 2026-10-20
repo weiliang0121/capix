@@ -28,7 +28,7 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 ```text
 独立实体：Transcript、Memories、SelectionUsage、模型供给、记录容器……
                       │ 通过资源契约提供受控访问
-定义：Scene / Group / Node = Callable + 可选 Composite
+结构：Scene / Group / Node = Callable + 可选 Composite
                       │ CallableBinder 解算与接线
                 BoundCallable + 成员结构
                       │ Driver 启动一次调用
@@ -42,8 +42,8 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
                └──────── 环境消费与服务交付
 ```
 
-- `*Definition` 声明契约与内容；`run`、`exceptions`、`observation` 是平级部分。
-- `members` 声明可用的 Group / Node，组合体自己的处理函数选择、调用、接纳成员。Node 不具有成员调用端口。
+- `new Node/Group/Scene` 直接构造结构；普通 `*Definition` 配置可经构造器或 `setDefinition` 传入。`setRun` 替换整个 run 阶段，`run`、`exceptions`、`observation` 是平级部分。
+- Scene / Group 通过 `add` 注册可用的 Group / Node，组合体自己的处理函数选择、调用、接纳成员。Node 不具有成员调用端口。
 - `BoundCallable` 是固定接线后的可复用结构。`Driver` 管理入口占用；每次运行建立新的 Invocation 和 CallableContext。
 - `Invocation` 统一协调调用阶段、直接子关系与交付；Context 保存本次现场。业务作者只取得本阶段 Work、具名资源与受控动作，见 [可调用结构](docs/callable-structures.md)。
 - 独立实体由宿主建立，结构绑定其访问形式。资源捕获边界按准确声明身份配置，不因结构叫 Group 就自动重新捕获。
@@ -55,7 +55,7 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 
 ```text
 services/observer/src/
-  conversation/    scene/task、group/node 声明、模型契约、资源绑定、消息同步
+  conversation/    scene/conversation、group/node 声明、模型契约、资源绑定、消息同步
   files/           可选工作目录实体与受控文本读写资源
   observation/     记录来源、查询投影、观测交付
   persistence/     多对话的 SQLite 存储与历史记录保存
@@ -63,7 +63,7 @@ services/observer/src/
   http/            对话、实体、观测端点与静态资源
 ```
 
-`ConversationSceneDefinition` / `ConversationTaskDefinition` 定义对话；`initializeObserver` 装配单个对话的运行环境，`ObserverConversations` 管理参考服务中的对话目录与按对话装配。`TranscriptFeed` 同步消息实体，`ObservationFeed` 交付观测，它们可以独立连接和关闭。对话使用 `ConversationRequest`，不把它当成通用 Callable 输入契约。
+`ConversationScene` / `ConversationGroup` 组织对话，`createConversationStructure` 返回宿主需要的明确节点引用；`initializeObserver` 装配单个对话的运行环境，`ObserverConversations` 管理参考服务中的对话目录与按对话装配。`TranscriptFeed` 同步消息实体，`ObservationFeed` 交付观测，它们可以独立连接和关闭。对话使用 `ConversationRequest`，不把它当成通用 Callable 输入契约。
 
 ```ts
 import { initializeObserver } from '@capix/observer-service/assembly';
@@ -72,7 +72,7 @@ const environment = initializeObserver(provider);
 const output = await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings, signal, progress });
 ```
 
-上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node 声明，或直接使用 `@capix/server-runtime`：先 `new Driver(capabilities)`，再 `driver.bind(definition, bindings)`，最后 `driver.run(bound, input, options)`，不必使用 Observer 的装配。
+上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node 声明，或直接使用 `@capix/server-runtime`：先 `new Driver(capabilities)`，再 `driver.bind(scene, options)`，最后 `driver.run(bound, input, options)`，不必使用 Observer 的装配。
 
 回答在正式追加消息后交付，随后处理记忆。启用持久化时，正式追加先提交到数据库。后处理失败保留已成立的回答。当前只有生成回答明确声明的、针对完整模型输出被拒绝的一次再次生成；没有通用自动重试、后台补偿、动态调度或默认服务未完成调用恢复。
 

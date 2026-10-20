@@ -2,8 +2,8 @@ import { modelOutputRejected } from './rejection.js';
 import { RuntimeError, isObject, type ChildReference, type ChildFacts, type ContinuationFact } from '@capix/server-runtime';
 import { isEqual } from 'es-toolkit';
 import type { ModelOutput, ModelRequest } from './types.js';
-import type { RequestModelDefinition } from '../group/model/request.js';
-import type { AcceptModelOutputDefinition, ModelAcceptanceInput } from '../node/model/accept.js';
+import type { RequestModel } from '../group/model/request.js';
+import type { AcceptModelOutput, ModelAcceptanceInput } from '../node/model/accept.js';
 import { z } from 'zod';
 
 /** Read-only parent facts also used by the capability's alternate input entry. */
@@ -15,8 +15,8 @@ export interface ModelParentFacts {
 
 /** Certified references, never embedded in the model request or acceptance input. */
 export interface ModelRegenerationEvidence {
-  readonly previous: ChildReference<RequestModelDefinition>;
-  readonly rejection: ChildReference<AcceptModelOutputDefinition<ModelAcceptanceInput, any>>;
+  readonly previous: ChildReference<RequestModel>;
+  readonly rejection: ChildReference<AcceptModelOutput<ModelAcceptanceInput, any>>;
 }
 
 export interface ModelRegenerationInput {
@@ -35,7 +35,7 @@ export const modelRegenerationDeclaration = Object.freeze({
 const rejectionDiagnostic = z.looseObject({ message: z.string(), detail: z.looseObject({ code: z.enum(modelRegenerationDeclaration.rejectionCodes), output: z.unknown() }) });
 
 /** Recheck exact references and declared model identity, not a key or latest failure. */
-export function allowsModelRegeneration(parent: ModelParentFacts, evidence: ModelRegenerationEvidence, model: RequestModelDefinition): boolean {
+export function allowsModelRegeneration(parent: ModelParentFacts, evidence: ModelRegenerationEvidence, model: RequestModel): boolean {
   const previous = parent.children.list(model).find((child) => child.ref === evidence.previous);
   const rejection = parent.children.values().find((child) => child.ref === evidence.rejection);
   if (!previous || !rejection) return false;
@@ -51,7 +51,7 @@ export function allowsModelRegeneration(parent: ModelParentFacts, evidence: Mode
   return previous.returned.output.finishReason === 'stop';
 }
 
-export function modelRegenerationInput(parent: ModelParentFacts, evidence: ModelRegenerationEvidence, model: RequestModelDefinition): ModelRegenerationInput {
+export function modelRegenerationInput(parent: ModelParentFacts, evidence: ModelRegenerationEvidence, model: RequestModel): ModelRegenerationInput {
   if (!allowsModelRegeneration(parent, evidence, model)) throw new RuntimeError('MODEL_REGENERATION_NOT_ALLOWED', '本次模型调用不满足再次生成的声明与条件。');
   const previous = parent.children.require(model, evidence.previous);
   const rejection = parent.children.get(evidence.rejection);

@@ -16,46 +16,46 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 
 | 对象                             | 表达什么                                      | 共同机制                          |
 | -------------------------------- | --------------------------------------------- | --------------------------------- |
-| SceneDefinition                  | 宿主装载的整体场景，显式组织成员              | Callable + Composite              |
-| GroupDefinition                  | 组合成员并实现整体处理，可任意嵌套 Group/Node | Callable + Composite              |
-| NodeDefinition                   | 直接处理，不声明成员                          | Callable                          |
+| Scene                            | 宿主装载的整体场景，显式组织成员              | Callable + Composite              |
+| Group                            | 组合成员并实现整体处理，可任意嵌套 Group/Node | Callable + Composite              |
+| Node                             | 直接处理，不声明成员                          | Callable                          |
 | CallableBinder / CallableBinding | 解算声明、接线，产出绑定契约                  | 不执行业务                        |
 | BoundCallable                    | 某绑定位置的可复用结构与稳定身份              | 同一调用构造路径                  |
 | Driver                           | 固定机制、绑定入口、宿主启动与结束释放        | 绑定归属固定，占用按 Bound 隔离   |
 | Invocation / CallableContext     | 单次调用与本层真实状态                        | 不按结构种类派生循环              |
 | Work                             | 当前阶段的资源、输出、CP、成员行动及事实      | 业务不接收内部 Invocation/Context |
 
-`Callable` 是共同契约，`Composite` 是成员组合切面。当前公开工厂为 `defineScene`、`defineGroup`、`defineNode`；具名类同样可以组织定义。Scene 在本版作为安装根，Group/Node 可作为成员，Node 的 members 同时在类型与运行检查中拒绝。结构声明写 `members`；一次调用实际发生的子调用仍使用 `work.children`。成员注册不代表自动遍历或执行。
+`Callable` 是结构公共配置基类，`CallableContract` 是只读调用签名；`Composite` 是成员组合切面。作者直接 new Scene/Group/Node，构造器或 setDefinition 接收普通 Definition 配置；defineScene/defineGroup/defineNode 仅为创建同样结构的类型推导便捷函数。Scene 在本版作为安装根，Group/Node 可作为成员，Node 的 members 同时在类型与运行检查中拒绝。结构对象经 add 注册 `members`；一次调用实际发生的子调用仍使用 `work.children`。成员注册不代表自动遍历或执行。
 
-宿主先显式创建 `Driver(capabilities)`，再由 `driver.bind(definition, bindings)` 委托 CallableBinder 取得归属于该 Driver 的 BoundCallable。`driver.run(bound, input, options)` 和 `driver.resume(bound, contextId, options)` 显式消费绑定结构。低层扩展者可以通过 `/construction` 使用共同 CallableContextBuilder / CallableInvocationBuilder。没有每种 kind 各一套 Binder、Bound 或运行循环。每次 bind 建立独立构造安装，Builder 在该绑定期间复用，不缓存本次输入或信号。
+宿主先显式创建 `Driver(capabilities)`，再由 `driver.bind(scene, options)` 委托 CallableBinder 取得归属于该 Driver 的 BoundCallable。`driver.run(bound, input, options)` 和 `driver.resume(bound, contextId, options)` 显式消费绑定结构。低层扩展者可以通过 `/construction` 使用 CallableInvocationBuilder 和 CallableContext。没有每种 kind 各一套 Binder、Bound 或运行循环。每次 bind 直接建立独立 CallableInvocationBuilder，其对象身份也是所建 Context 的安装归属；它在绑定期间复用，不缓存本次输入或信号。Context 直接构造，无独立 ContextBuilder。
 
 ## 包与目录
 
 仓库只有一个根 pnpm workspace 与锁文件，六个实际包：protocol、server/runtime、client/runtime、client/http、services/observer、apps/observer。跨包只用公开出口，服务端与客户端互不依赖。
 
-| 位置                                             | 归属                                               |
-| ------------------------------------------------ | -------------------------------------------------- |
-| `definition/`                                    | 作者声明、签名、阶段 Work、成员与接纳契约          |
-| `binding/`                                       | 声明解算、来源与资源接线、阶段访问签发             |
-| `structure/callable.ts`                          | BoundCallable，可复用结构，不持有单次状态          |
-| `driver.ts`                                      | 宿主调用入口与占用                                 |
-| `context/`、`context/builders/`                  | 本次状态、构造归属与构造职责                       |
-| `invocation/`、`invocation/builders/`            | 本次调用、控制、周期、关系与通用构造               |
-| `checkpoint/`                                    | 保存格式、核验、恢复与事实出口                     |
-| `records/callable/`                              | 新调用记录及选定子树的快照                         |
-| `records/{runtime,execution,operation,attempt}/` | 旧 REOA 记录格式及历史读取兼容                     |
-| `records/observation/`                           | 可选记录声明、安装、单次句柄和事实映射             |
-| `records/restoration/`                           | 只读历史载体恢复，不恢复执行                       |
-| `changes/publish.ts`                             | 生产者变化发布，不归属于可选观测                   |
-| `selection/`                                     | 独立选择计数与资源访问，不属于 Transcript 内部状态 |
+| 位置                                             | 归属                                                                  |
+| ------------------------------------------------ | --------------------------------------------------------------------- |
+| `definition/`                                    | 作者声明、签名、阶段 Work、成员与接纳契约                             |
+| `binding/`                                       | 声明解算、来源与资源接线、阶段访问签发                                |
+| `structure/`                                     | 作者 Callable/Scene/Group/Node 与绑定后 BoundCallable，不持有单次状态 |
+| `driver.ts`                                      | 宿主调用入口与占用                                                    |
+| `context/`                                       | 本次状态与固定构造归属                                                |
+| `invocation/`、`invocation/builders/`            | 本次调用、控制、周期、关系与通用构造                                  |
+| `checkpoint/`                                    | 保存格式、核验、恢复与事实出口                                        |
+| `records/callable/`                              | 新调用记录及选定子树的快照                                            |
+| `records/{runtime,execution,operation,attempt}/` | 旧 REOA 记录格式及历史读取兼容                                        |
+| `records/observation/`                           | 可选记录声明、安装、单次句柄和事实映射                                |
+| `records/restoration/`                           | 只读历史载体恢复，不恢复执行                                          |
+| `changes/publish.ts`                             | 生产者变化发布，不归属于可选观测                                      |
+| `selection/`                                     | 独立选择计数与资源访问，不属于 Transcript 内部状态                    |
 
-实体目录与职责目录可以组合；例如 context/builders/callable.ts 和 invocation/builders/callable.ts 的同名文件构造不同对象。binding/children 管理已声明成员及本阶段行动，invocation/children 管理真实父子关系，不能混成一个全能 Children 管理者。
+`structure/callable.ts` 对应可编辑结构的共同基类，`structure/bound.ts` 对应固定绑定结构。`invocation/builders/callable.ts` 协调资源选择、Context 建立、恢复与调用接线；不为其中一次简单构造再建立子 Builder。`binding/children/builder.ts` 则固定成员及接纳接线，分别构造单次引用认证和阶段动作窗口。binding/children 管理已声明成员及本阶段行动，invocation/children 管理真实父子关系，不能混成一个全能 Children 管理者。
 
 Clock、Initializer、ProgressChannel 是共享能力，位于包内根文件。单文件目录是否保留由语义边界决定，不以文件数量判断。
 
 ## 类型与身份
 
-类型参数按实际含义命名 Input、Output、Resources、ExceptionResources、Delta；结构判别使用 Kind。签名消费只依赖 DefinitionContract 的 kind 和 I/O/Delta，完整注册使用完整定义。类型见证不产生运行字段，不替代声明对象身份、阶段资格或恢复位置的检查。
+类型参数按实际含义命名 Input、Output、Resources、ExceptionResources、Delta；结构判别使用 Kind。签名消费只依赖 CallableContract 的 kind 和 I/O/Delta，完整注册使用实际结构对象。类型见证不产生运行字段，不替代声明对象身份、阶段资格或恢复位置的检查。
 
 | 名称                                   | 内容                                         |
 | -------------------------------------- | -------------------------------------------- |
@@ -81,7 +81,7 @@ Checkpoint Frame v4 与声明版本分别核验。v1/v2/v3 明确拒绝续接，
 
 ## 服务、客户端与公开入口
 
-Observer 的 ConversationSceneDefinition 接纳输入并调用 ConversationTaskDefinition；后者是普通 Group，负责材料准备、决策与结果落实。服务提供模型协议、业务资源、内容同步及对外进展解释。环境拥有实体和关闭边界，HTTP 拥有传输；没有服务自己的另一套内核循环。
+Observer 的 ConversationScene 接纳输入并调用 ConversationGroup；后者是普通 Group，负责材料准备、决策与结果落实。服务提供模型协议、业务资源、内容同步及对外进展解释。环境拥有实体和关闭边界，HTTP 拥有传输；没有服务自己的另一套内核循环。
 
 ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 只收发与接纳协议。应用 binding 负责读模型、调用图、几何布局与帧合并，React 消费 props/Store。当前客户端实际依赖对话与 Observer 契约，不宣称已是任意业务的通用客户端。
 
@@ -100,15 +100,15 @@ ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 
 
 | 之前                                                            | 当前                                                                         |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| RuntimeDefinition                                               | SceneDefinition                                                              |
-| ExecutionDefinition、OperationDefinition                        | GroupDefinition；对话任务由服务类表达                                        |
-| AttemptDefinition                                               | NodeDefinition                                                               |
+| RuntimeDefinition                                               | Scene                                                                        |
+| ExecutionDefinition、OperationDefinition                        | Group；对话任务由服务类表达                                                  |
+| AttemptDefinition                                               | Node                                                                         |
 | 四套 Binder / Bound / Context / Builder                         | CallableBinder / BoundCallable / CallableContext / CallableInvocationBuilder |
 | BoundRuntime 的占用                                             | Driver                                                                       |
 | 声明 children、level                                            | members、kind                                                                |
 | E 隐式捕获与出口                                                | 按准确声明安装 CallableSourceBinding                                         |
-| ConversationRuntimeDefinition / ConversationExecutionDefinition | ConversationSceneDefinition / ConversationTaskDefinition                     |
-| BoundConversationRuntime                                        | ConversationScene（绑定结构）与 Driver（驱动者）                             |
+| ConversationRuntimeDefinition / ConversationExecutionDefinition | ConversationScene / ConversationGroup                                        |
+| BoundConversationRuntime                                        | BoundConversationScene（绑定结构）与 Driver（驱动者）                        |
 | 活记录 REOA 判别与分层数组                                      | invocation 记录、通用 calls 树、明确任务 role                                |
 
 旧运行 API 不保留重复别名；旧持久记录按数据兼容边界保留。动态能力注册、调度器、任意执行重放与自动接纳不由此次结构调整引入。

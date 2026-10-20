@@ -2,10 +2,10 @@ import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { defineScene, defineGroup } from '@capix/server-runtime';
-import { RequestModelDefinition, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
+import { RequestModel, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 test('request-model keeps its progress subscription until the follow child returns', async () => {
-  const model = new RequestModelDefinition('answer');
+  const model = new RequestModel('answer');
   const events = [];
   const request = { model: 'fixture', messages: [], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 256, stream: true };
   const output = { id: 'reply', model: 'fixture', content: 'earlylate', finishReason: 'stop', usage: null };
@@ -40,7 +40,7 @@ test('request-model keeps its progress subscription until the follow child retur
   const execution = defineGroup()({
     members: [model],
     run: {
-      requires: RequestModelDefinition.requires,
+      requires: RequestModel.requires,
       async execute(work) {
         const call = work.children.create(model, work.input, {
           output: {

@@ -1,6 +1,6 @@
 import { installCallable } from './driver.mjs';
 import { randomUUID } from 'node:crypto';
-import { RecordingRootHelper, RuntimeCallRecord, CallableRecord, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, ResourceRecord, TranscriptRecord, MemoryRecord, defineScene, CallableInvocationBuilder, CallableContextBuilder, bindRecording, invocationRecording, ResourceBindings } from '@capix/server-runtime';
+import { RecordingRootHelper, RuntimeCallRecord, CallableRecord, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, ResourceRecord, TranscriptRecord, MemoryRecord, defineScene, CallableInvocationBuilder, bindRecording, invocationRecording, ResourceBindings } from '@capix/server-runtime';
 import { rememberCall } from './calls.mjs';
 
 const states = new WeakMap();
@@ -23,7 +23,7 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
     };
   }
   const capabilities = { ...options, ...(recorder ? { clock: recorder.clock, observations: [...(options.observations ?? []), recording] } : {}) };
-  const builder = new CallableInvocationBuilder(new CallableContextBuilder(), capabilities);
+  const builder = new CallableInvocationBuilder(capabilities);
   const runtime = installCallable(defineScene()({ run: { execute: () => undefined } }), { providers: [], source: { capture: () => null }, ...capabilities });
   const state = { invocationRecordings, recording, recorder, runtime, builder, observe: recorder ? [invocationRecording()] : [] };
   states.set(runtime, state);

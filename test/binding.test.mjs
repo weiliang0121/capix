@@ -2,11 +2,11 @@ import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { GroupDefinition, NodeDefinition, InvocationEntry, Sequence, ResourceOffer, CallableBinder, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { Group, Node, InvocationEntry, Sequence, ResourceOffer, CallableBinder, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
 import { BoundCallable } from '@capix/server-runtime/construction';
 
 const resource = new ResourceOffer('test.value', (value) => value, 'binding');
-class Read extends NodeDefinition {
+class Read extends Node {
   name = 'read';
   label = 'Read';
   source = 'test';
@@ -16,7 +16,7 @@ class Read extends NodeDefinition {
     return `${work.input}:${work.resources.value}`;
   }
 }
-class Work extends GroupDefinition {
+class Work extends Group {
   name = 'work';
   label = 'Work';
   source = 'test';
@@ -28,7 +28,7 @@ class Work extends GroupDefinition {
     return (await this.sequence.run(work.input, work.children)).read;
   }
 }
-class Main extends GroupDefinition {
+class Main extends Group {
   run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
   operation = new Work();
   members = [this.operation];

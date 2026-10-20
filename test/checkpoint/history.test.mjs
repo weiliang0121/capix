@@ -1,14 +1,14 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SceneDefinition, GroupDefinition, ExceptionContract, MemoryCheckpointStore, cloneCheckpointImage, DeclaredException, reception as defineReception } from '@capix/server-runtime';
+import { Scene, Group, ExceptionContract, MemoryCheckpointStore, cloneCheckpointImage, DeclaredException, reception as defineReception } from '@capix/server-runtime';
 
 const rejected = new ExceptionContract('fixture.rejected');
 const codec = { encode: (value) => value, decode: (value) => value };
 const source = { entry: () => null, capture: () => null };
 
 function harness(store, resume, calls, reception = false) {
-  class Child extends GroupDefinition {
+  class Child extends Group {
     raises = [rejected];
     checkpoint = { key: 'fixture.history.child', version: 1, input: codec, output: codec, points: [] };
     run = {
@@ -22,7 +22,7 @@ function harness(store, resume, calls, reception = false) {
   }
   const child = new Child();
   const contract = defineReception(child, { check: (value) => value, encode: codec.encode, decode: codec.decode });
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [child];
     receptions = reception === 'typed' ? [contract] : [];
     raises = [rejected];

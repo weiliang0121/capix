@@ -1,0 +1,32 @@
+{
+  "revision": 1,
+  "image": {
+    "id": "9fec2629-b7cb-48f3-b3df-8d9c0cb7fea3",
+    "formatVersion": 4,
+    "contract": { "key": "author-parent", "version": 1 },
+    "point": "saved",
+    "frame": {
+      "owner": { "contextId": "bea03fb6-ed89-432e-947e-988ee8580667", "kind": "scene" },
+      "phase": "execute",
+      "round": 1,
+      "input": {},
+      "currentInput": {},
+      "nextChildOrder": 4,
+      "children": [
+        { "identity": { "contextId": "616d54e0-5cde-4b85-be63-6a62dd440bf9", "kind": "group", "parentContextId": "bea03fb6-ed89-432e-947e-988ee8580667" }, "target": { "position": 0 }, "contract": { "key": "same-contract", "version": 1 }, "round": 1, "order": 0, "key": "same-key", "input": "first", "state": { "kind": "returned", "output": "first", "progress": { "round": 1, "phase": "receive", "currentInput": "first" }, "reception": { "kind": "accepted", "output": "first" } } },
+        { "identity": { "contextId": "1f2b7c80-2e93-4170-a488-e8ac1f8b9fba", "kind": "group", "parentContextId": "bea03fb6-ed89-432e-947e-988ee8580667" }, "target": { "position": 0 }, "contract": { "key": "same-contract", "version": 1 }, "round": 1, "order": 1, "key": "same-key", "input": "second", "state": { "kind": "returned", "output": "second", "progress": { "round": 1, "phase": "receive", "currentInput": "second" }, "reception": { "kind": "pending" } } },
+        { "identity": { "contextId": "e0fb3b99-193c-4cce-bed1-b81f593c050c", "kind": "group", "parentContextId": "bea03fb6-ed89-432e-947e-988ee8580667" }, "target": { "position": 1 }, "contract": { "key": "same-contract", "version": 1 }, "round": 1, "order": 2, "key": "same-key", "input": "other", "state": { "kind": "returned", "output": "other", "progress": { "round": 1, "phase": "receive", "currentInput": "other" }, "reception": { "kind": "pending" } } },
+        { "identity": { "contextId": "b04267b4-d37c-430f-a622-fbe576e78984", "kind": "group", "parentContextId": "bea03fb6-ed89-432e-947e-988ee8580667" }, "target": { "position": 2 }, "round": 1, "order": 3, "key": "same-key", "input": "plain", "state": { "kind": "returned", "output": "plain", "progress": { "round": 1, "phase": "receive", "currentInput": "plain" }, "reception": { "kind": "pending" } } }
+      ]
+    },
+    "state": { "expected": "first", "count": 2 },
+    "references": {
+      "chosen": { "contextId": "616d54e0-5cde-4b85-be63-6a62dd440bf9", "parentContextId": "bea03fb6-ed89-432e-947e-988ee8580667", "parentRound": 1, "order": 0, "target": { "position": 0 } },
+      "all": [
+        { "contextId": "1f2b7c80-2e93-4170-a488-e8ac1f8b9fba", "parentContextId": "bea03fb6-ed89-432e-947e-988ee8580667", "parentRound": 1, "order": 1, "target": { "position": 0 } },
+        { "contextId": "616d54e0-5cde-4b85-be63-6a62dd440bf9", "parentContextId": "bea03fb6-ed89-432e-947e-988ee8580667", "parentRound": 1, "order": 0, "target": { "position": 0 } }
+      ],
+      "repeated": { "contextId": "616d54e0-5cde-4b85-be63-6a62dd440bf9", "parentContextId": "bea03fb6-ed89-432e-947e-988ee8580667", "parentRound": 1, "order": 0, "target": { "position": 0 } }
+    }
+  }
+}

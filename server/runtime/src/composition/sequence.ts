@@ -1,7 +1,7 @@
 import type { InvocationOutputReceiver } from '../output/contract.js';
 import { collectDefinitionRequirements } from '../binding/resources.js';
 import { InvocationEntry } from '../definition/entry.js';
-import type { ChildCall, ChildCalls, ChildDefinition, ChildOptions, DefinitionDelta, DefinitionInput, DefinitionOutput } from '../definition/children.js';
+import type { ChildCall, ChildCalls, ChildCallable, ChildOptions, CallableDelta, CallableInput, CallableOutput } from '../definition/children.js';
 import { resourceRequests } from '../resource/bindings.js';
 import type { ResourceRequest } from '../resource/offer.js';
 import { isNonBlankString } from '../value/string.js';
@@ -11,36 +11,36 @@ export interface SequenceScope<Input, Outputs> {
   readonly outputs: Readonly<Outputs>;
 }
 
-export interface SequenceStep<Input, Outputs, Definition extends ChildDefinition, StepInput = DefinitionInput<Definition>, AcceptedOutput = DefinitionOutput<Definition>> {
+export interface SequenceStep<Input, Outputs, Definition extends ChildCallable, StepInput = CallableInput<Definition>, AcceptedOutput = CallableOutput<Definition>> {
   readonly use: Definition | InvocationEntry<Definition, StepInput>;
   readonly input: (scope: SequenceScope<Input, Outputs>) => StepInput;
   /** Passive output is separate from final delivery and explicit parent reception. */
-  readonly output?: (scope: SequenceScope<Input, Outputs>) => InvocationOutputReceiver<DefinitionOutput<Definition>, DefinitionDelta<Definition>> | undefined;
-  readonly accept?: (scope: SequenceScope<Input, Outputs>, output: DefinitionOutput<Definition>) => AcceptedOutput | Promise<AcceptedOutput>;
+  readonly output?: (scope: SequenceScope<Input, Outputs>) => InvocationOutputReceiver<CallableOutput<Definition>, CallableDelta<Definition>> | undefined;
+  readonly accept?: (scope: SequenceScope<Input, Outputs>, output: CallableOutput<Definition>) => AcceptedOutput | Promise<AcceptedOutput>;
 }
 
-type SequenceCalls<Uses extends ChildDefinition> = Pick<ChildCalls<Uses>, 'create' | 'entry'> & {
+type SequenceCalls<Uses extends ChildCallable> = Pick<ChildCalls<Uses>, 'create' | 'entry'> & {
   /** A concrete grant check; generic create alone can erase a narrower phase allowance. */
-  readonly create: (definition: Uses, input: DefinitionInput<Uses>, options?: ChildOptions<Uses>) => ChildCall<Uses>;
+  readonly create: (definition: Uses, input: CallableInput<Uses>, options?: ChildOptions<Uses>) => ChildCall<Uses>;
 };
 
-interface Entry<Input, Uses extends ChildDefinition> {
+interface Entry<Input, Uses extends ChildCallable> {
   readonly key: string;
   readonly use: Uses | InvocationEntry<Uses, never>;
   run(input: Input, outputs: Readonly<Record<string, unknown>>, children: Pick<ChildCalls<Uses>, 'create' | 'entry'>): Promise<unknown>;
 }
 
 /** A convenience over the same create → run → accept contract available to any parent. */
-export class Sequence<Input, Outputs = Record<never, never>, Uses extends ChildDefinition = never> {
+export class Sequence<Input, Outputs = Record<never, never>, Uses extends ChildCallable = never> {
   private readonly entries: readonly Entry<Input, Uses>[];
 
   constructor(entries: readonly Entry<Input, Uses>[] = []) {
     this.entries = Object.freeze([...entries]);
   }
 
-  step<Key extends string, Definition extends ChildDefinition, AcceptedOutput = DefinitionOutput<Definition>>(key: Key extends keyof Outputs ? never : Key, definition: SequenceStep<Input, Outputs, Definition, NoInfer<DefinitionInput<Definition>>, AcceptedOutput> & { readonly use: Definition }): Sequence<Input, Outputs & Record<Key, AcceptedOutput>, Uses | Definition>;
-  step<Key extends string, Definition extends ChildDefinition, StepInput, AcceptedOutput = DefinitionOutput<Definition>>(key: Key extends keyof Outputs ? never : Key, definition: SequenceStep<Input, Outputs, Definition, StepInput, AcceptedOutput> & { readonly use: InvocationEntry<Definition, StepInput> }): Sequence<Input, Outputs & Record<Key, AcceptedOutput>, Uses | Definition>;
-  step<Key extends string, Definition extends ChildDefinition, StepInput, AcceptedOutput>(key: Key extends keyof Outputs ? never : Key, definition: SequenceStep<Input, Outputs, Definition, StepInput, AcceptedOutput>): Sequence<Input, Outputs & Record<Key, AcceptedOutput>, Uses | Definition> {
+  step<Key extends string, Definition extends ChildCallable, AcceptedOutput = CallableOutput<Definition>>(key: Key extends keyof Outputs ? never : Key, definition: SequenceStep<Input, Outputs, Definition, NoInfer<CallableInput<Definition>>, AcceptedOutput> & { readonly use: Definition }): Sequence<Input, Outputs & Record<Key, AcceptedOutput>, Uses | Definition>;
+  step<Key extends string, Definition extends ChildCallable, StepInput, AcceptedOutput = CallableOutput<Definition>>(key: Key extends keyof Outputs ? never : Key, definition: SequenceStep<Input, Outputs, Definition, StepInput, AcceptedOutput> & { readonly use: InvocationEntry<Definition, StepInput> }): Sequence<Input, Outputs & Record<Key, AcceptedOutput>, Uses | Definition>;
+  step<Key extends string, Definition extends ChildCallable, StepInput, AcceptedOutput>(key: Key extends keyof Outputs ? never : Key, definition: SequenceStep<Input, Outputs, Definition, StepInput, AcceptedOutput>): Sequence<Input, Outputs & Record<Key, AcceptedOutput>, Uses | Definition> {
     if (!isNonBlankString(key) || this.entries.some((entry) => entry.key === key)) throw new Error('Sequence work keys must be non-blank and unique');
     const { use, input: prepare, accept, output } = definition;
     const entry: Entry<Input, Uses | Definition> = Object.freeze({
@@ -49,7 +49,7 @@ export class Sequence<Input, Outputs = Record<never, never>, Uses extends ChildD
       async run(input: Input, outputs: Readonly<Record<string, unknown>>, children: Pick<ChildCalls<Uses | Definition>, 'create' | 'entry'>) {
         const scope = Object.freeze({ input, outputs: outputs as Readonly<Outputs> });
         const options = { key, output: output?.(scope) };
-        const child = use instanceof InvocationEntry ? children.entry(use, prepare(scope), options) : children.create(use, prepare(scope) as DefinitionInput<Definition>, options);
+        const child = use instanceof InvocationEntry ? children.entry(use, prepare(scope), options) : children.create(use, prepare(scope) as CallableInput<Definition>, options);
         await child.run();
         return accept ? child.accept((delivered) => accept(scope, delivered)) : child.accept();
       },
@@ -62,7 +62,13 @@ export class Sequence<Input, Outputs = Record<never, never>, Uses extends ChildD
   }
 
   get requests(): readonly ResourceRequest<unknown>[] {
-    return Object.freeze(this.entries.flatMap(({ use }) => resourceRequests(collectDefinitionRequirements({ run: use.run, exceptions: use.exceptions }))));
+    return Object.freeze(
+      this.entries.flatMap(({ use }) => {
+        const run = use.run;
+        if (!run) throw new Error('Sequence member requires a configured run stage');
+        return resourceRequests(collectDefinitionRequirements({ run, exceptions: use.exceptions }));
+      }),
+    );
   }
 
   async run(input: Input, children: SequenceCalls<Uses>): Promise<Readonly<Outputs>> {

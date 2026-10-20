@@ -1,4 +1,4 @@
-import type { GroupWork } from '@capix/server-runtime';
+import type { CallableInput, GroupWork } from '@capix/server-runtime';
 import { CallableBinder, BoundCallable, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationOptions, type CallableSourceBinding } from '@capix/server-runtime/construction';
 import { Transcript } from '@capix/server-runtime/content';
 import type { ResourceRecord as ResourceRecordEntity } from '@capix/server-runtime/recording';
@@ -9,7 +9,7 @@ import type { TranscriptSnapshot } from '@capix/protocol/content';
 import type { ObserverChange } from '@capix/protocol/observer';
 import type { MemoryInput } from '@capix/observer-service/conversation';
 import { defineGroup, defineScene } from '@capix/server-runtime';
-import { ActiveContentResource, MaintainConversationContentDefinition, PrepareConversationContextDefinition, type ContextMaintenanceInput, type ContextMaintenanceDecision, type ContextMaintenancePolicy } from '@capix/observer-service/conversation';
+import { ActiveContentResource, MaintainConversationContent, PrepareConversationContext, type ContextMaintenanceInput, type ContextMaintenanceDecision, type ContextMaintenancePolicy } from '@capix/observer-service/conversation';
 
 const maintenancePolicy = defineGroup<ContextMaintenanceInput, ContextMaintenanceDecision>()({
   name: 'explicit-policy',
@@ -30,13 +30,13 @@ const maintenancePolicy = defineGroup<ContextMaintenanceInput, ContextMaintenanc
     },
   },
 });
-const maintenance = new MaintainConversationContentDefinition(maintenancePolicy);
-const preparation = new PrepareConversationContextDefinition(maintenance);
+const maintenance = new MaintainConversationContent(maintenancePolicy);
+const preparation = new PrepareConversationContext(maintenance);
 const functionalPolicy: ContextMaintenancePolicy = ({ material }) => ({ basis: material.basis, messageIndexes: [], memoryIds: [] });
 // @ts-expect-error Maintenance decisions must carry a fixed source basis.
 const ungroundedPolicy: ContextMaintenancePolicy = () => ({ messageIndexes: [], memoryIds: [] });
 // @ts-expect-error Preparation consumes an ordinary accepted input, including its formal message index.
-const missingPosition: Parameters<typeof preparation.run.execute>[0]['input'] = { message: { role: 'user', content: 'input' } };
+const missingPosition: CallableInput<typeof preparation> = { message: { role: 'user', content: 'input' } };
 void [functionalPolicy, ungroundedPolicy, missingPosition];
 
 const bound: BoundCallable<string, string> = new CallableBinder().bind(defineScene<string, string>()({ run: { execute: (work) => work.input } }), { providers: [], source: { capture: () => null } });
@@ -88,7 +88,7 @@ const work: InvocationOptions<string, number, CallContext>['work'] = {
 declare const reusable: BoundCallable<string, number, ExecutionResources>;
 // @ts-expect-error A reusable E structure is not the state of one E invocation.
 const callContext: CallContext = reusable;
-declare const node: import('@capix/server-runtime').NodeDefinition<string, number>;
+declare const node: import('@capix/server-runtime').Node<string, number>;
 declare const invocationBindings: CallableSourceBinding<{}, { label: string }, typeof node>;
 // @ts-expect-error a source binding does not contain a separate entry resource scope.
 invocationBindings.entry({ text: 'input' });

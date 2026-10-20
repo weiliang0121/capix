@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { Transcript } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
-import { GenerateAnswerDefinition, estimateCapacity } from '@capix/observer-service';
+import { GenerateAnswer, estimateCapacity } from '@capix/observer-service';
 
 import { createInput, observeFixture } from '../fixtures/observer.mjs';
 
@@ -31,7 +31,7 @@ async function generate(input, contextBudget = settings.contextBudget, requests 
       return output({ kind: 'answer', content: '完成' });
     },
   };
-  const operation = bindChild(runtime, new GenerateAnswerDefinition());
+  const operation = bindChild(runtime, new GenerateAnswer());
   const resourceBinding = resourceBindingFor(runtime, provider);
   const history = [...selectedMessages].sort((a, b) => a.index - b.index).map((item) => item.message);
   const transcript = new Transcript([...history, input.message]);

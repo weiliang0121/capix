@@ -1,40 +1,40 @@
 import type { CallableKind } from '@capix/protocol';
 import { isFunction } from 'es-toolkit/predicate';
-import type { ChildDefinition } from '../definition/children.js';
-import type { SceneDefinition } from '../definition/scene.js';
+import type { ChildCallable } from '../definition/children.js';
+import type { Scene } from '../structure/scene.js';
 import { resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
 import { isResourceRefinement, type ResourceRefinement } from '../resource/offer.js';
 import type { ChildBindingOptions } from './contract.js';
 import { collectDefinitionRequirements, collectResourceSupply, type ChildResourceBinding } from './resources.js';
 import { childKinds } from '../definition/kind.js';
-import { originalReception, snapshotDefinition } from './snapshot.js';
+import { originalReception, snapshotDefinition, type CallableSnapshot } from './snapshot.js';
 
-export type AnyCallableDefinition = SceneDefinition<any, any, any, any, any> | ChildDefinition;
+export type AnyCallable = Scene<any, any, any, any, any> | ChildCallable;
 
 /** Fixed interpretation of one structural position, without values or call state. */
-export interface ResolvedCallable<Definition extends AnyCallableDefinition = AnyCallableDefinition> {
+export interface ResolvedCallable<Definition extends AnyCallable = AnyCallable> {
   readonly kind: Definition['kind'];
   readonly definition: Definition;
-  readonly declaration: Definition;
+  readonly declaration: CallableSnapshot;
   readonly requires: ResourceRequirements;
   /** Offers routed through this position; local Work still receives only local requests. */
   readonly supply: ResourceRequirements;
   readonly members: readonly ResolvedChild[];
   readonly refinements?: readonly ResourceRefinement<any>[];
 }
-export type ResolvedChild = ResolvedCallable<ChildDefinition>;
+export type ResolvedChild = ResolvedCallable<ChildCallable>;
 
 /** All dependency collection is static. Explicit source bindings delimit supply, never callable kind. */
-export function resolveDeclaration<Definition extends AnyCallableDefinition>(definition: Definition, options: ChildBindingOptions = {}): ResolvedCallable<Definition> {
-  const refinements = new Map<AnyCallableDefinition, readonly ResourceRefinement<any>[]>();
+export function resolveDeclaration<Definition extends AnyCallable>(definition: Definition, options: ChildBindingOptions = {}): ResolvedCallable<Definition> {
+  const refinements = new Map<AnyCallable, readonly ResourceRefinement<any>[]>();
   for (const binding of options.childResources ?? []) {
     if (refinements.has(binding.definition)) throw new Error('Duplicate child resource binding');
     refinements.set(binding.definition, Object.freeze([...binding.refinements]));
   }
   const captures = new Set(options.sources ?? []);
-  const encountered = new Set<AnyCallableDefinition>();
-  const path = new Set<AnyCallableDefinition>();
-  const visit = (current: AnyCallableDefinition, parent?: { readonly kind: CallableKind; readonly definition: AnyCallableDefinition }): ResolvedCallable => {
+  const encountered = new Set<AnyCallable>();
+  const path = new Set<AnyCallable>();
+  const visit = (current: AnyCallable, parent?: { readonly kind: CallableKind; readonly definition: AnyCallable }): ResolvedCallable => {
     if (path.has(current)) throw new Error('Cyclic member declaration');
     if (!isFunction(current.run?.execute)) throw new Error('Callable definition requires execute');
     const allowed: readonly CallableKind[] | undefined = parent && childKinds[parent.kind];
@@ -42,7 +42,7 @@ export function resolveDeclaration<Definition extends AnyCallableDefinition>(def
     const declaration = snapshotDefinition(current);
     for (const observation of options.observations ?? []) observation.check?.(current, parent?.definition);
     const requires = collectDefinitionRequirements(declaration, options.observationProvides);
-    const definitions: readonly ChildDefinition[] = 'members' in declaration ? (declaration.members ?? []) : [];
+    const definitions: readonly ChildCallable[] = 'members' in declaration ? (declaration.members ?? []) : [];
     const receptions = new Set<object>();
     for (const reception of declaration.receptions ?? []) {
       const original = originalReception(reception);

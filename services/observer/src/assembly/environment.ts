@@ -2,8 +2,8 @@ import { RuntimeError, type Driver, type Clock, type ChangeBuffer, type Checkpoi
 import type { RecordBook, Recorder, RecordingInstallation } from '@capix/server-runtime/recording';
 import type { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import type { ObserverChange, RecordingArchive } from '@capix/protocol';
-import type { ConversationSceneDefinition } from '../conversation/scene.js';
-import type { ConversationScene } from '../conversation/binding.js';
+import type { ConversationScene, ConversationStructure } from '../conversation/scene.js';
+import type { BoundConversationScene } from '../conversation/binding.js';
 import type { ConversationCheckpointRuns } from '../conversation/checkpoints.js';
 import { conversationCheckpointConfiguration, validateConversationCheckpointRestoration } from '../conversation/binding/checkpoint.js';
 import type { ModelSource } from '../conversation/model/source.js';
@@ -28,8 +28,9 @@ export interface ObserverEnvironmentParts {
   readonly recorder: Recorder;
   readonly recording: RecordingInstallation;
   readonly driver: Driver;
-  readonly scene: ConversationScene;
-  readonly definition: ConversationSceneDefinition;
+  readonly scene: BoundConversationScene;
+  readonly definition: ConversationScene;
+  readonly structure: ConversationStructure;
   readonly recordSource: RecordSource;
   readonly recordingArchives: readonly RecordingArchive[];
   readonly persistence?: SqliteObserverStore;
@@ -53,9 +54,10 @@ export class ObserverEnvironment {
   readonly recorder: Recorder;
   readonly recording: RecordingInstallation;
   readonly driver: Driver;
-  readonly scene: ConversationScene;
+  readonly scene: BoundConversationScene;
   readonly changes: ChangeBuffer<ObserverChange>;
-  readonly definition: ConversationSceneDefinition;
+  readonly definition: ConversationScene;
+  readonly structure: ConversationStructure;
   readonly consumer: ChangeConsumer;
   readonly recordSource: RecordSource;
   readonly transcripts: TranscriptFeed;
@@ -89,6 +91,7 @@ export class ObserverEnvironment {
     this.driver = parts.driver;
     this.scene = parts.scene;
     this.definition = parts.definition;
+    this.structure = parts.structure;
     this.recordSource = parts.recordSource;
     this.recordingArchives = parts.recordingArchives;
     this.persistence = parts.persistence;

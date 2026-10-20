@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, bindCallSource, SceneDefinition, GroupDefinition, NodeDefinition } from '@capix/server-runtime';
+import { ExceptionContract, bindCallSource, Scene, Group, Node } from '@capix/server-runtime';
 import { Invocation, InvocationContext } from '@capix/server-runtime/construction';
 
 const contract = {
@@ -328,7 +328,7 @@ function composeLevel(Base, child, label, receives, explicit = false) {
     source = 'test';
     callee = 'test';
     output = contract;
-    members = Base === NodeDefinition ? undefined : child ? [child] : [];
+    members = Base === Node ? undefined : child ? [child] : [];
     run = {
       requires: {},
       execute: async (work) => {
@@ -361,10 +361,10 @@ function composeLevel(Base, child, label, receives, explicit = false) {
 
 test('REOA each declares output; child and host consumers are explicit without ancestor broadcast', async () => {
   const received = [];
-  const leaf = composeLevel(NodeDefinition, undefined, 'A', received);
-  const operation = composeLevel(GroupDefinition, leaf, 'O', received, true);
-  const execution = composeLevel(GroupDefinition, operation, 'E', received, false);
-  const runtime = composeLevel(SceneDefinition, execution, 'R', received, true);
+  const leaf = composeLevel(Node, undefined, 'A', received);
+  const operation = composeLevel(Group, leaf, 'O', received, true);
+  const execution = composeLevel(Group, operation, 'E', received, false);
+  const runtime = composeLevel(Scene, execution, 'R', received, true);
   const rEvents = [];
   const eEvents = [];
   const bound = installCallable(runtime, {
@@ -452,7 +452,7 @@ test('overlapping calls with the same declaration keep output origins, writers a
 
 test('bound fallback has no writer and remains subject to the declared result contract', async () => {
   const rejected = new ExceptionContract('BOUND_OUTPUT');
-  const runtime = new (class extends SceneDefinition {
+  const runtime = new (class extends Scene {
     output = contract;
     raises = [rejected];
     run = {
@@ -506,8 +506,8 @@ test('declared output validation applies to the value transformed by normal acce
 });
 
 test('one failing explicit E output consumer does not disable its other binding', async () => {
-  const execution = composeLevel(GroupDefinition, undefined, 'E', []);
-  const runtime = new (class extends SceneDefinition {
+  const execution = composeLevel(Group, undefined, 'E', []);
+  const runtime = new (class extends Scene {
     members = [execution];
     run = {
       requires: {},
@@ -599,7 +599,7 @@ test('final output validation cannot catch and clear a fault already owned by th
 test('a previous work view cannot create children after the invocation moves to another local round', async () => {
   let executions = 0;
   let saved;
-  const child = new (class extends GroupDefinition {
+  const child = new (class extends Group {
     run = {
       requires: {},
       execute: () => {
@@ -608,7 +608,7 @@ test('a previous work view cannot create children after the invocation moves to 
       },
     };
   })();
-  const definition = new (class extends SceneDefinition {
+  const definition = new (class extends Scene {
     maxRounds = 2;
     members = [child];
     run = {
@@ -633,10 +633,10 @@ for (const handled of [false, true]) {
   test(`current ${handled ? 'exception' : 'receive'} view can accept a child created by its executing view`, async () => {
     const rejected = new ExceptionContract('ACCEPT_FROM_CURRENT_VIEW');
     let saved;
-    const child = new (class extends GroupDefinition {
+    const child = new (class extends Group {
       run = { requires: {}, execute: () => 'child' };
     })();
-    const definition = new (class extends SceneDefinition {
+    const definition = new (class extends Scene {
       members = [child];
       raises = [rejected];
       run = {

@@ -6,8 +6,8 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/consumer-contract.ts', import.meta.url));
 const source = `
-import {NodeDefinition, defineNode, defineChildEntry, defineGroup, defineScene} from '@capix/server-runtime';
-import type {ChildCall, ChildCalls, ChildContract, ChildContractsOf, ChildEntry, ChildOptions, ChildReference, DefinitionMembers, DefinitionContract, DefinitionInput, DefinitionOutput, ExecuteWork, InvocationOutputReceiver, GroupDefinition, GroupWork, ResourceRequest} from '@capix/server-runtime';
+import {Node, Group, defineNode, defineChildEntry, defineGroup, defineScene} from '@capix/server-runtime';
+import type {ChildCall, ChildCalls, ChildContract, ChildContractsOf, ChildEntry, ChildOptions, ChildReference, CallableMembers, CallableContract, CallableInput, CallableOutput, ExecuteWork, InvocationOutputReceiver, GroupWork, ResourceRequest} from '@capix/server-runtime';
 
 declare function expectType<T>(value: T): void;
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -16,21 +16,21 @@ type Input = { readonly path: string };
 type Result = { readonly content: string };
 const metadata = { name: 'read', label: 'read', source: 'test', callee: 'files' };
 const read = defineNode<Input, Result>()({ ...metadata, output: { result: value => { throw new Error('not executed'); }, delta: value => String(value) }, run: { execute: work => ({ content: work.input.path }) } });
-const view: DefinitionContract<'node', Input, Result, string> = read;
+const view: CallableContract<'node', Input, Result, string> = read;
 // @ts-expect-error a real target cannot widen its accepted input through a shallow view
-const widenedInput: DefinitionContract<'node', unknown, Result, string> = read;
+const widenedInput: CallableContract<'node', unknown, Result, string> = read;
 const acceptsUnknown = defineNode<unknown, Result>()({ ...metadata, run: { execute: () => ({ content: 'unknown input' }) } });
 // @ts-expect-error facts must not claim a narrower input than the target actually receives
-const narrowedInput: DefinitionContract<'node', Input, Result> = acceptsUnknown;
+const narrowedInput: CallableContract<'node', Input, Result> = acceptsUnknown;
 // Output and Delta remain covariant; hiding detail does not permit a different input.
-const resultView: DefinitionContract<'node', Input, unknown, unknown> = read;
+const resultView: CallableContract<'node', Input, unknown, unknown> = read;
 declare const allCalls: ChildCalls;
 expectType<Promise<unknown>>(allCalls.create(resultView, { path: 'notes.md' }).run());
 // @ts-expect-error output erasure does not erase the input contract
 allCalls.create(resultView, 42);
 const erased: { readonly kind: 'node' } = read;
 // @ts-expect-error an erased signature cannot be relabelled with arbitrary I/O
-const forged: DefinitionContract<'node', number, boolean> = erased;
+const forged: CallableContract<'node', number, boolean> = erased;
 // @ts-expect-error a level-only view cannot become a callable target
 const erasedTarget: ChildContract = erased;
 const nested = defineGroup<number, number>()({ ...metadata, run: { execute: work => work.input } });
@@ -38,15 +38,15 @@ const task = defineGroup<number, number>()({ members: [nested], run: { execute: 
 const root = defineScene<number, number>()({ members: [task], run: { execute: work => work.input } });
 
 // An explicit destination type checks a declaration; it never supplies missing resource requests.
-const annotatedEmpty: GroupDefinition<string, number> = defineGroup<string, number>()({ ...metadata, run: { execute: work => work.input.length } });
-const annotatedStream: GroupDefinition<string, number, Record<string, never>, Record<string, never>, string> = defineGroup<string, number>()({ ...metadata, output: { result: value => Number(value), delta: value => String(value) }, run: { execute: work => work.input.length } });
+const annotatedEmpty: Group<string, number> = defineGroup<string, number>()({ ...metadata, run: { execute: work => work.input.length } });
+const annotatedStream: Group<string, number, Record<string, never>, Record<string, never>, string> = defineGroup<string, number>()({ ...metadata, output: { result: value => Number(value), delta: value => String(value) }, run: { execute: work => work.input.length } });
 declare const valuePort: ResourceRequest<number>;
 declare const repairPort: ResourceRequest<string>;
-const annotatedResources: GroupDefinition<string, number, { value: number }, { repair: string }> = defineGroup<string, number>()({ ...metadata, run: { requires: { value: valuePort }, execute: work => work.resources.value }, exceptions: { requires: { repair: repairPort }, accepts: [], handle: work => work.return(work.resources.repair.length) } });
+const annotatedResources: Group<string, number, { value: number }, { repair: string }> = defineGroup<string, number>()({ ...metadata, run: { requires: { value: valuePort }, execute: work => work.resources.value }, exceptions: { requires: { repair: repairPort }, accepts: [], handle: work => work.return(work.resources.repair.length) } });
 // @ts-expect-error the destination type cannot manufacture a run resource request
-const missingRunResource: GroupDefinition<string, number, { value: number }> = defineGroup<string, number>()({ ...metadata, run: { execute: () => 1 } });
+const missingRunResource = new Group<string, number, { value: number }>({ ...metadata, run: { execute: () => 1 } });
 // @ts-expect-error the destination type cannot manufacture an exception resource request
-const missingExceptionResource: GroupDefinition<string, number, Record<string, never>, { repair: string }> = defineGroup<string, number>()({ ...metadata, run: { execute: () => 1 }, exceptions: { accepts: [], handle: work => work.unhandled } });
+const missingExceptionResource = new Group<string, number, {}, { repair: string }>({ ...metadata, run: { execute: () => 1 }, exceptions: { accepts: [], handle: work => work.unhandled } });
 
 type NoAttemptChildren = Expect<Equal<ChildContractsOf<'node'>, never>>;
 expectType<NoAttemptChildren>(true);
@@ -104,26 +104,26 @@ consumer.children.entry(entryView, 2);
 // @ts-expect-error caller sees no complete run declaration through entryView
 entryView.run;
 // The actual entry retains these for assembly/composition.
-entry.run.requires;
+entry.run?.requires;
 entry.exceptions;
 
 // Shared class registration rules preserve leaf restrictions beyond literals.
-class BadLeaf extends NodeDefinition<Input, Result> {
+class BadLeaf extends Node<Input, Result> {
   readonly name = 'bad'; readonly label = 'bad'; readonly source = 'test'; readonly callee = 'local';
   // @ts-expect-error a named leaf class cannot declare children
   readonly members = [read];
   readonly run = { requires: {}, execute: (work: ExecuteWork<'node', Input, Result>) => ({ content: work.input.path }) };
 }
-class GoodLeaf extends NodeDefinition<Input, Result> {
+class GoodLeaf extends Node<Input, Result> {
   readonly name = 'good'; readonly label = 'good'; readonly source = 'test'; readonly callee = 'local';
   private readonly prefix = 'result:';
-  readonly run = { requires: {}, execute: (work: ExecuteWork<'node', Input, Result>) => this.project(work.input) };
+  constructor() { super(); this.setRun({ execute: work => this.project(work.input) }); }
   private project(input: Input): Result { return { content: this.prefix + input.path }; }
 }
 const named = new GoodLeaf();
-const classRegistration: DefinitionMembers<'group'> = { members: [named, nested] };
+const classRegistration: CallableMembers<'group'> = { members: [named, nested] };
 // @ts-expect-error common registration type retains the parent's exact position
-const invalidClassRegistration: DefinitionMembers<'node'> = { members: [named] };
+const invalidClassRegistration: CallableMembers<'node'> = { members: [named] };
 const namedParent = defineGroup<Input, Result>()({ ...metadata, members: [named], run: { execute: work => work.children.create(named, work.input).run() } });
 
 // Registration and stage selection cannot be inferred backwards from uses.

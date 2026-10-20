@@ -1,9 +1,9 @@
-import { GroupDefinition, defineGroup, defineChildEntry } from '@capix/server-runtime';
-import type { NodeDefinition, SceneDefinition, SceneWork, GroupWork, NodeWork, AcceptWork, HandleWork, ResumeWork, InvocationRunDefinition, InvocationExceptionDefinition, InvocationCheckpointPoint, ChildReference, ChildEntryInput, ChildrenOf, DefinitionInput, DefinitionOutput } from '@capix/server-runtime';
+import { Group, defineGroup, defineChildEntry } from '@capix/server-runtime';
+import type { Node, Scene, SceneWork, GroupWork, NodeWork, AcceptWork, HandleWork, ResumeWork, InvocationRunDefinition, InvocationExceptionDefinition, InvocationCheckpointPoint, ChildReference, ChildEntryInput, ChildrenOf, CallableInput, CallableOutput } from '@capix/server-runtime';
 
-declare const execution: GroupDefinition<string, number>;
-declare const operation: GroupDefinition<string, number>;
-declare const attempt: NodeDefinition<string, number>;
+declare const execution: Group<string, number>;
+declare const operation: Group<string, number>;
+declare const attempt: Node<string, number>;
 declare function expectType<T>(value: T): void;
 
 export function rootHelper(work: SceneWork<string, number>): Promise<number> {
@@ -24,11 +24,11 @@ export function leafHelper(work: NodeWork<string, number>): number {
 }
 
 // Helpers preserve the actual child's I/O rather than falling back to an untyped union.
-export function specificHelper<Definition extends ChildrenOf<'group'>>(work: GroupWork<string, number, Record<string, never>, Definition>, child: Definition, input: DefinitionInput<Definition>) {
-  expectType<Promise<DefinitionOutput<Definition>>>(work.children.create(child, input).run());
+export function specificHelper<Definition extends ChildrenOf<'group'>>(work: GroupWork<string, number, Record<string, never>, Definition>, child: Definition, input: CallableInput<Definition>) {
+  expectType<Promise<CallableOutput<Definition>>>(work.children.create(child, input).run());
 }
 
-export class NamedExecution extends GroupDefinition<string, number> {
+export class NamedExecution extends Group<string, number> {
   readonly members = [operation];
   readonly run: InvocationRunDefinition<string, number, 'group', Record<string, never>> = {
     requires: {},

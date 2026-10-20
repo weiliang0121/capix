@@ -1,6 +1,6 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import { DatabaseSync } from 'node:sqlite';
-import { SceneDefinition, GroupDefinition, NodeDefinition, TranscriptResource, Transcript, Memories, childReference } from '@capix/server-runtime';
+import { Scene, Group, Node, TranscriptResource, Transcript, Memories, childReference } from '@capix/server-runtime';
 import { SqliteCheckpointStore, SqliteObserverStore } from '@capix/observer-service';
 
 const [path, mode, boundary] = process.argv.slice(2);
@@ -21,7 +21,7 @@ const crash = (name) => {
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 const point = (execute, requires = {}, uses = [], references = {}) => ({ state: codec, references, resume: { requires, uses, execute } });
 const cp = (key, points) => ({ key, version: 1, input: codec, output: codec, points: Object.entries(points).map(([name, value]) => ({ name, ...value })) });
-class Model extends NodeDefinition {
+class Model extends Node {
   name = 'model';
   label = 'model';
   source = 'test';
@@ -34,7 +34,7 @@ class Model extends NodeDefinition {
   };
 }
 const model = new Model();
-class Request extends GroupDefinition {
+class Request extends Group {
   name = 'request';
   label = 'request';
   source = 'test';
@@ -77,7 +77,7 @@ async function consume(work, child, allowCrash, points) {
 }
 const resume = (work, _state, saved) => consume(work, work.children.resume(saved.child), false, executionPoints);
 const executionPoints = cp('chain.execution', { waiting: point(resume, requires, [request], { child: childReference(request) }), reception: point(resume, requires, [request], { child: childReference(request) }), accepted: point((_work, state) => state.output) }).points;
-class Conversation extends GroupDefinition {
+class Conversation extends Group {
   members = [request];
   checkpoint = { key: 'chain.execution', version: 1, input: codec, output: codec, points: executionPoints };
   run = {
@@ -90,7 +90,7 @@ class Conversation extends GroupDefinition {
   };
 }
 const conversation = new Conversation();
-class Root extends SceneDefinition {
+class Root extends Scene {
   members = [conversation];
   checkpoint = cp('chain.runtime', {
     waiting: point(

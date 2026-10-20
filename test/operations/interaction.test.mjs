@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { defineObservation, isInvocationCancelled } from '@capix/server-runtime';
 import { initializeObserver, ModelInteractions, ModelSource } from '@capix/observer-service';
-import { withRuntimeDefinition } from '../fixtures/assembly.mjs';
+import { withRuntimeDefinition, reconfigure } from '../fixtures/assembly.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const request = { model: 'fixture', messages: [], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 1, stream: false };
@@ -46,20 +46,22 @@ function conversation(provider, configureDefinition) {
   );
   return { environment, calls };
 }
-function watchPending(runtimeDefinition, callback, options) {
-  const definition = runtimeDefinition.taskDefinition.operationDefinitions.generation.requestModelDefinition;
-  definition.observation = [
-    ...definition.observation,
-    defineObservation(
-      {
-        requires: {},
-        observe(fact) {
-          if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'succeeded' && fact.change.result.output.kind === 'pending') callback();
+function watchPending(generation, callback, options) {
+  const definition = generation.requestModel;
+  reconfigure(definition, {
+    observation: [
+      ...definition.observation,
+      defineObservation(
+        {
+          requires: {},
+          observe(fact) {
+            if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'succeeded' && fact.change.result.output.kind === 'pending') callback();
+          },
         },
-      },
-      options,
-    ),
-  ];
+        options,
+      ),
+    ],
+  });
 }
 
 test('production request O accepts A1 pending and creates A2 which reads the same exchange without a second send', async () => {
@@ -67,8 +69,8 @@ test('production request O accepts A1 pending and creates A2 which reads the sam
   let pending = 0;
   const { environment, calls } = conversation(
     () => response.promise,
-    (definition) =>
-      watchPending(definition, () => {
+    (_scene, { generation }) =>
+      watchPending(generation, () => {
         pending += 1;
         response.resolve(output(JSON.stringify(answer)));
       }),
@@ -206,7 +208,7 @@ test('cancellation ends the invocation while its independent provider saves a la
   const pending = deferred();
   const { environment, calls } = conversation(
     () => response.promise,
-    (definition) => watchPending(definition, () => pending.resolve()),
+    (_scene, { generation }) => watchPending(generation, () => pending.resolve()),
   );
   const running = environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings, signal: controller.signal });
   const rejected = assert.rejects(running, (error) => isInvocationCancelled(error, controller.signal));
@@ -232,9 +234,9 @@ test('a parent observation fault does not erase or replay an already-started ind
   const response = deferred();
   const { environment, calls } = conversation(
     () => response.promise,
-    (definition) =>
+    (_scene, { generation }) =>
       watchPending(
-        definition,
+        generation,
         () => {
           throw new Error('parent observer fault');
         },

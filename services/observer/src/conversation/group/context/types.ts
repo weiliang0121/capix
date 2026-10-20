@@ -1,5 +1,5 @@
 import type { ModelSettings } from '@capix/protocol';
-import type { GroupDefinition } from '@capix/server-runtime';
+import type { Group } from '@capix/server-runtime';
 import type { ActiveContentSelection, ActiveContentSnapshot } from '../../content/active.js';
 import type { AnswerMessageContext } from '../../node/context/assemble.js';
 
@@ -19,5 +19,5 @@ export interface ContextMaintenanceInput extends ContextMaintenanceRequest {
 }
 
 export type ContextMaintenanceDecision = ActiveContentSelection;
-export type ContextMaintenanceOperation = GroupDefinition<ContextMaintenanceInput, ContextMaintenanceDecision, any, any, any>;
+export type ContextMaintenanceOperation = Group<ContextMaintenanceInput, ContextMaintenanceDecision, any, any, any>;
 export type ContextMaintenancePolicy = ((input: ContextMaintenanceInput) => ContextMaintenanceDecision | Promise<ContextMaintenanceDecision>) | ContextMaintenanceOperation;

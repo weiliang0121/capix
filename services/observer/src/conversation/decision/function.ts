@@ -1,5 +1,5 @@
 import { decisionInputCodec, checkLeafResult } from '../group/checkpoint.js';
-import { GroupDefinition, cloneCheckpointValue, type CheckpointCodec, checkpointPoint, type GroupWork, type InvocationCheckpointDefinition } from '@capix/server-runtime';
+import { Group, cloneCheckpointValue, type CheckpointCodec, checkpointPoint, type GroupWork } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { ConversationDecision, ConversationDecisionInput } from './types.js';
 
@@ -7,30 +7,34 @@ import type { ConversationDecision, ConversationDecisionInput } from './types.js
 const proposalCodec: CheckpointCodec<ConversationDecision> = { encode: cloneCheckpointValue, decode: (value) => cloneCheckpointValue(value) as unknown as ConversationDecision };
 
 /** A deterministic policy uses the same child delivery contract as a model-backed decision. */
-export class FunctionConversationDecisionDefinition extends GroupDefinition<ConversationDecisionInput, ConversationDecision> {
-  readonly name = 'conversationDecision';
-  readonly label = '决定下一步';
-  readonly source = 'services/observer/src/conversation/decision/function.ts · FunctionConversationDecisionDefinition';
-  readonly observation = [invocationRecording()];
-  readonly run;
-  readonly resultPoint = checkpointPoint<'group', ConversationDecisionInput, ConversationDecision>()({ name: 'result', state: proposalCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
-  readonly checkpoint: InvocationCheckpointDefinition<ConversationDecisionInput, ConversationDecision, 'group'> = {
-    key: 'observer.function-decision',
-    version: 3,
-    input: decisionInputCodec,
-    output: proposalCodec,
-    points: [this.resultPoint],
-  };
+export class FunctionConversationDecision extends Group<ConversationDecisionInput, ConversationDecision> {
+  readonly resultPoint;
 
   constructor(decide: (input: ConversationDecisionInput, signal: AbortSignal) => ConversationDecision | Promise<ConversationDecision>) {
     super();
-    this.run = {
-      requires: {},
-      execute: async (work: GroupWork<ConversationDecisionInput, ConversationDecision>) => {
-        const result = await decide(work.input, work.signal);
-        work.checkpoint?.save(this.resultPoint, result, {});
-        return result;
+
+    this.resultPoint = checkpointPoint<'group', ConversationDecisionInput, ConversationDecision>()({ name: 'result', state: proposalCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
+
+    this.setDefinition({
+      name: 'conversationDecision',
+      label: '决定下一步',
+      source: 'services/observer/src/conversation/decision/function.ts · FunctionConversationDecision',
+      observation: [invocationRecording()],
+      run: {
+        requires: {},
+        execute: async (work: GroupWork<ConversationDecisionInput, ConversationDecision>) => {
+          const result = await decide(work.input, work.signal);
+          work.checkpoint?.save(this.resultPoint, result, {});
+          return result;
+        },
       },
-    };
+      checkpoint: {
+        key: 'observer.function-decision',
+        version: 3,
+        input: decisionInputCodec,
+        output: proposalCodec,
+        points: [this.resultPoint],
+      },
+    });
   }
 }

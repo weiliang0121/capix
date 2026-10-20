@@ -1,4 +1,4 @@
-import { NodeDefinition, GroupDefinition, type NodeWork, type GroupWork, type AcceptWork, type ChildCalls, type OutputDeclaration } from '@capix/server-runtime';
+import { Node, Group, type NodeWork, type GroupWork, type AcceptWork, type ChildCalls, type OutputDeclaration } from '@capix/server-runtime';
 
 const text: OutputDeclaration<string, string> = {
   result(value) {
@@ -10,7 +10,7 @@ const text: OutputDeclaration<string, string> = {
     return value;
   },
 };
-class Leaf extends NodeDefinition<string, string, Record<string, never>, Record<string, never>, string> {
+class Leaf extends Node<string, string, Record<string, never>, Record<string, never>, string> {
   name = 'leaf';
   label = 'Leaf';
   source = 'test';
@@ -31,7 +31,7 @@ class Leaf extends NodeDefinition<string, string, Record<string, never>, Record<
     },
   };
 }
-class Parent extends GroupDefinition<string, string, Record<string, never>, Record<string, never>, string> {
+class Parent extends Group<string, string, Record<string, never>, Record<string, never>, string> {
   name = 'parent';
   label = 'Parent';
   source = 'test';
@@ -59,7 +59,7 @@ class Parent extends GroupDefinition<string, string, Record<string, never>, Reco
   };
 }
 void new Parent();
-declare const typed: NodeDefinition<string, string, Record<string, never>, Record<string, never>, string>;
+declare const typed: Node<string, string, Record<string, never>, Record<string, never>, string>;
 declare const children: ChildCalls<typeof typed>;
 children.create(typed, 'input', {
   output: {

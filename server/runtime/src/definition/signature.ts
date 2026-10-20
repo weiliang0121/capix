@@ -1,6 +1,6 @@
 import type { CallableKind } from '@capix/protocol';
 
-/** Type-only declaration signature: definitions cannot create or run invocations. */
+/** Type-only callable signature: author structures cannot create or run invocations. */
 export declare const invocationSignature: unique symbol;
 export interface InvocationSignature<Input, Output, Delta = never> {
   readonly input: Input;
@@ -11,12 +11,12 @@ export interface InvocationSignature<Input, Output, Delta = never> {
 }
 
 /** A consumer view of the original declaration, not sufficient content for binding. */
-export interface DefinitionContract<Kind extends CallableKind = CallableKind, Input = unknown, Output = unknown, Delta = unknown> {
+export interface CallableContract<Kind extends CallableKind = CallableKind, Input = unknown, Output = unknown, Delta = unknown> {
   readonly kind: Kind;
   readonly [invocationSignature]: InvocationSignature<Input, Output, Delta>;
 }
 
 type Signature<Definition> = Definition extends { readonly [invocationSignature]?: infer S } ? NonNullable<S> : InvocationSignature<unknown, unknown, unknown>;
-export type DefinitionInput<Definition> = Signature<Definition> extends { readonly input: infer Input } ? Input : unknown;
-export type DefinitionOutput<Definition> = Signature<Definition> extends { readonly output: infer Output } ? Output : unknown;
-export type DefinitionDelta<Definition> = Signature<Definition> extends { readonly delta: infer Delta } ? Delta : never;
+export type CallableInput<Callable> = Signature<Callable> extends { readonly input: infer Input } ? Input : unknown;
+export type CallableOutput<Callable> = Signature<Callable> extends { readonly output: infer Output } ? Output : unknown;
+export type CallableDelta<Callable> = Signature<Callable> extends { readonly delta: infer Delta } ? Delta : never;

@@ -1,0 +1,24 @@
+{
+  "revision": 1,
+  "image": {
+    "id": "6b98bbe9-60bc-4ab3-9aac-6b026812b0bd",
+    "formatVersion": 4,
+    "contract": { "key": "typed-reception-parent", "version": 1 },
+    "point": "saved",
+    "frame": {
+      "owner": { "contextId": "d807b85c-2011-444d-8405-ea595871d0ee", "kind": "scene" },
+      "phase": "execute",
+      "round": 1,
+      "input": {},
+      "currentInput": {},
+      "nextChildOrder": 3,
+      "children": [
+        { "identity": { "contextId": "405bcdba-1cd9-4d2c-b9fa-bae8c5667a04", "kind": "group", "parentContextId": "d807b85c-2011-444d-8405-ea595871d0ee" }, "target": { "position": 0 }, "round": 1, "order": 0, "key": "same-key", "input": "2026-01-01T00:00:00.000Z", "state": { "kind": "returned", "output": "2026-01-01T00:00:00.000Z", "progress": { "round": 1, "phase": "receive", "currentInput": "2026-01-01T00:00:00.000Z" }, "reception": { "kind": "accepted", "contract": { "position": 0 }, "output": "2026-01-01T00:00:00.000Z" } } },
+        { "identity": { "contextId": "179035b6-1706-4243-b12f-8d53fcbc637e", "kind": "group", "parentContextId": "d807b85c-2011-444d-8405-ea595871d0ee" }, "target": { "position": 0 }, "round": 1, "order": 1, "key": "same-key", "input": "2026-02-01T00:00:00.000Z", "state": { "kind": "returned", "output": "2026-02-01T00:00:00.000Z", "progress": { "round": 1, "phase": "receive", "currentInput": "2026-02-01T00:00:00.000Z" }, "reception": { "kind": "accepted", "contract": { "position": 0 }, "output": "2026-02-01T00:00:00.000Z" } } },
+        { "identity": { "contextId": "9c544afd-090c-4b9f-9457-d14a6c2ee467", "kind": "group", "parentContextId": "d807b85c-2011-444d-8405-ea595871d0ee" }, "target": { "position": 0 }, "round": 1, "order": 2, "input": "unused", "state": { "kind": "returned", "output": "unused", "progress": { "round": 1, "phase": "receive", "currentInput": "unused" }, "reception": { "kind": "accepted", "contract": { "position": 1 }, "output": null } } }
+      ]
+    },
+    "state": { "pid": 9003 },
+    "references": { "first": { "contextId": "405bcdba-1cd9-4d2c-b9fa-bae8c5667a04", "parentContextId": "d807b85c-2011-444d-8405-ea595871d0ee", "parentRound": 1, "order": 0, "target": { "position": 0 } }, "second": { "contextId": "179035b6-1706-4243-b12f-8d53fcbc637e", "parentContextId": "d807b85c-2011-444d-8405-ea595871d0ee", "parentRound": 1, "order": 1, "target": { "position": 0 } }, "empty": { "contextId": "9c544afd-090c-4b9f-9457-d14a6c2ee467", "parentContextId": "d807b85c-2011-444d-8405-ea595871d0ee", "parentRound": 1, "order": 2, "target": { "position": 0 } } }
+  }
+}

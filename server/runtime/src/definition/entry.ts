@@ -1,4 +1,4 @@
-import type { ChildContract, ChildDefinition, ChildFacts, DefinitionInput } from './children.js';
+import type { ChildContract, ChildCallable, ChildFacts, CallableInput } from './children.js';
 import type { ContinuationFact } from './work.js';
 
 export interface ChildEntryFacts {
@@ -15,14 +15,14 @@ export interface ChildEntryInput<Input> {
 /** Invocation-facing input adaptation; assembly helpers retain the complete definition. */
 export interface ChildEntry<Definition extends ChildContract, Input> {
   readonly definition: Definition;
-  readonly accept: (request: ChildEntryInput<Input>) => DefinitionInput<Definition>;
+  readonly accept: (request: ChildEntryInput<Input>) => CallableInput<Definition>;
 }
 
 /** An alternative input contract; binding owns admission and the real parent identity. */
-export class InvocationEntry<Definition extends ChildDefinition, EntryInput> implements ChildEntry<Definition, EntryInput> {
+export class InvocationEntry<Definition extends ChildCallable, EntryInput> implements ChildEntry<Definition, EntryInput> {
   constructor(
     readonly definition: Definition,
-    readonly accept: (request: ChildEntryInput<EntryInput>) => DefinitionInput<Definition>,
+    readonly accept: (request: ChildEntryInput<EntryInput>) => CallableInput<Definition>,
   ) {
     Object.freeze(this);
   }
@@ -34,6 +34,6 @@ export class InvocationEntry<Definition extends ChildDefinition, EntryInput> imp
   }
 }
 
-export function defineChildEntry<Definition extends ChildDefinition, Input>(definition: Definition, entry: { readonly accept: (request: ChildEntryInput<Input>) => NoInfer<DefinitionInput<Definition>> }): InvocationEntry<Definition, Input> {
+export function defineChildEntry<Definition extends ChildCallable, Input>(definition: Definition, entry: { readonly accept: (request: ChildEntryInput<Input>) => NoInfer<CallableInput<Definition>> }): InvocationEntry<Definition, Input> {
   return new InvocationEntry(definition, entry.accept.bind(entry));
 }

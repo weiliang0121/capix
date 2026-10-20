@@ -27,7 +27,7 @@ async function captureExecution(t, fileTask) {
     return result;
   };
   await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '整理资料' }], ...(fileTask ? { fileTask } : {}) }, { settings });
-  const definition = environment.definition.taskDefinition;
+  const definition = environment.structure.conversation;
   const resolved = resolveDeclaration(definition, {});
   const children = new BoundChildren(resolved.members, () => assert.fail('validation must not initialize children'));
   const receptions = new BoundReceptions(resolved.declaration.receptions, children);

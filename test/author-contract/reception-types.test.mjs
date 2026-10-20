@@ -6,8 +6,8 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/reception-contract.ts', import.meta.url));
 const source = `
-import {NodeDefinition, GroupDefinition, defineNode, defineGroup, defineScene, reception} from '@capix/server-runtime';
-import type {NodeWork, CheckpointCodec, ChildCall, ChildContract, ChildFacts, ChildReference, DefinitionContract, DefinitionOutput, GroupWork, ReceptionDefinition, ReceptionValue} from '@capix/server-runtime';
+import {Node, Group, defineNode, defineGroup, defineScene, reception} from '@capix/server-runtime';
+import type {NodeWork, CheckpointCodec, ChildCall, ChildContract, ChildFacts, ChildReference, CallableContract, CallableOutput, GroupWork, ReceptionDefinition, ReceptionValue} from '@capix/server-runtime';
 import {z} from 'zod';
 
 declare function expectType<T>(value: T): void;
@@ -90,7 +90,7 @@ function received<Definition extends ChildContract, Value>(history: Pick<ChildFa
 expectType<Receipt>(received(facts, first, saved));
 // @ts-expect-error helper cannot infer a broader target to admit a wrong contract
 received(facts, otherRef, saved);
-function acceptReceipt<Definition extends ChildContract, Value>(handle: ChildCall<Definition>, contract: ReceptionDefinition<NoInfer<Definition>, Value>, receive: (result: DefinitionOutput<Definition>) => NoInfer<Value> | Promise<NoInfer<Value>>): Promise<Value> {
+function acceptReceipt<Definition extends ChildContract, Value>(handle: ChildCall<Definition>, contract: ReceptionDefinition<NoInfer<Definition>, Value>, receive: (result: CallableOutput<Definition>) => NoInfer<Value> | Promise<NoInfer<Value>>): Promise<Value> {
   return handle.accept(contract, receive);
 }
 expectType<Promise<Receipt>>(acceptReceipt(call, saved, result => ({ location: result.text, bytes: 1 })));
@@ -132,7 +132,7 @@ const widenedValue: ReceptionDefinition<typeof child, Receipt | undefined> = sav
 // @ts-expect-error a narrower accepted shape is not the same contract
 const narrowedValue: ReceptionDefinition<typeof child, Receipt & { id: string }> = saved;
 // @ts-expect-error target signature is invariant, even when only output is erased
-const widenedChild: ReceptionDefinition<DefinitionContract<'node', Input, unknown>, Receipt> = saved;
+const widenedChild: ReceptionDefinition<CallableContract<'node', Input, unknown>, Receipt> = saved;
 // @ts-expect-error a naked object cannot manufacture the type-only contract witness
 const forged: ReceptionDefinition<typeof child, Receipt> = { child, value: receiptValue };
 
@@ -149,13 +149,13 @@ defineScene<Input, Receipt>()({ members: [other], receptions: [nestedSaved], run
 defineNode<Input, Receipt>()({ ...metadata, receptions: [saved], run: { execute: () => receipt } });
 // @ts-expect-error even an empty A reception registry is forbidden
 defineNode<Input, Receipt>()({ ...metadata, receptions: [], run: { execute: () => receipt } });
-class BadLeaf extends NodeDefinition<Input, Result> {
+class BadLeaf extends Node<Input, Result> {
   readonly name = 'leaf'; readonly label = 'leaf'; readonly source = 'test'; readonly callee = 'local';
   // @ts-expect-error named classes have the same A registration boundary
   readonly receptions = [saved];
   readonly run = { requires: {}, execute: (work: NodeWork<Input, Result>) => ({ text: work.input.path }) };
 }
-class NamedParent extends GroupDefinition<Input, Receipt> {
+class NamedParent extends Group<Input, Receipt> {
   readonly name = 'parent'; readonly label = 'parent'; readonly source = 'test';
   readonly members = [child];
   readonly receptions = [saved];

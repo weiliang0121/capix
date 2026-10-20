@@ -4,8 +4,8 @@
 
 ```text
 正式输入 + ActiveContent → prepareContext O（可先维护）→ 固定消息 / 记忆材料
-固定材料                 → 决策 / GenerateAnswerDefinition → 正式回答
-固定记忆 + 本轮 QA + 固定历史 + 已接纳的保存凭据 → ExtractMemoryDefinition → 记忆落实
+固定材料                 → 决策 / GenerateAnswer → 正式回答
+固定记忆 + 本轮 QA + 固定历史 + 已接纳的保存凭据 → ExtractMemory → 记忆落实
 已落实内容               → 可选 after-content 维护 → 下次准备时捕获
 ```
 
@@ -55,11 +55,11 @@ MemoryRecord extends BaseRecord<{
                          ↓
 固定活跃记忆 + 本轮 QA + 固定历史原文 + 本轮已接纳保存结果（如有）
                          ↓
-ExtractMemoryDefinition
-  → PrepareModelRequestDefinition：准备请求并检查容量
-  → RequestModelDefinition：通过 A 发起/读取模型交互，保留原始返回
-  → AcceptModelOutputDefinition：解析与整批接纳
-  → ApplyMemoryDefinition
+ExtractMemory
+  → PrepareModelRequest：准备请求并检查容量
+  → RequestModel：通过 A 发起/读取模型交互，保留原始返回
+  → AcceptModelOutput：解析与整批接纳
+  → ApplyMemory
       ├─ Memories.apply 审查、创建/更新并发布当前事实
       └─ 可选记录预设消费事实并登记 MemoryRecord
 ```
@@ -88,7 +88,7 @@ ExtractMemoryDefinition
 
 接纳先检查候选结构、目标与引用合法性，以及原始候选是否重复更新同一 ID。若 update 的 result 与本轮旧记忆的 topic/content/sourceIndexes 完全相同（索引顺序也相同），将其作为无操作过滤，不要求它额外引用本轮消息，不修改 Memory 或新增 MemoryRecord。是否无变化不依据 change 的文字，不做语义相似判断；正文、主题或来源发生变化时仍必须提供本轮依据。未知引用、正文依据不包含变化依据等错误不能借无操作绕过。剩余变更整批检查通过后才落实，仍不接受部分有效批次。
 
-模型原始候选保留在 RequestModelDefinition 的返回记录；独立 Interaction 也保存未经业务解释的 ModelOutput。AcceptModelOutputDefinition 保留实际接纳的变更，ApplyMemoryDefinition 成功后返回这些变更作为操作最终输出。因此可以核对哪些候选被过滤，以及失败发生在接纳还是落实，不新增跳过事件。未增加错误反馈或自动重试。
+模型原始候选保留在 RequestModel 的返回记录；独立 Interaction 也保存未经业务解释的 ModelOutput。AcceptModelOutput 保留实际接纳的变更，ApplyMemory 成功后返回这些变更作为操作最终输出。因此可以核对哪些候选被过滤，以及失败发生在接纳还是落实，不新增跳过事件。未增加错误反馈或自动重试。
 
 ## 已接纳的保存结果
 
@@ -118,7 +118,7 @@ MemoryResultSource {
 ## 归属与边界
 
 - 环境独立建立 Memories；它绑定一个 Transcript，提供 get/values/snapshot/apply，统一审查、落实并发布正式变化。R 仅绑定其正式资源，不拥有实体生命周期。业务没有原集合引用或 Memory.update 旁路。
-- ApplyMemoryDefinition 通过本层 memory.apply 资源提交已接纳提案，不传递记录来源、不自行修改内容或补写记录。资源绑定注入本次调用的来源。
+- ApplyMemory 通过本层 memory.apply 资源提交已接纳提案，不传递记录来源、不自行修改内容或补写记录。资源绑定注入本次调用的来源。
 - Memories 发布确定的 MemoryEvent，实体自身不持有 Recorder。必要捕获与可选观察独立消费事件；调用中的资源绑定提供 origin 与本次观察端口，记录预设在自己内部形成 RecordChangeSource 及 MemoryRecord。独立变化使用环境端口，不虚构调用来源。
 - MemoryRecord 保存在同一个 Book；按 memoryId 过滤，沿登记顺序返回。不另加索引；memoriesId/sequence 表达集合内正式变化顺序。
 - E/O/A 记录继续记录提取输入、模型原始返回和接纳候选；MemoryRecord 保存具体记忆体已落实的变化，二者不是重复对象。MemoryRecord 不持有调用 Context 实例、调用状态或虚构事件。

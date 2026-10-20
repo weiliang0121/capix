@@ -1,7 +1,7 @@
 import { captureSource } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, ChangeBuffer, bindResources, ResourceOffer, ResourceBindings, CallableInvocationBuilder, CallableContextBuilder } from '@capix/server-runtime';
+import { Recorder, RecordBook, ChangeBuffer, bindResources, ResourceOffer, ResourceBindings, CallableInvocationBuilder } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -12,7 +12,7 @@ const identity = { maxRounds: 1, execute: (context) => context.currentInput };
 test('independent construction chains reject foreign parents and share one path across callable kinds', async () => {
   const facts = [];
   const observations = [{ bindInvocation: () => ({ observe: (fact) => facts.push(fact) }) }];
-  const first = new CallableInvocationBuilder(new CallableContextBuilder(), { observations });
+  const first = new CallableInvocationBuilder({ observations });
   const foreign = new CallableInvocationBuilder();
   const description = { id: 'first-scene' };
   const parent = first.create('parent', {
@@ -35,6 +35,53 @@ test('independent construction chains reject foreign parents and share one path 
   assert.ok(sceneFacts.length > 0);
   assert.ok(sceneFacts.every((fact) => fact.description === description));
   assert.ok(facts.some((fact) => fact.identity.kind === 'group' && fact.identity.parentContextId === parent.context.id));
+});
+
+test('resource refinement cancellation prevents child registration and observation construction', async () => {
+  const controller = new AbortController();
+  const cause = new Error('cancelled during resource refinement');
+  const boundKinds = [];
+  const builder = new CallableInvocationBuilder({
+    observations: [
+      {
+        bindInvocation({ identity }) {
+          boundKinds.push(identity.kind);
+          return { observe() {} };
+        },
+      },
+    ],
+  });
+  const resource = new ResourceOffer('test.refined', (value) => value, 'access', {
+    refine(value) {
+      controller.abort(cause);
+      return value;
+    },
+  });
+  const requires = { value: resource.request() };
+  const resources = bindResources(requires, [resource.provide((source) => source)])('value');
+  let child;
+  const parent = builder.create(null, {
+    kind: 'scene',
+    controls: { signal: controller.signal },
+    resources,
+    supply: requires,
+    work: {
+      maxRounds: 1,
+      execute(_context, invocation) {
+        assert.throws(
+          () => {
+            child = builder.create('child', { kind: 'node', parent: invocation, requires, refinements: [resource.refine(() => null)], work: identity });
+          },
+          (error) => error.code === 'INVOCATION_CANCELLED' && error.cause === cause,
+        );
+        assert.equal(invocation.children.values().length, 0);
+        return null;
+      },
+    },
+  });
+  await assert.rejects(parent.run(), (error) => error.code === 'INVOCATION_CANCELLED' && error.cause === cause);
+  assert.equal(child, undefined);
+  assert.deepEqual(boundKinds, ['scene']);
 });
 
 test('reused builders bind each invocation to its own signal, settings and input', async () => {

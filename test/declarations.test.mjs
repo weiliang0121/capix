@@ -2,7 +2,7 @@ import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, GroupDefinition, InvocationEntry, ResourceOffer, Recorder, RecordBook, bindCallSource, CallableRecordHelper, bindRecording, invocationRecording } from '@capix/server-runtime';
+import { ExceptionContract, Group, InvocationEntry, ResourceOffer, Recorder, RecordBook, bindCallSource, CallableRecordHelper, bindRecording, invocationRecording } from '@capix/server-runtime';
 import { validateExecutionRecordSnapshot, readOutput } from '@capix/protocol';
 
 const rejected = new ExceptionContract('test.rejected');
@@ -21,7 +21,7 @@ test('peer declarations share fixed supplies but have separate aliases and phase
   const recovery = new ResourceOffer('test.recovery', (source, activity) => ({ read: () => activity.runSync('read', {}, () => source) }), 'access');
   const recorder = new Recorder(new RecordBook());
   let call;
-  class Main extends GroupDefinition {
+  class Main extends Group {
     raises = [rejected];
     run = {
       requires: { value: shared.request() },
@@ -82,7 +82,7 @@ test('peer declarations share fixed supplies but have separate aliases and phase
 
 test('handler-only lazy resources are not obtained on the success path', async () => {
   const unused = new ResourceOffer('test.unused', (value) => value, 'access');
-  class Main extends GroupDefinition {
+  class Main extends Group {
     run = { requires: {}, execute: () => 'done' };
     exceptions = { requires: { unused: unused.request() }, accepts: [rejected], handle: () => assert.fail('not entered') };
   }
@@ -94,13 +94,13 @@ test('a caught child error blocks later child entry admission and reception work
   const failure = new Error('child failed');
   let entryEffects = 0;
   let receptionEffects = 0;
-  class Good extends GroupDefinition {
+  class Good extends Group {
     name = 'good';
     label = 'good';
     source = 'test';
     run = { requires: {}, execute: () => 'done' };
   }
-  class Bad extends GroupDefinition {
+  class Bad extends Group {
     name = 'bad';
     label = 'bad';
     source = 'test';
@@ -117,7 +117,7 @@ test('a caught child error blocks later child entry admission and reception work
     entryEffects++;
     return input;
   });
-  class Main extends GroupDefinition {
+  class Main extends Group {
     members = [good, bad];
     run = {
       requires: {},
@@ -148,7 +148,7 @@ test('a caught child error blocks later child entry admission and reception work
 test('retained work endpoints cannot be used during exception handling even if its error is caught', async () => {
   const resource = new ResourceOffer('test.phase', (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }));
   let saved;
-  class Main extends GroupDefinition {
+  class Main extends Group {
     raises = [rejected];
     run = {
       requires: { value: resource.request() },
@@ -171,14 +171,14 @@ test('retained work endpoints cannot be used during exception handling even if i
 });
 
 test('child use grants are separate for run and handler, and invalid ownership fails at assembly', async () => {
-  class Work extends GroupDefinition {
+  class Work extends Group {
     name = 'work';
     label = 'work';
     source = 'test';
     run = { requires: {}, execute: () => 'child' };
   }
   const child = new Work();
-  class Main extends GroupDefinition {
+  class Main extends Group {
     members = [child];
     raises = [rejected];
     run = {
@@ -208,7 +208,7 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
   const output = { hidden: 'result', public: 3 };
   let descriptions = 0;
   let call;
-  class Main extends GroupDefinition {
+  class Main extends Group {
     run = {
       requires: {},
       execute(work) {
@@ -257,14 +257,14 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
 test('exception content can perform declared child work using only its granted resources', async () => {
   const resource = new ResourceOffer('test.repair', (value) => value, 'access');
   let resolved = 0;
-  class Repair extends GroupDefinition {
+  class Repair extends Group {
     name = 'repair';
     label = 'repair';
     source = 'test';
     run = { requires: { value: resource.request() }, execute: (work) => work.resources.value };
   }
   const child = new Repair();
-  class Main extends GroupDefinition {
+  class Main extends Group {
     raises = [rejected];
     members = [child];
     run = {
@@ -302,7 +302,7 @@ test('handler resource failure exits as an error without repeating work or handl
   let handlings = 0;
   let acquisition = 0;
   let call;
-  class Main extends GroupDefinition {
+  class Main extends Group {
     raises = [rejected];
     maxRounds = 2;
     run = {
@@ -355,7 +355,7 @@ for (const position of ['capture', 'expose']) {
       },
       'access',
     );
-    class Main extends GroupDefinition {
+    class Main extends Group {
       raises = [rejected];
       run = { requires: { value: resource.request() }, execute: (work) => work.resources.value };
       exceptions = {
@@ -380,7 +380,7 @@ for (const position of ['capture', 'expose']) {
 
 for (const gap of ['runtime', 'execution']) {
   test(`recording declarations reject a static ${gap} parent gap`, () => {
-    class Child extends GroupDefinition {
+    class Child extends Group {
       name = 'child';
       label = 'child';
       source = 'test';
@@ -388,7 +388,7 @@ for (const gap of ['runtime', 'execution']) {
       observation = [invocationRecording()];
     }
     const child = new Child();
-    class Main extends GroupDefinition {
+    class Main extends Group {
       members = [child];
       run = { requires: {}, execute: () => 'done' };
       observation = gap === 'runtime' ? [invocationRecording()] : undefined;

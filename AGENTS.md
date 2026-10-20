@@ -13,7 +13,7 @@
 - 一个根 pnpm Workspace 与锁文件，六个实际包：`@capix/protocol`、`@capix/server-runtime`、`@capix/client-runtime`、`@capix/client-http`、`@capix/observer-service`、`@capix/observer-app`。跨包只能使用公开出口，不导入其他包的 src/dist 私有路径，不为每个对象建包。
 - protocol 只包含真实跨端契约，内部按 content/invocation/recording/conversation/observer 分组；无 Node、HTTP 实现、数据库或 UI 依赖。服务端与客户端不互相依赖。Trace、几何布局、搜索与视口属于应用投影。
 - server/runtime 提供 Scene/Group/Node 可调用结构、声明/绑定、Invocation/Context、资源、异常和类型化观测出口；内容实体与可选记录预设暂同包，分别有 `/content` 与 `/recording` 入口。低层构造有 `/construction` 入口；根入口按职责分组，不为减少导出数量建立门面。
-- `structure/` 放可复用 BoundCallable，`binding/` 放 Binder 与接线，`context/`、`invocation/` 分别持有单次对象及各自 builders。Clock、Initializer、ProgressChannel 是共享能力，直接位于包内根文件；记录预设的声明、安装、单次句柄及映射集中在 `records/observation/`，历史记录恢复仍归 `records/restoration/`。生产者变化发布归 `changes/publish.ts`，不因可选观察端口而归属观测。
+- `structure/` 放作者 Callable/Scene/Group/Node 与绑定后 BoundCallable；`callable.ts` 是共同结构基类，`bound.ts` 是固定绑定结构。`binding/` 放 Binder 与接线，`context/`、`invocation/` 分别持有单次状态与调用；共同构造流程位于 `invocation/builders/callable.ts`。Clock、Initializer、ProgressChannel 是共享能力，直接位于包内根文件；记录预设的声明、安装、单次句柄及映射集中在 `records/observation/`，历史记录恢复仍归 `records/restoration/`。生产者变化发布归 `changes/publish.ts`，不因可选观察端口而归属观测。
 - services/observer 的 conversation 提供业务 Scene/Group/Node、模型契约和绑定、消息同步；observation 提供来源/记录投影/观测交付；assembly 建立独立实体和共享消费；http 负责宿主交付。不得让 conversation 依赖环境初始化来取得隐式对象。
 - 服务声明树在环境装配时创建，绑定源 ConversationCallSource 按次承担根 validate/capture 与准确 Task 的 captureTask/startedTask；模型配置接纳属于 conversation/model。ConversationContent 持有内容同步与无独立身份的 ActiveContent 索引，ObserverEnvironment 持有已安装运行与观测，initializeObserver 只负责建立；注入内容由宿主关闭，环境只解除自身观察。关闭耗尽清理后报告错误，不把正常关闭标记为来源不完整，不自动复用或重建已关闭环境。流程见 [服务装配](docs/service-assembly.md)。
 - ClientRuntime 保持无 UI：以 conversation/transcripts/observation 具名装配，初始化配置与消息同步，观测显式开启。当前依赖对话和 Observer 契约，不宣称已是任意业务的通用客户端。client/http 只做收发与协议接纳；app binding 投影后写入 Store，React 消费读模型与明确 props。内部接纳、会话协调与公开快照分开；每条增量照常消费，微任务合并发布，命令门控使用即时内部状态。正文可用性与服务结果、连接健康分别表达；app binding 按浏览器帧合并投影，一次写 Store。
@@ -25,13 +25,15 @@
 
 ## 运行结构与访问
 
-本文其余业务历史简称 R/E/O/A 分别指 Scene、服务 Task Group、普通 Group、Node；它们不再构成内核四层位置规则。新代码与类型使用 Scene/Group/Node，Task 是服务语义。
+- Scene/Group/Node 由构造器或 setDefinition 接收普通配置，成员通过 Scene/Group.add 注册。setDefinition 全量替换业务配置并保留成员；setRun 全量替换本阶段 requires/uses/execute/accept，各次 setter 独立推导资源和动作类型。结构本身是调用、uses、接纳和 CP 的注册身份；不建立平行 Definition 树。add 整批核验成员位置与循环，同对象去重且可在不同父位置复用。Node 不提供 add/members/receptions。未配置 run 的结构可组装但拒绝 bind。define* 仅是构造同一结构实例的推导便捷函数。绑定固定快照与作者对象分开，后续 setter/add 只影响新的绑定；业务 receiver 保留。
 
-- 运行时表示活动状态，不等同于 Scene。SceneDefinition / GroupDefinition / NodeDefinition 共享 CallableDefinition；Scene/Group 组合 Composite 成员，Node 不带 members。CallableBinder 产出可复用 BoundCallable，Driver 持有宿主入口占用；Invocation/CallableContext 表示单次调用。定义可用 defineScene/defineGroup/defineNode 或具名类，处理函数只接收阶段 Work，不取得内部 Context/Invocation。成功输出保持原引用。详见 [可调用结构](docs/callable-structures.md)。
-- 注册与资源解算使用完整 ChildDefinition；调用、facts、refs 只消费同一对象的 DefinitionContract kind及 I/O/Delta 签名。签名见证为必需的类型信息，Input 保持不变关系，不生成运行字段，也不替代身份检查；对象式定义经 define* 形成。Node 的 members 在类型和绑定时均拒绝，不能静默忽略。Sequence 累积步骤 Uses，显式标注非空序列时须保留第三泛型；宽化 Uses 不免除阶段端口检查。
+本文其余业务历史简称 R/E/O/A 分别指 Scene、服务 ConversationGroup、普通 Group、Node；它们不再构成内核四层位置规则。新代码与类型使用 Scene/Group/Node，不引入 Task 内核对象。
+
+- 运行时表示活动状态，不等同于 Scene。SceneDefinition / GroupDefinition / NodeDefinition 是共享 CallableDefinition 的普通配置类型；实际结构 Scene/Group 组合 Composite 成员，Node 不带 members。CallableBinder 产出可复用 BoundCallable，Driver 持有宿主入口占用；Invocation/CallableContext 表示单次调用。结构可直接 new Scene/Group/Node、具名业务子类或 define* 便捷构造，处理函数只接收阶段 Work，不取得内部 Context/Invocation。成功输出保持原引用。详见 [可调用结构](docs/callable-structures.md)。
+- 注册与资源解算使用完整 ChildCallable；调用、facts、refs 只消费同一对象的 CallableContract kind及 I/O/Delta 签名。签名见证为必需的类型信息，Input 保持不变关系，不生成运行字段，也不替代身份检查；作者对象经构造器或 define* 形成。Node 的 members 在类型和绑定时均拒绝，不能静默忽略。Sequence 累积步骤 Uses，显式标注非空序列时须保留第三泛型；宽化 Uses 不免除阶段端口检查。
 - 声明平级 run/exceptions/observation/checkpoint；绑定只接线与约束访问，不执行业务 Sequence。Scene 作为安装根，Scene/Group 的 members 可为 Group/Node，Group 任意嵌套，Node 无成员。childKinds 同时约束 Binder 与 ChildKind/ChildrenOf；基础 Work/CP 的 Allowed 不得超过所属 kind，工厂再从 members/uses 推导。成员注册与实际 work.children 调用区分。历史 facts/open 不依赖本阶段 uses；准确身份与阶段资格仍在运行期检查。资源从 requires 推导，helper 不能补隐式申请，原实体须通过正式资源访问。
-- CallableBinder 负责声明解算、来源、资源与 work 接线，CallableBinding 是绑定结果契约，BoundCallable 直接持有结果。resolveDeclaration 提前解算全树，固定内核字段、函数入口与各父位置；成员结构按结果惰性建立，不重新检查原声明。原业务实例与方法 receiver 不冻结。每次 bind 建立独立 CallableContextBuilder/CallableInvocationBuilder；同一安装的所有 kind 使用共同构造路径。宿主显式 new Driver(capabilities)，driver.bind 委托 Binder 返回固定结构；不引入 BindingEnvironment 或通用层级注册管理者。
-- Driver 持有固定机制接入与明确绑定归属；run/resume/isRunning 显式接收 BoundCallable，跨 Driver、独立 Binder 或伪造结构不能进入该驱动入口。占用按 Bound 独立，入口观测携带 driverId/boundId。每次 run 建立 CallableContext/Invocation；占用取得后预取消、validate、capture、构造、调用或观察失败均释放。BoundCallable 持有稳定结构身份，不持有本次状态；Builder 不缓存单次信号/输入。ObserverEnvironment 分别持有 driver、scene 与 definition，bindConversation 接收已有 Driver 并仅返回绑定结构。业务不维护第二个 executing 标志，不隐含排队。
+- CallableBinder 负责声明解算、来源、资源与 work 接线，CallableBinding 是绑定结果契约，BoundCallable 直接持有结果。resolveDeclaration 提前解算全树，固定内核字段、函数入口与各父位置；成员结构按结果惰性建立，不重新检查原声明。原业务实例与方法 receiver 不冻结。每次 bind 直接建立独立 CallableInvocationBuilder，其身份也是 Context 的安装归属；所有 kind 共用构造路径，资源选择前后均检查父活动，不以 Driver 身份合并不同绑定。Context 直接构造，只继承固定 signal，不保存父对象。宿主显式 new Driver(capabilities)，driver.bind 委托 Binder 返回固定结构；不引入 BindingEnvironment 或通用层级注册管理者。
+- Driver 持有固定机制接入与明确绑定归属；run/resume/isRunning 显式接收 BoundCallable，跨 Driver、独立 Binder 或伪造结构不能进入该驱动入口。占用按 Bound 独立，入口观测携带 driverId/boundId。每次 run 建立 CallableContext/Invocation；占用取得后预取消、validate、capture、构造、调用或观察失败均释放。BoundCallable 持有稳定结构身份，不持有本次状态；Builder 不缓存单次信号/输入。ObserverEnvironment 持有 structure 引用组、driver 和绑定后 scene；definition 只读定位 structure.scene。bindConversation 接收已有 Driver、明确结构引用组与资源，返回绑定结构。业务不维护第二个 executing 标志，不隐含排队。
 - 世界由独立实体构成：Transcript、Memories、SelectionUsage、Provider、记录容器等由环境建立。R 只绑定资源访问形式，不成为这些对象的所有者。
 - ResourceOffer 声明公开访问、capture、兑现时机与 describe。绑定按身份、唯一供应和声明检查；本层 requires 与子树 supply 分开。普通成员使用固定供给并取得本次端点，显式 CallableSourceBinding.capture 划定独立捕获子树；不能由 kind 推断捕获边界。来源方法在绑定时固定，本次固定接线由内部 CallableCallBindings 传递并核验归属，不进入 Work 或祖先 Context。业务只得到本阶段资源，子树供给不扩大父 Work。端点验证本地调用、阶段/轮次及固定信号，不递归查祖先状态；不得越过窗口使用。关闭观测不触发描述或惰性模型。
 - 所有结构使用普通调用输入，没有 E 专属 entry。Observer Scene 用 append 正式落实输入，再把 message/messageIndex 传给普通 Task Group。Task 通过明确 source binding 捕获模型配置与原文定位；prepareContext Group 在可选维护后捕获实际材料。输入已落实但 Task 未建立时，保留 Scene 与内容事实，不伪造 Task。started 是 Context 建立后、started 事实前的同步回调，必须返回 undefined，类型及运行期拒绝异步/其他返回；包装层透传或检查。迟到 Promise 拒绝被消费，不承诺撤销已开始副作用。恢复旧调用不重复登记，恢复中新建调用正常登记。ProgressChannel 被动隔离消费错误；InvocationEntry 保留显式子输入适配。见 [运行边界](docs/runtime-boundaries.md)。
@@ -77,12 +79,12 @@
 - 单轮失败或取消不暂停、清空后续消息；已确认结束后依据服务接纳事实自动推进。等待项只提供撤销，不要求用户暂停或恢复队列。服务明确未接纳且声明 retry:admission 时，保留同一本地项与顺序，确认可接纳后使用新提交身份尝试；结果未知只查询或跟随原身份，不能重 POST。
 - 取消通过 submission 独立控制接口传给 R.run；cancelRequested 不等于 cancelled，运行真正退出才发布终态。停止当前只影响当前项，等待项仍自动处理。InvocationCancelled 绑定具体控制信号，已归属故障优先；既成内容保留，收尾不受取消阻断，不以 Promise.race 提前释放运行。
 - ConversationRequest {messages} 是服务对话输入，不是通用 E 契约。正式接纳 1–501 条消息，末条为 user；忙碌返回409，不追加输入。回答追加后发 answer，记忆后处理前可见；completed 等 R.run 返回后发送。后处理失败保留回答。
-- ConversationSceneDefinition / ConversationTaskDefinition 组织输入接纳、材料准备、决策、生成与记忆提取。业务复杂度在具体声明，绑定固定资源来源。消息同步与观测 Feed 独立连接/关闭；不观测仍能正常对话。
+- ConversationScene / ConversationGroup 组织输入接纳、材料准备、决策、生成与记忆提取。业务复杂度在具体声明，绑定固定资源来源。消息同步与观测 Feed 独立连接/关闭；不观测仍能正常对话。
 - 准备并接纳固定活跃材料后，E 通过可替换决策 O 在已声明能力间有限推进，默认最多 8 步（允许 1–16）；目录含真实子声明的公开参数与可用条件，内部资源和输入仍由具体能力构造。默认策略仅在目标未定或候选需修正时调用理解模型；已接纳结果直接驱动下一步。文件预检 O/A 只检查命名路径元数据，显式 fileTask 跳过理解但不跳过预检；根内绝对候选可规范为相对路径。候选错误可同轮修正，真实异常不能回灌模型无限处理。task 仅在正式分支或澄清结论发布一次；回答先落实再保存，完成依赖真实交付与保存凭据，记忆是固定收尾。没有跨 QA 挂起或动态能力注册。
 - 默认链不调用模型选择历史、不自动分段或裁剪。prepareContext O 是实际材料唯一捕获点，理解/回答/提取消费其固定值；原文 fixedRange 只用于定位，材料计数通过核对真实消息的窄资源写入 SelectionUsage。可选 maintenance 为普通函数或 O 策略，由维护 O 在 before-request / after-content 的明确边界调用一次；策略可显式申请资源并组合子能力，不因内部内容变化递归触发。未配置不创建空维护调用；后处理失败保留正式回答。
 - 有限流式输出由 `output: OutputDeclaration<Result, Delta>` 声明，execute 的 Work 只获得本轮 writer；退出 execute 即封口，继续或异常处理废弃旧段，最终结果统一校验但保持原引用。Delta 不自动向祖先转发，也不进入 Recorder、Transcript 或持久化；显式绑定消费者故障隔离。
 - 当前仅回答/文档正文启用模型 SSE。模型交互持有有界临时原始前缀，RequestModel O 通过资源订阅跨越首次等待与后续读取，finally 解除消费。GenerateAnswer O 解码声明的 JSON content；完整返回仍须 finishReason/JSON/Schema/父层接纳。E 正式 append 后以实际候选来源和消息位置交接，不按文本或最后一次模型调用猜测身份。预览不一致不否定合法正式消息。
-- 只有 GenerateAnswerDefinition 明确支持一次再次生成：完整模型返回被 INVALID_JSON/EMPTY_OUTPUT/OUTPUT_SHAPE 拒绝时，依据直接子调用证据与声明契约继续。第二轮只准备反馈请求、调用及接纳，不重复材料准备、上下文组装或回答追加。超时、网络、取消、非 stop 返回、捕获/记录错误不自动重试。
+- 只有 GenerateAnswer 明确支持一次再次生成：完整模型返回被 INVALID_JSON/EMPTY_OUTPUT/OUTPUT_SHAPE 拒绝时，依据直接子调用证据与声明契约继续。第二轮只准备反馈请求、调用及接纳，不重复材料准备、上下文组装或回答追加。超时、网络、取消、非 stop 返回、捕获/记录错误不自动重试。
 - 模型输出契约使用固定 Zod 严格 Schema，与 JSON Schema 同源；不 coerce/trim/default 掩盖非法输出。结构校验与动态引用/来源/容量规则分别由能力负责。默认请求完整装载本次固定活跃材料并检查总容量，超限明确失败，不通过隐式截断凑容量；独立 SelectHistory 只在显式装配时运行。字节容量估算不是精确 tokenizer。
 - GET /api/executions 为轻量概览，详情按需读取 ExecutionRecordSnapshot。原文独立基线与增量同步，客户端组合引用和已加载正文。未加载/缺失/错误/空值分开。来源失效不改写业务结果。详见 [协议](docs/protocol.md)、[客户端](docs/client-runtime.md)。
 
@@ -99,7 +101,7 @@
 ## 编码、界面与验证
 
 - 每条变量声明只声明一个变量；循环直接表达继续/结束条件，不使用 while(true) 再内部 break。流读取以 done 结束，异常和提前退出仍释放资源。
-- 类自身 ID 直接生成；不为 ID 创建无意义别名。不为每次检查创建包装层。目录先表达对象或能力归属，再按实际职责分组；调用和上下文构造分别位于各自 `builders/callable.ts`，文件名可在不同归属下重复。需要独立表达 kind-职责 的文件名使用中划线，不为单个辅助文件建立空泛分类；工具固定文件名保持原名。目录归属不等于创建者或持有者，恢复等职责须保留所处理对象的边界，见 [项目组织](docs/organization.md)。
+- 类自身 ID 直接生成；不为 ID 创建无意义别名。不为每次检查创建包装层。目录先表达对象或能力归属，再按实际职责分组；仅包装一次 new 的构造无需单独 Builder 或转发工厂。调用 Builder 协调完整构造路径，子绑定 Builder 固定成员与接纳接线，分别构造单次引用与阶段动作。需要独立表达 kind-职责 的文件名使用中划线，不为单个辅助文件建立空泛分类；工具固定文件名保持原名。目录归属不等于创建者或持有者，恢复等职责须保留所处理对象的边界，见 [项目组织](docs/organization.md)。
 - 通用操作优先使用 es-toolkit@1.52.0 公开入口，不建通用 Utils/转发层。标准类型谓词用 predicate/compat；对象身份、严格记录正文、getter 隔离、循环和预算规则保留专用语义。只为真实需求引入深合并或克隆，不用通用函数覆盖正式接纳。
 - RuntimeError 是通用诊断，不是 R 层专属错误。错误格式保留 code/message/name/stack/cause/复合 errors；标准错误字段逐项安全读取并捕获访问异常，允许继承的 name；诊断 detail 不执行 getter/toJSON。保持现有转换预算，不单独创建错误记录或无限错误恢复。错误机制自身损坏属于 bug。
 - Observer 为黑灰主题；10/12/14/16px 字号，主标题20px。问答导航固定块宽并独立滚动；主图轮间等宽，默认按直接归属与同级顺序展示可折叠调用树，耗时作为独立辅助视图。离屏问答按视口卸载，详情按需加载；展开状态保留在应用层。颜色表达稳定操作类别，不映射时间；失败、运行中、选中以文字 tag 表达，不用状态彩色描边覆盖节点含义。累计被选次数用数字和局部短条，不用整块热度填色。上下文聚合关联，不重复消息全文。React + Vite + Tailwind，shadcn 源码组件留在 app 内。保留键盘可访问性，不用原生 title 遮挡节点。

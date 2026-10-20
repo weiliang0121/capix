@@ -3,7 +3,7 @@ import { fixtureState } from './runtime.mjs';
 import { resolveDeclaration } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 
-import { ConversationSceneDefinition, ActiveContent, acceptConversationInput, initializeObserver, observeExecution, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
+import { createConversationStructure, ActiveContent, acceptConversationInput, initializeObserver, observeExecution, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
 
 const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);
@@ -19,7 +19,7 @@ export function contextWithSource(input, options, parent) {
 }
 export function resourceBindingFor(runtime, provider, provided) {
   const model = new ModelInteractions(new ModelSource(provider));
-  const supply = resolveDeclaration(new ConversationSceneDefinition()).members[0].supply;
+  const supply = resolveDeclaration(createConversationStructure().scene).members[0].supply;
   const binding = bindResources(supply, conversationProviders);
   const worlds = new WeakMap();
   return (source) => {

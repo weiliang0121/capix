@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, cloneCheckpointHead, cloneCheckpointImage, cloneCheckpointDelivery, CHECKPOINT_MAX_BYTES } from '@capix/server-runtime';
+import { Scene, Group, MemoryCheckpointStore, cloneCheckpointHead, cloneCheckpointImage, cloneCheckpointDelivery, CHECKPOINT_MAX_BYTES } from '@capix/server-runtime';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const source = { entry: () => null, capture: () => null };
@@ -28,7 +28,7 @@ test('terminal checkpoint persistence failure still delivers the owned child err
     },
   };
   let returned;
-  class Child extends GroupDefinition {
+  class Child extends Group {
     checkpoint = checkpoint('child', () => assert.fail('not resuming'));
     run = {
       requires: {},
@@ -39,7 +39,7 @@ test('terminal checkpoint persistence failure still delivers the owned child err
     };
   }
   const child = new Child();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [child];
     run = {
       requires: {},
@@ -63,17 +63,17 @@ test('terminal checkpoint persistence failure still delivers the owned child err
 });
 
 test('a cached resumed child cannot be reused through a different declaration contract', async () => {
-  class ChildA extends GroupDefinition {
+  class ChildA extends Group {
     checkpoint = checkpoint('child-a', () => assert.fail('terminal child cannot run'));
     run = { requires: {}, execute: () => assert.fail('terminal child cannot run') };
   }
-  class ChildB extends GroupDefinition {
+  class ChildB extends Group {
     checkpoint = checkpoint('child-b', () => assert.fail('wrong child cannot run'));
     run = { requires: {}, execute: () => assert.fail('wrong child cannot run') };
   }
   const a = new ChildA();
   const b = new ChildB();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [a, b];
     checkpoint = checkpoint(
       'root',
@@ -98,7 +98,7 @@ for (const reception of ['pending', 'receiving']) {
   test(`a saved ${reception} child delivers one decoded value through cached lookup and parent reception`, async () => {
     let decoded = 0;
     const facts = [];
-    class Child extends GroupDefinition {
+    class Child extends Group {
       checkpoint = {
         ...checkpoint('child-a', () => assert.fail('terminal child cannot resume work')),
         output: {
@@ -112,7 +112,7 @@ for (const reception of ['pending', 'receiving']) {
       run = { requires: {}, execute: () => assert.fail('terminal child cannot execute work') };
     }
     const child = new Child();
-    class Root extends SceneDefinition {
+    class Root extends Scene {
       members = [child];
       checkpoint = checkpoint(
         'root',
@@ -195,13 +195,13 @@ test('fixed child deliveries require explicit final progress and stable sibling 
 });
 
 test('a final child delivery preserves its own second-round input without rerunning child work', async () => {
-  class Child extends GroupDefinition {
+  class Child extends Group {
     maxRounds = 2;
     checkpoint = checkpoint('child-a', () => assert.fail('terminal child cannot resume'));
     run = { requires: {}, execute: () => assert.fail('terminal child cannot execute') };
   }
   const child = new Child();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [child];
     checkpoint = checkpoint(
       'root',
@@ -238,7 +238,7 @@ test('two runtime structures cannot continue the same work through a shared chec
   const ready = new Promise((resolve) => {
     entered = resolve;
   });
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     checkpoint = checkpoint('root', async () => {
       entered();
       await pending;
@@ -260,11 +260,11 @@ test('two runtime structures cannot continue the same work through a shared chec
 });
 
 test('ordinary parallel child receptions remain supported without checkpoint or fixed entity access', async () => {
-  class Child extends GroupDefinition {
+  class Child extends Group {
     run = { requires: {}, execute: () => 1 };
   }
   const child = new Child();
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     members = [child];
     run = {
       requires: {},
@@ -294,7 +294,7 @@ test('a rejected continuation check publishes its failure without closing the sa
   const facts = [];
   const store = new MemoryCheckpointStore();
   const saved = store.save(savedRoot([]), 0);
-  class Root extends SceneDefinition {
+  class Root extends Scene {
     checkpoint = {
       ...checkpoint('root', () => assert.fail('rejected continuation must not run')),
       points: [

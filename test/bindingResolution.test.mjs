@@ -1,7 +1,7 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { GroupDefinition, ResourceOffer, MemoryCheckpointStore } from '@capix/server-runtime';
+import { Group, ResourceOffer, MemoryCheckpointStore } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {
@@ -97,7 +97,7 @@ test('resolved children, resource aliases and work functions stay fixed while de
   const originalOperation = operation('original-operation', [originalLeaf], { requires: originalRequires, uses: [originalLeaf], execute: (context) => context.children.create(originalLeaf, context.input).run() });
   const replacementLeaf = attempt('replacement-leaf', { requires: replacementRequires, execute: (context) => `${context.input}:${context.resources.replacement}` });
   const replacementOperation = operation('replacement-operation', [replacementLeaf], { requires: replacementRequires, uses: [replacementLeaf], execute: (context) => context.children.create(replacementLeaf, context.input).run() });
-  class Main extends GroupDefinition {
+  class Main extends Group {
     #prefix = 'initial';
     members = [originalOperation];
     run = { requires: originalRequires, uses: [originalOperation], execute: this.execute.bind(this) };

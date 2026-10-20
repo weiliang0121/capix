@@ -1,6 +1,5 @@
-import type { invocationSignature } from '../definition/signature.js';
 import type { CallableKind } from '@capix/protocol';
-import type { InvocationCheckpointDefinition, InvocationCheckpointPoint, CallableDefinition } from '../definition/callable.js';
+import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
 import type { Resolution, Continue } from '../definition/work.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationCheckpointWork } from '../checkpoint/work.js';
@@ -13,7 +12,7 @@ import type { ChildReference } from '../definition/children.js';
 import type { BoundChildren } from './children/bound.js';
 import { ChildBindingsBuilder } from './children/builder.js';
 import { InvocationAccess } from './access.js';
-import { originalCheckpointPoint } from './snapshot.js';
+import { type CallableSnapshot, originalCheckpointPoint } from './snapshot.js';
 import { savedCheckpointFacts } from './checkpoint.js';
 import { BoundReceptions } from './receptions.js';
 
@@ -39,7 +38,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
   readonly #accesses = new WeakMap<Invocation<Input, Output, Context>, InvocationAccess<Input, Output, Context>>();
 
   constructor(
-    private readonly declaration: Omit<CallableDefinition<Input, Output, Kind, Resources, ExceptionResources, any>, typeof invocationSignature> & { readonly kind: Kind },
+    private readonly declaration: CallableSnapshot<Input, Output, Kind, Resources, ExceptionResources, any>,
     private readonly children: BoundChildren,
     private readonly composite: boolean,
   ) {

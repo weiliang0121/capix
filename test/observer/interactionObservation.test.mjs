@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { defineObservation } from '@capix/server-runtime';
 import { ObserverConversations, SqliteObserverStore, createObserverServer } from '@capix/observer-service';
 import { ObservationHttpTransport } from '@capix/client-http';
-import { withRuntimeDefinition } from '../fixtures/assembly.mjs';
+import { withRuntimeDefinition, reconfigure } from '../fixtures/assembly.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 2000 };
 const output = (value) => ({ id: 'provider-feedback', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -51,17 +51,19 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
       },
     },
     {},
-    (definition) => {
-      const model = definition.taskDefinition.operationDefinitions.generation.requestModelDefinition;
-      model.observation = [
-        ...model.observation,
-        defineObservation({
-          requires: {},
-          observe(fact) {
-            if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'succeeded' && fact.change.result.output.kind === 'pending') pending.resolve();
-          },
-        }),
-      ];
+    (_scene, { generation }) => {
+      const model = generation.requestModel;
+      reconfigure(model, {
+        observation: [
+          ...model.observation,
+          defineObservation({
+            requires: {},
+            observe(fact) {
+              if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'succeeded' && fact.change.result.output.kind === 'pending') pending.resolve();
+            },
+          }),
+        ],
+      });
     },
   );
   const running = observer.driver.run(observer.scene, { messages: [{ role: 'user', content: 'sensitive prompt never in metadata' }] }, { settings });

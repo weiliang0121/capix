@@ -1,9 +1,9 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
+import { Scene, Group, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
 import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
-import { SelectHistoryDefinition, UnderstandRequestDefinition, DefaultConversationDecisionDefinition, FunctionConversationDecisionDefinition, CheckFileTaskDefinition, ProcessDocumentDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
+import { SelectHistory, UnderstandRequest, DefaultConversationDecision, FunctionConversationDecision, CheckFileTask, ProcessDocument, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 import { FileResources } from '@capix/observer-service/assembly';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };
@@ -55,7 +55,7 @@ function parentCheckpoint(key, child) {
   };
 }
 function assemble(operation, store, providers) {
-  class E extends GroupDefinition {
+  class E extends Group {
     members = [operation];
     checkpoint = parentCheckpoint('fixture.operations.e', operation);
     run = {
@@ -69,7 +69,7 @@ function assemble(operation, store, providers) {
     };
   }
   const execution = new E();
-  class R extends SceneDefinition {
+  class R extends Scene {
     members = [execution];
     checkpoint = parentCheckpoint('fixture.operations.r', execution);
     run = {
@@ -125,7 +125,7 @@ function environment(t, options = {}) {
 for (const scenario of ['selection', 'understanding', 'decision', 'preflight', 'document', 'function']) {
   test(`${scenario} declaration resumes a fixed child/result without repeating completed model or file work`, async (t) => {
     const env = environment(t);
-    const create = () => (scenario === 'selection' ? new SelectHistoryDefinition() : scenario === 'understanding' ? new UnderstandRequestDefinition({ files: true }) : scenario === 'decision' ? new DefaultConversationDecisionDefinition({ files: true }) : scenario === 'preflight' ? new CheckFileTaskDefinition() : scenario === 'document' ? new ProcessDocumentDefinition() : new FunctionConversationDecisionDefinition(() => ({ kind: 'invoke', capability: 'answer', arguments: {} })));
+    const create = () => (scenario === 'selection' ? new SelectHistory() : scenario === 'understanding' ? new UnderstandRequest({ files: true }) : scenario === 'decision' ? new DefaultConversationDecision({ files: true }) : scenario === 'preflight' ? new CheckFileTask() : scenario === 'document' ? new ProcessDocument() : new FunctionConversationDecision(() => ({ kind: 'invoke', capability: 'answer', arguments: {} })));
     const input = scenario === 'selection' ? env.selection : scenario === 'understanding' ? env.understanding : scenario === 'decision' || scenario === 'function' ? env.decision : scenario === 'preflight' ? { task: { sourcePath: 'notes.md' }, instruction: '读取' } : { sourcePath: 'notes.md', context: { message: env.selection.message, selectedMessages: [] }, memories: [] };
     const store = new CapturedStore();
     const expected = await assemble(create(), store, env.providers).run(input, {});
@@ -142,9 +142,9 @@ for (const scenario of ['selection', 'understanding', 'decision', 'preflight', '
 test('model interaction reference recovery consumes saved feedback without reissuing the external request', async (t) => {
   const env = environment(t);
   const store = new CapturedStore();
-  const expected = await assemble(new SelectHistoryDefinition(), store, env.providers).run(env.selection, {});
+  const expected = await assemble(new SelectHistory(), store, env.providers).run(env.selection, {});
   const boundary = store.writes.findIndex((write) => write.image?.point === 'interactionStarted');
-  const restored = assemble(new SelectHistoryDefinition(), restore(store.writes.slice(0, boundary + 1)), env.providers);
+  const restored = assemble(new SelectHistory(), restore(store.writes.slice(0, boundary + 1)), env.providers);
   assert.deepEqual(await restored.resume(store.writes[0].image.frame.owner.contextId, {}), expected);
   assert.equal(env.counters.model, 1);
 });
@@ -152,7 +152,7 @@ test('model interaction reference recovery consumes saved feedback without reiss
 test('unknown file read is not repeated when its result has no durable checkpoint', async (t) => {
   const env = environment(t);
   const store = new CapturedStore();
-  const create = () => new ProcessDocumentDefinition();
+  const create = () => new ProcessDocument();
   await assemble(create(), store, env.providers).run({ sourcePath: 'notes.md', context: { message: env.selection.message, selectedMessages: [] }, memories: [] }, {});
   const boundary = store.writes.findIndex((write) => write.image?.point === 'reading');
   const restored = assemble(create(), restore(store.writes.slice(0, boundary + 1)), env.providers);
@@ -164,7 +164,7 @@ for (const stage of ['preparation', 'acceptance']) {
   for (const kind of ['selection', 'understanding']) {
     test(`${kind} resumes its ${stage} A result before the parent has accepted it`, async (t) => {
       const env = environment(t);
-      const create = () => (kind === 'selection' ? new SelectHistoryDefinition() : new UnderstandRequestDefinition({ files: true }));
+      const create = () => (kind === 'selection' ? new SelectHistory() : new UnderstandRequest({ files: true }));
       const input = kind === 'selection' ? env.selection : env.understanding;
       const store = new CapturedStore();
       const expected = await assemble(create(), store, env.providers).run(input, {});
@@ -181,26 +181,26 @@ for (const stage of ['preparation', 'acceptance']) {
 test('the optional selection operation still verifies its message against the fixed Transcript range', async (t) => {
   const env = environment(t);
   const input = structuredClone(env.selection);
-  await assemble(new SelectHistoryDefinition(), new CapturedStore(), env.providers).run(input, {});
+  await assemble(new SelectHistory(), new CapturedStore(), env.providers).run(input, {});
   assert.equal(env.counters.model, 1);
-  await assert.rejects(assemble(new SelectHistoryDefinition(), new CapturedStore(), env.providers).run({ ...input, message: { role: 'user', content: '不同输入' } }, {}), /final message/);
+  await assert.rejects(assemble(new SelectHistory(), new CapturedStore(), env.providers).run({ ...input, message: { role: 'user', content: '不同输入' } }, {}), /final message/);
   assert.equal(env.counters.model, 1);
 });
 
 test('understanding consumes its fixed input without comparing it to current Transcript content', async (t) => {
   const env = environment(t);
   const input = { ...structuredClone(env.understanding), message: { role: 'user', content: '已经固定的旧输入' }, history: [{ index: 42, message: { role: 'assistant', content: '已经固定的旧材料' } }] };
-  assert.deepEqual(await assemble(new UnderstandRequestDefinition({ files: true }), new CapturedStore(), env.providers).run(input, {}), { kind: 'reply' });
+  assert.deepEqual(await assemble(new UnderstandRequest({ files: true }), new CapturedStore(), env.providers).run(input, {}), { kind: 'reply' });
   assert.equal(env.counters.model, 1);
 });
 
 test('missing model interaction feedback cannot be replaced by another model request', async (t) => {
   const env = environment(t);
   const store = new CapturedStore();
-  await assemble(new SelectHistoryDefinition(), store, env.providers).run(env.selection, {});
+  await assemble(new SelectHistory(), store, env.providers).run(env.selection, {});
   const boundary = store.writes.findIndex((write) => write.image?.point === 'interactionStarted');
   const restoredEnv = environment(t);
-  const restored = assemble(new SelectHistoryDefinition(), restore(store.writes.slice(0, boundary + 1)), restoredEnv.providers);
+  const restored = assemble(new SelectHistory(), restore(store.writes.slice(0, boundary + 1)), restoredEnv.providers);
   await assert.rejects(restored.resume(store.writes[0].image.frame.owner.contextId, {}), { code: 'MODEL_INTERACTION_UNKNOWN' });
   assert.equal(restoredEnv.counters.model, 0);
 });
@@ -209,7 +209,7 @@ for (const mismatch of ['request', 'purpose']) {
   test(`interaction recovery rejects an existing unrelated ${mismatch} without consuming its feedback`, async (t) => {
     const env = environment(t);
     const store = new CapturedStore();
-    await assemble(new SelectHistoryDefinition(), store, env.providers).run(env.selection, {});
+    await assemble(new SelectHistory(), store, env.providers).run(env.selection, {});
     const boundary = store.writes.findIndex((write) => write.image?.point === 'interactionStarted');
     const saved = store.writes[boundary].image;
     const request = mismatch === 'request' ? { ...saved.frame.currentInput, model: 'different-model' } : saved.frame.currentInput;
@@ -218,7 +218,7 @@ for (const mismatch of ['request', 'purpose']) {
     await env.interactions.result(unrelated, { signal: new AbortController().signal });
     const writes = structuredClone(store.writes.slice(0, boundary + 1));
     writes[boundary].image.state = unrelated;
-    const resumed = assemble(new SelectHistoryDefinition(), restore(writes), env.providers);
+    const resumed = assemble(new SelectHistory(), restore(writes), env.providers);
     await assert.rejects(resumed.resume(writes[0].image.frame.owner.contextId, {}), { code: 'MODEL_INTERACTION_MISMATCH' });
     assert.equal(env.counters.model, 2);
   });
@@ -227,10 +227,10 @@ for (const mismatch of ['request', 'purpose']) {
 test('a saved follow A waits for the original interaction instead of recreating start A', async (t) => {
   const env = environment(t, { timeoutMs: 200, delayMs: 120 });
   const store = new CapturedStore();
-  const expected = await assemble(new SelectHistoryDefinition(), store, env.providers).run(env.selection, {});
+  const expected = await assemble(new SelectHistory(), store, env.providers).run(env.selection, {});
   const boundary = store.writes.findIndex((write) => write.image?.contract.key === 'observer.follow-model' && write.image.point === 'waiting');
   assert.ok(boundary > 0, 'the first local wait delivered pending and established a follow call');
-  const resumed = assemble(new SelectHistoryDefinition(), restore(store.writes.slice(0, boundary + 1)), env.providers);
+  const resumed = assemble(new SelectHistory(), restore(store.writes.slice(0, boundary + 1)), env.providers);
   assert.deepEqual(await resumed.resume(store.writes[0].image.frame.owner.contextId, {}), expected);
   assert.equal(env.counters.model, 1);
 });

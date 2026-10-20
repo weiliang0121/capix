@@ -1,5 +1,5 @@
 import type { FileReceipt, GenerationOutput } from '@capix/protocol';
-import type { GroupDefinition } from '@capix/server-runtime';
+import type { Group } from '@capix/server-runtime';
 import type { RequestUnderstandingInput } from '../group/request/input.js';
 import type { FilePreflightInput, FilePreflightOutput } from '../group/preflight/types.js';
 
@@ -38,4 +38,4 @@ export interface ConversationDecisionInput {
 }
 
 /** The execution consumes the decision contract, independently of how the operation implements it. */
-export type ConversationDecisionDefinition = GroupDefinition<ConversationDecisionInput, ConversationDecision, any, any>;
+export type ConversationDecisionGroup = Group<ConversationDecisionInput, ConversationDecision, any, any>;

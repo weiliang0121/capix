@@ -1,10 +1,10 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
+import { Scene, Group, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
 import { MemoryResource } from '@capix/server-runtime/content';
 import { ConversationContent } from '@capix/observer-service/assembly';
-import { ActiveContentResource, PrepareConversationContextDefinition, MaintainConversationContentDefinition, ModelSettingsResource } from '@capix/observer-service/conversation';
+import { ActiveContentResource, PrepareConversationContext, MaintainConversationContent, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };
 const codec = { encode: structuredClone, decode: structuredClone };
@@ -55,7 +55,7 @@ function checkpoint(key, child) {
   };
 }
 function runtime(operation, content, store = new CapturedStore(), options = {}) {
-  class E extends GroupDefinition {
+  class E extends Group {
     members = [operation];
     checkpoint = checkpoint('active.fixture.e', operation);
     run = {
@@ -71,7 +71,7 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
   }
   const execution = new E();
   const thisCheckpoint = execution.checkpoint;
-  class R extends SceneDefinition {
+  class R extends Scene {
     members = [execution];
     checkpoint = checkpoint('active.fixture.r', execution);
     run = {
@@ -108,7 +108,7 @@ test('unconfigured preparation captures current content at execution and never c
   const content = new ConversationContent({ messages: [message('old'), message('question')] });
   t.after(() => content.close());
   const progress = [];
-  const prepared = await runtime(new PrepareConversationContextDefinition(), content, new CapturedStore(), { progress, afterCreated: () => content.transcript.append(message('just arrived')) }).run(input(content, 1), {});
+  const prepared = await runtime(new PrepareConversationContext(), content, new CapturedStore(), { progress, afterCreated: () => content.transcript.append(message('just arrived')) }).run(input(content, 1), {});
   assert.deepEqual(prepared.selection.historyIndexes, [0, 2]);
   assert.deepEqual(
     prepared.context.selectedMessages.map((item) => item.message.content),
@@ -126,12 +126,12 @@ test('function maintenance is one real O, can remove current membership, and pre
   t.after(() => content.close());
   const phases = [];
   const progress = [];
-  const maintenance = new MaintainConversationContentDefinition(({ material, phase, settings: received }) => {
+  const maintenance = new MaintainConversationContent(({ material, phase, settings: received }) => {
     phases.push(phase);
     assert.equal(received.contextBudget, settings.contextBudget);
     return { basis: material.basis, messageIndexes: [], memoryIds: [] };
   });
-  const prepared = await runtime(new PrepareConversationContextDefinition(maintenance), content, new CapturedStore(), { progress }).run(input(content, 1), {});
+  const prepared = await runtime(new PrepareConversationContext(maintenance), content, new CapturedStore(), { progress }).run(input(content, 1), {});
   assert.deepEqual(phases, ['before-request']);
   assert.deepEqual(prepared.material.messages, []);
   assert.deepEqual(prepared.selection.historyIndexes, []);
@@ -148,7 +148,7 @@ test('a composed maintenance O may write content and choose from the new explici
   t.after(() => content.close());
   let calls = 0;
   const requires = { activeContentManager: ActiveContentResource.manage.request(), memoryWriter: MemoryResource.apply.request() };
-  class Policy extends GroupDefinition {
+  class Policy extends Group {
     name = 'policy';
     label = 'policy';
     source = 'test';
@@ -163,7 +163,7 @@ test('a composed maintenance O may write content and choose from the new explici
       },
     };
   }
-  const material = await runtime(new MaintainConversationContentDefinition(new Policy()), content).run({ phase: 'after-content' }, {});
+  const material = await runtime(new MaintainConversationContent(new Policy()), content).run({ phase: 'after-content' }, {});
   assert.equal(calls, 1);
   assert.deepEqual(material.messages, []);
   assert.equal(material.memories[0].content, 'new understanding');
@@ -174,11 +174,11 @@ test('prepared completed checkpoint delivers fixed values after later content ch
   const content = new ConversationContent({ messages: [message('old'), message('question')] });
   t.after(() => content.close());
   const store = new CapturedStore();
-  const expected = await runtime(new PrepareConversationContextDefinition(), content, store).run(input(content, 1), {});
+  const expected = await runtime(new PrepareConversationContext(), content, store).run(input(content, 1), {});
   const boundary = store.writes.findIndex((write) => write.image?.contract.key === 'observer.prepare-context' && write.image.point === 'completed');
   assert.ok(boundary >= 0);
   content.transcript.append(message('later'));
-  const restored = runtime(new PrepareConversationContextDefinition(), content, replay(store.writes.slice(0, boundary + 1)));
+  const restored = runtime(new PrepareConversationContext(), content, replay(store.writes.slice(0, boundary + 1)));
   const result = await restored.resume(store.writes[0].image.frame.owner.contextId, {});
   assert.deepEqual(result, expected);
   assert.ok(Object.isFrozen(result.material) && Object.isFrozen(result.material.messages[0].message));
@@ -194,15 +194,15 @@ test('maintenance accepted checkpoint installs only against its exact basis with
     return { basis: material.basis, messageIndexes: [1], memoryIds: [] };
   };
   const store = new CapturedStore();
-  const expected = await runtime(new MaintainConversationContentDefinition(policy), content, store).run({ phase: 'after-content' }, {});
+  const expected = await runtime(new MaintainConversationContent(policy), content, store).run({ phase: 'after-content' }, {});
   const boundary = store.writes.findIndex((write) => write.image?.contract.key === 'observer.maintain-context' && write.image.point === 'accepted');
   assert.ok(boundary >= 0);
   const restoredContent = new ConversationContent({ saved: initial });
   t.after(() => restoredContent.close());
-  const restored = runtime(new MaintainConversationContentDefinition(policy), restoredContent, replay(store.writes.slice(0, boundary + 1)));
+  const restored = runtime(new MaintainConversationContent(policy), restoredContent, replay(store.writes.slice(0, boundary + 1)));
   assert.deepEqual(await restored.resume(store.writes[0].image.frame.owner.contextId, {}), expected);
   assert.equal(calls, 1);
-  const ambiguous = runtime(new MaintainConversationContentDefinition(policy), content, replay(store.writes.slice(0, boundary + 1)));
+  const ambiguous = runtime(new MaintainConversationContent(policy), content, replay(store.writes.slice(0, boundary + 1)));
   await assert.rejects(ambiguous.resume(store.writes[0].image.frame.owner.contextId, {}), /活跃材料依据已经变化/);
   assert.equal(calls, 1, 'same target is not evidence that this pending apply happened');
 });
@@ -216,12 +216,12 @@ test('maintenance completed checkpoint does not repeat an installed index change
     return { basis: material.basis, messageIndexes: [1], memoryIds: [] };
   };
   const store = new CapturedStore();
-  const expected = await runtime(new MaintainConversationContentDefinition(policy), content, store).run({ phase: 'after-content' }, {});
+  const expected = await runtime(new MaintainConversationContent(policy), content, store).run({ phase: 'after-content' }, {});
   const boundary = store.writes.findIndex((write) => write.image?.contract.key === 'observer.maintain-context' && write.image.point === 'completed');
   assert.ok(boundary >= 0);
   content.transcript.append(message('later'));
   const revision = content.active.capture().basis.indexRevision;
-  const restored = runtime(new MaintainConversationContentDefinition(policy), content, replay(store.writes.slice(0, boundary + 1)));
+  const restored = runtime(new MaintainConversationContent(policy), content, replay(store.writes.slice(0, boundary + 1)));
   assert.deepEqual(await restored.resume(store.writes[0].image.frame.owner.contextId, {}), expected);
   assert.equal(content.active.capture().basis.indexRevision, revision);
   assert.equal(calls, 1);
@@ -232,7 +232,7 @@ test('preparation and maintenance resume their actual waiting child before accep
   t.after(() => content.close());
   const initial = save(content);
   let calls = 0;
-  class Policy extends GroupDefinition {
+  class Policy extends Group {
     name = 'policy';
     label = 'policy';
     source = 'test';
@@ -249,7 +249,7 @@ test('preparation and maintenance resume their actual waiting child before accep
     };
   }
   const store = new CapturedStore();
-  const definition = () => new PrepareConversationContextDefinition(new MaintainConversationContentDefinition(new Policy()));
+  const definition = () => new PrepareConversationContext(new MaintainConversationContent(new Policy()));
   const expected = await runtime(definition(), content, store).run(input(content, 1), {});
   const boundary = store.writes.findIndex((write) => write.image?.contract.key === 'active.fixture.policy' && write.image.point === 'completed');
   assert.ok(boundary >= 0);

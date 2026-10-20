@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChildCallFailure, ExceptionContract, GroupDefinition, defineNode, defineGroup, defineScene, reception } from '@capix/server-runtime';
+import { ChildCallFailure, ExceptionContract, Group, defineNode, defineGroup, defineScene, reception } from '@capix/server-runtime';
 import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
 
 const metadata = { name: 'reception-fixture', label: 'Reception fixture', source: 'test' };
@@ -114,7 +114,7 @@ test('the same child has independent parent Accepted values in factory and named
     assert.equal(work.children.facts.get(call.ref).returned.output, 'hello');
     return accepted;
   });
-  class NamedParent extends GroupDefinition {
+  class NamedParent extends Group {
     name = metadata.name;
     label = metadata.label;
     source = metadata.source;

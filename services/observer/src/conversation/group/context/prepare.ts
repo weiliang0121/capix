@@ -1,4 +1,4 @@
-import { GroupDefinition, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { isEqual } from 'es-toolkit';
 import { ActiveContentResource, type ActiveContentReader } from '../../content/resource.js';
@@ -10,7 +10,7 @@ import { emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild }
 import { preparedConversationContextCodec } from './checkpoint.js';
 import type { PreparedConversationContext } from './types.js';
 export type { PreparedConversationContext } from './types.js';
-import type { MaintainConversationContentDefinition } from './maintain.js';
+import type { MaintainConversationContent } from './maintain.js';
 
 interface PreparationResources {
   readonly activeContent: ActiveContentReader;
@@ -19,22 +19,17 @@ interface PreparationResources {
 type PreparationWork = GroupWork<AcceptedConversationInput, PreparedConversationContext, PreparationResources>;
 
 /** Capture current material after optional maintenance; creation of E does not fix these values. */
-export class PrepareConversationContextDefinition extends GroupDefinition<AcceptedConversationInput, PreparedConversationContext, PreparationResources> {
-  readonly name = 'prepareContext';
-  readonly label = '准备对话材料';
-  readonly source = 'services/observer/src/conversation/group/context/prepare.ts · PrepareConversationContextDefinition';
-  readonly observation = [invocationRecording<AcceptedConversationInput, PreparedConversationContext>({ output: describePreparedConversationContext, relationAccepted: (output, relation) => (relation.key === 'maintenance' ? describeActiveContent(output as ActiveContentSnapshot) : output) })];
+export class PrepareConversationContext extends Group<AcceptedConversationInput, PreparedConversationContext, PreparationResources> {
   static readonly requires = Object.freeze({ activeContent: ActiveContentResource.read.request() });
-  readonly members;
-  readonly run;
-  readonly checkpoint;
+
   readonly waiting;
   readonly completed;
 
-  constructor(readonly maintenance?: MaintainConversationContentDefinition) {
+  constructor(readonly maintenance?: MaintainConversationContent) {
     super();
-    this.members = Object.freeze(maintenance ? [maintenance] : []);
-    const requires = PrepareConversationContextDefinition.requires;
+
+    if (maintenance) this.add(maintenance);
+    const requires = PrepareConversationContext.requires;
     const point = checkpointPoint<'group', AcceptedConversationInput, PreparedConversationContext>();
     this.waiting = maintenance
       ? point({
@@ -63,8 +58,8 @@ export class PrepareConversationContextDefinition extends GroupDefinition<Accept
       },
       resume: { execute: (_work, output) => output },
     });
-    this.checkpoint = { key: 'observer.prepare-context', version: 1, input: acceptedCheckpointInput, output: preparedConversationContextCodec, points: this.waiting ? [this.waiting, this.completed] : [this.completed] };
-    this.run = { requires, uses: this.members, execute: this.execute.bind(this) };
+
+    this.setDefinition({ name: 'prepareContext', label: '准备对话材料', source: 'services/observer/src/conversation/group/context/prepare.ts · PrepareConversationContext', observation: [invocationRecording<AcceptedConversationInput, PreparedConversationContext>({ output: describePreparedConversationContext, relationAccepted: (output, relation) => (relation.key === 'maintenance' ? describeActiveContent(output as ActiveContentSnapshot) : output) })], run: { requires, uses: this.members, execute: this.execute.bind(this) }, checkpoint: { key: 'observer.prepare-context', version: 1, input: acceptedCheckpointInput, output: preparedConversationContextCodec, points: this.waiting ? [this.waiting, this.completed] : [this.completed] } });
   }
 
   private async execute(work: PreparationWork): Promise<PreparedConversationContext> {
@@ -74,7 +69,7 @@ export class PrepareConversationContextDefinition extends GroupDefinition<Accept
     return this.receive(work, child);
   }
 
-  private async receive(work: PreparationWork, child: ChildCall<MaintainConversationContentDefinition>): Promise<PreparedConversationContext> {
+  private async receive(work: PreparationWork, child: ChildCall<MaintainConversationContent>): Promise<PreparedConversationContext> {
     await child.run();
     await child.accept();
     return this.capture(work);

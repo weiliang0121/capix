@@ -1,4 +1,4 @@
-import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, DefinitionInput, DefinitionOutput, ResumeChildCalls } from '../../definition/children.js';
+import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, ResumeChildCalls } from '../../definition/children.js';
 import type { ChildEntry } from '../../definition/entry.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import { ChildCallFailure } from '../../invocation/provenance.js';
@@ -33,7 +33,7 @@ export class InvocationChildBindings {
     });
   }
 
-  private create<D extends ChildContract>(definition: D, input: DefinitionInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
+  private create<D extends ChildContract>(definition: D, input: CallableInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
     return this.guard(() => {
       this.requireAllowed(definition);
       const child = this.options.children.get(definition).create(this.options.parent, input, { ...options, declarationPosition: this.options.children.position(definition) });
@@ -71,10 +71,10 @@ export class InvocationChildBindings {
     const entry = this.options.references.require(ref);
     const relation = entry.relation;
     const access = this;
-    function accept(): Promise<DefinitionOutput<D>>;
-    function accept<Value>(receive: (output: DefinitionOutput<D>) => Value | Promise<Value>): Promise<Value>;
-    function accept<Value>(contract: ReceptionDefinition<D, Value>, receive: (output: DefinitionOutput<D>) => NoInfer<Value> | Promise<NoInfer<Value>>): Promise<Value>;
-    function accept<Value = DefinitionOutput<D>>(first?: ReceptionDefinition<D, Value> | ((output: DefinitionOutput<D>) => Value | Promise<Value>), receive?: (output: DefinitionOutput<D>) => Value | Promise<Value>): Promise<Value> {
+    function accept(): Promise<CallableOutput<D>>;
+    function accept<Value>(receive: (output: CallableOutput<D>) => Value | Promise<Value>): Promise<Value>;
+    function accept<Value>(contract: ReceptionDefinition<D, Value>, receive: (output: CallableOutput<D>) => NoInfer<Value> | Promise<NoInfer<Value>>): Promise<Value>;
+    function accept<Value = CallableOutput<D>>(first?: ReceptionDefinition<D, Value> | ((output: CallableOutput<D>) => Value | Promise<Value>), receive?: (output: CallableOutput<D>) => Value | Promise<Value>): Promise<Value> {
       return access.perform(() => {
         if (first !== undefined && typeof first !== 'function' && (typeof first !== 'object' || first === null)) throw new Error('Invalid child reception contract or callback');
         const contract = typeof first === 'object' && first !== null ? access.options.receptions.require(first, entry.definition as D) : undefined;
@@ -82,7 +82,7 @@ export class InvocationChildBindings {
         if (contract && typeof callback !== 'function') throw new Error('Typed reception requires a callback');
         return relation.accept((output) => {
           access.checkActive();
-          return callback ? callback(output as DefinitionOutput<D>) : (output as Value);
+          return callback ? callback(output as CallableOutput<D>) : (output as Value);
         }, contract);
       });
     }
@@ -93,7 +93,7 @@ export class InvocationChildBindings {
         this.perform(async () => {
           // Reading a saved delivery starts no new work. Every real start still requires uses.
           if (!relation.returned) this.requireAllowed(entry.definition);
-          return (await relation.invocation.run()) as DefinitionOutput<D>;
+          return (await relation.invocation.run()) as CallableOutput<D>;
         }),
       accept,
     });

@@ -14,7 +14,7 @@
 | ModelSource               | 惰性建立 Provider，保存构造失败                                       |
 | ModelInteractions         | 服务持有交互实例、调用 Provider、控制外部自身超时、按 ID 读取保存状态 |
 | ModelResource.create/read | 绑定本次调用的受控创建与读取端点                                      |
-| RequestModelDefinition    | Group 的组合：接纳发起 Node 的交付，必要时建立读取 Node               |
+| RequestModel              | Group 的组合：接纳发起 Node 的交付，必要时建立读取 Node               |
 
 ```ts
 const model = new ModelSource(provider);
@@ -42,7 +42,7 @@ Interaction → Provider → 固定反馈 → 可被多个 Node 读取
 
 当前 发起 Node 本地等待为配置 `timeoutMs` 的一半，最少 1 ms；这只是服务第一版策略。Provider 的总超时从唯一一次发送开始计时，读取 Node 不延长超时、不再次构造请求。快速反馈不创建 读取 Node。慢反馈返回 pending 是正常交付，不虚构 发起 Node 失败或增加 Invocation 重试轮次。
 
-回答的有限再次生成仍是另一条路径：完整模型返回被业务接纳拒绝后，父 Group 根据正式异常和直接子调用证据，使用 `RequestModelDefinition.regeneration` 创建新请求和新交互。超时、取消和网络错误不进入这条路径。读取旧反馈与生成新反馈必须显式区分。
+回答的有限再次生成仍是另一条路径：完整模型返回被业务接纳拒绝后，父 Group 根据正式异常和直接子调用证据，使用 `RequestModel.regeneration` 创建新请求和新交互。超时、取消和网络错误不进入这条路径。读取旧反馈与生成新反馈必须显式区分。
 
 ## 时序与失败
 

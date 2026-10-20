@@ -7,7 +7,7 @@ const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedInd
 const entry = fileURLToPath(new URL('./types/checkpoint-contract.ts', import.meta.url));
 const source = `
 import {checkpointPoint, childReference, childReferences, defineNode, defineGroup, defineScene} from '@capix/server-runtime';
-import type {AuthorCheckpointWriter, CheckpointCodec, CheckpointPointOwner, ChildReference, ChildReferenceSlot, DefinitionContract, InvocationCheckpointDefinition, InvocationCheckpointPoint, ResourceRequest} from '@capix/server-runtime';
+import type {AuthorCheckpointWriter, CheckpointCodec, CheckpointPointOwner, ChildReference, ChildReferenceSlot, CallableContract, InvocationCheckpointDefinition, InvocationCheckpointPoint, ResourceRequest} from '@capix/server-runtime';
 
 type Input = { readonly query: string };
 type Output = { readonly answer: string };
@@ -104,7 +104,7 @@ const leafPoint = checkpointPoint<'node', Input, Output>()({
 const executionPoint = checkpointPoint<'group', Input, Output>()({ name: 'e', state: numberCodec, references: { child: childReference(nested) }, resume: { uses: [nested], execute: work => ({ answer: work.input.query }) } });
 const runtimePoint = checkpointPoint<'scene', Input, Output>()({ name: 'r', state: numberCodec, references: { child: childReference(execution) }, resume: { uses: [execution], execute: work => ({ answer: work.input.query }) } });
 // Slots and resume actions need only the original child's shallow signature.
-const shallowRead: DefinitionContract<'node', ChildInput, ChildOutput> = read;
+const shallowRead: CallableContract<'node', ChildInput, ChildOutput> = read;
 const shallowPoint = checkpointPoint<'group', Input, Output, string>()({ name: 'shallow', state: numberCodec, references: { child: childReference(shallowRead) }, resume: { uses: [shallowRead], async execute(work, state, saved) {
   const result: ChildOutput = await work.children.resume(saved.child).run();
   return { answer: result.text };

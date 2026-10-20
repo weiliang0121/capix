@@ -2,7 +2,7 @@ import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { defineScene, defineGroup, defineNode, Driver, ProgressChannel, invocationRecording, bindRecording, Recorder, RecordBook } from '@capix/server-runtime';
-import { ConversationSceneDefinition, ModelInteractions, ModelSource, bindConversation, initializeObserver, observeExecution, observeOverview, subscribeExecutions } from '@capix/observer-service';
+import { createConversationStructure, ModelInteractions, ModelSource, bindConversation, initializeObserver, observeExecution, observeOverview, subscribeExecutions } from '@capix/observer-service';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { ObservationReplica } from '@capix/client-runtime';
@@ -23,14 +23,14 @@ test('Scene members share Callable behavior, while only the exactly bound task p
   const recording = bindRecording(recorder);
   const model = new ModelInteractions(new ModelSource(provider));
   t.after(() => model.close());
-  const definition = new ConversationSceneDefinition();
+  const definition = createConversationStructure();
   const node = defineNode()({ name: 'scene-health-check', observation: [invocationRecording()], run: { execute: () => 'ready' } });
   const group = defineGroup()({ name: 'unrelated-group', members: [], observation: [invocationRecording()], run: { execute: () => 'ready' } });
-  const original = definition.run;
-  definition.members = [node, group, ...definition.members];
-  definition.run = {
+  const original = definition.scene.run;
+  definition.scene.add(node, group);
+  definition.scene.setRun({
     ...original,
-    uses: definition.members,
+    uses: definition.scene.members,
     async execute(work) {
       for (const member of [node, group]) {
         const call = work.children.create(member, null);
@@ -39,7 +39,7 @@ test('Scene members share Callable behavior, while only the exactly bound task p
       }
       return original.execute(work);
     },
-  };
+  });
   const driver = new Driver({ observations: [recording] });
   const scene = bindConversation(driver, definition, entities, model);
   const progress = [];
@@ -101,9 +101,9 @@ test('a conversation task nested under multiple groups retains its full ancestry
   const recording = bindRecording(recorder);
   const model = new ModelInteractions(new ModelSource(provider));
   t.after(() => model.close());
-  const definition = new ConversationSceneDefinition();
-  const original = definition.run;
-  const inner = defineGroup()({ name: 'inner', members: definition.members, observation: [invocationRecording()], run: original });
+  const definition = createConversationStructure();
+  const original = definition.scene.run;
+  const inner = defineGroup()({ name: 'inner', members: [definition.conversation], observation: [invocationRecording()], run: original });
   const wrapper = (name, child) =>
     defineGroup()({
       name,
@@ -119,10 +119,9 @@ test('a conversation task nested under multiple groups retains its full ancestry
       },
     });
   const outer = wrapper('outer', inner);
-  definition.members = [outer];
-  definition.run = wrapper('root-entry', outer).run;
+  definition.scene.add(outer);
   // This test exercises a different declared topology, without promising the original Scene CP.
-  definition.checkpoint = undefined;
+  definition.scene.setDefinition({ name: 'nested-conversation', observation: definition.scene.observation, run: wrapper('root-entry', outer).run });
   const driver = new Driver({ observations: [recording] });
   const scene = bindConversation(driver, definition, entities, model);
   const snapshot = await observeExecution(driver, scene, recording, input, { settings });

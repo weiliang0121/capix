@@ -4,7 +4,7 @@ import { captureSource } from './fixtures/observer.mjs';
 import { createEnvironment } from './fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Initializer, ResourceOffer, bindResources, TranscriptResource, MemoryResource, GroupDefinition, CallableRecord } from '@capix/server-runtime';
+import { Initializer, ResourceOffer, bindResources, TranscriptResource, MemoryResource, Group, CallableRecord } from '@capix/server-runtime';
 import { initializeObserver, ModelSettingsResource } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -108,7 +108,7 @@ test('an initializer retains failure and rejects recursive creation without impl
 test('declarations are checked before resource access or invocation construction', () => {
   const resource = new ResourceOffer('test.dependency', (value) => value);
   const unrelated = new ResourceOffer('test.unrelated', (value) => value);
-  class Work extends GroupDefinition {
+  class Work extends Group {
     name = 'test';
     label = 'test';
     source = 'test';
@@ -117,7 +117,7 @@ test('declarations are checked before resource access or invocation construction
       assert.fail('must not execute');
     }
   }
-  class Root extends GroupDefinition {
+  class Root extends Group {
     run = { requires: {}, execute: this.execute.bind(this) };
     members = [new Work()];
     execute() {

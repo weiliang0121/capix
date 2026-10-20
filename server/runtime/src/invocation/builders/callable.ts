@@ -15,9 +15,8 @@ import type { InvocationCapabilities } from '../capabilities.js';
 import { InvocationChangeEmitter } from '../changes.js';
 import { Invocation, type InvocationStarted } from '../invocation.js';
 import type { InvocationWork } from '../work.js';
-import type { CallableContext } from '../../context/callable.js';
+import { CallableContext } from '../../context/callable.js';
 import type { InvocationControls } from '../../context/context.js';
-import { CallableContextBuilder } from '../../context/builders/callable.js';
 import type { InvocationRelationOptions } from '../relation.js';
 
 export type CallableInvocationStarted<Input, Output, Resources extends object = object> = InvocationStarted<Input, Output, CallableContext<Input, Output, Resources>>;
@@ -41,16 +40,14 @@ export interface CallableInvocationRequest<Input, Output, Resources extends obje
   readonly started?: CallableInvocationStarted<Input, Output, Resources>;
 }
 
-/** Builds every callable through the same resource, control, observation and restoration path. */
+/** One binding installation's construction authority, shared by all its callable positions. */
 export class CallableInvocationBuilder {
-  constructor(
-    private readonly contextBuilder = new CallableContextBuilder(),
-    private readonly capabilities: InvocationCapabilities = {},
-  ) {}
+  constructor(private readonly capabilities: InvocationCapabilities = {}) {}
 
   check(parent: Invocation<unknown, unknown, CallableContext>): void {
     parent.requireActive();
-    this.contextBuilder.check(parent.context);
+    parent.context.requireActive();
+    if (!parent.context.belongsTo(this)) throw new Error('Call belongs to another binding installation');
   }
 
   restoration<Input, Output, Resources extends object = object>(contextId: string, work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>, kind: CallableKind, parentContextId?: string): CheckpointRestoration;
@@ -65,7 +62,10 @@ export class CallableInvocationBuilder {
     const supplied = request.resources ?? parent?.context.resources ?? new ResourceBindings({});
     const requires = request.requires ?? ({} as ResourceRequirements<Resources>);
     const resources = supplied.select(requires, request.initial, { input, refinements: request.refinements ?? [], supply: request.supply });
-    const context = this.contextBuilder.create<Input, Output, Resources>(input, request.kind, request.controls ?? {}, resources, parent?.context);
+    // Resource capture/refinement may run host code; recheck before establishing the child.
+    if (parent) this.check(parent);
+    const controls = parent ? { signal: parent.context.signal } : request.controls;
+    const context = new CallableContext<Input, Output, Resources>(input, request.kind, controls, resources, this);
     if (request.restore) {
       if (!request.work.checkpoint) throw new Error('Checkpoint declaration is missing');
       const frame = request.restore.head.image.frame;

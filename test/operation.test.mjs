@@ -8,7 +8,7 @@ import { TestOperation } from './fixtures/operation.mjs';
 import { TranscriptResource, bindResources } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 
-import { SelectHistoryDefinition, AssembleAnswerContextDefinition, answerOutputContract, selectionOutputContract } from '@capix/observer-service';
+import { SelectHistory, AssembleAnswerContext, answerOutputContract, selectionOutputContract } from '@capix/observer-service';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 };
 const runtime = createBoundRuntime();
@@ -191,7 +191,7 @@ test('one selection operation can overlap calls without mixing their history bou
       return response;
     },
   };
-  const op = bindChild(runtime, new SelectHistoryDefinition());
+  const op = bindChild(runtime, new SelectHistory());
   const resourceBinding = resourceBindingFor(runtime, provider);
   const first = { content: 'one', history: [{ role: 'user', content: 'a' }] };
   const second = { content: 'two', history: [...first.history, { role: 'user', content: 'b' }] };
@@ -220,7 +220,7 @@ test('assembly attempt consumes fixed input material and needs no recorder', asy
     ],
   });
   const input = { message, selectedMessages: [{ index: 0, message: transcriptFor(message).get(0) }] };
-  const attempt = bindChild(runtime, new AssembleAnswerContextDefinition());
+  const attempt = bindChild(runtime, new AssembleAnswerContext());
   const result = await invoke(lifecycleFor(runtime).execution({ input: message, settings, transcript: transcriptFor(message), resourceBinding: bindResources({}, []) }), (execution) =>
     runtime.operationInvocationBuilder
       .create(callFor(execution), {
