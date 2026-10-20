@@ -1,5 +1,5 @@
-import type { OperationWork } from '@capix/server-runtime';
-import { createBoundRuntime, BoundRuntime, BoundChildren, ChildBindingsBuilder, type Invocation, type BoundExecution, type ExecutionContext, type InvocationOptions, type ExecutionInvocationBindings } from '@capix/server-runtime/construction';
+import type { GroupWork } from '@capix/server-runtime';
+import { CallableBinder, BoundCallable, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationOptions, type CallableSourceBinding } from '@capix/server-runtime/construction';
 import { Transcript } from '@capix/server-runtime/content';
 import type { ResourceRecord as ResourceRecordEntity } from '@capix/server-runtime/recording';
 import type { ResourceRecord, ExecutionRecordSnapshot } from '@capix/protocol/recording';
@@ -8,14 +8,14 @@ import type { InvocationOrigin } from '@capix/protocol/invocation';
 import type { TranscriptSnapshot } from '@capix/protocol/content';
 import type { ObserverChange } from '@capix/protocol/observer';
 import type { MemoryInput } from '@capix/observer-service/conversation';
-import { defineOperation } from '@capix/server-runtime';
+import { defineGroup, defineScene } from '@capix/server-runtime';
 import { ActiveContentResource, MaintainConversationContentDefinition, PrepareConversationContextDefinition, type ContextMaintenanceInput, type ContextMaintenanceDecision, type ContextMaintenancePolicy } from '@capix/observer-service/conversation';
 
-const maintenancePolicy = defineOperation<ContextMaintenanceInput, ContextMaintenanceDecision>()({
+const maintenancePolicy = defineGroup<ContextMaintenanceInput, ContextMaintenanceDecision>()({
   name: 'explicit-policy',
   label: 'Explicit policy',
   source: 'test',
-  children: [],
+  members: [],
   run: {
     requires: { active: ActiveContentResource.read.request() },
     execute(work) {
@@ -39,14 +39,14 @@ const ungroundedPolicy: ContextMaintenancePolicy = () => ({ messageIndexes: [], 
 const missingPosition: Parameters<typeof preparation.run.execute>[0]['input'] = { message: { role: 'user', content: 'input' } };
 void [functionalPolicy, ungroundedPolicy, missingPosition];
 
-const bound: BoundRuntime = createBoundRuntime();
+const bound: BoundCallable<string, string> = new CallableBinder().bind(defineScene<string, string>()({ run: { execute: (work) => work.input } }), { providers: [], source: { capture: () => null } });
 // @ts-expect-error R is the bound structure, not the owner of its assembly environment.
 bound.environment;
 // @ts-expect-error child call construction is supplied to binders, not exposed by R.
 bound.executionInvocationBuilder;
 const transcript = new Transcript();
 const request: ConversationRequest = { messages: [{ role: 'user', content: 'input' }] };
-declare const author: OperationWork<string, number, { value: string }>;
+declare const author: GroupWork<string, number, { value: string }>;
 const value: string = author.resources.value;
 // @ts-expect-error A declaration cannot mutate the internal invocation lifecycle.
 author.complete(1);
@@ -76,7 +76,7 @@ childBuilder.build(parentCall, { validate: () => parentCall.requireActive() });
 
 // Different input, output and resource shapes verify the shared parameter order.
 type ExecutionResources = { label: string };
-type CallContext = ExecutionContext<string, number, ExecutionResources>;
+type CallContext = CallableContext<string, number, ExecutionResources>;
 const work: InvocationOptions<string, number, CallContext>['work'] = {
   maxRounds: 1,
   execute(context, invocation) {
@@ -85,15 +85,14 @@ const work: InvocationOptions<string, number, CallContext>['work'] = {
     return label.length + input.length;
   },
 };
-declare const reusable: BoundExecution<string, number, ExecutionResources>;
+declare const reusable: BoundCallable<string, number, ExecutionResources>;
 // @ts-expect-error A reusable E structure is not the state of one E invocation.
 const callContext: CallContext = reusable;
-declare const invocationBindings: ExecutionInvocationBindings<string, number, ExecutionResources>;
-// @ts-expect-error E bindings do not contain a separate entry resource scope.
+declare const node: import('@capix/server-runtime').NodeDefinition<string, number>;
+declare const invocationBindings: CallableSourceBinding<{}, { label: string }, typeof node>;
+// @ts-expect-error a source binding does not contain a separate entry resource scope.
 invocationBindings.entry({ text: 'input' });
-const captured = invocationBindings.capture('accepted input');
-// @ts-expect-error Captured supply is not a local resource view; aliases are declared when selecting a call's resources.
-captured.values.label;
-declare const labelRequest: import('@capix/server-runtime').ResourceRequest<string>;
-const label: string = captured.select({ label: labelRequest }).values.label;
-void [work, callContext, label];
+const captured = invocationBindings.capture?.('accepted input', {});
+// @ts-expect-error capture receives the selected definition's real input contract.
+invocationBindings.capture?.(42, {});
+void [work, callContext, captured];

@@ -52,7 +52,7 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
     },
     {},
     (definition) => {
-      const model = definition.executionDefinition.operationDefinitions.generation.requestModelDefinition;
+      const model = definition.taskDefinition.operationDefinitions.generation.requestModelDefinition;
       model.observation = [
         ...model.observation,
         defineObservation({
@@ -64,7 +64,7 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
       ];
     },
   );
-  const running = observer.runtime.run({ messages: [{ role: 'user', content: 'sensitive prompt never in metadata' }] }, { settings });
+  const running = observer.driver.run(observer.scene, { messages: [{ role: 'user', content: 'sensitive prompt never in metadata' }] }, { settings });
   // Avoid depending on network or provider timing: wait for the actual local A1 deadline fact.
   await pending.promise;
   const interaction = observer.interactions.states().find((state) => state.request.purpose === 'answer');
@@ -106,7 +106,7 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
   const root = [...observer.book.values()].find((record) => record.kind === 'runtime');
   const rootResponse = await fetch(`${base}/api/interactions?conversationId=${id}&callId=${root.id}`);
   assert.equal((await rootResponse.json()).code, 'CALL_NOT_FOUND');
-  const runtime = [...observer.book.values()].find((record) => record.kind === 'runtime-call');
+  const runtime = [...observer.book.values()].find((record) => record.kind === 'invocation' && record.structureKind === 'scene');
   assert.deepEqual((await transport.interactions(id, runtime.id)).interactionIds, []);
 });
 
@@ -124,7 +124,7 @@ test('saved interaction metadata is read through restored call links without con
   );
   const firstId = original.list().defaultConversationId;
   const environment = original.open(firstId);
-  await environment.runtime.run({ messages: [{ role: 'user', content: 'saved request' }] }, { settings });
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'saved request' }] }, { settings });
   const resource = [...environment.book.values()].find((record) => record.kind === 'resource' && record.access === 'model-interaction.create' && record.phase === 'returned');
   const ref = resource.value.output.id;
   const callId = resource.parentId;

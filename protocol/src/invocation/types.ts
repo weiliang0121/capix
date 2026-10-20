@@ -1,6 +1,8 @@
-/** Fixed runtime vocabulary; independent of any observation carrier. */
-export const invocationLevels = ['runtime', 'execution', 'operation', 'attempt'] as const;
-export type InvocationLevel = (typeof invocationLevels)[number];
+/** Structural description, never a dispatch policy for the common invocation mechanism. */
+export const callableKinds = ['scene', 'group', 'node'] as const;
+export type CallableKind = (typeof callableKinds)[number];
+/** Read-only vocabulary of historical REOA records. */
+export type LegacyInvocationLevel = 'runtime' | 'execution' | 'operation' | 'attempt';
 export const invocationProcessStages = ['execute', 'receive', 'handling', 'control'] as const;
 export const invocationProcessActions = ['start', 'return', 'throw', 'continue', 'unhandled', 'stop'] as const;
 export type InvocationProcessStage = (typeof invocationProcessStages)[number];

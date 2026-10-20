@@ -25,7 +25,7 @@ async function recordedRound() {
   const feed = new ObservationFeed(environment);
   const frames = [];
   feed.connect((frame) => frames.push(frame));
-  const final = await observeExecution(environment.runtime, environment.recording, request, { settings }, (value) => snapshots.push(value));
+  const final = await observeExecution(environment.driver, environment.scene, environment.recording, request, { settings }, (value) => snapshots.push(value));
   await settle();
   feed.close();
   return { transcriptId: environment.transcript.id, frames, snapshots, final, overview: observeOverview(environment), messages: environment.transcript.snapshot(), memory: observeMemory(environment.memories, environment.book) };
@@ -251,11 +251,11 @@ test('binding supports a conversation-only runtime and never synthesizes respons
 test('detail keeps R acceptance separate from QA/E and exposes recorded relation entries', async () => {
   const fixture = await recordedRound();
   const detail = projectDetail(fixture.final, fixture.memory);
-  const parent = fixture.final.runtimeCall;
+  const parent = fixture.final.rootCall;
   assert.ok(parent);
   assert.equal(detail.calls.get(detail.id).parentId, parent.id);
   const call = detail.calls.get(parent.id);
-  assert.equal(call.recordType, 'runtime');
+  assert.equal(call.recordType, 'scene');
   assert.equal(call.status, 'passed');
   assert.equal(call.children.length, 1);
   assert.equal(call.children[0].id, detail.id);

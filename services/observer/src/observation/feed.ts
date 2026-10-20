@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ObservationBaseline, ObservationFrame, ObservationUpdate, ObserverChange, ObservationChange, RecordEntry, RecordingArchive } from '@capix/protocol';
 import type { Transcript, Memories } from '@capix/server-runtime/content';
-import { observeMemory, snapshotValue, CompositeRecord, ExecutionRecord, RuntimeCallRecord, type BaseRecord, type RecordBook, type RecordingInstallation } from '@capix/server-runtime/recording';
+import { observeMemory, snapshotValue, CompositeRecord, CallableRecord, ExecutionRecord, RuntimeCallRecord, type BaseRecord, type RecordBook, type RecordingInstallation } from '@capix/server-runtime/recording';
 import type { ChangeConsumer } from '../assembly/changes.js';
 import type { RecordReceiver, RecordSource } from './record/source.js';
 import { observeOverview } from './overview.js';
@@ -65,7 +65,7 @@ export class ObservationFeed {
   }
 }
 
-/** A running R can be receiving a finished E: retain that whole local subtree until R finishes. */
+/** A running ancestor can still receive a finished task: retain its subtree until that call ends. */
 function activeRecords(book: RecordBook, rootId: string): BaseRecord<unknown>[] {
   const records = [...book.values()];
   const belongsToCurrent = (record: BaseRecord<unknown>): boolean => {
@@ -79,7 +79,7 @@ function activeRecords(book: RecordBook, rootId: string): BaseRecord<unknown>[] 
     return false;
   };
   const selected = new Set<string>([rootId]);
-  const pending: BaseRecord<unknown>[] = records.filter((record) => (record instanceof RuntimeCallRecord || record instanceof ExecutionRecord) && record.status === 'running' && belongsToCurrent(record));
+  const pending: BaseRecord<unknown>[] = records.filter((record) => (record instanceof CallableRecord || record instanceof RuntimeCallRecord || record instanceof ExecutionRecord) && record.status === 'running' && belongsToCurrent(record));
   for (let record: BaseRecord<unknown> | undefined = pending.pop(); record; record = pending.pop()) {
     if (selected.has(record.id)) continue;
     selected.add(record.id);

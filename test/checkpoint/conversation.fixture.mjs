@@ -10,14 +10,14 @@ const save = persistence.checkpoints.save.bind(persistence.checkpoints);
 persistence.checkpoints.save = (image, revision) => {
   const result = save(image, revision);
   if (image.contract.key === 'observer.request-model.answer' && image.point === 'feedbackAccepted') crash('feedback');
-  if (image.contract.key === 'observer.conversation.execution' && image.point === 'capabilityAccepted.answer') crash('accepted');
+  if (image.contract.key === 'observer.conversation.task' && image.point === 'capabilityAccepted.answer') crash('accepted');
   return result;
 };
 const finish = persistence.checkpoints.finish.bind(persistence.checkpoints);
 persistence.checkpoints.finish = (id, revision, delivery) => {
   const result = finish(id, revision, delivery);
   if (result.image.contract.key === 'observer.generate-answer.conversation' && delivery.status === 'succeeded') crash('delivery');
-  if (result.image.contract.key === 'observer.conversation.execution' && delivery.status === 'succeeded') crash('executionDelivery');
+  if (result.image.contract.key === 'observer.conversation.task' && delivery.status === 'succeeded') crash('executionDelivery');
   return result;
 };
 const commit = persistence.transcript.commit.bind(persistence.transcript);
@@ -50,7 +50,7 @@ let activeAfterRecovery;
 let concurrentRecovery;
 let independentRef;
 try {
-  if (mode === 'start') result = await environment.runtime.run({ messages: [{ role: 'user', content: '你好，验证新对话。' }] }, { settings: { model: 'fixed-model', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 } });
+  if (mode === 'start') result = await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '你好，验证新对话。' }] }, { settings: { model: 'fixed-model', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 } });
   else {
     const run = persistence.checkpointRuns.list(conversationId)[0];
     if (mode === 'changed') environment.transcript.append({ role: 'user', content: '后续新问题。' });

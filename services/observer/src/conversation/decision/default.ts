@@ -1,34 +1,34 @@
 import { z } from 'zod';
 import { checkpointCodec } from '../checkpoint.js';
 import { isEqual } from 'es-toolkit/predicate';
-import { decisionInputCodec, decisionCodec } from '../operations/checkpoint.js';
-import { OperationDefinition, checkpointPoint, childReference, type OperationWork, type InvocationCheckpointDefinition } from '@capix/server-runtime';
+import { decisionInputCodec, decisionCodec } from '../group/checkpoint.js';
+import { GroupDefinition, checkpointPoint, childReference, type GroupWork, type InvocationCheckpointDefinition } from '@capix/server-runtime';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import type { ModelCallResources } from '../resources.js';
-import { UnderstandRequestDefinition } from '../operations/request/understand.js';
-import type { RequestProposal } from '../operations/request/output.js';
+import { UnderstandRequestDefinition } from '../group/request/understand.js';
+import type { RequestProposal } from '../group/request/output.js';
 import type { ConversationDecision, ConversationDecisionInput } from './types.js';
 
 type DecisionResources = ModelCallResources | Record<string, never>;
 
 /** Known deliveries choose the next step directly; only an unresolved request needs a model. */
-export class DefaultConversationDecisionDefinition extends OperationDefinition<ConversationDecisionInput, ConversationDecision, DecisionResources> {
+export class DefaultConversationDecisionDefinition extends GroupDefinition<ConversationDecisionInput, ConversationDecision, DecisionResources> {
   readonly name = 'conversationDecision';
   readonly label = '决定下一步';
   readonly source = 'services/observer/src/conversation/decision/default.ts · DefaultConversationDecisionDefinition';
   readonly observation = [invocationRecording()];
   readonly understandingDefinition?: UnderstandRequestDefinition;
-  readonly children;
+  readonly members;
   readonly run;
   readonly resultPoint;
   readonly understandingPoint;
-  readonly checkpoint: InvocationCheckpointDefinition<ConversationDecisionInput, ConversationDecision, 'operation'>;
+  readonly checkpoint: InvocationCheckpointDefinition<ConversationDecisionInput, ConversationDecision, 'group'>;
 
   constructor(options: { readonly files: boolean }) {
     super();
     this.understandingDefinition = options.files ? new UnderstandRequestDefinition({ files: true }) : undefined;
-    this.children = Object.freeze(this.understandingDefinition ? [this.understandingDefinition] : []);
-    const resultPoint = checkpointPoint<'operation', ConversationDecisionInput, ConversationDecision>()({
+    this.members = Object.freeze(this.understandingDefinition ? [this.understandingDefinition] : []);
+    const resultPoint = checkpointPoint<'group', ConversationDecisionInput, ConversationDecision>()({
       name: 'result',
       state: decisionCodec,
       references: {},
@@ -46,7 +46,7 @@ export class DefaultConversationDecisionDefinition extends OperationDefinition<C
     this.resultPoint = resultPoint;
     const understanding = this.understandingDefinition;
     this.understandingPoint = understanding
-      ? checkpointPoint<'operation', ConversationDecisionInput, ConversationDecision>()({
+      ? checkpointPoint<'group', ConversationDecisionInput, ConversationDecision>()({
           name: 'understandingWaiting',
           state: checkpointCodec(z.null()),
           references: { understanding: childReference(understanding) },
@@ -67,16 +67,16 @@ export class DefaultConversationDecisionDefinition extends OperationDefinition<C
         })
       : undefined;
     this.checkpoint = { key: `observer.default-decision.${options.files ? 'files' : 'chat'}`, version: 3, input: decisionInputCodec, output: decisionCodec, points: [...(this.understandingPoint ? [this.understandingPoint] : []), resultPoint] };
-    this.run = { requires: this.understandingDefinition ? UnderstandRequestDefinition.requires : {}, uses: this.children, execute: this.execute.bind(this) };
+    this.run = { requires: this.understandingDefinition ? UnderstandRequestDefinition.requires : {}, uses: this.members, execute: this.execute.bind(this) };
   }
 
-  private async execute(work: OperationWork<ConversationDecisionInput, ConversationDecision, DecisionResources>): Promise<ConversationDecision> {
+  private async execute(work: GroupWork<ConversationDecisionInput, ConversationDecision, DecisionResources>): Promise<ConversationDecision> {
     const result = await this.decide(work);
     work.checkpoint?.save(this.resultPoint, result, {});
     return result;
   }
 
-  private async decide(work: OperationWork<ConversationDecisionInput, ConversationDecision, DecisionResources>): Promise<ConversationDecision> {
+  private async decide(work: GroupWork<ConversationDecisionInput, ConversationDecision, DecisionResources>): Promise<ConversationDecision> {
     const input = work.input;
     const progress = input.progress;
     if (progress.answer) {

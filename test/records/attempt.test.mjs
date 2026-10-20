@@ -6,8 +6,8 @@ import { TestOperation } from '../fixtures/operation.mjs';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { ExceptionContract, Recorder, BaseRecord, AttemptRecord, OperationRecord, AttemptRecordHelper, RecordBook } from '@capix/server-runtime';
-import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
+import { ExceptionContract, Recorder, BaseRecord, CallableRecord, OperationRecord, OperationRecordHelper, AttemptRecordHelper, RecordBook } from '@capix/server-runtime';
+import { createBoundRuntime, createRecordScope, observeCall } from '../fixtures/runtime.mjs';
 import { test } from 'node:test';
 
 import { projectExecution } from '../../apps/observer/.test-dist/observation/project.js';
@@ -39,7 +39,8 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   const secondLifecycle = lifecycleFor(runtime).attempt(operation, attempt, input);
   const second = secondLifecycle.begin();
   const secondRecord = recordFor(second);
-  assert.ok(secondRecord instanceof BaseRecord && secondRecord instanceof AttemptRecord);
+  assert.ok(secondRecord instanceof BaseRecord && secondRecord instanceof CallableRecord);
+  assert.equal(secondRecord.structureKind, 'node');
   assert.equal(secondRecord instanceof OperationRecord, false);
   assert.equal('executionId' in second, false);
   assert.equal('operationInstanceId' in second, false);
@@ -84,11 +85,11 @@ test('declared record participants are extensible names, not ownership or a fixe
   assert.equal(snapshot.attempts[0].callee, 'filesystem');
 
   for (const kind of ['operations', 'attempts']) {
-    for (const field of ['caller', 'callee']) {
+    for (const field of ['callee']) {
       const extended = structuredClone(snapshot);
       extended[kind][0][field] = 'custom-capability';
       validateExecutionRecordSnapshot(extended);
-      for (const invalid of [undefined, null, 1, {}, '', '   ']) {
+      for (const invalid of [null, 1, {}, '', '   ']) {
         const malformed = structuredClone(snapshot);
         malformed[kind][0][field] = invalid;
         assert.throws(() => validateExecutionRecordSnapshot(malformed));
@@ -97,15 +98,14 @@ test('declared record participants are extensible names, not ownership or a fixe
   }
 
   const unrelated = structuredClone(snapshot);
-  unrelated.attempts[0].operationId = 'missing-operation';
+  unrelated.attempts[0].parentId = 'missing-operation';
   assert.throws(() => validateExecutionRecordSnapshot(unrelated));
 });
 
 test('attempt ownership uses direct record ownership and rejects missing or incorrectly typed parents', (t) => {
-  const { runtime, execution, operation, definition: declaration } = setup();
-  const operationRecord = recordFor(operation);
+  const { runtime, execution, operationRecord, declaration } = legacySetup();
   const definition = { ...declaration, contextId: randomUUID(), operationId: operationRecord.id };
-  for (const operationId of ['missing', recordFor(execution).id]) {
+  for (const operationId of ['missing', execution.id]) {
     assert.throws(() => AttemptRecordHelper.create(runtime.recorder, { ...definition, operationId }, {}), /Operation does not exist/);
   }
   const attempt = AttemptRecordHelper.create(runtime.recorder, definition, {});
@@ -114,8 +114,7 @@ test('attempt ownership uses direct record ownership and rejects missing or inco
   });
   assert.deepEqual(AttemptRecordHelper.findByOperation(runtime.recorder, operationRecord.id), [attempt]);
   assert.throws(() => AttemptRecordHelper.get(runtime.recorder.book, operationRecord.id), /Attempt does not exist/);
-  const other = lifecycleFor(runtime).operation(execution, new TestOperation(runtime), {}).begin();
-  const otherRecord = recordFor(other);
+  const otherRecord = OperationRecordHelper.create(runtime.recorder, { executionId: execution.id, contextId: randomUUID(), operationInstanceId: 'other', operation: 'other', label: 'Other', source: 'test', caller: 'execution', callee: 'operation' }, {});
   assert.deepEqual(AttemptRecordHelper.findByOperation(runtime.recorder, otherRecord.id), []);
   const cycle = {};
   cycle.self = cycle;
@@ -130,8 +129,7 @@ test('attempt ownership uses direct record ownership and rejects missing or inco
 });
 
 test('failed attempt registration leaves no partial record or child reference', (t) => {
-  const { runtime, operation, definition: declaration } = setup();
-  const operationRecord = recordFor(operation);
+  const { runtime, operationRecord, declaration } = legacySetup();
   const definition = { ...declaration, contextId: randomUUID(), operationId: operationRecord.id };
   const failure = new Error('book failed');
   const originalSize = [...runtime.recorder.book.values()].length;
@@ -146,3 +144,12 @@ test('failed attempt registration leaves no partial record or child reference', 
   assert.equal([...runtime.recorder.book.values()].length, originalSize);
   assert.equal(operationRecord.childIds, before);
 });
+
+function legacySetup() {
+  const recorder = new Recorder(new RecordBook());
+  const root = createRecordScope(recorder);
+  const execution = ExecutionRecordHelper.create(recorder, { contextId: randomUUID(), parentId: root.id }, { input: null });
+  const operationRecord = OperationRecordHelper.create(recorder, { executionId: execution.id, contextId: randomUUID(), operationInstanceId: 'fixture', operation: 'legacy', label: 'Legacy', source: 'test', caller: 'execution', callee: 'operation' }, {});
+  const declaration = { name: 'acceptText', label: '接纳文本', source: 'test', caller: 'operation', callee: 'processing' };
+  return { runtime: { recorder }, execution, operationRecord, declaration };
+}

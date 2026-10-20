@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, checkpointPoint, childReference, assembleRuntime } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
 import { GenerateAnswerDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };
@@ -51,8 +52,8 @@ function parentCheckpoint(key, child) {
 function harness(t, provider, store, events = [], facts = [], generation = new GenerateAnswerDefinition()) {
   const interactions = new ModelInteractions(new ModelSource(provider));
   t.after(() => interactions.close());
-  class Execution extends ExecutionDefinition {
-    children = [generation];
+  class Execution extends GroupDefinition {
+    members = [generation];
     checkpoint = parentCheckpoint('fixture.answer.execution', generation);
     run = {
       requires: GenerateAnswerDefinition.requires,
@@ -65,8 +66,8 @@ function harness(t, provider, store, events = [], facts = [], generation = new G
     };
   }
   const execution = new Execution();
-  class Root extends RuntimeDefinition {
-    children = [execution];
+  class Root extends SceneDefinition {
+    members = [execution];
     checkpoint = parentCheckpoint('fixture.answer.runtime', execution);
     run = {
       requires: {},
@@ -78,7 +79,7 @@ function harness(t, provider, store, events = [], facts = [], generation = new G
       },
     };
   }
-  const runtime = assembleRuntime(new Root(), {
+  const runtime = installCallable(new Root(), {
     ...(store ? { checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } } : {}),
     providers: [ModelSettingsResource.snapshot.provide(() => settings), ModelSettingsResource.timeout.provide(() => settings.timeoutMs), ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)],
     source: { capture: () => null },

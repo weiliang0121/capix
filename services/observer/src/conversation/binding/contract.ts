@@ -1,12 +1,12 @@
-import type { ChangeCapture, InvocationControls, ExecutionInvocationCallbacks, ObservationInstallation, ProgressChannel, InvocationProgress, CheckpointInstallation } from '@capix/server-runtime';
+import type { InvocationControls, CallableInvocationCallbacks, ProgressChannel, InvocationProgress } from '@capix/server-runtime';
 import type { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
-import type { ModelSettings, InvocationEvent, GenerationOutput } from '@capix/protocol';
-import type { ConversationExecutionResources } from '../resources.js';
+import type { ModelSettings, GenerationOutput } from '@capix/protocol';
+import type { ConversationTaskResources } from '../resources.js';
 import type { ConversationProgress } from '../progress.js';
 import type { AcceptedConversationInput } from '../accept.js';
 import type { WorkspaceFiles, FileProgress } from '../../files/index.js';
 import type { ActiveContent } from '../content/active.js';
-import type { AnswerProgress } from '../operations/answer/stream.js';
+import type { AnswerProgress } from '../group/answer/stream.js';
 import type { ConversationCheckpointRun, ConversationCheckpointRuns } from '../checkpoints.js';
 
 export interface ConversationRunOptions extends InvocationControls {
@@ -19,7 +19,7 @@ export interface ConversationRunOptions extends InvocationControls {
   activity?: ProgressChannel<InvocationProgress>;
   fileProgress?: ProgressChannel<FileProgress>;
   answerProgress?: ProgressChannel<AnswerProgress>;
-  executionCallbacks?: ExecutionInvocationCallbacks<AcceptedConversationInput, GenerationOutput, ConversationExecutionResources>;
+  executionCallbacks?: CallableInvocationCallbacks<AcceptedConversationInput, GenerationOutput, ConversationTaskResources>;
 }
 
 export interface ConversationEntities {
@@ -30,11 +30,8 @@ export interface ConversationEntities {
   files?: WorkspaceFiles;
 }
 
-/** Fixed optional capabilities of the conversation binding, not options for one submission. */
+/** Service restoration association; the store comes from the installed Driver. */
 export interface ConversationBindingOptions {
-  observations?: readonly ObservationInstallation[];
-  changes?: ChangeCapture<InvocationEvent>;
-  checkpoints?: CheckpointInstallation;
   checkpointRuns?: ConversationCheckpointRuns;
   conversationId?: string;
 }

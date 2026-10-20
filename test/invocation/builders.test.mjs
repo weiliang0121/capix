@@ -1,7 +1,7 @@
 import { captureSource } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, ChangeBuffer, bindResources, ResourceOffer, ResourceBindings, createInvocationBuilders } from '@capix/server-runtime';
+import { Recorder, RecordBook, ChangeBuffer, bindResources, ResourceOffer, ResourceBindings, CallableInvocationBuilder, CallableContextBuilder } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -9,31 +9,32 @@ const operation = { id: 'operation', name: 'work', label: 'Work', source: 'test'
 const attempt = { name: 'action', label: 'Action', source: 'test', callee: 'processing' };
 const identity = { maxRounds: 1, execute: (context) => context.currentInput };
 
-test('independent construction chains keep R ownership without a bound runtime assembly environment', async () => {
+test('independent construction chains reject foreign parents and share one path across callable kinds', async () => {
   const facts = [];
   const observations = [{ bindInvocation: () => ({ observe: (fact) => facts.push(fact) }) }];
-  const first = createInvocationBuilders({ observations });
-  const foreign = createInvocationBuilders();
-  const description = { id: 'first-runtime' };
-  const parent = first.runtime.create('parent', {
+  const first = new CallableInvocationBuilder(new CallableContextBuilder(), { observations });
+  const foreign = new CallableInvocationBuilder();
+  const description = { id: 'first-scene' };
+  const parent = first.create('parent', {
+    kind: 'scene',
     description,
     controls: {},
     work: {
       maxRounds: 1,
       async execute(_context, invocation) {
-        assert.throws(() => foreign.execution.create(invocation, 'wrong owner', { work: identity }), /another Runtime/);
+        assert.throws(() => foreign.create('wrong owner', { kind: 'group', parent: invocation, work: identity }), /another binding installation/);
         assert.equal(invocation.children.values().length, 0);
-        const child = first.execution.create(invocation, 'child output', { work: identity });
+        const child = first.create('child output', { kind: 'group', parent: invocation, work: identity });
         await child.run();
         return invocation.children.get(child).accept((output) => output);
       },
     },
   });
   assert.equal(await parent.run(), 'child output');
-  const runtimeFacts = facts.filter((fact) => fact.identity.level === 'runtime');
-  assert.ok(runtimeFacts.length > 0);
-  assert.ok(runtimeFacts.every((fact) => fact.description === description));
-  assert.ok(facts.some((fact) => fact.identity.level === 'execution' && fact.identity.parentContextId === parent.context.id));
+  const sceneFacts = facts.filter((fact) => fact.identity.kind === 'scene');
+  assert.ok(sceneFacts.length > 0);
+  assert.ok(sceneFacts.every((fact) => fact.description === description));
+  assert.ok(facts.some((fact) => fact.identity.kind === 'group' && fact.identity.parentContextId === parent.context.id));
 });
 
 test('reused builders bind each invocation to its own signal, settings and input', async () => {
@@ -92,10 +93,10 @@ test('construction writes no call records and rejects foreign contexts before st
   const second = createBoundRuntime({ recorder });
   const root = first.executionInvocationBuilder.create('input', { context: { settings }, work: identity });
   const child = first.operationInvocationBuilder.create(root, { input: 'input', description: operation, work: identity });
-  assert.equal([...recorder.book.values()].filter((record) => ['execution', 'operation', 'attempt'].includes(record.kind)).length, 0);
-  assert.throws(() => second.operationInvocationBuilder.create(root, { input: 'foreign', description: operation, work: identity }), /another Runtime/);
-  assert.throws(() => second.attemptInvocationBuilder.create(child, { input: 'foreign', description: attempt, work: identity }), /another Runtime/);
-  assert.equal([...recorder.book.values()].filter((record) => ['execution', 'operation', 'attempt'].includes(record.kind)).length, 0);
+  assert.equal([...recorder.book.values()].filter((record) => record instanceof Object && ['group', 'node'].includes(record.structureKind)).length, 0);
+  assert.throws(() => second.operationInvocationBuilder.create(root, { input: 'foreign', description: operation, work: identity }), /another binding installation/);
+  assert.throws(() => second.attemptInvocationBuilder.create(child, { input: 'foreign', description: attempt, work: identity }), /another binding installation/);
+  assert.equal([...recorder.book.values()].filter((record) => record instanceof Object && ['group', 'node'].includes(record.structureKind)).length, 0);
 });
 
 test('a constructed call rechecks its parent before entering work, including nested operations', async () => {
@@ -207,12 +208,12 @@ test('shared builder capabilities produce independent call event scopes across n
     assert.equal(values.at(-1).change.status, 'succeeded');
     assert.ok(values.every((event) => Object.isFrozen(event) && Object.isFrozen(event.change)));
   }
-  const child = events.find((event) => event.level === 'operation');
-  const leaf = events.find((event) => event.level === 'attempt');
+  const child = events.find((event) => event.kind === 'group' && event.parentContextId === root.context.id);
+  const leaf = events.find((event) => event.kind === 'node');
   assert.equal(child.parentContextId, root.context.id);
   assert.equal(leaf.parentContextId, child.contextId);
   const laterParent = scopes.get(later.context.id)[0].parentContextId;
-  assert.equal(scopes.get(laterParent)[0].level, 'runtime');
+  assert.equal(scopes.get(laterParent)[0].kind, 'scene');
   assert.notEqual(laterParent, scopes.get(root.context.id)[0].parentContextId);
 });
 

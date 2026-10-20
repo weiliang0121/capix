@@ -104,25 +104,28 @@ export function createObservationProjection() {
       rawOverview = { ...rawOverview, messages: state.overview.messages.map((message) => counts.get(message.index) ?? message) };
     }
     if (snapshots.length) rawOverview = updateOverviews(rawOverview, snapshots);
-    if (!previous || previous.memory !== state.memory) {
+    const callTasks = new Map(rawOverview.executions.flatMap((execution) => execution.calls.map((call) => [call.id, execution.id] as const)));
+    if (!previous || previous.memory !== state.memory || snapshots.length || reset) {
       const grouped = new Map<string, MemoryRecord[]>();
       for (const item of state.memory.items)
         for (const record of item.records) {
-          if (!record.executionId) continue;
-          const records = grouped.get(record.executionId) ?? [];
+          const taskId = record.executionId ?? callTasks.get(record.callId ?? record.parentId ?? '');
+          if (!taskId) continue;
+          const records = grouped.get(taskId) ?? [];
           records.push(record);
-          grouped.set(record.executionId, records);
+          grouped.set(taskId, records);
         }
       memoryRecords = new Map([...grouped].map(([id, records]) => [id, sameMembers(memoryRecords.get(id), records) ? memoryRecords.get(id)! : records]));
     }
     if (reset || snapshots.length || previous?.overview !== state.overview || previous?.memory !== state.memory || previous?.transcriptRecords !== state.transcriptRecords || previousTranscripts !== transcripts) {
       const answers = new Map<string, number>();
       for (const record of state.transcriptRecords ?? []) {
-        if (!record.executionId || record.value.action !== 'append') continue;
+        const taskId = record.executionId ?? callTasks.get(record.callId ?? record.parentId ?? '');
+        if (!taskId || record.value.action !== 'append') continue;
         const messages = transcripts.get(record.transcriptId)?.snapshot?.messages;
         if (!messages) continue;
         const position = messages.slice(record.value.start, record.value.end).findIndex((message) => message.role === 'assistant');
-        if (position >= 0) answers.set(record.executionId, record.value.start + position);
+        if (position >= 0) answers.set(taskId, record.value.start + position);
       }
       const nextSources = new Map<string, ExecutionProjection>();
       const executions = rawOverview.executions.map((execution) => {
@@ -133,7 +136,7 @@ export function createObservationProjection() {
           nextSources.set(execution.id, cached);
           return cached.value;
         }
-        const memoryChanges = records.map((record) => ({ id: record.id, memoryId: record.memoryId, operationId: record.operationId, action: record.value.action, change: record.value.change }));
+        const memoryChanges = records.map((record) => ({ id: record.id, memoryId: record.memoryId, operationId: record.callId ?? record.operationId, action: record.value.action, change: record.value.change }));
         const value = { ...execution, memoryChanges, ...(answerIndex !== undefined ? { response: { ...execution.response, index: answerIndex } } : {}) };
         nextSources.set(execution.id, { source: execution, memories: records, answerIndex, value });
         return value;
@@ -172,10 +175,14 @@ export function createObservationProjection() {
     }
     graphSources = nextSources;
     if (nextGraphs) graphs = nextGraphs;
-    if (!previous || previous.memory !== state.memory || previousTranscripts !== transcripts)
+    if (!previous || previous.memory !== state.memory || previousTranscripts !== transcripts || snapshots.length || reset)
       memory = {
         items: state.memory.items.map((item) => ({
           ...item,
+          records: item.records.map((record) => {
+            const taskId = record.executionId ?? callTasks.get(record.callId ?? record.parentId ?? '');
+            return taskId ? { ...record, executionId: taskId, operationId: record.callId ?? record.operationId } : record;
+          }),
           sources: item.sources.map((source) => {
             const entity = transcripts.get(source.transcriptId);
             const message = entity?.snapshot?.messages[source.index];

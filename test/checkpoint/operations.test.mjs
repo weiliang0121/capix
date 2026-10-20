@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, checkpointPoint, childReference, assembleRuntime } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
 import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
 import { SelectHistoryDefinition, UnderstandRequestDefinition, DefaultConversationDecisionDefinition, FunctionConversationDecisionDefinition, CheckFileTaskDefinition, ProcessDocumentDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 import { FileResources } from '@capix/observer-service/assembly';
@@ -54,8 +55,8 @@ function parentCheckpoint(key, child) {
   };
 }
 function assemble(operation, store, providers) {
-  class E extends ExecutionDefinition {
-    children = [operation];
+  class E extends GroupDefinition {
+    members = [operation];
     checkpoint = parentCheckpoint('fixture.operations.e', operation);
     run = {
       requires: operation.run.requires,
@@ -68,8 +69,8 @@ function assemble(operation, store, providers) {
     };
   }
   const execution = new E();
-  class R extends RuntimeDefinition {
-    children = [execution];
+  class R extends SceneDefinition {
+    members = [execution];
     checkpoint = parentCheckpoint('fixture.operations.r', execution);
     run = {
       requires: {},
@@ -81,7 +82,7 @@ function assemble(operation, store, providers) {
       },
     };
   }
-  return assembleRuntime(new R(), { checkpoints: { store }, providers, source: { capture: () => null } });
+  return installCallable(new R(), { checkpoints: { store }, providers, source: { capture: () => null } });
 }
 function environment(t, options = {}) {
   const transcript = new Transcript([{ role: 'user', content: '处理文件' }]);

@@ -45,14 +45,14 @@ stopTranscript 停止当前集合或全部集合时，也结束正在进行的�
 业务状态包含 messages、transcriptId、transcripts、submission、submissions 和初始化错误。messages 是当前集合已接纳 snapshot.messages 的便利引用；权威副本保存在按 UID 索引的 transcripts 中。submission 保存本地 id/pending、已确认的 remote 累计投影及 feedback 连接状态；busy/pending/contextId/answered 只从 submission 派生，不另外维护一套执行真相。
 
 1. enqueue 同步检查并固定本地输入，固定 conversationId 并放入等待队列；一次实际 POST 另生成 submissionId；本地接纳不代表服务端已经接纳。submit 保留明确的立即发送入口与连接 Promise；有未结束提交或等待项时拒绝，不能插队。每次服务提交身份只发送一次 POST；明确未接纳的接纳重试建立新身份，结果未知不能重发。
-2. remote.input 来自正式消息写入位置，首次确认后在公开状态发布阶段调用一次 accepted(submission)。HTTP 200、收到首帧或建立 E 都不等于输入已接纳。回调接收该提交的不可变快照，必须同步返回 undefined；抛错或意外返回 Promise 只保存 notificationError，不停止接收或改写服务结果。
-3. remote.executions 保存服务选择关联的 E Context 身份，可以为空或多项；输入在 E Context 建立前也能正式落实。remote.answer 只指向已落实回答，正文来自独立实体同步，不从记录或提交反馈重复追加。
+2. remote.input 来自正式消息写入位置，首次确认后在公开状态发布阶段调用一次 accepted(submission)。HTTP 200、收到首帧或建立任务 Group 都不等于输入已接纳。回调接收该提交的不可变快照，必须同步返回 undefined；抛错或意外返回 Promise 只保存 notificationError，不停止接收或改写服务结果。
+3. remote.executions 保存服务选择关联的任务调用 Context 身份，可以为空或多项；输入在任务 Context 建立前也能正式落实。remote.answer 只指向已落实回答，正文来自独立实体同步，不从记录或提交反馈重复追加。
 4. remote.result 是服务任务 completed / failed / rejected / cancelled。后处理失败或取消保留已确认回答；completed 只表示任务返回，不凭空补造 input/answer。remote.cancelRequested 只表示服务端已接收取消要求，不能替代实际结束结果。remote.integrity 说明服务进展解释是否完整，与任务结果分开。
 5. feedback 表示 idle（尚未发送）、connecting / following / ended / interrupted / unavailable。unavailable 只来自服务明确的 SUBMISSION_UNAVAILABLE，表示已无法查询，不能证明未执行。断流、网络失败或投影不完整都不能证明服务执行失败；保留所有已确认事实。消息实体和观测同步失败各自保存在对应范围，不撤回提交结果。
 6. reconnectSubmission 只 follow 同一 submissionId，不重新发送输入；若有未确认的取消意图，可同时重发取消控制。refreshSubmission 单次查询同一身份，接纳事实；查询失败分别标明 interrupted 或 unavailable，终态标明 ended。新连接接收当前累计投影，允许 revision 跳跃；忽略旧修订，同版本冲突、事实回退或更改必须拒绝。旧连接回调不能写入新连接状态。
 7. stopFollowing 只停反馈连接；releaseSubmission 不能释放已发送但结果未知的当前提交。服务端未知、已淘汰或重启后丢失的 submissionId 仍表示结果无法确认，不能推断“没有执行”，也不能为了推进等待项丢弃当前身份。
 
-`remote.activities` 单独保存服务投影的 REOA 过程元数据。HTTP 检查格式，ClientSubmission 接纳调用身份、直接归属、轮次、终态和父层接纳事实，拒绝回退；`activities.integrity` 不代替提交结果，也不改写正文可用性。明确的过程来源失效保留最后事实；畸形反馈仍按协议错误拒绝，不把坏数据补成完成。
+`remote.activities` 单独保存服务投影的 Callable 过程元数据。HTTP 检查格式，ClientSubmission 接纳调用身份、直接归属、轮次、终态和父层接纳事实，拒绝回退；`activities.integrity` 不代替提交结果，也不改写正文可用性。明确的过程来源失效保留最后事实；畸形反馈仍按协议错误拒绝，不把坏数据补成完成。
 
 反馈基线与增量分别接纳：baseline 完整检查后建立副本；submission 按 fromRevision/revision 安装已知变化字段和 activity upsert，仅检查变化调用并复用其他条目。控制响应覆盖部分在途批次时可幂等合并重叠部分，缺口不强行越过。同修订增量逐项核对其声明事实，矛盾仍拒绝。answer 只更新候选，不重新接纳完整调用图；先到达的已接纳候选在 input 尚未同步时等待关联核对，不因不同来源的交付顺序提前失败。
 
@@ -177,11 +177,11 @@ Runtime 的本地 subscribe 消费者逐个通知；抛错的消费者被移除�
 
 ObservationReplica 在新结构中整批接纳 delta，失败不部分修改已接纳状态。重复交付忽略，范围和顺序缺口拒绝。记录新增与父级引用同步接纳；过程和父层接纳关系分别只追加新条目，并以 eventSequence 对照。资源事实作为独立 record entry 接收，按所属调用收集进 ExecutionRecordSnapshot.resources；待调用记录和对应边界齐备后提供执行视图。客户端不从资源事实反推实际业务状态。
 
-loadExecution 按需查询，E 与其父 R 均结束时才复用终态缓存；查询期间收到更新时保留新快照。ObservationReceiver 用本地连接代次检查详情响应：即使请求发起时未开启观测，中间开启又关闭，也不能让旧请求进入新范围。代次只标识本地交付生命周期，不是协议游标或业务版本。详情不进入 updates，不用历史详情覆盖概览。source 保留按需源码查询，不承诺执行时源码归档。
+loadExecution 按需查询，所选任务及其已提供的全部祖先均结束时才复用终态缓存；查询期间收到更新时保留新快照。ObservationReceiver 用本地连接代次检查详情响应：即使请求发起时未开启观测，中间开启又关闭，也不能让旧请求进入新范围。代次只标识本地交付生命周期，不是协议游标或业务版本。详情不进入 updates，不用历史详情覆盖概览。source 保留按需源码查询，不承诺执行时源码归档。
 
 观测连接仅接受一个首帧基线。顺序缺口最多自动取得一次新基线，连续失败明确报错。`ObservationConnectionError` 只由传输确认的网络中断、EOF 或无来源错误码的暂时 HTTP 失败产生；此时 `ObservationState.reconnectable` 为 true，应用提供“重新连接观测”，重连中保留已取得图谱。`SOURCE_INCOMPLETE`、协议身份/归属及消费者错误为终止错误，refresh/start/组件重挂不能绕过同一对话的失败；不同对话重新建立独立范围。健康连接保留显式刷新用途。旧连接回调和详情响应不得覆盖新连接。关闭观测不停止服务端记录。
 
-增量接纳只为受影响且边界齐备的执行重建快照，Receiver 的 updates 仍累计保留各 E 最新事实，供按帧合并的 binding 消费。Binding 按消息、选择计数和记忆来源依赖复用轮次、详情及图；没有把增量到达速度直接变成 React 更新频率。
+增量接纳只为受影响且边界齐备的执行重建快照，Receiver 的 updates 仍累计保留各任务最新事实，供按帧合并的 binding 消费。Binding 按消息、选择计数和记忆来源依赖复用轮次、详情及图；没有把增量到达速度直接变成 React 更新频率。
 
 ## HTTP 包边界
 
@@ -227,9 +227,9 @@ MessageContent 的 `format` 与 `complete` 分别决定纯文本/Markdown及完�
 
 `binding/responses.ts` 将正式消息与已开始提交的事实组合为 ConversationItem：正式消息、本地输入占位、助手回应区域。助手区域的读模型从 connecting 起建立，无需等 activities 或正式回答；可见时机再由展示层衔接前一回答的播放，以 queueId 保持身份，用 input 定位排列位置、answer 定位收纳正文，不按文本或 Observer 记录推断。等待队列不创建助手区域。区域并非正式 assistant 消息，不计入消息数。无跟踪关系的历史消息照常静态显示。
 
-`binding/activities.ts` 只将 REOA 过程转换为当前提示；`binding/submission.ts` 解释结果、取消与反馈状态。responses 将这些提示归入助手区域，区分正文未确认、未加载、同步中、可用、缺失和错误。正式回答已经落实时，后续记忆等处理失败不在对话区追加内部诊断；Runtime 的失败结果与 Observer 诊断保持真实，不改成成功，也不依赖记忆错误码判断。未生成回答的失败或明确拒绝显示用户可理解的提示，不直接拼接服务错误正文。正文未取得、同步失败、取消及未知结果仍分别提示。正文先到时先展示，定位后到时收进同一区域、消重且不重新播放。历史过程仅来自客户端仍保留的已跟踪提交，不从已有消息推导执行历史。
+`binding/activities.ts` 只将 Callable 过程转换为当前提示；`binding/submission.ts` 解释结果、取消与反馈状态。responses 将这些提示归入助手区域，区分正文未确认、未加载、同步中、可用、缺失和错误。正式回答已经落实时，后续记忆等处理失败不在对话区追加内部诊断；Runtime 的失败结果与 Observer 诊断保持真实，不改成成功，也不依赖记忆错误码判断。未生成回答的失败或明确拒绝显示用户可理解的提示，不直接拼接服务错误正文。正文未取得、同步失败、取消及未知结果仍分别提示。正文先到时先展示，定位后到时收进同一区域、消重且不重新播放。历史过程仅来自客户端仍保留的已跟踪提交，不从已有消息推导执行历史。
 
-对话只显示本次提交的一条当前进度，服务事实推进时原位替换文案；不展开 REOA 树，也不累积每一步的提示。binding 沿直接父子关系确定当前操作目的和正在工作的意图，例如“正在生成回答 · 调用模型”；同一模型调用进入记忆操作后会替换为“正在提取记忆体 · 调用模型”，不通过中文名称匹配猜测业务。再次尝试根据调用及祖先 round 明确提示，不推断重试原因。短阶段可能在一帧内结束，不为展示人为回放或延迟后续事实。
+对话只显示本次提交的一条当前进度，服务事实推进时原位替换文案；不展开调用树，也不累积每一步的提示。binding 沿直接父子关系确定当前操作目的和正在工作的意图，例如“正在生成回答 · 调用模型”；同一模型调用进入记忆操作后会替换为“正在提取记忆体 · 调用模型”，不通过中文名称匹配猜测业务。再次尝试根据调用及祖先 round 明确提示，不推断重试原因。短阶段可能在一帧内结束，不为展示人为回放或延迟后续事实。
 
 调用返回、父层接纳与提交结果仍是不同事实：子调用完成但结果待接纳时提示正在处理结果，只有 submission.result 才确定最终完成、失败或取消。当前过程提示替换通用的“等待回答”提示，避免同一次提交出现两个 loading。回答已落实但后处理仍在运行时，继续展示真实阶段；结束后不再保留过程提示或拼接内部过程诊断，正文尚未同步则保留独立的正文同步提示；未生成回答的失败和取消说明留在对应回应区域。
 
@@ -253,4 +253,4 @@ presentation/conversation/scroll.ts 只维护 DOM 几何和阅读意图，不消
 
 记录流每次连接通过服务端来源的 `open({ change, incomplete })` 建立一致基线，再按连接自己的 `scopeId/sequence` 接收增量；连接重建会更换交付范围，不改变来源 `recorder.id/revision`。`SOURCE_INCOMPLETE` 表示记录来源已经缺失事实，不是客户端落后。该错误终止本次记录流，不触发自动基线重试，已接纳的记录保留并与观测错误共同展示。重新连接同一个失效来源也不能生成健康基线。消息实体同步有独立消费出口，记录失效不会停止消息同步或禁止对话。
 
-副本接纳 `runtime-call`、`relation-appended` 及所属父调用的 E 入口阶段元数据，调用过程和父层关系历史分别保存，通过调用内 `eventSequence` 对照先后；它们不代替来源 revision 或连接 sequence。活动 R 调用的基线保留其已结束但仍待父层接纳的 E 子树。单轮快照必含 `runtimeCall/runtimeEvents`，表达父运行调用及其独立计时范围；执行 E 仍对应一个 QA。应用绑定把父调用、关系变化和资源事实整理进详情，主图不会把 R 计成新问答，也不会用 E 成功推断 R 接纳成功。
+副本接纳统一 `invocation` 记录与 `relation-appended`；structureKind 表达 scene/group/node，role 表达 Observer 的任务用途。调用过程和父层关系历史分别保存，通过 eventSequence 对照先后，不替代来源 revision 或连接 sequence。任务快照以 execution/calls 表达所选子树，rootCall 与 ancestors 保留完整根到父路径，boundaries 使用真实计时 scope。活动根调用的基线保留已结束但仍待父层接纳的任务子树。主图不把根调用或所有 Group 计成新问答，也不从任务成功推断父层接纳成功；旧记录由服务只读规范化后进入相同读模型。

@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Invocation, InvocationContext, InvocationCancelled, isInvocationCancelled, RuntimeError, RuntimeDefinition, ExecutionDefinition, ExceptionContract, ResourceOffer, assembleRuntime, bindResources } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationCancelled, isInvocationCancelled, RuntimeError, SceneDefinition, GroupDefinition, ExceptionContract, ResourceOffer, bindResources } from '@capix/server-runtime';
 import { observeCall } from '../fixtures/observation.mjs';
 
 function call(controller, execute, extra = {}) {
@@ -145,21 +146,21 @@ test('cancellation from resource start observation prevents synchronous and asyn
   }
 });
 
-class Main extends RuntimeDefinition {
+class Main extends SceneDefinition {
   constructor(execute, { children = [], requires = {} } = {}) {
     super();
-    this.children = children;
+    this.members = children;
     this.run = { requires, uses: children, execute };
   }
 }
 
 function runtime(definition, providers = []) {
-  return assembleRuntime(definition, { providers, source: { runtime: () => null, capture: () => undefined } });
+  return installCallable(definition, { providers, source: { runtime: () => null, capture: () => undefined } });
 }
 
 test('cancellation blocks new children before entry and releases Runtime occupancy', async () => {
   const controller = new AbortController();
-  const execution = new (class extends ExecutionDefinition {
+  const execution = new (class extends GroupDefinition {
     run = { requires: {}, execute: () => assert.fail('child must not run') };
     entry = { requires: {}, accept: () => assert.fail('entry must not run') };
   })();
@@ -184,7 +185,7 @@ test('cancellation blocks new children before entry and releases Runtime occupan
 
 test('a returned child is not accepted after parent cancellation', async () => {
   const controller = new AbortController();
-  const execution = new (class extends ExecutionDefinition {
+  const execution = new (class extends GroupDefinition {
     run = { requires: {}, execute: () => 'child result' };
   })();
   let relation;

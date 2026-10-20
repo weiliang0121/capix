@@ -1,3 +1,5 @@
+import { CallableRecord } from '../callable/record.js';
+import type { CallableRecord as CallableData } from '@capix/protocol';
 import { isEqual } from 'es-toolkit/predicate';
 import type { RecordEntry, RecordingRootRecord as RootData, RuntimeCallRecord as RuntimeData, ExecutionRecord as ExecutionData, OperationRecord as OperationData, AttemptRecord as AttemptData, InvocationBoundaryRecord as BoundaryData, TranscriptRecord as TranscriptData, MemoryRecord as MemoryData, ResourceRecord as ResourceData, CompositeRecord as CompositeData } from '@capix/protocol';
 import { BaseRecord } from '../record.js';
@@ -33,6 +35,11 @@ export function restoreEntry(entry: RecordEntry): BaseRecord<unknown> {
 
 function construct(entry: RecordEntry): BaseRecord<unknown> {
   switch (entry.kind) {
+    case 'invocation': {
+      const data = entry.data as CallableData;
+      if (typeof data.value.startedAt !== 'string') throw new Error('Stored callable has no observed start');
+      return new CallableRecord(data, { ...data.value, startedAt: data.value.startedAt });
+    }
     case 'runtime': {
       const data = entry.data as RootData;
       return new RecordingRootRecord(data.value);

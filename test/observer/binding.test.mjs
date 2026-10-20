@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore, ProgressChannel } from '@capix/server-runtime';
+import { Driver, MemoryCheckpointStore, ProgressChannel } from '@capix/server-runtime';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
-import { ActiveContent, bindConversation, ConversationRuntimeDefinition, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
+import { ActiveContent, bindConversation, ConversationSceneDefinition, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
 import { MemoryConversationCheckpointRuns } from '@capix/observer-service/assembly';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -21,13 +21,21 @@ function binding() {
       },
     }),
   );
-  const capabilities = { conversationId: 'conversation', checkpoints: { store: new MemoryCheckpointStore() }, checkpointRuns: new MemoryConversationCheckpointRuns() };
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, model, capabilities);
-  return { runtime, entities, model, capabilities, requests };
+  const checkpointStore = new MemoryCheckpointStore();
+  const capabilities = { conversationId: 'conversation', checkpointRuns: new MemoryConversationCheckpointRuns() };
+  const driver = new Driver({ checkpoints: { store: checkpointStore } });
+  const scene = bindConversation(driver, new ConversationSceneDefinition(), entities, model, capabilities);
+  return { driver, scene, entities, model, capabilities, requests };
 }
 
+test('conversation checkpoint association requires the Driver to install the store', (t) => {
+  const { entities, model, capabilities } = binding();
+  t.after(() => model.close());
+  assert.throws(() => bindConversation(new Driver(), new ConversationSceneDefinition(), entities, model, capabilities), /Checkpoint run association requires a conversation and checkpoint store/);
+});
+
 test('conversation source resets capture for reused options and registers CP before external started', async (t) => {
-  const { runtime, entities, model, capabilities, requests } = binding();
+  const { driver, scene, entities, model, capabilities, requests } = binding();
   t.after(() => model.close());
   const starts = [];
   const options = {
@@ -40,8 +48,8 @@ test('conversation source resets capture for reused options and registers CP bef
       },
     },
   };
-  await runtime.run({ messages: [{ role: 'user', content: 'first' }] }, options);
-  await runtime.run({ messages: [{ role: 'user', content: 'second' }] }, options);
+  await driver.run(scene, { messages: [{ role: 'user', content: 'first' }] }, options);
+  await driver.run(scene, { messages: [{ role: 'user', content: 'second' }] }, options);
   assert.deepEqual(
     starts.map((run) => [run.input.start, run.input.end, run.transcript.end]),
     [
@@ -55,7 +63,7 @@ test('conversation source resets capture for reused options and registers CP bef
 });
 
 test('a failed execution start cannot leak its input capture or progress channel into the next call', async (t) => {
-  const { runtime, entities, model, capabilities } = binding();
+  const { driver, scene, entities, model, capabilities } = binding();
   t.after(() => model.close());
   const events = [];
   const options = {
@@ -71,7 +79,7 @@ test('a failed execution start cannot leak its input capture or progress channel
       },
     },
   };
-  await assert.rejects(runtime.run({ messages: [{ role: 'user', content: 'admitted only' }] }, options), /host start callback failed/);
+  await assert.rejects(driver.run(scene, { messages: [{ role: 'user', content: 'admitted only' }] }, options), /host start callback failed/);
   assert.deepEqual(
     events.map((event) => event.kind),
     ['input'],
@@ -79,7 +87,7 @@ test('a failed execution start cannot leak its input capture or progress channel
   assert.equal(capabilities.checkpointRuns.list('conversation').length, 1);
   options.progress = undefined;
   options.executionCallbacks = undefined;
-  await runtime.run({ messages: [{ role: 'user', content: 'new request' }] }, options);
+  await driver.run(scene, { messages: [{ role: 'user', content: 'new request' }] }, options);
   const run = capabilities.checkpointRuns.list('conversation').at(-1);
   assert.deepEqual(run.input, { transcriptId: entities.transcript.id, start: 1, end: 2, revision: 2 });
   assert.equal(run.transcript.end, 2);
@@ -91,7 +99,7 @@ test('a failed execution start cannot leak its input capture or progress channel
 });
 
 test('conversation source preserves async host setup failure instead of starting model work', async (t) => {
-  const { runtime, entities, model, capabilities, requests } = binding();
+  const { driver, scene, entities, model, capabilities, requests } = binding();
   t.after(() => model.close());
   let release;
   const pending = new Promise((resolve) => {
@@ -100,7 +108,8 @@ test('conversation source preserves async host setup failure instead of starting
   let finished = false;
   try {
     await assert.rejects(
-      runtime.run(
+      driver.run(
+        scene,
         { messages: [{ role: 'user', content: 'accepted input' }] },
         {
           settings,
@@ -121,25 +130,25 @@ test('conversation source preserves async host setup failure instead of starting
     assert.equal(requests.length, 0);
     assert.equal(entities.transcript.length, 1);
     assert.equal(capabilities.checkpointRuns.list('conversation').length, 1);
-    assert.equal(runtime.running, false);
+    assert.equal(driver.isRunning(scene), false);
   } finally {
     release();
   }
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(finished, true);
-  await runtime.run({ messages: [{ role: 'user', content: 'next input' }] }, { settings });
+  await driver.run(scene, { messages: [{ role: 'user', content: 'next input' }] }, { settings });
   assert.equal(entities.transcript.length, 3);
   assert.equal(requests.length, 2);
 });
 
 test('conversation binding rechecks registered restoration configuration without relying on host admission', async (t) => {
-  const { runtime, entities, model, capabilities, requests } = binding();
+  const { driver, scene, entities, model, capabilities, requests } = binding();
   t.after(() => model.close());
-  await runtime.run({ messages: [{ role: 'user', content: 'original' }] }, { settings });
+  await driver.run(scene, { messages: [{ role: 'user', content: 'original' }] }, { settings });
   const [run] = capabilities.checkpointRuns.list('conversation');
-  const changed = bindConversation(new ConversationRuntimeDefinition({ maxDecisionSteps: 4 }), entities, model, capabilities);
-  await assert.rejects(changed.run({ messages: [{ role: 'user', content: 'must not append' }] }, { settings, checkpointRun: run }), { code: 'CHECKPOINT_CONFIGURATION_CHANGED' });
+  const changed = bindConversation(driver, new ConversationSceneDefinition({ maxDecisionSteps: 4 }), entities, model, capabilities);
+  await assert.rejects(driver.run(changed, { messages: [{ role: 'user', content: 'must not append' }] }, { settings, checkpointRun: run }), { code: 'CHECKPOINT_CONFIGURATION_CHANGED' });
   assert.equal(entities.transcript.length, 2);
   assert.equal(requests.length, 2);
-  assert.equal(changed.running, false);
+  assert.equal(driver.isRunning(changed), false);
 });

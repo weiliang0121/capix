@@ -2,7 +2,7 @@ import type { RecordEntry, RecordMutation, InvocationValue, ProcessRecord, Relat
 
 /** Apply the producer's declared mutation, never infer changes by comparing snapshots. */
 export function updateRecord(entry: RecordEntry, mutation: Exclude<RecordMutation, { kind: 'added' | 'replaced' }>): RecordEntry {
-  if (!['runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) throw new Error('Record mutation requires an invocation');
+  if (!['invocation', 'runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) throw new Error('Record mutation requires an invocation');
   const data = entry.data as RecordEntry['data'] & { status: string; value: InvocationValue };
   if (data.status !== 'running') throw new Error('A finished record cannot change');
   const value = data.value;

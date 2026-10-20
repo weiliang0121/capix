@@ -1,5 +1,5 @@
 import { isEqual } from 'es-toolkit';
-import { invocationLevels, invocationProcessStages, type ConversationActivities, type ConversationActivity, type ConversationActivityChange } from '@capix/protocol';
+import { callableKinds, invocationProcessStages, type ConversationActivities, type ConversationActivity, type ConversationActivityChange } from '@capix/protocol';
 
 const indexes = new WeakMap<ConversationActivities, ReadonlyMap<string, number>>();
 
@@ -83,29 +83,29 @@ function acceptIntegrity(next: ConversationActivities['integrity'], previous?: C
 }
 
 function assertCall(call: ConversationActivity, parent?: ConversationActivity): void {
-  if (!call || typeof call.contextId !== 'string' || !call.contextId || !invocationLevels.includes(call.level) || typeof call.label !== 'string' || !call.label || call.label.length > 120 || !['running', 'succeeded', 'failed', 'cancelled'].includes(call.status) || !['setup', ...invocationProcessStages].includes(call.phase) || !Number.isSafeInteger(call.round) || call.round < 0 || call.round > 2) throw new Error('处理过程调用身份或状态无效。');
+  if (!call || typeof call.contextId !== 'string' || !call.contextId || !callableKinds.includes(call.kind) || typeof call.label !== 'string' || !call.label || call.label.length > 120 || !['running', 'succeeded', 'failed', 'cancelled'].includes(call.status) || !['setup', ...invocationProcessStages].includes(call.phase) || !Number.isSafeInteger(call.round) || call.round < 0 || call.round > 2) throw new Error('处理过程调用身份或状态无效。');
   if ((call.startedAt !== undefined && !validTime(call.startedAt)) || (call.finishedAt !== undefined && !validTime(call.finishedAt)) || (call.status === 'running' ? call.finishedAt !== undefined : !call.finishedAt)) throw new Error('处理过程调用边界无效。');
-  if (call.level === 'runtime' ? call.parentContextId !== undefined || call.relation !== undefined : !parent || !allowsChild(parent.level, call.level)) throw new Error('处理过程父子归属无效。');
+  if (call.parentContextId === undefined ? call.relation !== undefined : !parent || !allowsChild(parent.kind, call.kind)) throw new Error('处理过程父子归属无效。');
   if (call.relation && (!['attached', 'returned', 'receiving', 'accepted', 'failed'].includes(call.relation.phase) || (call.relation.returned !== undefined && !['succeeded', 'failed', 'cancelled'].includes(call.relation.returned)) || (['receiving', 'accepted', 'failed'].includes(call.relation.phase) && call.relation.returned !== 'succeeded') || (call.relation.phase === 'returned' && !call.relation.returned))) throw new Error('处理过程父层接纳状态无效。');
 }
 
 function assertProgress(before: ConversationActivity, after: ConversationActivity): void {
-  if (before.contextId !== after.contextId || before.parentContextId !== after.parentContextId || before.level !== after.level || before.label !== after.label || (before.startedAt !== undefined && before.startedAt !== after.startedAt) || after.round < before.round) throw new Error('处理过程既有调用发生回退或改变。');
+  if (before.contextId !== after.contextId || before.parentContextId !== after.parentContextId || before.kind !== after.kind || before.label !== after.label || (before.startedAt !== undefined && before.startedAt !== after.startedAt) || after.round < before.round) throw new Error('处理过程既有调用发生回退或改变。');
   if (before.status === 'running' && (after.round === before.round ? !phaseCanAdvance(before.phase, after.phase) : before.phase === 'control' || after.phase === 'setup')) throw new Error('处理过程阶段发生回退。');
   if (before.status !== 'running' && (before.status !== after.status || before.finishedAt !== after.finishedAt || before.round !== after.round || before.phase !== after.phase)) throw new Error('已结束的调用不能重新运行或改写结果。');
   if (before.relation && (!after.relation || (before.relation.returned && before.relation.returned !== after.relation.returned) || !relationCanAdvance(before.relation.phase, after.relation.phase))) throw new Error('父层接纳事实发生回退或改变。');
 }
 
 function copyCall(call: ConversationActivity): ConversationActivity {
-  return Object.freeze({ contextId: call.contextId, ...(call.parentContextId ? { parentContextId: call.parentContextId } : {}), level: call.level, label: call.label, status: call.status, phase: call.phase, round: call.round, ...(call.startedAt ? { startedAt: call.startedAt } : {}), ...(call.finishedAt ? { finishedAt: call.finishedAt } : {}), ...(call.relation ? { relation: Object.freeze({ phase: call.relation.phase, ...(call.relation.returned ? { returned: call.relation.returned } : {}) }) } : {}) });
+  return Object.freeze({ contextId: call.contextId, ...(call.parentContextId ? { parentContextId: call.parentContextId } : {}), kind: call.kind, label: call.label, status: call.status, phase: call.phase, round: call.round, ...(call.startedAt ? { startedAt: call.startedAt } : {}), ...(call.finishedAt ? { finishedAt: call.finishedAt } : {}), ...(call.relation ? { relation: Object.freeze({ phase: call.relation.phase, ...(call.relation.returned ? { returned: call.relation.returned } : {}) }) } : {}) });
 }
 
 function validTime(value: string): boolean {
   return typeof value === 'string' && Number.isFinite(Date.parse(value));
 }
 
-function allowsChild(parent: ConversationActivity['level'], child: ConversationActivity['level']): boolean {
-  return (parent === 'runtime' && child === 'execution') || (parent === 'execution' && child === 'operation') || (parent === 'operation' && (child === 'operation' || child === 'attempt'));
+function allowsChild(parent: ConversationActivity['kind'], child: ConversationActivity['kind']): boolean {
+  return parent !== 'node' && child !== 'scene';
 }
 
 function relationCanAdvance(before: NonNullable<ConversationActivity['relation']>['phase'], after: NonNullable<ConversationActivity['relation']>['phase']): boolean {

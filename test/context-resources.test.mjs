@@ -1,12 +1,13 @@
+import { Driver } from '@capix/server-runtime';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence, defineAttempt } from '@capix/server-runtime';
+import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence, defineNode } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
-import { bindConversation, ConversationRuntimeDefinition, GenerateAnswerDefinition } from '@capix/observer-service';
+import { bindConversation, ConversationSceneDefinition, GenerateAnswerDefinition } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 
@@ -21,7 +22,7 @@ function provider() {
 
 test('Observer narrows resources at each action, captures fixed values and expires live endpoints with the call', async () => {
   const entities = createEnvironment();
-  const definition = new ConversationRuntimeDefinition();
+  const definition = new ConversationSceneDefinition();
   const views = [];
   const inspect = (current) => {
     const execute = current.run.execute;
@@ -29,12 +30,14 @@ test('Observer narrows resources at each action, captures fixed values and expir
       views.push({ definition: current, resources: { ...work.resources } });
       return execute.call(this, work);
     };
-    for (const child of current.children ?? []) inspect(child);
+    for (const child of current.members ?? []) inspect(child);
   };
-  inspect(definition.executionDefinition);
-  const runtime = bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider())));
+  inspect(definition.taskDefinition);
+  const driver = new Driver();
+  const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider())));
   let first;
-  await runtime.run(
+  await driver.run(
+    scene,
     { messages: [{ role: 'user', content: '你好' }] },
     {
       settings,
@@ -46,9 +49,9 @@ test('Observer narrows resources at each action, captures fixed values and expir
     },
   );
   const firstViews = [...views];
-  const entry = firstViews.find((view) => view.definition === definition.executionDefinition).resources;
-  const preparation = firstViews.find((view) => view.definition === definition.executionDefinition.operationDefinitions.preparation).resources;
-  const generation = firstViews.find((view) => view.definition === definition.executionDefinition.operationDefinitions.generation).resources;
+  const entry = firstViews.find((view) => view.definition === definition.taskDefinition).resources;
+  const preparation = firstViews.find((view) => view.definition === definition.taskDefinition.operationDefinitions.preparation).resources;
+  const generation = firstViews.find((view) => view.definition === definition.taskDefinition.operationDefinitions.generation).resources;
   assert.equal(entry.history.locate().end, 1);
   assert.deepEqual(Object.keys(preparation), ['activeContent']);
   assert.equal(preparation.activeContent.transcript, undefined);
@@ -63,16 +66,16 @@ test('Observer narrows resources at each action, captures fixed values and expir
     first.children.values().map((relation) => relation.key),
     ['preparation', 'decision', 'generation', 'decision', 'extraction'],
   );
-  const decisions = firstViews.filter((view) => view.definition === definition.executionDefinition.operationDefinitions.decision);
+  const decisions = firstViews.filter((view) => view.definition === definition.taskDefinition.operationDefinitions.decision);
   assert.equal(decisions.length, 2);
   assert.ok(
     decisions.every((view) => Object.keys(view.resources).length === 0),
     'ordinary deterministic decisions need no inherited history or model capabilities',
   );
   views.length = 0;
-  await runtime.run({ messages: [{ role: 'user', content: '继续' }] }, { settings: { ...settings, timeoutMs: 2000 } });
+  await driver.run(scene, { messages: [{ role: 'user', content: '继续' }] }, { settings: { ...settings, timeoutMs: 2000 } });
   assert.equal(views[0].resources.history.end, 3);
-  const nextGeneration = views.find((view) => view.definition === definition.executionDefinition.operationDefinitions.generation).resources;
+  const nextGeneration = views.find((view) => view.definition === definition.taskDefinition.operationDefinitions.generation).resources;
   assert.equal(nextGeneration.timeoutMs, 2000);
   assert.equal(generation.timeoutMs, 1000);
   assert.equal(entry.history.end, 1);
@@ -191,8 +194,8 @@ test('sequence preserves distinct offers even when children use the same alias',
     throw new Error('must not execute during assembly');
   };
   const metadata = { name: 'test', label: 'test', source: 'test', callee: 'test' };
-  const first = defineAttempt()({ ...metadata, run: { requires: { value: one.request() }, execute } });
-  const second = defineAttempt()({ ...metadata, run: { requires: { value: two.request() }, execute } });
+  const first = defineNode()({ ...metadata, run: { requires: { value: one.request() }, execute } });
+  const second = defineNode()({ ...metadata, run: { requires: { value: two.request() }, execute } });
   const sequence = new Sequence().step('first', { use: first, input: () => null }).step('second', { use: second, input: () => null });
   assert.equal(sequence.steps[0].use, first);
   assert.equal(sequence.steps[1].use, second);
@@ -244,7 +247,7 @@ test('E requests fail before E attachment, recording or work while the parent R 
   assert.equal(runtime.running, false);
   const entries = [...recorder.book.values()];
   assert.equal(entries.filter((entry) => entry.kind === 'execution').length, 0);
-  const parent = entries.find((entry) => entry.kind === 'runtime-call');
+  const parent = entries.find((entry) => entry.structureKind === 'scene');
   assert.equal(parent.status, 'failed');
   assert.match(parent.value.error.message, /Unfulfilled resource request/);
 });
@@ -310,8 +313,8 @@ test('model offers separate creation and reading while preserving provider metho
     assert.equal(this, model);
     return invoke(...args);
   };
-  const definition = new ConversationRuntimeDefinition();
-  const generation = definition.executionDefinition.operationDefinitions.generation;
+  const definition = new ConversationSceneDefinition();
+  const generation = definition.taskDefinition.operationDefinitions.generation;
   const execute = generation.run.execute;
   generation.run.execute = function (work) {
     const creator = work.resources.modelCreator;
@@ -327,6 +330,7 @@ test('model offers separate creation and reading while preserving provider metho
     assert.equal(work.transcriptRange, undefined);
     return execute.call(this, work);
   };
-  const runtime = bindConversation(definition, entities, new ModelInteractions(new ModelSource(model)));
-  await runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
+  const driver = new Driver();
+  const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(model)));
+  await driver.run(scene, { messages: [{ role: 'user', content: '你好' }] }, { settings });
 });

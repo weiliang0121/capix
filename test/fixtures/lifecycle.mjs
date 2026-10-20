@@ -1,5 +1,5 @@
 import { contextWithSource } from './observer.mjs';
-import { Invocation, InvocationChildren, OperationContext, AttemptContext, bindInvocationObservation, Clock } from '@capix/server-runtime';
+import { Invocation, InvocationChildren, CallableContext, bindInvocationObservation, invocationRecording, Clock } from '@capix/server-runtime';
 import { fixtureState } from './runtime.mjs';
 import { callFor, recordFor, rememberCall } from './calls.mjs';
 export { callFor, recordFor, rememberCall } from './calls.mjs';
@@ -10,11 +10,11 @@ const manual = new WeakMap();
 /** Explicit record probes for synchronous ownership tests; these are not executed calls. */
 export function lifecycleFor(runtime) {
   const state = fixtureState(runtime);
-  const make = (level, establish, description) => ({
+  const make = (kind, establish, description, declarations = state.observe) => ({
     create(execute) {
       const { context, parent, root } = establish();
-      const identity = { contextId: context.id, level, parentContextId: parent.context.id };
-      const observation = bindInvocationObservation({ identity, description, declarations: state.observe, resources: context.resources }, state.recording ? [state.recording] : [], parent.observation);
+      const identity = { contextId: context.id, kind, parentContextId: parent.context.id };
+      const observation = bindInvocationObservation({ identity, description, declarations, resources: context.resources }, state.recording ? [state.recording] : [], parent.observation);
       const clock = state.recorder?.clock ?? new Clock();
       if (execute) {
         const invocation = state.decorate(new Invocation({ context, parent: { invocation: parent }, identity, description, observation, clock, work: { execute, raises: description?.raises, maxRounds: 1 }, signal: context.signal }));
@@ -88,21 +88,26 @@ export function lifecycleFor(runtime) {
   });
   return {
     execution(request) {
-      return make('execution', () => {
-        const root = state.beginRuntime(request);
-        const context = contextWithSource(request.input, request, root.call.context);
-        return { context, parent: root.call, root };
-      });
+      return make(
+        'group',
+        () => {
+          const root = state.beginRuntime(request);
+          const context = contextWithSource(request.input, request, root.call.context);
+          return { context, parent: root.call, root };
+        },
+        undefined,
+        state.recorder ? [invocationRecording({ role: 'conversation-task' })] : [],
+      );
     },
     operation(execution, operation, input, parent) {
       if (parent && origins.get(parent) !== execution) throw new Error('Parent operation belongs to another execution');
       return make(
-        'operation',
+        'group',
         () => {
           execution.requireRunning();
           parent?.requireRunning();
           const owner = parent ?? execution;
-          const context = new OperationContext(owner, input);
+          const context = new CallableContext(input, 'group', { signal: owner.signal });
           origins.set(context, execution);
           return { context, parent: callFor(owner) };
         },
@@ -111,10 +116,10 @@ export function lifecycleFor(runtime) {
     },
     attempt(operation, attempt, input) {
       return make(
-        'attempt',
+        'node',
         () => {
           operation.requireActive();
-          return { context: new AttemptContext(operation, input), parent: callFor(operation) };
+          return { context: new CallableContext(input, 'node', { signal: operation.signal }), parent: callFor(operation) };
         },
         attempt,
       );

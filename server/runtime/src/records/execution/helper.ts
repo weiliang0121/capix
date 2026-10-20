@@ -2,7 +2,7 @@ import type { InvocationFailureFact } from '@capix/protocol';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 import type { Recorder } from '../recorder.js';
 import { InvocationBoundaryRecordHelper } from '../invocation/boundary/helper.js';
-import type { RuntimeErrorValue, ExecutionValue, ExecutionRecordSnapshot } from '@capix/protocol';
+import type { RuntimeErrorValue, ExecutionValue, LegacyExecutionRecordSnapshot } from '@capix/protocol';
 
 import type { RecordBook } from '../book.js';
 import { OperationRecordHelper } from '../operation/helper.js';
@@ -41,7 +41,7 @@ export class ExecutionRecordHelper {
     return record;
   }
 
-  static snapshot(recorder: Recorder, id: string): ExecutionRecordSnapshot {
+  static snapshot(recorder: Recorder, id: string): LegacyExecutionRecordSnapshot {
     const execution = this.get(recorder.book, id);
     const parent = execution.parentId ? recorder.book.get(execution.parentId) : undefined;
     if (!(parent instanceof RuntimeCallRecord)) throw new Error('Execution requires its recorded Runtime call');

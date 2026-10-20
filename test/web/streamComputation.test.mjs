@@ -17,7 +17,7 @@ test('preview-only app frames do not revisit unchanged observation history or ac
   const observation = observationState(ObservationReplica.receive(undefined, initial));
   const project = createDataProjection();
   const current = live();
-  const calls = Array.from({ length: 512 }, (_, index) => ({ contextId: `call-${index}`, level: 'operation', label: '生成回答', status: index === 511 ? 'running' : 'succeeded', phase: 'execute', round: 1 }));
+  const calls = Array.from({ length: 512 }, (_, index) => ({ contextId: `call-${index}`, kind: 'group', label: '生成回答', status: index === 511 ? 'running' : 'succeeded', phase: 'execute', round: 1 }));
   current.remote = { ...current.remote, activities: { calls, integrity: { status: 'complete' } } };
   const state = { ...client({ conversation: transport() }).getSnapshot(), transcriptId, observation, submission: current, submissions: new Map([[current.id, current]]) };
   const first = project(state);

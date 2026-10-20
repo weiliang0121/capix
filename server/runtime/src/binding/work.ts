@@ -1,6 +1,6 @@
 import type { invocationSignature } from '../definition/signature.js';
-import type { InvocationLevel } from '@capix/protocol';
-import type { InvocationCheckpointDefinition, InvocationCheckpointPoint, InvocationDefinition } from '../definition/invocation.js';
+import type { CallableKind } from '@capix/protocol';
+import type { InvocationCheckpointDefinition, InvocationCheckpointPoint, CallableDefinition } from '../definition/callable.js';
 import type { Resolution, Continue } from '../definition/work.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationCheckpointWork } from '../checkpoint/work.js';
@@ -28,7 +28,7 @@ function authorOutput<Output>(value: Output): Output {
 }
 
 /** Fixed declaration adaptation at one Bound position; each invocation gets its own access state. */
-export class InvocationWorkBinding<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, ExceptionResources extends object, Level extends InvocationLevel> implements InvocationWork<Input, Output, Context> {
+export class InvocationWorkBinding<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, ExceptionResources extends object, Kind extends CallableKind> implements InvocationWork<Input, Output, Context> {
   readonly output: InvocationWork<Input, Output, Context>['output'];
   readonly maxRounds: 1 | 2;
   readonly raises: InvocationWork<Input, Output, Context>['raises'];
@@ -39,8 +39,9 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
   readonly #accesses = new WeakMap<Invocation<Input, Output, Context>, InvocationAccess<Input, Output, Context>>();
 
   constructor(
-    private readonly declaration: Omit<InvocationDefinition<Input, Output, Level, Resources, ExceptionResources, any>, typeof invocationSignature> & { readonly level: Level },
+    private readonly declaration: Omit<CallableDefinition<Input, Output, Kind, Resources, ExceptionResources, any>, typeof invocationSignature> & { readonly kind: Kind },
     private readonly children: BoundChildren,
+    private readonly composite: boolean,
   ) {
     this.#childBindingsBuilder = new ChildBindingsBuilder(children, new BoundReceptions(declaration.receptions ?? [], children));
     this.output = declaration.output;
@@ -102,7 +103,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
     return resolution;
   }
 
-  private async resume(point: InvocationCheckpointPoint<Input, Output, Level, any, any, any, any, any>, invocation: Invocation<Input, Output, Context>, state: unknown, references: CheckpointReferences) {
+  private async resume(point: InvocationCheckpointPoint<Input, Output, Kind, any, any, any, any, any>, invocation: Invocation<Input, Output, Context>, state: unknown, references: CheckpointReferences) {
     const access = this.accessFor(invocation).enter(`checkpoint:${point.name}`, point.resume.requires, point.resume.uses ?? []);
     const registry = this.accessFor(invocation).references;
     const saved = Object.freeze(Object.fromEntries(Object.entries(references).map(([name, value]) => [name, Array.isArray(value) ? Object.freeze(value.map((ref) => registry.fromSaved(ref))) : registry.fromSaved(value as CheckpointReference)])));
@@ -117,8 +118,8 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
   }
 
   private childPort(access: ReturnType<InvocationAccess<Input, Output, Context>['enter']>) {
-    // The A author has no child capability even though the mechanism uniformly tracks relations.
-    return this.declaration.level === 'attempt' ? {} : { children: access.children };
+    // Only composition installs member actions; all calls retain the same relation mechanism.
+    return this.composite ? { children: access.children } : {};
   }
 
   private executionWork(invocation: Invocation<Input, Output, Context>, access: ReturnType<InvocationAccess<Input, Output, Context>['enter']>) {
@@ -153,7 +154,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
     return access;
   }
 
-  private bindCheckpoint(checkpoint: InvocationCheckpointDefinition<Input, Output, Level, any>): InvocationCheckpointWork<Input, Output, Context> {
+  private bindCheckpoint(checkpoint: InvocationCheckpointDefinition<Input, Output, Kind, any>): InvocationCheckpointWork<Input, Output, Context> {
     const points = Object.fromEntries(
       checkpoint.points.map((point) => [
         point.name,

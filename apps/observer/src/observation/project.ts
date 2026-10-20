@@ -1,22 +1,26 @@
 import { observationStatus } from './status.js';
 import { hasOutput, readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
-import type { ExecutionRecordSnapshot, OperationRecord, InvocationValue, GenerationOutput } from '@capix/protocol';
+import type { ExecutionRecordSnapshot, CallableRecord, InvocationValue, GenerationOutput } from '@capix/protocol';
 import type { CallSpan, Trace } from './types.js';
 export { validateExecutionRecordSnapshot } from '@capix/protocol';
 
-/** Each view is derived from the same current-format facts. */
+/** A task is selected by the service. Every call keeps its actual kind and direct parent. */
 export function projectExecution(facts: ExecutionRecordSnapshot): Trace {
   validateExecutionRecordSnapshot(facts);
   const execution = facts.execution;
-  const starts = new Map(facts.events.filter((e) => e.value.type === 'call').map((e) => [e.callId, e]));
-  const ends = new Map(facts.events.filter((e) => e.value.type !== 'call').map((e) => [e.callId, e]));
-  const result = (id: string, body: InvocationValue, status: OperationRecord['status']) => {
+  const startedAt = execution.value.startedAt;
+  if (startedAt === undefined) throw new Error('Conversation task has no recorded start');
+  const starts = new Map(facts.boundaries.filter((event) => event.value.type === 'call').map((event) => [event.callId, event]));
+  const ends = new Map(facts.boundaries.filter((event) => event.value.type !== 'call').map((event) => [event.callId, event]));
+  const origin = starts.get(execution.id);
+  const byId = new Map([...facts.calls, ...(facts.ancestors ?? []), ...(facts.rootCall ? [facts.rootCall] : [])].map((call) => [call.id, call]));
+  const result = (id: string, body: InvocationValue, status: CallableRecord['status']) => {
     const start = starts.get(id);
     const end = ends.get(id);
     return {
       status: status === 'succeeded' ? ('passed' as const) : observationStatus(status, facts.archive),
-      offsetMs: start?.offsetMs ?? 0,
-      ...(end && start ? { durationMs: end.offsetMs - start.offsetMs } : {}),
+      offsetMs: start && origin ? (start.scopeId === origin.scopeId ? start.offsetMs - origin.offsetMs : Date.parse(start.occurredAt) - Date.parse(origin.occurredAt)) : 0,
+      ...(start && end ? { durationMs: end.offsetMs - start.offsetMs } : {}),
       input: body.input,
       processes: body.processes,
       ...(hasOutput(body) ? { output: readOutput(body) } : {}),
@@ -24,80 +28,47 @@ export function projectExecution(facts: ExecutionRecordSnapshot): Trace {
       ...(body.failure ? { failure: body.failure } : {}),
     };
   };
-  const root: CallSpan = {
-    recordType: 'execution',
-    contextId: execution.contextId,
-    id: execution.id,
+  const calls: CallSpan[] = facts.calls.map((call) => ({
+    recordType: call.structureKind,
+    contextId: call.contextId,
+    id: call.id,
     executionId: execution.id,
-    operation: 'execution',
-    caller: 'caller',
-    callee: 'execution',
-    label: '执行调用',
-    source: 'server/runtime/src/structure/execution.ts · BoundExecution.create',
-    ...result(execution.id, execution.value, execution.status),
-  };
-  const operations = new Map(facts.operations.map((operation) => [operation.id, operation]));
-  const calls: CallSpan[] = [
-    root,
-    ...facts.operations.map((op) => ({
-      recordType: 'operation' as const,
-      contextId: op.contextId,
-      id: op.id,
-      executionId: op.executionId,
-      operationInstanceId: op.operationInstanceId,
-      operation: op.operation,
-      parentId: op.parentOperationId ?? op.executionId,
-      caller: op.parentOperationId ? ('operation' as const) : ('execution' as const),
-      callee: 'operation' as const,
-      label: op.label,
-      source: op.source,
-      ...result(op.id, op.value, op.status),
-    })),
-    ...facts.attempts.map((attempt) => {
-      const owner = operations.get(attempt.operationId)!;
-      return {
-        recordType: 'attempt' as const,
-        contextId: attempt.contextId,
-        id: attempt.id,
-        executionId: owner.executionId,
-        operationInstanceId: owner.operationInstanceId,
-        operation: `${owner.operation}.${attempt.name}`,
-        parentId: owner.id,
-        caller: 'operation' as const,
-        callee: 'attempt' as const,
-        target: attempt.callee,
-        label: attempt.label,
-        source: attempt.source,
-        ...result(attempt.id, attempt.value, attempt.status),
-      };
-    }),
-  ];
-  calls.sort((a, b) => (starts.get(a.id)?.sequence ?? Number.MAX_SAFE_INTEGER) - (starts.get(b.id)?.sequence ?? Number.MAX_SAFE_INTEGER));
+    operationInstanceId: call.structureId,
+    operation: call.name,
+    ...(call.parentId ? { parentId: call.parentId } : {}),
+    caller: (call.parentId ? byId.get(call.parentId)?.structureKind : undefined) ?? 'caller',
+    callee: call.structureKind,
+    target: call.callee,
+    label: call.label ?? call.name ?? '调用',
+    source: call.source ?? '',
+    ...result(call.id, call.value, call.status),
+  }));
+  calls.sort((left, right) => (starts.get(left.id)?.sequence ?? 0) - (starts.get(right.id)?.sequence ?? 0));
+  const root = calls.find((call) => call.id === execution.id)!;
   const groups = new Map<string, Trace['nodes'][number]['group']>();
   for (const call of calls) {
     const operation = call.operation;
-    const group = operation && ['selection', 'prepareContext', 'maintainContext'].some((name) => operation === name || operation.startsWith(`${name}.`)) ? 'selection' : operation?.startsWith('answer') ? 'answer' : operation?.startsWith('memory') ? 'memory' : ((call.parentId ? groups.get(call.parentId) : undefined) ?? 'flow');
+    const group = operation && ['selection', 'prepareContext', 'maintainContext'].includes(operation) ? 'selection' : operation === 'answer' || operation === 'processDocument' ? 'answer' : operation === 'memory' ? 'memory' : ((call.parentId ? groups.get(call.parentId) : undefined) ?? 'flow');
     groups.set(call.id, group);
   }
+  const ownIds = new Set(facts.calls.map((call) => call.id));
+  const events = facts.boundaries.filter((event) => ownIds.has(event.callId));
   return {
     facts,
     id: execution.id,
-    startedAt: execution.value.startedAt,
-    durationMs: facts.events.at(-1)?.offsetMs ?? 0,
+    startedAt,
+    durationMs: root.durationMs ?? Math.max(0, ...calls.map((call) => call.offsetMs + (call.durationMs ?? 0))),
     status: observationStatus(execution.status, facts.archive),
-    nodes: calls.map((call) => ({
-      ...call,
-      group: groups.get(call.id)!,
-    })),
+    nodes: calls.map((call) => ({ ...call, group: groups.get(call.id)! })),
     callSequence: {
       version: 1,
       calls,
-      events: facts.events,
+      events,
       participants: [
-        { id: 'caller', label: '调用方', description: '运行入口' },
-        { id: 'execution', label: 'Execution', description: '操作的显式组合' },
-        { id: 'operation', label: 'Operation', description: '具名动作的组合' },
-        { id: 'attempt', label: 'Attempt', description: '具名动作的一次调用，本地处理或外部调用由动作自身实现' },
+        { id: 'caller', label: '调用方', description: '调用入口' },
+        { id: 'scene', label: 'Scene', description: '整体场景的处理' },
+        { id: 'group', label: 'Group', description: '组合成员并实现整体处理' },
+        { id: 'node', label: 'Node', description: '直接处理，可以访问本地实体或外部交互' },
       ],
     },
     ...(root.status === 'passed' ? { result: root.output as GenerationOutput } : {}),

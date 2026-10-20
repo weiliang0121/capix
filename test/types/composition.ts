@@ -1,8 +1,8 @@
-import { Sequence, InvocationEntry, defineOperation, defineRuntime, type OperationDefinition, type AttemptDefinition, type ChildCalls, type OperationWork, type ExecutionWork, type RuntimeWork, assembleRuntime, type ExecutionDefinition, type RuntimeDefinition } from '@capix/server-runtime';
+import { Sequence, InvocationEntry, defineGroup, defineScene, type GroupDefinition, type NodeDefinition, type ChildCalls, type GroupWork, type SceneWork, Driver, type SceneDefinition } from '@capix/server-runtime';
 import { bindChildResources, type ResourceRefinement } from '@capix/server-runtime';
 
 const bounded = new ResourceOffer<{ readonly allowed: readonly string[] }, readonly string[], { readonly allowed: readonly string[] }, string>('bounded', (source) => source.allowed, 'access', { refine: (source, selected) => ({ allowed: source.allowed.filter((value) => value === selected) }) });
-declare const fileOperation: OperationDefinition<{ readonly path: string }, string>;
+declare const fileOperation: GroupDefinition<{ readonly path: string }, string>;
 bindChildResources(fileOperation, [bounded.refine<{ readonly path: string }>((input) => input.path)]);
 // @ts-expect-error only a resource offer can issue the nominal refinement contract
 const forgedRefinement: ResourceRefinement<{ readonly path: string }> = { offer: bounded.request().offer };
@@ -14,17 +14,17 @@ issuedRefinement.apply = () => ({ allowed: ['outside'] });
 bindChildResources(fileOperation, [bounded.refine<number>((input) => String(input))]);
 // @ts-expect-error selection must use the contract defined by the resource
 bounded.refine<{ readonly path: string }>(() => 42);
-declare const fileExecution: ExecutionDefinition<{ readonly path: string }, string>;
-// @ts-expect-error E captures its own resources; child refinement is for O/A
+declare const fileExecution: GroupDefinition<{ readonly path: string }, string>;
+// Any member binding can explicitly refine its subtree supply.
 bindChildResources(fileExecution, [bounded.refine<{ readonly path: string }>((input) => input.path)]);
 
-declare const length: OperationDefinition<string, number>;
-declare const format: OperationDefinition<number, string>;
-declare const leaf: AttemptDefinition<string, string>;
-declare const execution: ExecutionDefinition<string, number>;
-declare const parent: ExecutionWork<string, number, {}, typeof length | typeof format>;
-declare const operation: OperationWork<string, string, {}, typeof leaf>;
-declare const runtimeWork: RuntimeWork<string, number, {}, typeof execution>;
+declare const length: GroupDefinition<string, number>;
+declare const format: GroupDefinition<number, string>;
+declare const leaf: NodeDefinition<string, string>;
+declare const execution: GroupDefinition<string, number>;
+declare const parent: GroupWork<string, number, {}, typeof length | typeof format>;
+declare const operation: GroupWork<string, string, {}, typeof leaf>;
+declare const runtimeWork: SceneWork<string, number, {}, typeof execution>;
 declare const children: ChildCalls;
 
 const sequence = new Sequence<string>().step('length', { use: length, input: ({ input }) => input }).step('format', { use: format, input: ({ outputs }) => outputs.length, accept: (_scope, value) => ({ text: value }) });
@@ -70,21 +70,21 @@ const acceptedAlternative: Promise<number> = operation.children.entry(alternativ
 void acceptedAlternative;
 
 // @ts-expect-error raw object syntax has no checked declaration signature; use the factory or a named class
-const rawDefinition: OperationDefinition<string, number> = { level: 'operation', name: 'raw', label: 'raw', source: 'test', children: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (work) => work.input.length } };
+const rawDefinition: GroupDefinition<string, number> = { kind: 'group', name: 'raw', label: 'raw', source: 'test', members: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (work) => work.input.length } };
 void rawDefinition;
-const objectDefinition: OperationDefinition<string, number> = defineOperation<string, number>()({
+const objectDefinition: GroupDefinition<string, number> = defineGroup<string, number>()({
   name: 'length',
   label: 'length',
   source: 'test',
-  children: [],
+  members: [],
   maxRounds: 1,
   raises: [],
   run: { requires: {}, execute: (work) => work.input.length },
 });
 const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string>().step('length', { use: objectDefinition, input: ({ input }) => input }).run('hello', children);
 void objectOutput;
-const runtimeDefinition: RuntimeDefinition<string, number> = defineRuntime<string, number>()({
-  children: [execution],
+const runtimeDefinition: SceneDefinition<string, number> = defineScene<string, number>()({
+  members: [execution],
   maxRounds: 1,
   raises: [],
   run: {
@@ -96,14 +96,15 @@ const runtimeDefinition: RuntimeDefinition<string, number> = defineRuntime<strin
     },
   },
 });
-const runtime = assembleRuntime(runtimeDefinition, { providers: [], source: { capture: (_input, _options: { signal?: AbortSignal }) => null } });
-const rootOutput: Promise<number> = runtime.run('input', {});
+const driver = new Driver();
+const bound = driver.bind(runtimeDefinition, { providers: [], source: { capture: (_input, _options: { signal?: AbortSignal }) => null } });
+const rootOutput: Promise<number> = driver.run(bound, 'input', {});
 void rootOutput;
 // @ts-expect-error R input retains its own declared contract
-runtime.run(42, {});
-// @ts-expect-error R cannot register A as an E
-assembleRuntime({ ...runtimeDefinition, children: [leaf] }, { providers: [], source: { capture: () => null } });
-// @ts-expect-error R cannot call O directly
+driver.run(bound, 42, {});
+// A Scene can directly register a Node.
+driver.bind({ ...runtimeDefinition, members: [leaf] }, { providers: [], source: { capture: () => null } });
+// Structurally equal signatures are permitted; binding still checks exact identity.
 runtimeWork.children.create(length, 'input');
 // @ts-expect-error E cannot be a direct child of O
 operation.children.create(execution, 'input');
@@ -118,7 +119,7 @@ import { ExceptionContract, ResourceOffer, type InvocationRunDefinition, type In
 const issue = new ExceptionContract<{ reason: string }>('test.issue');
 const workValue = new ResourceOffer('work-value', (value: number) => value);
 const handlingValue = new ResourceOffer('handling-value', (value: string) => value);
-const run: InvocationRunDefinition<string, string, 'operation', { value: number }> = {
+const run: InvocationRunDefinition<string, string, 'group', { value: number }> = {
   requires: { value: workValue.request() },
   execute(work) {
     const value: number = work.resources.value;
@@ -127,7 +128,7 @@ const run: InvocationRunDefinition<string, string, 'operation', { value: number 
     return String(value);
   },
 };
-const exceptions: InvocationExceptionDefinition<string, string, 'operation', { repair: string }> = {
+const exceptions: InvocationExceptionDefinition<string, string, 'group', { repair: string }> = {
   requires: { repair: handlingValue.request() },
   accepts: [issue],
   handle(work) {
@@ -137,14 +138,14 @@ const exceptions: InvocationExceptionDefinition<string, string, 'operation', { r
     return work.return(repair);
   },
 };
-const composed: OperationDefinition<string, string, { value: number }, { repair: string }> = defineOperation<string, string>()({ name: 'typed', label: 'typed', source: 'test', children: [], maxRounds: 1, raises: [issue], run: { ...run, uses: [] }, exceptions: { ...exceptions, uses: [] } });
+const composed: GroupDefinition<string, string, { value: number }, { repair: string }> = defineGroup<string, string>()({ name: 'typed', label: 'typed', source: 'test', members: [], maxRounds: 1, raises: [issue], run: { ...run, uses: [] }, exceptions: { ...exceptions, uses: [] } });
 const composedResult: Promise<string> = children.create(composed, 'input').run();
 void composedResult;
 const childFact = operation.children.facts.get(operation.children.create(leaf, 'input').ref);
 // @ts-expect-error child facts do not grant its resources to the parent
 childFact.resources;
 
-import { defineObservation, type InvocationFact, type RuntimeStructureFact, type ObservationDefinition, type ObservationDeclaration } from '@capix/server-runtime';
+import { defineObservation, type InvocationFact, type DriverFact, type ObservationDefinition, type ObservationDeclaration } from '@capix/server-runtime';
 const counter = new ResourceOffer('counter', (value: { increment(): void }) => value);
 const callProbe: ObservationDeclaration<InvocationFact> = defineObservation<InvocationFact, { counter: { increment(): void } }>({
   requires: { counter: counter.request() },
@@ -160,7 +161,7 @@ const callProbe: ObservationDeclaration<InvocationFact> = defineObservation<Invo
   },
 });
 // @ts-expect-error structure facts and per-call facts are different observation contracts
-const structureProbe: ObservationDeclaration<RuntimeStructureFact> = callProbe;
+const structureProbe: ObservationDeclaration<DriverFact> = callProbe;
 // @ts-expect-error declarations do not own per-invocation resource binding
 callProbe.bind;
 const wrongPortProbe: ObservationDefinition<InvocationFact, { counter: { increment(): void } }> = {

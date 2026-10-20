@@ -41,8 +41,8 @@ test('two persisted conversations retain separate messages, memories, records an
   const second = host.create().id;
   const left = host.open(first);
   const right = host.open(second);
-  await left.runtime.run({ messages: [{ role: 'user', content: '第一段主题' }] }, { settings });
-  await right.runtime.run({ messages: [{ role: 'user', content: '第二段主题' }] }, { settings });
+  await left.driver.run(left.scene, { messages: [{ role: 'user', content: '第一段主题' }] }, { settings });
+  await right.driver.run(right.scene, { messages: [{ role: 'user', content: '第二段主题' }] }, { settings });
   const leftMemory = remember(left, '第一段记忆');
   const rightMemory = remember(right, '第二段记忆');
   const leftRecords = left.book.exportState();
@@ -74,7 +74,7 @@ test('two persisted conversations retain separate messages, memories, records an
   for (const entry of rightRecords.entries) assert.equal(restoredLeft.book.get(entry.data.id), undefined);
   assert.equal(observeOverview(restoredLeft).executions.length, 1);
   assert.equal(observeOverview(restoredRight).executions.length, 1);
-  await restoredRight.runtime.run({ messages: [{ role: 'user', content: '只继续第二段' }] }, { settings });
+  await restoredRight.driver.run(restoredRight.scene, { messages: [{ role: 'user', content: '只继续第二段' }] }, { settings });
   assert.equal(restoredRight.transcript.length, 4);
   assert.equal(restoredLeft.transcript.length, 2);
   restoredLeft.close();
@@ -110,7 +110,7 @@ test('v2 single-conversation migration preserves identities, indexes, source own
   const host = disk.open();
   const id = host.list().defaultConversationId;
   const environment = host.open(id);
-  await environment.runtime.run({ messages: [{ role: 'user', content: ' \n '.repeat(40) + '原有对话' }] }, { settings });
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: ' \n '.repeat(40) + '原有对话' }] }, { settings });
   const saved = host.persistence.loadContent(id);
   delete saved.transcript.appends;
   delete saved.memories.applies;

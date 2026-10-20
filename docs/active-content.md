@@ -4,23 +4,23 @@
 
 ## 归属与三个时机
 
-| 组成                   | 决定什么                                         | 不承担什么                          |
-| ---------------------- | ------------------------------------------------ | ----------------------------------- |
-| R 的普通资源动作       | 校验服务输入、正式追加消息，取得 messageIndex    | 不维护模型容量、不替 E 选历史       |
-| E 的普通输入与来源捕获 | message/messageIndex；固定本次模型配置和原文定位 | 不隐式读取最终工作材料              |
-| prepareContext O       | 可选维护后捕获本次消息、记忆值，返回固定材料     | 不默认裁剪、不调用选择模型          |
-| maintainContext O      | 在明确边界执行注入策略、接纳决定并落实索引       | 不递归监听每一次实体写入            |
-| ActiveContent          | 活跃成员、复合依据、受控 capture/apply           | 不拥有消息/记忆，不产生独立内容身份 |
+| 组成                            | 决定什么                                         | 不承担什么                          |
+| ------------------------------- | ------------------------------------------------ | ----------------------------------- |
+| Scene 的普通资源动作            | 校验服务输入、正式追加消息，取得 messageIndex    | 不维护模型容量、不替任务选择历史    |
+| 任务 Group 的普通输入与来源捕获 | message/messageIndex；固定本次模型配置和原文定位 | 不隐式读取最终工作材料              |
+| prepareContext Group            | 可选维护后捕获本次消息、记忆值，返回固定材料     | 不默认裁剪、不调用选择模型          |
+| maintainContext Group           | 在明确边界执行注入策略、接纳决定并落实索引       | 不递归监听每一次实体写入            |
+| ActiveContent                   | 活跃成员、复合依据、受控 capture/apply           | 不拥有消息/记忆，不产生独立内容身份 |
 
 ```text
-R 正式 append
-  → E 普通输入 { message, messageIndex, fileTask? }
-  → prepareContext O
-      → 可选 maintainContext O（before-request）
+Scene 正式 append
+  → 任务 Group 普通输入 { message, messageIndex, fileTask? }
+  → prepareContext Group
+      → 可选 maintainContext Group（before-request）
       → capture 固定材料
   → 决策 / 回答或文件能力
   → 正式回答、记忆收尾
-  → 可选 maintainContext O（after-content）
+  → 可选 maintainContext Group（after-content）
 ```
 
 澄清结论正式落实后也可进入 after-content。前序步骤失败不会无条件执行后处理；已落实消息、回答或记忆不因后续维护失败回滚。每个合法边界调用一次，没有自动重试、递归维护或框架预设的容量压缩。
@@ -65,9 +65,9 @@ capture 返回冻结值，不返回以后可能读到新内容的句柄。消息
 
 ## 资源与维护装配
 
-`ActiveContentResource.read` 只提供 capture；manage 提供 capture/apply。两者在 access 时通过当前调用的受控端点访问，不在 E 资源绑定时提前读取材料。绑定供应 ActiveContent 引用，业务只取得声明申请的端点。索引与必要内容同步独立于 Recorder，关闭观测不会停止索引更新。
+`ActiveContentResource.read` 只提供 capture；manage 提供 capture/apply。两者在 access 时通过当前调用的受控端点访问，不在任务 Group 的来源捕获时提前读取材料。绑定供应 ActiveContent 引用，业务只取得声明申请的端点。索引与必要内容同步独立于 Recorder，关闭观测不会停止索引更新。
 
-`maintenance` 接受普通函数，或普通 `OperationDefinition<ContextMaintenanceInput, ActiveContentSelection, ...>`。输入包含 phase、当前 material 和本次 settings。普通函数适合纯数据规则；需要模型或其他能力时提供 O，由该 O 的声明直接申请资源。绑定解算保留子树供给；维护 O 和准备 O 不为透传而申请子层资源。它继续遵守 E→O、O→O/A 的位置规则，不要求内核认识维护业务。
+`maintenance` 接受普通函数，或普通 `GroupDefinition<ContextMaintenanceInput, ActiveContentSelection, ...>`。输入包含 phase、当前 material 和本次 settings。普通函数适合纯数据规则；需要模型或其他能力时提供 Group，由该声明直接申请资源。绑定解算保留子树供给；维护 Group 和准备 Group 不为透传而申请子层资源。它继续遵守 Scene/Group 可组合 Group/Node、Node 无成员的结构规则，不要求内核认识维护业务。
 
 以下是程序化装配示例。保留最近十二条只是一项显式业务策略，**不是框架默认行为，也不保证下次请求容量充足**：
 
@@ -86,7 +86,7 @@ const environment = initializeObserver(provider, [], {
 });
 ```
 
-若策略 O 自己追加消息或更新记忆，其输入 basis 会过期；它必须通过声明的 read 资源明确取得新 basis，再返回决定。维护自身的写入不再次调度维护。基础机制不判断保留哪些材料、是否必须生成替代内容，完整请求容量由实际模型请求构造再次检查。
+若策略 Group 自己追加消息或更新记忆，其输入 basis 会过期；它必须通过声明的 read 资源明确取得新 basis，再返回决定。维护自身的写入不再次调度维护。基础机制不判断保留哪些材料、是否必须生成替代内容，完整请求容量由实际模型请求构造再次检查。
 
 未配置 maintenance 时，prepareContext 直接 capture，也没有空维护节点。独立历史选择与分段辅助仍可显式组合，但默认链不通过它们隐式截断材料。
 
@@ -102,21 +102,21 @@ prepareContext 返回：
 }
 ```
 
-`selectedMessages` 来自 material.messages，排除当前 messageIndex，保留其余全部成员及顺序。当前输入仍来自 E 的正式输入，策略把它退出活跃索引不等于取消本次输入。selection 只复用既有观测索引形状，不代表额外调用了选择模型。
+`selectedMessages` 来自 material.messages，排除当前 messageIndex，保留其余全部成员及顺序。当前输入仍来自任务 Group 的正式输入，策略把它退出活跃索引不等于取消本次输入。selection 只复用既有观测索引形状，不代表额外调用了选择模型。
 
 理解请求接收固定 history；回答/文档接收固定 context；记忆提取接收同一份固定历史和记忆，并补充本轮 QA 及真实接纳的操作结果。模型请求检查提示、Schema、正文、历史与记忆的完整容量，不跳过或截短长消息。容量估算仍是 UTF-8 字节估算，不是精确 tokenizer。
 
 活跃索引给出的成员顺序同样是本次材料的一部分。理解、回答和记忆请求保持该顺序，不再隐式按消息索引重新排序。
 
-E 的原文 fixedRange 继续用于定位及恢复核验，不参与材料再次装载。SelectionUsage 使用窄资源核对固定材料对应的真实 Transcript 消息，避免 CP 解码值的对象身份变化造成错误计数，也不把 E 创建之后的维护追加排除在计数外。
+任务 Group 的原文 fixedRange 继续用于定位及恢复核验，不参与材料再次装载。SelectionUsage 使用窄资源核对固定材料对应的真实 Transcript 消息，避免 CP 解码值的对象身份变化造成错误计数，也不把 任务 Group 创建之后的维护追加排除在计数外。
 
-准备、维护及相应父层关系的记录映射只保留 basis、消息索引和当时的记忆值，不重复消息正文。记忆值用于解释当时的材料，不能改读更新后的实体。实际业务输出和 CP 仍保存完整材料；自定义策略 O 的记录内容由它自己的观测声明决定。
+准备、维护及相应父层关系的记录映射只保留 basis、消息索引和当时的记忆值，不重复消息正文。记忆值用于解释当时的材料，不能改读更新后的实体。实际业务输出和 CP 仍保存完整材料；自定义策略 Group 的记录内容由它自己的观测声明决定。
 
 ## 保存与恢复边界
 
 SQLite v6 保存 active_content。源消息追加、新记忆创建及新活跃成员在同一事务中成立；显式索引决定也先同步持久化再安装内存。v5 迁移只以原当前消息段和全部记忆初始化一次，不重新激活历史归档。源写入失败不会留下只更新了一半的索引。详见 [持久化](persistence.md)。
 
-普通重启恢复索引，供新的工作捕获。旧工作 CP 恢复则使用已保存材料，不用当前活跃索引重建原输入。Observer 的 R/E 契约已升为 3/4，旧版本拒绝；宿主暂拒自定义维护的恢复，需先有稳定的策略配置与实现版本契约。
+普通重启恢复索引，供新的工作捕获。旧工作 CP 恢复则使用已保存材料，不用当前活跃索引重建原输入。Observer 的 Scene/任务 Group 契约为 version 4/6，Frame 为 v4；旧恢复格式和旧声明版本明确拒绝，历史内容仍可读取；宿主暂拒自定义维护的恢复，需先有稳定的策略配置与实现版本契约。
 
 维护预设具有局部 waiting（子策略有 CP 时）、accepted 和 completed 点，准备预设具有等待和固定结果点。当前 ActiveContent.apply 没有固定效果凭据：若索引已落实但 completed 尚未保存，较早 accepted 点发现依据变化就拒绝，不根据目标成员相同猜测完成；completed 续接直接使用已保存结果。局部预设支持不等于任意时刻、任意自定义策略都能恢复。详见 [Checkpoint](checkpoints.md)。
 

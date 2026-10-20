@@ -35,7 +35,7 @@ export const overviewResponse = z.object({
       memoryStatus: status.optional(),
       durationMs: time.optional(),
       observedOffsetMs: time,
-      calls: z.array(z.object({ id, contextId: id, recordType: z.enum(['execution', 'operation', 'attempt']), parentId: id.optional(), name: z.string(), label: z.string(), source: z.string(), status, offsetMs: time, durationMs: time.optional() })),
+      calls: z.array(z.object({ id, contextId: id, recordType: z.enum(['scene', 'group', 'node']), parentId: id.optional(), name: z.string(), label: z.string(), source: z.string(), status, offsetMs: time, durationMs: time.optional() })),
       transcriptRange: z.object({ transcriptId: id, start: index, end: index, revision: index.optional() }).optional(),
       availableMemoryIds: z.array(id),
       memoryChanges: z.array(z.object({ id, memoryId: id, operationId: id.optional(), action, change: z.string() })),
@@ -63,7 +63,7 @@ export function acceptSnapshot(value: unknown, expectedId?: string): ExecutionRe
 const conversationFailure = z.object({ code: id, message: z.string() });
 export const admissionResponse = z.discriminatedUnion('status', [z.object({ conversationId: id, transcriptId: id, status: z.literal('ready') }), z.object({ conversationId: id, transcriptId: id, status: z.literal('busy') }), z.object({ conversationId: id, transcriptId: id, status: z.literal('unavailable'), error: conversationFailure })]) satisfies z.ZodType<ConversationAdmission>;
 const conversationActivities = z.object({
-  calls: z.array(z.object({ contextId: id.max(256), parentContextId: id.max(256).optional(), level: z.enum(['runtime', 'execution', 'operation', 'attempt']), label: z.string().max(120), status: z.enum(['running', 'succeeded', 'failed', 'cancelled']), phase: z.enum(['setup', ...invocationProcessStages]), round: index.max(2), startedAt: z.iso.datetime().optional(), finishedAt: z.iso.datetime().optional(), relation: z.object({ phase: z.enum(['attached', 'returned', 'receiving', 'accepted', 'failed']), returned: z.enum(['succeeded', 'failed', 'cancelled']).optional() }).optional() })).max(512),
+  calls: z.array(z.object({ contextId: id.max(256), parentContextId: id.max(256).optional(), kind: z.enum(['scene', 'group', 'node']), label: z.string().max(120), status: z.enum(['running', 'succeeded', 'failed', 'cancelled']), phase: z.enum(['setup', ...invocationProcessStages]), round: index.max(2), startedAt: z.iso.datetime().optional(), finishedAt: z.iso.datetime().optional(), relation: z.object({ phase: z.enum(['attached', 'returned', 'receiving', 'accepted', 'failed']), returned: z.enum(['succeeded', 'failed', 'cancelled']).optional() }).optional() })).max(512),
   integrity: z.discriminatedUnion('status', [z.object({ status: z.literal('complete') }), z.object({ status: z.literal('incomplete'), error: conversationFailure })]),
 });
 const fileTask = z.union([z.object({ sourcePath: id, output: z.object({ path: id }).optional() }), z.object({ sourcePath: z.never().optional(), output: z.object({ path: id }) })]);
@@ -128,6 +128,7 @@ const recordData = z.object({ id, parentId: id.optional(), value: z.unknown() })
 const callBody = z.object({ input: z.unknown(), processes: z.array(z.unknown()) }).passthrough();
 const callRecord = recordData.extend({ contextId: id, status, childIds: z.array(id).optional(), value: callBody });
 const entry = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('invocation'), data: callRecord.extend({ structureKind: z.enum(['scene', 'group', 'node']), structureId: id.optional(), name: z.string().optional(), label: z.string().optional(), source: z.string().optional(), callee: z.string().optional(), role: z.string().optional(), childIds: z.array(id), value: callBody.extend({ startedAt: z.string() }) }) }),
   z.object({ kind: z.literal('runtime'), data: recordData.extend({ childIds: z.array(id), value: z.object({ createdAt: z.string() }) }) }),
   z.object({ kind: z.literal('runtime-call'), data: callRecord.extend({ runtimeInstanceId: id, value: callBody.extend({ startedAt: z.string() }) }) }),
   z.object({ kind: z.literal('execution'), data: callRecord.extend({ value: callBody.extend({ startedAt: z.string() }) }) }),
@@ -152,7 +153,7 @@ const invocationEvent = z.object({
   type: z.literal('invocation'),
   contextId: id,
   parentContextId: id.optional(),
-  level: z.enum(['runtime', 'execution', 'operation', 'attempt']),
+  kind: z.enum(['scene', 'group', 'node']),
   sequence: index.min(1),
   occurredAt: z.string(),
   change: z.discriminatedUnion('kind', [z.object({ kind: z.literal('started') }), z.object({ kind: z.literal('entry'), target: z.literal('execution'), instanceId: id, key: id.optional(), stage: z.enum(['accept', 'notification', 'admit', 'capture']), status: z.enum(['accepted', 'failed']), error: z.object({ code: id, message: z.string() }).passthrough().optional() }), z.object({ kind: z.literal('process'), processSequence: index.min(1), round: index, stage: z.enum(invocationProcessStages), action: z.enum(invocationProcessActions) }), z.object({ kind: z.literal('relation'), identity: relationIdentity, phase: z.enum(['attached', 'returned', 'receiving', 'accepted', 'failed']), status: z.enum(['succeeded', 'failed']).optional(), failure: failure.optional() }), z.object({ kind: z.literal('finished'), status: z.enum(['succeeded', 'failed']) })]),

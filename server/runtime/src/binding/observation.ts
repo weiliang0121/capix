@@ -1,7 +1,7 @@
 import type { ObservationDeclaration, ObservationDeclarationScope } from '../definition/observation.js';
 import { resourceRequests, type ResourceBindings, type ResourceRequirements } from '../resource/bindings.js';
-import type { InvocationFact, InvocationIdentity, InvocationDescription, RuntimeStructureFact } from '../observation/facts.js';
-import type { EventConsumer, InvocationObserver, RuntimeStructureObserver } from '../observation/observer.js';
+import type { InvocationFact, InvocationIdentity, InvocationDescription, DriverFact } from '../observation/facts.js';
+import type { EventConsumer, InvocationObserver, DriverObserver } from '../observation/observer.js';
 import { InvocationObservation } from '../observation/invocation.js';
 import { ObserverSession, publishSessions } from '../observation/session.js';
 
@@ -16,7 +16,7 @@ export interface ObservationInstallation {
   check?(definition: ObservationDeclarationScope, parent?: ObservationDeclarationScope): void;
   readonly failure?: 'isolate' | 'propagate';
   readonly provides?: ResourceRequirements;
-  bindRuntimeStructure?(identity: Readonly<{ runtimeId: string }>): RuntimeStructureObserver;
+  bindDriver?(identity: Readonly<{ driverId: string }>): DriverObserver;
   bindInvocation(setup: InvocationObservationSetup, parent?: InvocationObserver): InvocationObserver;
   invalidate?(error: unknown): void;
 }
@@ -79,10 +79,10 @@ export function bindInvocationObservation(setup: InvocationObservationSetup, ins
   return new InvocationObservation(sessions, installed);
 }
 
-/** Structure observation uses stable R identity, independently of invocation observations. */
-export function bindRuntimeStructureObservation(runtimeId: string, installations: readonly ObservationInstallation[] = []): EventConsumer<RuntimeStructureFact> {
+/** Driver observation uses stable driver identity, independently of invocation observations. */
+export function bindDriverObservation(driverId: string, installations: readonly ObservationInstallation[] = []): EventConsumer<DriverFact> {
   const sessions = installations.flatMap((installation) => {
-    const observer = installation.bindRuntimeStructure?.(Object.freeze({ runtimeId }));
+    const observer = installation.bindDriver?.(Object.freeze({ driverId }));
     return observer ? [new ObserverSession(observer, installation.failure ?? 'isolate', (error) => installation.invalidate?.(error))] : [];
   });
   return { publish: (fact) => publishSessions(sessions, (observer) => observer.observe(fact)) };

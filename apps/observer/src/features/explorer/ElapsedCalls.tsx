@@ -8,8 +8,8 @@ export function ElapsedCalls({ round, width, inspect }: { round: RoundView; widt
   const layout = useMemo(() => layoutInvocations(round), [round]);
   return (
     <div className="elapsed-calls">
-      {(['execution', 'operation', 'attempt'] as const).map((level) => {
-        const lanes = level === 'execution' ? 1 : level === 'operation' ? layout.operationLanes : layout.attemptLanes;
+      {(['group', 'node'] as const).map((level) => {
+        const lanes = level === 'group' ? layout.operationLanes : layout.attemptLanes;
         return (
           <section key={level} className="elapsed-lane">
             <div className="elapsed-lane-label">{laneNames[level]}</div>

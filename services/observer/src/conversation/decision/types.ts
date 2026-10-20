@@ -1,7 +1,7 @@
 import type { FileReceipt, GenerationOutput } from '@capix/protocol';
-import type { OperationDefinition } from '@capix/server-runtime';
-import type { RequestUnderstandingInput } from '../operations/request/input.js';
-import type { FilePreflightInput, FilePreflightOutput } from '../operations/preflight/types.js';
+import type { GroupDefinition } from '@capix/server-runtime';
+import type { RequestUnderstandingInput } from '../group/request/input.js';
+import type { FilePreflightInput, FilePreflightOutput } from '../group/preflight/types.js';
 
 export interface ConversationCapabilityArguments {
   readonly checkFile: FilePreflightInput;
@@ -38,4 +38,4 @@ export interface ConversationDecisionInput {
 }
 
 /** The execution consumes the decision contract, independently of how the operation implements it. */
-export type ConversationDecisionDefinition = OperationDefinition<ConversationDecisionInput, ConversationDecision, any, any>;
+export type ConversationDecisionDefinition = GroupDefinition<ConversationDecisionInput, ConversationDecision, any, any>;

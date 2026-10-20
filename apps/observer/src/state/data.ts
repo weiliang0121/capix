@@ -27,9 +27,9 @@ export interface CallMemory {
   changes: MemoryRecord[];
 }
 export interface CallDetail extends Omit<CallSpan, 'recordType' | 'caller' | 'callee'> {
-  recordType: CallSpan['recordType'] | 'runtime';
-  caller: CallSpan['caller'] | 'runtime';
-  callee: CallSpan['callee'] | 'runtime';
+  recordType: CallSpan['recordType'];
+  caller: CallSpan['caller'];
+  callee: CallSpan['callee'];
   startedAt?: string;
   relationEntries: readonly RelationChangeRecord[];
   children: CallSpan[];

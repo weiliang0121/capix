@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { Transcript, Memories } from '@capix/server-runtime/content';
 import { ObserverConversations, SqliteObserverStore, MemoryConversationCheckpointRuns, copyConversationCheckpointRun, checkpointTranscriptFingerprint, validateConversationCheckpointContent, validateConversationCheckpointDeliveryContent, validateConversationCheckpointReceipt, validateConversationCheckpointHeads } from '@capix/observer-service/assembly';
 
@@ -28,7 +29,7 @@ test('normal new conversation calls install CP and register real input plus fixe
   const conversation = host.create();
   const environment = host.open(conversation.id);
   const options = { settings: { ...settings } };
-  await environment.runtime.run({ messages: [{ role: 'user', content: 'hello' }] }, options);
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'hello' }] }, options);
   const [run] = environment.checkpointRuns.list(conversation.id);
   assert.equal(run.conversationId, conversation.id);
   assert.deepEqual(run.input, { transcriptId: environment.transcript.id, start: 0, end: 1, revision: 1 });
@@ -41,7 +42,7 @@ test('normal new conversation calls install CP and register real input plus fixe
   assert.equal(run.settings.model, 'test');
   await assert.rejects(host.recover(conversation.id, run.rootContextId));
   assert.equal(environment.transcript.length, 2);
-  await environment.runtime.run({ messages: [{ role: 'user', content: 'again' }] }, { settings });
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'again' }] }, { settings });
   assert.equal(environment.checkpointRuns.list(conversation.id).length, 2);
   assert.equal(environment.checkpointRuns.read(host.list().defaultConversationId, run.rootContextId), undefined);
   host.close();
@@ -55,7 +56,7 @@ test('checkpoint installation reuses the host SQLite connection and recovers met
   const environment = host.open(conversation.id);
   assert.equal(environment.checkpoints, persistence.checkpoints);
   assert.equal(environment.checkpointRuns, persistence.checkpointRuns);
-  await environment.runtime.run({ messages: [{ role: 'user', content: 'persist' }] }, { settings });
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'persist' }] }, { settings });
   const [run] = environment.checkpointRuns.list(conversation.id);
   const saved = persistence.checkpoints.read(run.rootContextId);
   host.close();
@@ -79,12 +80,47 @@ test('checkpoint installation reuses the host SQLite connection and recovers met
   next.close();
 });
 
+for (const formatVersion of [1, 2, 3, 99]) {
+  test(`checkpoint format ${formatVersion} refuses recovery without preventing healthy content and new calls`, async (t) => {
+    const path = temporary(t);
+    const host = new ObserverConversations(provider, [], { persistence: SqliteObserverStore.open(path) });
+    const conversation = host.list().conversations[0];
+    const environment = host.open(conversation.id);
+    await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'before upgrade' }] }, { settings });
+    const [run] = environment.checkpointRuns.list(conversation.id);
+    const original = environment.transcript.exportState();
+    host.close();
+
+    const database = new DatabaseSync(path);
+    const rows = database.prepare('SELECT id, body FROM checkpoint_images').all();
+    for (const row of rows) {
+      const image = JSON.parse(row.body);
+      image.formatVersion = formatVersion;
+      database.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(JSON.stringify(image), row.id);
+    }
+    database.close();
+
+    const persistence = SqliteObserverStore.open(path);
+    const restored = new ObserverConversations(provider, [], { persistence });
+    t.after(() => restored.close());
+    assert.deepEqual(restored.content(conversation.id).transcript.exportState(), original);
+    assert.throws(() => persistence.checkpoints.read(run.rootContextId), { code: 'CHECKPOINT_FORMAT_UNSUPPORTED' });
+    await assert.rejects(restored.recover(conversation.id, run.rootContextId), { code: 'CHECKPOINT_FORMAT_UNSUPPORTED' });
+    const current = restored.open(conversation.id);
+    await current.driver.run(current.scene, { messages: [{ role: 'user', content: 'after upgrade' }] }, { settings });
+    assert.equal(current.transcript.length, 4);
+    const latest = current.checkpointRuns.list(conversation.id).find((candidate) => candidate.rootContextId !== run.rootContextId);
+    assert.equal(current.checkpoints.read(latest.rootContextId).image.formatVersion, 4);
+  });
+}
+
 test('capture preserves the full accepted history when capacity checking rejects the request', async () => {
   const host = new ObserverConversations(provider);
   const conversation = host.create();
   const environment = host.open(conversation.id);
   await assert.rejects(
-    environment.runtime.run(
+    environment.driver.run(
+      environment.scene,
       {
         messages: [
           { role: 'user', content: 'large'.repeat(20000) },
@@ -157,7 +193,7 @@ test('host recovery rejects different orchestration configuration before any pro
   const host = new ObserverConversations(provider, [], { persistence: SqliteObserverStore.open(path) });
   const conversation = host.list().conversations[0];
   const environment = host.open(conversation.id);
-  await environment.runtime.run({ messages: [{ role: 'user', content: 'hello' }] }, { settings });
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'hello' }] }, { settings });
   const [run] = environment.checkpointRuns.list(conversation.id);
   host.close();
   const restored = new ObserverConversations(
@@ -177,15 +213,15 @@ test('host association must match the exact R and E heads', () => {
   const transcript = new Transcript([{ role: 'user', content: 'hello' }]);
   const run = copyConversationCheckpointRun(basis(transcript, new Memories(transcript)));
   const child = { identity: { contextId: 'execution', parentContextId: 'root' } };
-  const root = { image: { contract: { key: 'observer.conversation.runtime', version: 3 }, frame: { input: { messages: [{ role: 'user', content: 'hello' }] }, owner: { contextId: 'root', level: 'runtime' }, children: [child] }, references: { execution: { contextId: 'execution' } }, state: null } };
-  const execution = { image: { contract: { key: 'observer.conversation.execution', version: 5 }, frame: { input: { message: { role: 'user', content: 'hello' }, messageIndex: 0 }, owner: { contextId: 'execution', parentContextId: 'root', level: 'execution' } } } };
+  const root = { image: { contract: { key: 'observer.conversation.scene', version: 4 }, frame: { input: { messages: [{ role: 'user', content: 'hello' }] }, owner: { contextId: 'root', kind: 'scene' }, children: [child] }, references: { execution: { contextId: 'execution' } }, state: null } };
+  const execution = { image: { contract: { key: 'observer.conversation.task', version: 6 }, frame: { input: { message: { role: 'user', content: 'hello' }, messageIndex: 0 }, owner: { contextId: 'execution', parentContextId: 'root', kind: 'group' } } } };
   validateConversationCheckpointHeads(run, root, execution, transcript);
   execution.image.frame.input.messageIndex = 1;
   assert.throws(() => validateConversationCheckpointHeads(run, root, execution, transcript), { code: 'CHECKPOINT_CONTENT_CHANGED' });
   execution.image.frame.input.messageIndex = 0;
   root.image.contract.version = 2;
   assert.throws(() => validateConversationCheckpointHeads(run, root, execution, transcript), { code: 'CHECKPOINT_DECLARATION_CHANGED' });
-  root.image.contract.version = 3;
+  root.image.contract.version = 4;
   root.image.frame.input.messages[0].content = 'different';
   assert.throws(() => validateConversationCheckpointHeads(run, root, execution, transcript), { code: 'CHECKPOINT_CONTENT_CHANGED' });
   root.image.frame.input.messages[0].content = 'hello';

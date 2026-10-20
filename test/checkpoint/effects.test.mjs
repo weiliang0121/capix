@@ -1,9 +1,10 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, rm, unlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, checkpointPoint, childReference, assembleRuntime } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
 import { Transcript, Memories, MemoryResource } from '@capix/server-runtime/content';
 import { ExtractMemoryDefinition, SaveResultDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 import { WorkspaceFiles, FileResources } from '@capix/observer-service/assembly';
@@ -48,8 +49,8 @@ function harness(operation, providers, store, requires = operation.run.requires)
       }),
     ],
   });
-  class Execution extends ExecutionDefinition {
-    children = [operation];
+  class Execution extends GroupDefinition {
+    members = [operation];
     checkpoint = checkpoint('effects.execution', operation);
     run = {
       requires,
@@ -62,8 +63,8 @@ function harness(operation, providers, store, requires = operation.run.requires)
     };
   }
   const execution = new Execution();
-  class Root extends RuntimeDefinition {
-    children = [execution];
+  class Root extends SceneDefinition {
+    members = [execution];
     checkpoint = checkpoint('effects.runtime', execution);
     run = {
       requires: {},
@@ -75,7 +76,7 @@ function harness(operation, providers, store, requires = operation.run.requires)
       },
     };
   }
-  return assembleRuntime(new Root(), { checkpoints: { store }, providers, source: { entry: () => null, capture: () => null } });
+  return installCallable(new Root(), { checkpoints: { store }, providers, source: { capture: () => null } });
 }
 function rootId(store) {
   return [...store.ids].find((id) => store.read(id).image.contract.key === 'effects.runtime');

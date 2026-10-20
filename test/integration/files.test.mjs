@@ -117,7 +117,7 @@ test('a missing file is clarified before execution and releases admission for th
   assert.equal(submissions[0].remote.fileOutput, undefined);
   assert.equal(submissions[1].remote.result.status, 'completed');
   assert.equal(submissions[1].remote.fileOutput, undefined);
-  assert.equal(f.environment.runtime.running, false);
+  assert.equal(f.environment.driver.isRunning(f.environment.scene), false);
   assert.deepEqual((await readdir(f.root)).sort(), ['input.txt']);
 });
 

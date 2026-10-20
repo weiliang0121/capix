@@ -155,14 +155,14 @@ test('late observation loads and notifications from a disconnected session canno
 test('a completed E does not make its still-running parent R detail permanently cached', async () => {
   const execution = snapshot();
   const pending = snapshot('running');
-  const running = { ...execution, runtimeCall: pending.runtimeCall, runtimeEvents: pending.runtimeEvents };
+  const running = { ...execution, rootCall: pending.rootCall, boundaries: execution.boundaries.filter((item) => item.callId !== pending.rootCall.id || item.value.type === 'call') };
   const finished = execution;
   let reads = 0;
   const io = transport({ execution: async () => (++reads === 1 ? running : finished) });
   const runtime = client({ conversation: io, observation: io });
   await runtime.initialize();
-  assert.equal((await runtime.loadExecution(execution.execution.id)).runtimeCall.status, 'running');
-  assert.equal((await runtime.loadExecution(execution.execution.id)).runtimeCall.status, 'succeeded');
-  assert.equal((await runtime.loadExecution(execution.execution.id)).runtimeCall.status, 'succeeded');
+  assert.equal((await runtime.loadExecution(execution.execution.id)).rootCall.status, 'running');
+  assert.equal((await runtime.loadExecution(execution.execution.id)).rootCall.status, 'succeeded');
+  assert.equal((await runtime.loadExecution(execution.execution.id)).rootCall.status, 'succeeded');
   assert.equal(reads, 2);
 });

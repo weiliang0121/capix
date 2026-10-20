@@ -6,8 +6,8 @@ import { client, transport, submissionSnapshot } from './fixtures.mjs';
 const input = { messages: [{ role: 'user', content: '问题' }] };
 const start = '2026-10-11T00:00:00.000Z';
 const end = '2026-10-11T00:00:01.000Z';
-const root = () => ({ contextId: 'r', level: 'runtime', label: '本次处理', status: 'running', phase: 'execute', round: 1, startedAt: start });
-const child = (contextId, parentContextId, level, patch = {}) => ({ ...root(), contextId, parentContextId, level, label: level, relation: { phase: 'attached' }, ...patch });
+const root = () => ({ contextId: 'r', kind: 'scene', label: '本次处理', status: 'running', phase: 'execute', round: 1, startedAt: start });
+const child = (contextId, parentContextId, kind, patch = {}) => ({ ...root(), contextId, parentContextId, kind, label: kind, relation: { phase: 'attached' }, ...patch });
 const done = (call) => ({ ...call, status: 'succeeded', finishedAt: end });
 const activities = (calls, integrity = { status: 'complete' }) => ({ calls, integrity });
 const receive = (submission, calls, revision, patch = {}) => submission.receive(submissionSnapshot(submission.id, { revision, activities: activities(calls), ...patch }));
@@ -15,10 +15,10 @@ const receive = (submission, calls, revision, patch = {}) => submission.receive(
 test('cumulative activity reception retains short calls and separates return from parent acceptance', () => {
   const submission = new ClientSubmission('fixture-conversation', input);
   const r = root();
-  const e = child('e', 'r', 'execution');
+  const e = child('e', 'r', 'group');
   receive(submission, [r, e], 2);
-  const o = child('o', 'e', 'operation');
-  const a = done(child('a', 'o', 'attempt', { relation: { phase: 'returned', returned: 'succeeded' } }));
+  const o = child('o', 'e', 'group');
+  const a = done(child('a', 'o', 'node', { relation: { phase: 'returned', returned: 'succeeded' } }));
   receive(submission, [r, e, o, a], 20);
   assert.equal(submission.snapshot.remote.activities.calls.length, 4);
   assert.equal(submission.snapshot.remote.activities.calls[3].relation.phase, 'returned');
@@ -29,13 +29,13 @@ test('cumulative activity reception retains short calls and separates return fro
 
 test('activity copies are immutable and exclude undeclared data from a custom transport', () => {
   const submission = new ClientSubmission('fixture-conversation', input);
-  const calls = [root(), child('e', 'r', 'execution')];
+  const calls = [root(), child('e', 'r', 'group')];
   calls[0].input = { credential: 'fixture-only' };
   receive(submission, calls, 1);
   const accepted = submission.snapshot.remote.activities;
   calls[0].label = 'changed';
   calls[1].relation.phase = 'accepted';
-  calls.push(child('x', 'e', 'operation'));
+  calls.push(child('x', 'e', 'group'));
   assert.equal(accepted.calls[0].label, '本次处理');
   assert.equal(accepted.calls.length, 2);
   assert.equal(accepted.calls[1].relation.phase, 'attached');
@@ -47,7 +47,7 @@ test('activity copies are immutable and exclude undeclared data from a custom tr
 
 test('duplicate revisions compare accepted activity fields without permitting changed facts', () => {
   const submission = new ClientSubmission('fixture-conversation', input);
-  const calls = [{ ...root(), input: { ignored: true } }, child('e', 'r', 'execution', { relation: { phase: 'attached', source: { ignored: true } } })];
+  const calls = [{ ...root(), input: { ignored: true } }, child('e', 'r', 'group', { relation: { phase: 'attached', source: { ignored: true } } })];
   const snapshot = submissionSnapshot(submission.id, { revision: 4, activities: activities(calls) });
   submission.receive(snapshot);
   const before = submission.snapshot;
@@ -68,7 +68,7 @@ test('duplicate revisions compare accepted activity fields without permitting ch
 });
 
 test('malformed identities, topology and lifecycle boundaries do not partially replace a snapshot', () => {
-  const malformed = [[root(), root()], [root(), child('a', 'r', 'attempt')], [root(), child('o', 'absent', 'operation')], [{ ...root(), parentContextId: 'r' }], [{ ...root(), status: 'succeeded' }], [{ ...root(), finishedAt: end }], [{ ...root(), startedAt: 'invalid' }], [{ ...root(), round: -1 }], [root(), child('e', 'r', 'execution', { relation: { phase: 'accepted', returned: 'failed' } })]];
+  const malformed = [[root(), root()], [root(), child('a', 'r', 'node'), child('invalid', 'a', 'group')], [root(), child('o', 'absent', 'group')], [{ ...root(), parentContextId: 'r' }], [{ ...root(), status: 'succeeded' }], [{ ...root(), finishedAt: end }], [{ ...root(), startedAt: 'invalid' }], [{ ...root(), round: -1 }], [root(), child('e', 'r', 'group', { relation: { phase: 'accepted', returned: 'failed' } })]];
   for (const calls of malformed) {
     const submission = new ClientSubmission('fixture-conversation', input);
     receive(submission, [root()], 1);
@@ -80,7 +80,7 @@ test('malformed identities, topology and lifecycle boundaries do not partially r
 
 test('activity facts cannot disappear, reorder, change parent or revive a terminal call', () => {
   const r = root();
-  const e = done(child('e', 'r', 'execution', { relation: { phase: 'accepted', returned: 'succeeded' } }));
+  const e = done(child('e', 'r', 'group', { relation: { phase: 'accepted', returned: 'succeeded' } }));
   const regressed = [[], [r], [e, r], [r, { ...e, label: 'new label' }], [r, { ...e, status: 'running', finishedAt: undefined }], [r, { ...e, status: 'cancelled' }], [r, { ...e, relation: { phase: 'receiving', returned: 'succeeded' } }]];
   for (const calls of regressed) {
     const submission = new ClientSubmission('fixture-conversation', input);
@@ -152,12 +152,12 @@ test('cancellation intent never makes running activities terminal', () => {
 
 test('a retry keeps the failed child and appends a new invocation identity', () => {
   const submission = new ClientSubmission('fixture-conversation', input);
-  const base = [root(), child('e', 'r', 'execution'), child('o', 'e', 'operation')];
-  const failed = child('a1', 'o', 'attempt', { status: 'failed', finishedAt: end, relation: { phase: 'returned', returned: 'failed' } });
+  const base = [root(), child('e', 'r', 'group'), child('o', 'e', 'group')];
+  const failed = child('a1', 'o', 'node', { status: 'failed', finishedAt: end, relation: { phase: 'returned', returned: 'failed' } });
   receive(submission, [...base, failed], 5);
   const next = [...base];
   next[2] = { ...base[2], round: 2 };
-  receive(submission, [...next, failed, child('a2', 'o', 'attempt')], 8);
+  receive(submission, [...next, failed, child('a2', 'o', 'node')], 8);
   assert.equal(submission.snapshot.remote.activities.calls[3].status, 'failed');
   assert.equal(submission.snapshot.remote.activities.calls[4].contextId, 'a2');
 });

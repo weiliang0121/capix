@@ -6,9 +6,9 @@ import type { ModelSettings, TranscriptRangeLocator } from '@capix/protocol';
 import type { Transcript, Memories } from '@capix/server-runtime/content';
 import { validateSettings } from './model/settings.js';
 import { executionProgressSchema, conversationCheckpointOutput, acceptedCheckpointInput } from './checkpoint.js';
-import { memorySchema } from './operations/checkpoint.js';
+import { memorySchema } from './group/checkpoint.js';
 import { acceptConversationRequest } from './accept.js';
-import { preparedConversationContextSchema } from './operations/context/schema.js';
+import { preparedConversationContextSchema } from './group/context/schema.js';
 import type { ActiveContentSnapshot } from './content/active.js';
 
 /** Fixed construction basis for one R/E call; never a saved Submission or a mutable current conversation. */
@@ -134,10 +134,10 @@ export function validateConversationCheckpointReceipt(run: ConversationCheckpoin
 
 /** Cross-check host ownership against both kernel heads before binding current resources. */
 export function validateConversationCheckpointHeads(run: ConversationCheckpointRun, root: CheckpointHead | undefined, execution: CheckpointHead | undefined, transcript: Transcript): void {
-  if (root?.image.contract.key !== 'observer.conversation.runtime' || root.image.contract.version !== 3 || execution?.image.contract.key !== 'observer.conversation.execution' || execution.image.contract.version !== 5) throw new RuntimeError('CHECKPOINT_DECLARATION_CHANGED', '恢复所需的 R/E 声明版本不同，旧入口契约不能自动迁移。');
+  if (root?.image.contract.key !== 'observer.conversation.scene' || root.image.contract.version !== 4 || execution?.image.contract.key !== 'observer.conversation.task' || execution.image.contract.version !== 6) throw new RuntimeError('CHECKPOINT_DECLARATION_CHANGED', '恢复所需的 R/E 声明版本不同，旧入口契约不能自动迁移。');
   const child = root?.image.frame.children[0];
   const reference = root?.image.references.execution;
-  if (!root || !execution || root.image.frame.owner.contextId !== run.rootContextId || root.image.frame.owner.level !== 'runtime' || root.image.frame.owner.parentContextId !== undefined || root.image.frame.children.length !== 1 || child?.identity.contextId !== run.executionContextId || child.identity.parentContextId !== run.rootContextId || !reference || !('contextId' in reference) || reference.contextId !== run.executionContextId || execution.image.frame.owner.contextId !== run.executionContextId || execution.image.frame.owner.parentContextId !== run.rootContextId || execution.image.frame.owner.level !== 'execution') throw new RuntimeError('CHECKPOINT_CONTENT_CHANGED', '恢复调用身份与对话登记不一致。');
+  if (!root || !execution || root.image.frame.owner.contextId !== run.rootContextId || root.image.frame.owner.kind !== 'scene' || root.image.frame.owner.parentContextId !== undefined || root.image.frame.children.length !== 1 || child?.identity.contextId !== run.executionContextId || child.identity.parentContextId !== run.rootContextId || !reference || !('contextId' in reference) || reference.contextId !== run.executionContextId || execution.image.frame.owner.contextId !== run.executionContextId || execution.image.frame.owner.parentContextId !== run.rootContextId || execution.image.frame.owner.kind !== 'group') throw new RuntimeError('CHECKPOINT_CONTENT_CHANGED', '恢复调用身份与对话登记不一致。');
   const input = acceptedCheckpointInput.decode(execution.image.frame.input);
   const expected = acceptConversationRequest(
     root.image.frame.input,

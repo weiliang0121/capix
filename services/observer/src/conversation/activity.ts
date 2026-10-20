@@ -1,7 +1,7 @@
 import type { ConversationActivities, ConversationActivity, ConversationActivityChange } from '@capix/protocol';
 import type { InvocationProgress } from '@capix/server-runtime';
 
-const labels = { runtime: '运行', execution: '本轮执行', operation: '操作', attempt: '意图' } as const;
+const labels = { scene: '场景', group: '组合处理', node: '直接处理' } as const;
 const maximumCalls = 512;
 
 /** A bounded service projection of passive call facts, independent of records and formal content. */
@@ -25,7 +25,7 @@ export class ConversationActivityProjection {
     const previousSequence = this.sequences.get(identity.contextId) ?? 0;
     if (fact.eventSequence <= previousSequence) throw new Error('Activity facts must advance their call-local sequence');
     const previous = this.calls.get(identity.contextId);
-    if (previous && (previous.level !== identity.level || previous.parentContextId !== identity.parentContextId)) throw new Error('Activity call identity changed');
+    if (previous && (previous.kind !== identity.kind || previous.parentContextId !== identity.parentContextId)) throw new Error('Activity call identity changed');
     if (identity.parentContextId && !this.calls.has(identity.parentContextId)) throw new Error('Activity parent is missing');
     this.reserve(identity.contextId);
     this.sequences.set(identity.contextId, fact.eventSequence);
@@ -48,8 +48,8 @@ export class ConversationActivityProjection {
     const initial: ConversationActivity = previous ?? {
       contextId: identity.contextId,
       ...(identity.parentContextId ? { parentContextId: identity.parentContextId } : {}),
-      level: identity.level,
-      label: (fact.description?.label || fact.description?.name || labels[identity.level]).slice(0, 120),
+      kind: identity.kind,
+      label: (fact.description?.label || fact.description?.name || labels[identity.kind]).slice(0, 120),
       status: 'running',
       phase: 'setup',
       round: 0,

@@ -1,68 +1,54 @@
-import type { InvocationLevel } from '@capix/protocol';
+import type { CallableKind } from '@capix/protocol';
 import { isFunction } from 'es-toolkit/predicate';
 import type { ChildDefinition } from '../definition/children.js';
-import type { RuntimeDefinition } from '../definition/runtime.js';
-import type { ExecutionDefinition } from '../definition/execution.js';
-import type { OperationDefinition } from '../definition/operation.js';
-import type { AttemptDefinition } from '../definition/attempt.js';
+import type { SceneDefinition } from '../definition/scene.js';
 import { resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
 import { isResourceRefinement, type ResourceRefinement } from '../resource/offer.js';
 import type { ChildBindingOptions } from './contract.js';
 import { collectDefinitionRequirements, collectResourceSupply, type ChildResourceBinding } from './resources.js';
-import { childLevels } from '../definition/level.js';
+import { childKinds } from '../definition/kind.js';
 import { originalReception, snapshotDefinition } from './snapshot.js';
 
-type AnyRuntimeDefinition = RuntimeDefinition<any, any, any, any, any>;
-type BindingDefinition = AnyRuntimeDefinition | ChildDefinition;
+export type AnyCallableDefinition = SceneDefinition<any, any, any, any, any> | ChildDefinition;
 
-/** Fixed interpretation at one parent position; no Bound structure, source value or call state. */
-export interface ResolvedDeclaration<Definition extends BindingDefinition, Child extends ResolvedChild = ResolvedChild> {
-  readonly level: Definition['level'];
+/** Fixed interpretation of one structural position, without values or call state. */
+export interface ResolvedCallable<Definition extends AnyCallableDefinition = AnyCallableDefinition> {
+  readonly kind: Definition['kind'];
   readonly definition: Definition;
   readonly declaration: Definition;
   readonly requires: ResourceRequirements;
-  /** Captured offers needed by this position and its descendants, never a business resource view. */
+  /** Offers routed through this position; local Work still receives only local requests. */
   readonly supply: ResourceRequirements;
-  readonly children: readonly Child[];
+  readonly members: readonly ResolvedChild[];
   readonly refinements?: readonly ResourceRefinement<any>[];
 }
-export type ResolvedRuntime<Input = any, Output = any, Resources extends object = any> = ResolvedDeclaration<RuntimeDefinition<Input, Output, Resources, any, any>, ResolvedExecution>;
-export type ResolvedExecution<Input = any, Output = any, Resources extends object = any> = ResolvedDeclaration<ExecutionDefinition<Input, Output, Resources, any, any>, ResolvedOperation>;
-export type ResolvedOperation<Input = any, Output = any, Resources extends object = any> = ResolvedDeclaration<OperationDefinition<Input, Output, Resources, any, any>, ResolvedOperation | ResolvedAttempt>;
-export type ResolvedAttempt<Input = any, Output = any, Resources extends object = any> = ResolvedDeclaration<AttemptDefinition<Input, Output, Resources, any, any>, never>;
-export type ResolvedChild = ResolvedExecution | ResolvedOperation | ResolvedAttempt;
-type ResolvedNode = ResolvedRuntime | ResolvedChild;
+export type ResolvedChild = ResolvedCallable<ChildDefinition>;
 
-/** Resolve the whole supplied graph once; R and each E keep separate resource capture boundaries. */
-export function resolveDeclaration<Input, Output, Resources extends object>(definition: RuntimeDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedRuntime<Input, Output, Resources>;
-export function resolveDeclaration<Input, Output, Resources extends object>(definition: ExecutionDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedExecution<Input, Output, Resources>;
-export function resolveDeclaration<Input, Output, Resources extends object>(definition: OperationDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedOperation<Input, Output, Resources>;
-export function resolveDeclaration<Input, Output, Resources extends object>(definition: AttemptDefinition<Input, Output, Resources, any, any>, options?: ChildBindingOptions): ResolvedAttempt<Input, Output, Resources>;
-export function resolveDeclaration(definition: BindingDefinition, options?: ChildBindingOptions): ResolvedNode;
-export function resolveDeclaration(definition: BindingDefinition, options: ChildBindingOptions = {}): ResolvedNode {
-  const refinements = new Map<ChildDefinition, readonly ResourceRefinement<any>[]>();
+/** All dependency collection is static. Explicit source bindings delimit supply, never callable kind. */
+export function resolveDeclaration<Definition extends AnyCallableDefinition>(definition: Definition, options: ChildBindingOptions = {}): ResolvedCallable<Definition> {
+  const refinements = new Map<AnyCallableDefinition, readonly ResourceRefinement<any>[]>();
   for (const binding of options.childResources ?? []) {
-    if (binding.definition.level !== 'operation' && binding.definition.level !== 'attempt') throw new Error('Resource refinement requires a declared operation or attempt');
     if (refinements.has(binding.definition)) throw new Error('Duplicate child resource binding');
     refinements.set(binding.definition, Object.freeze([...binding.refinements]));
   }
-  const encountered = new Set<BindingDefinition>();
-  const path = new Set<BindingDefinition>();
-  const visit = (current: BindingDefinition, parent?: { readonly level: InvocationLevel; readonly definition: BindingDefinition }): ResolvedNode => {
-    if (path.has(current)) throw new Error('Cyclic child declaration');
-    if (!isFunction(current.run?.execute)) throw new Error('Child definition requires execute');
-    const allowed: readonly InvocationLevel[] | undefined = parent && childLevels[parent.level];
-    if (!Object.hasOwn(childLevels, current.level) || (allowed && !allowed.includes(current.level))) throw new Error('Invalid child definition level');
+  const captures = new Set(options.sources ?? []);
+  const encountered = new Set<AnyCallableDefinition>();
+  const path = new Set<AnyCallableDefinition>();
+  const visit = (current: AnyCallableDefinition, parent?: { readonly kind: CallableKind; readonly definition: AnyCallableDefinition }): ResolvedCallable => {
+    if (path.has(current)) throw new Error('Cyclic member declaration');
+    if (!isFunction(current.run?.execute)) throw new Error('Callable definition requires execute');
+    const allowed: readonly CallableKind[] | undefined = parent && childKinds[parent.kind];
+    if (!Object.hasOwn(childKinds, current.kind) || (allowed && !allowed.includes(current.kind))) throw new Error('Invalid member definition kind');
     const declaration = snapshotDefinition(current);
     for (const observation of options.observations ?? []) observation.check?.(current, parent?.definition);
     const requires = collectDefinitionRequirements(declaration, options.observationProvides);
-    const definitions: readonly ChildDefinition[] = declaration.level === 'attempt' ? [] : declaration.children;
+    const definitions: readonly ChildDefinition[] = 'members' in declaration ? (declaration.members ?? []) : [];
     const receptions = new Set<object>();
     for (const reception of declaration.receptions ?? []) {
       const original = originalReception(reception);
       if (receptions.has(original)) throw new Error('Duplicate parent reception contract');
       receptions.add(original);
-      if (!definitions.some((definition) => definition === reception.child)) throw new Error('Reception targets a child outside its owner');
+      if (!definitions.some((member) => member === reception.child)) throw new Error('Reception targets a member outside its owner');
     }
     const points = declaration.checkpoint?.points ?? [];
     const names = new Set<string>();
@@ -70,34 +56,37 @@ export function resolveDeclaration(definition: BindingDefinition, options: Child
       if (!point.name || names.has(point.name)) throw new Error('Checkpoint points need distinct registered names');
       names.add(point.name);
       for (const slot of Object.values(point.references as import('../definition/checkpoint.js').CheckpointReferenceSlots)) {
-        if (!definitions.some((definition) => definition === slot.definition)) throw new Error('Checkpoint reference targets a child outside its owner');
+        if (!definitions.some((member) => member === slot.definition)) throw new Error('Checkpoint reference targets a member outside its owner');
       }
     }
     const checkpointUses = points.flatMap((point) => [...(point.resume.uses ?? [])]);
     for (const child of [...(declaration.run.uses ?? definitions), ...(declaration.exceptions?.uses ?? []), ...checkpointUses]) {
-      if (!definitions.some((definition) => definition === child)) throw new Error('Declaration uses a child outside its owner');
+      if (!definitions.some((member) => member === child)) throw new Error('Declaration uses a member outside its owner');
     }
-    const selected = current.level === 'runtime' ? undefined : refinements.get(current);
-    const node = { level: declaration.level, definition: current, declaration, requires, refinements: selected };
+    const selected = refinements.get(current);
+    const node = { kind: declaration.kind, definition: current, declaration, requires, refinements: selected };
     encountered.add(current);
     path.add(current);
-    const children = definitions.map((child) => visit(child, node) as ResolvedChild);
+    const members = definitions.map((member) => visit(member, node) as ResolvedChild);
     path.delete(current);
-    const supply = collectResourceSupply(current.level === 'runtime' ? [requires] : [requires, ...children.map((child) => child.supply)]);
-    if (selected) checkRefinements(declaration, supply, selected);
-    // Parent/child levels were checked above; this restores their correlation after heterogeneous traversal.
-    return Object.freeze({ ...node, supply, children: Object.freeze(children) }) as ResolvedNode;
+    const inherited = members.filter((member) => !captures.has(member.definition)).map((member) => member.supply);
+    const supply = collectResourceSupply([requires, ...inherited]);
+    if (selected) checkRefinements(supply, selected);
+    return Object.freeze({ ...node, supply, members: Object.freeze(members) });
   };
   const resolved = visit(definition);
   for (const binding of options.childResources ?? []) {
-    if (!encountered.has(binding.definition)) throw new Error('Resource refinement requires a declared operation or attempt');
+    if (!encountered.has(binding.definition)) throw new Error('Resource refinement requires a registered member');
   }
-  return resolved;
+  for (const target of captures) {
+    if (!encountered.has(target)) throw new Error('Call source requires a registered member');
+  }
+  // Traversal preserves the identity and kind of its exact root definition.
+  return resolved as ResolvedCallable<Definition>;
 }
 
-function checkRefinements(definition: BindingDefinition, requires: ResourceRequirements, refinements: ChildResourceBinding['refinements']): void {
-  if (definition.level !== 'operation' && definition.level !== 'attempt') throw new Error('Resource refinement requires a declared operation or attempt');
-  const offers = new Set(resourceRequests(requires).map((request) => request.offer));
+function checkRefinements(supply: ResourceRequirements, refinements: ChildResourceBinding['refinements']): void {
+  const offers = new Set(resourceRequests(supply).map((request) => request.offer));
   const seen = new Set<ResourceRefinement<any>['offer']>();
   for (const refinement of refinements) {
     if (!isResourceRefinement(refinement)) throw new Error('Resource refinement was not issued by an offer');

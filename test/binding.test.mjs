@@ -1,11 +1,12 @@
+import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExecutionDefinition, OperationDefinition, AttemptDefinition, InvocationEntry, Sequence, ResourceOffer, assembleRuntime, RuntimeBinder, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
-import { createInvocationBuilders, resolveDeclaration, AttemptBinder, OperationBinder, ExecutionBinder, BoundChildren, BoundExecution, BoundOperation, BoundAttempt } from '@capix/server-runtime/construction';
+import { GroupDefinition, NodeDefinition, InvocationEntry, Sequence, ResourceOffer, CallableBinder, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { BoundCallable } from '@capix/server-runtime/construction';
 
 const resource = new ResourceOffer('test.value', (value) => value, 'binding');
-class Read extends AttemptDefinition {
+class Read extends NodeDefinition {
   name = 'read';
   label = 'Read';
   source = 'test';
@@ -15,22 +16,22 @@ class Read extends AttemptDefinition {
     return `${work.input}:${work.resources.value}`;
   }
 }
-class Work extends OperationDefinition {
+class Work extends GroupDefinition {
   name = 'work';
   label = 'Work';
   source = 'test';
   run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
   leaf = new Read();
-  children = [this.leaf];
+  members = [this.leaf];
   sequence = new Sequence().step('read', { use: this.leaf, input: ({ input }) => input });
   async execute(work) {
     return (await this.sequence.run(work.input, work.children)).read;
   }
 }
-class Main extends ExecutionDefinition {
+class Main extends GroupDefinition {
   run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
   operation = new Work();
-  children = [this.operation];
+  members = [this.operation];
   async execute(work) {
     const child = work.children.create(this.operation, work.input);
     await child.run();
@@ -41,7 +42,7 @@ function bind(main, source, options = {}) {
   const definition = runtimeDefinition(main);
   const observations = options.recorder ? [bindRecording(options.recorder, { failure: 'propagate' })] : undefined;
   if (observations) recordDefinitions(definition);
-  return assembleRuntime(definition, { observations, providers: [resource.provide((value) => value)], source: { capture: () => source(), callbacks: (_definition, options) => options.execution } });
+  return installCallable(definition, { observations, providers: [resource.provide((value) => value)], source: { capture: () => source() }, bindings: [bindCallSource(main, { started: (options) => options.execution?.started })] });
 }
 
 test('definitions bind to independent R endpoints; node identity is stable and per-call state is separate', async () => {
@@ -64,20 +65,20 @@ test('definitions bind to independent R endpoints; node identity is stable and p
   value = 'next';
   assert.equal(await first.run('two', { execution: callbacks }), 'two:next');
   assert.equal(await second.run('three', { execution: callbacks }), 'three:right');
-  const identity = (call, recorder = firstRecorder) => recordedCall(recorder, call.children.values()[0].invocation).operationInstanceId;
+  const identity = (call, recorder = firstRecorder) => recordedCall(recorder, call.children.values()[0].invocation).structureId;
   assert.equal(identity(calls[0]), identity(calls[1]));
   assert.notEqual(identity(calls[0]), identity(calls[2], secondRecorder));
   assert.notEqual(calls[0].context.id, calls[1].context.id);
   const parent = firstRecorder.book.get(recordedCall(firstRecorder, calls[0]).parentId);
-  assert.equal(parent.kind, 'runtime-call');
+  assert.equal(parent.kind, 'invocation');
   assert.equal(firstRecorder.book.get(parent.parentId).kind, 'runtime');
   assert.equal(first.running, false);
 });
 
-test('one RuntimeBinder binds independent roots and rejects foreign child references', async () => {
+test('one Driver binds independent roots and rejects foreign child references', async () => {
   const execution = new Main();
   const definition = runtimeDefinition(execution);
-  const binder = new RuntimeBinder();
+  const driver = new Driver();
   const calls = [];
   let release;
   const pending = new Promise((resolve) => {
@@ -103,22 +104,24 @@ test('one RuntimeBinder binds independent roots and rejects foreign child refere
     providers: [resource.provide((source) => source)],
     source: {
       capture: () => value,
-      callbacks: () => ({
-        started: (_context, invocation) => {
+    },
+    bindings: [
+      bindCallSource(execution, {
+        started: () => (_context, invocation) => {
           calls.push(invocation);
         },
       }),
-    },
+    ],
   });
-  const left = binder.bind(definition, options('left-resource'));
-  const right = binder.bind(definition, options('right-resource'));
+  const left = driver.bind(definition, options('left-resource'));
+  const right = driver.bind(definition, options('right-resource'));
   assert.notEqual(left.id, right.id);
-  const leftRun = left.run('left', {});
+  const leftRun = driver.run(left, 'left', {});
   await ready;
   assert.ok(previous);
   try {
-    assert.equal(left.running, true);
-    await assert.rejects(right.run('right', {}), /foreign child reference/);
+    assert.equal(driver.isRunning(left), true);
+    await assert.rejects(driver.run(right, 'right', {}), /foreign child reference/);
     assert.notEqual(calls[0].context.id, calls[1].context.id);
     assert.equal(calls[0].children.values().length, 1);
     assert.equal(calls[1].children.values().length, 0);
@@ -126,9 +129,9 @@ test('one RuntimeBinder binds independent roots and rejects foreign child refere
     release();
   }
   assert.equal(await leftRun, 'left:left-resource');
-  assert.equal(left.running, false);
-  assert.equal(right.running, false);
-  assert.equal(await left.run('next', {}), 'next:left-resource');
+  assert.equal(driver.isRunning(left), false);
+  assert.equal(driver.isRunning(right), false);
+  assert.equal(await driver.run(left, 'next', {}), 'next:left-resource');
 });
 
 test('business Work and child facts exclude lifecycle, binding and relation mutation', async () => {
@@ -151,10 +154,10 @@ test('business Work and child facts exclude lifecycle, binding and relation muta
 });
 
 test('plain definitions use the same fixed structures without class inheritance', async () => {
-  const child = { level: 'operation', name: 'length', label: 'Length', source: 'test', children: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (work) => work.input.length } };
+  const child = { kind: 'group', name: 'length', label: 'Length', source: 'test', members: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (work) => work.input.length } };
   const execution = {
-    level: 'execution',
-    children: [child],
+    kind: 'group',
+    members: [child],
     maxRounds: 1,
     raises: [],
     run: {
@@ -166,7 +169,7 @@ test('plain definitions use the same fixed structures without class inheritance'
       },
     },
   };
-  const runtime = assembleRuntime(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
+  const runtime = installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
   assert.equal(await runtime.run('hello', {}), 5);
 });
 
@@ -212,50 +215,46 @@ test('undeclared entries fail before admission and attachment', async () => {
 
 test('assembly rejects invalid levels and cycles without activating resource providers', () => {
   const main = new Main();
-  main.children = [new Read()];
-  assert.throws(() => bind(main, () => assert.fail('not yet')), /Invalid child definition level/);
-  main.children = [main.operation];
-  main.operation.children = [main.operation];
-  assert.throws(() => bind(main, () => assert.fail('not yet')), /Cyclic child declaration/);
+  main.members = [runtimeDefinition(new Main())];
+  assert.throws(() => bind(main, () => assert.fail('not yet')), /Invalid member definition kind/);
+  main.members = [main.operation];
+  main.operation.members = [main.operation];
+  assert.throws(() => bind(main, () => assert.fail('not yet')), /Cyclic member declaration/);
 });
 
 test('nested O structures stay lazy and a shared A declaration is bound independently at each parent position', () => {
   const shared = new Read();
   const left = new Work();
-  left.children = [shared];
+  left.members = [shared];
   const right = new Work();
-  right.children = [shared];
+  right.members = [shared];
   const group = new Work();
-  group.children = [left, right];
+  group.members = [left, right];
   const main = new Main();
-  main.children = [group];
-  const builders = createInvocationBuilders();
-  const attemptBinder = new AttemptBinder(builders.attempt);
-  const operationBinder = new OperationBinder(builders.operation, attemptBinder);
-  const executionBinder = new ExecutionBinder(builders.execution, operationBinder);
-  const roots = new BoundChildren([resolveDeclaration(main)], (resolved) => executionBinder.bindResolved(resolved));
-
+  main.members = [group];
+  const scene = new CallableBinder().bind(runtimeDefinition(main), { providers: [resource.provide(() => 'value')], source: { capture: () => null } });
+  const roots = scene.children;
   assert.equal(roots.initialized(main), false);
   const execution = roots.get(main);
-  assert.ok(execution instanceof BoundExecution);
+  assert.ok(execution instanceof BoundCallable);
   assert.equal(execution.children.initialized(group), false);
   const operation = execution.children.get(group);
-  assert.ok(operation instanceof BoundOperation);
+  assert.ok(operation instanceof BoundCallable);
   assert.equal(operation.children.initialized(left), false);
   assert.equal(operation.children.initialized(right), false);
 
   const first = operation.children.get(left);
-  assert.ok(first instanceof BoundOperation);
+  assert.ok(first instanceof BoundCallable);
   assert.equal(first.children.initialized(shared), false);
   assert.equal(operation.children.initialized(right), false);
   const firstLeaf = first.children.get(shared);
-  assert.ok(firstLeaf instanceof BoundAttempt);
+  assert.ok(firstLeaf instanceof BoundCallable);
   assert.equal(first.children.get(shared), firstLeaf);
 
   const second = operation.children.get(right);
   assert.equal(second.children.initialized(shared), false);
   const secondLeaf = second.children.get(shared);
-  assert.ok(secondLeaf instanceof BoundAttempt);
+  assert.ok(secondLeaf instanceof BoundCallable);
   assert.notEqual(firstLeaf, secondLeaf);
   assert.equal(roots.get(main), execution);
   assert.equal(execution.children.get(group), operation);
@@ -275,20 +274,25 @@ test('E construction follows R reservation, validation, ordinary input preparati
     await child.run();
     return child.accept();
   };
-  const runtime = assembleRuntime(definition, {
+  const runtime = installCallable(definition, {
     providers: [resource.provide((value) => value)],
     source: {
       validate: () => {
         assert.equal(runtime.running, true);
         order.push('validate');
       },
-      callbacks: (_definition, options) => options.execution,
-      capture: (input) => {
-        order.push('capture');
-        assert.deepEqual(input, { text: 'input' });
-        return 'value';
-      },
+      capture: () => 'root',
     },
+    bindings: [
+      bindCallSource(execution, {
+        started: (options) => options.execution?.started,
+        capture: (input) => {
+          order.push('capture');
+          assert.deepEqual(input, { text: 'input' });
+          return 'value';
+        },
+      }),
+    ],
   });
   assert.deepEqual(
     await runtime.run('input', {
@@ -314,7 +318,7 @@ test('pre-cancelled R skips E capture; capture failure releases R reservation', 
   await assert.rejects(runtime.run('input', { signal: AbortSignal.abort() }), /取消/);
   assert.equal(captures, 0);
   const failure = new Error('capture failed');
-  const broken = assembleRuntime(runtimeDefinition(execution), {
+  const broken = installCallable(runtimeDefinition(execution), {
     providers: [resource.provide((value) => value)],
     source: {
       capture: () => {
@@ -345,7 +349,7 @@ test('R resource endpoints remain scoped to R while E receives its own resource 
       return child.accept();
     },
   };
-  const runtime = assembleRuntime(definition, {
+  const runtime = installCallable(definition, {
     providers: [access.provide(() => null), resource.provide(() => 'value')],
     source: { runtime: () => null, capture: () => null },
   });

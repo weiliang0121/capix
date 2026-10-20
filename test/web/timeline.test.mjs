@@ -22,7 +22,7 @@ test('QA columns retain equal readable widths independently of duration or count
 });
 
 test('only calls within the same execution share a time scale, with nested lanes and inherited families', () => {
-  const calls = [call('e', 'execution', 10, 1000), call('selection', 'operation', 110, 600, 'e'), call('inner', 'operation', 210, 300, 'selection'), call('model', 'attempt', 250, 100, 'inner')];
+  const calls = [call('e', 'group', 10, 1000), call('selection', 'group', 110, 600, 'e'), call('inner', 'group', 210, 300, 'selection'), call('model', 'node', 250, 100, 'inner')];
   const layout = layoutInvocations(execution(calls));
   const [e, operation, nested, attempt] = layout.calls;
   close(e.width, 1);
@@ -40,12 +40,12 @@ test('only calls within the same execution share a time scale, with nested lanes
 });
 
 test('running geometry ends at observed offsets and never invents a completed duration', () => {
-  const layout = layoutInvocations(execution([call('e', 'execution', 5), call('memory', 'operation', 10, undefined, 'e')], 30));
+  const layout = layoutInvocations(execution([call('e', 'group', 5), call('memory', 'group', 10, undefined, 'e')], 30));
   assert.equal(layout.calls[0].call.durationMs, undefined);
   close(layout.calls[0].width, 1);
   close(layout.calls[1].left, 0.2);
   close(layout.calls[1].width, 0.8);
-  const zero = layoutInvocations(execution([call('e', 'execution', 5, 0)], 5));
+  const zero = layoutInvocations(execution([call('e', 'group', 5, 0)], 5));
   assert.equal(zero.calls[0].width, 0);
   assert.ok(Number.isFinite(zero.calls[0].left));
 });

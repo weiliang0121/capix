@@ -39,43 +39,46 @@ export function updateOverviews(previous: ObserverOverview, snapshots: Iterable<
 
 function projectExecutionSummary(snapshot: ExecutionRecordSnapshot, existing: ObserverOverview['executions'][number] | undefined, fallbackInputIndex: number): ObserverOverview['executions'][number] {
   validateExecutionRecordSnapshot(snapshot);
-  const starts = new Map(snapshot.events.filter((event) => event.value.type === 'call').map((event) => [event.callId, event]));
-  const ends = new Map(snapshot.events.filter((event) => event.value.type !== 'call').map((event) => [event.callId, event]));
-  const records = [snapshot.execution, ...snapshot.operations, ...snapshot.attempts];
-  const calls: InvocationSummary[] = [{ ...snapshot.execution, recordType: 'execution' as const, name: 'execution', label: '执行调用', source: 'server/runtime/src/structure/execution.ts · BoundExecution.create' }, ...snapshot.operations.map((record) => ({ ...record, recordType: 'operation' as const, name: record.operation, parentId: record.parentOperationId ?? record.executionId })), ...snapshot.attempts.map((record) => ({ ...record, recordType: 'attempt' as const, parentId: record.operationId }))].map((record) => {
-    const start = starts.get(record.id);
+  const startedAt = snapshot.execution.value.startedAt;
+  if (startedAt === undefined) throw new Error('Conversation task has no recorded start');
+  const starts = new Map(snapshot.boundaries.filter((event) => event.value.type === 'call').map((event) => [event.callId, event]));
+  const ends = new Map(snapshot.boundaries.filter((event) => event.value.type !== 'call').map((event) => [event.callId, event]));
+  const origin = starts.get(snapshot.execution.id)!;
+  const calls: InvocationSummary[] = snapshot.calls.map((record) => {
+    const start = starts.get(record.id)!;
     const end = ends.get(record.id);
-    return { id: record.id, contextId: record.contextId, recordType: record.recordType, ...('parentId' in record ? { parentId: record.parentId } : {}), name: record.name, label: record.label, source: record.source, status: record.status, offsetMs: start?.offsetMs ?? 0, ...(end && start ? { durationMs: end.offsetMs - start.offsetMs } : {}) };
+    const offsetMs = start.scopeId === origin.scopeId ? start.offsetMs - origin.offsetMs : Date.parse(start.occurredAt) - Date.parse(origin.occurredAt);
+    return { id: record.id, contextId: record.contextId, recordType: record.structureKind, ...(record.parentId ? { parentId: record.parentId } : {}), name: record.name ?? '', label: record.label ?? record.name ?? '调用', source: record.source ?? '', status: record.status, offsetMs, ...(end ? { durationMs: end.offsetMs - start.offsetMs } : {}) };
   });
   calls.sort((a, b) => (starts.get(a.id)?.sequence ?? Number.MAX_SAFE_INTEGER) - (starts.get(b.id)?.sequence ?? Number.MAX_SAFE_INTEGER));
-  const observedOffsetMs = Math.max(snapshot.events.at(-1)?.offsetMs ?? 0, ...records.map((record) => record.value.processes.at(-1)?.offsetMs ?? 0));
-  const durationMs = calls.find((call) => call.recordType === 'execution')?.durationMs;
+  const own = new Set(snapshot.calls.map((call) => call.id));
+  const observedOffsetMs = Math.max(0, ...snapshot.boundaries.filter((event) => own.has(event.callId)).map((event) => (event.scopeId === origin.scopeId ? event.offsetMs - origin.offsetMs : Date.parse(event.occurredAt) - Date.parse(origin.occurredAt))), ...snapshot.calls.map((record) => (record.value.processes.at(-1)?.offsetMs ?? origin.offsetMs) - origin.offsetMs));
+  const durationMs = calls.find((call) => call.id === snapshot.execution.id)?.durationMs;
   const range = executionResources(snapshot).transcriptRange;
   const inputIndex = range ? range.end - 1 : (existing?.inputIndex ?? fallbackInputIndex);
-  const selections = snapshot.operations.filter((operation) => operation.operation === 'selection' || operation.operation === 'prepareContext');
-  const response = snapshot.operations.find((operation) => operation.operation === 'answer' && operation.status === 'succeeded');
-  const responseValue = response ? object(readOutput(response.value)) : {};
-  const preparation = selections.find((operation) => operation.operation === 'prepareContext' && operation.status === 'succeeded');
+  const selections = snapshot.calls.filter((call) => call.name === 'selection' || call.name === 'prepareContext');
+  const preparation = selections.find((call) => call.name === 'prepareContext' && call.status === 'succeeded');
   const memoryInput = preparation ? object(object(readOutput(preparation.value)).material).memories : object(selections[0]?.value.input).memories;
-  const item: ObserverOverview['executions'][number] = {
+  const answer = snapshot.transcripts.find((record) => record.parentId === snapshot.execution.id && record.value.action === 'append' && record.value.end === record.value.start + 1);
+  const memory = snapshot.calls.find((call) => call.name === 'memory');
+  return {
     id: snapshot.execution.id,
     ...(snapshot.archive ? { archive: snapshot.archive } : {}),
-    startedAt: snapshot.execution.value.startedAt,
+    startedAt,
     status: snapshot.execution.status,
     observedOffsetMs,
     ...(durationMs === undefined ? {} : { durationMs }),
     inputIndex,
     calls,
-    selections: selections.map((operation) => {
-      const output = operation.status === 'succeeded' ? object(readOutput(operation.value)) : {};
-      const indexes = operation.operation === 'prepareContext' ? object(output.selection).historyIndexes : output.historyIndexes;
-      return { operationId: operation.id, status: operation.status, ...(isArray(indexes) && indexes.every(isNumber) ? { indexes } : {}) };
+    selections: selections.map((call) => {
+      const output = call.status === 'succeeded' ? object(readOutput(call.value)) : {};
+      const indexes = call.name === 'prepareContext' ? object(output.selection).historyIndexes : output.historyIndexes;
+      return { operationId: call.id, status: call.status, ...(isArray(indexes) && indexes.every(isNumber) ? { indexes } : {}) };
     }),
     availableMemoryIds: isArray(memoryInput) ? memoryInput.map((memory) => object(memory).id).filter(isString) : [],
-    memoryChanges: existing?.memoryChanges ?? [],
+    memoryChanges: snapshot.memories.map((record) => ({ id: record.id, memoryId: record.memoryId, operationId: record.callId ?? record.operationId, action: record.value.action, change: record.value.change })),
     ...(range ? { transcriptRange: range } : {}),
-    ...(isString(responseValue.content) ? { response: { ...(existing?.response?.index === undefined ? {} : { index: existing.response.index }) } } : {}),
-    ...(snapshot.operations.find((operation) => operation.operation === 'memory') ? { memoryStatus: snapshot.operations.find((operation) => operation.operation === 'memory')!.status } : {}),
+    ...(answer?.value.action === 'append' ? { response: { index: answer.value.start } } : existing?.response ? { response: existing.response } : {}),
+    ...(memory ? { memoryStatus: memory.status } : {}),
   };
-  return item;
 }

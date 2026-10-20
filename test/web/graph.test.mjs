@@ -5,7 +5,7 @@ import { createObservationProjection } from '../../apps/observer/.test-dist/bind
 import { snapshot } from '../client/fixtures.mjs';
 
 function call(id, parentId, name = id, extra = {}) {
-  return { id, contextId: `${id}-context`, recordType: id === 'e' ? 'execution' : 'operation', parentId, name, label: name, source: '', status: 'succeeded', offsetMs: 0, durationMs: 1, ...extra };
+  return { id, contextId: `${id}-context`, recordType: 'group', parentId, name, label: name, source: '', status: 'succeeded', offsetMs: 0, durationMs: 1, ...extra };
 }
 
 function round(calls) {
@@ -41,11 +41,11 @@ test('summary graph preserves supplied sibling order and readable identity indep
 });
 
 test('detail graph derives each local sequence from parent attachment facts and exposes R as an upstream link', () => {
-  const r = call('r', undefined, 'runtime', { recordType: 'runtime' });
+  const r = call('r', undefined, 'runtime', { recordType: 'scene' });
   const e = call('e', 'r');
   const a = call('a', 'e');
   const b = call('b', 'e');
-  const child = call('child', 'a', 'answer.invokeModel', { recordType: 'attempt' });
+  const child = call('child', 'a', 'answer.invokeModel', { recordType: 'node' });
   const relations = { r: [relation(e, 1)], e: [relation(a, 8), relation(b, 3)], a: [relation(child, 2)] };
   const graph = projectCallGraph(round([e, a, child, b]), detail([r, e, a, child, b], relations));
   assert.equal(graph.summaryOnly, false);
@@ -197,10 +197,10 @@ test('formal assistant append locates a clarification response without an answer
     sync: { status: 'live' },
   };
   const transcripts = new Map([['transcript', transcript]]);
-  const append = { id: 'append', transcriptId: 'transcript', executionId: 'e', revision: 2, occurredAt: recorded.execution.value.startedAt, value: { action: 'append', start: 1, end: 2 } };
+  const append = { id: 'append', transcriptId: 'transcript', callId: 'e', revision: 2, occurredAt: recorded.execution.value.startedAt, value: { action: 'append', start: 1, end: 2 } };
   const live = { ...state, updates: new Map([['e', recorded]]), transcriptRecords: [append] };
   const result = project(live, transcripts);
-  assert.equal(recorded.operations.length, 0);
+  assert.equal(recorded.calls.length, 1);
   assert.deepEqual(result.rounds[0].response, { index: 1, content: '保存到哪个文件？' });
   const noEvidence = createObservationProjection()({ ...live, transcriptRecords: [] }, transcripts);
   assert.equal(noEvidence.rounds[0].response, undefined, 'An E output or similar message text does not prove formal message ownership');

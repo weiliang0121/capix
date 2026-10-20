@@ -1,6 +1,6 @@
 import type { CheckpointCodec, ResourceRequest } from '@capix/server-runtime';
-import { checkpointPoint, childReference, childReferences, defineAttempt, defineChildEntry, defineExecution, defineOperation, defineRuntime } from '@capix/server-runtime';
-import type { ChildReference, ChildEntryFacts as EntryFacts, OperationWork, ResourcesOf } from '@capix/server-runtime';
+import { checkpointPoint, childReference, childReferences, defineNode, defineChildEntry, defineGroup, defineScene } from '@capix/server-runtime';
+import type { ChildReference, ChildEntryFacts as EntryFacts, GroupWork, ResourcesOf } from '@capix/server-runtime';
 
 const metadata = { label: 'test', source: 'test', callee: 'test' };
 
@@ -31,7 +31,7 @@ declare const stringCodec: CheckpointCodec<string>;
 declare const numberCodec: CheckpointCodec<number>;
 declare const stateCodec: CheckpointCodec<{ readonly offset: number }>;
 
-export const readText = defineAttempt<ReadInput, Document>()({
+export const readText = defineNode<ReadInput, Document>()({
   ...metadata,
   name: 'readText',
   run: {
@@ -75,9 +75,9 @@ export const readText = defineAttempt<ReadInput, Document>()({
   },
 });
 
-export const count = defineAttempt<number, number>()({ ...metadata, name: 'count', run: { execute: (work) => work.input + 1 } });
+export const count = defineNode<number, number>()({ ...metadata, name: 'count', run: { execute: (work) => work.input + 1 } });
 
-export const waitingPoint = checkpointPoint<'operation', ReadInput, string>()({
+export const waitingPoint = checkpointPoint<'group', ReadInput, string>()({
   name: 'waiting',
   state: stateCodec,
   references: { source: childReference(readText), copies: childReferences(readText) },
@@ -116,16 +116,16 @@ export const waitingPoint = checkpointPoint<'operation', ReadInput, string>()({
 const requires = { reader };
 
 // The extracted helper needs only a public work type and the actual requires/child declarations.
-async function readAndAccept(work: OperationWork<ReadInput, string, ResourcesOf<typeof requires>, typeof readText>): Promise<string> {
+async function readAndAccept(work: GroupWork<ReadInput, string, ResourcesOf<typeof requires>, typeof readText>): Promise<string> {
   const child = work.children.create(readText, work.input);
   await child.run();
   return child.accept((document) => document.text);
 }
 
-export const operation = defineOperation<ReadInput, string>()({
+export const operation = defineGroup<ReadInput, string>()({
   ...metadata,
   name: 'operation',
-  children: [readText, count],
+  members: [readText, count],
   run: {
     requires,
     uses: [readText],
@@ -193,10 +193,10 @@ export const operation = defineOperation<ReadInput, string>()({
   checkpoint: { key: 'operation', version: 1, input: inputCodec, output: stringCodec, points: [waitingPoint] },
 });
 
-defineOperation<ReadInput, number>()({
+defineGroup<ReadInput, number>()({
   ...metadata,
   name: 'defaults',
-  children: [readText, count],
+  members: [readText, count],
   run: {
     execute(work) {
       // Omitted run uses means all declared children.
@@ -217,10 +217,10 @@ defineOperation<ReadInput, number>()({
   },
 });
 
-defineOperation<ReadInput, string>()({
+defineGroup<ReadInput, string>()({
   ...metadata,
   name: 'uses-must-be-registered',
-  children: [readText],
+  members: [readText],
   run: {
     // @ts-expect-error A non-child cannot become callable merely by adding it to uses.
     uses: [count],
@@ -228,10 +228,10 @@ defineOperation<ReadInput, string>()({
   },
 });
 
-defineOperation<ReadInput, string>()({
+defineGroup<ReadInput, string>()({
   ...metadata,
   name: 'exception-uses-must-be-registered',
-  children: [readText],
+  members: [readText],
   run: { execute: () => '' },
   exceptions: {
     accepts: [],
@@ -241,7 +241,7 @@ defineOperation<ReadInput, string>()({
   },
 });
 
-checkpointPoint<'operation', ReadInput, string>()({
+checkpointPoint<'group', ReadInput, string>()({
   name: 'default-resume-uses',
   state: stateCodec,
   references: { source: childReference(readText) },
@@ -258,7 +258,7 @@ checkpointPoint<'operation', ReadInput, string>()({
   },
 });
 
-checkpointPoint<'attempt', ReadInput, string>()({
+checkpointPoint<'node', ReadInput, string>()({
   name: 'leaf-point-with-illegal-child',
   state: stateCodec,
   // @ts-expect-error An A point cannot declare direct-child reference roles.
@@ -272,10 +272,10 @@ checkpointPoint<'attempt', ReadInput, string>()({
   },
 });
 
-defineOperation<ReadInput, number>()({
+defineGroup<ReadInput, number>()({
   ...metadata,
   name: 'empty-uses',
-  children: [count],
+  members: [count],
   run: {
     uses: [],
     execute(work) {
@@ -286,10 +286,10 @@ defineOperation<ReadInput, number>()({
   },
 });
 
-export const execution = defineExecution<ReadInput, string>()({
+export const execution = defineGroup<ReadInput, string>()({
   ...metadata,
   name: 'execution',
-  children: [operation],
+  members: [operation],
   run: {
     execute: async (work) => {
       const child = work.children.create(operation, work.input);
@@ -299,10 +299,10 @@ export const execution = defineExecution<ReadInput, string>()({
   },
 });
 
-defineRuntime<string, string>()({
+defineScene<string, string>()({
   ...metadata,
   name: 'runtime',
-  children: [execution],
+  members: [execution],
   run: {
     execute: async (work) => {
       const child = work.children.create(execution, { path: work.input });
@@ -315,36 +315,36 @@ defineRuntime<string, string>()({
   },
 });
 
-defineAttempt<string, string>()({
+defineNode<string, string>()({
   ...metadata,
   name: 'leaf-cannot-register',
   // @ts-expect-error Attempts cannot register children.
-  children: [count],
+  members: [count],
   run: { execute: (work) => work.input },
 });
-defineExecution<string, string>()({
+defineGroup<string, string>()({
   ...metadata,
   name: 'bad-E-child',
-  // @ts-expect-error E allows O, not A directly.
-  children: [readText],
+  // Composite membership accepts this direct relationship.
+  members: [readText],
   run: { execute: (work) => work.input },
 });
-defineRuntime<string, string>()({
+defineScene<string, string>()({
   ...metadata,
   name: 'bad-R-child',
-  // @ts-expect-error R allows E, not O directly.
-  children: [operation],
+  // Composite membership accepts this direct relationship.
+  members: [operation],
   run: { execute: (work) => work.input },
 });
-defineOperation<string, string>()({
+defineGroup<string, string>()({
   ...metadata,
   name: 'bad-O-child',
-  // @ts-expect-error O cannot register E.
-  children: [execution],
+  // Composite membership accepts this direct relationship.
+  members: [execution],
   run: { execute: (work) => work.input },
 });
 
-defineOperation<number, number>()({
+defineGroup<number, number>()({
   ...metadata,
   name: 'wrong-point-owner',
   run: { execute: (work) => work.input },
@@ -358,7 +358,7 @@ defineOperation<number, number>()({
   },
 });
 
-defineAttempt<string, string>()({
+defineNode<string, string>()({
   ...metadata,
   name: 'streamed',
   output: {
@@ -386,7 +386,7 @@ defineAttempt<string, string>()({
   },
 });
 
-defineAttempt<string, string>()({
+defineNode<string, string>()({
   ...metadata,
   name: 'result-only',
   output: {
@@ -404,7 +404,7 @@ defineAttempt<string, string>()({
   },
 });
 
-const streamingPoint = checkpointPoint<'attempt', string, string, string>()({
+const streamingPoint = checkpointPoint<'node', string, string, string>()({
   name: 'streaming-leaf',
   state: stringCodec,
   references: {},
@@ -417,7 +417,7 @@ const streamingPoint = checkpointPoint<'attempt', string, string, string>()({
     },
   },
 });
-defineAttempt<string, string>()({
+defineNode<string, string>()({
   ...metadata,
   name: 'streaming-point-owner',
   output: {
@@ -434,7 +434,7 @@ defineAttempt<string, string>()({
   run: { execute: (work) => work.input },
 });
 
-defineOperation<ReadInput, string>()({
+defineGroup<ReadInput, string>()({
   ...metadata,
   name: 'cannot-forge-control',
   run: {
@@ -452,10 +452,10 @@ const alternate = defineChildEntry(readText, {
     return { path: input.filename };
   },
 });
-defineOperation<ReadInput, string>()({
+defineGroup<ReadInput, string>()({
   ...metadata,
   name: 'alternate-entry',
-  children: [readText],
+  members: [readText],
   run: {
     execute: async (work) => {
       const child = work.children.entry(alternate, { filename: work.input.path });
@@ -469,11 +469,11 @@ defineOperation<ReadInput, string>()({
 
 // Structurally equal definitions cannot get distinct per-object brands from TS.
 // This deliberately compiles. Exact definition/ref/point identity remains a binding/runtime check.
-const sameShape = defineAttempt<ReadInput, Document>()({ ...metadata, name: 'another-reader', run: { requires: { reader }, execute: () => ({ text: '' }) }, exceptions: { accepts: [], requires: { logger }, handle: (work) => work.unhandled } });
-defineOperation<ReadInput, string>()({
+const sameShape = defineNode<ReadInput, Document>()({ ...metadata, name: 'another-reader', run: { requires: { reader }, execute: () => ({ text: '' }) }, exceptions: { accepts: [], requires: { logger }, handle: (work) => work.unhandled } });
+defineGroup<ReadInput, string>()({
   ...metadata,
   name: 'identity-requires-runtime-check',
-  children: [readText],
+  members: [readText],
   run: {
     execute(work) {
       work.children.create(sameShape, work.input);
@@ -484,9 +484,9 @@ defineOperation<ReadInput, string>()({
 
 // A point cannot silently turn a non-streaming owner into an output producer.
 // @ts-expect-error A string Delta point cannot bind to a no-Delta owner.
-defineAttempt<string, string>()({ ...metadata, name: 'wrong-delta-owner', checkpoint: { key: 'wrong-delta', version: 1, input: stringCodec, output: stringCodec, points: [streamingPoint] }, run: { execute: (work) => work.input } });
+defineNode<string, string>()({ ...metadata, name: 'wrong-delta-owner', checkpoint: { key: 'wrong-delta', version: 1, input: stringCodec, output: stringCodec, points: [streamingPoint] }, run: { execute: (work) => work.input } });
 
-defineAttempt<string, string>()({
+defineNode<string, string>()({
   ...metadata,
   name: 'empty-resources',
   run: {
@@ -500,8 +500,8 @@ defineAttempt<string, string>()({
   },
 });
 
-const wrongLevelPoint = checkpointPoint<'runtime', ReadInput, string>()({ name: 'wrong-level', state: stringCodec, references: {}, resume: { execute: (_work, state) => state } });
-defineOperation<ReadInput, string>()({
+const wrongLevelPoint = checkpointPoint<'scene', ReadInput, string>()({ name: 'wrong-level', state: stringCodec, references: {}, resume: { execute: (_work, state) => state } });
+defineGroup<ReadInput, string>()({
   ...metadata,
   name: 'wrong-level-owner',
   run: { execute: () => '' },
@@ -516,8 +516,8 @@ defineOperation<ReadInput, string>()({
 });
 
 // @ts-expect-error E has no separate entry-input generic.
-defineExecution<string, string, { request: string }>();
-defineExecution<string, string>()({
+defineGroup<string, string, { request: string }>();
+defineGroup<string, string>()({
   run: { execute: (work) => work.input },
   // @ts-expect-error Input preparation belongs to ordinary parent work, not an E entry lifecycle.
   entry: { accept: (input: string) => input },

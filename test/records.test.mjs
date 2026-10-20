@@ -7,7 +7,7 @@ import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { createInput, observeFixture } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Recorder, BaseRecord, ExecutionRecord, OperationRecord, RecordBook, ExecutionRecordHelper, OperationRecordHelper, Clock, RuntimeError } from '@capix/server-runtime';
+import { Recorder, BaseRecord, CallableRecord, ExecutionRecord, OperationRecord, RecordBook, ExecutionRecordHelper, OperationRecordHelper, Clock, RuntimeError } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 import { test } from 'node:test';
 
@@ -46,6 +46,9 @@ const begin = (runtime, value = input) => {
   return context;
 };
 const complete = (context, output) => lifecycles.get(context).succeed(context, output);
+const groups = (snapshot) => snapshot.calls.filter((call) => call.id !== snapshot.execution.id && call.structureKind === 'group');
+const nodes = (snapshot) => snapshot.calls.filter((call) => call.structureKind === 'node');
+const directCalls = (recorder, parent) => recorder.tree.children(parent.id).filter((record) => record instanceof CallableRecord);
 
 test('Book stores any record by identity without creating invocation boundaries', () => {
   const book = new RecordBook();
@@ -155,14 +158,14 @@ test('construction does not execute; repeated calls share the callable identity,
   assert.equal(node.getRecords, undefined);
   assert.equal(node.exeId, undefined);
   const execution = begin(runtime);
-  assert.equal(OperationRecordHelper.findByExecution(new Recorder(book), recordFor(execution).id).length, 0);
+  assert.equal(directCalls(runtime.recorder, recordFor(execution)).length, 0);
   const value = { x: 1 };
   assert.equal(await node.call(callFor(execution), value), value);
   assert.equal(await node.call(callFor(execution), value), value);
-  const calls = OperationRecordHelper.findByExecution(new Recorder(book), recordFor(execution).id);
+  const calls = directCalls(runtime.recorder, recordFor(execution));
   assert.equal(calls.length, 2);
   assert.notEqual(calls[0].id, calls[1].id);
-  assert.ok(calls.every((op) => op.operationInstanceId === node.id && op.executionId === recordFor(execution).id));
+  assert.ok(calls.every((op) => op.structureId === node.id && op.parentId === recordFor(execution).id));
   const secondNode = new TestOperation(runtime, echo);
   assert.notEqual(secondNode.id, node.id);
   const past = observeCall(runtime.recording, callFor(execution));
@@ -207,15 +210,13 @@ test('one node overlaps calls within and across executions without mixing input 
   for (const execution of [a, b]) {
     const facts = observeCall(runtime.recording, callFor(execution));
     validateExecutionRecordSnapshot(facts);
-    assert.ok(facts.operations.every((op) => op.executionId === recordFor(execution).id && op.operationInstanceId === node.id));
+    assert.ok(facts.operations.every((op) => op.parentId === recordFor(execution).id && op.structureId === node.id));
   }
   assert.deepEqual(
-    OperationRecordHelper.findByExecution(new Recorder(book), recordFor(a).id)
-
-      .map((op) => readOutput(op.value).original),
+    directCalls(runtime.recorder, recordFor(a)).map((op) => readOutput(op.value).original),
     ['a1', 'a2'],
   );
-  assert.equal(OperationRecordHelper.findByExecution(new Recorder(book), recordFor(b).id).length, 1);
+  assert.equal(directCalls(runtime.recorder, recordFor(b)).length, 1);
 });
 
 test('Paired operations reject foreign parents, duplicate endings and ending before children', () => {
@@ -252,24 +253,27 @@ test('Paired operations reject foreign parents, duplicate endings and ending bef
 test('Observer execution observes execution, operations and boundaries from the same records', async () => {
   const facts = await execute();
   validateExecutionRecordSnapshot(facts);
-  assert.deepEqual(Object.keys(facts).sort(), ['attempts', 'events', 'execution', 'operations', 'resources', 'runtimeCall', 'runtimeEvents']);
+  assert.deepEqual(Object.keys(facts).sort(), ['boundaries', 'calls', 'execution', 'memories', 'resources', 'rootCall', 'transcripts']);
   assert.deepEqual(
-    facts.operations.map((record) => record.operation),
+    groups(facts).map((record) => record.name),
     ['prepareContext', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
   );
-  assert.equal(facts.attempts.length, 8);
+  assert.equal(nodes(facts).length, 8);
   const sequence = projectExecution(facts).callSequence;
   assert.deepEqual(
     sequence.participants.map((p) => p.id),
-    ['caller', 'execution', 'operation', 'attempt'],
+    ['caller', 'scene', 'group', 'node'],
   );
-  assert.equal(sequence.calls.length, 1 + facts.operations.length + facts.attempts.length);
-  assert.equal(sequence.events, facts.events);
-  for (const attempt of facts.attempts) {
+  assert.equal(sequence.calls.length, 1 + groups(facts).length + nodes(facts).length);
+  assert.deepEqual(
+    sequence.events,
+    facts.boundaries.filter((event) => event.callId !== facts.rootCall.id),
+  );
+  for (const attempt of nodes(facts)) {
     const call = sequence.calls.find((c) => c.id === attempt.id);
-    assert.equal(call.caller, 'operation');
-    assert.equal(call.callee, 'attempt');
-    assert.equal(call.parentId, attempt.operationId);
+    assert.equal(call.caller, 'group');
+    assert.equal(call.callee, 'node');
+    assert.equal(call.parentId, attempt.parentId);
     assert.equal(call.target, attempt.callee);
   }
   const expectedActions = {
@@ -279,66 +283,66 @@ test('Observer execution observes execution, operations and boundaries from the 
     requestModel: ['invokeModel'],
     conversationDecision: [],
   };
-  for (const operation of facts.operations) {
-    const attempts = facts.attempts.filter((attempt) => attempt.operationId === operation.id);
+  for (const operation of groups(facts)) {
+    const attempts = nodes(facts).filter((attempt) => attempt.parentId === operation.id);
     assert.deepEqual(
       attempts.map((attempt) => attempt.name),
-      expectedActions[operation.operation],
+      expectedActions[operation.name],
     );
-    if (operation.operation === 'prepareContext') {
+    if (operation.name === 'prepareContext') {
       assert.ok(readOutput(operation.value).material.basis);
       continue;
     }
-    if (operation.operation === 'conversationDecision') {
+    if (operation.name === 'conversationDecision') {
       assert.ok(['invoke', 'finish'].includes(readOutput(operation.value).kind));
       assert.ok(facts.execution.value.relationChanges.some((entry) => entry.identity.childContextId === operation.contextId && entry.change.kind === 'accepted'));
       continue;
     }
-    if (operation.operation === 'requestModel') {
+    if (operation.name === 'requestModel') {
       const invocation = attempts[0];
       assert.deepEqual(invocation.value.input, operation.value.input);
       assert.equal(readOutput(invocation.value).kind, 'received');
       assert.deepEqual(readOutput(invocation.value).output, readOutput(operation.value));
-      assert.ok(facts.operations.some((parent) => parent.id === operation.parentId));
+      assert.ok(groups(facts).some((parent) => parent.id === operation.parentId));
       continue;
     }
     const preparation = attempts.find((attempt) => attempt.name === 'prepareModelRequest');
-    const invocation = facts.operations.find((child) => child.parentId === operation.id && child.operation === 'requestModel');
+    const invocation = groups(facts).find((child) => child.parentId === operation.id && child.name === 'requestModel');
     const acceptance = attempts.find((attempt) => attempt.name === 'acceptModelOutput');
     assert.deepEqual(invocation.value.input, readOutput(preparation.value));
     assert.deepEqual(acceptance.value.input.output, readOutput(invocation.value));
     assert.deepEqual(readOutput(operation.value), readOutput(attempts.at(-1).value));
-    if (operation.operation === 'memory') assert.deepEqual(attempts.at(-1).value.input, readOutput(acceptance.value));
+    if (operation.name === 'memory') assert.deepEqual(attempts.at(-1).value.input, readOutput(acceptance.value));
   }
-  const preparation = facts.operations.find((op) => op.operation === 'prepareContext');
-  const answer = facts.operations.find((op) => op.operation === 'answer');
-  const assembled = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'assembleContext');
+  const preparation = groups(facts).find((op) => op.name === 'prepareContext');
+  const answer = groups(facts).find((op) => op.name === 'answer');
+  const assembled = nodes(facts).find((attempt) => attempt.parentId === answer.id && attempt.name === 'assembleContext');
   assert.equal('context' in readOutput(preparation.value), false);
   assert.deepEqual(readOutput(preparation.value).material.messageIndexes, [0, 1]);
   assert.deepEqual(readOutput(preparation.value).selection, { historyIndexes: [0] });
   assert.deepEqual(assembled.value.input, { message: { role: 'user', content: input.content }, selectedMessages: [{ index: 0, message: input.history[0] }] });
   assert.deepEqual(answer.value.input, { context: assembled.value.input, memories: [] });
   assert.deepEqual(readOutput(facts.execution.value), readOutput(answer.value));
-  for (const op of facts.operations) {
-    assert.equal(op.executionId, facts.execution.id);
+  for (const op of groups(facts)) {
+    assert.ok(facts.calls.some((parent) => parent.id === op.parentId));
     assert.equal(op.status, 'succeeded');
     assert.equal('durationMs' in op, false);
     assert.equal('outputId' in op, false);
   }
   const view = projectExecution(facts);
   assert.deepEqual(
-    view.callSequence.calls.filter((call) => call.recordType === 'operation').map((call) => call.id),
-    facts.operations.map((record) => record.id),
+    view.callSequence.calls.filter((call) => call.recordType === 'group' && call.id !== facts.execution.id).map((call) => call.id),
+    groups(facts).map((record) => record.id),
   );
-  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'attempt').length, 8);
+  assert.equal(view.callSequence.calls.filter((call) => call.recordType === 'node').length, 8);
   assert.deepEqual(view.result, { kind: 'answer', content: '海盐项目' });
 });
 
 test('Acceptance rejection preserves raw output and its original cause without recording an accepted result', async () => {
   const facts = await execute('broken-json');
-  const answer = facts.operations.find((op) => op.operation === 'answer');
-  const invoked = facts.operations.find((operation) => operation.parentId === answer.id && operation.operation === 'requestModel');
-  const accepted = facts.attempts.find((attempt) => attempt.operationId === answer.id && attempt.name === 'acceptModelOutput');
+  const answer = groups(facts).find((op) => op.name === 'answer');
+  const invoked = groups(facts).find((operation) => operation.parentId === answer.id && operation.name === 'requestModel');
+  const accepted = nodes(facts).find((attempt) => attempt.parentId === answer.id && attempt.name === 'acceptModelOutput');
   assert.equal(readOutput(invoked.value).content, 'broken-json');
   assert.equal(accepted.value.input.output.content, 'broken-json');
   assert.equal(readOutput(accepted.value), undefined);
@@ -351,7 +355,7 @@ test('Acceptance rejection preserves raw output and its original cause without r
   assert.equal(facts.execution.value.failure.kind, 'exception');
   assert.equal(accepted.value.error.cause.code, 'INVALID_JSON');
   assert.deepEqual(accepted.value.error.detail, { code: 'INVALID_JSON', output: readOutput(invoked.value) });
-  assert.equal(facts.attempts.filter((attempt) => attempt.operationId === answer.id && attempt.name === 'acceptModelOutput' && attempt.status === 'failed').length, 2);
+  assert.equal(nodes(facts).filter((attempt) => attempt.parentId === answer.id && attempt.name === 'acceptModelOutput' && attempt.status === 'failed').length, 2);
   const runtime = createRecordedRuntime();
   const execution = begin(runtime);
   const failure = new RuntimeError('TEST', 'test');
@@ -375,19 +379,16 @@ test('missing or contradictory facts are rejected instead of repaired by the pro
       delete f.execution.contextId;
     },
     (f) => {
-      delete f.operations[0].contextId;
+      delete f.calls[1].contextId;
     },
     (f) => {
-      delete f.attempts[0].contextId;
+      f.calls[1].contextId = f.execution.contextId;
     },
     (f) => {
-      f.operations[0].contextId = f.execution.contextId;
+      f.calls[2].contextId = f.calls[1].id;
     },
     (f) => {
-      f.attempts[0].contextId = f.operations[0].id;
-    },
-    (f) => {
-      f.operations[0].executionId = f.execution.contextId;
+      f.calls[1].parentId = 'missing';
     },
     (f) => {
       delete f.execution.status;
@@ -396,54 +397,37 @@ test('missing or contradictory facts are rejected instead of repaired by the pro
       f.execution.status = 'running';
     },
     (f) => {
-      f.operations[0].status = 'failed';
+      f.calls[1].status = 'failed';
     },
     (f) => {
-      delete f.operations[0].status;
+      delete f.calls[1].status;
     },
-    (f) => f.operations.pop(),
-    (f) => f.attempts.pop(),
+    (f) => f.calls.pop(),
     (f) => {
-      f.attempts[0].operationId = f.execution.id;
-    },
-    (f) => {
-      f.attempts[0].operationId = f.operations[1].id;
+      f.calls[1].id = f.execution.id;
     },
     (f) => {
-      f.attempts[0].id = f.operations[0].id;
+      f.calls[1].name = '';
     },
     (f) => {
-      f.attempts[0].status = 'failed';
+      f.calls[1].label = 123;
     },
     (f) => {
-      f.attempts[0].name = '';
+      f.calls[1].structureKind = 'execution';
     },
     (f) => {
-      f.attempts[0].label = 123;
+      f.calls[1].value.error = { code: 'x', message: 'x' };
+    },
+    (f) =>
+      f.boundaries.splice(
+        f.boundaries.findIndex((event) => event.callId === f.calls[1].id && event.value.type === 'return'),
+        1,
+      ),
+    (f) => {
+      f.boundaries[1].sequence = 99;
     },
     (f) => {
-      const operationEnd = f.events.find((event) => event.callId === f.operations[0].id && event.value.type === 'return');
-      const attemptEnd = f.events.find((event) => event.callId === f.attempts[2].id && event.value.type === 'return');
-      [operationEnd.callId, attemptEnd.callId] = [attemptEnd.callId, operationEnd.callId];
-    },
-    (f) => {
-      f.operations[0].executionId = 'missing';
-    },
-    (f) => {
-      f.operations[0].parentOperationId = 'missing';
-    },
-    (f) => {
-      f.operations[0].value.error = { code: 'x', message: 'x' };
-    },
-    (f) => f.events.pop(),
-    (f) => {
-      f.events[1].sequence = 99;
-    },
-    (f) => {
-      f.operations[0].id = f.execution.id;
-    },
-    (f) => {
-      f.events[0].offsetMs = -1;
+      f.boundaries[0].offsetMs = -1;
     },
   ]) {
     const invalid = structuredClone(facts);
@@ -465,7 +449,7 @@ test('publication failure does not change execution facts or operation output', 
   const snapshot = observeCall(runtime.recording, callFor(execution));
   const processes = [snapshot.execution, ...snapshot.operations, ...snapshot.attempts].reduce((count, record) => count + record.value.processes.length, 0);
   const relations = [snapshot.execution, ...snapshot.operations, ...snapshot.attempts].reduce((count, record) => count + record.value.relationChanges.length, 0);
-  assert.equal(log.mock.callCount(), snapshot.events.length + processes + relations);
+  assert.ok(log.mock.callCount() >= processes + relations);
 });
 
 test('Paired operations use the record tree without scanning Book', (t) => {

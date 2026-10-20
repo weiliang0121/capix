@@ -21,7 +21,8 @@ async function execute(failAt) {
   let invocation;
   let error;
   try {
-    await environment.runtime.run(
+    await environment.driver.run(
+      environment.scene,
       { messages: [{ role: 'user', content: '你好' }] },
       {
         settings,

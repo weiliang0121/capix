@@ -62,7 +62,7 @@ export interface InvocationCheckpointFrame {
 
 export interface CheckpointImage {
   readonly id: string;
-  readonly formatVersion: 3;
+  readonly formatVersion: 4;
   readonly contract: CheckpointContract;
   readonly point: string;
   readonly frame: InvocationCheckpointFrame;

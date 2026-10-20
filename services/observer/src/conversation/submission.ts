@@ -5,7 +5,7 @@ import type { ConversationProgress } from './progress.js';
 import { ConversationActivityProjection } from './activity.js';
 import { ConversationFileProjection } from './files.js';
 import { ConversationPreviewProjection } from './preview.js';
-import type { AnswerProgress } from './operations/answer/stream.js';
+import type { AnswerProgress } from './group/answer/stream.js';
 import type { FileProgress } from '../files/index.js';
 
 export function conversationFailure(error: unknown): ConversationFailure {

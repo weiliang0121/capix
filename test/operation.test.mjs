@@ -5,7 +5,7 @@ import { createInput, sourceFor, contextFor, transcriptFor } from './fixtures/ob
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
-import { BoundRuntime, TranscriptResource, bindResources } from '@capix/server-runtime';
+import { TranscriptResource, bindResources } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 
 import { SelectHistoryDefinition, AssembleAnswerContextDefinition, answerOutputContract, selectionOutputContract } from '@capix/observer-service';

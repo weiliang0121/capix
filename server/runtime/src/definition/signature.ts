@@ -1,4 +1,4 @@
-import type { InvocationLevel } from '@capix/protocol';
+import type { CallableKind } from '@capix/protocol';
 
 /** Type-only declaration signature: definitions cannot create or run invocations. */
 export declare const invocationSignature: unique symbol;
@@ -11,8 +11,8 @@ export interface InvocationSignature<Input, Output, Delta = never> {
 }
 
 /** A consumer view of the original declaration, not sufficient content for binding. */
-export interface DefinitionContract<Level extends InvocationLevel = InvocationLevel, Input = unknown, Output = unknown, Delta = unknown> {
-  readonly level: Level;
+export interface DefinitionContract<Kind extends CallableKind = CallableKind, Input = unknown, Output = unknown, Delta = unknown> {
+  readonly kind: Kind;
   readonly [invocationSignature]: InvocationSignature<Input, Output, Delta>;
 }
 

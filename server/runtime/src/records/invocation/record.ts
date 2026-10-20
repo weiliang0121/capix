@@ -1,3 +1,4 @@
+import type { CallableRecord } from '../callable/record.js';
 import type { RuntimeCallRecord } from '../runtime/record.js';
 import type { ExecutionRecord } from '../execution/record.js';
 import type { OperationRecord } from '../operation/record.js';
@@ -10,7 +11,7 @@ import { isUndefined } from 'es-toolkit/predicate';
 import { snapshotValue } from '../value/snapshot.js';
 import { restoreStatus } from '../restoration/access.js';
 
-export type ConcreteInvocationRecord = RuntimeCallRecord | ExecutionRecord | OperationRecord | AttemptRecord;
+export type ConcreteInvocationRecord = CallableRecord | RuntimeCallRecord | ExecutionRecord | OperationRecord | AttemptRecord;
 
 /** R/E/O/A share result registration and an internal append-only process history. */
 export class InvocationRecord<Value extends InvocationValue> extends CompositeRecord<Value> {

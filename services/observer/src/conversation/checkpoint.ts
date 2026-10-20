@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { cloneCheckpointValue, type CheckpointCodec } from '@capix/server-runtime';
-import { answerOutputContract } from './operations/answer/output.js';
+import { answerOutputContract } from './group/answer/output.js';
 import type { GenerationOutput } from '@capix/protocol';
-import { preparedConversationContextSchema } from './operations/context/schema.js';
+import { preparedConversationContextSchema } from './group/context/schema.js';
 
 /** Service data contracts, shared by the actual R/E continuation declarations. */
 export function checkpointCodec<Value>(schema: z.ZodType<Value>): CheckpointCodec<Value> {

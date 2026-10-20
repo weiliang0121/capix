@@ -1,5 +1,8 @@
 import type { RecordingArchiveOrigin } from '../observer/archive.js';
 import type { InvocationFailureFact, RuntimeErrorValue } from '../invocation/errors.js';
+import type { CallableKind } from '../invocation/types.js';
+import type { TranscriptRecord } from './transcript.js';
+import type { MemoryRecord } from './memory.js';
 import type { ResourceRecord } from './resource.js';
 import type { InvocationRelationIdentity } from '../invocation/types.js';
 export { invocationProcessStages, invocationProcessActions } from '../invocation/types.js';
@@ -110,7 +113,7 @@ export interface InvocationBoundaryRecord extends BaseRecord<InvocationBoundaryV
   readonly offsetMs: number;
 }
 /** One E invocation's record subtree, parent R invocation record and recorded work boundaries. */
-export interface ExecutionRecordSnapshot {
+export interface LegacyExecutionRecordSnapshot {
   readonly archive?: RecordingArchiveOrigin;
   runtimeCall: RuntimeCallRecord;
   runtimeEvents: InvocationBoundaryRecord[];
@@ -120,4 +123,35 @@ export interface ExecutionRecordSnapshot {
   /** Existing wire field; these are invocation boundary records, not system change events. */
   events: InvocationBoundaryRecord[];
   resources: ResourceRecord[];
+}
+
+/** One actual Callable invocation; structure and business roles do not determine its parent. */
+export interface CallableValue<Input = unknown, Output = unknown> extends InvocationValue<Input, Output> {
+  /** New calls always supply this; an interrupted legacy carrier may have no observed start. */
+  readonly startedAt?: string;
+}
+export interface CallableRecord<Input = unknown, Output = unknown> extends CompositeRecord<CallableValue<Input, Output>> {
+  readonly contextId: string;
+  readonly structureKind: CallableKind;
+  readonly structureId?: string;
+  readonly name?: string;
+  readonly label?: string;
+  readonly source?: string;
+  readonly callee?: string;
+  /** Host interpretation only; never a kernel dispatch or recovery contract. */
+  readonly role?: string;
+  readonly status: 'running' | 'succeeded' | 'failed';
+}
+/** A service-selected task subtree. The task role is independent of structural kind. */
+export interface ExecutionRecordSnapshot {
+  readonly archive?: RecordingArchiveOrigin;
+  readonly execution: CallableRecord;
+  readonly calls: readonly CallableRecord[];
+  readonly rootCall?: CallableRecord;
+  /** Complete root-to-parent path between rootCall and execution; excludes both endpoints. */
+  readonly ancestors?: readonly CallableRecord[];
+  readonly boundaries: readonly InvocationBoundaryRecord[];
+  readonly transcripts: readonly TranscriptRecord[];
+  readonly memories: readonly MemoryRecord[];
+  readonly resources: readonly ResourceRecord[];
 }

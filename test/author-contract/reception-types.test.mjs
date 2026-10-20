@@ -6,19 +6,19 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/reception-contract.ts', import.meta.url));
 const source = `
-import { AttemptDefinition, OperationDefinition, defineAttempt, defineExecution, defineOperation, defineRuntime, reception } from '@capix/server-runtime';
-import type { AttemptWork, CheckpointCodec, ChildCall, ChildContract, ChildFacts, ChildReference, DefinitionContract, DefinitionOutput, OperationWork, ReceptionDefinition, ReceptionValue } from '@capix/server-runtime';
-import { z } from 'zod';
+import {NodeDefinition, GroupDefinition, defineNode, defineGroup, defineScene, reception} from '@capix/server-runtime';
+import type {NodeWork, CheckpointCodec, ChildCall, ChildContract, ChildFacts, ChildReference, DefinitionContract, DefinitionOutput, GroupWork, ReceptionDefinition, ReceptionValue} from '@capix/server-runtime';
+import {z} from 'zod';
 
 declare function expectType<T>(value: T): void;
 type Input = { readonly path: string };
 type Result = { readonly text: string };
 type Receipt = { readonly location: string; readonly bytes: number };
 const metadata = { name: 'child', label: 'child', source: 'test', callee: 'local' };
-const child = defineAttempt<Input, Result>()({ ...metadata, run: { execute: work => ({ text: work.input.path }) } });
-const other = defineAttempt<number, boolean>()({ ...metadata, run: { execute: work => work.input > 0 } });
-const nested = defineOperation<Input, Result>()({ ...metadata, run: { execute: work => ({ text: work.input.path }) } });
-const task = defineExecution<Input, Result>()({ children: [nested], run: { execute: work => work.children.create(nested, work.input).run() } });
+const child = defineNode<Input, Result>()({ ...metadata, run: { execute: work => ({ text: work.input.path }) } });
+const other = defineNode<number, boolean>()({ ...metadata, run: { execute: work => work.input > 0 } });
+const nested = defineGroup<Input, Result>()({ ...metadata, run: { execute: work => ({ text: work.input.path }) } });
+const task = defineGroup<Input, Result>()({ members: [nested], run: { execute: work => work.children.create(nested, work.input).run() } });
 declare const receiptValue: ReceptionValue<Receipt>;
 declare const countValue: ReceptionValue<number>;
 declare const undefinedValue: ReceptionValue<undefined>;
@@ -32,7 +32,7 @@ const taskSaved = reception(task, receiptValue);
 const wrongSaved = reception(other, receiptValue);
 declare const receipt: Receipt;
 
-const firstParent = defineOperation<Input, Receipt>()({ ...metadata, children: [child], receptions: [saved], run: { async execute(work) {
+const firstParent = defineGroup<Input, Receipt>()({ ...metadata, members: [child], receptions: [saved], run: { async execute(work) {
   const call = work.children.create(child, work.input);
   const result: Result = await call.run();
   const accepted: Receipt = await call.accept(saved, output => ({ location: output.text, bytes: output.text.length }));
@@ -40,14 +40,14 @@ const firstParent = defineOperation<Input, Receipt>()({ ...metadata, children: [
   expectType<string>(result.text);
   return history;
 } } });
-const secondParent = defineOperation<Input, number>()({ ...metadata, children: [child], receptions: [counted], run: { async execute(work) {
+const secondParent = defineGroup<Input, number>()({ ...metadata, members: [child], receptions: [counted], run: { async execute(work) {
   const call = work.children.create(child, work.input);
   await call.run();
   return call.accept(counted, result => result.text.length);
 } } });
-defineOperation<Input, Receipt>()({ ...metadata, children: [child, nested], receptions: [saved, nestedSaved], run: { execute: () => receipt } });
-defineExecution<Input, Receipt>()({ children: [nested], receptions: [nestedSaved], run: { execute: () => receipt } });
-defineRuntime<Input, Receipt>()({ children: [task], receptions: [taskSaved], run: { execute: () => receipt } });
+defineGroup<Input, Receipt>()({ ...metadata, members: [child, nested], receptions: [saved, nestedSaved], run: { execute: () => receipt } });
+defineGroup<Input, Receipt>()({ members: [nested], receptions: [nestedSaved], run: { execute: () => receipt } });
+defineScene<Input, Receipt>()({ members: [task], receptions: [taskSaved], run: { execute: () => receipt } });
 
 declare const call: ChildCall<typeof child>;
 expectType<Promise<Result>>(call.accept());
@@ -77,7 +77,7 @@ expectType<void>(facts.accepted(first, completed));
 facts.accepted(otherRef, saved);
 // @ts-expect-error historical Accepted remains the contract's value
 expectType<number>(facts.accepted(first, saved));
-declare const noActions: OperationWork<Input, Receipt, {}, never>;
+declare const noActions: GroupWork<Input, Receipt, {}, never>;
 noActions.children.open(first);
 expectType<Receipt>(noActions.children.facts.accepted(first, saved));
 // @ts-expect-error typed history does not supply a create grant
@@ -132,34 +132,34 @@ const widenedValue: ReceptionDefinition<typeof child, Receipt | undefined> = sav
 // @ts-expect-error a narrower accepted shape is not the same contract
 const narrowedValue: ReceptionDefinition<typeof child, Receipt & { id: string }> = saved;
 // @ts-expect-error target signature is invariant, even when only output is erased
-const widenedChild: ReceptionDefinition<DefinitionContract<'attempt', Input, unknown>, Receipt> = saved;
+const widenedChild: ReceptionDefinition<DefinitionContract<'node', Input, unknown>, Receipt> = saved;
 // @ts-expect-error a naked object cannot manufacture the type-only contract witness
 const forged: ReceptionDefinition<typeof child, Receipt> = { child, value: receiptValue };
 
 // Parent registration is constrained by children; reception cannot infer extra children.
 // @ts-expect-error unknown child's reception cannot expand registration
-defineOperation<Input, Receipt>()({ ...metadata, children: [child], receptions: [wrongSaved], run: { execute: () => receipt } });
+defineGroup<Input, Receipt>()({ ...metadata, members: [child], receptions: [wrongSaved], run: { execute: () => receipt } });
 // @ts-expect-error no children were registered
-defineOperation<Input, Receipt>()({ ...metadata, receptions: [saved], run: { execute: () => receipt } });
+defineGroup<Input, Receipt>()({ ...metadata, receptions: [saved], run: { execute: () => receipt } });
 // @ts-expect-error E cannot register an A reception
-defineExecution<Input, Receipt>()({ children: [nested], receptions: [saved], run: { execute: () => receipt } });
-// @ts-expect-error R cannot register an O reception
-defineRuntime<Input, Receipt>()({ children: [task], receptions: [nestedSaved], run: { execute: () => receipt } });
+defineGroup<Input, Receipt>()({ members: [nested], receptions: [saved], run: { execute: () => receipt } });
+// @ts-expect-error parent registration cannot widen the registered member signature
+defineScene<Input, Receipt>()({ members: [other], receptions: [nestedSaved], run: { execute: () => receipt } });
 // @ts-expect-error A cannot declare receptions
-defineAttempt<Input, Receipt>()({ ...metadata, receptions: [saved], run: { execute: () => receipt } });
+defineNode<Input, Receipt>()({ ...metadata, receptions: [saved], run: { execute: () => receipt } });
 // @ts-expect-error even an empty A reception registry is forbidden
-defineAttempt<Input, Receipt>()({ ...metadata, receptions: [], run: { execute: () => receipt } });
-class BadLeaf extends AttemptDefinition<Input, Result> {
+defineNode<Input, Receipt>()({ ...metadata, receptions: [], run: { execute: () => receipt } });
+class BadLeaf extends NodeDefinition<Input, Result> {
   readonly name = 'leaf'; readonly label = 'leaf'; readonly source = 'test'; readonly callee = 'local';
   // @ts-expect-error named classes have the same A registration boundary
   readonly receptions = [saved];
-  readonly run = { requires: {}, execute: (work: AttemptWork<Input, Result>) => ({ text: work.input.path }) };
+  readonly run = { requires: {}, execute: (work: NodeWork<Input, Result>) => ({ text: work.input.path }) };
 }
-class NamedParent extends OperationDefinition<Input, Receipt> {
+class NamedParent extends GroupDefinition<Input, Receipt> {
   readonly name = 'parent'; readonly label = 'parent'; readonly source = 'test';
-  readonly children = [child];
+  readonly members = [child];
   readonly receptions = [saved];
-  readonly run = { requires: {}, execute: (_work: OperationWork<Input, Receipt>) => receipt };
+  readonly run = { requires: {}, execute: (_work: GroupWork<Input, Receipt>) => receipt };
 }
 
 // Identity, registration and relation status remain runtime facts, not TS brands.

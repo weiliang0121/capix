@@ -1,7 +1,8 @@
+import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, ResourceOffer, assembleRuntime, defineExecution, defineRuntime, isInvocationCancelled } from '@capix/server-runtime';
-import { createInvocationBuilders } from '@capix/server-runtime/construction';
+import { ExceptionContract, ResourceOffer, defineGroup, defineScene, isInvocationCancelled } from '@capix/server-runtime';
+import { CallableInvocationBuilder } from '@capix/server-runtime/construction';
 
 function deferred() {
   return Promise.withResolvers();
@@ -33,11 +34,11 @@ async function assertPending(call, message) {
 }
 
 function root(builders, work, controls = {}) {
-  return builders.runtime.create('initial', { description: { id: 'invocation-control-fixture' }, controls, work: { maxRounds: 1, ...work } });
+  return builders.create('initial', { kind: 'scene', description: { id: 'invocation-control-fixture' }, controls, work: { maxRounds: 1, ...work } });
 }
 
 test('a normal parent waits for a started child and its finally without implicitly accepting the result', { timeout: 2000 }, async (t) => {
-  const builders = createInvocationBuilders();
+  const builders = new CallableInvocationBuilder();
   const body = deferred();
   const cleanup = deferred();
   const cleanupStarted = deferred();
@@ -49,7 +50,9 @@ test('a normal parent waits for a started child and its finally without implicit
   let childRun;
   const parent = root(builders, {
     execute(_context, owner) {
-      child = builders.execution.create(owner, 'child input', {
+      child = builders.create('child input', {
+        kind: 'group',
+        parent: owner,
         work: {
           maxRounds: 1,
           async execute() {
@@ -81,11 +84,11 @@ test('a normal parent waits for a started child and its finally without implicit
 });
 
 test('a created but unstarted child does not block parent completion or acquire an invented return', { timeout: 2000 }, async () => {
-  const builders = createInvocationBuilders();
+  const builders = new CallableInvocationBuilder();
   let child;
   const parent = root(builders, {
     execute(_context, owner) {
-      child = builders.execution.create(owner, 'unused', { work: { maxRounds: 1, execute: () => assert.fail('unused child must not execute') } });
+      child = builders.create('unused', { kind: 'group', parent: owner, work: { maxRounds: 1, execute: () => assert.fail('unused child must not execute') } });
       return 'complete';
     },
   });
@@ -101,12 +104,12 @@ test('an already entered reception finishes with its original Work before the pa
   t.after(() => release.resolve());
   const writes = [];
   const writer = new ResourceOffer('test.control.reception-write', (_source, activity) => ({ append: (value) => activity.runSync('append', {}, () => writes.push(value)) }));
-  const child = defineExecution()({ run: { execute: () => 'child output' } });
+  const child = defineGroup()({ run: { execute: () => 'child output' } });
   let reception;
   let parentAccepted = false;
   let childFacts;
-  const definition = defineRuntime()({
-    children: [child],
+  const definition = defineScene()({
+    members: [child],
     run: {
       requires: { writer: writer.request() },
       uses: [child],
@@ -132,7 +135,7 @@ test('an already entered reception finishes with its original Work before the pa
       },
     },
   });
-  const runtime = assembleRuntime(definition, { providers: [writer.provide(() => null)], source: { runtime: () => null, capture: () => null } });
+  const runtime = installCallable(definition, { providers: [writer.provide(() => null)], source: { runtime: () => null, capture: () => null } });
   const parentRun = track(runtime.run(null));
   await entered.promise;
   await assertPending(parentRun, 'an asynchronous reception belongs to the parent work');
@@ -146,7 +149,7 @@ test('an already entered reception finishes with its original Work before the pa
 
 for (const failureKind of ['declared', 'fault']) {
   test(`a parent ${failureKind} failure waits for started child work without invalidating its local acceptance`, { timeout: 2000 }, async (t) => {
-    const builders = createInvocationBuilders();
+    const builders = new CallableInvocationBuilder();
     const release = deferred();
     t.after(() => release.resolve());
     const rejected = new ExceptionContract('CONTROL_PARENT_FAILURE');
@@ -157,7 +160,9 @@ for (const failureKind of ['declared', 'fault']) {
     const parent = root(builders, {
       raises: failureKind === 'declared' ? [rejected] : [],
       execute(_context, owner) {
-        child = builders.execution.create(owner, 'independent child', {
+        child = builders.create('independent child', {
+          kind: 'group',
+          parent: owner,
           work: {
             maxRounds: 1,
             async execute() {
@@ -189,7 +194,7 @@ for (const failureKind of ['declared', 'fault']) {
 
 for (const transition of ['receive', 'next-round']) {
   test(`a started child survives its parent's ordinary ${transition} transition`, { timeout: 2000 }, async (t) => {
-    const builders = createInvocationBuilders();
+    const builders = new CallableInvocationBuilder();
     const entered = deferred();
     const release = deferred();
     t.after(() => release.resolve());
@@ -203,7 +208,9 @@ for (const transition of ['receive', 'next-round']) {
           entered.resolve();
           return 'parent output';
         }
-        child = builders.execution.create(owner, 'child input', {
+        child = builders.create('child input', {
+          kind: 'group',
+          parent: owner,
           work: {
             maxRounds: 1,
             async execute() {
@@ -239,7 +246,7 @@ for (const transition of ['receive', 'next-round']) {
 }
 
 test('cancellation waits for real child exit and preserves effects established before the request', { timeout: 2000 }, async (t) => {
-  const builders = createInvocationBuilders();
+  const builders = new CallableInvocationBuilder();
   const controller = new AbortController();
   const body = deferred();
   const cleanup = deferred();
@@ -254,7 +261,9 @@ test('cancellation waits for real child exit and preserves effects established b
     builders,
     {
       execute(_context, owner) {
-        const child = builders.execution.create(owner, null, {
+        const child = builders.create(null, {
+          kind: 'group',
+          parent: owner,
           work: {
             maxRounds: 1,
             async execute() {
@@ -293,7 +302,7 @@ test('cancellation waits for real child exit and preserves effects established b
 });
 
 test('catching an owned child fault cannot clear it or skip another started child during parent closing', { timeout: 2000 }, async (t) => {
-  const builders = createInvocationBuilders();
+  const builders = new CallableInvocationBuilder();
   const release = deferred();
   const caught = deferred();
   t.after(() => release.resolve());
@@ -301,7 +310,9 @@ test('catching an owned child fault cannot clear it or skip another started chil
   let siblingRun;
   const parent = root(builders, {
     async execute(_context, owner) {
-      const sibling = builders.execution.create(owner, null, {
+      const sibling = builders.create(null, {
+        kind: 'group',
+        parent: owner,
         work: {
           maxRounds: 1,
           async execute() {
@@ -311,7 +322,9 @@ test('catching an owned child fault cannot clear it or skip another started chil
         },
       });
       siblingRun = track(sibling.run());
-      const failed = builders.execution.create(owner, null, {
+      const failed = builders.create(null, {
+        kind: 'group',
+        parent: owner,
         work: {
           maxRounds: 1,
           execute: () => {
@@ -340,7 +353,7 @@ test('catching an owned child fault cannot clear it or skip another started chil
 });
 
 test('a later reception diagnostic does not replace an unhandled parent declared exception during closing', { timeout: 2000 }, async (t) => {
-  const builders = createInvocationBuilders();
+  const builders = new CallableInvocationBuilder();
   const release = deferred();
   const entered = deferred();
   t.after(() => release.resolve());
@@ -352,7 +365,7 @@ test('a later reception diagnostic does not replace an unhandled parent declared
   const parent = root(builders, {
     raises: [rejected],
     async execute(_context, owner) {
-      child = builders.execution.create(owner, null, { work: { maxRounds: 1, execute: () => 'child output' } });
+      child = builders.create(null, { kind: 'group', parent: owner, work: { maxRounds: 1, execute: () => 'child output' } });
       await child.run();
       reception = track(
         owner.children.get(child).accept(async () => {
@@ -379,15 +392,15 @@ test('a later reception diagnostic does not replace an unhandled parent declared
 
 test('an unawaited author child fault is owned by the parent without a second unhandled Promise rejection', { timeout: 2000 }, async () => {
   const failure = new Error('unawaited author child fault');
-  const child = defineExecution()({
+  const child = defineGroup()({
     run: {
       execute() {
         throw failure;
       },
     },
   });
-  const definition = defineRuntime()({
-    children: [child],
+  const definition = defineScene()({
+    members: [child],
     run: {
       uses: [child],
       execute(work) {
@@ -396,7 +409,7 @@ test('an unawaited author child fault is owned by the parent without a second un
       },
     },
   });
-  const runtime = assembleRuntime(definition, { providers: [], source: { capture: () => null } });
+  const runtime = installCallable(definition, { providers: [], source: { capture: () => null } });
   await assert.rejects(runtime.run(null), (error) => error === failure);
   // Let Node report an unhandled wrapper Promise, if a public handle created one.
   await new Promise((resolve) => setImmediate(resolve));
@@ -407,7 +420,7 @@ test('an unawaited child declared failure keeps its original delivery without au
   t.after(() => release.resolve());
   const rejected = new ExceptionContract('CONTROL_UNOBSERVED_CHILD');
   const exception = rejected.create('child declined', {});
-  const child = defineExecution()({
+  const child = defineGroup()({
     raises: [rejected],
     run: {
       async execute() {
@@ -417,8 +430,8 @@ test('an unawaited child declared failure keeps its original delivery without au
     },
   });
   let childFacts;
-  const definition = defineRuntime()({
-    children: [child],
+  const definition = defineScene()({
+    members: [child],
     run: {
       uses: [child],
       execute(work) {
@@ -429,7 +442,7 @@ test('an unawaited child declared failure keeps its original delivery without au
       },
     },
   });
-  const runtime = assembleRuntime(definition, { providers: [], source: { capture: () => null } });
+  const runtime = installCallable(definition, { providers: [], source: { capture: () => null } });
   const parentRun = track(runtime.run(null));
   await assertPending(parentRun, 'the parent still joins the delayed child');
   release.resolve();

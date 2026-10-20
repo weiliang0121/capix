@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RecordBook, Recorder, BaseRecord, CompositeRecord, RecordingRootRecord, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper } from '@capix/server-runtime/recording';
-import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
+import { readOutput, validateLegacyExecutionRecordSnapshot } from '@capix/protocol';
 
 const occurredAt = '2026-10-12T00:00:00.000Z';
 
@@ -77,7 +77,7 @@ test('record history roundtrips concrete carriers, identities, local results and
     original.recorder.tree.descendants(original.root.id).map((record) => record.id),
   );
   assert.deepEqual(readOutput(restored.get(original.attempt.id).value), { written: true });
-  validateExecutionRecordSnapshot(ExecutionRecordHelper.snapshot(recorder, original.execution.id));
+  validateLegacyExecutionRecordSnapshot(ExecutionRecordHelper.snapshot(recorder, original.execution.id));
   const freshRoot = recorder.add(new RecordingRootRecord({ createdAt: occurredAt }));
   assert.equal(freshRoot.historical, false);
   assert.equal(changes.length, 1);

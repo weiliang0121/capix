@@ -34,11 +34,11 @@ function rejects(source, codes, withinService = false) {
 }
 
 const capabilitySetup = `
-import { z } from 'zod';
-import type { ChildCalls, OperationDefinition } from '@capix/server-runtime';
-import { conversationCapability } from './capability.js';
-declare const read: OperationDefinition<{ path: string }, { content: string }, {}, {}, { text: string }>;
-declare const summary: OperationDefinition<{ text: string }, { summary: string }>;
+import {z} from 'zod';
+import type {ChildCalls, GroupDefinition} from '@capix/server-runtime';
+import {conversationCapability} from './capability.js';
+declare const read: GroupDefinition<{ path: string }, { content: string }, {}, {}, { text: string }>;
+declare const summary: GroupDefinition<{ text: string }, { summary: string }>;
 declare const readOnly: ChildCalls<typeof read>;
 declare const both: ChildCalls<typeof read | typeof summary>;
 interface State { text: string }
@@ -88,10 +88,10 @@ conversationCapability({ ...options, output: { receive: (event) => { if (event.k
 });
 
 const sequenceSetup = `
-import { Sequence, InvocationEntry, type ChildCalls, type ChildDefinition, type OperationDefinition } from '@capix/server-runtime';
-declare const read: OperationDefinition<{ path: string }, { content: string }, {}, {}, { text: string }>;
-declare const summary: OperationDefinition<{ text: string }, { summary: string }>;
-declare const exists: OperationDefinition<{ path: string }, { exists: boolean }>;
+import {Sequence, InvocationEntry, type ChildCalls, type ChildDefinition, type GroupDefinition} from '@capix/server-runtime';
+declare const read: GroupDefinition<{ path: string }, { content: string }, {}, {}, { text: string }>;
+declare const summary: GroupDefinition<{ text: string }, { summary: string }>;
+declare const exists: GroupDefinition<{ path: string }, { exists: boolean }>;
 declare const readOnly: ChildCalls<typeof read>;
 declare const both: ChildCalls<typeof read | typeof summary>;
 declare const all: ChildCalls<typeof read | typeof summary | typeof exists>;
@@ -158,16 +158,16 @@ void unionOutput; void dispatch;
 
 test('output-only helpers infer the returned value without the whole declaration tree', () => {
   accepts(`
-import type { ChildCall, OperationDefinition } from '@capix/server-runtime';
-declare const call: ChildCall<OperationDefinition<{ path: string }, { content: string }>>;
+import type {ChildCall, GroupDefinition} from '@capix/server-runtime';
+declare const call: ChildCall<GroupDefinition<{ path: string }, { content: string }>>;
 function receive<Output>(port: { readonly run: () => Promise<Output> }): Promise<Output> { return port.run(); }
 const result: Promise<{ content: string }> = receive(call);
 void result;
 `);
   rejects(
     `
-import type { ChildCall, OperationDefinition } from '@capix/server-runtime';
-declare const call: ChildCall<OperationDefinition<{ path: string }, { content: string }>>;
+import type {ChildCall, GroupDefinition} from '@capix/server-runtime';
+declare const call: ChildCall<GroupDefinition<{ path: string }, { content: string }>>;
 function receive<Output>(port: { readonly run: () => Promise<Output> }): Promise<Output> { return port.run(); }
 const wrong: Promise<{ summary: string }> = receive(call);
 `,

@@ -1,10 +1,11 @@
+import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ResourceOffer, MemoryCheckpointStore, checkpointPoint, assembleRuntime } from '@capix/server-runtime';
+import { ResourceOffer, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function assemble(definition, options = {}) {
-  return assembleRuntime(definition, { providers: [], source: { entry: () => null, capture: () => null }, ...options });
+  return installCallable(definition, { providers: [], source: { entry: () => null, capture: () => null }, ...options });
 }
 
 test('assembled work preserves absent acceptance as a reuse fact instead of inserting an identity receiver', async () => {
@@ -27,7 +28,7 @@ test('assembled work preserves absent acceptance as a reuse fact instead of inse
         return value;
       };
     }
-    const definition = { level: 'runtime', maxRounds: 1, raises: [], children: [], run };
+    const definition = { kind: 'scene', maxRounds: 1, raises: [], members: [], run };
     const runtime = assemble(definition, {
       observations: [
         {
@@ -69,7 +70,7 @@ test('overlapping calls through one bound O retain independent access and child 
   });
   const requires = { owner: resource.request() };
   const leaf = {
-    level: 'attempt',
+    kind: 'node',
     name: 'await-result',
     label: 'Await result',
     source: 'test',
@@ -79,13 +80,13 @@ test('overlapping calls through one bound O retain independent access and child 
     run: { requires: {}, execute: (work) => new Promise((resolve) => pending.set(work.input, resolve)) },
   };
   const operation = {
-    level: 'operation',
+    kind: 'group',
     name: 'overlap',
     label: 'Overlap',
     source: 'test',
     maxRounds: 1,
     raises: [],
-    children: [leaf],
+    members: [leaf],
     run: {
       requires,
       async execute(work) {
@@ -112,10 +113,10 @@ test('overlapping calls through one bound O retain independent access and child 
     },
   };
   const execution = {
-    level: 'execution',
+    kind: 'group',
     maxRounds: 1,
     raises: [],
-    children: [operation],
+    members: [operation],
     run: {
       requires,
       async execute(work) {
@@ -161,15 +162,15 @@ test('checkpoint continuation hands its child delivery to normal acceptance with
     realized.push('continuation');
     return 'continuation access';
   });
-  const child = { level: 'execution', maxRounds: 1, raises: [], children: [], run: { requires: {}, execute: () => ({ answer: 'child output' }) } };
+  const child = { kind: 'group', maxRounds: 1, raises: [], members: [], run: { requires: {}, execute: () => ({ answer: 'child output' }) } };
   const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
   let call;
   let previous;
   const definition = {
-    level: 'runtime',
+    kind: 'scene',
     maxRounds: 1,
     raises: [],
-    children: [child],
+    members: [child],
     run: {
       requires: { normal: normal.request() },
       uses: [],
@@ -216,7 +217,7 @@ test('checkpoint continuation hands its child delivery to normal acceptance with
     },
   };
   const store = new MemoryCheckpointStore();
-  store.save({ id: 'saved-access', formatVersion: 3, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'restored-access', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'saved-access', formatVersion: 4, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'restored-access', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   const runtime = assemble(definition, { checkpoints: { store }, providers: [normal.provide(() => null), continuation.provide(() => null)], source: { runtime: () => null, entry: () => null, capture: () => null } });
   assert.deepEqual(realized, []);
   assert.equal(await runtime.resume('restored-access', {}), 'child output');
@@ -247,10 +248,10 @@ test('a restored point closes retained resource views, endpoints and checkpoint 
         },
       });
       const definition = {
-        level: 'runtime',
+        kind: 'scene',
         maxRounds: 1,
         raises: [],
-        children: [],
+        members: [],
         run: {
           requires: { data: offer.request() },
           execute: () => assert.fail('normal execute must not replay'),
@@ -266,7 +267,7 @@ test('a restored point closes retained resource views, endpoints and checkpoint 
         checkpoint: { key: `resume-window.${retained}`, version: 1, input: codec, output: codec, points: [point] },
       };
       const store = new MemoryCheckpointStore();
-      store.save({ id: `image-${retained}`, formatVersion: 3, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: `call-${retained}`, level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+      store.save({ id: `image-${retained}`, formatVersion: 4, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: `call-${retained}`, kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
       const runtime = assemble(definition, { checkpoints: { store }, providers: [offer.provide(() => null)], source: { runtime: () => null, capture: () => null } });
       // Catching an illegal port use cannot erase the already-owned kernel fault.
       await assert.rejects(runtime.resume(`call-${retained}`, {}), /window is closed/);
@@ -286,7 +287,7 @@ test('execute and restored point bodies seal output while entered reception reta
       const resource = new ResourceOffer(`test.output-reception-window.${mode}`, (_source, activity) => ({
         read: () => activity.runSync('read', {}, () => 'phase resource'),
       }));
-      const child = { level: 'execution', maxRounds: 1, raises: [], children: [], run: { requires: {}, execute: () => 'child result' } };
+      const child = { kind: 'group', maxRounds: 1, raises: [], members: [], run: { requires: {}, execute: () => 'child result' } };
       let reception;
       let receptionFinished = false;
       let settled = false;
@@ -307,10 +308,10 @@ test('execute and restored point bodies seal output while entered reception reta
       }
       const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { requires: { data: resource.request() }, uses: [child], execute } });
       const definition = {
-        level: 'runtime',
+        kind: 'scene',
         maxRounds: 1,
         raises: [],
-        children: [child],
+        members: [child],
         output: { result: (value) => value, delta: (value) => value },
         run: {
           requires: { data: resource.request() },
@@ -324,7 +325,7 @@ test('execute and restored point bodies seal output while entered reception reta
         checkpoint: { key: `output-reception-window.${mode}`, version: 1, input: codec, output: codec, points: [point] },
       };
       const store = new MemoryCheckpointStore();
-      if (mode === 'restored') store.save({ id: 'output-window-image', formatVersion: 3, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'output-window-call', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+      if (mode === 'restored') store.save({ id: 'output-window-image', formatVersion: 4, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'output-window-call', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
       const runtime = assemble(definition, {
         checkpoints: { store },
         providers: [resource.provide(() => null)],

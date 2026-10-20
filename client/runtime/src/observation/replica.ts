@@ -1,5 +1,5 @@
 import { isArray } from 'es-toolkit/compat';
-import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, ExecutionRecordSnapshot, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord } from '@capix/protocol';
+import type { ObservationBaseline, ObservationFrame, RecordEntry, RecordChangeEvent, InvocationEvent, ObserverOverview, MemoryObservation, ExecutionRecordSnapshot, CallableRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord } from '@capix/protocol';
 import { validateExecutionRecordSnapshot, validateRecordingArchives, validateRecordingArchiveOrigin } from '@capix/protocol';
 
 export class ObservationSequenceError extends Error {}
@@ -136,8 +136,8 @@ function applyRecord(entries: Map<string, RecordEntry>, event: RecordChangeEvent
     return;
   }
   const entry = entries.get(change.id);
-  if (!entry || !['runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) throw new ObservationContractError('调用记录尚未装载。');
-  const data = entry.data as RuntimeCallRecord | ExecutionRecord | OperationRecord | AttemptRecord;
+  if (!entry || entry.kind !== 'invocation') throw new ObservationContractError('调用记录尚未装载。');
+  const data = entry.data as CallableRecord;
   if (data.status !== 'running') throw new ObservationContractError('调用记录已经结束。');
   if (change.kind === 'process-appended' || change.kind === 'relation-appended') {
     const sequence = Math.max(data.value.processes.at(-1)?.eventSequence ?? 0, data.value.relationChanges.at(-1)?.eventSequence ?? 0);
@@ -150,49 +150,56 @@ function applyRecord(entries: Map<string, RecordEntry>, event: RecordChangeEvent
   } else if (change.kind === 'process-appended') {
     if (change.process.sequence !== data.value.processes.length + 1) throw new ObservationContractError('调用过程顺序不连续。');
     entries.set(data.id, { ...entry, data: { ...data, value: { ...data.value, processes: [...data.value.processes, change.process] } } });
-  } else entries.set(data.id, { ...entry, data: { ...data, status: change.status, value: { ...data.value, ...change.result } } as ExecutionRecord });
+  } else entries.set(data.id, { ...entry, data: { ...data, status: change.status, value: { ...data.value, ...change.result } } as CallableRecord });
+}
+
+function isTask(entry: RecordEntry | undefined): entry is RecordEntry & { data: CallableRecord } {
+  return entry?.kind === 'invocation' && (entry.data as CallableRecord).role === 'conversation-task';
 }
 
 function snapshots(entries: ReadonlyMap<string, RecordEntry>, previous?: ReadonlyMap<string, ExecutionRecordSnapshot>, affected?: ReadonlySet<string>) {
   if (previous && affected?.size === 0) return { snapshots: previous, updates: new Map<string, ExecutionRecordSnapshot>() };
   const result = new Map(previous);
   const updates = new Map<string, ExecutionRecordSnapshot>();
-  const ids = affected ?? new Set([...entries.values()].filter((entry) => entry.kind === 'execution').map((entry) => entry.data.id));
+  const ids = affected ?? new Set([...entries.values()].filter(isTask).map((entry) => entry.data.id));
   for (const id of ids) {
     result.delete(id);
     const item = entries.get(id);
-    if (!item || item.kind !== 'execution') continue;
-    const execution = item.data as ExecutionRecord;
-    // Match the server detail projection through explicit ownership, independently of delivery batch order.
-    const scope = descendants(entries, item);
-    const operations = scope.filter((entry) => entry.kind === 'operation').map((entry) => entry.data as OperationRecord);
-    const attempts = scope.filter((entry) => entry.kind === 'attempt').map((entry) => entry.data as AttemptRecord);
-    const events = scope
-      .filter((entry) => entry.kind === 'invocation-boundary' && (entry.data as InvocationBoundaryRecord).executionId === execution.id)
-      .map((entry) => entry.data as InvocationBoundaryRecord)
-      .sort((a, b) => a.sequence - b.sequence);
-    const called = new Set<string>();
-    const returned = new Set<string>();
-    const threw = new Set<string>();
-    for (const event of events) {
-      if (event.value.type === 'call') called.add(event.callId);
-      else if (event.value.type === 'return') returned.add(event.callId);
-      else threw.add(event.callId);
-    }
-    // A record update and its boundary are separate formal facts; expose a call view when both exist.
-    if ([execution, ...operations, ...attempts].some((record) => !called.has(record.id) || (record.status !== 'running' && !(record.status === 'succeeded' ? returned : threw).has(record.id)))) continue;
+    if (!isTask(item)) continue;
+    const execution = item.data;
+    const scope = [item, ...descendants(entries, item)];
+    const calls = scope.filter((entry) => entry.kind === 'invocation').map((entry) => entry.data as CallableRecord);
+    const boundaries = scope.filter((entry) => entry.kind === 'invocation-boundary').map((entry) => entry.data as InvocationBoundaryRecord);
     const resources = scope.filter((entry) => entry.kind === 'resource').map((entry) => entry.data as ResourceRecord);
-    const parent = execution.parentId ? entries.get(execution.parentId) : undefined;
-    if (!parent || parent.kind !== 'runtime-call') continue;
-    const runtimeCall = parent.data as RuntimeCallRecord;
-    const runtimeChildren = children(entries, parent);
-    const runtimeEvents = runtimeChildren
-      .filter((entry) => entry.kind === 'invocation-boundary' && (entry.data as InvocationBoundaryRecord).callId === runtimeCall.id)
-      .map((entry) => entry.data as InvocationBoundaryRecord)
-      .sort((a, b) => a.sequence - b.sequence);
-    if (!runtimeEvents.some((event) => event.value.type === 'call') || (runtimeCall.status !== 'running' && !runtimeEvents.some((event) => event.value.type === (runtimeCall.status === 'succeeded' ? 'return' : 'throw')))) continue;
-    resources.push(...runtimeChildren.filter((entry) => entry.kind === 'resource').map((entry) => entry.data as ResourceRecord));
-    const snapshot = { runtimeCall, runtimeEvents, execution, operations, attempts, events, resources };
+    const transcripts = scope.filter((entry) => entry.kind === 'transcript').map((entry) => entry.data as TranscriptRecord);
+    const memories = scope.filter((entry) => entry.kind === 'memory').map((entry) => entry.data as MemoryRecord);
+    let ancestor = execution.parentId ? entries.get(execution.parentId) : undefined;
+    const path: RecordEntry[] = [];
+    const visited = new Set<string>();
+    while (ancestor) {
+      if (visited.has(ancestor.data.id)) throw new ObservationContractError('调用祖先存在循环。');
+      visited.add(ancestor.data.id);
+      if (ancestor.kind === 'invocation') path.push(ancestor);
+      ancestor = ancestor.data.parentId ? entries.get(ancestor.data.parentId) : undefined;
+    }
+    path.reverse();
+    const rootCall = path[0]?.data as CallableRecord | undefined;
+    const ancestors = path.slice(1).map((entry) => entry.data as CallableRecord);
+    if (execution.parentId && !rootCall && entries.get(execution.parentId)?.kind !== 'runtime') continue;
+    const ancestorResources: ResourceRecord[] = [];
+    for (const member of path) {
+      const own = children(entries, member);
+      boundaries.push(...own.filter((entry) => entry.kind === 'invocation-boundary' && (entry.data as InvocationBoundaryRecord).callId === member.data.id).map((entry) => entry.data as InvocationBoundaryRecord));
+      ancestorResources.push(...own.filter((entry) => entry.kind === 'resource').map((entry) => entry.data as ResourceRecord));
+    }
+    resources.unshift(...ancestorResources);
+    const called = new Set(boundaries.filter((event) => event.value.type === 'call').map((event) => event.callId));
+    const returned = new Set(boundaries.filter((event) => event.value.type === 'return').map((event) => event.callId));
+    const threw = new Set(boundaries.filter((event) => event.value.type === 'throw').map((event) => event.callId));
+    // Updates and boundaries are separate facts. Do not expose a partially closed call snapshot.
+    if ([...calls, ...ancestors, ...(rootCall ? [rootCall] : [])].some((call) => !called.has(call.id) || (call.status !== 'running' && !(call.status === 'succeeded' ? returned : threw).has(call.id)))) continue;
+    boundaries.sort((left, right) => (left.scopeId === right.scopeId ? left.sequence - right.sequence : Date.parse(left.occurredAt) - Date.parse(right.occurredAt)));
+    const snapshot = { execution, calls, ...(rootCall ? { rootCall } : {}), ...(ancestors.length ? { ancestors } : {}), boundaries, resources, transcripts, memories };
     validateExecutionRecordSnapshot(snapshot);
     result.set(execution.id, snapshot);
     updates.set(execution.id, snapshot);
@@ -200,26 +207,19 @@ function snapshots(entries: ReadonlyMap<string, RecordEntry>, previous?: Readonl
   return { snapshots: result, updates };
 }
 
-/** Resolve ownership from formal record relationships, not a comparison of snapshots. */
+/** Follow recorded ownership; only explicit task roles select QA scopes. */
 function affectedExecutions(previous: ReadonlyMap<string, RecordEntry>, entries: ReadonlyMap<string, RecordEntry>, changed: ReadonlySet<string>): Set<string> {
   const affected = new Set<string>();
   const visit = (source: ReadonlyMap<string, RecordEntry>, id: string) => {
     const visited = new Set<string>();
     let entry = source.get(id);
+    if (entry?.kind === 'invocation') {
+      for (const child of descendants(source, entry)) if (isTask(child)) affected.add(child.data.id);
+    }
     while (entry) {
-      if (visited.has(entry.data.id)) throw new ObservationContractError('记录归属存在循环或重复引用。');
+      if (visited.has(entry.data.id)) throw new ObservationContractError('记录归属存在循环。');
       visited.add(entry.data.id);
-      if (entry.kind === 'execution') {
-        affected.add(entry.data.id);
-        return;
-      }
-      if (entry.kind === 'runtime-call') {
-        // R facts are part of every directly contained E view, including multiple E in one R.
-        for (const childId of (entry.data as RuntimeCallRecord).childIds) {
-          if (source.get(childId)?.kind === 'execution') affected.add(childId);
-        }
-        return;
-      }
+      if (isTask(entry)) affected.add(entry.data.id);
       if (!entry.data.parentId) return;
       entry = source.get(entry.data.parentId);
     }

@@ -83,9 +83,9 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
     assert.equal(readOutput(value), value.processes[1].output);
     assert.equal(Object.isFrozen(readOutput(value)), true);
   }
-  const pending = publications.find((s) => s.attempts[0]?.value.processes.length === 2);
-  assert.equal(hasOutput(pending.attempts[0].value), false);
-  assert.equal(pending.attempts[0].value.processes.length, 2);
+  const pending = publications.flatMap((s) => s.calls).find((call) => call.structureKind === 'node' && call.value.processes.length === 2);
+  assert.equal(hasOutput(pending.value), false);
+  assert.equal(pending.value.processes.length, 2);
   const serialized = JSON.stringify(snapshot);
   const restored = JSON.parse(serialized);
   validateExecutionRecordSnapshot(restored);
@@ -182,7 +182,7 @@ test('observation rejects corrupted compact references rather than silently losi
     },
   ]) {
     const changed = structuredClone(snapshot);
-    corrupt(changed.operations[0].value);
+    corrupt(changed.calls.find((call) => call.id !== changed.execution.id).value);
     assert.throws(() => validateExecutionRecordSnapshot(changed));
   }
 });

@@ -1,12 +1,12 @@
 import type { Invocation } from '../invocation/invocation.js';
 import type { InvocationContext } from '../context/context.js';
 import type { CheckpointCodec, CheckpointContract, CheckpointReferences, InvocationCheckpointFrame } from './contract.js';
-import type { InvocationLevel } from '@capix/protocol';
+import type { CallableKind } from '@capix/protocol';
 import type { DecodedCheckpointFrame } from './facts.js';
 import type { InvocationReceptionBinding } from '../invocation/reception.js';
 
 export interface CheckpointChildBinding {
-  readonly level: InvocationLevel;
+  readonly kind: CallableKind;
   readonly binding?: CheckpointBinding;
 }
 

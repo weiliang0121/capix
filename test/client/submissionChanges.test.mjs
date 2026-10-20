@@ -6,7 +6,7 @@ import { submissionSnapshot } from './fixtures.mjs';
 
 const create = () => new ClientSubmission('fixture-conversation', { messages: [{ role: 'user', content: 'hello' }] });
 const input = { transcriptId: 'fixture-transcript', start: 0, end: 1 };
-const call = (contextId = 'r', patch = {}) => ({ contextId, level: 'runtime', label: '运行', status: 'running', phase: 'execute', round: 1, startedAt: '2026-10-01T00:00:00Z', ...patch });
+const call = (contextId = 'r', patch = {}) => ({ contextId, kind: 'scene', label: '运行', status: 'running', phase: 'execute', round: 1, startedAt: '2026-10-01T00:00:00Z', ...patch });
 const baseline = (submission, patch = {}) => ({ type: 'baseline', submission: submissionSnapshot(submission.id, patch) });
 const update = (submission, fromRevision, revision, change, patch = {}) => ({ type: 'submission', conversationId: submission.conversationId, submissionId: submission.id, fromRevision, revision, change, ...patch });
 
@@ -30,10 +30,10 @@ test('submission changes require a baseline and contiguous revision coverage whi
 test('overlapping query baselines merge already attached execution prefixes and call upserts without duplication', () => {
   const submission = create();
   const root = call();
-  const execution = call('e', { level: 'execution', parentContextId: 'r', relation: { phase: 'attached' } });
+  const execution = call('e', { kind: 'group', parentContextId: 'r', relation: { phase: 'attached' } });
   submission.receiveFrame(baseline(submission, { revision: 2, input, executions: [{ contextId: 'e' }], activities: { calls: [root, execution], integrity: { status: 'complete' } } }));
   const before = submission.snapshot.remote;
-  submission.receiveFrame(update(submission, 0, 4, { input, executions: [{ contextId: 'e' }, { contextId: 'e2' }], activities: { calls: [root, { ...execution, phase: 'receive' }, call('e2', { level: 'execution', parentContextId: 'r' })] } }));
+  submission.receiveFrame(update(submission, 0, 4, { input, executions: [{ contextId: 'e' }, { contextId: 'e2' }], activities: { calls: [root, { ...execution, phase: 'receive' }, call('e2', { kind: 'group', parentContextId: 'r' })] } }));
   const accepted = submission.snapshot.remote;
   assert.deepEqual(
     accepted.executions.map((entry) => entry.contextId),
@@ -49,7 +49,7 @@ test('overlapping query baselines merge already attached execution prefixes and 
 
 test('activity deltas validate only changed calls and structurally share the other 500 entries', (context) => {
   const submission = create();
-  const calls = [call(), ...Array.from({ length: 500 }, (_, index) => call(`e${index}`, { level: 'execution', parentContextId: 'r' }))];
+  const calls = [call(), ...Array.from({ length: 500 }, (_, index) => call(`e${index}`, { kind: 'group', parentContextId: 'r' }))];
   submission.receiveFrame(baseline(submission, { activities: { calls, integrity: { status: 'complete' } } }));
   const before = submission.snapshot.remote.activities;
   const parse = context.mock.method(Date, 'parse');
@@ -68,9 +68,9 @@ test('delta acceptance is atomic across small facts, activity changes, and execu
   const submission = create();
   submission.receiveFrame(baseline(submission, { input, activities: { calls: [call()], integrity: { status: 'complete' } } }));
   const accepted = submission.snapshot.remote;
-  assert.throws(() => submission.receiveFrame(update(submission, 0, 1, { executions: [{ contextId: 'e' }], activities: { calls: [call('e', { level: 'execution', parentContextId: 'r' })] }, answer: { transcriptId: input.transcriptId, index: 0 } })), SubmissionContractError);
+  assert.throws(() => submission.receiveFrame(update(submission, 0, 1, { executions: [{ contextId: 'e' }], activities: { calls: [call('e', { kind: 'group', parentContextId: 'r' })] }, answer: { transcriptId: input.transcriptId, index: 0 } })), SubmissionContractError);
   assert.strictEqual(submission.snapshot.remote, accepted);
-  submission.receiveFrame(update(submission, 0, 1, { executions: [{ contextId: 'e' }], activities: { calls: [call('e', { level: 'execution', parentContextId: 'r' })] }, answer: { transcriptId: input.transcriptId, index: 1 } }));
+  submission.receiveFrame(update(submission, 0, 1, { executions: [{ contextId: 'e' }], activities: { calls: [call('e', { kind: 'group', parentContextId: 'r' })] }, answer: { transcriptId: input.transcriptId, index: 1 } }));
   assert.equal(submission.snapshot.remote.activities.calls.length, 2);
   assert.equal(submission.snapshot.remote.executions.length, 1);
   assert.throws(() => submission.receiveFrame(update(submission, 1, 2, { input: { ...input, end: 2 } })), SubmissionContractError);
@@ -84,7 +84,7 @@ test('delta admission clearing, immutable terminal facts, and independently inco
   assert.equal(submission.snapshot.remote.admission, undefined);
   assert.equal(submission.snapshot.remote.result, undefined);
   assert.throws(() => submission.receiveFrame(update(submission, 1, 2, { activities: { integrity: { status: 'complete' } } })), SubmissionContractError);
-  assert.throws(() => submission.receiveFrame(update(submission, 1, 2, { activities: { calls: [call('e', { level: 'execution', parentContextId: 'r' })] } })), SubmissionContractError);
+  assert.throws(() => submission.receiveFrame(update(submission, 1, 2, { activities: { calls: [call('e', { kind: 'group', parentContextId: 'r' })] } })), SubmissionContractError);
   submission.receiveFrame(update(submission, 1, 2, { result: { status: 'completed' } }));
   assert.deepEqual(submission.snapshot.remote.activities.integrity, incomplete);
   assert.throws(() => submission.receiveFrame(update(submission, 2, 3, { result: { status: 'failed', error: { code: 'LATE', message: 'changed' } } })), SubmissionContractError);
@@ -95,7 +95,7 @@ test('a newly introduced activity source needs integrity and rejects duplicates,
   const submission = create();
   submission.receiveFrame(baseline(submission));
   assert.throws(() => submission.receiveFrame(update(submission, 0, 1, { activities: { calls: [call()] } })), SubmissionContractError);
-  for (const calls of [[call(), call()], [call('e', { level: 'execution', parentContextId: 'missing' })], Array.from({ length: 513 }, (_, index) => call(`r${index}`))]) {
+  for (const calls of [[call(), call()], [call('e', { kind: 'group', parentContextId: 'missing' })], Array.from({ length: 513 }, (_, index) => call(`r${index}`))]) {
     assert.throws(() => submission.receiveFrame(update(submission, 0, 1, { activities: { calls, integrity: { status: 'complete' } } })), SubmissionContractError);
   }
   submission.receiveFrame(update(submission, 0, 1, { activities: { calls: [call()], integrity: { status: 'complete' } } }));
@@ -128,7 +128,7 @@ test('HTTP accepts real change frames and terminal facts after the connection ba
 
 test('equal-revision deltas verify their supplied facts without rescanning unchanged calls', (context) => {
   const submission = create();
-  const calls = [call(), call('e', { level: 'execution', parentContextId: 'r' })];
+  const calls = [call(), call('e', { kind: 'group', parentContextId: 'r' })];
   submission.receiveFrame(baseline(submission, { revision: 5, input, executions: [{ contextId: 'e' }], activities: { calls, integrity: { status: 'complete' } } }));
   const before = submission.snapshot.remote;
   const parse = context.mock.method(Date, 'parse');

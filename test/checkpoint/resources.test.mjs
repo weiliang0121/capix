@@ -1,9 +1,10 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assembleRuntime, RuntimeDefinition, ExecutionDefinition, OperationDefinition, InvocationContext, InvocationChildren, Transcript, TranscriptResource, MemoryCheckpointStore } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, InvocationContext, InvocationChildren, Transcript, TranscriptResource, MemoryCheckpointStore } from '@capix/server-runtime';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
-class Answer extends OperationDefinition {
+class Answer extends GroupDefinition {
   name = 'answer';
   label = 'answer';
   source = 'test';
@@ -11,10 +12,9 @@ class Answer extends OperationDefinition {
 }
 
 function assemble(execution, transcript, progress = []) {
-  return assembleRuntime(runtimeDefinition(execution), {
+  return installCallable(runtimeDefinition(execution), {
     providers: [TranscriptResource.append.provide(() => transcript)],
     source: {
-      entry: () => null,
       capture: () => null,
       progress: () => ({
         receive: (fact) => {
@@ -27,7 +27,7 @@ function assemble(execution, transcript, progress = []) {
 
 test('fixed transcript writes require a real direct-child reception and cannot be swallowed', async () => {
   const transcript = new Transcript();
-  class Main extends ExecutionDefinition {
+  class Main extends GroupDefinition {
     run = {
       requires: { messages: TranscriptResource.append.request() },
       execute(work) {
@@ -44,8 +44,8 @@ test('fixed transcript writes derive parent and child identity from the actual r
   const transcript = new Transcript();
   const answer = new Answer();
   const progress = [];
-  class Main extends ExecutionDefinition {
-    children = [answer];
+  class Main extends GroupDefinition {
+    members = [answer];
     run = {
       requires: { messages: TranscriptResource.append.request() },
       async execute(work) {
@@ -61,8 +61,8 @@ test('fixed transcript writes derive parent and child identity from the actual r
     };
   }
   const receipt = await assemble(new Main(), transcript, progress).run(null, {});
-  const parentId = progress.find((f) => f.kind === 'started' && f.identity.level === 'execution').identity.contextId;
-  const childId = progress.find((f) => f.kind === 'started' && f.identity.level === 'operation').identity.contextId;
+  const parentId = progress.find((f) => f.kind === 'started' && f.identity.kind === 'group' && f.description?.name !== 'answer').identity.contextId;
+  const childId = progress.find((f) => f.kind === 'started' && f.description?.name === 'answer').identity.contextId;
   assert.deepEqual(receipt, { transcriptId: transcript.id, start: 0, count: 1, revision: 1 });
   assert.deepEqual(transcript.exportState().appends[0].request.operation, { parentContextId: parentId, childContextId: childId, position: 'answer' });
   assert.equal(transcript.length, 1);
@@ -75,8 +75,8 @@ for (const stale of [undefined, 'endpoint', 'view']) {
     let firstEndpoint;
     let firstValues;
     const progress = [];
-    class Main extends ExecutionDefinition {
-      children = [answer];
+    class Main extends GroupDefinition {
+      members = [answer];
       maxRounds = 2;
       run = {
         requires: { messages: TranscriptResource.append.request() },
@@ -108,7 +108,7 @@ for (const stale of [undefined, 'endpoint', 'view']) {
       assert.equal(transcript.length, 2);
       assert.deepEqual(
         transcript.exportState().appends.map((saved) => saved.request.operation.childContextId),
-        progress.filter((f) => f.kind === 'started' && f.identity.level === 'operation').map((f) => f.identity.contextId),
+        progress.filter((f) => f.kind === 'started' && f.description?.name === 'answer').map((f) => f.identity.contextId),
       );
     }
   });
@@ -152,7 +152,7 @@ test('a checkpoint writer retained from a previous round cannot save the current
   const codec = { encode: (value) => value, decode: (value) => value };
   const store = new MemoryCheckpointStore();
   let writer;
-  class Root extends RuntimeDefinition {
+  class Root extends SceneDefinition {
     maxRounds = 2;
     checkpoint = { key: 'test.round-writer', version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { requires: {}, execute: () => null } }] };
     run = {
@@ -165,7 +165,7 @@ test('a checkpoint writer retained from a previous round cannot save the current
       accept: (work) => (work.round === 1 ? work.continue(work.initialInput, 'next') : work.delivered),
     };
   }
-  const runtime = assembleRuntime(new Root(), { checkpoints: { store }, providers: [], source: { entry: () => null, capture: () => null } });
+  const runtime = installCallable(new Root(), { checkpoints: { store }, providers: [], source: { capture: () => null } });
   await assert.rejects(runtime.run(null, {}), /inactive declaration|outside its executing round/);
   assert.equal(runtime.running, false);
 });
@@ -174,8 +174,8 @@ test('parallel fixed appends bind each effect to its own asynchronous reception'
   const progress = [];
   const transcript = new Transcript();
   const answer = new Answer();
-  class Main extends ExecutionDefinition {
-    children = [answer];
+  class Main extends GroupDefinition {
+    members = [answer];
     run = {
       requires: { messages: TranscriptResource.append.request() },
       async execute(work) {
@@ -194,7 +194,7 @@ test('parallel fixed appends bind each effect to its own asynchronous reception'
         assert.deepEqual(
           transcript.exportState().appends.map((item) => item.request.operation.childContextId),
           progress
-            .filter((f) => f.kind === 'started' && f.identity.level === 'operation')
+            .filter((f) => f.kind === 'started' && f.description?.name === 'answer')
             .map((f) => f.identity.contextId)
             .reverse(),
         );

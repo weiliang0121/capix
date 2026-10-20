@@ -1,13 +1,14 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, ExceptionContract, assembleRuntime, MemoryCheckpointStore, cloneCheckpointImage, DeclaredException, reception as defineReception } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, ExceptionContract, MemoryCheckpointStore, cloneCheckpointImage, DeclaredException, reception as defineReception } from '@capix/server-runtime';
 
 const rejected = new ExceptionContract('fixture.rejected');
 const codec = { encode: (value) => value, decode: (value) => value };
 const source = { entry: () => null, capture: () => null };
 
 function harness(store, resume, calls, reception = false) {
-  class Child extends ExecutionDefinition {
+  class Child extends GroupDefinition {
     raises = [rejected];
     checkpoint = { key: 'fixture.history.child', version: 1, input: codec, output: codec, points: [] };
     run = {
@@ -21,8 +22,8 @@ function harness(store, resume, calls, reception = false) {
   }
   const child = new Child();
   const contract = defineReception(child, { check: (value) => value, encode: codec.encode, decode: codec.decode });
-  class Root extends RuntimeDefinition {
-    children = [child];
+  class Root extends SceneDefinition {
+    members = [child];
     receptions = reception === 'typed' ? [contract] : [];
     raises = [rejected];
     maxRounds = 2;
@@ -55,7 +56,7 @@ function harness(store, resume, calls, reception = false) {
       },
     };
   }
-  return assembleRuntime(new Root(), { source, providers: [], checkpoints: { store } });
+  return installCallable(new Root(), { source, providers: [], checkpoints: { store } });
 }
 
 async function capture(reception = false) {

@@ -1,7 +1,8 @@
+import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, ExecutionDefinition, OperationDefinition, InvocationEntry, ResourceOffer, Recorder, RecordBook, assembleRuntime, ExecutionRecordHelper, bindRecording, invocationRecording } from '@capix/server-runtime';
+import { ExceptionContract, GroupDefinition, InvocationEntry, ResourceOffer, Recorder, RecordBook, bindCallSource, CallableRecordHelper, bindRecording, invocationRecording } from '@capix/server-runtime';
 import { validateExecutionRecordSnapshot, readOutput } from '@capix/protocol';
 
 const rejected = new ExceptionContract('test.rejected');
@@ -10,7 +11,7 @@ function assemble(execution, providers = [], recorder) {
   const definition = runtimeDefinition(execution);
   const observations = recorder ? [bindRecording(recorder, { failure: 'propagate' })] : undefined;
   if (observations) recordDefinitions(definition);
-  return assembleRuntime(definition, { providers, observations, source: { entry: () => null, capture: () => null, callbacks: (_definition, options) => options.execution } });
+  return installCallable(definition, { providers, observations, source: { capture: () => null }, bindings: [bindCallSource(execution, { started: (options) => options.execution?.started })] });
 }
 
 test('peer declarations share fixed supplies but have separate aliases and phase endpoints', async () => {
@@ -20,7 +21,7 @@ test('peer declarations share fixed supplies but have separate aliases and phase
   const recovery = new ResourceOffer('test.recovery', (source, activity) => ({ read: () => activity.runSync('read', {}, () => source) }), 'access');
   const recorder = new Recorder(new RecordBook());
   let call;
-  class Main extends ExecutionDefinition {
+  class Main extends GroupDefinition {
     raises = [rejected];
     run = {
       requires: { value: shared.request() },
@@ -73,7 +74,7 @@ test('peer declarations share fixed supplies but have separate aliases and phase
   );
   assert.equal(captures, 1);
   assert.equal(late, 1);
-  const snapshot = ExecutionRecordHelper.snapshot(recorder, recordedCall(recorder, call).id);
+  const snapshot = CallableRecordHelper.snapshot(recorder, recordedCall(recorder, call).id);
   validateExecutionRecordSnapshot(snapshot);
   assert.equal(snapshot.resources.filter((fact) => fact.access === 'test.shared' && fact.phase === 'bound').length, 1);
   assert.equal(snapshot.resources.filter((fact) => fact.access === 'test.shared' && fact.phase === 'available').length, 1);
@@ -81,7 +82,7 @@ test('peer declarations share fixed supplies but have separate aliases and phase
 
 test('handler-only lazy resources are not obtained on the success path', async () => {
   const unused = new ResourceOffer('test.unused', (value) => value, 'access');
-  class Main extends ExecutionDefinition {
+  class Main extends GroupDefinition {
     run = { requires: {}, execute: () => 'done' };
     exceptions = { requires: { unused: unused.request() }, accepts: [rejected], handle: () => assert.fail('not entered') };
   }
@@ -93,13 +94,13 @@ test('a caught child error blocks later child entry admission and reception work
   const failure = new Error('child failed');
   let entryEffects = 0;
   let receptionEffects = 0;
-  class Good extends OperationDefinition {
+  class Good extends GroupDefinition {
     name = 'good';
     label = 'good';
     source = 'test';
     run = { requires: {}, execute: () => 'done' };
   }
-  class Bad extends OperationDefinition {
+  class Bad extends GroupDefinition {
     name = 'bad';
     label = 'bad';
     source = 'test';
@@ -116,8 +117,8 @@ test('a caught child error blocks later child entry admission and reception work
     entryEffects++;
     return input;
   });
-  class Main extends ExecutionDefinition {
-    children = [good, bad];
+  class Main extends GroupDefinition {
+    members = [good, bad];
     run = {
       requires: {},
       async execute(work) {
@@ -147,7 +148,7 @@ test('a caught child error blocks later child entry admission and reception work
 test('retained work endpoints cannot be used during exception handling even if its error is caught', async () => {
   const resource = new ResourceOffer('test.phase', (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }));
   let saved;
-  class Main extends ExecutionDefinition {
+  class Main extends GroupDefinition {
     raises = [rejected];
     run = {
       requires: { value: resource.request() },
@@ -170,15 +171,15 @@ test('retained work endpoints cannot be used during exception handling even if i
 });
 
 test('child use grants are separate for run and handler, and invalid ownership fails at assembly', async () => {
-  class Work extends OperationDefinition {
+  class Work extends GroupDefinition {
     name = 'work';
     label = 'work';
     source = 'test';
     run = { requires: {}, execute: () => 'child' };
   }
   const child = new Work();
-  class Main extends ExecutionDefinition {
-    children = [child];
+  class Main extends GroupDefinition {
+    members = [child];
     raises = [rejected];
     run = {
       requires: {},
@@ -207,7 +208,7 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
   const output = { hidden: 'result', public: 3 };
   let descriptions = 0;
   let call;
-  class Main extends ExecutionDefinition {
+  class Main extends GroupDefinition {
     run = {
       requires: {},
       execute(work) {
@@ -246,7 +247,7 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
     output,
   );
   assert.equal(call.context.state.output, output);
-  const snapshot = ExecutionRecordHelper.snapshot(recorder, recordedCall(recorder, call).id);
+  const snapshot = CallableRecordHelper.snapshot(recorder, recordedCall(recorder, call).id);
   validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(snapshot.execution.value.input, { public: 2 });
   assert.deepEqual(readOutput(snapshot.execution.value), { public: 3 });
@@ -256,16 +257,16 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
 test('exception content can perform declared child work using only its granted resources', async () => {
   const resource = new ResourceOffer('test.repair', (value) => value, 'access');
   let resolved = 0;
-  class Repair extends OperationDefinition {
+  class Repair extends GroupDefinition {
     name = 'repair';
     label = 'repair';
     source = 'test';
     run = { requires: { value: resource.request() }, execute: (work) => work.resources.value };
   }
   const child = new Repair();
-  class Main extends ExecutionDefinition {
+  class Main extends GroupDefinition {
     raises = [rejected];
-    children = [child];
+    members = [child];
     run = {
       requires: {},
       uses: [],
@@ -301,7 +302,7 @@ test('handler resource failure exits as an error without repeating work or handl
   let handlings = 0;
   let acquisition = 0;
   let call;
-  class Main extends ExecutionDefinition {
+  class Main extends GroupDefinition {
     raises = [rejected];
     maxRounds = 2;
     run = {
@@ -354,7 +355,7 @@ for (const position of ['capture', 'expose']) {
       },
       'access',
     );
-    class Main extends ExecutionDefinition {
+    class Main extends GroupDefinition {
       raises = [rejected];
       run = { requires: { value: resource.request() }, execute: (work) => work.resources.value };
       exceptions = {
@@ -379,7 +380,7 @@ for (const position of ['capture', 'expose']) {
 
 for (const gap of ['runtime', 'execution']) {
   test(`recording declarations reject a static ${gap} parent gap`, () => {
-    class Child extends OperationDefinition {
+    class Child extends GroupDefinition {
       name = 'child';
       label = 'child';
       source = 'test';
@@ -387,8 +388,8 @@ for (const gap of ['runtime', 'execution']) {
       observation = [invocationRecording()];
     }
     const child = new Child();
-    class Main extends ExecutionDefinition {
-      children = [child];
+    class Main extends GroupDefinition {
+      members = [child];
       run = { requires: {}, execute: () => 'done' };
       observation = gap === 'runtime' ? [invocationRecording()] : undefined;
     }
@@ -396,7 +397,7 @@ for (const gap of ['runtime', 'execution']) {
     const definition = runtimeDefinition(execution);
     if (gap === 'execution') definition.observation = [invocationRecording()];
     const installation = bindRecording(new Recorder(new RecordBook()));
-    assert.throws(() => assembleRuntime(definition, { observations: [installation], providers: [], source: { entry: () => null, capture: () => null } }), /recording declaration on its direct parent/);
-    assert.doesNotThrow(() => assembleRuntime(definition, { providers: [], source: { entry: () => null, capture: () => null } }));
+    assert.throws(() => installCallable(definition, { observations: [installation], providers: [], source: { entry: () => null, capture: () => null } }), /recording declaration on its direct parent/);
+    assert.doesNotThrow(() => installCallable(definition, { providers: [], source: { entry: () => null, capture: () => null } }));
   });
 }

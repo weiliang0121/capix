@@ -4,10 +4,10 @@ import { callFor } from '../fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BaseRecord, ExecutionRecordHelper, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, RecordBook, Clock, Recorder, BoundRuntime } from '@capix/server-runtime';
+import { BaseRecord, ExecutionRecordHelper, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, RecordBook, Clock, Recorder } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 
-import { validateExecutionRecordSnapshot } from '@capix/protocol';
+import { validateExecutionRecordSnapshot, validateLegacyExecutionRecordSnapshot } from '@capix/protocol';
 
 class ManualClock extends Clock {
   elapsed = 100;
@@ -59,22 +59,22 @@ test('event records share the Book, have their own IDs, and snapshots read the e
   const secondSnapshot = observeCall(runtime.recording, callFor(second));
   assert.deepEqual(
     secondSnapshot.events.map((event) => event.sequence),
-    [1],
+    [2],
   );
-  assert.equal(InvocationBoundaryRecordHelper.findByExecution(new Recorder(book), first.execution.id).length, 2);
+  assert.equal(InvocationBoundaryRecordHelper.findByScope(new Recorder(book), first.rootCall.id).filter((event) => event.callId === first.execution.id).length, 2);
   assert.equal(during.events.length, 1);
   const changed = structuredClone(first);
   changed.events[0].id = changed.events[1].id;
   assert.throws(() => validateExecutionRecordSnapshot(changed));
   changed.events[0].id = first.events[0].id;
-  changed.events[0].executionId = secondSnapshot.execution.id;
+  changed.events[0].callId = secondSnapshot.execution.id;
   assert.throws(() => validateExecutionRecordSnapshot(changed));
   validateExecutionRecordSnapshot(first);
   validateExecutionRecordSnapshot(secondSnapshot);
   first.events[0].sequence = 500;
-  assert.equal(observeCall(runtime.recording, callFor(firstContext)).events[0].sequence, 1);
-  assert.equal([...book.values()].filter((record) => record.kind === 'execution').length, 2);
-  assert.equal([...book.values()].filter((record) => record.kind === 'runtime-call').length, 2);
+  assert.equal(observeCall(runtime.recording, callFor(firstContext)).events[0].sequence, 2);
+  assert.equal([...book.values()].filter((record) => record.structureKind === 'group').length, 2);
+  assert.equal([...book.values()].filter((record) => record.structureKind === 'scene').length, 2);
 });
 
 test('event helpers reject foreign/non-call targets and leave no event or sequence advance if Book registration fails', () => {
@@ -160,5 +160,5 @@ test('last event follows execution sequence across interleaved children, with fa
     snapshot.events.map((record) => record.sequence),
     [1, 2, 3, 4, 5, 6, 7, 8],
   );
-  validateExecutionRecordSnapshot(snapshot);
+  validateLegacyExecutionRecordSnapshot(snapshot);
 });

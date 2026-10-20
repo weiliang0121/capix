@@ -1,5 +1,7 @@
 # 定义作者契约（收敛方案 v6）
 
+> **2026-10-20 结构迁移：** 当前采用 Scene / Group / Node 及共同 Callable / Composite，旧 REOA 名称和位置表在本文保留为设计讨论历史。已实施契约以 [可调用结构](callable-structures.md)、[运行边界](runtime-boundaries.md) 为准。资源捕获按明确声明绑定，内核不再设 E 专属接线；Checkpoint 使用 Frame v4。
+
 > 状态：已实施，2026-10-17。由 Fable v5 与 Codex v1 合并，源码核对基线为 `1e72e2e`。门槛实验发现的 D06 失败交付调整已由用户确认；正式机制、Observer 声明与回归已迁移。
 >
 > 本文件是本轮唯一方案，包含完整契约、实施条件与验证结果，不再要求交叉阅读两份讨论稿。保留 D01–D10 与 C1–C7 编号供审阅定位。作者契约回归位于 `test/author-contract/`，均使用正式公开接口；类型门槛含独立编译失败用例。验证结果与兼容边界见 §12。
@@ -641,7 +643,7 @@ Context 原子安装 continuation、阶段行动撤销、恢复引用重新签�
 - [局部继续、异常处理与输出段](../server/runtime/src/invocation/cycle.ts)、[正式输出身份检查](../server/runtime/src/output/section.ts)。
 - [E 入口](../server/runtime/src/definition/execution.ts)、[替代输入入口](../server/runtime/src/definition/entry.ts)。
 - [CP 存储契约](../server/runtime/src/checkpoint/contract.ts)、[子依据解析与接纳状态安装](../server/runtime/src/checkpoint/children.ts)。
-- [回答生成和异常来源](../services/observer/src/conversation/operations/answer/generate.ts)、[业务恢复检查](../services/observer/src/conversation/operations/answer/checkpoint.ts)、[模型再次生成入口](../services/observer/src/conversation/operations/model/request.ts)。
+- [回答生成和异常来源](../services/observer/src/conversation/group/answer/generate.ts)、[业务恢复检查](../services/observer/src/conversation/group/answer/checkpoint.ts)、[模型再次生成入口](../services/observer/src/conversation/group/model/request.ts)。
 - [并行与输出身份现有测试](../test/checkpoint/audit.test.mjs)、[并行实体落实现有测试](../test/checkpoint/resources.test.mjs)。
 
 公开工厂和阶段类型的通过/失败用例见 [类型门槛](../test/author-contract/types.test.mjs)，运行用例见 [工厂实例](../test/author-contract/factories.test.mjs)，控制与声明固定回归见 [作者边界](../test/author-contract/controlBoundaries.test.mjs)。

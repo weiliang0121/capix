@@ -12,11 +12,11 @@ interface StoredChild {
 
 /** Reusable child structures; no parent invocation or phase access is retained here. */
 export class BoundChildren {
-  readonly #entries: ReadonlyMap<ChildContract, { readonly level: ChildDefinition['level']; readonly value: Initializer<StoredChild>; readonly checkpoint?: CheckpointBinding }>;
+  readonly #entries: ReadonlyMap<ChildContract, { readonly kind: ChildDefinition['kind']; readonly value: Initializer<StoredChild>; readonly checkpoint?: CheckpointBinding }>;
   readonly #definitions: readonly ChildDefinition[];
 
   constructor(children: readonly ResolvedChild[], create: (child: ResolvedChild) => StoredChild) {
-    this.#entries = new Map(children.map((child) => [child.definition, { level: child.declaration.level, value: new Initializer(() => create(child)), checkpoint: child.declaration.checkpoint }]));
+    this.#entries = new Map(children.map((child) => [child.definition, { kind: child.declaration.kind, value: new Initializer(() => create(child)), checkpoint: child.declaration.checkpoint }]));
     this.#definitions = Object.freeze([...new Set(children.map((child) => child.definition))]);
   }
 
@@ -38,7 +38,7 @@ export class BoundChildren {
 
   /** Durable declaration association is independent of lazy Bound initialization. */
   checkpointLayout() {
-    return Object.freeze([...this.#entries.values()].map((entry) => Object.freeze({ level: entry.level, binding: entry.checkpoint })));
+    return Object.freeze([...this.#entries.values()].map((entry) => Object.freeze({ kind: entry.kind, binding: entry.checkpoint })));
   }
 
   get<Definition extends ChildContract>(definition: Definition): StoredChild {

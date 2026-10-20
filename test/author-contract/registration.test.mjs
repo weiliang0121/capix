@@ -1,12 +1,13 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AttemptDefinition, defineAttempt, defineOperation, defineExecution, defineRuntime, assembleRuntime } from '@capix/server-runtime';
+import { NodeDefinition, defineNode, defineGroup, defineScene } from '@capix/server-runtime';
 
 const metadata = { name: 'test', label: 'test', source: 'test', callee: 'test' };
 function assemble(leaf) {
-  const operation = defineOperation()({
+  const operation = defineGroup()({
     ...metadata,
-    children: [leaf],
+    members: [leaf],
     run: {
       async execute(work) {
         const child = work.children.create(leaf, work.input);
@@ -15,8 +16,8 @@ function assemble(leaf) {
       },
     },
   });
-  const execution = defineExecution()({
-    children: [operation],
+  const execution = defineGroup()({
+    members: [operation],
     run: {
       async execute(work) {
         const child = work.children.create(operation, work.input);
@@ -25,8 +26,8 @@ function assemble(leaf) {
       },
     },
   });
-  const root = defineRuntime()({
-    children: [execution],
+  const root = defineScene()({
+    members: [execution],
     run: {
       async execute(work) {
         const child = work.children.create(execution, work.input);
@@ -35,29 +36,29 @@ function assemble(leaf) {
       },
     },
   });
-  return assembleRuntime(root, { providers: [], source: { runtime: () => null, capture: () => null } });
+  return installCallable(root, { providers: [], source: { runtime: () => null, capture: () => null } });
 }
 
-for (const children of [[], [defineAttempt()({ ...metadata, run: { execute: (work) => work.input } })]]) {
+for (const children of [[], [defineNode()({ ...metadata, run: { execute: (work) => work.input } })]]) {
   test(`binding rejects an A with ${children.length} declared children before any work runs`, () => {
     let called = 0;
-    class InvalidLeaf extends AttemptDefinition {
+    class InvalidLeaf extends NodeDefinition {
       name = 'invalid';
       label = 'invalid';
       source = 'test';
       callee = 'local';
-      children = children;
+      members = children;
       run = { requires: {}, execute: () => ++called };
     }
-    assert.throws(() => assemble(new InvalidLeaf()), /Attempts cannot declare children/);
-    const literal = defineAttempt()({ ...metadata, children, run: { execute: () => ++called } });
-    assert.throws(() => assemble(literal), /Attempts cannot declare children/);
+    assert.throws(() => assemble(new InvalidLeaf()), /Nodes cannot declare members/);
+    const literal = defineNode()({ ...metadata, members: children, run: { execute: () => ++called } });
+    assert.throws(() => assemble(literal), /Nodes cannot declare members/);
     assert.equal(called, 0);
   });
 }
 
 test('a class and its complete factory path retain the receiver and original output reference without recording', async () => {
-  class Reader extends AttemptDefinition {
+  class Reader extends NodeDefinition {
     name = 'read';
     label = 'read';
     source = 'test';

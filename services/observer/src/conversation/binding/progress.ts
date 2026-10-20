@@ -3,7 +3,7 @@ import type { TranscriptAppendProgress } from '@capix/server-runtime/content';
 import type { ConversationTask, GenerationOutput } from '@capix/protocol';
 import type { FileProgress } from '../../files/index.js';
 import type { ConversationProgress } from '../progress.js';
-import type { AnswerProgress } from '../operations/answer/stream.js';
+import type { AnswerProgress } from '../group/answer/stream.js';
 
 export function taskProgress(progress?: ProgressChannel<ConversationProgress>, files?: ProgressChannel<FileProgress>): ProgressReceiver<ConversationTask> {
   return {
@@ -29,15 +29,6 @@ export function activityProgress(progress?: ProgressChannel<InvocationProgress>)
   return {
     receive(fact): undefined {
       progress.publish(fact);
-    },
-  };
-}
-
-export function executionProgress(progress?: ProgressChannel<ConversationProgress>): ProgressReceiver<InvocationProgress> | undefined {
-  if (!progress) return;
-  return {
-    receive(fact): undefined {
-      if (fact.kind === 'started' && fact.identity.level === 'execution') progress.publish({ kind: 'execution', contextId: fact.identity.contextId });
     },
   };
 }

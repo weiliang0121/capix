@@ -98,39 +98,50 @@ test('HTTP: incomplete model output ends one QA and automatically advances waiti
 
 test('HTTP: readiness racing another caller retains the same waiting item and retries admission with a fresh POST identity', async (t) => {
   const gate = deferred();
-  let reserve;
+  let competing;
   let raced = false;
-  const f = await fixture(t, async () => output({ kind: 'answer', content: 'answer' }), {
-    transport: (io, environment) => ({
-      config: () => io.config(),
-      conversations: (signal) => io.conversations(signal),
-      activeSubmission: (id, signal) => io.activeSubmission(id, signal),
-      conversation: (id, signal) => io.conversation(id, signal),
-      createConversation: (signal) => io.createConversation(signal),
-      admission: (id, signal) => io.admission(id, signal),
-      read: (id, signal) => io.read(id, signal),
-      follow: (id, receive, signal) => io.follow(id, receive, signal),
-      cancel: (id, signal) => io.cancel(id, signal),
-      submit: (request, receive, signal) => {
-        if (!raced) {
-          raced = true;
-          reserve = environment.runtime.reserve(() => gate.promise);
-        }
-        return io.submit(request, receive, signal);
-      },
-    }),
-  });
+  const f = await fixture(
+    t,
+    async (number) => {
+      if (number === 1) await gate.promise;
+      return output({ kind: 'answer', content: 'answer' });
+    },
+    {
+      transport: (io, environment) => ({
+        config: () => io.config(),
+        conversations: (signal) => io.conversations(signal),
+        activeSubmission: (id, signal) => io.activeSubmission(id, signal),
+        conversation: (id, signal) => io.conversation(id, signal),
+        createConversation: (signal) => io.createConversation(signal),
+        admission: (id, signal) => io.admission(id, signal),
+        read: (id, signal) => io.read(id, signal),
+        follow: (id, receive, signal) => io.follow(id, receive, signal),
+        cancel: (id, signal) => io.cancel(id, signal),
+        submit: (request, receive, signal) => {
+          if (!raced) {
+            raced = true;
+            competing = environment.driver.run(environment.scene, input('another caller'), { settings });
+          }
+          return io.submit(request, receive, signal);
+        },
+      }),
+    },
+  );
   const local = f.runtime.enqueue(input('retained question'));
   const later = f.runtime.enqueue(input('withdraw this'));
   await until(() => f.runtime.getSnapshot().submission?.remote?.result?.retry === 'admission');
-  assert.equal(f.environment.transcript.length, 0, 'busy rejection did not append input');
+  assert.deepEqual(
+    f.environment.transcript.snapshot().map((message) => message.content),
+    ['another caller'],
+    'busy rejection did not append the queued input',
+  );
   assert.deepEqual(
     f.runtime.getSnapshot().queue.waiting.map((item) => item.id),
     [local.id, later.id],
   );
   await f.runtime.cancelSubmission(later.id);
   gate.resolve();
-  await reserve;
+  await competing;
   await until(() => f.runtime.getSnapshot().submission?.remote?.result?.status === 'completed');
   assert.equal(f.posts.length, 2);
   assert.notEqual(f.posts[0].submissionId, f.posts[1].submissionId);
@@ -138,7 +149,7 @@ test('HTTP: readiness racing another caller retains the same waiting item and re
   assert.equal(f.runtime.getSnapshot().submission.queueId, local.id);
   assert.deepEqual(
     f.environment.transcript.snapshot().map((message) => message.content),
-    ['retained question', 'answer'],
+    ['another caller', 'answer', 'retained question', 'answer'],
   );
 });
 

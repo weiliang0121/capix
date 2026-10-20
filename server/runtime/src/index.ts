@@ -1,23 +1,26 @@
 // Declarations and business composition.
-export * from './definition/invocation.js';
+export * from './definition/callable.js';
 export * from './definition/work.js';
 export * from './definition/factory.js';
 export * from './definition/checkpoint.js';
 export * from './definition/reception.js';
 export { ChildCallFailure } from './invocation/provenance.js';
-export * from './definition/runtime.js';
-export * from './definition/execution.js';
-export * from './definition/operation.js';
-export * from './definition/attempt.js';
+export * from './definition/scene.js';
+export * from './definition/group.js';
+export * from './definition/node.js';
+export * from './definition/composition.js';
 export * from './definition/children.js';
-export type { ChildLevel } from './definition/level.js';
+export type { ChildKind } from './definition/kind.js';
+export type { CallableKind } from '@capix/protocol';
 export * from './definition/entry.js';
 export * from './definition/observation.js';
 export * from './exception/contract.js';
 export * from './composition/sequence.js';
 
+export * from './driver.js';
+
 // Application assembly and independent resource supplies.
-export * from './binding/runtime.js';
+export * from './binding/callable.js';
 export * from './binding/observation.js';
 export * from './binding/resources.js';
 export { ResourceOffer, type ResourceRequest, type ResourceProvider, type ResourceRefinement, type ResourceRequests, type ResourcesOf } from './resource/offer.js';
@@ -33,7 +36,6 @@ export * from './interaction/interaction.js';
 export * from './context/view.js';
 export * from './invocation/view.js';
 export type { OutputDeclaration, InvocationOutputWriter, InvocationOutputEvent, InvocationOutputReceiver } from './output/contract.js';
-export * from './invocation/description.js';
 export * from './invocation/identity.js';
 export * from './invocation/progress.js';
 export { InvocationCancelled, isInvocationCancelled } from './invocation/cancellation.js';

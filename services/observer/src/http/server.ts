@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ConversationAdmission, ConversationSubmissionDiscovery, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse, InteractionUpdate } from '@capix/protocol';
-import { ExecutionRecord, ExecutionRecordHelper, observeMemory } from '@capix/server-runtime/recording';
+import { isTaskRecord, taskSnapshot } from '../observation/calls.js';
+import { observeMemory } from '@capix/server-runtime/recording';
 import { isObject, RuntimeError } from '@capix/server-runtime';
 import type { ObserverConversations } from '../assembly/conversations.js';
 import { transcriptSnapshot } from '../conversation/transcript/feed.js';
@@ -63,7 +64,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     if (!configured) return Object.freeze({ conversationId, transcriptId, status: 'unavailable', error: Object.freeze({ code: 'KEY_MISSING', message: '服务端尚未配置模型凭据；请配置并重启。' }) });
     const failure = conversations.model.failure;
     if (failure) return Object.freeze({ conversationId, transcriptId, status: 'unavailable', error: failure });
-    return Object.freeze({ conversationId, transcriptId, status: observer?.runtime.running || !submissions.available ? 'busy' : 'ready' });
+    return Object.freeze({ conversationId, transcriptId, status: (observer && observer.driver.isRunning(observer.scene)) || !submissions.available ? 'busy' : 'ready' });
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -175,9 +176,9 @@ export function createObserverServer(options: ObserverServerOptions) {
       const observer = conversations.open(target());
       observer.recordSource.assertComplete();
       const id = url.searchParams.get('id') || '';
-      if (!(observer.book.get(id) instanceof ExecutionRecord)) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
+      if (!isTaskRecord(observer.book.get(id))) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
       const archive = executionArchive(observer.book, observer.recordingArchives, id);
-      return json(res, 200, { ...ExecutionRecordHelper.snapshot(observer.recording.recorder, id), ...(archive ? { archive } : {}) });
+      return json(res, 200, { ...taskSnapshot(observer.book, id), ...(archive ? { archive } : {}) });
     }
     if (req.method === 'GET' && url.pathname === '/api/source') {
       const path = url.searchParams.get('file') || '';
@@ -235,7 +236,7 @@ export function createObserverServer(options: ObserverServerOptions) {
       }
       submission.start(async (signal) => {
         const observer = conversations.open(conversationId);
-        return observer.runtime.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, answerProgress: submission.answerProgress, signal });
+        return observer.driver.run(observer.scene, data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, answerProgress: submission.answerProgress, signal });
       });
       // This controller only detaches the initial HTTP waiter; it is never passed to runtime.run.
       const waiting = new AbortController();

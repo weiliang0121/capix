@@ -3,7 +3,7 @@ import { TranscriptResource, MemoryResource, SelectionUsageResource, type Transc
 import type { ModelSettings, FileTask, ConversationTask } from '@capix/protocol';
 import { FileResources, type WorkspaceFiles, type FileProgress, type FileResourceSource } from '../files/index.js';
 import type { ProgressChannel } from '@capix/server-runtime';
-import { ConversationTaskResource, type TaskSelection } from './task.js';
+import { ConversationTaskResource, type TaskSelection } from './decision/selection.js';
 import { ModelSettingsResource, ModelResource } from './model/resources.js';
 import type { ModelInteractions, ModelInteractionCreator, ModelInteractionReader } from './model/interactions.js';
 import { ConversationMaterialUsageResource } from './content/usage.js';
@@ -26,20 +26,20 @@ export interface ConversationResources extends ModelCallResources, HistoryResour
 export interface MemoryWriteResources {
   readonly memoryWriter: Offered<typeof MemoryResource.apply>;
 }
-export interface ConversationExecutionResources extends HistoryResources {
+export interface ConversationTaskResources extends HistoryResources {
   readonly messages: Offered<typeof TranscriptResource.append>;
   readonly selectionUsage: Offered<typeof ConversationMaterialUsageResource>;
   readonly tasks: TaskSelection;
 }
 
-export const conversationExecutionRequests = Object.freeze({
+export const conversationTaskRequests = Object.freeze({
   history: TranscriptResource.fixedRange.request(),
   messages: TranscriptResource.append.request(),
   selectionUsage: ConversationMaterialUsageResource.request(),
   tasks: ConversationTaskResource.request(),
 });
-export const conversationRuntimeRequests = Object.freeze({ messages: TranscriptResource.append.request() });
-export interface ConversationRuntimeResources {
+export const conversationSceneRequests = Object.freeze({ messages: TranscriptResource.append.request() });
+export interface ConversationSceneResources {
   readonly messages: Offered<typeof TranscriptResource.append>;
 }
 

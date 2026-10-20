@@ -126,7 +126,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
           if (!definition) throw new Error('Checkpoint point is not declared');
           const children = captureCheckpointChildren(context, this.invocation.children, this.#savedChildren);
           const continuation = captureCheckpointContinuation(context.continuation, children.children);
-          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 3, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input: this.work!.input.encode(context.input), currentInput: this.work!.input.encode(context.currentInput), ...children, ...(continuation ? { continuation } : {}) }, state: definition.state.encode(state), references });
+          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 4, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input: this.work!.input.encode(context.input), currentInput: this.work!.input.encode(context.currentInput), ...children, ...(continuation ? { continuation } : {}) }, state: definition.state.encode(state), references });
           const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children, this.work!.receptions);
           checkCheckpointReferences(image.frame, image.references, definition.references);
           definition.check?.(image.frame, definition.state.decode(image.state), image.references, decoded);

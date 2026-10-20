@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight, ArrowUpRight } from 'lucide-react';
 import type { CallGraphModel, CallGraphNode } from '../../state/graph.js';
 import { formatDuration } from './layout.js';
 
-const levelLabels = { execution: 'E', operation: 'O', attempt: 'A' };
+const kindLabels = { scene: 'S', group: 'G', node: 'N' };
 const statusLabels = { running: '运行中', succeeded: '完成', failed: '失败', unresolved: '上次运行未取得结束记录' };
 
 function hasFailure(node: CallGraphNode): boolean {
@@ -23,14 +23,14 @@ interface TreeProps {
 }
 
 function CallNode({ node, expanded, toggle, inspect }: TreeProps & { node: CallGraphNode }) {
-  const open = expanded.get(node.id) ?? (node.level === 'execution' || hasFailure(node));
+  const open = expanded.get(node.id) ?? (node.task || hasFailure(node));
   const childrenId = `call-children-${node.id}`;
   return (
     <li className={`call-tree-item explorer-family-${family(node)}`}>
-      <div className={`call-tree-node${node.level === 'execution' ? ' call-tree-execution' : ''}`}>
+      <div className={`call-tree-node${node.task ? ' call-tree-execution' : ''}`}>
         <button type="button" className="call-tree-inspect" onClick={() => inspect(node.id)} aria-label={`${node.label}，${statusLabels[node.status]}，查看调用详情`}>
           <div className="call-tree-heading">
-            <span className="call-tree-level">{levelLabels[node.level]}</span>
+            <span className="call-tree-level">{kindLabels[node.kind]}</span>
             {node.order !== undefined && <span className="call-tree-order">{String(node.order).padStart(2, '0')}</span>}
             <strong>{node.label}</strong>
             <ArrowUpRight className="call-tree-link" size={12} />
@@ -66,7 +66,7 @@ export function CallGraph({ graph, ...props }: TreeProps & { graph: CallGraphMod
     <div className="call-graph">
       {graph.runtimeId && (
         <button type="button" className="call-graph-origin" onClick={() => props.inspect(graph.runtimeId!)}>
-          所属 R 调用 <ArrowUpRight size={12} />
+          所属场景调用 <ArrowUpRight size={12} />
         </button>
       )}
       <ol className="call-tree-roots">

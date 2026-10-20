@@ -133,7 +133,7 @@ export class ObservationReceiver {
   async loadExecution(id: string, signal?: AbortSignal): Promise<ExecutionRecordSnapshot> {
     if (!this.transport || !this.conversationId) throw new Error('未接入观测能力或尚未打开对话。');
     const cached = this.getExecution(id);
-    if (cached && (cached.archive || (cached.execution.status !== 'running' && cached.runtimeCall.status !== 'running'))) return cached;
+    if (cached && (cached.archive || (cached.execution.status !== 'running' && cached.rootCall?.status !== 'running' && (cached.ancestors ?? []).every((call) => call.status !== 'running')))) return cached;
     const generation = this.generation;
     const snapshot = await this.transport.execution(this.conversationId, id, signal);
     if (generation !== this.generation) throw new Error('观测连接已更换，忽略旧详情响应。');

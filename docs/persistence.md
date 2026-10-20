@@ -1,8 +1,10 @@
 # 对话持久化
 
-按 Conversation 保存独立的 Transcript、Memories、所属活跃索引和可选记录预设产物，参见 [对话身份与切换](conversations.md)。重新启动时恢复内容实体及只读历史记录，再装配新的 Provider、REOA 绑定、记录安装和交付连接，允许开始新 QA。
+按 Conversation 保存独立的 Transcript、Memories、所属活跃索引和可选记录预设产物，参见 [对话身份与切换](conversations.md)。重新启动时恢复内容实体及只读历史记录，再装配新的 Provider、Callable 绑定、记录安装和交付连接，允许开始新 QA。
 
 服务启动不自动恢复未完成步骤、本地等待队列与服务提交身份。新调用默认保存 checkpoint，内置对话、决策、文件与记忆声明可在有可靠依据的位置由宿主显式续接，见 [Checkpoint](checkpoints.md)；它不重放原 Promise、输入接纳或旧提交反馈。独立 Interaction 另行保存固定模型请求与已接收反馈，允许按 ID 读取，不自动重发。历史记录用于解释已经观测到的过程，不能用于驱动旧执行。暂不新增 Thread、任务账本或后台工作队列。
+
+当前 checkpoint 使用 Frame v4，Scene/任务 Group 的声明契约分别为 version 4/6。v1/v2/v3 及未知恢复格式返回 `CHECKPOINT_FORMAT_UNSUPPORTED`，不自动迁移旧 image；它们存于同一库中不会阻止健康消息、记忆、历史记录读取，也不会阻止新调用产生 v4。
 
 ## 依赖与位置
 
@@ -52,7 +54,7 @@ Transcript 保存稳定 id、消息绝对 index、正文、revision 和分段起
 
 ## 独立交互保存
 
-`store.interactions` 提供 create/commit/read。Interaction 先保存 prepared 请求，再保存 started 发送意图，最后保存反馈或失败；反馈保存后才允许 A 解释。请求与已接收反馈不可替换，更新检查 expectedRevision。存储不依赖记录安装，也不要求先初始化对话内容。
+`store.interactions` 提供 create/commit/read。Interaction 先保存 prepared 请求，再保存 started 发送意图，最后保存反馈或失败；反馈保存后才允许 Node 解释。请求与已接收反馈不可替换，更新检查 expectedRevision。存储不依赖记录安装，也不要求先初始化对话内容。
 
 已保存的 ModelOutput 包含未经业务 JSON 接纳的 content；因此模型内容解释失败后仍可读取它。恢复读取不创建 Provider，不继续旧 QA；只有发送意图而无反馈时明确不可恢复等待。模型发送与 SQLite 不是跨系统事务，也没有进程重启后重新发送的承诺。独立生命周期、取消及读者边界见 [外部交互](interactions.md)。
 
@@ -63,6 +65,8 @@ Recorder 产出确定性的 RecordChangeEvent。服务在交给 ChangeBuffer 前
 记录保存发生在观测载体更新之后，不参与业务内容接纳。记录保存失败让该观测来源失效；已经成立的回答和记忆不撤销。若只是记录写入契约失败，内容仍可用；数据库本身不可用则同时影响内容接纳资格。
 
 `RecordBook.exportState()` / `RecordBook.restore()` 保存并重建具体记录类型。恢复检查身份、正文、归属、父子引用和局部顺序，不调用 add/finish 重演活动，也不发出新增通知。恢复记录为只读历史，当前调用不能挂在旧调用或旧安装根下。
+
+新记录以 `kind: invocation` 保存 CallableRecord 和实际 structureKind；旧 REOA 记录保留原 carrier、ID 和归属，查询时只读规范化成通用 calls。旧中断记录没有起始时间时保持未知，不借用父时间；格式迁移不把 Group 自动认定为业务任务。
 
 每次启动建立新的 Recorder 与 RecordingInstallation。旧来源带以下归档信息：
 

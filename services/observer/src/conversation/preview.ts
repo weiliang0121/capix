@@ -1,5 +1,5 @@
 import type { AnswerPreviewChange, AnswerPreviewSnapshot } from '@capix/protocol';
-import type { AnswerProgress, AnswerSource } from './operations/answer/stream.js';
+import type { AnswerProgress, AnswerSource } from './group/answer/stream.js';
 
 /** Submission-local public interpretation of explicitly selected answer outputs. */
 export class ConversationPreviewProjection {

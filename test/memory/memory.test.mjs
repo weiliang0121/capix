@@ -1,8 +1,9 @@
+import { Driver } from '@capix/server-runtime';
 import { ModelInteractions, ModelSource, ActiveContent } from '@capix/observer-service';
 import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, bindConversation, ConversationRuntimeDefinition } from '@capix/observer-service';
+import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, bindConversation, ConversationSceneDefinition } from '@capix/observer-service';
 
 import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, SelectionUsage, bindRecording } from '@capix/server-runtime';
 
@@ -12,7 +13,7 @@ const content = (topic, value, sourceIndexes) => ({ topic, content: value, sourc
 const change = (result, explanation, indexes = result.sourceIndexes, memoryId = null) => ({ action: memoryId === null ? 'create' : 'update', memoryId, change: explanation, sourceIndexes: indexes, result });
 
 async function run(environment, message, options = settings) {
-  return observeExecution(environment.runtime, environment.recording, { messages: [{ role: 'user', content: message }] }, { settings: options });
+  return observeExecution(environment.driver, environment.scene, environment.recording, { messages: [{ role: 'user', content: message }] }, { settings: options });
 }
 
 test('updates preserve Memory identity while immutable MemoryRecords describe each applied change and its actual operation', async () => {
@@ -59,16 +60,16 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
   for (const facts of [first, second, third]) {
     assert.equal(facts.execution.status, 'succeeded');
     assert.deepEqual(
-      facts.operations.map((item) => item.operation),
+      facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).map((item) => item.name),
       ['prepareContext', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
     );
-    const decisions = facts.operations.filter((item) => item.operation === 'conversationDecision');
+    const decisions = facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).filter((item) => item.name === 'conversationDecision');
     assert.deepEqual(
       decisions.map((record) => readOutput(record.value).kind),
       ['invoke', 'finish'],
     );
     assert.ok(
-      decisions.every((record) => !facts.attempts.some((attempt) => attempt.operationId === record.id)),
+      decisions.every((record) => !facts.calls.filter((item) => item.structureKind === 'node').some((attempt) => attempt.parentId === record.id)),
       'ordinary routing does not make additional model calls',
     );
   }
@@ -78,9 +79,9 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
     const extraction = JSON.parse(requests[index + 1].request.messages[1].content);
     assert.deepEqual(selection.memories, extraction.memories);
   }
-  assert.deepEqual(readOutput(first.operations.find((record) => record.operation === 'prepareContext').value).material.memories, []);
-  assert.equal(readOutput(second.operations.find((record) => record.operation === 'prepareContext').value).material.memories[0].content, '用户聚餐预算200元。');
-  assert.equal(readOutput(third.operations.find((record) => record.operation === 'prepareContext').value).material.memories[0].content, '用户聚餐预算150元。');
+  assert.deepEqual(readOutput(first.calls.filter((item) => item.structureKind === 'group' && item.id !== first.execution.id).find((record) => record.name === 'prepareContext').value).material.memories, []);
+  assert.equal(readOutput(second.calls.filter((item) => item.structureKind === 'group' && item.id !== second.execution.id).find((record) => record.name === 'prepareContext').value).material.memories[0].content, '用户聚餐预算200元。');
+  assert.equal(readOutput(third.calls.filter((item) => item.structureKind === 'group' && item.id !== third.execution.id).find((record) => record.name === 'prepareContext').value).material.memories[0].content, '用户聚餐预算150元。');
   assert.equal(environment.memories.get(memory.id), memory);
   assert.equal(environment.memories.values().length, 2);
   assert.equal(memory.content, '用户聚餐预算150元。');
@@ -92,10 +93,12 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
   assert.notEqual(records[0].id, records[1].id);
   assert.notEqual(records[0].id, memory.id);
   assert.equal(records[1].memoryId, memory.id);
-  assert.equal(records[1].executionId, second.execution.id);
-  const operation = second.operations.find((item) => item.operation === 'memory');
-  assert.equal(records[1].operationId, operation.id);
-  assert.notEqual(records[1].operationId, operation.contextId);
+  assert.equal(records[1].executionId, undefined, 'generic records locate their task through the real parent tree');
+  const operation = second.calls.filter((item) => item.structureKind === 'group' && item.id !== second.execution.id).find((item) => item.name === 'memory');
+  const applied = second.calls.find((call) => call.name === 'applyMemory' && call.parentId === operation.id);
+  assert.equal(records[1].callId, applied.id);
+  assert.equal(records[1].parentId, applied.id);
+  assert.notEqual(records[1].parentId, operation.contextId);
   assert.deepEqual(records[1].value, { action: 'update', change: '聚餐预算从200元改为150元', sourceIndexes: [2], result: content('聚餐', '用户聚餐预算150元。', [0, 2]) });
   assert.throws(() => {
     records[0].value.result.content = 'rewrite';
@@ -157,8 +160,8 @@ test('failed extraction leaves current memory and its records unchanged and keep
   invalid = true;
   const facts = await run(environment, '改成150');
   assert.equal(facts.execution.status, 'failed');
-  assert.equal(facts.operations.find((item) => item.operation === 'memory').value.error.code, 'MEMORY_SOURCE');
-  assert.equal(facts.operations.find((item) => item.operation === 'answer').status, 'succeeded');
+  assert.equal(facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).find((item) => item.name === 'memory').value.error.code, 'MEMORY_SOURCE');
+  assert.equal(facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).find((item) => item.name === 'answer').status, 'succeeded');
   assert.equal(environment.transcript.current('assistant').content, '正式回答');
   assert.equal(memory.content, '200');
   assert.equal(MemoryRecordHelper.find(environment.book, memory.id).length, 1);
@@ -194,8 +197,10 @@ test('recording observes the actual changed fact; registration failure propagate
   const recording = bindRecording(recorder, { failure: 'propagate' });
   const transcript = new Transcript([], { observation: recording.transcript });
   const memories = new Memories(transcript, { observation: recording.memory });
-  const execution = bindConversation(
-    new ConversationRuntimeDefinition(),
+  const driver = new Driver({ observations: [recording] });
+  const scene = bindConversation(
+    driver,
+    new ConversationSceneDefinition(),
     { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
     new ModelInteractions(
       new ModelSource({
@@ -206,15 +211,14 @@ test('recording observes the actual changed fact; registration failure propagate
         },
       }),
     ),
-    { observations: [recording] },
   );
-  await assert.rejects(execution.run({ messages: [{ role: 'user', content: '预算150' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'memory record registration failed');
+  await assert.rejects(driver.run(scene, { messages: [{ role: 'user', content: '预算150' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'memory record registration failed');
   const memory = memories.values()[0];
   assert.equal(memory.content, '150');
   assert.equal(MemoryRecordHelper.find(book, memory.id).length, 0);
-  const operation = [...book.values()].find((record) => record.operation === 'memory');
-  const accepted = [...book.values()].find((record) => record.operationId === operation.id && record.name === 'acceptModelOutput');
-  const applied = [...book.values()].find((record) => record.operationId === operation.id && record.name === 'applyMemory');
+  const operation = [...book.values()].find((record) => record.name === 'memory');
+  const accepted = [...book.values()].find((record) => record.parentId === operation.id && record.name === 'acceptModelOutput');
+  const applied = [...book.values()].find((record) => record.parentId === operation.id && record.name === 'applyMemory');
   assert.equal(accepted.status, 'succeeded');
   assert.equal(readOutput(accepted.value).memories.length, 1);
   assert.equal(applied.status, 'running'); // The observer lost a fact and cannot finish this record.
@@ -234,8 +238,8 @@ test('invalid memory output stops at acceptance without invoking application or 
     },
   });
   const snapshot = await run(environment, '记住这个安排');
-  const extraction = snapshot.operations.find((operation) => operation.operation === 'memory');
-  const attempts = snapshot.attempts.filter((attempt) => attempt.operationId === extraction.id);
+  const extraction = snapshot.calls.filter((item) => item.structureKind === 'group' && item.id !== snapshot.execution.id).find((operation) => operation.name === 'memory');
+  const attempts = snapshot.calls.filter((item) => item.structureKind === 'node').filter((attempt) => attempt.parentId === extraction.id);
   assert.deepEqual(
     attempts.map((attempt) => [attempt.name, attempt.status]),
     [
@@ -243,10 +247,10 @@ test('invalid memory output stops at acceptance without invoking application or 
       ['acceptModelOutput', 'failed'],
     ],
   );
-  const requested = snapshot.operations.find((operation) => operation.parentId === extraction.id && operation.operation === 'requestModel');
+  const requested = snapshot.calls.filter((item) => item.structureKind === 'group' && item.id !== snapshot.execution.id).find((operation) => operation.parentId === extraction.id && operation.name === 'requestModel');
   assert.equal(requested.status, 'succeeded');
   assert.deepEqual(readOutput(requested.value), invalid);
-  const invoked = snapshot.attempts.find((attempt) => attempt.operationId === requested.id);
+  const invoked = snapshot.calls.filter((item) => item.structureKind === 'node').find((attempt) => attempt.parentId === requested.id);
   assert.equal(invoked.name, 'invokeModel');
   assert.equal(readOutput(invoked.value).kind, 'received');
   assert.deepEqual(readOutput(invoked.value).output, invalid);
@@ -273,7 +277,7 @@ test('memory capacity overflow stops postprocessing without truncating evidence 
   });
   const facts = await run(environment, '请回答。', { ...settings, contextBudget: 16000 });
   assert.deepEqual(purposes, ['answer']);
-  assert.equal(facts.operations.at(-1).value.error.code, 'CAPACITY_EXCEEDED');
+  assert.equal(facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).at(-1).value.error.code, 'CAPACITY_EXCEEDED');
   assert.equal(environment.transcript.length, 2);
   assert.equal(environment.memories.values().length, 0);
 });
@@ -288,7 +292,7 @@ test('answer capacity includes active memories and rejects overflow before any p
   const memory = environment.memories.apply([{ action: 'create', memoryId: null, change: '接纳初始记忆', sourceIndexes: [0], result: content('大量理解', '历史条件。'.repeat(10000), [0]) }])[0];
   const facts = await run(environment, '继续', { ...settings, contextBudget: 2000 });
   assert.equal(facts.execution.status, 'failed');
-  const answer = facts.operations.find((operation) => operation.operation === 'answer');
+  const answer = facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).find((operation) => operation.name === 'answer');
   assert.equal(answer.value.error.code, 'CAPACITY_EXCEEDED');
   assert.equal(answer.value.input.memories[0].content, memory.content);
   assert.equal(environment.transcript.length, 3);

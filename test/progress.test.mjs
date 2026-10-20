@@ -1,6 +1,7 @@
+import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, InvocationCancelled, RuntimeError, ProgressChannel, Transcript, TranscriptResource, bindResources, ExecutionDefinition, OperationDefinition, AttemptDefinition, assembleRuntime } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationCancelled, RuntimeError, ProgressChannel, Transcript, TranscriptResource, bindResources, GroupDefinition, NodeDefinition, bindCallSource } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 const message = (content) => ({ role: 'user', content });
@@ -216,37 +217,41 @@ test('append commit reaches its local receiver before resource returned observat
 });
 
 test('assembly selects local execution progress by declaration and each run receives a separate identity', async () => {
-  class Echo extends ExecutionDefinition {
+  class Echo extends GroupDefinition {
     run = { requires: {}, execute: (work) => work.input };
   }
   const execution = new Echo();
   const facts = [];
   const selected = [];
-  const runtime = assembleRuntime(runtimeDefinition(execution), {
+  const runtime = installCallable(runtimeDefinition(execution), {
     providers: [],
     source: {
       entry: () => null,
       capture: () => null,
-      executionProgress(definition) {
-        selected.push(definition);
-        return {
-          receive(fact) {
-            facts.push(fact);
-          },
-        };
-      },
     },
+    bindings: [
+      bindCallSource(execution, {
+        progress() {
+          selected.push(execution);
+          return {
+            receive(fact) {
+              facts.push(fact);
+            },
+          };
+        },
+      }),
+    ],
   });
   assert.equal(await runtime.run('first', {}), 'first');
   assert.equal(await runtime.run('second', {}), 'second');
   assert.deepEqual(selected, [execution, execution]);
   assert.deepEqual(
-    facts.filter(({ kind }) => kind !== 'process').map(({ kind, identity }) => [kind, identity.level]),
+    facts.filter(({ kind }) => kind !== 'process').map(({ kind, identity }) => [kind, identity.kind]),
     [
-      ['started', 'execution'],
-      ['finished', 'execution'],
-      ['started', 'execution'],
-      ['finished', 'execution'],
+      ['started', 'group'],
+      ['finished', 'group'],
+      ['started', 'group'],
+      ['finished', 'group'],
     ],
   );
   assert.notEqual(facts[0].identity.contextId, facts.at(-1).identity.contextId);
@@ -266,22 +271,22 @@ function delegated(child) {
 }
 
 function hierarchy() {
-  const attempt = new (class extends AttemptDefinition {
+  const attempt = new (class extends NodeDefinition {
     name = 'echo';
     label = '测试能力';
     source = 'private-source';
     callee = 'private-provider';
     run = { requires: {}, execute: (work) => work.input };
   })();
-  const operation = new (class extends OperationDefinition {
+  const operation = new (class extends GroupDefinition {
     name = 'compose';
     label = '组合工作';
     source = 'private-operation-source';
-    children = [attempt];
+    members = [attempt];
     run = delegated(attempt);
   })();
-  const execution = new (class extends ExecutionDefinition {
-    children = [operation];
+  const execution = new (class extends GroupDefinition {
+    members = [operation];
     run = delegated(operation);
   })();
   return runtimeDefinition(execution);
@@ -289,7 +294,7 @@ function hierarchy() {
 
 test('one per-run progress receiver sees REOA and parent acceptance without recording or IO', async () => {
   const runs = [];
-  const runtime = assembleRuntime(hierarchy(), {
+  const runtime = installCallable(hierarchy(), {
     providers: [],
     source: {
       entry: () => null,
@@ -312,12 +317,12 @@ test('one per-run progress receiver sees REOA and parent acceptance without reco
   assert.equal(runs.length, 2);
   for (const facts of runs) {
     assert.deepEqual(
-      facts.filter((fact) => fact.kind === 'started').map((fact) => fact.identity.level),
-      ['runtime', 'execution', 'operation', 'attempt'],
+      facts.filter((fact) => fact.kind === 'started').map((fact) => fact.identity.kind),
+      ['scene', 'group', 'group', 'node'],
     );
     assert.deepEqual(
-      facts.filter((fact) => fact.kind === 'finished').map((fact) => fact.identity.level),
-      ['attempt', 'operation', 'execution', 'runtime'],
+      facts.filter((fact) => fact.kind === 'finished').map((fact) => fact.identity.kind),
+      ['node', 'group', 'group', 'scene'],
     );
     assert.equal(facts.filter((fact) => fact.kind === 'relation' && fact.phase === 'accepted').length, 3);
     for (const relation of facts.filter((fact) => fact.kind === 'relation' && fact.phase === 'returned')) {
@@ -348,26 +353,30 @@ test('local progress failure disables only its receiver while ancestor keeps the
   const facts = [];
   let localNotifications = 0;
   let localFailures = 0;
-  const runtime = assembleRuntime(hierarchy(), {
+  const definition = hierarchy();
+  const runtime = installCallable(definition, {
     providers: [],
     source: {
-      entry: () => null,
       capture: () => null,
       progress: () => ({
         receive: (fact) => {
           facts.push(fact);
         },
       }),
-      executionProgress: () => ({
-        receive() {
-          localNotifications++;
-          throw new Error('local projection unavailable');
-        },
-        failed() {
-          localFailures++;
-        },
-      }),
     },
+    bindings: [
+      bindCallSource(definition.members[0], {
+        progress: () => ({
+          receive() {
+            localNotifications++;
+            throw new Error('local projection unavailable');
+          },
+          failed() {
+            localFailures++;
+          },
+        }),
+      }),
+    ],
   });
   assert.equal(await runtime.run('answer', {}), 'answer');
   assert.equal(localNotifications, 1);
@@ -482,7 +491,7 @@ test('child cancellation is distinguished in parent return progress and never ac
   const controller = new AbortController();
   const facts = [];
   const definition = hierarchy();
-  const attempt = definition.children[0].children[0].children[0];
+  const attempt = definition.members[0].members[0].members[0];
   attempt.run = {
     requires: {},
     execute() {
@@ -490,7 +499,7 @@ test('child cancellation is distinguished in parent return progress and never ac
       throw new InvocationCancelled(controller.signal);
     },
   };
-  const runtime = assembleRuntime(definition, {
+  const runtime = installCallable(definition, {
     providers: [],
     source: {
       entry: () => null,

@@ -2,11 +2,11 @@ import { isEqual } from 'es-toolkit';
 import { RuntimeError, type CheckpointStore } from '@capix/server-runtime';
 import type { Transcript, Memories } from '@capix/server-runtime/content';
 import type { WorkspaceFiles } from '../../files/index.js';
-import type { ConversationRuntimeDefinition } from '../definition.js';
+import type { ConversationSceneDefinition } from '../scene.js';
 import { validateConversationCheckpointContent, validateConversationCheckpointDeliveryContent, validateConversationCheckpointReceipt, validateConversationCheckpointHeads, type ConversationCheckpointRun } from '../checkpoints.js';
 
-export function conversationCheckpointConfiguration(definition: ConversationRuntimeDefinition, files?: WorkspaceFiles): ConversationCheckpointRun['configuration'] {
-  return Object.freeze({ files: definition.filesEnabled, ...(definition.filesEnabled ? { fileScope: files?.checkpointScope } : {}), maxDecisionSteps: definition.executionDefinition.maxDecisionSteps, customDecision: definition.customDecision, customMaintenance: definition.customMaintenance });
+export function conversationCheckpointConfiguration(definition: ConversationSceneDefinition, files?: WorkspaceFiles): ConversationCheckpointRun['configuration'] {
+  return Object.freeze({ files: definition.filesEnabled, ...(definition.filesEnabled ? { fileScope: files?.checkpointScope } : {}), maxDecisionSteps: definition.taskDefinition.maxDecisionSteps, customDecision: definition.customDecision, customMaintenance: definition.customMaintenance });
 }
 
 /** Shared checks run at host admission and again when the kernel binds restoration resources. */

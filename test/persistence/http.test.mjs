@@ -120,7 +120,7 @@ test('unreadable historical records fail observation explicitly while transcript
   const original = await get(first.base, '/api/transcript');
   await first.close();
   const database = new DatabaseSync(disk.path);
-  database.exec("UPDATE records SET body = json_set(body, '$.id', 'invalid-record-id') WHERE kind = 'execution'");
+  database.exec("UPDATE records SET body = json_set(body, '$.id', 'invalid-record-id') WHERE kind = 'invocation'");
   database.close();
   const next = await disk.start();
   assert.deepEqual(await get(next.base, '/api/transcript'), original);

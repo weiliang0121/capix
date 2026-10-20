@@ -4,7 +4,7 @@ import type { ObservationDeclaration } from '../definition/observation.js';
 import type { InvocationFact } from '../observation/facts.js';
 import type { ChildDefinition, DefinitionInput } from '../definition/children.js';
 
-type RefinableDefinition = Exclude<ChildDefinition, { readonly level: 'execution' }>;
+type RefinableDefinition = ChildDefinition;
 
 interface ResourceDeclarations {
   readonly run: { readonly requires: ResourceRequirements };

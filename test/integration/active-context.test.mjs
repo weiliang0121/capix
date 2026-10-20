@@ -34,7 +34,7 @@ test('active material alone supplies the default request and memory extraction k
   [memory] = environment.memories.apply([{ action: 'create', memoryId: null, result: { topic: 'topic', content: 'fixed content', sourceIndexes: [0] }, change: 'initial', sourceIndexes: [0] }]);
   const active = environment.content.active.capture();
   environment.content.active.apply({ basis: active.basis, messageIndexes: [1, 0], memoryIds: [memory.id] });
-  await environment.runtime.run(input('continue'), { settings });
+  await environment.driver.run(environment.scene, input('continue'), { settings });
   assert.deepEqual(
     requests.map((request) => request.purpose),
     ['answer', 'memory'],
@@ -61,7 +61,7 @@ test('configured maintenance runs as normal O before capture and once after cont
       return { basis: material.basis, messageIndexes: phase === 'before-request' ? [1] : [], memoryIds: [] };
     },
   });
-  await environment.runtime.run(input('continue'), { settings });
+  await environment.driver.run(environment.scene, input('continue'), { settings });
   assert.deepEqual(phases, ['before-request', 'after-content']);
   assert.deepEqual(
     requests[0].body.history.map((item) => item.index),
@@ -70,7 +70,7 @@ test('configured maintenance runs as normal O before capture and once after cont
   assert.deepEqual(environment.content.active.capture().messages, []);
   assert.equal(environment.transcript.length, 4);
   const records = [...environment.book.values()];
-  const maintenance = records.filter((record) => record.operation === 'maintainContext');
+  const maintenance = records.filter((record) => record.name === 'maintainContext');
   assert.equal(maintenance.length, 2);
   assert.ok(maintenance.every((record) => record.status === 'succeeded'));
 });
@@ -83,12 +83,12 @@ test('maintenance failure preserves formal input, releases R and permits a new s
       return { basis: material.basis, messageIndexes: material.messages.map((item) => item.index), memoryIds: [] };
     },
   });
-  await assert.rejects(environment.runtime.run(input('first'), { settings }), /maintenance failed/);
+  await assert.rejects(environment.driver.run(environment.scene, input('first'), { settings }), /maintenance failed/);
   assert.equal(environment.transcript.length, 3);
   assert.equal(requests.length, 0);
-  assert.equal(environment.runtime.running, false);
+  assert.equal(environment.driver.isRunning(environment.scene), false);
   fail = false;
-  await environment.runtime.run(input('second'), { settings });
+  await environment.driver.run(environment.scene, input('second'), { settings });
   assert.equal(environment.transcript.length, 5);
   assert.deepEqual(
     requests.map((request) => request.purpose),
@@ -105,10 +105,10 @@ test('after-content failure preserves the answer and does not recursively retry 
       return { basis: material.basis, messageIndexes: material.messages.map((item) => item.index), memoryIds: [] };
     },
   });
-  await assert.rejects(environment.runtime.run(input('continue'), { settings }), /postprocess failed/);
+  await assert.rejects(environment.driver.run(environment.scene, input('continue'), { settings }), /postprocess failed/);
   assert.deepEqual(phases, ['before-request', 'after-content']);
   assert.equal(environment.transcript.get(3).content, 'fixed answer');
-  assert.equal(environment.runtime.running, false);
+  assert.equal(environment.driver.isRunning(environment.scene), false);
 });
 
 test('R occupancy rejects a competing submission before it can append input during maintenance', async (t) => {
@@ -129,9 +129,9 @@ test('R occupancy rejects a competing submission before it can append input duri
       return { basis: material.basis, messageIndexes: material.messages.map((item) => item.index), memoryIds: [] };
     },
   });
-  const first = environment.runtime.run(input('first'), { settings });
+  const first = environment.driver.run(environment.scene, input('first'), { settings });
   await started;
-  await assert.rejects(environment.runtime.run(input('second'), { settings }), { code: 'RUNTIME_BUSY' });
+  await assert.rejects(environment.driver.run(environment.scene, input('second'), { settings }), { code: 'RUNTIME_BUSY' });
   assert.equal(environment.transcript.length, 3);
   release();
   await first;

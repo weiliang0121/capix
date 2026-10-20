@@ -27,7 +27,7 @@ for (const changed of ['root', 'readLimit', 'writeLimit']) {
     const host = new ObserverConversations(provider, [], { persistence, files });
     const conversation = host.list().conversations[0];
     const environment = host.open(conversation.id);
-    await environment.runtime.run({ messages: [{ role: 'user', content: 'hello' }] }, { settings });
+    await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'hello' }] }, { settings });
     const [run] = environment.checkpointRuns.list(conversation.id);
     assert.equal(run.configuration.fileScope, files.checkpointScope);
     host.close();

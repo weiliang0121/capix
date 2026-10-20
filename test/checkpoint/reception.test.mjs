@@ -1,19 +1,20 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { cloneCheckpointImage, checkpointReference, defineRuntime, defineExecution, reception, checkpointPoint, assembleRuntime, MemoryCheckpointStore } from '@capix/server-runtime';
+import { cloneCheckpointImage, checkpointReference, defineScene, defineGroup, reception, checkpointPoint, MemoryCheckpointStore } from '@capix/server-runtime';
 import { decodeCheckpointFrame } from '@capix/server-runtime/construction';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const dateBinding = { position: 0, childPosition: 0, check: (value) => assert.ok(value instanceof Date && Number.isFinite(value.getTime())), codec: { encode: (value) => value.toISOString(), decode: (value) => new Date(value) } };
 function image(reception = { kind: 'accepted', contract: { position: 0 }, output: '2026-01-01T00:00:00.000Z' }) {
-  const child = { identity: { contextId: 'child', parentContextId: 'parent', level: 'execution' }, target: { position: 0 }, round: 1, order: 0, input: null, state: { kind: 'returned', output: 'raw', progress: { round: 1, currentInput: null, phase: 'receive' }, reception } };
-  return { id: 'typed', formatVersion: 3, contract: { key: 'parent', version: 1 }, point: 'saved', frame: { owner: { contextId: 'parent', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 1, children: [child] }, state: null, references: { selected: checkpointReference(child) } };
+  const child = { identity: { contextId: 'child', parentContextId: 'parent', kind: 'group' }, target: { position: 0 }, round: 1, order: 0, input: null, state: { kind: 'returned', output: 'raw', progress: { round: 1, currentInput: null, phase: 'receive' }, reception } };
+  return { id: 'typed', formatVersion: 4, contract: { key: 'parent', version: 1 }, point: 'saved', frame: { owner: { contextId: 'parent', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 1, children: [child] }, state: null, references: { selected: checkpointReference(child) } };
 }
-const decode = (source, bindings = [dateBinding]) => decodeCheckpointFrame(cloneCheckpointImage(source).frame, { input: codec, output: codec }, [{ level: 'execution' }], bindings);
+const decode = (source, bindings = [dateBinding]) => decodeCheckpointFrame(cloneCheckpointImage(source).frame, { input: codec, output: codec }, [{ kind: 'group' }], bindings);
 
 for (const kind of ['receiving', 'accepted', 'failed']) {
-  test(`v3 retains the parent reception position for ${kind}`, () => {
+  test(`v4 retains the parent reception position for ${kind}`, () => {
     const source = image(kind === 'accepted' ? undefined : { kind, contract: { position: 0 } });
     if (kind === 'failed') {
       source.frame.children[0].state.reception.error = { code: 'REJECTED', message: 'business refusal' };
@@ -83,7 +84,7 @@ test('typed reception restores Date and undefined in a new process without re-ru
   const captured = processFixture('capture');
   assert.equal(captured.status, 0, captured.stderr);
   const head = JSON.parse(captured.stdout);
-  assert.equal(head.image.formatVersion, 3);
+  assert.equal(head.image.formatVersion, 4);
   assert.deepEqual(
     head.image.frame.children.map((child) => child.state.reception.contract.position),
     [0, 0, 1],
@@ -142,7 +143,7 @@ for (const failure of ['encode', 'store']) {
     let checked;
     let parentWork;
     let ref;
-    const child = defineExecution()({ run: { execute: () => 'source' } });
+    const child = defineGroup()({ run: { execute: () => 'source' } });
     const contract = reception(child, {
       check(value) {
         assert.ok(value instanceof Date);
@@ -157,8 +158,8 @@ for (const failure of ['encode', 'store']) {
       },
     });
     const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { execute: () => null } });
-    const definition = defineRuntime()({
-      children: [child],
+    const definition = defineScene()({
+      members: [child],
       receptions: [contract],
       checkpoint: { key: 'reception-failure', version: 1, input: codec, output: codec, points: [point] },
       run: {
@@ -190,7 +191,7 @@ for (const failure of ['encode', 'store']) {
       store.save = () => {
         throw new Error('fixture store failure');
       };
-    const runtime = assembleRuntime(definition, { providers: [], source: { runtime: () => null, capture: () => null }, checkpoints: { store } });
+    const runtime = installCallable(definition, { providers: [], source: { capture: () => null }, checkpoints: { store } });
     await assert.rejects(runtime.run(null, {}), new RegExp(`fixture ${failure} failure`));
     assert.equal(callbacks, 1);
     assert.equal(effects.get('fixed-position'), checked);

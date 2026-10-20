@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, assembleRuntime, MemoryCheckpointStore, cloneCheckpointHead, cloneCheckpointImage, cloneCheckpointDelivery, CHECKPOINT_MAX_BYTES } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, cloneCheckpointHead, cloneCheckpointImage, cloneCheckpointDelivery, CHECKPOINT_MAX_BYTES } from '@capix/server-runtime';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const source = { entry: () => null, capture: () => null };
@@ -10,11 +11,11 @@ function checkpoint(key, execute, uses = []) {
 }
 
 function savedRoot(children) {
-  return { id: 'root-cp', formatVersion: 3, contract: { key: 'root', version: 1 }, point: 'saved', frame: { owner: { contextId: 'root-context', level: 'runtime' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: children.length, children }, state: null, references: {} };
+  return { id: 'root-cp', formatVersion: 4, contract: { key: 'root', version: 1 }, point: 'saved', frame: { owner: { contextId: 'root-context', kind: 'scene' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: children.length, children }, state: null, references: {} };
 }
 
 function returnedChild() {
-  return { target: { position: 0 }, identity: { contextId: 'child-context', parentContextId: 'root-context', level: 'execution' }, contract: { key: 'child-a', version: 1 }, round: 1, order: 0, key: 'work', input: {}, state: { kind: 'returned', output: 'delivered', progress: { round: 1, phase: 'receive', currentInput: {} }, reception: { kind: 'pending' } } };
+  return { target: { position: 0 }, identity: { contextId: 'child-context', parentContextId: 'root-context', kind: 'group' }, contract: { key: 'child-a', version: 1 }, round: 1, order: 0, key: 'work', input: {}, state: { kind: 'returned', output: 'delivered', progress: { round: 1, phase: 'receive', currentInput: {} }, reception: { kind: 'pending' } } };
 }
 
 test('terminal checkpoint persistence failure still delivers the owned child error to its parent', async () => {
@@ -27,7 +28,7 @@ test('terminal checkpoint persistence failure still delivers the owned child err
     },
   };
   let returned;
-  class Child extends ExecutionDefinition {
+  class Child extends GroupDefinition {
     checkpoint = checkpoint('child', () => assert.fail('not resuming'));
     run = {
       requires: {},
@@ -38,8 +39,8 @@ test('terminal checkpoint persistence failure still delivers the owned child err
     };
   }
   const child = new Child();
-  class Root extends RuntimeDefinition {
-    children = [child];
+  class Root extends SceneDefinition {
+    members = [child];
     run = {
       requires: {},
       uses: [child],
@@ -55,25 +56,25 @@ test('terminal checkpoint persistence failure still delivers the owned child err
       },
     };
   }
-  const runtime = assembleRuntime(new Root(), { source, providers: [], checkpoints: { store } });
+  const runtime = installCallable(new Root(), { source, providers: [], checkpoints: { store } });
   await assert.rejects(runtime.run({}, {}), /checkpoint|database/);
   assert.equal(returned.status, 'failed');
   assert.equal(runtime.running, false);
 });
 
 test('a cached resumed child cannot be reused through a different declaration contract', async () => {
-  class ChildA extends ExecutionDefinition {
+  class ChildA extends GroupDefinition {
     checkpoint = checkpoint('child-a', () => assert.fail('terminal child cannot run'));
     run = { requires: {}, execute: () => assert.fail('terminal child cannot run') };
   }
-  class ChildB extends ExecutionDefinition {
+  class ChildB extends GroupDefinition {
     checkpoint = checkpoint('child-b', () => assert.fail('wrong child cannot run'));
     run = { requires: {}, execute: () => assert.fail('wrong child cannot run') };
   }
   const a = new ChildA();
   const b = new ChildB();
-  class Root extends RuntimeDefinition {
-    children = [a, b];
+  class Root extends SceneDefinition {
+    members = [a, b];
     checkpoint = checkpoint(
       'root',
       async (work) => {
@@ -88,7 +89,7 @@ test('a cached resumed child cannot be reused through a different declaration co
   }
   const store = new MemoryCheckpointStore();
   store.save(savedRoot([returnedChild()]), 0);
-  const runtime = assembleRuntime(new Root(), { source, providers: [], checkpoints: { store } });
+  const runtime = installCallable(new Root(), { source, providers: [], checkpoints: { store } });
   await assert.rejects(runtime.resume('root-context', {}), /contract|ownership|different declaration/);
   assert.equal(runtime.running, false);
 });
@@ -97,7 +98,7 @@ for (const reception of ['pending', 'receiving']) {
   test(`a saved ${reception} child delivers one decoded value through cached lookup and parent reception`, async () => {
     let decoded = 0;
     const facts = [];
-    class Child extends ExecutionDefinition {
+    class Child extends GroupDefinition {
       checkpoint = {
         ...checkpoint('child-a', () => assert.fail('terminal child cannot resume work')),
         output: {
@@ -111,8 +112,8 @@ for (const reception of ['pending', 'receiving']) {
       run = { requires: {}, execute: () => assert.fail('terminal child cannot execute work') };
     }
     const child = new Child();
-    class Root extends RuntimeDefinition {
-      children = [child];
+    class Root extends SceneDefinition {
+      members = [child];
       checkpoint = checkpoint(
         'root',
         async (work) => {
@@ -142,7 +143,7 @@ for (const reception of ['pending', 'receiving']) {
     saved.state.reception = { kind: reception };
     const store = new MemoryCheckpointStore();
     store.save(savedRoot([saved]), 0);
-    const runtime = assembleRuntime(new Root(), { source, providers: [], checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } });
+    const runtime = installCallable(new Root(), { source, providers: [], checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } });
     assert.equal(await runtime.resume('root-context', {}), 8);
     assert.ok(decoded >= 1, 'saved checks may decode separately; cached call preserves one delivery identity');
     const captured = store.read('root-context').image.frame.children[0];
@@ -188,20 +189,20 @@ test('fixed child deliveries require explicit final progress and stable sibling 
     assert.throws(() => cloneCheckpointDelivery({ status: 'succeeded', output: 'fixed', ...(progress ? { progress } : {}) }));
   }
   const first = returnedChild();
-  const second = { ...returnedChild(), identity: { contextId: 'second-child', parentContextId: 'root-context', level: 'execution' }, order: 1 };
+  const second = { ...returnedChild(), identity: { contextId: 'second-child', parentContextId: 'root-context', kind: 'group' }, order: 1 };
   assert.doesNotThrow(() => cloneCheckpointImage(savedRoot([first, second])));
   assert.throws(() => cloneCheckpointImage(savedRoot([second, first])), /order/);
 });
 
 test('a final child delivery preserves its own second-round input without rerunning child work', async () => {
-  class Child extends ExecutionDefinition {
+  class Child extends GroupDefinition {
     maxRounds = 2;
     checkpoint = checkpoint('child-a', () => assert.fail('terminal child cannot resume'));
     run = { requires: {}, execute: () => assert.fail('terminal child cannot execute') };
   }
   const child = new Child();
-  class Root extends RuntimeDefinition {
-    children = [child];
+  class Root extends SceneDefinition {
+    members = [child];
     checkpoint = checkpoint(
       'root',
       async (work) => {
@@ -222,9 +223,9 @@ test('a final child delivery preserves its own second-round input without rerunn
   relation.state = { kind: 'waiting' };
   const store = new MemoryCheckpointStore();
   store.save(savedRoot([relation]), 0);
-  store.save({ id: 'child-cp', formatVersion: 3, contract: { key: 'child-a', version: 1 }, point: 'saved', frame: { owner: relation.identity, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'child-cp', formatVersion: 4, contract: { key: 'child-a', version: 1 }, point: 'saved', frame: { owner: relation.identity, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   store.finish('child-context', 1, { status: 'succeeded', output: 'final round output', progress: { round: 2, phase: 'handling', currentInput: { retry: true } } });
-  const runtime = assembleRuntime(new Root(), { source, providers: [], checkpoints: { store } });
+  const runtime = installCallable(new Root(), { source, providers: [], checkpoints: { store } });
   assert.equal(await runtime.resume('root-context', {}), 'final round output');
 });
 
@@ -237,7 +238,7 @@ test('two runtime structures cannot continue the same work through a shared chec
   const ready = new Promise((resolve) => {
     entered = resolve;
   });
-  class Root extends RuntimeDefinition {
+  class Root extends SceneDefinition {
     checkpoint = checkpoint('root', async () => {
       entered();
       await pending;
@@ -247,8 +248,8 @@ test('two runtime structures cannot continue the same work through a shared chec
   }
   const store = new MemoryCheckpointStore();
   store.save(savedRoot([]), 0);
-  const first = assembleRuntime(new Root(), { source, providers: [], checkpoints: { store } });
-  const second = assembleRuntime(new Root(), { source, providers: [], checkpoints: { store } });
+  const first = installCallable(new Root(), { source, providers: [], checkpoints: { store } });
+  const second = installCallable(new Root(), { source, providers: [], checkpoints: { store } });
   const running = first.resume('root-context', {});
   await ready;
   await assert.rejects(second.resume('root-context', {}), /already active/);
@@ -259,12 +260,12 @@ test('two runtime structures cannot continue the same work through a shared chec
 });
 
 test('ordinary parallel child receptions remain supported without checkpoint or fixed entity access', async () => {
-  class Child extends ExecutionDefinition {
+  class Child extends GroupDefinition {
     run = { requires: {}, execute: () => 1 };
   }
   const child = new Child();
-  class Root extends RuntimeDefinition {
-    children = [child];
+  class Root extends SceneDefinition {
+    members = [child];
     run = {
       requires: {},
       uses: [child],
@@ -285,7 +286,7 @@ test('ordinary parallel child receptions remain supported without checkpoint or 
       },
     };
   }
-  const runtime = assembleRuntime(new Root(), { source, providers: [] });
+  const runtime = installCallable(new Root(), { source, providers: [] });
   assert.deepEqual(await runtime.run({}, {}), [1, 1]);
 });
 
@@ -293,7 +294,7 @@ test('a rejected continuation check publishes its failure without closing the sa
   const facts = [];
   const store = new MemoryCheckpointStore();
   const saved = store.save(savedRoot([]), 0);
-  class Root extends RuntimeDefinition {
+  class Root extends SceneDefinition {
     checkpoint = {
       ...checkpoint('root', () => assert.fail('rejected continuation must not run')),
       points: [
@@ -310,7 +311,7 @@ test('a rejected continuation check publishes its failure without closing the sa
     };
     run = { requires: {}, execute: () => assert.fail('not running original work') };
   }
-  const runtime = assembleRuntime(new Root(), { source, providers: [], checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } });
+  const runtime = installCallable(new Root(), { source, providers: [], checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } });
   await assert.rejects(runtime.resume('root-context', {}), /incompatible/);
   assert.equal(store.read('root-context'), saved);
   assert.ok(facts.some((fact) => fact.kind === 'failed' && fact.stage === 'restore'));

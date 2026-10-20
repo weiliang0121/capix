@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { MemoryCheckpointStore } from '@capix/server-runtime';
 
 function image(id = 'cp-1', contextId = 'scope-1') {
-  return { id, formatVersion: 3, contract: { key: 'fixture', version: 1 }, point: 'accepted', frame: { owner: { contextId, level: 'runtime' }, round: 1, phase: 'execute', input: { content: 'input' }, currentInput: { content: 'input' }, nextChildOrder: 0, children: [] }, state: { content: 'saved' }, references: {} };
+  return { id, formatVersion: 4, contract: { key: 'fixture', version: 1 }, point: 'accepted', frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: { content: 'input' }, currentInput: { content: 'input' }, nextChildOrder: 0, children: [] }, state: { content: 'saved' }, references: {} };
 }
 
 test('memory checkpoint storage fixes caller values and rejects stale or duplicate progress', () => {
@@ -23,7 +23,7 @@ test('memory checkpoint storage fixes caller values and rejects stale or duplica
 });
 
 test('memory checkpoint advancement keeps owner, original input and contract fixed', () => {
-  for (const mutate of [(next) => (next.frame.owner.level = 'execution'), (next) => (next.frame.owner.parentContextId = 'parent'), (next) => (next.frame.input = 'changed'), (next) => (next.contract.version = 2)]) {
+  for (const mutate of [(next) => (next.frame.owner.kind = 'group'), (next) => (next.frame.owner.parentContextId = 'parent'), (next) => (next.frame.input = 'changed'), (next) => (next.contract.version = 2)]) {
     const store = new MemoryCheckpointStore();
     const saved = store.save(image(), 0);
     const next = image('cp-2');

@@ -1,12 +1,13 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, RuntimeDefinition, ExecutionDefinition, OperationDefinition, assembleRuntime } from '@capix/server-runtime';
+import { Sequence, SceneDefinition, GroupDefinition, bindCallSource } from '@capix/server-runtime';
 
 const output = { result: (value) => value, delta: (value) => value };
 
 test('Sequence binds declared output explicitly while final parent acceptance remains independent', async () => {
   const phases = [];
-  const operation = new (class extends OperationDefinition {
+  const operation = new (class extends GroupDefinition {
     name = 'source';
     label = 'source';
     source = 'test';
@@ -19,9 +20,9 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       },
     };
   })();
-  const execution = new (class extends ExecutionDefinition {
+  const execution = new (class extends GroupDefinition {
     output = output;
-    children = [operation];
+    members = [operation];
     run = {
       requires: {},
       async execute(work) {
@@ -46,8 +47,8 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       },
     };
   })();
-  const runtime = new (class extends RuntimeDefinition {
-    children = [execution];
+  const runtime = new (class extends SceneDefinition {
+    members = [execution];
     run = {
       requires: {},
       async execute(work) {
@@ -58,17 +59,21 @@ test('Sequence binds declared output explicitly while final parent acceptance re
     };
   })();
   const events = [];
-  const bound = assembleRuntime(runtime, {
+  const bound = installCallable(runtime, {
     providers: [],
     source: {
       entry: () => ({}),
       capture: () => ({}),
-      executionOutput: () => ({
-        receive(event) {
-          events.push(event);
-        },
-      }),
     },
+    bindings: [
+      bindCallSource(execution, {
+        output: () => ({
+          receive(event) {
+            events.push(event);
+          },
+        }),
+      }),
+    ],
   });
   assert.equal(await bound.run(null, {}), 'result');
   assert.deepEqual(

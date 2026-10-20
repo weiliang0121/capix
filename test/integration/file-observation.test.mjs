@@ -70,17 +70,17 @@ async function fixture(t) {
 
 function assertFileCalls(snapshot) {
   assert.equal(snapshot.execution.status, 'succeeded');
-  assert.equal(snapshot.runtimeCall.status, 'succeeded');
-  const fileCalls = snapshot.attempts.filter((attempt) => attempt.callee === 'filesystem');
+  assert.equal(snapshot.rootCall.status, 'succeeded');
+  const fileCalls = snapshot.calls.filter((attempt) => attempt.callee === 'filesystem');
   assert.deepEqual(
     fileCalls.map((call) => call.name),
     ['inspectFileTask', 'readText', 'createText'],
     'preflight, read and create retain their declared external actor',
   );
   assert.ok(fileCalls.every((attempt) => attempt.status === 'succeeded'));
-  const nested = snapshot.operations.find((operation) => operation.parentOperationId);
+  const nested = snapshot.calls.find((call) => call.structureKind === 'group' && call.id !== snapshot.execution.id && call.parentId !== snapshot.execution.id);
   assert.ok(nested, 'document generation remains a nested O instead of being flattened to E');
-  assert.ok(snapshot.operations.some((operation) => operation.id === nested.parentOperationId));
+  assert.ok(snapshot.calls.some((call) => call.id === nested.parentId));
 }
 
 test('file read-and-save deltas reach a completed client observation without stopping at the first file A', async (t) => {
@@ -93,7 +93,7 @@ test('file read-and-save deltas reach a completed client observation without sto
   assert.equal(await readFile(join(f.root, task.output.path), 'utf8'), answer);
   await until(() => {
     const state = f.runtime.getSnapshot().observation;
-    return Boolean(state.error) || [...state.records.values()].some((snapshot) => snapshot.runtimeCall.status === 'succeeded');
+    return Boolean(state.error) || [...state.records.values()].some((snapshot) => snapshot.rootCall.status === 'succeeded');
   });
   const state = f.runtime.getSnapshot().observation;
   assert.equal(state.error, undefined);

@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Transcript, Memories } from '@capix/server-runtime/content';
 import { SqliteObserverStore, initializeObserver, observeOverview } from '@capix/observer-service';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
-import { ExecutionRecord, ExecutionRecordHelper } from '@capix/server-runtime/recording';
+import { CallableRecord, CallableRecordHelper } from '@capix/server-runtime/recording';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const provider = {
@@ -136,11 +136,11 @@ test('second writer is excluded, unknown schema and broken metadata cannot becom
 test('restored environment continues a new QA while retaining original queryable record trees', async (t) => {
   const disk = fixture(t);
   const first = initializeObserver(provider, [], { persistence: disk.open() });
-  await first.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
+  await first.driver.run(first.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings });
   const expected = first.book.exportState();
   const oldRoot = first.recording.root.id;
   const oldTranscript = first.transcript.id;
-  const execution = first.book.values().find((record) => record instanceof ExecutionRecord);
+  const execution = first.book.values().find((record) => record instanceof CallableRecord && record.role === 'conversation-task');
   first.close();
   const restored = initializeObserver(provider, [], { persistence: disk.open() });
   disk.track(restored);
@@ -148,10 +148,10 @@ test('restored environment continues a new QA while retaining original queryable
   assert.notEqual(restored.recording.root.id, oldRoot);
   assert.equal(restored.recordingArchives[0].state, 'sealed');
   for (const entry of expected.entries) assert.deepEqual(restored.book.get(entry.data.id).toJSON(), entry.data);
-  const snapshot = ExecutionRecordHelper.snapshot(restored.recorder, execution.id);
+  const snapshot = CallableRecordHelper.snapshot(restored.recorder, execution.id);
   validateExecutionRecordSnapshot(snapshot);
   assert.equal(snapshot.execution.status, 'succeeded');
-  await restored.runtime.run({ messages: [{ role: 'user', content: '下一轮' }] }, { settings });
+  await restored.driver.run(restored.scene, { messages: [{ role: 'user', content: '下一轮' }] }, { settings });
   assert.equal(restored.transcript.length, 4);
   const overview = observeOverview(restored);
   assert.equal(overview.executions.length, 2);
@@ -163,10 +163,10 @@ test('restored environment continues a new QA while retaining original queryable
 test('optional record saving failure preserves content and saves an honest incomplete archive prefix', async (t) => {
   const disk = fixture(t);
   disk.open().close();
-  installTrigger(disk.path, "CREATE TRIGGER reject_operation BEFORE INSERT ON records WHEN NEW.kind = 'operation' BEGIN SELECT RAISE(ABORT, 'fixture'); END;");
+  installTrigger(disk.path, "CREATE TRIGGER reject_operation BEFORE INSERT ON records WHEN NEW.kind = 'invocation' AND json_extract(NEW.body, '$.structureKind') = 'group' BEGIN SELECT RAISE(ABORT, 'fixture'); END;");
   const store = disk.open();
   const first = initializeObserver(provider, [], { persistence: store });
-  await first.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
+  await first.driver.run(first.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings });
   assert.equal(first.transcript.length, 2);
   assert.equal(store.failure, undefined, 'record constraint failure is not a content failure');
   assert.throws(() => first.recordSource.assertComplete(), /不完整/);

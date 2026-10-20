@@ -17,20 +17,11 @@ interface ResourceContextView<Input, Output, Resources extends object> extends I
   readonly signal: AbortSignal;
   readonly resources: { readonly values: Readonly<Resources> };
 }
-export interface ExecutionContextView<Input = unknown, Output = unknown, Resources extends object = object> extends ResourceContextView<Input, Output, Resources> {
-  readonly level: 'execution';
-}
-export interface RuntimeContextView<Input = unknown, Output = unknown, Resources extends object = object> extends ResourceContextView<Input, Output, Resources> {
-  readonly level: 'runtime';
-}
-export interface OperationContextView<Input = unknown, Output = unknown, Resources extends object = object> extends ResourceContextView<Input, Output, Resources> {
-  readonly level: 'operation';
-}
-export interface AttemptContextView<Input = unknown, Output = unknown, Resources extends object = object> extends ResourceContextView<Input, Output, Resources> {
-  readonly level: 'attempt';
+export interface CallableContextView<Input = unknown, Output = unknown, Resources extends object = object> extends ResourceContextView<Input, Output, Resources> {
+  readonly kind: import('@capix/protocol').CallableKind;
 }
 
-export type ContextViewOf<Context extends InvocationContext<any, any>> = Context extends InvocationContext<infer Input, infer Output> & { readonly resources: ResourceBindings<infer Resources>; readonly signal: AbortSignal; readonly level: infer Level } ? (Level extends 'runtime' ? RuntimeContextView<Input, Output, Resources> : Level extends 'execution' ? ExecutionContextView<Input, Output, Resources> : Level extends 'operation' ? OperationContextView<Input, Output, Resources> : AttemptContextView<Input, Output, Resources>) : Context extends InvocationContext<infer Input, infer Output> ? InvocationContextView<Input, Output> : never;
+export type ContextViewOf<Context extends InvocationContext<any, any>> = Context extends InvocationContext<infer Input, infer Output> & { readonly resources: ResourceBindings<infer Resources>; readonly signal: AbortSignal; readonly kind: import('@capix/protocol').CallableKind } ? CallableContextView<Input, Output, Resources> : Context extends InvocationContext<infer Input, infer Output> ? InvocationContextView<Input, Output> : never;
 
 export type ContextViewResources<ContextView extends InvocationContextView<any, any>, Resources extends object> = Omit<ContextView, 'resources'> & { readonly resources: { readonly values: Readonly<Resources> } };
 
@@ -62,7 +53,7 @@ export function invocationContextView<Context extends InvocationContext<any, any
     continueWith: (input: unknown, reason: string) => context.continueWith(input, reason),
   };
   if ('resources' in context && 'signal' in context) {
-    Object.defineProperties(view, { level: { enumerable: true, value: 'level' in context ? context.level : undefined }, signal: { enumerable: true, value: context.signal } });
+    Object.defineProperties(view, { kind: { enumerable: true, value: 'kind' in context ? context.kind : undefined }, signal: { enumerable: true, value: context.signal } });
     if (values) Object.defineProperty(view, 'resources', { enumerable: true, value: Object.freeze({ values }) });
   }
   return Object.freeze(view) as ContextViewOf<Context>;

@@ -1,10 +1,10 @@
 import { contextWithSource, sourceFor } from './fixtures/observer.mjs';
 import { callFor, recordFor } from './fixtures/lifecycle.mjs';
-import { InvocationRecordHelper, OperationRecord } from '@capix/server-runtime';
+import { InvocationRecordHelper, CallableRecord } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationContext, ExecutionContext, Transcript, Recorder, RecordBook } from '@capix/server-runtime';
+import { InvocationContext, Transcript, Recorder, RecordBook } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { TestOperation } from './fixtures/operation.mjs';
@@ -115,7 +115,7 @@ test('Work and failure-registration errors remain distinct; Context keeps the or
     registration = new Error('record unavailable');
   const finish = InvocationRecordHelper.finish;
   t.mock.method(InvocationRecordHelper, 'finish', (...args) => {
-    if (args[1].kind === 'execution') throw registration;
+    if (args[1].structureKind === 'group') throw registration;
     return finish(...args);
   });
   let execution;
@@ -147,7 +147,7 @@ test('a strict start-observation failure prevents child work and is visible to i
   let entered = false;
   const add = records.add.bind(records);
   t.mock.method(records, 'add', (record) => {
-    if (record instanceof OperationRecord) throw failure;
+    if (record instanceof CallableRecord && record.structureKind === 'group') throw failure;
     return add(record);
   });
   await assert.rejects(

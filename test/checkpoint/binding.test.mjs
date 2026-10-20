@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, OperationDefinition, ResourceOffer, assembleRuntime } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, ResourceOffer, bindCallSource } from '@capix/server-runtime';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 
@@ -8,15 +9,15 @@ function checkpoint(key, execute, requires = {}, uses = []) {
   return { key, version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { requires, uses, execute } }] };
 }
 
-function head(key, contextId, level, state, children = [], parentContextId) {
+function head(key, contextId, kind, state, children = [], parentContextId) {
   return {
     revision: 1,
     image: {
       id: `checkpoint-${contextId}`,
-      formatVersion: 3,
+      formatVersion: 4,
       contract: { key, version: 1 },
       point: 'saved',
-      frame: { owner: { contextId, level, ...(parentContextId ? { parentContextId } : {}) }, round: 1, phase: 'execute', input: { original: contextId }, currentInput: { original: contextId }, nextChildOrder: children.length, children },
+      frame: { owner: { contextId, kind, ...(parentContextId ? { parentContextId } : {}) }, round: 1, phase: 'execute', input: { original: contextId }, currentInput: { original: contextId }, nextChildOrder: children.length, children },
       state,
       references: {},
     },
@@ -44,11 +45,11 @@ function storeOf(...initial) {
 }
 
 function assemble(definition, options = {}) {
-  return assembleRuntime(definition, { providers: [], source: { capture: () => null }, ...options });
+  return installCallable(definition, { providers: [], source: { capture: () => null }, ...options });
 }
 
 test('checkpoint declarations do not change normal execution when persistence is absent', async () => {
-  class Root extends RuntimeDefinition {
+  class Root extends SceneDefinition {
     checkpoint = checkpoint('test.optional', () => assert.fail('not resuming'));
     run = {
       requires: {},
@@ -75,7 +76,7 @@ test('a checkpoint continuation exposes only its declared resources, and install
     },
     'binding',
   );
-  class Root extends RuntimeDefinition {
+  class Root extends SceneDefinition {
     checkpoint = checkpoint(
       'test.resources',
       (work, state) => {
@@ -90,11 +91,11 @@ test('a checkpoint continuation exposes only its declared resources, and install
     );
     run = { requires: { normal: normal.request() }, execute: () => assert.fail('normal execution cannot be replayed') };
   }
-  const store = storeOf(head('test.resources', 'root-1', 'runtime', { answer: 'saved answer' }));
+  const store = storeOf(head('test.resources', 'root-1', 'scene', { answer: 'saved answer' }));
   const runtime = assemble(new Root(), {
     checkpoints: { store },
     providers: [normal.provide(() => null), continuation.provide(() => 7)],
-    source: { runtime: () => null, capture: () => null },
+    source: { capture: () => null },
   });
   assert.equal(await runtime.resume('root-1', {}), 'saved answer');
   assert.equal(resumed, 1);
@@ -103,9 +104,9 @@ test('a checkpoint continuation exposes only its declared resources, and install
   assert.equal(resumed, 1);
 });
 
-test('resuming a direct E child uses fixed input without repeating parent preparation or original started callbacks', async () => {
+test('resuming a direct member uses fixed input without repeating parent preparation or original started callbacks', async () => {
   let captures = 0;
-  class Child extends ExecutionDefinition {
+  class Child extends GroupDefinition {
     checkpoint = checkpoint('test.child', (work, state) => {
       assert.deepEqual(work.initialInput, { original: 'child-1' });
       return state.answer;
@@ -113,8 +114,8 @@ test('resuming a direct E child uses fixed input without repeating parent prepar
     run = { requires: {}, execute: () => assert.fail('child execute must not repeat') };
   }
   const child = new Child();
-  class Root extends RuntimeDefinition {
-    children = [child];
+  class Root extends SceneDefinition {
+    members = [child];
     checkpoint = checkpoint(
       'test.parent',
       async (work) => {
@@ -127,27 +128,29 @@ test('resuming a direct E child uses fixed input without repeating parent prepar
     );
     run = { requires: {}, execute: () => assert.fail('parent execute must not repeat') };
   }
-  const relation = { target: { position: 0 }, identity: { contextId: 'child-1', level: 'execution', parentContextId: 'parent-1' }, contract: { key: 'test.child', version: 1 }, round: 1, order: 0, key: 'selected-execution', input: { original: 'child-1' }, state: { kind: 'waiting' } };
-  const store = storeOf(head('test.parent', 'parent-1', 'runtime', {}, [relation]), head('test.child', 'child-1', 'execution', { answer: 'fixed response' }, [], 'parent-1'));
+  const relation = { target: { position: 0 }, identity: { contextId: 'child-1', kind: 'group', parentContextId: 'parent-1' }, contract: { key: 'test.child', version: 1 }, round: 1, order: 0, key: 'selected-execution', input: { original: 'child-1' }, state: { kind: 'waiting' } };
+  const store = storeOf(head('test.parent', 'parent-1', 'scene', {}, [relation]), head('test.child', 'child-1', 'group', { answer: 'fixed response' }, [], 'parent-1'));
   const runtime = assemble(new Root(), {
     checkpoints: { store },
-    source: {
-      capture: (input) => {
-        captures++;
-        assert.deepEqual(input, { original: 'child-1' });
-        return null;
-      },
-      callbacks: () => ({ started: () => assert.fail('original submission started callback must not repeat') }),
-    },
+    bindings: [
+      bindCallSource(child, {
+        capture: (input) => {
+          captures++;
+          assert.deepEqual(input, { original: 'child-1' });
+          return null;
+        },
+        started: () => () => assert.fail('original submission started callback must not repeat'),
+      }),
+    ],
   });
   assert.equal(await runtime.resume('parent-1', {}), 'accepted fixed response');
   assert.equal(captures, 1);
 });
 
-test('a new E created within recovery still registers its new call before work', async () => {
+test('a new member created within recovery still registers its new call before work', async () => {
   const order = [];
   let identity;
-  class Child extends ExecutionDefinition {
+  class Child extends GroupDefinition {
     run = {
       requires: {},
       execute(work) {
@@ -157,8 +160,8 @@ test('a new E created within recovery still registers its new call before work',
     };
   }
   const child = new Child();
-  class Root extends RuntimeDefinition {
-    children = [child];
+  class Root extends SceneDefinition {
+    members = [child];
     checkpoint = checkpoint(
       'test.parent-new-child',
       async (work) => {
@@ -172,14 +175,14 @@ test('a new E created within recovery still registers its new call before work',
     run = { requires: {}, execute: () => assert.fail('parent execute must not repeat') };
   }
   const runtime = assemble(new Root(), {
-    checkpoints: { store: storeOf(head('test.parent-new-child', 'parent-1', 'runtime', {})) },
-    source: {
-      capture() {
-        order.push('capture');
-        return null;
-      },
-      callbacks: () => ({
-        started(context, invocation) {
+    checkpoints: { store: storeOf(head('test.parent-new-child', 'parent-1', 'scene', {})) },
+    bindings: [
+      bindCallSource(child, {
+        capture() {
+          order.push('capture');
+          return null;
+        },
+        started: () => (context, invocation) => {
           order.push('started');
           identity = invocation.identity;
           assert.equal(context.id, identity.contextId);
@@ -187,7 +190,7 @@ test('a new E created within recovery still registers its new call before work',
           assert.equal(invocation.recovering, true);
         },
       }),
-    },
+    ],
   });
   assert.equal(await runtime.resume('parent-1', {}), 'new work');
   assert.deepEqual(order, ['capture', 'started', 'execute']);
@@ -197,24 +200,24 @@ test('a new E created within recovery still registers its new call before work',
 
 test('checkpoint-only resources and children must be covered during assembly', () => {
   const missing = new ResourceOffer('test.checkpoint.missing', (value) => value);
-  class Root extends RuntimeDefinition {
+  class Root extends SceneDefinition {
     checkpoint = checkpoint('test.invalid-resource', () => null, { missing: missing.request() });
     run = { requires: {}, execute: () => null };
   }
   assert.throws(() => assemble(new Root()), /Expected one resource provider/);
-  class Unknown extends OperationDefinition {
+  class Unknown extends GroupDefinition {
     name = 'unknown';
     label = 'unknown';
     source = 'test';
     run = { requires: {}, execute: () => null };
   }
   const unknown = new Unknown();
-  class BadChild extends ExecutionDefinition {
+  class BadChild extends GroupDefinition {
     checkpoint = checkpoint('test.invalid-child', () => null, {}, [unknown]);
     run = { requires: {}, execute: () => null };
   }
-  class BadRoot extends RuntimeDefinition {
-    children = [new BadChild()];
+  class BadRoot extends SceneDefinition {
+    members = [new BadChild()];
     run = { requires: {}, execute: () => null };
   }
   assert.throws(() => assemble(new BadRoot()), /outside its owner/);
@@ -223,20 +226,19 @@ test('checkpoint-only resources and children must be covered during assembly', (
 test('restoration rejects incompatible ownership and contract before constructing resource captures', async () => {
   let captures = 0;
   const resource = new ResourceOffer('test.checkpoint.guard', (value) => value);
-  class Root extends RuntimeDefinition {
+  class Root extends SceneDefinition {
     checkpoint = checkpoint('test.guard', () => null, { value: resource.request() });
     run = { requires: {}, execute: () => assert.fail('not running') };
   }
-  for (const saved of [head('other.contract', 'root-1', 'runtime', {}), head('test.guard', 'root-1', 'execution', {}, [], 'another-parent')]) {
+  for (const saved of [head('other.contract', 'root-1', 'scene', {}), head('test.guard', 'root-1', 'group', {}, [], 'another-parent')]) {
     const runtime = assemble(new Root(), {
       checkpoints: { store: storeOf(saved) },
       providers: [resource.provide(() => null)],
       source: {
-        runtime: () => {
+        capture: () => {
           captures++;
           return null;
         },
-        capture: () => null,
       },
     });
     await assert.rejects(runtime.resume('root-1', {}), /incompatible|another scope/);
@@ -248,12 +250,12 @@ test('restoration rejects incompatible ownership and contract before constructin
 test('restored work and newly created descendants use the recovery observation source', async () => {
   const facts = [];
   const resource = new ResourceOffer('test.checkpoint.observed', (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }));
-  class Child extends ExecutionDefinition {
+  class Child extends GroupDefinition {
     run = { requires: { value: resource.request() }, execute: (work) => work.resources.value.read() };
   }
   const child = new Child();
-  class Root extends RuntimeDefinition {
-    children = [child];
+  class Root extends SceneDefinition {
+    members = [child];
     checkpoint = checkpoint(
       'test.observation',
       async (work) => {
@@ -267,7 +269,7 @@ test('restored work and newly created descendants use the recovery observation s
     run = { requires: {}, execute: () => assert.fail('not running original work') };
   }
   const runtime = assemble(new Root(), {
-    checkpoints: { store: storeOf(head('test.observation', 'root-1', 'runtime', {})), observation: { observe: (fact) => facts.push(fact) } },
+    checkpoints: { store: storeOf(head('test.observation', 'root-1', 'scene', {})), observation: { observe: (fact) => facts.push(fact) } },
     observations: [{ bindInvocation: () => assert.fail('recovery cannot enter the original record installation') }],
     changes: { capture: () => assert.fail('original change source cannot identify recovery activities') },
     providers: [resource.provide(() => 'new child result')],
@@ -284,13 +286,13 @@ for (const failure of [undefined, 'propagate']) {
   test(`read rejection emits one restore failure and ${failure ? 'preserves both strict faults' : 'isolates observer faults'}`, async () => {
     const observerError = new Error('failure observer failed');
     const facts = [];
-    class Root extends RuntimeDefinition {
+    class Root extends SceneDefinition {
       checkpoint = checkpoint('test.expected', () => assert.fail('incompatible work must not run'));
       run = { requires: {}, execute: () => assert.fail('not normal execution') };
     }
     const runtime = assemble(new Root(), {
       checkpoints: {
-        store: storeOf(head('test.other', 'root-1', 'runtime', {})),
+        store: storeOf(head('test.other', 'root-1', 'scene', {})),
         observation: {
           failure,
           observe: (fact) => {
@@ -326,7 +328,7 @@ for (const stage of ['point', 'codec', 'capture']) {
     const expected = new Error(`${stage} unavailable`);
     const facts = [];
     const resource = new ResourceOffer(`test.restore.${stage}`, () => assert.fail('unavailable work must not expose a resource'), 'binding');
-    class Root extends RuntimeDefinition {
+    class Root extends SceneDefinition {
       checkpoint = {
         ...checkpoint('test.construction', () => assert.fail('not resuming'), { resource: resource.request() }),
         input:
@@ -341,7 +343,7 @@ for (const stage of ['point', 'codec', 'capture']) {
       };
       run = { requires: {}, execute: () => assert.fail('not normal execution') };
     }
-    const saved = head('test.construction', 'root-1', 'runtime', {});
+    const saved = head('test.construction', 'root-1', 'scene', {});
     if (stage === 'point') saved.image.point = 'unknown-point';
     const store = storeOf(saved);
     const runtime = assemble(new Root(), {
@@ -352,7 +354,7 @@ for (const stage of ['point', 'codec', 'capture']) {
           return null;
         }),
       ],
-      source: { runtime: () => null, capture: () => null },
+      source: { capture: () => null },
     });
     await assert.rejects(runtime.resume('root-1', {}), stage === 'point' ? /point is not declared/ : (error) => error === expected);
     assert.equal(facts.length, 1);

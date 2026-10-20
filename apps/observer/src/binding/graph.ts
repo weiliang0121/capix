@@ -30,7 +30,7 @@ function pathSummary(value: unknown): string | undefined {
 /** These are interpretations of known Observer contracts, never inferred model reasoning. */
 function summarize(call: CallDetail, accepted: unknown): string | undefined {
   const output = object(call.output);
-  const name = call.recordType === 'attempt' ? call.operation?.split('.').at(-1) : call.operation;
+  const name = call.recordType === 'node' ? call.operation?.split('.').at(-1) : call.operation;
   if (name === 'conversationDecision') {
     const received = object(accepted);
     if (received.kind === 'revise') {
@@ -87,14 +87,14 @@ export function projectCallGraph(round: RoundView, detail?: ExecutionDetail): Ca
   const calls = new Map(round.calls.map((call) => [call.id, call]));
   const matchingDetail = detail?.id === round.id ? detail : undefined;
   const root = matchingDetail?.calls.get(round.id);
-  const runtimeId = root?.parentId && matchingDetail?.calls.get(root.parentId)?.recordType === 'runtime' ? root.parentId : undefined;
+  const runtimeId = root?.parentId && matchingDetail?.calls.has(root.parentId) ? root.parentId : undefined;
   let incomplete = false;
-  const identities = new Set([...calls.keys(), ...[...(matchingDetail?.calls.values() ?? [])].filter((call) => call.recordType !== 'runtime').map((call) => call.id)]);
+  const identities = new Set([...calls.keys(), ...[...(matchingDetail?.calls.values() ?? [])].filter((call) => call.id !== runtimeId).map((call) => call.id)]);
   for (const id of identities) {
     const summary = calls.get(id);
     const local = matchingDetail?.calls.get(id);
     const call = local ?? summary!;
-    if (call.recordType === 'runtime') continue;
+    if (call.id === runtimeId) continue;
     const parent = call.parentId ? matchingDetail?.calls.get(call.parentId) : undefined;
     const relations = parent?.relationEntries.filter((entry) => entry.childId === id || entry.identity.childContextId === call.contextId) ?? [];
     const attached = relations.find((entry) => entry.change.kind === 'attached');
@@ -109,7 +109,8 @@ export function projectCallGraph(round: RoundView, detail?: ExecutionDetail): Ca
       node: {
         id,
         label: call.label,
-        level: call.recordType,
+        kind: call.recordType,
+        ...(id === round.id ? { task: true as const } : {}),
         status: call.status === 'unresolved' ? 'unresolved' : observationStatus(call.status === 'passed' ? 'succeeded' : call.status, round.archive),
         name: local?.operation ?? summary?.name,
         ...(call.durationMs === undefined ? {} : { durationMs: call.durationMs }),
@@ -149,7 +150,7 @@ export function projectCallGraph(round: RoundView, detail?: ExecutionDetail): Ca
     return { ...entry.node, ...(order === undefined ? {} : { order }), ...(invalid ? { incomplete: true } : {}), children: projected };
   };
   const execution = entries.get(round.id);
-  const roots = execution?.node.level === 'execution' ? [build(execution)] : [];
+  const roots = execution ? [build(execution)] : [];
   if (!roots.length) incomplete = true;
   const unattached = detached.filter((entry) => !visited.has(entry.node.id)).map((entry) => ({ ...build(entry), incomplete: true }));
   // Preserve unreachable cycles as incomplete calls, without inventing a link to E.

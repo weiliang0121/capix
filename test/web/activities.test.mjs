@@ -12,8 +12,8 @@ const projectResponses = (messages, state) => createResponseProjection()(message
 const startedAt = '2026-10-11T00:00:00.000Z';
 const finishedAt = '2026-10-11T00:00:00.010Z';
 const input = { transcriptId: 'fixture-transcript', start: 0, end: 1 };
-const call = (contextId, level, parentContextId, patch = {}) => ({ contextId, level, ...(parentContextId ? { parentContextId } : {}), label: contextId, status: 'running', phase: 'execute', round: 1, startedAt, ...patch });
-const calls = () => [call('runtime', 'runtime'), call('execution', 'execution', 'runtime'), call('answer', 'operation', 'execution', { label: '生成回答' }), call('model-1', 'attempt', 'answer', { label: '调用模型' })];
+const call = (contextId, kind, parentContextId, patch = {}) => ({ contextId, kind, ...(parentContextId ? { parentContextId } : {}), label: contextId, status: 'running', phase: 'execute', round: 1, startedAt, ...patch });
+const calls = () => [call('scene', 'scene'), call('group', 'group', 'scene'), call('answer', 'group', 'group', { label: '生成回答' }), call('model-1', 'node', 'answer', { label: '调用模型' })];
 const activities = (items, integrity = { status: 'complete' }) => ({ calls: items, integrity });
 const submission = (patch = {}) => ({ id: 'first', queueId: 'local-first', pending: '问题', feedback: { status: 'following' }, remote: submissionSnapshot('first', { input, activities: activities(calls()), ...patch }) });
 const state = (value) => ({ ...client({ conversation: transport() }).getSnapshot(), transcriptId: input.transcriptId, submission: value, submissions: new Map([[value.id, value]]) });
@@ -48,7 +48,7 @@ test('one current hint replaces finished steps and carries the operation purpose
   items[3] = { ...items[3], status: 'succeeded', finishedAt, relation: { phase: 'failed', returned: 'succeeded' } };
   const failed = projectConversationProcess(submission({ activities: activities(items) }));
   assert.equal(failed.label, '生成回答 · 正在处理结果接纳失败');
-  items.push(call('model-2', 'attempt', 'answer', { label: '调用模型' }));
+  items.push(call('model-2', 'node', 'answer', { label: '调用模型' }));
   items[2] = { ...items[2], round: 2 };
   const retried = projectConversationProcess(submission({ activities: activities(items) }));
   assert.equal(retried.label, '正在生成回答 · 调用模型（第 2 次尝试）');
@@ -157,7 +157,7 @@ test('unchanged submission facts retain conversation read model identity', () =>
 test('releasing a terminal submission without accepted input removes its unanchored process', () => {
   const runtime = client({ conversation: transport() });
   const initial = runtime.getSnapshot();
-  const rejected = submission({ input: undefined, result: { status: 'rejected', error: { code: 'INVALID_INPUT', message: '输入无效' } }, activities: activities([call('runtime', 'runtime', undefined, { status: 'failed', finishedAt })]) });
+  const rejected = submission({ input: undefined, result: { status: 'rejected', error: { code: 'INVALID_INPUT', message: '输入无效' } }, activities: activities([call('scene', 'scene', undefined, { status: 'failed', finishedAt })]) });
   const retained = new Map([[rejected.id, rejected]]);
   const project = createDataProjection();
   const before = project({ ...initial, submission: rejected, submissions: retained });
@@ -180,8 +180,8 @@ test('new operation replaces prior purpose, and answer delivery does not imply a
   const items = calls();
   items[2] = { ...items[2], status: 'succeeded', finishedAt, relation: { phase: 'accepted', returned: 'succeeded' } };
   items[3] = { ...items[3], status: 'succeeded', finishedAt, relation: { phase: 'accepted', returned: 'succeeded' } };
-  items.push(call('memory', 'operation', 'execution', { label: '提取记忆体' }));
-  items.push(call('memory-model', 'attempt', 'memory', { label: '调用模型' }));
+  items.push(call('memory', 'group', 'group', { label: '提取记忆体' }));
+  items.push(call('memory-model', 'node', 'memory', { label: '调用模型' }));
   const value = submission({ answer: { transcriptId: input.transcriptId, index: 1 }, activities: activities(items) });
   const data = createDataProjection()({ ...initial, ...state(value), messages: messages.map((row) => row.message), answerAvailability: 'available' });
   assert.equal(data.conversation.find((item) => item.kind === 'response').process.label, '正在提取记忆体 · 调用模型');

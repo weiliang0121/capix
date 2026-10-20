@@ -47,7 +47,7 @@ function conversation(provider, configureDefinition) {
   return { environment, calls };
 }
 function watchPending(runtimeDefinition, callback, options) {
-  const definition = runtimeDefinition.executionDefinition.operationDefinitions.generation.requestModelDefinition;
+  const definition = runtimeDefinition.taskDefinition.operationDefinitions.generation.requestModelDefinition;
   definition.observation = [
     ...definition.observation,
     defineObservation(
@@ -75,7 +75,8 @@ test('production request O accepts A1 pending and creates A2 which reads the sam
   );
   let execution;
   assert.deepEqual(
-    await environment.runtime.run(
+    await environment.driver.run(
+      environment.scene,
       { messages: [{ role: 'user', content: '你好' }] },
       {
         settings,
@@ -108,7 +109,8 @@ test('production request O accepts A1 pending and creates A2 which reads the sam
 test('a fast provider reply completes the initial A without creating a follow call', async () => {
   const { environment, calls } = conversation(async () => output(JSON.stringify(answer)));
   let execution;
-  await environment.runtime.run(
+  await environment.driver.run(
+    environment.scene,
     { messages: [{ role: 'user', content: '你好' }] },
     {
       settings,
@@ -206,12 +208,12 @@ test('cancellation ends the invocation while its independent provider saves a la
     () => response.promise,
     (definition) => watchPending(definition, () => pending.resolve()),
   );
-  const running = environment.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings, signal: controller.signal });
+  const running = environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings, signal: controller.signal });
   const rejected = assert.rejects(running, (error) => isInvocationCancelled(error, controller.signal));
   await pending.promise;
   controller.abort();
   await rejected;
-  assert.equal(environment.runtime.running, false);
+  assert.equal(environment.driver.isRunning(environment.scene), false);
   assert.equal(environment.interactions.active, true);
   assert.equal(calls.find((call) => call.purpose === 'answer').signal.aborted, false);
   assert.throws(() => environment.close(), /active external interactions/);
@@ -220,7 +222,7 @@ test('cancellation ends the invocation while its independent provider saves a la
   const saved = environment.interactions.states().find((state) => state.request.purpose === 'answer');
   assert.equal(saved.feedback.payload.content, JSON.stringify(answer));
   assert.equal(calls.filter((call) => call.purpose === 'answer').length, 1);
-  assert.equal(environment.runtime.running, false);
+  assert.equal(environment.driver.isRunning(environment.scene), false);
   assert.equal(environment.interactions.active, false);
   assert.equal(environment.transcript.length, 1);
   environment.close();
@@ -239,8 +241,8 @@ test('a parent observation fault does not erase or replay an already-started ind
         { failure: 'propagate' },
       ),
   );
-  await assert.rejects(environment.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause?.message === 'parent observer fault');
-  assert.equal(environment.runtime.running, false);
+  await assert.rejects(environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause?.message === 'parent observer fault');
+  assert.equal(environment.driver.isRunning(environment.scene), false);
   assert.equal(environment.interactions.active, true);
   assert.throws(() => environment.close(), /active external interactions/);
   response.resolve(output(JSON.stringify(answer)));

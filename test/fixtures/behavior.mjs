@@ -3,7 +3,7 @@ import { captureSource } from './observer.mjs';
 import { ResourceBindings } from '@capix/server-runtime';
 
 // Low-level mechanism fixtures deliberately retain actual Context/Invocation access.
-// Business definitions are separately verified through assembleRuntime's restricted views.
+// Business definitions are separately verified through installCallable's restricted views.
 function work(owner) {
   return {
     maxRounds: owner.maxRounds ?? 1,

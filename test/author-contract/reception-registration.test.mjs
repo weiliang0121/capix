@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AttemptDefinition, defineAttempt, defineOperation, reception, resolveDeclaration } from '@capix/server-runtime';
+import { NodeDefinition, defineNode, defineGroup, reception, resolveDeclaration } from '@capix/server-runtime';
 
 const metadata = { name: 'test', label: 'test', source: 'test', callee: 'local' };
 const identity = { check: (value) => value, encode: (value) => value, decode: (value) => value };
-const child = defineAttempt()({ ...metadata, run: { execute: (work) => work.input } });
+const child = defineNode()({ ...metadata, run: { execute: (work) => work.input } });
 
 function parent(children, receptions) {
-  return defineOperation()({ ...metadata, children, receptions, run: { execute: (work) => work.input } });
+  return defineGroup()({ ...metadata, members: children, receptions, run: { execute: (work) => work.input } });
 }
 
 test('reception registration rejects repeated contracts and targets outside its direct children', () => {
@@ -15,10 +15,10 @@ test('reception registration rejects repeated contracts and targets outside its 
   assert.throws(() => resolveDeclaration(parent([child], [accepted, accepted])), /Duplicate parent reception contract/);
   const snapshot = resolveDeclaration(parent([child], [accepted])).declaration.receptions[0];
   assert.throws(() => resolveDeclaration(parent([child], [accepted, snapshot])), /Duplicate parent reception contract/);
-  const sameShapeChild = defineAttempt()({ ...metadata, run: { execute: (work) => work.input } });
-  assert.throws(() => resolveDeclaration(parent([sameShapeChild], [accepted])), /Reception targets a child outside its owner/);
+  const sameShapeChild = defineNode()({ ...metadata, run: { execute: (work) => work.input } });
+  assert.throws(() => resolveDeclaration(parent([sameShapeChild], [accepted])), /Reception targets a member outside its owner/);
   const nested = parent([child], []);
-  assert.throws(() => resolveDeclaration(parent([nested], [accepted])), /Reception targets a child outside its owner/);
+  assert.throws(() => resolveDeclaration(parent([nested], [accepted])), /Reception targets a member outside its owner/);
 });
 
 test('separate contracts for one child and the same contract in separate parents remain legal', () => {
@@ -33,7 +33,7 @@ test('separate contracts for one child and the same contract in separate parents
 
 for (const receptions of [[], [reception(child, identity)]]) {
   test(`A rejects a reception registry of size ${receptions.length} in class and factory forms`, () => {
-    class InvalidLeaf extends AttemptDefinition {
+    class InvalidLeaf extends NodeDefinition {
       name = 'invalid';
       label = 'invalid';
       source = 'test';
@@ -41,9 +41,9 @@ for (const receptions of [[], [reception(child, identity)]]) {
       receptions = receptions;
       run = { requires: {}, execute: (work) => work.input };
     }
-    assert.throws(() => resolveDeclaration(new InvalidLeaf()), /Attempts cannot declare receptions/);
-    const factory = defineAttempt()({ ...metadata, receptions, run: { execute: (work) => work.input } });
-    assert.throws(() => resolveDeclaration(factory), /Attempts cannot declare receptions/);
+    assert.throws(() => resolveDeclaration(new InvalidLeaf()), /Nodes cannot declare receptions/);
+    const factory = defineNode()({ ...metadata, receptions, run: { execute: (work) => work.input } });
+    assert.throws(() => resolveDeclaration(factory), /Nodes cannot declare receptions/);
   });
 }
 

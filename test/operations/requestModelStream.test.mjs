@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { defineRuntime, defineExecution, assembleRuntime } from '@capix/server-runtime';
+import { defineScene, defineGroup } from '@capix/server-runtime';
 import { RequestModelDefinition, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 test('request-model keeps its progress subscription until the follow child returns', async () => {
@@ -36,8 +37,8 @@ test('request-model keeps its progress subscription until the follow child retur
       return output;
     },
   };
-  const execution = defineExecution()({
-    children: [model],
+  const execution = defineGroup()({
+    members: [model],
     run: {
       requires: RequestModelDefinition.requires,
       async execute(work) {
@@ -53,8 +54,8 @@ test('request-model keeps its progress subscription until the follow child retur
       },
     },
   });
-  const root = defineRuntime()({
-    children: [execution],
+  const root = defineScene()({
+    members: [execution],
     run: {
       async execute(work) {
         const call = work.children.create(execution, work.input);
@@ -64,7 +65,7 @@ test('request-model keeps its progress subscription until the follow child retur
     },
   });
   const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };
-  const runtime = assembleRuntime(root, {
+  const runtime = installCallable(root, {
     providers: [ModelSettingsResource.snapshot.provide(() => settings), ModelSettingsResource.timeout.provide(() => settings.timeoutMs), ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)],
     source: { entry: () => null, capture: () => null },
   });

@@ -146,7 +146,7 @@ test('record and source query responses must match the requested identity', asyn
 });
 
 test('execution details require the actual parent R record and its independent boundaries', async () => {
-  for (const field of ['runtimeCall', 'runtimeEvents']) {
+  for (const field of ['calls', 'boundaries']) {
     const incomplete = snapshot();
     delete incomplete[field];
     await assert.rejects(jsonObservation(incomplete).execution('fixture-conversation', incomplete.execution.id), (error) => error.code === 'INVALID_SNAPSHOT');
@@ -174,7 +174,7 @@ test('entity queries validate the requested UID and entity streams preserve revi
 test('observation delivery preserves E entry diagnostics and parent relationship failure evidence', async () => {
   const occurredAt = '2026-10-09T00:00:00Z';
   const error = { code: 'ENTRY_TEST', message: 'entry delivery failed' };
-  const invocation = { type: 'invocation', contextId: 'runtime-context', level: 'runtime', occurredAt };
+  const invocation = { type: 'invocation', contextId: 'runtime-context', kind: 'scene', occurredAt };
   const changes = ['accept', 'notification', 'admit', 'capture'].map((stage, index) => ({ ...invocation, sequence: index + 2, change: { kind: 'entry', target: 'execution', instanceId: 'execution-instance', key: 'main', stage, status: stage === 'notification' ? 'failed' : 'accepted', ...(stage === 'notification' ? { error } : {}) } }));
   changes.push({ type: 'record', recorderId: 'fixture-recorder', revision: 1, occurredAt, change: { kind: 'relation-appended', id: 'runtime-call', relation: { identity: { parentContextId: 'runtime-context', childContextId: 'child-context', parentRound: 0 }, eventSequence: 6, occurredAt, offsetMs: 10, childId: 'child-call', change: { kind: 'failed', source: 'observation', error } } } });
   const frames = [baseline({ invocations: [{ ...invocation, sequence: 1, change: { kind: 'started' } }] }), { type: 'delta', scopeId: 'fixture-scope', sequence: 1, changes }];
@@ -277,7 +277,7 @@ test('malformed submission feedback is rejected before delivery', async () => {
 });
 
 test('submission HTTP boundary accepts bounded activity metadata and strips arbitrary bodies', async () => {
-  const call = { contextId: 'r', level: 'runtime', label: '运行', status: 'running', phase: 'execute', round: 1, startedAt: '2026-10-11T00:00:00.000Z' };
+  const call = { contextId: 'r', kind: 'scene', label: '运行', status: 'running', phase: 'execute', round: 1, startedAt: '2026-10-11T00:00:00.000Z' };
   const body = { ...initial, activities: { calls: [{ ...call, input: 'private', output: 'private', source: '/private/file' }], integrity: { status: 'complete' } } };
   const accepted = await jsonConversation(body).read('submission');
   assert.deepEqual(accepted.submission.activities.calls, [call]);

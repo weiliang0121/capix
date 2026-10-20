@@ -1,15 +1,16 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assembleRuntime } from '@capix/server-runtime';
+
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 function operation(execute) {
-  return { level: 'operation', name: 'delivery', label: 'Delivery', source: 'test', children: [], maxRounds: 1, raises: [], run: { requires: {}, execute } };
+  return { kind: 'group', name: 'delivery', label: 'Delivery', source: 'test', members: [], maxRounds: 1, raises: [], run: { requires: {}, execute } };
 }
 
 function assemble(child, execute) {
-  const execution = { level: 'execution', children: [child], maxRounds: 1, raises: [], run: { requires: {}, execute } };
-  return assembleRuntime(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
+  const execution = { kind: 'group', members: [child], maxRounds: 1, raises: [], run: { requires: {}, execute } };
+  return installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
 }
 
 test('parent acceptance receives the exact delivery of the selected child, independently of acceptance order', async () => {

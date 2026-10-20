@@ -27,20 +27,24 @@ test('R-owned facts refresh every contained E, while an E fact refreshes only th
   const first = snapshot('running', 'first');
   const second = snapshot('running', 'second');
   const unrelated = snapshot('running', 'unrelated');
-  second.execution.parentId = first.runtimeCall.id;
-  first.runtimeCall.childIds.push(second.execution.id);
-  const entries = [...entriesOf(first), ...entriesOf(second).filter((entry) => entry.kind !== 'runtime-call' && entry.data.parentId !== second.runtimeCall.id), ...entriesOf(unrelated)];
+  second.execution.parentId = first.rootCall.id;
+  for (const boundary of second.boundaries) {
+    boundary.scopeId = first.rootCall.id;
+    boundary.sequence += 2;
+  }
+  first.rootCall.childIds.push(second.execution.id);
+  const entries = [...entriesOf(first), ...entriesOf(second).filter((entry) => entry.data.id !== second.rootCall.id && entry.data.parentId !== second.rootCall.id), ...entriesOf(unrelated)];
   // The second E itself was reparented; its descendant boundaries still belong to it.
-  if (!entries.some((entry) => entry.data.id === second.execution.id)) entries.push({ kind: 'execution', data: second.execution });
+  if (!entries.some((entry) => entry.data.id === second.execution.id)) entries.push({ kind: 'invocation', data: second.execution });
   let replica = ObservationReplica.receive(undefined, baseline({ entries }));
   assert.equal(replica.snapshots.size, 3);
   const original = replica;
-  replica = ObservationReplica.receive(replica, replace(replica, [{ kind: 'runtime-call', data: { ...first.runtimeCall, value: { ...first.runtimeCall.value, input: 'new R input' } } }]));
+  replica = ObservationReplica.receive(replica, replace(replica, [{ kind: 'invocation', data: { ...first.rootCall, value: { ...first.rootCall.value, input: 'new R input' } } }]));
   assert.deepEqual([...replica.updates.keys()].sort(), ['first', 'second']);
   assert.equal(replica.snapshots.get('unrelated'), original.snapshots.get('unrelated'));
-  assert.equal(replica.snapshots.get('first').runtimeCall, replica.snapshots.get('second').runtimeCall);
+  assert.equal(replica.snapshots.get('first').rootCall, replica.snapshots.get('second').rootCall);
   const previous = replica;
-  replica = ObservationReplica.receive(replica, replace(replica, [{ kind: 'execution', data: { ...second.execution, value: { ...second.execution.value, input: 'new E input' } } }]));
+  replica = ObservationReplica.receive(replica, replace(replica, [{ kind: 'invocation', data: { ...second.execution, value: { ...second.execution.value, input: 'new E input' } } }]));
   assert.deepEqual([...replica.updates.keys()], ['second']);
   assert.equal(replica.snapshots.get('first'), previous.snapshots.get('first'));
 });
@@ -82,8 +86,8 @@ test('large execution boundaries and owner contexts are checked through indexes 
   const count = 256;
   for (let index = 0; index < count; index++) {
     const id = `operation-${index}`;
-    const boundary = { id: `call-${id}`, parentId: id, scopeId: value.execution.id, executionId: value.execution.id, callId: id, sequence: index + 2, occurredAt: value.execution.value.startedAt, offsetMs: 0, value: { type: 'call', scope: 'work' } };
-    const operation = { id, parentId: value.execution.id, executionId: value.execution.id, contextId: `context-${id}`, operationInstanceId: 'operation-instance', operation: 'fixture', label: 'Fixture', source: 'fixture', caller: 'execution', callee: 'operation', status: 'running', childIds: [boundary.id], value: { startedAt: value.execution.value.startedAt, input: null, processes: [], relationChanges: [] } };
+    const boundary = { id: `call-${id}`, parentId: id, scopeId: value.rootCall.id, callId: id, sequence: index + 3, occurredAt: value.execution.value.startedAt, offsetMs: 0, value: { type: 'call', scope: 'work' } };
+    const operation = { structureKind: 'group', id, parentId: value.execution.id, executionId: value.execution.id, contextId: `context-${id}`, operationInstanceId: 'operation-instance', operation: 'fixture', label: 'Fixture', source: 'fixture', caller: 'execution', callee: 'operation', status: 'running', childIds: [boundary.id], value: { startedAt: value.execution.value.startedAt, input: null, processes: [], relationChanges: [] } };
     Object.defineProperty(operation, 'id', {
       enumerable: true,
       get() {
@@ -99,14 +103,14 @@ test('large execution boundaries and owner contexts are checked through indexes 
       },
     });
     value.execution.childIds.push(id);
-    value.operations.push(operation);
-    value.events.push(boundary);
+    value.calls.push(operation);
+    value.boundaries.push(boundary);
   }
   validateExecutionRecordSnapshot(value);
   assert.ok(ownerReads < count * 16, `${ownerReads} owner accesses for ${count} operations`);
   const frame = baseline({ entries: entriesOf(value) });
   boundaryReads = 0;
   const replica = ObservationReplica.receive(undefined, frame);
-  assert.equal(replica.snapshots.get(value.execution.id).operations.length, count);
+  assert.equal(replica.snapshots.get(value.execution.id).calls.length, count + 1);
   assert.ok(boundaryReads < count * 16, `${boundaryReads} boundary accesses for ${count} operations`);
 });

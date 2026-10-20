@@ -1,3 +1,4 @@
+import { CallableRecord } from '../callable/record.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import type { RecordBook } from '../book.js';
 import type { BaseRecord } from '../record.js';
@@ -15,6 +16,9 @@ import { ResourceRecord } from '../resource/record.js';
 
 /** Existing record kinds' ownership rules; no storage, indexing or publication. */
 export function checkRelation(record: BaseRecord<unknown>, parent: CompositeRecord<unknown> | undefined, book: RecordBook, mode: 'register' | 'restore' = 'register'): void {
+  if (record instanceof CallableRecord && !(parent instanceof RecordingRootRecord || parent instanceof CallableRecord)) throw new Error('Callable record requires its recording root or direct callable parent');
+  if (record instanceof CallableRecord && parent instanceof CallableRecord && parent.structureKind === 'node') throw new Error('A node record cannot own child calls');
+  if (record instanceof CallableRecord && parent instanceof CallableRecord && record.structureKind === 'scene') throw new Error('A scene record cannot be a member call');
   if (record instanceof RecordingRootRecord && parent) throw new Error('Recording root cannot have a parent record');
   if (record instanceof RuntimeCallRecord && !(parent instanceof RecordingRootRecord)) throw new Error('Runtime call record requires a recording root parent');
   if (record instanceof ExecutionRecord && !(parent instanceof RuntimeCallRecord)) throw new Error('Execution record requires a Runtime call record parent');

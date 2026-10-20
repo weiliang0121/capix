@@ -1,88 +1,50 @@
-import { isUndefined } from 'es-toolkit/predicate';
 import { readOutput, type ExecutionSummary, type InvocationSummary, type ObserverOverview, type RecordingArchive } from '@capix/protocol';
-import { AttemptRecord, InvocationBoundaryRecord, ExecutionRecord, MemoryRecord, OperationRecord, type RecordBook } from '@capix/server-runtime/recording';
+import { type RecordBook } from '@capix/server-runtime/recording';
 import { type Transcript } from '@capix/server-runtime/content';
 import { executionTranscript } from './evidence.js';
 import { inspectExecutions } from './inspect.js';
 import { executionArchive } from './archive.js';
-import type { SelectionInput } from '../conversation/operations/history/input.js';
+import { taskView } from './calls.js';
+import type { SelectionInput } from '../conversation/group/history/input.js';
 import type { describePreparedConversationContext } from '../conversation/content/observation.js';
 
-type ObservedCallRecord = ExecutionRecord | OperationRecord | AttemptRecord;
-
-/** Read list/timing facts directly: opening the explorer does not load every invocation body. */
+/** Interpret explicit task roles while preserving the actual callable tree. No body is cloned here. */
 export function observeOverview(observer: { readonly book: RecordBook; readonly transcript: Transcript; readonly recordingArchives?: readonly RecordingArchive[] }): ObserverOverview {
   const observation = inspectExecutions(observer.book, observer.transcript);
-  const records = [...observer.book.values()];
-  const operations = records.filter((record): record is OperationRecord => record instanceof OperationRecord);
-  const attempts = records.filter((record): record is AttemptRecord => record instanceof AttemptRecord);
-  const changes = records.filter((record): record is MemoryRecord => record instanceof MemoryRecord);
-  const operationsByExecution = new Map<string, OperationRecord[]>();
-  for (const record of operations) {
-    const own = operationsByExecution.get(record.executionId);
-    if (own) own.push(record);
-    else operationsByExecution.set(record.executionId, [record]);
-  }
-  const operationsById = new Map(operations.map((record) => [record.id, record]));
-  const attemptsByExecution = new Map<string, AttemptRecord[]>();
-  for (const record of attempts) {
-    const executionId = operationsById.get(record.operationId)?.executionId;
-    if (!executionId) continue;
-    const own = attemptsByExecution.get(executionId);
-    if (own) own.push(record);
-    else attemptsByExecution.set(executionId, [record]);
-  }
-  const changesByExecution = new Map<string, MemoryRecord[]>();
-  for (const record of changes) {
-    if (!record.executionId) continue;
-    const own = changesByExecution.get(record.executionId);
-    if (own) own.push(record);
-    else changesByExecution.set(record.executionId, [record]);
-  }
-  const observedOffsets = new Map<string, number>();
-  const boundaries = new Map<string, { start?: number; end?: number }>();
-  for (const record of records) {
-    if (record instanceof ExecutionRecord) observedOffsets.set(record.id, Math.max(observedOffsets.get(record.id) ?? 0, record.value.processes.at(-1)?.offsetMs ?? 0));
-    if (record instanceof OperationRecord) observedOffsets.set(record.executionId, Math.max(observedOffsets.get(record.executionId) ?? 0, record.value.processes.at(-1)?.offsetMs ?? 0));
-    if (record instanceof AttemptRecord) {
-      const operation = observer.book.get(record.operationId);
-      if (operation instanceof OperationRecord) observedOffsets.set(operation.executionId, Math.max(observedOffsets.get(operation.executionId) ?? 0, record.value.processes.at(-1)?.offsetMs ?? 0));
-    }
-    if (!(record instanceof InvocationBoundaryRecord) || !record.executionId) continue;
-    observedOffsets.set(record.executionId, Math.max(observedOffsets.get(record.executionId) ?? 0, record.offsetMs));
-    const timing = boundaries.get(record.callId) ?? {};
-    if (record.value.type === 'call') timing.start = record.offsetMs;
-    else timing.end = record.offsetMs;
-    boundaries.set(record.callId, timing);
-  }
-  const summarize = (record: ObservedCallRecord): InvocationSummary => {
-    const timing = boundaries.get(record.id);
-    const common = { id: record.id, contextId: record.contextId, status: record.status, offsetMs: timing?.start ?? 0, ...(!isUndefined(timing?.start) && !isUndefined(timing?.end) ? { durationMs: timing!.end! - timing!.start! } : {}) };
-    if (record instanceof ExecutionRecord) return { ...common, recordType: 'execution', name: 'execution', label: '执行调用', source: 'server/runtime/src/structure/execution.ts · BoundExecution.create' };
-    if (record instanceof OperationRecord) return { ...common, recordType: 'operation', parentId: record.parentOperationId ?? record.executionId, name: record.operation, label: record.label, source: record.source };
-    return { ...common, recordType: 'attempt', parentId: record.operationId, name: record.name, label: record.label, source: record.source };
-  };
   const executions: ExecutionSummary[] = observation.executions.map((execution) => {
-    const record = observer.book.get(execution.id);
-    if (!(record instanceof ExecutionRecord)) throw new Error('Observed execution record does not exist');
-    const ownOperations = operationsByExecution.get(record.id) ?? [];
-    const ownAttempts = attemptsByExecution.get(record.id) ?? [];
-    const preparation = ownOperations.find((operation) => operation.operation === 'prepareContext');
+    const snapshot = taskView(observer.book, execution.id);
+    const startedAt = snapshot.execution.value.startedAt;
+    if (startedAt === undefined) throw new Error('Conversation task has no recorded start');
+    const start = Date.parse(startedAt);
+    const starts = new Map(snapshot.boundaries.filter((boundary) => boundary.value.type === 'call').map((boundary) => [boundary.callId, boundary]));
+    const ends = new Map(snapshot.boundaries.filter((boundary) => boundary.value.type !== 'call').map((boundary) => [boundary.callId, boundary]));
+    const origin = starts.get(snapshot.execution.id);
+    const offset = (boundary: (typeof snapshot.boundaries)[number]) => (origin && boundary.scopeId === origin.scopeId ? boundary.offsetMs - origin.offsetMs : Date.parse(boundary.occurredAt) - start);
+    const calls: InvocationSummary[] = snapshot.calls.map((record) => {
+      const first = starts.get(record.id);
+      const last = ends.get(record.id);
+      return { id: record.id, contextId: record.contextId, recordType: record.structureKind, ...(record.parentId ? { parentId: record.parentId } : {}), name: record.name ?? '', label: record.label ?? record.name ?? '调用', source: record.source ?? '', status: record.status, offsetMs: first ? offset(first) : 0, ...(first && last ? { durationMs: last.offsetMs - first.offsetMs } : {}) };
+    });
+    const preparation = snapshot.calls.find((call) => call.name === 'prepareContext');
     const prepared = preparation?.status === 'succeeded' ? (readOutput(preparation.value) as ReturnType<typeof describePreparedConversationContext>) : undefined;
-    const legacySelection = ownOperations.find((operation) => operation.operation === 'selection');
-    const captured = legacySelection?.value.input as SelectionInput | undefined;
-    const range = executionTranscript(observer.book, record.id);
-    const call = summarize(record);
-    const archive = executionArchive(observer.book, observer.recordingArchives, record.id);
+    const captured = snapshot.calls.find((call) => call.name === 'selection')?.value.input as SelectionInput | undefined;
+    const range = executionTranscript(observer.book, execution.id);
+    const durationMs = calls.find((call) => call.id === execution.id)?.durationMs;
+    const archive = executionArchive(observer.book, observer.recordingArchives, execution.id);
+    const ownIds = new Set(snapshot.calls.map((call) => call.id));
+    // A terminal boundary is the exact monotonic extent of that call. Its wall-clock
+    // process timestamps have millisecond precision and must not extend that extent.
+    const pendingProcesses = snapshot.calls.filter((call) => !ends.has(call.id)).flatMap((call) => call.value.processes.map((process) => Date.parse(process.occurredAt) - start));
+    const observedOffsetMs = Math.max(0, ...snapshot.boundaries.filter((boundary) => ownIds.has(boundary.callId)).map(offset), ...pendingProcesses);
     return {
       ...execution,
       ...(archive ? { archive } : {}),
-      observedOffsetMs: observedOffsets.get(execution.id) ?? 0,
-      ...(isUndefined(call.durationMs) ? {} : { durationMs: call.durationMs }),
-      calls: [call, ...ownOperations.map(summarize), ...ownAttempts.map(summarize)],
+      observedOffsetMs,
+      ...(durationMs === undefined ? {} : { durationMs }),
+      calls,
       ...(range ? { transcriptRange: range } : {}),
       availableMemoryIds: (prepared?.material.memories ?? captured?.memories)?.map((memory) => memory.id) ?? [],
-      memoryChanges: (changesByExecution.get(execution.id) ?? []).map((change) => ({ id: change.id, memoryId: change.memoryId, operationId: change.operationId, action: change.value.action, change: change.value.change })),
+      memoryChanges: snapshot.memories.map((change) => ({ id: change.id, memoryId: change.memoryId, operationId: change.callId ?? change.operationId, action: change.value.action, change: change.value.change })),
     };
   });
   return { transcriptId: observer.transcript.id, messages: observation.messages, executions, ...(observer.recordingArchives?.length ? { archives: observer.recordingArchives } : {}) };

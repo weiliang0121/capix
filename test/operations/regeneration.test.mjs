@@ -2,8 +2,8 @@ import { ActiveContent } from '@capix/observer-service';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindConversation, ConversationRuntimeDefinition } from '@capix/observer-service';
-import { RuntimeError, AttemptRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix/server-runtime';
+import { bindConversation, ConversationSceneDefinition } from '@capix/observer-service';
+import { Driver, RuntimeError, CallableRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix/server-runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const answer = { kind: 'answer', content: '修正后的回答' };
@@ -29,9 +29,11 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
   const transcript = new Transcript([], { observation: recording?.transcript });
   const memories = new Memories(transcript, { observation: recording?.memory });
   const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() };
-  const definition = new ConversationRuntimeDefinition();
+  const definition = new ConversationSceneDefinition();
   configureDefinition?.(definition);
-  const environment = { ...entities, definition, recording, book: recorder?.book, runtime: bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider)), { observations: recording ? [recording] : undefined }) };
+  const driver = new Driver({ observations: recording ? [recording] : undefined });
+  const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
+  const environment = { ...entities, definition, recording, book: recorder?.book, driver, scene };
   let invocation;
   return {
     ...environment,
@@ -40,7 +42,8 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
       return invocation;
     },
     run: () =>
-      environment.runtime.run(
+      environment.driver.run(
+        environment.scene,
         { messages },
         {
           settings: configuration,
@@ -176,7 +179,7 @@ test('regeneration works without records and keeps per-call evidence isolated', 
 test('record failure cannot be classified as an output rejection or trigger a second request', async (t) => {
   const append = InvocationRecord.prototype.append;
   t.mock.method(InvocationRecord.prototype, 'append', function (process) {
-    if (this instanceof AttemptRecord && this.name === 'acceptModelOutput' && process.type === 'throw') throw new Error('record failed');
+    if (this instanceof CallableRecord && this.name === 'acceptModelOutput' && process.type === 'throw') throw new Error('record failed');
     return append.call(this, process);
   });
   const f = fixture([output('bad')], { recordingFailure: 'propagate' });
@@ -192,7 +195,7 @@ test('regeneration declaration rejects invalid evidence and missing feedback bef
   let checked = false;
   const f = fixture([output('bad'), output(JSON.stringify(answer))], {
     configureDefinition(definition) {
-      const behavior = definition.executionDefinition.operationDefinitions.generation;
+      const behavior = definition.taskDefinition.operationDefinitions.generation;
       const handle = behavior.exceptions.handle;
       const capability = behavior.requestModelDefinition.regeneration;
       assert.equal(capability.declaration.maxAdditionalCalls, 1);
@@ -220,7 +223,7 @@ test('regeneration declaration rejects invalid evidence and missing feedback bef
 test('parent may decline an eligible regeneration without changing child capability', async (t) => {
   const f = fixture([output('bad')], {
     configureDefinition(definition) {
-      const behavior = definition.executionDefinition.operationDefinitions.generation;
+      const behavior = definition.taskDefinition.operationDefinitions.generation;
       t.mock.method(behavior.exceptions, 'handle', function (work) {
         const children = work.children.facts.values();
         const facts = { round: work.round, continuation: work.continuation, children: work.children.facts };

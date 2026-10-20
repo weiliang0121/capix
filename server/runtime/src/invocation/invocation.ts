@@ -31,6 +31,8 @@ export type InvocationStarted<Input, Output, Context extends InvocationContext<I
 
 export interface InvocationOptions<Input, Output, Context extends InvocationContext<Input, Output>> {
   context: Context;
+  /** Fixed host binding scope, authenticated by construction; never exposed through business Work. */
+  construction?: object;
   checkpoints?: CheckpointInstallation;
   restore?: CheckpointRestoration;
   clock?: Clock;
@@ -76,7 +78,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     this.#clock = options.clock ?? new Clock();
     this.#progress = options.progress ? new ProgressChannel(options.progress) : undefined;
     this.hasProgress = !this.recovering && (!!this.#progress || !!options.parent?.invocation.hasProgress);
-    this.#identity = Object.freeze(options.identity ? { ...options.identity } : { contextId: options.context.id, level: ('level' in options.context ? options.context.level : 'attempt') as InvocationIdentity['level'], ...(options.parent ? { parentContextId: options.parent.invocation.context.id } : {}) });
+    this.#identity = Object.freeze(options.identity ? { ...options.identity } : { contextId: options.context.id, kind: ('kind' in options.context ? options.context.kind : 'node') as InvocationIdentity['kind'], ...(options.parent ? { parentContextId: options.parent.invocation.context.id } : {}) });
     this.children = new InvocationChildren(
       options.context,
       (failure) => {
@@ -125,6 +127,10 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   get context(): Context {
     return this.options.context;
+  }
+
+  get construction(): object | undefined {
+    return this.options.construction;
   }
 
   get identity(): InvocationIdentity {

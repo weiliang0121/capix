@@ -14,7 +14,7 @@ export function executionResources(snapshot: ExecutionRecordSnapshot) {
 
 /** Forwarding supply is not E access. Interpret only actual accesses in this E's recorded subtree. */
 function executionSettings(snapshot: ExecutionRecordSnapshot): { settings: unknown; settingsState: ExecutionSettingsState } {
-  const owners = new Set([snapshot.execution.id, ...snapshot.operations.map((call) => call.id), ...snapshot.attempts.map((call) => call.id)]);
+  const owners = new Set(snapshot.calls.map((call) => call.id));
   const supplies = new Map<string, unknown>();
   for (const fact of snapshot.resources) {
     if (!owners.has(fact.parentId) || fact.phase !== 'available' || fact.access !== 'model-settings.snapshot') continue;

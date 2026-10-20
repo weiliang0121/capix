@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BoundRuntime, createInvocationBuilders, RecordingRootRecord, RuntimeCallRecord, bindRecording, Recorder, RecordBook, ExecutionRecord } from '@capix/server-runtime';
+import { defineScene, CallableRecord, RecordingRootRecord, RuntimeCallRecord, bindRecording, Recorder, RecordBook, ExecutionRecord } from '@capix/server-runtime';
 import { subscribeExecutions } from '@capix/observer-service';
 import { createBoundRuntime, createRecordScope, observeCall } from '../fixtures/runtime.mjs';
 
@@ -11,7 +12,7 @@ test('record installation owns the long-lived result while BoundRuntime owns no 
   const recorder = new Recorder(new RecordBook());
   const recording = bindRecording(recorder);
   const capabilities = { observations: [recording] };
-  const runtime = new BoundRuntime(createInvocationBuilders(capabilities).runtime, undefined, capabilities);
+  const runtime = installCallable(defineScene()({ run: { execute: () => undefined } }), { providers: [], source: { capture: () => null }, ...capabilities });
   assert.equal(runtime.context, undefined);
   assert.equal(runtime.record, undefined);
   assert.equal(runtime.recorder, undefined);
@@ -40,7 +41,7 @@ test('each BoundRuntime call owns its E while success and failure leave the shar
   await third.run();
   assert.deepEqual(original.childIds, []);
   const parents = [first, second, third].map((invocation) => recorder.book.get(invocation.record.parentId));
-  assert.ok(parents.every((record) => record instanceof RuntimeCallRecord));
+  assert.ok(parents.every((record) => record instanceof CallableRecord && record.structureKind === 'scene'));
   assert.deepEqual(
     runtime.record.childIds,
     parents.map((record) => record.id),

@@ -61,7 +61,7 @@ test('observation stream accepts multiple executions independently and validates
     /观测连接已结束/,
   );
   assert.deepEqual(
-    received.map((value) => (value.type === 'baseline' ? value.entries.find((entry) => entry.kind === 'execution').data.id : value.changes.find((event) => event.change.entry.kind === 'execution').change.entry.data.id)),
+    received.map((value) => (value.type === 'baseline' ? value.entries.find((entry) => entry.kind === 'invocation' && entry.data.role === 'conversation-task').data.id : value.changes.find((event) => event.change.entry.kind === 'invocation' && event.change.entry.data.role === 'conversation-task').change.entry.data.id)),
     ['execution-1', 'another'],
   );
   const invalid = new ObservationHttpTransport('', async () => new Response('{"type":"snapshot","snapshot":{}}\n'));

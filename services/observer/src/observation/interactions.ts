@@ -12,7 +12,7 @@ type InteractionEnvironment = Pick<ObserverEnvironment, 'recordSource' | 'book' 
 export function callInteractionLinks(environment: InteractionEnvironment, callId: string): CallInteractionLinks {
   environment.recordSource.assertComplete();
   const call = environment.book.get(callId);
-  if (!(call instanceof CompositeRecord) || !['runtime-call', 'execution', 'operation', 'attempt'].includes(call.kind)) throw new RuntimeError('CALL_NOT_FOUND', '找不到指定对话中的调用。');
+  if (!(call instanceof CompositeRecord) || !['invocation', 'runtime-call', 'execution', 'operation', 'attempt'].includes(call.kind)) throw new RuntimeError('CALL_NOT_FOUND', '找不到指定对话中的调用。');
   const ids = new Set<string>();
   for (const childId of call.childIds) {
     const resource = environment.book.get(childId);

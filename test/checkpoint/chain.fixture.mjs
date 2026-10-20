@@ -1,5 +1,6 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import { DatabaseSync } from 'node:sqlite';
-import { RuntimeDefinition, ExecutionDefinition, OperationDefinition, AttemptDefinition, TranscriptResource, Transcript, Memories, assembleRuntime, childReference } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, NodeDefinition, TranscriptResource, Transcript, Memories, childReference } from '@capix/server-runtime';
 import { SqliteCheckpointStore, SqliteObserverStore } from '@capix/observer-service';
 
 const [path, mode, boundary] = process.argv.slice(2);
@@ -20,7 +21,7 @@ const crash = (name) => {
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 const point = (execute, requires = {}, uses = [], references = {}) => ({ state: codec, references, resume: { requires, uses, execute } });
 const cp = (key, points) => ({ key, version: 1, input: codec, output: codec, points: Object.entries(points).map(([name, value]) => ({ name, ...value })) });
-class Model extends AttemptDefinition {
+class Model extends NodeDefinition {
   name = 'model';
   label = 'model';
   source = 'test';
@@ -33,11 +34,11 @@ class Model extends AttemptDefinition {
   };
 }
 const model = new Model();
-class Request extends OperationDefinition {
+class Request extends GroupDefinition {
   name = 'request';
   label = 'request';
   source = 'test';
-  children = [model];
+  members = [model];
   checkpoint = cp('chain.request', { feedback: point((_work, state) => state.output) });
   run = {
     requires: {},
@@ -76,8 +77,8 @@ async function consume(work, child, allowCrash, points) {
 }
 const resume = (work, _state, saved) => consume(work, work.children.resume(saved.child), false, executionPoints);
 const executionPoints = cp('chain.execution', { waiting: point(resume, requires, [request], { child: childReference(request) }), reception: point(resume, requires, [request], { child: childReference(request) }), accepted: point((_work, state) => state.output) }).points;
-class Conversation extends ExecutionDefinition {
-  children = [request];
+class Conversation extends GroupDefinition {
+  members = [request];
   checkpoint = { key: 'chain.execution', version: 1, input: codec, output: codec, points: executionPoints };
   run = {
     requires,
@@ -89,8 +90,8 @@ class Conversation extends ExecutionDefinition {
   };
 }
 const conversation = new Conversation();
-class Root extends RuntimeDefinition {
-  children = [conversation];
+class Root extends SceneDefinition {
+  members = [conversation];
   checkpoint = cp('chain.runtime', {
     waiting: point(
       async (work, _state, saved) => {
@@ -117,10 +118,10 @@ const facts = [];
 const store = new SqliteCheckpointStore(database);
 const save = store.save.bind(store);
 store.save = (image, revision) => {
-  if (image.frame.owner.level === 'runtime') put('rootId', image.frame.owner.contextId);
+  if (image.frame.owner.kind === 'scene') put('rootId', image.frame.owner.contextId);
   return save(image, revision);
 };
-const runtime = assembleRuntime(new Root(), { checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } }, providers: [TranscriptResource.append.provide(() => transcript)], source: { runtime: () => null, entry: () => null, capture: () => null } });
+const runtime = installCallable(new Root(), { checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } }, providers: [TranscriptResource.append.provide(() => transcript)], source: { capture: () => null } });
 const output = mode === 'start' ? await runtime.run({ question: 'question' }, {}) : await runtime.resume(saved('rootId'), {});
 process.stdout.write(JSON.stringify({ output, messages: transcript.exportState().messages, appends: transcript.exportState().appends, calls: Number(saved('modelCalls')), terminal: store.read(saved('rootId')).delivery, restoredChildren: facts.filter((fact) => fact.kind === 'child-restored').map((fact) => ({ mode: fact.mode, contextId: fact.child.identity.contextId, state: fact.child.state.kind })), recovery: facts.filter((fact) => fact.kind === 'installed').map((fact) => ({ activityId: fact.activityId, contextId: fact.contextId, children: fact.frame.children.length })) }));
 content.close();

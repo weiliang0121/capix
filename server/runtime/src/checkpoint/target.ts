@@ -24,7 +24,7 @@ export function checkpointTarget(child: CheckpointChild, binding?: CheckpointBin
     return output;
   };
   const view = Object.freeze({
-    context: Object.freeze({ ...invocationContextView(context), level: child.identity.level, signal }),
+    context: Object.freeze({ ...invocationContextView(context), kind: child.identity.kind, signal }),
     origin: Object.freeze({ contextId: context.id }),
     sequence: 0,
     ...(failure ? { failure } : {}),

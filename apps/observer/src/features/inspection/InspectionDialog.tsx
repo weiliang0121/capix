@@ -29,7 +29,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
       <DialogContent className="inspector-dialog">
         <DialogHeader>
           <div className="eyebrow">
-            问答 {String(number).padStart(2, '0')} {call ? ` / ${call.recordType === 'runtime' ? '运行调用' : call.recordType === 'execution' ? '执行' : call.recordType === 'operation' ? '操作' : '意图'}` : ''}
+            问答 {String(number).padStart(2, '0')} {call ? ` / ${call.recordType === 'scene' ? '场景' : call.recordType === 'group' ? '组合' : '处理'}` : ''}
           </div>
           <DialogTitle>{call?.label ?? '这一轮交流'}</DialogTitle>
           <DialogDescription asChild>
@@ -173,7 +173,7 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
                 <TabsContent value="context">
                   <p className="subtle">记录捕获的上下文，不是运行中 Context 的实时副本。</p>
                   <DataBlock title="调用关联" value={{ contextId: call?.contextId ?? detail.contextId, executionRecordId: detail.id, parentRecordId: call?.parentId, operationInstanceId: call?.operationInstanceId }} />
-                  {call?.recordType !== 'runtime' && (
+                  {call?.recordType !== 'scene' && (
                     <div className="detail-grid">
                       <section>{detail.settingsState === 'available' ? <DataBlock title="本次执行的配置快照" value={detail.settings} /> : <p className="empty-note">{detail.settingsState === 'multiple' ? '本次执行使用了多个配置供给，请查看对应调用的资源事实。' : detail.settingsState === 'inconsistent' ? '同一配置供给的记录不一致，无法展示统一快照。' : '本次执行尚无已记录的配置访问。'}</p>}</section>
                       <DataBlock title="固定消息范围" value={detail.transcriptRange} />

@@ -1,18 +1,18 @@
 # 正式消息、活跃材料与分段
 
-Transcript 是环境独立创建的内容实体，具有自己的 UID 和 revision，不属于 R 的内部数据范围。它保留全部正式 user/assistant 消息；`get/ref/snapshot/length` 面向全部消息，绝对索引不变。正式消息只增不改；是否进入下一次模型材料，由独立于正文的活跃索引决定。
+Transcript 是环境独立创建的内容实体，具有自己的 UID 和 revision，不属于 Scene 的内部数据范围。它保留全部正式 user/assistant 消息；`get/ref/snapshot/length` 面向全部消息，绝对索引不变。正式消息只增不改；是否进入下一次模型材料，由独立于正文的活跃索引决定。
 
 ```text
-R 正式追加输入 → E 获得 message / messageIndex
+Scene 正式追加输入 → 任务 Group 获得 message / messageIndex
                       ↓
-            prepareContext O（可先运行维护 O）
+            prepareContext Group（可先运行维护 Group）
                       ↓
         活跃消息值 + 活跃记忆值 + 复合版本依据
                       ↓
        理解 / 回答 / 提取使用同一份固定材料
 ```
 
-默认服务不再通过 E entry 接纳或切段。R 使用普通 append 资源；E 建立时固定配置及原文定位，在准备 O 中才捕获真实材料。当前输入单独传递，历史数组排除本次 messageIndex，避免重复装载；其他活跃消息完整进入下游请求。不再进行隐式最近轮次保留、模型选择或按容量截取前缀；实际请求超限明确失败，正式输入仍保留。
+默认服务由 Scene 使用普通 append 资源接纳输入；任务 Group 的显式来源绑定固定配置及原文定位，在准备 Group 中才捕获真实材料。没有特化的 E entry。当前输入单独传递，历史数组排除本次 messageIndex，避免重复装载；其他活跃消息完整进入下游请求。不再进行隐式最近轮次保留、模型选择或按容量截取前缀；实际请求超限明确失败，正式输入仍保留。
 
 `ActiveContent` 由 `ConversationContent` 持有，只管理已有消息索引和记忆 ID，不复制、删除或修改这些实体。显式维护策略可决定哪些内容退出活跃集合，不要求先生成替代记忆；保留来源索引也不表示运行时沿引用重新加载原文。模型材料、维护边界、持久索引和恢复限制见 [活跃材料与维护](active-content.md)。
 
@@ -28,7 +28,7 @@ Transcript 的 append/appendFrom/startSegment 在审查与落实后通知必要�
 
 Transcript 自身负责消息和段边界的接纳、落实，以及本地 revision。一次非空批量追加或有效切段推进一次 revision；消息 index 仍只定位正文。没有捕获器、没有 Recorder 时，revision 同样推进；它不是网络交付游标。
 
-`new Transcript(messages, { changes, observation: recording.transcript })` 在接纳初始消息前固定两个可选出口；initializeObserver 在环境层分别建立 Transcript、Memories、R 和所需接线。createBoundRuntime 不创建内容实体。另有可选 persistence 端口，在内存变更和两个发布出口之前同步提交；restore 不执行该端口或重发事件。Transcript 的 changes 只要求 `ChangeCapture<TranscriptEvent>`。一个 `ChangeBuffer<A | B>` 可以共享给只产生 A 和只产生 B 的来源，不要求每个对象独占捕获器。服务已将消息、记忆、调用及记录登记接入同一捕获器。
+`new Transcript(messages, { changes, observation: recording.transcript })` 在接纳初始消息前固定两个可选出口；initializeObserver 在环境层分别建立 Transcript、Memories、Scene 与 Driver 和所需接线。driver.bind 不创建内容实体。另有可选 persistence 端口，在内存变更和两个发布出口之前同步提交；restore 不执行该端口或重发事件。Transcript 的 changes 只要求 `ChangeCapture<TranscriptEvent>`。一个 `ChangeBuffer<A | B>` 可以共享给只产生 A 和只产生 B 的来源，不要求每个对象独占捕获器。服务已将消息、记忆、调用及记录登记接入同一捕获器。
 
 ```text
 整批接纳 → 固定事件正文 → 正式更新集合及 revision
@@ -36,7 +36,7 @@ Transcript 自身负责消息和段边界的接纳、落实，以及本地 revis
                           └─ 可选观察（记录预设可生成 TranscriptRecord）
 ```
 
-TranscriptEvent 固定 transcriptId、revision、occurredAt 与 change；messages-appended 保存 start 和已接纳的不可变消息，segment-started 保存 previousStart/start/end。事件及其正文、消息数组均冻结；消息正文复用 Transcript 已冻结的对象。事件不携带活的 Transcript 或调用记录，不从后来的状态反推。通过工作资源端点发生的变化携带 origin.contextId，即使未开启记录也保留来源；当前服务的正式输入追加归已经建立的 R 调用；调用外变更允许没有 origin。内部可选 RecordChangeSource 只用于对应 TranscriptRecord 的记录归属。记录保存 transcriptId/revision 与追加/分段范围，不携带消息正文；它与携带消息正文的变化事件是两个不同出口。
+TranscriptEvent 固定 transcriptId、revision、occurredAt 与 change；messages-appended 保存 start 和已接纳的不可变消息，segment-started 保存 previousStart/start/end。事件及其正文、消息数组均冻结；消息正文复用 Transcript 已冻结的对象。事件不携带活的 Transcript 或调用记录，不从后来的状态反推。通过工作资源端点发生的变化携带 origin.contextId，即使未开启记录也保留来源；当前服务的正式输入追加归已经建立的 Scene 调用；调用外变更允许没有 origin。内部可选 RecordChangeSource 只用于对应 TranscriptRecord 的记录归属。记录保存 transcriptId/revision 与追加/分段范围，不携带消息正文；它与携带消息正文的变化事件是两个不同出口。
 
 ChangeBuffer 只暂存尚未取走的事实。capture 不调用消费者；take 转移当前批次、返回冻结数组并清空待取集合。不同来源的事件按捕获顺序放在一个批次中，但批次不表示业务事务。来源负责正文不可变，缓冲器不解释或复制泛型正文。服务已默认装配并通过 wait/take 持续消费；wait 只唤醒异步消费，不在 capture 内运行消费者。缓冲不持有已取出历史，不承诺持久化、消费确认、失败重投或重放。慢网络连接的缓存上限由发送者处理。
 

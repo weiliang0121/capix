@@ -1,4 +1,4 @@
-import type { ExecutionInvocationCallbacks, InvocationContext, InvocationStarted } from '@capix/server-runtime';
+import type { CallableInvocationCallbacks, InvocationContext, InvocationStarted } from '@capix/server-runtime';
 
 export const started: InvocationStarted<string, number, InvocationContext<string, number>> = (context, invocation) => {
   const input: string = context.input;
@@ -7,13 +7,13 @@ export const started: InvocationStarted<string, number, InvocationContext<string
   void contextId;
 };
 
-export const callbacks: ExecutionInvocationCallbacks<string, number, Record<string, never>> = {
+export const callbacks: CallableInvocationCallbacks<string, number, Record<string, never>> = {
   started(context, invocation) {
     const input: string = context.input;
-    const level: 'execution' = context.level;
+    const kind: 'scene' | 'group' | 'node' = context.kind;
     const contextId: string = invocation.identity.contextId;
     void input;
-    void level;
+    void kind;
     void contextId;
     return undefined;
   },

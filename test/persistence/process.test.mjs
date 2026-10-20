@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SqliteObserverStore, initializeObserver, observeOverview, ObservationFeed } from '@capix/observer-service';
-import { ExecutionRecord, ExecutionRecordHelper } from '@capix/server-runtime/recording';
+import { CallableRecord, CallableRecordHelper } from '@capix/server-runtime/recording';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 for (const mode of ['content', 'running', 'finished']) {
@@ -43,21 +43,21 @@ for (const mode of ['content', 'running', 'finished']) {
       { persistence: store },
     );
     assert.equal(modelCalls, 0);
-    assert.equal(environment.runtime.running, false);
+    assert.equal(environment.driver.isRunning(environment.scene), false);
     if (mode === 'content') {
       assert.equal(environment.transcript.get(0).content, 'durable before memory application');
       assert.equal(environment.transcript.revision, 1);
       return;
     }
     assert.equal(environment.recordingArchives[0].state, 'open');
-    const old = environment.book.values().find((record) => record instanceof ExecutionRecord);
+    const old = environment.book.values().find((record) => record instanceof CallableRecord && record.role === 'conversation-task');
     assert.ok(old);
     assert.equal(old.historical, true);
     const overview = observeOverview(environment);
     assert.equal(overview.executions[0].archive.state, 'open');
     assert.equal(old.status, mode === 'running' ? 'running' : 'succeeded');
     const archive = overview.executions[0].archive;
-    const detail = { ...ExecutionRecordHelper.snapshot(environment.recorder, old.id), archive };
+    const detail = { ...CallableRecordHelper.snapshot(environment.recorder, old.id), archive };
     validateExecutionRecordSnapshot(detail);
     if (mode === 'finished') assert.equal(environment.transcript.get(1).content, 'durable answer');
     const frames = [];

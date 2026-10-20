@@ -4,7 +4,7 @@ import { ExecutionRecordHelper, ChildCallFailure } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AttemptContext, Recorder, RecordBook, ExceptionContract } from '@capix/server-runtime';
+import { CallableContext, Recorder, RecordBook, ExceptionContract } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { TestOperation } from './fixtures/operation.mjs';
@@ -43,7 +43,7 @@ test('one Attempt instance creates independent contexts per call and leaves pare
   await assert.rejects(attempt.call(callFor(operation), 'invalid'), (error) => error instanceof ChildCallFailure && error.exception === failure);
   assert.equal(operation.status, 'running');
   assert.equal(await attempt.call(callFor(operation), 'accepted'), 'accepted');
-  assert.ok(contexts.every((context) => context instanceof AttemptContext && context.signal === operation.signal && context.operationContext === undefined));
+  assert.ok(contexts.every((context) => context instanceof CallableContext && context.signal === operation.signal && context.operationContext === undefined));
   assert.notEqual(contexts[0].id, contexts[1].id);
   assert.equal(contexts[0].state.error, failure);
   assert.equal(contexts[1].state.output, 'accepted');
@@ -174,7 +174,7 @@ test('the operation owns branching and can explicitly call the same action twice
     const snapshot = observeCall(runtime.recording, callFor(context));
     validateExecutionRecordSnapshot(snapshot);
     assert.equal(snapshot.attempts.length, input === 0 ? 2 : 1);
-    assert.ok(snapshot.attempts.every((attempt) => attempt.name === 'addOne' && attempt.operationId === snapshot.operations[0].id));
+    assert.ok(snapshot.attempts.every((attempt) => attempt.name === 'addOne' && attempt.parentId === snapshot.operations[0].id));
     assert.equal(new Set(snapshot.attempts.map((attempt) => attempt.contextId)).size, snapshot.attempts.length);
   }
 });

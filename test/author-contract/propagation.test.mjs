@@ -1,12 +1,13 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, ChildCallFailure, assembleRuntime, defineRuntime, defineExecution, defineOperation, defineAttempt } from '@capix/server-runtime';
+import { ExceptionContract, ChildCallFailure, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
 
 const rejected = new ExceptionContract('AUTHOR_REJECTION');
 const metadata = { name: 'fixture', label: 'fixture', source: 'test' };
 function runtime(operation) {
-  const execution = defineExecution()({
-    children: [operation],
+  const execution = defineGroup()({
+    members: [operation],
     run: {
       async execute(work) {
         const child = work.children.create(operation, work.input);
@@ -15,8 +16,8 @@ function runtime(operation) {
       },
     },
   });
-  const root = defineRuntime()({
-    children: [execution],
+  const root = defineScene()({
+    members: [execution],
     run: {
       async execute(work) {
         const child = work.children.create(execution, work.input);
@@ -25,9 +26,9 @@ function runtime(operation) {
       },
     },
   });
-  return assembleRuntime(root, { providers: [], source: { capture: () => null } });
+  return installCallable(root, { providers: [], source: { capture: () => null } });
 }
-const attempt = (execute, raises = []) => defineAttempt()({ ...metadata, callee: 'fixture', raises, run: { execute } });
+const attempt = (execute, raises = []) => defineNode()({ ...metadata, callee: 'fixture', raises, run: { execute } });
 
 for (const selected of [0, 1]) {
   test(`author Work identifies selected child ${selected} when one declaration throws the same exception concurrently`, async () => {
@@ -36,9 +37,9 @@ for (const selected of [0, 1]) {
       throw exception;
     }, [rejected]);
     let refs;
-    const operation = defineOperation()({
+    const operation = defineGroup()({
       ...metadata,
-      children: [child],
+      members: [child],
       run: {
         async execute(work) {
           const calls = [work.children.create(child, 'first', { key: 'same' }), work.children.create(child, 'second', { key: 'same' })];
@@ -72,10 +73,10 @@ for (const mode of ['rethrow', 'unwrap', 'replace', 'swallow']) {
       throw original;
     }, [rejected]);
     let ref;
-    const operation = defineOperation()({
+    const operation = defineGroup()({
       ...metadata,
       raises: [rejected],
-      children: [child],
+      members: [child],
       run: {
         async execute(work) {
           const call = work.children.create(child, 'input');
@@ -113,9 +114,9 @@ test('author nested run preserves inner source and independent outer failed rece
   }, [rejected]);
   let outerRef;
   let innerRef;
-  const operation = defineOperation()({
+  const operation = defineGroup()({
     ...metadata,
-    children: [outer, inner],
+    members: [outer, inner],
     run: {
       async execute(work) {
         const first = work.children.create(outer, 'outer');
@@ -153,10 +154,10 @@ test('accepted continuation exposes previous precise source and enables a separa
   const repair = attempt(() => 'fixed');
   let source;
   let repaired;
-  const operation = defineOperation()({
+  const operation = defineGroup()({
     ...metadata,
     maxRounds: 2,
-    children: [failing, repair],
+    members: [failing, repair],
     run: {
       uses: [failing],
       async execute(work) {
@@ -198,9 +199,9 @@ test('declining after a caught repair rejection preserves the original unhandled
   const repair = attempt(() => {
     throw secondary;
   }, [rejected]);
-  const operation = defineOperation()({
+  const operation = defineGroup()({
     ...metadata,
-    children: [first, repair],
+    members: [first, repair],
     run: {
       uses: [first],
       execute(work) {

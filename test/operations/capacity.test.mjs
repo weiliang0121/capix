@@ -4,7 +4,7 @@ import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Transcript, BoundRuntime } from '@capix/server-runtime';
+import { Transcript } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 import { GenerateAnswerDefinition, estimateCapacity } from '@capix/observer-service';
@@ -91,26 +91,26 @@ test('the observed execution uses fixed active material without a selection-mode
   assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
   assert.equal(requests.length, 2);
   assert.equal(
-    facts.operations.some((record) => record.operation === 'selection'),
+    facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).some((record) => record.name === 'selection'),
     false,
   );
-  for (const decision of facts.operations.filter((record) => record.operation === 'conversationDecision')) {
+  for (const decision of facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).filter((record) => record.name === 'conversationDecision')) {
     assert.deepEqual(
       decision.value.input.request.history.map((item) => item.index),
       [0, 1, 2],
     );
     assert.equal(
-      facts.attempts.some((record) => record.operationId === decision.id),
+      facts.calls.filter((item) => item.structureKind === 'node').some((record) => record.parentId === decision.id),
       false,
       'routing consumes fixed active material without another model request',
     );
   }
-  const generation = facts.operations.find((record) => record.operation === 'answer');
+  const generation = facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).find((record) => record.name === 'answer');
   assert.deepEqual(
     generation.value.input.context.selectedMessages.map((item) => item.index),
     [0, 1, 2],
   );
-  const prepared = facts.attempts.find((record) => record.operationId === generation.id && record.name === 'prepareModelRequest');
+  const prepared = facts.calls.filter((item) => item.structureKind === 'node').find((record) => record.parentId === generation.id && record.name === 'prepareModelRequest');
   assert.deepEqual(readOutput(prepared.value), requests[0]);
   assert.deepEqual(
     JSON.parse(requests[0].messages[1].content).history.map((item) => item.index),
@@ -130,7 +130,7 @@ test('the observed execution uses fixed active material without a selection-mode
   assert.equal(rejected.execution.value.error.code, 'CAPACITY_EXCEEDED');
   assert.ok(rejected.execution.value.error.detail.required > 1);
   assert.equal(
-    rejected.operations.some((record) => record.operation === 'requestModel'),
+    rejected.calls.filter((item) => item.structureKind === 'group' && item.id !== rejected.execution.id).some((record) => record.name === 'requestModel'),
     false,
   );
 });

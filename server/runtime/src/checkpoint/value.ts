@@ -1,3 +1,4 @@
+import { RuntimeError } from '../errors/error.js';
 import type { CheckpointValue, CheckpointImage, CheckpointDelivery, CheckpointHead, CheckpointChild, CheckpointReference } from './contract.js';
 
 export const CHECKPOINT_MAX_BYTES = 8 * 1024 * 1024;
@@ -52,7 +53,7 @@ const object = (value: any): value is Record<string, any> => value !== null && t
 const text = (value: any): boolean => typeof value === 'string' && value.trim().length > 0 && value.length <= 1024;
 const integer = (value: any, minimum = 0): boolean => Number.isSafeInteger(value) && value >= minimum;
 const contract = (value: any): boolean => object(value) && text(value.key) && integer(value.version, 1);
-const identity = (value: any): boolean => object(value) && text(value.contextId) && ['runtime', 'execution', 'operation', 'attempt'].includes(value.level) && (value.parentContextId === undefined || text(value.parentContextId));
+const identity = (value: any): boolean => object(value) && text(value.contextId) && ['scene', 'group', 'node'].includes(value.kind) && !Object.hasOwn(value, 'level') && (value.parentContextId === undefined || text(value.parentContextId));
 const progress = (value: any): boolean => object(value) && integer(value.round, 1) && value.round <= 2 && ['execute', 'receive', 'handling'].includes(value.phase) && Object.hasOwn(value, 'currentInput');
 
 /** References never substitute for the complete parent-owned relationship frame. */
@@ -71,15 +72,16 @@ export function checkpointReference(child: CheckpointChild): CheckpointReference
 
 export function cloneCheckpointImage(value: unknown): CheckpointImage {
   const image: any = cloneCheckpointValue(value);
-  if (!object(image) || !text(image.id) || image.formatVersion !== 3 || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 3 is supported');
+  if (object(image) && Number.isSafeInteger(image.formatVersion) && image.formatVersion !== 4) throw new RuntimeError('CHECKPOINT_FORMAT_UNSUPPORTED', 'Only checkpoint formatVersion 4 is supported; historical content and records remain readable.', { formatVersion: image.formatVersion });
+  if (!object(image) || !text(image.id) || image.formatVersion !== 4 || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 4 is supported');
   const frame = image.frame;
   if (!object(frame) || !identity(frame.owner) || !integer(frame.round, 1) || frame.round > 2 || frame.phase !== 'execute' || !Object.hasOwn(frame, 'input') || !Object.hasOwn(frame, 'currentInput') || !integer(frame.nextChildOrder) || !Array.isArray(frame.children) || frame.children.length > 4096) fail('invalid frame');
   const ids = new Set<string>();
   let previousOrder = -1;
   for (const child of frame.children) {
     if (!object(child) || !identity(child.identity) || child.identity.parentContextId !== frame.owner.contextId || child.identity.contextId === frame.owner.contextId || ids.has(child.identity.contextId) || !integer(child.round, 1) || child.round > frame.round || !integer(child.order) || child.order >= frame.nextChildOrder || child.order <= previousOrder || !Object.hasOwn(child, 'input') || !object(child.target) || Object.keys(child.target).length !== 1 || !integer(child.target.position) || (child.key !== undefined && !text(child.key)) || (child.contract !== undefined && !contract(child.contract))) fail('invalid child identity, declaration position or order');
-    const allowed = frame.owner.level === 'runtime' ? ['execution'] : frame.owner.level === 'execution' ? ['operation'] : frame.owner.level === 'operation' ? ['operation', 'attempt'] : [];
-    if (!allowed.includes(child.identity.level)) fail('invalid child level');
+    const allowed = frame.owner.kind === 'node' ? [] : ['group', 'node'];
+    if (!allowed.includes(child.identity.kind)) fail('invalid child structure kind');
     const state = child.state;
     if (!object(state)) fail('invalid child state');
     if (state.kind === 'waiting') {

@@ -1,4 +1,4 @@
-import { AttemptDefinition, OperationDefinition, type AttemptWork, type OperationWork, type AcceptWork, type ChildCalls, type OutputDeclaration } from '@capix/server-runtime';
+import { NodeDefinition, GroupDefinition, type NodeWork, type GroupWork, type AcceptWork, type ChildCalls, type OutputDeclaration } from '@capix/server-runtime';
 
 const text: OutputDeclaration<string, string> = {
   result(value) {
@@ -10,7 +10,7 @@ const text: OutputDeclaration<string, string> = {
     return value;
   },
 };
-class Leaf extends AttemptDefinition<string, string, Record<string, never>, Record<string, never>, string> {
+class Leaf extends NodeDefinition<string, string, Record<string, never>, Record<string, never>, string> {
   name = 'leaf';
   label = 'Leaf';
   source = 'test';
@@ -18,29 +18,29 @@ class Leaf extends AttemptDefinition<string, string, Record<string, never>, Reco
   readonly output = text;
   readonly run = {
     requires: {},
-    execute(work: AttemptWork<string, string, Record<string, never>, string>) {
+    execute(work: NodeWork<string, string, Record<string, never>, string>) {
       work.output.emit(work.input);
       // @ts-expect-error only declared string deltas may be emitted
       work.output.emit(42);
       return work.input;
     },
-    accept(work: AcceptWork<'attempt', string, string, Record<string, never>>) {
+    accept(work: AcceptWork<'node', string, string, Record<string, never>>) {
       // @ts-expect-error reception does not own a writer
       work.output.emit('late');
       return work.delivered;
     },
   };
 }
-class Parent extends OperationDefinition<string, string, Record<string, never>, Record<string, never>, string> {
+class Parent extends GroupDefinition<string, string, Record<string, never>, Record<string, never>, string> {
   name = 'parent';
   label = 'Parent';
   source = 'test';
   readonly leaf = new Leaf();
-  readonly children = [this.leaf];
+  readonly members = [this.leaf];
   readonly output = text;
   readonly run = {
     requires: {},
-    execute: async (work: OperationWork<string, string, Record<string, never>, Leaf, string>) => {
+    execute: async (work: GroupWork<string, string, Record<string, never>, Leaf, string>) => {
       const call = work.children.create(this.leaf, work.input, {
         output: {
           receive(event) {
@@ -59,7 +59,7 @@ class Parent extends OperationDefinition<string, string, Record<string, never>, 
   };
 }
 void new Parent();
-declare const typed: AttemptDefinition<string, string, Record<string, never>, Record<string, never>, string>;
+declare const typed: NodeDefinition<string, string, Record<string, never>, Record<string, never>, string>;
 declare const children: ChildCalls<typeof typed>;
 children.create(typed, 'input', {
   output: {

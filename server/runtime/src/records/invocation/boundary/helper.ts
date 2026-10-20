@@ -1,3 +1,4 @@
+import { CallableRecord } from '../../callable/record.js';
 import { sortBy } from 'es-toolkit/array';
 import { isFinite } from 'es-toolkit/compat';
 import type { InvocationBoundaryValue } from '@capix/protocol';
@@ -13,7 +14,7 @@ export class InvocationBoundaryRecordHelper {
   static create(recorder: Recorder, location: { start: number; scopeId?: string; executionId?: string; callId: string; occurredAt?: string; offsetMs?: number }, type: InvocationBoundaryValue['type']): InvocationBoundaryRecord {
     const scopeId = location.scopeId ?? location.executionId ?? location.callId;
     const timingRecord = recorder.book.get(scopeId);
-    if (!(timingRecord instanceof ExecutionRecord || timingRecord instanceof RuntimeCallRecord)) throw new Error('Invocation timing scope does not exist');
+    if (!(timingRecord instanceof CallableRecord || timingRecord instanceof ExecutionRecord || timingRecord instanceof RuntimeCallRecord)) throw new Error('Invocation timing scope does not exist');
     const invocationRecord = recorder.book.get(location.callId);
     if (!(invocationRecord instanceof InvocationRecord) || (invocationRecord !== timingRecord && !recorder.tree.descendants(timingRecord.id).includes(invocationRecord))) throw new Error('Boundary target is outside its timing scope');
     const expectedStatus = type === 'call' ? 'running' : type === 'return' ? 'succeeded' : 'failed';
@@ -38,7 +39,7 @@ export class InvocationBoundaryRecordHelper {
 
   static findByScope(recorder: Recorder, scopeId: string): readonly InvocationBoundaryRecord[] {
     const timingRecord = recorder.book.get(scopeId);
-    if (!(timingRecord instanceof ExecutionRecord || timingRecord instanceof RuntimeCallRecord)) throw new Error('Invocation timing scope does not exist');
+    if (!(timingRecord instanceof CallableRecord || timingRecord instanceof ExecutionRecord || timingRecord instanceof RuntimeCallRecord)) throw new Error('Invocation timing scope does not exist');
     return sortBy(
       recorder.tree.descendants(scopeId).filter((record): record is InvocationBoundaryRecord => record instanceof InvocationBoundaryRecord && record.scopeId === scopeId),
       [(boundary) => boundary.sequence],

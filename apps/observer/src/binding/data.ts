@@ -58,7 +58,7 @@ export function createDataProjection() {
     const abandonmentChanged = state.submission?.feedback.status === 'unavailable' && Boolean(previous?.queue.waiting.length) !== Boolean(state.queue.waiting.length);
     const conversation = content !== previousContent || previous?.submissions !== state.submissions || previous?.submission !== state.submission || previous?.transcripts !== state.transcripts || previous?.queue.blocked !== state.queue.blocked || abandonmentChanged || admissionQueueChanged ? projectResponses(content, state) : data.conversation;
     if (previousContextId !== state.contextId || previousExecutions !== observation.overview.executions) {
-      runningId = state.contextId ? (observation.overview.executions.find((item) => item.calls.some((call) => call.recordType === 'execution' && call.contextId === state.contextId))?.id ?? '') : '';
+      runningId = state.contextId ? (observation.overview.executions.find((item) => item.calls.some((call) => call.id === item.id && call.contextId === state.contextId))?.id ?? '') : '';
       previousContextId = state.contextId;
       previousExecutions = observation.overview.executions;
     }

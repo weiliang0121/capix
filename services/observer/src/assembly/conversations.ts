@@ -6,7 +6,7 @@ import type { ModelInitialization } from '../conversation/model/types.js';
 import { conversationTitle } from '../conversation/title.js';
 import { ModelSource } from '../conversation/model/source.js';
 import type { WorkspaceFiles } from '../files/index.js';
-import type { ContextMaintenancePolicy } from '../conversation/operations/context/maintain.js';
+import type { ContextMaintenancePolicy } from '../conversation/group/context/maintain.js';
 import type { ConversationDecisionDefinition } from '../conversation/decision/types.js';
 import type { SqliteObserverStore } from '../persistence/store.js';
 import { initializeObserver } from './initialize.js';

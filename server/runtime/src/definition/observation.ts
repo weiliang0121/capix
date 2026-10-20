@@ -1,4 +1,4 @@
-import type { InvocationLevel } from '@capix/protocol';
+import type { CallableKind } from '@capix/protocol';
 import type { ResourceRequirements } from '../resource/bindings.js';
 import type { InvocationFact } from '../observation/facts.js';
 
@@ -16,7 +16,7 @@ export interface ObservationDeclaration<Fact> {
 
 /** Static declaration shape for capability-specific checks; never a live invocation. */
 export interface ObservationDeclarationScope {
-  readonly level: InvocationLevel;
+  readonly kind: CallableKind;
   readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
 }
 

@@ -1,8 +1,8 @@
 import { observeCall } from '../fixtures/observation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, ExecutionContext, ExceptionContract, Recorder, RecordBook, ExecutionRecordHelper, invocationRecording } from '@capix/server-runtime';
-import { createBoundRuntime } from '../fixtures/runtime.mjs';
+import { Invocation, InvocationContext, ExceptionContract, Recorder, RecordBook, invocationRecording } from '@capix/server-runtime';
+import { createBoundRuntime, observeCall as snapshotCall } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 
 const rejected = new ExceptionContract('TEST_OUTPUT_REJECTED');
@@ -244,7 +244,7 @@ test('record-only IO descriptions preserve live values and handling output refer
   const context = call.context;
   assert.equal(await call.run(), output);
   assert.equal(context.state.output, output);
-  const snapshot = ExecutionRecordHelper.snapshot(runtime.recorder, call.record.id);
+  const snapshot = snapshotCall(runtime.recording, call);
   validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(snapshot.execution.value.input, { text: 'original' });
   assert.deepEqual(readOutput(snapshot.execution.value), { text: 'fallback' });
@@ -266,7 +266,7 @@ test('failed record delivery exposes error category without live failure objects
   });
   const context = call.context;
   await assert.rejects(call.run(), (error) => error.exception === exception && error.cause === exception);
-  const snapshot = ExecutionRecordHelper.snapshot(runtime.recorder, call.record.id);
+  const snapshot = snapshotCall(runtime.recording, call);
   validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(snapshot.execution.value.failure, { kind: 'exception', phase: 'execute', contextId: context.id, contract: rejected.name });
   assert.equal(Object.hasOwn(snapshot.execution.value.processes.at(-1).failure, 'error'), false);

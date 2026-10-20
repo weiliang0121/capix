@@ -3,10 +3,10 @@ import { invocationRecording } from '@capix/server-runtime';
 /** A real R declaration used by tests that focus on one selected E. */
 export function runtimeDefinition(execution) {
   return {
-    level: 'runtime',
+    kind: 'scene',
     maxRounds: 1,
     raises: execution.raises ?? [],
-    children: [execution],
+    members: [execution],
     run: {
       requires: {},
       uses: [execution],
@@ -22,7 +22,7 @@ export function runtimeDefinition(execution) {
 /** Recording is an explicit declaration throughout the tested subtree. */
 export function recordDefinitions(definition) {
   definition.observation ??= [invocationRecording({}, { failure: 'propagate' })];
-  for (const child of definition.children ?? []) recordDefinitions(child);
+  for (const child of definition.members ?? []) recordDefinitions(child);
   return definition;
 }
 

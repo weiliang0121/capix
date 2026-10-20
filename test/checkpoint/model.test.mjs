@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, MemoryCheckpointStore, checkpointPoint, childReference, assembleRuntime } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
 import { RequestModelDefinition, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 const request = { model: 'fixture', messages: [{ role: 'user', content: 'fixed input' }], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 256, stream: false };
@@ -45,8 +46,8 @@ function parentCheckpoint(key, child) {
 function harness(t, provider, store, facts = [], progress = () => {}, model = new RequestModelDefinition('answer')) {
   const interactions = new ModelInteractions(new ModelSource(provider));
   t.after(() => interactions.close());
-  class Execution extends ExecutionDefinition {
-    children = [model];
+  class Execution extends GroupDefinition {
+    members = [model];
     checkpoint = parentCheckpoint('fixture.model.execution', model);
     run = {
       requires: RequestModelDefinition.requires,
@@ -59,8 +60,8 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
     };
   }
   const execution = new Execution();
-  class Root extends RuntimeDefinition {
-    children = [execution];
+  class Root extends SceneDefinition {
+    members = [execution];
     checkpoint = parentCheckpoint('fixture.model.runtime', execution);
     run = {
       requires: {},
@@ -72,10 +73,10 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
       },
     };
   }
-  const runtime = assembleRuntime(new Root(), {
+  const runtime = installCallable(new Root(), {
     ...(store ? { checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } } : {}),
     providers: [ModelSettingsResource.snapshot.provide(() => settings), ModelSettingsResource.timeout.provide(() => settings.timeoutMs), ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)],
-    source: { entry: () => null, capture: () => null, progress: () => ({ receive: progress }) },
+    source: { capture: () => null, progress: () => ({ receive: progress }) },
   });
   return { runtime, model };
 }
@@ -150,14 +151,14 @@ for (const pending of [false, true]) {
       restoredStore,
       facts,
     );
-    const root = store.images.find((image) => image.frame.owner.level === 'runtime');
+    const root = store.images.find((image) => image.frame.owner.kind === 'scene');
     const result = await restored.runtime.resume(root.frame.owner.contextId, {});
     assert.deepEqual(result, output);
     assert.equal(constructions, 0);
     assert.equal(calls, 1);
     assert.ok(facts.some((fact) => fact.kind === 'installed' && fact.contextId === modelImage.frame.owner.contextId));
     assert.equal(facts.filter((fact) => fact.kind === 'resource').length, 0);
-    assert.equal(facts.filter((fact) => fact.kind === 'activity' && fact.fact.identity.level === 'attempt').length, 0, 'installing completed A facts never re-executes or re-observes those A calls');
+    assert.equal(facts.filter((fact) => fact.kind === 'activity' && fact.fact.identity.kind === 'node').length, 0, 'installing completed A facts never re-executes or re-observes those A calls');
   });
 }
 
@@ -188,7 +189,7 @@ test('request-model recovery rejects a missing acceptance or mismatched saved ou
   const store = new CapturedStore();
   const original = harness(t, { invoke: async () => output }, store);
   await original.runtime.run(request, {});
-  const rootId = store.images.find((image) => image.frame.owner.level === 'runtime').frame.owner.contextId;
+  const rootId = store.images.find((image) => image.frame.owner.kind === 'scene').frame.owner.contextId;
   for (const mutate of [
     (image) => {
       image.frame.children[0].state.reception = { kind: 'pending' };

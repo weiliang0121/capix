@@ -5,7 +5,7 @@ import { modelTextSchema } from '../model/schema.js';
 
 // The E catalog is heterogeneous. Each adapter captures its concrete Definition,
 // validates selectable arguments and constructs that child's exact input before calling.
-type CapabilityContract = ChildContractsOf<'execution'>;
+type CapabilityContract = ChildContractsOf<'group'>;
 
 // Heterogeneous dispatch carries only identity and start; the adapter reopens
 // the exact declaration before accepting its result.

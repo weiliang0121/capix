@@ -129,7 +129,7 @@ R 最终通过 `run(input, controls)` 驱动唯一已装配 E；现有 `run(work
 
 ### 3. Service 的 R 声明混入了实体供应与 E 业务策略
 
-[ConversationRuntimeDefinition](../services/observer/src/conversation/definition.ts) 当前既接收 `ModelProvider | (() => ModelProvider)`，又持有分段函数 `admit` 和供应函数表；[ObserverBinding](../services/observer/src/conversation/binding.ts) 同时负责模型初始化、R 引用、E 绑定、入口资源和对话流交付。
+[ConversationRuntimeDefinition](../services/observer/src/conversation/scene.ts) 当前既接收 `ModelProvider | (() => ModelProvider)`，又持有分段函数 `admit` 和供应函数表；[ObserverBinding](../services/observer/src/conversation/binding.ts) 同时负责模型初始化、R 引用、E 绑定、入口资源和对话流交付。
 
 模型实例／工厂应属于环境供给，供应函数表属于绑定接线。按历史容量选择新分段是 E 入口的具体业务策略，不应放在 R 声明上。R 保留确定的执行次序，不理解模型预算和消息含义。
 
@@ -177,7 +177,7 @@ RuntimeContext 的初步改造已确认：内容实体引用迁出后，仅接�
 
 ### 6. 来源与子关系需要保留准确语义
 
-`Invocation.source` 是纯 ID 的 [ChangeSource](../server/runtime/src/records/source.ts)，不是原实体。业务目前两处使用：E [追加回答](../services/observer/src/conversation/execution.ts)，A [落实记忆](../services/observer/src/conversation/attempt/memory/apply.ts)。其中 callId/executionId/operationId 是记录身份；无 Recorder 时整个 source 为 undefined。现有内容变化事件也不带调用来源，因此无记录时虽然仍有调用进度与内容变化，却不能可靠关联“哪个调用产生了这次变化”。
+`Invocation.source` 是纯 ID 的 [ChangeSource](../server/runtime/src/records/source.ts)，不是原实体。业务目前两处使用：E [追加回答](../services/observer/src/conversation/task.ts)，A [落实记忆](../services/observer/src/conversation/node/memory/apply.ts)。其中 callId/executionId/operationId 是记录身份；无 Recorder 时整个 source 为 undefined。现有内容变化事件也不带调用来源，因此无记录时虽然仍有调用进度与内容变化，却不能可靠关联“哪个调用产生了这次变化”。
 
 需要区分运行来源与记录引用：前者表达已经成立的调用关系，可以从现有 Context 身份和直接父子关系着手；后者表达启用记录后对应的 Record 关系。来源事实由运行机制确定，记录绑定负责记录映射，观测不能靠事件相邻或时间相近猜测归因。不建立新的全局身份平台。先确定最小来源契约；其后如需传入内容变化事件，应同步调整 protocol 和客户端类型，并保持缺省情况下已有行为，不能声称只是内部接线。
 

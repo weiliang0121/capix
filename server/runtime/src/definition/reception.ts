@@ -1,4 +1,4 @@
-import type { InvocationLevel } from '@capix/protocol';
+import type { CallableKind } from '@capix/protocol';
 import type { CheckpointValue } from '../checkpoint/contract.js';
 import type { ChildContract, ChildContractsOf } from './children.js';
 
@@ -21,7 +21,7 @@ export interface ReceptionDefinition<Definition extends ChildContract, Value> {
 
 // Registration is heterogeneous; concrete accept/read sites retain both invariant parameters.
 export type ReceptionRegistration<Definition extends ChildContract = ChildContract> = ReceptionDefinition<any, any> & { readonly child: Definition };
-export type DefinitionReceptions<Level extends InvocationLevel> = Level extends 'attempt' ? never : readonly ReceptionRegistration<ChildContractsOf<Level>>[];
+export type DefinitionReceptions<Kind extends CallableKind> = Kind extends 'node' ? never : readonly ReceptionRegistration<ChildContractsOf<Kind>>[];
 
 type SynchronousCheck<Check extends (value: unknown) => unknown> = [Extract<ReturnType<Check>, PromiseLike<unknown>>] extends [never] ? unknown : never;
 

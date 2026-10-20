@@ -60,12 +60,12 @@ test('resource facts hold plain range locators; calls consume selected content a
   );
   assert.equal(facts.execution.status, 'succeeded');
   assert.deepEqual(
-    facts.operations.map((record) => record.operation),
+    facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).map((record) => record.name),
     ['prepareContext', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
   );
-  assert.equal(facts.attempts.length, 8);
-  assert.equal(facts.events.length, 2 * (1 + facts.operations.length + facts.attempts.length));
-  for (const decision of facts.operations.filter((record) => record.operation === 'conversationDecision')) {
+  assert.equal(facts.calls.filter((item) => item.structureKind === 'node').length, 8);
+  assert.equal(facts.boundaries.filter((event) => event.callId !== facts.rootCall.id).length, 2 * (1 + facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).length + facts.calls.filter((item) => item.structureKind === 'node').length));
+  for (const decision of facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).filter((record) => record.name === 'conversationDecision')) {
     assert.deepEqual(
       decision.value.input.request.history.map((item) => item.index),
       [0],
@@ -79,11 +79,11 @@ test('resource facts hold plain range locators; calls consume selected content a
   assert.equal(rangeFact.value.transcriptId, transcriptFor(input).id);
   assert.equal(rangeFact.value.transcript, undefined);
   assert.ok(snapshots.filter((snapshot) => snapshot.resources.some((fact) => fact.id === rangeFact.id)).every((snapshot) => snapshot.resources.find((fact) => fact.id === rangeFact.id).value.end === 2));
-  for (const record of [...facts.operations, ...facts.attempts]) {
+  for (const record of [...facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id), ...facts.calls.filter((item) => item.structureKind === 'node')]) {
     assert.equal(Object.hasOwn(record.value, 'transcriptRange'), false);
     assert.equal(Object.hasOwn(record.value, 'settings'), false);
   }
-  const assembled = readOutput(facts.attempts.find((record) => record.name === 'assembleContext').value);
+  const assembled = readOutput(facts.calls.filter((item) => item.structureKind === 'node').find((record) => record.name === 'assembleContext').value);
   assert.deepEqual(assembled.message, input);
   assert.deepEqual(assembled.selectedMessages, [{ index: 0, message: transcript.get(0) }]);
   assert.deepEqual(JSON.parse(requests[0].messages[1].content), { message: input, memories: [], history: [{ index: 0, role: 'user', content: '林岚负责海盐项目' }] });

@@ -38,11 +38,11 @@ function fixture(t) {
     },
   };
 }
-const run = (environment, content = '提问') => environment.runtime.run({ messages: [{ role: 'user', content }] }, { settings });
+const run = (environment, content = '提问') => environment.driver.run(environment.scene, { messages: [{ role: 'user', content }] }, { settings });
 
 for (const [name, damage] of [
-  ['identity', (database, sourceId) => database.prepare("UPDATE records SET body = json_set(body, '$.id', 'wrong') WHERE source_id = ? AND kind = 'execution'").run(sourceId)],
-  ['structure', (database, sourceId) => database.prepare("UPDATE records SET kind = 'not-a-record' WHERE source_id = ? AND kind = 'execution'").run(sourceId)],
+  ['identity', (database, sourceId) => database.prepare("UPDATE records SET body = json_set(body, '$.id', 'wrong') WHERE source_id = ? AND kind = 'invocation'").run(sourceId)],
+  ['structure', (database, sourceId) => database.prepare("UPDATE records SET kind = 'not-a-record' WHERE source_id = ? AND kind = 'invocation'").run(sourceId)],
   ['archive', (database, sourceId) => database.prepare("UPDATE record_sources SET roots = '[]' WHERE id = ?").run(sourceId)],
 ]) {
   test(`damaged historical ${name} disables only that conversation's observation while healthy content continues`, async (t) => {

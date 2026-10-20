@@ -1,9 +1,10 @@
+import { Driver } from '@capix/server-runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { bindConversation, ConversationRuntimeDefinition, ConversationSubmission, ModelInteractions, ModelSource, WorkspaceFiles } from '@capix/observer-service';
+import { bindConversation, ConversationSceneDefinition, ConversationSubmission, ModelInteractions, ModelSource, WorkspaceFiles } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 2000 };
@@ -34,7 +35,8 @@ function fixture(t, answer, options = {}) {
       },
     }),
   );
-  const runtime = bindConversation(new ConversationRuntimeDefinition({ files: Boolean(options.files) }), { ...environment, files: options.files }, interactions);
+  const driver = new Driver();
+  const scene = bindConversation(driver, new ConversationSceneDefinition({ files: Boolean(options.files) }), { ...environment, files: options.files }, interactions);
   const submission = new ConversationSubmission('streaming-submission', 'conversation');
   const frames = [];
   const detach = submission.connectFrames((frame) => {
@@ -50,7 +52,7 @@ function fixture(t, answer, options = {}) {
   });
   t.after(async () => {
     options.release?.();
-    if (runtime.running) submission.requestCancellation();
+    if (driver.isRunning(scene)) submission.requestCancellation();
     await interactions.settled();
     detach();
     interactions.close();
@@ -62,9 +64,10 @@ function fixture(t, answer, options = {}) {
     completed,
     calls,
     interactions,
-    runtime,
+    driver,
+    scene,
     start(value = input) {
-      submission.start((signal) => runtime.run(value, { settings, signal, answerProgress: submission.answerProgress, progress: submission.progress, fileProgress: submission.fileProgress }));
+      submission.start((signal) => driver.run(scene, value, { settings, signal, answerProgress: submission.answerProgress, progress: submission.progress, fileProgress: submission.fileProgress }));
     },
     async milestone(promise) {
       await Promise.race([promise, completed.then((snapshot) => assert.fail(`Submission ended before expected progress: ${JSON.stringify(snapshot.result)}`))]);

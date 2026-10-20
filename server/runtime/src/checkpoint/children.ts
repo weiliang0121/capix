@@ -50,7 +50,8 @@ export function captureCheckpointChildren(context: InvocationContext, relations:
 function captureCheckpointChild(context: InvocationContext, relation: InvocationRelation, saved?: CheckpointChild): CheckpointChild {
   const target = relation.invocation;
   const binding = target.checkpointBinding;
-  const identity = target.identity ?? { contextId: target.context.id, parentContextId: context.id, level: ('level' in target.context ? target.context.level : 'attempt') as 'attempt' };
+  const identity = target.identity;
+  if (!identity) throw new Error('Checkpoint child has no explicit callable identity');
   const position = relation.declarationPosition ?? saved?.target.position;
   if (position === undefined) throw new Error('Checkpoint child has no fixed declaration position');
   const base = { identity, target: { position }, ...(binding ? { contract: { key: binding.key, version: binding.version } } : saved?.contract ? { contract: saved.contract } : {}), round: relation.round, order: relation.order, ...(relation.key ? { key: relation.key } : {}), input: binding ? cloneCheckpointValue(binding.input.encode(target.context.input)) : saved ? saved.input : cloneCheckpointValue(target.context.input) };

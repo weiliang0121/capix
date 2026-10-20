@@ -1,13 +1,14 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, MemoryCheckpointStore, assembleRuntime, checkpointPoint, childReference, defineChildEntry, defineExecution, defineOperation, defineRuntime } from '@capix/server-runtime';
+import { ExceptionContract, MemoryCheckpointStore, checkpointPoint, childReference, defineChildEntry, defineGroup, defineScene } from '@capix/server-runtime';
 import { InvocationContext } from '@capix/server-runtime/construction';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 const rejected = new ExceptionContract('AUTHOR_CONTROL_FIXTURE');
 
 function runtime(definition, store) {
-  return assembleRuntime(definition, { providers: [], source: { capture: () => null }, ...(store ? { checkpoints: { store } } : {}) });
+  return installCallable(definition, { providers: [], source: { capture: () => null }, ...(store ? { checkpoints: { store } } : {}) });
 }
 
 // The construction entry can produce the real mechanism control value. It is not
@@ -26,7 +27,7 @@ for (const boundary of ['execute', 'accept', 'handler-return']) {
       const value = forged ? mechanismContinuation() : businessValue();
       let executions = 0;
       let acceptances = 0;
-      const definition = defineRuntime()({
+      const definition = defineScene()({
         maxRounds: 2,
         ...(boundary === 'handler-return' ? { raises: [rejected] } : {}),
         run: {
@@ -80,7 +81,7 @@ for (const forged of [true, false]) {
         },
       },
     });
-    const definition = defineRuntime()({
+    const definition = defineScene()({
       maxRounds: 2,
       checkpoint: { key: 'author.control.resume', version: 1, input: codec, output: codec, points: [point] },
       run: {
@@ -121,7 +122,7 @@ for (const forged of [true, false]) {
 test('ChildEntry admission cannot change the already selected child definition', async () => {
   let originalCalls = 0;
   let replacementCalls = 0;
-  const original = defineExecution()({
+  const original = defineGroup()({
     run: {
       execute(work) {
         originalCalls++;
@@ -129,7 +130,7 @@ test('ChildEntry admission cannot change the already selected child definition',
       },
     },
   });
-  const replacement = defineExecution()({
+  const replacement = defineGroup()({
     run: {
       execute(work) {
         replacementCalls++;
@@ -145,8 +146,8 @@ test('ChildEntry admission cannot change the already selected child definition',
       return `${input}:admitted`;
     },
   });
-  const root = defineRuntime()({
-    children: [original, replacement],
+  const root = defineScene()({
+    members: [original, replacement],
     run: {
       async execute(work) {
         const child = work.children.entry(entry, work.input);
@@ -166,10 +167,10 @@ test('ChildEntry admission cannot change the already selected child definition',
 });
 
 test('lazy child checkpoint layout retains the resolved level after original declaration mutation', async () => {
-  const operation = defineOperation()({ name: 'fixture', label: 'fixture', source: 'test', run: { execute: () => 'delivered' } });
+  const operation = defineGroup()({ name: 'fixture', label: 'fixture', source: 'test', run: { execute: () => 'delivered' } });
   const point = checkpointPoint()({ name: 'accepted', state: codec, references: { child: childReference(operation) }, resume: { execute: () => 'resumed' } });
-  const execution = defineExecution()({
-    children: [operation],
+  const execution = defineGroup()({
+    members: [operation],
     checkpoint: { key: 'author.layout.execution', version: 1, input: codec, output: codec, points: [point] },
     run: {
       async execute(work) {
@@ -181,8 +182,8 @@ test('lazy child checkpoint layout retains the resolved level after original dec
       },
     },
   });
-  const root = defineRuntime()({
-    children: [execution],
+  const root = defineScene()({
+    members: [execution],
     run: {
       async execute(work) {
         const child = work.children.create(execution, work.input);
@@ -194,6 +195,6 @@ test('lazy child checkpoint layout retains the resolved level after original dec
   const installed = runtime(root, new MemoryCheckpointStore());
   // The author object remains mutable for business use. Already resolved kernel
   // fields must not be read from it again while lazily creating the E structure.
-  operation.level = 'attempt';
+  operation.kind = 'attempt';
   assert.equal(await installed.run('input', {}), 'delivered');
 });

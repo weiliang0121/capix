@@ -2,7 +2,7 @@ import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { lifecycleFor, callFor, recordFor } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, TranscriptRangeRef, Transcript, Memories, MemoryResource, ChangeBuffer, Recorder, RecordBook, ExecutionRecordHelper, ResourceRecord, snapshotValue } from '@capix/server-runtime';
+import { bindResources, ResourceOffer, TranscriptResource, TranscriptRangeRef, Transcript, Memories, MemoryResource, ChangeBuffer, Recorder, RecordBook, CallableRecordHelper, ResourceRecord, snapshotValue } from '@capix/server-runtime';
 
 function scope(recorder = new Recorder(new RecordBook()), contextId = 'call') {
   const runtime = createBoundRuntime({ recorder });
@@ -66,7 +66,7 @@ test('resource static assembly records nothing, binding captures once, per-call 
   assert.deepEqual(recorded[1].value, { limit: 100 });
   assert.ok(Object.isFrozen(recorded[1].value));
   assert.deepEqual(
-    ExecutionRecordHelper.snapshot(recorder, record.id).resources,
+    CallableRecordHelper.snapshot(recorder, record.id).resources,
     recorded.map((fact) => fact.toJSON()),
   );
   assert.throws(() => bound.attach(owner), /already established/);

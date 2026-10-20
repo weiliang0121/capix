@@ -1,6 +1,7 @@
+import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ResourceOffer, bindResources, bindChildResources, assembleRuntime, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { ResourceOffer, bindResources, bindChildResources, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
 import { runtimeDefinition, recordDefinitions } from './fixtures/declarations.mjs';
 
 function fixture({ recorded = false, mapOperation = (input) => input.allowed, mapAttempt = (input) => input.leaf } = {}) {
@@ -24,7 +25,7 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
   const dormant = new ResourceOffer('test.dormant', () => assert.fail('unrequested endpoint'), 'access');
   const requires = { bounded: offer.request(), dormant: dormant.request() };
   const attempt = {
-    level: 'attempt',
+    kind: 'node',
     name: 'leaf',
     label: 'Leaf',
     source: 'test',
@@ -41,13 +42,13 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
     },
   };
   const operation = {
-    level: 'operation',
+    kind: 'group',
     name: 'work',
     label: 'Work',
     source: 'test',
     maxRounds: 1,
     raises: [],
-    children: [attempt],
+    members: [attempt],
     run: {
       requires,
       async execute(context) {
@@ -60,10 +61,10 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
     },
   };
   const execution = {
-    level: 'execution',
+    kind: 'group',
     maxRounds: 1,
     raises: [],
-    children: [operation],
+    members: [operation],
     run: {
       requires,
       async execute(context) {
@@ -89,7 +90,7 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
     childResources: [bindChildResources(operation, [offer.refine(mapOperation)]), bindChildResources(attempt, [offer.refine(mapAttempt)])],
     observations: recorded ? [bindRecording(recorder)] : undefined,
   };
-  return { runtime: assembleRuntime(definition, options), definition, options, offer, operation, attempt, counters, endpoints, recorder };
+  return { runtime: installCallable(definition, options), definition, options, offer, operation, attempt, counters, endpoints, recorder };
 }
 
 test('child input refines O and A supplies without recapturing or mutating ancestors and siblings', async () => {
@@ -154,11 +155,11 @@ test('refined resources retain call-local bound and available observations with 
 test('assembly rejects unknown targets, duplicate bindings, and refinements outside declared requests', () => {
   const { definition, options, operation, offer, counters } = fixture();
   const unknown = { ...operation };
-  assert.throws(() => assembleRuntime(definition, { ...options, childResources: [bindChildResources(unknown, [offer.refine((input) => input.allowed)])] }), /declared operation or attempt/);
-  assert.throws(() => assembleRuntime(definition, { ...options, childResources: [options.childResources[0], options.childResources[0]] }), /Duplicate child resource binding/);
+  assert.throws(() => installCallable(definition, { ...options, childResources: [bindChildResources(unknown, [offer.refine((input) => input.allowed)])] }), /registered member/);
+  assert.throws(() => installCallable(definition, { ...options, childResources: [options.childResources[0], options.childResources[0]] }), /Duplicate child resource binding/);
   assert.throws(() => bindChildResources(operation, [offer.refine(() => []), offer.refine(() => [])]), /Duplicate resource refinement/);
   const other = new ResourceOffer('other', (source) => source, 'access', { refine: (source) => source });
-  assert.throws(() => assembleRuntime(definition, { ...options, childResources: [bindChildResources(operation, [other.refine(() => [])])] }), /Refined resource is not requested/);
+  assert.throws(() => installCallable(definition, { ...options, childResources: [bindChildResources(operation, [other.refine(() => [])])] }), /Refined resource is not requested/);
   assert.deepEqual(counters, { capture: 0, refine: 0, describe: 0, dormant: 0 });
 });
 
@@ -180,7 +181,7 @@ test('only offer-issued refinements are accepted; copied or fabricated rules can
   const parent = bindResources(requires, [offer.provide((source) => source)])({ allowed: ['a'] });
   for (const rule of [forged, copied, inherited]) {
     assert.throws(() => bindChildResources(operation, [rule]), /not issued by an offer/);
-    assert.throws(() => assembleRuntime(definition, { ...options, childResources: [{ definition: operation, refinements: [rule] }] }), /not issued by an offer/);
+    assert.throws(() => installCallable(definition, { ...options, childResources: [{ definition: operation, refinements: [rule] }] }), /not issued by an offer/);
     assert.throws(() => parent.select(requires, requires, { input: { allowed: ['outside'] }, refinements: [rule] }), /not issued by an offer/);
   }
   assert.equal(issued.apply, undefined);

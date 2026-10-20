@@ -1,11 +1,11 @@
-import type { InvocationLevel, InvocationProcessStage, InvocationRelationPhase } from '../invocation/types.js';
+import type { CallableKind, InvocationProcessStage, InvocationRelationPhase } from '../invocation/types.js';
 import type { ConversationFailure } from './delivery.js';
 
 /** Public call metadata for one submission. No inputs, outputs, source paths or model reasoning. */
 export interface ConversationActivity {
   readonly contextId: string;
   readonly parentContextId?: string;
-  readonly level: InvocationLevel;
+  readonly kind: CallableKind;
   readonly label: string;
   readonly status: 'running' | 'succeeded' | 'failed' | 'cancelled';
   readonly phase: 'setup' | InvocationProcessStage;

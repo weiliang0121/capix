@@ -1,3 +1,4 @@
+import { CallableRecord } from '../callable/record.js';
 import type { RecordBook } from '../book.js';
 import { CompositeRecord } from '../composite.js';
 import { InvocationRecord } from '../invocation/record.js';
@@ -31,7 +32,19 @@ export function checkRestoredTree(book: RecordBook): void {
       }
     }
     if (record instanceof InvocationBoundaryRecord) {
-      if (record.scopeId !== (record.executionId ?? record.callId)) throw new Error('Stored boundary has an inconsistent timing scope');
+      const invocation = book.get(record.callId);
+      if (invocation instanceof CallableRecord) {
+        let scope: CallableRecord = invocation;
+        const parents = new Set([scope.id]);
+        let parent = scope.parentId ? book.get(scope.parentId) : undefined;
+        while (parent instanceof CallableRecord) {
+          if (parents.has(parent.id)) throw new Error('Stored callable ancestry contains a cycle');
+          parents.add(parent.id);
+          scope = parent;
+          parent = scope.parentId ? book.get(scope.parentId) : undefined;
+        }
+        if (record.scopeId !== scope.id || record.executionId !== undefined) throw new Error('Stored callable boundary has an inconsistent timing scope');
+      } else if (record.scopeId !== (record.executionId ?? record.callId)) throw new Error('Stored boundary has an inconsistent timing scope');
       const scope = boundaries.get(record.scopeId) ?? { sequence: 0, offsetMs: 0, calls: new Map() };
       if (record.sequence !== scope.sequence + 1 || record.offsetMs < scope.offsetMs) throw new Error('Stored boundary sequence does not advance');
       const prior = scope.calls.get(record.callId);

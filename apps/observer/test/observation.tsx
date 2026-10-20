@@ -72,7 +72,7 @@ const observation: ObservationTransport = {
     });
   },
 };
-const call: CallDetail = { id: 'fixture-call', contextId: 'fixture-context', recordType: 'attempt', caller: 'operation', callee: 'attempt', status: 'passed', source: '', label: '调用模型', offsetMs: 0, processes: [], processEntries: [], relationEntries: [], children: [], memory: { incoming: [], changes: [] }, resources: [{ id: 'resource', parentId: 'fixture-call', access: 'model-interaction.read', supplyId: 'supply', sequence: 1, occurredAt: '2026-10-13T00:00:00Z', phase: 'returned', value: null }], localRounds: 1, output: { kind: 'pending', interaction: { id: pending.id } } };
+const call: CallDetail = { id: 'fixture-call', contextId: 'fixture-context', recordType: 'node', caller: 'group', callee: 'node', status: 'passed', source: '', label: '调用模型', offsetMs: 0, processes: [], processEntries: [], relationEntries: [], children: [], memory: { incoming: [], changes: [] }, resources: [{ id: 'resource', parentId: 'fixture-call', access: 'model-interaction.read', supplyId: 'supply', sequence: 1, occurredAt: '2026-10-13T00:00:00Z', phase: 'returned', value: null }], localRounds: 1, output: { kind: 'pending', interaction: { id: pending.id } } };
 const parent: CallDetail = { ...call, id: 'fixture-parent', relationEntries: [{ childId: call.id, identity: { parentContextId: 'parent-context', childContextId: call.contextId, parentRound: 1 }, eventSequence: 1, occurredAt: '2026-10-13T00:00:00Z', offsetMs: 0, change: { kind: 'accepted', output: call.output } }] };
 const runtime = new ClientRuntime({ conversation, transcripts, observation });
 const application = createApplication(runtime);

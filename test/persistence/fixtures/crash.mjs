@@ -21,7 +21,7 @@ if (mode === 'content') {
   const save = store.applyRecordChange.bind(store);
   store.applyRecordChange = (event) => {
     save(event);
-    if (event.change.kind === 'added' && event.change.entry.kind === 'execution') executionId = event.change.entry.data.id;
+    if (event.change.kind === 'added' && event.change.entry.kind === 'invocation' && event.change.entry.data.role === 'conversation-task') executionId = event.change.entry.data.id;
     if (mode === 'finished' && event.change.kind === 'finished' && event.change.id === executionId) process.kill(process.pid, 'SIGKILL');
   };
   const environment = initializeObserver(
@@ -34,6 +34,6 @@ if (mode === 'content') {
     [],
     { persistence: store },
   );
-  await environment.runtime.run({ messages: [{ role: 'user', content: 'crash window' }] }, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 } });
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'crash window' }] }, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 } });
 }
 throw new Error('Crash checkpoint was not reached');

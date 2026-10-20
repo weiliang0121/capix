@@ -1,3 +1,4 @@
+import { Driver } from '@capix/server-runtime';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 import { submissionSnapshot as submission, submissionSnapshots } from '../fixtures/submissions.mjs';
@@ -8,10 +9,10 @@ import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
 import { ClientRuntime } from '@capix/client-runtime';
-import { BoundRuntime, ProgressChannel, defineObservation } from '@capix/server-runtime';
+import { ProgressChannel, defineObservation } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
-import { ConversationSubmission, createObserverServer, ObserverConversations, bindConversation, ConversationRuntimeDefinition, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
+import { ConversationSubmission, createObserverServer, ObserverConversations, bindConversation, ConversationSceneDefinition, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
 import { withRuntimeDefinition } from '../fixtures/assembly.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
@@ -65,7 +66,7 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
   assert.equal(stream.at(-1).result.status, 'completed');
   assert.equal(stream.at(-1).answer.index, 1);
   assert.equal(stream.at(-1).activities.integrity.status, 'complete');
-  assert.deepEqual(new Set(stream.at(-1).activities.calls.map((call) => call.level)), new Set(['runtime', 'execution', 'operation', 'attempt']));
+  assert.deepEqual(new Set(stream.at(-1).activities.calls.map((call) => call.kind)), new Set(['scene', 'group', 'node']));
   assert.ok(stream.at(-1).activities.calls.every((call) => call.status === 'succeeded'));
   assert.ok(stream.every((item) => !('snapshot' in item)));
   const listed = await get('/api/executions');
@@ -81,7 +82,7 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
   );
   assert.ok(overview.messages.every((item) => !('message' in item)));
   const execution = overview.executions[0];
-  assert.equal(execution.calls.length, 1 + snapshot.operations.length + snapshot.attempts.length);
+  assert.equal(execution.calls.length, snapshot.calls.length);
   assert.deepEqual(execution.transcriptRange, { transcriptId: overview.transcriptId, start: 0, end: 1, revision: 1 });
   assert.deepEqual(execution.availableMemoryIds, []);
   assert.deepEqual(execution.response, { index: 1 });
@@ -90,16 +91,17 @@ test('HTTP overview exposes timing and associations without invocation bodies, w
     assert.ok(call.durationMs >= 0);
     for (const key of ['value', 'input', 'output', 'processes', 'error']) assert.equal(Object.hasOwn(call, key), false);
   }
-  const end = snapshot.events.at(-1).offsetMs;
-  assert.equal(execution.observedOffsetMs, end);
-  assert.equal(execution.durationMs, end - snapshot.events[0].offsetMs);
+  const start = snapshot.boundaries.find((event) => event.callId === snapshot.execution.id && event.value.type === 'call').offsetMs;
+  const end = snapshot.boundaries.find((event) => event.callId === snapshot.execution.id && event.value.type === 'return').offsetMs;
+  assert.equal(execution.observedOffsetMs, end - start);
+  assert.equal(execution.durationMs, end - start);
   const detail = await get('/api/execution?id=' + execution.id);
   assert.deepEqual(detail, snapshot);
-  const path = snapshot.operations[0].source.split(' · ')[0];
+  const path = snapshot.calls.find((call) => call.source)?.source.split(' · ')[0];
   const source = await get('/api/source?file=' + encodeURIComponent(path));
   assert.equal(source.path, path);
   assert.match(source.content, /class PrepareConversationContext/);
-  for (const call of execution.calls) {
+  for (const call of execution.calls.filter((item) => item.source)) {
     const file = call.source.split(' · ')[0];
     const resolved = await get('/api/source?file=' + encodeURIComponent(file));
     assert.equal(resolved.path, file, `moved source must remain inspectable: ${call.source}`);
@@ -159,7 +161,7 @@ test('failed memory postprocessing still exposes the completed answer and the ac
   const failed = executions[0].calls.filter((call) => call.status === 'failed');
   assert.deepEqual(
     failed.map((call) => call.label),
-    ['执行调用', '提取记忆体', '请求模型', '发起模型调用'],
+    ['本次对话任务', '提取记忆体', '请求模型', '发起模型调用'],
   );
   for (let index = 1; index < failed.length; index++) assert.equal(failed[index].parentId, failed[index - 1].id);
 });
@@ -358,11 +360,11 @@ test('transport validates origin, input and source boundary before accepting wor
   assert.equal(submission(await invalid.json()).result.error.code, 'INVALID_INPUT');
   assert.equal(observer.transcript.length, 0);
   assert.equal(
-    [...observer.book.values()].some((record) => record.kind === 'execution'),
+    [...observer.book.values()].some((record) => record.kind === 'invocation' && record.role === 'conversation-task'),
     false,
     'rejected E input creates no QA',
   );
-  const failedRuntime = [...observer.book.values()].find((record) => record.kind === 'runtime-call');
+  const failedRuntime = [...observer.book.values()].find((record) => record.kind === 'invocation' && record.structureKind === 'scene');
   assert.equal(failedRuntime.status, 'failed', 'R records the rejected child admission');
   assert.equal(observer.recording.root.childIds.includes(failedRuntime.id), true);
   for (const path of ['.env', '../../.env', 'services/observer/src/../../../../.env']) assert.equal((await fetch(base + '/api/source?file=' + encodeURIComponent(path))).status, 404);
@@ -404,7 +406,7 @@ test('separate HTTP subclasses deliver business content while records remain sep
     ['user', 'assistant'],
   );
   assert.deepEqual(await observation.memory(conversationId), { items: [] });
-  const path = last.operations[0].source.split(' · ')[0];
+  const path = last.calls.find((call) => call.source)?.source.split(' · ')[0];
   assert.match((await observation.source(path)).content, /class PrepareConversationContext/);
 });
 
@@ -432,7 +434,7 @@ test('real HTTP headless client uses conversation only for two rounds without an
   for (const submission of submissions) {
     assert.equal(submission.remote.result.status, 'completed');
     assert.equal(submission.remote.activities.integrity.status, 'complete');
-    assert.deepEqual(new Set(submission.remote.activities.calls.map((call) => call.level)), new Set(['runtime', 'execution', 'operation', 'attempt']));
+    assert.deepEqual(new Set(submission.remote.activities.calls.map((call) => call.kind)), new Set(['scene', 'group', 'node']));
     assert.ok(submission.remote.activities.calls.every((call) => call.status === 'succeeded'));
   }
 });
@@ -483,9 +485,11 @@ test('answer is delivered before memory finishes, and closing observation does n
 
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
   const entities = createEnvironment();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, new ModelInteractions(new ModelSource(provider)));
+  const driver = new Driver();
+  const scene = bindConversation(driver, new ConversationSceneDefinition(), entities, new ModelInteractions(new ModelSource(provider)));
   const received = [];
-  const output = await runtime.run(
+  const output = await driver.run(
+    scene,
     { messages: [{ role: 'user', content: '问题' }] },
     {
       settings,
@@ -502,7 +506,7 @@ test('the concrete conversation can deliver without a Recorder or any execution 
     ['input', 'execution', 'task', 'answer'],
   );
   assert.equal(received[0].range.transcriptId, entities.transcript.id);
-  assert.equal(runtime.recorder, undefined);
+  assert.equal(driver.recorder, undefined);
   assert.equal(entities.transcript.length, 2);
 });
 
@@ -637,7 +641,7 @@ test('invalid settings with a valid submission ID are retained as explicit rejec
   assert.equal(observer.transcript.length, 0);
   assert.equal(modelCalls, 0);
   assert.equal(
-    [...observer.book.values()].some((record) => record.kind === 'runtime-call'),
+    [...observer.book.values()].some((record) => record.kind === 'invocation' && record.structureKind === 'scene'),
     false,
   );
   const transport = new ConversationHttpTransport(base);
@@ -688,7 +692,7 @@ test('HTTP cancellation retains an answer while memory feedback completes indepe
   const terminal = frames.at(-1);
   assert.equal(terminal.result.status, 'cancelled');
   assert.deepEqual(terminal.answer, requested.answer);
-  assert.equal(observer.runtime.running, false);
+  assert.equal(observer.driver.isRunning(observer.scene), false);
   assert.equal(observer.transcript.length, 2);
   assert.equal(observer.memories.snapshot().length, 0);
   assert.deepEqual(submission(await client.read(id)), terminal);
@@ -726,7 +730,7 @@ test('HTTP cancellation ends local work without cancelling external delivery or 
   const response = await run('取消调用', { id });
   await entering;
   await response.body.cancel();
-  assert.equal(observer.runtime.running, true, 'disconnecting delivery does not request cancellation');
+  assert.equal(observer.driver.isRunning(observer.scene), true, 'disconnecting delivery does not request cancellation');
   const client = new ConversationHttpTransport(base);
   await client.cancel(id);
   const frames = [];
@@ -739,7 +743,7 @@ test('HTTP cancellation ends local work without cancelling external delivery or 
   );
   assert.equal(frames.at(-1).result.status, 'cancelled');
   assert.equal(frames.at(-1).cancelRequested, true);
-  assert.equal(observer.runtime.running, false);
+  assert.equal(observer.driver.isRunning(observer.scene), false);
   assert.equal(observer.transcript.length, 1);
   assert.equal(observer.interactions.active, true);
   assert.equal(externalSignal.aborted, false);
@@ -804,7 +808,7 @@ for (const fault of [false, true]) {
       undefined,
       { ...settings, timeoutMs: 1000 },
       (definition) => {
-        const model = definition.executionDefinition.operationDefinitions.generation.requestModelDefinition;
+        const model = definition.taskDefinition.operationDefinitions.generation.requestModelDefinition;
         model.observation = [
           ...model.observation,
           defineObservation(
@@ -828,7 +832,7 @@ for (const fault of [false, true]) {
     try {
       await returned;
       const interim = await get(`/api/submissions/${id}`);
-      assert.equal(observer.runtime.running, false, 'the R invocation has genuinely ended');
+      assert.equal(observer.driver.isRunning(observer.scene), false, 'the R invocation has genuinely ended');
       assert.equal(observer.interactions.active, true);
       assert.equal(interim.cancelRequested, true);
       if (fault) {

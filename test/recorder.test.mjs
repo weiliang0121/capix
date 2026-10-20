@@ -107,6 +107,7 @@ test('Observer projects only its own call scope even when two Runtimes share one
   });
   const appended = [...recorder.book.values()].at(-1);
   assert.equal(appended.callId, first.record.id);
-  assert.equal(appended.executionId, first.record.id);
+  assert.equal(appended.executionId, undefined);
+  assert.equal(appended.contextId, first.context.id);
   unsubscribe();
 });

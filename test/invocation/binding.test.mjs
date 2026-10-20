@@ -2,7 +2,7 @@ import { createEnvironment } from '../fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Recorder, RecordBook, ExecutionRecordHelper, InvocationBoundaryRecordHelper, TranscriptRecord, MemoryRecord, bindRecording, bindInvocationObservation, invocationRecording, ResourceBindings } from '@capix/server-runtime';
-import { createBoundRuntime } from '../fixtures/runtime.mjs';
+import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 
 const operation = { id: 'work', name: 'work', label: 'Work', source: 'test' };
 const attempt = { name: 'apply', label: 'Apply', source: 'test', callee: 'processing' };
@@ -78,9 +78,9 @@ test('live nested calls and content sources use their bound records without Cont
   const memory = [...recorder.book.values()].find((record) => record instanceof MemoryRecord);
   const answer = [...recorder.book.values()].find((record) => record instanceof TranscriptRecord && record.parentId);
   assert.equal(memory.parentId, leaf.record.id);
-  assert.equal(memory.operationId, nested.record.id);
+  assert.equal(memory.contextId, leaf.context.id);
   assert.equal(answer.parentId, root.record.id);
-  assert.equal(ExecutionRecordHelper.snapshot(recorder, root.record.id).events.length, 8);
+  assert.equal(observeCall(runtime.recording, root).events.length, 8);
 });
 
 test('one reused work behavior keeps separate bindings during overlapping child calls', async () => {
@@ -117,8 +117,8 @@ test('the recording preset rejects foreign facts, repeated starts and an unstart
     const installation = bindRecording(recorder);
     const declarations = [invocationRecording({}, { failure: 'propagate' })];
     const resources = new ResourceBindings({});
-    const parent = installation.bindInvocation({ identity: { level: 'runtime', contextId: 'parent' }, description: { id: 'runtime' }, resources, declarations });
-    const scope = mode === 'missing-parent' ? installation.bindInvocation({ identity: { level: 'execution', contextId: 'child', parentContextId: 'parent' }, resources, declarations }, parent) : parent;
+    const parent = installation.bindInvocation({ identity: { kind: 'scene', contextId: 'parent' }, description: { id: 'runtime' }, resources, declarations });
+    const scope = mode === 'missing-parent' ? installation.bindInvocation({ identity: { kind: 'group', contextId: 'child', parentContextId: 'parent' }, resources, declarations }, parent) : parent;
     const observation = bindInvocationObservation({ ...scope.setup, resources: scope.resources }, []);
     const fact = { kind: 'started', input: null, identity: scope.setup.identity, eventSequence: 1, occurredAt: new Date().toISOString(), monotonicTime: 0 };
     if (mode === 'duplicate') assert.equal(observation.publish(fact), undefined);
@@ -140,7 +140,7 @@ test('a recorded child cannot start before its parent has registered its call', 
   await assert.rejects(child.run(), (error) => error.code === 'OBSERVATION_FAILED' && /has not started/.test(error.cause.message));
   assert.equal(root.record, undefined);
   assert.equal(child.record, undefined);
-  assert.equal([...recorder.book.values()].filter((record) => record.kind === 'execution' || record.kind === 'operation').length, 0);
+  assert.equal([...recorder.book.values()].filter((record) => record.kind === 'execution' || record.structureKind === 'group').length, 0);
   assert.equal(root.context.status, 'running');
 });
 

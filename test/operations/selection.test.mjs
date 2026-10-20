@@ -1,3 +1,4 @@
+import { Driver } from '@capix/server-runtime';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 import { resourceFact } from '../fixtures/observer.mjs';
@@ -34,8 +35,8 @@ for (const fails of [false, true]) {
       ],
     };
     const messagesBefore = input.messages;
-    const facts = await observeExecution(environment.runtime, environment.recording, input, { settings, transcript: environment.transcript });
-    const selection = facts.operations.find((operation) => operation.operation === 'prepareContext');
+    const facts = await observeExecution(environment.driver, environment.scene, environment.recording, input, { settings, transcript: environment.transcript });
+    const selection = facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).find((operation) => operation.name === 'prepareContext');
     assert.equal(selection.status, 'succeeded');
     assert.deepEqual(readOutput(selection.value).selection, { historyIndexes: [0, 1] });
     assert.equal(requests.length, fails ? 1 : 2);
@@ -47,7 +48,7 @@ for (const fails of [false, true]) {
 }
 
 test('message counts accumulate independently and never enter model requests', async () => {
-  const { bindConversation, ConversationRuntimeDefinition } = await import('@capix/observer-service');
+  const { bindConversation, ConversationSceneDefinition } = await import('@capix/observer-service');
   const { createBoundRuntime } = await import('@capix/server-runtime');
   const { Transcript } = await import('@capix/server-runtime');
   const entities = createEnvironment({ messages: [{ role: 'user', content: '我在北京' }] });
@@ -55,8 +56,10 @@ test('message counts accumulate independently and never enter model requests', a
   const original = transcript.get(0);
   const requests = [];
   let fails = false;
-  const runtime = bindConversation(
-    new ConversationRuntimeDefinition(),
+  const driver = new Driver();
+  const scene = bindConversation(
+    driver,
+    new ConversationSceneDefinition(),
     entities,
     new ModelInteractions(
       new ModelSource({
@@ -76,7 +79,7 @@ test('message counts accumulate independently and never enter model requests', a
     ),
   );
   const run = async () => {
-    return runtime.run({ messages: [{ role: 'user', content: '继续' }] }, { settings });
+    return driver.run(scene, { messages: [{ role: 'user', content: '继续' }] }, { settings });
   };
   await run();
   assert.equal(requests.length, 1);

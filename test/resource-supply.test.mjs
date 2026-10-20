@@ -1,16 +1,17 @@
+import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ResourceOffer, bindResources, bindChildResources, assembleRuntime } from '@capix/server-runtime';
+import { ResourceOffer, bindResources, bindChildResources, bindCallSource } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {
-  return { level: 'attempt', name, label: name, source: 'test', callee: 'test', maxRounds: 1, raises: [], run };
+  return { kind: 'node', name, label: name, source: 'test', callee: 'test', maxRounds: 1, raises: [], run };
 }
 function operation(name, children, run) {
-  return { level: 'operation', name, label: name, source: 'test', children, maxRounds: 1, raises: [], run };
+  return { kind: 'group', name, label: name, source: 'test', members: children, maxRounds: 1, raises: [], run };
 }
 function execution(children, run) {
-  return { level: 'execution', children, maxRounds: 1, raises: [], run };
+  return { kind: 'group', members: children, maxRounds: 1, raises: [], run };
 }
 
 // Offer identities, local aliases, resource captures and business access are separate boundaries.
@@ -36,7 +37,7 @@ test('transitive supplies retain offers while parents receive only their own res
     },
   });
   const main = execution([parent], { requires: {}, execute: (work) => work.children.create(parent, null).run() });
-  const runtime = assembleRuntime(runtimeDefinition(main), {
+  const runtime = installCallable(runtimeDefinition(main), {
     providers: [
       history.provide(() => {
         captures.history++;
@@ -58,7 +59,7 @@ test('transitive supplies retain offers while parents receive only their own res
           return {
             observe() {},
             resource(fact) {
-              facts.push({ level: setup.identity.level, name: setup.description?.name, access: fact.access });
+              facts.push({ kind: setup.identity.kind, name: setup.description?.name, access: fact.access });
             },
           };
         },
@@ -72,8 +73,8 @@ test('transitive supplies retain offers while parents receive only their own res
   assert.notEqual(endpoints[0], endpoints[1]);
   const modelFacts = facts.filter((fact) => fact.access === 'supply.model');
   assert.ok(modelFacts.length > 0);
-  assert.ok(modelFacts.every((fact) => fact.level === 'attempt'));
-  assert.ok(!facts.some((fact) => fact.access === 'supply.dormant' || fact.level === 'execution'));
+  assert.ok(modelFacts.every((fact) => fact.kind === 'node'));
+  assert.ok(!facts.some((fact) => fact.access === 'supply.dormant' || fact.name === undefined));
   for (const endpoint of endpoints) assert.throws(() => endpoint.read(), /ended|running/);
 });
 
@@ -109,7 +110,7 @@ test('a pure forwarding operation narrows descendant supply without owning an en
     },
   });
   const main = execution([parent], { requires: {}, execute: (work) => Promise.all(work.input.map((selection) => work.children.create(parent, selection).run())) });
-  const runtime = assembleRuntime(runtimeDefinition(main), {
+  const runtime = installCallable(runtimeDefinition(main), {
     providers: [offer.provide(() => ['a', 'b'])],
     source: { capture: () => null },
     childResources: [bindChildResources(parent, [offer.refine((selection) => selection)])],
@@ -135,14 +136,15 @@ test('R and E keep independent capture sources even when they use the same offer
       return [work.resources.value, await work.children.create(main, 'prepared').run()];
     },
   };
-  const runtime = assembleRuntime(definition, {
+  const runtime = installCallable(definition, {
     providers: [
       offer.provide((source) => {
         captures.push(source);
         return source;
       }),
     ],
-    source: { runtime: (input) => `R:${input}`, capture: (input) => `E:${input}` },
+    source: { capture: (input) => `R:${input}` },
+    bindings: [bindCallSource(main, { capture: (input) => `E:${input}` })],
   });
   assert.deepEqual(await runtime.run('input', {}), ['R:input', 'E:prepared']);
   assert.deepEqual(captures, ['R:input', 'E:prepared']);
@@ -173,9 +175,9 @@ test('observation-only supplies never satisfy a business descendant requirement'
       },
     ],
   };
-  assert.equal(await assembleRuntime(runtimeDefinition(main), options).run(null, {}), 'ok');
+  assert.equal(await installCallable(runtimeDefinition(main), options).run(null, {}), 'ok');
   leaf.run = { requires: { value: offer.request() }, execute: (work) => work.resources.value };
-  assert.throws(() => assembleRuntime(runtimeDefinition(main), options), /Expected one resource provider/);
+  assert.throws(() => installCallable(runtimeDefinition(main), options), /Expected one resource provider/);
 });
 
 test('identity aggregation still rejects missing, duplicate and name-conflicting providers', () => {
@@ -186,8 +188,8 @@ test('identity aggregation still rejects missing, duplicate and name-conflicting
   const main = execution([parent], { requires: {}, execute: () => null });
   const definition = runtimeDefinition(main);
   const source = { capture: () => null };
-  assert.throws(() => assembleRuntime(definition, { providers: [], source }), /Expected one resource provider/);
-  assert.throws(() => assembleRuntime(definition, { providers: [first.provide(() => null), first.provide(() => null)], source }), /Expected one resource provider/);
+  assert.throws(() => installCallable(definition, { providers: [], source }), /Expected one resource provider/);
+  assert.throws(() => installCallable(definition, { providers: [first.provide(() => null), first.provide(() => null)], source }), /Expected one resource provider/);
   parent.run = { requires: { value: second.request() }, execute: () => null };
-  assert.throws(() => assembleRuntime(definition, { providers: [first.provide(() => null), second.provide(() => null)], source }), /Different resource offers/);
+  assert.throws(() => installCallable(definition, { providers: [first.provide(() => null), second.provide(() => null)], source }), /Different resource offers/);
 });

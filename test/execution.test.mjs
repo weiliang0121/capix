@@ -1,3 +1,4 @@
+import { Driver } from '@capix/server-runtime';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { ExecutionFixture } from './fixtures/behavior.mjs';
@@ -8,7 +9,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Recorder, RecordBook } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
-import { bindConversation, ConversationRuntimeDefinition } from '@capix/observer-service';
+import { bindConversation, ConversationSceneDefinition } from '@capix/observer-service';
 
 import { TestOperation } from './fixtures/operation.mjs';
 import { createInput, transcriptFor } from './fixtures/observer.mjs';
@@ -52,14 +53,14 @@ test('one Execution and Operation can be called again after success and failure 
   const records = contexts.map((context) => observeCall(runtime.recording, callFor(context)));
   assert.equal(new Set(records.map((snapshot) => snapshot.execution.id)).size, 3);
   assert.equal(new Set(records.map((snapshot) => snapshot.operations[0].id)).size, 3);
-  assert.ok(records.every((snapshot) => snapshot.operations[0].operationInstanceId === operation.id));
+  assert.ok(records.every((snapshot) => snapshot.operations[0].structureId === operation.id));
   assert.deepEqual(
     records.map((snapshot) => snapshot.attempts.length),
     [3, 2, 3],
   );
 });
 
-test('bindConversation, ConversationRuntimeDefinition returns answers without a recorder and uses the configuration of each call', async () => {
+test('bindConversation, ConversationSceneDefinition returns answers without a recorder and uses the configuration of each call', async () => {
   const requests = [];
   const provider = {
     async invoke(request, purpose) {
@@ -68,9 +69,10 @@ test('bindConversation, ConversationRuntimeDefinition returns answers without a 
     },
   };
   const entities = createEnvironment();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), entities, new ModelInteractions(new ModelSource(provider)));
+  const driver = new Driver();
+  const scene = bindConversation(driver, new ConversationSceneDefinition(), entities, new ModelInteractions(new ModelSource(provider)));
   for (const model of ['one', 'two']) {
-    const answer = await runtime.run({ messages: [{ role: 'user', content: model }] }, { settings: { ...settings, model } });
+    const answer = await driver.run(scene, { messages: [{ role: 'user', content: model }] }, { settings: { ...settings, model } });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });
     assert.equal(entities.transcript.current('assistant').content, 'done');
   }

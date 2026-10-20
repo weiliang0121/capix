@@ -1,16 +1,17 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, InvocationEntry, MemoryCheckpointStore, checkpointPoint, assembleRuntime } from '@capix/server-runtime';
-import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, RuntimeContext } from '@capix/server-runtime/construction';
+import { ExceptionContract, InvocationEntry, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
+import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, CallableContext } from '@capix/server-runtime/construction';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 function operation(execute = (work) => work.input) {
-  return { level: 'operation', name: 'child', label: 'Child', source: 'test', children: [], maxRounds: 1, raises: [], run: { requires: {}, execute } };
+  return { kind: 'group', name: 'child', label: 'Child', source: 'test', members: [], maxRounds: 1, raises: [], run: { requires: {}, execute } };
 }
 
 function assemble(child, run, options = {}) {
-  const execution = { level: 'execution', children: [child], maxRounds: 1, raises: [], ...options, run: { requires: {}, ...run } };
-  return assembleRuntime(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
+  const execution = { kind: 'group', members: [child], maxRounds: 1, raises: [], ...options, run: { requires: {}, ...run } };
+  return installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
 }
 
 test('run and acceptance share an exact child reference across distinct Work actions', async () => {
@@ -163,7 +164,7 @@ test('building access and obtaining an endpoint stay lazy, and a reused builder 
   const parents = [];
   for (const input of ['first', 'second']) {
     const parent = new Invocation({
-      context: new RuntimeContext(input),
+      context: new CallableContext(input, 'scene'),
       signal: new AbortController().signal,
       work: {
         maxRounds: 1,
@@ -226,8 +227,8 @@ test('alternative entry acceptance can cancel its parent without creating or sta
 test('resuming a saved final child delivery keeps its bound structure uninitialized', async () => {
   const codec = { encode: (value) => value, decode: (value) => value };
   const definition = {
-    level: 'execution',
-    children: [],
+    kind: 'group',
+    members: [],
     maxRounds: 1,
     raises: [],
     run: { requires: {}, execute: () => assert.fail('final child work cannot execute again') },
@@ -236,23 +237,23 @@ test('resuming a saved final child delivery keeps its bound structure uninitiali
   const bound = new BoundChildren([resolveDeclaration(definition)], () => assert.fail('final delivery must not initialize the child structure'));
   const builder = new ChildBindingsBuilder(bound);
   const store = new MemoryCheckpointStore();
-  const childIdentity = { contextId: 'child-context', level: 'execution', parentContextId: 'parent-context' };
+  const childIdentity = { contextId: 'child-context', kind: 'group', parentContextId: 'parent-context' };
   const childContract = { key: definition.checkpoint.key, version: 1 };
-  store.save({ id: 'child-cp', formatVersion: 3, contract: childContract, point: 'saved', frame: { owner: childIdentity, round: 1, phase: 'execute', input: 'child', currentInput: 'child', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'child-cp', formatVersion: 4, contract: childContract, point: 'saved', frame: { owner: childIdentity, round: 1, phase: 'execute', input: 'child', currentInput: 'child', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   store.finish('child-context', 1, { status: 'succeeded', output: { answer: 'saved' }, progress: { round: 1, phase: 'receive', currentInput: 'child' } });
   const saved = store.save(
     {
       id: 'parent-cp',
-      formatVersion: 3,
+      formatVersion: 4,
       contract: { key: 'test.lazy.parent', version: 1 },
       point: 'waiting',
-      frame: { owner: { contextId: 'parent-context', level: 'runtime' }, round: 1, phase: 'execute', input: 'parent', currentInput: 'parent', nextChildOrder: 1, children: [{ identity: childIdentity, target: { position: 0 }, contract: childContract, round: 1, order: 0, input: 'child', state: { kind: 'waiting' } }] },
+      frame: { owner: { contextId: 'parent-context', kind: 'scene' }, round: 1, phase: 'execute', input: 'parent', currentInput: 'parent', nextChildOrder: 1, children: [{ identity: childIdentity, target: { position: 0 }, contract: childContract, round: 1, order: 0, input: 'child', state: { kind: 'waiting' } }] },
       state: null,
       references: {},
     },
     0,
   );
-  const context = new RuntimeContext('parent');
+  const context = new CallableContext('parent', 'scene');
   context.installCheckpoint({ id: 'parent-context', round: 1, currentInput: 'parent' });
   const parent = new Invocation({
     context,

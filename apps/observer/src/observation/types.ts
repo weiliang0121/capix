@@ -3,7 +3,7 @@ import type { ExecutionRecordSnapshot, ProcessRecord, RuntimeErrorValue, Invocat
 export type Purpose = 'selection' | 'answer' | 'memory';
 export type NodeStatus = 'running' | 'passed' | 'failed' | 'unresolved';
 export interface TraceNode {
-  recordType: 'execution' | 'operation' | 'attempt';
+  recordType: 'scene' | 'group' | 'node';
   contextId: string;
   executionId?: string;
   operationInstanceId?: string;
@@ -21,9 +21,9 @@ export interface TraceNode {
   error?: RuntimeErrorValue;
   failure?: InvocationFailureFact;
 }
-export type ParticipantId = 'caller' | 'execution' | 'operation' | 'attempt';
+export type ParticipantId = 'caller' | 'scene' | 'group' | 'node';
 export interface CallSpan {
-  recordType: 'execution' | 'operation' | 'attempt';
+  recordType: 'scene' | 'group' | 'node';
   contextId: string;
   executionId?: string;
   operationInstanceId?: string;

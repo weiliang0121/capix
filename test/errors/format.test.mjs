@@ -177,9 +177,10 @@ test('unrecordable error detail and aggregates close the Observer execution with
     });
     validateExecutionRecordSnapshot(facts);
     assert.equal(facts.execution.status, 'failed');
-    assert.ok(facts.operations.every((operation) => operation.status !== 'running'));
-    assert.ok(facts.attempts.every((attempt) => attempt.status !== 'running'));
-    assert.equal(facts.events.at(-1).value.type, 'throw');
+    assert.ok(facts.calls.some((call) => call.structureKind === 'group'));
+    assert.ok(facts.calls.some((call) => call.structureKind === 'node'));
+    assert.ok(facts.calls.every((call) => call.status !== 'running'));
+    assert.equal(facts.boundaries.filter((boundary) => boundary.callId === facts.execution.id).at(-1).value.type, 'throw');
     recordable(facts.execution.value.error);
   }
 });

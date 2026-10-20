@@ -6,7 +6,7 @@ import { ObserverConversations } from '@capix/observer-service/assembly';
 const conversationId = 'conversation';
 const roots = new Set(['root', 'other']);
 const runs = { read: (conversation, rootContextId) => (conversation === conversationId && roots.has(rootContextId) ? { conversationId, rootContextId } : undefined) };
-const owner = { contextId: 'root', level: 'runtime' };
+const owner = { contextId: 'root', kind: 'scene' };
 function fact(detail = {}, changes = {}) {
   return { kind: 'saved', checkpointId: 'checkpoint', point: 'waiting', activityId: 'original', contextId: owner.contextId, owner, recovering: false, sequence: 1, occurredAt: '2026-10-14T00:00:00.000Z', ...detail, ...changes };
 }
@@ -14,7 +14,7 @@ function fact(detail = {}, changes = {}) {
 test('checkpoint source separates original and restored activities and does not retain their IO', () => {
   const source = new CheckpointObservation(conversationId, runs);
   source.observe(fact());
-  const child = { identity: { contextId: 'execution', parentContextId: 'root', level: 'execution' }, round: 1, order: 0, key: 'work', state: { kind: 'returned', reception: { kind: 'accepted' } } };
+  const child = { identity: { contextId: 'execution', parentContextId: 'root', kind: 'group' }, round: 1, order: 0, key: 'work', state: { kind: 'returned', reception: { kind: 'accepted' } } };
   Object.defineProperty(child, 'input', { get: () => assert.fail('must not read saved input') });
   Object.defineProperty(child.state, 'output', { get: () => assert.fail('must not read saved output') });
   const frame = { owner, round: 1, nextChildOrder: 1, children: [child] };
@@ -40,10 +40,10 @@ test('host checkpoint subscriptions filter actual ancestry and publish outside t
   const source = new CheckpointObservation(conversationId, runs);
   const updates = [];
   const close = source.subscribe('root', (update) => updates.push(update));
-  source.observe(fact({}, { activityId: 'other', contextId: 'other', owner: { contextId: 'other', level: 'runtime' } }));
+  source.observe(fact({}, { activityId: 'other', contextId: 'other', owner: { contextId: 'other', kind: 'scene' } }));
   source.observe(fact());
-  source.observe(fact({}, { activityId: 'execution', contextId: 'execution', owner: { contextId: 'execution', parentContextId: 'root', level: 'execution' } }));
-  source.observe(fact({}, { activityId: 'operation', contextId: 'operation', owner: { contextId: 'operation', parentContextId: 'execution', level: 'operation' } }));
+  source.observe(fact({}, { activityId: 'execution', contextId: 'execution', owner: { contextId: 'execution', parentContextId: 'root', kind: 'group' } }));
+  source.observe(fact({}, { activityId: 'operation', contextId: 'operation', owner: { contextId: 'operation', parentContextId: 'execution', kind: 'group' } }));
   assert.equal(updates.length, 1, 'only the requested baseline is synchronous');
   await Promise.resolve();
   assert.equal(updates.length, 2);
@@ -104,7 +104,7 @@ test('default Observer assembly consumes checkpoint metadata even if an optional
   });
   const conversation = host.create();
   const environment = host.open(conversation.id);
-  assert.equal((await environment.runtime.run({ messages: [{ role: 'user', content: 'hello' }] }, { settings })).content, 'reply');
+  assert.equal((await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'hello' }] }, { settings })).content, 'reply');
   const [run] = environment.checkpointRuns.list(conversation.id);
   const snapshot = environment.checkpointObservation.query(run.rootContextId);
   assert.ok(snapshot.events.length > 3);

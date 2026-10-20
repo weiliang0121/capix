@@ -1,7 +1,8 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { ChangeBuffer, assembleRuntime, RuntimeDefinition, ExecutionDefinition, invocationRecording, bindRecording, Recorder, RecordBook, BaseRecord, ExecutionRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix/server-runtime';
+import { ChangeBuffer, SceneDefinition, GroupDefinition, invocationRecording, bindRecording, Recorder, RecordBook, BaseRecord, CallableRecordHelper, Transcript, Memories, ChangeCaptureError } from '@capix/server-runtime';
 import { ObserverConversations, ObservationFeed, acceptConversationInput, createObserverServer } from '@capix/observer-service';
 import { ObservationReplica, ObservationSequenceError, ClientRuntime } from '@capix/client-runtime';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';
@@ -40,17 +41,17 @@ function fixture(messages = []) {
   return environment;
 }
 async function run(environment, content) {
-  await environment.runtime.run({ messages: [{ role: 'user', content }] }, { settings });
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content }] }, { settings });
 }
 
 function executionRuntime(execute, { changes, recording, accept, parentAccept } = {}) {
-  class E extends ExecutionDefinition {
-    observation = recording ? [invocationRecording()] : undefined;
+  class E extends GroupDefinition {
+    observation = recording ? [invocationRecording({ role: 'conversation-task' })] : undefined;
     run = { requires: {}, execute, ...(accept ? { accept } : {}) };
   }
   const execution = new E();
-  class R extends RuntimeDefinition {
-    children = [execution];
+  class R extends SceneDefinition {
+    members = [execution];
     observation = recording ? [invocationRecording()] : undefined;
     run = {
       requires: {},
@@ -61,7 +62,7 @@ function executionRuntime(execute, { changes, recording, accept, parentAccept } 
       },
     };
   }
-  return assembleRuntime(new R(), { changes, observations: recording ? [recording] : [], providers: [], source: { entry: () => ({}), capture: () => ({}) } });
+  return installCallable(new R(), { changes, observations: recording ? [recording] : [], providers: [], source: { entry: () => ({}), capture: () => ({}) } });
 }
 
 test('all live sources remain observable without Recorder and do not serialize arbitrary invocation IO', async () => {
@@ -91,7 +92,7 @@ test('all live sources remain observable without Recorder and do not serialize a
       [2, 'update', 'two'],
     ],
   );
-  const calls = events.filter((event) => event.type === 'invocation' && event.level === 'execution');
+  const calls = events.filter((event) => event.type === 'invocation' && event.kind === 'group');
   assert.equal(calls[0].change.kind, 'started');
   assert.deepEqual(
     calls.map((event) => event.sequence),
@@ -109,8 +110,8 @@ test('record registration captures its child and parent reference together; proc
   const initial = changes.take()[0];
   await runtime.run('input', {});
   const events = changes.take().filter((event) => event.type === 'record');
-  const added = events.find((event) => event.change.kind === 'added' && event.change.entry.kind === 'execution');
-  const parent = events.find((event) => event.change.kind === 'added' && event.change.entry.kind === 'runtime-call');
+  const added = events.find((event) => event.change.kind === 'added' && event.change.entry.kind === 'invocation' && event.change.entry.data.role === 'conversation-task');
+  const parent = events.find((event) => event.change.kind === 'added' && event.change.entry.kind === 'invocation' && event.change.entry.data.structureKind === 'scene');
   assert.deepEqual(added.change.parent, { id: parent.change.entry.data.id, childId: added.change.entry.data.id });
   assert.deepEqual(initial.change.entry.data.childIds, [], 'old parent snapshot remains fixed');
   assert.deepEqual(added.change.entry.data.value.processes, [], 'registration did not mutate into the final record');
@@ -153,7 +154,7 @@ test('multi-round observation deltas reconstruct records and content locations e
     assert.equal(replica.memory.items[0].content, 'memory 4');
     assert.equal(replica.memory.items[0].records.length, 3);
     assert.equal(replica.snapshots.size, 4);
-    for (const [id, snapshot] of replica.snapshots) assert.deepEqual(snapshot, wire(ExecutionRecordHelper.snapshot(environment.recorder, id)));
+    for (const [id, snapshot] of replica.snapshots) assert.deepEqual(snapshot, wire(CallableRecordHelper.snapshot(environment.recorder, id)));
     assert.ok(frames.slice(1).every((frame) => frame.type === 'delta' && !('snapshot' in frame)));
     assert.deepEqual(
       frames.map((frame) => frame.sequence),
@@ -172,7 +173,7 @@ test('multi-round observation deltas reconstruct records and content locations e
     });
     stop();
     assert.equal(baseline.overview.executions.length, 4);
-    assert.equal(baseline.entries.filter((entry) => entry.kind === 'execution').length, 0);
+    assert.equal(baseline.entries.filter((entry) => entry.kind === 'invocation' && entry.data.role === 'conversation-task').length, 0);
     assert.equal(baseline.entries[0].kind, 'runtime');
     assert.equal(baseline.memory.items[0].content, 'memory 4');
     assert.deepEqual(
@@ -325,7 +326,7 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
   assert.equal(runtime.getSnapshot().observation.error, undefined);
   const failed = [...runtime.getSnapshot().observation.records.values()].find((snapshot) => snapshot.execution.status === 'failed');
   assert.equal(failed.execution.value.failure.kind, 'exception');
-  const handling = failed.operations.find((operation) => operation.operation === 'answer').value.processes.filter((process) => process.stage === 'handling');
+  const handling = failed.calls.find((operation) => operation.name === 'answer').value.processes.filter((process) => process.stage === 'handling');
   assert.deepEqual(
     handling.map((process) => process.type),
     ['start', 'continue', 'start', 'unhandled'],
@@ -446,7 +447,7 @@ test('joining during an active call seeds local source positions and continues t
   const runtime = executionRuntime(() => pending, { recording: environment.recording, changes: environment.changes });
   const running = runtime.run('input', {});
   await settle();
-  const record = [...environment.book.values()].find((record) => record.kind === 'execution');
+  const record = [...environment.book.values()].find((record) => record.kind === 'invocation' && record.role === 'conversation-task');
   let replica;
   let failure;
   const stop = feed.connect((frame) => {
@@ -464,7 +465,7 @@ test('joining during an active call seeds local source positions and continues t
     await running;
     await settle();
     assert.equal(failure, undefined);
-    assert.deepEqual(replica.snapshots.get(record.id), wire(ExecutionRecordHelper.snapshot(environment.recorder, record.id)));
+    assert.deepEqual(replica.snapshots.get(record.id), wire(CallableRecordHelper.snapshot(environment.recorder, record.id)));
     assert.equal(replica.invocationEvents.get(record.contextId).change.status, 'succeeded');
   } finally {
     release('output');
@@ -484,7 +485,7 @@ test('reconnecting while R accepts a completed E preserves the child and the par
   const runtime = executionRuntime(() => 'child output', { recording: environment.recording, changes: environment.changes, parentAccept: () => accepted });
   const pending = runtime.run('input', {});
   await settle();
-  const execution = [...environment.book.values()].find((record) => record.kind === 'execution');
+  const execution = [...environment.book.values()].find((record) => record.kind === 'invocation' && record.role === 'conversation-task');
   let replica;
   let failure;
   const stop = feed.connect((frame) => {
@@ -498,15 +499,15 @@ test('reconnecting while R accepts a completed E preserves the child and the par
     assert.equal(failure, undefined);
     const snapshot = replica.snapshots.get(execution.id);
     assert.equal(snapshot.execution.status, 'succeeded');
-    assert.equal(snapshot.runtimeCall.status, 'running');
-    assert.equal(snapshot.runtimeCall.value.relationChanges.at(-1).change.kind, 'receiving');
-    assert.equal(snapshot.runtimeCall.value.relationChanges.at(-1).childId, execution.id);
+    assert.equal(snapshot.rootCall.status, 'running');
+    assert.equal(snapshot.rootCall.value.relationChanges.at(-1).change.kind, 'receiving');
+    assert.equal(snapshot.rootCall.value.relationChanges.at(-1).childId, execution.id);
     release('accepted output');
     assert.equal(await pending, 'accepted output');
     await settle();
     assert.equal(failure, undefined);
-    assert.deepEqual(replica.snapshots.get(execution.id), wire(ExecutionRecordHelper.snapshot(environment.recorder, execution.id)));
-    assert.equal(replica.snapshots.get(execution.id).runtimeCall.value.relationChanges.at(-1).change.kind, 'accepted');
+    assert.deepEqual(replica.snapshots.get(execution.id), wire(CallableRecordHelper.snapshot(environment.recorder, execution.id)));
+    assert.equal(replica.snapshots.get(execution.id).rootCall.value.relationChanges.at(-1).change.kind, 'accepted');
   } finally {
     release('accepted output');
     await pending;
@@ -571,7 +572,7 @@ test('individual record changes retain partial R terminal facts until the separa
   let sawPendingBoundary = false;
   for (const event of events) {
     replica = ObservationReplica.receive(replica, { type: 'delta', scopeId: replica.scopeId, sequence: ++sequence, changes: [event] });
-    if (event.type === 'record' && event.change.kind === 'finished' && replica.entries.get(event.change.id)?.kind === 'runtime-call') {
+    if (event.type === 'record' && event.change.kind === 'finished' && replica.entries.get(event.change.id)?.kind === 'invocation' && replica.entries.get(event.change.id)?.data.structureKind === 'scene') {
       sawPendingBoundary = true;
       assert.equal(replica.entries.get(event.change.id).data.status, 'succeeded');
       assert.equal(replica.snapshots.size, 0, 'raw R terminal is retained without publishing an incomplete execution view');
@@ -580,5 +581,5 @@ test('individual record changes retain partial R terminal facts until the separa
   assert.equal(sawPendingBoundary, true);
   assert.equal(replica.snapshots.size, 1);
   const snapshot = [...replica.snapshots.values()][0];
-  assert.deepEqual(snapshot, wire(ExecutionRecordHelper.snapshot(recorder, snapshot.execution.id)));
+  assert.deepEqual(snapshot, wire(CallableRecordHelper.snapshot(recorder, snapshot.execution.id)));
 });

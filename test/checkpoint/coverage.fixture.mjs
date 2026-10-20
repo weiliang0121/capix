@@ -26,7 +26,7 @@ persistence.checkpoints.save = (image, revision) => {
   if (key === 'observer.request-model.memory' && image.point === 'feedbackAccepted') crash('memoryFeedback');
   if (key === 'observer.apply-memory' && image.point === 'prepared') crash('memoryPrepared');
   if (key === 'observer.create-text' && image.point === 'prepared') crash('filePrepared');
-  if (key === 'observer.conversation.execution') {
+  if (key === 'observer.conversation.task') {
     if (image.point === 'preparationAccepted') crash('preparationAccepted');
     if (image.point === 'decisionAccepted') crash('decisionAccepted');
     if (image.point === 'capabilityAccepted.answer' || image.point === 'capabilityAccepted.document') crash('answerAccepted');
@@ -91,7 +91,7 @@ const environment = conversations.open(conversationId);
 let result;
 let error;
 try {
-  if (mode === 'start') result = await environment.runtime.run({ messages: [{ role: 'user', content: '整理文件并保存。' }] }, { settings: { model: 'fixed', contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 1000 } });
+  if (mode === 'start') result = await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '整理文件并保存。' }] }, { settings: { model: 'fixed', contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 1000 } });
   else {
     if (mode === 'changedFile') writeFileSync(join(workspace, 'notes.md'), '后来改动');
     const run = persistence.checkpointRuns.list(conversationId)[0];

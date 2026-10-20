@@ -1,7 +1,7 @@
 import type { BaseRecord, ProcessRecord, RelationChangeRecord } from './types.js';
 import type { RuntimeErrorValue, InvocationFailureFact } from '../invocation/errors.js';
 
-export type RecordKind = 'runtime' | 'runtime-call' | 'execution' | 'operation' | 'attempt' | 'invocation-boundary' | 'transcript' | 'memory' | 'resource' | 'custom';
+export type RecordKind = 'invocation' | 'runtime' | 'runtime-call' | 'execution' | 'operation' | 'attempt' | 'invocation-boundary' | 'transcript' | 'memory' | 'resource' | 'custom';
 export interface RecordEntry {
   readonly kind: RecordKind;
   readonly data: BaseRecord;

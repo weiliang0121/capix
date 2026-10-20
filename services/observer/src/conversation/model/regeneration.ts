@@ -2,8 +2,8 @@ import { modelOutputRejected } from './rejection.js';
 import { RuntimeError, isObject, type ChildReference, type ChildFacts, type ContinuationFact } from '@capix/server-runtime';
 import { isEqual } from 'es-toolkit';
 import type { ModelOutput, ModelRequest } from './types.js';
-import type { RequestModelDefinition } from '../operations/model/request.js';
-import type { AcceptModelOutputDefinition, ModelAcceptanceInput } from '../attempt/model/accept.js';
+import type { RequestModelDefinition } from '../group/model/request.js';
+import type { AcceptModelOutputDefinition, ModelAcceptanceInput } from '../node/model/accept.js';
 import { z } from 'zod';
 
 /** Read-only parent facts also used by the capability's alternate input entry. */

@@ -1,14 +1,15 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChildCallFailure, ExceptionContract, OperationDefinition, assembleRuntime, defineAttempt, defineExecution, defineOperation, defineRuntime, reception } from '@capix/server-runtime';
+import { ChildCallFailure, ExceptionContract, GroupDefinition, defineNode, defineGroup, defineScene, reception } from '@capix/server-runtime';
 import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
 
 const metadata = { name: 'reception-fixture', label: 'Reception fixture', source: 'test' };
 const issue = new ExceptionContract('RECEPTION_FIXTURE');
 
 function runtime(operation, providers = []) {
-  const execution = defineExecution()({
-    children: [operation],
+  const execution = defineGroup()({
+    members: [operation],
     run: {
       async execute(work) {
         const call = work.children.create(operation, work.input);
@@ -17,8 +18,8 @@ function runtime(operation, providers = []) {
       },
     },
   });
-  const root = defineRuntime()({
-    children: [execution],
+  const root = defineScene()({
+    members: [execution],
     run: {
       async execute(work) {
         const call = work.children.create(execution, work.input);
@@ -27,11 +28,11 @@ function runtime(operation, providers = []) {
       },
     },
   });
-  return assembleRuntime(root, { providers, source: { capture: () => null } });
+  return installCallable(root, { providers, source: { capture: () => null } });
 }
 
 function leaf(execute = (work) => work.input) {
-  return defineAttempt()({ ...metadata, callee: 'local', run: { execute } });
+  return defineNode()({ ...metadata, callee: 'local', run: { execute } });
 }
 
 function checked(check = (value) => value) {
@@ -47,7 +48,7 @@ function checked(check = (value) => value) {
 }
 
 function parent(child, contracts, execute, options = {}) {
-  return defineOperation()({ ...metadata, children: [child], receptions: contracts, run: { execute }, ...options });
+  return defineGroup()({ ...metadata, members: [child], receptions: contracts, run: { execute }, ...options });
 }
 
 test('R, E and O each register and consume their own direct-child reception', async () => {
@@ -60,8 +61,8 @@ test('R, E and O each register and consume their own direct-child reception', as
     return work.children.facts.accepted(call.ref, operationValue);
   });
   const executionValue = reception(operation, checked());
-  const execution = defineExecution()({
-    children: [operation],
+  const execution = defineGroup()({
+    members: [operation],
     receptions: [executionValue],
     run: {
       async execute(work) {
@@ -73,8 +74,8 @@ test('R, E and O each register and consume their own direct-child reception', as
     },
   });
   const runtimeValue = reception(execution, checked());
-  const root = defineRuntime()({
-    children: [execution],
+  const root = defineScene()({
+    members: [execution],
     receptions: [runtimeValue],
     run: {
       async execute(work) {
@@ -85,7 +86,7 @@ test('R, E and O each register and consume their own direct-child reception', as
       },
     },
   });
-  const installed = assembleRuntime(root, { providers: [], source: { capture: () => null } });
+  const installed = installCallable(root, { providers: [], source: { capture: () => null } });
   assert.deepEqual(await installed.run(null, {}), ['number:7']);
 });
 
@@ -113,11 +114,11 @@ test('the same child has independent parent Accepted values in factory and named
     assert.equal(work.children.facts.get(call.ref).returned.output, 'hello');
     return accepted;
   });
-  class NamedParent extends OperationDefinition {
+  class NamedParent extends GroupDefinition {
     name = metadata.name;
     label = metadata.label;
     source = metadata.source;
-    children = [child];
+    members = [child];
     receptions = [count];
     run = {
       requires: {},
@@ -253,7 +254,7 @@ for (const mode of ['unregistered', 'different-child']) {
         checkedRejection = true;
         return 'cannot swallow a contract violation';
       },
-      { children: [child, otherChild] },
+      { members: [child, otherChild] },
     );
     await assert.rejects(runtime(definition).run(null, {}));
     assert.equal(checkedRejection, true);

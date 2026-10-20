@@ -15,7 +15,7 @@ export type DecodedCheckpointFrame = Omit<InvocationCheckpointFrame, 'input' | '
 /** A persisted position is meaningful only inside this parent's fixed contract. */
 export function checkpointChildBinding(child: CheckpointChild, children: readonly CheckpointChildBinding[] = []): CheckpointBinding | undefined {
   const target = children[child.target.position];
-  if (!target || target.level !== child.identity.level || target.binding?.key !== child.contract?.key || target.binding?.version !== child.contract?.version) throw new Error('Checkpoint child declaration position or contract is incompatible');
+  if (!target || target.kind !== child.identity.kind || target.binding?.key !== child.contract?.key || target.binding?.version !== child.contract?.version) throw new Error('Checkpoint child declaration position or contract is incompatible');
   return target.binding;
 }
 

@@ -4,7 +4,8 @@ import type { RelationChangeRecord } from '@capix/protocol';
 export interface CallGraphNode {
   readonly id: string;
   readonly label: string;
-  readonly level: 'execution' | 'operation' | 'attempt';
+  readonly kind: 'scene' | 'group' | 'node';
+  readonly task?: true;
   readonly status: ObservationStatus;
   readonly name?: string;
   readonly summary?: string;

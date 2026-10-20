@@ -1,3 +1,5 @@
+export { CallableRecord, type CallableRecordOptions } from './callable/record.js';
+export { CallableRecordHelper } from './callable/helper.js';
 export { BaseRecord } from './record.js';
 export { CompositeRecord } from './composite.js';
 export { RecordingRootRecord } from './root/record.js';

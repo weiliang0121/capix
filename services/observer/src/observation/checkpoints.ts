@@ -165,7 +165,7 @@ export class CheckpointObservation {
     const visited = new Set<string>();
     let current = this.#owners.get(contextId);
     while (current && !visited.has(current.contextId)) {
-      if (current.level === 'runtime') return current.parentContextId ? undefined : current.contextId;
+      if (!current.parentContextId) return current.contextId;
       visited.add(current.contextId);
       const parentContextId = current.parentContextId;
       current = parentContextId ? this.#owners.get(parentContextId) : undefined;

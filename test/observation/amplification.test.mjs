@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Transcript, Memories } from '@capix/server-runtime/content';
-import { RecordBook, Recorder, OperationRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper, observeMemory } from '@capix/server-runtime/recording';
+import { RecordBook, Recorder, CallableRecord, OperationRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper, observeMemory } from '@capix/server-runtime/recording';
 import { initializeObserver, observeOverview } from '@capix/observer-service';
 import { createRecordScope } from '../fixtures/runtime.mjs';
 
@@ -15,7 +15,7 @@ test('overview groups long-conversation operation ownership without rescanning e
     },
   });
   try {
-    for (let index = 0; index < 16; index++) await environment.runtime.run({ messages: [{ role: 'user', content: `question ${index}` }] }, { settings });
+    for (let index = 0; index < 16; index++) await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: `question ${index}` }] }, { settings });
     const expected = observeOverview(environment);
     const records = [...environment.book.values()];
     let ownershipReads = 0;
@@ -23,7 +23,7 @@ test('overview groups long-conversation operation ownership without rescanning e
       (record) =>
         new Proxy(record, {
           get(target, key) {
-            if (target instanceof OperationRecord && key === 'executionId') ownershipReads++;
+            if (target instanceof CallableRecord && key === 'parentId') ownershipReads++;
             const value = Reflect.get(target, key, target);
             return typeof value === 'function' ? value.bind(target) : value;
           },
@@ -31,9 +31,9 @@ test('overview groups long-conversation operation ownership without rescanning e
     );
     const scans = t.mock.method(environment.book, 'values', () => projected.values());
     assert.deepEqual(observeOverview(environment), expected);
-    const operations = records.filter((record) => record instanceof OperationRecord).length;
+    const operations = records.filter((record) => record instanceof CallableRecord).length;
     assert.ok(ownershipReads <= operations * 6, `${ownershipReads} ownership reads for ${operations} operations`);
-    assert.equal(scans.mock.callCount(), 4, 'execution transcript ranges must use direct resource ownership, without scanning the entire book');
+    assert.equal(scans.mock.callCount(), 3, 'execution transcript ranges must use direct resource ownership, without scanning the entire book');
   } finally {
     environment.consumer.close();
   }
@@ -90,7 +90,7 @@ test('restored execution identities keep absent and populated overview groups in
       assert.equal(overview.executions[0].id, id);
       assert.deepEqual(
         overview.executions[0].calls.map((call) => call.recordType),
-        populated ? ['execution', 'operation', 'attempt'] : ['execution'],
+        populated ? ['group', 'group', 'node'] : ['group'],
       );
       assert.equal(overview.executions[0].memoryChanges.length, populated ? 1 : 0);
     }

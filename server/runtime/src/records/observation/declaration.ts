@@ -5,6 +5,8 @@ import { ResourceOffer } from '../../resource/offer.js';
 import type { InvocationRecording } from './invocation.js';
 
 export interface InvocationRecordDescription<Input = unknown, Output = unknown> {
+  /** Host interpretation; does not change execution or invocation ownership. */
+  readonly role?: string;
   readonly input?: (input: Input) => unknown;
   readonly output?: (output: Output) => unknown;
   /** Parent acceptance may produce a different value from the child's returned output. */
@@ -28,6 +30,7 @@ export const InvocationRecordAccess = new ResourceOffer<InvocationRecording, Inv
 /** Call records are produced here, not by an implicit Invocation recording path. */
 export function invocationRecording<Input = unknown, Output = unknown>(description: InvocationRecordDescription<Input, Output> = {}, options: { failure?: 'isolate' | 'propagate' } = {}) {
   const mapped: InvocationRecordDescription = {
+    ...(description.role !== undefined ? { role: description.role } : {}),
     ...(description.input ? { input: (input: unknown) => description.input!(input as Input) } : {}),
     ...(description.output ? { output: (output: unknown) => description.output!(output as Output) } : {}),
     ...(description.relationAccepted ? { relationAccepted: description.relationAccepted } : {}),

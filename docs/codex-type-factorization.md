@@ -1,5 +1,7 @@
 # CAPiX 实现空间、候选维度与类型表达（Codex 讨论结果 v4）
 
+> **2026-10-20 结构迁移：** 当前采用 Scene / Group / Node 及共同 Callable / Composite，旧 REOA 名称和位置表在本文保留为设计讨论历史。已实施契约以 [可调用结构](callable-structures.md)、[运行边界](runtime-boundaries.md) 为准。资源捕获按明确声明绑定，内核不再设 E 专属接线；Checkpoint 使用 Frame v4。
+
 > 状态：P02「entry 与 R/E 输入边界」及 P03/P04「结构、调用、能力与 Work」的窄闭环已实施，结果与限制分别见 §14 / §15；2026-10-19 的候选收敛与契约类型收尾见 §16，后续 P06 受限类型整理见 §19。概念讨论和 Fable 审查保留在 §12 / §13。其余前置问题继续开放，不整体启动原类型因式分解批次；§5 的历史源码证据基线仍为 `894fddf`。
 >
 > **本轮设计闭环（2026-10-19，基线 `e07a217`）：** §17 收敛声明元信息、正式能力契约与候选 catalog 的职责。现有选择链已做针对性回归，R/E 描述丢失已独立复现；公共元信息形状、记录兼容及源码定位尚未迁移。设计规则闭合不等于这些实现缺口已经修复。
@@ -106,7 +108,7 @@
 
 ### 5.1 当前真实链路
 
-源码定位：`server/runtime/src/structure/execution.ts`、`definition/entry.ts`、`definition/invocation.ts`、`invocation/builders/execution.ts`；服务样本：`services/observer/src/conversation/execution.ts` 与 `conversation/binding/source.ts`。
+源码定位：`server/runtime/src/structure/execution.ts`、`definition/entry.ts`、`definition/invocation.ts`、`invocation/builders/execution.ts`；服务样本：`services/observer/src/conversation/task.ts` 与 `conversation/binding/source.ts`。
 
 以下描述当前行为，不是新设计：
 
@@ -1073,8 +1075,8 @@ async function execute(work) {
 | R/E 工厂接受 name/label，快照丢弃，Bound 描述只发 id        | `definition/factory.ts`、`binding/snapshot.ts`、`structure/{runtime,execution}.ts`       | 修复需覆盖快照、正常/恢复调用、被动进展；若承诺保存展示名称，还须贯通记录与协议     |
 | O/A 强制描述字段，A 包含 callee                             | `definition/{operation,attempt}.ts`                                                      | 共通元信息不能只改工厂；具名类、快照、构造器和事实描述必须一致                      |
 | 记录要求 O/A 的完整描述；协议仍有必填 source/callee         | `records/observation/invocation.ts`、`protocol/src/recording/`                           | source 可空字符串不等于 callee 可空；必须选择诚实的缺省语义或调整协议，不能伪造目标 |
-| 选择键关联 use，参数校验与输入转换分开                      | `conversation/decision/capability.ts`、`conversation/execution.ts`                       | 保持局部契约；公开模型参数不自动等于完整 Input                                      |
-| 正常链复核 available/参数后保存已接纳决定，再创建真实子调用 | `conversation/execution.ts` 的 advance/receiveDecision/afterDecision                     | 保持真实接纳与执行区别；函数策略和模型策略受同样检查                                |
+| 选择键关联 use，参数校验与输入转换分开                      | `conversation/decision/capability.ts`、`conversation/task.ts`                            | 保持局部契约；公开模型参数不自动等于完整 Input                                      |
+| 正常链复核 available/参数后保存已接纳决定，再创建真实子调用 | `conversation/task.ts` 的 advance/receiveDecision/afterDecision                          | 保持真实接纳与执行区别；函数策略和模型策略受同样检查                                |
 | 默认策略根据已接纳交付直接推进，只在需要理解时调用模型      | `conversation/decision/default.ts`                                                       | 元信息迁移不增加决策模型调用或隐式动态注册                                          |
 | Observer 按 operation/name 解释部分结果                     | `services/observer/src/observation/overview.ts`、`apps/observer/src/binding/overview.ts` | 这是服务既有约定，不是通用元信息的类型证明；须核对明确的服务结果格式与解释器        |
 

@@ -56,8 +56,8 @@ export function checkEntry(entry: RecordEntry): void {
   text(data.id);
   optionalText(data.parentId);
   if (!Object.hasOwn(data, 'value')) fail();
-  if (['runtime', 'runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) children(data.childIds);
-  if (['runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) {
+  if (['invocation', 'runtime', 'runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) children(data.childIds);
+  if (['invocation', 'runtime-call', 'execution', 'operation', 'attempt'].includes(entry.kind)) {
     text(data.parentId);
     text(data.contextId);
     if (data.contextId === data.id) fail();
@@ -68,6 +68,12 @@ export function checkEntry(entry: RecordEntry): void {
   }
 
   switch (entry.kind) {
+    case 'invocation':
+      if (!['scene', 'group', 'node'].includes(data.structureKind as string)) fail();
+      for (const name of ['structureId', 'name', 'label', 'callee', 'role']) optionalText(data[name]);
+      if (data.source !== undefined && typeof data.source !== 'string') fail();
+      time(object(data.value).startedAt);
+      break;
     case 'runtime':
       time(object(data.value).createdAt);
       break;

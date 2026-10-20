@@ -32,6 +32,7 @@ export class SqliteCheckpointStore implements CheckpointStore {
     try {
       return this.readHead(contextId);
     } catch (cause) {
+      if (cause instanceof RuntimeError && cause.code === 'CHECKPOINT_FORMAT_UNSUPPORTED') throw cause;
       throw storageFailure(cause);
     }
   }
@@ -95,7 +96,7 @@ export class SqliteCheckpointStore implements CheckpointStore {
           throw storageFailure(new AggregateError([cause, rollback], 'Checkpoint transaction and rollback failed'));
         }
       }
-      if (cause instanceof RuntimeError && cause.code === 'CHECKPOINT_CONFLICT') throw cause;
+      if (cause instanceof RuntimeError && (cause.code === 'CHECKPOINT_CONFLICT' || cause.code === 'CHECKPOINT_FORMAT_UNSUPPORTED')) throw cause;
       throw storageFailure(cause);
     }
   }

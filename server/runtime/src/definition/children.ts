@@ -1,21 +1,19 @@
-import type { ExecutionDefinition } from './execution.js';
-import type { OperationDefinition } from './operation.js';
-import type { AttemptDefinition } from './attempt.js';
+import type { GroupDefinition } from './group.js';
+import type { NodeDefinition } from './node.js';
 import type { DefinitionContract, DefinitionInput, DefinitionOutput, DefinitionDelta } from './signature.js';
 import type { InvocationOutputReceiver } from '../output/contract.js';
 import type { ChildEntry } from './entry.js';
-import type { InvocationFailureFact, RuntimeErrorValue, InvocationLevel } from '@capix/protocol';
-import type { ChildLevel } from './level.js';
+import type { InvocationFailureFact, RuntimeErrorValue, CallableKind } from '@capix/protocol';
 import type { ReceptionDefinition } from './reception.js';
+import type { ChildKind } from './kind.js';
 
-// Heterogeneous storage erases IO; all public lookup and call sites retain the concrete definition.
-export type ChildDefinition = ExecutionDefinition<any, any, any, any, any> | OperationDefinition<any, any, any, any, any> | AttemptDefinition<any, any, any, any, any>;
-export type ChildrenOf<Level extends InvocationLevel> = Extract<ChildDefinition, { readonly level: ChildLevel<Level> }>;
-/** Calls and facts need a target signature, never the target's complete declaration tree. */
-// Input is erased only at this heterogeneous upper bound; concrete call sites retain their Definition.
-export type ChildContract = DefinitionContract<'execution', any> | DefinitionContract<'operation', any> | DefinitionContract<'attempt', any>;
-export type ChildContractsOf<Level extends InvocationLevel> = Extract<ChildContract, { readonly level: ChildLevel<Level> }>;
-export type DefinitionChildren<Level extends InvocationLevel> = Level extends 'attempt' ? { readonly children?: never } : { readonly children: readonly ChildrenOf<Level>[] };
+// Heterogeneous storage erases IO; call sites retain the concrete definition.
+export type ChildDefinition = GroupDefinition<any, any, any, any, any> | NodeDefinition<any, any, any, any, any>;
+export type ChildrenOf<Kind extends CallableKind> = [ChildKind<Kind>] extends [never] ? never : ChildDefinition;
+/** Calls and facts consume the signature of the same registered definition object. */
+export type ChildContract = DefinitionContract<'group', any> | DefinitionContract<'node', any>;
+export type ChildContractsOf<Kind extends CallableKind> = [ChildKind<Kind>] extends [never] ? never : ChildContract;
+export type DefinitionMembers<Kind extends CallableKind> = Kind extends 'node' ? { readonly members?: never } : { readonly members: readonly ChildrenOf<Kind>[] };
 export type { DefinitionContract, DefinitionInput, DefinitionOutput, DefinitionDelta } from './signature.js';
 
 declare const childReferenceSignature: unique symbol;

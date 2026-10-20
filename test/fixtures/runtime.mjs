@@ -1,5 +1,6 @@
+import { installCallable } from './driver.mjs';
 import { randomUUID } from 'node:crypto';
-import { RecordingRootHelper, RuntimeCallRecord, InvocationBoundaryRecordHelper, BoundRuntime, createInvocationBuilders, bindRecording, invocationRecording, ResourceBindings, ExecutionRecordHelper } from '@capix/server-runtime';
+import { RecordingRootHelper, RuntimeCallRecord, CallableRecord, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, ResourceRecord, TranscriptRecord, MemoryRecord, defineScene, CallableInvocationBuilder, CallableContextBuilder, bindRecording, invocationRecording, ResourceBindings } from '@capix/server-runtime';
 import { rememberCall } from './calls.mjs';
 
 const states = new WeakMap();
@@ -9,7 +10,7 @@ export function fixtureState(runtime) {
   return state;
 }
 
-/** Low-level tests explicitly assemble recording and a genuine parent R call. */
+/** Low-level mechanism tests use one genuine builder and explicit parent calls. */
 export function createBoundRuntime({ recorder, ...options } = {}) {
   const invocationRecordings = new Map();
   const recording = recorder ? bindRecording(recorder, { failure: 'propagate' }) : undefined;
@@ -22,31 +23,36 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
     };
   }
   const capabilities = { ...options, ...(recorder ? { clock: recorder.clock, observations: [...(options.observations ?? []), recording] } : {}) };
-  const builders = createInvocationBuilders(capabilities);
-  const runtime = new BoundRuntime(builders.runtime, undefined, capabilities);
-  const state = { invocationRecordings, recording, recorder, runtime, observe: recorder ? [invocationRecording()] : [] };
+  const builder = new CallableInvocationBuilder(new CallableContextBuilder(), capabilities);
+  const runtime = installCallable(defineScene()({ run: { execute: () => undefined } }), { providers: [], source: { capture: () => null }, ...capabilities });
+  const state = { invocationRecordings, recording, recorder, runtime, builder, observe: recorder ? [invocationRecording()] : [] };
   states.set(runtime, state);
-  // Kept only on the test fixture to make legacy record assertions explicit.
-  Object.defineProperties(runtime, {
-    runtimeInvocationBuilder: { value: builders.runtime },
-    executionInvocationBuilder: { value: builders.execution },
-    operationInvocationBuilder: { value: builders.operation },
-    attemptInvocationBuilder: { value: builders.attempt },
-    recording: { value: recording },
-    recorder: { value: recorder },
-    record: { get: () => recording?.root },
-  });
   const decorate = (invocation) => {
     Object.defineProperty(invocation, 'record', { get: () => invocationRecordings.get(invocation.context.id)?.record });
     return rememberCall(invocation);
   };
   state.decorate = decorate;
-  for (const builder of [runtime.operationInvocationBuilder, runtime.attemptInvocationBuilder]) {
-    const create = builder.create.bind(builder);
-    builder.create = (parent, request) => decorate(create(parent, { ...request, observation: request.observation ?? state.observe }));
-  }
-  const createE = runtime.executionInvocationBuilder.create.bind(runtime.executionInvocationBuilder);
-  state.createExecution = (parent, input, request) => decorate(createE(parent, input, { ...request, observation: request.observation ?? state.observe }));
+  const childBuilder = (kind) => ({
+    create(parent, request) {
+      return decorate(builder.create(request.input, { ...request, kind, parent, observation: request.observation ?? state.observe }));
+    },
+  });
+  const executionBuilder = {};
+  // Descriptive fixture adapters preserve old test vocabulary; they all use the same mechanism.
+  Object.defineProperties(runtime, {
+    runtimeInvocationBuilder: { value: { create: (input, request) => decorate(builder.create(input, { ...request, kind: 'scene' })) } },
+    executionInvocationBuilder: { value: executionBuilder },
+    operationInvocationBuilder: { value: childBuilder('group') },
+    attemptInvocationBuilder: { value: childBuilder('node') },
+    recording: { value: recording },
+    recorder: { value: recorder },
+    record: { get: () => recording?.root },
+  });
+  state.createExecution = (parent, input, request) => {
+    request.validate?.();
+    const established = request.establish?.() ?? {};
+    return decorate(builder.create(input, { ...request, ...established, kind: 'group', parent, controls: request.context, observation: request.observation ?? (recorder ? [invocationRecording({ role: 'conversation-task' })] : []) }));
+  };
   state.beginRuntime = (controls = {}) => {
     let resolve;
     let reject;
@@ -54,13 +60,12 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
       resolve = accept;
       reject = fail;
     });
-    const call = decorate(runtime.runtimeInvocationBuilder.create(null, { description: { id: runtime.id }, controls, resources: new ResourceBindings({}), observation: recorder ? [invocationRecording({ input: () => null, output: () => null })] : [], work: { maxRounds: 1, execute: () => pending } }));
+    const call = decorate(builder.create(null, { kind: 'scene', description: { id: runtime.id }, controls, resources: new ResourceBindings({}), observation: recorder ? [invocationRecording({ input: () => null, output: () => null })] : [], work: { maxRounds: 1, execute: () => pending } }));
     const completion = call.run();
-    // Some manual lifecycle fixtures deliberately retain a running parent.
     completion.catch(() => {});
     return { call, completion, resolve, reject };
   };
-  runtime.executionInvocationBuilder.create = (input, request) => {
+  executionBuilder.create = (input, request) => {
     const parent = state.beginRuntime(request.context);
     let invocation;
     try {
@@ -85,14 +90,37 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
     };
     return invocation;
   };
-  runtime.executionInvocationBuilder.submit = (accept, request) => runtime.executionInvocationBuilder.create(accept(), request).run();
+  executionBuilder.submit = (accept, request) => executionBuilder.create(accept(), request).run();
   return runtime;
 }
 
 export function observeCall(recording, invocation) {
   const record = invocation.record;
-  if (!record || recording.recorder.tree.root(record.id) !== recording.root) throw new Error('Execution record does not exist');
-  return ExecutionRecordHelper.snapshot(recording.recorder, record.id);
+  const recorder = recording.recorder;
+  if (!(record instanceof CallableRecord) || recorder.tree.root(record.id) !== recording.root) throw new Error('Call record does not exist');
+  const descendants = recorder.tree.descendants(record.id);
+  const parent = recorder.book.get(record.parentId);
+  const rootChildren = parent ? recorder.tree.children(parent.id) : [];
+  const calls = [record, ...descendants.filter((item) => item instanceof CallableRecord)].map((item) => item.toJSON());
+  const boundaries = [...rootChildren, ...descendants]
+    .filter((item) => item instanceof InvocationBoundaryRecord)
+    .map((item) => item.toJSON())
+    .sort((left, right) => (left.scopeId === right.scopeId ? left.sequence - right.sequence : Date.parse(left.occurredAt) - Date.parse(right.occurredAt)));
+  // Convenience subsets are test projections over real callable records, never legacy record instances.
+  return {
+    execution: record.toJSON(),
+    calls,
+    rootCall: parent?.toJSON(),
+    boundaries,
+    operations: calls.slice(1).filter((item) => item.structureKind === 'group'),
+    attempts: calls.slice(1).filter((item) => item.structureKind === 'node'),
+    events: boundaries.filter((item) => item.callId !== parent?.id),
+    runtimeCall: parent?.toJSON(),
+    runtimeEvents: boundaries.filter((item) => item.callId === parent?.id),
+    resources: [...rootChildren, ...descendants].filter((item) => item instanceof ResourceRecord).map((item) => item.toJSON()),
+    transcripts: descendants.filter((item) => item instanceof TranscriptRecord).map((item) => item.toJSON()),
+    memories: descendants.filter((item) => item instanceof MemoryRecord).map((item) => item.toJSON()),
+  };
 }
 
 /** Record-only ownership fixture; no execution of work is implied. */

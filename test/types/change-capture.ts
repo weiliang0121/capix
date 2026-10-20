@@ -1,5 +1,5 @@
 import type { ObserverChange } from '@capix/protocol';
-import { ChangeBuffer, Transcript, createBoundRuntime, type ChangeCapture, type TranscriptEvent } from '@capix/server-runtime';
+import { ChangeBuffer, Transcript, Driver, defineScene, type ChangeCapture, type TranscriptEvent } from '@capix/server-runtime';
 
 // A second local source demonstrates union reuse without inventing a production MemoryEvent.
 type OtherEvent = Readonly<{ kind: 'other-changed'; value: number }>;
@@ -8,7 +8,8 @@ const transcriptCapture: ChangeCapture<TranscriptEvent> = observer;
 const otherCapture: ChangeCapture<OtherEvent> = observer;
 
 new Transcript([], { changes: transcriptCapture });
-createBoundRuntime({ changes: observer });
+const driver = new Driver({ changes: observer });
+driver.bind(defineScene<null, null>()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
 otherCapture.capture({ kind: 'other-changed', value: 1 });
 
 // @ts-expect-error A transcript source cannot submit another source's event.

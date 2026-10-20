@@ -1,9 +1,10 @@
+import { Driver } from '@capix/server-runtime';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
-import { ProgressChannel, defineExecution } from '@capix/server-runtime';
-import { ConversationSubmission, createSubmissionStore, bindConversation, ConversationRuntimeDefinition, ConversationExecutionDefinition, acceptMessages } from '@capix/observer-service';
+import { ProgressChannel, defineGroup } from '@capix/server-runtime';
+import { ConversationSubmission, createSubmissionStore, bindConversation, ConversationSceneDefinition, ConversationTaskDefinition, acceptMessages } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
@@ -56,9 +57,10 @@ test('service projection retains input committed before capture failure, without
       },
     },
   });
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
+  const driver = new Driver();
+  const scene = bindConversation(driver, new ConversationSceneDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
   const submission = new ConversationSubmission('append-failed', 'conversation');
-  submission.start(() => runtime.run(input, { settings, progress: submission.progress }));
+  submission.start(() => driver.run(scene, input, { settings, progress: submission.progress }));
   const snapshot = await complete(submission);
   assert.equal(environment.transcript.length, 1);
   assert.deepEqual(snapshot.input, { transcriptId: environment.transcript.id, start: 0, end: 1, revision: 1 });
@@ -89,11 +91,12 @@ test('service input acceptance only classifies validation it actually owns', () 
 
 test('projection failure stops trustworthy progress but does not stop a running conversation', async () => {
   const environment = createEnvironment();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
+  const driver = new Driver();
+  const scene = bindConversation(driver, new ConversationSceneDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
   const submission = new ConversationSubmission('broken-projection', 'conversation');
   // A second committed input cannot be interpreted as the same submission's input.
   submission.progress.publish({ kind: 'input', range: { transcriptId: environment.transcript.id, start: 0, end: 1, revision: 1 } });
-  submission.start(() => runtime.run(input, { settings, progress: submission.progress }));
+  submission.start(() => driver.run(scene, input, { settings, progress: submission.progress }));
   const snapshot = await complete(submission);
   assert.equal(snapshot.integrity.status, 'incomplete');
   assert.equal(snapshot.result.status, 'completed');
@@ -173,13 +176,13 @@ test('active discovery follows the service lifetime even when projection fails, 
 
 test('conversation binding selects its declared E instead of giving every R child the same public meaning', async () => {
   const environment = createEnvironment();
-  const definition = new ConversationRuntimeDefinition();
-  const other = defineExecution()({ children: [], run: { execute: () => null } });
+  const definition = new ConversationSceneDefinition();
+  const other = defineGroup()({ members: [], run: { execute: () => null } });
   const originalRun = definition.run;
-  definition.children = [other, definition.executionDefinition];
+  definition.members = [other, definition.taskDefinition];
   definition.run = {
     ...originalRun,
-    uses: definition.children,
+    uses: definition.members,
     execute: async (work) => {
       const unrelated = work.children.create(other, work.input, { key: 'unrelated' });
       await unrelated.run();
@@ -187,9 +190,10 @@ test('conversation binding selects its declared E instead of giving every R chil
       return originalRun.execute(work);
     },
   };
-  const runtime = bindConversation(definition, environment, new ModelInteractions(new ModelSource(provider)));
+  const driver = new Driver();
+  const scene = bindConversation(driver, definition, environment, new ModelInteractions(new ModelSource(provider)));
   const received = [];
-  await runtime.run(input, {
+  await driver.run(scene, input, {
     settings,
     progress: new ProgressChannel({
       receive(fact) {
@@ -222,7 +226,8 @@ test('async delivery listeners are isolated and readiness cancellation only deta
 
 test('a single submission channel disables its consumer across input, execution and answer sources', async () => {
   const environment = createEnvironment();
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
+  const driver = new Driver();
+  const scene = bindConversation(driver, new ConversationSceneDefinition(), environment, new ModelInteractions(new ModelSource(provider)));
   const received = [];
   const failures = [];
   const failure = new Error('input projection failed');
@@ -235,13 +240,13 @@ test('a single submission channel disables its consumer across input, execution 
       failures.push(error);
     },
   });
-  const output = await runtime.run(input, { settings, progress });
+  const output = await driver.run(scene, input, { settings, progress });
   assert.equal(output.content, 'answer');
   assert.deepEqual(received, ['input']);
   assert.deepEqual(failures, [failure]);
   assert.equal(environment.transcript.length, 2);
   const next = [];
-  await runtime.run(input, {
+  await driver.run(scene, input, {
     settings,
     progress: new ProgressChannel({
       receive(fact) {
@@ -311,10 +316,11 @@ test('only runtime-confirmed cancellation terminates as cancelled and keeps comm
       },
     }),
   );
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), environment, interactions);
+  const driver = new Driver();
+  const scene = bindConversation(driver, new ConversationSceneDefinition(), environment, interactions);
   const submission = new ConversationSubmission('confirmed-cancel', 'conversation');
   try {
-    submission.start((signal) => runtime.run(input, { settings, progress: submission.progress, activity: submission.activity, signal }));
+    submission.start((signal) => driver.run(scene, input, { settings, progress: submission.progress, activity: submission.activity, signal }));
     await entering;
     submission.requestCancellation();
     const result = await complete(submission);
@@ -322,10 +328,10 @@ test('only runtime-confirmed cancellation terminates as cancelled and keeps comm
     assert.equal(result.cancelRequested, true);
     assert.equal(result.input.end, 1);
     assert.equal(result.activities.integrity.status, 'complete');
-    assert.equal(result.activities.calls.find((call) => call.level === 'runtime').status, 'cancelled');
-    assert.ok(result.activities.calls.some((call) => call.level === 'attempt' && call.status === 'cancelled'));
+    assert.equal(result.activities.calls.find((call) => call.kind === 'scene').status, 'cancelled');
+    assert.ok(result.activities.calls.some((call) => call.kind === 'node' && call.status === 'cancelled'));
     assert.equal(environment.transcript.length, 1);
-    assert.equal(runtime.running, false);
+    assert.equal(driver.isRunning(scene), false);
     assert.equal(providerSignal.aborted, false);
     assert.equal(interactions.active, true);
     release();

@@ -6,8 +6,8 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/checkpoint-contract.ts', import.meta.url));
 const source = `
-import { checkpointPoint, childReference, childReferences, defineAttempt, defineExecution, defineOperation, defineRuntime } from '@capix/server-runtime';
-import type { AuthorCheckpointWriter, CheckpointCodec, CheckpointPointOwner, ChildReference, ChildReferenceSlot, DefinitionContract, InvocationCheckpointDefinition, InvocationCheckpointPoint, ResourceRequest } from '@capix/server-runtime';
+import {checkpointPoint, childReference, childReferences, defineNode, defineGroup, defineScene} from '@capix/server-runtime';
+import type {AuthorCheckpointWriter, CheckpointCodec, CheckpointPointOwner, ChildReference, ChildReferenceSlot, DefinitionContract, InvocationCheckpointDefinition, InvocationCheckpointPoint, ResourceRequest} from '@capix/server-runtime';
 
 type Input = { readonly query: string };
 type Output = { readonly answer: string };
@@ -22,18 +22,18 @@ declare const numberCodec: CheckpointCodec<number>;
 declare const checkOutput: (value: unknown) => Output;
 declare const checkDelta: (value: unknown) => string;
 declare const lookup: ResourceRequest<{ readonly at: (cursor: number) => string }>;
-declare const writer: AuthorCheckpointWriter<'operation', Input, Output, string>;
+declare const writer: AuthorCheckpointWriter<'group', Input, Output, string>;
 
 const metadata = { label: 'test', source: 'test', callee: 'test' };
-const read = defineAttempt<ChildInput, ChildOutput>()({ ...metadata, name: 'read', run: { execute: work => ({ text: work.input.path }) } });
-const wrongRead = defineAttempt<{ readonly path: number }, ChildOutput>()({ ...metadata, name: 'wrong-read', run: { execute: work => ({ text: String(work.input.path) }) } });
-const nested = defineOperation<ChildInput, ChildOutput>()({ ...metadata, name: 'nested', run: { execute: work => ({ text: work.input.path }) } });
-const execution = defineExecution<Input, Output>()({ run: { execute: work => ({ answer: work.input.query }) } });
+const read = defineNode<ChildInput, ChildOutput>()({ ...metadata, name: 'read', run: { execute: work => ({ text: work.input.path }) } });
+const wrongRead = defineNode<{ readonly path: number }, ChildOutput>()({ ...metadata, name: 'wrong-read', run: { execute: work => ({ text: String(work.input.path) }) } });
+const nested = defineGroup<ChildInput, ChildOutput>()({ ...metadata, name: 'nested', run: { execute: work => ({ text: work.input.path }) } });
+const execution = defineGroup<Input, Output>()({ run: { execute: work => ({ answer: work.input.query }) } });
 declare const readRef: ChildReference<typeof read>;
 declare const wrongReadRef: ChildReference<typeof wrongRead>;
 declare const nestedRef: ChildReference<typeof nested>;
 
-const waiting = checkpointPoint<'operation', Input, Output, string>()({
+const waiting = checkpointPoint<'group', Input, Output, string>()({
   name: 'waiting', state: stateCodec,
   references: { one: childReference(read), batch: childReferences(read) },
   check(state, facts) {
@@ -75,7 +75,7 @@ const waiting = checkpointPoint<'operation', Input, Output, string>()({
   } },
 });
 
-const settled = checkpointPoint<'operation', Input, Output, string>()({
+const settled = checkpointPoint<'group', Input, Output, string>()({
   name: 'settled', state: pathCodec, references: { prior: childReference(nested) },
   resume: { execute(work, state, saved) {
     work.children.open(saved.prior);
@@ -90,7 +90,7 @@ const settled = checkpointPoint<'operation', Input, Output, string>()({
   } },
 });
 
-const leafPoint = checkpointPoint<'attempt', Input, Output>()({
+const leafPoint = checkpointPoint<'node', Input, Output>()({
   name: 'leaf', state: numberCodec, references: {},
   resume: { execute(work, state) {
     const count: number = state;
@@ -101,20 +101,20 @@ const leafPoint = checkpointPoint<'attempt', Input, Output>()({
     return { answer: work.input.query };
   } },
 });
-const executionPoint = checkpointPoint<'execution', Input, Output>()({ name: 'e', state: numberCodec, references: { child: childReference(nested) }, resume: { uses: [nested], execute: work => ({ answer: work.input.query }) } });
-const runtimePoint = checkpointPoint<'runtime', Input, Output>()({ name: 'r', state: numberCodec, references: { child: childReference(execution) }, resume: { uses: [execution], execute: work => ({ answer: work.input.query }) } });
+const executionPoint = checkpointPoint<'group', Input, Output>()({ name: 'e', state: numberCodec, references: { child: childReference(nested) }, resume: { uses: [nested], execute: work => ({ answer: work.input.query }) } });
+const runtimePoint = checkpointPoint<'scene', Input, Output>()({ name: 'r', state: numberCodec, references: { child: childReference(execution) }, resume: { uses: [execution], execute: work => ({ answer: work.input.query }) } });
 // Slots and resume actions need only the original child's shallow signature.
-const shallowRead: DefinitionContract<'attempt', ChildInput, ChildOutput> = read;
-const shallowPoint = checkpointPoint<'operation', Input, Output, string>()({ name: 'shallow', state: numberCodec, references: { child: childReference(shallowRead) }, resume: { uses: [shallowRead], async execute(work, state, saved) {
+const shallowRead: DefinitionContract<'node', ChildInput, ChildOutput> = read;
+const shallowPoint = checkpointPoint<'group', Input, Output, string>()({ name: 'shallow', state: numberCodec, references: { child: childReference(shallowRead) }, resume: { uses: [shallowRead], async execute(work, state, saved) {
   const result: ChildOutput = await work.children.resume(saved.child).run();
   return { answer: result.text };
 } } });
 
-const checkpoint: InvocationCheckpointDefinition<Input, Output, 'operation', string> = { key: 'op', version: 1, input: inputCodec, output: outputCodec, points: [waiting, settled, shallowPoint] };
-defineOperation<Input, Output>()({ ...metadata, name: 'operation', children: [read, nested], output: { result: checkOutput, delta: checkDelta }, checkpoint, run: { execute: work => ({ answer: work.input.query }) } });
-defineAttempt<Input, Output>()({ ...metadata, name: 'leaf', checkpoint: { key: 'a', version: 1, input: inputCodec, output: outputCodec, points: [leafPoint] }, run: { execute: work => ({ answer: work.input.query }) } });
-defineExecution<Input, Output>()({ children: [nested], checkpoint: { key: 'e', version: 1, input: inputCodec, output: outputCodec, points: [executionPoint] }, run: { execute: work => ({ answer: work.input.query }) } });
-defineRuntime<Input, Output>()({ children: [execution], checkpoint: { key: 'r', version: 1, input: inputCodec, output: outputCodec, points: [runtimePoint] }, run: { execute: work => ({ answer: work.input.query }) } });
+const checkpoint: InvocationCheckpointDefinition<Input, Output, 'group', string> = { key: 'op', version: 1, input: inputCodec, output: outputCodec, points: [waiting, settled, shallowPoint] };
+defineGroup<Input, Output>()({ ...metadata, name: 'operation', members: [read, nested], output: { result: checkOutput, delta: checkDelta }, checkpoint, run: { execute: work => ({ answer: work.input.query }) } });
+defineNode<Input, Output>()({ ...metadata, name: 'leaf', checkpoint: { key: 'a', version: 1, input: inputCodec, output: outputCodec, points: [leafPoint] }, run: { execute: work => ({ answer: work.input.query }) } });
+defineGroup<Input, Output>()({ members: [nested], checkpoint: { key: 'e', version: 1, input: inputCodec, output: outputCodec, points: [executionPoint] }, run: { execute: work => ({ answer: work.input.query }) } });
+defineScene<Input, Output>()({ members: [execution], checkpoint: { key: 'r', version: 1, input: inputCodec, output: outputCodec, points: [runtimePoint] }, run: { execute: work => ({ answer: work.input.query }) } });
 
 writer.save(waiting, { cursor: 1 }, { one: readRef, batch: [readRef, readRef] });
 writer.save(settled, { path: 'done' }, { prior: nestedRef });
@@ -132,45 +132,45 @@ writer.save(waiting, { cursor: 1 }, { one: wrongReadRef, batch: [readRef] });
 writer.save(settled, { path: 'done' }, { one: readRef });
 
 // @ts-expect-error owner level differs
-const wrongLevel: CheckpointPointOwner<'execution', Input, Output, string> = waiting;
+const wrongLevel: CheckpointPointOwner<'scene', Input, Output, string> = waiting;
 // @ts-expect-error owner input differs
-const wrongInput: CheckpointPointOwner<'operation', { readonly query: number }, Output, string> = waiting;
+const wrongInput: CheckpointPointOwner<'group', { readonly query: number }, Output, string> = waiting;
 // @ts-expect-error owner output differs
-const wrongOutput: CheckpointPointOwner<'operation', Input, { readonly answer: number }, string> = waiting;
+const wrongOutput: CheckpointPointOwner<'group', Input, { readonly answer: number }, string> = waiting;
 // @ts-expect-error owner does not support the point's Delta
-const wrongDelta: CheckpointPointOwner<'operation', Input, Output, number> = waiting;
+const wrongDelta: CheckpointPointOwner<'group', Input, Output, number> = waiting;
 // @ts-expect-error point cannot be registered with a different owner level
-const wrongParent: InvocationCheckpointDefinition<Input, Output, 'execution', string> = checkpoint;
+const wrongParent: InvocationCheckpointDefinition<Input, Output, 'scene', string> = checkpoint;
 // @ts-expect-error checkpoint cannot override the parent's declared I/O
-defineOperation<Input, { readonly answer: number }>()({ ...metadata, name: 'wrong-owner', checkpoint, run: { execute: () => ({ answer: 1 }) } });
+defineGroup<Input, { readonly answer: number }>()({ ...metadata, name: 'wrong-owner', checkpoint, run: { execute: () => ({ answer: 1 }) } });
 // @ts-expect-error checkpoint cannot invent an output Delta for its owner
-defineOperation<Input, Output>()({ ...metadata, name: 'missing-output', checkpoint, run: { execute: () => ({ answer: '' }) } });
+defineGroup<Input, Output>()({ ...metadata, name: 'missing-output', checkpoint, run: { execute: () => ({ answer: '' }) } });
 // @ts-expect-error resume output follows owner O
-checkpointPoint<'operation', Input, Output>()({ name: 'bad-output', state: numberCodec, references: {}, resume: { execute: () => ({ answer: 1 }) } });
+checkpointPoint<'group', Input, Output>()({ name: 'bad-output', state: numberCodec, references: {}, resume: { execute: () => ({ answer: 1 }) } });
 // @ts-expect-error check annotation cannot change codec State
-checkpointPoint<'operation', Input, Output>()({ name: 'bad-check', state: numberCodec, references: {}, check: (state: string) => {}, resume: { execute: () => ({ answer: '' }) } });
+checkpointPoint<'group', Input, Output>()({ name: 'bad-check', state: numberCodec, references: {}, check: (state: string) => {}, resume: { execute: () => ({ answer: '' }) } });
 // @ts-expect-error resume annotation cannot change codec State
-checkpointPoint<'operation', Input, Output>()({ name: 'bad-state', state: numberCodec, references: {}, resume: { execute: (work, state: string) => ({ answer: '' }) } });
+checkpointPoint<'group', Input, Output>()({ name: 'bad-state', state: numberCodec, references: {}, resume: { execute: (work, state: string) => ({ answer: '' }) } });
 
-// Factory and explicit interfaces share the same direct-child level rules.
+// Factory and explicit interfaces share structural membership and stage grants.
 // @ts-expect-error A has no direct children for references
-checkpointPoint<'attempt', Input, Output>()({ name: 'bad-a-ref', state: numberCodec, references: { child: childReference(read) }, resume: { execute: () => ({ answer: '' }) } });
-// @ts-expect-error E cannot refer directly to A
-checkpointPoint<'execution', Input, Output>()({ name: 'bad-e-ref', state: numberCodec, references: { child: childReference(read) }, resume: { execute: () => ({ answer: '' }) } });
-// @ts-expect-error R cannot refer directly to A
-checkpointPoint<'runtime', Input, Output>()({ name: 'bad-r-ref', state: numberCodec, references: { child: childReference(read) }, resume: { execute: () => ({ answer: '' }) } });
-// @ts-expect-error O cannot refer directly to E
-checkpointPoint<'operation', Input, Output>()({ name: 'bad-o-ref', state: numberCodec, references: { child: childReference(execution) }, resume: { execute: () => ({ answer: '' }) } });
-// @ts-expect-error explicit E point cannot widen its slots to A
-type BadExecutionPoint = InvocationCheckpointPoint<Input, Output, 'execution', number, {}, { child: ChildReferenceSlot<typeof read, false> }>;
+checkpointPoint<'node', Input, Output>()({ name: 'bad-a-ref', state: numberCodec, references: { child: childReference(read) }, resume: { execute: () => ({ answer: '' }) } });
+// Composite scopes support these formerly level-specific relationships.
+checkpointPoint<'group', Input, Output>()({ name: 'bad-e-ref', state: numberCodec, references: { child: childReference(read) }, resume: { execute: () => ({ answer: '' }) } });
+// Composite scopes support these formerly level-specific relationships.
+checkpointPoint<'scene', Input, Output>()({ name: 'bad-r-ref', state: numberCodec, references: { child: childReference(read) }, resume: { execute: () => ({ answer: '' }) } });
+// Composite scopes support these formerly level-specific relationships.
+checkpointPoint<'group', Input, Output>()({ name: 'bad-o-ref', state: numberCodec, references: { child: childReference(execution) }, resume: { execute: () => ({ answer: '' }) } });
+// Composite scopes support these formerly level-specific relationships.
+type BadExecutionPoint = InvocationCheckpointPoint<Input, Output, 'group', number, {}, { child: ChildReferenceSlot<typeof read, false> }>;
 // @ts-expect-error explicit A point cannot declare a child slot
-type BadAttemptPoint = InvocationCheckpointPoint<Input, Output, 'attempt', number, {}, { child: ChildReferenceSlot<typeof read, false> }>;
+type BadAttemptPoint = InvocationCheckpointPoint<Input, Output, 'node', number, {}, { child: ChildReferenceSlot<typeof read, false> }>;
 // @ts-expect-error A cannot declare uses
-checkpointPoint<'attempt', Input, Output>()({ name: 'bad-a-uses', state: numberCodec, references: {}, resume: { uses: [read], execute: () => ({ answer: '' }) } });
-// @ts-expect-error E cannot resume A directly
-checkpointPoint<'execution', Input, Output>()({ name: 'bad-e-uses', state: numberCodec, references: {}, resume: { uses: [read], execute: () => ({ answer: '' }) } });
+checkpointPoint<'node', Input, Output>()({ name: 'bad-a-uses', state: numberCodec, references: {}, resume: { uses: [read], execute: () => ({ answer: '' }) } });
+// Composite scopes support these formerly level-specific relationships.
+checkpointPoint<'group', Input, Output>()({ name: 'bad-e-uses', state: numberCodec, references: {}, resume: { uses: [read], execute: () => ({ answer: '' }) } });
 
-const explicit: InvocationCheckpointPoint<Input, Output, 'operation', number> = {
+const explicit: InvocationCheckpointPoint<Input, Output, 'group', number> = {
   name: 'explicit-defaults', state: numberCodec, references: {}, resume: { requires: {}, execute(work) {
     work.children.open(readRef);
     work.children.facts.get(readRef);
@@ -183,12 +183,12 @@ const explicit: InvocationCheckpointPoint<Input, Output, 'operation', number> = 
 };
 
 // A point may use a subset of an owner's output capability.
-const noDelta = checkpointPoint<'operation', Input, Output>()({ name: 'no-delta', state: numberCodec, references: {}, resume: { execute: () => ({ answer: '' }) } });
-const widerDeltaOwner: CheckpointPointOwner<'operation', Input, Output, string | number> = waiting;
-const noDeltaForStreamOwner: CheckpointPointOwner<'operation', Input, Output, string> = noDelta;
+const noDelta = checkpointPoint<'group', Input, Output>()({ name: 'no-delta', state: numberCodec, references: {}, resume: { execute: () => ({ answer: '' }) } });
+const widerDeltaOwner: CheckpointPointOwner<'group', Input, Output, string | number> = waiting;
+const noDeltaForStreamOwner: CheckpointPointOwner<'group', Input, Output, string> = noDelta;
 
 // Object identity and parent/point registration still require binding checks.
-const sameShapedUnregisteredPoint = checkpointPoint<'operation', Input, Output, string>()({ name: 'elsewhere', state: stateCodec, references: { one: childReference(read), batch: childReferences(read) }, resume: { execute: () => ({ answer: '' }) } });
+const sameShapedUnregisteredPoint = checkpointPoint<'group', Input, Output, string>()({ name: 'elsewhere', state: stateCodec, references: { one: childReference(read), batch: childReferences(read) }, resume: { execute: () => ({ answer: '' }) } });
 writer.save(sameShapedUnregisteredPoint, { cursor: 1 }, { one: readRef, batch: [readRef] });
 `;
 

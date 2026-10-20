@@ -18,7 +18,7 @@ export function invocationProgress(fact: InvocationFact, signal: AbortSignal): I
   } catch {
     // A hostile description cannot prevent publication of the underlying fact.
   }
-  const identity = Object.freeze({ contextId: fact.identity.contextId, level: fact.identity.level, ...(fact.identity.parentContextId ? { parentContextId: fact.identity.parentContextId } : {}) });
+  const identity = Object.freeze({ contextId: fact.identity.contextId, kind: fact.identity.kind, ...(fact.identity.parentContextId ? { parentContextId: fact.identity.parentContextId } : {}) });
   const base = { identity, eventSequence: fact.eventSequence, occurredAt: fact.occurredAt, ...(Object.keys(description).length ? { description: Object.freeze(description) } : {}) };
   if (fact.kind === 'started') return Object.freeze({ ...base, kind: 'started' });
   if (fact.kind === 'process') return Object.freeze({ ...base, kind: 'process', processSequence: fact.processSequence, round: fact.round, stage: fact.process.stage, action: fact.process.type });

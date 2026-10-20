@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, assembleRuntime, RuntimeDefinition, ExecutionDefinition, OperationDefinition, AttemptDefinition } from '@capix/server-runtime';
+import { ExceptionContract, bindCallSource, SceneDefinition, GroupDefinition, NodeDefinition } from '@capix/server-runtime';
 import { Invocation, InvocationContext } from '@capix/server-runtime/construction';
 
 const contract = {
@@ -327,7 +328,7 @@ function composeLevel(Base, child, label, receives, explicit = false) {
     source = 'test';
     callee = 'test';
     output = contract;
-    children = Base === AttemptDefinition ? undefined : child ? [child] : [];
+    members = Base === NodeDefinition ? undefined : child ? [child] : [];
     run = {
       requires: {},
       execute: async (work) => {
@@ -360,13 +361,13 @@ function composeLevel(Base, child, label, receives, explicit = false) {
 
 test('REOA each declares output; child and host consumers are explicit without ancestor broadcast', async () => {
   const received = [];
-  const leaf = composeLevel(AttemptDefinition, undefined, 'A', received);
-  const operation = composeLevel(OperationDefinition, leaf, 'O', received, true);
-  const execution = composeLevel(ExecutionDefinition, operation, 'E', received, false);
-  const runtime = composeLevel(RuntimeDefinition, execution, 'R', received, true);
+  const leaf = composeLevel(NodeDefinition, undefined, 'A', received);
+  const operation = composeLevel(GroupDefinition, leaf, 'O', received, true);
+  const execution = composeLevel(GroupDefinition, operation, 'E', received, false);
+  const runtime = composeLevel(SceneDefinition, execution, 'R', received, true);
   const rEvents = [];
   const eEvents = [];
-  const bound = assembleRuntime(runtime, {
+  const bound = installCallable(runtime, {
     providers: [],
     source: {
       entry: () => ({}),
@@ -376,12 +377,16 @@ test('REOA each declares output; child and host consumers are explicit without a
           rEvents.push(event);
         },
       }),
-      executionOutput: () => ({
-        receive(event) {
-          eEvents.push(event);
-        },
-      }),
     },
+    bindings: [
+      bindCallSource(execution, {
+        output: () => ({
+          receive(event) {
+            eEvents.push(event);
+          },
+        }),
+      }),
+    ],
   });
   assert.equal(await bound.run('input', {}), 'A');
   assert.deepEqual(
@@ -447,7 +452,7 @@ test('overlapping calls with the same declaration keep output origins, writers a
 
 test('bound fallback has no writer and remains subject to the declared result contract', async () => {
   const rejected = new ExceptionContract('BOUND_OUTPUT');
-  const runtime = new (class extends RuntimeDefinition {
+  const runtime = new (class extends SceneDefinition {
     output = contract;
     raises = [rejected];
     run = {
@@ -467,7 +472,7 @@ test('bound fallback has no writer and remains subject to the declared result co
     };
   })();
   const events = [];
-  const bound = assembleRuntime(runtime, {
+  const bound = installCallable(runtime, {
     providers: [],
     source: {
       entry: () => ({}),
@@ -501,9 +506,9 @@ test('declared output validation applies to the value transformed by normal acce
 });
 
 test('one failing explicit E output consumer does not disable its other binding', async () => {
-  const execution = composeLevel(ExecutionDefinition, undefined, 'E', []);
-  const runtime = new (class extends RuntimeDefinition {
-    children = [execution];
+  const execution = composeLevel(GroupDefinition, undefined, 'E', []);
+  const runtime = new (class extends SceneDefinition {
+    members = [execution];
     run = {
       requires: {},
       async execute(work) {
@@ -520,17 +525,21 @@ test('one failing explicit E output consumer does not disable its other binding'
     };
   })();
   const events = [];
-  const bound = assembleRuntime(runtime, {
+  const bound = installCallable(runtime, {
     providers: [],
     source: {
       entry: () => ({}),
       capture: () => ({}),
-      executionOutput: () => ({
-        receive(event) {
-          events.push(event);
-        },
-      }),
     },
+    bindings: [
+      bindCallSource(execution, {
+        output: () => ({
+          receive(event) {
+            events.push(event);
+          },
+        }),
+      }),
+    ],
   });
   assert.equal(await bound.run('input', {}), 'E');
   assert.equal(events.at(-1).kind, 'completed');
@@ -590,7 +599,7 @@ test('final output validation cannot catch and clear a fault already owned by th
 test('a previous work view cannot create children after the invocation moves to another local round', async () => {
   let executions = 0;
   let saved;
-  const child = new (class extends ExecutionDefinition {
+  const child = new (class extends GroupDefinition {
     run = {
       requires: {},
       execute: () => {
@@ -599,12 +608,12 @@ test('a previous work view cannot create children after the invocation moves to 
       },
     };
   })();
-  const definition = new (class extends RuntimeDefinition {
+  const definition = new (class extends SceneDefinition {
     maxRounds = 2;
-    children = [child];
+    members = [child];
     run = {
       requires: {},
-      uses: this.children,
+      uses: this.members,
       execute(work) {
         if (work.round === 1) saved = work;
         else assert.throws(() => saved.children.create(child, 'stale'), /inactive declaration round/);
@@ -615,7 +624,7 @@ test('a previous work view cannot create children after the invocation moves to 
       },
     };
   })();
-  const runtime = assembleRuntime(definition, { providers: [], source: { entry: () => ({}), capture: () => ({}) } });
+  const runtime = installCallable(definition, { providers: [], source: { entry: () => ({}), capture: () => ({}) } });
   await assert.rejects(runtime.run('input', {}), /inactive declaration round/);
   assert.equal(executions, 0, 'the stale binding cannot establish new child work');
 });
@@ -624,15 +633,15 @@ for (const handled of [false, true]) {
   test(`current ${handled ? 'exception' : 'receive'} view can accept a child created by its executing view`, async () => {
     const rejected = new ExceptionContract('ACCEPT_FROM_CURRENT_VIEW');
     let saved;
-    const child = new (class extends ExecutionDefinition {
+    const child = new (class extends GroupDefinition {
       run = { requires: {}, execute: () => 'child' };
     })();
-    const definition = new (class extends RuntimeDefinition {
-      children = [child];
+    const definition = new (class extends SceneDefinition {
+      members = [child];
       raises = [rejected];
       run = {
         requires: {},
-        uses: this.children,
+        uses: this.members,
         async execute(work) {
           const call = work.children.create(child, 'input');
           saved = call.ref;
@@ -647,7 +656,7 @@ for (const handled of [false, true]) {
       };
       exceptions = {
         requires: {},
-        uses: this.children,
+        uses: this.members,
         accepts: [rejected],
         async handle(work) {
           assert.equal('output' in work, false);
@@ -655,7 +664,7 @@ for (const handled of [false, true]) {
         },
       };
     })();
-    const runtime = assembleRuntime(definition, { providers: [], source: { entry: () => ({}), capture: () => ({}) } });
+    const runtime = installCallable(definition, { providers: [], source: { entry: () => ({}), capture: () => ({}) } });
     assert.equal(await runtime.run('input', {}), 'child');
   });
 }

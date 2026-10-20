@@ -1,6 +1,6 @@
 import type { TranscriptEvent, MemoryEvent } from '@capix/protocol';
 import type { ResourceBindings } from '../resource/bindings.js';
-import type { InvocationFact, ResourceObservation, RuntimeStructureFact } from './facts.js';
+import type { InvocationFact, ResourceObservation, DriverFact } from './facts.js';
 
 export interface EventConsumer<Event> {
   publish(event: Event): unknown | undefined;
@@ -16,7 +16,7 @@ export interface InvocationObserver {
   available?(): boolean;
 }
 
-export interface RuntimeStructureObserver {
-  observe(fact: RuntimeStructureFact): undefined;
+export interface DriverObserver {
+  observe(fact: DriverFact): undefined;
   available?(): boolean;
 }

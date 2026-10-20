@@ -24,10 +24,10 @@ function describeActivity(calls: readonly ConversationActivity[]): string {
   const visited = new Set<string>();
   for (; ancestor && !visited.has(ancestor.contextId); ancestor = ancestor.parentContextId ? byId.get(ancestor.parentContextId) : undefined) {
     visited.add(ancestor.contextId);
-    if (ancestor.level === 'operation' && !operation) operation = ancestor;
+    if (ancestor.kind === 'group' && !operation) operation = ancestor;
     round = Math.max(round, ancestor.round);
   }
-  const purpose = operation?.label ?? (current.level === 'attempt' ? current.label : current.level === 'execution' ? '处理本轮对话' : '处理本次请求');
+  const purpose = operation?.label ?? current.label;
   const retry = round > 1 ? `（第 ${round} 次尝试）` : '';
   if (current.phase === 'handling') return `${purpose} · 正在处理异常${retry}`;
   if (current.phase === 'control') return `${purpose} · 正在结束当前调用${retry}`;

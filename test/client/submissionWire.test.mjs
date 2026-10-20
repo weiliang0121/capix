@@ -10,7 +10,7 @@ const output = (value) => ({ id: 'fixture', model: 'fixture', content: JSON.stri
 const tick = () => new Promise((resolve) => queueMicrotask(resolve));
 const input = { messages: [{ role: 'user', content: 'question' }] };
 const client = () => new ClientSubmission('conversation', input);
-const started = (contextId, parentContextId, level, eventSequence = 1) => ({ kind: 'started', eventSequence, identity: { contextId, ...(parentContextId ? { parentContextId } : {}), level }, occurredAt: '2026-10-01T00:00:00Z' });
+const started = (contextId, parentContextId, kind, eventSequence = 1) => ({ kind: 'started', eventSequence, identity: { contextId, ...(parentContextId ? { parentContextId } : {}), kind }, occurredAt: '2026-10-01T00:00:00Z' });
 
 function generation(service, kind, sequence, extra = {}) {
   service.answerProgress.publish({ kind: 'generation', event: { kind, sequence, contextId: 'answer', round: 1, ...extra } });
@@ -21,12 +21,12 @@ test('real submission producers preserve clients across pending subscription and
   const service = new ConversationSubmission(first.id, first.conversationId);
   service.connectFrames((frame) => first.receiveFrame(frame));
   service.progress.publish({ kind: 'input', range: { transcriptId: 't', start: 0, end: 1 } });
-  service.activity.publish(started('r', undefined, 'runtime'));
+  service.activity.publish(started('r', undefined, 'scene'));
   const frames = [];
   service.connectFrames((frame) => {
     frames.push(frame);
   });
-  service.activity.publish(started('e', 'r', 'execution'));
+  service.activity.publish(started('e', 'r', 'group'));
   service.progress.publish({ kind: 'execution', contextId: 'e' });
   let reentered = false;
   service.connectFrames((frame) => {

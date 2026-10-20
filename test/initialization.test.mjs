@@ -1,9 +1,10 @@
+import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 import { captureSource } from './fixtures/observer.mjs';
 import { createEnvironment } from './fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Initializer, ResourceOffer, bindResources, TranscriptResource, MemoryResource, assembleRuntime, OperationDefinition, ExecutionDefinition, AttemptRecord, OperationRecord } from '@capix/server-runtime';
+import { Initializer, ResourceOffer, bindResources, TranscriptResource, MemoryResource, GroupDefinition, CallableRecord } from '@capix/server-runtime';
 import { initializeObserver, ModelSettingsResource } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -18,10 +19,10 @@ function environment(invoke) {
   return { ...value, modelCreations: () => created };
 }
 function run(env, configuration = settings) {
-  return env.runtime.run({ messages: [{ role: 'user', content: '你好' }] }, { settings: configuration });
+  return env.driver.run(env.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings: configuration });
 }
-const attempts = (env) => [...env.book.values()].filter((record) => record instanceof AttemptRecord);
-const operations = (env) => [...env.book.values()].filter((record) => record instanceof OperationRecord);
+const attempts = (env) => [...env.book.values()].filter((record) => record instanceof CallableRecord && record.structureKind === 'node');
+const operations = (env) => [...env.book.values()].filter((record) => record instanceof CallableRecord && record.structureKind === 'group' && record.role !== 'conversation-task');
 
 test('unused operations and model providers stay inactive; bound O identities survive later calls', async () => {
   let fail = true;
@@ -34,7 +35,7 @@ test('unused operations and model providers stay inactive; bound O identities su
   await assert.rejects(run(env), /model unavailable/);
   const first = operations(env);
   assert.deepEqual(
-    first.map((operation) => operation.operation),
+    first.map((operation) => operation.name),
     ['prepareContext', 'conversationDecision', 'answer', 'requestModel'],
   );
   assert.equal(first[3].parentId, first[2].id);
@@ -44,9 +45,10 @@ test('unused operations and model providers stay inactive; bound O identities su
   );
   fail = false;
   await run(env);
-  const answers = operations(env).filter((record) => record.operation === 'answer');
+  const answers = operations(env).filter((record) => record.name === 'answer');
   assert.equal(answers.length, 2);
-  assert.equal(answers[0].operationInstanceId, answers[1].operationInstanceId);
+  assert.equal(typeof answers[0].structureId, 'string');
+  assert.equal(answers[0].structureId, answers[1].structureId);
   assert.equal(env.modelCreations(), 1);
   assert.equal(env.transcript.current('assistant').content, answer.content);
 });
@@ -56,7 +58,7 @@ test('capacity rejection does not invoke later actions or instantiate a model pr
   await assert.rejects(run(env, { ...settings, contextBudget: 256, maxOutputTokens: 64 }), (error) => error.code === 'CAPACITY_EXCEEDED');
   assert.equal(env.modelCreations(), 0);
   assert.deepEqual(
-    operations(env).map((operation) => operation.operation),
+    operations(env).map((operation) => operation.name),
     ['prepareContext', 'conversationDecision', 'answer'],
   );
   assert.equal(
@@ -106,7 +108,7 @@ test('an initializer retains failure and rejects recursive creation without impl
 test('declarations are checked before resource access or invocation construction', () => {
   const resource = new ResourceOffer('test.dependency', (value) => value);
   const unrelated = new ResourceOffer('test.unrelated', (value) => value);
-  class Work extends OperationDefinition {
+  class Work extends GroupDefinition {
     name = 'test';
     label = 'test';
     source = 'test';
@@ -115,9 +117,9 @@ test('declarations are checked before resource access or invocation construction
       assert.fail('must not execute');
     }
   }
-  class Root extends ExecutionDefinition {
+  class Root extends GroupDefinition {
     run = { requires: {}, execute: this.execute.bind(this) };
-    children = [new Work()];
+    members = [new Work()];
     execute() {
       assert.fail('must not execute');
     }
@@ -125,7 +127,7 @@ test('declarations are checked before resource access or invocation construction
   let supplied = 0;
   assert.throws(
     () =>
-      assembleRuntime(runtimeDefinition(new Root()), {
+      installCallable(runtimeDefinition(new Root()), {
         providers: [
           unrelated.provide(() => {
             supplied++;

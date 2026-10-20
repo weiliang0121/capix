@@ -4,7 +4,7 @@
 
 `@capix/protocol` 是唯一跨端依赖。只公开可序列化数据、记录引用解析与完整性校验；不包含运行实体、HTTP 实现、模型供应商格式或图谱投影。所有跨包导入使用公开出口。
 
-`@capix/server-runtime` 持有 REOA、Context、Invocation、RecordBook、Transcript 与 Memory 等现有运行对象，不依赖服务或应用。`services/observer` 装配当前筛选、回答、提取场景及模型适配器。`client/runtime` 通过 protocol 读取和提交，保存本地提交状态与已观测数据，不依赖 React 或服务端。`client/http` 的 HttpTransport 基类处理 HTTP，ConversationHttpTransport 与 ObservationHttpTransport 两个子类分别通过公开接口实现 ConversationTransport 与 ObservationTransport，接纳具体响应与 NDJSON 消息，客户端 Runtime 不反向依赖它。`apps/observer` 装配客户端 Runtime 与 HTTP 实现，负责 React 界面与前端投影，不导入服务端。对话交付与观测分别接入，见 [客户端 Runtime](client-runtime.md)。
+`@capix/server-runtime` 持有 Callable 结构、Context、Invocation、RecordBook、Transcript 与 Memory 等现有运行对象，不依赖服务或应用。`services/observer` 装配当前筛选、回答、提取场景及模型适配器。`client/runtime` 通过 protocol 读取和提交，保存本地提交状态与已观测数据，不依赖 React 或服务端。`client/http` 的 HttpTransport 基类处理 HTTP，ConversationHttpTransport 与 ObservationHttpTransport 两个子类分别通过公开接口实现 ConversationTransport 与 ObservationTransport，接纳具体响应与 NDJSON 消息，客户端 Runtime 不反向依赖它。`apps/observer` 装配客户端 Runtime 与 HTTP 实现，负责 React 界面与前端投影，不导入服务端。对话交付与观测分别接入，见 [客户端 Runtime](client-runtime.md)。
 
 ## HTTP
 
@@ -26,8 +26,8 @@
 - POST `/api/run` 接受 ConversationSubmissionRequest `{ conversationId, submissionId, input: ConversationRequest }`。首次发送建立服务提交对象并启动运行，200 返回 NDJSON，每行是 ConversationSubmissionFrame（baseline/submission/answer）；输入已落实、任务已结束或投影失效时即可开始交付。客户端生成 submissionId，使首个响应丢失后仍可查询；该身份不提供幂等重提承诺。
 - GET `/api/submissions/:id` 返回 ConversationSubmissionBaseline（当前累计提交投影与可选预览）；GET `/api/submissions/:id/follow` 同步衔接当前投影与后续变化。关闭任意反馈连接仅解除消费，不取消已启动的服务运行。终态或进展解释不完整时本次连接结束；后者仍可显式查询最终任务结果。
 - POST `/api/submissions/:id/cancel` 以同源 JSON 请求取消已登记的运行，返回 ConversationSubmissionBaseline。重复请求在保留期内幂等；未知身份仍返回 SUBMISSION_UNAVAILABLE，不登记取消标记，也不能据此认为原请求不会执行。取消控制不关闭原反馈或消息同步。
-- 提交投影包含 conversationId、submissionId、revision、可选 input 范围、可选 answer 定位、executions Context 身份数组、可选 cancelRequested、result 和 integrity。输入与回答来自实体正式写入点；executions 来自选定声明的调用现场；result 在 R.run 实际返回或抛错后形成。投影不包含原文、Record 或运行对象。cancelRequested 只表示已请求停止；result 为 completed/failed/rejected/cancelled，只有本次运行实际以可识别的取消原因退出才报告 cancelled。已有输入、回答和记忆不回滚，取消与完成竞争可以得到 cancelRequested + completed；单纯信号已取消不能遮蔽独立故障。
-- 可选 activities 是本次提交的有界 REOA 过程投影，包含 calls 和独立 integrity。Observer 默认启用；不安装 Recorder 也可使用。每项仅含 contextId、直接 parentContextId、level、label、status、phase、round、可选开始/结束时间以及父层 relation。过程、内容落实、提交结果分别判断；活动来源失效不关闭提交反馈，也不影响消息同步或运行结果。
+- 提交投影包含 conversationId、submissionId、revision、可选 input 范围、可选 answer 定位、executions Context 身份数组、可选 cancelRequested、result 和 integrity。输入与回答来自实体正式写入点；executions 来自选定声明的调用现场；result 在 Driver.run 实际返回或抛错后形成。投影不包含原文、Record 或运行对象。cancelRequested 只表示已请求停止；result 为 completed/failed/rejected/cancelled，只有本次运行实际以可识别的取消原因退出才报告 cancelled。已有输入、回答和记忆不回滚，取消与完成竞争可以得到 cancelRequested + completed；单纯信号已取消不能遮蔽独立故障。
+- 可选 activities 是本次提交的有界 Callable 过程投影，包含 calls 和独立 integrity。Observer 默认启用；不安装 Recorder 也可使用。每项仅含 contextId、直接 parentContextId、kind、label、status、phase、round、可选开始/结束时间以及父层 relation。过程、内容落实、提交结果分别判断；活动来源失效不关闭提交反馈，也不影响消息同步或运行结果。
 - `baseline` 携带完整提交状态与可选预览，只用于首次连接、查询、取消响应和慢连接追赶。正常 `submission` 帧为 `{ conversationId, submissionId, fromRevision, revision, change }`：只携带本修订区间已落实的字段、新增 execution 身份及变化的 activity 条目；`admission:null` 明确移除旧提示，省略字段表示未变化。变化由生产者安装事实时提供，微任务合并同一调用的最后状态，不比较完整快照推导增量。正文 `answer` 帧不会附带未变化的提交状态。
 - 接收方从完整基线开始应用连续修订；控制查询可能取得流批次内部的基线，允许重叠区间中已知 execution 前缀与调用条目幂等合并，但不允许改变身份、顺序或回退状态。修订缺口停止当前反馈消费，重连仍取得明确完整基线，不重 POST。内部累计快照和传输增量是不同形态。
 - 明确的输入拒绝返回 400、忙碌拒绝返回 409，响应体可以是保留下来的提交基线，客户端应接纳其中的 rejected 事实。已经接纳输入后的失败通过累计投影表达，回答不会因后处理失败撤销。仅有网络状态码不能替代正式运行事实。
@@ -38,9 +38,9 @@
 
 `ConversationRequest.fileTask` 为 `{ sourcePath, output?: { path } }` 或 `{ output: { path } }`，路径相对于服务端显式配置的工作目录。`ConfigurationResponse.files` 存在时表示支持此任务，给出 `maxReadBytes/maxWriteBytes`；不公开宿主绝对路径。合法路径、结构和启用条件在追加输入前检查，文件预检先检查命名来源、目标及元数据；实际读写仍独立检查存在性、UTF-8、字节上限及禁止覆盖。自然语言候选中的配置根内绝对路径可由服务规范为相对路径，正式 fileTask 契约仍只使用相对路径。原文和结果仍以正式 user/assistant 消息同步，文件正文不进入提交反馈。
 
-服务在 E 接纳任务后发布 `task`：`reply`、`file { task: FileTask }`、`clarify` 或 `unsupported`。决策候选和预检结果不发布为 task，只有正式执行分支启动或最终澄清/不支持时发布。它是本轮稳定的分支选择，不能更换或消失；出现前必须已有正式输入。普通自然语言也可得到 file 任务，客户端不从文本识别路径。显式 fileTask 是完整约束，远端不能偷偷扩大或换成普通回答。首次累计快照可以同时含 input、task、回答及终态。
+服务在任务 Group 接纳决定后发布 `task`：`reply`、`file { task: FileTask }`、`clarify` 或 `unsupported`。决策候选和预检结果不发布为 task，只有正式执行分支启动或最终澄清/不支持时发布。它是本轮稳定的分支选择，不能更换或消失；出现前必须已有正式输入。普通自然语言也可得到 file 任务，客户端不从文本识别路径。显式 fileTask 是完整约束，远端不能偷偷扩大或换成普通回答。首次累计快照可以同时含 input、task、回答及终态。
 
-提交的 `fileOutput` 独立表达结果文件：`pending`、`created`（path/bytes/SHA-256 digest 回执）、`not-created`（not-started/cancelled/failed）或 `unconfirmed`。requested 来自 E 正式选择含输出的文件任务；started 与发布结果来自实际文件端点。端点完成发布后立即发出 created，即使稍后取消、父层接纳或记忆处理失败也保留。工作结束时，完整来源证实尚未开始的输出为 not-started；已经开始但缺少可信结果的输出只能是 unconfirmed。
+提交的 `fileOutput` 独立表达结果文件：`pending`、`created`（path/bytes/SHA-256 digest 回执）、`not-created`（not-started/cancelled/failed）或 `unconfirmed`。requested 来自任务 Group 正式选择含输出的文件任务；started 与发布结果来自实际文件端点。端点完成发布后立即发出 created，即使稍后取消、父层接纳或记忆处理失败也保留。工作结束时，完整来源证实尚未开始的输出为 not-started；已经开始但缺少可信结果的输出只能是 unconfirmed。
 
 没有 `fileOutput` 只表示尚未收到该项事实，不等价于未创建；输入拒绝、尚未进入受理通知等情况可以没有该字段。客户端保留本地路径意图，与服务事实区分。已确认终态不可回退；任务终态不能携带 pending，受理拒绝不能同时携带文件执行事实。文件投影失效不改写执行结果或已经确认的创建回执；缺失任务归属时不发布无归属的文件结果，并标记反馈解释不完整。回答先正式落实，再执行保存；保存失败和记忆失败都保留正文，文件组件独立显示保存结果。
 
@@ -48,11 +48,11 @@
 
 ## 身份、顺序与时间
 
-conversationId 是持续交流的身份，submissionId 是已固定目标的服务请求关联身份，Context.id 是一次内核调用身份，Record.id 是可选观测载体身份，这些身份互不替代。一次提交可关联零个或多个 E；即使不启用 Recorder 也能取得消息落实和调用进展。投影 revision 仅表达该提交解释状态的变化，允许连接合并中间状态后交付更高修订；它不是调用顺序、消息 revision 或观测游标。累计事实不可回退，同修订必须等值。
+conversationId 是持续交流的身份，submissionId 是已固定目标的服务请求关联身份，Context.id 是一次内核调用身份，Record.id 是可选观测载体身份，这些身份互不替代。一次提交可关联零个或多个任务调用；即使不启用 Recorder 也能取得消息落实和调用进展。投影 revision 仅表达该提交解释状态的变化，允许连接合并中间状态后交付更高修订；它不是调用顺序、消息 revision 或观测游标。累计事实不可回退，同修订必须等值。
 
 executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
 
-服务提交对象拥有运行任务、独立取消控制器与投影，反馈连接只读取。运行信号传给 R.run，不借用 HTTP 连接信号；能力不合作时继续等待，不提前释放占用。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接受背压阻塞后仅标记需要重建基线，可写时发送当时的完整基线，不丢弃任意正文片段后继续发送无效增量。慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
+服务提交对象拥有运行任务、独立取消控制器与投影，反馈连接只读取。运行信号传给 Driver.run，不借用 HTTP 连接信号；能力不合作时继续等待，不提前释放占用。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接受背压阻塞后仅标记需要重建基线，可写时发送当时的完整基线，不丢弃任意正文片段后继续发送无效增量。慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
 
 ## 接纳条件与下一笔提交
 
@@ -66,9 +66,9 @@ rejected.retry:admission 是明确未接纳且允许再次尝试受理的声明�
 
 ## 对话处理过程
 
-被动 InvocationProgress 由调用结构发布，运行绑定在每次 R 调用选择全 REOA 来源，服务直接投影明确事实；不从记录、消息数量或两份快照差异反推。ConversationSubmission 的 activity 与内容 progress 通道独立隔离。活动关闭或消费者失败不参与业务接纳，不影响运行。
+被动 InvocationProgress 由调用结构发布，运行绑定在每次根调用选择所属 Callable 子树来源，服务直接投影明确事实；不从记录、消息数量或两份快照差异反推。ConversationSubmission 的 activity 与内容 progress 通道独立隔离。活动关闭或消费者失败不参与业务接纳，不影响运行。
 
-ConversationActivity 使用 Context 身份，status 为 running/succeeded/failed/cancelled，phase 为 setup/execute/receive/handling/control，round 为本调用处理轮次（0–2）。同一次 O 继续处理时保留自身身份并更新轮次，新建 A 有独立身份。短调用完成后仍保留条目。started 之前的建立失败可只有 finishedAt，不补造开始时间。
+ConversationActivity 使用 Context 身份，status 为 running/succeeded/failed/cancelled，phase 为 setup/execute/receive/handling/control，round 为本调用处理轮次（0–2）。同一次 Group 继续处理时保留自身身份并更新轮次，新建 Node 有独立身份。短调用完成后仍保留条目。started 之前的建立失败可只有 finishedAt，不补造开始时间。
 
 relation 描述父层处理该子调用的 attached/returned/receiving/accepted/failed，并保留真实返回 succeeded/failed/cancelled。子调用成功与父层接纳不是同一事实；子调用工作成功但交付失败时可以同时出现 status:succeeded 与 relation.returned:failed。取消请求 ACK 不结束任何条目，只有已发生的调用退出更新其状态。调用进展不替代提交 result，异常重试中的子失败也不推断整轮失败。
 
@@ -81,14 +81,14 @@ relation 描述父层处理该子调用的 attached/returned/receiving/accepted/
 | 提交 / follow              | 提交字段与调用条目增量、正文增量 | 完整基线用于建立和追赶；预览不驱动完整调用数组构造或序列化                           |
 | 原文订阅                   | 正式 append/segment 变化         | 首次和重连保留全量消息基线与前缀一致性检查；客户端复用已确认消息，不重复复制同一基线 |
 | 观测订阅                   | 明确记录/记忆/选择变化           | 基线含概览、记忆与当前运行范围的记录；先按归属筛选，再物化记录正文，历史详情按需查询 |
-| 执行概览 / 记忆查询        | 单次累计读模型                   | 按归属一次分组，避免每个 E/Memory 重扫完整记录集合；仍随实际历史规模增长             |
+| 执行概览 / 记忆查询        | 单次累计读模型                   | 按归属一次分组，避免每个任务/Memory 重扫完整记录集合；仍随实际历史规模增长           |
 | 执行详情 / 源码            | 所选实体的完整正文               | 按需读取；记录验证使用 ID 查找，保留完整关联检查                                     |
 | 外部交互订阅               | 单个交互的少量状态元数据         | 不传模型请求/反馈正文，不随正文分片频率更新                                          |
 | 对话目录 / 配置 / 接纳状态 | 单次元数据响应                   | 不在正文增量上重复请求；目录当前仍完整读取                                           |
 
 NDJSON 逐新分片扫描，整行只组装一次；客户端默认单行上限为 16 MiB，超限终止消费并释放 reader，发送积压使用有界字节预算与游标队列。客户端保留不可变副本，变化调用单独校验并复用其他调用对象；平面引用数组/Map 的浅复制、恢复基线校验及 Markdown 展示解析仍有与实际数据量相关的成本。回归以序列化次数、扫描次数、对象复用和线中字节预算验证，不使用机器耗时阈值或真实模型。
 
-执行列表按实际登记顺序。边界事件 scopeId 确定计时范围，sequence 与单调 offsetMs 是范围内部时序依据；R 调用和每个 E 分别计时，EOA 共用 E 范围。occurredAt/startedAt 是展示用墙钟。未结束调用没有 durationMs；不得补造耗时。跨 QA 不推断执行依赖，前端使用等宽列；默认调用树按直接 parentId 连接，以父层 attached 关系的 eventSequence 表达同级调用顺序，不以时间反推关系。耗时视图才在轮内按计时比例布局。
+执行列表按实际登记顺序。新调用树以实际根调用作为 scopeId，全部后代共用其单调 offsetMs；sequence 是该范围内部的边界顺序，任务详情省略兄弟子树时允许间隙。旧历史计时范围保留，不跨 scope 比较 offsetMs。occurredAt/startedAt 是展示用墙钟；历史未记录的起始时间与未结束调用的耗时保持未知。跨任务不推断依赖，默认调用树按直接 parentId 连接，以父层 attached 关系的 eventSequence 表达同级顺序，不以时间反推关系。
 
 availableMemoryIds 来自本轮输入快照，只表示可见，不能宣称模型实际采用。selections 是选择操作结果；容量裁剪后的最终原文与候选有区别，详情必须以实际请求记录为准。response 即使后处理失败也可以存在。
 
@@ -104,25 +104,25 @@ UI 的读模型和组件接口不属于本协议，见 [客户端与应用绑定
 
 ## 内容变化记录
 
-MemoryRecord 的 executionId/operationId 改为可选，contextId/callId 可选并标识实际来源调用；由运行外部直接接纳的记忆变化没有虚构调用归属。TranscriptRecord 的 append 仅含 start/end，不附带原文；它表达追加或分段，包含 transcriptId、revision、occurredAt 与可选调用来源。transcriptId/revision 将内容事件与其记录关联；MemoryRecord 使用 memoriesId/sequence。内容记录通过观测增量传输，但不加入 ExecutionRecordSnapshot 的 EOA 节点列表。
+MemoryRecord 的 executionId/operationId 改为可选，contextId/callId 可选并标识实际来源调用；由运行外部直接接纳的记忆变化没有虚构调用归属。TranscriptRecord 的 append 仅含 start/end，不附带原文；它表达追加或分段，包含 transcriptId、revision、occurredAt 与可选调用来源。transcriptId/revision 将内容事件与其记录关联；MemoryRecord 使用 memoriesId/sequence。内容记录通过观测增量传输，但不加入 ExecutionRecordSnapshot.calls 调用节点列表。
 
 ## 记录安装根记录与通用命名
 
-BaseRecord 表达身份、直接 parentId 与正文；CompositeRecord 增加 childIds。RecordingRootRecord 是具体根记录，value 当前只有 createdAt；RuntimeCallRecord 表达单次 R 调用，InvocationValue 是 R/E/O/A 共用调用正文，分别保留 processes 与 relationChanges。Recorder 是服务端环境登记机制，不属于跨端协议。RuntimeContext 是运行现场，也不加入协议。
+BaseRecord 表达身份、直接 parentId 与正文；CompositeRecord 增加 childIds。RecordingRootRecord 是记录安装根，value 当前只有 createdAt。新实时记录统一为 CallableRecord（record entry kind 为 invocation），structureKind 为 scene/group/node；InvocationValue 分别保留 processes 与 relationChanges。可选 role 是业务用途元数据，Observer 用 conversation-task 选任务，不从结构 kind 推断。Recorder 与 CallableContext 是服务端对象，不加入协议。
 
-记录树为 RecordingRootRecord → RuntimeCallRecord → ExecutionRecord → OperationRecord → AttemptRecord，其他记录依自己的产生位置挂接。每层直接 parentId 指向对应父记录，不因下游查询方便把全量祖先身份塞进基类。
+新记录树为 RecordingRootRecord → 根 CallableRecord → 真实成员 CallableRecord，其他记录依产生位置挂接。Scene/Group 可组合 Group/Node；Node 无子调用。旧 RuntimeCallRecord/ExecutionRecord/OperationRecord/AttemptRecord 只保留历史读取，服务将它们只读规范化为通用调用详情，不改写原持久记录。
 
-ExecutionRecordSnapshot 仍以一个 E 为查询范围，包含其 E/O/A、边界与资源事实；同时包含必填父层 runtimeCall、runtimeEvents 及 R 直属资源事实，不附带 记录安装根正文或 R 的其他 E 子树。runtimeCall/runtimeEvents 缺失的旧快照不再接纳；runtimeEvents 仅包含 R 自身的边界，不能混入 E 的 events。响应外的 parentId/childIds 引用不意味着已完整装载整棵树。观测基线携带 记录安装根与活动 R 的局部子树；E 已完成但 R 仍在接纳时，该 E 子树继续保留。其余已完成正文按需查询，R 不作为新 QA 计数。
+ExecutionRecordSnapshot 保留业务查询名称，execution 是明确选中的任务，calls 是它及其后代；rootCall 可携带实际根调用，ancestors 按根到直接父顺序提供两者之间的全部中间调用。ancestors 不重复 rootCall/execution，不允许省略中间节点后接入无关根。boundaries、resources 可包含这些祖先的正式事实，但不附带兄弟任务子树。根调用本身被选中时可省略 rootCall。transcripts/memories 是内容变化记录，消息正文仍独立同步。旧字段 runtimeCall/runtimeEvents/events/operations/attempts 属于 LegacyExecutionRecordSnapshot，不是新响应契约。
 
-详情中的 operations、attempts 和 E 子树资源按 childIds 深度优先遍历形成稳定数组，R 直属资源附在其后；客户端从基线或增量构造详情时采用同一顺序。这是归属投影顺序，不是全局登记或时间顺序；实际先后继续读取调用边界、过程和资源各自的 sequence，不扫描全局 Book 反推。
+详情中的 calls 按真实 childIds 深度优先形成稳定数组；祖先路径单独表达，资源依实际产生调用收集。客户端从基线和增量构造相同关系。归属顺序不等于发生时间，实际先后继续读取调用边界、过程和资源各自的 sequence。活动根调用的基线保留已经结束但仍待父层接纳的任务子树；业务任务的展示计数不随结构深度变化。
 
-relationChanges 保留父层真实发生的 attached、returned、receiving、accepted、failed，含父子 Context、父轮次、可选 key/子记录 ID 和 eventSequence。returned 是子层结果，accepted 才是父层完成接纳；failed.source 区分接纳工作与观测故障，不能从 E 成功推断 R 成功。交付游标与各来源顺序分开，不承诺旧游标重放或业务恢复。
+relationChanges 保留父层真实发生的 attached、returned、receiving、accepted、failed，含父子 Context、父轮次、可选 key/子记录 ID 和 eventSequence。returned 是子层结果，accepted 才是父层完成接纳；failed.source 区分接纳工作与观测故障，不能从任务成功推断根调用接纳成功。交付游标与各来源顺序分开，不承诺旧游标重放或业务恢复。
 
 ObserverOverview 可带 archives（sourceId、rootIds、revision、state），其执行简介和 ExecutionRecordSnapshot 可带对应 archive 来源。state=open/sealed/incomplete 解释持久历史的封存状态；旧 running 不代表仍在执行。归档详情允许缺少尚未保存的边界尾部，不放宽已有身份、归属、顺序及正文规则。当前活动基线与历史来源分开，见 [持久化](persistence.md)。
 
 ## 变化与交付
 
-ObserverChange 是已知来源的联合：TranscriptEvent、MemoryEvent、InvocationEvent、RecordChangeEvent。生产者仅依赖本类的 ChangeCapture<E>；联合类型用于装配与跨端接纳，不赋予公共捕获器业务分派职责。InvocationEvent 只包含身份、直接父级、进度、子关系、入口阶段和终态元数据；E 尚未建立时，所属父调用可发布 entry，标明目标实例、accept/notification/admit/capture 阶段及结果，不伪造 E Context 或记录。任意业务 IO 留在业务通道或记录中。
+ObserverChange 是已知来源的联合：TranscriptEvent、MemoryEvent、InvocationEvent、RecordChangeEvent。生产者仅依赖本类的 ChangeCapture<E>；联合类型用于装配与跨端接纳，不赋予公共捕获器业务分派职责。InvocationEvent 包含 contextId、可选 parentContextId、kind 及开始、进度、子关系和终态元数据，不再有特化 E entry 事件。成员建立前的失败保留已存在的父调用及内容事实，不伪造成员 Context 或记录。任意业务 IO 留在业务通道或记录中。
 
 RecordMutation 分为 added、process-appended、relation-appended、finished、replaced。added 携带新记录与直接父级新增引用；process-appended 与 relation-appended 分别只携带本次新增过程或关系条目；finished 保持 resultOf 正文复用。replaced 是通用显式更新的后备形式，不是快照 diff。record entry 的 kind 由具体记录类声明。
 
@@ -132,7 +132,7 @@ ObservationBaseline 的 sequence 固定为本连接的 0，另带独立的 Trans
 
 ## 资源事实与实体同步
 
-`ExecutionRecordSnapshot.resources` 为 ResourceRecord 数组。每条事实具有自身 id、直接 parentId（R/E/O/A 调用记录）、access、supplyId、sequence、occurredAt、phase 和由资源契约定义的 value。sequence 在所属调用的资源事实范围内递增；bound 先于 available/unavailable，started 与 returned/threw 以 interactionId 配对。运行与异常处理阶段的端点共享此序列，同一供给的 bound/available 不因阶段切换重复发送。资源顺序、调用过程 sequence、实体 revision 和发送者 sequence 各有边界，不互相替代。
+`ExecutionRecordSnapshot.resources` 为 ResourceRecord 数组。每条事实具有自身 id、直接 parentId（实际 CallableRecord）、access、supplyId、sequence、occurredAt、phase 和由资源契约定义的 value。sequence 在所属调用的资源事实范围内递增；bound 先于 available/unavailable，started 与 returned/threw 以 interactionId 配对。运行与异常处理阶段的端点共享此序列，同一供给的 bound/available 不因阶段切换重复发送。资源顺序、调用过程 sequence、实体 revision 和发送者 sequence 各有边界，不互相替代。
 
 静态申请/供给不产生记录。调用内资源端点兑现及方法执行才产生事实。描述函数不会在关闭记录时运行；供给失败与已完成工作后的记录失败保持不同证据，不把后者重新解释成业务失败。
 
@@ -144,6 +144,6 @@ ObservationBaseline 的 sequence 固定为本连接的 0，另带独立的 Trans
 
 提交反馈首帧为 `{ type: 'baseline', submission, preview? }`，常规进展为 `{ type: 'submission', submission }`，预览增量为 `{ type: 'answer', conversationId, submissionId, change }`。查询与取消控制响应也使用 baseline。正式消息正文仍由独立 Transcript 同步，不由临时预览生成正式消息。
 
-预览每代从 generation 的新值与 revision=1 开始；change 为 started、appended（UTF-16 offset/text）、received、committed（message/consistency）或 discarded。received 只表示该候选完成本层处理，committed 来自 E 成功追加正式回答后的明确来源关联。consistency 为 complete（全文相等）、prefix（可选预览只收到前缀）或 mismatch（正式正文胜出）；不一致不回滚合法业务结果。废弃后再次生成新代，旧流不能写入新代。
+预览每代从 generation 的新值与 revision=1 开始；change 为 started、appended（UTF-16 offset/text）、received、committed（message/consistency）或 discarded。received 只表示该候选完成本层处理，committed 来自任务 Group 成功追加正式回答后的明确来源关联。consistency 为 complete（全文相等）、prefix（可选预览只收到前缀）或 mismatch（正式正文胜出）；不一致不回滚合法业务结果。废弃后再次生成新代，旧流不能写入新代。
 
 预览仅有界保留于本次进程内提交，可在 follow/read 基线恢复，不持久化每个片段。断线只解除消费，不能重新发起模型调用。预览完整性与活动、提交结果、正式内容同步相互独立；流输出接收缺口允许取基线，内容冲突停止该候选自动恢复。

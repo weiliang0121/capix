@@ -1,18 +1,19 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RuntimeDefinition, ExecutionDefinition, ExceptionContract, ResourceOffer, assembleRuntime } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, ExceptionContract, ResourceOffer } from '@capix/server-runtime';
 
-class TestExecutionDefinition extends ExecutionDefinition {
+class TestExecutionDefinition extends GroupDefinition {
   constructor(execute) {
     super();
     this.run = { requires: {}, execute };
   }
 }
 
-class Main extends RuntimeDefinition {
+class Main extends SceneDefinition {
   constructor(children, execute) {
     super();
-    this.children = children;
+    this.members = children;
     this.run = { requires: {}, uses: children, execute };
   }
 }
@@ -27,7 +28,15 @@ function forward(definition, onRuntime) {
 }
 
 function assemble(definition, options = {}) {
-  return assembleRuntime(definition, { providers: [], source: { capture: () => undefined }, ...options });
+  const { memberSource, ...installation } = options;
+  const bindings = memberSource
+    ? definition.members.map((member) => ({
+        definition: member,
+        capture: memberSource.capture ? (input, options) => memberSource.capture(input, options, member) : undefined,
+        started: memberSource.callbacks ? (options) => memberSource.callbacks(options)?.started : undefined,
+      }))
+    : [];
+  return installCallable(definition, { providers: [], source: { capture: () => undefined }, bindings, ...installation });
 }
 
 function probe() {
@@ -51,8 +60,8 @@ test('R calls have independent contexts and ordinary E child relationships', asy
   assert.equal(await runtime.run(2, {}), 4);
   assert.equal(await runtime.run(3, {}), 6);
   assert.notEqual(parents[0], parents[1]);
-  const starts = observation.facts.filter((fact) => fact.kind === 'started' && fact.identity.level === 'runtime');
-  const finishes = observation.facts.filter((fact) => fact.kind === 'finished' && fact.identity.level === 'runtime');
+  const starts = observation.facts.filter((fact) => fact.kind === 'started' && fact.identity.kind === 'scene');
+  const finishes = observation.facts.filter((fact) => fact.kind === 'finished' && fact.identity.kind === 'scene');
   assert.notEqual(starts[0].identity.contextId, starts[1].identity.contextId);
   assert.deepEqual(
     finishes.map((fact) => fact.state.status),
@@ -65,7 +74,7 @@ test('R calls have independent contexts and ordinary E child relationships', asy
     assert.equal(relation.parentRound, 1);
     assert.equal(relation.returned.status, 'succeeded');
     assert.equal(relation.reception.status, 'accepted');
-    const childStart = observation.facts.find((fact) => fact.kind === 'started' && fact.identity.level === 'execution' && fact.identity.parentContextId === starts[index].identity.contextId);
+    const childStart = observation.facts.find((fact) => fact.kind === 'started' && fact.identity.kind === 'group' && fact.identity.parentContextId === starts[index].identity.contextId);
     assert.ok(childStart);
   }
 });
@@ -109,7 +118,7 @@ test('R chooses from declared E nodes without capturing unused E supplies', asyn
       await child.run();
       return child.accept();
     }),
-    { source: { capture: (_input, _options, definition) => chosen.push(definition === first ? 'first' : 'second') } },
+    { memberSource: { capture: (_input, _options, definition) => chosen.push(definition === first ? 'first' : 'second') } },
   );
   assert.equal(await runtime.run(2, {}), 'second');
   assert.deepEqual(chosen, ['second']);
@@ -144,10 +153,10 @@ test('R input preparation failure belongs to R before any E context or relation 
     { observations: [observation.installation] },
   );
   await assert.rejects(runtime.run(null, {}), /bad input/);
-  assert.equal(observation.facts.find((fact) => fact.kind === 'finished' && fact.identity.level === 'runtime').state.status, 'failed');
+  assert.equal(observation.facts.find((fact) => fact.kind === 'finished' && fact.identity.kind === 'scene').state.status, 'failed');
   assert.equal(parent.children.facts.values().length, 0);
   assert.equal(
-    observation.facts.some((fact) => fact.identity.level === 'execution'),
+    observation.facts.some((fact) => fact.identity.kind === 'group'),
     false,
   );
   assert.equal(runtime.running, false);
@@ -170,7 +179,7 @@ test('R prepares ordinary E input before E capture and construction', async () =
       return child.accept();
     }),
     {
-      source: {
+      memberSource: {
         capture: (input) => {
           order.push('capture');
           assert.deepEqual(messages, ['input']);
@@ -213,12 +222,12 @@ test('cancellation after R content preparation retains content without creating 
       controller.abort();
       return forward(execution)(work);
     }),
-    { observations: [observed.installation], source: { capture: () => assert.fail('cancelled parent cannot capture E') } },
+    { observations: [observed.installation], memberSource: { capture: () => assert.fail('cancelled parent cannot capture E') } },
   );
   await assert.rejects(runtime.run('input', { signal: controller.signal }));
   assert.deepEqual(messages, ['input']);
   assert.equal(
-    observed.facts.some((fact) => fact.identity.level === 'execution'),
+    observed.facts.some((fact) => fact.identity.kind === 'group'),
     false,
   );
   assert.equal(runtime.running, false);
@@ -235,7 +244,7 @@ test('E supplies are fulfilled without exposing them to R work', async () => {
     ),
     {
       providers: [secret.provide((source) => source)],
-      source: { capture: () => 'value' },
+      memberSource: { capture: () => 'value' },
     },
   );
   assert.equal(await runtime.run(null, {}), 'value');
@@ -259,7 +268,7 @@ test('R acceptance failure preserves the completed E outcome', async () => {
   await assert.rejects(runtime.run(null, {}), /parent acceptance/);
   assert.equal(relation().returned.status, 'succeeded');
   assert.equal(relation().returned.output, 2);
-  assert.equal(observation.facts.find((fact) => fact.kind === 'finished' && fact.identity.level === 'execution').state.status, 'succeeded');
+  assert.equal(observation.facts.find((fact) => fact.kind === 'finished' && fact.identity.kind === 'group').state.status, 'succeeded');
   assert.equal(relation().reception.status, 'failed');
 });
 
@@ -303,7 +312,7 @@ test('R reports actual terminal observation failure while preserving successful 
     failure: 'propagate',
     bindInvocation: () => ({
       observe(fact) {
-        if (fail && fact.identity.level === 'runtime' && fact.kind === 'finished') {
+        if (fail && fact.identity.kind === 'scene' && fact.kind === 'finished') {
           finished = fact.state;
           fail = false;
           throw new Error('terminal observation');
@@ -334,7 +343,7 @@ test('E capture failures cannot masquerade as a declared E work exception', asyn
   const definition = new Main([execution], forward(execution));
   definition.exceptions = { requires: {}, accepts: [rejected], handle: () => assert.fail('capture errors are structural') };
   const runtime = assemble(definition, {
-    source: {
+    memberSource: {
       capture: () => {
         throw rejected.create('invalid', {});
       },
@@ -409,14 +418,14 @@ test('ordinary R input preparation creates only real R/E invocation facts', asyn
     observed.facts.some((fact) => fact.kind === 'entry'),
     false,
   );
-  const eStarted = observed.facts.find((fact) => fact.kind === 'started' && fact.identity.level === 'execution');
+  const eStarted = observed.facts.find((fact) => fact.kind === 'started' && fact.identity.kind === 'group');
   assert.equal(eStarted.input, 2);
   assert.equal(
     changes.some((event) => event.change.kind === 'entry'),
     false,
   );
   assert.equal(
-    changes.filter((event) => event.level === 'runtime').every((event, index, values) => index === 0 || event.sequence === values[index - 1].sequence + 1),
+    changes.filter((event) => event.kind === 'scene').every((event, index, values) => index === 0 || event.sequence === values[index - 1].sequence + 1),
     true,
   );
 });
@@ -427,7 +436,7 @@ test('capture failure records R failure without inventing an E invocation', asyn
   const execution = new TestExecutionDefinition(() => assert.fail('unreachable'));
   const runtime = assemble(new Main([execution], forward(execution)), {
     observations: [observed.installation],
-    source: {
+    memberSource: {
       capture: () => {
         throw failure;
       },
@@ -435,7 +444,7 @@ test('capture failure records R failure without inventing an E invocation', asyn
   });
   await assert.rejects(runtime.run(null, {}), (error) => error === failure);
   assert.equal(
-    observed.facts.some((fact) => fact.kind === 'started' && fact.identity.level === 'execution'),
+    observed.facts.some((fact) => fact.kind === 'started' && fact.identity.kind === 'group'),
     false,
   );
   assert.equal(
@@ -459,7 +468,7 @@ test('R prepares content once and calls several E with ordinary independent inpu
       await second.run();
       return second.accept();
     }),
-    { source: { capture: (input) => captured.push(input) } },
+    { memberSource: { capture: (input) => captured.push(input) } },
   );
   assert.equal(await runtime.run(1, {}), 3);
   assert.deepEqual(appended, [1]);
@@ -472,14 +481,14 @@ test('enabled observation installations check actual static parent declarations'
   const definition = new Main([execution], forward(execution));
   const installation = {
     check(scope, parent) {
-      checked.push([scope.level, parent?.level]);
+      checked.push([scope.kind, parent?.kind]);
     },
     bindInvocation: () => ({ observe() {} }),
   };
   assemble(definition, { observations: [installation] });
   assert.deepEqual(checked, [
-    ['runtime', undefined],
-    ['execution', 'runtime'],
+    ['scene', undefined],
+    ['group', 'scene'],
   ]);
 });
 

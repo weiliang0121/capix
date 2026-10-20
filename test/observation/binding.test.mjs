@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, InvocationChangeEmitter, ResourceBindings, ResourceOffer, bindResources, bindInvocationObservation, defineObservation, Transcript, createBoundRuntime } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationChangeEmitter, ResourceBindings, ResourceOffer, bindResources, bindInvocationObservation, defineObservation, Transcript, Driver, defineNode } from '@capix/server-runtime';
 
 function call({ observe, failure, work, parent, declarations, resources, capture, installations = [] } = {}) {
   const context = new InvocationContext({ mutable: new Map() });
-  const identity = { contextId: context.id, level: 'attempt', ...(parent ? { parentContextId: parent.context.id } : {}) };
+  const identity = { contextId: context.id, kind: 'node', ...(parent ? { parentContextId: parent.context.id } : {}) };
   return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { maxRounds: 1, execute: () => 'output', ...work }, observation: bindInvocationObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ requires: {}, observe: observe ?? (() => undefined) }, { failure })] }, installations, parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
 }
 
@@ -356,18 +356,18 @@ test('a committed Transcript fact reaches observation even when capture fails; r
 
 test('Runtime structure facts have their own order and failed acquisition reporting still releases occupancy', async () => {
   const facts = [];
-  const runtime = createBoundRuntime({
+  const driver = new Driver({
     observations: [
       {
         failure: 'propagate',
         bindInvocation() {
           return { observe() {} };
         },
-        bindRuntimeStructure(identity) {
+        bindDriver(identity) {
           return {
             observe(fact) {
               facts.push(fact);
-              assert.equal(fact.runtimeId, identity.runtimeId);
+              assert.equal(fact.driverId, identity.driverId);
               if (fact.kind === 'acquired') throw new Error('acquire observer');
             },
           };
@@ -375,12 +375,24 @@ test('Runtime structure facts have their own order and failed acquisition report
       },
     ],
   });
-  await assert.rejects(
-    runtime.reserve(() => assert.fail('must not run')),
-    { code: 'OBSERVATION_FAILED' },
+  let calls = 0;
+  const bound = driver.bind(
+    defineNode()({
+      run: {
+        execute: () => {
+          calls++;
+          return 'next';
+        },
+      },
+    }),
+    { providers: [], source: { capture: () => null } },
   );
-  assert.equal(runtime.running, false);
-  assert.equal(await runtime.reserve(() => 'next'), 'next');
+  await assert.rejects(driver.run(bound, null, {}), { code: 'OBSERVATION_FAILED' });
+  assert.equal(calls, 0);
+  assert.equal(driver.isRunning(bound), false);
+  assert.equal(await driver.run(bound, null, {}), 'next');
+  assert.equal(calls, 1);
+  assert.equal(facts[1].boundId, bound.id);
   assert.deepEqual(
     facts.map((fact) => fact.kind),
     ['established', 'acquired'],
@@ -395,7 +407,7 @@ test('an availability check failure follows the observer isolation policy', asyn
   const seen = [];
   let invalidated = 0;
   const context = new InvocationContext(null);
-  const identity = { contextId: context.id, level: 'attempt' };
+  const identity = { contextId: context.id, kind: 'node' };
   const observation = bindInvocationObservation({ identity, resources: new ResourceBindings({}) }, [
     {
       bindInvocation() {

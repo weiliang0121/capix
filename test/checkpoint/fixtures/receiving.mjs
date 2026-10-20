@@ -1,13 +1,14 @@
+import { installCallable } from '../../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { defineRuntime, defineExecution, reception, checkpointPoint, childReference, assembleRuntime, MemoryCheckpointStore } from '@capix/server-runtime';
+import { defineScene, defineGroup, reception, checkpointPoint, childReference, MemoryCheckpointStore } from '@capix/server-runtime';
 
 const mode = process.argv[2];
 const variant = process.argv[3];
 const codec = { encode: (value) => value, decode: (value) => value };
 let runs = 0;
 let callbacks = 0;
-const child = defineExecution()({
+const child = defineGroup()({
   run: {
     execute: () => {
       runs++;
@@ -46,8 +47,8 @@ const point = checkpointPoint()({
     },
   },
 });
-const root = defineRuntime()({
-  children: [child],
+const root = defineScene()({
+  members: [child],
   receptions: [original, other],
   checkpoint: { key: 'receiving-parent', version: 1, input: codec, output: codec, points: [point] },
   run: {
@@ -76,7 +77,7 @@ if (mode.startsWith('capture')) {
   store.save(head.image, 0);
   contextId = head.image.frame.owner.contextId;
 }
-const runtime = assembleRuntime(root, { providers: [], source: { runtime: () => null, capture: () => null }, checkpoints: { store } });
+const runtime = installCallable(root, { providers: [], source: { capture: () => null }, checkpoints: { store } });
 try {
   const result = mode.startsWith('capture') ? await runtime.run(null, {}) : await runtime.resume(contextId, {});
   process.stdout.write(JSON.stringify(result));

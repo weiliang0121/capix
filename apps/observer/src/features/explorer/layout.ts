@@ -63,7 +63,7 @@ export interface InvocationLayout {
 /** Width encodes time only within this execution. Running spans stop at observed facts. */
 export function layoutInvocations(execution: Pick<RoundView, 'calls' | 'observedOffsetMs'>): InvocationLayout {
   const byId = new Map(execution.calls.map((call) => [call.id, call]));
-  const root = execution.calls.find((call) => call.recordType === 'execution');
+  const root = execution.calls.find((call) => !call.parentId || !byId.has(call.parentId));
   const start = root?.offsetMs ?? Math.min(0, ...execution.calls.map((call) => call.offsetMs));
   const observedEnd = Math.max(start, execution.observedOffsetMs, ...execution.calls.map((call) => call.offsetMs + (call.durationMs ?? 0)));
   const span = Math.max(0, root?.durationMs ?? observedEnd - start);
@@ -80,15 +80,15 @@ export function layoutInvocations(execution: Pick<RoundView, 'calls' | 'observed
   };
   const calls = execution.calls.map((call): CallGeometry => {
     const parents = ancestors(call);
-    const operations = parents.filter((parent) => parent.recordType === 'operation');
-    const owner = call.recordType === 'operation' ? call : operations[0];
+    const operations = parents.filter((parent) => parent.recordType === 'group' && parent.id !== root?.id);
+    const owner = call.recordType === 'group' ? call : operations[0];
     const named = [owner, ...operations].find((item) => item && ['selection', 'prepareContext', 'maintainContext', 'answer', 'memory'].includes(item.name));
     const family: CallFamily = named?.name === 'prepareContext' || named?.name === 'maintainContext' ? 'selection' : ((named?.name ?? 'neutral') as CallFamily);
     const left = span ? Math.min(1, Math.max(0, (call.offsetMs - start) / span)) : 0;
     const recordedDuration = call.durationMs ?? Math.max(0, observedEnd - call.offsetMs);
-    return { call, left, width: span ? Math.min(1 - left, Math.max(0, recordedDuration / span)) : 0, lane: call.recordType === 'attempt' ? Math.max(0, operations.length - 1) : operations.length, family };
+    return { call, left, width: span ? Math.min(1 - left, Math.max(0, recordedDuration / span)) : 0, lane: call.recordType === 'node' ? Math.max(0, operations.length - 1) : operations.length, family };
   });
-  return { calls, operationLanes: Math.max(1, ...calls.filter((item) => item.call.recordType === 'operation').map((item) => item.lane + 1)), attemptLanes: Math.max(1, ...calls.filter((item) => item.call.recordType === 'attempt').map((item) => item.lane + 1)) };
+  return { calls, operationLanes: Math.max(1, ...calls.filter((item) => item.call.recordType === 'group').map((item) => item.lane + 1)), attemptLanes: Math.max(1, ...calls.filter((item) => item.call.recordType === 'node').map((item) => item.lane + 1)) };
 }
 
 export function formatDuration(milliseconds: number | undefined, status = 'running'): string {

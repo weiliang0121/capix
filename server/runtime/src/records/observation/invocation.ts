@@ -7,15 +7,11 @@ import { failureFact } from '../../invocation/failure.js';
 import type { InvocationFact, ResourceObservation } from '../../observation/facts.js';
 import type { InvocationObserver } from '../../observation/observer.js';
 import { bindResources, resourceRequests, type ResourceBindings } from '../../resource/bindings.js';
-import { AttemptRecord } from '../attempt/record.js';
-import { ExecutionRecord } from '../execution/record.js';
+import { CallableRecord } from '../callable/record.js';
 import { InvocationBoundaryRecordHelper } from '../invocation/boundary/helper.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
-import type { ConcreteInvocationRecord } from '../invocation/record.js';
-import { OperationRecord } from '../operation/record.js';
 import type { Recorder } from '../recorder.js';
 import { ResourceRecord } from '../resource/record.js';
-import { RuntimeCallRecord } from '../runtime/record.js';
 import type { RecordChangeSource } from '../source.js';
 import { InvocationRecordAccess, type InvocationRecordDescription, type InvocationRecordWriter } from './declaration.js';
 import type { RecordingInstallation } from './installation.js';
@@ -26,12 +22,11 @@ export class InvocationRecording implements InvocationObserver {
   readonly resources: ResourceBindings<{ record: InvocationRecordWriter }>;
   readonly #childRecordings = new Map<string, InvocationRecording>();
   readonly #pendingAttachments: Extract<InvocationFact, { kind: 'relation' }>[] = [];
-  #record?: ConcreteInvocationRecord;
+  #record?: CallableRecord;
   #startedTick?: number;
   #failed = false;
   readonly #enabled: boolean;
   #recordDescription: InvocationRecordDescription = {};
-  #executionRecording?: InvocationRecording;
 
   constructor(
     private readonly installation: RecordingInstallation,
@@ -43,7 +38,7 @@ export class InvocationRecording implements InvocationObserver {
     if (parentRecording) parentRecording.#childRecordings.set(setup.identity.contextId, this);
     this.resources = bindResources({ record: InvocationRecordAccess.request() }, [InvocationRecordAccess.provide(() => this)])(undefined);
   }
-  get record(): ConcreteInvocationRecord | undefined {
+  get record(): CallableRecord | undefined {
     return this.#record;
   }
   available(): boolean {
@@ -55,7 +50,7 @@ export class InvocationRecording implements InvocationObserver {
   }
   observeDescribed(fact: InvocationFact, description: InvocationRecordDescription = {}): void {
     this.protect(() => {
-      if (fact.identity.contextId !== this.setup.identity.contextId || fact.identity.level !== this.setup.identity.level) throw new Error('Call fact belongs to another local observation');
+      if (fact.identity.contextId !== this.setup.identity.contextId || fact.identity.kind !== this.setup.identity.kind) throw new Error('Call fact belongs to another local observation');
       this.#recordDescription = description;
       if (fact.kind === 'started') this.begin(fact);
       else if (fact.kind === 'process') this.process(fact);
@@ -87,7 +82,7 @@ export class InvocationRecording implements InvocationObserver {
   private get recorder(): Recorder {
     return this.installation.recorder;
   }
-  private requireRecord(): ConcreteInvocationRecord {
+  private requireRecord(): CallableRecord {
     if (!this.#record) throw new Error('The call recording has not started');
     return this.#record;
   }
@@ -96,34 +91,30 @@ export class InvocationRecording implements InvocationObserver {
   }
   private source(): RecordChangeSource {
     const record = this.requireRecord();
-    const executionRecord = this.#executionRecording ? this.#executionRecording.#record : undefined;
-    return { contextId: record.contextId, callId: record.id, ...(executionRecord ? { executionId: executionRecord.id } : {}), ...(record instanceof OperationRecord ? { operationId: record.id } : record instanceof AttemptRecord ? { operationId: record.operationId } : {}) };
+    return { contextId: record.contextId, callId: record.id };
   }
   private begin(fact: Extract<InvocationFact, { kind: 'started' }>): void {
     if (this.#record) throw new Error('A call recording can only start once');
     const input = this.#recordDescription.input ? this.#recordDescription.input(fact.input) : fact.input;
-    const description = pick(fact.description ?? this.setup.description ?? {}, ['id', 'name', 'label', 'source', 'callee']);
+    const description = fact.description ?? this.setup.description ?? {};
     const parentRecord = this.parentRecording?.requireRecord();
-    const contextId = fact.identity.contextId;
-    if (fact.identity.level === 'runtime') {
-      if (parentRecord || !description?.id) throw new Error('Runtime recording requires a stable Runtime instance identity');
-      this.#record = this.recorder.add(new RuntimeCallRecord(contextId, description.id, { input, startedAt: fact.occurredAt }, this.installation.root.id));
-    } else if (fact.identity.level === 'execution') {
-      if (!(parentRecord instanceof RuntimeCallRecord)) throw new Error('Execution recording requires its parent Runtime call');
-      this.#record = this.recorder.add(new ExecutionRecord(contextId, { input, startedAt: fact.occurredAt }, parentRecord.id));
-      this.#executionRecording = this;
-    } else if (fact.identity.level === 'operation') {
-      if (!(parentRecord instanceof ExecutionRecord || parentRecord instanceof OperationRecord) || !description?.id || !description.name || !description.label || isUndefined(description.source)) throw new Error('Operation recording requires a parent record and a complete description');
-      this.#executionRecording = this.parentRecording ? this.parentRecording.#executionRecording : undefined;
-      this.#record = this.recorder.add(new OperationRecord({ contextId, executionId: parentRecord instanceof ExecutionRecord ? parentRecord.id : parentRecord.executionId, operationInstanceId: description.id, operation: description.name, label: description.label, source: description.source, caller: parentRecord instanceof ExecutionRecord ? 'execution' : 'operation', callee: 'operation', ...(parentRecord instanceof OperationRecord ? { parentOperationId: parentRecord.id } : {}) }, input));
-    } else {
-      if (!(parentRecord instanceof OperationRecord) || !description?.name || !description.label || isUndefined(description.source) || !description.callee) throw new Error('Attempt recording requires a parent record and a complete description');
-      this.#executionRecording = this.parentRecording ? this.parentRecording.#executionRecording : undefined;
-      this.#record = this.recorder.add(new AttemptRecord({ contextId, operationId: parentRecord.id, name: description.name, label: description.label, source: description.source, caller: 'operation', callee: description.callee }, input));
-    }
+    if ((fact.identity.parentContextId !== undefined) !== !!parentRecord || (parentRecord && parentRecord.contextId !== fact.identity.parentContextId)) throw new Error('Call recording parent differs from its invocation relationship');
+    this.#record = this.recorder.add(
+      new CallableRecord(
+        {
+          contextId: fact.identity.contextId,
+          structureKind: fact.identity.kind,
+          parentId: parentRecord?.id ?? this.installation.root.id,
+          ...(description.id !== undefined ? { structureId: description.id } : {}),
+          ...pick(description, ['name', 'label', 'source', 'callee']),
+          ...(this.#recordDescription.role !== undefined || description.role !== undefined ? { role: this.#recordDescription.role ?? description.role } : {}),
+        },
+        { input, startedAt: fact.occurredAt },
+      ),
+    );
     this.#startedTick = fact.monotonicTime;
     this.boundary(fact, 'call');
-    // Construction can attach children before this call starts; retain the actual fact order.
+    // Construction can attach children before this call starts; retain actual fact order.
     for (const attachment of this.#pendingAttachments.splice(0)) this.relation(attachment, Math.max(0, this.offset(attachment.monotonicTime)));
   }
   private process(fact: Extract<InvocationFact, { kind: 'process' }>): void {
@@ -175,13 +166,18 @@ export class InvocationRecording implements InvocationObserver {
     }
     this.boundary(fact, state.status === 'succeeded' ? 'return' : 'throw');
   }
+  private timingRoot(): InvocationRecording {
+    let recording: InvocationRecording = this;
+    while (recording.parentRecording) recording = recording.parentRecording;
+    return recording;
+  }
   private offset(time: number): number {
-    const timingRecording = this.#executionRecording ?? this;
+    const timingRecording = this.timingRoot();
     if (isUndefined(timingRecording.#startedTick)) throw new Error('Call recording has no timing origin');
     return time - timingRecording.#startedTick;
   }
   private boundary(fact: InvocationFact, type: 'call' | 'return' | 'throw'): void {
-    const timingRecording = this.#executionRecording ?? this;
+    const timingRecording = this.timingRoot();
     InvocationBoundaryRecordHelper.create(this.recorder, { start: timingRecording.#startedTick!, scopeId: timingRecording.requireRecord().id, callId: this.requireRecord().id, occurredAt: fact.occurredAt, offsetMs: this.offset(fact.monotonicTime) }, type);
   }
   private protect(work: () => void): void {

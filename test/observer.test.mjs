@@ -1,12 +1,11 @@
 import { callFor } from './fixtures/lifecycle.mjs';
-import { ExecutionRecordHelper } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { observeFixture, createInput, resourceFact } from './fixtures/observer.mjs';
 import { DeepSeekProvider, acceptConversationInput, answerOutputContract, selectionOutputContract, memoryOutputContract } from '@capix/observer-service';
-import { Transcript, RecordBook, Recorder, BoundRuntime } from '@capix/server-runtime';
+import { Transcript, RecordBook, Recorder } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';
@@ -69,7 +68,7 @@ test('fixed preparation and two model stages produce a causal trace with active 
     false,
   );
   assert.ok(trace.nodes.every((n) => n.status === 'passed' && n.durationMs >= 0));
-  assert.ok(records.some((t) => t.nodes.find((n) => n.operation === 'requestModel.invokeModel' && n.group === 'answer')?.status === 'running'));
+  assert.ok(records.some((t) => t.nodes.find((n) => n.operation === 'invokeModel' && n.group === 'answer')?.status === 'running'));
   assert.equal(records[0].nodes[0].status, 'running');
   for (const stage of ['answer', 'memory']) {
     const owner = trace.nodes.find((node) => node.operation === stage);
@@ -92,7 +91,7 @@ test('capacity failure prevents all model calls and preserves capacity evidence'
   const { trace } = await run(provider, { ...settings, contextBudget: 256 });
   assert.equal(trace.error.code, 'CAPACITY_EXCEEDED');
   assert.equal(provider.calls.length, 0);
-  const capacity = trace.nodes.find((n) => n.operation === 'answer.prepareModelRequest');
+  const capacity = trace.nodes.find((n) => n.operation === 'prepareModelRequest');
   assert.equal(Object.hasOwn(capacity, 'output'), false);
   assert.equal(capacity.error.detail.fits, false);
   assert.equal(capacity.error.detail.exact, false);
@@ -105,7 +104,7 @@ test('malformed, duplicate and truncated results fail at the corresponding bound
     ['', 'stop', 'EMPTY_OUTPUT', 'acceptModelOutput'],
   ]) {
     const { trace } = await run(scripted([output(raw, finish), output(raw, finish)]));
-    const accepted = trace.nodes.filter((n) => n.operation === `answer.${stage}`).at(-1);
+    const accepted = trace.nodes.filter((n) => n.operation === `${stage}`).at(-1);
     assert.equal(accepted.status, 'failed');
     assert.deepEqual(trace.error, accepted.error);
     if (code === 'INCOMPLETE_OUTPUT') {
@@ -125,7 +124,7 @@ test('answer classification is validated but does not invent task success', asyn
   assert.equal(trace.error.code, 'MODEL_OUTPUT_REJECTED');
   assert.equal(trace.error.cause.code, 'OUTPUT_SHAPE');
   assert.deepEqual(trace.error.detail, { code: 'OUTPUT_SHAPE', output: output('{"kind":"tool","content":"x"}') });
-  const accepted = trace.nodes.find((n) => n.operation === 'answer.acceptModelOutput');
+  const accepted = trace.nodes.find((n) => n.operation === 'acceptModelOutput');
   assert.equal(accepted.status, 'failed');
   assert.deepEqual(accepted.error.cause.detail.issues[0].path, ['kind']);
   assert.deepEqual(JSON.parse(JSON.stringify(trace)).error.cause.detail.issues, accepted.error.cause.detail.issues);
@@ -164,7 +163,7 @@ test('DeepSeek request uses JSON mode; transport secret is absent from observati
   assert.equal(trace.status, 'succeeded');
   assert.equal(sent.length, 2);
   assert.equal(JSON.stringify(records).includes('test-secret-do-not-log'), false);
-  assert.equal(trace.nodes.find((n) => n.operation === 'requestModel.invokeModel' && n.group === 'answer').output.output.usage.totalTokens, 15);
+  assert.equal(trace.nodes.find((n) => n.operation === 'invokeModel' && n.group === 'answer').output.output.usage.totalTokens, 15);
 });
 test('provider HTTP errors remain explicit and never retry', async () => {
   let calls = 0;
@@ -204,17 +203,17 @@ test('Named action sequence records nested call and return boundaries rather tha
   assert.equal(calls.filter((call) => call.operation !== 'conversationDecision').length, 14);
   const decisions = calls.filter((call) => call.operation === 'conversationDecision');
   assert.equal(decisions.length, 2);
-  assert.ok(decisions.every((call) => call.parentId === calls.find((parent) => parent.operation === 'execution').id));
+  assert.ok(decisions.every((call) => call.parentId === calls.find((parent) => parent.operation === 'conversationTask').id));
   assert.equal(events.length, calls.length * 2);
   const active = new Set();
   let previousTime = -1;
   events.forEach((event, index) => {
-    assert.equal(event.sequence, index + 1);
+    assert.equal(event.sequence, events[0].sequence + index);
     assert.ok(event.offsetMs >= previousTime);
     previousTime = event.offsetMs;
     const call = calls.find((c) => c.id === event.callId);
     if (event.value.type === 'call') {
-      if (call.parentId) assert.ok(active.has(call.parentId));
+      if (calls.some((parent) => parent.id === call.parentId)) assert.ok(active.has(call.parentId));
       active.add(call.id);
     } else {
       assert.ok(active.has(call.id));
@@ -225,11 +224,11 @@ test('Named action sequence records nested call and return boundaries rather tha
   assert.equal(active.size, 0);
   const selection = calls.find((call) => call.operation === 'answer');
   const request = calls.find((call) => call.operation === 'requestModel' && call.parentId === selection.id);
-  const invoke = calls.find((call) => call.operation === 'requestModel.invokeModel' && call.parentId === request.id);
+  const invoke = calls.find((call) => call.operation === 'invokeModel' && call.parentId === request.id);
   assert.equal(invoke.parentId, request.id);
   assert.equal(request.parentId, selection.id);
-  assert.equal(invoke.caller, 'operation');
-  assert.equal(invoke.callee, 'attempt');
+  assert.equal(invoke.caller, 'group');
+  assert.equal(invoke.callee, 'node');
   assert.equal(invoke.target, 'provider');
   const firstEnd = events.find((e) => e.callId === calls.find((c) => c.operation === 'prepareContext').id && e.value.type === 'return');
   const secondStart = events.find((e) => e.callId === calls.find((c) => c.operation === 'answer').id && e.value.type === 'call');
@@ -244,11 +243,11 @@ test('failure propagates through calls, is caught by Observer execution, and nev
   const { calls, events } = trace.callSequence;
   assert.deepEqual(
     events.filter((e) => e.value.type === 'throw').map((e) => calls.find((c) => c.id === e.callId).operation),
-    ['answer.acceptModelOutput', 'answer', 'execution'],
+    ['acceptModelOutput', 'answer', 'conversationTask'],
   );
-  assert.equal(events.at(-1).callId, calls.find((c) => c.operation === 'execution').id);
+  assert.equal(events.at(-1).callId, calls.find((c) => c.operation === 'conversationTask').id);
   assert.equal(events.at(-1).value.type, 'throw');
-  assert.equal(calls.find((c) => c.operation === 'execution').status, 'failed');
+  assert.equal(calls.find((c) => c.operation === 'conversationTask').status, 'failed');
   assert.ok(!calls.some((c) => c.operation === 'memory'));
 });
 
@@ -264,22 +263,22 @@ test('sequence ordering follows completion when calls overlap', async () => {
     name = 'b';
   }
   const start = (operation) => invoke(lifecycleFor(runtime).operation(execution, operation, input), () => new Promise((resolve) => resolvers.push(resolve)));
-  const first = start(new FirstOperation(runtime)),
-    second = start(new SecondOperation(runtime));
+  const first = start(new FirstOperation(runtime));
+  const second = start(new SecondOperation(runtime));
   resolvers[1]('second');
   await second;
   resolvers[0]('first');
   await first;
   const facts = observeCall(runtime.recording, callFor(execution));
   assert.deepEqual(
-    facts.events.filter((e) => e.callId !== facts.execution.id).map((e) => `${e.value.type}:${facts.operations.find((op) => op.id === e.callId).operation}`),
+    facts.events.filter((e) => e.callId !== facts.execution.id).map((e) => `${e.value.type}:${facts.operations.find((op) => op.id === e.callId).name}`),
     ['call:a', 'call:b', 'return:b', 'return:a'],
   );
 });
 
 test('Observer execution uses its captured configuration even when caller settings change between model calls', async () => {
-  const mutable = { ...settings },
-    requests = [];
+  const mutable = { ...settings };
+  const requests = [];
   const provider = {
     async invoke(request, purpose) {
       requests.push(request);

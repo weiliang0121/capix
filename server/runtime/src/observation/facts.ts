@@ -9,6 +9,8 @@ export type { InvocationRelationIdentity } from '@capix/protocol';
 export type { InvocationIdentity } from '../invocation/identity.js';
 
 export interface InvocationDescription {
+  /** Host-only description; never grants execution, membership or recovery authority. */
+  readonly role?: string;
   /** Stable bound-structure identity when supplied; not an invocation or record ID. */
   readonly id?: string;
   readonly name?: string;
@@ -42,11 +44,11 @@ export interface ResourceObservation {
   readonly describe: () => unknown;
 }
 
-/** Facts of the reusable structure, ordered independently from individual calls. */
-export type RuntimeStructureFact = Readonly<
+/** Facts of the installed driver, ordered independently from individual calls. */
+export type DriverFact = Readonly<
   {
-    runtimeId: string;
+    driverId: string;
     sequence: number;
     occurredAt: string;
-  } & ({ kind: 'established' } | { kind: 'acquired' } | { kind: 'released' } | { kind: 'rejected'; reason: 'busy'; error: unknown } | { kind: 'entry-failed'; error: unknown })
+  } & ({ kind: 'established' } | ({ boundId: string } & ({ kind: 'acquired' } | { kind: 'released' } | { kind: 'rejected'; reason: 'busy'; error: unknown } | { kind: 'entry-failed'; error: unknown })))
 >;

@@ -1,6 +1,7 @@
+import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, OperationDefinition, MemoryCheckpointStore, checkpointPoint, childReference, assembleRuntime } from '@capix/server-runtime';
+import { SceneDefinition, GroupDefinition, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
 import { MemoryResource } from '@capix/server-runtime/content';
 import { ConversationContent } from '@capix/observer-service/assembly';
 import { ActiveContentResource, PrepareConversationContextDefinition, MaintainConversationContentDefinition, ModelSettingsResource } from '@capix/observer-service/conversation';
@@ -54,8 +55,8 @@ function checkpoint(key, child) {
   };
 }
 function runtime(operation, content, store = new CapturedStore(), options = {}) {
-  class E extends ExecutionDefinition {
-    children = [operation];
+  class E extends GroupDefinition {
+    members = [operation];
     checkpoint = checkpoint('active.fixture.e', operation);
     run = {
       requires: {},
@@ -70,8 +71,8 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
   }
   const execution = new E();
   const thisCheckpoint = execution.checkpoint;
-  class R extends RuntimeDefinition {
-    children = [execution];
+  class R extends SceneDefinition {
+    members = [execution];
     checkpoint = checkpoint('active.fixture.r', execution);
     run = {
       requires: {},
@@ -83,7 +84,7 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
       },
     };
   }
-  return assembleRuntime(new R(), {
+  return installCallable(new R(), {
     checkpoints: { store },
     providers: [ActiveContentResource.read.provide(() => content.active), ActiveContentResource.manage.provide(() => content.active), ModelSettingsResource.snapshot.provide(() => settings), MemoryResource.apply.provide(() => content.memories)],
     source: {
@@ -114,7 +115,10 @@ test('unconfigured preparation captures current content at execution and never c
     ['old', 'just arrived'],
   );
   assert.equal(prepared.context.message, content.transcript.get(1));
-  assert.equal(progress.filter((fact) => fact.kind === 'started' && fact.identity.level === 'operation').length, 1);
+  assert.deepEqual(
+    progress.filter((fact) => fact.kind === 'started' && fact.description?.name).map((fact) => fact.description.name),
+    ['prepareContext'],
+  );
 });
 
 test('function maintenance is one real O, can remove current membership, and preparation keeps explicit current input', async (t) => {
@@ -133,7 +137,10 @@ test('function maintenance is one real O, can remove current membership, and pre
   assert.deepEqual(prepared.selection.historyIndexes, []);
   assert.equal(prepared.context.message.content, 'question');
   assert.equal(content.transcript.length, 2);
-  assert.equal(progress.filter((fact) => fact.kind === 'started' && fact.identity.level === 'operation').length, 2);
+  assert.deepEqual(
+    progress.filter((fact) => fact.kind === 'started' && fact.description?.name).map((fact) => fact.description.name),
+    ['prepareContext', 'maintainContext'],
+  );
 });
 
 test('a composed maintenance O may write content and choose from the new explicit basis without recursive maintenance', async (t) => {
@@ -141,7 +148,7 @@ test('a composed maintenance O may write content and choose from the new explici
   t.after(() => content.close());
   let calls = 0;
   const requires = { activeContentManager: ActiveContentResource.manage.request(), memoryWriter: MemoryResource.apply.request() };
-  class Policy extends OperationDefinition {
+  class Policy extends GroupDefinition {
     name = 'policy';
     label = 'policy';
     source = 'test';
@@ -225,7 +232,7 @@ test('preparation and maintenance resume their actual waiting child before accep
   t.after(() => content.close());
   const initial = save(content);
   let calls = 0;
-  class Policy extends OperationDefinition {
+  class Policy extends GroupDefinition {
     name = 'policy';
     label = 'policy';
     source = 'test';

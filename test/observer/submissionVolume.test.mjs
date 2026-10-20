@@ -1,22 +1,23 @@
+import { Driver } from '@capix/server-runtime';
 import { ActiveContent } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
-import { ConversationSubmission, bindConversation, ConversationRuntimeDefinition, ModelInteractions, ModelSource } from '@capix/observer-service';
+import { ConversationSubmission, bindConversation, ConversationSceneDefinition, ModelInteractions, ModelSource } from '@capix/observer-service';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import { ClientSubmission } from '@capix/client-runtime';
 
 const tick = () => new Promise((resolve) => queueMicrotask(resolve));
 const occurredAt = '2026-10-01T00:00:00.000Z';
-const fact = (contextId, level, kind, eventSequence, fields = {}) => ({ identity: { contextId, level, ...(level === 'execution' ? { parentContextId: 'r' } : {}) }, kind, eventSequence, occurredAt, ...fields });
+const fact = (contextId, structureKind, kind, eventSequence, fields = {}) => ({ identity: { contextId, kind: structureKind, ...(structureKind === 'group' ? { parentContextId: 'r' } : {}) }, kind, eventSequence, occurredAt, ...fields });
 const event = (submission, kind, sequence, fields = {}) => submission.answerProgress.publish({ kind: 'generation', event: { kind, sequence, contextId: 'answer', round: 1, ...fields } });
 const size = (frame) => Buffer.byteLength(JSON.stringify(frame) + '\n');
 
 test('preview chunks neither resend nor rebuild cumulative call state, regardless of graph size', async () => {
   async function measure(count) {
     const submission = new ConversationSubmission('submission', 'conversation');
-    submission.activity.publish(fact('r', 'runtime', 'started', 1));
-    for (let index = 0; index < count; index++) submission.activity.publish(fact(`e-${index}`, 'execution', 'started', 1));
+    submission.activity.publish(fact('r', 'scene', 'started', 1));
+    for (let index = 0; index < count; index++) submission.activity.publish(fact(`e-${index}`, 'group', 'started', 1));
     await tick();
     const snapshot = submission.snapshot;
     const frames = [];
@@ -47,14 +48,14 @@ test('preview chunks neither resend nor rebuild cumulative call state, regardles
 
 test('activity changes contain only affected calls and unchanged boundary actions do not publish', async () => {
   const submission = new ConversationSubmission('submission', 'conversation');
-  submission.activity.publish(fact('r', 'runtime', 'started', 1));
-  for (let index = 0; index < 100; index++) submission.activity.publish(fact(`e-${index}`, 'execution', 'started', 1));
+  submission.activity.publish(fact('r', 'scene', 'started', 1));
+  for (let index = 0; index < 100; index++) submission.activity.publish(fact(`e-${index}`, 'group', 'started', 1));
   await tick();
   const frames = [];
   submission.connectFrames((frame) => {
     frames.push(frame);
   });
-  submission.activity.publish(fact('e-50', 'execution', 'process', 2, { stage: 'execute', round: 1, action: 'start' }));
+  submission.activity.publish(fact('e-50', 'group', 'process', 2, { stage: 'execute', round: 1, action: 'start' }));
   await tick();
   assert.equal(frames.length, 2);
   assert.equal(frames[1].type, 'submission');
@@ -63,7 +64,7 @@ test('activity changes contain only affected calls and unchanged boundary action
     ['e-50'],
   );
   const snapshot = submission.snapshot;
-  submission.activity.publish(fact('e-50', 'execution', 'process', 3, { stage: 'execute', round: 1, action: 'return' }));
+  submission.activity.publish(fact('e-50', 'group', 'process', 3, { stage: 'execute', round: 1, action: 'return' }));
   await tick();
   assert.equal(frames.length, 2, 'boundary facts already represented by the same phase are not retransmitted');
   assert.strictEqual(submission.snapshot, snapshot);
@@ -108,9 +109,10 @@ test('full declared streaming chain stays within a wire budget and client recons
   t.after(() => interactions.close());
   const transcript = new Transcript();
   const memories = new Memories(transcript);
-  const runtime = bindConversation(new ConversationRuntimeDefinition(), { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() }, interactions);
+  const driver = new Driver();
+  const scene = bindConversation(driver, new ConversationSceneDefinition(), { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() }, interactions);
   const client = new ClientSubmission('volume-conversation', { messages: [{ role: 'user', content: '模拟问题' }] });
-  const submission = new ConversationSubmission(client.id, client.conversationId, { admission: () => ({ conversationId: client.conversationId, transcriptId: transcript.id, status: runtime.running ? 'busy' : 'ready' }) });
+  const submission = new ConversationSubmission(client.id, client.conversationId, { admission: () => ({ conversationId: client.conversationId, transcriptId: transcript.id, status: driver.isRunning(scene) ? 'busy' : 'ready' }) });
   const frames = [];
   const detach = submission.connectFrames((frame) => {
     frames.push(frame);
@@ -124,7 +126,7 @@ test('full declared streaming chain stays within a wire budget and client recons
       }
     });
   });
-  submission.start((signal) => runtime.run(client.input, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 }, signal, progress: submission.progress, activity: submission.activity, answerProgress: submission.answerProgress }));
+  submission.start((signal) => driver.run(scene, client.input, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 }, signal, progress: submission.progress, activity: submission.activity, answerProgress: submission.answerProgress }));
   const final = await completed;
   await tick();
   detach();

@@ -1,31 +1,33 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Sequence, defineAttempt, defineOperation, defineExecution, assembleRuntime, Recorder, RecordBook, bindRecording, defineObservation } from '@capix/server-runtime';
+import { Sequence, defineNode, defineGroup, Recorder, RecordBook, bindRecording, defineObservation } from '@capix/server-runtime';
 import { runtimeDefinition, recordDefinitions, recordedCall } from '../fixtures/declarations.mjs';
 
 const metadata = { name: 'composed', label: 'Composed', source: 'test', callee: 'test' };
 function attempt(name, execute = (value) => value) {
-  return defineAttempt()({ ...metadata, name, run: { execute: (work) => execute(work.input) } });
+  return defineNode()({ ...metadata, name, run: { execute: (work) => execute(work.input) } });
 }
 function composed(sequence) {
-  return defineOperation()({ ...metadata, children: [...new Set(sequence.steps.map((step) => step.use))], run: { execute: (work) => sequence.run(work.input, work.children) } });
+  return defineGroup()({ ...metadata, members: [...new Set(sequence.steps.map((step) => step.use))], run: { execute: (work) => sequence.run(work.input, work.children) } });
 }
 function install(composition, recorder) {
   const calls = [];
-  const execution = defineExecution()({ children: [...new Set(composition.steps.map((step) => step.use))], run: { execute: (work) => composition.run(work.input, work.children) } });
+  const execution = defineGroup()({ members: [...new Set(composition.steps.map((step) => step.use))], run: { execute: (work) => composition.run(work.input, work.children) } });
   const definition = runtimeDefinition(execution);
   if (recorder) recordDefinitions(definition);
-  const runtime = assembleRuntime(definition, {
+  const runtime = installCallable(definition, {
     providers: [],
     observations: recorder ? [bindRecording(recorder)] : [],
-    source: {
-      capture: () => null,
-      callbacks: () => ({
-        started: (_context, call) => {
+    source: { capture: () => null },
+    bindings: [
+      {
+        definition: execution,
+        started: () => (_context, call) => {
           calls.push(call);
         },
-      }),
-    },
+      },
+    ],
   });
   return { calls, runtime };
 }
@@ -144,8 +146,8 @@ test('direct calls attach and return without pretending parent acceptance took p
   const operation = composed(new Sequence());
   let saved;
   let facts;
-  const execution = defineExecution()({
-    children: [operation],
+  const execution = defineGroup()({
+    members: [operation],
     run: {
       execute(work) {
         facts = work.children.facts;
@@ -154,7 +156,7 @@ test('direct calls attach and return without pretending parent acceptance took p
       },
     },
   });
-  const runtime = assembleRuntime(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
+  const runtime = installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
   await runtime.run(null, {});
   const child = facts.get(saved.ref);
   assert.equal(child.key, undefined);
@@ -165,7 +167,7 @@ test('direct calls attach and return without pretending parent acceptance took p
 
 test('a terminal reporting failure remains a failed delivery with a succeeded child context', async () => {
   const error = new Error('finish record failed');
-  const use = defineOperation()({
+  const use = defineGroup()({
     ...metadata,
     observation: [
       defineObservation(

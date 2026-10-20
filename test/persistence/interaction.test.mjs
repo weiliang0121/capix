@@ -219,7 +219,7 @@ test('v1 migration preserves conversation content, memory identities and recordi
   };
   const store = disk.open();
   const environment = initializeObserver(provider, [], { persistence: store });
-  await environment.runtime.run({ messages: [{ role: 'user', content: 'hello' }] }, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 } });
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'hello' }] }, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 } });
   environment.memories.apply([{ action: 'create', memoryId: null, change: 'keep source', sourceIndexes: [0, 1], result: { topic: 'fixture', content: 'saved memory', sourceIndexes: [0, 1] } }]);
   environment.close();
   const before = disk.open();

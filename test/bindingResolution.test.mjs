@@ -1,22 +1,23 @@
+import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExecutionDefinition, ResourceOffer, MemoryCheckpointStore, assembleRuntime } from '@capix/server-runtime';
+import { GroupDefinition, ResourceOffer, MemoryCheckpointStore } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {
-  return { level: 'attempt', name, label: name, source: 'test', callee: 'test', maxRounds: 1, raises: [], run };
+  return { kind: 'node', name, label: name, source: 'test', callee: 'test', maxRounds: 1, raises: [], run };
 }
 
 function operation(name, children, run) {
-  return { level: 'operation', name, label: name, source: 'test', children, maxRounds: 1, raises: [], run };
+  return { kind: 'group', name, label: name, source: 'test', members: children, maxRounds: 1, raises: [], run };
 }
 
 function execution(children, run) {
-  return { level: 'execution', children, maxRounds: 1, raises: [], run };
+  return { kind: 'group', members: children, maxRounds: 1, raises: [], run };
 }
 
 function assemble(definition, options = {}) {
-  return assembleRuntime(definition, { providers: [], source: { capture: () => null }, ...options });
+  return installCallable(definition, { providers: [], source: { capture: () => null }, ...options });
 }
 
 test('declaration checks finish once per binding position before any call and never repeat during lazy construction', async () => {
@@ -33,7 +34,7 @@ test('declaration checks finish once per binding position before any call and ne
     observations: [
       {
         check(scope, owner) {
-          checked.push([scope.level, scope.name, owner?.level, owner?.name]);
+          checked.push([scope.kind, scope.name, owner?.kind, owner?.name]);
         },
         bindInvocation(setup) {
           called.push({ ...setup.identity, description: setup.description });
@@ -43,14 +44,14 @@ test('declaration checks finish once per binding position before any call and ne
     ],
   });
   assert.deepEqual(checked, [
-    ['runtime', undefined, undefined, undefined],
-    ['execution', undefined, 'runtime', undefined],
-    ['operation', 'left', 'execution', undefined],
-    ['operation', 'shared', 'operation', 'left'],
-    ['attempt', 'leaf', 'operation', 'shared'],
-    ['operation', 'right', 'execution', undefined],
-    ['operation', 'shared', 'operation', 'right'],
-    ['attempt', 'leaf', 'operation', 'shared'],
+    ['scene', undefined, undefined, undefined],
+    ['group', undefined, 'scene', undefined],
+    ['group', 'left', 'group', undefined],
+    ['group', 'shared', 'group', 'left'],
+    ['node', 'leaf', 'group', 'shared'],
+    ['group', 'right', 'group', undefined],
+    ['group', 'shared', 'group', 'right'],
+    ['node', 'leaf', 'group', 'shared'],
   ]);
   const initialChecks = checked.slice();
   assert.equal(called.length, 0);
@@ -96,9 +97,9 @@ test('resolved children, resource aliases and work functions stay fixed while de
   const originalOperation = operation('original-operation', [originalLeaf], { requires: originalRequires, uses: [originalLeaf], execute: (context) => context.children.create(originalLeaf, context.input).run() });
   const replacementLeaf = attempt('replacement-leaf', { requires: replacementRequires, execute: (context) => `${context.input}:${context.resources.replacement}` });
   const replacementOperation = operation('replacement-operation', [replacementLeaf], { requires: replacementRequires, uses: [replacementLeaf], execute: (context) => context.children.create(replacementLeaf, context.input).run() });
-  class Main extends ExecutionDefinition {
+  class Main extends GroupDefinition {
     #prefix = 'initial';
-    children = [originalOperation];
+    members = [originalOperation];
     run = { requires: originalRequires, uses: [originalOperation], execute: this.execute.bind(this) };
     setPrefix(value) {
       this.#prefix = value;
@@ -122,12 +123,12 @@ test('resolved children, resource aliases and work functions stay fixed while de
   const existing = assemble(definition, options);
   assert.equal(captured, 0);
   main.setPrefix('live');
-  main.children.splice(0, 1, replacementOperation);
+  main.members.splice(0, 1, replacementOperation);
   main.run.uses.splice(0, 1, replacementOperation);
   main.run.requires = replacementRequires;
   main.run.execute = (context) => context.children.create(replacementOperation, `replacement:${context.input}`).run();
   originalRequires.value = newResource.request();
-  originalOperation.children.length = 0;
+  originalOperation.members.length = 0;
   originalOperation.run.uses.length = 0;
   originalOperation.run.execute = () => assert.fail('mutated lazy O work must not run');
   originalLeaf.run.execute = () => assert.fail('mutated lazy A work must not run');
@@ -171,12 +172,8 @@ test('E captures resources after ordinary R input preparation and fixes its decl
   const definition = runtimeDefinition(main);
   const options = {
     providers: [value.provide((source) => source)],
-    source: {
-      capture(input, _options, declared) {
-        assert.equal(declared, main);
-        return `resource:${input}`;
-      },
-    },
+    source: { capture: () => null },
+    bindings: [{ definition: main, capture: (input) => `resource:${input}` }],
   };
   const existing = assemble(definition, options);
   run.prefix = 'live';
@@ -228,9 +225,9 @@ test('checkpoint contracts, codecs and continuation callbacks use the same fixed
   };
   const point = { name: 'saved', references: {}, state: codec, check: () => true, resume };
   const checkpoint = { key: 'test.resolution.checkpoint', version: 1, input: codec, output: codec, points: [point] };
-  const definition = { level: 'runtime', maxRounds: 1, raises: [], children: [], checkpoint, run: { requires: {}, execute: () => assert.fail('normal work cannot replay during restoration') } };
+  const definition = { kind: 'scene', maxRounds: 1, raises: [], members: [], checkpoint, run: { requires: {}, execute: () => assert.fail('normal work cannot replay during restoration') } };
   const store = new MemoryCheckpointStore();
-  const save = (contextId) => store.save({ id: `image-${contextId}`, formatVersion: 3, contract: { key: checkpoint.key, version: 1 }, point: 'saved', references: {}, frame: { owner: { contextId, level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: { answer: 'original continuation' } }, 0);
+  const save = (contextId) => store.save({ id: `image-${contextId}`, formatVersion: 4, contract: { key: checkpoint.key, version: 1 }, point: 'saved', references: {}, frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: { answer: 'original continuation' } }, 0);
   save('original-root');
   save('new-root');
   const existing = assemble(definition, { checkpoints: { store } });

@@ -1,6 +1,7 @@
+import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { defineRuntime, defineExecution, defineOperation, defineAttempt, defineChildEntry, checkpointPoint, ResourceOffer, MemoryCheckpointStore, assembleRuntime } from '@capix/server-runtime';
+import { defineScene, defineGroup, defineNode, defineChildEntry, checkpointPoint, ResourceOffer, MemoryCheckpointStore } from '@capix/server-runtime';
 
 const metadata = { name: 'test', label: 'Test', source: 'test', callee: 'test' };
 const codec = { encode: (value) => value, decode: (value) => value };
@@ -16,8 +17,8 @@ test('actual factories bind R/E/O/A, preserve alternate input and function recei
       return work.input * this.factor + work.resources.value;
     },
   };
-  const leaf = defineAttempt()({ ...metadata, run });
-  const second = defineAttempt()({ ...metadata, run });
+  const leaf = defineNode()({ ...metadata, run });
+  const second = defineNode()({ ...metadata, run });
   assert.notEqual(leaf, second);
   assert.equal(executions, 0);
   const entryContent = {
@@ -36,9 +37,9 @@ test('actual factories bind R/E/O/A, preserve alternate input and function recei
     entry.accept = () => 0;
   }, TypeError);
   entryContent.base = 3;
-  const operation = defineOperation()({
+  const operation = defineGroup()({
     ...metadata,
-    children: [leaf],
+    members: [leaf],
     run: {
       requires: { value: resource.request() },
       async execute(work) {
@@ -48,8 +49,8 @@ test('actual factories bind R/E/O/A, preserve alternate input and function recei
       },
     },
   });
-  const execution = defineExecution()({
-    children: [operation],
+  const execution = defineGroup()({
+    members: [operation],
     run: {
       requires: { value: resource.request() },
       async execute(work) {
@@ -59,8 +60,8 @@ test('actual factories bind R/E/O/A, preserve alternate input and function recei
       },
     },
   });
-  const root = defineRuntime()({
-    children: [execution],
+  const root = defineScene()({
+    members: [execution],
     run: {
       requires: { value: resource.request() },
       async execute(work) {
@@ -70,7 +71,7 @@ test('actual factories bind R/E/O/A, preserve alternate input and function recei
       },
     },
   });
-  const runtime = assembleRuntime(root, { providers: [resource.provide(() => null)], source: { runtime: () => null, capture: () => null } });
+  const runtime = installCallable(root, { providers: [resource.provide(() => null)], source: { runtime: () => null, capture: () => null } });
   assert.equal(await runtime.run({ number: 5 }, {}), 28);
   assert.equal(executions, 1);
 });
@@ -91,7 +92,7 @@ test('point factories retain real identity and save optional typed checkpoints i
     },
   };
   const point = checkpointPoint()(pointContent);
-  const root = defineRuntime()({
+  const root = defineScene()({
     checkpoint: { key: 'test.factory.cp', version: 1, input: codec, output: codec, points: [point] },
     run: {
       execute(work) {
@@ -101,7 +102,7 @@ test('point factories retain real identity and save optional typed checkpoints i
     },
   });
   const store = new MemoryCheckpointStore();
-  const runtime = assembleRuntime(root, { providers: [], source: { runtime: () => null, capture: () => null }, checkpoints: { store } });
+  const runtime = installCallable(root, { providers: [], source: { runtime: () => null, capture: () => null }, checkpoints: { store } });
   assert.equal(await runtime.run('saved', {}), 'saved');
   assert.equal(pointContent.checks, 1);
   assert.equal(point.name, 'prepared');

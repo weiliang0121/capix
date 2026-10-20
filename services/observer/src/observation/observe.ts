@@ -1,12 +1,14 @@
 import type { ExecutionRecordSnapshot } from '@capix/protocol';
 import type { RecordingInstallation } from '@capix/server-runtime/recording';
 
-import { InvocationBoundaryRecord, ExecutionRecord, OperationRecord, AttemptRecord, ExecutionRecordHelper } from '@capix/server-runtime/recording';
+import { InvocationBoundaryRecord } from '@capix/server-runtime/recording';
+import { callRecord, isTaskRecord, recordSubtree, taskSnapshot } from './calls.js';
 
-import type { ConversationRunOptions, BoundConversationRuntime } from '../conversation/binding.js';
+import type { Driver } from '@capix/server-runtime';
+import type { ConversationRunOptions, ConversationScene } from '../conversation/binding.js';
 
 /** Observe one invocation by Context identity, independent of its input value. */
-export async function observeExecution(runtime: BoundConversationRuntime, recording: RecordingInstallation, input: unknown, options: ConversationRunOptions, publish: (snapshot: ExecutionRecordSnapshot) => void = () => {}): Promise<ExecutionRecordSnapshot> {
+export async function observeExecution(driver: Driver, scene: ConversationScene, recording: RecordingInstallation, input: unknown, options: ConversationRunOptions, publish: (snapshot: ExecutionRecordSnapshot) => void = () => {}): Promise<ExecutionRecordSnapshot> {
   let contextId: string | undefined;
   let latest: ExecutionRecordSnapshot | undefined;
   const unsubscribe = subscribeExecutions(recording, (snapshot) => {
@@ -16,7 +18,7 @@ export async function observeExecution(runtime: BoundConversationRuntime, record
   });
   try {
     try {
-      await runtime.run(input, {
+      await driver.run(scene, input, {
         ...options,
         executionCallbacks: {
           started: (context) => {
@@ -25,10 +27,10 @@ export async function observeExecution(runtime: BoundConversationRuntime, record
         },
       });
     } catch (error) {
-      if (latest?.execution.status !== 'failed' || latest.events.at(-1)?.callId !== latest.execution.id || latest.events.at(-1)?.value.type !== 'throw') throw error;
+      if (latest?.execution.status !== 'failed' || !latest.boundaries.some((event) => event.callId === latest!.execution.id && event.value.type === 'throw')) throw error;
     }
     if (!latest || latest.execution.status === 'running') throw new Error('Execution observation is incomplete');
-    return ExecutionRecordHelper.snapshot(recording.recorder, latest.execution.id);
+    return taskSnapshot(recording.recorder.book, latest.execution.id);
   } finally {
     unsubscribe();
   }
@@ -37,12 +39,28 @@ export async function observeExecution(runtime: BoundConversationRuntime, record
 /** Observer projection: boundary events and running call updates retain the existing snapshot cadence. */
 export function subscribeExecutions(recording: RecordingInstallation, publish: (snapshot: ExecutionRecordSnapshot) => void): () => void {
   return recording.recorder.subscribe((record, change) => {
-    let executionId: string | undefined;
-    if (record instanceof InvocationBoundaryRecord) executionId = record.executionId;
-    else if (change === 'update' && (record instanceof ExecutionRecord || record instanceof OperationRecord || record instanceof AttemptRecord) && record.status === 'running') executionId = record instanceof ExecutionRecord ? record.id : record instanceof OperationRecord ? record.executionId : (recording.recorder.book.get(record.operationId) as OperationRecord).executionId;
-    else return;
-    // A shared Recorder may contain another Runtime's calls; this projection owns only this scope.
-    if (!executionId || recording.recorder.tree.root(executionId) !== recording.root) return;
-    publish(ExecutionRecordHelper.snapshot(recording.recorder, executionId));
+    const call = callRecord(record);
+    if (!(record instanceof InvocationBoundaryRecord) && !(change === 'update' && call?.status === 'running')) return;
+    const owner = record instanceof InvocationBoundaryRecord ? recording.recorder.book.get(record.callId) : record;
+    if (!owner) return;
+    const book = recording.recorder.book;
+    const ids = new Set(
+      recordSubtree(book, owner)
+        .filter(isTaskRecord)
+        .map((record) => record.id),
+    );
+    const visited = new Set<string>();
+    let ancestor = owner.parentId ? book.get(owner.parentId) : undefined;
+    while (ancestor) {
+      if (visited.has(ancestor.id)) throw new Error('Recorded task ancestry contains a cycle');
+      visited.add(ancestor.id);
+      if (isTaskRecord(ancestor)) ids.add(ancestor.id);
+      ancestor = ancestor.parentId ? book.get(ancestor.parentId) : undefined;
+    }
+    // Ancestor delivery changes refresh its real task descendants, including post-task scene acceptance.
+    for (const id of ids) {
+      if (recording.recorder.tree.root(id) !== recording.root) continue;
+      publish(taskSnapshot(recording.recorder.book, id));
+    }
   });
 }

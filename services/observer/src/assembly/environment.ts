@@ -1,9 +1,9 @@
-import { RuntimeError, type Clock, type ChangeBuffer, type CheckpointStore, type InvocationControls } from '@capix/server-runtime';
+import { RuntimeError, type Driver, type Clock, type ChangeBuffer, type CheckpointStore, type InvocationControls } from '@capix/server-runtime';
 import type { RecordBook, Recorder, RecordingInstallation } from '@capix/server-runtime/recording';
 import type { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import type { ObserverChange, RecordingArchive } from '@capix/protocol';
-import type { ConversationRuntimeDefinition } from '../conversation/definition.js';
-import type { BoundConversationRuntime } from '../conversation/binding.js';
+import type { ConversationSceneDefinition } from '../conversation/scene.js';
+import type { ConversationScene } from '../conversation/binding.js';
 import type { ConversationCheckpointRuns } from '../conversation/checkpoints.js';
 import { conversationCheckpointConfiguration, validateConversationCheckpointRestoration } from '../conversation/binding/checkpoint.js';
 import type { ModelSource } from '../conversation/model/source.js';
@@ -27,8 +27,9 @@ export interface ObserverEnvironmentParts {
   readonly clock: Clock;
   readonly recorder: Recorder;
   readonly recording: RecordingInstallation;
-  readonly runtime: BoundConversationRuntime;
-  readonly definition: ConversationRuntimeDefinition;
+  readonly driver: Driver;
+  readonly scene: ConversationScene;
+  readonly definition: ConversationSceneDefinition;
   readonly recordSource: RecordSource;
   readonly recordingArchives: readonly RecordingArchive[];
   readonly persistence?: SqliteObserverStore;
@@ -51,9 +52,10 @@ export class ObserverEnvironment {
   readonly clock: Clock;
   readonly recorder: Recorder;
   readonly recording: RecordingInstallation;
-  readonly runtime: BoundConversationRuntime;
+  readonly driver: Driver;
+  readonly scene: ConversationScene;
   readonly changes: ChangeBuffer<ObserverChange>;
-  readonly definition: ConversationRuntimeDefinition;
+  readonly definition: ConversationSceneDefinition;
   readonly consumer: ChangeConsumer;
   readonly recordSource: RecordSource;
   readonly transcripts: TranscriptFeed;
@@ -84,7 +86,8 @@ export class ObserverEnvironment {
     this.clock = parts.clock;
     this.recorder = parts.recorder;
     this.recording = parts.recording;
-    this.runtime = parts.runtime;
+    this.driver = parts.driver;
+    this.scene = parts.scene;
     this.definition = parts.definition;
     this.recordSource = parts.recordSource;
     this.recordingArchives = parts.recordingArchives;
@@ -99,21 +102,21 @@ export class ObserverEnvironment {
   }
 
   get active(): boolean {
-    return this.runtime.running || this.interactions.active;
+    return this.driver.isRunning(this.scene) || this.interactions.active;
   }
 
   async recover(rootContextId: string, controls: InvocationControls = {}) {
     if (this.#closed) throw new RuntimeError('SERVICE_CLOSED', '服务已关闭。');
-    if (this.runtime.running) throw new RuntimeError('RUNTIME_BUSY', '当前环境正在执行，请等待本次调用结束。');
+    if (this.driver.isRunning(this.scene)) throw new RuntimeError('RUNTIME_BUSY', '当前环境正在执行，请等待本次调用结束。');
     const run = this.checkpointRuns.read(this.conversationId, rootContextId);
     if (!run) throw new RuntimeError('CHECKPOINT_NOT_FOUND', '未找到该对话的恢复依据。');
     validateConversationCheckpointRestoration(run, { configuration: conversationCheckpointConfiguration(this.definition, this.files), transcript: this.transcript, memories: this.memories, checkpoints: this.checkpoints });
-    return this.runtime.resume(rootContextId, { ...controls, settings: run.settings, checkpointRun: run });
+    return this.driver.resume(this.scene, rootContextId, { ...controls, settings: run.settings, checkpointRun: run });
   }
 
   close(): void {
     if (this.#closed) return;
-    if (this.runtime.running) throw new Error('Cannot close an environment with an active invocation');
+    if (this.driver.isRunning(this.scene)) throw new Error('Cannot close an environment with an active invocation');
     if (this.interactions.active) throw new Error('Cannot close an environment with active external interactions');
     this.#closed = true;
     const failures: unknown[] = [];

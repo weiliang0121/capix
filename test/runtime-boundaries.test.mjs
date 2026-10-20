@@ -5,9 +5,10 @@ import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
 import { InvocationRecordHelper } from '@capix/server-runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, BoundRuntime, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix/server-runtime';
+import { Invocation, InvocationContext, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix/server-runtime';
+import { Driver, defineNode } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
-import { initializeObserver, bindConversation, ConversationRuntimeDefinition, observeExecution, observeOverview, acceptConversationInput } from '@capix/observer-service';
+import { initializeObserver, bindConversation, ConversationSceneDefinition, observeExecution, observeOverview, acceptConversationInput } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const createRecorder = (book = new RecordBook()) => new Recorder(book);
@@ -51,33 +52,36 @@ test('Invocation consumes an established context and rejects concurrent reuse', 
   await assert.rejects(invocation.run(), /already started/);
 });
 
-test('BoundRuntime reservation blocks other entry work and always releases after failure', async () => {
-  const { runtime, transcript } = createEnvironment();
+test('Driver blocks concurrent entry before source validation and releases after failure', async () => {
+  const { transcript } = createEnvironment();
   let release;
   const pending = new Promise((resolve) => {
     release = resolve;
   });
-  const first = runtime.reserve(() => pending);
+  const driver = new Driver();
+  const bound = driver.bind(defineNode()({ run: { execute: (work) => (work.input === 'wait' ? pending : work.input) } }), {
+    providers: [],
+    source: {
+      capture: (input) => {
+        if (input === 'invalid') throw new Error('invalid input');
+        if (input === 'append') {
+          accepted = true;
+          transcript.append({ role: 'user', content: 'must not append' });
+        }
+        return null;
+      },
+    },
+  });
   let accepted = false;
-  await assert.rejects(
-    runtime.reserve(() => {
-      accepted = true;
-      transcript.append({ role: 'user', content: 'must not append' });
-    }),
-    (error) => error.code === 'RUNTIME_BUSY',
-  );
+  const first = driver.run(bound, 'wait', {});
+  await assert.rejects(driver.run(bound, 'append', {}), (error) => error.code === 'RUNTIME_BUSY');
   assert.equal(accepted, false);
   assert.equal(transcript.length, 0);
   release();
   await first;
-  await assert.rejects(
-    runtime.reserve(() => {
-      throw new Error('invalid input');
-    }),
-    /invalid input/,
-  );
-  assert.equal(runtime.running, false);
-  assert.equal(await runtime.reserve(() => 'next'), 'next');
+  await assert.rejects(driver.run(bound, 'invalid', {}), /invalid input/);
+  assert.equal(driver.isRunning(bound), false);
+  assert.equal(await driver.run(bound, 'next', {}), 'next');
 });
 
 test('Transcript validates full batches, records changes once, and keeps old evidence stable across segmentation', () => {
@@ -106,7 +110,7 @@ test('Memories owns official mutation, records standalone changes, skips unchang
   const original = memory.snapshot();
   const changes = () => [...recorder.book.values()].filter((r) => r instanceof MemoryRecord);
   assert.equal(changes().length, 1);
-  assert.equal(changes()[0].operationId, undefined);
+  assert.equal(changes()[0].parentId, undefined);
   assert.deepEqual(memories.apply([proposed('北京', memory.id)]), []);
   assert.equal(changes().length, 1);
   assert.throws(() => memories.apply([proposed('上海', memory.id), proposed('广州', 'missing')]));
@@ -136,7 +140,7 @@ test('content registration failure preserves the applied fact and does not prete
   assert.equal(transcript.current('user').content, 'accepted');
 });
 
-test('new R assemblies share independently owned entities without absorbing their lifetimes', async () => {
+test('separate drivers and bindings share entities without absorbing their lifetimes', async () => {
   const provider = {
     async invoke(request, purpose) {
       const input = JSON.parse(request.messages[1].content);
@@ -146,21 +150,22 @@ test('new R assemblies share independently owned entities without absorbing thei
     },
   };
   const environment = initializeObserver(provider);
-  const run = async (runtime, text) => observeExecution(runtime, environment.recording, { messages: [{ role: 'user', content: text }] }, { settings });
-  const first = await run(environment.runtime, '我在北京');
+  const run = async (driver, scene, text) => observeExecution(driver, scene, environment.recording, { messages: [{ role: 'user', content: text }] }, { settings });
+  const first = await run(environment.driver, environment.scene, '我在北京');
   const memory = environment.memories.values()[0];
-  const next = bindConversation(new ConversationRuntimeDefinition(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)), { observations: [environment.recording], changes: environment.changes });
-  const second = await run(next, '继续');
+  const driver = new Driver({ observations: [environment.recording], changes: environment.changes });
+  const next = bindConversation(driver, new ConversationSceneDefinition(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)));
+  const second = await run(driver, next, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.memories.get(memory.id), memory);
   assert.equal(environment.selectionUsage.get(environment.transcript.get(0)), 1);
-  assert.equal(second.operations.find((operation) => operation.operation === 'memory').value.input.memories[0].id, memory.id);
+  assert.equal(second.calls.filter((item) => item.structureKind === 'group' && item.id !== second.execution.id).find((operation) => operation.name === 'memory').value.input.memories[0].id, memory.id);
   const observation = observeOverview(environment);
   assert.equal(observation.executions.length, 2);
   assert.equal(environment.transcript.current('assistant').content, '已了解');
   assert.equal(observation.messages[0].count, 1);
   const change = [...environment.book.values()].find((r) => r instanceof MemoryRecord);
-  const apply = first.attempts.find((r) => r.name === 'applyMemory');
+  const apply = first.calls.filter((item) => item.structureKind === 'node').find((r) => r.name === 'applyMemory');
   assert.equal(change.callId, apply.id);
   assert.equal(change.contextId, apply.contextId);
   const response = [...environment.book.values()].find((r) => r instanceof TranscriptRecord && r.value.action === 'append' && environment.transcript.get(r.value.start)?.role === 'assistant');
@@ -185,14 +190,14 @@ test('EOA rejects cross-BoundRuntime contexts independently of the recording lay
     source = 'test';
     async execute(context, invocation) {
       rememberCall(invocation);
-      await assert.rejects(new Leaf(b.attemptInvocationBuilder).call(invocation, 'input'), /another Runtime/);
+      await assert.rejects(new Leaf(b.attemptInvocationBuilder).call(invocation, 'input'), /another binding installation/);
       return 'done';
     }
   }
   class Root extends ExecutionFixture {
     async execute(context, invocation) {
       rememberCall(invocation);
-      await assert.rejects(new Work(b.operationInvocationBuilder).call(invocation, 'input'), /another Runtime/);
+      await assert.rejects(new Work(b.operationInvocationBuilder).call(invocation, 'input'), /another binding installation/);
       return new Work(a.operationInvocationBuilder).call(invocation, 'input');
     }
   }
@@ -203,7 +208,7 @@ test('Invocation distinguishes successful work from failed result registration w
   const recorder = createRecorder();
   const finish = InvocationRecordHelper.finish;
   t.mock.method(InvocationRecordHelper, 'finish', (...args) => {
-    if (args[1].kind === 'execution') throw new Error('cannot register result');
+    if (args[1].role === 'conversation-task') throw new Error('cannot register result');
     return finish(...args);
   });
   const runtime = createBoundRuntime({ recorder });
@@ -226,7 +231,7 @@ test('Invocation start registration failure prevents work and releases the Bound
   const recorder = createRecorder();
   const add = recorder.add.bind(recorder);
   t.mock.method(recorder, 'add', (record) => {
-    if (record.kind === 'execution') throw new Error('cannot begin record');
+    if (record.role === 'conversation-task') throw new Error('cannot begin record');
     return add(record);
   });
   const runtime = createBoundRuntime({ recorder });
@@ -254,7 +259,7 @@ test('Invocation preserves both work and failure-registration errors without rep
   const registration = new Error('cannot register failure');
   const finish = InvocationRecordHelper.finish;
   t.mock.method(InvocationRecordHelper, 'finish', (...args) => {
-    if (args[1].kind === 'execution') throw registration;
+    if (args[1].role === 'conversation-task') throw registration;
     return finish(...args);
   });
   const runtime = createBoundRuntime({ recorder });

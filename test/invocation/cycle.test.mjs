@@ -1,12 +1,12 @@
 import { ExecutionFixture, OperationFixture, AttemptFixture } from '../fixtures/behavior.mjs';
 import { callFor, recordFor, rememberCall } from '../fixtures/lifecycle.mjs';
-import { InvocationRecord, AttemptRecord } from '@capix/server-runtime';
+import { InvocationRecord, CallableRecord } from '@capix/server-runtime';
 import { subscribeExecutions } from '@capix/observer-service';
 import { ExecutionRecordHelper } from '@capix/server-runtime';
 import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BoundRuntime, Recorder, RecordBook, ExceptionContract } from '@capix/server-runtime';
+import { Recorder, RecordBook, ExceptionContract } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
@@ -77,7 +77,7 @@ test('local two-round handling keeps one context and one record with immutable p
   assert.equal(record.value.processes[1].output.value, 1);
   assert.equal(record.value.processes[2].input.value, 1);
   assert.equal(record.value.processes[3].input.value, 1);
-  assert.equal(published.find((s) => s.operations[0]?.value.processes.length === 1).operations[0].value.processes.length, 1);
+  assert.equal(published.find((s) => s.calls.some((call) => call.id !== s.execution.id && call.value.processes.length === 1)).calls.find((call) => call.id !== recordFor(execution).id && call.value.processes.length === 1).value.processes.length, 1);
   assert.throws(() => record.value.processes.push({}), TypeError);
   assert.throws(() => (record.value.processes[1].output.value = 100), TypeError);
   assert.throws(() => record.append(record.value.processes[0]), /ended/);
@@ -350,7 +350,7 @@ test('child recording failures cannot be converted into parent retries', async (
     receptions = 0;
   const original = InvocationRecord.prototype.append;
   t.mock.method(InvocationRecord.prototype, 'append', function (process) {
-    if (this instanceof AttemptRecord && process.type === 'return') throw new Error('child recording failed');
+    if (this instanceof CallableRecord && this.structureKind === 'node' && process.type === 'return') throw new Error('child recording failed');
     original.call(this, process);
   });
   class Child extends AttemptFixture {
@@ -401,8 +401,8 @@ test('process publication is live during acceptance and does not create standalo
     ['start', 'return'],
   );
   assert.equal(work.contexts[0].progress.phase, 'receive');
-  assert.equal([...recorder.book.values()].filter((record) => record.kind === 'runtime-call').length, 1);
-  assert.equal([...recorder.book.values()].filter((record) => record.kind === 'operation').length, 1);
+  assert.equal([...recorder.book.values()].filter((record) => record.structureKind === 'scene').length, 1);
+  assert.equal([...recorder.book.values()].filter((record) => record.structureKind === 'group' && record.role !== 'conversation-task').length, 1);
   assert.equal([...recorder.book.values()].filter((record) => record.kind === 'invocation-boundary').length, 3);
   validateExecutionRecordSnapshot(snapshot);
   const corrupt = structuredClone(snapshot);

@@ -30,7 +30,7 @@ function readCheckpoint(installation: CheckpointInstallation | undefined, contra
   const head = cloneCheckpointHead(saved);
   const image = head.image;
   if (image.contract.key !== contract.key || image.contract.version !== contract.version) throw new Error('Checkpoint declaration is incompatible');
-  if (image.frame.owner.contextId !== contextId || image.frame.owner.level !== owner.level || image.frame.owner.parentContextId !== owner.parentContextId) throw new Error('Checkpoint work belongs to another scope');
+  if (image.frame.owner.contextId !== contextId || image.frame.owner.kind !== owner.kind || image.frame.owner.parentContextId !== owner.parentContextId) throw new Error('Checkpoint work belongs to another scope');
   if (head.delivery) throw new Error('A terminal checkpoint work cannot execute again');
   return Object.freeze({ head });
 }

@@ -9,7 +9,7 @@ export function observationFixture(rounds = 200, batches = 40) {
   const values = Array.from({ length: rounds }, (_, index) => snapshot('running', `execution-${index}`));
   const initial = baseline({ entries: values.flatMap(entriesOf) });
   const target = values.at(-1).execution;
-  const frames = Array.from({ length: batches }, (_, index) => ({ type: 'delta', scopeId: initial.scopeId, sequence: index + 1, changes: [{ type: 'record', recorderId: initial.recorder.id, revision: index + 1, occurredAt: target.value.startedAt, change: { kind: 'replaced', entry: { kind: 'execution', data: { ...target, value: { ...target.value, input: { round: index } } } } } }] }));
+  const frames = Array.from({ length: batches }, (_, index) => ({ type: 'delta', scopeId: initial.scopeId, sequence: index + 1, changes: [{ type: 'record', recorderId: initial.recorder.id, revision: index + 1, occurredAt: target.value.startedAt, change: { kind: 'replaced', entry: { kind: 'invocation', data: { ...target, value: { ...target.value, input: { round: index } } } } } }] }));
   return { initial, frames };
 }
 

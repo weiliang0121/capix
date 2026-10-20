@@ -1,4 +1,5 @@
 import type { RecordingArchive, RecordingArchiveOrigin } from './archive.js';
+import type { CallableKind } from '../invocation/types.js';
 import type { ExecutionRecord } from '../recording/types.js';
 import type { ExecutionObservation } from './execution.js';
 import type { MemoryRecord } from '../recording/memory.js';
@@ -14,7 +15,7 @@ export type { ObservationUpdate } from './stream.js';
 export interface InvocationSummary {
   id: string;
   contextId: string;
-  recordType: 'execution' | 'operation' | 'attempt';
+  recordType: CallableKind;
   parentId?: string;
   name: string;
   label: string;

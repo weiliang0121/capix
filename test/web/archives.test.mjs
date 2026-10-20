@@ -12,27 +12,36 @@ const archive = { sourceId: 'old-source', revision: 4, state: 'open' };
 
 test('archive accepts persisted boundary prefixes without weakening live snapshot checks', () => {
   const complete = snapshot('succeeded');
-  const cut = { ...complete, events: complete.events.slice(0, 1), runtimeEvents: complete.runtimeEvents.slice(0, 1) };
+  const cut = { ...complete, boundaries: complete.boundaries.slice(0, 2) };
   assert.throws(() => validateExecutionRecordSnapshot(cut));
   const historical = { ...cut, archive };
   assert.doesNotThrow(() => validateExecutionRecordSnapshot(historical));
   assert.equal(projectExecution(historical).status, 'succeeded');
   assert.equal(projectExecution(historical).callSequence.calls[0].durationMs, undefined);
   assert.throws(() => validateExecutionRecordSnapshot({ ...historical, execution: { ...historical.execution, status: 'running' } }), 'archive cannot make a running record contain a final output');
-  assert.throws(() => validateExecutionRecordSnapshot({ ...historical, events: [{ ...cut.events[0], sequence: 2 }] }), 'archive cannot hide internal sequence gaps');
+  assert.throws(
+    () =>
+      validateExecutionRecordSnapshot({
+        ...historical,
+        boundaries: [
+          { ...cut.boundaries[0], sequence: 2 },
+          { ...cut.boundaries[1], sequence: 2 },
+        ],
+      }),
+    'archive cannot hide duplicate sequence identities',
+  );
   assert.throws(() => validateExecutionRecordSnapshot({ ...historical, archive: { ...archive, state: 'invented' } }));
 });
 
 test('just-registered historical call loads without fabricating boundaries or an outcome', () => {
   const value = snapshot('running');
-  value.events = [];
-  value.runtimeEvents = [];
+  value.boundaries = [];
   assert.throws(() => validateExecutionRecordSnapshot(value));
   value.archive = archive;
   const detail = projectDetail(value, { items: [] });
   assert.equal(detail.status, 'unresolved');
   assert.equal(detail.calls.get(value.execution.id).status, 'unresolved');
-  assert.equal(detail.calls.get(value.runtimeCall.id).status, 'unresolved');
+  assert.equal(detail.calls.get(value.rootCall.id).status, 'unresolved');
   assert.equal(detail.calls.get(value.execution.id).durationMs, undefined);
   assert.equal(value.execution.status, 'running');
   assert.equal(formatDuration(undefined, detail.status), '耗时未取得');
@@ -41,7 +50,7 @@ test('just-registered historical call loads without fabricating boundaries or an
 test('archive provenance survives reception; app separates unresolved history from live calls', () => {
   const old = snapshot('running', 'old');
   const current = snapshot('running', 'current');
-  const execution = (value, origin) => ({ id: value.execution.id, startedAt: value.execution.value.startedAt, status: value.execution.status, inputIndex: 0, selections: [], memoryChanges: [], availableMemoryIds: [], observedOffsetMs: 3, ...(origin ? { archive: origin } : {}), calls: [{ id: value.execution.id, contextId: value.execution.contextId, recordType: 'execution', name: 'execution', label: '执行调用', source: '', status: value.execution.status, offsetMs: 0 }] });
+  const execution = (value, origin) => ({ id: value.execution.id, startedAt: value.execution.value.startedAt, status: value.execution.status, inputIndex: 0, selections: [], memoryChanges: [], availableMemoryIds: [], observedOffsetMs: 3, ...(origin ? { archive: origin } : {}), calls: [{ id: value.execution.id, contextId: value.execution.contextId, recordType: 'group', name: 'execution', label: '执行调用', source: '', status: value.execution.status, offsetMs: 0 }] });
   const overview = { transcriptId: 'transcript', messages: [], archives: [{ ...archive, rootIds: ['runtime-root'] }], executions: [execution(old, archive), execution(current)] };
   const replica = ObservationReplica.receive(undefined, baseline({ overview }));
   const project = createObservationProjection();
@@ -67,7 +76,7 @@ test('archive provenance survives reception; app separates unresolved history fr
 test('reconnected baseline drops stale live details before historical detail reload', () => {
   const project = createObservationProjection();
   const running = snapshot('running', 'old');
-  const execution = { id: 'old', startedAt: running.execution.value.startedAt, status: 'running', inputIndex: 0, selections: [], memoryChanges: [], availableMemoryIds: [], observedOffsetMs: 0, calls: [{ id: 'old', contextId: running.execution.contextId, recordType: 'execution', name: 'execution', label: '执行调用', source: '', status: 'running', offsetMs: 0 }] };
+  const execution = { id: 'old', startedAt: running.execution.value.startedAt, status: 'running', inputIndex: 0, selections: [], memoryChanges: [], availableMemoryIds: [], observedOffsetMs: 0, calls: [{ id: 'old', contextId: running.execution.contextId, recordType: 'group', name: 'execution', label: '执行调用', source: '', status: 'running', offsetMs: 0 }] };
   const live = { overview: { transcriptId: 'transcript', messages: [], executions: [execution] }, updates: new Map(), records: new Map([['old', running]]), memory: { items: [] }, loading: false };
   assert.equal(project(live, new Map()).details.get('old').status, 'running');
   const restored = { ...live, overview: { ...live.overview, executions: [{ ...execution, archive }] }, records: new Map() };

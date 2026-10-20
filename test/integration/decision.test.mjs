@@ -5,10 +5,10 @@ import { test } from 'node:test';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initializeObserver, bindConversation, ConversationRuntimeDefinition, FunctionConversationDecisionDefinition, WorkspaceFiles } from '@capix/observer-service';
-import { ProgressChannel } from '@capix/server-runtime';
+import { initializeObserver, bindConversation, ConversationSceneDefinition, FunctionConversationDecisionDefinition, WorkspaceFiles } from '@capix/observer-service';
+import { Driver, ProgressChannel } from '@capix/server-runtime';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
-import { ExecutionRecordHelper } from '@capix/server-runtime/recording';
+import { CallableRecordHelper } from '@capix/server-runtime/recording';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
@@ -48,8 +48,10 @@ async function fixture(t, decide, options = {}) {
           const transcript = new Transcript();
           const memories = new Memories(transcript);
           const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage(), files };
-          const definition = new ConversationRuntimeDefinition({ files: true, decision, maxDecisionSteps: config.maxDecisionSteps });
-          return { ...entities, runtime: bindConversation(definition, entities, new ModelInteractions(new ModelSource(provider))) };
+          const definition = new ConversationSceneDefinition({ files: true, decision, maxDecisionSteps: config.maxDecisionSteps });
+          const driver = new Driver();
+          const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
+          return { ...entities, driver, scene };
         })()
       : initializeObserver(provider, [], config);
   return {
@@ -60,7 +62,8 @@ async function fixture(t, decide, options = {}) {
     progress,
     fileProgress,
     run: (message = '处理一下', fileTask, signal) =>
-      environment.runtime.run(
+      environment.driver.run(
+        environment.scene,
         { messages: [{ role: 'user', content: message }], ...(fileTask ? { fileTask } : {}) },
         {
           settings,
@@ -100,7 +103,7 @@ for (const recording of [true, false]) {
     assert.equal(f.inputs[1].latest.capability, 'answer');
     assert.deepEqual(f.inputs[1].progress.answer, answer);
     assert.equal(f.environment.transcript.length, 2);
-    assert.equal(f.environment.runtime.running, false);
+    assert.equal(f.environment.driver.isRunning(f.environment.scene), false);
     if (!recording) assert.equal(f.environment.recorder, undefined);
   });
 }
@@ -203,12 +206,12 @@ test('forged memory source after publication preserves the file and answer witho
     { role: 'user', content: '生成并保存' },
     { role: 'assistant', content: answer.content },
   ]);
-  assert.equal(f.environment.runtime.running, false);
+  assert.equal(f.environment.driver.isRunning(f.environment.scene), false);
   assert.equal(f.environment.memories.values().length, 0, 'a valid first proposal must not be applied before the invalid second proposal is checked');
   assert.equal(f.fileProgress.filter((fact) => fact.kind === 'created').length, 1);
   assert.equal(f.modelCalls.filter((call) => call.purpose === 'answer').length, 1);
   assert.equal(f.modelCalls.filter((call) => call.purpose === 'memory').length, 1);
-  assert.equal([...f.environment.book.values()].filter((record) => record.kind === 'operation' && record.operation === 'saveResult').length, 1);
+  assert.equal([...f.environment.book.values()].filter((record) => record.kind === 'invocation' && record.name === 'saveResult').length, 1);
 });
 
 test('decisions cannot replace save arguments, repeat answer/save effects, or finish before the promised save', async (t) => {
@@ -280,7 +283,7 @@ test('decision limit stops unresolved proposals without inventing an answer or r
   await assert.rejects(f.run(), { code: 'DECISION_LIMIT' });
   assert.equal(f.inputs.length, 3);
   assert.equal(f.environment.transcript.length, 1);
-  assert.equal(f.environment.runtime.running, false);
+  assert.equal(f.environment.driver.isRunning(f.environment.scene), false);
   assert.deepEqual(
     f.modelCalls.map((call) => call.purpose),
     [],
@@ -297,7 +300,7 @@ test('actual child failures terminate execution rather than requesting another d
     ['answer'],
   );
   assert.equal(f.environment.transcript.length, 1);
-  assert.equal(f.environment.runtime.running, false);
+  assert.equal(f.environment.driver.isRunning(f.environment.scene), false);
 });
 
 for (const checked of [false, true]) {
@@ -318,10 +321,10 @@ for (const checked of [false, true]) {
     await entered.promise;
     controller.abort();
     await Promise.resolve();
-    assert.equal(f.environment.runtime.running, true, 'abort must not release occupancy before the active child actually exits');
+    assert.equal(f.environment.driver.isRunning(f.environment.scene), true, 'abort must not release occupancy before the active child actually exits');
     release.resolve();
     await rejected;
-    assert.equal(f.environment.runtime.running, false);
+    assert.equal(f.environment.driver.isRunning(f.environment.scene), false);
     assert.equal(f.inputs.length, checked ? 2 : 1);
     assert.deepEqual(
       f.modelCalls.map((call) => call.purpose),
@@ -364,7 +367,7 @@ for (const phase of ['read', 'create']) {
     });
     await assert.rejects(f.run());
     assert.equal(f.inputs.length, phase === 'read' ? 2 : 3, 'an actual I/O failure does not enter the decision loop again');
-    assert.equal(f.environment.runtime.running, false);
+    assert.equal(f.environment.driver.isRunning(f.environment.scene), false);
     assert.equal(
       f.modelCalls.some((call) => call.purpose === 'memory'),
       false,
@@ -381,17 +384,17 @@ test('decision, preflight and selected work remain real recorded calls with acce
   const task = { sourcePath: 'input.txt', output: { path: 'result.md' } };
   const f = await fixture(t, filePolicy(task));
   await f.run();
-  const execution = [...f.environment.book.values()].find((record) => record.kind === 'execution');
-  const snapshot = ExecutionRecordHelper.snapshot(f.environment.recorder, execution.id);
+  const execution = [...f.environment.book.values()].find((record) => record.kind === 'invocation' && record.role === 'conversation-task');
+  const snapshot = CallableRecordHelper.snapshot(f.environment.recorder, execution.id);
   validateExecutionRecordSnapshot(snapshot);
   assert.equal(snapshot.execution.status, 'succeeded');
-  const direct = snapshot.operations.filter((record) => !record.parentOperationId);
+  const direct = snapshot.calls.filter((record) => record.parentId === snapshot.execution.id);
   assert.deepEqual(
-    direct.map((record) => record.operation),
+    direct.map((record) => record.name),
     ['prepareContext', 'conversationDecision', 'checkFileTask', 'conversationDecision', 'processDocument', 'conversationDecision', 'saveResult', 'conversationDecision', 'memory'],
   );
-  const preflight = direct.find((record) => record.operation === 'checkFileTask');
-  assert.ok(snapshot.attempts.some((record) => record.operationId === preflight.id && record.callee === 'filesystem'));
+  const preflight = direct.find((record) => record.name === 'checkFileTask');
+  assert.ok(snapshot.calls.some((record) => record.parentId === preflight.id && record.callee === 'filesystem'));
   for (const record of direct) {
     assert.equal(record.status, 'succeeded');
     assert.ok(snapshot.execution.value.relationChanges.some((change) => change.identity.childContextId === record.contextId && change.change.kind === 'accepted'));

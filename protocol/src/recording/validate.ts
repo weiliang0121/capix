@@ -1,14 +1,133 @@
 import { validateRecordingArchiveOrigin } from '../observer/archive.js';
 import { hasOutput, outputProcess, readOutput } from './invocation.js';
-import type { ExecutionRecordSnapshot, OperationRecord, InvocationValue, RelationChangeRecord, InvocationBoundaryRecord } from './types.js';
+import type { ExecutionRecordSnapshot, CallableRecord, LegacyExecutionRecordSnapshot, OperationRecord, InvocationValue, RelationChangeRecord, InvocationBoundaryRecord } from './types.js';
+
+/** Validate a task projection of real callable records, including normalized historical carriers. */
+export function validateExecutionRecordSnapshot(value: unknown): asserts value is ExecutionRecordSnapshot {
+  function fail(): never {
+    throw new Error('调用记录格式无效或关联缺失。');
+  }
+  if (!value || typeof value !== 'object') fail();
+  const snapshot = value as ExecutionRecordSnapshot;
+  if (snapshot.archive !== undefined) validateRecordingArchiveOrigin(snapshot.archive);
+  if (!snapshot.execution || !Array.isArray(snapshot.calls) || !Array.isArray(snapshot.boundaries) || !Array.isArray(snapshot.resources) || !Array.isArray(snapshot.transcripts) || !Array.isArray(snapshot.memories)) fail();
+  const records = new Map<string, CallableRecord>();
+  const contexts = new Set<string>();
+  const accept = (record: CallableRecord) => {
+    if (!record || typeof record.id !== 'string' || !record.id || typeof record.contextId !== 'string' || !record.contextId || record.contextId === record.id || records.has(record.id) || contexts.has(record.id) || records.has(record.contextId) || contexts.has(record.contextId) || !['scene', 'group', 'node'].includes(record.structureKind) || !Array.isArray(record.childIds) || new Set(record.childIds).size !== record.childIds.length || record.childIds.some((id) => typeof id !== 'string' || !id) || !record.value) fail();
+    if (record.value.startedAt === undefined ? !snapshot.archive : typeof record.value.startedAt !== 'string' || !Number.isFinite(Date.parse(record.value.startedAt))) fail();
+    for (const key of ['structureId', 'name', 'label', 'callee', 'role'] as const) if (record[key] !== undefined && (typeof record[key] !== 'string' || !record[key]!.trim())) fail();
+    if (record.source !== undefined && typeof record.source !== 'string') fail();
+    if (record.parentId !== undefined && (typeof record.parentId !== 'string' || !record.parentId)) fail();
+    validateInvocationRecordValue(record.value, record.contextId);
+    if (!validRecordedStatus(record.status, record.value)) fail();
+    records.set(record.id, record);
+    contexts.add(record.contextId);
+  };
+  for (const record of snapshot.calls) accept(record);
+  const task = records.get(snapshot.execution.id);
+  if (!task || JSON.stringify(task) !== JSON.stringify(snapshot.execution)) fail();
+  if (snapshot.rootCall && snapshot.rootCall.id !== task.id) accept(snapshot.rootCall);
+  else if (snapshot.rootCall && JSON.stringify(snapshot.rootCall) !== JSON.stringify(task)) fail();
+  if (snapshot.ancestors !== undefined && !Array.isArray(snapshot.ancestors)) fail();
+  const ancestors = snapshot.ancestors ?? [];
+  if (ancestors.length && (!snapshot.rootCall || snapshot.rootCall.id === task.id)) fail();
+  for (const ancestor of ancestors) accept(ancestor);
+  const path = snapshot.rootCall && snapshot.rootCall.id !== task.id ? [snapshot.rootCall, ...ancestors, task] : [task];
+  for (let index = 1; index < path.length; index++) {
+    const parent = path[index - 1]!;
+    const child = path[index]!;
+    if (parent.structureKind === 'node' || child.parentId !== parent.id || !parent.childIds.includes(child.id)) fail();
+  }
+  const root = path[0]!;
+  if (root.parentId && records.has(root.parentId)) fail();
+  for (const record of snapshot.calls) {
+    if (contexts.has(record.id)) fail();
+    if (record.id === task.id) continue;
+    const visited = new Set<string>([record.id]);
+    let current: CallableRecord = record;
+    while (current.id !== task.id) {
+      const parent: CallableRecord | undefined = current.parentId ? records.get(current.parentId) : undefined;
+      if (!parent || visited.has(parent.id) || parent.structureKind === 'node' || !parent.childIds.includes(current.id)) fail();
+      visited.add(parent.id);
+      current = parent;
+    }
+  }
+  for (const record of records.values()) {
+    if (record.structureKind === 'scene' && record.parentId && records.has(record.parentId)) fail();
+    for (const relation of record.value.relationChanges) {
+      const child = relation.childId ? records.get(relation.childId) : undefined;
+      if (child && (child.parentId !== record.id || child.contextId !== relation.identity.childContextId)) fail();
+    }
+  }
+  const seen = new Set<string>([...records.keys(), ...contexts]);
+  const timing = new Map<string, { scopeId: string; started?: number; ended?: number }>();
+  const scopes = new Map<string, { sequence: number; offsetMs: number }>();
+  for (const boundary of snapshot.boundaries) {
+    const call = records.get(boundary?.callId);
+    const prior = scopes.get(boundary?.scopeId);
+    if (!boundary || typeof boundary.id !== 'string' || !boundary.id || seen.has(boundary.id) || !call || boundary.parentId !== call.id || typeof boundary.scopeId !== 'string' || !boundary.scopeId || !Number.isSafeInteger(boundary.sequence) || boundary.sequence < 1 || (prior && boundary.sequence <= prior.sequence) || !Number.isFinite(boundary.offsetMs) || boundary.offsetMs < (prior?.offsetMs ?? 0) || typeof boundary.occurredAt !== 'string' || !Number.isFinite(Date.parse(boundary.occurredAt)) || boundary.value?.scope !== 'work') fail();
+    if (!snapshot.archive && (boundary.scopeId !== (snapshot.rootCall ?? task).id || boundary.executionId !== undefined)) fail();
+    seen.add(boundary.id);
+    scopes.set(boundary.scopeId, { sequence: boundary.sequence, offsetMs: boundary.offsetMs });
+    const state: { scopeId: string; started?: number; ended?: number } = timing.get(call.id) ?? { scopeId: boundary.scopeId };
+    if (state.scopeId !== boundary.scopeId) fail();
+    const time = boundary.offsetMs;
+    if (boundary.value.type === 'call') {
+      if (state.started !== undefined || state.ended !== undefined) fail();
+      state.started = time;
+    } else if (boundary.value.type === 'return' || boundary.value.type === 'throw') {
+      if (state.started === undefined || state.ended !== undefined || time < state.started || call.status !== (boundary.value.type === 'return' ? 'succeeded' : 'failed')) fail();
+      state.ended = time;
+    } else fail();
+    timing.set(call.id, state);
+  }
+  for (const record of records.values()) {
+    const time = timing.get(record.id);
+    if (!snapshot.archive && (!time || time.started === undefined || (record.status !== 'running' && time.ended === undefined))) fail();
+    const parentTime = record.parentId ? timing.get(record.parentId) : undefined;
+    if (time?.scopeId === parentTime?.scopeId) {
+      if (time?.started !== undefined && parentTime?.started !== undefined && time.started < parentTime.started) fail();
+      if (time?.ended !== undefined && parentTime?.ended !== undefined && time.ended > parentTime.ended) fail();
+      if (time?.started !== undefined && parentTime?.ended !== undefined && time.ended === undefined) fail();
+    }
+  }
+  const resourceSequences = new Map<string, number>();
+  const accesses = new Map<string, string>();
+  const interactions = new Map<string, string>();
+  for (const resource of snapshot.resources) {
+    if (!resource || typeof resource.id !== 'string' || !resource.id || seen.has(resource.id) || !records.has(resource.parentId) || typeof resource.access !== 'string' || !resource.access || typeof resource.supplyId !== 'string' || !resource.supplyId || typeof resource.occurredAt !== 'string' || !Number.isFinite(Date.parse(resource.occurredAt)) || !Object.hasOwn(resource, 'value') || resource.sequence !== (resourceSequences.get(resource.parentId) ?? 0) + 1) fail();
+    resourceSequences.set(resource.parentId, resource.sequence);
+    seen.add(resource.id);
+    const key = JSON.stringify([resource.parentId, resource.supplyId, resource.access]);
+    if (resource.phase === 'bound') {
+      if (accesses.has(key) || resource.interactionId !== undefined) fail();
+      accesses.set(key, 'bound');
+    } else if (resource.phase === 'available' || resource.phase === 'unavailable') {
+      if (accesses.get(key) !== 'bound' || resource.interactionId !== undefined) fail();
+      accesses.set(key, resource.phase);
+    } else if (resource.phase === 'started') {
+      if (accesses.get(key) !== 'available' || typeof resource.interactionId !== 'string' || !resource.interactionId || interactions.has(resource.interactionId)) fail();
+      interactions.set(resource.interactionId, key);
+    } else if (resource.phase === 'returned' || resource.phase === 'threw') {
+      if (typeof resource.interactionId !== 'string' || interactions.get(resource.interactionId) !== key) fail();
+      interactions.delete(resource.interactionId);
+    } else fail();
+  }
+  for (const content of [...snapshot.transcripts, ...snapshot.memories]) {
+    const call = content.callId ? records.get(content.callId) : undefined;
+    if (!content || typeof content.id !== 'string' || !content.id || seen.has(content.id) || !call || content.parentId !== call.id || content.contextId !== call.contextId || !Object.hasOwn(content, 'value')) fail();
+    seen.add(content.id);
+  }
+}
 
 /** Reject inconsistent identities, ownership and boundary facts before projecting them. */
-export function validateExecutionRecordSnapshot(value: unknown): asserts value is ExecutionRecordSnapshot {
+export function validateLegacyExecutionRecordSnapshot(value: unknown): asserts value is LegacyExecutionRecordSnapshot {
   const fail = () => {
     throw new Error('运行记录格式无效或关联缺失。');
   };
   if (!value || typeof value !== 'object') return fail();
-  const snapshot = value as ExecutionRecordSnapshot;
+  const snapshot = value as LegacyExecutionRecordSnapshot;
   if (snapshot.archive !== undefined) validateRecordingArchiveOrigin(snapshot.archive);
   const historical = snapshot.archive !== undefined;
   if (!snapshot.execution || typeof snapshot.execution.id !== 'string' || !snapshot.execution.id || !snapshot.execution.value || typeof snapshot.execution.value.startedAt !== 'string' || !Array.isArray(snapshot.operations) || !Array.isArray(snapshot.attempts) || !Array.isArray(snapshot.events) || !Array.isArray(snapshot.resources)) return fail();

@@ -1,8 +1,9 @@
-import { ExecutionContext, Transcript, TranscriptRangeRef, bindResources, AttemptBinder, OperationBinder, ExecutionBinder, Memories, SelectionUsage } from '@capix/server-runtime';
+import { CallableContext, Transcript, TranscriptRangeRef, bindResources, InvocationWorkBinding, BoundChildren, Memories, SelectionUsage } from '@capix/server-runtime';
+import { fixtureState } from './runtime.mjs';
 import { resolveDeclaration } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 
-import { ConversationRuntimeDefinition, ActiveContent, acceptConversationInput, initializeObserver, observeExecution, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
+import { ConversationSceneDefinition, ActiveContent, acceptConversationInput, initializeObserver, observeExecution, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
 
 const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);
@@ -12,13 +13,13 @@ export function captureSource(options) {
 }
 export function contextWithSource(input, options, parent) {
   const source = captureSource(options);
-  const context = new ExecutionContext(input, options, undefined, options.resourceBinding?.(source), parent);
+  const context = new CallableContext(input, 'group', { signal: parent?.signal ?? options.signal }, options.resourceBinding?.(source));
   sources.set(context, source);
   return context;
 }
 export function resourceBindingFor(runtime, provider, provided) {
   const model = new ModelInteractions(new ModelSource(provider));
-  const supply = resolveDeclaration(new ConversationRuntimeDefinition()).children[0].supply;
+  const supply = resolveDeclaration(new ConversationSceneDefinition()).members[0].supply;
   const binding = bindResources(supply, conversationProviders);
   const worlds = new WeakMap();
   return (source) => {
@@ -33,12 +34,24 @@ export function resourceBindingFor(runtime, provider, provided) {
   };
 }
 export function bindChild(runtime, definition) {
-  const options = { observationProvides: runtime.recording?.provides };
-  const attempt = new AttemptBinder(runtime.attemptInvocationBuilder, options);
-  const operation = new OperationBinder(runtime.operationInvocationBuilder, attempt, options);
-  if (definition.level === 'attempt') return attempt.bind(definition);
-  if (definition.level === 'operation') return operation.bind(definition);
-  return new ExecutionBinder(runtime.executionInvocationBuilder, operation, options).bind(definition);
+  const state = fixtureState(runtime);
+  const resolved = resolveDeclaration(definition, { observationProvides: runtime.recording?.provides });
+  const bind = (current) => {
+    const children = new BoundChildren(current.members, bind);
+    const work = new InvocationWorkBinding(current.declaration, children, 'members' in current.declaration);
+    const bound = {
+      definition: current.definition,
+      children,
+      create(parent, input, options = {}) {
+        return state.decorate(state.builder.create(input, { parent, kind: current.kind, ...options, requires: current.requires, supply: current.supply, refinements: current.refinements, description: current.declaration, observation: current.declaration.observation, work }));
+      },
+      async call(parent, input) {
+        return this.create(parent, input).run();
+      },
+    };
+    return bound;
+  };
+  return bind(resolved);
 }
 // Construction metadata is captured only by this test fixture, not exposed by a work Context.
 export const sourceFor = (context) => sources.get(context);
@@ -54,11 +67,11 @@ export function createInput({ content, history }) {
 export function observeFixture(input, settings, provider, publish, signal) {
   const environment = initializeObserver(provider, transcriptFor(input).snapshot().slice(0, -1));
   transcripts.set(input, environment.transcript);
-  return observeExecution(environment.runtime, environment.recording, { messages: [input] }, { settings, signal }, publish);
+  return observeExecution(environment.driver, environment.scene, environment.recording, { messages: [input] }, { settings, signal }, publish);
 }
 
 export function resourceFact(snapshot, access) {
-  const owners = new Set([snapshot.execution.id, ...snapshot.operations.map((call) => call.id), ...snapshot.attempts.map((call) => call.id)]);
+  const owners = new Set(snapshot.calls.map((call) => call.id));
   const facts = snapshot.resources.filter((fact) => owners.has(fact.parentId) && fact.access === access && fact.phase === 'available');
   const first = facts[0];
   for (const fact of facts) {

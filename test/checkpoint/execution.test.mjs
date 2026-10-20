@@ -23,13 +23,13 @@ async function captureExecution(t, fileTask) {
   const save = environment.checkpoints.save.bind(environment.checkpoints);
   environment.checkpoints.save = (image, revision) => {
     const result = save(image, revision);
-    if (image.contract.key === 'observer.conversation.execution') images.push(image);
+    if (image.contract.key === 'observer.conversation.task') images.push(image);
     return result;
   };
-  await environment.runtime.run({ messages: [{ role: 'user', content: '整理资料' }], ...(fileTask ? { fileTask } : {}) }, { settings });
-  const definition = environment.definition.executionDefinition;
+  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '整理资料' }], ...(fileTask ? { fileTask } : {}) }, { settings });
+  const definition = environment.definition.taskDefinition;
   const resolved = resolveDeclaration(definition, {});
-  const children = new BoundChildren(resolved.children, () => assert.fail('validation must not initialize children'));
+  const children = new BoundChildren(resolved.members, () => assert.fail('validation must not initialize children'));
   const receptions = new BoundReceptions(resolved.declaration.receptions, children);
   const check = (image) => {
     const point = definition.checkpoint.points.find((point) => point.name === image.point);

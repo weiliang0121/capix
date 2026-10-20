@@ -4,7 +4,7 @@ import { executionResources } from '../../apps/observer/.test-dist/binding/resou
 
 const settings = { model: 'fixture', contextBudget: 32768 };
 const fact = (parentId, supplyId, value = settings) => ({ parentId, supplyId, phase: 'available', access: 'model-settings.snapshot', value });
-const snapshot = (resources) => ({ execution: { id: 'E' }, operations: [{ id: 'O' }], attempts: [{ id: 'A' }], resources });
+const snapshot = (resources) => ({ execution: { id: 'E' }, calls: [{ id: 'E' }, { id: 'O' }, { id: 'A' }], resources });
 
 test('execution settings come from one consistent supply accessed by actual descendants', () => {
   const projected = executionResources(snapshot([fact('O', 'shared'), fact('A', 'shared', { ...settings }), fact('R', 'root', { model: 'root-only' }), fact('foreign', 'foreign', { model: 'foreign-only' })]));

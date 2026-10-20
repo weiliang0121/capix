@@ -19,7 +19,7 @@ function fixture() {
   };
   const changes = [{ ...create('after update'), action: 'update', memoryId: items[0].id }, { ...create('unchanged'), action: 'update', memoryId: items[1].id }, create('new memory')];
   const receipt = memories.applyFixed({ contract: { key: 'memories.apply', version: 1 }, operation: { contextId: 'apply', position: 'memories' }, memoriesId: memories.id, changes });
-  const identity = { contextId: 'apply', parentContextId: 'execution', level: 'attempt' };
+  const identity = { contextId: 'apply', parentContextId: 'execution', kind: 'node' };
   const heads = new Map([
     ['execution', { image: { frame: { children: [{ identity }] } } }],
     ['apply', { image: { contract: { key: 'observer.apply-memory' }, frame: { owner: identity, children: [], input: { memories: changes } } } }],
@@ -83,7 +83,7 @@ test('a completed preparation is checked before E has accepted or saved its mate
   const fixtureValue = fixture();
   const { transcript, memories, run, heads, checkpoints } = fixtureValue;
   const prepared = preparedMaterial(fixtureValue, run.memories.sequence, []);
-  const identity = { contextId: 'prepare', parentContextId: 'execution', level: 'operation' };
+  const identity = { contextId: 'prepare', parentContextId: 'execution', kind: 'group' };
   heads.get('execution').image.frame.children.push({ identity });
   heads.set('prepare', { image: { contract: { key: 'observer.prepare-context' }, point: 'completed', state: prepared, frame: { owner: identity, children: [] } } });
   validateConversationCheckpointContent(run, transcript, memories, checkpoints);
