@@ -7,6 +7,8 @@ import type { ObservationDeclaration } from '../definition/observation.js';
 import type { InvocationLevel } from '@capix/protocol';
 import type { CheckpointCodec } from '../checkpoint/contract.js';
 import type { invocationSignature } from '../definition/signature.js';
+import type { DefinitionReceptions, ReceptionDefinition } from '../definition/reception.js';
+import type { ChildContract } from '../definition/children.js';
 
 // Heterogeneous traversal erases only the pairing already retained by the overloads.
 type AnyDefinition = RuntimeDefinition<any, any, any, any, any> | ExecutionDefinition<any, any, any, any, any> | OperationDefinition<any, any, any, any, any> | AttemptDefinition<any, any, any, any, any>;
@@ -27,6 +29,7 @@ export function snapshotDefinition(definition: AnyDefinition): AnyDefinition {
       return Object.freeze({ ...snapshotInvocation(definition), level: definition.level, children: Object.freeze([...definition.children]), name: definition.name, label: definition.label, source: definition.source });
     case 'attempt':
       if (definition.children !== undefined) throw new Error('Attempts cannot declare children');
+      if (definition.receptions !== undefined) throw new Error('Attempts cannot declare receptions');
       return Object.freeze({ ...snapshotInvocation(definition), level: definition.level, name: definition.name, label: definition.label, source: definition.source, callee: definition.callee });
   }
 }
@@ -43,10 +46,26 @@ function snapshotInvocation<Input, Output, Level extends InvocationLevel, Resour
     exceptions: exceptions ? Object.freeze({ requires: Object.freeze({ ...exceptions.requires }), uses: exceptions.uses ? Object.freeze([...exceptions.uses]) : undefined, accepts: Object.freeze([...exceptions.accepts]), handle: exceptions.handle.bind(exceptions) }) : undefined,
     observation: definition.observation ? Object.freeze(definition.observation.map(snapshotObservation)) : undefined,
     checkpoint: definition.checkpoint ? snapshotCheckpoint(definition.checkpoint) : undefined,
+    receptions: definition.receptions ? (Object.freeze(definition.receptions.map(snapshotReception)) as DefinitionReceptions<Level>) : undefined,
   } satisfies Omit<InvocationDefinition<Input, Output, Level, Resources, ExceptionResources, Delta>, typeof invocationSignature>);
   // All runtime fields are checked above. Preserve the input's type-only I/O
   // witness without creating a symbol value or treating it as runtime identity.
   return fixed as typeof fixed & Pick<InvocationDefinition<Input, Output, Level, Resources, ExceptionResources, Delta>, typeof invocationSignature>;
+}
+
+const receptionOrigins = new WeakMap<object, object>();
+
+/** The fixed interpreter retains the declaration object's registration identity. */
+export function originalReception(reception: object): object {
+  return receptionOrigins.get(reception) ?? reception;
+}
+
+function snapshotReception<Definition extends ChildContract, Value>(reception: ReceptionDefinition<Definition, Value>): ReceptionDefinition<Definition, Value> {
+  const value = reception.value;
+  if (typeof value?.check !== 'function' || typeof value.encode !== 'function' || typeof value.decode !== 'function') throw new Error('Reception requires check, encode and decode functions');
+  const fixed = Object.freeze({ child: reception.child, value: Object.freeze({ check: value.check.bind(value), encode: value.encode.bind(value), decode: value.decode.bind(value) }) }) as ReceptionDefinition<Definition, Value>;
+  receptionOrigins.set(fixed, originalReception(reception));
+  return fixed;
 }
 
 function snapshotObservation<Fact>(declaration: ObservationDeclaration<Fact>): ObservationDeclaration<Fact> {

@@ -8,6 +8,7 @@ import type { InvocationFact } from '../observation/facts.js';
 import type { InvocationCheckpointDefinition } from './checkpoint.js';
 import type { AcceptWork, Continue, ExecuteWork, HandleWork, Resolution } from './work.js';
 import type { invocationSignature, InvocationSignature } from './signature.js';
+import type { DefinitionReceptions } from './reception.js';
 
 export type { InvocationCheckpointPoint, InvocationCheckpointDefinition } from './checkpoint.js';
 
@@ -36,4 +37,5 @@ export abstract class InvocationDefinition<Input, Output, Level extends Invocati
   readonly exceptions?: InvocationExceptionDefinition<Input, Output, Level, ExceptionResources>;
   readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
   readonly checkpoint?: InvocationCheckpointDefinition<Input, Output, Level, Delta>;
+  readonly receptions?: DefinitionReceptions<Level>;
 }

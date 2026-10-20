@@ -13,7 +13,7 @@ function head(key, contextId, level, state, children = [], parentContextId) {
     revision: 1,
     image: {
       id: `checkpoint-${contextId}`,
-      formatVersion: 2,
+      formatVersion: 3,
       contract: { key, version: 1 },
       point: 'saved',
       frame: { owner: { contextId, level, ...(parentContextId ? { parentContextId } : {}) }, round: 1, phase: 'execute', input: { original: contextId }, currentInput: { original: contextId }, nextChildOrder: children.length, children },

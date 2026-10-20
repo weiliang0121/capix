@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveDeclaration, BoundChildren, decodeCheckpointFrame, savedCheckpointFacts } from '@capix/server-runtime/construction';
+import { resolveDeclaration, BoundChildren, BoundReceptions, decodeCheckpointFrame, savedCheckpointFacts } from '@capix/server-runtime/construction';
 import { initializeObserver, WorkspaceFiles } from '@capix/observer-service/assembly';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 1000 };
@@ -30,10 +30,11 @@ async function captureExecution(t, fileTask) {
   const definition = environment.definition.executionDefinition;
   const resolved = resolveDeclaration(definition, {});
   const children = new BoundChildren(resolved.children, () => assert.fail('validation must not initialize children'));
+  const receptions = new BoundReceptions(resolved.declaration.receptions, children);
   const check = (image) => {
     const point = definition.checkpoint.points.find((point) => point.name === image.point);
-    const decoded = decodeCheckpointFrame(image.frame, definition.checkpoint, children.checkpointLayout());
-    point.check?.(point.state.decode(image.state), savedCheckpointFacts(decoded, image.references, children));
+    const decoded = decodeCheckpointFrame(image.frame, definition.checkpoint, children.checkpointLayout(), receptions.bindings());
+    point.check?.(point.state.decode(image.state), savedCheckpointFacts(decoded, image.references, children, receptions));
   };
   return { check, images };
 }

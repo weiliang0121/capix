@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RuntimeDefinition, ExecutionDefinition, ExceptionContract, assembleRuntime, MemoryCheckpointStore, cloneCheckpointImage, DeclaredException } from '@capix/server-runtime';
+import { RuntimeDefinition, ExecutionDefinition, ExceptionContract, assembleRuntime, MemoryCheckpointStore, cloneCheckpointImage, DeclaredException, reception as defineReception } from '@capix/server-runtime';
 
 const rejected = new ExceptionContract('fixture.rejected');
 const codec = { encode: (value) => value, decode: (value) => value };
@@ -20,8 +20,10 @@ function harness(store, resume, calls, reception = false) {
     };
   }
   const child = new Child();
+  const contract = defineReception(child, { check: (value) => value, encode: codec.encode, decode: codec.decode });
   class Root extends RuntimeDefinition {
     children = [child];
+    receptions = reception === 'typed' ? [contract] : [];
     raises = [rejected];
     maxRounds = 2;
     checkpoint = { key: 'fixture.history.root', version: 1, input: codec, output: codec, points: [{ name: 'second', state: codec, references: {}, resume: { requires: {}, uses: [child], execute: (work) => resume(work, child, this.checkpoint.points[0]) } }] };
@@ -40,10 +42,12 @@ function harness(store, resume, calls, reception = false) {
         if (work.round === 1) {
           const call = work.children.create(child, {}, { key: 'rejected' });
           const output = await call.run();
-          if (reception)
-            return call.accept(() => {
+          if (reception) {
+            const receive = () => {
               throw rejected.create('parent refused successful output', { source: 'acceptance' });
-            });
+            };
+            return reception === 'typed' ? call.accept(contract, receive) : call.accept(receive);
+          }
           return output;
         }
         work.checkpoint.save(this.checkpoint.points[0], null, {});
@@ -140,35 +144,37 @@ test('checkpoint validation rejects current-round, structural and misattributed 
   }
 });
 
-test('real handled reception continuation retains successful child output and readonly diagnostic through recapture', async () => {
-  const image = await capture(true);
-  const child = image.frame.children[0];
-  assert.equal(image.frame.continuation.origin.kind, 'child-reception');
-  assert.equal(child.state.kind, 'returned');
-  assert.equal(child.state.reception.kind, 'failed');
-  assert.deepEqual(child.state.output, { answer: 'successful child output' });
-  assert.equal(child.state.reception.error.message, 'parent refused successful output');
-  const store = new MemoryCheckpointStore();
-  store.save(image, 0);
-  const calls = { child: 0, handled: 0 };
-  const runtime = harness(
-    store,
-    (work, definition, point) => {
-      const fact = work.children.facts.requireUnique(definition, { parentRound: 1 });
-      assert.equal(work.continuation.origin.kind, 'child-reception');
-      assert.equal(work.continuation.origin.child, fact.ref);
-      assert.equal(fact.returned.status, 'succeeded');
-      assert.deepEqual(fact.returned.output, { answer: 'successful child output' });
-      assert.equal(fact.reception.status, 'failed');
-      assert.equal(fact.reception.diagnostic instanceof DeclaredException, false);
-      assert.deepEqual(fact.reception.diagnostic, child.state.reception.error);
-      work.checkpoint.save(point, null, {});
-      return 'continued after prior reception failure';
-    },
-    calls,
-    true,
-  );
-  assert.equal(await runtime.resume(image.frame.owner.contextId, {}), 'continued after prior reception failure');
-  assert.deepEqual(calls, { child: 0, handled: 0 });
-  assert.deepEqual(store.read(image.frame.owner.contextId).image.frame.children[0], child);
-});
+for (const mode of [true, 'typed'])
+  test(`real ${mode === 'typed' ? 'typed' : 'raw'} handled reception continuation retains successful child output and readonly diagnostic through recapture`, async () => {
+    const image = await capture(mode);
+    const child = image.frame.children[0];
+    assert.equal(image.frame.continuation.origin.kind, 'child-reception');
+    assert.equal(child.state.kind, 'returned');
+    assert.equal(child.state.reception.kind, 'failed');
+    assert.deepEqual(child.state.reception.contract, mode === 'typed' ? { position: 0 } : undefined);
+    assert.deepEqual(child.state.output, { answer: 'successful child output' });
+    assert.equal(child.state.reception.error.message, 'parent refused successful output');
+    const store = new MemoryCheckpointStore();
+    store.save(image, 0);
+    const calls = { child: 0, handled: 0 };
+    const runtime = harness(
+      store,
+      (work, definition, point) => {
+        const fact = work.children.facts.requireUnique(definition, { parentRound: 1 });
+        assert.equal(work.continuation.origin.kind, 'child-reception');
+        assert.equal(work.continuation.origin.child, fact.ref);
+        assert.equal(fact.returned.status, 'succeeded');
+        assert.deepEqual(fact.returned.output, { answer: 'successful child output' });
+        assert.equal(fact.reception.status, 'failed');
+        assert.equal(fact.reception.diagnostic instanceof DeclaredException, false);
+        assert.deepEqual(fact.reception.diagnostic, child.state.reception.error);
+        work.checkpoint.save(point, null, {});
+        return 'continued after prior reception failure';
+      },
+      calls,
+      mode,
+    );
+    assert.equal(await runtime.resume(image.frame.owner.contextId, {}), 'continued after prior reception failure');
+    assert.deepEqual(calls, { child: 0, handled: 0 });
+    assert.deepEqual(store.read(image.frame.owner.contextId).image.frame.children[0], child);
+  });

@@ -4,11 +4,14 @@ import type { Invocation } from '../../invocation/invocation.js';
 import { ChildCallFailure } from '../../invocation/provenance.js';
 import type { BoundChildren } from './bound.js';
 import type { InvocationChildReferences } from './references.js';
+import type { ReceptionDefinition } from '../../definition/reception.js';
+import type { BoundReceptions } from '../receptions.js';
 
 export type ChildBindingsParent = Invocation<any, any, any>;
 
 interface ChildAccessOptions {
   readonly children: BoundChildren;
+  readonly receptions: BoundReceptions;
   readonly parent: ChildBindingsParent;
   readonly allowed: ReadonlySet<ChildContract>;
   readonly validate: () => void;
@@ -67,6 +70,22 @@ export class InvocationChildBindings {
   private handle<D extends ChildContract>(ref: ChildReference<D>): ChildCall<D> {
     const entry = this.options.references.require(ref);
     const relation = entry.relation;
+    const access = this;
+    function accept(): Promise<DefinitionOutput<D>>;
+    function accept<Value>(receive: (output: DefinitionOutput<D>) => Value | Promise<Value>): Promise<Value>;
+    function accept<Value>(contract: ReceptionDefinition<D, Value>, receive: (output: DefinitionOutput<D>) => NoInfer<Value> | Promise<NoInfer<Value>>): Promise<Value>;
+    function accept<Value = DefinitionOutput<D>>(first?: ReceptionDefinition<D, Value> | ((output: DefinitionOutput<D>) => Value | Promise<Value>), receive?: (output: DefinitionOutput<D>) => Value | Promise<Value>): Promise<Value> {
+      return access.perform(() => {
+        if (first !== undefined && typeof first !== 'function' && (typeof first !== 'object' || first === null)) throw new Error('Invalid child reception contract or callback');
+        const contract = typeof first === 'object' && first !== null ? access.options.receptions.require(first, entry.definition as D) : undefined;
+        const callback = typeof first === 'function' ? first : receive;
+        if (contract && typeof callback !== 'function') throw new Error('Typed reception requires a callback');
+        return relation.accept((output) => {
+          access.checkActive();
+          return callback ? callback(output as DefinitionOutput<D>) : (output as Value);
+        }, contract);
+      });
+    }
     return Object.freeze({
       ref,
       ...(relation.key !== undefined ? { key: relation.key } : {}),
@@ -76,13 +95,7 @@ export class InvocationChildBindings {
           if (!relation.returned) this.requireAllowed(entry.definition);
           return (await relation.invocation.run()) as DefinitionOutput<D>;
         }),
-      accept: <Value = DefinitionOutput<D>>(receive?: (output: DefinitionOutput<D>) => Value | Promise<Value>): Promise<Value> =>
-        this.perform(() =>
-          relation.accept((output) => {
-            this.checkActive();
-            return receive ? receive(output as DefinitionOutput<D>) : (output as Value);
-          }),
-        ),
+      accept,
     });
   }
 

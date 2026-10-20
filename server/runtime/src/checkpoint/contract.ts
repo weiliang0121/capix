@@ -32,7 +32,11 @@ export interface CheckpointContinuation {
   readonly origin?: { readonly kind: 'self'; readonly phase: 'execute' | 'accept' } | { readonly kind: 'child-return' | 'child-reception'; readonly child: CheckpointReference };
 }
 
-export type CheckpointChildReception = { readonly kind: 'pending' | 'receiving' } | { readonly kind: 'accepted'; readonly output?: CheckpointValue } | { readonly kind: 'failed'; readonly error: CheckpointValue; readonly failure: InvocationFailureFact & { readonly kind: 'exception'; readonly contract: string } };
+export interface CheckpointReceptionContract {
+  readonly position: number;
+}
+
+export type CheckpointChildReception = { readonly kind: 'pending' } | { readonly kind: 'receiving'; readonly contract?: CheckpointReceptionContract } | { readonly kind: 'accepted'; readonly contract?: CheckpointReceptionContract; readonly output?: CheckpointValue } | { readonly kind: 'failed'; readonly contract?: CheckpointReceptionContract; readonly error: CheckpointValue; readonly failure: InvocationFailureFact & { readonly kind: 'exception'; readonly contract: string } };
 
 export interface CheckpointChild {
   readonly identity: InvocationIdentity;
@@ -58,7 +62,7 @@ export interface InvocationCheckpointFrame {
 
 export interface CheckpointImage {
   readonly id: string;
-  readonly formatVersion: 2;
+  readonly formatVersion: 3;
   readonly contract: CheckpointContract;
   readonly point: string;
   readonly frame: InvocationCheckpointFrame;

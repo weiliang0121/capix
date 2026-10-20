@@ -10,6 +10,7 @@ import type { InvocationContext } from '../context/context.js';
 import type { InvocationResult } from './result.js';
 import type { InvocationPropagationScope } from './provenance.js';
 import type { RuntimeErrorValue } from '@capix/protocol';
+import type { InvocationReceptionBinding } from './reception.js';
 
 export interface InvocationRelationOptions {
   /** Work position in a composition, not the reusable behavior's identity. */
@@ -28,7 +29,7 @@ export interface InvocationTarget<Output = unknown> {
   readonly identity?: InvocationIdentity;
 }
 
-export type InvocationRelationReception = Readonly<{ status: 'pending' } | { status: 'receiving' } | { status: 'accepted'; output: unknown } | { status: 'failed'; error: unknown; failure?: InvocationFailure; diagnostic?: RuntimeErrorValue }>;
+export type InvocationRelationReception = Readonly<{ status: 'pending' } | ({ readonly contract?: InvocationReceptionBinding } & ({ status: 'receiving' } | { status: 'accepted'; output: unknown } | { status: 'failed'; error: unknown; failure?: InvocationFailure; diagnostic?: RuntimeErrorValue }))>;
 
 /** Already-decoded relationship facts. Installing them does not replay return or acceptance. */
 export interface InvocationRelationBaseline<Output = unknown> {
@@ -123,53 +124,65 @@ export class InvocationRelation<Output = unknown> {
     this.owner.publish(this, { kind: 'returned', result: this.#returned });
   }
 
-  accept<Value>(work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
+  accept<Value>(work: (delivered: Output) => Value | Promise<Value>, contract?: InvocationReceptionBinding): Promise<Value> {
     try {
-      return this.owner.accepting(() => this.acceptResult(work));
+      return this.owner.accepting(() => this.acceptResult(work, contract));
     } catch (error) {
       return Promise.reject(error);
     }
   }
 
-  private async acceptResult<Value>(work: (delivered: Output) => Value | Promise<Value>): Promise<Value> {
+  private async acceptResult<Value>(work: (delivered: Output) => Value | Promise<Value>, contract?: InvocationReceptionBinding): Promise<Value> {
     const scope = this.owner.captureDelivery();
-    const delivered = this.beginReception();
-    const output = await this.receiveWithinParent(delivered, work, scope);
+    const delivered = this.beginReception(contract);
+    const output = await this.receiveWithinParent(delivered, work, scope, contract);
     // Acceptance is fixed before notification. A later observer failure cannot undo it.
-    this.completeReception(output);
+    this.completeReception(output, contract);
     return output;
   }
 
-  private beginReception(): Output {
+  private beginReception(contract?: InvocationReceptionBinding): Output {
     this.owner.requireHealthy();
     if (this.#returned?.status !== 'succeeded') throw new Error('Child invocation has not returned successfully');
+    if (contract && contract.childPosition !== this.declarationPosition) throw new Error('Reception contract belongs to a different child position');
     if (this.#reception.status !== 'pending' && !this.#restoredReception) throw new Error('Child result has already entered acceptance');
+    if (this.#restoredReception && this.#reception.status === 'receiving' && this.#reception.contract !== contract) throw new Error('Restored reception contract cannot be replaced');
     this.#restoredReception = false;
-    this.#reception = Object.freeze({ status: 'receiving' });
+    this.#reception = Object.freeze({ status: 'receiving', ...(contract ? { contract } : {}) });
     const observed = this.owner.publish(this, { kind: 'receiving' });
     if (observed !== undefined) {
-      this.#reception = Object.freeze({ status: 'failed', error: observed });
+      this.#reception = Object.freeze({ status: 'failed', error: observed, ...(contract ? { contract } : {}) });
       const failed = this.owner.publish(this, { kind: 'failed', error: observed, source: 'observation' });
       throw combineFaults([observed, ...(failed !== undefined ? [failed] : [])]);
     }
     return this.#returned.output;
   }
 
-  private async receiveWithinParent<Value>(delivered: Output, work: (delivered: Output) => Value | Promise<Value>, scope: InvocationPropagationScope): Promise<Value> {
+  private async receiveWithinParent<Value>(delivered: Output, work: (delivered: Output) => Value | Promise<Value>, scope: InvocationPropagationScope, contract?: InvocationReceptionBinding): Promise<Value> {
     try {
       this.owner.requireHealthy();
-      return await this.owner.receive(this, async () => work(delivered));
+      return await this.owner.receive(this, async () => {
+        const value = await work(delivered);
+        try {
+          contract?.check(value);
+        } catch (cause) {
+          // A contract violation is a technical failure, even if a validator throws
+          // a DeclaredException. It cannot authorize another business reception.
+          throw new Error('Parent reception value violates its contract', { cause });
+        }
+        return value;
+      });
     } catch (error) {
       const rejected = this.owner.receptionFailure(this, error, scope);
-      this.#reception = Object.freeze({ status: 'failed', error: rejected.error, failure: rejected.failure });
+      this.#reception = Object.freeze({ status: 'failed', error: rejected.error, failure: rejected.failure, ...(contract ? { contract } : {}) });
       const failed = this.owner.publish(this, { kind: 'failed', error: rejected.error, source: 'work' });
       if (failed !== undefined) throw new AggregateError([rejected.error, failed], 'Child acceptance and observation both failed', { cause: rejected.error });
       throw rejected.delivery;
     }
   }
 
-  private completeReception(output: unknown): void {
-    this.#reception = Object.freeze({ status: 'accepted', output });
+  private completeReception(output: unknown, contract?: InvocationReceptionBinding): void {
+    this.#reception = Object.freeze({ status: 'accepted', output, ...(contract ? { contract } : {}) });
     const accepted = this.owner.publish(this, { kind: 'accepted', output });
     if (accepted !== undefined) throw accepted;
   }

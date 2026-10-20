@@ -6,6 +6,7 @@ export * from './structure/operation.js';
 export * from './structure/attempt.js';
 export * from './binding/children/bound.js';
 export * from './binding/children/builder.js';
+export * from './binding/receptions.js';
 export * from './binding/runtime.js';
 export * from './binding/execution.js';
 export * from './binding/operation.js';
@@ -31,6 +32,7 @@ export * from './invocation/builders/operation.js';
 export * from './invocation/builders/attempt.js';
 export * from './invocation/children.js';
 export * from './invocation/relation.js';
+export type { InvocationReceptionBinding } from './invocation/reception.js';
 export type { InvocationCapabilities } from './invocation/capabilities.js';
 
 export * from './checkpoint/work.js';

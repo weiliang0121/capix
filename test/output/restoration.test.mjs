@@ -9,7 +9,7 @@ function restore(definition, { round = 1, currentInput = { stage: 'saved' } } = 
   const store = new MemoryCheckpointStore();
   const events = [];
   const contextId = `restored-round-${round}`;
-  store.save({ id: 'saved-image', formatVersion: 2, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, level: 'runtime' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [], ...(round === 2 ? { continuation: { fromRound: 1, stage: 'accept', reason: 'saved continuation' } } : {}) }, state: { source: 'durable' }, references: {} }, 0);
+  store.save({ id: 'saved-image', formatVersion: 3, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, level: 'runtime' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [], ...(round === 2 ? { continuation: { fromRound: 1, stage: 'accept', reason: 'saved continuation' } } : {}) }, state: { source: 'durable' }, references: {} }, 0);
   const runtime = assembleRuntime(definition, {
     providers: [],
     checkpoints: { store },

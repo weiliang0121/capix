@@ -1,6 +1,6 @@
 # REOA Checkpoint 与执行恢复设计
 
-状态：2026-10-18，有限内核与 Observer 默认内置能力声明已接入 CP；P02 材料准备与普通 R/E 输入已落地，支持声明边界上的宿主显式续接。第 0 节说明当前 API 与限制；其后保留设计推演，伪代码解释职责，不代替源码契约。自动恢复、旧提交交付与恢复 UI 尚未接入。
+状态：2026-10-20，有限内核与 Observer 默认内置能力声明已接入 CP；P05 父接纳契约与 Frame v3 已落地，支持声明边界上的宿主显式续接。第 0 节说明当前 API 与限制；其后保留设计推演，伪代码解释职责，不代替源码契约。自动恢复、旧提交交付与恢复 UI 尚未接入。
 
 恢复的目标是：某次 REOA 工作中断后，依据已经保存的事实和声明的续接入口，继续推进该工作。重新建立 Invocation、Context 和资源访问是实现手段；不恢复原 Promise、闭包、调用栈，也不反序列化 Bound 结构。
 
@@ -26,9 +26,13 @@
 
 作者恢复点使用 `checkpointPoint<Level, Input, Output>()`，具名点通过对象注册和保存；跨进程再以所属契约和点名核验。resume 接收本阶段 Work、已解码业务 state 和准确引用槽位，正常和恢复均经相同的 child.run/accept 接缝。完整作者用法见 [定义作者契约](definition-author-contract.md)。
 
-当前格式为 **Frame v2**：完整直接子关系与业务 state/refs 分开保存，包含已接纳 continuation，以及与该继续来源精确对应的前轮已处理接纳异常诊断。子声明由父 checkpoint key/version 与去重后的固定声明位置关联，不依赖 JS 身份、key 或同名契约。新进程必须提供兼容声明；同版本任意改动业务实现不在可检测承诺内。
+当前格式为 **Frame v3**：完整直接子关系与业务 state/refs 分开保存，包含已接纳 continuation，以及与该继续来源精确对应的前轮已处理接纳异常诊断。子声明由父 checkpoint key/version 与去重后的固定声明位置关联，不依赖 JS 身份、key 或同名契约。v3 另外保存父接纳契约的注册位置及其编码值。新进程必须提供兼容声明；同版本任意改动业务实现不在可检测承诺内。
 
-v1 CP 明确拒绝恢复，不自动迁移或重发。Observer 内置声明已同步提升版本；历史消息、记忆和可选记录继续读取。第 1 节以后的历史推演保留当时伪代码，不作为当前作者 API。
+v1/v2 CP 明确拒绝恢复，不自动迁移或重发。Observer E 的接纳声明已提升版本；历史消息、记忆和可选记录继续读取。第 1 节以后的历史推演保留当时伪代码，不作为当前作者 API。
+
+父可在 `receptions` 登记 `reception(child, { check, encode, decode })`。进入 receiving 即固定本次契约；accepted 保存值经该 codec 编码，恢复先核对本父注册位置和准确子声明位置，再 decode/check。`facts.children.accepted(ref, contract)` 在恢复点 check 与 resume 中均取得解码后的 V，包含合法 undefined。它要求契约匹配，不能将旧 raw 接纳补成 typed 接纳。raw accept 保留既有纯数据保存行为。
+
+普通接纳只同步检查实际 V，保留原引用；不会编解码来替换它。保存失败不撤回已接纳值或实体效果，也不授权再次接纳。receiving 的续接只能使用已固定的同一契约；需要重入实体写入时，仍由 `applyFixed` 等实体凭据保证，契约本身不提供幂等性。同一契约不可重复登记，注册顺序或含义变化需要提升父 CP version。
 
 ### 0.1 内核事实与保存
 
@@ -56,7 +60,7 @@ E 已移除原先覆盖决策、文件和记忆的 `continuationBarrier`。各�
 
 FunctionDecision 可保存纯数据候选，候选是否可执行仍由 E 接纳逻辑判断，CP 不抢占原业务审查。Observer 宿主目前仍拒绝恢复注入的自定义决策函数，因为没有固定该函数实现版本的契约；默认决策链可恢复。注入自定义维护也暂不允许宿主恢复，即使策略 O 自带 CP；当前没有完整版本化其宿主配置与实现的恢复契约。
 
-P02 移除 E 专属 entry 后，Observer 的 R/E checkpoint 契约分别为 **version 3 / 4**；Frame 仍为 v2，二者不是同一个版本维度。旧 R/E 声明版本明确拒绝，不转换旧 entry 或 selection 状态。默认 Observer 保持单 E 的恢复登记，不由通用内核的多 E 能力推导出宿主已有多 E 恢复。
+P02 移除 E 专属 entry，P05 为 E→decision 登记父接纳契约后，Observer 的 R/E checkpoint 契约分别为 **version 3 / 5**；Frame 为 v3，二者不是同一个版本维度。旧 R/E 声明版本明确拒绝，不转换旧 entry、selection 或 raw 决策接纳状态。默认 Observer 保持单 E 的恢复登记，不由通用内核的多 E 能力推导出宿主已有多 E 恢复。
 
 准备 O 的 completed、E 的 preparationAccepted 及已返回交付保存同一份固定材料。恢复核对材料来源及当时值，不读取当前活跃索引替换它。R 从已保存的 executionWaiting 续接准确 E，不重复 append；正式输入已写入但尚无首个 R CP 的窗口仍不承诺恢复。
 

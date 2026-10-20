@@ -49,3 +49,5 @@ export type ExecutionDecisionState = ReturnType<typeof executionDecisionState.de
 export type ExecutionCapabilityState = ReturnType<typeof executionCapabilityState.decode>;
 
 export const decisionAcceptanceSchema = z.strictObject({ choice: acceptedDecisionSchema, progress: executionProgressSchema, checkedCandidates: z.array(z.string()).max(16) });
+
+export type DecisionAcceptance = z.infer<typeof decisionAcceptanceSchema>;

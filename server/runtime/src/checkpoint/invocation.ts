@@ -59,7 +59,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       if (invocation.context.progress.round !== image.frame.round || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.currentInput)), image.frame.currentInput) || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.input)), image.frame.input)) throw new Error('Checkpoint input changed during binding');
       if (!isEqual(invocation.context.continuation, restoreCheckpointContinuation(image.frame))) throw new Error('Checkpoint continuation changed during binding');
       checkCheckpointReferences(image.frame, image.references, work.points[image.point]!.references);
-      const children = image.frame.children.map((child) => decodeCheckpointChild(child, checkpointChildBinding(child, work.children), signal));
+      const children = image.frame.children.map((child) => decodeCheckpointChild(child, checkpointChildBinding(child, work.children), signal, work.receptions));
       invocation.children.install(image.frame.nextChildOrder, children);
       for (const child of image.frame.children) this.#savedChildren.set(child.identity.contextId, child);
     }
@@ -102,7 +102,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     const current = this.installation.store.read(this.invocation.context.id);
     if (!current || current.delivery || current.revision !== this.#restore.revision || current.image.id !== image.id) throw new Error('Checkpoint head changed before continuation');
     const point = this.work!.points[image.point]!;
-    const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children);
+    const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children, this.work!.receptions);
     checkCheckpointReferences(image.frame, image.references, point.references);
     point.check?.(image.frame, point.state.decode(image.state), image.references, decoded);
     this.emit({ kind: 'installed', checkpointId: image.id, point: image.point, frame: image.frame });
@@ -126,8 +126,8 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
           if (!definition) throw new Error('Checkpoint point is not declared');
           const children = captureCheckpointChildren(context, this.invocation.children, this.#savedChildren);
           const continuation = captureCheckpointContinuation(context.continuation, children.children);
-          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 2, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input: this.work!.input.encode(context.input), currentInput: this.work!.input.encode(context.currentInput), ...children, ...(continuation ? { continuation } : {}) }, state: definition.state.encode(state), references });
-          const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children);
+          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 3, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input: this.work!.input.encode(context.input), currentInput: this.work!.input.encode(context.currentInput), ...children, ...(continuation ? { continuation } : {}) }, state: definition.state.encode(state), references });
+          const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children, this.work!.receptions);
           checkCheckpointReferences(image.frame, image.references, definition.references);
           definition.check?.(image.frame, definition.state.decode(image.state), image.references, decoded);
           this.emit({ kind: 'captured', checkpointId: image.id, point });
@@ -177,7 +177,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       return target;
     }
     const child = restored.child;
-    const decoded = decodeCheckpointChild(child, binding, this.signal);
+    const decoded = decodeCheckpointChild(child, binding, this.signal, this.work?.receptions);
     this.invocation.children.replaceSaved(contextId, decoded.target, decoded.state);
     this.#savedChildren.set(contextId, child);
     this.#resumedChildren.set(contextId, decoded.target);

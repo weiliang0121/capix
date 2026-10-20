@@ -3,6 +3,7 @@ export * from './definition/invocation.js';
 export * from './definition/work.js';
 export * from './definition/factory.js';
 export * from './definition/checkpoint.js';
+export * from './definition/reception.js';
 export { ChildCallFailure } from './invocation/provenance.js';
 export * from './definition/runtime.js';
 export * from './definition/execution.js';

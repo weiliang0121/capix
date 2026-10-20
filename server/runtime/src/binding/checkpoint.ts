@@ -4,10 +4,12 @@ import type { CheckpointFacts } from '../definition/checkpoint.js';
 import type { ChildContract, ChildFact, ChildFacts, ChildReference } from '../definition/children.js';
 import type { ContinuationFact } from '../definition/work.js';
 import type { BoundChildren } from './children/bound.js';
+import { BoundReceptions } from './receptions.js';
+import type { ReceptionDefinition } from '../definition/reception.js';
 
 /** Saved checks get decoded facts and inert references, never a live action registry. */
-export function savedCheckpointFacts(frame: DecodedCheckpointFrame, references: CheckpointReferences, children: BoundChildren): CheckpointFacts<unknown> {
-  const entries = new WeakMap<ChildReference, { readonly definition: ChildContract; readonly fact: ChildFact<ChildContract> }>();
+export function savedCheckpointFacts(frame: DecodedCheckpointFrame, references: CheckpointReferences, children: BoundChildren, receptions = new BoundReceptions([], children)): CheckpointFacts<unknown> {
+  const entries = new WeakMap<ChildReference, { readonly saved: DecodedCheckpointChild; readonly definition: ChildContract; readonly fact: ChildFact<ChildContract> }>();
   const byId = new Map<string, { readonly saved: DecodedCheckpointChild; readonly ref: ChildReference; readonly definition: ChildContract; readonly fact: ChildFact<ChildContract> }>();
   for (const saved of frame.children) {
     const definition = children.at(saved.target.position);
@@ -35,6 +37,13 @@ export function savedCheckpointFacts(frame: DecodedCheckpointFrame, references: 
   };
   const facts: ChildFacts = Object.freeze({
     get: <Definition extends ChildContract>(ref: ChildReference<Definition>) => requireEntry(ref).fact as ChildFact<Definition>,
+    accepted: <Definition extends ChildContract, Value>(ref: ChildReference<Definition>, contract: ReceptionDefinition<NoInfer<Definition>, Value>): Value => {
+      const entry = requireEntry(ref);
+      const binding = receptions.require(contract, entry.definition as Definition);
+      const state = entry.saved.state;
+      if (state.kind !== 'returned' || state.reception.kind !== 'accepted' || state.reception.contract?.position !== binding.position) throw new Error('Saved child has no accepted value under this reception contract');
+      return state.reception.output as Value;
+    },
     require: <Definition extends ChildContract>(definition: Definition, ref: ChildReference) => {
       const entry = requireEntry(ref);
       if (entry.definition !== definition) throw new Error('Saved child reference belongs to a different declaration');

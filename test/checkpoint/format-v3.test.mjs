@@ -5,7 +5,7 @@ import { cloneCheckpointImage, cloneCheckpointHead, checkpointReference, checkpo
 
 function image() {
   const child = { identity: { contextId: 'child', parentContextId: 'parent', level: 'attempt' }, target: { position: 0 }, round: 1, order: 0, input: { request: 'initial' }, state: { kind: 'returned', output: 'delivered', progress: { round: 2, currentInput: { request: 'child-second' }, phase: 'receive' }, reception: { kind: 'accepted', output: { selected: true } } } };
-  return { id: 'point-image', formatVersion: 2, contract: { key: 'parent-contract', version: 1 }, point: 'saved', frame: { owner: { contextId: 'parent', level: 'operation' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 1, children: [child] }, state: { selected: true }, references: { chosen: checkpointReference(child), all: [checkpointReference(child)], repeated: checkpointReference(child) } };
+  return { id: 'point-image', formatVersion: 3, contract: { key: 'parent-contract', version: 1 }, point: 'saved', frame: { owner: { contextId: 'parent', level: 'operation' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 1, children: [child] }, state: { selected: true }, references: { chosen: checkpointReference(child), all: [checkpointReference(child)], repeated: checkpointReference(child) } };
 }
 const copy = (value) => JSON.parse(JSON.stringify(value));
 
@@ -19,10 +19,10 @@ function handledReception() {
   return value;
 }
 
-test('production v2 image preserves complete relations, child progress and repeated reference slots', () => {
+test('production v3 image preserves complete relations, child progress and repeated reference slots', () => {
   const value = image();
   const fixed = cloneCheckpointImage(value);
-  assert.equal(fixed.formatVersion, 2);
+  assert.equal(fixed.formatVersion, 3);
   assert.equal(fixed.frame.children.length, 1);
   assert.equal(fixed.frame.children[0].state.progress.round, 2);
   assert.equal(fixed.frame.children[0].round, 1);
@@ -33,16 +33,17 @@ test('production v2 image preserves complete relations, child progress and repea
   assert.equal(Object.isFrozen(fixed.references.all), true);
 });
 
-test('production v2 survives a separate process without memory objects', () => {
+test('production v3 survives a separate process without memory objects', () => {
   const child = spawnSync(process.execPath, ['--input-type=module', '-e', "import {readFileSync} from 'node:fs'; import {cloneCheckpointImage} from '@capix/server-runtime'; const value=cloneCheckpointImage(JSON.parse(readFileSync(0,'utf8'))); process.stdout.write(JSON.stringify({version:value.formatVersion,position:value.frame.children[0].target.position,ref:value.references.chosen.contextId}));"], { cwd: process.cwd(), input: JSON.stringify(image()), encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
-  assert.deepEqual(JSON.parse(child.stdout), { version: 2, position: 0, ref: 'child' });
+  assert.deepEqual(JSON.parse(child.stdout), { version: 3, position: 0, ref: 'child' });
 });
 
-test('production rejects v1 and malformed persistent identity without upgrading', () => {
-  const prior = image();
-  prior.formatVersion = 1;
-  assert.throws(() => cloneCheckpointImage(prior), /formatVersion 2/);
+test('production rejects v1/v2 and malformed persistent identity without upgrading', () => {
+  for (const formatVersion of [1, 2]) {
+    const prior = { ...image(), formatVersion };
+    assert.throws(() => cloneCheckpointImage(prior), /formatVersion 3/);
+  }
   const mutations = [
     (value) => {
       delete value.references;
@@ -145,7 +146,7 @@ test('waiting needs a CP contract while successful delivery without one remains 
   assert.doesNotThrow(() => cloneCheckpointImage(value));
 });
 
-test('v2 memory store and head validation retain independent image and final delivery budgets', () => {
+test('v3 memory store and head validation retain independent image and final delivery budgets', () => {
   const value = image();
   value.state.padding = 'x'.repeat(5 * 1024 * 1024);
   const store = new MemoryCheckpointStore();
@@ -156,11 +157,11 @@ test('v2 memory store and head validation retain independent image and final del
 });
 
 test('real Invocation captures in one process and resumes successful no-CP child acceptance in another', () => {
-  const worker = new URL('./fixtures/v2-call.mjs', import.meta.url);
+  const worker = new URL('./fixtures/v3-call.mjs', import.meta.url);
   const first = spawnSync(process.execPath, [worker.pathname, 'capture'], { cwd: process.cwd(), encoding: 'utf8' });
   assert.equal(first.status, 0, first.stderr);
   const saved = JSON.parse(first.stdout);
-  assert.equal(saved.image.formatVersion, 2);
+  assert.equal(saved.image.formatVersion, 3);
   assert.equal(saved.delivery, undefined);
   assert.equal(saved.image.frame.children[0].contract, undefined);
   assert.equal(saved.image.frame.children[0].state.reception.kind, 'pending');
@@ -280,7 +281,7 @@ test('production codecs decode complete saved-time IO and progress without re-cl
 });
 
 test('real factory declarations preserve scoped child identities, duplicate definitions and reference arrays across processes', () => {
-  const worker = new URL('./fixtures/v2-author.mjs', import.meta.url);
+  const worker = new URL('./fixtures/v3-author.mjs', import.meta.url);
   const run = (mode, input, variant) => spawnSync(process.execPath, [worker.pathname, mode, ...(variant ? [variant] : [])], { input, encoding: 'utf8', cwd: process.cwd() });
   const captured = run('capture');
   assert.equal(captured.status, 0, captured.stderr);

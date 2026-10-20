@@ -11,6 +11,7 @@ import type { RuntimeDefinition } from './runtime.js';
 import type { ExecutionDefinition } from './execution.js';
 import type { OperationDefinition } from './operation.js';
 import type { AttemptDefinition } from './attempt.js';
+import type { ReceptionRegistration } from './reception.js';
 
 type RunAllowed<Children extends readonly ChildDefinition[], Uses extends readonly NoInfer<Children[number]>[] | undefined> = Uses extends readonly Children[number][] ? Uses[number] : Children[number];
 type FactoryChildren<Level extends InvocationLevel, Children extends readonly ChildrenOf<Level>[]> = Level extends 'attempt' ? { readonly children?: never } : { readonly children?: Children };
@@ -21,6 +22,7 @@ interface DefinitionOptions<Level extends InvocationLevel, Input, Output, Childr
   readonly raises?: readonly ExceptionContract<unknown>[];
   readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
   readonly checkpoint?: InvocationCheckpointDefinition<Input, Output, Level, NoInfer<Delta>>;
+  readonly receptions?: Level extends 'attempt' ? never : readonly ReceptionRegistration<NoInfer<Children[number]>>[];
   readonly run: {
     readonly requires?: Requires;
     readonly uses?: Uses;

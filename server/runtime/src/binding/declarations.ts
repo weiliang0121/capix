@@ -10,7 +10,7 @@ import { isResourceRefinement, type ResourceRefinement } from '../resource/offer
 import type { ChildBindingOptions } from './contract.js';
 import { collectDefinitionRequirements, collectResourceSupply, type ChildResourceBinding } from './resources.js';
 import { childLevels } from '../definition/level.js';
-import { snapshotDefinition } from './snapshot.js';
+import { originalReception, snapshotDefinition } from './snapshot.js';
 
 type AnyRuntimeDefinition = RuntimeDefinition<any, any, any, any, any>;
 type BindingDefinition = AnyRuntimeDefinition | ChildDefinition;
@@ -57,6 +57,13 @@ export function resolveDeclaration(definition: BindingDefinition, options: Child
     for (const observation of options.observations ?? []) observation.check?.(current, parent?.definition);
     const requires = collectDefinitionRequirements(declaration, options.observationProvides);
     const definitions: readonly ChildDefinition[] = declaration.level === 'attempt' ? [] : declaration.children;
+    const receptions = new Set<object>();
+    for (const reception of declaration.receptions ?? []) {
+      const original = originalReception(reception);
+      if (receptions.has(original)) throw new Error('Duplicate parent reception contract');
+      receptions.add(original);
+      if (!definitions.some((definition) => definition === reception.child)) throw new Error('Reception targets a child outside its owner');
+    }
     const points = declaration.checkpoint?.points ?? [];
     const names = new Set<string>();
     for (const point of points) {

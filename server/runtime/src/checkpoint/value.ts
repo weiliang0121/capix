@@ -71,7 +71,7 @@ export function checkpointReference(child: CheckpointChild): CheckpointReference
 
 export function cloneCheckpointImage(value: unknown): CheckpointImage {
   const image: any = cloneCheckpointValue(value);
-  if (!object(image) || !text(image.id) || image.formatVersion !== 2 || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 2 is supported');
+  if (!object(image) || !text(image.id) || image.formatVersion !== 3 || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 3 is supported');
   const frame = image.frame;
   if (!object(frame) || !identity(frame.owner) || !integer(frame.round, 1) || frame.round > 2 || frame.phase !== 'execute' || !Object.hasOwn(frame, 'input') || !Object.hasOwn(frame, 'currentInput') || !integer(frame.nextChildOrder) || !Array.isArray(frame.children) || frame.children.length > 4096) fail('invalid frame');
   const ids = new Set<string>();
@@ -86,6 +86,9 @@ export function cloneCheckpointImage(value: unknown): CheckpointImage {
       if (!child.contract) fail('waiting child needs a resumable contract');
     } else if (state.kind === 'returned') {
       if (!Object.hasOwn(state, 'output') || !progress(state.progress) || !object(state.reception) || !['pending', 'receiving', 'accepted', 'failed'].includes(state.reception.kind)) fail('invalid child reception');
+      const receptionContract = state.reception.contract;
+      if (receptionContract !== undefined && (state.reception.kind === 'pending' || !object(receptionContract) || Object.keys(receptionContract).length !== 1 || !integer(receptionContract.position))) fail('invalid reception contract position');
+      if (state.reception.kind === 'accepted' && receptionContract !== undefined && !Object.hasOwn(state.reception, 'output')) fail('contracted reception requires encoded output');
       if (state.reception.kind === 'failed') {
         const reception = state.reception;
         const continuation = frame.continuation;

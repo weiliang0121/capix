@@ -9,6 +9,8 @@ import { failureFact } from '../../invocation/failure.js';
 import { RuntimeErrorHelper } from '../../errors/helper.js';
 import { isInvocationCancelled } from '../../invocation/cancellation.js';
 import type { BoundChildren } from './bound.js';
+import type { BoundReceptions } from '../receptions.js';
+import type { ReceptionDefinition } from '../../definition/reception.js';
 
 interface ReferenceEntry {
   readonly definition: ChildContract;
@@ -25,9 +27,22 @@ export class InvocationChildReferences {
   constructor(
     private readonly parent: Invocation<any, any, any>,
     private readonly children: BoundChildren,
+    private readonly receptions: BoundReceptions,
   ) {
     this.facts = Object.freeze({
       get: <D extends ChildContract>(ref: ChildReference<D>) => this.fact(this.require(ref)) as ChildFact<D>,
+      accepted: <D extends ChildContract, Value>(ref: ChildReference<D>, contract: ReceptionDefinition<NoInfer<D>, Value>): Value => {
+        try {
+          const entry = this.require(ref);
+          const binding = this.receptions.require(contract, entry.definition as D);
+          const reception = entry.relation.reception;
+          if (reception.status !== 'accepted' || reception.contract !== binding) throw new Error('Child has no accepted value under this reception contract');
+          return reception.output as Value;
+        } catch (error) {
+          this.parent.reject(error);
+          throw error;
+        }
+      },
       require: <D extends ChildContract>(definition: D, ref: ChildReference) => {
         const entry = this.require(ref);
         if (entry.definition !== definition) return this.reject(new Error('Child reference belongs to a different declaration'));

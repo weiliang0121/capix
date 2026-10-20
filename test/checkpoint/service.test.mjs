@@ -178,7 +178,7 @@ test('host association must match the exact R and E heads', () => {
   const run = copyConversationCheckpointRun(basis(transcript, new Memories(transcript)));
   const child = { identity: { contextId: 'execution', parentContextId: 'root' } };
   const root = { image: { contract: { key: 'observer.conversation.runtime', version: 3 }, frame: { input: { messages: [{ role: 'user', content: 'hello' }] }, owner: { contextId: 'root', level: 'runtime' }, children: [child] }, references: { execution: { contextId: 'execution' } }, state: null } };
-  const execution = { image: { contract: { key: 'observer.conversation.execution', version: 4 }, frame: { input: { message: { role: 'user', content: 'hello' }, messageIndex: 0 }, owner: { contextId: 'execution', parentContextId: 'root', level: 'execution' } } } };
+  const execution = { image: { contract: { key: 'observer.conversation.execution', version: 5 }, frame: { input: { message: { role: 'user', content: 'hello' }, messageIndex: 0 }, owner: { contextId: 'execution', parentContextId: 'root', level: 'execution' } } } };
   validateConversationCheckpointHeads(run, root, execution, transcript);
   execution.image.frame.input.messageIndex = 1;
   assert.throws(() => validateConversationCheckpointHeads(run, root, execution, transcript), { code: 'CHECKPOINT_CONTENT_CHANGED' });

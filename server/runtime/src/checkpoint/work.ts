@@ -3,6 +3,7 @@ import type { InvocationContext } from '../context/context.js';
 import type { CheckpointCodec, CheckpointContract, CheckpointReferences, InvocationCheckpointFrame } from './contract.js';
 import type { InvocationLevel } from '@capix/protocol';
 import type { DecodedCheckpointFrame } from './facts.js';
+import type { InvocationReceptionBinding } from '../invocation/reception.js';
 
 export interface CheckpointChildBinding {
   readonly level: InvocationLevel;
@@ -18,6 +19,7 @@ export interface InvocationCheckpointWork<Input, Output, Context extends Invocat
   readonly input: CheckpointCodec<Input>;
   readonly output: CheckpointCodec<Output>;
   readonly children?: readonly CheckpointChildBinding[];
+  readonly receptions?: readonly InvocationReceptionBinding[];
   readonly points: Readonly<
     Record<
       string,

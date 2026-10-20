@@ -6,8 +6,9 @@ import type { CheckpointBinding } from './work.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationChildren, InvocationChildBaseline } from '../invocation/children.js';
 import type { InvocationRelation, InvocationTarget } from '../invocation/relation.js';
+import type { InvocationReceptionBinding } from '../invocation/reception.js';
 import { RuntimeErrorHelper } from '../errors/helper.js';
-import { decodeCheckpointDiagnostic } from './facts.js';
+import { checkpointReceptionBinding, decodeCheckpointDiagnostic, decodeCheckpointReception } from './facts.js';
 
 /** Interpret saved evidence only; installing a target and its relationship belongs to the parent call. */
 export function resolveCheckpointChild(saved: CheckpointChild, value?: CheckpointHead): { readonly kind: 'continuation' } | { readonly kind: 'delivery'; readonly child: CheckpointChild } {
@@ -23,7 +24,8 @@ export function resolveCheckpointChild(saved: CheckpointChild, value?: Checkpoin
 }
 
 /** Decode once: both the target and its relation retain the same delivered value. */
-export function decodeCheckpointChild(child: CheckpointChild, binding: CheckpointBinding | undefined, signal: AbortSignal): InvocationChildBaseline {
+export function decodeCheckpointChild(child: CheckpointChild, binding: CheckpointBinding | undefined, signal: AbortSignal, receptions: readonly InvocationReceptionBinding[] = []): InvocationChildBaseline {
+  const receptionBinding = checkpointReceptionBinding(child, receptions);
   const target = checkpointTarget(child, binding, signal);
   const identity = { target, round: child.round, order: child.order, key: child.key, declarationPosition: child.target.position };
   const state = target.context.state;
@@ -34,8 +36,9 @@ export function decodeCheckpointChild(child: CheckpointChild, binding: Checkpoin
   }
   if (state.status !== 'succeeded') throw new Error('Saved delivery did not produce a successful target');
   const returned = { status: 'succeeded' as const, output: state.output };
-  const savedReception = child.state.reception;
-  const reception = savedReception.kind === 'accepted' ? { status: 'accepted' as const, output: savedReception.output } : savedReception.kind === 'failed' ? { status: 'failed' as const, error: savedReception.error, diagnostic: decodeCheckpointDiagnostic(savedReception.error), failure: Object.freeze({ ...savedReception.failure, error: savedReception.error }) } : { status: savedReception.kind };
+  const savedReception = decodeCheckpointReception(child, receptionBinding);
+  const contract = receptionBinding ? { contract: receptionBinding } : {};
+  const reception = savedReception.kind === 'accepted' ? { status: 'accepted' as const, output: savedReception.output, ...contract } : savedReception.kind === 'failed' ? { status: 'failed' as const, error: savedReception.error, diagnostic: decodeCheckpointDiagnostic(savedReception.error), failure: Object.freeze({ ...savedReception.failure, error: savedReception.error }), ...contract } : { status: savedReception.kind, ...contract };
   return { ...identity, state: { returned, reception } };
 }
 
@@ -62,15 +65,18 @@ function captureCheckpointChild(context: InvocationContext, relation: Invocation
     return { ...base, state: { kind: 'failed', error: cloneCheckpointValue(RuntimeErrorHelper.format(relation.returned.error)), failure: { kind: 'exception', phase: failure.phase, contextId: failure.contextId, contract: failure.contract }, progress: captureChildProgress(target) } };
   }
   const output = binding ? cloneCheckpointValue(binding.output.encode(relation.returned.output)) : cloneCheckpointValue(relation.returned.output);
-  if (relation.reception.status === 'failed') {
-    const failure = relation.reception.failure;
+  const reception = relation.reception;
+  const receptionContract = reception.status !== 'pending' && reception.contract ? { contract: { position: reception.contract.position } } : {};
+  if (reception.status !== 'pending' && reception.contract && reception.contract.childPosition !== position) throw new Error('Checkpoint reception targets a different child declaration');
+  if (reception.status === 'failed') {
+    const failure = reception.failure;
     const continuation = context.continuation;
     const origin = continuation?.origin;
     if (context.progress.round !== 2 || relation.round !== 1 || continuation?.stage !== 'handling' || origin?.kind !== 'child-reception' || origin.child.parentContextId !== context.id || origin.child.childContextId !== identity.contextId || origin.child.parentRound !== relation.round || origin.child.order !== relation.order || failure?.kind !== 'exception' || !failure.contract || failure.contextId !== context.id || failure.phase === 'handling') throw new Error('Only the prior handled declared reception exception can be checkpointed as history');
     if (saved?.state.kind === 'returned' && saved.state.reception.kind === 'failed') return { ...base, state: { kind: 'returned', output, progress: captureChildProgress(target), reception: saved.state.reception } };
-    return { ...base, state: { kind: 'returned', output, progress: captureChildProgress(target), reception: { kind: 'failed', error: cloneCheckpointValue(RuntimeErrorHelper.format(relation.reception.error)), failure: { kind: 'exception', phase: failure.phase, contextId: failure.contextId, contract: failure.contract } } } };
+    return { ...base, state: { kind: 'returned', output, progress: captureChildProgress(target), reception: { kind: 'failed', ...receptionContract, error: cloneCheckpointValue(RuntimeErrorHelper.format(reception.error)), failure: { kind: 'exception', phase: failure.phase, contextId: failure.contextId, contract: failure.contract } } } };
   }
-  return { ...base, state: { kind: 'returned', output, progress: captureChildProgress(target), reception: relation.reception.status === 'accepted' ? { kind: 'accepted', ...(relation.reception.output !== undefined ? { output: cloneCheckpointValue(relation.reception.output) } : {}) } : { kind: relation.reception.status } } };
+  return { ...base, state: { kind: 'returned', output, progress: captureChildProgress(target), reception: reception.status === 'accepted' ? { kind: 'accepted', ...receptionContract, ...(reception.contract ? { output: cloneCheckpointValue(reception.contract.codec.encode(reception.output)) } : reception.output !== undefined ? { output: cloneCheckpointValue(reception.output) } : {}) } : { kind: reception.status, ...receptionContract } } };
 }
 
 function captureChildProgress(target: InvocationTarget) {

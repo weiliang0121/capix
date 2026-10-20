@@ -230,7 +230,7 @@ test('checkpoint contracts, codecs and continuation callbacks use the same fixed
   const checkpoint = { key: 'test.resolution.checkpoint', version: 1, input: codec, output: codec, points: [point] };
   const definition = { level: 'runtime', maxRounds: 1, raises: [], children: [], checkpoint, run: { requires: {}, execute: () => assert.fail('normal work cannot replay during restoration') } };
   const store = new MemoryCheckpointStore();
-  const save = (contextId) => store.save({ id: `image-${contextId}`, formatVersion: 2, contract: { key: checkpoint.key, version: 1 }, point: 'saved', references: {}, frame: { owner: { contextId, level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: { answer: 'original continuation' } }, 0);
+  const save = (contextId) => store.save({ id: `image-${contextId}`, formatVersion: 3, contract: { key: checkpoint.key, version: 1 }, point: 'saved', references: {}, frame: { owner: { contextId, level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: { answer: 'original continuation' } }, 0);
   save('original-root');
   save('new-root');
   const existing = assemble(definition, { checkpoints: { store } });

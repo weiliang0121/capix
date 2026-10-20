@@ -27,7 +27,7 @@ function fixture(t) {
 function image(id = 'cp-1', contextId = 'context-1') {
   return {
     id,
-    formatVersion: 2,
+    formatVersion: 3,
     contract: { key: 'fixture.request-model', version: 1 },
     point: 'feedback-accepted',
     frame: { owner: { contextId, level: 'operation', parentContextId: 'parent-1' }, round: 1, phase: 'execute', input: { model: 'fixture', content: 'fixed input' }, currentInput: { model: 'fixture', content: 'fixed input' }, nextChildOrder: 0, children: [] },
@@ -178,6 +178,7 @@ test('checkpoint failure does not roll back a transaction owned by the host', (t
 });
 
 for (const [label, mutate] of [
+  ...[1, 2].map((formatVersion) => [`unsupported format v${formatVersion}`, (database) => database.prepare('UPDATE checkpoint_images SET body = ?').run(JSON.stringify({ ...image(), formatVersion }))]),
   ['malformed image JSON', (database) => database.prepare('UPDATE checkpoint_images SET body = ?').run('{ broken')],
   ['image identity mismatch', (database) => database.prepare('UPDATE checkpoint_images SET body = ?').run(JSON.stringify(image('other-id')))],
   ['image context mismatch', (database) => database.prepare('UPDATE checkpoint_images SET context_id = ?').run('other-context')],

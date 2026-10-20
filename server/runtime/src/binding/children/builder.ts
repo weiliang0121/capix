@@ -2,6 +2,7 @@ import type { ChildCalls, ChildContract, ResumeChildCalls } from '../../definiti
 import type { BoundChildren } from './bound.js';
 import { InvocationChildBindings, type ChildBindingsParent } from './binding.js';
 import { InvocationChildReferences } from './references.js';
+import { BoundReceptions } from '../receptions.js';
 
 export interface ChildBindingsBuildOptions {
   readonly uses?: readonly ChildContract[];
@@ -12,17 +13,20 @@ export interface ChildBindingsBuildOptions {
 
 /** Resolve phase authority without initializing the reusable child structures. */
 export class ChildBindingsBuilder {
-  constructor(readonly children: BoundChildren) {}
+  constructor(
+    readonly children: BoundChildren,
+    readonly receptions = new BoundReceptions([], children),
+  ) {}
 
   references(parent: ChildBindingsParent): InvocationChildReferences {
-    return new InvocationChildReferences(parent, this.children);
+    return new InvocationChildReferences(parent, this.children, this.receptions);
   }
 
   build(parent: ChildBindingsParent, options: ChildBindingsBuildOptions): ChildCalls | ResumeChildCalls {
     try {
       const definitions = options.uses ?? this.children.definitions();
       this.children.checkUses(definitions);
-      return new InvocationChildBindings({ children: this.children, parent, allowed: new Set(definitions), validate: options.validate, references: options.references, restoring: options.restoring ?? false }).port;
+      return new InvocationChildBindings({ children: this.children, receptions: this.receptions, parent, allowed: new Set(definitions), validate: options.validate, references: options.references, restoring: options.restoring ?? false }).port;
     } catch (error) {
       parent.reject(error);
       throw error;

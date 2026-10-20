@@ -6,6 +6,7 @@ import type { InvocationOutputReceiver } from '../output/contract.js';
 import type { ChildEntry } from './entry.js';
 import type { InvocationFailureFact, RuntimeErrorValue, InvocationLevel } from '@capix/protocol';
 import type { ChildLevel } from './level.js';
+import type { ReceptionDefinition } from './reception.js';
 
 // Heterogeneous storage erases IO; all public lookup and call sites retain the concrete definition.
 export type ChildDefinition = ExecutionDefinition<any, any, any, any, any> | OperationDefinition<any, any, any, any, any> | AttemptDefinition<any, any, any, any, any>;
@@ -29,6 +30,7 @@ export interface ChildCall<Definition extends ChildContract> {
   run(): Promise<DefinitionOutput<Definition>>;
   accept(): Promise<DefinitionOutput<Definition>>;
   accept<Value>(receive: (output: DefinitionOutput<Definition>) => Value | Promise<Value>): Promise<Value>;
+  accept<Value>(reception: ReceptionDefinition<Definition, Value>, receive: (output: DefinitionOutput<Definition>) => NoInfer<Value> | Promise<NoInfer<Value>>): Promise<Value>;
 }
 
 export type ChildReturnFact<Output> = { readonly status: 'succeeded'; readonly output: Output } | { readonly status: 'failed'; readonly diagnostic: RuntimeErrorValue; readonly failure?: InvocationFailureFact } | { readonly status: 'cancelled'; readonly diagnostic: RuntimeErrorValue };
@@ -44,6 +46,7 @@ export interface ChildFact<Definition = unknown> {
 }
 
 export interface ChildFacts {
+  accepted<Definition extends ChildContract, Value>(reference: ChildReference<Definition>, reception: ReceptionDefinition<NoInfer<Definition>, Value>): Value;
   get<Definition extends ChildContract>(reference: ChildReference<Definition>): ChildFact<Definition>;
   require<Definition extends ChildContract>(definition: Definition, reference: ChildReference): ChildFact<Definition>;
   list<Definition extends ChildContract>(definition: Definition, query?: { readonly parentRound?: 1 | 2 }): readonly ChildFact<Definition>[];

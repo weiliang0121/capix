@@ -14,7 +14,7 @@
 >
 > 本轮元信息议题直接读 §17；它修正 §11 R05「全部归记录预设」的候选解释，不改写 v6 与 §16 已实施接口。
 
-> 后续父接纳契约与 P06 类型推演见 §18。基于该推演的受限类型整理已实施，结果与兼容性收紧见 §19；父接纳契约及其新保存格式仍待独立实施，不能视为现有 Frame v2。
+> 后续父接纳契约与 P06 类型推演见 §18。受限类型整理已实施，结果与兼容性收紧见 §19；父接纳契约与 Frame v3 的独立闭环见 §20。各节按当时范围记录，当前保存格式以 §20 与 Checkpoint 文档为准。
 
 ## 1. 本轮先回答什么
 
@@ -1283,3 +1283,55 @@ const target: DefinitionContract<'attempt', ReadInput, ReadResult, never> = read
 | Check 耗时（毫秒，单次） | 196.52 | 197.65 |
 
 这组用例的实例化数约增加 6.5%，检查耗时接近；单次耗时不用于推断性能提升或回退。本轮没有得到编译成本下降的证据，收益是完整声明与消费签名的边界、准确阶段约束和可复现的误用拒绝。后续如优化推导成本，须保留这些类型及运行验收，不能撤掉 Input 不变或阶段范围检查换取较小数字。
+
+## 20. P05 父接纳契约闭环（2026-10-20）
+
+§18.1 的候选已接入真实绑定、调用和 CP；上一轮 P06 类型整理先提交为 `c09562e`。本轮增加父接纳的值契约，不扩展 REOA 位置、资源范围、动态登记或外部交互生命周期。
+
+### 20.1 作者与绑定边界
+
+```ts
+const receiptValue = {
+  check: (value: unknown) => receiptSchema.parse(value),
+  encode: receiptCodec.encode,
+  decode: receiptCodec.decode,
+};
+const saved = reception(generate, receiptValue);
+// 父声明 children: [generate], receptions: [saved]
+const call = work.children.create(generate, input);
+await call.run();
+const receipt = await call.accept(saved, (result) => files.write(result));
+const previous = work.children.facts.accepted(call.ref, saved);
+```
+
+Accepted 由 `check` 的返回类型派生，encode/decode 与接纳回调不能反向扩大它；子签名与 Accepted 保持不变约束。与已有 codec 组合时，明确写 `value: unknown` 或先声明值契约，避免 TypeScript 从上下文和 codec 同时求解。普通 `accept()` / `accept(callback)` 继续支持，raw 历史仍是 unknown。
+
+`receptions` 只由 R/E/O 登记，目标必须是真实直接子声明；A 即使登记空数组也拒绝。同一契约对象重复登记拒绝，不同对象即使相同 check/codec 也占独立位置。解算固定注册数组、方法入口与 receiver，原对象只承担身份，不从它重新读取变化后的方法。`BoundReceptions` 持有固定接线，不持有调用状态或另建生命周期。
+
+### 20.2 一次接纳与失败
+
+窗口、父注册和子归属先检查，进入 receiving 时固定契约，再运行原业务回调。check 同步验证回调的真实值，允许校验器返回副本，但返回值不替换正式值；异步 check 在类型侧拒绝，运行期误传 Promise/thenable 同样失败并消费迟到拒绝。正常路径不调用 codec。
+
+业务回调的已声明异常保持既有 child-reception 传播；check 抛错属于契约技术失败，即便抛出的对象是 DeclaredException 也不进入业务异常处理。检查失败不撤销已落实的消息等实体效果。接纳成功但保存失败时，已接纳值与效果均保留，不允许通过再次 accept 重做操作。
+
+`facts.accepted(ref, contract)` 是要求式读取：必须是本父真实 ref、注册的契约、对应子声明和该关系实际采用的契约，且状态已经 accepted。合法 undefined 与尚未接纳分开；重复 key 不影响按准确 ref 读取。历史读取不增加 uses，不签发启动或恢复权限。
+
+### 20.3 Frame v3 与恢复
+
+完整 Frame 继续保存所有直接关系，业务 state/refs 仍是声明自己的状态与关注子集。v3 在非 pending reception 上增加可选 `contract: { position }`；typed accepted 必须有编码 output，包含 undefined 的显式编码。raw accepted 沿用纯数据规则。
+
+跨进程按父 CP key/version、父内接纳契约位置、子声明位置与准确关系核验；typed 值先 decode/check，随后同时供安装的关系事实和 point.check 使用。正常值可以是 Date 等 codec 能处理的类型，不能把编码形态冒充 V。receiving 恢复仅允许原契约，raw/typed 也不能互换；前轮已处理的接纳异常诊断保留契约位置，不复活失败关系。
+
+v1/v2 明确拒绝续接，不自动迁移，不重发。消息、记忆、历史记录不受格式升级影响。持久位置不是全局身份；同版本偷偷更换注册顺序或业务含义无法自动证明，必须提升所属父 CP version。实体效果与 CP 仍不在统一事务内，receiving 后恢复是否可重入实体写入由固定凭据决定，接纳契约不代替实体幂等性。
+
+### 20.4 Observer 验证与范围
+
+实际迁移选择 E→decision：模型返回的是提案，父接纳生成 choice/progress/checkedCandidates；同一个 decision key 多次出现时，CP 检查按准确 ref 读取 typed Accepted。删除这部分对 unknown 的重复 parse 与类型断言，保留业务进度之间的交叉核验。Observer E CP version 从 4 升到 5，R 仍为 3。
+
+目录调度只保留子 ref 与 run；具体适配器通过 require/open 找回准确子声明再接纳，不把带不变接纳契约的 ChildCall 强制宽化到异构联合。目录接受的能力名来自真实注册项，与提案选择一致；普通模型提案校验与真实可用条件仍在服务。
+
+验证覆盖：类与工厂；R→E、E→O、O→A；同子不同父 Accepted；同 key 多次；错误契约／外父 ref／旧阶段／重复接纳；原引用与合法 undefined；同步检查及副作用之后的失败；完整 Frame、前轮异常历史及真实跨进程 Date/undefined 恢复；receiving 固定契约；编码／Store 失败；Observer 正常与恢复链。测试使用本地替身 Provider，不调用真实模型。
+
+其余业务接纳继续使用 raw API，不强制一次迁移所有声明。公共元信息最终形状、全量 ContextView 合并和更大的类型因式分解不包含在此次闭环。
+
+全量验收：六包构建、类型检查和格式检查通过；1571 项测试全部通过，接纳类型测试另核验 26 个应拒绝位置。独立复审补齐异步校验误用、真实消息落实后失败及三层父接纳。服务 `DecisionAcceptance` 使用命名类型，避免新接纳字段重复展开同一 Schema；这是类型表达收敛，不宣称编译性能提升。

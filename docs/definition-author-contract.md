@@ -10,6 +10,8 @@
 
 > **后续 P06 类型整理（2026-10-19，已实施）：** 完整注册与浅消费签名分开，阶段／CP 推导保留所属范围；签名与 Input 不变约束、Sequence Uses、A children 拒绝等静态兼容边界见 [§19 实施记录](codex-type-factorization.md#19-p06-受限类型整理实施2026-10-19)。对象式定义使用已有 `define*`，具名类继续支持。D05 的接纳值与 Frame v2 未在本轮改为新接纳契约。
 
+> **后续 P05 父接纳契约（2026-10-20，已实施）：** R/E/O 可显式登记接纳契约，正常核验保持原引用，历史事实按准确 ref 与契约读取。D05 的 raw accept 仍支持；新 typed 接纳使用 Frame v3 保存，v1/v2 明确拒绝续接。原文的 v2 段落保留为历史实施依据，当前规则见 [Checkpoint](checkpoints.md) 与 [§20 实施记录](codex-type-factorization.md#20-p05-父接纳契约闭环2026-10-20)。
+
 ## 1. 目标、范围与收敛决定
 
 **定义作者表达业务决定，内核核验自己掌握的身份、归属和活动边界。作者不必为了调用一个子能力，先理解并传递驱动自己的 Invocation。**
@@ -587,7 +589,7 @@ D04 的成功 `Promise<Output>` 和返回值身份保留，改变的是失败捕
 
 ### 12.2 D08 的持久关联与 v2 格式实验
 
-[正式格式与跨进程回归](../test/checkpoint/format-v2.test.mjs) 使用独立 Node 进程重新创建工厂声明，经真实 Store、Binder、Invocation 保存并恢复。它验证完整 Frame/业务 state/refs、声明位置、点注册、非恒等 codec、无 CP 成功子、严格预算及拒绝路径；隔离持久原型已移除。
+[正式格式与跨进程回归](../test/checkpoint/format-v3.test.mjs) 使用独立 Node 进程重新创建工厂声明，经真实 Store、Binder、Invocation 保存并恢复。它验证完整 Frame/业务 state/refs、声明位置、点注册、非恒等 codec、无 CP 成功子、严格预算及拒绝路径；隔离持久原型已移除。
 
 验证的持久关联为：**父 checkpoint key/version + 按声明对象首次出现去重的直接子位置**。同对象重复注册不新增位置，不同对象即使同名、同 CP 契约也占不同位置。有子 CP 时另验其 key/version；没有 CP 的成功子仍可关联，等待子仍要求有效恢复契约。
 

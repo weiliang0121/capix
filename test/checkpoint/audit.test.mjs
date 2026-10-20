@@ -10,7 +10,7 @@ function checkpoint(key, execute, uses = []) {
 }
 
 function savedRoot(children) {
-  return { id: 'root-cp', formatVersion: 2, contract: { key: 'root', version: 1 }, point: 'saved', frame: { owner: { contextId: 'root-context', level: 'runtime' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: children.length, children }, state: null, references: {} };
+  return { id: 'root-cp', formatVersion: 3, contract: { key: 'root', version: 1 }, point: 'saved', frame: { owner: { contextId: 'root-context', level: 'runtime' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: children.length, children }, state: null, references: {} };
 }
 
 function returnedChild() {
@@ -222,7 +222,7 @@ test('a final child delivery preserves its own second-round input without rerunn
   relation.state = { kind: 'waiting' };
   const store = new MemoryCheckpointStore();
   store.save(savedRoot([relation]), 0);
-  store.save({ id: 'child-cp', formatVersion: 2, contract: { key: 'child-a', version: 1 }, point: 'saved', frame: { owner: relation.identity, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'child-cp', formatVersion: 3, contract: { key: 'child-a', version: 1 }, point: 'saved', frame: { owner: relation.identity, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   store.finish('child-context', 1, { status: 'succeeded', output: 'final round output', progress: { round: 2, phase: 'handling', currentInput: { retry: true } } });
   const runtime = assembleRuntime(new Root(), { source, providers: [], checkpoints: { store } });
   assert.equal(await runtime.resume('root-context', {}), 'final round output');

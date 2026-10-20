@@ -15,6 +15,7 @@ import { ChildBindingsBuilder } from './children/builder.js';
 import { InvocationAccess } from './access.js';
 import { originalCheckpointPoint } from './snapshot.js';
 import { savedCheckpointFacts } from './checkpoint.js';
+import { BoundReceptions } from './receptions.js';
 
 /** Private token shape distinguishes a control proposal from ordinary business objects. */
 class AcceptanceProposal {
@@ -41,7 +42,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
     private readonly declaration: Omit<InvocationDefinition<Input, Output, Level, Resources, ExceptionResources, any>, typeof invocationSignature> & { readonly level: Level },
     private readonly children: BoundChildren,
   ) {
-    this.#childBindingsBuilder = new ChildBindingsBuilder(children);
+    this.#childBindingsBuilder = new ChildBindingsBuilder(children, new BoundReceptions(declaration.receptions ?? [], children));
     this.output = declaration.output;
     this.maxRounds = declaration.maxRounds;
     this.raises = declaration.raises;
@@ -164,11 +165,11 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
               return [name, { cardinality: reference.many ? ('many' as const) : ('one' as const), position: this.children.position(reference.definition) }];
             }),
           ),
-          check: (_frame: unknown, state: unknown, references: CheckpointReferences, decoded: import('../checkpoint/facts.js').DecodedCheckpointFrame) => point.check?.(state, savedCheckpointFacts(decoded, references, this.children) as never),
+          check: (_frame: unknown, state: unknown, references: CheckpointReferences, decoded: import('../checkpoint/facts.js').DecodedCheckpointFrame) => point.check?.(state, savedCheckpointFacts(decoded, references, this.children, this.#childBindingsBuilder.receptions) as never),
           execute: (_context: Context, invocation: Invocation<Input, Output, Context>, state: unknown, references: CheckpointReferences) => this.resume(point, invocation, state, references),
         },
       ]),
     );
-    return { key: checkpoint.key, version: checkpoint.version, input: checkpoint.input, output: checkpoint.output, children: this.children.checkpointLayout(), points };
+    return { key: checkpoint.key, version: checkpoint.version, input: checkpoint.input, output: checkpoint.output, children: this.children.checkpointLayout(), receptions: this.#childBindingsBuilder.receptions.bindings(), points };
   }
 }

@@ -216,7 +216,7 @@ test('checkpoint continuation hands its child delivery to normal acceptance with
     },
   };
   const store = new MemoryCheckpointStore();
-  store.save({ id: 'saved-access', formatVersion: 2, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'restored-access', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'saved-access', formatVersion: 3, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'restored-access', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   const runtime = assemble(definition, { checkpoints: { store }, providers: [normal.provide(() => null), continuation.provide(() => null)], source: { runtime: () => null, entry: () => null, capture: () => null } });
   assert.deepEqual(realized, []);
   assert.equal(await runtime.resume('restored-access', {}), 'child output');
@@ -266,7 +266,7 @@ test('a restored point closes retained resource views, endpoints and checkpoint 
         checkpoint: { key: `resume-window.${retained}`, version: 1, input: codec, output: codec, points: [point] },
       };
       const store = new MemoryCheckpointStore();
-      store.save({ id: `image-${retained}`, formatVersion: 2, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: `call-${retained}`, level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+      store.save({ id: `image-${retained}`, formatVersion: 3, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: `call-${retained}`, level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
       const runtime = assemble(definition, { checkpoints: { store }, providers: [offer.provide(() => null)], source: { runtime: () => null, capture: () => null } });
       // Catching an illegal port use cannot erase the already-owned kernel fault.
       await assert.rejects(runtime.resume(`call-${retained}`, {}), /window is closed/);
@@ -324,7 +324,7 @@ test('execute and restored point bodies seal output while entered reception reta
         checkpoint: { key: `output-reception-window.${mode}`, version: 1, input: codec, output: codec, points: [point] },
       };
       const store = new MemoryCheckpointStore();
-      if (mode === 'restored') store.save({ id: 'output-window-image', formatVersion: 2, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'output-window-call', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+      if (mode === 'restored') store.save({ id: 'output-window-image', formatVersion: 3, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'output-window-call', level: 'runtime' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
       const runtime = assemble(definition, {
         checkpoints: { store },
         providers: [resource.provide(() => null)],
