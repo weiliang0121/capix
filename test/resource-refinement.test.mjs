@@ -1,10 +1,10 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ResourceOffer, bindResources, bindChildResources, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { Group, Node, ResourceOffer, bindResources, bindChildResources, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
 import { runtimeDefinition, recordDefinitions } from './fixtures/declarations.mjs';
 
-function fixture({ recorded = false, mapOperation = (input) => input.allowed, mapAttempt = (input) => input.leaf } = {}) {
+function fixture({ recorded = false, built = true, mapOperation = (input) => input.allowed, mapAttempt = (input) => input.leaf } = {}) {
   const counters = { capture: 0, refine: 0, describe: 0, dormant: 0 };
   const endpoints = [];
   const offer = new ResourceOffer('test.bounded', (source, activity) => Object.freeze({ read: () => activity.runSync('read', {}, () => source.allowed) }), 'access', {
@@ -24,8 +24,7 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
   });
   const dormant = new ResourceOffer('test.dormant', () => assert.fail('unrequested endpoint'), 'access');
   const requires = { bounded: offer.request(), dormant: dormant.request() };
-  const attempt = {
-    kind: 'node',
+  const attempt = new Node({
     name: 'leaf',
     label: 'Leaf',
     source: 'test',
@@ -40,15 +39,13 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
         return endpoint.read();
       },
     },
-  };
-  const operation = {
-    kind: 'group',
+  });
+  const operation = new Group({
     name: 'work',
     label: 'Work',
     source: 'test',
     maxRounds: 1,
     raises: [],
-    members: [attempt],
     run: {
       requires,
       async execute(context) {
@@ -59,12 +56,10 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
         return { own, output, after: endpoint.read() };
       },
     },
-  };
-  const execution = {
-    kind: 'group',
+  }).add(attempt);
+  const execution = new Group({
     maxRounds: 1,
     raises: [],
-    members: [operation],
     run: {
       requires,
       async execute(context) {
@@ -74,7 +69,7 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
         return { before, results, after: context.resources.bounded.read() };
       },
     },
-  };
+  }).add(operation);
   const definition = runtimeDefinition(execution);
   const recorder = new Recorder(new RecordBook());
   if (recorded) recordDefinitions(definition);
@@ -90,7 +85,7 @@ function fixture({ recorded = false, mapOperation = (input) => input.allowed, ma
     childResources: [bindChildResources(operation, [offer.refine(mapOperation)]), bindChildResources(attempt, [offer.refine(mapAttempt)])],
     observations: recorded ? [bindRecording(recorder)] : undefined,
   };
-  return { runtime: installCallable(definition, options), definition, options, offer, operation, attempt, counters, endpoints, recorder };
+  return { runtime: built ? installCallable(definition, options) : undefined, definition, options, offer, operation, attempt, counters, endpoints, recorder };
 }
 
 test('child input refines O and A supplies without recapturing or mutating ancestors and siblings', async () => {
@@ -153,7 +148,7 @@ test('refined resources retain call-local bound and available observations with 
 });
 
 test('assembly rejects unknown targets, duplicate bindings, and refinements outside declared requests', () => {
-  const { definition, options, operation, offer, counters } = fixture();
+  const { definition, options, operation, offer, counters } = fixture({ built: false });
   const unknown = { ...operation };
   assert.throws(() => installCallable(definition, { ...options, childResources: [bindChildResources(unknown, [offer.refine((input) => input.allowed)])] }), /registered member/);
   assert.throws(() => installCallable(definition, { ...options, childResources: [options.childResources[0], options.childResources[0]] }), /Duplicate child resource binding/);
@@ -172,7 +167,7 @@ test('offers without refinement cannot create narrowing rules and low-level sele
 });
 
 test('only offer-issued refinements are accepted; copied or fabricated rules cannot replace resource validation', () => {
-  const { definition, options, operation, offer, counters } = fixture();
+  const { definition, options, operation, offer, counters } = fixture({ built: false });
   const issued = offer.refine((input) => input.allowed);
   const forged = { offer: issued.offer, apply: () => ({ allowed: ['outside'] }) };
   const copied = { ...issued };

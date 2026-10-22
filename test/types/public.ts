@@ -1,5 +1,5 @@
-import type { CallableInput, GroupWork } from '@capix/server-runtime';
-import { CallableBinder, BoundCallable, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationOptions, type CallableSourceBinding } from '@capix/server-runtime/construction';
+import type { BuiltCallable, CallableInput, Group, GroupWork } from '@capix/server-runtime';
+import { CallableBuilder, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationOptions, type CallableSourceBinding } from '@capix/server-runtime/construction';
 import { Transcript } from '@capix/server-runtime/content';
 import type { ResourceRecord as ResourceRecordEntity } from '@capix/server-runtime/recording';
 import type { ResourceRecord, ExecutionRecordSnapshot } from '@capix/protocol/recording';
@@ -39,7 +39,9 @@ const ungroundedPolicy: ContextMaintenancePolicy = () => ({ messageIndexes: [], 
 const missingPosition: CallableInput<typeof preparation> = { message: { role: 'user', content: 'input' } };
 void [functionalPolicy, ungroundedPolicy, missingPosition];
 
-const bound: BoundCallable<string, string> = new CallableBinder().bind(defineScene<string, string>()({ run: { execute: (work) => work.input } }), { providers: [], source: { capture: () => null } });
+const sourceScene = defineScene<string, string>()({ run: { execute: (work) => work.input } });
+const bound = new CallableBuilder().build(sourceScene, { providers: [], source: { capture: () => null } });
+const originalScene: typeof sourceScene = bound;
 // @ts-expect-error R is the bound structure, not the owner of its assembly environment.
 bound.environment;
 // @ts-expect-error child call construction is supplied to binders, not exposed by R.
@@ -61,7 +63,7 @@ declare const origin: InvocationOrigin;
 declare const snapshot: TranscriptSnapshot;
 declare const change: ObserverChange;
 declare const input: MemoryInput;
-void [bound, transcript, request, value, data, detail, origin, snapshot, change, input];
+void [bound, originalScene, transcript, request, value, data, detail, origin, snapshot, change, input];
 
 declare const childStructures: BoundChildren;
 declare const parentCall: Invocation;
@@ -85,7 +87,7 @@ const work: InvocationOptions<string, number, CallContext>['work'] = {
     return label.length + input.length;
   },
 };
-declare const reusable: BoundCallable<string, number, ExecutionResources>;
+declare const reusable: BuiltCallable<Group<string, number>, {}>;
 // @ts-expect-error A reusable E structure is not the state of one E invocation.
 const callContext: CallContext = reusable;
 declare const node: import('@capix/server-runtime').Node<string, number>;

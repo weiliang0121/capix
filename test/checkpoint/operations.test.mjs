@@ -56,7 +56,10 @@ function parentCheckpoint(key, child) {
 }
 function assemble(operation, store, providers) {
   class E extends Group {
-    members = [operation];
+    constructor() {
+      super();
+      this.add(operation);
+    }
     checkpoint = parentCheckpoint('fixture.operations.e', operation);
     run = {
       requires: operation.run.requires,
@@ -70,7 +73,10 @@ function assemble(operation, store, providers) {
   }
   const execution = new E();
   class R extends Scene {
-    members = [execution];
+    constructor() {
+      super();
+      this.add(execution);
+    }
     checkpoint = parentCheckpoint('fixture.operations.r', execution);
     run = {
       requires: {},

@@ -1,31 +1,33 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, ResourceOffer, MemoryCheckpointStore } from '@capix/server-runtime';
+import { Scene, Group, Node, ResourceOffer, MemoryCheckpointStore } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {
-  return { kind: 'node', name, label: name, source: 'test', callee: 'test', maxRounds: 1, raises: [], run };
+  return new Node({ name, label: name, source: 'test', callee: 'test', run });
 }
 
 function operation(name, children, run) {
-  return { kind: 'group', name, label: name, source: 'test', members: children, maxRounds: 1, raises: [], run };
+  return new Group({ name, label: name, source: 'test', run }).add(...children);
 }
 
 function execution(children, run) {
-  return { kind: 'group', members: children, maxRounds: 1, raises: [], run };
+  return new Group({ run }).add(...children);
 }
 
 function assemble(definition, options = {}) {
   return installCallable(definition, { providers: [], source: { capture: () => null }, ...options });
 }
 
-test('declaration checks finish once per binding position before any call and never repeat during lazy construction', async () => {
+test('declaration checks finish once per structure before any call and never repeat during invocation construction', async () => {
   const checked = [];
   const called = [];
-  const leaf = attempt('leaf', { requires: {}, execute: (context) => context.input });
-  const shared = operation('shared', [leaf], { requires: {}, execute: (context) => context.children.create(leaf, context.input).run() });
-  const parent = (name) => operation(name, [shared], { requires: {}, execute: (context) => context.children.create(shared, context.input).run() });
+  const parent = (name) => {
+    const leaf = attempt('leaf', { requires: {}, execute: (context) => context.input });
+    const shared = operation('shared', [leaf], { requires: {}, execute: (context) => context.children.create(leaf, context.input).run() });
+    return operation(name, [shared], { requires: {}, execute: (context) => context.children.create(shared, context.input).run() });
+  };
   const left = parent('left');
   const right = parent('right');
   const main = execution([left, right], { requires: {}, execute: (context) => context.children.create(context.input === 'right' ? right : left, context.input).run() });
@@ -65,19 +67,21 @@ test('declaration checks finish once per binding position before any call and ne
   assert.equal(new Set(sharedCalls.map((call) => call.contextId)).size, 3);
 });
 
-test('a shared child keeps its supply at each parent position without granting it to the parent', async () => {
+test('nodes sharing behavior use the root supply without granting it to their parents', async () => {
   const value = new ResourceOffer('test.resolution.parent-scope', (source) => source, 'binding');
   const requires = { value: value.request() };
   let captures = 0;
-  const shared = attempt('shared', { requires, execute: (work) => work.resources.value });
-  const parent = (name) =>
-    operation(name, [shared], {
+  const behavior = { requires, execute: (work) => work.resources.value };
+  const parent = (name) => {
+    const child = attempt('shared', behavior);
+    return operation(name, [child], {
       requires: {},
       execute(work) {
         assert.deepEqual(Object.keys(work.resources), []);
-        return work.children.create(shared, work.input).run();
+        return work.children.create(child, work.input).run();
       },
     });
+  };
   const left = parent('left');
   const right = parent('right');
   const main = execution([left, right], { requires: {}, execute: (work) => Promise.all([work.children.create(left, null).run(), work.children.create(right, null).run()]) });
@@ -85,10 +89,11 @@ test('a shared child keeps its supply at each parent position without granting i
   assert.equal(captures, 0);
   assert.deepEqual(await runtime.run(null, {}), [1, 1]);
   assert.equal(captures, 1);
-  assert.throws(() => assemble(runtimeDefinition(main)), /Expected one resource provider/);
+  const missing = execution([parent('missing')], { requires: {}, execute: () => null });
+  assert.throws(() => assemble(runtimeDefinition(missing)), /Expected one resource provider/);
 });
 
-test('resolved children, resource aliases and work functions stay fixed while declaration instances remain live', async () => {
+test('built children, resource aliases and work functions stay fixed while business instances remain live', async () => {
   const oldResource = new ResourceOffer('test.resolution.original', (value) => value);
   const newResource = new ResourceOffer('test.resolution.replacement', (value) => value);
   const originalRequires = { value: oldResource.request() };
@@ -99,8 +104,11 @@ test('resolved children, resource aliases and work functions stay fixed while de
   const replacementOperation = operation('replacement-operation', [replacementLeaf], { requires: replacementRequires, uses: [replacementLeaf], execute: (context) => context.children.create(replacementLeaf, context.input).run() });
   class Main extends Group {
     #prefix = 'initial';
-    members = [originalOperation];
     run = { requires: originalRequires, uses: [originalOperation], execute: this.execute.bind(this) };
+    constructor() {
+      super();
+      this.add(originalOperation);
+    }
     setPrefix(value) {
       this.#prefix = value;
     }
@@ -123,20 +131,33 @@ test('resolved children, resource aliases and work functions stay fixed while de
   const existing = assemble(definition, options);
   assert.equal(captured, 0);
   main.setPrefix('live');
-  main.members.splice(0, 1, replacementOperation);
-  main.run.uses.splice(0, 1, replacementOperation);
-  main.run.requires = replacementRequires;
-  main.run.execute = (context) => context.children.create(replacementOperation, `replacement:${context.input}`).run();
+  assert.throws(() => main.members.splice(0, 1, replacementOperation), TypeError);
+  assert.throws(() => main.run.uses.splice(0, 1, replacementOperation), TypeError);
+  assert.throws(() => {
+    main.run.requires = replacementRequires;
+  }, TypeError);
+  assert.throws(() => {
+    main.run.execute = () => assert.fail('replacement work');
+  }, TypeError);
   originalRequires.value = newResource.request();
-  originalOperation.members.length = 0;
-  originalOperation.run.uses.length = 0;
-  originalOperation.run.execute = () => assert.fail('mutated lazy O work must not run');
-  originalLeaf.run.execute = () => assert.fail('mutated lazy A work must not run');
+  assert.throws(() => {
+    originalOperation.members.length = 0;
+  }, TypeError);
+  assert.throws(() => {
+    originalOperation.run.uses.length = 0;
+  }, TypeError);
+  assert.throws(() => {
+    originalOperation.run.execute = () => null;
+  }, TypeError);
+  assert.throws(() => {
+    originalLeaf.run.execute = () => null;
+  }, TypeError);
   assert.equal(await existing.run('first', {}), 'live:first:old');
   assert.equal(await existing.run('second', {}), 'live:second:old');
   assert.equal(captured, 2);
   assert.equal(Object.isFrozen(main), false);
-  assert.equal(await assemble(definition, options).run('third', {}), 'replacement:third:new');
+  const replacement = execution([replacementOperation], { requires: replacementRequires, execute: (work) => work.children.create(replacementOperation, `replacement:${work.input}`).run() });
+  assert.equal(await assemble(runtimeDefinition(replacement), options).run('third', {}), 'replacement:third:new');
 });
 
 test('fixed run callbacks keep their original receiver without freezing its business state', async () => {
@@ -156,7 +177,7 @@ test('fixed run callbacks keep their original receiver without freezing its busi
   assert.equal(await runtime.run('two', {}), '12:two');
   assert.equal(run.calls, 12);
   assert.equal(Object.isFrozen(run), false);
-  assert.equal(await assemble(definition).run('three', {}), 'replacement');
+  assert.equal(await assemble(runtimeDefinition(execution([], run))).run('three', {}), 'replacement');
 });
 
 test('E captures resources after ordinary R input preparation and fixes its declared run receiver', async () => {
@@ -179,9 +200,12 @@ test('E captures resources after ordinary R input preparation and fixes its decl
   run.prefix = 'live';
   run.requires.value = new ResourceOffer('test.resolution.unavailable', (source) => source).request();
   run.execute = () => assert.fail('mutated original run must not execute');
-  main.run = { requires: {}, execute: (work) => `new:${work.input}` };
+  assert.throws(() => {
+    main.run = { requires: {}, execute: (work) => `new:${work.input}` };
+  }, TypeError);
   assert.equal(await existing.run('one', {}), 'live:one:resource:one');
-  assert.equal(await assemble(definition, options).run('two', {}), 'new:two');
+  const replacement = execution([], { requires: {}, execute: (work) => `new:${work.input}` });
+  assert.equal(await assemble(runtimeDefinition(replacement)).run('two', {}), 'new:two');
 });
 
 test('observation declarations are fixed before lazy construction while consumers keep their own state', async () => {
@@ -205,11 +229,13 @@ test('observation declarations are fixed before lazy construction while consumer
   const existing = assemble(definition, { observations: [] });
   observation.observe = () => assert.fail('mutated observer must not run');
   observation.requires.unavailable = new ResourceOffer('test.resolution.observer', (value) => value).request();
-  main.observation.splice(0, 1, replacement);
+  assert.throws(() => main.observation.splice(0, 1, replacement), TypeError);
   assert.equal(await existing.run('first', {}), 'first');
   assert.equal(observation.starts, 1);
   assert.equal(replacementStarts, 0);
-  assert.equal(await assemble(definition, { observations: [] }).run('second', {}), 'second');
+  const next = execution([], { requires: {}, execute: (work) => work.input });
+  next.observation = [replacement];
+  assert.equal(await assemble(runtimeDefinition(next), { observations: [] }).run('second', {}), 'second');
   assert.equal(replacementStarts, 1);
 });
 
@@ -225,7 +251,7 @@ test('checkpoint contracts, codecs and continuation callbacks use the same fixed
   };
   const point = { name: 'saved', references: {}, state: codec, check: () => true, resume };
   const checkpoint = { key: 'test.resolution.checkpoint', version: 1, input: codec, output: codec, points: [point] };
-  const definition = { kind: 'scene', maxRounds: 1, raises: [], members: [], checkpoint, run: { requires: {}, execute: () => assert.fail('normal work cannot replay during restoration') } };
+  const definition = new Scene({ checkpoint, run: { requires: {}, execute: () => assert.fail('normal work cannot replay during restoration') } });
   const store = new MemoryCheckpointStore();
   const save = (contextId) => store.save({ id: `image-${contextId}`, formatVersion: 4, contract: { key: checkpoint.key, version: 1 }, point: 'saved', references: {}, frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: { answer: 'original continuation' } }, 0);
   save('original-root');
@@ -241,6 +267,6 @@ test('checkpoint contracts, codecs and continuation callbacks use the same fixed
   assert.equal(await existing.resume('original-root', {}), 'original continuation');
   assert.equal(resume.calls, 1);
   assert.equal(store.read('original-root').delivery.output, 'original continuation');
-  const replacement = assemble(definition, { checkpoints: { store } });
+  const replacement = assemble(new Scene({ checkpoint, run: { execute: () => null } }), { checkpoints: { store } });
   await assert.rejects(replacement.resume('new-root', {}), /incompatible/);
 });

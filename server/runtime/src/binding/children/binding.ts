@@ -1,3 +1,4 @@
+import { createCallableInvocation, restoreCallableInvocation } from '../../invocation/builders/structure.js';
 import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, ResumeChildCalls } from '../../definition/children.js';
 import type { ChildEntry } from '../../definition/entry.js';
 import type { Invocation } from '../../invocation/invocation.js';
@@ -36,7 +37,7 @@ export class InvocationChildBindings {
   private create<D extends ChildContract>(definition: D, input: CallableInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
     return this.guard(() => {
       this.requireAllowed(definition);
-      const child = this.options.children.get(definition).create(this.options.parent, input, { ...options, declarationPosition: this.options.children.position(definition) });
+      const child = createCallableInvocation(this.options.children.get(definition), this.options.parent, input, { ...options, declarationPosition: this.options.children.position(definition) });
       return this.handle(this.options.references.forTarget(definition, child));
     });
   }
@@ -62,7 +63,7 @@ export class InvocationChildBindings {
       this.requireAllowed(entry.definition);
       const position = this.options.children.position(entry.definition);
       const contextId = entry.relation.invocation.context.id;
-      this.options.parent.restoreChild(position, contextId, () => this.options.children.get(entry.definition).resume(this.options.parent, contextId, { declarationPosition: position }));
+      this.options.parent.restoreChild(position, contextId, () => restoreCallableInvocation(this.options.children.get(entry.definition), this.options.parent, contextId, { declarationPosition: position }));
       return this.handle(ref);
     });
   }

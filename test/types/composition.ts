@@ -97,7 +97,7 @@ const runtimeDefinition: Scene<string, number> = defineScene<string, number>()({
   },
 });
 const driver = new Driver();
-const bound = driver.bind(runtimeDefinition, { providers: [], source: { capture: (_input, _options: { signal?: AbortSignal }) => null } });
+const bound = driver.build(runtimeDefinition, { providers: [], source: { capture: (_input, _options: { signal?: AbortSignal }) => null } });
 const rootOutput: Promise<number> = driver.run(bound, 'input', {});
 void rootOutput;
 // @ts-expect-error R input retains its own declared contract
@@ -105,7 +105,7 @@ driver.run(bound, 42, {});
 // A Scene can directly register a Node.
 const leafScene = new Scene<string, number>({ run: { execute: (work) => work.input.length } });
 leafScene.add(leaf);
-driver.bind(leafScene, { providers: [], source: { capture: () => null } });
+driver.build(leafScene, { providers: [], source: { capture: () => null } });
 // Structurally equal signatures are permitted; binding still checks exact identity.
 runtimeWork.children.create(length, 'input');
 // @ts-expect-error E cannot be a direct child of O

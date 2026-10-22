@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver } from '@capix/observer-service/assembly';
+import { createConversationStructure } from '@capix/observer-service/conversation';
+import { Group } from '@capix/server-runtime';
 
 const settings = { model: 'fixture', contextBudget: 100000, maxOutputTokens: 512, timeoutMs: 1000 };
 const input = (content) => ({ messages: [{ role: 'user', content }] });
@@ -135,4 +137,38 @@ test('R occupancy rejects a competing submission before it can append input duri
   assert.equal(environment.transcript.length, 3);
   release();
   await first;
+});
+
+test('maintenance factories create independent structures for before-request and after-content', async (t) => {
+  const policies = [];
+  const phases = [];
+  const { environment } = setup(t, {
+    maintenance: {
+      create() {
+        const policy = new Group({
+          run: {
+            execute(work) {
+              const { phase, material } = work.input;
+              phases.push(phase);
+              return { basis: material.basis, messageIndexes: material.messages.map((item) => item.index), memoryIds: material.memories.map((item) => item.id) };
+            },
+          },
+        });
+        policies.push(policy);
+        return policy;
+      },
+    },
+  });
+  assert.equal(policies.length, 2);
+  assert.notEqual(policies[0], policies[1]);
+  assert.notEqual(environment.structure.preparation.maintenance, environment.structure.maintenance);
+  assert.equal(environment.structure.preparation.maintenance.members[0], policies[0]);
+  assert.equal(environment.structure.maintenance.members[0], policies[1]);
+  await environment.driver.run(environment.scene, input('continue'), { settings });
+  assert.deepEqual(phases, ['before-request', 'after-content']);
+});
+
+test('maintenance factories cannot reuse one policy structure at two positions', () => {
+  const policy = new Group({ run: { execute: () => null } });
+  assert.throws(() => createConversationStructure({ maintenance: { create: () => policy } }), /parent|belong|owned|owner/i);
 });

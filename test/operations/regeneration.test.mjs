@@ -3,7 +3,7 @@ import { ActiveContent } from '@capix/observer-service';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindConversation, createConversationStructure } from '@capix/observer-service';
+import { buildConversation, createConversationStructure } from '@capix/observer-service';
 import { Driver, RuntimeError, CallableRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix/server-runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -33,7 +33,7 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
   const definition = createConversationStructure();
   configureDefinition?.(definition);
   const driver = new Driver({ observations: recording ? [recording] : undefined });
-  const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
+  const scene = buildConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
   const environment = { ...entities, definition, recording, book: recorder?.book, driver, scene };
   let invocation;
   return {

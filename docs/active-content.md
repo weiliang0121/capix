@@ -67,7 +67,7 @@ capture 返回冻结值，不返回以后可能读到新内容的句柄。消息
 
 `ActiveContentResource.read` 只提供 capture；manage 提供 capture/apply。两者在 access 时通过当前调用的受控端点访问，不在任务 Group 的来源捕获时提前读取材料。绑定供应 ActiveContent 引用，业务只取得声明申请的端点。索引与必要内容同步独立于 Recorder，关闭观测不会停止索引更新。
 
-`maintenance` 接受普通函数，或普通 `GroupDefinition<ContextMaintenanceInput, ActiveContentSelection, ...>`。输入包含 phase、当前 material 和本次 settings。普通函数适合纯数据规则；需要模型或其他能力时提供 Group，由该声明直接申请资源。绑定解算保留子树供给；维护 Group 和准备 Group 不为透传而申请子层资源。它继续遵守 Scene/Group 可组合 Group/Node、Node 无成员的结构规则，不要求内核认识维护业务。
+`maintenance` 宿主配置接受普通函数，或 `{ create(): ContextMaintenanceOperation }` 工厂。输入包含 phase、当前 material 和本次 settings。普通函数适合纯数据规则；需要模型或其他能力时由工厂为 before-request、after-content 两个位置分别建立 Group，由该结构直接申请资源。两个位置不共享同一个结构实例；独立构造 MaintainConversationContent 时仍可传入只属于该维护边界的具体策略 Group。绑定解算保留子树供给；维护 Group 和准备 Group 不为透传而申请子层资源。它继续遵守 Scene/Group 可组合 Group/Node、Node 无成员的结构规则，不要求内核认识维护业务。
 
 以下是程序化装配示例。保留最近十二条只是一项显式业务策略，**不是框架默认行为，也不保证下次请求容量充足**：
 

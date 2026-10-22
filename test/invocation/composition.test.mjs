@@ -204,7 +204,8 @@ test('input preparation failure creates no child and repeated positions produce 
   );
   await assert.rejects(failed.runtime.run(1, {}), (value) => value === error);
   assert.equal(failed.calls[0].children.values().length, 0);
-  const sequence = new Sequence().step('one', { use, input: () => null }).step('two', { use, input: () => null });
+  const repeated = composed(new Sequence());
+  const sequence = new Sequence().step('one', { use: repeated, input: () => null }).step('two', { use: repeated, input: () => null });
   const installed = install(sequence);
   await installed.runtime.run(1, {});
   const children = installed.calls[0].children.values();

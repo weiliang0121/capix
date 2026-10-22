@@ -20,3 +20,6 @@ type Signature<Definition> = Definition extends { readonly [invocationSignature]
 export type CallableInput<Callable> = Signature<Callable> extends { readonly input: infer Input } ? Input : unknown;
 export type CallableOutput<Callable> = Signature<Callable> extends { readonly output: infer Output } ? Output : unknown;
 export type CallableDelta<Callable> = Signature<Callable> extends { readonly delta: infer Delta } ? Delta : never;
+
+/** Relationship types use the stable calling contract, independently of installed capabilities. */
+export type CallableShape<Structure> = Structure extends CallableContract<infer Kind, infer Input, infer Output, infer Delta> ? CallableContract<Kind, Input, Output, Delta> : never;

@@ -42,14 +42,16 @@ test('legacy invocation records remain readable alongside callable records', () 
 test('live recording and generic subtree details follow direct members and restore without level inference', async () => {
   const recorder = new Recorder(new RecordBook());
   const recorded = (role) => [invocationRecording(role ? { role } : {}, { failure: 'propagate' })];
-  const node = defineNode()({ name: 'read', observation: recorded(), run: { execute: () => 'read value' } });
+  const read = () => 'read value';
+  const node = defineNode()({ name: 'read', observation: recorded(), run: { execute: read } });
+  const nestedNode = defineNode()({ name: 'read', observation: recorded(), run: { execute: read } });
   const nested = defineGroup()({
     name: 'inner',
-    members: [node],
+    members: [nestedNode],
     observation: recorded(),
     run: {
       async execute(work) {
-        const call = work.children.create(node, null);
+        const call = work.children.create(nestedNode, null);
         await call.run();
         return call.accept();
       },

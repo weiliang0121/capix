@@ -1,7 +1,8 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CallableBinder, Driver, ResourceOffer, bindChildResources, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
+import { Driver, ResourceOffer, bindChildResources, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
+import { CallableBuilder, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
 
 function install(definition, options = {}) {
   return installCallable(definition, { providers: [], source: { capture: () => null }, ...options });
@@ -25,7 +26,7 @@ test('a root group or node rejects a second source registration instead of silen
   for (const definition of [defineGroup()({ run: { execute: () => null } }), defineNode()({ run: { execute: () => null } })]) {
     assert.throws(
       () =>
-        new CallableBinder().bind(definition, {
+        new CallableBuilder().build(definition, {
           providers: [],
           source: { capture: () => null },
           bindings: [{ definition, capture: () => 'unused' }],
@@ -145,6 +146,7 @@ test('explicit sources can be attached to a deep group or node and do not depend
   const starts = [];
   const offer = new ResourceOffer('callable.source', (value) => value);
   const inherited = defineNode()({ run: { requires: { value: offer.request() }, execute: (work) => work.resources.value } });
+  const rootReader = defineNode()({ run: { requires: { value: offer.request() }, execute: (work) => work.resources.value } });
   const independent = defineNode()({ run: { requires: { value: offer.request() }, execute: (work) => work.resources.value } });
   const target = defineGroup()({
     members: [inherited, independent],
@@ -157,10 +159,10 @@ test('explicit sources can be attached to a deep group or node and do not depend
   });
   const wrapper = defineGroup()({ members: [target], run: delegate(target) });
   const scene = defineScene()({
-    members: [wrapper, inherited],
+    members: [wrapper, rootReader],
     run: {
       async execute(work) {
-        return [await receive(work, inherited, null), await receive(work, wrapper, 'task')];
+        return [await receive(work, rootReader, null), await receive(work, wrapper, 'task')];
       },
     },
   });
@@ -232,12 +234,13 @@ test('resource narrowing stays local even when the parent has no endpoint for th
     },
   });
   const node = defineNode()({ run: { requires: { values: offer.request() }, execute: (work) => work.resources.values } });
+  const rootReader = defineNode()({ run: { requires: { values: offer.request() }, execute: (work) => work.resources.values } });
   const group = defineGroup()({ members: [node], run: delegate(node) });
   const scene = defineScene()({
-    members: [group, node],
+    members: [group, rootReader],
     run: {
       async execute(work) {
-        return [await receive(work, group, ['a']), await receive(work, node, null)];
+        return [await receive(work, group, ['a']), await receive(work, rootReader, null)];
       },
     },
   });
@@ -246,14 +249,14 @@ test('resource narrowing stays local even when the parent has no endpoint for th
   assert.equal(captures, 1);
 });
 
-test('a driver keeps occupancy on its bound callable and constructor failure releases it', async () => {
+test('a driver keeps occupancy on its built callable and constructor failure releases it', async () => {
   let finish;
   const waiting = new Promise((resolve) => {
     finish = resolve;
   });
   const scene = defineScene()({ run: { execute: () => waiting } });
   const driver = new Driver();
-  const bound = driver.bind(scene, {
+  const bound = driver.build(scene, {
     providers: [],
     source: {
       capture: (_input, options) => {
@@ -273,20 +276,21 @@ test('a driver keeps occupancy on its bound callable and constructor failure rel
 });
 
 test('call construction scopes are authenticated to their exact bound installation', () => {
-  const definition = defineScene()({ run: { execute: () => null } });
-  const binder = new CallableBinder();
-  const first = binder.bind(definition, { providers: [], source: { capture: () => null } });
-  const second = binder.bind(definition, { providers: [], source: { capture: () => null } });
-  assert.throws(() => second.createRoot(null, first.begin({}), {}), /another binding installation/);
-  assert.throws(() => first.createRoot(null, {}, {}), /another binding installation/);
+  const builder = new CallableBuilder();
+  const first = builder.build(defineScene()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
+  const second = builder.build(defineScene()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
+  const own = callableConstruction(first).sources.begin({});
+  assert.throws(() => callableConstruction(second).sources.require(own), /another binding installation/);
+  assert.throws(() => callableConstruction(first).sources.require({}), /another binding installation/);
+  assert.doesNotThrow(() => createRootInvocation(first, null, {}, {}));
 });
 
 test('binding rejects node members, undeclared source targets and duplicate registrations', () => {
   const node = defineNode()({ run: { execute: () => null } });
   const illegal = Object.assign(node, { members: [] });
-  assert.throws(() => install(defineScene()({ members: [illegal], run: delegate(illegal) })), /Nodes cannot declare members/);
+  const scene = defineScene()({ members: [illegal], run: delegate(illegal) });
+  assert.throws(() => install(scene), /Nodes cannot declare members/);
   delete node.members;
-  const scene = defineScene()({ members: [node], run: delegate(node) });
   const other = defineNode()({ run: { execute: () => null } });
   assert.throws(() => install(scene, { bindings: [{ definition: other, capture: () => null }] }), /registered member/);
   assert.throws(() => install(scene, { bindings: [{ definition: node }, { definition: node }] }), /Duplicate callable source/);

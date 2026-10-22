@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence, defineNode } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
-import { bindConversation, createConversationStructure, GenerateAnswer } from '@capix/observer-service';
+import { buildConversation, createConversationStructure, GenerateAnswer } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 
@@ -37,7 +37,7 @@ test('Observer narrows resources at each action, captures fixed values and expir
   };
   inspect(definition.conversation);
   const driver = new Driver();
-  const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider())));
+  const scene = buildConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider())));
   let first;
   await driver.run(
     scene,
@@ -337,6 +337,6 @@ test('model offers separate creation and reading while preserving provider metho
     },
   });
   const driver = new Driver();
-  const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(model)));
+  const scene = buildConversation(driver, definition, entities, new ModelInteractions(new ModelSource(model)));
   await driver.run(scene, { messages: [{ role: 'user', content: '你好' }] }, { settings });
 });

@@ -328,7 +328,10 @@ function composeLevel(Base, child, label, receives, explicit = false) {
     source = 'test';
     callee = 'test';
     output = contract;
-    members = Base === Node ? undefined : child ? [child] : [];
+    constructor() {
+      super();
+      if (Base !== Node && child) this.add(child);
+    }
     run = {
       requires: {},
       execute: async (work) => {
@@ -508,7 +511,10 @@ test('declared output validation applies to the value transformed by normal acce
 test('one failing explicit E output consumer does not disable its other binding', async () => {
   const execution = composeLevel(Group, undefined, 'E', []);
   const runtime = new (class extends Scene {
-    members = [execution];
+    constructor() {
+      super();
+      this.add(execution);
+    }
     run = {
       requires: {},
       async execute(work) {
@@ -610,10 +616,13 @@ test('a previous work view cannot create children after the invocation moves to 
   })();
   const definition = new (class extends Scene {
     maxRounds = 2;
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     run = {
       requires: {},
-      uses: this.members,
+      uses: [child],
       execute(work) {
         if (work.round === 1) saved = work;
         else assert.throws(() => saved.children.create(child, 'stale'), /inactive declaration round/);
@@ -637,11 +646,14 @@ for (const handled of [false, true]) {
       run = { requires: {}, execute: () => 'child' };
     })();
     const definition = new (class extends Scene {
-      members = [child];
+      constructor() {
+        super();
+        this.add(child);
+      }
       raises = [rejected];
       run = {
         requires: {},
-        uses: this.members,
+        uses: [child],
         async execute(work) {
           const call = work.children.create(child, 'input');
           saved = call.ref;
@@ -656,7 +668,7 @@ for (const handled of [false, true]) {
       };
       exceptions = {
         requires: {},
-        uses: this.members,
+        uses: [child],
         accepts: [rejected],
         async handle(work) {
           assert.equal('output' in work, false);

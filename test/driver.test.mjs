@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CallableBinder, Clock, Driver, MemoryCheckpointStore, checkpointPoint, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
+import { Clock, Driver, MemoryCheckpointStore, checkpointPoint, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
+import { CallableBuilder, createCallableInvocation } from '@capix/server-runtime/construction';
 
 const source = { capture: () => null };
 const codec = { encode: (value) => value, decode: (value) => value };
@@ -25,7 +26,7 @@ function observation(facts, calls = []) {
 }
 
 function bind(driver, definition, options = {}) {
-  return driver.bind(definition, { source, providers: [], ...options });
+  return driver.build(definition, { source, providers: [], ...options });
 }
 
 test('one Driver explicitly selects scene, group and node bindings without a current entry', async () => {
@@ -38,7 +39,7 @@ test('one Driver explicitly selects scene, group and node bindings without a cur
   assert.equal('running' in driver, false);
 });
 
-test('Driver rejects foreign, bare and forged bounds before source capture or entry activity', async () => {
+test('Driver rejects foreign, standalone-built and forged structures before source capture or entry activity', async () => {
   const facts = [];
   const driver = new Driver({ observations: [observation(facts)] });
   const other = new Driver();
@@ -52,10 +53,10 @@ test('Driver rejects foreign, bare and forged bounds before source capture or en
       },
     },
   };
-  const definition = defineNode()({ run: { execute: () => assert.fail('unowned call must not run') } });
-  const own = driver.bind(definition, options);
-  const foreign = other.bind(definition, options);
-  const bare = new CallableBinder().bind(definition, options);
+  const definition = () => defineNode()({ run: { execute: () => assert.fail('unowned call must not run') } });
+  const own = driver.build(definition(), options);
+  const foreign = other.build(definition(), options);
+  const bare = new CallableBuilder().build(definition(), options);
   const forged = Object.assign(Object.create(Object.getPrototypeOf(own)), own);
   for (const bound of [foreign, bare, forged, { id: own.id }, null]) {
     await assert.rejects(driver.run(bound, null, {}), (error) => error.code === 'FOREIGN_BINDING');
@@ -102,7 +103,7 @@ test('binding installations stay distinct even under one Driver', async () => {
   const run = driver.run(first, null, {});
   await entered.promise;
   try {
-    assert.throws(() => second.create(parent, null), /another binding installation/);
+    assert.throws(() => createCallableInvocation(second, parent, null), /another binding installation/);
     assert.equal(await driver.run(second, null, {}), 'second');
     assert.equal(driver.isRunning(first), true);
   } finally {
@@ -111,7 +112,7 @@ test('binding installations stay distinct even under one Driver', async () => {
   assert.equal(await run, 'first');
 });
 
-test('entry occupancy is per Bound and busy rejection cannot start a duplicate call', async () => {
+test('entry occupancy is per built root and busy rejection cannot start a duplicate call', async () => {
   const facts = [];
   const driver = new Driver({ observations: [observation(facts)] });
   const entered = deferred();

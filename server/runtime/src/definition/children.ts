@@ -1,6 +1,6 @@
 import type { Group } from '../structure/group.js';
 import type { Node } from '../structure/node.js';
-import type { CallableContract, CallableInput, CallableOutput, CallableDelta } from './signature.js';
+import type { CallableContract, CallableInput, CallableOutput, CallableDelta, CallableShape } from './signature.js';
 import type { InvocationOutputReceiver } from '../output/contract.js';
 import type { ChildEntry } from './entry.js';
 import type { InvocationFailureFact, RuntimeErrorValue, CallableKind } from '@capix/protocol';
@@ -14,7 +14,7 @@ export type ChildrenOf<Kind extends CallableKind> = [ChildKind<Kind>] extends [n
 export type ChildContract = CallableContract<'group', any> | CallableContract<'node', any>;
 export type ChildContractsOf<Kind extends CallableKind> = [ChildKind<Kind>] extends [never] ? never : ChildContract;
 export type CallableMembers<Kind extends CallableKind> = Kind extends 'node' ? { readonly members?: never } : { readonly members: readonly ChildrenOf<Kind>[] };
-export type { CallableContract, CallableInput, CallableOutput, CallableDelta } from './signature.js';
+export type { CallableContract, CallableInput, CallableOutput, CallableDelta, CallableShape } from './signature.js';
 
 declare const childReferenceSignature: unique symbol;
 /** Certified by this parent activity; the opaque identity does not grant action rights. */
@@ -58,11 +58,11 @@ export interface ChildOptions<Definition extends ChildContract> {
 }
 
 export interface ChildCalls<Allowed extends ChildContract = ChildContract> {
-  create<Definition extends Allowed>(definition: Definition, input: NoInfer<CallableInput<Definition>>, options?: ChildOptions<Definition>): ChildCall<Definition>;
-  entry<Definition extends Allowed, Input>(entry: ChildEntry<Definition, Input>, input: NoInfer<Input>, options?: ChildOptions<Definition>): ChildCall<Definition>;
+  create<Definition extends Allowed | CallableShape<Allowed>>(definition: Definition, input: NoInfer<CallableInput<Definition>>, options?: ChildOptions<Definition>): ChildCall<Definition>;
+  entry<Definition extends Allowed | CallableShape<Allowed>, Input>(entry: ChildEntry<Definition, Input>, input: NoInfer<Input>, options?: ChildOptions<Definition>): ChildCall<Definition>;
   open<Definition extends ChildContract>(reference: ChildReference<Definition>): ChildCall<Definition>;
   readonly facts: ChildFacts;
 }
 export interface ResumeChildCalls<Allowed extends ChildContract = ChildContract> extends ChildCalls<Allowed> {
-  resume<Definition extends Allowed>(reference: ChildReference<Definition>): ChildCall<Definition>;
+  resume<Definition extends Allowed | CallableShape<Allowed>>(reference: ChildReference<Definition>): ChildCall<Definition>;
 }

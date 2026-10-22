@@ -90,7 +90,7 @@ test('R, E and O each register and consume their own direct-child reception', as
   assert.deepEqual(await installed.run(null, {}), ['number:7']);
 });
 
-test('the same child has independent parent Accepted values in factory and named declarations', async () => {
+test('equivalent children have independent parent Accepted values in factory and named declarations', async () => {
   const child = leaf();
   const text = reception(
     child,
@@ -99,8 +99,9 @@ test('the same child has independent parent Accepted values in factory and named
       return value;
     }),
   );
+  const namedChild = leaf();
   const count = reception(
-    child,
+    namedChild,
     checked((value) => {
       assert.equal(typeof value, 'number');
       return value;
@@ -118,12 +119,15 @@ test('the same child has independent parent Accepted values in factory and named
     name = metadata.name;
     label = metadata.label;
     source = metadata.source;
-    members = [child];
+    constructor() {
+      super();
+      this.add(namedChild);
+    }
     receptions = [count];
     run = {
       requires: {},
       async execute(work) {
-        const call = work.children.create(child, 'hello');
+        const call = work.children.create(namedChild, 'hello');
         await call.run();
         await call.accept(count, (result) => result.length);
         return work.children.facts.accepted(call.ref, count);

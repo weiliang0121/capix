@@ -51,7 +51,10 @@ function executionRuntime(execute, { changes, recording, accept, parentAccept } 
   }
   const execution = new E();
   class R extends Scene {
-    members = [execution];
+    constructor() {
+      super();
+      this.add(execution);
+    }
     observation = recording ? [invocationRecording()] : undefined;
     run = {
       requires: {},

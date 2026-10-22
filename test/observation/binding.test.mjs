@@ -376,7 +376,7 @@ test('Runtime structure facts have their own order and failed acquisition report
     ],
   });
   let calls = 0;
-  const bound = driver.bind(
+  const bound = driver.build(
     defineNode()({
       run: {
         execute: () => {

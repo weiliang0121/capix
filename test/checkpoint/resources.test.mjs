@@ -45,7 +45,10 @@ test('fixed transcript writes derive parent and child identity from the actual r
   const answer = new Answer();
   const progress = [];
   class Main extends Group {
-    members = [answer];
+    constructor() {
+      super();
+      this.add(answer);
+    }
     run = {
       requires: { messages: TranscriptResource.append.request() },
       async execute(work) {
@@ -76,7 +79,10 @@ for (const stale of [undefined, 'endpoint', 'view']) {
     let firstValues;
     const progress = [];
     class Main extends Group {
-      members = [answer];
+      constructor() {
+        super();
+        this.add(answer);
+      }
       maxRounds = 2;
       run = {
         requires: { messages: TranscriptResource.append.request() },
@@ -175,7 +181,10 @@ test('parallel fixed appends bind each effect to its own asynchronous reception'
   const transcript = new Transcript();
   const answer = new Answer();
   class Main extends Group {
-    members = [answer];
+    constructor() {
+      super();
+      this.add(answer);
+    }
     run = {
       requires: { messages: TranscriptResource.append.request() },
       async execute(work) {

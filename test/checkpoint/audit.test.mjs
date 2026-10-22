@@ -40,7 +40,10 @@ test('terminal checkpoint persistence failure still delivers the owned child err
   }
   const child = new Child();
   class Root extends Scene {
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     run = {
       requires: {},
       uses: [child],
@@ -74,7 +77,10 @@ test('a cached resumed child cannot be reused through a different declaration co
   const a = new ChildA();
   const b = new ChildB();
   class Root extends Scene {
-    members = [a, b];
+    constructor() {
+      super();
+      this.add(a, b);
+    }
     checkpoint = checkpoint(
       'root',
       async (work) => {
@@ -113,7 +119,10 @@ for (const reception of ['pending', 'receiving']) {
     }
     const child = new Child();
     class Root extends Scene {
-      members = [child];
+      constructor() {
+        super();
+        this.add(child);
+      }
       checkpoint = checkpoint(
         'root',
         async (work) => {
@@ -202,7 +211,10 @@ test('a final child delivery preserves its own second-round input without rerunn
   }
   const child = new Child();
   class Root extends Scene {
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     checkpoint = checkpoint(
       'root',
       async (work) => {
@@ -265,7 +277,10 @@ test('ordinary parallel child receptions remain supported without checkpoint or 
   }
   const child = new Child();
   class Root extends Scene {
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     run = {
       requires: {},
       uses: [child],

@@ -282,11 +282,17 @@ function hierarchy() {
     name = 'compose';
     label = '组合工作';
     source = 'private-operation-source';
-    members = [attempt];
+    constructor() {
+      super();
+      this.add(attempt);
+    }
     run = delegated(attempt);
   })();
   const execution = new (class extends Group {
-    members = [operation];
+    constructor() {
+      super();
+      this.add(operation);
+    }
     run = delegated(operation);
   })();
   return runtimeDefinition(execution);

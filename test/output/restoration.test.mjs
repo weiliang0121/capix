@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, MemoryCheckpointStore } from '@capix/server-runtime';
+import { Scene, ExceptionContract, MemoryCheckpointStore } from '@capix/server-runtime';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 const output = { result: (value) => value, delta: (value) => value };
@@ -11,7 +11,8 @@ function restore(definition, { round = 1, currentInput = { stage: 'saved' } } = 
   const events = [];
   const contextId = `restored-round-${round}`;
   store.save({ id: 'saved-image', formatVersion: 4, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, kind: 'scene' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [], ...(round === 2 ? { continuation: { fromRound: 1, stage: 'accept', reason: 'saved continuation' } } : {}) }, state: { source: 'durable' }, references: {} }, 0);
-  const runtime = installCallable(definition, {
+  const { kind, members, ...configuration } = definition;
+  const runtime = installCallable(new Scene(configuration), {
     providers: [],
     checkpoints: { store },
     source: {

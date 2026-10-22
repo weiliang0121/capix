@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { CallableKind } from '@capix/protocol';
+import { initializeStructureConfiguration, assertStructureConfigurable } from './configuration.js';
 import type { CallableDescription, CallableDefinition, EmptyResources, InferredCallableDefinition, InferredRunDefinition, InvocationExceptionDefinition, InvocationRunDefinition, StageAllowed, StageUses } from '../definition/callable.js';
 import type { ChildContractsOf } from '../definition/children.js';
 import type { invocationSignature, InvocationSignature } from '../definition/signature.js';
@@ -21,6 +23,7 @@ type ExceptionConfiguration<Input, Output, Kind extends CallableKind, Resources 
 
 /** Author object identity is stable; individual declaration phases can be replaced before binding. */
 export abstract class Callable<Input, Output, Kind extends CallableKind, Delta = never> {
+  readonly id = randomUUID();
   readonly kind: Kind;
   declare readonly [invocationSignature]: InvocationSignature<Input, Output, Delta>;
   name?: string;
@@ -38,17 +41,20 @@ export abstract class Callable<Input, Output, Kind extends CallableKind, Delta =
   exceptions?: InvocationExceptionDefinition<Input, Output, Kind, object>;
 
   protected constructor(kind: Kind) {
+    initializeStructureConfiguration(this);
     this.kind = kind;
     Object.defineProperty(this, 'kind', { value: kind, enumerable: true, writable: false, configurable: false });
   }
 
   setRun<const Requires extends ResourceRequests = EmptyResources, const Uses extends StageUses<Kind> = undefined>(run: InferredRunDefinition<Input, Output, Kind, Requires, Uses, Delta>): this {
+    assertStructureConfigurable(this);
     const next = normalizeRun<Input, Output, Kind, ResourcesOf<Requires>, StageAllowed<Kind, Uses>, Delta>(run);
     this.run = next;
     return this;
   }
 
   setDefinition<const Requires extends ResourceRequests = EmptyResources, const Uses extends StageUses<Kind> = undefined, const ExceptionRequires extends ResourceRequests = EmptyResources, const ExceptionUses extends StageUses<Kind> = readonly []>(definition: InferredCallableDefinition<Input, Output, Kind, Requires, Uses, ExceptionRequires, ExceptionUses, Delta>): this {
+    assertStructureConfigurable(this);
     checkDefinition(definition);
     const run = normalizeRun<Input, Output, Kind, ResourcesOf<Requires>, StageAllowed<Kind, Uses>, Delta>(definition.run);
     const exceptions = definition.exceptions ? normalizeExceptions<Input, Output, Kind, ResourcesOf<ExceptionRequires>, ExceptionUses extends readonly ChildContractsOf<Kind>[] ? ExceptionUses[number] : never>(definition.exceptions) : undefined;
@@ -57,6 +63,7 @@ export abstract class Callable<Input, Output, Kind extends CallableKind, Delta =
   }
 
   protected configure<Resources extends object, ExceptionResources extends object>(definition: CallableDefinition<Input, Output, Kind, Resources, ExceptionResources, Delta>): void {
+    assertStructureConfigurable(this);
     checkDefinition(definition);
     const run = normalizeRun<Input, Output, Kind, Resources, ChildContractsOf<Kind>, Delta>(definition.run);
     const exceptions = definition.exceptions ? normalizeExceptions<Input, Output, Kind, ExceptionResources, ChildContractsOf<Kind>>(definition.exceptions) : undefined;

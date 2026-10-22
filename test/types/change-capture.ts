@@ -9,7 +9,7 @@ const otherCapture: ChangeCapture<OtherEvent> = observer;
 
 new Transcript([], { changes: transcriptCapture });
 const driver = new Driver({ changes: observer });
-driver.bind(defineScene<null, null>()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
+driver.build(defineScene<null, null>()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
 otherCapture.capture({ kind: 'other-changed', value: 1 });
 
 // @ts-expect-error A transcript source cannot submit another source's event.

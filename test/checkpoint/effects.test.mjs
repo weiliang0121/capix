@@ -50,7 +50,10 @@ function harness(operation, providers, store, requires = operation.run.requires)
     ],
   });
   class Execution extends Group {
-    members = [operation];
+    constructor() {
+      super();
+      this.add(operation);
+    }
     checkpoint = checkpoint('effects.execution', operation);
     run = {
       requires,
@@ -64,7 +67,10 @@ function harness(operation, providers, store, requires = operation.run.requires)
   }
   const execution = new Execution();
   class Root extends Scene {
-    members = [execution];
+    constructor() {
+      super();
+      this.add(execution);
+    }
     checkpoint = checkpoint('effects.runtime', execution);
     run = {
       requires: {},

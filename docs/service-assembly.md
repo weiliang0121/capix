@@ -11,7 +11,7 @@
 | `assembly/initialize.ts`：initializeObserver             | 一次具体环境的建立、接线与失败清理                          | 后续每次提交的状态                    |
 | `assembly/environment.ts`：ObserverEnvironment           | 已安装环境的身份、恢复入口与关闭                            | 创建声明树或执行业务路径              |
 | `conversation/scene.ts`：ConversationScene               | 接纳输入，调用明确传入的 ConversationGroup                  | 实体创建、Provider 初始化             |
-| `conversation/binding.ts`：bindConversation              | 通过已有 Driver 绑定声明、资源供给与服务接线                | 创建 Driver、运行时输入接纳和动态编排 |
+| `conversation/binding.ts`：buildConversation             | 通过已有 Driver 构建原结构、资源供给与服务接线              | 创建 Driver、运行时输入接纳和动态编排 |
 | `conversation/binding/source.ts`：ConversationCallSource | 按次校验、Scene 资源供给、对话 Group 配置定位捕获和建立回调 | 修改业务决策、消费模型结果            |
 | `conversation/conversation.ts` 与具体 Group/Node 声明    | 材料准备、决策、子能力调用和父层接纳                        | 环境缓存与关闭                        |
 
@@ -26,9 +26,9 @@ sequenceDiagram
     participant Content as ConversationContent
     participant Init as initializeObserver
     participant Def as 业务声明树
-    participant Bind as bindConversation
+    participant Bind as buildConversation
     participant Driver as Driver
-    participant Kernel as 内核 Binder / Bound
+    participant Kernel as 内核 Binder / Builder
     App->>Host: 创建宿主，提供 Provider 工厂 / DB / 文件实体
     Note over Host: 共享 ModelSource，Provider 尚未初始化
     App->>Host: content(conversationId)
@@ -41,17 +41,19 @@ sequenceDiagram
     Init->>Init: 建立模型交互和 CP 端口
     Init->>Driver: new Driver，固定时钟、观测与 CP 机制
     Init->>Bind: Driver + 声明 + 独立实体 + 服务恢复依据
-    Bind->>Driver: bind，提供资源与来源接线
-    Driver->>Kernel: CallableBinder，提前解算声明与资源要求
-    Kernel-->>Driver: BoundCallable，成员结构按需建立
-    Driver-->>Bind: 已绑定 Scene
-    Bind-->>Init: BoundCallable
+    Bind->>Driver: build，提供资源与来源接线
+    Driver->>Kernel: CallableBuilder，协调 Binder 解算与运行能力装配
+    Kernel-->>Driver: 原 Scene，完整装配并固定配置
+    Driver-->>Bind: 同一个已构建 Scene
+    Bind-->>Init: BuiltConversationScene（原 Scene 的类型）
     Init->>Content: 安装内容记录观察，取得解除句柄
     Init-->>Host: ObserverEnvironment
     Note over Host: 只有完整成功的环境进入缓存
 ```
 
-Node/Group/Scene 由构造器或 setDefinition 安装业务配置，add 注册成员；绑定时固定执行契约。创建结构和创建 Bound 是两个时机：当前默认业务声明树在环境初始化时一次建立；内核提前解算声明，随后惰性建立实际用到的 BoundCallable。工厂返回 `{ scene, conversation, preparation, generation, extraction, decision, ... }` 的普通引用组，不创建新实体。环境持有该 `structure`、`driver` 和绑定后的 `scene`，`definition` 暂作为 `structure.scene` 的只读定位别名；通过 `driver.run(scene,input,options)` 启动，通过 `driver.isRunning(scene)` 判断占用。每次 QA 不重建声明树，也不在业务声明上保存本次输入、信号或进度。
+Node/Group/Scene 由构造器或 setDefinition 安装业务配置，add 注册单父成员。环境初始化时一次建立完整结构，然后 `driver.build` 在同一批对象上完成资源接线与运行能力装配，不再构造 Bound 树。完整成功后固定配置，拒绝 setter、add 和再次构建；构建失败不发布半成品。工厂返回 `{ scene, conversation, preparation, generation, extraction, decision, ... }` 的普通引用组，不创建新实体。环境的 `scene` 与 `structure.scene` 是同一个对象，前者具有构建后的类型；已移除重复的 `definition` 别名。每次 QA 通过 `driver.run(scene,input,options)` 创建独立调用，不重建结构，也不在结构上保存本次输入、信号或进度。
+
+可复用的是处理逻辑、配置工厂与独立资源实体。自定义 decision 使用 `{ create(): ConversationDecisionGroup }`，每个对话取得独立结构；维护配置可以是普通业务函数或 `{ create(): ContextMaintenanceOperation }`。before-request 与 after-content 各建立自己的维护 Group，结构策略也各调用工厂一次，返回同一个已归属对象会被拒绝。函数策略可以共享，但不能在闭包中混存各次调用的现场。
 
 仅查询消息可以加载内容，而不建立运行环境、恢复记录或初始化 Provider。开启该对话的观测或执行时才调用 `open`。真正发起模型交互时才兑现 Provider。
 
@@ -66,7 +68,7 @@ Node/Group/Scene 由构造器或 setDefinition 安装业务配置，add 注册�
 | ConversationContent                                | 对话内容装配                             | 宿主拥有内容同步生命周期；单环境可以借用         |
 | 声明树、Driver、SelectionUsage                     | 首次装配具体对话环境                     | 环境期复用；SelectionUsage 仍是独立实体          |
 | ModelInteractions、记录安装、RecordSource、CP 观测 | 首次装配具体对话环境                     | 环境关闭时解除和关闭                             |
-| ConversationCallSource                             | `bindConversation`                       | 绑定期复用，每次 options 有独立捕获槽            |
+| ConversationCallSource                             | `buildConversation`                      | 绑定期复用，每次 options 有独立捕获槽            |
 | Invocation / Context、业务推进 state               | 每次调用                                 | 单次调用和本层状态，不存入可复用声明             |
 | Submission 与反馈连接                              | HTTP 受理 / 跟随                         | 服务交付层持有，连接不拥有上述实体               |
 
@@ -118,7 +120,7 @@ Scene 的输入接纳是服务声明中的普通资源动作。ConversationGroup
 
 宿主 `environment.recover(rootContextId)` 先检查环境开放、无活动工作以及恢复登记。实际进入内核的 `source.validate` 再检查登记身份和当前依据。两者复用 `binding/checkpoint.ts` 的配置、head、内容与凭据核验，保留两个核对时机，避免直接使用 `driver.resume(scene,contextId,options)` 绕过检查。
 
-恢复输入沿用已保存配置、原文定位和已准备的不可变材料，不用当前活跃索引替换旧快照。R 续接不重复 append，不重发旧 Submission 的输入/started/回答通知。当前 Scene/ConversationGroup 契约分别为 observer.conversation.scene version 4 与 observer.conversation.task version 6，Frame 为 v4；旧 REOA CP 明确拒绝；自定义维护的宿主恢复尚未开放，索引落实也没有固定效果凭据。详细承诺见 [Checkpoint](checkpoints.md)。
+恢复输入沿用已保存配置、原文定位和已准备的不可变材料，不用当前活跃索引替换旧快照。R 续接不重复 append，不重发旧 Submission 的输入/started/回答通知。默认业务树布局保持，Scene/ConversationGroup 契约仍分别为 observer.conversation.scene version 4 与 observer.conversation.task version 6，Frame 为 v4；旧 REOA CP 明确拒绝；自定义维护的宿主恢复尚未开放，索引落实也没有固定效果凭据；本轮维护位置拆分不扩张这一恢复承诺。详细承诺见 [Checkpoint](checkpoints.md)。
 
 ## 失败与关闭
 

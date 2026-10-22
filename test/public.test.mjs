@@ -12,14 +12,15 @@ import { ObservationFeed } from '@capix/observer-service/observation';
 import { createObserverServer } from '@capix/observer-service/http';
 
 test('public role entrypoints resolve to the same implementations without requiring a recording carrier', () => {
-  assert.equal(runtime.BoundCallable, construction.BoundCallable);
+  assert.equal(runtime.CallableBuilder, construction.CallableBuilder);
+  assert.equal(runtime.BoundCallable, undefined);
   assert.equal(runtime.Transcript, content.Transcript);
   assert.equal(runtime.bindRecording, recording.bindRecording);
   assert.equal(runtime.observeMemory, recording.observeMemory);
   assert.ok(!('observeMemory' in content));
   assert.ok(!('Recorder' in content));
-  const bound = new construction.CallableBinder().bind(runtime.defineScene()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
-  assert.ok(bound instanceof construction.BoundCallable);
+  const bound = new construction.CallableBuilder().build(runtime.defineScene()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
+  assert.ok(bound instanceof runtime.Scene);
   assert.equal(bound.id.length > 0, true);
   for (const assembly of ['environment', 'executionInvocationBuilder', 'operationInvocationBuilder', 'attemptInvocationBuilder']) assert.ok(!(assembly in bound));
   for (const binder of ['CallableBinder']) assert.equal(runtime[binder], construction[binder]);

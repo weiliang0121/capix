@@ -2,43 +2,44 @@
 
 当前结构为 Scene / Group / Node；共同机制为 Callable，成员组合为 Composite。完整角色表见 [项目组织](organization.md)，作者示例见 [可调用结构](callable-structures.md)。运行时表示这些结构和独立实体实际协作的活动状态，不是某个 Scene 或 Driver 的别名。
 
-## 声明与绑定
+## 结构配置与整体构建
 
 Scene 与 Group 都声明自己的普通输入、输出、run 和 members；Node 实现普通处理，没有 members。run / exceptions / observation / checkpoint 平级。成员注册不执行工作，Group 自己选择调用顺序、分支与接纳；Sequence 是可选组合辅助。
 
 | 对象                      | 职责                                                          |
 | ------------------------- | ------------------------------------------------------------- |
 | CallableBinder            | 解算固定声明图，核验成员位置、资源、阶段 uses、接纳和 CP 契约 |
-| CallableBinding           | Bound 所需接线契约，不增加运行实体                            |
-| BoundCallable             | 保存本位置身份、固定工作和惰性成员，提供构造入口              |
+| CallableBinding           | 原结构需要安装的固定接线契约，不增加运行实体                  |
+| CallableBuilder           | 完成原结构的绑定与运行能力装配，成功后一次性发布              |
 | CallableInvocationBuilder | 持有安装归属，用同一机制建立任何 kind 的 Context 和调用       |
 | Driver                    | 宿主入口、占用、实际结束后释放                                |
 
-原 Node/Group/Scene 结构用于注册身份，普通 Definition 配置没有独立身份。成员经 add 组织，业务配置经构造器或 setDefinition 安装；setRun 替换完整阶段。绑定时生成独立 CallableSnapshot，仅保存固定执行契约，不伪装成仍有 add/setter 的作者结构。业务方法 receiver 保留。解算固定内核字段、容器和函数入口，不冻结业务实例。修改结构须重新装配；惰性建立成员时不重新读取原声明或解算子树。Initializer 缓存成功或失败，不静默重试。
+Scene/Group/Node 本身是注册身份，普通 Definition 配置没有独立身份。Scene 是根，Group/Node 只有一个父结构；同父重复 add 不增加位置，跨父添加或循环拒绝。业务配置经构造器或 setDefinition 安装，setRun 替换完整阶段。构建提前解算全树，固定配置容器、函数入口和资源接线，但保留业务方法 receiver。原结构承载这些装配结果，不产生第二棵 Bound 树。
 
 ```text
 new Driver(capabilities)
-  → 固定机制接入，建立 CallableBinder
+  → 固定调用机制接入
 
-Driver.bind(structure, bindingOptions)
-  → CallableBinder.bind
-      → resolveDeclaration：全树静态检查及按位置解算
-      → bindCallableSources：来源、供给与明确成员绑定
-      → new CallableInvocationBuilder(capabilities)，作为本次绑定的共同构造依据
-      → BoundCallable（成员仍惰性）
-  → 登记 BoundCallable 归属与独立占用
+Driver.build(structure, bindingOptions)
+  → CallableBuilder.build
+      → CallableBinder.bind：检查配置、成员、资源与来源契约
+      → 建立固定 work 接线和 CallableInvocationBuilder
+      → 将运行能力安装到原结构，完整成功后固定配置
+  → 返回同一个结构的 BuiltCallable 类型
 
-Driver.run(bound, input, options)
-  → 核验绑定归属，取得本绑定占用，检查预取消，validate
+Driver.run(builtScene, input, options)
+  → 核验构建归属，取得本场景入口占用，检查预取消，validate
   → 建立本次固定 CallableCallBindings
   → root capture，构造根 Invocation / CallableContext
   → Invocation.run → 当前阶段 Work → 业务
   → 实际返回或失败，释放占用
 ```
 
-BoundCallable 归属于创建它的 Driver；跨 Driver、伪造结构及直接由独立 Binder 创建的结构均不能通过这个入口运行。每个绑定独立占用，使用 `Driver.isRunning(bound)` 查询；同一个 Driver 的其他绑定不受此入口忙碌影响。占用不在 Context，Context 不保存另一个 executing 标记。构造、业务、观测任一失败都释放；内部等待队列不由 Driver 隐式建立。Driver 的入口活动观测包含 driverId 与 boundId，结构尚未产生调用时也能明确归属。
+build 成功后拒绝结构 setter、add 和再次构建。修改业务逻辑或供应规则需另建结构；输入和资源内容变化仍按次处理。build 不取得本次资源值、不执行业务；失败不留下部分可运行结构。固定结构与构建归属不等于固定一次运行的现场。
 
-CallableInvocationBuilder 直接构造 CallableContext，将自身作为固定安装归属。建立子调用时，资源选择前后均核对父活动及归属，因为资源收窄会执行宿主逻辑，可能同步触发取消。子 Context 只继承父信号，不保留父对象。不同 bind 即使来自同一 Driver，也不共享构造归属。
+构建后的场景归属于其 Driver；跨 Driver、伪造结构及独立 CallableBuilder 构建的结构均不能通过该 Driver 入口运行。场景入口独立占用，使用 `Driver.isRunning(scene)` 查询；同一个 Driver 的其他场景不受影响。占用不在 Context，也不扩展为每个 Node 的执行锁。构造、业务、观测任一失败都释放；Driver 不隐式建立等待队列。入口观测仍包含 driverId 与 boundId，boundId 指该构建安装的稳定身份，不代表第二个 Bound 对象。
+
+CallableInvocationBuilder 直接构造 CallableContext，以自身作为固定安装归属。建立子调用时，资源选择前后均核对父活动及归属，因为资源收窄会执行宿主逻辑，可能同步触发取消。子 Context 只继承父信号，不保留父对象。不同构建即使来自同一 Driver，也不共享构造归属。
 
 ## 来源、供应与访问窗口
 
@@ -52,12 +53,12 @@ const sourceBinding = bindCallSource(task, {
   started: (options) => options.started,
 });
 const driver = new Driver();
-const boundScene = driver.bind(scene, {
+const builtScene = driver.build(scene, {
   providers,
   source: { capture: (input, options) => captureSceneBasis(input, options) },
   bindings: [sourceBinding],
 });
-await driver.run(boundScene, input, options);
+await driver.run(builtScene, input, options);
 ```
 
 这里的 task 可以是 Group 或 Node，独立捕获不由 kind 决定。仅绑定 progress/started/output 不会隐式创建新供给边界。来源方法在绑定时固定；本次 options 与接线归属由内部固定对象传递，不存入业务 Work，不需要祖先 Context 链。

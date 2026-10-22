@@ -3,7 +3,7 @@ import { ActiveContent } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
-import { ConversationSubmission, bindConversation, createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service';
+import { ConversationSubmission, buildConversation, createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import { ClientSubmission } from '@capix/client-runtime';
 
@@ -110,7 +110,7 @@ test('full declared streaming chain stays within a wire budget and client recons
   const transcript = new Transcript();
   const memories = new Memories(transcript);
   const driver = new Driver();
-  const scene = bindConversation(driver, createConversationStructure(), { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() }, interactions);
+  const scene = buildConversation(driver, createConversationStructure(), { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() }, interactions);
   const client = new ClientSubmission('volume-conversation', { messages: [{ role: 'user', content: '模拟问题' }] });
   const submission = new ConversationSubmission(client.id, client.conversationId, { admission: () => ({ conversationId: client.conversationId, transcriptId: transcript.id, status: driver.isRunning(scene) ? 'busy' : 'ready' }) });
   const frames = [];

@@ -11,3 +11,18 @@ export interface InvocationCapabilities {
   readonly observations?: readonly ObservationInstallation[];
   readonly changes?: ChangeCapture<InvocationEvent>;
 }
+
+/** Keep mechanism selections fixed while their providers retain their own state and receivers. */
+export function snapshotInvocationCapabilities(options: InvocationCapabilities): InvocationCapabilities {
+  const observation = options.checkpoints?.observation;
+  return Object.freeze({
+    ...options,
+    observations: options.observations ? Object.freeze([...options.observations]) : undefined,
+    checkpoints: options.checkpoints
+      ? Object.freeze({
+          store: options.checkpoints.store,
+          observation: observation ? Object.freeze({ observe: observation.observe.bind(observation), failure: observation.failure }) : undefined,
+        })
+      : undefined,
+  });
+}

@@ -1,5 +1,6 @@
 import { Callable } from './callable.js';
 import type { ChildCallable } from '../definition/children.js';
+import { claimStructureMembers } from './configuration.js';
 
 /** Preflight all additions before changing membership; repeat registration preserves the original position. */
 export function appendMembers(owner: { readonly kind: 'scene' | 'group' }, current: readonly ChildCallable[], additions: readonly ChildCallable[]): readonly ChildCallable[] {
@@ -16,5 +17,7 @@ export function appendMembers(owner: { readonly kind: 'scene' | 'group' }, curre
   }
   const next = [...current];
   for (const member of additions) if (!next.includes(member)) next.push(member);
-  return Object.freeze(next);
+  const members = Object.freeze(next);
+  claimStructureMembers(owner, additions);
+  return members;
 }

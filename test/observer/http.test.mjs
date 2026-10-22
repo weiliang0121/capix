@@ -12,7 +12,7 @@ import { ClientRuntime } from '@capix/client-runtime';
 import { ProgressChannel, defineObservation } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
-import { ConversationSubmission, createObserverServer, ObserverConversations, bindConversation, createConversationStructure, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
+import { ConversationSubmission, createObserverServer, ObserverConversations, buildConversation, createConversationStructure, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
 import { withRuntimeDefinition, reconfigure } from '../fixtures/assembly.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
@@ -489,7 +489,7 @@ test('answer is delivered before memory finishes, and closing observation does n
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
   const entities = createEnvironment();
   const driver = new Driver();
-  const scene = bindConversation(driver, createConversationStructure(), entities, new ModelInteractions(new ModelSource(provider)));
+  const scene = buildConversation(driver, createConversationStructure(), entities, new ModelInteractions(new ModelSource(provider)));
   const received = [];
   const output = await driver.run(
     scene,

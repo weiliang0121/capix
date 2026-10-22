@@ -4,34 +4,43 @@ import { Node, defineNode, defineGroup, reception, resolveDeclaration } from '@c
 
 const metadata = { name: 'test', label: 'test', source: 'test', callee: 'local' };
 const identity = { check: (value) => value, encode: (value) => value, decode: (value) => value };
-const child = defineNode()({ ...metadata, run: { execute: (work) => work.input } });
+function makeChild() {
+  return defineNode()({ ...metadata, run: { execute: (work) => work.input } });
+}
 
 function parent(children, receptions) {
   return defineGroup()({ ...metadata, members: children, receptions, run: { execute: (work) => work.input } });
 }
 
 test('reception registration rejects repeated contracts and targets outside its direct children', () => {
+  const child = makeChild();
   const accepted = reception(child, identity);
-  assert.throws(() => resolveDeclaration(parent([child], [accepted, accepted])), /Duplicate parent reception contract/);
-  const snapshot = resolveDeclaration(parent([child], [accepted])).declaration.receptions[0];
-  assert.throws(() => resolveDeclaration(parent([child], [accepted, snapshot])), /Duplicate parent reception contract/);
-  const sameShapeChild = defineNode()({ ...metadata, run: { execute: (work) => work.input } });
+  const owner = parent([child], [accepted, accepted]);
+  assert.throws(() => resolveDeclaration(owner), /Duplicate parent reception contract/);
+  owner.receptions = [accepted];
+  const snapshot = resolveDeclaration(owner).declaration.receptions[0];
+  owner.receptions = [accepted, snapshot];
+  assert.throws(() => resolveDeclaration(owner), /Duplicate parent reception contract/);
+  const sameShapeChild = makeChild();
   assert.throws(() => resolveDeclaration(parent([sameShapeChild], [accepted])), /Reception targets a member outside its owner/);
-  const nested = parent([child], []);
-  assert.throws(() => resolveDeclaration(parent([nested], [accepted])), /Reception targets a member outside its owner/);
+  const nestedChild = makeChild();
+  const nestedAccepted = reception(nestedChild, identity);
+  const nested = parent([nestedChild], []);
+  assert.throws(() => resolveDeclaration(parent([nested], [nestedAccepted])), /Reception targets a member outside its owner/);
 });
 
-test('separate contracts for one child and the same contract in separate parents remain legal', () => {
+test('separate contracts for one child remain legal without duplicating its parent ownership', () => {
+  const child = makeChild();
   const first = reception(child, identity);
   const second = reception(child, identity);
   const resolved = resolveDeclaration(parent([child], [first, second]));
   assert.equal(resolved.declaration.receptions.length, 2);
   assert.equal(resolved.declaration.receptions[0].child, child);
   assert.equal(resolved.declaration.receptions[1].child, child);
-  assert.doesNotThrow(() => resolveDeclaration(parent([child], [first])));
+  assert.throws(() => parent([child], [first]), /already belongs to another parent/);
 });
 
-for (const receptions of [[], [reception(child, identity)]]) {
+for (const receptions of [[], [reception(makeChild(), identity)]]) {
   test(`A rejects a reception registry of size ${receptions.length} in class and factory forms`, () => {
     class InvalidLeaf extends Node {
       name = 'invalid';
@@ -48,6 +57,7 @@ for (const receptions of [[], [reception(child, identity)]]) {
 }
 
 test('binding fixes validator and codec functions while preserving their original receiver', () => {
+  const child = makeChild();
   const calls = [];
   const value = {
     label: 'receiver',
@@ -83,6 +93,7 @@ test('binding fixes validator and codec functions while preserving their origina
 
 test('invalid reception value contracts are rejected during binding', () => {
   for (const field of ['check', 'encode', 'decode']) {
+    const child = makeChild();
     const invalid = reception(child, { ...identity, [field]: undefined });
     assert.throws(() => resolveDeclaration(parent([child], [invalid])), /Reception requires check, encode and decode functions/);
   }

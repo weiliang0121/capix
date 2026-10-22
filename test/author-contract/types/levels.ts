@@ -29,7 +29,10 @@ export function specificHelper<Definition extends ChildrenOf<'group'>>(work: Gro
 }
 
 export class NamedExecution extends Group<string, number> {
-  readonly members = [operation];
+  constructor() {
+    super();
+    this.add(operation);
+  }
   readonly run: InvocationRunDefinition<string, number, 'group', Record<string, never>> = {
     requires: {},
     execute: executionHelper,

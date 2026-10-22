@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { initializeObserver, bindConversation, createConversationStructure, FunctionConversationDecision, WorkspaceFiles } from '@capix/observer-service';
+import { initializeObserver, ObserverConversations, buildConversation, createConversationStructure, FunctionConversationDecision, WorkspaceFiles } from '@capix/observer-service';
 import { Driver, ProgressChannel } from '@capix/server-runtime';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import { CallableRecordHelper } from '@capix/server-runtime/recording';
@@ -27,10 +27,13 @@ async function fixture(t, decide, options = {}) {
   const modelCalls = [];
   const progress = [];
   const fileProgress = [];
-  const decision = new FunctionConversationDecision(async (input) => {
-    inputs.push(input);
-    return decide(input, { root, files, index: inputs.length - 1 });
-  });
+  const decision = {
+    create: () =>
+      new FunctionConversationDecision(async (input) => {
+        inputs.push(input);
+        return decide(input, { root, files, index: inputs.length - 1 });
+      }),
+  };
   const provider = {
     async invoke(request, purpose) {
       modelCalls.push({ request, purpose });
@@ -50,7 +53,7 @@ async function fixture(t, decide, options = {}) {
           const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage(), files };
           const definition = createConversationStructure({ files: true, decision, maxDecisionSteps: config.maxDecisionSteps });
           const driver = new Driver();
-          const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
+          const scene = buildConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
           return { ...entities, driver, scene };
         })()
       : initializeObserver(provider, [], config);
@@ -398,5 +401,38 @@ test('decision, preflight and selected work remain real recorded calls with acce
   for (const record of direct) {
     assert.equal(record.status, 'succeeded');
     assert.ok(snapshot.execution.value.relationChanges.some((change) => change.identity.childContextId === record.contextId && change.change.kind === 'accepted'));
+  }
+});
+
+test('conversation hosts reuse decision factories while keeping each scene structure distinct', () => {
+  const decisions = [];
+  const host = new ObserverConversations(
+    {
+      invoke() {
+        throw new Error('No model call expected');
+      },
+    },
+    [],
+    {
+      decision: {
+        create() {
+          const decision = new FunctionConversationDecision(ordinary);
+          decisions.push(decision);
+          return decision;
+        },
+      },
+    },
+  );
+  try {
+    const first = host.open(host.list().defaultConversationId);
+    const second = host.open(host.create().id);
+    assert.equal(decisions.length, 2);
+    assert.notEqual(decisions[0], decisions[1]);
+    assert.equal(first.structure.decision, decisions[0]);
+    assert.equal(second.structure.decision, decisions[1]);
+    assert.equal(first.scene, first.structure.scene);
+    assert.equal(second.scene, second.structure.scene);
+  } finally {
+    host.close();
   }
 });

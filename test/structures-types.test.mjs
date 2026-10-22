@@ -59,7 +59,7 @@ test('an explicitly annotated callback cannot enlarge the installed phase action
   // TypeScript annotations are erased; actual authority comes from uses.
   group.setRun({ uses: [], execute: (work) => work.children.create(child, null).run() });
   const driver = new Driver();
-  const bound = driver.bind(group, { providers: [], source: { capture: () => null } });
+  const bound = driver.build(group, { providers: [], source: { capture: () => null } });
   await assert.rejects(driver.run(bound, null, {}), /not declared.*phase uses/);
   assert.equal(childCalls, 0);
   assert.equal(driver.isRunning(bound), false);
@@ -89,7 +89,7 @@ test('constructor exception configuration grants no actions when uses is omitted
     },
   }).add(child);
   const driver = new Driver();
-  const bound = driver.bind(group, { providers: [], source: { capture: () => null } });
+  const bound = driver.build(group, { providers: [], source: { capture: () => null } });
   await assert.rejects(driver.run(bound, null, {}), /not declared.*phase uses/);
   assert.equal(childCalls, 0);
   assert.equal(driver.isRunning(bound), false);

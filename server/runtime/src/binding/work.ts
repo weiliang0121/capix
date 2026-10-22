@@ -128,7 +128,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
           save: (point: object, state: unknown, refs: Readonly<Record<string, ChildReference | readonly ChildReference[]>>) => {
             try {
               access.validate();
-              const registered = this.declaration.checkpoint?.points.find((candidate) => originalCheckpointPoint(candidate) === point);
+              const registered = this.declaration.checkpoint?.points.find((candidate) => originalCheckpointPoint(candidate) === originalCheckpointPoint(point));
               if (!registered) throw new Error('Checkpoint point is not registered on this declaration');
               const registry = this.accessFor(invocation).references;
               const references = Object.fromEntries(Object.entries(refs).map(([name, value]) => [name, Array.isArray(value) ? value.map((ref) => registry.encode(ref)) : registry.encode(value as ChildReference)]));

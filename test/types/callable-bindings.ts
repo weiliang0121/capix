@@ -1,8 +1,10 @@
-import { Driver, defineNode, defineScene, type BoundCallable, type CheckpointStore } from '@capix/server-runtime';
+import { Driver, Group, Node, defineNode, defineScene, type BuiltCallable, type BuiltOptions, type CheckpointStore } from '@capix/server-runtime';
+
+import { createRootInvocation } from '@capix/server-runtime/construction';
 
 const node = defineNode<number, number>()({ run: { execute: (work) => work.input } });
 const driver = new Driver();
-const bound = driver.bind(node, {
+const bound = driver.build(node, {
   providers: [],
   source: {
     capture(_input: number, options: { tenantId: string }) {
@@ -12,8 +14,9 @@ const bound = driver.bind(node, {
 });
 const output: Promise<number> = driver.run(bound, 1, { tenantId: 'tenant', signal: new AbortController().signal });
 const resumed: Promise<number> = driver.resume(bound, 'saved-call', { tenantId: 'tenant' });
-const scope = bound.begin({ tenantId: 'tenant' });
-const directOutput: Promise<number> = bound.createRoot(1, scope, {}).run();
+const original: typeof node = bound;
+const requiredOptions: BuiltOptions<typeof bound> = { tenantId: 'tenant' };
+const directOutput: Promise<number> = createRootInvocation(bound, 1, { tenantId: 'tenant' }, {}).run();
 const running: boolean = driver.isRunning(bound);
 const checkpoints: CheckpointStore | undefined = driver.checkpointStore;
 
@@ -21,14 +24,14 @@ const checkpoints: CheckpointStore | undefined = driver.checkpointStore;
 driver.run(bound, 1, {});
 // @ts-expect-error Resume cannot omit the same source requirement.
 driver.resume(bound, 'saved-call', {});
-// @ts-expect-error A caller cannot omit required source options by entering the Bound directly.
-bound.begin({});
+// @ts-expect-error Low-level construction preserves the same required source options.
+createRootInvocation(bound, 1, {}, {});
 // @ts-expect-error A typed option cannot be substituted by another primitive.
 driver.run(bound, 1, { tenantId: 42 });
 // @ts-expect-error Source options cannot be widened by explicitly weakening the Driver method.
-driver.run<number, number, Record<string, never>, unknown>(bound, 1, {});
+driver.run<BuiltCallable<typeof node, unknown>>(bound, 1, {});
 // @ts-expect-error Erasing the options contract cannot make a source callable without its input.
-const erased: BoundCallable<number, number> = bound;
+const erased: BuiltCallable<typeof node, unknown> = bound;
 // @ts-expect-error The callable input is still independent from the source options.
 driver.run(bound, 'wrong input', { tenantId: 'tenant' });
 // @ts-expect-error A surrounding result annotation cannot change the declared output.
@@ -43,7 +46,7 @@ driver.running;
 driver.reserve(() => null);
 
 const scene = defineScene<string, string>()({ run: { execute: (work) => work.input } });
-const other = driver.bind(scene, {
+const other = driver.build(scene, {
   providers: [],
   source: {
     capture(_input: string, options: { documentId: number }) {
@@ -55,8 +58,51 @@ const otherOutput: Promise<string> = driver.run(other, 'document', { documentId:
 // @ts-expect-error A different binding retains its independent option contract.
 driver.run(other, 'document', { tenantId: 'tenant' });
 // @ts-expect-error Binding source input cannot change the definition's declared input.
-driver.bind(node, { providers: [], source: { capture: (_input: string) => null } });
+driver.build(node, { providers: [], source: { capture: (_input: string) => null } });
 
-const unconstrained = driver.bind(node, { providers: [], source: { capture: () => null } });
+const simpleNode = defineNode<number, number>()({ run: { execute: (work) => work.input } });
+const unconstrained = driver.build(simpleNode, { providers: [], source: { capture: () => null } });
 const simpleOutput: Promise<number> = driver.run(unconstrained, 1, {});
-void [output, resumed, directOutput, running, checkpoints, erased, wrongOutput, otherOutput, simpleOutput];
+void [original, requiredOptions, output, resumed, directOutput, running, checkpoints, erased, wrongOutput, otherOutput, simpleOutput];
+
+// The required build marker is independent from a structure's callable signature.
+const unbuilt = new Node<number, number>({ run: { execute: (work) => work.input } });
+// @ts-expect-error A configured structure has not installed its runtime capability.
+driver.run(unbuilt, 1, {});
+// @ts-expect-error Restoration also requires a built structure.
+driver.resume(unbuilt, 'saved-call', {});
+// @ts-expect-error Occupancy is defined only for a built entry owned by the Driver.
+driver.isRunning(unbuilt);
+// @ts-expect-error Low-level creation cannot silently build an unprepared structure.
+createRootInvocation(unbuilt, 1, {}, {});
+// @ts-expect-error The original alias does not statically acquire the returned build marker.
+driver.run(node, 1, { tenantId: 'tenant' });
+
+class NamedGroup extends Group<number, string> {
+  readonly purpose = 'format';
+  readonly child = new Node<number, string>({ run: { execute: (work) => String(work.input) } });
+
+  constructor() {
+    super();
+    this.add(this.child);
+    this.setRun({
+      uses: [this.child],
+      execute: async (work) => {
+        const child = work.children.create(this.child, work.input);
+        await child.run();
+        return child.accept();
+      },
+    });
+  }
+}
+const authored = new NamedGroup();
+const builtGroup = driver.build(authored, { providers: [], source: { capture: () => null } });
+const sameClass: NamedGroup = builtGroup;
+const purpose: 'format' = builtGroup.purpose;
+const ownChild: typeof authored.child = builtGroup.child;
+const groupOutput: Promise<string> = driver.run(builtGroup, 42, {});
+// @ts-expect-error Building preserves the concrete input rather than widening to unknown.
+driver.run(builtGroup, 'wrong', {});
+// @ts-expect-error Building preserves a subclass output rather than widening to unknown.
+const wrongGroupOutput: Promise<number> = driver.run(builtGroup, 42, {});
+void [sameClass, purpose, ownChild, groupOutput, wrongGroupOutput];

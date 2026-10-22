@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { invocationRecording } from '@capix/server-runtime/recording';
-import { Group, RuntimeError, reception, checkpointPoint, childReference, type GroupWork, type ResumeWork, type ChildContract, type ChildrenOf, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint, type ReceptionDefinition } from '@capix/server-runtime';
+import { Group, RuntimeError, reception, checkpointPoint, childReference, type GroupWork, type ResumeWork, type ChildContract, type ChildrenOf, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@capix/server-runtime';
 import { isEqual } from 'es-toolkit';
 import type { GenerationOutput, ConversationTask } from '@capix/protocol';
 import { conversationTaskRequests, type ConversationTaskResources } from './resources.js';
@@ -42,7 +42,7 @@ const fileArguments = z.strictObject({ task: z.union([z.strictObject({ sourcePat
 
 /** Compose one conversation request from accepted decisions and child deliveries. */
 export class ConversationGroup extends Group<AcceptedConversationInput, GenerationOutput, ConversationTaskResources, Record<string, never>, AnswerProgress> {
-  readonly decisionReception: ReceptionDefinition<ConversationDecisionGroup, DecisionAcceptance>;
+  readonly decisionReception;
   readonly maxDecisionSteps: number;
 
   readonly preparationWaiting;

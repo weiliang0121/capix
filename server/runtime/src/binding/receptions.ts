@@ -35,7 +35,7 @@ export class BoundReceptions {
     this.#bindings = Object.freeze(bindings);
   }
 
-  require<Definition extends ChildContract, Value>(reception: ReceptionDefinition<Definition, Value>, child: NoInfer<Definition>): InvocationReceptionBinding {
+  require<Definition extends ChildContract, Value>(reception: ReceptionDefinition<NoInfer<Definition>, Value>, child: Definition): InvocationReceptionBinding {
     const entry = this.#entries.get(originalReception(reception));
     if (!entry) throw new Error('Reception contract is not registered by this parent');
     if (entry.child !== child) throw new Error('Reception contract belongs to a different child declaration');

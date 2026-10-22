@@ -149,7 +149,7 @@ test('cancellation from resource start observation prevents synchronous and asyn
 class Main extends Scene {
   constructor(execute, { children = [], requires = {} } = {}) {
     super();
-    this.members = children;
+    this.add(...children);
     this.run = { requires, uses: children, execute };
   }
 }

@@ -34,13 +34,14 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
   const captures = new Set(options.sources ?? []);
   const encountered = new Set<AnyCallable>();
   const path = new Set<AnyCallable>();
+  const observations: { definition: AnyCallable; parent?: AnyCallable }[] = [];
   const visit = (current: AnyCallable, parent?: { readonly kind: CallableKind; readonly definition: AnyCallable }): ResolvedCallable => {
     if (path.has(current)) throw new Error('Cyclic member declaration');
     if (!isFunction(current.run?.execute)) throw new Error('Callable definition requires execute');
     const allowed: readonly CallableKind[] | undefined = parent && childKinds[parent.kind];
     if (!Object.hasOwn(childKinds, current.kind) || (allowed && !allowed.includes(current.kind))) throw new Error('Invalid member definition kind');
     const declaration = snapshotDefinition(current);
-    for (const observation of options.observations ?? []) observation.check?.(current, parent?.definition);
+    observations.push({ definition: current, parent: parent?.definition });
     const requires = collectDefinitionRequirements(declaration, options.observationProvides);
     const definitions: readonly ChildCallable[] = 'members' in declaration ? (declaration.members ?? []) : [];
     const receptions = new Set<object>();
@@ -80,6 +81,10 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
   }
   for (const target of captures) {
     if (!encountered.has(target)) throw new Error('Call source requires a registered member');
+  }
+  // Fix every interpreted entry before host checks run; checks cannot rewrite a later member's work.
+  for (const entry of observations) {
+    for (const observation of options.observations ?? []) observation.check?.(entry.definition, entry.parent);
   }
   // Traversal preserves the identity and kind of its exact root definition.
   return resolved as ResolvedCallable<Definition>;

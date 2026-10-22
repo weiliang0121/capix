@@ -10,7 +10,7 @@ import { originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.j
 import { activeContentSnapshotCodec, contextMaintenanceRequestCodec, contextMaintenanceInputCodec, maintenanceAcceptedCodec, maintenanceCompletedCodec } from './checkpoint.js';
 import { activeContentSelectionSchema } from './schema.js';
 import type { ContextMaintenanceDecision, ContextMaintenanceInput, ContextMaintenanceOperation, ContextMaintenancePolicy, ContextMaintenanceRequest } from './types.js';
-export type { ContextMaintenanceDecision, ContextMaintenanceInput, ContextMaintenanceOperation, ContextMaintenancePolicy, ContextMaintenanceRequest } from './types.js';
+export type { ContextMaintenanceConfiguration, ContextMaintenanceFunction, ContextMaintenanceDecision, ContextMaintenanceInput, ContextMaintenanceOperation, ContextMaintenancePolicy, ContextMaintenanceRequest } from './types.js';
 
 interface MaintenanceResources {
   readonly activeContentManager: ActiveContentManager;

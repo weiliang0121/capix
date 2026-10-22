@@ -1,4 +1,4 @@
-import { Driver, Group, Node, Scene, checkpointPoint, childReference, reception, defineGroup, defineNode, defineScene, type ResourceRequest, type CheckpointCodec, type ChildReference, type GroupDefinition, type NodeDefinition, type NodeWork, type GroupWork, type HandleWork } from '@capix/server-runtime';
+import { Driver, Group, Node, Scene, checkpointPoint, childReference, reception, defineGroup, defineNode, defineScene, type BuiltCallable, type CallableInput, type CallableOutput, type CallableDelta, type ResourceRequest, type CheckpointCodec, type ChildReference, type GroupDefinition, type NodeDefinition, type NodeWork, type GroupWork, type HandleWork } from '@capix/server-runtime';
 
 declare function expectType<Value>(value: Value): void;
 
@@ -347,10 +347,131 @@ factoryGroup.add(read);
 factoryScene.add(group);
 
 const driver = new Driver();
-const bound = driver.bind(group, { providers: [], source: { capture: () => null } });
+const bound = driver.build(group, { providers: [], source: { capture: () => null } });
 expectType<Promise<Result>>(driver.run(bound, { path: 'notes.md' }, {}));
 // @ts-expect-error bound inputs are fixed by the structure rather than the latest phase resources
 driver.run(bound, 123, {});
 // @ts-expect-error bound outputs cannot be changed by a surrounding annotation
 const incorrectOutput: Promise<number> = driver.run(bound, { path: 'notes.md' }, {});
 void [constructor, incorrectOutput];
+
+// Build is a facet on the original object. Relation contracts compare its stable
+// kind/I/O/Delta signature, not the newly installed runtime-capability marker.
+declare const builtRead: BuiltCallable<typeof read, { tenantId: string }>;
+declare const originalReadRef: ChildReference<typeof read>;
+declare const builtReadRef: ChildReference<typeof builtRead>;
+const sameRead: typeof read = builtRead;
+expectType<Input>({ path: 'notes.md' } satisfies CallableInput<typeof builtRead>);
+expectType<Result>({ text: 'read' } satisfies CallableOutput<typeof builtRead>);
+const relationOwner = new Group<Input, Result>();
+relationOwner.add(read);
+relationOwner.setDefinition({
+  receptions: [value],
+  run: {
+    uses: [builtRead],
+    async execute(work) {
+      const fromOriginal = work.children.create(read, work.input);
+      const fromBuilt = work.children.create(builtRead, work.input);
+      await fromOriginal.run();
+      await fromBuilt.run();
+      const originalValue: number = await fromOriginal.accept(value, (result) => result.text.length);
+      const builtValue: number = await fromBuilt.accept(value, (result) => result.text.length);
+      expectType<number>(work.children.facts.accepted(originalReadRef, value));
+      expectType<number>(work.children.facts.accepted(builtReadRef, value));
+      // @ts-expect-error A build facet does not weaken the reception value contract.
+      fromBuilt.accept(value, (result) => result.text);
+      // @ts-expect-error A build facet does not change the child's input.
+      work.children.create(builtRead, { path: 42 });
+      return { text: String(originalValue + builtValue) };
+    },
+  },
+});
+const builtPoint = checkpointPoint<'group', Input, Result>()({
+  name: 'built-facets',
+  state: numberCodec,
+  references: { original: childReference(read), built: childReference(builtRead) },
+  resume: {
+    uses: [builtRead],
+    async execute(work, _state, saved) {
+      const original = work.children.resume(saved.original);
+      const built = work.children.resume(saved.built);
+      expectType<Promise<Result>>(original.run());
+      expectType<Promise<Result>>(built.run());
+      await original.run();
+      await built.run();
+      const accepted: number = await built.accept(value, (result) => result.text.length);
+      return { text: String(accepted) };
+    },
+  },
+});
+relationOwner.setDefinition({
+  checkpoint: { key: 'built.facets', version: 1, input: inputCodec, output: resultCodec, points: [builtPoint] },
+  receptions: [value],
+  run: {
+    uses: [read],
+    async execute(work) {
+      const child = work.children.create(builtRead, work.input);
+      work.checkpoint?.save(builtPoint, 1, { original: child.ref, built: builtReadRef });
+      await child.run();
+      return child.accept();
+    },
+  },
+});
+
+const differentInput = new Node<number, Result>();
+const narrowerInput = new Node<{ path: 'exact.md' }, Result>();
+const differentOutput = new Node<Input, number>();
+const differentKind = new Group<Input, Result>();
+const differentDelta = new Node<Input, Result, {}, {}, string>();
+const rejectedBuildFacets = checkpointPoint<'group', Input, Result>()({
+  name: 'rejected-built-facets',
+  state: numberCodec,
+  references: {
+    input: childReference(differentInput),
+    narrow: childReference(narrowerInput),
+    output: childReference(differentOutput),
+    kind: childReference(differentKind),
+    delta: childReference(differentDelta),
+  },
+  resume: {
+    uses: [builtRead],
+    execute(work, _state, saved) {
+      // @ts-expect-error Stable identity does not erase the input signature.
+      work.children.resume(saved.input);
+      // @ts-expect-error A narrower input cannot substitute for the installed callable.
+      work.children.resume(saved.narrow);
+      // @ts-expect-error Stable identity does not erase the output signature.
+      work.children.resume(saved.output);
+      // @ts-expect-error Stable identity does not erase the structural kind.
+      work.children.resume(saved.kind);
+      // @ts-expect-error Stable identity does not erase the output Delta.
+      work.children.resume(saved.delta);
+      return { text: 'type-only' };
+    },
+  },
+});
+
+// Streaming callbacks use the same Delta before and after runtime assembly.
+declare const builtStreamed: BuiltCallable<typeof streamed, { tenantId: string }>;
+const streamedOwner = new Group<Input, Result, {}, {}, string>();
+streamedOwner.add(streamed);
+streamedOwner.setRun({
+  uses: [builtStreamed],
+  async execute(work) {
+    const child = work.children.create(streamed, work.input, {
+      output: {
+        receive(event) {
+          if (event.kind === 'delta') {
+            expectType<CallableDelta<typeof builtStreamed>>(event.delta);
+            work.output.emit(event.delta);
+            // @ts-expect-error Streaming Delta stays string after assembly.
+            expectType<number>(event.delta);
+          }
+        },
+      },
+    });
+    await child.run();
+    return child.accept();
+  },
+});
+void [sameRead, rejectedBuildFacets];

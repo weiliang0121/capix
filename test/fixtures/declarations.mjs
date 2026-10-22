@@ -1,12 +1,10 @@
-import { invocationRecording } from '@capix/server-runtime';
+import { Scene, invocationRecording } from '@capix/server-runtime';
 
-/** A real R declaration used by tests that focus on one selected E. */
+/** A real Scene used by tests that focus on one selected child. */
 export function runtimeDefinition(execution) {
-  return {
-    kind: 'scene',
+  return new Scene({
     maxRounds: 1,
     raises: execution.raises ?? [],
-    members: [execution],
     run: {
       requires: {},
       uses: [execution],
@@ -16,7 +14,7 @@ export function runtimeDefinition(execution) {
         return child.accept(() => output);
       },
     },
-  };
+  }).add(execution);
 }
 
 /** Recording is an explicit declaration throughout the tested subtree. */

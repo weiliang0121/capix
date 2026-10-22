@@ -1,17 +1,17 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ResourceOffer, bindResources, bindChildResources, bindCallSource } from '@capix/server-runtime';
+import { Group, Node, ResourceOffer, bindResources, bindChildResources, bindCallSource } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {
-  return { kind: 'node', name, label: name, source: 'test', callee: 'test', maxRounds: 1, raises: [], run };
+  return new Node({ name, label: name, source: 'test', callee: 'test', run });
 }
 function operation(name, children, run) {
-  return { kind: 'group', name, label: name, source: 'test', members: children, maxRounds: 1, raises: [], run };
+  return new Group({ name, label: name, source: 'test', run }).add(...children);
 }
 function execution(children, run) {
-  return { kind: 'group', members: children, maxRounds: 1, raises: [], run };
+  return new Group({ run }).add(...children);
 }
 
 // Offer identities, local aliases, resource captures and business access are separate boundaries.
@@ -176,8 +176,9 @@ test('observation-only supplies never satisfy a business descendant requirement'
     ],
   };
   assert.equal(await installCallable(runtimeDefinition(main), options).run(null, {}), 'ok');
-  leaf.run = { requires: { value: offer.request() }, execute: (work) => work.resources.value };
-  assert.throws(() => installCallable(runtimeDefinition(main), options), /Expected one resource provider/);
+  const businessLeaf = attempt('business-leaf', { requires: { value: offer.request() }, execute: (work) => work.resources.value });
+  const next = execution([businessLeaf], { requires: {}, execute: (work) => work.children.create(businessLeaf, null).run() });
+  assert.throws(() => installCallable(runtimeDefinition(next), options), /Expected one resource provider/);
 });
 
 test('identity aggregation still rejects missing, duplicate and name-conflicting providers', () => {

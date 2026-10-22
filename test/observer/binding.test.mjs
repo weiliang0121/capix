@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Driver, MemoryCheckpointStore, ProgressChannel } from '@capix/server-runtime';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
-import { ActiveContent, bindConversation, createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
+import { ActiveContent, buildConversation, createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
 import { MemoryConversationCheckpointRuns } from '@capix/observer-service/assembly';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -24,14 +24,14 @@ function binding() {
   const checkpointStore = new MemoryCheckpointStore();
   const capabilities = { conversationId: 'conversation', checkpointRuns: new MemoryConversationCheckpointRuns() };
   const driver = new Driver({ checkpoints: { store: checkpointStore } });
-  const scene = bindConversation(driver, createConversationStructure(), entities, model, capabilities);
+  const scene = buildConversation(driver, createConversationStructure(), entities, model, capabilities);
   return { driver, scene, entities, model, capabilities, requests };
 }
 
 test('conversation checkpoint association requires the Driver to install the store', (t) => {
   const { entities, model, capabilities } = binding();
   t.after(() => model.close());
-  assert.throws(() => bindConversation(new Driver(), createConversationStructure(), entities, model, capabilities), /Checkpoint run association requires a conversation and checkpoint store/);
+  assert.throws(() => buildConversation(new Driver(), createConversationStructure(), entities, model, capabilities), /Checkpoint run association requires a conversation and checkpoint store/);
 });
 
 test('conversation source resets capture for reused options and registers CP before external started', async (t) => {
@@ -146,7 +146,7 @@ test('conversation binding rechecks registered restoration configuration without
   t.after(() => model.close());
   await driver.run(scene, { messages: [{ role: 'user', content: 'original' }] }, { settings });
   const [run] = capabilities.checkpointRuns.list('conversation');
-  const changed = bindConversation(driver, createConversationStructure({ maxDecisionSteps: 4 }), entities, model, capabilities);
+  const changed = buildConversation(driver, createConversationStructure({ maxDecisionSteps: 4 }), entities, model, capabilities);
   await assert.rejects(driver.run(changed, { messages: [{ role: 'user', content: 'must not append' }] }, { settings, checkpointRun: run }), { code: 'CHECKPOINT_CONFIGURATION_CHANGED' });
   assert.equal(entities.transcript.length, 2);
   assert.equal(requests.length, 2);

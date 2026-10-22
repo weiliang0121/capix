@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 import { ProgressChannel, defineGroup } from '@capix/server-runtime';
-import { ConversationSubmission, createSubmissionStore, bindConversation, createConversationStructure, ConversationGroup, acceptMessages } from '@capix/observer-service';
+import { ConversationSubmission, createSubmissionStore, buildConversation, createConversationStructure, ConversationGroup, acceptMessages } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
@@ -58,7 +58,7 @@ test('service projection retains input committed before capture failure, without
     },
   });
   const driver = new Driver();
-  const scene = bindConversation(driver, createConversationStructure(), environment, new ModelInteractions(new ModelSource(provider)));
+  const scene = buildConversation(driver, createConversationStructure(), environment, new ModelInteractions(new ModelSource(provider)));
   const submission = new ConversationSubmission('append-failed', 'conversation');
   submission.start(() => driver.run(scene, input, { settings, progress: submission.progress }));
   const snapshot = await complete(submission);
@@ -92,7 +92,7 @@ test('service input acceptance only classifies validation it actually owns', () 
 test('projection failure stops trustworthy progress but does not stop a running conversation', async () => {
   const environment = createEnvironment();
   const driver = new Driver();
-  const scene = bindConversation(driver, createConversationStructure(), environment, new ModelInteractions(new ModelSource(provider)));
+  const scene = buildConversation(driver, createConversationStructure(), environment, new ModelInteractions(new ModelSource(provider)));
   const submission = new ConversationSubmission('broken-projection', 'conversation');
   // A second committed input cannot be interpreted as the same submission's input.
   submission.progress.publish({ kind: 'input', range: { transcriptId: environment.transcript.id, start: 0, end: 1, revision: 1 } });
@@ -191,7 +191,7 @@ test('conversation binding selects its declared E instead of giving every R chil
     },
   });
   const driver = new Driver();
-  const scene = bindConversation(driver, definition, environment, new ModelInteractions(new ModelSource(provider)));
+  const scene = buildConversation(driver, definition, environment, new ModelInteractions(new ModelSource(provider)));
   const received = [];
   await driver.run(scene, input, {
     settings,
@@ -227,7 +227,7 @@ test('async delivery listeners are isolated and readiness cancellation only deta
 test('a single submission channel disables its consumer across input, execution and answer sources', async () => {
   const environment = createEnvironment();
   const driver = new Driver();
-  const scene = bindConversation(driver, createConversationStructure(), environment, new ModelInteractions(new ModelSource(provider)));
+  const scene = buildConversation(driver, createConversationStructure(), environment, new ModelInteractions(new ModelSource(provider)));
   const received = [];
   const failures = [];
   const failure = new Error('input projection failed');
@@ -317,7 +317,7 @@ test('only runtime-confirmed cancellation terminates as cancelled and keeps comm
     }),
   );
   const driver = new Driver();
-  const scene = bindConversation(driver, createConversationStructure(), environment, interactions);
+  const scene = buildConversation(driver, createConversationStructure(), environment, interactions);
   const submission = new ConversationSubmission('confirmed-cancel', 'conversation');
   try {
     submission.start((signal) => driver.run(scene, input, { settings, progress: submission.progress, activity: submission.activity, signal }));

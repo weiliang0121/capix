@@ -4,25 +4,26 @@
 
 ## 对象与切面
 
-| 对象／切面                  | 负责什么                               | 不负责什么                         |
-| --------------------------- | -------------------------------------- | ---------------------------------- |
-| Callable / CallableContract | 结构共有的调用配置 / 只读 I/O 签名     | 不持有一次调用的进度               |
-| Composite                   | 声明可用成员                           | 不自动遍历、调度或接纳成员         |
-| Node                        | 基础可调用节点                         | 不取得成员调用端口                 |
-| Group                       | 组合成员，完成自己的整体处理           | 不限定固定顺序、并行或模型决策方式 |
-| Scene                       | 向宿主表达整体场景，自身可调用         | 不持有入口占用，不代替驱动者       |
-| CallableBinder              | 解算声明、资源申请与显式来源绑定       | 不执行业务，不缓存当前输入         |
-| BoundCallable               | 持有固定接线和惰性成员结构             | 不持有运行中的 Context             |
-| Driver                      | 提供绑定入口，按绑定结构管理占用和启动 | 不替业务选择成员                   |
-| Invocation                  | 协调一次调用的工作阶段、控制与交付     | 不识别“对话任务”之类的业务角色     |
-| CallableContext             | 本次输入、进度、终态与资源窗口         | 不引用祖先 Context 来获取资源      |
-| Work                        | 本阶段业务可用的资源与动作             | 不暴露 Invocation 或构造绑定       |
+| 对象／切面                  | 负责什么                                         | 不负责什么                         |
+| --------------------------- | ------------------------------------------------ | ---------------------------------- |
+| Callable / CallableContract | 结构共有的调用配置 / 只读 I/O 签名               | 不持有一次调用的进度               |
+| Composite                   | 声明可用成员                                     | 不自动遍历、调度或接纳成员         |
+| Node                        | 基础可调用节点                                   | 不取得成员调用端口                 |
+| Group                       | 组合成员，完成自己的整体处理                     | 不限定固定顺序、并行或模型决策方式 |
+| Scene                       | 向宿主表达整体场景，自身可调用                   | 不持有入口占用，不代替驱动者       |
+| CallableBinder              | 解算声明、资源申请与显式来源绑定                 | 不执行业务，不缓存当前输入         |
+| CallableBuilder             | 协调完整构建，把固定接线与调用构造能力装入原结构 | 不创建本次 Context 或执行业务      |
+| BuiltCallable               | 原结构完成构建后的类型，固定接线与调用构造能力   | 不是第二个结构，不持有本次 Context |
+| Driver                      | 提供整体构建入口，按场景管理占用和启动           | 不替业务选择成员                   |
+| Invocation                  | 协调一次调用的工作阶段、控制与交付               | 不识别“对话任务”之类的业务角色     |
+| CallableContext             | 本次输入、进度、终态与资源窗口                   | 不引用祖先 Context 来获取资源      |
+| Work                        | 本阶段业务可用的资源与动作                       | 不暴露 Invocation 或构造绑定       |
 
 Scene 和 Group 具有成员组合能力。Node 在类型和绑定阶段均拒绝成员声明。空 Group 仍具有组合能力，不能用成员数量判断对象种类。当前 Scene 用作宿主入口，成员为 Group 或 Node；嵌套 Scene 不在本轮范围。
 
 `members` 是结构对象中已注册的可用成员，通过 `scene.add(group)`、`group.add(node)` 或 `scene.add(node)` 建立。`work.children` 是本次调用在当前阶段获得的子调用端口。声明中没有调用顺序；每个组合体自己的 `execute` 决定何时创建、运行与接纳子调用。
 
-## 局部构造、组织、绑定、运行
+## 配置、构建、调用
 
 业务先构造一个闭合的节点，再把节点组织成组合体或场景。业务配置仍存在，但不再另建一个有注册身份的 Definition 对象树。`NodeDefinition`、`GroupDefinition`、`SceneDefinition` 是普通配置类型；Node、Group、Scene 本身才是成员、uses、接纳契约和 checkpoint 引用的目标。
 
@@ -59,19 +60,22 @@ scene.setDefinition({
 });
 
 const driver = new Driver();
-const boundScene = driver.bind(scene, {
+const builtScene = driver.build(scene, {
   providers: [],
   source: { capture: () => undefined },
 });
-const result = await driver.run(boundScene, 'CAPiX', {}); // 5
+// builtScene === scene；返回值提供构建后的类型，不是另一个结构。
+const result = await driver.run(builtScene, 'CAPiX', {}); // 5
 ```
 
 - 构造器配置和 `setDefinition` 表达同一组业务字段；`setDefinition` 全量替换业务配置，未提供的可选机制清除，已经 add 的成员保留。
 - `setRun` 全量替换 run 阶段，包括 requires、uses、execute 和 accept。资源与动作类型从本次配置推导，不沿用上一阶段的资源类型。
 - 构造器显式给出 I/O 后，需要资源时可提供第三泛型；希望资源就地推导时，用 `setRun` 或 `setDefinition`。I/O 和 Delta 属于节点固定签名，不随 setter 改变。
-- `add` 仅注册可用成员，不推导顺序或自动执行。重复加入同一个对象不新增位置；一个对象可在多个父结构中复用，不隐式从旧父结构移走。同一配置创建两个 Node，则是两个注册身份。
+- `add` 仅注册可用成员，不推导顺序或自动执行。Scene 是根；每个 Group/Node 只能有一个父结构。同父重复添加不新增位置，跨父添加拒绝，不隐式移走。需要复用时共享处理函数、配置工厂或资源实体，并建立不同结构实例。
 - `add` 整批检查 kind 与循环，失败不部分安装。未配置 execute 的结构可以先组织，但不能绑定运行。Node 没有 add，也不能获得 children 或 receptions。
-- 绑定固定每个位置的业务入口、机制配置、成员顺序和资源接线。之后修改结构只影响下一次 bind；已有绑定及其惰性子结构继续使用原契约。业务闭包与 receiver 不被冻结，作者仍需避免让运行读取自己后来修改的外部可变配置。
+- `driver.build` 完整成功后固定整棵结构的业务入口、机制配置、成员顺序和资源接线；之后拒绝 `setRun`、`setDefinition`、`add` 和再次构建。构建失败不留下部分可运行的结构，修正配置后可再次尝试。业务闭包与 receiver 不深度冻结，处理函数不能把本次输入、资源端点或进度写入共享字段。
+
+构建期间整树暂时禁止配置修改及重入构建；完整声明入口先固定，再执行宿主的检查回调。原配置对象中的业务状态仍由业务持有，改变它不会重新选择已固定的函数入口。Proxy 结构和无法固定的结构字段在安装前拒绝，避免出现只有部分节点装配成功的状态。
 
 构造器与 setter 的类型精度有明确差别：构造器的 I/O、Resources、ExceptionResources、Delta 固定，行动端口按结构 kind 检查；独立调用 `setRun` / `setDefinition` 才能从本次 uses 推导更窄的行动集合。两种入口都执行同样的运行期范围检查：run 省略 uses 表示全部已注册成员，exceptions 省略 uses 表示没有新增子行动。需要静态收窄的组合处理优先用 setter。
 
@@ -81,9 +85,13 @@ const result = await driver.run(boundScene, 'CAPiX', {}); // 5
 
 处理函数消费阶段 Work。成功返回保持真实引用，子返回和父接纳分别记录。注册身份、阶段行动范围、恢复引用和资源申请仍独立检查。
 
-宿主显式创建 Driver。Driver 固定时钟、观测和 checkpoint 等机制接入，`bind` 委托 CallableBinder，返回归属于此 Driver 的 BoundCallable；`run` 和 `resume` 显式接收该绑定结构，不保存“当前场景”。每个绑定入口独立占用，`isRunning(boundScene)` 查询该入口；其他 Driver 或直接由 Binder 创建的结构不能混入。
+宿主显式创建 Driver。`driver.build(scene, options)` 是整体构建入口，内部先由 CallableBinder 解算结构与资源接线，再由 CallableBuilder 将调用构造能力安装到原 Scene/Group/Node；返回值与传入结构严格相同。`BuiltCallable<Structure, Options>` 表达已完成构建的类型，不增加 Bound 对象或平行结构树。
 
-绑定提前解算声明树并固定函数入口，保留业务方法 receiver。每次 bind 建立独立构造安装，统一 Binder 惰性建立成员的 BoundCallable；统一 Builder 为每次调用建立 CallableContext 和 Invocation。调用循环消费同一个工作契约，不根据 Scene／Group／Node 分派执行流程。每个绑定的 I/O 与宿主参数类型独立保留，Driver 本身不绑定一种业务签名。
+构建不执行来源捕获或业务，也不创建 Invocation。每次 `driver.run(builtScene, input, options)` 才核验构建归属、取得入口占用、捕获本次来源、建立 Invocation/CallableContext 并执行。`resume` 与 `isRunning` 同样显式接收构建后的场景；Driver 不保存“当前场景”。不同场景入口各自占用，节点不会因为单父归属而被隐式串行化。
+
+构建固定声明字段、业务方法入口及 receiver，并建立独立 CallableInvocationBuilder 作为安装归属。成员使用已完成的接线，单次调用仍由统一 Builder 建立 Context 和 Invocation；运行循环不根据 Scene/Group/Node 分派不同执行机制。每个场景保留自己的 I/O 与宿主参数类型，Driver 本身不绑定一种业务签名。未构建、跨 Driver 或伪造结构不能进入运行入口。
+
+一个结构只完成一次构建。改变业务结构或资源供应规则时，建立新结构并重新构建；可以继续使用同一消息、记忆或其他资源实体，不需要清空对话。每次输入、模型参数、文件路径与内容变化不是结构修改，按既有接线形成独立调用范围。
 
 普通使用可以省略 Driver 的机制配置：时钟使用系统实现，观测和 checkpoint 不安装。显式安装的机制在该 Driver 内固定；需要不同安装时由宿主创建不同 Driver。注入不转移实体、记录载体或数据库的关闭责任。
 
@@ -93,7 +101,7 @@ const result = await driver.run(boundScene, 'CAPiX', {}); // 5
 
 当前根入口取得一次来源。普通成员沿用已经捕获的供给，为本层和阶段建立自己的访问窗口。宿主可以通过准确的声明身份注册新的捕获边界；例如 Observer 的对话 Group 在建立时固定本次模型配置。该规则来自显式绑定，不来自 Group 的结构种类。
 
-`source` 和按目标注册的 `bindings` 仍沿用当前的捕获、建立通知与输出接线。本次只消除沿声明树寻找目标的写法；它们的职责重划留待单独讨论。
+`source` 和按目标注册的 `bindings` 仍沿用当前的捕获、建立通知与输出接线。它们仍是资源与宿主事实的明确接线；整体构建不提前执行这些按次回调。
 
 本层 Work 仅获得本阶段申请的端点。子树供给需求不扩张父 Work。固定构造绑定沿调用链传递，Context 不保存祖先或来源解析器；Builder 不保存单次输入。
 
@@ -113,6 +121,6 @@ const result = await driver.run(boundScene, 'CAPiX', {}); // 5
 
 实时记录使用通用调用树和实际结构种类。对话任务的角色由服务明确标记，不能把每个 Group 都投影成 QA。任务位于深层 Group 时，详情显式携带中间祖先路径，保留子树与根之间的真实归属。旧 REOA 记录保留只读解释，不据此复原新的运行结构。
 
-本次构造方式调整不改变已有 v4 编码；相同的成员顺序、CP key/version、点和接纳契约仍可续接。Checkpoint Frame v4 使用实际调用身份、结构种类、成员位置及父接纳契约。旧 v1／v2／v3 不自动迁移或续接；消息、记忆和健康历史记录的读取不依赖旧 checkpoint 可以恢复。新的树结构仍要求准确直接归属、声明版本与注册位置，不能以名称、角色或相同输入代替身份。
+本次同体构建不改变已有 v4 编码；默认 Observer 的成员顺序、CP key/version、点和接纳契约保持。维护策略的前后两个位置改为独立结构，自定义维护的宿主恢复继续明确拒绝；不把结构改造当作恢复兼容证明。Checkpoint Frame v4 使用实际调用身份、结构种类、成员位置及父接纳契约。旧 v1／v2／v3 不自动迁移或续接；消息、记忆和健康历史记录的读取不依赖旧 checkpoint 可以恢复。新的树结构仍要求准确直接归属、声明版本与注册位置，不能以名称、角色或相同输入代替身份。
 
 本次不增加全局调度、自动收集执行循环、运行期能力注册、任意位置恢复或外部副作用重放。

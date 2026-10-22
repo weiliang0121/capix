@@ -30,7 +30,10 @@ type InvalidException = InvocationExceptionDefinition<string, number, 'group', R
 type InvalidPoint = InvocationCheckpointPoint<string, number, 'group', number, Record<string, never>, Record<string, never>, typeof scene>;
 
 class InvalidExecution extends Group<string, number> {
-  readonly members = [operation];
+  constructor() {
+    super();
+    this.add(operation);
+  }
   readonly run: InvocationRunDefinition<string, number, 'group', Record<string, never>, never, typeof operation> = {
     requires: {},
     execute(work) {

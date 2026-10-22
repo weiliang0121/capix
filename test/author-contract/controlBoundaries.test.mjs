@@ -68,34 +68,36 @@ for (const forged of [true, false]) {
     let resumed = 0;
     let normalExecutions = 0;
     let acceptances = 0;
-    const point = checkpointPoint()({
-      name: 'prepared',
-      state: codec,
-      references: {},
-      resume: {
-        execute(work, state) {
-          resumed++;
-          assert.equal(work.round, 1);
-          assert.deepEqual(state, { ready: true });
-          return value;
+    function createDefinition() {
+      const point = checkpointPoint()({
+        name: 'prepared',
+        state: codec,
+        references: {},
+        resume: {
+          execute(work, state) {
+            resumed++;
+            assert.equal(work.round, 1);
+            assert.deepEqual(state, { ready: true });
+            return value;
+          },
         },
-      },
-    });
-    const definition = defineScene()({
-      maxRounds: 2,
-      checkpoint: { key: 'author.control.resume', version: 1, input: codec, output: codec, points: [point] },
-      run: {
-        execute(work) {
-          normalExecutions++;
-          work.checkpoint.save(point, { ready: true }, {});
-          return 'initial result';
+      });
+      return defineScene()({
+        maxRounds: 2,
+        checkpoint: { key: 'author.control.resume', version: 1, input: codec, output: codec, points: [point] },
+        run: {
+          execute(work) {
+            normalExecutions++;
+            work.checkpoint.save(point, { ready: true }, {});
+            return 'initial result';
+          },
+          accept(work) {
+            acceptances++;
+            return work.delivered;
+          },
         },
-        accept(work) {
-          acceptances++;
-          return work.delivered;
-        },
-      },
-    });
+      });
+    }
     let saved;
     class CapturingStore extends MemoryCheckpointStore {
       save(image, revision) {
@@ -104,13 +106,13 @@ for (const forged of [true, false]) {
         return head;
       }
     }
-    assert.equal(await runtime(definition, new CapturingStore()).run('initial', {}), 'initial result');
+    assert.equal(await runtime(createDefinition(), new CapturingStore()).run('initial', {}), 'initial result');
     assert.ok(saved, 'the first invocation reached the durable author boundary');
     // Restore only the captured image, as if the process ended at save. A final
     // delivery from the completed fixture invocation is deliberately excluded.
     const restoredStore = new MemoryCheckpointStore();
     restoredStore.save(saved, 0);
-    const restored = runtime(definition, restoredStore);
+    const restored = runtime(createDefinition(), restoredStore);
     if (forged) await assert.rejects(restored.resume(saved.frame.owner.contextId, {}), /control must be issued by the current author phase/);
     else assert.equal(await restored.resume(saved.frame.owner.contextId, {}), value);
     assert.equal(resumed, 1);
@@ -166,7 +168,7 @@ test('ChildEntry admission cannot change the already selected child definition',
   assert.equal(replacementCalls, 0);
 });
 
-test('lazy child checkpoint layout retains the resolved level after original declaration mutation', async () => {
+test('built child checkpoint layout and processing reject later structure mutation', async () => {
   const operation = defineGroup()({ name: 'fixture', label: 'fixture', source: 'test', run: { execute: () => 'delivered' } });
   const point = checkpointPoint()({ name: 'accepted', state: codec, references: { child: childReference(operation) }, resume: { execute: () => 'resumed' } });
   const execution = defineGroup()({
@@ -193,11 +195,11 @@ test('lazy child checkpoint layout retains the resolved level after original dec
     },
   });
   const installed = runtime(root, new MemoryCheckpointStore());
-  // Kind is fixed at construction. Business configuration remains replaceable,
-  // but lazy binding must continue to use the original checkpoint layout and work.
+  // Kind is fixed at construction. Building also fixes the business
+  // configuration used by later calls and the saved checkpoint layout.
   assert.throws(() => {
     operation.kind = 'node';
   }, /read only/);
-  operation.setRun({ execute: () => 'changed after binding' });
+  assert.throws(() => operation.setRun({ execute: () => 'changed after build' }), /configuration is locked after build/);
   assert.equal(await installed.run('input', {}), 'delivered');
 });

@@ -1,16 +1,16 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, InvocationEntry, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
-import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, CallableContext } from '@capix/server-runtime/construction';
+import { Group, ExceptionContract, InvocationEntry, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
+import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, CallableContext, CallableBuilder, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 function operation(execute = (work) => work.input) {
-  return { kind: 'group', name: 'child', label: 'Child', source: 'test', members: [], maxRounds: 1, raises: [], run: { requires: {}, execute } };
+  return new Group({ name: 'child', label: 'Child', source: 'test', maxRounds: 1, raises: [], run: { requires: {}, execute } });
 }
 
 function assemble(child, run, options = {}) {
-  const execution = { kind: 'group', members: [child], maxRounds: 1, raises: [], ...options, run: { requires: {}, ...run } };
+  const execution = new Group({ maxRounds: 1, raises: [], ...options, run: { requires: {}, ...run } }).add(child);
   return installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
 }
 
@@ -144,64 +144,69 @@ for (const boundary of ['phase', 'round']) {
   }
 }
 
-test('building access and obtaining an endpoint stay lazy, and a reused builder keeps invocation state separate', async () => {
-  const definition = operation();
-  let initialized = 0;
-  const bound = new BoundChildren([resolveDeclaration(definition)], (actual) => {
-    assert.equal(actual.definition, definition);
-    initialized++;
-    return {
-      create(parent, input, options) {
-        return new Invocation({ parent: { invocation: parent, ...options }, context: new InvocationContext(input), signal: new AbortController().signal, work: { maxRounds: 1, execute: (context) => context.currentInput } });
-      },
-      resume() {
-        assert.fail('normal access must not resume a child');
-      },
-    };
+test('building child access does not execute members and a reused builder keeps invocation state separate', async () => {
+  let calls = 0;
+  const definition = operation((work) => {
+    calls++;
+    return work.input;
   });
-  const builder = new ChildBindingsBuilder(bound);
   const accessObjects = [];
   const parents = [];
-  for (const input of ['first', 'second']) {
-    const parent = new Invocation({
-      context: new CallableContext(input, 'scene'),
-      signal: new AbortController().signal,
-      work: {
-        maxRounds: 1,
-        async execute(context, invocation) {
-          const references = builder.references(invocation);
-          const allowed = [definition];
-          const bindings = builder.build(invocation, { validate: () => context.requireRunning(), uses: allowed, references });
-          accessObjects.push(bindings);
-          assert.ok(Object.isFrozen(bindings));
-          for (const field of ['parent', 'view', 'validate', 'calls', 'allowed', 'bound']) assert.equal(field in bindings, false);
-          assert.equal(initialized, input === 'first' ? 0 : 1);
-          allowed.length = 0;
-          // Editing the input array cannot revoke or widen the already-built access object.
-          const call = bindings.create(definition, context.currentInput);
-          assert.equal(initialized, 1);
-          assert.equal(await call.run(), input);
-          const reception = builder.build(invocation, { validate: () => context.requireRunning(), uses: [], references });
-          return reception.open(call.ref).accept();
-        },
+  let builder;
+  const structure = new Group({
+    run: {
+      async execute(work) {
+        const invocation = parents.at(-1);
+        const context = invocation.context;
+        const references = builder.references(invocation);
+        const allowed = [definition];
+        const bindings = builder.build(invocation, { validate: () => context.requireRunning(), uses: allowed, references });
+        accessObjects.push(bindings);
+        assert.ok(Object.isFrozen(bindings));
+        for (const field of ['parent', 'view', 'validate', 'calls', 'allowed', 'bound']) assert.equal(field in bindings, false);
+        assert.equal(calls, work.input === 'first' ? 0 : 1);
+        allowed.length = 0;
+        // Editing the input array cannot revoke or widen the already-built access object.
+        const call = bindings.create(definition, work.input);
+        assert.equal(calls, work.input === 'first' ? 0 : 1);
+        assert.equal(await call.run(), work.input);
+        const reception = builder.build(invocation, { validate: () => context.requireRunning(), uses: [], references });
+        return reception.open(call.ref).accept();
       },
-    });
-    parents.push(parent);
+    },
+  }).add(definition);
+  new CallableBuilder().build(structure, {
+    providers: [],
+    source: {
+      capture: () => null,
+      started: () => (_context, invocation) => {
+        parents.push(invocation);
+      },
+    },
+  });
+  const bound = callableConstruction(structure).binding.children;
+  builder = new ChildBindingsBuilder(bound);
+  assert.equal(bound.get(definition), definition);
+  assert.equal(calls, 0);
+  for (const input of ['first', 'second']) {
+    const parent = createRootInvocation(structure, input, {});
     assert.equal(await parent.run(), input);
   }
-  assert.equal(initialized, 1);
+  assert.equal(calls, 2);
   assert.notEqual(accessObjects[0], accessObjects[1]);
   assert.notEqual(parents[0].context.id, parents[1].context.id);
 });
 
-test('a builder rejects an unknown declaration before any lazy child structure is initialized', () => {
+test('a builder rejects an unknown declaration before creating any child invocation', () => {
   const declared = operation();
   const unknown = operation();
-  const bound = new BoundChildren([resolveDeclaration(declared)], () => assert.fail('invalid grants must not initialize any child'));
+  const bound = new BoundChildren([resolveDeclaration(declared)]);
   const builder = new ChildBindingsBuilder(bound);
   const parent = new Invocation({ context: new InvocationContext(null), signal: new AbortController().signal, work: { maxRounds: 1, execute: () => null } });
   assert.throws(() => builder.build(parent, { validate: () => {}, uses: [unknown], references: builder.references(parent) }), /outside|not declared/);
-  assert.equal(bound.initialized(declared), false);
+  assert.equal(bound.get(declared), declared);
+  assert.equal(parent.children.values().length, 0);
+  assert.throws(() => callableConstruction(declared), /not been built/);
 });
 
 test('alternative entry acceptance can cancel its parent without creating or starting the child', async () => {
@@ -224,17 +229,15 @@ test('alternative entry acceptance can cancel its parent without creating or sta
   assert.equal(accepted, 1);
 });
 
-test('resuming a saved final child delivery keeps its bound structure uninitialized', async () => {
+test('resuming a saved final child delivery needs no child invocation construction', async () => {
   const codec = { encode: (value) => value, decode: (value) => value };
-  const definition = {
-    kind: 'group',
-    members: [],
+  const definition = new Group({
     maxRounds: 1,
     raises: [],
     run: { requires: {}, execute: () => assert.fail('final child work cannot execute again') },
     checkpoint: { key: 'test.lazy.final-child', version: 1, input: codec, output: codec, points: [checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { execute: () => assert.fail('final child work cannot resume') } })] },
-  };
-  const bound = new BoundChildren([resolveDeclaration(definition)], () => assert.fail('final delivery must not initialize the child structure'));
+  });
+  const bound = new BoundChildren([resolveDeclaration(definition)]);
   const builder = new ChildBindingsBuilder(bound);
   const store = new MemoryCheckpointStore();
   const childIdentity = { contextId: 'child-context', kind: 'group', parentContextId: 'parent-context' };
@@ -277,7 +280,7 @@ test('resuming a saved final child delivery keeps its bound structure uninitiali
               const bindings = builder.build(invocation, { validate: () => invocation.context.requireRunning(), uses: [definition], references, restoring: true });
               const ref = references.facts.requireUnique(definition, { parentRound: 1 }).ref;
               const resumed = bindings.resume(ref);
-              assert.equal(bound.initialized(definition), false);
+              assert.throws(() => callableConstruction(definition), /not been built/);
               assert.equal(bindings.resume(ref).ref, resumed.ref);
               const delivered = await resumed.run();
               assert.deepEqual(delivered, { answer: 'saved' });
@@ -292,5 +295,5 @@ test('resuming a saved final child delivery keeps its bound structure uninitiali
     },
   });
   assert.equal(await parent.run(), 'saved');
-  assert.equal(bound.initialized(definition), false);
+  assert.throws(() => callableConstruction(definition), /not been built/);
 });

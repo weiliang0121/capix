@@ -23,7 +23,10 @@ function harness(store, resume, calls, reception = false) {
   const child = new Child();
   const contract = defineReception(child, { check: (value) => value, encode: codec.encode, decode: codec.decode });
   class Root extends Scene {
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     receptions = reception === 'typed' ? [contract] : [];
     raises = [rejected];
     maxRounds = 2;

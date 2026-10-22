@@ -1,4 +1,4 @@
-import { CallableContext, Transcript, TranscriptRangeRef, bindResources, InvocationWorkBinding, BoundChildren, Memories, SelectionUsage } from '@capix/server-runtime';
+import { CallableContext, Transcript, TranscriptRangeRef, bindResources, CallableBuilder, callableConstruction, Memories, SelectionUsage } from '@capix/server-runtime';
 import { fixtureState } from './runtime.mjs';
 import { resolveDeclaration } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
@@ -35,23 +35,38 @@ export function resourceBindingFor(runtime, provider, provided) {
 }
 export function bindChild(runtime, definition) {
   const state = fixtureState(runtime);
+  // This low-level fixture supplies resources through its manually constructed parent calls.
+  // Build real structures first; root provider resolution must never replace that supplied world.
   const resolved = resolveDeclaration(definition, { observationProvides: runtime.recording?.provides });
-  const bind = (current) => {
-    const children = new BoundChildren(current.members, bind);
-    const work = new InvocationWorkBinding(current.declaration, children, 'members' in current.declaration);
-    const bound = {
-      definition: current.definition,
-      children,
-      create(parent, input, options = {}) {
-        return state.decorate(state.builder.create(input, { parent, kind: current.kind, ...options, requires: current.requires, supply: current.supply, refinements: current.refinements, description: current.declaration, observation: current.declaration.observation, work }));
+  const offers = [...new Set(Object.values(resolved.supply).map((request) => request.offer))];
+  const built = new CallableBuilder(state.capabilities).build(definition, {
+    providers: offers.map((offer) => ({
+      offer,
+      timing: 'access',
+      resolve() {
+        throw new Error('Fixture resources must come from the explicit parent');
       },
-      async call(parent, input) {
-        return this.create(parent, input).run();
+      expose() {
+        throw new Error('Fixture resources must come from the explicit parent');
       },
-    };
-    return bound;
+      describe() {
+        return null;
+      },
+    })),
+    source: { capture: () => null },
+  });
+  const { binding, invocations, sources } = callableConstruction(built);
+  state.builder = invocations;
+  state.construction = sources.begin({});
+  return {
+    definition,
+    create(parent, input, options = {}) {
+      return state.decorate(invocations.create(input, { parent, kind: definition.kind, ...options, construction: state.construction, requires: binding.requires, supply: binding.supply, refinements: binding.refinements, description: binding.declaration, observation: binding.declaration.observation, work: binding.work }));
+    },
+    async call(parent, input) {
+      return this.create(parent, input).run();
+    },
   };
-  return bind(resolved);
 }
 // Construction metadata is captured only by this test fixture, not exposed by a work Context.
 export const sourceFor = (context) => sources.get(context);

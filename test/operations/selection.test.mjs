@@ -48,7 +48,7 @@ for (const fails of [false, true]) {
 }
 
 test('message counts accumulate independently and never enter model requests', async () => {
-  const { bindConversation, createConversationStructure } = await import('@capix/observer-service');
+  const { buildConversation, createConversationStructure } = await import('@capix/observer-service');
   const { createBoundRuntime } = await import('@capix/server-runtime');
   const { Transcript } = await import('@capix/server-runtime');
   const entities = createEnvironment({ messages: [{ role: 'user', content: '我在北京' }] });
@@ -57,7 +57,7 @@ test('message counts accumulate independently and never enter model requests', a
   const requests = [];
   let fails = false;
   const driver = new Driver();
-  const scene = bindConversation(
+  const scene = buildConversation(
     driver,
     createConversationStructure(),
     entities,

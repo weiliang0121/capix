@@ -6,8 +6,8 @@ import type { ModelInitialization } from '../conversation/model/types.js';
 import { conversationTitle } from '../conversation/title.js';
 import { ModelSource } from '../conversation/model/source.js';
 import type { WorkspaceFiles } from '../files/index.js';
-import type { ContextMaintenancePolicy } from '../conversation/group/context/maintain.js';
-import type { ConversationDecisionGroup } from '../conversation/decision/types.js';
+import type { ContextMaintenanceConfiguration } from '../conversation/group/context/maintain.js';
+import type { ConversationDecisionFactory } from '../conversation/decision/types.js';
 import type { SqliteObserverStore } from '../persistence/store.js';
 import { initializeObserver } from './initialize.js';
 import type { ObserverEnvironment } from './environment.js';
@@ -27,7 +27,7 @@ export class ObserverConversations {
   constructor(
     private readonly provider: ModelInitialization,
     messages: readonly Message[] = [],
-    private readonly options: { files?: WorkspaceFiles; decision?: ConversationDecisionGroup; maxDecisionSteps?: number; maintenance?: ContextMaintenancePolicy; persistence?: SqliteObserverStore; checkpointObservation?: CheckpointInstallation['observation'] } = {},
+    private readonly options: { files?: WorkspaceFiles; decision?: ConversationDecisionFactory; maxDecisionSteps?: number; maintenance?: ContextMaintenanceConfiguration; persistence?: SqliteObserverStore; checkpointObservation?: CheckpointInstallation['observation'] } = {},
   ) {
     this.model = new ModelSource(provider);
     this.files = options.files;

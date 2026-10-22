@@ -118,7 +118,10 @@ test('a caught child error blocks later child entry admission and reception work
     return input;
   });
   class Main extends Group {
-    members = [good, bad];
+    constructor() {
+      super();
+      this.add(good, bad);
+    }
     run = {
       requires: {},
       async execute(work) {
@@ -179,7 +182,10 @@ test('child use grants are separate for run and handler, and invalid ownership f
   }
   const child = new Work();
   class Main extends Group {
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     raises = [rejected];
     run = {
       requires: {},
@@ -198,8 +204,17 @@ test('child use grants are separate for run and handler, and invalid ownership f
     };
   }
   await assert.rejects(assemble(new Main()).run(null, {}), /not declared/);
-  const invalid = new Main();
-  invalid.exceptions = { ...invalid.exceptions, uses: [new Work()] };
+  const invalid = new Group({
+    run: { requires: {}, execute: () => 'done' },
+    exceptions: {
+      requires: {},
+      uses: [new Work()],
+      accepts: [rejected],
+      handle(work) {
+        return work.return('done');
+      },
+    },
+  });
   assert.throws(() => assemble(invalid), /outside its owner/);
 });
 
@@ -266,7 +281,10 @@ test('exception content can perform declared child work using only its granted r
   const child = new Repair();
   class Main extends Group {
     raises = [rejected];
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     run = {
       requires: {},
       uses: [],
@@ -389,7 +407,10 @@ for (const gap of ['runtime', 'execution']) {
     }
     const child = new Child();
     class Main extends Group {
-      members = [child];
+      constructor() {
+        super();
+        this.add(child);
+      }
       run = { requires: {}, execute: () => 'done' };
       observation = gap === 'runtime' ? [invocationRecording()] : undefined;
     }

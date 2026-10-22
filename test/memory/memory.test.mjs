@@ -3,7 +3,7 @@ import { ModelInteractions, ModelSource, ActiveContent } from '@capix/observer-s
 import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, bindConversation, createConversationStructure } from '@capix/observer-service';
+import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, buildConversation, createConversationStructure } from '@capix/observer-service';
 
 import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, SelectionUsage, bindRecording } from '@capix/server-runtime';
 
@@ -198,7 +198,7 @@ test('recording observes the actual changed fact; registration failure propagate
   const transcript = new Transcript([], { observation: recording.transcript });
   const memories = new Memories(transcript, { observation: recording.memory });
   const driver = new Driver({ observations: [recording] });
-  const scene = bindConversation(
+  const scene = buildConversation(
     driver,
     createConversationStructure(),
     { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },

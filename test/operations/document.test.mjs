@@ -6,7 +6,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { bindConversation, createConversationStructure, ConversationSubmission, WorkspaceFiles } from '@capix/observer-service';
+import { buildConversation, createConversationStructure, ConversationSubmission, WorkspaceFiles } from '@capix/observer-service';
 import { ProgressChannel } from '@capix/server-runtime';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import { Recorder, RecordBook, bindRecording } from '@capix/server-runtime/recording';
@@ -50,7 +50,7 @@ async function fixture(t, { recorded = true, answers = [answer], memoryFailure =
   const entities = { transcript, memories, active: new ActiveContent(transcript, memories), files, selectionUsage: new SelectionUsage() };
   const definition = createConversationStructure({ files: true });
   const driver = new Driver({ observations: recording ? [recording] : undefined });
-  const scene = bindConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
+  const scene = buildConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
   const progress = [];
   const fileProgress = new ProgressChannel({
     receive(fact) {
@@ -164,7 +164,7 @@ test('disabled file capability rejects before accepting input', async () => {
   const transcript = new Transcript();
   const memories = new Memories(transcript);
   const driver = new Driver();
-  const scene = bindConversation(
+  const scene = buildConversation(
     driver,
     createConversationStructure(),
     { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
@@ -232,7 +232,7 @@ test('declared file support requires the bound workspace entity', () => {
   const memories = new Memories(transcript);
   assert.throws(
     () =>
-      bindConversation(
+      buildConversation(
         driver,
         createConversationStructure({ files: true }),
         { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },

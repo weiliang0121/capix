@@ -7,10 +7,12 @@ import type { DriverFact } from './observation/facts.js';
 import { DeclaredException } from './exception/contract.js';
 import { requireNotCancelled } from './invocation/cancellation.js';
 import { RuntimeError } from './errors/error.js';
-import type { BoundCallable } from './structure/bound.js';
+import type { AnyBuiltCallable, BuiltCallable, BuiltOptions } from './structure/construction.js';
+import { CallableBuilder } from './structure/builder.js';
+import { createRootInvocation, restoreRootInvocation } from './invocation/builders/structure.js';
 import type { InvocationControls } from './context/context.js';
-import type { InvocationCapabilities } from './invocation/capabilities.js';
-import { CallableBinder, type CallableBindingOptions } from './binding/callable.js';
+import { snapshotInvocationCapabilities, type InvocationCapabilities } from './invocation/capabilities.js';
+import { type CallableBindingOptions } from './binding/callable.js';
 import type { AnyCallable } from './binding/declarations.js';
 import type { CallableInput, CallableOutput } from './definition/signature.js';
 import type { CheckpointStore } from './checkpoint/contract.js';
@@ -21,7 +23,7 @@ type DriverChange = { kind: 'established' } | ({ boundId: string } & ({ kind: 'a
 export class Driver {
   readonly id = randomUUID();
   readonly #entries = new WeakMap<object, { running: boolean }>();
-  readonly #binder: CallableBinder;
+  readonly #builder: CallableBuilder;
   readonly #clock: Clock;
   readonly #checkpointStore: CheckpointStore | undefined;
   readonly #observation: EventConsumer<DriverFact>;
@@ -29,18 +31,10 @@ export class Driver {
 
   constructor(options: InvocationCapabilities = {}) {
     this.#clock = options.clock ?? new Clock();
-    const observations = options.observations ? Object.freeze([...options.observations]) : undefined;
-    const checkpointObservation = options.checkpoints?.observation;
-    const checkpoints = options.checkpoints
-      ? Object.freeze({
-          store: options.checkpoints.store,
-          observation: checkpointObservation ? Object.freeze({ observe: checkpointObservation.observe.bind(checkpointObservation), failure: checkpointObservation.failure }) : undefined,
-        })
-      : undefined;
-    this.#checkpointStore = checkpoints?.store;
-    const capabilities = Object.freeze({ ...options, clock: this.#clock, observations, checkpoints });
-    this.#binder = new CallableBinder(capabilities);
-    this.#observation = bindDriverObservation(this.id, observations);
+    const capabilities = snapshotInvocationCapabilities({ ...options, clock: this.#clock });
+    this.#checkpointStore = capabilities.checkpoints?.store;
+    this.#builder = new CallableBuilder(capabilities);
+    this.#observation = bindDriverObservation(this.id, capabilities.observations);
     this.publish({ kind: 'established' });
   }
 
@@ -48,22 +42,22 @@ export class Driver {
     return this.#checkpointStore;
   }
 
-  bind<Structure extends AnyCallable, Options, Source>(structure: Structure, options: CallableBindingOptions<NoInfer<CallableInput<Structure>>, Options, Source>): BoundCallable<CallableInput<Structure>, CallableOutput<Structure>, object, Options> {
-    const bound = this.#binder.bind(structure, options);
-    this.#entries.set(bound, { running: false });
-    return bound;
+  build<Structure extends AnyCallable, Options, Source>(structure: Structure, options: CallableBindingOptions<NoInfer<CallableInput<Structure>>, Options, Source>): BuiltCallable<Structure, Options> {
+    const built = this.#builder.build(structure, options);
+    this.#entries.set(built, { running: false });
+    return built;
   }
 
-  isRunning(bound: BoundCallable<any, any, any, any>): boolean {
-    return this.entry(bound).running;
+  isRunning(structure: AnyBuiltCallable): boolean {
+    return this.entry(structure).running;
   }
 
-  run<Input, Output, Resources extends object, Options>(bound: BoundCallable<Input, Output, Resources, Options>, input: NoInfer<Input>, options: NoInfer<Options> & InvocationControls): Promise<Output> {
-    return this.perform(bound, { input }, options);
+  run<Structure extends AnyBuiltCallable>(structure: Structure, input: NoInfer<CallableInput<Structure>>, options: NoInfer<BuiltOptions<Structure>> & InvocationControls): Promise<CallableOutput<Structure>> {
+    return this.perform(structure, { input }, options);
   }
 
-  resume<Input, Output, Resources extends object, Options>(bound: BoundCallable<Input, Output, Resources, Options>, contextId: string, options: NoInfer<Options> & InvocationControls): Promise<Output> {
-    return this.perform(bound, { contextId }, options);
+  resume<Structure extends AnyBuiltCallable>(structure: Structure, contextId: string, options: NoInfer<BuiltOptions<Structure>> & InvocationControls): Promise<CallableOutput<Structure>> {
+    return this.perform(structure, { contextId }, options);
   }
 
   private entry(bound: object): { running: boolean } {
@@ -103,18 +97,17 @@ export class Driver {
     }
   }
 
-  private async perform<Input, Output, Resources extends object, Options>(bound: BoundCallable<Input, Output, Resources, Options>, request: { input: Input } | { contextId: string }, options: Options & InvocationControls): Promise<Output> {
+  private async perform<Structure extends AnyBuiltCallable>(structure: Structure, request: { input: CallableInput<Structure> } | { contextId: string }, options: BuiltOptions<Structure> & InvocationControls): Promise<CallableOutput<Structure>> {
     try {
-      const entry = this.entry(bound);
-      return await this.reserve(bound.id, entry, () => {
+      const entry = this.entry(structure);
+      return await this.reserve(structure.id, entry, () => {
         let invocation;
         try {
           if (options?.signal) requireNotCancelled(options.signal);
-          const scope = bound.begin(options);
-          invocation = 'contextId' in request ? bound.resumeRoot(request.contextId, scope, options) : bound.createRoot(request.input, scope, options);
+          invocation = 'contextId' in request ? restoreRootInvocation(structure, request.contextId, options, options) : createRootInvocation(structure, request.input, options, options);
         } catch (error) {
           try {
-            this.publish({ kind: 'entry-failed', boundId: bound.id, error });
+            this.publish({ kind: 'entry-failed', boundId: structure.id, error });
           } catch (observation) {
             throw new AggregateError([error, observation], 'Call construction and observation both failed', { cause: error });
           }

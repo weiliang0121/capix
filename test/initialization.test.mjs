@@ -119,7 +119,10 @@ test('declarations are checked before resource access or invocation construction
   }
   class Root extends Group {
     run = { requires: {}, execute: this.execute.bind(this) };
-    members = [new Work()];
+    constructor() {
+      super();
+      this.add(new Work());
+    }
     execute() {
       assert.fail('must not execute');
     }

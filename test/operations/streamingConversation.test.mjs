@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { bindConversation, createConversationStructure, ConversationSubmission, ModelInteractions, ModelSource, WorkspaceFiles } from '@capix/observer-service';
+import { buildConversation, createConversationStructure, ConversationSubmission, ModelInteractions, ModelSource, WorkspaceFiles } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 2000 };
@@ -36,7 +36,7 @@ function fixture(t, answer, options = {}) {
     }),
   );
   const driver = new Driver();
-  const scene = bindConversation(driver, createConversationStructure({ files: Boolean(options.files) }), { ...environment, files: options.files }, interactions);
+  const scene = buildConversation(driver, createConversationStructure({ files: Boolean(options.files) }), { ...environment, files: options.files }, interactions);
   const submission = new ConversationSubmission('streaming-submission', 'conversation');
   const frames = [];
   const detach = submission.connectFrames((frame) => {

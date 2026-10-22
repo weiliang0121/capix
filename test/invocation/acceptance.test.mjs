@@ -1,15 +1,16 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Group } from '@capix/server-runtime';
 
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 function operation(execute) {
-  return { kind: 'group', name: 'delivery', label: 'Delivery', source: 'test', members: [], maxRounds: 1, raises: [], run: { requires: {}, execute } };
+  return new Group({ name: 'delivery', label: 'Delivery', source: 'test', run: { requires: {}, execute } });
 }
 
 function assemble(child, execute) {
-  const execution = { kind: 'group', members: [child], maxRounds: 1, raises: [], run: { requires: {}, execute } };
+  const execution = new Group({ run: { requires: {}, execute } }).add(child);
   return installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
 }
 
@@ -65,9 +66,12 @@ test('parent acceptance cannot consume another parent invocation child', async (
     return call.accept();
   });
   assert.equal(await owner.run(null, {}), 'delivered');
-  const other = assemble(child, async (work) => {
-    return work.children.open(retained).accept(() => assert.fail('foreign delivery'));
-  });
+  const other = assemble(
+    operation(() => 'delivered'),
+    async (work) => {
+      return work.children.open(retained).accept(() => assert.fail('foreign delivery'));
+    },
+  );
   await assert.rejects(other.run(null, {}), /foreign child reference/);
 });
 

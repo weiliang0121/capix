@@ -25,7 +25,7 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
   const capabilities = { ...options, ...(recorder ? { clock: recorder.clock, observations: [...(options.observations ?? []), recording] } : {}) };
   const builder = new CallableInvocationBuilder(capabilities);
   const runtime = installCallable(defineScene()({ run: { execute: () => undefined } }), { providers: [], source: { capture: () => null }, ...capabilities });
-  const state = { invocationRecordings, recording, recorder, runtime, builder, observe: recorder ? [invocationRecording()] : [] };
+  const state = { invocationRecordings, recording, recorder, runtime, builder, capabilities, observe: recorder ? [invocationRecording()] : [] };
   states.set(runtime, state);
   const decorate = (invocation) => {
     Object.defineProperty(invocation, 'record', { get: () => invocationRecordings.get(invocation.context.id)?.record });
@@ -34,13 +34,13 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
   state.decorate = decorate;
   const childBuilder = (kind) => ({
     create(parent, request) {
-      return decorate(builder.create(request.input, { ...request, kind, parent, observation: request.observation ?? state.observe }));
+      return decorate(state.builder.create(request.input, { ...request, kind, parent, construction: parent.construction ?? state.construction, observation: request.observation ?? state.observe }));
     },
   });
   const executionBuilder = {};
   // Descriptive fixture adapters preserve old test vocabulary; they all use the same mechanism.
   Object.defineProperties(runtime, {
-    runtimeInvocationBuilder: { value: { create: (input, request) => decorate(builder.create(input, { ...request, kind: 'scene' })) } },
+    runtimeInvocationBuilder: { value: { create: (input, request) => decorate(state.builder.create(input, { ...request, kind: 'scene' })) } },
     executionInvocationBuilder: { value: executionBuilder },
     operationInvocationBuilder: { value: childBuilder('group') },
     attemptInvocationBuilder: { value: childBuilder('node') },
@@ -51,7 +51,7 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
   state.createExecution = (parent, input, request) => {
     request.validate?.();
     const established = request.establish?.() ?? {};
-    return decorate(builder.create(input, { ...request, ...established, kind: 'group', parent, controls: request.context, observation: request.observation ?? (recorder ? [invocationRecording({ role: 'conversation-task' })] : []) }));
+    return decorate(state.builder.create(input, { ...request, ...established, kind: 'group', parent, construction: parent.construction ?? state.construction, controls: request.context, observation: request.observation ?? (recorder ? [invocationRecording({ role: 'conversation-task' })] : []) }));
   };
   state.beginRuntime = (controls = {}) => {
     let resolve;
@@ -60,7 +60,7 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
       resolve = accept;
       reject = fail;
     });
-    const call = decorate(builder.create(null, { kind: 'scene', description: { id: runtime.id }, controls, resources: new ResourceBindings({}), observation: recorder ? [invocationRecording({ input: () => null, output: () => null })] : [], work: { maxRounds: 1, execute: () => pending } }));
+    const call = decorate(state.builder.create(null, { kind: 'scene', construction: state.construction, description: { id: runtime.id }, controls, resources: new ResourceBindings({}), observation: recorder ? [invocationRecording({ input: () => null, output: () => null })] : [], work: { maxRounds: 1, execute: () => pending } }));
     const completion = call.run();
     completion.catch(() => {});
     return { call, completion, resolve, reject };

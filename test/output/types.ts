@@ -36,7 +36,10 @@ class Parent extends Group<string, string, Record<string, never>, Record<string,
   label = 'Parent';
   source = 'test';
   readonly leaf = new Leaf();
-  readonly members = [this.leaf];
+  constructor() {
+    super();
+    this.add(this.leaf);
+  }
   readonly output = text;
   readonly run = {
     requires: {},

@@ -115,7 +115,10 @@ test('resuming a direct member uses fixed input without repeating parent prepara
   }
   const child = new Child();
   class Root extends Scene {
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     checkpoint = checkpoint(
       'test.parent',
       async (work) => {
@@ -161,7 +164,10 @@ test('a new member created within recovery still registers its new call before w
   }
   const child = new Child();
   class Root extends Scene {
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     checkpoint = checkpoint(
       'test.parent-new-child',
       async (work) => {
@@ -217,7 +223,10 @@ test('checkpoint-only resources and children must be covered during assembly', (
     run = { requires: {}, execute: () => null };
   }
   class BadRoot extends Scene {
-    members = [new BadChild()];
+    constructor() {
+      super();
+      this.add(new BadChild());
+    }
     run = { requires: {}, execute: () => null };
   }
   assert.throws(() => assemble(new BadRoot()), /outside its owner/);
@@ -255,7 +264,10 @@ test('restored work and newly created descendants use the recovery observation s
   }
   const child = new Child();
   class Root extends Scene {
-    members = [child];
+    constructor() {
+      super();
+      this.add(child);
+    }
     checkpoint = checkpoint(
       'test.observation',
       async (work) => {

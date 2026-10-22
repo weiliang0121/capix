@@ -22,7 +22,10 @@ test('Sequence binds declared output explicitly while final parent acceptance re
   })();
   const execution = new (class extends Group {
     output = output;
-    members = [operation];
+    constructor() {
+      super();
+      this.add(operation);
+    }
     run = {
       requires: {},
       async execute(work) {
@@ -48,7 +51,10 @@ test('Sequence binds declared output explicitly while final parent acceptance re
     };
   })();
   const runtime = new (class extends Scene {
-    members = [execution];
+    constructor() {
+      super();
+      this.add(execution);
+    }
     run = {
       requires: {},
       async execute(work) {

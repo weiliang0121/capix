@@ -13,7 +13,7 @@ class TestExecutionDefinition extends Group {
 class Main extends Scene {
   constructor(children, execute) {
     super();
-    this.members = children;
+    this.add(...children);
     this.run = { requires: {}, uses: children, execute };
   }
 }
@@ -368,7 +368,9 @@ test('omitted observation installation leaves declarations and their dependencie
   const definition = new Main([execution], forward(execution));
   assert.equal(await assemble(definition).run(null, {}), 'done');
   assert.equal(observed, 0);
-  assert.throws(() => assemble(definition, { observations: [] }), /Expected one resource provider/);
+  const other = new TestExecutionDefinition(() => 'done');
+  other.observation = execution.observation;
+  assert.throws(() => assemble(new Main([other], forward(other)), { observations: [] }), /Expected one resource provider/);
 });
 
 test('an explicit empty observation installation enables resource-free declarations', async () => {
@@ -385,7 +387,9 @@ test('an explicit empty observation installation enables resource-free declarati
   const definition = new Main([execution], forward(execution));
   assert.equal(await assemble(definition).run(null, {}), 'done');
   assert.deepEqual(events, []);
-  assert.equal(await assemble(definition, { observations: [] }).run(null, {}), 'done');
+  const other = new TestExecutionDefinition(() => 'done');
+  other.observation = execution.observation;
+  assert.equal(await assemble(new Main([other], forward(other)), { observations: [] }).run(null, {}), 'done');
   assert.equal(events[0], 'started');
   assert.equal(events.at(-1), 'finished');
 });

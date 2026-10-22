@@ -10,12 +10,12 @@ import { ConversationCallSource } from './binding/source.js';
 
 export type { ConversationRunOptions, ConversationEntities, ConversationBindingOptions } from './binding/contract.js';
 
-/** Bind fixed declarations and independent supplies. Per-call capture belongs to the source. */
-export function bindConversation(driver: Driver, structure: ConversationStructure, entities: ConversationEntities, model: ModelInteractions, capabilities: ConversationBindingOptions = {}) {
+/** Build the existing scene using fixed resource wiring; per-call capture remains deferred. */
+export function buildConversation(driver: Driver, structure: ConversationStructure, entities: ConversationEntities, model: ModelInteractions, capabilities: ConversationBindingOptions = {}) {
   const { scene, conversation, document, save } = structure;
   if (scene.filesEnabled && !entities.files) throw new Error('File-enabled conversation requires a workspace file entity');
   const source = new ConversationCallSource(scene, entities, model, capabilities, driver.checkpointStore);
-  return driver.bind(scene, {
+  return driver.build(scene, {
     childResources: [...(document ? [bindChildResources(document, [FileResources.readText.refine((input: DocumentProcessingInput) => input.sourcePath)])] : []), ...(save ? [bindChildResources(save, [FileResources.createText.refine((input: CreateTextInput) => input.path)])] : [])],
     providers: [...conversationProviders, ...(scene.filesEnabled ? conversationFileProviders : [])],
     source,
@@ -29,4 +29,4 @@ export function bindConversation(driver: Driver, structure: ConversationStructur
     ],
   });
 }
-export type BoundConversationScene = ReturnType<typeof bindConversation>;
+export type BuiltConversationScene = ReturnType<typeof buildConversation>;

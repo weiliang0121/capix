@@ -38,7 +38,10 @@ class Request extends Group {
   name = 'request';
   label = 'request';
   source = 'test';
-  members = [model];
+  constructor() {
+    super();
+    this.add(model);
+  }
   checkpoint = cp('chain.request', { feedback: point((_work, state) => state.output) });
   run = {
     requires: {},
@@ -78,7 +81,10 @@ async function consume(work, child, allowCrash, points) {
 const resume = (work, _state, saved) => consume(work, work.children.resume(saved.child), false, executionPoints);
 const executionPoints = cp('chain.execution', { waiting: point(resume, requires, [request], { child: childReference(request) }), reception: point(resume, requires, [request], { child: childReference(request) }), accepted: point((_work, state) => state.output) }).points;
 class Conversation extends Group {
-  members = [request];
+  constructor() {
+    super();
+    this.add(request);
+  }
   checkpoint = { key: 'chain.execution', version: 1, input: codec, output: codec, points: executionPoints };
   run = {
     requires,
@@ -91,7 +97,10 @@ class Conversation extends Group {
 }
 const conversation = new Conversation();
 class Root extends Scene {
-  members = [conversation];
+  constructor() {
+    super();
+    this.add(conversation);
+  }
   checkpoint = cp('chain.runtime', {
     waiting: point(
       async (work, _state, saved) => {

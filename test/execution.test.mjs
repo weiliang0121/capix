@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Recorder, RecordBook } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
-import { bindConversation, createConversationStructure } from '@capix/observer-service';
+import { buildConversation, createConversationStructure } from '@capix/observer-service';
 
 import { TestOperation } from './fixtures/operation.mjs';
 import { createInput, transcriptFor } from './fixtures/observer.mjs';
@@ -60,7 +60,7 @@ test('one Execution and Operation can be called again after success and failure 
   );
 });
 
-test('bindConversation, createConversationStructure returns answers without a recorder and uses the configuration of each call', async () => {
+test('buildConversation, createConversationStructure returns answers without a recorder and uses the configuration of each call', async () => {
   const requests = [];
   const provider = {
     async invoke(request, purpose) {
@@ -70,7 +70,7 @@ test('bindConversation, createConversationStructure returns answers without a re
   };
   const entities = createEnvironment();
   const driver = new Driver();
-  const scene = bindConversation(driver, createConversationStructure(), entities, new ModelInteractions(new ModelSource(provider)));
+  const scene = buildConversation(driver, createConversationStructure(), entities, new ModelInteractions(new ModelSource(provider)));
   for (const model of ['one', 'two']) {
     const answer = await driver.run(scene, { messages: [{ role: 'user', content: model }] }, { settings: { ...settings, model } });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });

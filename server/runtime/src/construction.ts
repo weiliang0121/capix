@@ -1,5 +1,8 @@
 /** Low-level callable construction. Applications normally bind a Scene and use its Driver. */
-export * from './structure/bound.js';
+export type { BuiltCallable, AnyBuiltCallable, BuiltOptions } from './structure/construction.js';
+export { callableConstruction } from './structure/construction.js';
+export * from './structure/builder.js';
+export * from './invocation/builders/structure.js';
 export * from './binding/children/bound.js';
 export * from './binding/children/builder.js';
 export * from './binding/receptions.js';

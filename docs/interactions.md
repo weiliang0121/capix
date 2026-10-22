@@ -19,7 +19,8 @@
 ```ts
 const model = new ModelSource(provider);
 const interactions = new ModelInteractions(model, { persistence: store.interactions });
-const runtime = bindConversation(definition, entities, interactions, observation);
+const driver = new Driver(capabilities);
+const scene = buildConversation(driver, structure, entities, interactions);
 ```
 
 业务只取得资源端点。`create.start(request, purpose, { timeoutMs })` 返回 `{ id }`，不接收 Invocation 的取消信号；`read.wait` 返回 `received | pending`，`read.result` 取得已接收反馈或抛出真实失败。读取端点没有发送方法，不能凭缺少结果自动重发。读取 Node 使用自己的 Context 和资源端点；不能复用已经结束的发起 Node 端点。

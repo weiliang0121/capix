@@ -2,7 +2,7 @@ import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { defineScene, defineGroup, defineNode, Driver, ProgressChannel, invocationRecording, bindRecording, Recorder, RecordBook } from '@capix/server-runtime';
-import { createConversationStructure, ModelInteractions, ModelSource, bindConversation, initializeObserver, observeExecution, observeOverview, subscribeExecutions } from '@capix/observer-service';
+import { createConversationStructure, ConversationGroup, PrepareConversationContext, GenerateAnswer, ExtractMemory, DefaultConversationDecision, acceptConversationRequest, conversationSceneRequests, ModelInteractions, ModelSource, buildConversation, initializeObserver, observeExecution, observeOverview, subscribeExecutions } from '@capix/observer-service';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { ObservationReplica } from '@capix/client-runtime';
@@ -41,7 +41,7 @@ test('Scene members share Callable behavior, while only the exactly bound task p
     },
   });
   const driver = new Driver({ observations: [recording] });
-  const scene = bindConversation(driver, definition, entities, model);
+  const scene = buildConversation(driver, definition, entities, model);
   const progress = [];
   const activity = [];
   await driver.run(scene, input, {
@@ -101,29 +101,35 @@ test('a conversation task nested under multiple groups retains its full ancestry
   const recording = bindRecording(recorder);
   const model = new ModelInteractions(new ModelSource(provider));
   t.after(() => model.close());
-  const definition = createConversationStructure();
-  const original = definition.scene.run;
-  const inner = defineGroup()({ name: 'inner', members: [definition.conversation], observation: [invocationRecording()], run: original });
-  const wrapper = (name, child) =>
-    defineGroup()({
-      name,
-      members: [child],
-      observation: [invocationRecording()],
-      run: {
-        uses: [child],
-        async execute(work) {
-          const call = work.children.create(child, work.input);
-          await call.run();
-          return call.accept((value) => value);
-        },
+  const capabilities = { preparation: new PrepareConversationContext(), generation: new GenerateAnswer(), extraction: new ExtractMemory(), decision: new DefaultConversationDecision({ files: false }) };
+  const conversation = new ConversationGroup(capabilities);
+  const inner = defineGroup()({
+    name: 'inner',
+    members: [conversation],
+    observation: [invocationRecording()],
+    run: {
+      requires: conversationSceneRequests,
+      async execute(work) {
+        const accepted = acceptConversationRequest(work.input, work.resources.messages.append, false);
+        const call = work.children.create(conversation, accepted);
+        await call.run();
+        return call.accept();
       },
-    });
-  const outer = wrapper('outer', inner);
-  definition.scene.add(outer);
-  // This test exercises a different declared topology, without promising the original Scene CP.
-  definition.scene.setDefinition({ name: 'nested-conversation', observation: definition.scene.observation, run: wrapper('root-entry', outer).run });
+    },
+  });
+  const forward = (child) => ({
+    uses: [child],
+    async execute(work) {
+      const call = work.children.create(child, work.input);
+      await call.run();
+      return call.accept();
+    },
+  });
+  const outer = defineGroup()({ name: 'outer', members: [inner], observation: [invocationRecording()], run: forward(inner) });
+  const root = defineScene()({ name: 'nested-conversation', members: [outer], observation: [invocationRecording()], run: forward(outer) });
+  const definition = { scene: root, conversation, ...capabilities };
   const driver = new Driver({ observations: [recording] });
-  const scene = bindConversation(driver, definition, entities, model);
+  const scene = buildConversation(driver, definition, entities, model);
   const snapshot = await observeExecution(driver, scene, recording, input, { settings });
   validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(
@@ -149,7 +155,7 @@ test('a Driver may run an explicitly marked root task without a synthetic Scene 
   const recording = bindRecording(recorder);
   const task = defineGroup()({ name: 'root-task', observation: [invocationRecording({ role: 'conversation-task' })], run: { execute: () => ({ kind: 'answer', content: 'done' }) } });
   const driver = new Driver({ observations: [recording] });
-  const bound = driver.bind(task, { providers: [], source: { capture: () => null } });
+  const bound = driver.build(task, { providers: [], source: { capture: () => null } });
   const snapshots = [];
   const stop = subscribeExecutions(recording, (snapshot) => snapshots.push(snapshot));
   try {

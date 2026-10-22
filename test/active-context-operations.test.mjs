@@ -56,7 +56,10 @@ function checkpoint(key, child) {
 }
 function runtime(operation, content, store = new CapturedStore(), options = {}) {
   class E extends Group {
-    members = [operation];
+    constructor() {
+      super();
+      this.add(operation);
+    }
     checkpoint = checkpoint('active.fixture.e', operation);
     run = {
       requires: {},
@@ -72,7 +75,10 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
   const execution = new E();
   const thisCheckpoint = execution.checkpoint;
   class R extends Scene {
-    members = [execution];
+    constructor() {
+      super();
+      this.add(execution);
+    }
     checkpoint = checkpoint('active.fixture.r', execution);
     run = {
       requires: {},

@@ -47,7 +47,10 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
   const interactions = new ModelInteractions(new ModelSource(provider));
   t.after(() => interactions.close());
   class Execution extends Group {
-    members = [model];
+    constructor() {
+      super();
+      this.add(model);
+    }
     checkpoint = parentCheckpoint('fixture.model.execution', model);
     run = {
       requires: RequestModel.requires,
@@ -61,7 +64,10 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
   }
   const execution = new Execution();
   class Root extends Scene {
-    members = [execution];
+    constructor() {
+      super();
+      this.add(execution);
+    }
     checkpoint = parentCheckpoint('fixture.model.runtime', execution);
     run = {
       requires: {},

@@ -157,7 +157,7 @@ class BadLeaf extends Node<Input, Result> {
 }
 class NamedParent extends Group<Input, Receipt> {
   readonly name = 'parent'; readonly label = 'parent'; readonly source = 'test';
-  readonly members = [child];
+  constructor() { super(); this.add(child); }
   readonly receptions = [saved];
   readonly run = { requires: {}, execute: (_work: GroupWork<Input, Receipt>) => receipt };
 }

@@ -39,3 +39,8 @@ export interface ConversationDecisionInput {
 
 /** The execution consumes the decision contract, independently of how the operation implements it. */
 export type ConversationDecisionGroup = Group<ConversationDecisionInput, ConversationDecision, any, any>;
+
+/** Hosts may reuse the factory, while every conversation owns a distinct structure. */
+export interface ConversationDecisionFactory {
+  readonly create: () => ConversationDecisionGroup;
+}
