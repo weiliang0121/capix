@@ -25,8 +25,8 @@ function resume(work: ResumeWork<'node', string, string, { reader: Reader }>) {
 }
 
 // A helper cannot create an implicit request or substitute a different resource contract.
-defineNode<string, string>()({ ...metadata, run: { execute: read } });
-defineNode<string, string>()({ ...metadata, run: { requires: { reader: writer }, execute: read } });
-defineNode<string, string>()({ ...metadata, run: { execute: (work) => work.input, accept } });
-defineNode<string, string>()({ ...metadata, run: { execute: (work) => work.input }, exceptions: { accepts: [], handle } });
-checkpointPoint<'node', string, string>()({ name: 'read', state, references: {}, resume: { execute: resume } });
+defineNode<string, string>()({ ...metadata, run: read });
+defineNode<string, string>()({ ...metadata, deps: { reader: writer }, run: read });
+defineNode<string, string>()({ ...metadata, run: (work) => work.input, accept });
+defineNode<string, string>()({ ...metadata, run: (work) => work.input, exceptions: { accepts: [], handle } });
+checkpointPoint<'node', string, string>()({ name: 'read', state, references: {}, resume: { run: resume } });

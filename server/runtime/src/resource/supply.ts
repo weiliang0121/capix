@@ -16,9 +16,9 @@ export class ResourceSupply {
     Object.freeze(this);
   }
 
-  select(requires: ResourceRequirements): ResourceSupply {
+  select(deps: ResourceRequirements): ResourceSupply {
     const entries: ResourceValue[] = [];
-    for (const request of Object.values(requires) as ResourceRequest<unknown>[]) {
+    for (const request of Object.values(deps) as ResourceRequest<unknown>[]) {
       const entry = this.entries.find((value) => value.offer === request.offer);
       if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
       if (!entries.includes(entry)) entries.push(entry);

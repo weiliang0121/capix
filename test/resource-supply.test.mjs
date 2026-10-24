@@ -5,13 +5,13 @@ import { Group, Node, ResourceOffer, bindResources, bindChildResources, bindCall
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {
-  return new Node({ name, label: name, source: 'test', callee: 'test', run });
+  return new Node({ name, label: name, source: 'test', callee: 'test', deps: run.deps, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) });
 }
 function operation(name, children, run) {
-  return new Group({ name, label: name, source: 'test', run }).add(...children);
+  return new Group({ name, label: name, source: 'test', deps: run.deps, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) }).add(...children);
 }
 function execution(children, run) {
-  return new Group({ run }).add(...children);
+  return new Group({ deps: run.deps, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) }).add(...children);
 }
 
 // Offer identities, local aliases, resource captures and business access are separate boundaries.
@@ -26,17 +26,17 @@ test('transitive supplies retain offers while parents receive only their own res
     return endpoint;
   });
   const dormant = new ResourceOffer('supply.dormant', () => assert.fail('unused descendant must stay lazy'));
-  const leaf = attempt('model', { requires: { value: model.request() }, execute: (work) => work.resources.value.read() });
-  const unused = attempt('unused', { requires: { value: dormant.request() }, execute: () => null });
+  const leaf = attempt('model', { deps: { value: model.request() }, execute: (work) => work.resources.value.read() });
+  const unused = attempt('unused', { deps: { value: dormant.request() }, execute: () => null });
   const parent = operation('parent', [leaf, unused], {
-    requires: { value: history.request() },
+    deps: { value: history.request() },
     async execute(work) {
       assert.deepEqual(Object.keys(work.resources), ['value']);
       assert.equal(work.resources.value, 'history');
       return Promise.all([work.children.create(leaf, null).run(), work.children.create(leaf, null).run()]);
     },
   });
-  const main = execution([parent], { requires: {}, execute: (work) => work.children.create(parent, null).run() });
+  const main = execution([parent], { deps: {}, execute: (work) => work.children.create(parent, null).run() });
   const runtime = installCallable(runtimeDefinition(main), {
     providers: [
       history.provide(() => {
@@ -101,15 +101,15 @@ test('a pure forwarding operation narrows descendant supply without owning an en
       },
     },
   );
-  const leaf = attempt('read', { requires: { value: offer.request() }, execute: (work) => work.resources.value.read() });
+  const leaf = attempt('read', { deps: { value: offer.request() }, execute: (work) => work.resources.value.read() });
   const parent = operation('forward', [leaf], {
-    requires: {},
+    deps: {},
     execute(work) {
       assert.deepEqual(Object.keys(work.resources), []);
       return work.children.create(leaf, null).run();
     },
   });
-  const main = execution([parent], { requires: {}, execute: (work) => Promise.all(work.input.map((selection) => work.children.create(parent, selection).run())) });
+  const main = execution([parent], { deps: {}, execute: (work) => Promise.all(work.input.map((selection) => work.children.create(parent, selection).run())) });
   const runtime = installCallable(runtimeDefinition(main), {
     providers: [offer.provide(() => ['a', 'b'])],
     source: { capture: () => null },
@@ -126,12 +126,12 @@ test('a pure forwarding operation narrows descendant supply without owning an en
 test('R and E keep independent capture sources even when they use the same offer', async () => {
   const captures = [];
   const offer = new ResourceOffer('supply.boundary', (value) => value, 'binding');
-  const leaf = attempt('leaf', { requires: { value: offer.request() }, execute: (work) => work.resources.value });
-  const parent = operation('forward', [leaf], { requires: {}, execute: (work) => work.children.create(leaf, null).run() });
-  const main = execution([parent], { requires: {}, execute: (work) => work.children.create(parent, null).run() });
+  const leaf = attempt('leaf', { deps: { value: offer.request() }, execute: (work) => work.resources.value });
+  const parent = operation('forward', [leaf], { deps: {}, execute: (work) => work.children.create(leaf, null).run() });
+  const main = execution([parent], { deps: {}, execute: (work) => work.children.create(parent, null).run() });
   const definition = runtimeDefinition(main);
   definition.run = {
-    requires: { value: offer.request() },
+    deps: { value: offer.request() },
     async execute(work) {
       return [work.resources.value, await work.children.create(main, 'prepared').run()];
     },
@@ -152,17 +152,17 @@ test('R and E keep independent capture sources even when they use the same offer
 
 test('observation-only supplies never satisfy a business descendant requirement', async () => {
   const offer = new ResourceOffer('supply.observer-only', (value) => value);
-  const leaf = attempt('leaf', { requires: {}, execute: () => 'ok' });
+  const leaf = attempt('leaf', { deps: {}, execute: () => 'ok' });
   leaf.observation = [
     {
-      requires: { value: offer.request() },
+      deps: { value: offer.request() },
       observe(_fact, resources) {
         assert.equal(resources.value, 'observer');
       },
     },
   ];
-  const parent = operation('parent', [leaf], { requires: {}, execute: (work) => work.children.create(leaf, null).run() });
-  const main = execution([parent], { requires: {}, execute: (work) => work.children.create(parent, null).run() });
+  const parent = operation('parent', [leaf], { deps: {}, execute: (work) => work.children.create(leaf, null).run() });
+  const main = execution([parent], { deps: {}, execute: (work) => work.children.create(parent, null).run() });
   const options = {
     providers: [],
     source: { capture: () => null },
@@ -176,21 +176,21 @@ test('observation-only supplies never satisfy a business descendant requirement'
     ],
   };
   assert.equal(await installCallable(runtimeDefinition(main), options).run(null, {}), 'ok');
-  const businessLeaf = attempt('business-leaf', { requires: { value: offer.request() }, execute: (work) => work.resources.value });
-  const next = execution([businessLeaf], { requires: {}, execute: (work) => work.children.create(businessLeaf, null).run() });
+  const businessLeaf = attempt('business-leaf', { deps: { value: offer.request() }, execute: (work) => work.resources.value });
+  const next = execution([businessLeaf], { deps: {}, execute: (work) => work.children.create(businessLeaf, null).run() });
   assert.throws(() => installCallable(runtimeDefinition(next), options), /Expected one resource provider/);
 });
 
 test('identity aggregation still rejects missing, duplicate and name-conflicting providers', () => {
   const first = new ResourceOffer('supply.shared-name', (source) => source);
   const second = new ResourceOffer('supply.shared-name', (source) => source);
-  const leaf = attempt('leaf', { requires: { value: first.request() }, execute: () => null });
-  const parent = operation('parent', [leaf], { requires: {}, execute: () => null });
-  const main = execution([parent], { requires: {}, execute: () => null });
+  const leaf = attempt('leaf', { deps: { value: first.request() }, execute: () => null });
+  const parent = operation('parent', [leaf], { deps: {}, execute: () => null });
+  const main = execution([parent], { deps: {}, execute: () => null });
   const definition = runtimeDefinition(main);
   const source = { capture: () => null };
   assert.throws(() => installCallable(definition, { providers: [], source }), /Expected one resource provider/);
   assert.throws(() => installCallable(definition, { providers: [first.provide(() => null), first.provide(() => null)], source }), /Expected one resource provider/);
-  parent.run = { requires: { value: second.request() }, execute: () => null };
+  parent.run = { deps: { value: second.request() }, execute: () => null };
   assert.throws(() => installCallable(definition, { providers: [first.provide(() => null), second.provide(() => null)], source }), /Different resource offers/);
 });

@@ -204,4 +204,4 @@ export function InspectionDialog({ target, detail, loading, error, qa, number, o
   );
 }
 
-const relationLabels = { attached: '已建立', returned: '子调用已返回', receiving: '父层接纳中', accepted: '父层已接纳', failed: '父层接纳失败' };
+const relationLabels = { attached: '已建立', returned: '子调用已返回', receiving: '父层接纳中', accepted: '父层已接纳', handled: '失败已处理', failed: '父层接纳失败' };

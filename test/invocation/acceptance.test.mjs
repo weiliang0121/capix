@@ -6,11 +6,11 @@ import { Group } from '@capix/server-runtime';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 function operation(execute) {
-  return new Group({ name: 'delivery', label: 'Delivery', source: 'test', run: { requires: {}, execute } });
+  return new Group({ name: 'delivery', label: 'Delivery', source: 'test', deps: {}, run: execute });
 }
 
 function assemble(child, execute) {
-  const execution = new Group({ run: { requires: {}, execute } }).add(child);
+  const execution = new Group({ deps: {}, run: execute }).add(child);
   return installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
 }
 

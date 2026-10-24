@@ -36,9 +36,9 @@ function parentCheckpoint(key, child) {
         state: codec,
         references: { child: childReference(child) },
         resume: {
-          requires: {},
+          deps: {},
           uses: [child],
-          async execute(work, _state, saved) {
+          async run(work, _state, saved) {
             const call = work.children.resume(saved.child);
             await call.run();
             return call.accept();
@@ -59,10 +59,10 @@ function harness(t, provider, store, events = [], facts = [], generation = new G
     }
     checkpoint = parentCheckpoint('fixture.answer.execution', generation);
     run = {
-      requires: GenerateAnswer.requires,
+      deps: GenerateAnswer.deps,
       execute: async (work) => {
         const call = work.children.create(generation, work.input, { key: 'generation', output: { receive: (event) => void events.push(event) } });
-        work.checkpoint?.save(this.checkpoint.points[0], {}, { child: call.ref });
+        work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
         await call.run();
         return call.accept();
       },
@@ -76,10 +76,10 @@ function harness(t, provider, store, events = [], facts = [], generation = new G
     }
     checkpoint = parentCheckpoint('fixture.answer.runtime', execution);
     run = {
-      requires: {},
+      deps: {},
       execute: async (work) => {
         const call = work.children.create(execution, work.input, { key: 'execution' });
-        work.checkpoint?.save(this.checkpoint.points[0], {}, { child: call.ref });
+        work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
         await call.run();
         return call.accept();
       },
@@ -289,8 +289,8 @@ for (const stage of ['context', 'request', 'regenerationRequest', 'acceptance'])
     let recoveredRejection = false;
     const generation = new GenerateAnswer();
     if (stage === 'regenerationRequest') {
-      const resume = generation.regenerationWaiting.resume.execute;
-      generation.regenerationWaiting.resume.execute = (work, state, refs) => {
+      const resume = generation.regenerationWaiting.resume.run;
+      generation.regenerationWaiting.resume.run = (work, state, refs) => {
         const rejection = work.children.facts.require(generation.acceptOutput, work.continuation.origin.child);
         assert.equal(rejection.returned.status, 'failed');
         assert.equal(rejection.returned.diagnostic.code, 'MODEL_OUTPUT_REJECTED');

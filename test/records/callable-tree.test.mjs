@@ -43,32 +43,28 @@ test('live recording and generic subtree details follow direct members and resto
   const recorder = new Recorder(new RecordBook());
   const recorded = (role) => [invocationRecording(role ? { role } : {}, { failure: 'propagate' })];
   const read = () => 'read value';
-  const node = defineNode()({ name: 'read', observation: recorded(), run: { execute: read } });
-  const nestedNode = defineNode()({ name: 'read', observation: recorded(), run: { execute: read } });
+  const node = defineNode()({ name: 'read', observation: recorded(), run: read });
+  const nestedNode = defineNode()({ name: 'read', observation: recorded(), run: read });
   const nested = defineGroup()({
     name: 'inner',
     members: [nestedNode],
     observation: recorded(),
-    run: {
-      async execute(work) {
-        const call = work.children.create(nestedNode, null);
-        await call.run();
-        return call.accept();
-      },
+    async run(work) {
+      const call = work.children.create(nestedNode, null);
+      await call.run();
+      return call.accept();
     },
   });
   const scene = defineScene()({
     members: [node, nested],
     observation: recorded(),
-    run: {
-      async execute(work) {
-        const direct = work.children.create(node, null);
-        await direct.run();
-        await direct.accept();
-        const child = work.children.create(nested, null);
-        await child.run();
-        return child.accept();
-      },
+    async run(work) {
+      const direct = work.children.create(node, null);
+      await direct.run();
+      await direct.accept();
+      const child = work.children.create(nested, null);
+      await child.run();
+      return child.accept();
     },
   });
   const driver = installCallable(scene, { providers: [], source: { capture: () => null }, observations: [bindRecording(recorder, { failure: 'propagate' })] });

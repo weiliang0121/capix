@@ -15,11 +15,11 @@ type Expect<T extends true> = T;
 type Input = { readonly path: string };
 type Result = { readonly content: string };
 const metadata = { name: 'read', label: 'read', source: 'test', callee: 'files' };
-const read = defineNode<Input, Result>()({ ...metadata, output: { result: value => { throw new Error('not executed'); }, delta: value => String(value) }, run: { execute: work => ({ content: work.input.path }) } });
+const read = defineNode<Input, Result>()({ ...metadata, output: { result: value => { throw new Error('not executed'); }, delta: value => String(value) }, run: work => ({ content: work.input.path }) });
 const view: CallableContract<'node', Input, Result, string> = read;
 // @ts-expect-error a real target cannot widen its accepted input through a shallow view
 const widenedInput: CallableContract<'node', unknown, Result, string> = read;
-const acceptsUnknown = defineNode<unknown, Result>()({ ...metadata, run: { execute: () => ({ content: 'unknown input' }) } });
+const acceptsUnknown = defineNode<unknown, Result>()({ ...metadata, run: () => ({ content: 'unknown input' }) });
 // @ts-expect-error facts must not claim a narrower input than the target actually receives
 const narrowedInput: CallableContract<'node', Input, Result> = acceptsUnknown;
 // Output and Delta remain covariant; hiding detail does not permit a different input.
@@ -33,20 +33,21 @@ const erased: { readonly kind: 'node' } = read;
 const forged: CallableContract<'node', number, boolean> = erased;
 // @ts-expect-error a level-only view cannot become a callable target
 const erasedTarget: ChildContract = erased;
-const nested = defineGroup<number, number>()({ ...metadata, run: { execute: work => work.input } });
-const task = defineGroup<number, number>()({ members: [nested], run: { execute: work => work.input } });
-const root = defineScene<number, number>()({ members: [task], run: { execute: work => work.input } });
+const nested = defineGroup<number, number>()({ ...metadata, run: work => work.input });
+const task = defineGroup<number, number>()({ members: [nested], run: work => work.input });
+const root = defineScene<number, number>()({ members: [task], run: work => work.input });
 
 // An explicit destination type checks a declaration; it never supplies missing resource requests.
-const annotatedEmpty: Group<string, number> = defineGroup<string, number>()({ ...metadata, run: { execute: work => work.input.length } });
-const annotatedStream: Group<string, number, Record<string, never>, Record<string, never>, string> = defineGroup<string, number>()({ ...metadata, output: { result: value => Number(value), delta: value => String(value) }, run: { execute: work => work.input.length } });
+const annotatedEmpty: Group<string, number> = defineGroup<string, number>()({ ...metadata, run: work => work.input.length });
+const annotatedStream: Group<string, number, Record<string, never>, Record<string, never>, string> = defineGroup<string, number>()({ ...metadata, output: { result: value => Number(value), delta: value => String(value) }, run: work => work.input.length });
 declare const valuePort: ResourceRequest<number>;
 declare const repairPort: ResourceRequest<string>;
-const annotatedResources: Group<string, number, { value: number }, { repair: string }> = defineGroup<string, number>()({ ...metadata, run: { requires: { value: valuePort }, execute: work => work.resources.value }, exceptions: { requires: { repair: repairPort }, accepts: [], handle: work => work.return(work.resources.repair.length) } });
+const annotatedResources: Group<string, number, { value: number }, { repair: string }> = defineGroup<string, number>()({ ...metadata, deps: { value: valuePort },
+run: work => work.resources.value, exceptions: { deps: { repair: repairPort }, accepts: [], handle: work => work.return(work.resources.repair.length) } });
 // @ts-expect-error the destination type cannot manufacture a run resource request
-const missingRunResource = new Group<string, number, { value: number }>({ ...metadata, run: { execute: () => 1 } });
+const missingRunResource = new Group<string, number, { value: number }>({ ...metadata, run: () => 1 });
 // @ts-expect-error the destination type cannot manufacture an exception resource request
-const missingExceptionResource = new Group<string, number, {}, { repair: string }>({ ...metadata, run: { execute: () => 1 }, exceptions: { accepts: [], handle: work => work.unhandled } });
+const missingExceptionResource = new Group<string, number, {}, { repair: string }>({ ...metadata, run: () => 1, exceptions: { accepts: [], handle: work => work.unhandled } });
 
 type NoAttemptChildren = Expect<Equal<ChildContractsOf<'node'>, never>>;
 expectType<NoAttemptChildren>(true);
@@ -56,9 +57,9 @@ view.run;
 // @ts-expect-error no resource declaration tree on the consumer contract
 view.children;
 // @ts-expect-error binding inputs still need a complete declaration
-const invalidRegisteredChild = defineGroup<string, string>()({ ...metadata, members: [view], run: { execute: work => work.input } });
+const invalidRegisteredChild = defineGroup<string, string>()({ ...metadata, members: [view], run: work => work.input });
 // @ts-expect-error shallow objects cannot manufacture definitions at registration
-const invalidLiteralChild = defineGroup<string, string>()({ ...metadata, members: [{ kind: 'node' }], run: { execute: work => work.input } });
+const invalidLiteralChild = defineGroup<string, string>()({ ...metadata, members: [{ kind: 'node' }], run: work => work.input });
 // @ts-expect-error Runtime is not any parent's ChildContract
 const invalidRoot: ChildContract = root;
 // @ts-expect-error even a bare ChildCall cannot refer to R
@@ -104,7 +105,7 @@ consumer.children.entry(entryView, 2);
 // @ts-expect-error caller sees no complete run declaration through entryView
 entryView.run;
 // The actual entry retains these for assembly/composition.
-entry.run?.requires;
+entry.run?.deps;
 entry.exceptions;
 
 // Shared class registration rules preserve leaf restrictions beyond literals.
@@ -112,30 +113,31 @@ class BadLeaf extends Node<Input, Result> {
   readonly name = 'bad'; readonly label = 'bad'; readonly source = 'test'; readonly callee = 'local';
   // @ts-expect-error a named leaf class cannot declare children
   readonly members = [read];
-  readonly run = { requires: {}, execute: (work: ExecuteWork<'node', Input, Result>) => ({ content: work.input.path }) };
+  readonly run = { deps: {}, execute: (work: ExecuteWork<'node', Input, Result>) => ({ content: work.input.path }) };
 }
 class GoodLeaf extends Node<Input, Result> {
   readonly name = 'good'; readonly label = 'good'; readonly source = 'test'; readonly callee = 'local';
   private readonly prefix = 'result:';
-  constructor() { super(); this.setRun({ execute: work => this.project(work.input) }); }
+  constructor() { super(); this.setRun(work => this.project(work.input)); }
   private project(input: Input): Result { return { content: this.prefix + input.path }; }
 }
 const named = new GoodLeaf();
 const classRegistration: CallableMembers<'group'> = { members: [named, nested] };
 // @ts-expect-error common registration type retains the parent's exact position
 const invalidClassRegistration: CallableMembers<'node'> = { members: [named] };
-const namedParent = defineGroup<Input, Result>()({ ...metadata, members: [named], run: { execute: work => work.children.create(named, work.input).run() } });
+const namedParent = defineGroup<Input, Result>()({ ...metadata, members: [named], run: work => work.children.create(named, work.input).run() });
 
 // Registration and stage selection cannot be inferred backwards from uses.
 // @ts-expect-error run uses cannot add an unregistered different child
-const invalidUses = defineGroup<string, string>()({ ...metadata, members: [read], run: { uses: [nested], execute: work => work.input } });
+const invalidUses = defineGroup<string, string>()({ ...metadata, members: [read], uses: [nested],
+run: work => work.input });
 // @ts-expect-error exception uses cannot add an unregistered different child
-const invalidExceptionUses = defineGroup<string, string>()({ ...metadata, members: [read], run: { execute: work => work.input }, exceptions: { accepts: [], uses: [nested], handle: work => work.unhandled } });
+const invalidExceptionUses = defineGroup<string, string>()({ ...metadata, members: [read], run: work => work.input, exceptions: { accepts: [], uses: [nested], handle: work => work.unhandled } });
 
 // Runtime checks retain real identity and activity rights; structural types do
 // not prove registrations, ownership, relation status or a live phase window.
 declare const anotherSameShape: typeof read;
-const identityStillChecked = defineGroup<Input, Result>()({ ...metadata, members: [read], run: { execute(work) { return work.children.create(anotherSameShape, work.input).run(); } } });
+const identityStillChecked = defineGroup<Input, Result>()({ ...metadata, members: [read], run(work) { return work.children.create(anotherSameShape, work.input).run(); } });
 declare const history: ChildReference<typeof view>;
 declare const noActions: GroupWork<string, string, {}, never>;
 noActions.children.facts.get(history);

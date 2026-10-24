@@ -24,7 +24,7 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
   }
   const capabilities = { ...options, ...(recorder ? { clock: recorder.clock, observations: [...(options.observations ?? []), recording] } : {}) };
   const builder = new CallableInvocationBuilder(capabilities);
-  const runtime = installCallable(defineScene()({ run: { execute: () => undefined } }), { providers: [], source: { capture: () => null }, ...capabilities });
+  const runtime = installCallable(defineScene()({ run: () => undefined }), { providers: [], source: { capture: () => null }, ...capabilities });
   const state = { invocationRecordings, recording, recorder, runtime, builder, capabilities, observe: recorder ? [invocationRecording()] : [] };
   states.set(runtime, state);
   const decorate = (invocation) => {

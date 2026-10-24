@@ -18,6 +18,8 @@ export interface InvocationRelationOptions {
   /** Fixed declaration position in the owning parent's resolved children. */
   declarationPosition?: number;
   output?: InvocationOutputReceiver<any, any>;
+  /** An explicit operation receiver owns failed delivery; raw calls keep strict propagation. */
+  receiveFailure?: boolean;
 }
 
 export interface InvocationTarget<Output = unknown> {
@@ -29,7 +31,7 @@ export interface InvocationTarget<Output = unknown> {
   readonly identity?: InvocationIdentity;
 }
 
-export type InvocationRelationReception = Readonly<{ status: 'pending' } | ({ readonly contract?: InvocationReceptionBinding } & ({ status: 'receiving' } | { status: 'accepted'; output: unknown } | { status: 'failed'; error: unknown; failure?: InvocationFailure; diagnostic?: RuntimeErrorValue }))>;
+export type InvocationRelationReception = Readonly<{ status: 'pending' } | ({ readonly contract?: InvocationReceptionBinding } & ({ status: 'receiving' } | { status: 'accepted' | 'handled'; output: unknown } | { status: 'failed'; error: unknown; failure?: InvocationFailure; diagnostic?: RuntimeErrorValue }))>;
 
 /** Already-decoded relationship facts. Installing them does not replay return or acceptance. */
 export interface InvocationRelationBaseline<Output = unknown> {
@@ -53,6 +55,7 @@ export interface InvocationRelationSetup<Output = unknown> {
   readonly order: number;
   readonly key?: string;
   readonly declarationPosition?: number;
+  readonly receiveFailure?: boolean;
 }
 
 /** A direct parent-child relationship, not another invocation or E/O/A execution layer. */
@@ -66,6 +69,7 @@ export class InvocationRelation<Output = unknown> {
   readonly order: number;
   readonly key?: string;
   readonly declarationPosition?: number;
+  readonly receiveFailure: boolean;
 
   constructor(
     identity: InvocationRelationSetup<Output>,
@@ -76,6 +80,7 @@ export class InvocationRelation<Output = unknown> {
     this.order = identity.order;
     this.key = identity.key;
     this.declarationPosition = identity.declarationPosition;
+    this.receiveFailure = identity.receiveFailure ?? false;
     const relation = this;
     this.view = Object.freeze({
       get invocation() {
@@ -120,7 +125,7 @@ export class InvocationRelation<Output = unknown> {
   returnedWith(result: InvocationResult<Output>): void {
     if (this.#returned) throw new Error('Child invocation has already returned');
     this.#returned = Object.freeze(result);
-    if (result.status === 'failed' && result.failure) this.owner.fail(result.failure);
+    if (result.status === 'failed' && result.failure && !this.receiveFailure) this.owner.fail(result.failure);
     this.owner.publish(this, { kind: 'returned', result: this.#returned });
   }
 
@@ -132,18 +137,39 @@ export class InvocationRelation<Output = unknown> {
     }
   }
 
+  /** Handling a failed delivery never rewrites that child's outcome as succeeded. */
+  handle<Value>(work: (failure: unknown) => Value | Promise<Value>, contract?: InvocationReceptionBinding): Promise<Value> {
+    try {
+      return this.owner.accepting(async () => {
+        if (!this.receiveFailure || this.#returned?.status !== 'failed' || !this.#returned.failure?.receptionAllowed) throw new Error('Child has no receivable failed delivery');
+        const scope = this.owner.captureDelivery();
+        const failure = this.#returned.error;
+        this.beginReception(contract, true);
+        const output = await this.receiveWithinParent(failure, work, scope, contract);
+        this.#reception = Object.freeze({ status: 'handled', output, ...(contract ? { contract } : {}) });
+        const observed = this.owner.publish(this, { kind: 'handled', output });
+        if (observed !== undefined) throw observed;
+        return output;
+      });
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
+
   private async acceptResult<Value>(work: (delivered: Output) => Value | Promise<Value>, contract?: InvocationReceptionBinding): Promise<Value> {
     const scope = this.owner.captureDelivery();
-    const delivered = this.beginReception(contract);
+    if (this.#returned?.status !== 'succeeded') throw new Error('Child invocation has not returned successfully');
+    const delivered = this.#returned.output;
+    this.beginReception(contract);
     const output = await this.receiveWithinParent(delivered, work, scope, contract);
     // Acceptance is fixed before notification. A later observer failure cannot undo it.
     this.completeReception(output, contract);
     return output;
   }
 
-  private beginReception(contract?: InvocationReceptionBinding): Output {
+  private beginReception(contract?: InvocationReceptionBinding, failed = false): void {
     this.owner.requireHealthy();
-    if (this.#returned?.status !== 'succeeded') throw new Error('Child invocation has not returned successfully');
+    if (!this.#returned || (failed ? this.#returned.status !== 'failed' : this.#returned.status !== 'succeeded')) throw new Error('Child invocation has not returned the expected outcome');
     if (contract && contract.childPosition !== this.declarationPosition) throw new Error('Reception contract belongs to a different child position');
     if (this.#reception.status !== 'pending' && !this.#restoredReception) throw new Error('Child result has already entered acceptance');
     if (this.#restoredReception && this.#reception.status === 'receiving' && this.#reception.contract !== contract) throw new Error('Restored reception contract cannot be replaced');
@@ -155,10 +181,9 @@ export class InvocationRelation<Output = unknown> {
       const failed = this.owner.publish(this, { kind: 'failed', error: observed, source: 'observation' });
       throw combineFaults([observed, ...(failed !== undefined ? [failed] : [])]);
     }
-    return this.#returned.output;
   }
 
-  private async receiveWithinParent<Value>(delivered: Output, work: (delivered: Output) => Value | Promise<Value>, scope: InvocationPropagationScope, contract?: InvocationReceptionBinding): Promise<Value> {
+  private async receiveWithinParent<Delivered, Value>(delivered: Delivered, work: (delivered: Delivered) => Value | Promise<Value>, scope: InvocationPropagationScope, contract?: InvocationReceptionBinding): Promise<Value> {
     try {
       this.owner.requireHealthy();
       return await this.owner.receive(this, async () => {

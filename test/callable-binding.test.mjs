@@ -15,15 +15,13 @@ async function receive(work, member, input) {
 }
 
 function delegate(member) {
-  return {
-    async execute(work) {
-      return receive(work, member, work.input);
-    },
+  return async function (work) {
+    return receive(work, member, work.input);
   };
 }
 
 test('a root group or node rejects a second source registration instead of silently ignoring it', () => {
-  for (const definition of [defineGroup()({ run: { execute: () => null } }), defineNode()({ run: { execute: () => null } })]) {
+  for (const definition of [defineGroup()({ run: () => null }), defineNode()({ run: () => null })]) {
     assert.throws(
       () =>
         new CallableBuilder().build(definition, {
@@ -40,46 +38,36 @@ test('scene, nested groups and nodes execute their own work through the shared c
   const executed = [];
   const result = { value: 42 };
   const unused = defineNode()({
-    run: {
-      execute() {
-        assert.fail('registration cannot schedule an unused member');
-      },
+    run() {
+      assert.fail('registration cannot schedule an unused member');
     },
   });
   const node = defineNode()({
-    run: {
-      execute(work) {
-        assert.equal('children' in work, false);
-        executed.push('node');
-        return result;
-      },
+    run(work) {
+      assert.equal('children' in work, false);
+      executed.push('node');
+      return result;
     },
   });
   const inner = defineGroup()({
     members: [node, unused],
-    run: {
-      async execute(work) {
-        executed.push('inner');
-        return receive(work, node, work.input);
-      },
+    async run(work) {
+      executed.push('inner');
+      return receive(work, node, work.input);
     },
   });
   const outer = defineGroup()({
     members: [inner],
-    run: {
-      async execute(work) {
-        executed.push('outer');
-        return receive(work, inner, work.input);
-      },
+    async run(work) {
+      executed.push('outer');
+      return receive(work, inner, work.input);
     },
   });
   const scene = defineScene()({
     members: [outer],
-    run: {
-      async execute(work) {
-        executed.push('scene');
-        return receive(work, outer, work.input);
-      },
+    async run(work) {
+      executed.push('scene');
+      return receive(work, outer, work.input);
     },
   });
   const kinds = [];
@@ -108,14 +96,12 @@ test('one fixed supply is shared while each call receives its own revocable reso
     endpoints.push(endpoint);
     return endpoint;
   });
-  const node = defineNode()({ run: { requires: { data: offer.request() }, execute: (work) => work.resources.data.read() } });
+  const node = defineNode()({ deps: { data: offer.request() }, run: (work) => work.resources.data.read() });
   const group = defineGroup()({
     members: [node],
-    run: {
-      async execute(work) {
-        assert.deepEqual(Object.keys(work.resources), []);
-        return Promise.all([receive(work, node, 1), receive(work, node, 2)]);
-      },
+    async run(work) {
+      assert.deepEqual(Object.keys(work.resources), []);
+      return Promise.all([receive(work, node, 1), receive(work, node, 2)]);
     },
   });
   const driver = install(defineScene()({ members: [group], run: delegate(group) }), {
@@ -145,25 +131,21 @@ test('explicit sources can be attached to a deep group or node and do not depend
   const captures = [];
   const starts = [];
   const offer = new ResourceOffer('callable.source', (value) => value);
-  const inherited = defineNode()({ run: { requires: { value: offer.request() }, execute: (work) => work.resources.value } });
-  const rootReader = defineNode()({ run: { requires: { value: offer.request() }, execute: (work) => work.resources.value } });
-  const independent = defineNode()({ run: { requires: { value: offer.request() }, execute: (work) => work.resources.value } });
+  const inherited = defineNode()({ deps: { value: offer.request() }, run: (work) => work.resources.value });
+  const rootReader = defineNode()({ deps: { value: offer.request() }, run: (work) => work.resources.value });
+  const independent = defineNode()({ deps: { value: offer.request() }, run: (work) => work.resources.value });
   const target = defineGroup()({
     members: [inherited, independent],
-    run: {
-      async execute(work) {
-        assert.deepEqual(Object.keys(work.resources), []);
-        return [await receive(work, inherited, null), await receive(work, independent, 'leaf')];
-      },
+    async run(work) {
+      assert.deepEqual(Object.keys(work.resources), []);
+      return [await receive(work, inherited, null), await receive(work, independent, 'leaf')];
     },
   });
   const wrapper = defineGroup()({ members: [target], run: delegate(target) });
   const scene = defineScene()({
     members: [wrapper, rootReader],
-    run: {
-      async execute(work) {
-        return [await receive(work, rootReader, null), await receive(work, wrapper, 'task')];
-      },
+    async run(work) {
+      return [await receive(work, rootReader, null), await receive(work, wrapper, 'task')];
     },
   });
   const driver = install(scene, {
@@ -190,10 +172,8 @@ test('explicit sources can be attached to a deep group or node and do not depend
 
 test('a source boundary failure preserves its parent facts without attaching a fabricated child', async () => {
   const target = defineNode()({
-    run: {
-      execute() {
-        assert.fail('failed source must not execute');
-      },
+    run() {
+      assert.fail('failed source must not execute');
     },
   });
   const group = defineGroup()({ members: [target], run: delegate(target) });
@@ -233,15 +213,13 @@ test('resource narrowing stays local even when the parent has no endpoint for th
       return Object.freeze([...wanted]);
     },
   });
-  const node = defineNode()({ run: { requires: { values: offer.request() }, execute: (work) => work.resources.values } });
-  const rootReader = defineNode()({ run: { requires: { values: offer.request() }, execute: (work) => work.resources.values } });
+  const node = defineNode()({ deps: { values: offer.request() }, run: (work) => work.resources.values });
+  const rootReader = defineNode()({ deps: { values: offer.request() }, run: (work) => work.resources.values });
   const group = defineGroup()({ members: [node], run: delegate(node) });
   const scene = defineScene()({
     members: [group, rootReader],
-    run: {
-      async execute(work) {
-        return [await receive(work, group, ['a']), await receive(work, rootReader, null)];
-      },
+    async run(work) {
+      return [await receive(work, group, ['a']), await receive(work, rootReader, null)];
     },
   });
   const driver = install(scene, { providers: [offer.provide((source) => source)], source: { capture: () => ['a', 'b'] }, childResources: [bindChildResources(group, [offer.refine((input) => input)])] });
@@ -254,7 +232,7 @@ test('a driver keeps occupancy on its built callable and constructor failure rel
   const waiting = new Promise((resolve) => {
     finish = resolve;
   });
-  const scene = defineScene()({ run: { execute: () => waiting } });
+  const scene = defineScene()({ run: () => waiting });
   const driver = new Driver();
   const bound = driver.build(scene, {
     providers: [],
@@ -277,8 +255,8 @@ test('a driver keeps occupancy on its built callable and constructor failure rel
 
 test('call construction scopes are authenticated to their exact bound installation', () => {
   const builder = new CallableBuilder();
-  const first = builder.build(defineScene()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
-  const second = builder.build(defineScene()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
+  const first = builder.build(defineScene()({ run: () => null }), { providers: [], source: { capture: () => null } });
+  const second = builder.build(defineScene()({ run: () => null }), { providers: [], source: { capture: () => null } });
   const own = callableConstruction(first).calls.begin({});
   assert.throws(() => callableConstruction(second).calls.require(own), /another binding installation/);
   assert.throws(() => callableConstruction(first).calls.require({}), /another binding installation/);
@@ -286,19 +264,19 @@ test('call construction scopes are authenticated to their exact bound installati
 });
 
 test('binding rejects node members, undeclared source targets and duplicate registrations', () => {
-  const node = defineNode()({ run: { execute: () => null } });
+  const node = defineNode()({ run: () => null });
   const illegal = Object.assign(node, { members: [] });
   const scene = defineScene()({ members: [illegal], run: delegate(illegal) });
   assert.throws(() => install(scene), /Nodes cannot declare members/);
   delete node.members;
-  const other = defineNode()({ run: { execute: () => null } });
+  const other = defineNode()({ run: () => null });
   assert.throws(() => install(scene, { bindings: [{ definition: other, capture: () => null }] }), /registered member/);
   assert.throws(() => install(scene, { bindings: [{ definition: node }, { definition: node }] }), /Duplicate callable source/);
 });
 
 test('host source methods and receivers are fixed during binding without freezing host state', async () => {
   const offer = new ResourceOffer('callable.fixed-source', (value) => value);
-  const scene = defineScene()({ run: { requires: { value: offer.request() }, execute: (work) => work.resources.value } });
+  const scene = defineScene()({ deps: { value: offer.request() }, run: (work) => work.resources.value });
   const source = {
     value: 'initial',
     capture() {
@@ -314,7 +292,7 @@ test('host source methods and receivers are fixed during binding without freezin
 
 test('a pre-cancelled entry releases occupancy without capturing a host source', async () => {
   let captured = 0;
-  const driver = install(defineScene()({ run: { execute: () => 'done' } }), {
+  const driver = install(defineScene()({ run: () => 'done' }), {
     source: {
       capture: () => {
         captured++;
@@ -331,25 +309,21 @@ test('a pre-cancelled entry releases occupancy without capturing a host source',
 
 test('same-signature members retain exact phase authorization independently of their structural types', async () => {
   let called = 0;
-  const allowed = defineNode()({ run: { execute: () => 1 } });
+  const allowed = defineNode()({ run: () => 1 });
   const other = defineNode()({
-    run: {
-      execute: () => {
-        called++;
-        return 2;
-      },
+    run: () => {
+      called++;
+      return 2;
     },
   });
   const scene = defineScene()({
     members: [allowed, other],
-    run: {
-      uses: [allowed],
-      execute(work) {
-        try {
-          work.children.create(other, null);
-        } catch {}
-        return 'cannot hide this violation';
-      },
+    uses: [allowed],
+    run(work) {
+      try {
+        work.children.create(other, null);
+      } catch {}
+      return 'cannot hide this violation';
     },
   });
   await assert.rejects(install(scene).run(null, {}), /not allowed|not declared|phase/i);

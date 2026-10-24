@@ -82,7 +82,7 @@ export function bindChild(runtime, definition) {
   return {
     definition,
     create(parent, input, options = {}) {
-      return state.decorate(invocations.create(input, { parent, kind: definition.kind, ...options, construction: state.construction, requires: binding.requires, supply: binding.supply, refinements: binding.refinements, description: binding.declaration, observation: binding.declaration.observation, work: binding.work }));
+      return state.decorate(invocations.create(input, { parent, kind: definition.kind, ...options, construction: state.construction, deps: binding.deps, supply: binding.supply, refinements: binding.refinements, description: binding.declaration, observation: binding.declaration.observation, work: binding.work }));
     },
     async call(parent, input) {
       return this.create(parent, input).run();

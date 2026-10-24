@@ -146,12 +146,10 @@ test('maintenance factories create independent structures for before-request and
     maintenance: {
       create() {
         const policy = new Group({
-          run: {
-            execute(work) {
-              const { phase, material } = work.input;
-              phases.push(phase);
-              return { basis: material.basis, messageIndexes: material.messages.map((item) => item.index), memoryIds: material.memories.map((item) => item.id) };
-            },
+          run(work) {
+            const { phase, material } = work.input;
+            phases.push(phase);
+            return { basis: material.basis, messageIndexes: material.messages.map((item) => item.index), memoryIds: material.memories.map((item) => item.id) };
           },
         });
         policies.push(policy);
@@ -169,6 +167,6 @@ test('maintenance factories create independent structures for before-request and
 });
 
 test('maintenance factories cannot reuse one policy structure at two positions', () => {
-  const policy = new Group({ run: { execute: () => null } });
+  const policy = new Group({ run: () => null });
   assert.throws(() => createConversationStructure({ maintenance: { create: () => policy } }), /parent|belong|owned|owner/i);
 });

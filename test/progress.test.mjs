@@ -218,7 +218,7 @@ test('append commit reaches its local receiver before resource returned observat
 
 test('assembly selects local execution progress by declaration and each run receives a separate identity', async () => {
   class Echo extends Group {
-    run = { requires: {}, execute: (work) => work.input };
+    run = { deps: {}, execute: (work) => work.input };
   }
   const execution = new Echo();
   const facts = [];
@@ -260,7 +260,7 @@ test('assembly selects local execution progress by declaration and each run rece
 
 function delegated(child) {
   return {
-    requires: {},
+    deps: {},
     uses: [child],
     async execute(work) {
       const call = work.children.create(child, work.input, { key: 'child' });
@@ -276,7 +276,7 @@ function hierarchy() {
     label = '测试能力';
     source = 'private-source';
     callee = 'private-provider';
-    run = { requires: {}, execute: (work) => work.input };
+    run = { deps: {}, execute: (work) => work.input };
   })();
   const operation = new (class extends Group {
     name = 'compose';
@@ -499,7 +499,7 @@ test('child cancellation is distinguished in parent return progress and never ac
   const definition = hierarchy();
   const attempt = definition.members[0].members[0].members[0];
   attempt.run = {
-    requires: {},
+    deps: {},
     execute() {
       controller.abort();
       throw new InvocationCancelled(controller.signal);

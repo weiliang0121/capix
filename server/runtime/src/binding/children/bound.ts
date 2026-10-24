@@ -1,15 +1,27 @@
 import type { ChildContract, ChildCallable } from '../../definition/children.js';
 import type { CheckpointBinding } from '../../checkpoint/work.js';
+import type { NamedMembers } from '../../definition/composition.js';
+import { checkMemberName } from '../../structure/members.js';
 import type { ResolvedChild } from '../declarations.js';
 
 /** Reusable child structures; no parent invocation or phase access is retained here. */
 export class BoundChildren {
   readonly #entries: ReadonlyMap<ChildContract, { readonly kind: ChildCallable['kind']; readonly value: ChildCallable; readonly checkpoint?: CheckpointBinding }>;
   readonly #definitions: readonly ChildCallable[];
+  readonly #names: ReadonlyMap<string, ChildContract>;
 
-  constructor(children: readonly ResolvedChild[]) {
+  constructor(children: readonly ResolvedChild[], names: NamedMembers = {}) {
     this.#entries = new Map(children.map((child) => [child.definition, { kind: child.declaration.kind, value: child.definition, checkpoint: child.declaration.checkpoint }]));
     this.#definitions = Object.freeze([...new Set(children.map((child) => child.definition))]);
+    for (const [name, definition] of Object.entries(names)) {
+      checkMemberName(name);
+      if (!this.#entries.has(definition)) throw new Error('Named member is outside its owner');
+    }
+    this.#names = new Map(Object.entries(names));
+  }
+
+  names(): ReadonlyMap<string, ChildContract> {
+    return this.#names;
   }
 
   definitions(): readonly ChildCallable[] {

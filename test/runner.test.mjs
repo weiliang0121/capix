@@ -13,7 +13,7 @@ function deferred() {
 }
 
 function scene(execute = (work) => work.input) {
-  return new Scene({ run: { execute } });
+  return new Scene({ run: execute });
 }
 
 function observation(facts) {
@@ -49,8 +49,8 @@ test('Runner fixes one scene and builds itself; every run starts a fresh call', 
   assert.equal(new Set(contexts).size, 2);
   assert.equal(runner.isRunning, false);
   assert.throws(() => runner.build(), /already been built/);
-  assert.throws(() => root.setRun({ execute: () => 'replacement' }), /built|fixed|configur/i);
-  assert.throws(() => new Runner(new Node({ run: { execute: () => 'leaf' } }), new Resources()), /requires a Scene/);
+  assert.throws(() => root.setRun(() => 'replacement'), /built|fixed|configur/i);
+  assert.throws(() => new Runner(new Node({ run: () => 'leaf' }), new Resources()), /requires a Scene/);
 });
 
 test('failed Runner builds can be corrected, but reentrant build never publishes a partial installation', async () => {
@@ -66,7 +66,7 @@ test('failed Runner builds can be corrected, but reentrant build never publishes
   };
   runner = new Runner(root, new Resources(), undefined, { observations: [install] });
   assert.throws(() => runner.build(), /requires execute/);
-  root.setRun({ execute: (work) => work.input });
+  root.setRun((work) => work.input);
   assert.equal(runner.build(), runner);
   assert.equal(checked, true);
   assert.equal(await runner.run('healthy'), 'healthy');
@@ -106,20 +106,16 @@ test('pre-cancellation skips host validation; active cancellation waits for a st
   const childExit = deferred();
   let validations = 0;
   const child = new Node({
-    run: {
-      async execute() {
-        childEntered.resolve();
-        return childExit.promise;
-      },
+    async run() {
+      childEntered.resolve();
+      return childExit.promise;
     },
   });
   const root = new Scene().add(child);
-  root.setRun({
-    async execute(work) {
-      const call = work.children.create(child, null);
-      await call.run();
-      return call.accept();
-    },
+  root.setRun(async function (work) {
+    const call = work.children.create(child, null);
+    await call.run();
+    return call.accept();
   });
   const runner = new Runner(root, new Resources(), undefined, {
     validate() {
@@ -147,14 +143,12 @@ test('pre-cancellation skips host validation; active cancellation waits for a st
 });
 
 test('call hooks are registered by exact root/child identity and retain their receiver and built methods', async () => {
-  const child = new Node({ run: { execute: (work) => `${work.input}:child` } });
+  const child = new Node({ run: (work) => `${work.input}:child` });
   const root = new Scene().add(child);
-  root.setRun({
-    async execute(work) {
-      const call = work.children.create(child, work.input);
-      await call.run();
-      return call.accept();
-    },
+  root.setRun(async function (work) {
+    const call = work.children.create(child, work.input);
+    await call.run();
+    return call.accept();
   });
   const established = [];
   const progress = [];
@@ -228,7 +222,7 @@ test('foreign and duplicate hook registrations fail before a structure becomes r
     /Duplicate/,
   );
   // Failed registrations did not lock or partially install the scene.
-  root.setRun({ execute: () => 'repaired' });
+  root.setRun(() => 'repaired');
   new Runner(root, new Resources()).build();
 });
 
@@ -292,10 +286,10 @@ test('per-call validation failure releases occupancy and asynchronous validators
 
 test('Runner resume keeps the original identity and input and skips started registration', async () => {
   const store = new MemoryCheckpointStore();
-  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { requires: {}, execute: (work, state) => `${work.input}:${state}` } });
+  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { deps: {}, run: (work, state) => `${work.input}:${state}` } });
   const root = new Scene({
     checkpoint: { key: 'runner.resume', version: 1, input: codec, output: codec, points: [point] },
-    run: { execute: () => assert.fail('resume must not replay the original body') },
+    run: () => assert.fail('resume must not replay the original body'),
   });
   let validated = 0;
   const runner = new Runner(root, new Resources(), undefined, {
@@ -318,7 +312,7 @@ test('Runner resume keeps the original identity and input and skips started regi
   store.save(
     {
       id: 'runner-saved',
-      formatVersion: 4,
+      formatVersion: 5,
       contract: { key: 'runner.resume', version: 1 },
       point: 'saved',
       frame: { owner: { contextId: 'runner-context', kind: 'scene' }, round: 1, phase: 'execute', input: 'original', currentInput: 'original', nextChildOrder: 0, children: [] },
@@ -368,11 +362,9 @@ test('Runner converts an unhandled declared result without confusing it with adm
   const original = failure.create('unable to proceed', { retry: false });
   const root = new Scene({
     raises: [failure],
-    run: {
-      execute(work) {
-        if (work.input) throw original;
-        return 'ok';
-      },
+    run(work) {
+      if (work.input) throw original;
+      return 'ok';
     },
   });
   const facts = [];
@@ -416,14 +408,12 @@ test('Runner host validation retains its receiver and rejects asynchronous admis
 test('child validation precedes capture while started factories still follow the fixed capture', async () => {
   const number = new ResourceOffer('runner.validated-capture', (value) => value);
   const child = new Node();
-  child.setRun({ requires: { number: number.request() }, execute: (work) => work.resources.number });
+  child.setRun((work) => work.resources.number, { number: number.request() });
   const root = new Scene().add(child);
-  root.setRun({
-    async execute(work) {
-      const call = work.children.create(child, work.input);
-      await call.run();
-      return call.accept();
-    },
+  root.setRun(async function (work) {
+    const call = work.children.create(child, work.input);
+    await call.run();
+    return call.accept();
   });
   const captured = [];
   const established = [];
@@ -488,7 +478,7 @@ test('run and resume fix top-level options before delayed child capture without 
     const store = new MemoryCheckpointStore();
     const value = new ResourceOffer('runner.fixed-options', (captured) => captured);
     const child = new Node();
-    child.setRun({ requires: { value: value.request() }, execute: (work) => work.resources.value });
+    child.setRun((work) => work.resources.value, { value: value.request() });
     const root = new Scene().add(child);
     const delayed = async (work) => {
       entered.resolve();
@@ -497,10 +487,10 @@ test('run and resume fix top-level options before delayed child capture without 
       await call.run();
       return call.accept();
     };
-    const point = checkpointPoint()({ name: 'waiting', state: codec, references: {}, resume: { requires: {}, uses: [child], execute: delayed } });
+    const point = checkpointPoint()({ name: 'waiting', state: codec, references: {}, resume: { deps: {}, uses: [child], run: delayed } });
     root.setDefinition({
       checkpoint: { key: 'runner.fixed-options', version: 1, input: codec, output: codec, points: [point] },
-      run: { execute: delayed },
+      run: delayed,
     });
     const entity = { state: 'initial' };
     const control = new AbortController();
@@ -525,7 +515,7 @@ test('run and resume fix top-level options before delayed child capture without 
       store.save(
         {
           id: 'runner-options-cp',
-          formatVersion: 4,
+          formatVersion: 5,
           contract: { key: 'runner.fixed-options', version: 1 },
           point: 'waiting',
           frame: { owner: { contextId: 'runner-options-context', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] },

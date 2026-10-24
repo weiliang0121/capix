@@ -38,6 +38,13 @@ export interface CheckpointReceptionContract {
 
 export type CheckpointChildReception = { readonly kind: 'pending' } | { readonly kind: 'receiving'; readonly contract?: CheckpointReceptionContract } | { readonly kind: 'accepted'; readonly contract?: CheckpointReceptionContract; readonly output?: CheckpointValue } | { readonly kind: 'failed'; readonly contract?: CheckpointReceptionContract; readonly error: CheckpointValue; readonly failure: InvocationFailureFact & { readonly kind: 'exception'; readonly contract: string } };
 
+/** A failed delivery stays failed after its parent explicitly adopts a replacement value. */
+export interface CheckpointHandledReception {
+  readonly kind: 'handled';
+  readonly contract?: CheckpointReceptionContract;
+  readonly output?: CheckpointValue;
+}
+
 export interface CheckpointChild {
   readonly identity: InvocationIdentity;
   readonly target: { readonly position: number };
@@ -46,7 +53,7 @@ export interface CheckpointChild {
   readonly order: number;
   readonly key?: string;
   readonly input: CheckpointValue;
-  readonly state: { readonly kind: 'waiting' } | { readonly kind: 'returned'; readonly output: CheckpointValue; readonly progress: { readonly round: number; readonly currentInput: CheckpointValue; readonly phase: 'execute' | 'receive' | 'handling' }; readonly reception: CheckpointChildReception } | { readonly kind: 'failed'; readonly error: CheckpointValue; readonly failure: InvocationFailureFact & { readonly kind: 'exception'; readonly contract: string }; readonly progress: { readonly round: number; readonly currentInput: CheckpointValue; readonly phase: 'execute' | 'receive' | 'handling' } };
+  readonly state: { readonly kind: 'waiting' } | { readonly kind: 'returned'; readonly output: CheckpointValue; readonly progress: { readonly round: number; readonly currentInput: CheckpointValue; readonly phase: 'execute' | 'receive' | 'handling' }; readonly reception: CheckpointChildReception } | { readonly kind: 'failed'; readonly error: CheckpointValue; readonly failure: InvocationFailureFact; readonly progress: { readonly round: number; readonly currentInput: CheckpointValue; readonly phase: 'execute' | 'receive' | 'handling' }; readonly reception?: CheckpointHandledReception };
 }
 
 export interface InvocationCheckpointFrame {
@@ -62,7 +69,7 @@ export interface InvocationCheckpointFrame {
 
 export interface CheckpointImage {
   readonly id: string;
-  readonly formatVersion: 4;
+  readonly formatVersion: 5;
   readonly contract: CheckpointContract;
   readonly point: string;
   readonly frame: InvocationCheckpointFrame;

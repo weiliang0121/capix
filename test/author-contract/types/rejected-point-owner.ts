@@ -10,11 +10,11 @@ const unowned = checkpointPoint()({
   state: numberCodec,
   references: {},
   resume: {
-    execute(work) {
+    run(work) {
       const input: string = work.input;
       return input;
     },
   },
 });
 
-defineGroup<string, string>()({ name: 'later-owner', label: 'Owner', source: 'test', run: { execute: (work) => work.input }, checkpoint: { key: 'later', version: 1, input: stringCodec, output: stringCodec, points: [unowned] } });
+defineGroup<string, string>()({ name: 'later-owner', label: 'Owner', source: 'test', run: (work) => work.input, checkpoint: { key: 'later', version: 1, input: stringCodec, output: stringCodec, points: [unowned] } });

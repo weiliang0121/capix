@@ -11,14 +11,14 @@ test('actual factories bind R/E/O/A, preserve alternate input and function recei
   const resource = new ResourceOffer('test.factory.value', () => 4);
   const run = {
     factor: 3,
-    requires: { value: resource.request() },
+    deps: { value: resource.request() },
     execute(work) {
       executions++;
       return work.input * this.factor + work.resources.value;
     },
   };
-  const leaf = defineNode()({ ...metadata, run });
-  const second = defineNode()({ ...metadata, run });
+  const leaf = defineNode()({ ...metadata, deps: run.deps, run: run.execute.bind(run) });
+  const second = defineNode()({ ...metadata, deps: run.deps, run: run.execute.bind(run) });
   assert.notEqual(leaf, second);
   assert.equal(executions, 0);
   const entryContent = {
@@ -40,35 +40,29 @@ test('actual factories bind R/E/O/A, preserve alternate input and function recei
   const operation = defineGroup()({
     ...metadata,
     members: [leaf],
-    run: {
-      requires: { value: resource.request() },
-      async execute(work) {
-        const child = work.children.entry(entry, work.input);
-        await child.run();
-        return child.accept();
-      },
+    deps: { value: resource.request() },
+    async run(work) {
+      const child = work.children.entry(entry, work.input);
+      await child.run();
+      return child.accept();
     },
   });
   const execution = defineGroup()({
     members: [operation],
-    run: {
-      requires: { value: resource.request() },
-      async execute(work) {
-        const child = work.children.create(operation, work.input);
-        await child.run();
-        return child.accept();
-      },
+    deps: { value: resource.request() },
+    async run(work) {
+      const child = work.children.create(operation, work.input);
+      await child.run();
+      return child.accept();
     },
   });
   const root = defineScene()({
     members: [execution],
-    run: {
-      requires: { value: resource.request() },
-      async execute(work) {
-        const child = work.children.create(execution, work.input.number);
-        await child.run();
-        return child.accept();
-      },
+    deps: { value: resource.request() },
+    async run(work) {
+      const child = work.children.create(execution, work.input.number);
+      await child.run();
+      return child.accept();
     },
   });
   const runtime = installCallable(root, { providers: [resource.provide(() => null)], source: { runtime: () => null, capture: () => null } });
@@ -86,7 +80,7 @@ test('point factories retain real identity and save optional typed checkpoints i
       this.checks++;
     },
     resume: {
-      execute(_work, state) {
+      run(_work, state) {
         return state;
       },
     },
@@ -94,11 +88,9 @@ test('point factories retain real identity and save optional typed checkpoints i
   const point = checkpointPoint()(pointContent);
   const root = defineScene()({
     checkpoint: { key: 'test.factory.cp', version: 1, input: codec, output: codec, points: [point] },
-    run: {
-      execute(work) {
-        work.checkpoint?.save(point, work.input, {});
-        return work.input;
-      },
+    run(work) {
+      work.checkpoint?.({ point: point, state: work.input, refs: {} });
+      return work.input;
     },
   });
   const store = new MemoryCheckpointStore();

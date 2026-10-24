@@ -11,7 +11,7 @@ export class InspectFileTask extends Node<FileTask, FileTaskInspection, { readon
   constructor() {
     super();
 
-    this.resultPoint = checkpointPoint<'node', FileTask, FileTaskInspection>()({ name: 'result', state: inspectionCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
+    this.resultPoint = checkpointPoint<'node', FileTask, FileTaskInspection>()({ name: 'result', state: inspectionCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { run: (_work, result) => result } });
 
     this.setDefinition({
       name: 'inspectFileTask',
@@ -21,13 +21,11 @@ export class InspectFileTask extends Node<FileTask, FileTaskInspection, { readon
       raises: [FileAccessException],
       observation: [invocationRecording()],
       checkpoint: { key: 'observer.inspect-file', version: 1, input: fileTaskCodec, output: inspectionCodec, points: [this.resultPoint] },
-      run: {
-        requires: { inspector: FileResources.inspect.request() },
-        execute: async (work: NodeWork<FileTask, FileTaskInspection, { readonly inspector: FileInspector }>) => {
-          const result = await work.resources.inspector.inspect(work.input, work.signal);
-          work.checkpoint?.save(this.resultPoint, result, {});
-          return result;
-        },
+      deps: { inspector: FileResources.inspect.request() },
+      run: async (work: NodeWork<FileTask, FileTaskInspection, { readonly inspector: FileInspector }>) => {
+        const result = await work.resources.inspector.inspect(work.input);
+        work.checkpoint?.({ point: this.resultPoint, state: result, refs: {} });
+        return result;
       },
     });
   }

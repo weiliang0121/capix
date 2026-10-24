@@ -1,6 +1,6 @@
 # Callable Checkpoint 与执行恢复设计
 
-状态：2026-10-20，有限内核与 Observer 默认内置能力声明已接入 CP；共同 Callable 调用与 Frame v4 已落地，支持声明边界上的宿主显式续接。第 0 节说明当前 API 与限制；其后保留设计推演，伪代码解释职责，不代替源码契约。自动恢复、旧提交交付与恢复 UI 尚未接入。
+状态：2026-10-25，有限内核与 Observer 默认内置能力声明已接入 CP；共同 Callable 调用与 Frame v5 已落地，支持声明边界上的宿主显式续接及同轮已处理失败的保存。第 0 节说明当前 API 与限制；其后保留设计推演，伪代码解释职责，不代替源码契约。自动恢复、旧提交交付与恢复 UI 尚未接入。
 
 恢复的目标是：某次 Callable 工作中断后，依据已经保存的事实和声明的续接入口，继续推进该工作。重新建立 Invocation、Context 和资源访问是实现手段；不恢复原 Promise、闭包、调用栈，也不反序列化 Bound 结构。
 
@@ -12,31 +12,37 @@
 
 内核 CP 保持可选；Observer 默认给新产生的调用安装保存端口。新建对话正常聊天即可产生真实 CP，已有对话之后的新调用采用相同规则，不给过去的任务补写 CP。启动不扫描或自动继续旧 QA，没有新增 HTTP 恢复接口或界面恢复按钮。
 
-| 入口                                                                                   | 当前行为                                                                                                                                                            |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CallableDefinition.checkpoint`                                                        | 声明稳定 `key/version`、输入/输出 codec、`points` 数组；每点独立声明 name、`state` codec、引用槽位及 `check(state,facts)` 和 `resume { requires, uses, execute }`。 |
-| `new Runner(scene, resources, interactions, { checkpoints: { store, observation? } })` | 注入同步保存端口和可选 CP 观察者，随后通过该 Runner 构建结构。未安装时 `work.checkpoint` 为 undefined，原流程不变。                                                 |
-| `work.checkpoint.save(point,state,refs)`                                               | 仅当前 execute 工作轮可用；固定输入、round、直接子关系与声明状态，检查后提交不可变 CP。保存失败属于结构故障。                                                       |
-| `runner.resume(contextId, options)`                                                    | 核对绑定归属、当前 head、版本和工作归属，重建本次活动与资源访问，进入声明点；遵守该 Runner 入口占用边界。                                                           |
-| `work.children.resume(saved.ref)`                                                      | 开放子 CP 建立续接；固定成功交付提供结果视图。缺失或明确失败/取消拒绝，不退化为重新发起。                                                                           |
-| `TranscriptResource.append.applyFixed({position,messages})`                            | 真实子接纳中由绑定取得父子身份；实体核对固定依据并返回原凭据，重复确认不再次追加。                                                                                  |
-| `MemoryResource.apply.applyFixed({position,changes})`                                  | 由资源端点取得当前 A 身份；整个批次与凭据同事务保存，重复确认不修改记忆或占用新顺序。                                                                               |
+| 入口                                                                                   | 当前行为                                                                                                                                                    |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CallableDefinition.checkpoint`                                                        | 声明稳定 `key/version`、输入/输出 codec、`points` 数组；每点独立声明 name、`state` codec、引用槽位及 `check(state,facts)` 和 `resume { deps, uses, run }`。 |
+| `new Runner(scene, resources, interactions, { checkpoints: { store, observation? } })` | 注入同步保存端口和可选 CP 观察者，随后通过该 Runner 构建结构。未安装时 `work.checkpoint` 为 undefined，原流程不变。                                         |
+| `work.checkpoint({ point, state, refs })`                                              | 当前运行或恢复工作阶段使用；固定输入、round、直接子关系与声明状态，检查后提交不可变 CP。保存失败属于结构故障。                                              |
+| `runner.resume(contextId, options)`                                                    | 核对绑定归属、当前 head、版本和工作归属，重建本次活动与资源访问，进入声明点；遵守该 Runner 入口占用边界。                                                   |
+| `work.children.resume(saved.ref)`                                                      | 开放子 CP 建立续接；固定成功交付提供结果视图。缺失或明确失败/取消拒绝，不退化为重新发起。                                                                   |
+| `TranscriptResource.append.applyFixed({position,messages})`                            | 真实子接纳中由绑定取得父子身份；实体核对固定依据并返回原凭据，重复确认不再次追加。                                                                          |
+| `MemoryResource.apply.applyFixed({position,changes})`                                  | 由资源端点取得当前 A 身份；整个批次与凭据同事务保存，重复确认不修改记忆或占用新顺序。                                                                       |
 
 资源端点与 CP writer 保持 phase/round 访问窗口。直接子接纳通过私有异步范围关联固定操作，支持并行接纳；逸出已结束接纳的回调不能借用后续接纳身份。没有增加新的恢复编排器或通用 resume/run/accept 预设，声明共享自己的正常阶段函数，Invocation 仍处理父子运行机制。
 
 作者恢复点使用 `checkpointPoint<Kind, Input, Output>()`，具名点通过对象注册和保存；跨进程再以所属契约和点名核验。resume 接收本阶段 Work、已解码业务 state 和准确引用槽位，正常和恢复均经相同的 child.run/accept 接缝。完整作者用法见 [定义作者契约](definition-author-contract.md)。
 
-当前格式为 **Frame v4**：完整直接子关系与业务 state/refs 分开保存，包含已接纳 continuation，以及与该继续来源精确对应的前轮已处理接纳异常诊断。子声明由父 checkpoint key/version 与去重后的固定声明位置关联，不依赖 JS 身份、key 或同名契约。v4 保留父接纳契约位置及编码值，owner 与子身份使用 kind: scene/group/node；成员位置属于固定父声明。新进程必须提供兼容声明；同版本任意改动业务实现不在可检测承诺内。
+当前格式为 **Frame v5**：完整直接子关系与业务 state/refs 分开保存，包含已接纳 continuation、与该继续来源精确对应的前轮已处理接纳异常诊断，以及同轮子失败已经完成的 `handled` 接收事实。子声明由父 checkpoint key/version 与去重后的固定声明位置关联，不依赖 JS 身份、key 或同名契约。父接纳契约位置及编码值继续保存，owner 与子身份使用 kind: scene/group/node；成员位置属于固定父声明。新进程必须提供兼容声明；同版本任意改动业务实现不在可检测承诺内。
 
-v1/v2/v3 CP 明确拒绝恢复，不自动迁移或重发。Observer Scene／Task 的接纳声明已提升版本；历史消息、记忆和可选记录继续读取。第 1 节以后的历史推演保留当时伪代码，不作为当前作者 API。
+v1/v2/v3/v4 CP 明确拒绝恢复，不自动迁移或重发。格式升级不改写旧 image；历史消息、记忆和可选记录继续读取。第 1 节以后的历史推演保留当时伪代码，不作为当前作者 API。
 
 父可在 `receptions` 登记 `reception(child, { check, encode, decode })`。进入 receiving 即固定本次契约；accepted 保存值经该 codec 编码，恢复先核对本父注册位置和准确子声明位置，再 decode/check。`facts.children.accepted(ref, contract)` 在恢复点 check 与 resume 中均取得解码后的 V，包含合法 undefined。它要求契约匹配，不能将旧 raw 接纳补成 typed 接纳。raw accept 保留既有纯数据保存行为。
 
 普通接纳只同步检查实际 V，保留原引用；不会编解码来替换它。保存失败不撤回已接纳值或实体效果，也不授权再次接纳。receiving 的续接只能使用已固定的同一契约；需要重入实体写入时，仍由 `applyFixed` 等实体凭据保证，契约本身不提供幂等性。同一契约不可重复登记，注册顺序或含义变化需要提升父 CP version。
 
+`work.children.invoke(child, input, { result: { failed }, reception })` 的失败分支成功返回后，子调用仍是 `returned: failed`，父关系另记 `reception: handled`。v5 保存这两个独立事实及接收后的值；恢复用 `work.children.facts.handled(ref, reception)` 读取经契约解码和检查的 V，不再次调用失败来源或 `failed` 回调。接收回调还在执行时不能保存该同轮失败，普通 raw 接收值仍需符合纯数据边界。`handled` 不代表子成功，也不使失败子调用重新可运行。
+
+CP 保存或最终交付落盘失败不属于可由业务 `result.failed` 处理的失败。调用保留必要机制失败，父层不能用替代正文将它变成成功；磁盘故障与原业务已经产生的内容或外部效果分别记录，不承诺回滚。
+
+若 Group 交付的是后代 Node 的失败，直接关系仍属于 Group，失败诊断保留真实 Node 的 `failure.contextId`。该诊断 ID 只解释来源，不能作为父层直接子引用；`refs`、接收契约和恢复目标仍按完整直接关系精确核对。闭包不会被持久化：业务必须注册明确的点和续接处理，并在保存点之后使用已保存事实推进。
+
 ### 0.1 内核事实与保存
 
-实际契约见 [checkpoint/contract.ts](../server/runtime/src/checkpoint/contract.ts)、[definition/callable.ts](../server/runtime/src/definition/callable.ts)。CPF 与业务 state 分开，捕获全部直接子关系，不做正文裁剪。支持 execute 点、等待关系、成功返回/接纳关系；第二轮还可保存**已由本层处理的前轮子声明异常**，作为只读历史诊断。它不重建活异常、不重新进入异常处理、不让失败子调用复活。当前轮失败、结构故障、取消和异常处理阶段仍不能当作开放恢复点。
+实际契约见 [checkpoint/contract.ts](../server/runtime/src/checkpoint/contract.ts)、[definition/callable.ts](../server/runtime/src/definition/callable.ts)。CPF 与业务 state 分开，捕获全部直接子关系，不做正文裁剪。支持运行点、等待关系、成功返回/接纳关系和已经完成处理的子失败；第二轮还可保存**已由本层处理的前轮子声明异常**，作为只读历史诊断。它不重建活异常、不重新进入异常处理、不让失败子调用复活。同轮尚未处理或正在处理的失败、结构故障、取消和异常处理阶段仍不能当作开放恢复点。
 
 返回关系与最终交付保存真实子 round、phase、currentInput，不能从较早 CP 或父 round 推测。固定交付视图不伪造原 execute 中间结果或未保存的后代。GenerateAnswer 的二次生成核对原拒绝码、诊断与真实失败关系，恢复不重置次数或产生第三次生成。
 
@@ -60,7 +66,7 @@ E 已移除原先覆盖决策、文件和记忆的 `continuationBarrier`。各�
 
 FunctionDecision 可保存纯数据候选，候选是否可执行仍由 E 接纳逻辑判断，CP 不抢占原业务审查。Observer 宿主目前仍拒绝恢复注入的自定义决策函数，因为没有固定该函数实现版本的契约；默认决策链可恢复。注入自定义维护也暂不允许宿主恢复，即使策略 O 自带 CP；当前没有完整版本化其宿主配置与实现的恢复契约。
 
-当前 Observer 的 Scene/Task checkpoint 契约为 **observer.conversation.scene version 4 / observer.conversation.task version 6**；Frame 为 v4，声明版本与格式版本分开。旧 REOA CP 不自动迁移。默认服务保持单任务的恢复登记，不因 Group 可嵌套就承诺宿主支持任意多任务恢复。
+当前 Observer 的 Scene/Task checkpoint 契约为 **observer.conversation.scene version 4 / observer.conversation.task version 6**；Frame 为 v5，声明版本与格式版本分开。旧 CP 不自动迁移。默认服务保持单任务的恢复登记，不因 Group 可嵌套就承诺宿主支持任意多任务恢复。
 
 准备 O 的 completed、E 的 preparationAccepted 及已返回交付保存同一份固定材料。恢复核对材料来源及当时值，不读取当前活跃索引替换它。R 从已保存的 executionWaiting 续接准确 E，不重复 append；正式输入已写入但尚无首个 R CP 的窗口仍不承诺恢复。
 

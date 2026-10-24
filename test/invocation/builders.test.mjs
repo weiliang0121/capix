@@ -57,20 +57,20 @@ test('resource refinement cancellation prevents child registration and observati
       return value;
     },
   });
-  const requires = { value: resource.request() };
-  const resources = bindResources(requires, [resource.provide((source) => source)])('value');
+  const deps = { value: resource.request() };
+  const resources = bindResources(deps, [resource.provide((source) => source)])('value');
   let child;
   const parent = builder.create(null, {
     kind: 'scene',
     controls: { signal: controller.signal },
     resources,
-    supply: requires,
+    supply: deps,
     work: {
       maxRounds: 1,
       execute(_context, invocation) {
         assert.throws(
           () => {
-            child = builder.create('child', { kind: 'node', parent: invocation, requires, refinements: [resource.refine(() => null)], work: identity });
+            child = builder.create('child', { kind: 'node', parent: invocation, deps, refinements: [resource.refine(() => null)], work: identity });
           },
           (error) => error.code === 'INVOCATION_CANCELLED' && error.cause === cause,
         );
@@ -91,8 +91,8 @@ test('reused builders bind each invocation to its own signal, settings and input
   const secondController = new AbortController();
   const mutableSettings = { ...settings };
   const configuration = new ResourceOffer('test.settings', (source) => source);
-  const requires = { settings: configuration.request() };
-  const resourceBinding = bindResources(requires, [configuration.provide((source) => source.settings)]);
+  const deps = { settings: configuration.request() };
+  const resourceBinding = bindResources(deps, [configuration.provide((source) => source.settings)]);
   const observed = [];
   let release;
   const pending = new Promise((resolve) => {
@@ -106,14 +106,14 @@ test('reused builders bind each invocation to its own signal, settings and input
       return context.currentInput;
     },
   };
-  const first = runtime.executionInvocationBuilder.create('first', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: firstController.signal }, work: inspect });
+  const first = runtime.executionInvocationBuilder.create('first', { deps, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: firstController.signal }, work: inspect });
   mutableSettings.model = 'next';
-  const second = runtime.executionInvocationBuilder.create('second', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: secondController.signal }, work: inspect });
+  const second = runtime.executionInvocationBuilder.create('second', { deps, establish: () => ({ resources: resourceBinding(captureSource({ settings: mutableSettings })) }), context: { signal: secondController.signal }, work: inspect });
   const firstOperation = runtime.operationInvocationBuilder.create(first, { input: 'first operation', description: operation, work: identity });
   const secondOperation = runtime.operationInvocationBuilder.create(second, { input: 'second operation', description: operation, work: identity });
   const firstAttempt = runtime.attemptInvocationBuilder.create(firstOperation, { input: 'first action', description: attempt, work: identity });
   const secondAttempt = runtime.attemptInvocationBuilder.create(secondOperation, { input: 'second action', description: attempt, work: identity });
-  const unstarted = runtime.executionInvocationBuilder.create('unstarted', { requires, establish: () => ({ resources: resourceBinding(captureSource({ settings })) }), context: {}, work: identity });
+  const unstarted = runtime.executionInvocationBuilder.create('unstarted', { deps, establish: () => ({ resources: resourceBinding(captureSource({ settings })) }), context: {}, work: identity });
   assert.throws(() => unstarted.context.resources.values.settings, /started invocation/);
   await assert.rejects(unstarted.run(), /started invocation/);
   const firstRun = first.run();

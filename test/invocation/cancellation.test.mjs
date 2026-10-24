@@ -147,10 +147,10 @@ test('cancellation from resource start observation prevents synchronous and asyn
 });
 
 class Main extends Scene {
-  constructor(execute, { children = [], requires = {} } = {}) {
+  constructor(execute, { children = [], deps = {} } = {}) {
     super();
     this.add(...children);
-    this.run = { requires, uses: children, execute };
+    this.run = { deps, uses: children, execute };
   }
 }
 
@@ -161,8 +161,8 @@ function runtime(definition, providers = []) {
 test('cancellation blocks new children before entry and releases Runtime occupancy', async () => {
   const controller = new AbortController();
   const execution = new (class extends Group {
-    run = { requires: {}, execute: () => assert.fail('child must not run') };
-    entry = { requires: {}, accept: () => assert.fail('entry must not run') };
+    run = { deps: {}, execute: () => assert.fail('child must not run') };
+    entry = { deps: {}, accept: () => assert.fail('entry must not run') };
   })();
   let parent;
   const bound = runtime(
@@ -186,7 +186,7 @@ test('cancellation blocks new children before entry and releases Runtime occupan
 test('a returned child is not accepted after parent cancellation', async () => {
   const controller = new AbortController();
   const execution = new (class extends Group {
-    run = { requires: {}, execute: () => 'child result' };
+    run = { deps: {}, execute: () => 'child result' };
   })();
   let relation;
   let acceptances = 0;
@@ -224,7 +224,7 @@ test('cached resource endpoints stop later writes but preserve already establish
         } catch {}
         return 'ignored';
       },
-      { requires: { writer: offer.request() } },
+      { deps: { writer: offer.request() } },
     ),
     [offer.provide(() => null)],
   );

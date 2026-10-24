@@ -10,20 +10,20 @@ import type { MemoryExtraction } from '../../group/memory/output.js';
 
 /** Apply already accepted changes; record each change after it takes effect. */
 export class ApplyMemory extends Node<MemoryExtraction, MemoryExtraction, MemoryWriteResources> {
-  static readonly requires = Object.freeze({ memoryWriter: MemoryResource.apply.request() });
+  static readonly deps = Object.freeze({ memoryWriter: MemoryResource.apply.request() });
 
   private readonly preparedPoint;
 
   constructor() {
     super();
 
-    this.preparedPoint = checkpointPoint<'node', MemoryExtraction, MemoryExtraction>()({ name: 'prepared', state: checkpointCodec(z.null()), references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { requires: ApplyMemory.requires, execute: (work) => this.apply(work) } });
+    this.preparedPoint = checkpointPoint<'node', MemoryExtraction, MemoryExtraction>()({ name: 'prepared', state: checkpointCodec(z.null()), references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { deps: ApplyMemory.deps, run: (work) => this.apply(work) } });
 
-    this.setDefinition({ observation: [invocationRecording()], name: 'applyMemory', label: '落实记忆', source: 'services/observer/src/conversation/node/memory/apply.ts · ApplyMemory', callee: 'processing', run: { requires: ApplyMemory.requires, execute: this.execute.bind(this) }, checkpoint: { key: 'observer.apply-memory', version: 1, input: memoryCheckpointOutput, output: memoryCheckpointOutput, points: [this.preparedPoint] } });
+    this.setDefinition({ observation: [invocationRecording()], name: 'applyMemory', label: '落实记忆', source: 'services/observer/src/conversation/node/memory/apply.ts · ApplyMemory', callee: 'processing', deps: ApplyMemory.deps, run: this.execute.bind(this), checkpoint: { key: 'observer.apply-memory', version: 1, input: memoryCheckpointOutput, output: memoryCheckpointOutput, points: [this.preparedPoint] } });
   }
 
   private execute(work: NodeWork<MemoryExtraction, MemoryExtraction, MemoryWriteResources>): MemoryExtraction {
-    work.checkpoint?.save(this.preparedPoint, null, {});
+    work.checkpoint?.({ point: this.preparedPoint, state: null, refs: {} });
     return this.apply(work);
   }
 

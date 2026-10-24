@@ -11,7 +11,7 @@ export class ReadText extends Node<{ readonly path: string }, TextDocument, { re
   constructor() {
     super();
 
-    this.resultPoint = checkpointPoint<'node', { readonly path: string }, TextDocument>()({ name: 'result', state: textDocumentCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
+    this.resultPoint = checkpointPoint<'node', { readonly path: string }, TextDocument>()({ name: 'result', state: textDocumentCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { run: (_work, result) => result } });
 
     this.setDefinition({
       name: 'readText',
@@ -21,13 +21,11 @@ export class ReadText extends Node<{ readonly path: string }, TextDocument, { re
       raises: [FileAccessException],
       observation: [invocationRecording<{ readonly path: string }, TextDocument>({ output: documentDescriptor })],
       checkpoint: { key: 'observer.read-text', version: 1, input: checkpointCodec(z.strictObject({ path: z.string().min(1) })), output: textDocumentCodec, points: [this.resultPoint] },
-      run: {
-        requires: { reader: FileResources.readText.request() },
-        execute: async (work: NodeWork<{ readonly path: string }, TextDocument, { readonly reader: FileReader }>) => {
-          const result = await work.resources.reader.readText(work.input.path, work.signal);
-          work.checkpoint?.save(this.resultPoint, result, {});
-          return result;
-        },
+      deps: { reader: FileResources.readText.request() },
+      run: async (work: NodeWork<{ readonly path: string }, TextDocument, { readonly reader: FileReader }>) => {
+        const result = await work.resources.reader.readText(work.input.path, work.signal);
+        work.checkpoint?.({ point: this.resultPoint, state: result, refs: {} });
+        return result;
       },
     });
   }

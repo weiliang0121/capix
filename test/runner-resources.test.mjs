@@ -35,17 +35,15 @@ test('Resources supplies a shared entity through independent call endpoints, wit
       return 'unused';
     },
   });
-  const child = new Node({ run: { requires: { value: value.request() }, execute: (work) => work.resources.value.read() } });
-  const unused = new Node({ run: { requires: { value: dormant.request() }, execute: () => assert.fail('unselected member must not execute') } });
+  const child = new Node({ deps: { value: value.request() }, run: (work) => work.resources.value.read() });
+  const unused = new Node({ deps: { value: dormant.request() }, run: () => assert.fail('unselected member must not execute') });
   const scene = new Scene();
   scene.add(child, unused);
-  scene.setRun({
-    async execute(work) {
-      assert.deepEqual(Object.keys(work.resources), [], 'subtree supply must not grant parent access');
-      const calls = [work.children.create(child, null), work.children.create(child, null)];
-      await Promise.all(calls.map((call) => call.run()));
-      return Promise.all(calls.map((call) => call.accept()));
-    },
+  scene.setRun(async function (work) {
+    assert.deepEqual(Object.keys(work.resources), [], 'subtree supply must not grant parent access');
+    const calls = [work.children.create(child, null), work.children.create(child, null)];
+    await Promise.all(calls.map((call) => call.run()));
+    return Promise.all(calls.map((call) => call.accept()));
   });
   const resources = new Resources();
   resources.register(value, entity);
@@ -68,28 +66,24 @@ test('one explicit capture supplies several offers coherently and leaves sibling
   const right = readable('runner.capture.right');
   let captured = 0;
   let selected = 0;
-  const pair = () => new Node({ run: { requires: { left: left.request(), right: right.request() }, execute: (work) => [work.resources.left.read(), work.resources.right.read()] } });
+  const pair = () => new Node({ deps: { left: left.request(), right: right.request() }, run: (work) => [work.resources.left.read(), work.resources.right.read()] });
   const leaf = pair();
   const sibling = pair();
   const group = new Group();
   group.add(leaf);
-  group.setRun({
-    async execute(work) {
-      const first = work.children.create(leaf, null);
-      const second = work.children.create(leaf, null);
-      await Promise.all([first.run(), second.run()]);
-      return Promise.all([first.accept(), second.accept()]);
-    },
+  group.setRun(async function (work) {
+    const first = work.children.create(leaf, null);
+    const second = work.children.create(leaf, null);
+    await Promise.all([first.run(), second.run()]);
+    return Promise.all([first.accept(), second.accept()]);
   });
   const scene = new Scene();
   scene.add(group, sibling);
-  scene.setRun({
-    async execute(work) {
-      const scoped = work.children.create(group, work.input);
-      const normal = work.children.create(sibling, null);
-      await Promise.all([scoped.run(), normal.run()]);
-      return [await scoped.accept(), await normal.accept()];
-    },
+  scene.setRun(async function (work) {
+    const scoped = work.children.create(group, work.input);
+    const normal = work.children.create(sibling, null);
+    await Promise.all([scoped.run(), normal.run()]);
+    return [await scoped.accept(), await normal.accept()];
   });
   const resources = new Resources();
   resources.register(left, 'global-left');
@@ -133,25 +127,21 @@ test('a nested partial capture inherits the actual narrowed ancestor supply', as
     },
   });
   const tag = readable('runner.scope.tag');
-  const leaf = new Node({ run: { requires: { files: files.request(), tag: tag.request() }, execute: (work) => ({ files: work.resources.files.read(), tag: work.resources.tag.read() }) } });
+  const leaf = new Node({ deps: { files: files.request(), tag: tag.request() }, run: (work) => ({ files: work.resources.files.read(), tag: work.resources.tag.read() }) });
   const group = new Group();
   group.add(leaf);
-  group.setRun({
-    async execute(work) {
-      assert.deepEqual(Object.keys(work.resources), []);
-      const call = work.children.create(leaf, work.input[0]);
-      await call.run();
-      return call.accept();
-    },
+  group.setRun(async function (work) {
+    assert.deepEqual(Object.keys(work.resources), []);
+    const call = work.children.create(leaf, work.input[0]);
+    await call.run();
+    return call.accept();
   });
   const scene = new Scene();
   scene.add(group);
-  scene.setRun({
-    async execute(work) {
-      const calls = work.input.map((selection) => work.children.create(group, selection));
-      await Promise.all(calls.map((call) => call.run()));
-      return Promise.all(calls.map((call) => call.accept()));
-    },
+  scene.setRun(async function (work) {
+    const calls = work.input.map((selection) => work.children.create(group, selection));
+    await Promise.all(calls.map((call) => call.run()));
+    return Promise.all(calls.map((call) => call.accept()));
   });
   const resources = new Resources();
   resources.register(files, ['a', 'b']);
@@ -176,16 +166,14 @@ test('multiple Runners share a registry but keep capture scope, options and busy
   const entered = Promise.withResolvers();
   const make = (wait) =>
     new Scene({
-      run: {
-        requires: { value: value.request() },
-        async execute(work) {
-          const endpoint = work.resources.value;
-          if (wait) {
-            entered.resolve();
-            await gate.promise;
-          }
-          return endpoint.read();
-        },
+      deps: { value: value.request() },
+      async run(work) {
+        const endpoint = work.resources.value;
+        if (wait) {
+          entered.resolve();
+          await gate.promise;
+        }
+        return endpoint.read();
       },
     });
   const firstScene = make(true);
@@ -205,8 +193,8 @@ test('multiple Runners share a registry but keep capture scope, options and busy
 
 test('a built Runner uses fixed registrations while later scope registration can serve a new Runner', async () => {
   const value = readable('runner.registration-snapshot');
-  const originalScene = new Scene({ run: { requires: { value: value.request() }, execute: (work) => work.resources.value.read() } });
-  const nextScene = new Scene({ run: { requires: { value: value.request() }, execute: (work) => work.resources.value.read() } });
+  const originalScene = new Scene({ deps: { value: value.request() }, run: (work) => work.resources.value.read() });
+  const nextScene = new Scene({ deps: { value: value.request() }, run: (work) => work.resources.value.read() });
   const resources = new Resources();
   resources.register(value, 'fixed');
   const original = new Runner(originalScene, resources).build();
@@ -225,7 +213,7 @@ test('registered resource capture keeps its method while preserving the host rec
     },
   };
   const offer = readable('runner.fixed-capture-contract', policy);
-  const scene = new Scene({ run: { requires: { value: offer.request() }, execute: (work) => work.resources.value.read() } });
+  const scene = new Scene({ deps: { value: offer.request() }, run: (work) => work.resources.value.read() });
   const resources = new Resources();
   resources.register(offer, 'entity');
   const runner = new Runner(scene, resources).build();
@@ -236,7 +224,7 @@ test('registered resource capture keeps its method while preserving the host rec
 
 test('capture failure and capture callback reentry do not leak the Runner reservation', async () => {
   const value = readable('runner.capture-failure');
-  const scene = new Scene({ run: { requires: { value: value.request() }, execute: (work) => work.resources.value.read() } });
+  const scene = new Scene({ deps: { value: value.request() }, run: (work) => work.resources.value.read() });
   const resources = new Resources();
   let runner;
   let nested;
@@ -259,21 +247,17 @@ test('cancellation during a child capture prevents child establishment and relea
   const controller = new AbortController();
   let executed = 0;
   const child = new Node({
-    run: {
-      requires: { value: value.request() },
-      execute(work) {
-        executed++;
-        return work.resources.value.read();
-      },
+    deps: { value: value.request() },
+    run(work) {
+      executed++;
+      return work.resources.value.read();
     },
   });
   const scene = new Scene().add(child);
-  scene.setRun({
-    async execute(work) {
-      const call = work.children.create(child, work.input);
-      await call.run();
-      return call.accept();
-    },
+  scene.setRun(async function (work) {
+    const call = work.children.create(child, work.input);
+    await call.run();
+    return call.accept();
   });
   const resources = new Resources();
   resources
@@ -293,7 +277,7 @@ test('cancellation during a child capture prevents child establishment and relea
 test('scope capture and resource selectors reject asynchronous construction', async () => {
   for (const boundary of ['capture', 'select']) {
     const value = readable(`runner.sync.${boundary}`);
-    const scene = new Scene({ run: { requires: { value: value.request() }, execute: (work) => work.resources.value.read() } });
+    const scene = new Scene({ deps: { value: value.request() }, run: (work) => work.resources.value.read() });
     const resources = new Resources();
     resources.capture(scene, () => (boundary === 'capture' ? Promise.resolve('unexpected') : 'snapshot')).register(value, (snapshot) => (boundary === 'select' ? Promise.resolve(snapshot) : snapshot));
     const runner = new Runner(scene, resources).build();
@@ -303,7 +287,7 @@ test('scope capture and resource selectors reject asynchronous construction', as
 
 test('missing resource failure does not lock the scene and unused registrations stay irrelevant', async () => {
   const value = readable('runner.missing');
-  const scene = new Scene({ run: { requires: { value: value.request() }, execute: (work) => work.resources.value.read() } });
+  const scene = new Scene({ deps: { value: value.request() }, run: (work) => work.resources.value.read() });
   const resources = new Resources();
   const runner = new Runner(scene, resources);
   assert.throws(() => runner.build(), /resource|supply|register|provider/i);
@@ -321,7 +305,7 @@ test('resource registration checks exact identity, duplicate supply and conflict
   const resources = new Resources();
   resources.register(first, 'one');
   assert.throws(() => resources.register(first, 'duplicate'), /duplicate|registered/i);
-  const scene = new Scene({ run: { requires: { first: first.request(), second: second.request() }, execute: () => null } });
+  const scene = new Scene({ deps: { first: first.request(), second: second.request() }, run: () => null });
   assert.throws(() => new Runner(scene, resources).build(), /resource|supply|register|provider/i);
   resources.register(second, 'two');
   assert.throws(() => new Runner(scene, resources).build(), /name|conflict|different/i);
@@ -340,17 +324,15 @@ test('declared failure handling and continuation renew access windows without re
   const scene = new Scene({
     raises: [failure],
     maxRounds: 2,
-    run: {
-      requires: { value: offer.request() },
-      execute(work) {
-        assert.equal(work.resources.value.read(), 'fixed');
-        if (work.round === 1) throw failure.create('continue with retained supply', {});
-        return work.input;
-      },
+    deps: { value: offer.request() },
+    run(work) {
+      assert.equal(work.resources.value.read(), 'fixed');
+      if (work.round === 1) throw failure.create('continue with retained supply', {});
+      return work.input;
     },
     exceptions: {
       accepts: [failure],
-      requires: { value: offer.request() },
+      deps: { value: offer.request() },
       handle(work) {
         assert.equal(work.resources.value.read(), 'fixed');
         return work.continue('continued', 'fixture');
@@ -373,12 +355,11 @@ test('declared failure handling and continuation renew access windows without re
 
 test('fixed content writes still require actual parent reception and retain exact child provenance', async () => {
   const transcript = new Transcript();
-  const child = new Node({ run: { execute: (work) => `answer:${work.input}` } });
+  const child = new Node({ run: (work) => `answer:${work.input}` });
   const scene = new Scene();
   scene.add(child);
-  scene.setRun({
-    requires: { messages: TranscriptResource.append.request() },
-    async execute(work) {
+  scene.setRun(
+    async function (work) {
       const call = work.children.create(child, work.input);
       await call.run();
       return call.accept((content) => {
@@ -387,7 +368,8 @@ test('fixed content writes still require actual parent reception and retain exac
         return first;
       });
     },
-  });
+    { messages: TranscriptResource.append.request() },
+  );
   const resources = new Resources();
   resources.register(TranscriptResource.append, transcript);
   const runner = new Runner(scene, resources).build();
@@ -400,12 +382,10 @@ test('fixed content writes still require actual parent reception and retain exac
   for (const append of appends) assert.notEqual(append.request.operation.parentContextId, append.request.operation.childContextId);
 
   const invalid = new Scene({
-    run: {
-      requires: { messages: TranscriptResource.append.request() },
-      execute(work) {
-        assert.throws(() => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'unaccepted' }] }), /active direct-child reception/);
-        return 'caught';
-      },
+    deps: { messages: TranscriptResource.append.request() },
+    run(work) {
+      assert.throws(() => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'unaccepted' }] }), /active direct-child reception/);
+      return 'caught';
     },
   });
   await assert.rejects(new Runner(invalid, resources).build().run(null), /active direct-child reception/);
@@ -424,8 +404,8 @@ test('Runner restoration opens fresh resource endpoints and preserves fixed inpu
       state: codec,
       references: {},
       resume: {
-        requires: { snapshot: snapshot.request() },
-        execute(work, state) {
+        deps: { snapshot: snapshot.request() },
+        run(work, state) {
           resumed++;
           endpoints.push(work.resources.snapshot);
           assert.equal(work.input, state.input);
@@ -436,14 +416,12 @@ test('Runner restoration opens fresh resource endpoints and preserves fixed inpu
     });
     const scene = new Scene({
       checkpoint: { key: 'runner.restore', version: 1, input: codec, output: codec, points: [point] },
-      run: {
-        requires: { snapshot: snapshot.request() },
-        execute(work) {
-          normal++;
-          endpoints.push(work.resources.snapshot);
-          work.checkpoint.save(point, { input: work.input, captured: work.resources.snapshot.read() }, {});
-          return 'normal';
-        },
+      deps: { snapshot: snapshot.request() },
+      run(work) {
+        normal++;
+        endpoints.push(work.resources.snapshot);
+        work.checkpoint({ point: point, state: { input: work.input, captured: work.resources.snapshot.read() }, refs: {} });
+        return 'normal';
       },
     });
     const resources = new Resources();
@@ -472,11 +450,9 @@ test('a saved returned child is accepted through new resource access without rer
   let saved;
   const build = (store) => {
     const answer = new Node({
-      run: {
-        execute: () => {
-          childRuns++;
-          return 'durable answer';
-        },
+      run: () => {
+        childRuns++;
+        return 'durable answer';
       },
     });
     const receive = (work, call) => call.accept((content) => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }));
@@ -485,22 +461,20 @@ test('a saved returned child is accepted through new resource access without rer
       state: codec,
       references: { answer: childReference(answer) },
       resume: {
-        requires: { messages: TranscriptResource.append.request() },
-        execute(work, _state, refs) {
+        deps: { messages: TranscriptResource.append.request() },
+        run(work, _state, refs) {
           return receive(work, work.children.open(refs.answer));
         },
       },
     });
     const scene = new Scene({
       checkpoint: { key: 'runner.fixed-reception', version: 1, input: codec, output: codec, points: [point] },
-      run: {
-        requires: { messages: TranscriptResource.append.request() },
-        async execute(work) {
-          const call = work.children.create(answer, null);
-          await call.run();
-          work.checkpoint.save(point, null, { answer: call.ref });
-          return receive(work, call);
-        },
+      deps: { messages: TranscriptResource.append.request() },
+      async run(work) {
+        const call = work.children.create(answer, null);
+        await call.run();
+        work.checkpoint({ point: point, state: null, refs: { answer: call.ref } });
+        return receive(work, call);
       },
     });
     scene.add(answer);

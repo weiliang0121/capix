@@ -43,9 +43,9 @@ export interface InvocationCheckpointPoint<Input, Output, Kind extends CallableK
   readonly references: Slots;
   check?(state: State, facts: CheckpointFacts<Input, Slots>): void;
   readonly resume: {
-    readonly requires: ResourceRequirements<Resources>;
+    readonly deps: ResourceRequirements<Resources>;
     readonly uses?: readonly Allowed[];
-    execute(work: ResumeWork<Kind, Input, Output, Resources, Allowed, Delta>, state: State, saved: SavedReferences<Slots>): Output | Promise<Output>;
+    run(work: ResumeWork<Kind, Input, Output, Resources, Allowed, Delta>, state: State, saved: SavedReferences<Slots>): Output | Promise<Output>;
   };
 }
 
@@ -57,25 +57,25 @@ export interface InvocationCheckpointDefinition<Input, Output, Kind extends Call
 }
 
 export interface AuthorCheckpointWriter<Kind extends CallableKind, Input, Output, Delta = never> {
-  save<Point extends CheckpointPointOwner<Kind, Input, Output, Delta> & { readonly state: CheckpointCodec<unknown>; readonly references: CheckpointReferenceSlots }>(point: Point, state: NoInfer<Point extends { readonly state: CheckpointCodec<infer State> } ? State : never>, references: NoInfer<SavedReferences<Point['references']>>): void;
+  <Point extends CheckpointPointOwner<Kind, Input, Output, Delta> & { readonly state: CheckpointCodec<unknown>; readonly references: CheckpointReferenceSlots }>(options: { readonly point: Point; readonly state: NoInfer<Point extends { readonly state: CheckpointCodec<infer State> } ? State : never> } & (keyof Point['references'] extends never ? { readonly refs?: NoInfer<SavedReferences<Point['references']>> } : { readonly refs: NoInfer<SavedReferences<Point['references']>> })): void;
 }
 
-interface PointOptions<Kind extends CallableKind, Input, Output, State, Slots extends CheckpointReferenceSlotsFor<Kind>, Requires extends ResourceRequests, Uses extends readonly ChildContractsOf<Kind>[], Delta> {
+interface PointOptions<Kind extends CallableKind, Input, Output, State, Slots extends CheckpointReferenceSlotsFor<Kind>, Deps extends ResourceRequests, Uses extends readonly ChildContractsOf<Kind>[], Delta> {
   readonly name: string;
   readonly state: CheckpointCodec<State>;
   readonly references: Slots;
   readonly check?: (state: NoInfer<State>, facts: CheckpointFacts<Input, NoInfer<Slots>>) => void;
   readonly resume: {
-    readonly requires?: Requires;
+    readonly deps?: Deps;
     readonly uses?: Uses;
-    readonly execute: (work: ResumeWork<Kind, Input, Output, ResourcesOf<NoInfer<Requires>>, Uses[number], Delta>, state: NoInfer<State>, saved: SavedReferences<NoInfer<Slots>>) => Output | Promise<Output>;
+    readonly run: (work: ResumeWork<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, Uses[number], Delta>, state: NoInfer<State>, saved: SavedReferences<NoInfer<Slots>>) => Output | Promise<Output>;
   };
 }
 
 /** Owner I/O is explicit because an independent point cannot infer from later registration. */
 export function checkpointPoint<Kind extends CallableKind, Input, Output, Delta = never>() {
-  return <State, const Slots extends CheckpointReferenceSlotsFor<Kind>, const Requires extends ResourceRequests = Readonly<Record<never, never>>, const Uses extends readonly ChildContractsOf<Kind>[] = readonly []>(options: PointOptions<Kind, Input, Output, State, Slots, Requires, Uses, Delta>): InvocationCheckpointPoint<Input, Output, Kind, State, ResourcesOf<Requires>, Slots, Uses[number], Delta> => {
-    const requires = (options.resume.requires ?? {}) as ResourceRequirements<ResourcesOf<Requires>>;
-    return Object.freeze({ name: options.name, state: options.state, references: options.references, check: options.check?.bind(options), resume: { requires, uses: options.resume.uses, execute: options.resume.execute.bind(options.resume) } });
+  return <State, const Slots extends CheckpointReferenceSlotsFor<Kind>, const Deps extends ResourceRequests = Readonly<Record<never, never>>, const Uses extends readonly ChildContractsOf<Kind>[] = readonly []>(options: PointOptions<Kind, Input, Output, State, Slots, Deps, Uses, Delta>): InvocationCheckpointPoint<Input, Output, Kind, State, ResourcesOf<Deps>, Slots, Uses[number], Delta> => {
+    const deps = (options.resume.deps ?? {}) as ResourceRequirements<ResourcesOf<Deps>>;
+    return Object.freeze({ name: options.name, state: options.state, references: options.references, check: options.check?.bind(options), resume: { deps, uses: options.resume.uses, run: options.resume.run.bind(options.resume) } });
   };
 }

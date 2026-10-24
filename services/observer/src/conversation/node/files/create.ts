@@ -13,13 +13,13 @@ export interface CreateTextInput {
 export const createTextCheckpointInput = checkpointCodec(z.strictObject({ path: z.string().min(1), text: z.string() }));
 export const fileReceiptCheckpoint = checkpointCodec(z.strictObject({ path: z.string().min(1), bytes: z.int().nonnegative(), digest: z.string().min(1) }));
 export class CreateText extends Node<CreateTextInput, FileReceipt, { readonly creator: FileCreator }> {
-  static readonly requires = Object.freeze({ creator: FileResources.createText.request() });
+  static readonly deps = Object.freeze({ creator: FileResources.createText.request() });
   private readonly preparedPoint;
 
   constructor() {
     super();
 
-    this.preparedPoint = checkpointPoint<'node', CreateTextInput, FileReceipt>()({ name: 'prepared', state: checkpointCodec(z.null()), references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { requires: CreateText.requires, execute: (work) => this.create(work) } });
+    this.preparedPoint = checkpointPoint<'node', CreateTextInput, FileReceipt>()({ name: 'prepared', state: checkpointCodec(z.null()), references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { deps: CreateText.deps, run: (work) => this.create(work) } });
 
     this.setDefinition({
       name: 'createText',
@@ -29,12 +29,10 @@ export class CreateText extends Node<CreateTextInput, FileReceipt, { readonly cr
       raises: [FileAccessException],
       observation: [invocationRecording<CreateTextInput, FileReceipt>({ input: ({ path, text }) => ({ path, bytes: Buffer.byteLength(text, 'utf8') }) })],
       checkpoint: { key: 'observer.create-text', version: 1, input: createTextCheckpointInput, output: fileReceiptCheckpoint, points: [this.preparedPoint] },
-      run: {
-        requires: CreateText.requires,
-        execute: (work: NodeWork<CreateTextInput, FileReceipt, { readonly creator: FileCreator }>) => {
-          work.checkpoint?.save(this.preparedPoint, null, {});
-          return this.create(work);
-        },
+      deps: CreateText.deps,
+      run: (work: NodeWork<CreateTextInput, FileReceipt, { readonly creator: FileCreator }>) => {
+        work.checkpoint?.({ point: this.preparedPoint, state: null, refs: {} });
+        return this.create(work);
       },
     });
   }

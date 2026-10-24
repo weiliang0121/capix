@@ -24,7 +24,7 @@ export class ExecutionFixture {
     return this.builder.submit(accept, {
       context: options,
       started,
-      requires: this.requires ?? {},
+      deps: this.deps ?? {},
       work: work(this),
       establish: () => ({ resources: this.resourceBinding?.(captureSource(options)) ?? new ResourceBindings({}) }),
     });
@@ -36,19 +36,19 @@ export class OperationFixture {
     this.builder = builder;
   }
   create(parent, input, options = {}) {
-    return this.builder.create(parent, { input, requires: this.requires ?? {}, description: { id: this.id, name: this.name, label: this.label, source: this.source }, work: work(this), key: options.key });
+    return this.builder.create(parent, { input, deps: this.deps ?? {}, description: { id: this.id, name: this.name, label: this.label, source: this.source }, work: work(this), key: options.key });
   }
   async call(parent, input) {
     return this.create(parent, input).run();
   }
 }
 export class AttemptFixture {
-  constructor(builder, requires = {}) {
+  constructor(builder, deps = {}) {
     this.builder = builder;
-    this.requires = requires;
+    this.deps = deps;
   }
   create(parent, input, options = {}) {
-    return this.builder.create(parent, { input, requires: this.requires, description: this, work: work(this), key: options.key });
+    return this.builder.create(parent, { input, deps: this.deps, description: this, work: work(this), key: options.key });
   }
   async call(parent, input) {
     return this.create(parent, input).run();

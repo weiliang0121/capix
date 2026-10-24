@@ -53,7 +53,7 @@ function restore<Structure extends AnyCallable>(structure: Structure, contextId:
 function construct<Structure extends AnyCallable>(structure: Structure, input: CallableInput<Structure>, scope: CallableCallBindings, controls: InvocationControls, parent?: Invocation<unknown, unknown, CallableContext>, options: InvocationRelationOptions = {}, restore?: CheckpointRestoration): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>> {
   const { binding, invocations } = callableConstruction(structure);
   const declaration = binding.declaration;
-  const initial = restore ? declaration.checkpoint?.points.find((point) => point.name === restore.head.image.point)?.resume.requires : declaration.run.requires;
+  const initial = restore ? declaration.checkpoint?.points.find((point) => point.name === restore.head.image.point)?.resume.deps : declaration.run.deps;
   if (!initial) throw new Error('Checkpoint point is not declared');
   const access = scope.open(structure, input, !!restore, parent?.context.resources.supply);
   const { name, label, source, callee } = declaration;
@@ -64,7 +64,8 @@ function construct<Structure extends AnyCallable>(structure: Structure, input: C
     construction: scope,
     key: options.key,
     declarationPosition: options.declarationPosition,
-    requires: binding.requires,
+    receiveFailure: options.receiveFailure,
+    deps: binding.deps,
     supply: binding.supply,
     initial,
     refinements: binding.refinements,

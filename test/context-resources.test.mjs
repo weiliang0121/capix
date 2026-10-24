@@ -26,13 +26,14 @@ test('Observer narrows resources at each action, captures fixed values and expir
   const views = [];
   const inspect = (current) => {
     const execute = current.run.execute;
-    current.setRun({
-      ...current.run,
-      execute(work) {
+    current.setRun(
+      function (work) {
         views.push({ definition: current, resources: { ...work.resources } });
         return execute.call(this, work);
       },
-    });
+      current.run.deps,
+      { uses: current.run.uses, accept: current.run.accept },
+    );
     for (const child of current.members ?? []) inspect(child);
   };
   inspect(definition.conversation);
@@ -170,14 +171,14 @@ test('assembly validates requests without resolving sources, and rejects duplica
 test('publication supplies the access form; construction only binds the source and captures requests', () => {
   const offer = new ResourceOffer('read', (source) => Object.freeze({ read: () => source.text }));
   const unused = new ResourceOffer('unused', (source) => source);
-  const requires = { reader: offer.request() };
-  const bind = bindResources(requires, [
+  const deps = { reader: offer.request() };
+  const bind = bindResources(deps, [
     offer.provide((parent) => parent),
     unused.provide(() => {
       throw new Error('unused');
     }),
   ]);
-  requires.reader = unused.request();
+  deps.reader = unused.request();
   const source = { text: 'first' };
   const first = bind(source);
   const second = bind({ text: 'second' });
@@ -196,8 +197,8 @@ test('sequence preserves distinct offers even when children use the same alias',
     throw new Error('must not execute during assembly');
   };
   const metadata = { name: 'test', label: 'test', source: 'test', callee: 'test' };
-  const first = defineNode()({ ...metadata, run: { requires: { value: one.request() }, execute } });
-  const second = defineNode()({ ...metadata, run: { requires: { value: two.request() }, execute } });
+  const first = defineNode()({ ...metadata, deps: { value: one.request() }, run: execute });
+  const second = defineNode()({ ...metadata, deps: { value: two.request() }, run: execute });
   const sequence = new Sequence().step('first', { use: first, input: () => null }).step('second', { use: second, input: () => null });
   assert.equal(sequence.steps[0].use, first);
   assert.equal(sequence.steps[1].use, second);
@@ -239,7 +240,7 @@ test('E requests fail before E attachment, recording or work while the parent R 
   const recorder = new Recorder(new RecordBook());
   const runtime = createBoundRuntime({ recorder });
   class Entry extends ExecutionFixture {
-    requires = { history: TranscriptResource.fixedRange.request() };
+    deps = { history: TranscriptResource.fixedRange.request() };
     execute() {
       assert.fail('must not execute');
     }
@@ -318,9 +319,8 @@ test('model offers separate creation and reading while preserving provider metho
   const definition = createConversationStructure();
   const generation = definition.generation;
   const execute = generation.run.execute;
-  generation.setRun({
-    ...generation.run,
-    execute(work) {
+  generation.setRun(
+    function (work) {
       const creator = work.resources.modelCreator;
       const reader = work.resources.modelReader;
       assert.notEqual(creator, model);
@@ -334,7 +334,9 @@ test('model offers separate creation and reading while preserving provider metho
       assert.equal(work.transcriptRange, undefined);
       return execute.call(this, work);
     },
-  });
+    generation.run.deps,
+    { uses: generation.run.uses, accept: generation.run.accept },
+  );
 
   const runner = createConversationRunner(definition, entities, new ModelInteractions(new ModelSource(model)));
   await runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });

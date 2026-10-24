@@ -19,7 +19,7 @@ test('public role entrypoints resolve to the same implementations without requir
   assert.equal(runtime.observeMemory, recording.observeMemory);
   assert.ok(!('observeMemory' in content));
   assert.ok(!('Recorder' in content));
-  const bound = new construction.CallableBuilder().build(runtime.defineScene()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
+  const bound = new construction.CallableBuilder().build(runtime.defineScene()({ run: () => null }), { providers: [], source: { capture: () => null } });
   assert.ok(bound instanceof runtime.Scene);
   assert.equal(bound.id.length > 0, true);
   for (const assembly of ['environment', 'executionInvocationBuilder', 'operationInvocationBuilder', 'attemptInvocationBuilder']) assert.ok(!(assembly in bound));

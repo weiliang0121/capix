@@ -11,20 +11,18 @@ import { checkCapacity } from '../../model/capacity.js';
 
 /** Build the operation-specific request and verify capacity before sending it. */
 export class PrepareModelRequest<Input, Resources extends ModelRequestResources = ModelRequestResources> extends Node<Input, ModelRequest, Resources> {
-  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request() });
+  static readonly deps = Object.freeze({ settings: ModelSettingsResource.snapshot.request() });
 
-  constructor(createRequest: (input: Input, resources: Resources) => ModelRequest, requires: ResourceRequirements<Resources> = PrepareModelRequest.requires as ResourceRequirements<Resources>, description: InvocationRecordDescription<Input, ModelRequest> = {}) {
-    const resultPoint = checkpointPoint<'node', Input, ModelRequest>()({ name: 'result', state: modelRequestCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, output) => output } });
+  constructor(createRequest: (input: Input, resources: Resources) => ModelRequest, deps: ResourceRequirements<Resources> = PrepareModelRequest.deps as ResourceRequirements<Resources>, description: InvocationRecordDescription<Input, ModelRequest> = {}) {
+    const resultPoint = checkpointPoint<'node', Input, ModelRequest>()({ name: 'result', state: modelRequestCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { run: (_work, output) => output } });
     super({
       observation: [invocationRecording(description)],
-      run: {
-        requires,
-        execute(work) {
-          const request = createRequest(work.input, work.resources);
-          checkCapacity(request, work.resources.settings);
-          work.checkpoint?.save(resultPoint, request, {});
-          return request;
-        },
+      deps,
+      run(work) {
+        const request = createRequest(work.input, work.resources);
+        checkCapacity(request, work.resources.settings);
+        work.checkpoint?.({ point: resultPoint, state: request, refs: {} });
+        return request;
       },
       checkpoint: { key: 'observer.prepare-model-request', version: 1, input: { encode: cloneCheckpointValue, decode: (value: CheckpointValue) => cloneCheckpointValue(value) as Input }, output: modelRequestCodec, points: [resultPoint] },
       name: 'prepareModelRequest',

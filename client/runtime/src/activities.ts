@@ -86,7 +86,10 @@ function assertCall(call: ConversationActivity, parent?: ConversationActivity): 
   if (!call || typeof call.contextId !== 'string' || !call.contextId || !callableKinds.includes(call.kind) || typeof call.label !== 'string' || !call.label || call.label.length > 120 || !['running', 'succeeded', 'failed', 'cancelled'].includes(call.status) || !['setup', ...invocationProcessStages].includes(call.phase) || !Number.isSafeInteger(call.round) || call.round < 0 || call.round > 2) throw new Error('处理过程调用身份或状态无效。');
   if ((call.startedAt !== undefined && !validTime(call.startedAt)) || (call.finishedAt !== undefined && !validTime(call.finishedAt)) || (call.status === 'running' ? call.finishedAt !== undefined : !call.finishedAt)) throw new Error('处理过程调用边界无效。');
   if (call.parentContextId === undefined ? call.relation !== undefined : !parent || !allowsChild(parent.kind, call.kind)) throw new Error('处理过程父子归属无效。');
-  if (call.relation && (!['attached', 'returned', 'receiving', 'accepted', 'failed'].includes(call.relation.phase) || (call.relation.returned !== undefined && !['succeeded', 'failed', 'cancelled'].includes(call.relation.returned)) || (['receiving', 'accepted', 'failed'].includes(call.relation.phase) && call.relation.returned !== 'succeeded') || (call.relation.phase === 'returned' && !call.relation.returned))) throw new Error('处理过程父层接纳状态无效。');
+  if (call.relation) {
+    const { phase, returned } = call.relation;
+    if (!['attached', 'returned', 'receiving', 'accepted', 'handled', 'failed'].includes(phase) || (returned !== undefined && !['succeeded', 'failed', 'cancelled'].includes(returned)) || (phase === 'accepted' && returned !== 'succeeded') || (phase === 'handled' && returned !== 'failed') || (['receiving', 'failed'].includes(phase) && returned !== 'succeeded' && returned !== 'failed') || (phase === 'returned' && !returned)) throw new Error('处理过程父层接纳状态无效。');
+  }
 }
 
 function assertProgress(before: ConversationActivity, after: ConversationActivity): void {
@@ -110,8 +113,8 @@ function allowsChild(parent: ConversationActivity['kind'], child: ConversationAc
 
 function relationCanAdvance(before: NonNullable<ConversationActivity['relation']>['phase'], after: NonNullable<ConversationActivity['relation']>['phase']): boolean {
   if (before === after) return true;
-  if (before === 'accepted' || before === 'failed') return false;
-  if (before === 'receiving') return after === 'accepted' || after === 'failed';
+  if (before === 'accepted' || before === 'handled' || before === 'failed') return false;
+  if (before === 'receiving') return after === 'accepted' || after === 'handled' || after === 'failed';
   if (before === 'returned') return after !== 'attached';
   return true;
 }

@@ -11,6 +11,8 @@ export interface InvocationRecordDescription<Input = unknown, Output = unknown> 
   readonly output?: (output: Output) => unknown;
   /** Parent acceptance may produce a different value from the child's returned output. */
   readonly relationAccepted?: (output: unknown, relation: InvocationRelationIdentity) => unknown;
+  /** Handling a failed child produces a distinct value without changing the child's failed return. */
+  readonly relationHandled?: (output: unknown, relation: InvocationRelationIdentity) => unknown;
 }
 export interface InvocationRecordWriter {
   observe(fact: InvocationFact, description?: InvocationRecordDescription): undefined;
@@ -34,10 +36,11 @@ export function invocationRecording<Input = unknown, Output = unknown>(descripti
     ...(description.input ? { input: (input: unknown) => description.input!(input as Input) } : {}),
     ...(description.output ? { output: (output: unknown) => description.output!(output as Output) } : {}),
     ...(description.relationAccepted ? { relationAccepted: description.relationAccepted } : {}),
+    ...(description.relationHandled ? { relationHandled: description.relationHandled } : {}),
   };
   return defineObservation<InvocationFact, { record: InvocationRecordWriter }>(
     {
-      requires: { record: InvocationRecordAccess.request() },
+      deps: { record: InvocationRecordAccess.request() },
       observe(fact, ports) {
         return ports.record.observe(fact, mapped);
       },

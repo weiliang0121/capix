@@ -25,7 +25,7 @@ export class ExtractMemory extends Group<MemoryInput, MemoryExtraction, ModelCal
   protected readonly outputContract;
   protected readonly task;
 
-  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request(), memoryWriter: MemoryResource.apply.request() } as const);
+  static readonly deps = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request(), memoryWriter: MemoryResource.apply.request() } as const);
 
   readonly points;
 
@@ -52,13 +52,13 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     this.add(this.prepareRequest, this.requestModel, this.acceptOutput, this.applyMemory);
     const point = checkpointPoint<'group', MemoryInput, MemoryExtraction>();
     this.points = {
-      requestWaiting: point({ name: 'requestWaiting', state: emptyCheckpointState, references: { child: childReference(this.prepareRequest) }, check: (_state, facts) => this.check(facts, facts.references.child, 'request'), resume: { uses: this.members, execute: (work, _state, saved) => this.receiveRequest(work, work.children.resume(saved.child)) } }),
-      modelWaiting: point({ name: 'modelWaiting', state: emptyCheckpointState, references: { child: childReference(this.requestModel) }, check: (_state, facts) => this.check(facts, facts.references.child, 'model'), resume: { uses: [this.requestModel, this.acceptOutput, this.applyMemory], execute: (work, _state, saved) => this.receiveModel(work, work.children.resume(saved.child)) } }),
-      acceptanceWaiting: point({ name: 'acceptanceWaiting', state: emptyCheckpointState, references: { child: childReference(this.acceptOutput) }, check: (_state, facts) => this.check(facts, facts.references.child, 'acceptance'), resume: { uses: [this.acceptOutput, this.applyMemory], execute: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.child)) } }),
-      applicationWaiting: point({ name: 'applicationWaiting', state: emptyCheckpointState, references: { child: childReference(this.applyMemory) }, check: (_state, facts) => this.check(facts, facts.references.child, 'application'), resume: { uses: [this.applyMemory], execute: (work, _state, saved) => this.receiveApplication(work.children.resume(saved.child)) } }),
+      requestWaiting: point({ name: 'requestWaiting', state: emptyCheckpointState, references: { child: childReference(this.prepareRequest) }, check: (_state, facts) => this.check(facts, facts.references.child, 'request'), resume: { uses: this.members, run: (work, _state, saved) => this.receiveRequest(work, work.children.resume(saved.child)) } }),
+      modelWaiting: point({ name: 'modelWaiting', state: emptyCheckpointState, references: { child: childReference(this.requestModel) }, check: (_state, facts) => this.check(facts, facts.references.child, 'model'), resume: { uses: [this.requestModel, this.acceptOutput, this.applyMemory], run: (work, _state, saved) => this.receiveModel(work, work.children.resume(saved.child)) } }),
+      acceptanceWaiting: point({ name: 'acceptanceWaiting', state: emptyCheckpointState, references: { child: childReference(this.acceptOutput) }, check: (_state, facts) => this.check(facts, facts.references.child, 'acceptance'), resume: { uses: [this.acceptOutput, this.applyMemory], run: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.child)) } }),
+      applicationWaiting: point({ name: 'applicationWaiting', state: emptyCheckpointState, references: { child: childReference(this.applyMemory) }, check: (_state, facts) => this.check(facts, facts.references.child, 'application'), resume: { uses: [this.applyMemory], run: (work, _state, saved) => this.receiveApplication(work.children.resume(saved.child)) } }),
     };
 
-    this.setDefinition({ observation: [invocationRecording()], name: 'memory', label: '提取记忆体', source: 'services/observer/src/conversation/group/memory/extract.ts · ExtractMemory', run: { requires: ExtractMemory.requires, uses: this.members, execute: this.execute.bind(this) }, checkpoint: { key: 'observer.extract-memory', version: 2, input: memoryCheckpointInput, output: memoryCheckpointOutput, points: Object.values(this.points) } });
+    this.setDefinition({ observation: [invocationRecording()], name: 'memory', label: '提取记忆体', source: 'services/observer/src/conversation/group/memory/extract.ts · ExtractMemory', deps: ExtractMemory.deps, uses: this.members, run: this.execute.bind(this), checkpoint: { key: 'observer.extract-memory', version: 2, input: memoryCheckpointInput, output: memoryCheckpointOutput, points: Object.values(this.points) } });
   }
 
   protected prepare(input: MemoryInput) {
@@ -67,7 +67,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
 
   private async execute(work: MemoryWork): Promise<MemoryExtraction> {
     const child = work.children.create(this.prepareRequest, work.input, { key: 'request' });
-    work.checkpoint?.save(this.points.requestWaiting, null, { child: child.ref });
+    work.checkpoint?.({ point: this.points.requestWaiting, state: null, refs: { child: child.ref } });
     return this.receiveRequest(work, child);
   }
 
@@ -75,7 +75,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     await child.run();
     const request = await child.accept();
     const model = work.children.create(this.requestModel, request, { key: 'model' });
-    work.checkpoint?.save(this.points.modelWaiting, null, { child: model.ref });
+    work.checkpoint?.({ point: this.points.modelWaiting, state: null, refs: { child: model.ref } });
     return this.receiveModel(work, model);
   }
 
@@ -83,7 +83,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     await child.run();
     const output = await child.accept();
     const acceptance = work.children.create(this.acceptOutput, { output, basis: work.input }, { key: 'acceptance' });
-    work.checkpoint?.save(this.points.acceptanceWaiting, null, { child: acceptance.ref });
+    work.checkpoint?.({ point: this.points.acceptanceWaiting, state: null, refs: { child: acceptance.ref } });
     return this.receiveAcceptance(work, acceptance);
   }
 
@@ -91,7 +91,7 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
     await child.run();
     const output = await child.accept();
     const application = work.children.create(this.applyMemory, output, { key: 'application' });
-    work.checkpoint?.save(this.points.applicationWaiting, null, { child: application.ref });
+    work.checkpoint?.({ point: this.points.applicationWaiting, state: null, refs: { child: application.ref } });
     return this.receiveApplication(application);
   }
 

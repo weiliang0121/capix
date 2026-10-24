@@ -333,7 +333,7 @@ function composeLevel(Base, child, label, receives, explicit = false) {
       if (Base !== Node && child) this.add(child);
     }
     run = {
-      requires: {},
+      deps: {},
       execute: async (work) => {
         assert.ok(work.output);
         work.output.emit(label);
@@ -459,14 +459,14 @@ test('bound fallback has no writer and remains subject to the declared result co
     output = contract;
     raises = [rejected];
     run = {
-      requires: {},
+      deps: {},
       execute(work) {
         work.output.emit('tentative');
         throw rejected.create('fallback', {});
       },
     };
     exceptions = {
-      requires: {},
+      deps: {},
       accepts: [rejected],
       handle(work) {
         assert.equal('output' in work, false);
@@ -516,7 +516,7 @@ test('one failing explicit E output consumer does not disable its other binding'
       this.add(execution);
     }
     run = {
-      requires: {},
+      deps: {},
       async execute(work) {
         const child = work.children.create(execution, 'input', {
           output: {
@@ -607,7 +607,7 @@ test('a previous work view cannot create children after the invocation moves to 
   let saved;
   const child = new (class extends Group {
     run = {
-      requires: {},
+      deps: {},
       execute: () => {
         executions++;
         return 'child';
@@ -621,7 +621,7 @@ test('a previous work view cannot create children after the invocation moves to 
       this.add(child);
     }
     run = {
-      requires: {},
+      deps: {},
       uses: [child],
       execute(work) {
         if (work.round === 1) saved = work;
@@ -643,7 +643,7 @@ for (const handled of [false, true]) {
     const rejected = new ExceptionContract('ACCEPT_FROM_CURRENT_VIEW');
     let saved;
     const child = new (class extends Group {
-      run = { requires: {}, execute: () => 'child' };
+      run = { deps: {}, execute: () => 'child' };
     })();
     const definition = new (class extends Scene {
       constructor() {
@@ -652,7 +652,7 @@ for (const handled of [false, true]) {
       }
       raises = [rejected];
       run = {
-        requires: {},
+        deps: {},
         uses: [child],
         async execute(work) {
           const call = work.children.create(child, 'input');
@@ -667,7 +667,7 @@ for (const handled of [false, true]) {
         },
       };
       exceptions = {
-        requires: {},
+        deps: {},
         uses: [child],
         accepts: [rejected],
         async handle(work) {

@@ -34,7 +34,7 @@ export class NamedExecution extends Group<string, number> {
     this.add(operation);
   }
   readonly run: InvocationRunDefinition<string, number, 'group', Record<string, never>> = {
-    requires: {},
+    deps: {},
     execute: executionHelper,
     accept(work) {
       expectType<Promise<number>>(work.children.create(operation, work.input).run());
@@ -42,7 +42,7 @@ export class NamedExecution extends Group<string, number> {
     },
   };
   readonly exceptions: InvocationExceptionDefinition<string, number, 'group', Record<string, never>> = {
-    requires: {},
+    deps: {},
     uses: [operation],
     accepts: [],
     handle(work) {
@@ -52,7 +52,7 @@ export class NamedExecution extends Group<string, number> {
   };
 }
 
-export const factoryExecution = defineGroup<string, number>()({ members: [operation], run: { execute: executionHelper } });
+export const factoryExecution = defineGroup<string, number>()({ members: [operation], run: executionHelper });
 
 const entry = defineChildEntry(operation, { accept: ({ input }: ChildEntryInput<number>) => String(input) });
 export function stageHelpers(accept: AcceptWork<'group', string, number>, handle: HandleWork<'group', string, number>, resume: ResumeWork<'group', string, number>, reference: ChildReference<typeof operation>) {

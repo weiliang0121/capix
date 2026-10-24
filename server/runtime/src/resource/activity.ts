@@ -4,10 +4,15 @@ import type { TranscriptEvent, MemoryEvent } from '@capix/protocol';
 import type { EventConsumer } from '../observation/observer.js';
 import type { ResourceObservation } from '../observation/facts.js';
 import { RuntimeErrorHelper } from '../errors/helper.js';
+import type { OperationOptions, OperationOutcome, OperationResult } from '../operation/contract.js';
+import { receiveOperation } from '../operation/receive.js';
+import { isProtectedOperationFailure } from '../operation/failure.js';
+import type { ResourceOperation } from './methods.js';
 
 /** Internal call binding only. Business receives the resource endpoint, never this provenance port. */
 export interface ResourceOwner {
   readonly contextId: string;
+  readonly signal?: AbortSignal;
   readonly round?: () => number;
   readonly reception?: () => Readonly<{ parentContextId: string; childContextId: string }>;
   readonly nextSequence?: () => number;
@@ -36,11 +41,15 @@ export class ResourceSession {
   error(error: unknown, allowException = false): void {
     this.owner?.error?.(error, allowException);
   }
+  /** Check before owning a competing failure, so an already-failed operation is not erased by cancellation. */
+  checkWindow(): void {
+    if (this.parent) this.parent.checkWindow();
+    else this.owner?.validate();
+    this.restriction?.();
+  }
   validate(): void {
     try {
-      if (this.parent) this.parent.validate();
-      else this.owner?.validate();
-      this.restriction?.();
+      this.checkWindow();
     } catch (error) {
       this.error(error);
       throw error;
@@ -93,6 +102,95 @@ export class ResourceActivity {
   unavailable(error: unknown): void {
     this.session.error(error);
     this.publish('unavailable', () => ({ error: RuntimeErrorHelper.format(error) }));
+  }
+
+  /** Produce an outcome before receiving it; infrastructure failures never enter business failure reception. */
+  async operate<Output, Delta = never, const Options extends OperationOptions<Output, unknown, unknown, Delta> = {}>(action: string, detail: ResourceInteractionDescription<Output>, execute: (operation: ResourceOperation<Delta>) => Output | PromiseLike<Output>, options?: Options): Promise<OperationResult<Output, Options>> {
+    this.validate();
+    try {
+      if (options?.delta !== undefined && typeof options.delta !== 'function') throw new TypeError('Delta receiver must be a function');
+      if (options?.result?.succeeded !== undefined && typeof options.result.succeeded !== 'function') throw new TypeError('Success receiver must be a function');
+      if (options?.result?.failed !== undefined && typeof options.result.failed !== 'function') throw new TypeError('Failure receiver must be a function');
+    } catch (error) {
+      this.session.error(error);
+      throw error;
+    }
+    const receiver = options?.result;
+    const succeeded = receiver?.succeeded?.bind(receiver);
+    const failed = receiver?.failed?.bind(receiver);
+    const reception = options ? { ...options, result: { succeeded, failed } } : options;
+    const interactionId = randomUUID();
+    this.publish('started', () => ({ action, input: detail.input?.() ?? null }), interactionId);
+    this.validate();
+    let open = true;
+    let consume = options?.delta?.bind(options);
+    const operation: ResourceOperation<Delta> = Object.freeze({
+      signal: this.session.owner?.signal,
+      emit: (delta: Delta) => {
+        if (!open) {
+          const error = new Error('Resource operation output is closed');
+          this.session.error(error);
+          throw error;
+        }
+        this.validate();
+        if (!consume) return;
+        try {
+          const result: unknown = consume(delta);
+          // Consumers are passive. A rejected async consumer is detached just like a thrown one.
+          if (result !== null && (typeof result === 'object' || typeof result === 'function') && typeof (result as PromiseLike<unknown>).then === 'function') {
+            void Promise.resolve(result).catch(() => {
+              consume = undefined;
+            });
+          }
+        } catch {
+          consume = undefined;
+        }
+      },
+    });
+    let outcome: OperationOutcome<Output>;
+    try {
+      outcome = { status: 'succeeded', value: await execute(operation) };
+    } catch (failure) {
+      outcome = { status: 'failed', failure };
+    } finally {
+      open = false;
+      consume = undefined;
+    }
+    if (outcome.status === 'succeeded') {
+      // A successful source cannot publish a result through an expired window.
+      this.validate();
+      const value = outcome.value;
+      this.publish('returned', () => ({ action, output: detail.output?.(value) ?? null }), interactionId);
+    } else {
+      const failure = outcome.failure;
+      try {
+        this.session.checkWindow();
+      } catch (windowFailure) {
+        // Both facts exist. Keep the original operation fault, and do not run a
+        // business receiver after cancellation or closure of its access window.
+        const combined = windowFailure === failure ? failure : new AggregateError([failure, windowFailure], 'Resource operation failed after its access window became unavailable', { cause: failure });
+        this.failed(action, interactionId, combined);
+        throw combined;
+      }
+      if (isProtectedOperationFailure(failure) || !failed) {
+        this.failed(action, interactionId, failure);
+        throw failure;
+      }
+      // Record the real failed operation even when its caller can handle that outcome.
+      try {
+        this.publish('threw', () => ({ action, error: RuntimeErrorHelper.format(failure) }), interactionId);
+      } catch (observation) {
+        throw new AggregateError([failure, observation], 'Resource operation and failure observation both failed', { cause: failure });
+      }
+    }
+    try {
+      const result = await receiveOperation<Output, unknown, Options>(outcome, reception);
+      this.validate();
+      return result;
+    } catch (error) {
+      this.session.error(error, true);
+      throw error;
+    }
   }
 
   runSync<Output>(action: string, detail: ResourceInteractionDescription<Output>, execute: () => Output): Output {

@@ -5,14 +5,12 @@ export function runtimeDefinition(execution) {
   return new Scene({
     maxRounds: 1,
     raises: execution.raises ?? [],
-    run: {
-      requires: {},
-      uses: [execution],
-      async execute(work) {
-        const child = work.children.create(execution, work.input, { key: 'execution' });
-        const output = await child.run();
-        return child.accept(() => output);
-      },
+    deps: {},
+    uses: [execution],
+    async run(work) {
+      const child = work.children.create(execution, work.input, { key: 'execution' });
+      const output = await child.run();
+      return child.accept(() => output);
     },
   }).add(execution);
 }

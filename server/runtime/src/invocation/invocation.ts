@@ -6,10 +6,12 @@ import type { InvocationOutputWriter, InvocationOutputReceiver } from '../output
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from '../clock.js';
 import { DeclaredException } from '../exception/contract.js';
+import { isProtectedOperationFailure } from '../operation/failure.js';
 import { InvocationStopped } from './stop.js';
 import { isInvocationCancelled } from './cancellation.js';
 import { InvocationControl } from './control.js';
 import type { InvocationFailure, InvocationPhase } from './failure.js';
+import { containsFailure } from './failure.js';
 import { invocationContextView, type ContextFactsOf } from '../context/view.js';
 import { invocationView, childInvocationView, type InvocationView, type ChildInvocationView } from './view.js';
 import { InvocationChildren, type ParentInvocation } from './children.js';
@@ -17,7 +19,7 @@ import type { InvocationRelation, InvocationRelationOptions } from './relation.j
 import type { InvocationChangeEmitter } from './changes.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationObservation } from '../observation/invocation.js';
-import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDescription, InvocationRelationIdentity, InvocationRelationChange } from '../observation/facts.js';
+import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDescription, InvocationRelationIdentity, InvocationRelationChange, BusinessEvent } from '../observation/facts.js';
 import { combineFaults } from '../observation/error.js';
 import { invocationChange, invocationProgress } from './facts.js';
 import { InvocationCycle } from './cycle.js';
@@ -60,6 +62,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   #sequence = 0;
   #eventSequence = 0;
   #resourceSequence = 0;
+  #businessSequence = 0;
   readonly #clock: Clock;
   readonly #progress?: ProgressChannel<InvocationProgress>;
   readonly #identity: InvocationIdentity;
@@ -272,12 +275,14 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   private failDelivery(error: unknown): never {
     const classified = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, this.context.status === 'succeeded' ? 'observation' : this.context.progress.phase, true);
     let delivered = error instanceof AggregateError ? error : classified.error;
+    let receptionAllowed = classified.receptionAllowed === true && !isProtectedOperationFailure(delivered);
     try {
       this.#checkpoint?.finish({ status: isInvocationCancelled(delivered, this.options.signal) ? 'cancelled' : 'failed' });
     } catch (checkpointError) {
       delivered = new AggregateError([delivered, checkpointError], 'Invocation failure and terminal checkpoint save failed', { cause: delivered });
+      receptionAllowed = false;
     }
-    this.#failure = Object.freeze({ ...classified, ...(delivered instanceof AggregateError ? { kind: 'error' as const } : {}), error: delivered });
+    this.#failure = Object.freeze({ ...classified, ...(delivered instanceof AggregateError ? { kind: 'error' as const } : {}), error: delivered, receptionAllowed });
     if (this.context.status === 'running') this.context.fail(delivered, this.#failure);
     this.#parentRelation?.returnedWith({ status: 'failed', error: delivered, failure: this.#failure });
     throw this.#parentRelation && this.#parentDeliveryScope ? this.options.parent!.invocation.children.deliverReturn(this.#parentRelation, delivered, this.#failure, this.#parentDeliveryScope) : delivered;
@@ -301,9 +306,10 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   classify(error: unknown, phase: InvocationPhase, forceError = false, origin?: InvocationExceptionOrigin): InvocationFailure {
     if (this.#fault) {
+      if (['observation', 'control', 'setup'].includes(phase) || isProtectedOperationFailure(error)) this.#fault = Object.freeze({ ...this.#fault, receptionAllowed: false });
       // A structural report can add a second cause; retain it without allowing
       // caught business code to replace an already-owned failure.
-      if (error instanceof AggregateError && (error.errors.includes(this.#fault.error) || error.cause === this.#fault.error)) this.#fault = Object.freeze({ ...this.#fault, error });
+      if (error instanceof AggregateError && containsFailure(error, this.#fault.error)) this.#fault = Object.freeze({ ...this.#fault, error });
       return this.#fault;
     }
     let propagation;
@@ -318,7 +324,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     const allowed = declared && (!!propagation || this.options.work.raises?.includes(exception.contract));
     const actual = forceError && exception instanceof DeclaredException ? new InvocationStopped(phase === 'handling' ? 'EXCEPTION_HANDLER_FAILED' : 'INVOCATION_FAILED', '结构处理抛出的异常不能再次进入业务处理。', undefined, { cause: exception }) : declared && !allowed ? new InvocationStopped('UNDECLARED_EXCEPTION', '工作产生了未声明的异常。', { contract: exception.contract.name }, { cause: exception }) : exception;
     const source = propagation?.origin ?? origin ?? Object.freeze({ kind: 'self' as const, phase: phase === 'receive' ? ('accept' as const) : ('execute' as const) });
-    const failure: InvocationFailure = Object.freeze({ kind: allowed ? 'exception' : 'error', phase, contextId: this.context.id, ...(allowed ? { contract: exception.contract.name, origin: source } : {}), error: actual });
+    const failure: InvocationFailure = Object.freeze({ kind: allowed ? 'exception' : 'error', phase, contextId: this.context.id, ...(allowed ? { contract: exception.contract.name, origin: source } : {}), error: actual, receptionAllowed: !forceError && !isProtectedOperationFailure(actual) });
     this.#classified = failure;
     if (failure.kind === 'error') this.#fault = failure;
     return failure;
@@ -338,6 +344,17 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   nextResourceSequence(): number {
     return ++this.#resourceSequence;
+  }
+
+  observeBusiness(event: BusinessEvent): void {
+    this.requireActive();
+    if (!event || typeof event.event !== 'string' || !event.event.trim()) throw new TypeError('Business observation needs an event name');
+    const fact = Object.freeze({ identity: this.identity, sequence: ++this.#businessSequence, occurredAt: this.#clock.now(), event: Object.freeze({ ...event }) });
+    const failure = this.observation?.business.publish(fact);
+    if (failure !== undefined) {
+      this.classify(failure, 'observation', true);
+      throw failure;
+    }
   }
 
   private nextSequence(): number {

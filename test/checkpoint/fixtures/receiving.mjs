@@ -9,11 +9,9 @@ const codec = { encode: (value) => value, decode: (value) => value };
 let runs = 0;
 let callbacks = 0;
 const child = defineGroup()({
-  run: {
-    execute: () => {
-      runs++;
-      return '2026-01-01T00:00:00.000Z';
-    },
+  run: () => {
+    runs++;
+    return '2026-01-01T00:00:00.000Z';
   },
 });
 const value = {
@@ -34,7 +32,7 @@ const point = checkpointPoint()({
     assert.equal(facts.references.selected.reception.status, 'receiving');
   },
   resume: {
-    async execute(work, _state, refs) {
+    async run(work, _state, refs) {
       const handle = work.children.open(refs.selected);
       const receive = (output) => {
         callbacks++;
@@ -51,16 +49,14 @@ const root = defineScene()({
   members: [child],
   receptions: [original, other],
   checkpoint: { key: 'receiving-parent', version: 1, input: codec, output: codec, points: [point] },
-  run: {
-    async execute(work) {
-      const handle = work.children.create(child, null);
-      await handle.run();
-      const receive = (output) => {
-        work.checkpoint.save(point, null, { selected: handle.ref });
-        return new Date(output);
-      };
-      return mode === 'capture-raw' ? handle.accept(receive) : handle.accept(original, receive);
-    },
+  async run(work) {
+    const handle = work.children.create(child, null);
+    await handle.run();
+    const receive = (output) => {
+      work.checkpoint({ point: point, state: null, refs: { selected: handle.ref } });
+      return new Date(output);
+    };
+    return mode === 'capture-raw' ? handle.accept(receive) : handle.accept(original, receive);
   },
 });
 const store = new MemoryCheckpointStore();

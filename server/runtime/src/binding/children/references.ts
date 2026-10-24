@@ -43,6 +43,18 @@ export class InvocationChildReferences {
           throw error;
         }
       },
+      handled: <D extends ChildContract, Value>(ref: ChildReference<D>, contract: ReceptionDefinition<NoInfer<D>, Value>): Value => {
+        try {
+          const entry = this.require(ref);
+          const binding = this.receptions.require(contract, entry.definition as D);
+          const reception = entry.relation.reception;
+          if (reception.status !== 'handled' || reception.contract !== binding) throw new Error('Child has no handled value under this reception contract');
+          return reception.output as Value;
+        } catch (error) {
+          this.parent.reject(error);
+          throw error;
+        }
+      },
       require: <D extends ChildContract>(definition: D, ref: ChildReference) => {
         const entry = this.require(ref);
         if (entry.definition !== definition) return this.reject(new Error('Child reference belongs to a different declaration'));
@@ -126,7 +138,7 @@ export class InvocationChildReferences {
     const signal = 'signal' in context ? context.signal : undefined;
     const result = returned?.status === 'succeeded' ? Object.freeze({ status: 'succeeded' as const, output: returned.output }) : returned ? (signal instanceof AbortSignal && isInvocationCancelled(returned.error, signal) ? Object.freeze({ status: 'cancelled' as const, diagnostic: returned.diagnostic ?? RuntimeErrorHelper.format(returned.error) }) : Object.freeze({ status: 'failed' as const, diagnostic: returned.diagnostic ?? RuntimeErrorHelper.format(returned.error), ...(returned.failure ? { failure: Object.freeze(failureFact(returned.failure)) } : {}) })) : undefined;
     const reception = relation.reception;
-    const received = reception.status === 'accepted' ? Object.freeze({ status: 'accepted' as const, value: reception.output }) : reception.status === 'failed' ? Object.freeze({ status: 'failed' as const, diagnostic: reception.diagnostic ?? RuntimeErrorHelper.format(reception.error), ...(reception.failure ? { failure: Object.freeze(failureFact(reception.failure)) } : {}) }) : Object.freeze({ status: reception.status });
+    const received = reception.status === 'accepted' || reception.status === 'handled' ? Object.freeze({ status: reception.status, value: reception.output }) : reception.status === 'failed' ? Object.freeze({ status: 'failed' as const, diagnostic: reception.diagnostic ?? RuntimeErrorHelper.format(reception.error), ...(reception.failure ? { failure: Object.freeze(failureFact(reception.failure)) } : {}) }) : Object.freeze({ status: reception.status });
     return Object.freeze({ ref: entry.ref, ...(relation.key ? { key: relation.key } : {}), parentRound: relation.round as 1 | 2, order: relation.order, input: context.input, returned: result, reception: received, ...(context.progress.round ? { progress: Object.freeze({ round: context.progress.round as 1 | 2, currentInput: context.currentInput, phase: context.progress.phase }) } : {}) });
   }
 

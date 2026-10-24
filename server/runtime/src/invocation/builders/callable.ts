@@ -32,7 +32,7 @@ export interface CallableInvocationRequest<Input, Output, Resources extends obje
   readonly output?: InvocationOutputReceiver<Output>;
   readonly resources?: ResourceBindings;
   readonly supplied?: ResourceSupply;
-  readonly requires?: ResourceRequirements<Resources>;
+  readonly deps?: ResourceRequirements<Resources>;
   readonly initial?: ResourceRequirements;
   readonly supply?: ResourceRequirements;
   readonly refinements?: readonly ResourceRefinement<Input>[];
@@ -63,9 +63,9 @@ export class CallableInvocationBuilder {
     if (parent) this.check(parent);
     if (request.supplied && request.resources) throw new Error('Call construction must provide one resource supply');
     const supplied = request.supplied ?? request.resources?.supply ?? parent?.context.resources.supply ?? new ResourceSupply();
-    const requires = request.requires ?? ({} as ResourceRequirements<Resources>);
-    const selected = supplied.select(request.supply ?? requires).refine(input, request.refinements ?? []);
-    const resources = new ResourceBindings(requires, selected.entries, request.initial, request.supply);
+    const deps = request.deps ?? ({} as ResourceRequirements<Resources>);
+    const selected = supplied.select(request.supply ?? deps).refine(input, request.refinements ?? []);
+    const resources = new ResourceBindings(deps, selected.entries, request.initial, request.supply);
     // Resource capture/refinement may run host code; recheck before establishing the child.
     if (parent) this.check(parent);
     const controls = parent ? { signal: parent.context.signal } : request.controls;
@@ -80,7 +80,7 @@ export class CallableInvocationBuilder {
     const observation = recovering ? undefined : bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources }, this.capabilities.observations, parent?.observation);
     const changes = !recovering && this.capabilities.changes ? new InvocationChangeEmitter(identity, this.capabilities.changes) : undefined;
     const invocation = new Invocation<Input, Output, CallableContext<Input, Output, Resources>>({
-      ...(parent ? { parent: { invocation: parent, key: request.key, declarationPosition: request.declarationPosition } } : {}),
+      ...(parent ? { parent: { invocation: parent, key: request.key, declarationPosition: request.declarationPosition, receiveFailure: request.receiveFailure } } : {}),
       context,
       construction: request.construction ?? parent?.construction,
       work: request.work,

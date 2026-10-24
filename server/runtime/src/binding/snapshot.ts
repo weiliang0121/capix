@@ -5,6 +5,8 @@ import type { CheckpointCodec } from '../checkpoint/contract.js';
 import type { ReceptionDefinition } from '../definition/reception.js';
 import type { ChildContract, ChildCallable } from '../definition/children.js';
 import type { ExceptionContract } from '../exception/contract.js';
+import type { NamedMembers } from '../definition/composition.js';
+import { checkMemberName } from '../structure/members.js';
 import type { AnyCallable } from './declarations.js';
 
 /** Fixed execution configuration. It has no author setters or callable identity. */
@@ -15,15 +17,22 @@ export interface CallableSnapshot<Input = any, Output = any, Kind extends Callab
   readonly run: InvocationRunDefinition<Input, Output, Kind, Resources, Delta>;
   readonly exceptions?: InvocationExceptionDefinition<Input, Output, Kind, ExceptionResources>;
   readonly members?: readonly ChildCallable[];
+  readonly names?: NamedMembers;
 }
 
 /** Freeze interpreted contracts and member identity while preserving business receivers. */
 export function snapshotDefinition(definition: AnyCallable): CallableSnapshot {
   const members = 'members' in definition ? definition.members : undefined;
+  const names = 'names' in definition ? definition.names : undefined;
+  if (definition.kind === 'node' && names !== undefined) throw new Error('Nodes cannot declare member names');
+  for (const [name, member] of Object.entries(names ?? {})) {
+    checkMemberName(name);
+    if (!members?.includes(member)) throw new Error('Named member is outside its owner');
+  }
   if (definition.kind === 'node' && members !== undefined) throw new Error('Nodes cannot declare members');
   if (definition.kind === 'node' && definition.receptions !== undefined) throw new Error('Nodes cannot declare receptions');
   const run = definition.run;
-  if (!run || typeof run.execute !== 'function') throw new Error('Callable definition requires execute');
+  if (!run || typeof run.execute !== 'function') throw new Error('Callable definition needs a run function');
   const exceptions = definition.exceptions;
   const output = definition.output;
   return Object.freeze({
@@ -35,12 +44,12 @@ export function snapshotDefinition(definition: AnyCallable): CallableSnapshot {
     maxRounds: definition.maxRounds ?? 1,
     raises: Object.freeze([...(definition.raises ?? [])]),
     output: output ? Object.freeze({ result: output.result.bind(output), delta: output.delta?.bind(output) }) : undefined,
-    run: Object.freeze({ requires: Object.freeze({ ...run.requires }), uses: run.uses ? Object.freeze([...run.uses]) : undefined, execute: run.execute.bind(run), accept: run.accept?.bind(run) }),
-    exceptions: exceptions ? Object.freeze({ requires: Object.freeze({ ...exceptions.requires }), uses: exceptions.uses ? Object.freeze([...exceptions.uses]) : undefined, accepts: Object.freeze([...exceptions.accepts]), handle: exceptions.handle.bind(exceptions) }) : undefined,
+    run: Object.freeze({ deps: Object.freeze({ ...run.deps }), uses: run.uses ? Object.freeze([...run.uses]) : undefined, execute: run.execute.bind(run), accept: run.accept?.bind(run) }),
+    exceptions: exceptions ? Object.freeze({ deps: Object.freeze({ ...exceptions.deps }), uses: exceptions.uses ? Object.freeze([...exceptions.uses]) : undefined, accepts: Object.freeze([...exceptions.accepts]), handle: exceptions.handle.bind(exceptions) }) : undefined,
     observation: definition.observation ? Object.freeze(definition.observation.map(snapshotObservation)) : undefined,
     checkpoint: definition.checkpoint ? snapshotCheckpoint<any, any, any, any>(definition.checkpoint) : undefined,
     receptions: definition.receptions ? Object.freeze(definition.receptions.map(snapshotReception)) : undefined,
-    ...(members ? { members: Object.freeze([...members]) } : {}),
+    ...(members ? { members: Object.freeze([...members]), names: Object.freeze({ ...names }) } : {}),
   });
 }
 
@@ -53,14 +62,14 @@ export function originalReception(reception: object): object {
 
 function snapshotReception<Definition extends ChildContract, Value>(reception: ReceptionDefinition<Definition, Value>): ReceptionDefinition<Definition, Value> {
   const value = reception.value;
-  if (typeof value?.check !== 'function' || typeof value.encode !== 'function' || typeof value.decode !== 'function') throw new Error('Reception requires check, encode and decode functions');
+  if (typeof value?.check !== 'function' || typeof value.encode !== 'function' || typeof value.decode !== 'function') throw new Error('Reception needs check, encode and decode functions');
   const fixed = Object.freeze({ child: reception.child, value: Object.freeze({ check: value.check.bind(value), encode: value.encode.bind(value), decode: value.decode.bind(value) }) }) as ReceptionDefinition<Definition, Value>;
   receptionOrigins.set(fixed, originalReception(reception));
   return fixed;
 }
 
 function snapshotObservation<Fact>(declaration: ObservationDeclaration<Fact>): ObservationDeclaration<Fact> {
-  return Object.freeze({ requires: Object.freeze({ ...declaration.requires }), failure: declaration.failure, observe: declaration.observe.bind(declaration) });
+  return Object.freeze({ deps: Object.freeze({ ...declaration.deps }), failure: declaration.failure, observe: declaration.observe.bind(declaration) });
 }
 
 function snapshotCodec<Value>(codec: CheckpointCodec<Value>): CheckpointCodec<Value> {
@@ -90,7 +99,7 @@ function snapshotCheckpointPoint<Input, Output, Kind extends CallableKind, State
     state: snapshotCodec(point.state),
     references: Object.freeze(Object.fromEntries(Object.entries(point.references).map(([name, slot]) => [name, Object.freeze({ ...slot })]))) as Slots,
     check: point.check?.bind(point),
-    resume: Object.freeze({ requires: Object.freeze({ ...resume.requires }), uses: resume.uses ? Object.freeze([...resume.uses]) : undefined, execute: resume.execute.bind(resume) }),
+    resume: Object.freeze({ deps: Object.freeze({ ...resume.deps }), uses: resume.uses ? Object.freeze([...resume.uses]) : undefined, run: resume.run.bind(resume) }),
   });
   pointOrigins.set(fixed, originalCheckpointPoint(point));
   return fixed;

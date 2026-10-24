@@ -1,6 +1,8 @@
 import { isUndefined } from 'es-toolkit/predicate';
+import { randomUUID } from 'node:crypto';
 import type { ResourceActivity } from './activity.js';
 import { isNonBlankString } from '../value/string.js';
+import { resourceMethods, type ResourceMethodDeclarations, type ResourceMethods, type ResourceMethodsDeclaration, type ResourceMethodsSource } from './methods.js';
 
 export interface ResourceIdentity {
   readonly name: string;
@@ -28,7 +30,7 @@ export class ResourceRequest<Value> {
   }
 }
 export type ResourceRequests = Readonly<Record<string, ResourceRequest<unknown>>>;
-export type ResourcesOf<Requires extends ResourceRequests> = { readonly [Key in keyof Requires]: Requires[Key] extends ResourceRequest<infer Value> ? Value : never };
+export type ResourcesOf<Deps extends ResourceRequests> = { readonly [Key in keyof Deps]: Deps[Key] extends ResourceRequest<infer Value> ? Value : never };
 
 export interface ResourceProvider<Source> {
   readonly offer: ResourceIdentity;
@@ -65,7 +67,7 @@ export interface ResourceCapture<Source, Captured, Selection = never> {
 }
 
 /** The resource owns capture, its public endpoint, and the typed description of runtime use. */
-export class ResourceOffer<Source, Value, Captured = Source, Selection = never> {
+class ResourceOfferImplementation<Source, Value, Captured = Source, Selection = never> {
   readonly #identity: ResourceIdentity;
   readonly #expose: (captured: Captured, activity: ResourceActivity) => Value;
   readonly #options: ResourceCapture<Source, Captured, Selection>;
@@ -73,11 +75,14 @@ export class ResourceOffer<Source, Value, Captured = Source, Selection = never> 
 
   constructor(name: string, expose: (source: Source, activity: ResourceActivity) => Value, timing?: 'binding' | 'access', options?: ResourceCapture<Source, Source, Selection>);
   constructor(name: string, expose: (captured: Captured, activity: ResourceActivity) => Value, timing: 'binding' | 'access', options: ResourceCapture<Source, Captured, Selection> & { capture: (source: Source) => Captured });
-  constructor(name: string, expose: ((captured: Captured, activity: ResourceActivity) => Value) | ((source: Source, activity: ResourceActivity) => Value), timing: 'binding' | 'access' = 'access', options: ResourceCapture<Source, Captured, Selection> | ResourceCapture<Source, Source, Selection> = {}) {
+  constructor(declaration: ResourceMethodsDeclaration<ResourceMethodDeclarations>);
+  constructor(nameOrDeclaration: string | ResourceMethodsDeclaration<ResourceMethodDeclarations>, expose?: ((captured: Captured, activity: ResourceActivity) => Value) | ((source: Source, activity: ResourceActivity) => Value), timing: 'binding' | 'access' = 'access', options: ResourceCapture<Source, Captured, Selection> | ResourceCapture<Source, Source, Selection> = {}) {
+    const name = typeof nameOrDeclaration === 'string' ? nameOrDeclaration : (nameOrDeclaration.name ?? `resource:${randomUUID()}`);
     if (!isNonBlankString(name)) throw new TypeError('Resource access requires a stable name');
     this.#identity = Object.freeze({ name });
-    this.#expose = expose as (captured: Captured, activity: ResourceActivity) => Value;
-    this.#options = options as ResourceCapture<Source, Captured, Selection>;
+    this.#expose = (typeof nameOrDeclaration === 'string' ? expose : resourceMethods(nameOrDeclaration.methods, nameOrDeclaration.observation)) as (captured: Captured, activity: ResourceActivity) => Value;
+    if (!this.#expose) throw new TypeError('Resource access requires an endpoint declaration');
+    this.#options = (typeof nameOrDeclaration === 'string' ? options : { describe: nameOrDeclaration.observation?.source?.bind(nameOrDeclaration.observation) }) as ResourceCapture<Source, Captured, Selection>;
     this.timing = timing;
     Object.freeze(this);
   }
@@ -108,3 +113,12 @@ export class ResourceOffer<Source, Value, Captured = Source, Selection = never> 
     });
   }
 }
+
+/** The two constructor forms produce the same offer object; methods infer their complete endpoint type. */
+export type ResourceOffer<Source, Value, Captured = Source, Selection = never> = ResourceOfferImplementation<Source, Value, Captured, Selection>;
+export interface ResourceOfferConstructor {
+  new <const Methods extends ResourceMethodDeclarations>(declaration: ResourceMethodsDeclaration<Methods>): ResourceOffer<ResourceMethodsSource<Methods>, ResourceMethods<Methods>>;
+  new <Source, Value, Captured = Source, Selection = never>(name: string, expose: (source: Source, activity: ResourceActivity) => Value, timing?: 'binding' | 'access', options?: ResourceCapture<Source, Source, Selection>): ResourceOffer<Source, Value, Captured, Selection>;
+  new <Source, Value, Captured, Selection = never>(name: string, expose: (captured: Captured, activity: ResourceActivity) => Value, timing: 'binding' | 'access', options: ResourceCapture<Source, Captured, Selection> & { capture: (source: Source) => Captured }): ResourceOffer<Source, Value, Captured, Selection>;
+}
+export const ResourceOffer: ResourceOfferConstructor = ResourceOfferImplementation;

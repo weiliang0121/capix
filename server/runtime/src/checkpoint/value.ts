@@ -72,8 +72,8 @@ export function checkpointReference(child: CheckpointChild): CheckpointReference
 
 export function cloneCheckpointImage(value: unknown): CheckpointImage {
   const image: any = cloneCheckpointValue(value);
-  if (object(image) && Number.isSafeInteger(image.formatVersion) && image.formatVersion !== 4) throw new RuntimeError('CHECKPOINT_FORMAT_UNSUPPORTED', 'Only checkpoint formatVersion 4 is supported; historical content and records remain readable.', { formatVersion: image.formatVersion });
-  if (!object(image) || !text(image.id) || image.formatVersion !== 4 || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 4 is supported');
+  if (object(image) && Number.isSafeInteger(image.formatVersion) && image.formatVersion !== 5) throw new RuntimeError('CHECKPOINT_FORMAT_UNSUPPORTED', 'Only checkpoint formatVersion 5 is supported; historical content and records remain readable.', { formatVersion: image.formatVersion });
+  if (!object(image) || !text(image.id) || image.formatVersion !== 5 || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 5 is supported');
   const frame = image.frame;
   if (!object(frame) || !identity(frame.owner) || !integer(frame.round, 1) || frame.round > 2 || frame.phase !== 'execute' || !Object.hasOwn(frame, 'input') || !Object.hasOwn(frame, 'currentInput') || !integer(frame.nextChildOrder) || !Array.isArray(frame.children) || frame.children.length > 4096) fail('invalid frame');
   const ids = new Set<string>();
@@ -98,7 +98,15 @@ export function cloneCheckpointImage(value: unknown): CheckpointImage {
         if (checkpointReferenceChild(continuation.origin.child, frame.children) !== child) fail('reception failure is not the accepted continuation origin');
       }
     } else if (state.kind === 'failed') {
-      if (child.round >= frame.round || !progress(state.progress) || !object(state.error) || !text(state.error.code) || typeof state.error.message !== 'string' || !object(state.failure) || state.failure.kind !== 'exception' || state.failure.contextId !== child.identity.contextId || !text(state.failure.contract) || !['execute', 'receive', 'handling'].includes(state.failure.phase)) fail('invalid historical child failure');
+      if (state.reception !== undefined) {
+        const reception = state.reception;
+        // The delivery belongs to this direct child. Its diagnostic can retain a
+        // deeper fault's context ID; that ID never grants a child relationship.
+        if (!progress(state.progress) || !object(state.error) || !text(state.error.code) || typeof state.error.message !== 'string' || !object(state.failure) || !['error', 'exception'].includes(state.failure.kind) || !text(state.failure.contextId) || !['execute', 'receive', 'handling'].includes(state.failure.phase) || (state.failure.kind === 'exception' ? !text(state.failure.contract) : state.failure.contract !== undefined) || Object.hasOwn(state, 'output')) fail('invalid handled child failure');
+        if (!object(reception) || reception.kind !== 'handled' || Object.keys(reception).some((key) => !['kind', 'contract', 'output'].includes(key))) fail('invalid handled failure reception');
+        const receptionContract = reception.contract;
+        if (receptionContract !== undefined && (!object(receptionContract) || Object.keys(receptionContract).length !== 1 || !integer(receptionContract.position) || !Object.hasOwn(reception, 'output'))) fail('invalid handled reception contract');
+      } else if (child.round >= frame.round || !progress(state.progress) || !object(state.error) || !text(state.error.code) || typeof state.error.message !== 'string' || !object(state.failure) || state.failure.kind !== 'exception' || state.failure.contextId !== child.identity.contextId || !text(state.failure.contract) || !['execute', 'receive', 'handling'].includes(state.failure.phase)) fail('invalid historical child failure');
     } else fail('unsupported child state');
     ids.add(child.identity.contextId);
     previousOrder = child.order;

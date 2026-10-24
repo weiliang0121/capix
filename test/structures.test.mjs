@@ -10,11 +10,9 @@ test('constructors and setters configure the same callable objects without execu
   let calls = 0;
   const result = { answer: 42 };
   const definition = {
-    run: {
-      execute: () => {
-        calls++;
-        return result;
-      },
+    run: () => {
+      calls++;
+      return result;
     },
   };
   const direct = new Node(definition);
@@ -31,36 +29,36 @@ test('constructors and setters configure the same callable objects without execu
 test('local structures compose with add while each composite explicitly runs and accepts its children', async () => {
   const events = [];
   const leaf = new Node({
-    run: {
-      execute: (work) => {
-        events.push('node');
-        return work.input + 1;
-      },
+    run: (work) => {
+      events.push('node');
+      return work.input + 1;
     },
   });
-  const unused = new Node({ run: { execute: () => assert.fail('add must not schedule members') } });
+  const unused = new Node({ run: () => assert.fail('add must not schedule members') });
   const group = new Group();
   group.add(leaf, unused);
-  group.setRun({
-    uses: [leaf],
-    async execute(work) {
+  group.setRun(
+    async function (work) {
       events.push('group');
       const child = work.children.create(leaf, work.input);
       await child.run();
       return child.accept((value) => value * 2);
     },
-  });
+    undefined,
+    { uses: [leaf] },
+  );
   const scene = new Scene();
   scene.add(group);
-  scene.setRun({
-    uses: [group],
-    async execute(work) {
+  scene.setRun(
+    async function (work) {
       events.push('scene');
       const child = work.children.create(group, work.input);
       await child.run();
       return child.accept((value) => value + 3);
     },
-  });
+    undefined,
+    { uses: [group] },
+  );
   assert.deepEqual(events, []);
   const driver = new Driver();
   assert.equal(await driver.run(build(driver, scene), 4, {}), 13);
@@ -68,15 +66,14 @@ test('local structures compose with add while each composite explicitly runs and
 });
 
 test('the same business configuration produces independent child identities and persistent positions', async () => {
-  const config = { run: { execute: (work) => work.input } };
+  const config = { run: (work) => work.input };
   const left = new Node(config);
   const right = new Node(config);
   const group = new Group();
   group.add(left, right, left);
   assert.deepEqual(group.members, [left, right]);
-  group.setRun({
-    uses: [left, right],
-    async execute(work) {
+  group.setRun(
+    async function (work) {
       const a = work.children.create(left, 'left');
       const b = work.children.create(right, 'right');
       await Promise.all([a.run(), b.run()]);
@@ -86,7 +83,9 @@ test('the same business configuration produces independent child identities and 
       assert.equal(work.children.facts.list(right).length, 1);
       return [first, second];
     },
-  });
+    undefined,
+    { uses: [left, right] },
+  );
   const driver = new Driver();
   const bound = build(driver, group);
   assert.equal(bound, group);
@@ -96,43 +95,45 @@ test('the same business configuration produces independent child identities and 
 });
 
 test('same-signature objects remain distinct when validating a child reference', async () => {
-  const left = new Node({ run: { execute: () => 'left' } });
-  const right = new Node({ run: { execute: () => 'right' } });
+  const left = new Node({ run: () => 'left' });
+  const right = new Node({ run: () => 'right' });
   const group = new Group();
   group.add(left, right);
-  group.setRun({
-    uses: [left, right],
-    async execute(work) {
+  group.setRun(
+    async function (work) {
       const child = work.children.create(right, null);
       await child.run();
       return work.children.facts.require(left, child.ref);
     },
-  });
+    undefined,
+    { uses: [left, right] },
+  );
   const driver = new Driver();
   await assert.rejects(driver.run(build(driver, group), null, {}), /different declaration/);
 });
 
 test('successful build locks the whole structure while retaining its original identity', async () => {
-  const first = new Node({ run: { execute: (work) => `first:${work.input}` } });
-  const second = new Node({ run: { execute: (work) => `second:${work.input}` } });
+  const first = new Node({ run: (work) => `first:${work.input}` });
+  const second = new Node({ run: (work) => `second:${work.input}` });
   const group = new Group();
   group.add(first);
-  group.setRun({
-    uses: [first],
-    async execute(work) {
+  group.setRun(
+    async function (work) {
       const child = work.children.create(first, work.input);
       await child.run();
       return child.accept();
     },
-  });
+    undefined,
+    { uses: [first] },
+  );
   const driver = new Driver();
   const installed = build(driver, group);
   assert.equal(installed, group);
   assert.throws(() => group.add(second), /locked|built|build/i);
   assert.throws(() => group.add(first), /locked|built|build/i);
-  assert.throws(() => group.setRun({ execute: () => 'replacement' }), /locked|built|build/i);
-  assert.throws(() => group.setDefinition({ run: { execute: () => 'replacement' } }), /locked|built|build/i);
-  assert.throws(() => first.setRun({ execute: () => 'changed later' }), /locked|built|build/i);
+  assert.throws(() => group.setRun(() => 'replacement'), /locked|built|build/i);
+  assert.throws(() => group.setDefinition({ run: () => 'replacement' }), /locked|built|build/i);
+  assert.throws(() => first.setRun(() => 'changed later'), /locked|built|build/i);
   assert.throws(() => {
     group.members = [second];
   }, TypeError);
@@ -146,7 +147,7 @@ test('successful build locks the whole structure while retaining its original id
   assert.equal(callableConstruction(installed).binding.children.definitions().length, 1);
   assert.throws(() => build(driver, group), /built|build|install|locked/i);
   assert.throws(() => build(new Driver(), group), /built|build|install|locked/i);
-  const another = new Group({ run: { execute: () => null } });
+  const another = new Group({ run: () => null });
   assert.doesNotThrow(() => another.add(second));
 });
 
@@ -154,8 +155,8 @@ test('configuration replacement before build selects the final resource contract
   const oldOffer = new ResourceOffer('structures.old', (value) => value);
   const newOffer = new ResourceOffer('structures.new', (value) => value);
   const node = new Node();
-  node.setRun({ requires: { old: oldOffer.request() }, execute: (work) => work.resources.old });
-  node.setRun({ requires: { next: newOffer.request() }, execute: (work) => work.resources.next });
+  node.setRun((work) => work.resources.old, { old: oldOffer.request() });
+  node.setRun((work) => work.resources.next, { next: newOffer.request() });
   const driver = new Driver();
   assert.throws(() => build(driver, node, [oldOffer.provide(() => 'old')]), /resource provider/);
   const ready = build(driver, node, [newOffer.provide(() => 'new')]);
@@ -163,18 +164,19 @@ test('configuration replacement before build selects the final resource contract
 });
 
 test('setDefinition replaces optional business mechanisms while preserving add membership', async () => {
-  const child = new Node({ run: { execute: () => null } });
-  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { execute: () => null } });
+  const child = new Node({ run: () => null });
+  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { run: () => null } });
   const group = new Group({
     name: 'old',
     maxRounds: 2,
     checkpoint: { key: 'structures.old', version: 1, input: codec, output: codec, points: [point] },
     observation: [],
     output: { result: (value) => value, delta: (value) => value },
-    run: { execute: () => 'old', accept: (work) => work.delivered },
+    run: () => 'old',
+    accept: (work) => work.delivered,
   });
   group.add(child);
-  group.setDefinition({ run: { execute: () => 'new' } });
+  group.setDefinition({ run: () => 'new' });
   assert.deepEqual(group.members, [child]);
   assert.equal(group.name, undefined);
   assert.equal(group.checkpoint, undefined);
@@ -194,9 +196,9 @@ test('constructor and setter preserve business receivers without freezing the ho
       return this.count + work.input;
     },
   };
-  const constructor = new Node({ run: handler });
+  const constructor = new Node({ run: handler.execute.bind(handler) });
   const setter = new Node();
-  setter.setRun(handler);
+  setter.setRun(handler.execute.bind(handler));
   const driver = new Driver();
   const a = build(driver, constructor);
   const b = build(driver, setter);
@@ -210,9 +212,9 @@ test('constructor and setter preserve business receivers without freezing the ho
 test('unconfigured structures and uses outside the added members fail before execution', () => {
   const driver = new Driver();
   assert.throws(() => build(driver, new Node()), /execute|run|configured|definition/i);
-  const child = new Node({ run: { execute: () => 'never' } });
+  const child = new Node({ run: () => 'never' });
   const group = new Group();
-  group.setRun({ uses: [child], execute: () => 'never' });
+  group.setRun(() => 'never', undefined, { uses: [child] });
   assert.throws(() => build(driver, group), /outside|member/i);
   group.add(child);
   assert.doesNotThrow(() => build(driver, group));
@@ -220,22 +222,22 @@ test('unconfigured structures and uses outside the added members fail before exe
 
 test('setRun replaces a subclass field without keeping a second hidden definition', async () => {
   class Custom extends Node {
-    run = { requires: {}, execute: () => 'original' };
+    run = { deps: {}, execute: () => 'original' };
   }
   const node = new Custom();
   const driver = new Driver();
-  node.setRun({ execute: () => 'replacement' });
+  node.setRun(() => 'replacement');
   const installed = build(driver, node);
   assert.equal(installed, node);
   assert.equal(await driver.run(installed, null, {}), 'replacement');
-  assert.throws(() => node.setRun({ execute: () => 'too late' }), /locked|built|build/i);
+  assert.throws(() => node.setRun(() => 'too late'), /locked|built|build/i);
 });
 
 test('invalid replacement leaves the previously configured stage and metadata intact', async () => {
-  const node = new Node({ name: 'original', run: { execute: () => 'original' } });
-  assert.throws(() => node.setRun({ execute: null }), /execute/);
-  assert.throws(() => node.setDefinition({ name: 'replacement', run: { execute: () => 'replacement' }, exceptions: { accepts: [], handle: null } }), /exceptions|handle/);
-  assert.throws(() => node.setDefinition({ kind: 'group', run: { execute: () => null } }), /kind/);
+  const node = new Node({ name: 'original', run: () => 'original' });
+  assert.throws(() => node.setRun(null), /run|function/);
+  assert.throws(() => node.setDefinition({ name: 'replacement', run: () => 'replacement', exceptions: { accepts: [], handle: null } }), /exceptions|handle/);
+  assert.throws(() => node.setDefinition({ kind: 'group', run: () => null }), /kind/);
   assert.equal(node.kind, 'node');
   assert.equal(node.name, 'original');
   const driver = new Driver();
@@ -243,30 +245,30 @@ test('invalid replacement leaves the previously configured stage and metadata in
 });
 
 test('add rejects invalid membership and cycles without partially installing an argument list', () => {
-  const node = new Node({ run: { execute: () => null } });
-  const scene = new Scene({ run: { execute: () => null } });
-  const group = new Group({ run: { execute: () => null } });
+  const node = new Node({ run: () => null });
+  const scene = new Scene({ run: () => null });
+  const group = new Group({ run: () => null });
   assert.equal(node.add, undefined);
   assert.throws(() => group.add(node, scene), /member|kind|scene/i);
   assert.deepEqual(group.members, []);
   assert.throws(() => group.add(group), /cyclic|cycle|itself/i);
-  const child = new Group({ run: { execute: () => null } });
+  const child = new Group({ run: () => null });
   group.add(child);
   assert.throws(() => child.add(group), /cyclic|cycle/i);
   assert.deepEqual(child.members, []);
 });
 
 test('a member has one structural parent and a failed batch claims none of its free members', () => {
-  const member = new Node({ run: { execute: () => null } });
-  const free = new Node({ run: { execute: () => null } });
-  const first = new Group({ run: { execute: () => null } });
-  const second = new Group({ run: { execute: () => null } });
+  const member = new Node({ run: () => null });
+  const free = new Node({ run: () => null });
+  const first = new Group({ run: () => null });
+  const second = new Group({ run: () => null });
   first.add(member, member);
   first.add(member);
   assert.deepEqual(first.members, [member]);
   assert.throws(() => second.add(free, member), /parent/i);
   assert.deepEqual(second.members, []);
-  const third = new Group({ run: { execute: () => null } });
+  const third = new Group({ run: () => null });
   third.add(free);
   assert.deepEqual(third.members, [free]);
   assert.throws(() => {
@@ -275,12 +277,12 @@ test('a member has one structural parent and a failed batch claims none of its f
 });
 
 test('a nested group cannot acquire another parent while its member ownership stays intact', () => {
-  const node = new Node({ run: { execute: () => null } });
-  const nested = new Group({ run: { execute: () => null } });
+  const node = new Node({ run: () => null });
+  const nested = new Group({ run: () => null });
   nested.add(node);
-  const scene = new Scene({ run: { execute: () => null } });
+  const scene = new Scene({ run: () => null });
   scene.add(nested);
-  const other = new Scene({ run: { execute: () => null } });
+  const other = new Scene({ run: () => null });
   assert.throws(() => other.add(nested), /parent/i);
   assert.throws(() => other.add(node), /parent/i);
   assert.deepEqual(scene.members, [nested]);
@@ -289,9 +291,9 @@ test('a nested group cannot acquire another parent while its member ownership st
 });
 
 test('a prototype clone cannot inherit the configuration identity of another structure', () => {
-  const original = new Node({ run: { execute: () => null } });
+  const original = new Node({ run: () => null });
   const forged = Object.create(original);
-  const group = new Group({ run: { execute: () => null } });
+  const group = new Group({ run: () => null });
   assert.throws(() => group.add(forged), /initialized|configuration/i);
   assert.deepEqual(group.members, []);
   assert.throws(() => build(new Driver(), forged), /initialized|configuration/i);
@@ -299,13 +301,13 @@ test('a prototype clone cannot inherit the configuration identity of another str
 });
 
 test('a rejected proxy does not claim membership or reserve the real structure for construction', async () => {
-  const original = new Node({ run: { execute: () => 'original' } });
+  const original = new Node({ run: () => 'original' });
   const proxy = new Proxy(original, {});
-  const first = new Node({ run: { execute: () => 'first' } });
-  const group = new Group({ run: { execute: () => null } });
+  const first = new Node({ run: () => 'first' });
+  const group = new Group({ run: () => null });
   assert.throws(() => group.add(first, proxy), /proxies/i);
   assert.deepEqual(group.members, []);
-  const other = new Group({ run: { execute: () => null } });
+  const other = new Group({ run: () => null });
   assert.doesNotThrow(() => other.add(first));
   const driver = new Driver();
   assert.throws(() => build(driver, proxy), /proxies/i);
@@ -314,13 +316,13 @@ test('a rejected proxy does not claim membership or reserve the real structure f
 });
 
 test('a nonconfigurable members accessor cannot leave a partly installed structure tree', () => {
-  const child = new Node({ run: { execute: () => null } });
-  const group = new Group({ run: { execute: () => null } }).add(child);
+  const child = new Node({ run: () => null });
+  const group = new Group({ run: () => null }).add(child);
   Object.defineProperty(group, 'members', { get: () => [child], configurable: false });
   assert.throws(() => build(new Driver(), group), /members.*fixed|fixed.*members/i);
   assert.throws(() => callableConstruction(group), /not been built/);
   assert.throws(() => callableConstruction(child), /not been built/);
-  assert.doesNotThrow(() => child.setRun({ execute: () => 'still configurable' }));
+  assert.doesNotThrow(() => child.setRun(() => 'still configurable'));
 });
 
 test('a low-level Builder fixes selected mechanisms without freezing provider state', async () => {
@@ -344,14 +346,12 @@ test('a low-level Builder fixes selected mechanisms without freezing provider st
   const checkpoints = { store, observation: observed };
   const capabilities = { checkpoints, observations };
   const builder = new CallableBuilder(capabilities);
-  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { execute: (_work, state) => state } });
+  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { run: (_work, state) => state } });
   const node = new Node({
     checkpoint: { key: 'structures.mechanisms', version: 1, input: codec, output: codec, points: [point] },
-    run: {
-      execute(work) {
-        work.checkpoint.save(point, 'result', {});
-        return 'result';
-      },
+    run(work) {
+      work.checkpoint({ point: point, state: 'result', refs: {} });
+      return 'result';
     },
   });
   const ready = builder.build(node, { providers: [], source: { capture: () => null } });
@@ -372,46 +372,45 @@ test('a low-level Builder fixes selected mechanisms without freezing provider st
 });
 
 test('an already built root cannot be adopted by an unbuilt parent', () => {
-  const node = new Node({ run: { execute: () => null } });
+  const node = new Node({ run: () => null });
   build(new Driver(), node);
-  const group = new Group({ run: { execute: () => null } });
+  const group = new Group({ run: () => null });
   assert.throws(() => group.add(node), /built|build|parent/i);
   assert.deepEqual(group.members, []);
 });
 
 test('a failed build leaves the entire structure configurable and permits a later successful build', async () => {
-  const first = new Node({ run: { execute: () => 'original' } });
+  const first = new Node({ run: () => 'original' });
   const missing = new Node();
-  const group = new Group({ run: { execute: () => 'group' } });
+  const group = new Group({ run: () => 'group' });
   group.add(first, missing);
   const driver = new Driver();
   assert.throws(() => build(driver, group), /execute|run|configured|definition/i);
-  first.setRun({ execute: () => 'updated' });
-  missing.setRun({ execute: () => 'configured' });
-  group.setRun({
-    uses: [first, missing],
-    async execute(work) {
+  first.setRun(() => 'updated');
+  missing.setRun(() => 'configured');
+  group.setRun(
+    async function (work) {
       const calls = [work.children.create(first, null), work.children.create(missing, null)];
       await Promise.all(calls.map((call) => call.run()));
       return Promise.all(calls.map((call) => call.accept()));
     },
-  });
+    undefined,
+    { uses: [first, missing] },
+  );
   assert.deepEqual(await driver.run(build(driver, group), null, {}), ['updated', 'configured']);
 });
 
 test('binding hooks cannot edit or recursively build the reserved structure tree', async () => {
-  const child = new Node({ run: { execute: () => 'original' } });
-  const extra = new Node({ run: { execute: () => 'extra' } });
+  const child = new Node({ run: () => 'original' });
+  const extra = new Node({ run: () => 'extra' });
   const group = new Group({
-    run: {
-      async execute(work) {
-        const call = work.children.create(child, null);
-        await call.run();
-        return call.accept();
-      },
+    async run(work) {
+      const call = work.children.create(child, null);
+      await call.run();
+      return call.accept();
     },
   }).add(child);
-  const other = new Group({ run: { execute: () => null } });
+  const other = new Group({ run: () => null });
   let checks = 0;
   const driver = new Driver({
     observations: [
@@ -420,8 +419,8 @@ test('binding hooks cannot edit or recursively build the reserved structure tree
           if (structure !== group) return;
           checks++;
           assert.throws(() => group.add(extra), /building|build/i);
-          assert.throws(() => child.setRun({ execute: () => 'replacement' }), /building|build/i);
-          assert.throws(() => child.setDefinition({ run: { execute: () => 'replacement' } }), /building|build/i);
+          assert.throws(() => child.setRun(() => 'replacement'), /building|build/i);
+          assert.throws(() => child.setDefinition({ run: () => 'replacement' }), /building|build/i);
           assert.throws(() => other.add(child), /building|build/i);
           assert.throws(() => build(driver, group), /building|build/i);
         },
@@ -439,8 +438,8 @@ test('binding hooks cannot edit or recursively build the reserved structure tree
 test('a failed host binding hook releases building reservations on every descendant', async () => {
   const failure = new Error('binding validation failed');
   let fail = true;
-  const child = new Node({ run: { execute: () => 'original' } });
-  const group = new Group({ run: { execute: () => 'group' } }).add(child);
+  const child = new Node({ run: () => 'original' });
+  const group = new Group({ run: () => 'group' }).add(child);
   const driver = new Driver({
     observations: [
       {
@@ -457,13 +456,11 @@ test('a failed host binding hook releases building reservations on every descend
   );
   assert.throws(() => callableConstruction(group), /not been built/);
   assert.throws(() => callableConstruction(child), /not been built/);
-  child.setRun({ execute: () => 'repaired' });
-  group.setRun({
-    async execute(work) {
-      const call = work.children.create(child, null);
-      await call.run();
-      return call.accept();
-    },
+  child.setRun(() => 'repaired');
+  group.setRun(async function (work) {
+    const call = work.children.create(child, null);
+    await call.run();
+    return call.accept();
   });
   fail = false;
   assert.equal(await driver.run(build(driver, group), null, {}), 'repaired');
@@ -471,8 +468,8 @@ test('a failed host binding hook releases building reservations on every descend
 
 test('direct configuration mutation by a binding hook rejects the build before installation', async () => {
   let mutate = true;
-  const child = new Node({ name: 'original', run: { execute: () => 'child' } });
-  const group = new Group({ run: { execute: () => 'group' } }).add(child);
+  const child = new Node({ name: 'original', run: () => 'child' });
+  const group = new Group({ run: () => 'group' }).add(child);
   const driver = new Driver({
     observations: [
       {
@@ -487,7 +484,7 @@ test('direct configuration mutation by a binding hook rejects the build before i
   assert.throws(() => callableConstruction(group), /not been built/);
   assert.throws(() => callableConstruction(child), /not been built/);
   mutate = false;
-  child.setDefinition({ name: 'repaired', run: { execute: () => 'child' } });
+  child.setDefinition({ name: 'repaired', run: () => 'child' });
   assert.equal(await driver.run(build(driver, group), null, {}), 'group');
 });
 
@@ -498,14 +495,12 @@ test('binding hooks cannot rewrite an already resolved nested entry while its bu
       return `original:${this.suffix}`;
     },
   };
-  const child = new Node({ run: handler });
+  const child = new Node({ run: handler.execute.bind(handler) });
   const group = new Group({
-    run: {
-      async execute(work) {
-        const call = work.children.create(child, null);
-        await call.run();
-        return call.accept();
-      },
+    async run(work) {
+      const call = work.children.create(child, null);
+      await call.run();
+      return call.accept();
     },
   }).add(child);
   const driver = new Driver({
@@ -528,7 +523,7 @@ test('binding hooks cannot rewrite an already resolved nested entry while its bu
 
 test('factory configuration reads inherited getters and keeps the same concrete author objects', async () => {
   const { defineGroup } = await import('@capix/server-runtime');
-  const child = new Node({ run: { execute: (work) => work.input + 1 } });
+  const child = new Node({ run: (work) => work.input + 1 });
   const handler = {
     offset: 10,
     uses: [child],
@@ -545,8 +540,11 @@ test('factory configuration reads inherited getters and keeps the same concrete 
     get members() {
       return [child];
     }
+    get uses() {
+      return handler.uses;
+    }
     get run() {
-      return handler;
+      return handler.execute.bind(handler);
     }
   }
   const group = defineGroup()(new Configuration());

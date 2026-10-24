@@ -5,11 +5,11 @@ import { Invocation, InvocationContext, InvocationChangeEmitter, ResourceBinding
 function call({ observe, failure, work, parent, declarations, resources, capture, installations = [] } = {}) {
   const context = new InvocationContext({ mutable: new Map() });
   const identity = { contextId: context.id, kind: 'node', ...(parent ? { parentContextId: parent.context.id } : {}) };
-  return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { maxRounds: 1, execute: () => 'output', ...work }, observation: bindInvocationObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ requires: {}, observe: observe ?? (() => undefined) }, { failure })] }, installations, parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
+  return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { maxRounds: 1, execute: () => 'output', ...work }, observation: bindInvocationObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ deps: {}, observe: observe ?? (() => undefined) }, { failure })] }, installations, parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
 }
 
 function observer(observe, failure) {
-  return defineObservation({ requires: {}, observe }, { failure });
+  return defineObservation({ deps: {}, observe }, { failure });
 }
 
 test('isolated observer stops once while a healthy observer receives all actual call facts', async () => {
@@ -163,7 +163,7 @@ test('formal observation ports expire after each synchronous callback; asynchron
     resources,
     declarations: [
       defineObservation({
-        requires: requirements,
+        deps: requirements,
         observe(_fact, ports) {
           retained = ports.writer;
           retained.write();
@@ -195,11 +195,11 @@ test('one observation declaration gives each call its own first start and synchr
     },
     'binding',
   );
-  const requires = { reader: offer.request() };
-  const resources = bindResources(requires, [offer.provide(() => 'shared supply')])(undefined);
+  const deps = { reader: offer.request() };
+  const resources = bindResources(deps, [offer.provide(() => 'shared supply')])(undefined);
   const declaration = defineObservation(
     {
-      requires,
+      deps,
       observe(fact, ports) {
         const contextId = fact.identity.contextId;
         for (const [otherId, endpoint] of retained) {
@@ -233,12 +233,12 @@ test('observation declaration fixes its requested resource aliases before bindin
     },
   }));
   const replacement = new ResourceOffer('test.replacement-observation', () => assert.fail('replacement must not be exposed'));
-  const requires = { reader: approved.request() };
-  const request = requires.reader;
+  const deps = { reader: approved.request() };
+  const request = deps.reader;
   let retained;
   let observed = 0;
   const definition = {
-    requires,
+    deps,
     observe(_fact, ports) {
       retained = ports.reader;
       observed++;
@@ -247,13 +247,13 @@ test('observation declaration fixes its requested resource aliases before bindin
     },
   };
   const declaration = defineObservation(definition, { failure: 'propagate' });
-  requires.reader = replacement.request();
-  requires.extra = replacement.request();
-  definition.requires = { replacement: replacement.request() };
+  deps.reader = replacement.request();
+  deps.extra = replacement.request();
+  definition.deps = { replacement: replacement.request() };
   assert.ok(Object.isFrozen(declaration));
-  assert.ok(Object.isFrozen(declaration.requires));
-  assert.notEqual(declaration.requires, requires);
-  assert.deepEqual(declaration.requires, { reader: request });
+  assert.ok(Object.isFrozen(declaration.deps));
+  assert.notEqual(declaration.deps, deps);
+  assert.deepEqual(declaration.deps, { reader: request });
   const resources = bindResources({ approved: approved.request(), replacement: replacement.request() }, [approved.provide(() => 'approved'), replacement.provide(() => null)])(undefined);
   assert.equal(await call({ resources, declarations: [declaration] }).run(), 'output');
   assert.equal(observed, 5);
@@ -300,7 +300,7 @@ test('failed installed observation is skipped with its dependent declarations in
   };
   const declarations = [
     defineObservation({
-      requires: { writer: writer.request() },
+      deps: { writer: writer.request() },
       observe(fact, ports) {
         if (fact.kind === 'started') ports.writer.write();
       },
@@ -378,11 +378,9 @@ test('Runtime structure facts have their own order and failed acquisition report
   let calls = 0;
   const bound = driver.build(
     defineNode()({
-      run: {
-        execute: () => {
-          calls++;
-          return 'next';
-        },
+      run: () => {
+        calls++;
+        return 'next';
       },
     }),
     { providers: [], source: { capture: () => null } },

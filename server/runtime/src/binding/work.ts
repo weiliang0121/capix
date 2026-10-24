@@ -53,13 +53,13 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
 
   async execute(_context: Context, invocation: Invocation<Input, Output, Context>) {
     const run = this.declaration.run;
-    const access = this.accessFor(invocation).enter('run', run.requires, run.uses);
+    const access = this.accessFor(invocation).enter('run', run.deps, run.uses);
     return authorOutput(await run.execute(this.executionWork(invocation, access) as never));
   }
 
   private async receive(_context: Context, output: Output, invocation: Invocation<Input, Output, Context>) {
     const run = this.declaration.run;
-    const access = this.accessFor(invocation).enter('receive', run.requires, run.uses);
+    const access = this.accessFor(invocation).enter('receive', run.deps, run.uses);
     const proposals = new WeakMap<AcceptanceProposal, Continuation<Input>>();
     const work = Object.freeze({
       ...access.base,
@@ -84,7 +84,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
 
   private async handle(_context: Context, exception: DeclaredException, invocation: Invocation<Input, Output, Context>) {
     const exceptions = this.declaration.exceptions!;
-    const access = this.accessFor(invocation).enter('exceptions', exceptions.requires, exceptions.uses ?? []);
+    const access = this.accessFor(invocation).enter('exceptions', exceptions.deps, exceptions.uses ?? []);
     const proposals = new WeakMap<Resolution<Input, Output>, InvocationResolution<Input, Output>>();
     const issue = (value: InvocationResolution<Input, Output>): Resolution<Input, Output> => {
       access.validate();
@@ -103,11 +103,11 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
   }
 
   private async resume(point: InvocationCheckpointPoint<Input, Output, Kind, any, any, any, any, any>, invocation: Invocation<Input, Output, Context>, state: unknown, references: CheckpointReferences) {
-    const access = this.accessFor(invocation).enter(`checkpoint:${point.name}`, point.resume.requires, point.resume.uses ?? []);
+    const access = this.accessFor(invocation).enter(`checkpoint:${point.name}`, point.resume.deps, point.resume.uses ?? []);
     const registry = this.accessFor(invocation).references;
     const saved = Object.freeze(Object.fromEntries(Object.entries(references).map(([name, value]) => [name, Array.isArray(value) ? Object.freeze(value.map((ref) => registry.fromSaved(ref))) : registry.fromSaved(value as CheckpointReference)])));
     try {
-      return authorOutput(await point.resume.execute(this.executionWork(invocation, access) as never, state, saved as import('../definition/checkpoint.js').SavedReferences<any>));
+      return authorOutput(await point.resume.run(this.executionWork(invocation, access) as never, state, saved as import('../definition/checkpoint.js').SavedReferences<any>));
     } finally {
       invocation.sealOutput();
       const settling = invocation.children.settleAcceptances();
@@ -124,20 +124,18 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
   private executionWork(invocation: Invocation<Input, Output, Context>, access: ReturnType<InvocationAccess<Input, Output, Context>['enter']>) {
     const writer = invocation.checkpointWriter;
     const checkpoint = writer
-      ? Object.freeze({
-          save: (point: object, state: unknown, refs: Readonly<Record<string, ChildReference | readonly ChildReference[]>>) => {
-            try {
-              access.validate();
-              const registered = this.declaration.checkpoint?.points.find((candidate) => originalCheckpointPoint(candidate) === originalCheckpointPoint(point));
-              if (!registered) throw new Error('Checkpoint point is not registered on this declaration');
-              const registry = this.accessFor(invocation).references;
-              const references = Object.fromEntries(Object.entries(refs).map(([name, value]) => [name, Array.isArray(value) ? value.map((ref) => registry.encode(ref)) : registry.encode(value as ChildReference)]));
-              writer.save(registered.name, state, references);
-            } catch (error) {
-              invocation.reject(error);
-              throw error;
-            }
-          },
+      ? Object.freeze((options: { readonly point: object; readonly state: unknown; readonly refs?: Readonly<Record<string, ChildReference | readonly ChildReference[]>> }) => {
+          try {
+            access.validate();
+            const registered = this.declaration.checkpoint?.points.find((candidate) => originalCheckpointPoint(candidate) === originalCheckpointPoint(options.point));
+            if (!registered) throw new Error('Checkpoint point is not registered on this declaration');
+            const registry = this.accessFor(invocation).references;
+            const references = Object.fromEntries(Object.entries(options.refs ?? {}).map(([name, value]) => [name, Array.isArray(value) ? value.map((ref) => registry.encode(ref)) : registry.encode(value as ChildReference)]));
+            writer.save(registered.name, options.state, references);
+          } catch (error) {
+            invocation.reject(error);
+            throw error;
+          }
         })
       : undefined;
     const output = this.declaration.output?.delta ? invocation.outputWriter : undefined;

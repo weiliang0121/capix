@@ -12,7 +12,7 @@ test('record installation owns the long-lived result while BoundRuntime owns no 
   const recorder = new Recorder(new RecordBook());
   const recording = bindRecording(recorder);
   const capabilities = { observations: [recording] };
-  const runtime = installCallable(defineScene()({ run: { execute: () => undefined } }), { providers: [], source: { capture: () => null }, ...capabilities });
+  const runtime = installCallable(defineScene()({ run: () => undefined }), { providers: [], source: { capture: () => null }, ...capabilities });
   assert.equal(runtime.context, undefined);
   assert.equal(runtime.record, undefined);
   assert.equal(runtime.recorder, undefined);

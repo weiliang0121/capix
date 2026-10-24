@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CallableKind } from '@capix/protocol';
 import { initializeStructureConfiguration, assertStructureConfigurable } from './configuration.js';
-import type { CallableDescription, CallableDefinition, EmptyResources, InferredCallableDefinition, InferredRunDefinition, InvocationExceptionDefinition, InvocationRunDefinition, StageAllowed, StageUses } from '../definition/callable.js';
+import type { CallableDescription, CallableDefinition, CallableRun, CallableRunOptions, EmptyResources, InferredCallableDefinition, InvocationExceptionDefinition, InvocationRunDefinition, StageAllowed, StageUses } from '../definition/callable.js';
 import type { ChildContractsOf } from '../definition/children.js';
 import type { invocationSignature, InvocationSignature } from '../definition/signature.js';
 import type { ResourceRequests, ResourcesOf } from '../resource/offer.js';
@@ -9,17 +9,22 @@ import type { ExecuteWork, AcceptWork, Continue, HandleWork, Resolution } from '
 import type { ExceptionContract } from '../exception/contract.js';
 
 type RunConfiguration<Input, Output, Kind extends CallableKind, Resources extends object, Allowed extends ChildContractsOf<Kind>, Delta> = {
-  readonly requires?: ResourceRequests;
+  readonly deps?: ResourceRequests;
   readonly uses?: readonly ChildContractsOf<Kind>[];
   readonly execute: (work: ExecuteWork<Kind, Input, Output, Resources, Allowed, Delta>) => Output | Promise<Output>;
   readonly accept?: (work: AcceptWork<Kind, Input, Output, Resources, Allowed>) => Output | Continue<Input> | Promise<Output | Continue<Input>>;
 };
 type ExceptionConfiguration<Input, Output, Kind extends CallableKind, Resources extends object, Allowed extends ChildContractsOf<Kind>> = {
-  readonly requires?: ResourceRequests;
+  readonly deps?: ResourceRequests;
   readonly uses?: readonly ChildContractsOf<Kind>[];
   readonly accepts: readonly ExceptionContract<unknown>[];
   readonly handle: (work: HandleWork<Kind, Input, Output, Resources, Allowed>) => Resolution<Input, Output> | Promise<Resolution<Input, Output>>;
 };
+
+type RunArguments<Deps extends ResourceRequests, Options> = [keyof Deps] extends [never] ? [deps?: Deps, options?: Options] : [deps: Deps, options?: Options];
+
+/** Heterogeneous registration reads configuration, never another object's author setters. */
+export type CallableStructure<Kind extends CallableKind> = Omit<Callable<any, any, Kind, any>, 'setRun' | 'setDefinition'>;
 
 /** Author object identity is stable; individual declaration phases can be replaced before binding. */
 export abstract class Callable<Input, Output, Kind extends CallableKind, Delta = never> {
@@ -46,18 +51,21 @@ export abstract class Callable<Input, Output, Kind extends CallableKind, Delta =
     Object.defineProperty(this, 'kind', { value: kind, enumerable: true, writable: false, configurable: false });
   }
 
-  setRun<const Requires extends ResourceRequests = EmptyResources, const Uses extends StageUses<Kind> = undefined>(run: InferredRunDefinition<Input, Output, Kind, Requires, Uses, Delta>): this {
+  /** A bare function becomes this structure's method; bound functions retain their receiver. */
+  setRun<const Deps extends ResourceRequests = EmptyResources, const Uses extends StageUses<Kind> = undefined>(run: CallableRun<Input, Output, Kind, ResourcesOf<NoInfer<Deps>>, StageAllowed<Kind, Uses>, Delta, this>, ...configuration: RunArguments<Deps, CallableRunOptions<Input, Output, Kind, ResourcesOf<NoInfer<Deps>>, Uses, this>>): this;
+  setRun<const Deps extends ResourceRequests = EmptyResources, const Uses extends StageUses<Kind> = undefined>(run: CallableRun<Input, Output, Kind, ResourcesOf<Deps>, StageAllowed<Kind, Uses>, Delta>, deps?: Deps, options?: CallableRunOptions<Input, Output, Kind, ResourcesOf<Deps>, Uses>): this {
     assertStructureConfigurable(this);
-    const next = normalizeRun<Input, Output, Kind, ResourcesOf<Requires>, StageAllowed<Kind, Uses>, Delta>(run);
+    if (typeof run !== 'function') throw new TypeError('Callable run must be a function');
+    const next = normalizeRun<Input, Output, Kind, ResourcesOf<Deps>, StageAllowed<Kind, Uses>, Delta>({ deps, uses: options?.uses, execute: run.bind(this), accept: options?.accept?.bind(this) });
     this.run = next;
     return this;
   }
 
-  setDefinition<const Requires extends ResourceRequests = EmptyResources, const Uses extends StageUses<Kind> = undefined, const ExceptionRequires extends ResourceRequests = EmptyResources, const ExceptionUses extends StageUses<Kind> = readonly []>(definition: InferredCallableDefinition<Input, Output, Kind, Requires, Uses, ExceptionRequires, ExceptionUses, Delta>): this {
+  setDefinition<const Deps extends ResourceRequests = EmptyResources, const Uses extends StageUses<Kind> = undefined, const ExceptionDeps extends ResourceRequests = EmptyResources, const ExceptionUses extends StageUses<Kind> = readonly []>(definition: InferredCallableDefinition<Input, Output, Kind, Deps, Uses, ExceptionDeps, ExceptionUses, Delta>): this {
     assertStructureConfigurable(this);
     checkDefinition(definition);
-    const run = normalizeRun<Input, Output, Kind, ResourcesOf<Requires>, StageAllowed<Kind, Uses>, Delta>(definition.run);
-    const exceptions = definition.exceptions ? normalizeExceptions<Input, Output, Kind, ResourcesOf<ExceptionRequires>, ExceptionUses extends readonly ChildContractsOf<Kind>[] ? ExceptionUses[number] : never>(definition.exceptions) : undefined;
+    const run = normalizeDefinitionRun<Input, Output, Kind, ResourcesOf<Deps>, StageAllowed<Kind, Uses>, Delta>(definition);
+    const exceptions = definition.exceptions ? normalizeExceptions<Input, Output, Kind, ResourcesOf<ExceptionDeps>, ExceptionUses extends readonly ChildContractsOf<Kind>[] ? ExceptionUses[number] : never>(definition.exceptions) : undefined;
     this.replaceDefinition(definition, run, exceptions);
     return this;
   }
@@ -65,7 +73,7 @@ export abstract class Callable<Input, Output, Kind extends CallableKind, Delta =
   protected configure<Resources extends object, ExceptionResources extends object>(definition: CallableDefinition<Input, Output, Kind, Resources, ExceptionResources, Delta>): void {
     assertStructureConfigurable(this);
     checkDefinition(definition);
-    const run = normalizeRun<Input, Output, Kind, Resources, ChildContractsOf<Kind>, Delta>(definition.run);
+    const run = normalizeDefinitionRun<Input, Output, Kind, Resources, ChildContractsOf<Kind>, Delta>(definition);
     const exceptions = definition.exceptions ? normalizeExceptions<Input, Output, Kind, ExceptionResources, ChildContractsOf<Kind>>(definition.exceptions) : undefined;
     this.replaceDefinition(definition, run, exceptions);
   }
@@ -110,10 +118,16 @@ function checkDefinition(definition: { readonly maxRounds?: 1 | 2 }): void {
 function normalizeRun<Input, Output, Kind extends CallableKind, Resources extends object, Allowed extends ChildContractsOf<Kind>, Delta>(run: RunConfiguration<Input, Output, Kind, Resources, Allowed, Delta>): InvocationRunDefinition<Input, Output, Kind, object, Delta> {
   if (!run || typeof run.execute !== 'function') throw new TypeError('Callable run requires execute');
   if (run.accept !== undefined && typeof run.accept !== 'function') throw new TypeError('Callable accept must be a function');
-  return { requires: run.requires ?? {}, uses: run.uses, execute: run.execute.bind(run), ...(run.accept ? { accept: run.accept.bind(run) } : {}) };
+  return { deps: run.deps ?? {}, uses: run.uses, execute: run.execute.bind(run), ...(run.accept ? { accept: run.accept.bind(run) } : {}) };
+}
+
+/** Flat author configuration keeps its own receiver; the mechanism sees one fixed stage. */
+function normalizeDefinitionRun<Input, Output, Kind extends CallableKind, Resources extends object, Allowed extends ChildContractsOf<Kind>, Delta>(definition: { readonly deps?: ResourceRequests; readonly uses?: readonly ChildContractsOf<Kind>[]; readonly run: CallableRun<Input, Output, Kind, Resources, Allowed, Delta>; readonly accept?: (work: AcceptWork<Kind, Input, Output, Resources, Allowed>) => Output | Continue<Input> | Promise<Output | Continue<Input>> }): InvocationRunDefinition<Input, Output, Kind, object, Delta> {
+  if (typeof definition.run !== 'function') throw new TypeError('Callable run must be a function');
+  return normalizeRun({ deps: definition.deps, uses: definition.uses, execute: definition.run.bind(definition), accept: definition.accept?.bind(definition) });
 }
 
 function normalizeExceptions<Input, Output, Kind extends CallableKind, Resources extends object, Allowed extends ChildContractsOf<Kind>>(exceptions: ExceptionConfiguration<Input, Output, Kind, Resources, Allowed>): InvocationExceptionDefinition<Input, Output, Kind, object> {
   if (typeof exceptions.handle !== 'function' || !Array.isArray(exceptions.accepts)) throw new TypeError('Callable exceptions require accepts and handle');
-  return { requires: exceptions.requires ?? {}, uses: exceptions.uses, accepts: exceptions.accepts, handle: exceptions.handle.bind(exceptions) };
+  return { deps: exceptions.deps ?? {}, uses: exceptions.uses, accepts: exceptions.accepts, handle: exceptions.handle.bind(exceptions) };
 }

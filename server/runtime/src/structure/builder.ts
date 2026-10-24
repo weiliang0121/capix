@@ -44,21 +44,21 @@ export class CallableBuilder {
       const prepare = (node: ResolvedCallable): void => {
         if (!reserved.delete(node.definition)) throw new Error('Callable membership changed while building');
         for (const member of node.members) if (structureParent(member.definition) !== node.definition) throw new Error('Callable membership changed while building');
-        const children = new BoundChildren(node.members);
+        const children = new BoundChildren(node.members, node.declaration.names);
         const composite = node.declaration.members !== undefined;
         const work = new InvocationWorkBinding<any, any, CallableContext<any, any, object>, object, object, any>(node.declaration, children, composite);
-        const binding = Object.freeze({ definition: node.definition, declaration: node.declaration, children, composite, requires: node.requires, supply: node.supply, refinements: node.refinements, work });
+        const binding = Object.freeze({ definition: node.definition, declaration: node.declaration, children, composite, deps: node.deps, supply: node.supply, refinements: node.refinements, work });
         const fields: PropertyDescriptorMap = {};
         for (const [key, value] of Object.entries(node.declaration)) {
-          if (key === 'kind' || key === 'members') continue;
+          if (key === 'kind' || key === 'members' || key === 'names') continue;
           const existing = Object.getOwnPropertyDescriptor(node.definition, key);
           if (existing && !existing.configurable) throw new Error(`Callable configuration field cannot be fixed: ${key}`);
           fields[key] = { value, enumerable: true, writable: false, configurable: false };
         }
         // Identity and membership cannot be reassigned after construction either.
-        for (const key of ['id', 'kind', ...(composite ? ['members'] : [])]) {
+        for (const key of ['id', 'kind', ...(composite ? ['members', 'names'] : [])]) {
           const existing = Object.getOwnPropertyDescriptor(node.definition, key);
-          const value = key === 'id' ? node.definition.id : key === 'kind' ? node.declaration.kind : node.declaration.members;
+          const value = key === 'id' ? node.definition.id : key === 'kind' ? node.declaration.kind : key === 'members' ? node.declaration.members : node.declaration.names;
           const fixed = existing && 'value' in existing && !existing.writable && existing.value === value;
           if (existing && !existing.configurable && !fixed) throw new Error(`Callable structure field cannot be fixed: ${key}`);
           if (!existing || existing.configurable) fields[key] = { value, enumerable: true, writable: false, configurable: false };
@@ -100,13 +100,16 @@ function checkTree(root: AnyCallable): readonly AnyCallable[] {
     if (structureParent(structure) !== parent) throw new Error('Callable structure has another parent or unregistered membership');
     if (seen.has(structure)) throw new Error('Callable structure occurs more than once');
     seen.add(structure);
-    if (structure.kind !== 'node') for (const member of structure.members) visit(member, structure);
+    if (structure.kind !== 'node') {
+      if (!structure.members) throw new TypeError('Composite structures must provide their members');
+      for (const member of structure.members) visit(member, structure);
+    }
   };
   visit(root);
   return [...seen];
 }
 
-const configurationFields = ['id', 'kind', 'members', 'name', 'label', 'source', 'callee', 'maxRounds', 'raises', 'output', 'run', 'exceptions', 'observation', 'checkpoint', 'receptions'] as const;
+const configurationFields = ['id', 'kind', 'members', 'names', 'name', 'label', 'source', 'callee', 'maxRounds', 'raises', 'output', 'run', 'exceptions', 'observation', 'checkpoint', 'receptions'] as const;
 
 function sameDescriptor(before: PropertyDescriptor | undefined, after: PropertyDescriptor | undefined): boolean {
   if (!before || !after) return before === after;

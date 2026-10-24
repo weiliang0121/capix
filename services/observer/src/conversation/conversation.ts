@@ -81,7 +81,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
         const child = this.checkChild(facts, facts.references.active, 'preparation', capabilities.preparation);
         if (facts.children.values().length !== 1 || !isEqual(child.input, facts.input)) throw new Error('Preparation continuation changed the admitted input');
       },
-      resume: { requires: conversationTaskRequests, uses: this.members, execute: (work, _state, saved) => this.receivePreparation(work, work.children.resume(saved.active)) },
+      resume: { deps: conversationTaskRequests, uses: this.members, run: (work, _state, saved) => this.receivePreparation(work, work.children.resume(saved.active)) },
     });
     this.preparationAccepted = point({
       name: 'preparationAccepted',
@@ -92,7 +92,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
         this.checkChild(facts, facts.references.active, 'preparation', capabilities.preparation, 'accepted');
         if (facts.children.values().length !== 1) throw new Error('Preparation continuation contains later work');
       },
-      resume: { requires: conversationTaskRequests, uses: this.members, execute: (work, state) => this.advance(work, state) },
+      resume: { deps: conversationTaskRequests, uses: this.members, run: (work, state) => this.advance(work, state) },
     });
     this.decisionWaiting = point({
       name: 'decisionWaiting',
@@ -102,7 +102,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
         this.checkProgress(facts, state, facts.references.active);
         this.checkChild(facts, facts.references.active, 'decision', capabilities.decision);
       },
-      resume: { requires: conversationTaskRequests, uses: this.members, execute: (work, state, saved) => this.receiveDecision(work, state, work.children.resume(saved.active)) },
+      resume: { deps: conversationTaskRequests, uses: this.members, run: (work, state, saved) => this.receiveDecision(work, state, work.children.resume(saved.active)) },
     });
     this.decisionAccepted = point({
       name: 'decisionAccepted',
@@ -113,7 +113,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
         const child = this.checkChild(facts, facts.references.active, 'decision', capabilities.decision, 'accepted');
         if (!isEqual(facts.children.accepted(child.ref, this.decisionReception), { choice: state.choice, progress: state.progress, checkedCandidates: state.checkedCandidates })) throw new Error('Decision continuation differs from its accepted proposal');
       },
-      resume: { requires: conversationTaskRequests, uses: this.members, execute: (work, state) => this.afterDecision(work, state) },
+      resume: { deps: conversationTaskRequests, uses: this.members, run: (work, state) => this.afterDecision(work, state) },
     });
     for (const name of ['answer', ...(capabilities.document ? ['checkFile', 'document', 'save'] : [])]) {
       const definition = this.capabilityDefinition(name);
@@ -133,7 +133,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
             const decided = facts.children.require(capabilities.decision, decision.ref);
             if (!isEqual(facts.children.accepted(decided.ref, this.decisionReception).choice, { kind: 'invoke', capability: state.capability, arguments: state.arguments })) throw new Error('Capability continuation differs from the accepted decision');
           },
-          resume: { requires: conversationTaskRequests, uses: this.members, execute: (work, state, saved) => this.receiveCapability(work, state, work.children.resume(saved.active)) },
+          resume: { deps: conversationTaskRequests, uses: this.members, run: (work, state, saved) => this.receiveCapability(work, state, work.children.resume(saved.active)) },
         }),
       );
       this.capabilityAccepted.set(
@@ -147,7 +147,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
             this.checkChild(facts, facts.references.active, this.capabilityKey(name), definition, 'accepted');
             if (state.progress.latest?.capability !== name || ((name === 'answer' || name === 'document') && !state.progress.answer)) throw new Error('Capability continuation differs from its accepted result');
           },
-          resume: { requires: conversationTaskRequests, uses: this.members, execute: (work, state) => this.advance(work, state) },
+          resume: { deps: conversationTaskRequests, uses: this.members, run: (work, state) => this.advance(work, state) },
         }),
       );
     }
@@ -161,7 +161,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
         this.checkSettledDecision(facts);
         if (!state.progress.answer || !state.progress.response) throw new Error('Memory continuation requires an accepted answer');
       },
-      resume: { requires: conversationTaskRequests, uses: this.members, execute: (work, state, saved) => this.receiveExtraction(work, state, work.children.resume(saved.active)) },
+      resume: { deps: conversationTaskRequests, uses: this.members, run: (work, state, saved) => this.receiveExtraction(work, state, work.children.resume(saved.active)) },
     });
     this.completed = point({
       name: 'completed',
@@ -173,7 +173,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
         if (!state.progress.answer) throw new Error('Completed conversation requires its answer');
         this.checkSettledDecision(facts);
       },
-      resume: { requires: conversationTaskRequests, uses: this.members, execute: (work, state) => this.finishContent(work, state) },
+      resume: { deps: conversationTaskRequests, uses: this.members, run: (work, state) => this.finishContent(work, state) },
     });
     const maintenance = capabilities.maintenance;
     this.maintenanceWaiting = maintenance
@@ -185,7 +185,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
             this.checkProgress(facts, state, facts.references.active);
             this.checkMaintenance(facts, state, facts.references.active);
           },
-          resume: { requires: conversationTaskRequests, uses: this.members, execute: (work, state, saved) => this.receiveMaintenance(work, state, work.children.resume(saved.active)) },
+          resume: { deps: conversationTaskRequests, uses: this.members, run: (work, state, saved) => this.receiveMaintenance(work, state, work.children.resume(saved.active)) },
         })
       : undefined;
     this.maintenanceCompleted = maintenance
@@ -197,7 +197,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
             this.checkProgress(facts, state, facts.references.active);
             this.checkMaintenance(facts, state, facts.references.active, 'accepted');
           },
-          resume: { requires: {}, uses: [], execute: (_work, state) => state.progress.answer! },
+          resume: { deps: {}, uses: [], run: (_work, state) => state.progress.answer! },
         })
       : undefined;
 
@@ -216,7 +216,9 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
           },
         }),
       ],
-      run: { requires: conversationTaskRequests, uses: this.members, execute: this.execute.bind(this) },
+      deps: conversationTaskRequests,
+      uses: this.members,
+      run: this.execute.bind(this),
       receptions: [this.decisionReception],
       checkpoint: { key: 'observer.conversation.task', version: 6, input: acceptedCheckpointInput, output: conversationCheckpointOutput, points: [this.preparationWaiting, this.preparationAccepted, this.decisionWaiting, this.decisionAccepted, ...this.capabilityWaiting.values(), ...this.capabilityAccepted.values(), this.extractionWaiting, this.completed, ...(this.maintenanceWaiting ? [this.maintenanceWaiting] : []), ...(this.maintenanceCompleted ? [this.maintenanceCompleted] : [])] },
     });
@@ -224,7 +226,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
 
   private async execute(work: Work): Promise<GenerationOutput> {
     const child = work.children.create(this.capabilities.preparation, work.input, { key: 'preparation' });
-    work.checkpoint?.save(this.preparationWaiting, {}, { active: child.ref });
+    work.checkpoint?.({ point: this.preparationWaiting, state: {}, refs: { active: child.ref } });
     return this.receivePreparation(work, child);
   }
 
@@ -235,7 +237,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
       return delivered;
     });
     const state = { prepared, progress: {}, step: 0, checkedCandidates: [] };
-    work.checkpoint?.save(this.preparationAccepted, state, { active: child.ref });
+    work.checkpoint?.({ point: this.preparationAccepted, state: state, refs: { active: child.ref } });
     return this.advance(work, state);
   }
 
@@ -254,7 +256,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
       { key: 'decision' },
     );
     const waiting = { ...state };
-    if (this.capabilities.decision.checkpoint) work.checkpoint?.save(this.decisionWaiting, waiting, { active: child.ref });
+    if (this.capabilities.decision.checkpoint) work.checkpoint?.({ point: this.decisionWaiting, state: waiting, refs: { active: child.ref } });
     return this.receiveDecision(work, waiting, child);
   }
 
@@ -278,7 +280,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
       return { choice, progress, checkedCandidates: [...checked] };
     });
     const next: ExecutionDecisionState = { ...state, ...accepted };
-    work.checkpoint?.save(this.decisionAccepted, next, { active: child.ref });
+    work.checkpoint?.({ point: this.decisionAccepted, state: next, refs: { active: child.ref } });
     return this.afterDecision(work, next);
   }
 
@@ -289,13 +291,13 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
       if (choice.conclusion.kind !== 'settled') return this.finishContent(work, state);
       const child = work.children.create(this.capabilities.extraction, prepareMemoryInput({ index: work.input.messageIndex, message: work.input.message }, state.progress.response!, state.prepared.context.selectedMessages, state.prepared.material.memories, { saved: state.progress.saved }), { key: 'extraction' });
       const waiting = { prepared: state.prepared, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates };
-      work.checkpoint?.save(this.extractionWaiting, waiting, { active: child.ref });
+      work.checkpoint?.({ point: this.extractionWaiting, state: waiting, refs: { active: child.ref } });
       return this.receiveExtraction(work, waiting, child);
     }
     const capability = this.catalog(work, state.prepared).get(choice.capability)!;
     const child = capability.create(choice.arguments, state.progress);
     const waiting: ExecutionCapabilityState = { prepared: state.prepared, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates, capability: choice.capability, arguments: choice.arguments };
-    work.checkpoint?.save(this.capabilityWaiting.get(choice.capability)!, waiting, { active: child.ref });
+    work.checkpoint?.({ point: this.capabilityWaiting.get(choice.capability)!, state: waiting, refs: { active: child.ref } });
     return this.receiveCapability(work, waiting, child, capability);
   }
 
@@ -303,14 +305,14 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
     await child.run();
     const progress = await capability.accept(child, state.progress);
     const next = { prepared: state.prepared, progress, step: state.step + 1, checkedCandidates: state.checkedCandidates };
-    work.checkpoint?.save(this.capabilityAccepted.get(state.capability)!, next, { active: child.ref });
+    work.checkpoint?.({ point: this.capabilityAccepted.get(state.capability)!, state: next, refs: { active: child.ref } });
     return this.advance(work, next);
   }
 
   private async receiveExtraction(work: Work, state: ExecutionWaitingState, child: ChildCall<ExtractMemory>): Promise<GenerationOutput> {
     await child.run();
     await child.accept((delivered) => delivered);
-    work.checkpoint?.save(this.completed, state, { active: child.ref });
+    work.checkpoint?.({ point: this.completed, state: state, refs: { active: child.ref } });
     return this.finishContent(work, state);
   }
 
@@ -319,14 +321,14 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
     if (!maintenance) return state.progress.answer!;
     const settled = { prepared: state.prepared, progress: state.progress, step: state.step, checkedCandidates: state.checkedCandidates };
     const child = work.children.create(maintenance, { phase: 'after-content' }, { key: 'maintenance' });
-    work.checkpoint?.save(this.maintenanceWaiting!, settled, { active: child.ref });
+    work.checkpoint?.({ point: this.maintenanceWaiting!, state: settled, refs: { active: child.ref } });
     return this.receiveMaintenance(work, settled, child);
   }
 
   private async receiveMaintenance(work: Work, state: ExecutionContinuation, child: ChildCall<MaintainConversationContent>): Promise<GenerationOutput> {
     await child.run();
     await child.accept();
-    work.checkpoint?.save(this.maintenanceCompleted!, state, { active: child.ref });
+    work.checkpoint?.({ point: this.maintenanceCompleted!, state: state, refs: { active: child.ref } });
     return state.progress.answer!;
   }
 

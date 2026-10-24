@@ -5,7 +5,7 @@ import { ConversationGroup, GenerateAnswer } from '@capix/observer-service/conve
 /** Test mutations use the same full replacement contract as author configuration. */
 export function reconfigure(callable, changes) {
   const { name, label, source, callee, maxRounds, raises, output, run, exceptions, observation, checkpoint, receptions } = callable;
-  callable.setDefinition({ name, label, source, callee, maxRounds, raises, output, run, exceptions, observation, checkpoint, receptions, ...changes });
+  callable.setDefinition({ name, label, source, callee, maxRounds, raises, output, deps: run?.deps, uses: run?.uses, run: run?.execute, accept: run?.accept, exceptions, observation, checkpoint, receptions, ...changes });
   return callable;
 }
 

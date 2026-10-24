@@ -39,29 +39,25 @@ test('request-model keeps its progress subscription until the follow child retur
   };
   const execution = defineGroup()({
     members: [model],
-    run: {
-      requires: RequestModel.requires,
-      async execute(work) {
-        const call = work.children.create(model, work.input, {
-          output: {
-            receive: (event) => {
-              events.push(event);
-            },
+    deps: RequestModel.deps,
+    async run(work) {
+      const call = work.children.create(model, work.input, {
+        output: {
+          receive: (event) => {
+            events.push(event);
           },
-        });
-        await call.run();
-        return call.accept();
-      },
+        },
+      });
+      await call.run();
+      return call.accept();
     },
   });
   const root = defineScene()({
     members: [execution],
-    run: {
-      async execute(work) {
-        const call = work.children.create(execution, work.input);
-        await call.run();
-        return call.accept();
-      },
+    async run(work) {
+      const call = work.children.create(execution, work.input);
+      await call.run();
+      return call.accept();
     },
   });
   const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };

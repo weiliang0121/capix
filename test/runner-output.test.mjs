@@ -10,23 +10,19 @@ test('Runner child output uses the exact registered port, preserves final identi
   const output = { result: (value) => value, delta: (value) => value };
   const child = new Node({
     output,
-    run: {
-      execute(work) {
-        writer = work.output;
-        writer.emit('hel');
-        writer.emit('lo');
-        return final;
-      },
+    run(work) {
+      writer = work.output;
+      writer.emit('hel');
+      writer.emit('lo');
+      return final;
     },
   });
   const scene = new Scene({
     output,
-    run: {
-      async execute(work) {
-        const call = work.children.create(child, work.input);
-        await call.run();
-        return call.accept();
-      },
+    async run(work) {
+      const call = work.children.create(child, work.input);
+      await call.run();
+      return call.accept();
     },
   }).add(child);
   const runner = new Runner(scene, new Resources(), undefined, {
@@ -71,11 +67,9 @@ test('a failing Runner output consumer is isolated from the real result', async 
   let reported = 0;
   const scene = new Scene({
     output: { result: (value) => value, delta: (value) => value },
-    run: {
-      execute(work) {
-        work.output.emit('preview');
-        return result;
-      },
+    run(work) {
+      work.output.emit('preview');
+      return result;
     },
   });
   const runner = new Runner(scene, new Resources(), undefined, {

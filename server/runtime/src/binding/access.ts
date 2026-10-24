@@ -20,9 +20,9 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
     this.references = childBindingsBuilder.references(invocation);
   }
 
-  enter(phase: AccessPhase, requires: ResourceRequirements, uses?: readonly ChildContract[]) {
+  enter(phase: AccessPhase, deps: ResourceRequirements, uses?: readonly ChildContract[]) {
     const resourcePhase = phase === 'receive' ? 'run' : phase;
-    this.#resources.activate(resourcePhase, requires);
+    this.#resources.activate(resourcePhase, deps);
     const context = this.invocation.context;
     const round = context.progress.round;
     let open = true;
@@ -43,8 +43,12 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
       input: context.currentInput,
       initialInput: context.input,
       round: round as 1 | 2,
-      resources: this.#resources.view(requires, resourcePhase),
+      resources: this.#resources.view(deps, resourcePhase),
       signal: (context as Context & { signal: AbortSignal }).signal,
+      observation: (event: import('../observation/facts.js').BusinessEvent) => {
+        validate();
+        this.invocation.observeBusiness(event);
+      },
       ...(context.continuation ? { continuation: this.references.continuation(context.continuation) } : {}),
     };
     const close = () => {

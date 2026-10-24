@@ -23,7 +23,7 @@ export interface CallableBinding<Input, Output, Resources extends object> {
   readonly declaration: CallableSnapshot;
   readonly children: BoundChildren;
   readonly composite: boolean;
-  readonly requires: ResourceRequirements<Resources>;
+  readonly deps: ResourceRequirements<Resources>;
   readonly supply: ResourceRequirements;
   readonly refinements?: readonly ResourceRefinement<Input>[];
   readonly work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>;

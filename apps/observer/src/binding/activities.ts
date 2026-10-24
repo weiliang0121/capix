@@ -35,7 +35,7 @@ function describeActivity(calls: readonly ConversationActivity[]): string {
   if (current.phase === 'setup') return `${purpose} · 准备中${retry}`;
   // A returned result still needs its parent's handling. It does not finish the submission.
   const child = findLast(calls, (call) => call.parentContextId === current.contextId);
-  if (child && child.status !== 'running' && child.relation?.phase !== 'accepted') {
+  if (child && child.status !== 'running' && child.relation?.phase !== 'accepted' && child.relation?.phase !== 'handled') {
     if (child.relation?.phase === 'failed') return `${purpose} · 正在处理结果接纳失败${retry}`;
     if (child.relation?.returned === 'failed' || child.status === 'failed') return `${purpose} · 正在处理调用失败${retry}`;
     if (child.relation?.returned === 'cancelled' || child.status === 'cancelled') return `${purpose} · 正在处理调用取消${retry}`;

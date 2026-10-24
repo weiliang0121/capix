@@ -30,17 +30,15 @@ for (const boundary of ['execute', 'accept', 'handler-return']) {
       const definition = defineScene()({
         maxRounds: 2,
         ...(boundary === 'handler-return' ? { raises: [rejected] } : {}),
-        run: {
-          execute(work) {
-            executions++;
-            assert.equal(work.round, 1, 'a raw mechanism value cannot initiate another author round');
-            if (boundary === 'handler-return') throw rejected.create('enter the handler', {});
-            return boundary === 'execute' ? value : 'candidate';
-          },
-          accept(work) {
-            acceptances++;
-            return boundary === 'accept' ? value : work.delivered;
-          },
+        run(work) {
+          executions++;
+          assert.equal(work.round, 1, 'a raw mechanism value cannot initiate another author round');
+          if (boundary === 'handler-return') throw rejected.create('enter the handler', {});
+          return boundary === 'execute' ? value : 'candidate';
+        },
+        accept(work) {
+          acceptances++;
+          return boundary === 'accept' ? value : work.delivered;
         },
         ...(boundary === 'handler-return'
           ? {
@@ -74,7 +72,7 @@ for (const forged of [true, false]) {
         state: codec,
         references: {},
         resume: {
-          execute(work, state) {
+          run(work, state) {
             resumed++;
             assert.equal(work.round, 1);
             assert.deepEqual(state, { ready: true });
@@ -85,16 +83,14 @@ for (const forged of [true, false]) {
       return defineScene()({
         maxRounds: 2,
         checkpoint: { key: 'author.control.resume', version: 1, input: codec, output: codec, points: [point] },
-        run: {
-          execute(work) {
-            normalExecutions++;
-            work.checkpoint.save(point, { ready: true }, {});
-            return 'initial result';
-          },
-          accept(work) {
-            acceptances++;
-            return work.delivered;
-          },
+        run(work) {
+          normalExecutions++;
+          work.checkpoint({ point: point, state: { ready: true }, refs: {} });
+          return 'initial result';
+        },
+        accept(work) {
+          acceptances++;
+          return work.delivered;
         },
       });
     }
@@ -125,19 +121,15 @@ test('ChildEntry admission cannot change the already selected child definition',
   let originalCalls = 0;
   let replacementCalls = 0;
   const original = defineGroup()({
-    run: {
-      execute(work) {
-        originalCalls++;
-        return `original:${work.input}`;
-      },
+    run(work) {
+      originalCalls++;
+      return `original:${work.input}`;
     },
   });
   const replacement = defineGroup()({
-    run: {
-      execute(work) {
-        replacementCalls++;
-        return `replacement:${work.input}`;
-      },
+    run(work) {
+      replacementCalls++;
+      return `replacement:${work.input}`;
     },
   });
   const entry = defineChildEntry(original, {
@@ -150,16 +142,14 @@ test('ChildEntry admission cannot change the already selected child definition',
   });
   const root = defineScene()({
     members: [original, replacement],
-    run: {
-      async execute(work) {
-        const child = work.children.entry(entry, work.input);
-        await child.run();
-        const accepted = await child.accept();
-        const fact = work.children.facts.require(original, child.ref);
-        assert.equal(fact.input, 'request:admitted');
-        assert.equal(fact.reception.value, accepted);
-        return accepted;
-      },
+    async run(work) {
+      const child = work.children.entry(entry, work.input);
+      await child.run();
+      const accepted = await child.accept();
+      const fact = work.children.facts.require(original, child.ref);
+      assert.equal(fact.input, 'request:admitted');
+      assert.equal(fact.reception.value, accepted);
+      return accepted;
     },
   });
 
@@ -169,29 +159,25 @@ test('ChildEntry admission cannot change the already selected child definition',
 });
 
 test('built child checkpoint layout and processing reject later structure mutation', async () => {
-  const operation = defineGroup()({ name: 'fixture', label: 'fixture', source: 'test', run: { execute: () => 'delivered' } });
-  const point = checkpointPoint()({ name: 'accepted', state: codec, references: { child: childReference(operation) }, resume: { execute: () => 'resumed' } });
+  const operation = defineGroup()({ name: 'fixture', label: 'fixture', source: 'test', run: () => 'delivered' });
+  const point = checkpointPoint()({ name: 'accepted', state: codec, references: { child: childReference(operation) }, resume: { run: () => 'resumed' } });
   const execution = defineGroup()({
     members: [operation],
     checkpoint: { key: 'author.layout.execution', version: 1, input: codec, output: codec, points: [point] },
-    run: {
-      async execute(work) {
-        const child = work.children.create(operation, work.input);
-        await child.run();
-        const output = await child.accept();
-        work.checkpoint.save(point, {}, { child: child.ref });
-        return output;
-      },
+    async run(work) {
+      const child = work.children.create(operation, work.input);
+      await child.run();
+      const output = await child.accept();
+      work.checkpoint({ point: point, state: {}, refs: { child: child.ref } });
+      return output;
     },
   });
   const root = defineScene()({
     members: [execution],
-    run: {
-      async execute(work) {
-        const child = work.children.create(execution, work.input);
-        await child.run();
-        return child.accept();
-      },
+    async run(work) {
+      const child = work.children.create(execution, work.input);
+      await child.run();
+      return child.accept();
     },
   });
   const installed = runtime(root, new MemoryCheckpointStore());
@@ -200,6 +186,6 @@ test('built child checkpoint layout and processing reject later structure mutati
   assert.throws(() => {
     operation.kind = 'node';
   }, /read only/);
-  assert.throws(() => operation.setRun({ execute: () => 'changed after build' }), /configuration is locked after build/);
+  assert.throws(() => operation.setRun(() => 'changed after build'), /configuration is locked after build/);
   assert.equal(await installed.run('input', {}), 'delivered');
 });

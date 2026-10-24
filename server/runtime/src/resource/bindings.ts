@@ -6,8 +6,8 @@ import { ResourceRequest, type ResourceProvider, type ResourceValue, type Resour
 
 export type ResourceRequirements<Resources extends object = object> = { readonly [Key in keyof Resources]: ResourceRequest<Resources[Key]> };
 
-export function resourceRequests<Resources extends object>(requires: ResourceRequirements<Resources>): readonly ResourceRequest<unknown>[] {
-  return Object.keys(requires).map((name) => requires[name as keyof Resources]);
+export function resourceRequests<Resources extends object>(deps: ResourceRequirements<Resources>): readonly ResourceRequest<unknown>[] {
+  return Object.keys(deps).map((name) => deps[name as keyof Resources]);
 }
 
 /** Supply captures survive phase changes; local endpoints do not cross declaration phases. */
@@ -27,7 +27,7 @@ export class ResourceBindings<Resources extends object = object> {
   #phase = 'run';
   readonly #closed = new Set<string>();
 
-  constructor(requires: ResourceRequirements<Resources>, available: readonly ResourceValue[] = [], initial: ResourceRequirements = requires, supply: ResourceRequirements = requires) {
+  constructor(deps: ResourceRequirements<Resources>, available: readonly ResourceValue[] = [], initial: ResourceRequirements = deps, supply: ResourceRequirements = deps) {
     this.supply = new ResourceSupply(available).select(supply);
     this.#entries = this.supply.entries;
     this.#initial = initial;
@@ -35,11 +35,11 @@ export class ResourceBindings<Resources extends object = object> {
   }
 
   /** Each declaration receives a distinct, revocable named view, never this binding. */
-  view<SelectedResources extends object>(requires: ResourceRequirements<SelectedResources>, phase = 'run'): Readonly<SelectedResources> {
+  view<SelectedResources extends object>(deps: ResourceRequirements<SelectedResources>, phase = 'run'): Readonly<SelectedResources> {
     const values = {};
     let round = this.#attached ? this.round() : undefined;
-    for (const name of Object.keys(requires)) {
-      const request = requires[name as keyof SelectedResources];
+    for (const name of Object.keys(deps)) {
+      const request = deps[name as keyof SelectedResources];
       const entry = this.#entries.find((value) => value.offer === request.offer);
       if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
       Object.defineProperty(values, name, {
@@ -79,10 +79,10 @@ export class ResourceBindings<Resources extends object = object> {
     this.activate(phase, this.#initial);
   }
 
-  activate(phase: string, requires: ResourceRequirements): void {
+  activate(phase: string, deps: ResourceRequirements): void {
     if (!this.#started) throw new Error('Resource access requires a started invocation');
     this.#phase = phase;
-    for (const request of resourceRequests(requires)) {
+    for (const request of resourceRequests(deps)) {
       const entry = this.#entries.find((value) => value.offer === request.offer);
       if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
       const local = this.local(entry, phase, this.round());
@@ -95,10 +95,10 @@ export class ResourceBindings<Resources extends object = object> {
     this.#closed.add(`${phase}:${this.round()}`);
   }
 
-  select<SelectedResources extends object, Input = unknown>(requires: ResourceRequirements<SelectedResources>, initial: ResourceRequirements = requires, selection?: { readonly input: Input; readonly refinements: readonly ResourceRefinement<Input>[]; readonly supply?: ResourceRequirements }): ResourceBindings<SelectedResources> {
-    let supply = this.supply.select(selection?.supply ?? requires);
+  select<SelectedResources extends object, Input = unknown>(deps: ResourceRequirements<SelectedResources>, initial: ResourceRequirements = deps, selection?: { readonly input: Input; readonly refinements: readonly ResourceRefinement<Input>[]; readonly supply?: ResourceRequirements }): ResourceBindings<SelectedResources> {
+    let supply = this.supply.select(selection?.supply ?? deps);
     if (selection?.refinements.length) supply = supply.refine(selection.input, selection.refinements);
-    return new ResourceBindings(requires, supply.entries, initial, selection?.supply);
+    return new ResourceBindings(deps, supply.entries, initial, selection?.supply);
   }
 
   /** Combine supply captures for a distinct declaration, without exposing another declaration's endpoints. */
@@ -198,8 +198,8 @@ export function checkResourceProviders<Source>(requested: readonly ResourceReque
 }
 
 /** Initialization checks publication identity; each call obtains values through the published access form. */
-export function bindResources<Source, Resources extends object>(requires: ResourceRequirements<Resources>, providers: readonly ResourceProvider<Source>[]): (parent: Source) => ResourceBindings<Resources> {
-  const requests = Object.freeze({ ...requires });
+export function bindResources<Source, Resources extends object>(deps: ResourceRequirements<Resources>, providers: readonly ResourceProvider<Source>[]): (parent: Source) => ResourceBindings<Resources> {
+  const requests = Object.freeze({ ...deps });
   const declared = Object.keys(requests).map((name) => requests[name as keyof Resources]);
   checkResourceProviders(declared, providers);
   const offers = new Set(declared.map((request) => request.offer));

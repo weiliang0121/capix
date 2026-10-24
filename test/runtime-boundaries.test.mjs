@@ -60,7 +60,7 @@ test('Driver blocks concurrent entry before source validation and releases after
     release = resolve;
   });
   const driver = new Driver();
-  const bound = driver.build(defineNode()({ run: { execute: (work) => (work.input === 'wait' ? pending : work.input) } }), {
+  const bound = driver.build(defineNode()({ run: (work) => (work.input === 'wait' ? pending : work.input) }), {
     providers: [],
     source: {
       capture: (input) => {

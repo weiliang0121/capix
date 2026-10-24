@@ -340,13 +340,14 @@ test('full feedback retention explicitly refuses fresh work and preserves duplic
 
 test('failure before a complete execution record produces a terminal transport error, never silent success', async (t) => {
   const { run } = await setup(t, provider, true, undefined, settings, (definition) => {
-    definition.setRun({
-      ...definition.run,
-      execute: (work) => {
+    definition.setRun(
+      (work) => {
         work.resources.messages.append(work.input.messages);
         throw new Error('private diagnostic must not be an HTTP message');
       },
-    });
+      definition.run.deps,
+      { uses: definition.run.uses, accept: definition.run.accept },
+    );
   });
   const stream = await updates(await run());
   assert.equal(stream.at(-1).input.end, 1);
@@ -816,7 +817,7 @@ for (const fault of [false, true]) {
             ...model.observation,
             defineObservation(
               {
-                requires: {},
+                deps: {},
                 observe(fact) {
                   if (fact.kind !== 'relation' || fact.change.kind !== 'returned' || fact.change.result.status !== 'succeeded' || fact.change.result.output.kind !== 'pending') return;
                   // The public cancellation entry is invoked at the exact synchronous handoff boundary.

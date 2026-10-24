@@ -42,7 +42,7 @@ export class GenerateAnswer extends Group<GenerationInput, GenerationOutput, Mod
 如果提供 task，task.instruction 是父层已经接纳的本轮内容处理目标，可能包含上一轮澄清的必要信息；task.fileTask 是确定的文件范围，不能扩大。不要把保存目标路径当成已经保存的事实。
 kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少用户可补充的必要信息，content 给出具体澄清问题；unknown 为缺乏知识或实际能力，content 如实说明。content 是直接呈现给用户的正文。`;
 
-  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() } as const);
+  static readonly deps = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() } as const);
 
   readonly contextWaiting;
   readonly requestWaiting;
@@ -74,12 +74,12 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     this.prepareRegeneration = new PrepareModelRequest(prepareRegenerationRequest, undefined, options.document ? { input: (input) => ({ ...input, request: describeModelRequest(input.request) }), output: describeModelRequest } : {});
     this.add(this.prepareRegeneration, this.assembleContext, this.prepareRequest, this.requestModel, this.acceptOutput);
     const point = checkpointPoint<'group', GenerationInput, GenerationOutput, AnswerTextDelta>();
-    this.contextWaiting = point({ name: 'contextWaiting', state: answerCheckpointCodecs.waiting, references: { context: childReference(this.assembleContext) }, check: (_state, facts) => checkPreparationWaiting(facts, facts.references.context, 'context', this), resume: { requires: {}, uses: [this.assembleContext, this.prepareRequest, this.requestModel, this.acceptOutput], execute: (work, _state, saved) => this.receiveContext(work, work.children.resume(saved.context)) } });
-    this.requestWaiting = point({ name: 'requestWaiting', state: answerCheckpointCodecs.waiting, references: { request: childReference(this.prepareRequest) }, check: (_state, facts) => checkPreparationWaiting(facts, facts.references.request, 'request', this), resume: { requires: {}, uses: [this.prepareRequest, this.requestModel, this.acceptOutput], execute: (work, _state, saved) => this.receiveRequest(work, work.children.resume(saved.request)) } });
-    this.regenerationWaiting = point({ name: 'regenerationWaiting', state: answerCheckpointCodecs.waiting, references: { request: childReference(this.prepareRegeneration) }, check: (_state, facts) => checkPreparationWaiting(facts, facts.references.request, 'request', this), resume: { requires: {}, uses: [this.prepareRegeneration, this.requestModel, this.acceptOutput], execute: (work, _state, saved) => this.receiveRequest(work, work.children.resume(saved.request)) } });
-    this.acceptanceWaiting = point({ name: 'acceptanceWaiting', state: answerCheckpointCodecs.waiting, references: { acceptance: childReference(this.acceptOutput) }, check: (_state, facts) => checkAcceptanceWaiting(facts, facts.references.acceptance, this), resume: { requires: {}, uses: [this.acceptOutput], execute: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.acceptance)) } });
-    this.modelWaiting = point({ name: 'modelWaiting', state: answerCheckpointCodecs.waiting, references: { model: childReference(this.requestModel) }, check: (_state, facts) => checkModelWaiting(facts, facts.references.model, this), resume: { requires: {}, uses: [this.requestModel, this.acceptOutput], execute: (work, _state, saved) => this.resumeModel(work, saved.model) } });
-    this.answerAccepted = point({ name: 'answerAccepted', state: answerCheckpointCodecs.output, references: { acceptance: childReference(this.acceptOutput) }, check: (output, facts) => checkAnswerAccepted(facts, output, this), resume: { requires: {}, uses: [], execute: (_work, output) => output } });
+    this.contextWaiting = point({ name: 'contextWaiting', state: answerCheckpointCodecs.waiting, references: { context: childReference(this.assembleContext) }, check: (_state, facts) => checkPreparationWaiting(facts, facts.references.context, 'context', this), resume: { deps: {}, uses: [this.assembleContext, this.prepareRequest, this.requestModel, this.acceptOutput], run: (work, _state, saved) => this.receiveContext(work, work.children.resume(saved.context)) } });
+    this.requestWaiting = point({ name: 'requestWaiting', state: answerCheckpointCodecs.waiting, references: { request: childReference(this.prepareRequest) }, check: (_state, facts) => checkPreparationWaiting(facts, facts.references.request, 'request', this), resume: { deps: {}, uses: [this.prepareRequest, this.requestModel, this.acceptOutput], run: (work, _state, saved) => this.receiveRequest(work, work.children.resume(saved.request)) } });
+    this.regenerationWaiting = point({ name: 'regenerationWaiting', state: answerCheckpointCodecs.waiting, references: { request: childReference(this.prepareRegeneration) }, check: (_state, facts) => checkPreparationWaiting(facts, facts.references.request, 'request', this), resume: { deps: {}, uses: [this.prepareRegeneration, this.requestModel, this.acceptOutput], run: (work, _state, saved) => this.receiveRequest(work, work.children.resume(saved.request)) } });
+    this.acceptanceWaiting = point({ name: 'acceptanceWaiting', state: answerCheckpointCodecs.waiting, references: { acceptance: childReference(this.acceptOutput) }, check: (_state, facts) => checkAcceptanceWaiting(facts, facts.references.acceptance, this), resume: { deps: {}, uses: [this.acceptOutput], run: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.acceptance)) } });
+    this.modelWaiting = point({ name: 'modelWaiting', state: answerCheckpointCodecs.waiting, references: { model: childReference(this.requestModel) }, check: (_state, facts) => checkModelWaiting(facts, facts.references.model, this), resume: { deps: {}, uses: [this.requestModel, this.acceptOutput], run: (work, _state, saved) => this.resumeModel(work, saved.model) } });
+    this.answerAccepted = point({ name: 'answerAccepted', state: answerCheckpointCodecs.output, references: { acceptance: childReference(this.acceptOutput) }, check: (output, facts) => checkAnswerAccepted(facts, output, this), resume: { deps: {}, uses: [], run: (_work, output) => output } });
 
     this.setDefinition({
       output: answerStream,
@@ -87,11 +87,13 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
       name: 'answer',
       label: '生成回答',
       source: 'services/observer/src/conversation/group/answer/generate.ts · GenerateAnswer',
-      run: { requires: GenerateAnswer.requires, uses: this.members, execute: this.execute.bind(this) },
+      deps: GenerateAnswer.deps,
+      uses: this.members,
+      run: this.execute.bind(this),
       checkpoint: { key: `observer.generate-answer.${options.document ? 'document' : options.files ? 'files' : 'conversation'}`, version: 4, input: answerCheckpointCodecs.input, output: answerCheckpointCodecs.output, points: [this.contextWaiting, this.requestWaiting, this.regenerationWaiting, this.modelWaiting, this.acceptanceWaiting, this.answerAccepted] },
       maxRounds: 2,
       exceptions: {
-        requires: {},
+        deps: {},
         accepts: [modelOutputRejected],
         handle: this.handleException.bind(this),
       },
@@ -102,13 +104,13 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     if (Boolean(work.input.document) !== this.documentEnabled) throw new RuntimeError('DOCUMENT_INPUT', '文档证据必须与生成能力的声明一致。');
     if (work.round === 1) {
       const assembled = work.children.create(this.assembleContext, work.input.context, { key: 'context' });
-      work.checkpoint?.save(this.contextWaiting, {}, { context: assembled.ref });
+      work.checkpoint?.({ point: this.contextWaiting, state: {}, refs: { context: assembled.ref } });
       return this.receiveContext(work, assembled);
     }
     const evidence = this.regenerationEvidence(work);
     if (!evidence) throw new Error('Missing accepted model regeneration source');
     const request = work.children.create(this.prepareRegeneration, this.requestModel.regeneration.input({ round: work.round, continuation: work.continuation, children: work.children.facts }, evidence), { key: 'request' });
-    work.checkpoint?.save(this.regenerationWaiting, {}, { request: request.ref });
+    work.checkpoint?.({ point: this.regenerationWaiting, state: {}, refs: { request: request.ref } });
     return this.receiveRequest(work, request, evidence);
   }
 
@@ -117,7 +119,7 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     const context = await assembled.accept();
     const input = work.input;
     const request = work.children.create(this.prepareRequest, { ...context, memories: input.memories, ...(input.task ? { task: input.task } : {}), ...(input.document ? { document: input.document } : {}) }, { key: 'request' });
-    work.checkpoint?.save(this.requestWaiting, {}, { request: request.ref });
+    work.checkpoint?.({ point: this.requestWaiting, state: {}, refs: { request: request.ref } });
     return this.receiveRequest(work, request);
   }
 
@@ -126,7 +128,7 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     const prepared = await request.accept();
     // Restored preparation was checked against the saved rejection and fixed request.
     const model = evidence ? work.children.entry(this.requestModel.regeneration.entry, { request: prepared, evidence }, { key: 'model', output: decodeModelText(work) }) : work.children.create(this.requestModel, prepared, { key: 'model', output: decodeModelText(work) });
-    work.checkpoint?.save(this.modelWaiting, {}, { model: model.ref });
+    work.checkpoint?.({ point: this.modelWaiting, state: {}, refs: { model: model.ref } });
     return this.receiveModel(work, model);
   }
 
@@ -134,14 +136,14 @@ kind 表达本次回答的性质：answer 为能够回答；needs-info 为缺少
     await model.run();
     const output = await model.accept();
     const acceptance = work.children.create(this.acceptOutput, { output }, { key: 'acceptance' });
-    work.checkpoint?.save(this.acceptanceWaiting, {}, { acceptance: acceptance.ref });
+    work.checkpoint?.({ point: this.acceptanceWaiting, state: {}, refs: { acceptance: acceptance.ref } });
     return this.receiveAcceptance(work, acceptance);
   }
 
   private async receiveAcceptance(work: AnswerWork, acceptance: ChildCall<AcceptModelOutput<ModelAcceptanceInput, GenerationOutput>>): Promise<GenerationOutput> {
     await acceptance.run();
     const answer = await acceptance.accept();
-    work.checkpoint?.save(this.answerAccepted, answer, { acceptance: acceptance.ref });
+    work.checkpoint?.({ point: this.answerAccepted, state: answer, refs: { acceptance: acceptance.ref } });
     return answer;
   }
 

@@ -2,6 +2,7 @@ import type { CallableKind } from '@capix/protocol';
 import type { DeclaredException } from '../exception/contract.js';
 import type { ChildCalls, ChildContract, ChildContractsOf, ChildReference, ResumeChildCalls } from './children.js';
 import type { AuthorCheckpointWriter } from './checkpoint.js';
+import type { BusinessEvent } from '../observation/facts.js';
 
 export type ExceptionOrigin = { readonly kind: 'self'; readonly phase: 'execute' | 'accept' } | { readonly kind: 'child-return' | 'child-reception'; readonly child: ChildReference };
 
@@ -30,6 +31,7 @@ export interface Work<Input, Resources extends object> {
   readonly resources: Readonly<Resources>;
   readonly signal: AbortSignal;
   readonly continuation?: ContinuationFact;
+  observation(event: BusinessEvent): void;
 }
 
 export interface CompositeWork<Allowed extends ChildContract = ChildContract, Restoring extends boolean = false> {

@@ -2,7 +2,7 @@ import { Driver, Group, Node, defineNode, defineScene, type BuiltCallable, type 
 
 import { createRootInvocation } from '@capix/server-runtime/construction';
 
-const node = defineNode<number, number>()({ run: { execute: (work) => work.input } });
+const node = defineNode<number, number>()({ run: (work) => work.input });
 const driver = new Driver();
 const bound = driver.build(node, {
   providers: [],
@@ -45,7 +45,7 @@ driver.running;
 // @ts-expect-error Entry occupation is internal; callers run an actual bound callable.
 driver.reserve(() => null);
 
-const scene = defineScene<string, string>()({ run: { execute: (work) => work.input } });
+const scene = defineScene<string, string>()({ run: (work) => work.input });
 const other = driver.build(scene, {
   providers: [],
   source: {
@@ -60,13 +60,13 @@ driver.run(other, 'document', { tenantId: 'tenant' });
 // @ts-expect-error Binding source input cannot change the definition's declared input.
 driver.build(node, { providers: [], source: { capture: (_input: string) => null } });
 
-const simpleNode = defineNode<number, number>()({ run: { execute: (work) => work.input } });
+const simpleNode = defineNode<number, number>()({ run: (work) => work.input });
 const unconstrained = driver.build(simpleNode, { providers: [], source: { capture: () => null } });
 const simpleOutput: Promise<number> = driver.run(unconstrained, 1, {});
 void [original, requiredOptions, output, resumed, directOutput, running, checkpoints, erased, wrongOutput, otherOutput, simpleOutput];
 
 // The required build marker is independent from a structure's callable signature.
-const unbuilt = new Node<number, number>({ run: { execute: (work) => work.input } });
+const unbuilt = new Node<number, number>({ run: (work) => work.input });
 // @ts-expect-error A configured structure has not installed its runtime capability.
 driver.run(unbuilt, 1, {});
 // @ts-expect-error Restoration also requires a built structure.
@@ -80,19 +80,20 @@ driver.run(node, 1, { tenantId: 'tenant' });
 
 class NamedGroup extends Group<number, string> {
   readonly purpose = 'format';
-  readonly child = new Node<number, string>({ run: { execute: (work) => String(work.input) } });
+  readonly child = new Node<number, string>({ run: (work) => String(work.input) });
 
   constructor() {
     super();
     this.add(this.child);
-    this.setRun({
-      uses: [this.child],
-      execute: async (work) => {
+    this.setRun(
+      async (work) => {
         const child = work.children.create(this.child, work.input);
         await child.run();
         return child.accept();
       },
-    });
+      {},
+      { uses: [this.child] },
+    );
   }
 }
 const authored = new NamedGroup();

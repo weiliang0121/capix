@@ -11,7 +11,7 @@ class Read extends Node {
   label = 'Read';
   source = 'test';
   callee = 'test';
-  run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
+  run = { deps: { value: resource.request() }, execute: this.execute.bind(this) };
   execute(work) {
     return `${work.input}:${work.resources.value}`;
   }
@@ -20,7 +20,7 @@ class Work extends Group {
   name = 'work';
   label = 'Work';
   source = 'test';
-  run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
+  run = { deps: { value: resource.request() }, execute: this.execute.bind(this) };
   leaf = new Read();
   sequence = new Sequence().step('read', { use: this.leaf, input: ({ input }) => input });
   constructor() {
@@ -32,7 +32,7 @@ class Work extends Group {
   }
 }
 class Main extends Group {
-  run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
+  run = { deps: { value: resource.request() }, execute: this.execute.bind(this) };
   operation = new Work();
   constructor() {
     super();
@@ -164,15 +164,13 @@ test('business Work and child facts exclude lifecycle, binding and relation muta
 });
 
 test('plain configurations build concrete structures without business subclassing', async () => {
-  const child = new Group({ name: 'length', label: 'Length', source: 'test', run: { requires: {}, execute: (work) => work.input.length } });
+  const child = new Group({ name: 'length', label: 'Length', source: 'test', deps: {}, run: (work) => work.input.length });
   const execution = new Group({
-    run: {
-      requires: {},
-      execute: async (work) => {
-        const call = work.children.create(child, work.input);
-        await call.run();
-        return call.accept();
-      },
+    deps: {},
+    run: async (work) => {
+      const call = work.children.create(child, work.input);
+      await call.run();
+      return call.accept();
     },
   }).add(child);
   const runtime = installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
@@ -230,8 +228,8 @@ test('assembly rejects invalid levels and cycles without activating resource pro
 test('building nested structures retains exact member identities without opening resources', () => {
   const left = new Work();
   const right = new Work();
-  const group = new Group({ run: { execute: () => null } }).add(left, right);
-  const main = new Group({ run: { execute: () => null } }).add(group);
+  const group = new Group({ run: () => null }).add(left, right);
+  const main = new Group({ run: () => null }).add(group);
   const definition = runtimeDefinition(main);
   const scene = new CallableBuilder().build(definition, { providers: [resource.provide(() => assert.fail('build cannot open resources'))], source: { capture: () => assert.fail('build cannot capture input') } });
   assert.equal(scene, definition);
@@ -326,7 +324,7 @@ test('R resource endpoints remain scoped to R while E receives its own resource 
   };
   const definition = runtimeDefinition(main);
   definition.run = {
-    requires: { access: access.request() },
+    deps: { access: access.request() },
     async execute(work) {
       saved = work.resources.access;
       const input = saved.touch();

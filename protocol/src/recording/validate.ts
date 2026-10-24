@@ -270,11 +270,14 @@ function validRelations(body: InvocationValue, ownerContextId: string | undefine
       if (change.result.status === 'succeeded' ? !Object.hasOwn(change.result, 'output') : !validError(change.result.error) || (change.result.failure !== undefined && !validFailure(change.result.failure))) return false;
       relations.set(identity.childContextId, { identity, phase: 'returned', status: change.result.status });
     } else if (change.kind === 'receiving') {
-      if (old?.phase !== 'returned' || old.status !== 'succeeded') return false;
+      if (old?.phase !== 'returned') return false;
       relations.set(identity.childContextId, { ...old, phase: 'receiving' });
     } else if (change.kind === 'accepted') {
-      if (old?.phase !== 'receiving' || !Object.hasOwn(change, 'output')) return false;
+      if (old?.phase !== 'receiving' || old.status !== 'succeeded' || !Object.hasOwn(change, 'output')) return false;
       relations.set(identity.childContextId, { ...old, phase: 'accepted' });
+    } else if (change.kind === 'handled') {
+      if (old?.phase !== 'receiving' || old.status !== 'failed' || !Object.hasOwn(change, 'output')) return false;
+      relations.set(identity.childContextId, { ...old, phase: 'handled' });
     } else if (change.kind === 'failed') {
       if (old?.phase !== 'receiving' || !validError(change.error) || !['work', 'observation'].includes(change.source) || (change.failure !== undefined && !validFailure(change.failure))) return false;
       relations.set(identity.childContextId, { ...old, phase: 'failed' });

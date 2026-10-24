@@ -13,20 +13,18 @@ export class FunctionConversationDecision extends Group<ConversationDecisionInpu
   constructor(decide: (input: ConversationDecisionInput, signal: AbortSignal) => ConversationDecision | Promise<ConversationDecision>) {
     super();
 
-    this.resultPoint = checkpointPoint<'group', ConversationDecisionInput, ConversationDecision>()({ name: 'result', state: proposalCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
+    this.resultPoint = checkpointPoint<'group', ConversationDecisionInput, ConversationDecision>()({ name: 'result', state: proposalCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { run: (_work, result) => result } });
 
     this.setDefinition({
       name: 'conversationDecision',
       label: '决定下一步',
       source: 'services/observer/src/conversation/decision/function.ts · FunctionConversationDecision',
       observation: [invocationRecording()],
-      run: {
-        requires: {},
-        execute: async (work: GroupWork<ConversationDecisionInput, ConversationDecision>) => {
-          const result = await decide(work.input, work.signal);
-          work.checkpoint?.save(this.resultPoint, result, {});
-          return result;
-        },
+      deps: {},
+      run: async (work: GroupWork<ConversationDecisionInput, ConversationDecision>) => {
+        const result = await decide(work.input, work.signal);
+        work.checkpoint?.({ point: this.resultPoint, state: result, refs: {} });
+        return result;
       },
       checkpoint: {
         key: 'observer.function-decision',

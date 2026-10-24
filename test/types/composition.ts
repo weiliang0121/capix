@@ -70,7 +70,7 @@ const acceptedAlternative: Promise<number> = operation.children.entry(alternativ
 void acceptedAlternative;
 
 // @ts-expect-error raw object syntax has no checked declaration signature; use the factory or a named class
-const rawDefinition: Group<string, number> = { kind: 'group', name: 'raw', label: 'raw', source: 'test', members: [], maxRounds: 1, raises: [], run: { requires: {}, execute: (work) => work.input.length } };
+const rawDefinition: Group<string, number> = { kind: 'group', name: 'raw', label: 'raw', source: 'test', members: [], maxRounds: 1, raises: [], deps: {}, run: (work) => work.input.length };
 void rawDefinition;
 const objectDefinition: Group<string, number> = defineGroup<string, number>()({
   name: 'length',
@@ -79,7 +79,8 @@ const objectDefinition: Group<string, number> = defineGroup<string, number>()({
   members: [],
   maxRounds: 1,
   raises: [],
-  run: { requires: {}, execute: (work) => work.input.length },
+  deps: {},
+  run: (work) => work.input.length,
 });
 const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string>().step('length', { use: objectDefinition, input: ({ input }) => input }).run('hello', children);
 void objectOutput;
@@ -87,13 +88,11 @@ const runtimeDefinition: Scene<string, number> = defineScene<string, number>()({
   members: [execution],
   maxRounds: 1,
   raises: [],
-  run: {
-    requires: {},
-    async execute(work) {
-      const child = work.children.create(execution, work.input);
-      await child.run();
-      return child.accept();
-    },
+  deps: {},
+  async run(work) {
+    const child = work.children.create(execution, work.input);
+    await child.run();
+    return child.accept();
   },
 });
 const driver = new Driver();
@@ -103,7 +102,7 @@ void rootOutput;
 // @ts-expect-error R input retains its own declared contract
 driver.run(bound, 42, {});
 // A Scene can directly register a Node.
-const leafScene = new Scene<string, number>({ run: { execute: (work) => work.input.length } });
+const leafScene = new Scene<string, number>({ run: (work) => work.input.length });
 leafScene.add(leaf);
 driver.build(leafScene, { providers: [], source: { capture: () => null } });
 // Structurally equal signatures are permitted; binding still checks exact identity.
@@ -122,7 +121,7 @@ const issue = new ExceptionContract<{ reason: string }>('test.issue');
 const workValue = new ResourceOffer('work-value', (value: number) => value);
 const handlingValue = new ResourceOffer('handling-value', (value: string) => value);
 const run: InvocationRunDefinition<string, string, 'group', { value: number }> = {
-  requires: { value: workValue.request() },
+  deps: { value: workValue.request() },
   execute(work) {
     const value: number = work.resources.value;
     // @ts-expect-error work does not acquire the handler's resource aliases
@@ -131,7 +130,7 @@ const run: InvocationRunDefinition<string, string, 'group', { value: number }> =
   },
 };
 const exceptions: InvocationExceptionDefinition<string, string, 'group', { repair: string }> = {
-  requires: { repair: handlingValue.request() },
+  deps: { repair: handlingValue.request() },
   accepts: [issue],
   handle(work) {
     const repair: string = work.resources.repair;
@@ -140,7 +139,7 @@ const exceptions: InvocationExceptionDefinition<string, string, 'group', { repai
     return work.return(repair);
   },
 };
-const composed: Group<string, string, { value: number }, { repair: string }> = defineGroup<string, string>()({ name: 'typed', label: 'typed', source: 'test', members: [], maxRounds: 1, raises: [issue], run: { ...run, uses: [] }, exceptions: { ...exceptions, uses: [] } });
+const composed: Group<string, string, { value: number }, { repair: string }> = defineGroup<string, string>()({ name: 'typed', label: 'typed', source: 'test', members: [], maxRounds: 1, raises: [issue], deps: run.deps, uses: [], run: run.execute, accept: run.accept, exceptions: { ...exceptions, uses: [] } });
 const composedResult: Promise<string> = children.create(composed, 'input').run();
 void composedResult;
 const childFact = operation.children.facts.get(operation.children.create(leaf, 'input').ref);
@@ -150,7 +149,7 @@ childFact.resources;
 import { defineObservation, type InvocationFact, type DriverFact, type ObservationDefinition, type ObservationDeclaration } from '@capix/server-runtime';
 const counter = new ResourceOffer('counter', (value: { increment(): void }) => value);
 const callProbe: ObservationDeclaration<InvocationFact> = defineObservation<InvocationFact, { counter: { increment(): void } }>({
-  requires: { counter: counter.request() },
+  deps: { counter: counter.request() },
   observe(fact, ports) {
     if (fact.kind === 'started') ports.counter.increment();
     // @ts-expect-error an observer receives only its requested resource aliases
@@ -167,14 +166,14 @@ const structureProbe: ObservationDeclaration<DriverFact> = callProbe;
 // @ts-expect-error declarations do not own per-invocation resource binding
 callProbe.bind;
 const wrongPortProbe: ObservationDefinition<InvocationFact, { counter: { increment(): void } }> = {
-  requires: {
+  deps: {
     // @ts-expect-error each requested resource must supply its declared port type
     counter: workValue.request(),
   },
   observe: () => undefined,
 };
 const asynchronousProbe: ObservationDefinition<InvocationFact, Record<string, never>> = {
-  requires: {},
+  deps: {},
   // @ts-expect-error asynchronous observation cannot retain the synchronous resource window
   observe: async () => undefined,
 };

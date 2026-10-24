@@ -1,5 +1,7 @@
 import { createCallableInvocation, restoreCallableInvocation } from '../../invocation/builders/structure.js';
-import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, ResumeChildCalls } from '../../definition/children.js';
+import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls } from '../../definition/children.js';
+import type { OperationOptions } from '../../operation/contract.js';
+import { InvocationCancelled } from '../../invocation/cancellation.js';
 import type { ChildEntry } from '../../definition/entry.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import { ChildCallFailure } from '../../invocation/provenance.js';
@@ -7,11 +9,16 @@ import type { BoundChildren } from './bound.js';
 import type { InvocationChildReferences } from './references.js';
 import type { ReceptionDefinition } from '../../definition/reception.js';
 import type { BoundReceptions } from '../receptions.js';
+import { combineOutputReceivers } from '../../output/delivery.js';
 
 export type ChildBindingsParent = Invocation<any, any, any>;
 
+/** Public overloads have checked result/reception association before heterogeneous dispatch. */
+type InvocationChildOperationOptions<D extends ChildContract> = ChildOptions<D> & OperationOptions<CallableOutput<D>, unknown, unknown, CallableDelta<D>> & { readonly reception?: ReceptionDefinition<D, any> };
+
 interface ChildAccessOptions {
   readonly children: BoundChildren;
+  readonly names?: ReadonlyMap<string, ChildContract>;
   readonly receptions: BoundReceptions;
   readonly parent: ChildBindingsParent;
   readonly allowed: ReadonlySet<ChildContract>;
@@ -26,12 +33,72 @@ export class InvocationChildBindings {
 
   constructor(private readonly options: ChildAccessOptions) {
     this.port = Object.freeze({
+      ...Object.fromEntries([...(options.names ?? [])].filter(([, definition]) => options.allowed.has(definition)).map(([name, definition]) => [name, Object.freeze({ invoke: (input: unknown, reception?: InvocationChildOperationOptions<ChildContract>) => this.invoke(definition, input, reception ?? {}) })])),
+      invoke: this.invoke.bind(this),
       create: this.create.bind(this),
       entry: this.entry.bind(this),
       open: this.open.bind(this),
       facts: options.references.facts,
       ...(options.restoring ? { resume: this.resume.bind(this) } : {}),
     });
+  }
+
+  private invoke<D extends ChildContract>(definition: D, input: CallableInput<D>, options: InvocationChildOperationOptions<D> = {}): Promise<any> {
+    return this.perform(() =>
+      this.options.parent.children.accepting(async () => {
+        this.requireAllowed(definition);
+        const contract = options.reception ? this.options.receptions.require(options.reception, definition) : undefined;
+        const receiver = options.result;
+        if (options.delta !== undefined && typeof options.delta !== 'function') throw new TypeError('Delta receiver must be a function');
+        if (receiver?.succeeded !== undefined && typeof receiver.succeeded !== 'function') throw new TypeError('Success receiver must be a function');
+        if (receiver?.failed !== undefined && typeof receiver.failed !== 'function') throw new TypeError('Failure receiver must be a function');
+        const succeeded = receiver?.succeeded?.bind(receiver);
+        const failed = receiver?.failed?.bind(receiver);
+        const delta = options.delta?.bind(options);
+        const output = options.output;
+        const outputReceive = output?.receive.bind(output);
+        const outputFailed = output?.failed?.bind(output);
+        const outputReceiver = combineOutputReceivers<CallableOutput<D>, CallableDelta<D>>(
+          delta
+            ? {
+                receive: (event) => {
+                  if (event.kind !== 'delta') return undefined;
+                  const returned: unknown = delta(event.delta);
+                  if (returned !== undefined) {
+                    void Promise.resolve(returned).catch(() => undefined);
+                    throw new TypeError('Delta receivers must return undefined synchronously');
+                  }
+                  return undefined;
+                },
+              }
+            : undefined,
+          outputReceive ? { receive: outputReceive, failed: outputFailed } : undefined,
+        );
+        const child = createCallableInvocation(this.options.children.get(definition), this.options.parent, input, {
+          key: options.key,
+          declarationPosition: this.options.children.position(definition),
+          receiveFailure: !!failed,
+          ...(outputReceiver ? { output: outputReceiver } : {}),
+        });
+        const relation = this.options.parent.children.get(child);
+        try {
+          await child.run();
+        } catch (error) {
+          this.checkActive();
+          if (!failed || relation.returned?.status !== 'failed' || !relation.returned.failure?.receptionAllowed || relation.returned.error instanceof InvocationCancelled || child.context.progress.round === 0 || ['setup', 'control', 'observation'].includes(relation.returned.failure?.phase ?? 'setup')) throw error;
+          // The child's original outcome stays failed. Its receiver runs once in this parent's scope.
+          return relation.handle((failure) => {
+            this.checkActive();
+            return failed(failure);
+          }, contract);
+        }
+        // Deliberately outside the source catch: reception errors cannot call result.failed again.
+        return relation.accept((output) => {
+          this.checkActive();
+          return succeeded ? succeeded(output) : output;
+        }, contract);
+      }),
+    );
   }
 
   private create<D extends ChildContract>(definition: D, input: CallableInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {

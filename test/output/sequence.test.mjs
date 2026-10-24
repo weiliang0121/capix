@@ -13,7 +13,7 @@ test('Sequence binds declared output explicitly while final parent acceptance re
     source = 'test';
     output = output;
     run = {
-      requires: {},
+      deps: {},
       execute(work) {
         work.output.emit('child text');
         return 'result';
@@ -27,7 +27,7 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       this.add(operation);
     }
     run = {
-      requires: {},
+      deps: {},
       async execute(work) {
         const composition = new Sequence().step('source', {
           use: operation,
@@ -56,7 +56,7 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       this.add(execution);
     }
     run = {
-      requires: {},
+      deps: {},
       async execute(work) {
         const child = work.children.create(execution, null);
         await child.run();

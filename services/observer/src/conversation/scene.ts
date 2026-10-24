@@ -50,9 +50,9 @@ export class ConversationScene extends Scene<unknown, GenerationOutput, Conversa
         if (facts.children.values().length !== 1 || child.key !== 'conversation') throw new Error('Conversation checkpoint must identify its direct execution');
       },
       resume: {
-        requires: {},
+        deps: {},
         uses: [conversation],
-        execute: async (work, _state, saved) => {
+        run: async (work, _state, saved) => {
           const child = work.children.resume(saved.execution);
           await child.run();
           return child.accept();
@@ -64,14 +64,16 @@ export class ConversationScene extends Scene<unknown, GenerationOutput, Conversa
       label: '对话场景',
       observation: [invocationRecording()],
       checkpoint: { key: 'observer.conversation.scene', version: 4, input: conversationCheckpointInput, output: conversationCheckpointOutput, points: [this.executionWaiting] },
-      run: { requires: conversationSceneRequests, uses: [conversation], execute: this.execute.bind(this) },
+      deps: conversationSceneRequests,
+      uses: [conversation],
+      run: this.execute.bind(this),
     });
   }
 
   private async execute(work: SceneWork<unknown, GenerationOutput, ConversationSceneResources>): Promise<GenerationOutput> {
     const accepted = acceptConversationRequest(work.input, work.resources.messages.append, this.filesEnabled);
     const child = work.children.create(this.conversation, accepted, { key: 'conversation' });
-    work.checkpoint?.save(this.executionWaiting, {}, { execution: child.ref });
+    work.checkpoint?.({ point: this.executionWaiting, state: {}, refs: { execution: child.ref } });
     await child.run();
     return child.accept();
   }

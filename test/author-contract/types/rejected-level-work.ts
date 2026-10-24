@@ -35,7 +35,7 @@ class InvalidExecution extends Group<string, number> {
     this.add(operation);
   }
   readonly run: InvocationRunDefinition<string, number, 'group', Record<string, never>, never, typeof operation> = {
-    requires: {},
+    deps: {},
     execute(work) {
       work.children.create(attempt, work.input);
       return 0;
@@ -43,16 +43,14 @@ class InvalidExecution extends Group<string, number> {
   };
 }
 
-defineGroup<string, number>()({ members: [operation], run: { execute: (work) => work.children.create(attempt, work.input).run() } });
+defineGroup<string, number>()({ members: [operation], run: (work) => work.children.create(attempt, work.input).run() });
 
 // A narrowed stage cannot acquire actions just because its owner registered another child.
 defineGroup<string, number>()({
   members: [operation],
-  run: {
-    uses: [],
-    execute(work) {
-      work.children.create(operation, work.input);
-      return 0;
-    },
+  uses: [],
+  run(work) {
+    work.children.create(operation, work.input);
+    return 0;
   },
 });

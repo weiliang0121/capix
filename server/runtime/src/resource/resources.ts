@@ -6,6 +6,7 @@ import type { InteractionContract } from '../interaction/contract.js';
 import type { InteractionChannel, Interactions } from '../interaction/interactions.js';
 import { Callable } from '../structure/callable.js';
 import { ResourceOffer, type ResourceIdentity, type ResourceProvider, type ResourceRefinement } from './offer.js';
+import { Resource } from './resource.js';
 
 export interface ResourceRegistration {
   readonly offer: ResourceIdentity;
@@ -44,7 +45,13 @@ export class Resources<Options extends object = {}> {
   readonly #scopes = new Map<AnyCallable, { capture: (input: unknown, options: Options) => unknown; registrations: ResourceRegistration[] }>();
   readonly #refinements = new Map<ChildCallable, ResourceRefinement<any>[]>();
 
-  register<Source, Value, Captured, Selection>(offer: ResourceOffer<Source, Value, Captured, Selection>, supply: NoInfer<Source>): this {
+  register<Source, Value, Captured, Selection>(resource: Resource<NoInfer<Source>>, offer: ResourceOffer<Source, Value, Captured, Selection>): this;
+  register<Source, Value, Captured, Selection>(offer: ResourceOffer<Source, Value, Captured, Selection>, supply: NoInfer<Source>): this;
+  register<Source, Value, Captured, Selection>(resourceOrOffer: Resource<Source> | ResourceOffer<Source, Value, Captured, Selection>, offerOrSupply: ResourceOffer<Source, Value, Captured, Selection> | Source): this {
+    const resource = resourceOrOffer instanceof Resource ? resourceOrOffer : undefined;
+    const offer = (resource ? offerOrSupply : resourceOrOffer) as ResourceOffer<Source, Value, Captured, Selection>;
+    if (!(offer instanceof ResourceOffer)) throw new TypeError('Resource registration requires an access offer');
+    const supply = resource ? resource.origin : (offerOrSupply as Source);
     const provider = offer.provide<unknown>(() => supply);
     addRegistration(this.#registrations, Object.freeze({ offer: provider.offer, bind: () => provider }));
     return this;

@@ -28,16 +28,16 @@ export class AssembleAnswerContext extends Node<AnswerMessageContext, AnswerMess
         checkLeafResult(facts);
         if (!isEqual(result, facts.input)) throw new Error('Fixed message material changed during assembly');
       },
-      resume: { execute: (_work, result) => result },
+      resume: { run: (_work, result) => result },
     });
 
-    this.setDefinition({ observation: [invocationRecording()], name: 'assembleContext', label: '确认消息材料', source: 'services/observer/src/conversation/node/context/assemble.ts · AssembleAnswerContext', callee: 'processing', checkpoint: { key: 'observer.assemble-answer-context', version: 2, input: contextCodec, output: contextCodec, points: [this.resultPoint] }, run: { requires: {}, execute: this.execute.bind(this) } });
+    this.setDefinition({ observation: [invocationRecording()], name: 'assembleContext', label: '确认消息材料', source: 'services/observer/src/conversation/node/context/assemble.ts · AssembleAnswerContext', callee: 'processing', checkpoint: { key: 'observer.assemble-answer-context', version: 2, input: contextCodec, output: contextCodec, points: [this.resultPoint] }, deps: {}, run: this.execute.bind(this) });
   }
 
   private execute(work: NodeWork<AnswerMessageContext, AnswerMessageContext>): AnswerMessageContext {
     const parsed = answerMessageContextSchema.parse(work.input);
     const result = Object.freeze({ message: Object.freeze(parsed.message), selectedMessages: Object.freeze(parsed.selectedMessages.map((item) => Object.freeze({ index: item.index, message: Object.freeze(item.message) }))) });
-    work.checkpoint?.save(this.resultPoint, result, {});
+    work.checkpoint?.({ point: this.resultPoint, state: result, refs: {} });
     return result;
   }
 }

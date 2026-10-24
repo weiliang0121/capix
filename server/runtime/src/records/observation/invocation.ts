@@ -33,7 +33,7 @@ export class InvocationRecording implements InvocationObserver {
     readonly setup: InvocationObservationSetup,
     private readonly parentRecording?: InvocationRecording,
   ) {
-    this.#enabled = (setup.declarations ?? []).some((declaration) => resourceRequests(declaration.requires).some((request) => request.offer === InvocationRecordAccess.request().offer));
+    this.#enabled = (setup.declarations ?? []).some((declaration) => resourceRequests(declaration.deps).some((request) => request.offer === InvocationRecordAccess.request().offer));
     if (parentRecording && parentRecording.installation !== installation) throw new Error('Recording parent belongs to another installation');
     if (parentRecording) parentRecording.#childRecordings.set(setup.identity.contextId, this);
     this.resources = bindResources({ record: InvocationRecordAccess.request() }, [InvocationRecordAccess.provide(() => this)])(undefined);
@@ -143,6 +143,7 @@ export class InvocationRecording implements InvocationObserver {
     let change: RecordedRelationChange;
     if (fact.change.kind === 'returned') change = { kind: 'returned', result: recordedResult(fact.change.result, childRecording ? childRecording.#recordDescription : undefined) };
     else if (fact.change.kind === 'accepted' && this.#recordDescription.relationAccepted) change = { kind: 'accepted', output: this.#recordDescription.relationAccepted(fact.change.output, fact.relation) };
+    else if (fact.change.kind === 'handled' && this.#recordDescription.relationHandled) change = { kind: 'handled', output: this.#recordDescription.relationHandled(fact.change.output, fact.relation) };
     else if (fact.change.kind === 'failed') change = { kind: 'failed', source: fact.change.source, error: RuntimeErrorHelper.format(fact.change.error), ...(fact.change.failure ? { failure: failureFact(fact.change.failure) } : {}) };
     else change = fact.change;
     const relation = { identity: fact.relation, eventSequence: fact.eventSequence, occurredAt: fact.occurredAt, offsetMs, ...(childRecording?.record ? { childId: childRecording.record.id } : {}), change };

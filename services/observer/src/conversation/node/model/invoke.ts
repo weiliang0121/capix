@@ -10,7 +10,7 @@ import type { ModelInteractionRef, ModelInteractionResult } from '../../model/in
 
 /** Initiate one exchange and wait locally; pending is an explicit delivery to its parent. */
 export class InvokeModel extends Node<ModelRequest, ModelInteractionResult, ModelCallResources, Record<string, never>, ModelInteractionRef> {
-  static readonly requires = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
+  static readonly deps = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
 
   private readonly resultPoint;
   private readonly interactionStartedPoint;
@@ -21,18 +21,18 @@ export class InvokeModel extends Node<ModelRequest, ModelInteractionResult, Mode
   ) {
     super();
 
-    this.resultPoint = checkpointPoint<'node', ModelRequest, ModelInteractionResult, ModelInteractionRef>()({ name: 'result', state: interactionResultCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
+    this.resultPoint = checkpointPoint<'node', ModelRequest, ModelInteractionResult, ModelInteractionRef>()({ name: 'result', state: interactionResultCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { run: (_work, result) => result } });
     this.interactionStartedPoint = checkpointPoint<'node', ModelRequest, ModelInteractionResult, ModelInteractionRef>()({
       name: 'interactionStarted',
       state: interactionRefCodec,
       references: {},
       check: (_state, facts) => checkLeafResult(facts),
       resume: {
-        requires: { modelReader: ModelResource.read.request() },
-        execute: async (work, interaction) => {
+        deps: { modelReader: ModelResource.read.request() },
+        run: async (work, interaction) => {
           const output = await work.resources.modelReader.result(interaction, { signal: work.signal, expected: { request: work.input, purpose: this.purpose } });
           const result: ModelInteractionResult = { kind: 'received', interaction, output };
-          work.checkpoint?.save(this.resultPoint, result, {});
+          work.checkpoint?.({ point: this.resultPoint, state: result, refs: {} });
           return result;
         },
       },
@@ -48,7 +48,8 @@ export class InvokeModel extends Node<ModelRequest, ModelInteractionResult, Mode
       },
       observation: [invocationRecording<ModelRequest, ModelInteractionResult>({ input: description.input, output: (result) => (result.kind === 'received' ? { ...result, output: description.output ? description.output(result.output) : result.output } : result) })],
       checkpoint: { key: `observer.invoke-model.${purpose}`, version: 1, input: modelRequestCodec, output: interactionResultCodec, points: [this.interactionStartedPoint, this.resultPoint] },
-      run: { requires: InvokeModel.requires, execute: this.execute.bind(this) },
+      deps: InvokeModel.deps,
+      run: this.execute.bind(this),
       name: 'invokeModel',
       label: '发起模型调用',
       source: 'services/observer/src/conversation/node/model/invoke.ts · InvokeModel',
@@ -60,10 +61,10 @@ export class InvokeModel extends Node<ModelRequest, ModelInteractionResult, Mode
     const { timeoutMs, settings, modelCreator, modelReader } = work.resources;
     checkCapacity(work.input, settings);
     const interaction = modelCreator.start(work.input, this.purpose, { timeoutMs });
-    work.checkpoint?.save(this.interactionStartedPoint, interaction, {});
+    work.checkpoint?.({ point: this.interactionStartedPoint, state: interaction, refs: {} });
     work.output.emit(interaction);
     const result = await modelReader.wait(interaction, { signal: work.signal, waitMs: Math.max(1, Math.floor(timeoutMs / 2)) });
-    work.checkpoint?.save(this.resultPoint, result, {});
+    work.checkpoint?.({ point: this.resultPoint, state: result, refs: {} });
     return result;
   }
 }

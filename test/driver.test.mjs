@@ -31,7 +31,7 @@ function bind(driver, definition, options = {}) {
 
 test('one Driver explicitly selects scene, group and node bindings without a current entry', async () => {
   const driver = new Driver();
-  const definitions = [defineScene()({ run: { execute: (work) => `scene:${work.input}` } }), defineGroup()({ run: { execute: (work) => `group:${work.input}` } }), defineNode()({ run: { execute: (work) => `node:${work.input}` } })];
+  const definitions = [defineScene()({ run: (work) => `scene:${work.input}` }), defineGroup()({ run: (work) => `group:${work.input}` }), defineNode()({ run: (work) => `node:${work.input}` })];
   const bounds = definitions.map((definition) => bind(driver, definition));
   assert.deepEqual(await Promise.all(bounds.map((bound) => driver.run(bound, 'input', {}))), ['scene:input', 'group:input', 'node:input']);
   for (const bound of bounds) assert.equal(driver.isRunning(bound), false);
@@ -53,7 +53,7 @@ test('Driver rejects foreign, standalone-built and forged structures before sour
       },
     },
   };
-  const definition = () => defineNode()({ run: { execute: () => assert.fail('unowned call must not run') } });
+  const definition = () => defineNode()({ run: () => assert.fail('unowned call must not run') });
   const own = driver.build(definition(), options);
   const foreign = other.build(definition(), options);
   const bare = new CallableBuilder().build(definition(), options);
@@ -82,12 +82,10 @@ test('binding installations stay distinct even under one Driver', async () => {
   const first = bind(
     driver,
     defineGroup()({
-      run: {
-        async execute() {
-          entered.resolve();
-          await finished.promise;
-          return 'first';
-        },
+      async run() {
+        entered.resolve();
+        await finished.promise;
+        return 'first';
       },
     }),
     {
@@ -99,7 +97,7 @@ test('binding installations stay distinct even under one Driver', async () => {
       },
     },
   );
-  const second = bind(driver, defineNode()({ run: { execute: () => 'second' } }));
+  const second = bind(driver, defineNode()({ run: () => 'second' }));
   const run = driver.run(first, null, {});
   await entered.promise;
   try {
@@ -121,11 +119,9 @@ test('entry occupancy is per built root and busy rejection cannot start a duplic
   const first = bind(
     driver,
     defineNode()({
-      run: {
-        async execute() {
-          entered.resolve();
-          return finished.promise;
-        },
+      async run() {
+        entered.resolve();
+        return finished.promise;
       },
     }),
     {
@@ -137,7 +133,7 @@ test('entry occupancy is per built root and busy rejection cannot start a duplic
       },
     },
   );
-  const second = bind(driver, defineNode()({ run: { execute: () => 'independent' } }));
+  const second = bind(driver, defineNode()({ run: () => 'independent' }));
   const running = driver.run(first, null, {});
   await entered.promise;
   try {
@@ -175,11 +171,9 @@ test('source and work failures release the same entry for a later call', async (
   const bound = bind(
     driver,
     defineNode()({
-      run: {
-        execute(work) {
-          if (work.input === 'work') throw new Error('work failed');
-          return 'ok';
-        },
+      run(work) {
+        if (work.input === 'work') throw new Error('work failed');
+        return 'ok';
       },
     }),
     {
@@ -211,11 +205,9 @@ test('pre-cancellation does not capture a source and cancellation never releases
   const bound = bind(
     driver,
     defineNode()({
-      run: {
-        async execute() {
-          entered.resolve();
-          return finished.promise;
-        },
+      async run() {
+        entered.resolve();
+        return finished.promise;
       },
     }),
     { source: { capture: () => captures++ } },
@@ -257,11 +249,9 @@ test('strict entry observation failures still release occupancy and preserve a w
   const bound = bind(
     driver,
     defineNode()({
-      run: {
-        execute(work) {
-          if (work.input) throw original;
-          return 'ok';
-        },
+      run(work) {
+        if (work.input) throw original;
+        return 'ok';
       },
     }),
   );
@@ -293,7 +283,7 @@ test('Driver mechanisms are fixed while supplied clocks and observation instance
   options.clock = new Clock();
   options.observations.length = 0;
   install.label = 'still mutable';
-  const bound = bind(driver, defineNode()({ run: { execute: () => 'ok' } }));
+  const bound = bind(driver, defineNode()({ run: () => 'ok' }));
   assert.equal(await driver.run(bound, null, {}), 'ok');
   assert.ok(clock.count > facts.length);
   assert.equal(install.label, 'still mutable');
@@ -317,14 +307,12 @@ test('Driver retains its installed checkpoint store and callback receiver across
   checkpoints.store = other;
   checkpoints.observation = { observe: () => assert.fail('replacement callback must not install') };
   observed.observe = () => assert.fail('replacement method must not install');
-  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { requires: {}, execute: (_work, state) => state } });
+  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { deps: {}, run: (_work, state) => state } });
   const definition = defineNode()({
     checkpoint: { key: 'driver.node', version: 1, input: codec, output: codec, points: [point] },
-    run: {
-      execute(work) {
-        work.checkpoint.save(point, 'result', {});
-        return 'result';
-      },
+    run(work) {
+      work.checkpoint({ point: point, state: 'result', refs: {} });
+      return 'result';
     },
   });
   const bound = bind(driver, definition);
@@ -343,10 +331,10 @@ test('resume explicitly selects an owned binding and releases failures without r
   const store = new MemoryCheckpointStore();
   const facts = [];
   const driver = new Driver({ checkpoints: { store }, observations: [observation(facts)] });
-  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { requires: {}, execute: (work, state) => `${work.input}:${state}` } });
+  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { deps: {}, run: (work, state) => `${work.input}:${state}` } });
   const definition = defineNode()({
     checkpoint: { key: 'driver.resume', version: 1, input: codec, output: codec, points: [point] },
-    run: { execute: () => assert.fail('resume must not execute the initial body') },
+    run: () => assert.fail('resume must not execute the initial body'),
   });
   let captures = 0;
   const bound = bind(driver, definition, {
@@ -366,7 +354,7 @@ test('resume explicitly selects an owned binding and releases failures without r
   store.save(
     {
       id: 'saved-checkpoint',
-      formatVersion: 4,
+      formatVersion: 5,
       contract: { key: 'driver.resume', version: 1 },
       point: 'saved',
       frame: { owner: { contextId: 'saved-context', kind: 'node' }, round: 1, phase: 'execute', input: 'original', currentInput: 'original', nextChildOrder: 0, children: [] },

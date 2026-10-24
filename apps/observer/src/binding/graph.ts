@@ -77,6 +77,7 @@ function reception(entry: RelationChangeRecord): NonNullable<CallGraphNode['rece
   if (change.kind === 'attached') return { status: change.kind, label: '等待返回' };
   if (change.kind === 'returned') return { status: change.kind, label: change.result.status === 'failed' ? '子调用返回失败' : '已返回，待父层接纳' };
   if (change.kind === 'receiving') return { status: change.kind, label: '父层接纳中' };
+  if (change.kind === 'handled') return { status: change.kind, label: '失败已处理' };
   if (change.kind === 'failed') return { status: change.kind, label: change.source === 'observation' ? '接纳观测失败' : '父层接纳失败' };
   return { status: change.kind, label: '父层已接纳' };
 }

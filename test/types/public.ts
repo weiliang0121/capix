@@ -16,18 +16,16 @@ const maintenancePolicy = defineGroup<ContextMaintenanceInput, ContextMaintenanc
   label: 'Explicit policy',
   source: 'test',
   members: [],
-  run: {
-    requires: { active: ActiveContentResource.read.request() },
-    execute(work) {
-      const current = work.resources.active.capture();
-      const phase: 'before-request' | 'after-content' = work.input.phase;
-      // @ts-expect-error A read offer does not grant index installation.
-      work.resources.active.apply({});
-      // @ts-expect-error An undeclared model port is not inferred from surrounding supplies.
-      work.resources.model.invoke();
-      void phase;
-      return { basis: current.basis, messageIndexes: current.messages.map((item) => item.index), memoryIds: current.memories.map((item) => item.id) };
-    },
+  deps: { active: ActiveContentResource.read.request() },
+  run(work) {
+    const current = work.resources.active.capture();
+    const phase: 'before-request' | 'after-content' = work.input.phase;
+    // @ts-expect-error A read offer does not grant index installation.
+    work.resources.active.apply({});
+    // @ts-expect-error An undeclared model port is not inferred from surrounding supplies.
+    work.resources.model.invoke();
+    void phase;
+    return { basis: current.basis, messageIndexes: current.messages.map((item) => item.index), memoryIds: current.memories.map((item) => item.id) };
   },
 });
 const maintenance = new MaintainConversationContent(maintenancePolicy);
@@ -39,7 +37,7 @@ const ungroundedPolicy: ContextMaintenancePolicy = () => ({ messageIndexes: [], 
 const missingPosition: CallableInput<typeof preparation> = { message: { role: 'user', content: 'input' } };
 void [functionalPolicy, ungroundedPolicy, missingPosition];
 
-const sourceScene = defineScene<string, string>()({ run: { execute: (work) => work.input } });
+const sourceScene = defineScene<string, string>()({ run: (work) => work.input });
 const bound = new CallableBuilder().build(sourceScene, { providers: [], source: { capture: () => null } });
 const originalScene: typeof sourceScene = bound;
 // @ts-expect-error R is the bound structure, not the owner of its assembly environment.

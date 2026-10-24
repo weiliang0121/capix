@@ -10,7 +10,7 @@ import { isEqual } from 'es-toolkit/predicate';
 export class SaveResult extends Group<CreateTextInput, FileReceipt, { readonly creator: FileCreator }> {
   readonly createText;
 
-  static readonly requires = Object.freeze({ creator: FileResources.createText.request() });
+  static readonly deps = Object.freeze({ creator: FileResources.createText.request() });
 
   readonly creationWaiting;
 
@@ -29,15 +29,15 @@ export class SaveResult extends Group<CreateTextInput, FileReceipt, { readonly c
         const child = waitingChild(facts, facts.references.child, 'create');
         if (facts.children.values().length !== 1 || !isEqual(child.input, facts.input)) throw new Error('File save checkpoint must identify its fixed creation child');
       },
-      resume: { uses: this.members, execute: (work, _state, saved) => this.receive(work.children.resume(saved.child)) },
+      resume: { uses: this.members, run: (work, _state, saved) => this.receive(work.children.resume(saved.child)) },
     });
 
-    this.setDefinition({ name: 'saveResult', label: '保存结果', source: 'services/observer/src/conversation/group/document/save.ts · SaveResult', observation: [invocationRecording<CreateTextInput, FileReceipt>({ input: ({ path, text }) => ({ path, bytes: Buffer.byteLength(text, 'utf8') }) })], run: { requires: SaveResult.requires, uses: this.members, execute: this.execute.bind(this) }, checkpoint: { key: 'observer.save-result', version: 2, input: createTextCheckpointInput, output: fileReceiptCheckpoint, points: [this.creationWaiting] } });
+    this.setDefinition({ name: 'saveResult', label: '保存结果', source: 'services/observer/src/conversation/group/document/save.ts · SaveResult', observation: [invocationRecording<CreateTextInput, FileReceipt>({ input: ({ path, text }) => ({ path, bytes: Buffer.byteLength(text, 'utf8') }) })], deps: SaveResult.deps, uses: this.members, run: this.execute.bind(this), checkpoint: { key: 'observer.save-result', version: 2, input: createTextCheckpointInput, output: fileReceiptCheckpoint, points: [this.creationWaiting] } });
   }
 
   private async execute(work: GroupWork<CreateTextInput, FileReceipt, object>): Promise<FileReceipt> {
     const child = work.children.create(this.createText, work.input, { key: 'create' });
-    work.checkpoint?.save(this.creationWaiting, null, { child: child.ref });
+    work.checkpoint?.({ point: this.creationWaiting, state: null, refs: { child: child.ref } });
     return this.receive(child);
   }
   private async receive(child: ChildCall<CreateText>): Promise<FileReceipt> {

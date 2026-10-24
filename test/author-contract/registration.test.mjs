@@ -8,38 +8,32 @@ function assemble(leaf) {
   const operation = defineGroup()({
     ...metadata,
     members: [leaf],
-    run: {
-      async execute(work) {
-        const child = work.children.create(leaf, work.input);
-        await child.run();
-        return child.accept();
-      },
+    async run(work) {
+      const child = work.children.create(leaf, work.input);
+      await child.run();
+      return child.accept();
     },
   });
   const execution = defineGroup()({
     members: [operation],
-    run: {
-      async execute(work) {
-        const child = work.children.create(operation, work.input);
-        await child.run();
-        return child.accept();
-      },
+    async run(work) {
+      const child = work.children.create(operation, work.input);
+      await child.run();
+      return child.accept();
     },
   });
   const root = defineScene()({
     members: [execution],
-    run: {
-      async execute(work) {
-        const child = work.children.create(execution, work.input);
-        await child.run();
-        return child.accept();
-      },
+    async run(work) {
+      const child = work.children.create(execution, work.input);
+      await child.run();
+      return child.accept();
     },
   });
   return installCallable(root, { providers: [], source: { runtime: () => null, capture: () => null } });
 }
 
-for (const children of [[], [defineNode()({ ...metadata, run: { execute: (work) => work.input } })]]) {
+for (const children of [[], [defineNode()({ ...metadata, run: (work) => work.input })]]) {
   test(`binding rejects an A with ${children.length} declared children before any work runs`, () => {
     let called = 0;
     class InvalidLeaf extends Node {
@@ -48,10 +42,10 @@ for (const children of [[], [defineNode()({ ...metadata, run: { execute: (work) 
       source = 'test';
       callee = 'local';
       members = children;
-      run = { requires: {}, execute: () => ++called };
+      run = { deps: {}, execute: () => ++called };
     }
     assert.throws(() => assemble(new InvalidLeaf()), /Nodes cannot declare members/);
-    assert.throws(() => defineNode()({ ...metadata, members: children, run: { execute: () => ++called } }), /Node cannot have members/);
+    assert.throws(() => defineNode()({ ...metadata, members: children, run: () => ++called }), /Node cannot have members/);
     assert.equal(called, 0);
   });
 }
@@ -63,7 +57,7 @@ test('a class and its complete factory path retain the receiver and original out
     source = 'test';
     callee = 'local';
     outputValue = { content: 'original' };
-    run = { requires: {}, execute: () => this.outputValue };
+    run = { deps: {}, execute: () => this.outputValue };
   }
   const reader = new Reader();
   const runtime = assemble(reader);

@@ -30,20 +30,20 @@ export class FollowModel extends Node<FollowModelInput, ModelOutput, FollowModel
         checkLeafResult(facts);
         if (!isEqual(facts.input, state)) throw new Error('Follow checkpoint changed interaction');
       },
-      resume: { requires: { modelReader: ModelResource.read.request() }, execute: (work) => this.receive(work) },
+      resume: { deps: { modelReader: ModelResource.read.request() }, run: (work) => this.receive(work) },
     });
-    this.resultPoint = checkpointPoint<'node', FollowModelInput, ModelOutput>()({ name: 'result', state: modelFeedbackCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { execute: (_work, result) => result } });
+    this.resultPoint = checkpointPoint<'node', FollowModelInput, ModelOutput>()({ name: 'result', state: modelFeedbackCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { run: (_work, result) => result } });
 
-    this.setDefinition({ name: 'followModel', label: '等待模型反馈', source: 'services/observer/src/conversation/node/model/follow.ts · FollowModel', callee: 'model-interaction', observation: [invocationRecording()], checkpoint: { key: 'observer.follow-model', version: 1, input: followInputCodec, output: modelFeedbackCodec, points: [this.waitingPoint, this.resultPoint] }, run: { requires: { modelReader: ModelResource.read.request() }, execute: this.execute.bind(this) } });
+    this.setDefinition({ name: 'followModel', label: '等待模型反馈', source: 'services/observer/src/conversation/node/model/follow.ts · FollowModel', callee: 'model-interaction', observation: [invocationRecording()], checkpoint: { key: 'observer.follow-model', version: 1, input: followInputCodec, output: modelFeedbackCodec, points: [this.waitingPoint, this.resultPoint] }, deps: { modelReader: ModelResource.read.request() }, run: this.execute.bind(this) });
   }
 
   private execute(work: NodeWork<FollowModelInput, ModelOutput, FollowModelResources>): Promise<ModelOutput> {
-    work.checkpoint?.save(this.waitingPoint, work.input, {});
+    work.checkpoint?.({ point: this.waitingPoint, state: work.input, refs: {} });
     return this.receive(work);
   }
   private async receive(work: NodeWork<FollowModelInput, ModelOutput, FollowModelResources>): Promise<ModelOutput> {
     const output = await work.resources.modelReader.result(work.input, { signal: work.signal, expected: work.input.expected });
-    work.checkpoint?.save(this.resultPoint, output, {});
+    work.checkpoint?.({ point: this.resultPoint, state: output, refs: {} });
     return output;
   }
 }

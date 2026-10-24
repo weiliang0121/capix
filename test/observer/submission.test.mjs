@@ -177,19 +177,19 @@ test('active discovery follows the service lifetime even when projection fails, 
 test('conversation binding selects its declared E instead of giving every R child the same public meaning', async () => {
   const environment = createEnvironment();
   const definition = createConversationStructure();
-  const other = defineGroup()({ members: [], run: { execute: () => null } });
+  const other = defineGroup()({ members: [], run: () => null });
   const originalRun = definition.scene.run;
   definition.scene.add(other);
-  definition.scene.setRun({
-    ...originalRun,
-    uses: definition.scene.members,
-    execute: async (work) => {
+  definition.scene.setRun(
+    async (work) => {
       const unrelated = work.children.create(other, work.input, { key: 'unrelated' });
       await unrelated.run();
       await unrelated.accept(() => undefined);
       return originalRun.execute(work);
     },
-  });
+    originalRun.deps,
+    { uses: definition.scene.members, accept: originalRun.accept },
+  );
 
   const runner = createConversationRunner(definition, environment, new ModelInteractions(new ModelSource(provider)));
   const received = [];

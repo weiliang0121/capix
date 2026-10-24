@@ -44,7 +44,7 @@ function checkpoint(key, child) {
         references: { child: childReference(child) },
         resume: {
           uses: [child],
-          async execute(work, _state, saved) {
+          async run(work, _state, saved) {
             const child = work.children.resume(saved.child);
             await child.run();
             return child.accept();
@@ -62,10 +62,10 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
     }
     checkpoint = checkpoint('active.fixture.e', operation);
     run = {
-      requires: {},
+      deps: {},
       async execute(work) {
         const child = work.children.create(operation, work.input);
-        work.checkpoint.save(thisCheckpoint.points[0], null, { child: child.ref });
+        work.checkpoint({ point: thisCheckpoint.points[0], state: null, refs: { child: child.ref } });
         options.afterCreated?.();
         await child.run();
         return child.accept();
@@ -81,10 +81,10 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
     }
     checkpoint = checkpoint('active.fixture.r', execution);
     run = {
-      requires: {},
+      deps: {},
       execute: async (work) => {
         const child = work.children.create(execution, work.input);
-        work.checkpoint.save(this.checkpoint.points[0], null, { child: child.ref });
+        work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: { child: child.ref } });
         await child.run();
         return child.accept();
       },
@@ -153,13 +153,13 @@ test('a composed maintenance O may write content and choose from the new explici
   const content = new ConversationContent({ messages: [message('evidence')] });
   t.after(() => content.close());
   let calls = 0;
-  const requires = { activeContentManager: ActiveContentResource.manage.request(), memoryWriter: MemoryResource.apply.request() };
+  const deps = { activeContentManager: ActiveContentResource.manage.request(), memoryWriter: MemoryResource.apply.request() };
   class Policy extends Group {
     name = 'policy';
     label = 'policy';
     source = 'test';
     run = {
-      requires,
+      deps,
       execute(work) {
         calls++;
         assert.equal(work.input.phase, 'after-content');
@@ -242,14 +242,14 @@ test('preparation and maintenance resume their actual waiting child before accep
     name = 'policy';
     label = 'policy';
     source = 'test';
-    completed = checkpointPoint()({ name: 'completed', state: codec, references: {}, resume: { execute: (_work, output) => output } });
+    completed = checkpointPoint()({ name: 'completed', state: codec, references: {}, resume: { run: (_work, output) => output } });
     checkpoint = { key: 'active.fixture.policy', version: 1, input: codec, output: codec, points: [this.completed] };
     run = {
-      requires: {},
+      deps: {},
       execute: (work) => {
         calls++;
         const decision = { basis: work.input.material.basis, messageIndexes: [0], memoryIds: [] };
-        work.checkpoint.save(this.completed, decision, {});
+        work.checkpoint({ point: this.completed, state: decision, refs: {} });
         return decision;
       },
     };

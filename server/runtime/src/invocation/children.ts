@@ -98,8 +98,8 @@ export class InvocationChildren implements InvocationRelationOwner {
     const identity = Object.freeze({ parentContextId: this.context.id, childContextId: relation.invocation.context.id, parentRound: relation.round, ...(relation.key ? { key: relation.key } : {}) });
     return this.observe?.(identity, change);
   }
-  private relation<Output>(target: InvocationTarget<Output>, round: number, order: number, key?: string, declarationPosition?: number): InvocationRelation<Output> {
-    return new InvocationRelation({ target, round, order, key, declarationPosition }, this);
+  private relation<Output>(target: InvocationTarget<Output>, round: number, order: number, key?: string, declarationPosition?: number, receiveFailure?: boolean): InvocationRelation<Output> {
+    return new InvocationRelation({ target, round, order, key, declarationPosition, receiveFailure }, this);
   }
   run<Value>(target: InvocationTarget<Value>, work: () => Promise<Value>): Promise<Value> {
     // Start admission is checked inside the child's delivery boundary, so a rejected
@@ -155,7 +155,7 @@ export class InvocationChildren implements InvocationRelationOwner {
     this.context.requireRunning();
     this.requireHealthy();
     if (this.#items.has(target.context.id)) throw new Error('Child invocation is already attached');
-    const relation = this.relation(target, this.context.progress.round, this.#nextOrder++, options.key, options.declarationPosition);
+    const relation = this.relation(target, this.context.progress.round, this.#nextOrder++, options.key, options.declarationPosition, options.receiveFailure);
     this.#items.set(target.context.id, relation);
     this.publish(relation, { kind: 'attached' });
     this.requireHealthy();

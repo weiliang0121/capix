@@ -62,7 +62,7 @@ test('request understanding only proposes a candidate, leaving path eligibility 
     definition.members.map((child) => child.name),
     ['prepareModelRequest', 'requestModel', 'acceptModelOutput'],
   );
-  assert.ok(Object.values(definition.run.requires).every((request) => !request.offer.name.startsWith('workspace-files')));
+  assert.ok(Object.values(definition.run.deps).every((request) => !request.offer.name.startsWith('workspace-files')));
 });
 
 test('understanding uses exactly the fixed active material without implicit recent-history expansion', async () => {

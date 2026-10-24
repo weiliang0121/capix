@@ -17,7 +17,7 @@ class Leaf extends Node<string, string, Record<string, never>, Record<string, ne
   callee = 'test';
   readonly output = text;
   readonly run = {
-    requires: {},
+    deps: {},
     execute(work: NodeWork<string, string, Record<string, never>, string>) {
       work.output.emit(work.input);
       // @ts-expect-error only declared string deltas may be emitted
@@ -42,7 +42,7 @@ class Parent extends Group<string, string, Record<string, never>, Record<string,
   }
   readonly output = text;
   readonly run = {
-    requires: {},
+    deps: {},
     execute: async (work: GroupWork<string, string, Record<string, never>, Leaf, string>) => {
       const call = work.children.create(this.leaf, work.input, {
         output: {

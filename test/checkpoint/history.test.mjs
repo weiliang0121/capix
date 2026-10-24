@@ -12,7 +12,7 @@ function harness(store, resume, calls, reception = false) {
     raises = [rejected];
     checkpoint = { key: 'fixture.history.child', version: 1, input: codec, output: codec, points: [] };
     run = {
-      requires: {},
+      deps: {},
       execute() {
         calls.child++;
         if (reception) return { answer: 'successful child output' };
@@ -30,9 +30,9 @@ function harness(store, resume, calls, reception = false) {
     receptions = reception === 'typed' ? [contract] : [];
     raises = [rejected];
     maxRounds = 2;
-    checkpoint = { key: 'fixture.history.root', version: 1, input: codec, output: codec, points: [{ name: 'second', state: codec, references: {}, resume: { requires: {}, uses: [child], execute: (work) => resume(work, child, this.checkpoint.points[0]) } }] };
+    checkpoint = { key: 'fixture.history.root', version: 1, input: codec, output: codec, points: [{ name: 'second', state: codec, references: {}, resume: { deps: {}, uses: [child], run: (work) => resume(work, child, this.checkpoint.points[0]) } }] };
     exceptions = {
-      requires: {},
+      deps: {},
       accepts: [rejected],
       handle(work) {
         calls.handled++;
@@ -40,7 +40,7 @@ function harness(store, resume, calls, reception = false) {
       },
     };
     run = {
-      requires: {},
+      deps: {},
       uses: [child],
       execute: async (work) => {
         if (work.round === 1) {
@@ -54,7 +54,7 @@ function harness(store, resume, calls, reception = false) {
           }
           return output;
         }
-        work.checkpoint.save(this.checkpoint.points[0], null, {});
+        work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: {} });
         return 'second round result';
       },
     };
@@ -103,7 +103,7 @@ test('second-round checkpoints retain a handled child exception as inert histori
       assert.equal(relation.returned.diagnostic instanceof DeclaredException, false);
       assert.deepEqual(relation.returned.diagnostic, failed.state.error);
       assert.equal(relation.returned.failure.contract, rejected.name);
-      work.checkpoint.save(point, null, {});
+      work.checkpoint({ point: point, state: null, refs: {} });
       return 'resumed second round';
     },
     calls,
@@ -172,7 +172,7 @@ for (const mode of [true, 'typed'])
         assert.equal(fact.reception.status, 'failed');
         assert.equal(fact.reception.diagnostic instanceof DeclaredException, false);
         assert.deepEqual(fact.reception.diagnostic, child.state.reception.error);
-        work.checkpoint.save(point, null, {});
+        work.checkpoint({ point: point, state: null, refs: {} });
         return 'continued after prior reception failure';
       },
       calls,

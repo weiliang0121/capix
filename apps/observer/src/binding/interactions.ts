@@ -22,7 +22,7 @@ export function projectInteraction({ id, value, error, call, parent }: { id: str
   const pending = isPlainObject(call.output) && call.output.kind === 'pending' && isPlainObject(call.output.interaction) && call.output.interaction.id === id;
   const relation = parent?.relationEntries.filter((entry) => entry.childId === call.id || (!entry.childId && entry.identity.childContextId === call.contextId)).at(-1);
   const parentChange = relation?.change;
-  const parentReceipt = parentChange?.kind === 'accepted' ? '父层已接纳本次返回' : parentChange?.kind === 'receiving' ? '父层正在接纳本次返回' : parentChange?.kind === 'failed' ? (parentChange.source === 'observation' ? '父层接纳记录不完整' : '父层接纳失败') : parentChange?.kind === 'returned' ? '本次已返回，尚无父层接纳事实' : '尚无父层接纳事实';
+  const parentReceipt = parentChange?.kind === 'accepted' ? '父层已接纳本次返回' : parentChange?.kind === 'handled' ? '失败已处理' : parentChange?.kind === 'receiving' ? '父层正在接纳本次返回' : parentChange?.kind === 'failed' ? (parentChange.source === 'observation' ? '父层接纳记录不完整' : '父层接纳失败') : parentChange?.kind === 'returned' ? '本次已返回，尚无父层接纳事实' : '尚无父层接纳事实';
   const status = !value ? '状态尚未取得' : value.result.kind === 'received' ? (value.retained === 'persistent' ? '反馈已接收并保存' : '反馈已接收（进程内）') : value.result.kind === 'unavailable' ? '交互结果不可用' : value.delivery === 'started' ? '发送已登记，等待外部反馈' : '交互已建立，尚未登记发送';
   return {
     id,

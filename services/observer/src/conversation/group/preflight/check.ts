@@ -11,7 +11,7 @@ type PreflightWork = GroupWork<FilePreflightInput, FilePreflightOutput, object>;
 export class CheckFileTask extends Group<FilePreflightInput, FilePreflightOutput, { readonly inspector: FileInspector }> {
   readonly inspectFile;
 
-  static readonly requires = Object.freeze({ inspector: FileResources.inspect.request() });
+  static readonly deps = Object.freeze({ inspector: FileResources.inspect.request() });
   readonly inspecting;
   readonly result;
 
@@ -29,7 +29,7 @@ export class CheckFileTask extends Group<FilePreflightInput, FilePreflightOutput
         const child = waitingChild(facts, facts.references.child, 'inspect');
         if (facts.children.values().length !== 1 || !isEqual(child.input, facts.input.task)) throw new Error('Preflight checkpoint changed task');
       },
-      resume: { uses: this.members, execute: (work, _state, saved) => this.receive(work, work.children.resume(saved.child)) },
+      resume: { uses: this.members, run: (work, _state, saved) => this.receive(work, work.children.resume(saved.child)) },
     });
     this.result = checkpointPoint<'group', FilePreflightInput, FilePreflightOutput>()({
       name: 'result',
@@ -40,21 +40,21 @@ export class CheckFileTask extends Group<FilePreflightInput, FilePreflightOutput
         const child = acceptedChild(facts.children.requireUnique(this.inspectFile, { parentRound: 1 }));
         if (facts.children.values().length !== 1 || child.key !== 'inspect' || !isEqual(child.reception.value, output)) throw new Error('Preflight checkpoint differs from accepted inspection');
       },
-      resume: { execute: (_work, output) => output },
+      resume: { run: (_work, output) => output },
     });
 
-    this.setDefinition({ name: 'checkFileTask', label: '预检文件任务', source: 'services/observer/src/conversation/group/preflight/check.ts · CheckFileTask', observation: [invocationRecording()], checkpoint: { key: 'observer.file-preflight', version: 2, input: preflightInputCodec, output: preflightCodec, points: [this.inspecting, this.result] }, run: { requires: CheckFileTask.requires, uses: this.members, execute: this.execute.bind(this) } });
+    this.setDefinition({ name: 'checkFileTask', label: '预检文件任务', source: 'services/observer/src/conversation/group/preflight/check.ts · CheckFileTask', observation: [invocationRecording()], checkpoint: { key: 'observer.file-preflight', version: 2, input: preflightInputCodec, output: preflightCodec, points: [this.inspecting, this.result] }, deps: CheckFileTask.deps, uses: this.members, run: this.execute.bind(this) });
   }
 
   private async execute(work: PreflightWork): Promise<FilePreflightOutput> {
     const child = work.children.create(this.inspectFile, work.input.task, { key: 'inspect' });
-    work.checkpoint?.save(this.inspecting, null, { child: child.ref });
+    work.checkpoint?.({ point: this.inspecting, state: null, refs: { child: child.ref } });
     return this.receive(work, child);
   }
   private async receive(work: PreflightWork, child: ChildCall<InspectFileTask>): Promise<FilePreflightOutput> {
     await child.run();
     const output = await child.accept((result) => (result.kind === 'ready' ? Object.freeze({ ...result, instruction: work.input.instruction }) : result));
-    work.checkpoint?.save(this.result, output, {});
+    work.checkpoint?.({ point: this.result, state: output, refs: {} });
     return output;
   }
 }

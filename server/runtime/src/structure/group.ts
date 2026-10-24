@@ -1,7 +1,7 @@
 import { Callable } from './callable.js';
-import { appendMembers } from './members.js';
+import { appendMembers, appendNamedMembers, requireChildCallable } from './members.js';
 import type { GroupDefinition } from '../definition/group.js';
-import type { Composite } from '../definition/composition.js';
+import type { Composite, NamedMembers, MemberRegistration, NamedMemberRegistration } from '../definition/composition.js';
 import type { ChildCallable } from '../definition/children.js';
 import type { EmptyResources } from '../definition/callable.js';
 import { assertStructureConfigurable } from './configuration.js';
@@ -9,6 +9,11 @@ import { assertStructureConfigurable } from './configuration.js';
 /** A callable composite owns its own processing, independently of its registered members. */
 export class Group<Input = unknown, Output = unknown, Resources extends object = EmptyResources, ExceptionResources extends object = EmptyResources, Delta = never> extends Callable<Input, Output, 'group', Delta> implements Composite {
   #members: readonly ChildCallable[] = Object.freeze([]);
+  #names: NamedMembers = Object.freeze({});
+
+  get names(): NamedMembers {
+    return this.#names;
+  }
 
   get members(): readonly ChildCallable[] {
     return this.#members;
@@ -19,9 +24,22 @@ export class Group<Input = unknown, Output = unknown, Resources extends object =
     if (definition !== undefined) this.configure(definition);
   }
 
-  add(...members: readonly ChildCallable[]): this {
+  add<const Names extends NamedMembers>(members: MemberRegistration<Names>): this & NamedMemberRegistration<Names>;
+  add(...members: readonly ChildCallable[]): this;
+  add(...members: readonly unknown[]): this {
     assertStructureConfigurable(this);
-    this.#members = appendMembers(this, this.#members, members);
+    if (members.length === 1 && !(members[0] instanceof Callable)) {
+      const next = appendNamedMembers(this, this.#members, this.#names, members[0]!);
+      this.#members = next.members;
+      this.#names = next.names;
+    } else {
+      const additions: ChildCallable[] = [];
+      for (const member of members) {
+        requireChildCallable(member);
+        additions.push(member);
+      }
+      this.#members = appendMembers(this, this.#members, additions);
+    }
     return this;
   }
 }

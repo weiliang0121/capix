@@ -23,7 +23,7 @@ export interface ObservationInstallation {
 
 /** Each binding grants this declaration a separate synchronous resource window. */
 function bindObservation<Fact>(declaration: ObservationDeclaration<Fact>, resources: ResourceBindings): (fact: Fact) => undefined {
-  const local = resources.select(declaration.requires);
+  const local = resources.select(declaration.deps);
   let active = false;
   let started = false;
   local.restrict(() => {
@@ -59,7 +59,7 @@ export function bindInvocationObservation(setup: InvocationObservationSetup, ins
   const suppliers = [...installed.values()];
   const resources = setup.resources.supplement(suppliers.flatMap((session) => (session.observer.resources ? [session.observer.resources] : [])));
   for (const declaration of setup.declarations ?? []) {
-    const requests = resourceRequests(declaration.requires);
+    const requests = resourceRequests(declaration.deps);
     const unavailable = requests.some((request) => !resources.provides(request));
     if (unavailable) {
       // A disabled parent installation disables its descendant carrier only.

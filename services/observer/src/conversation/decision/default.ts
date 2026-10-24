@@ -36,7 +36,7 @@ export class DefaultConversationDecision extends Group<ConversationDecisionInput
           facts.children.require(this.understanding, child.ref);
         }
       },
-      resume: { execute: (_work, result) => result },
+      resume: { run: (_work, result) => result },
     });
     this.resultPoint = resultPoint;
     const understanding = this.understanding;
@@ -51,23 +51,23 @@ export class DefaultConversationDecision extends Group<ConversationDecisionInput
           },
           resume: {
             uses: [understanding],
-            execute: async (work, _state, saved) => {
+            run: async (work, _state, saved) => {
               const child = work.children.resume(saved.understanding);
               await child.run();
               const result = await child.accept(decisionFromProposal);
-              work.checkpoint?.save(resultPoint, result, {});
+              work.checkpoint?.({ point: resultPoint, state: result, refs: {} });
               return result;
             },
           },
         })
       : undefined;
 
-    this.setDefinition({ name: 'conversationDecision', label: '决定下一步', source: 'services/observer/src/conversation/decision/default.ts · DefaultConversationDecision', observation: [invocationRecording()], run: { requires: this.understanding ? UnderstandRequest.requires : {}, uses: this.members, execute: this.execute.bind(this) }, checkpoint: { key: `observer.default-decision.${options.files ? 'files' : 'chat'}`, version: 3, input: decisionInputCodec, output: decisionCodec, points: [...(this.understandingPoint ? [this.understandingPoint] : []), resultPoint] } });
+    this.setDefinition({ name: 'conversationDecision', label: '决定下一步', source: 'services/observer/src/conversation/decision/default.ts · DefaultConversationDecision', observation: [invocationRecording()], deps: this.understanding ? UnderstandRequest.deps : {}, uses: this.members, run: this.execute.bind(this), checkpoint: { key: `observer.default-decision.${options.files ? 'files' : 'chat'}`, version: 3, input: decisionInputCodec, output: decisionCodec, points: [...(this.understandingPoint ? [this.understandingPoint] : []), resultPoint] } });
   }
 
   private async execute(work: GroupWork<ConversationDecisionInput, ConversationDecision, DecisionResources>): Promise<ConversationDecision> {
     const result = await this.decide(work);
-    work.checkpoint?.save(this.resultPoint, result, {});
+    work.checkpoint?.({ point: this.resultPoint, state: result, refs: {} });
     return result;
   }
 
@@ -95,7 +95,7 @@ export class DefaultConversationDecision extends Group<ConversationDecisionInput
     };
     const understanding = work.children.create(this.understanding, request, { key: 'understanding' });
     if (!this.understandingPoint) throw new Error('Understanding checkpoint is unavailable');
-    work.checkpoint?.save(this.understandingPoint, null, { understanding: understanding.ref });
+    work.checkpoint?.({ point: this.understandingPoint, state: null, refs: { understanding: understanding.ref } });
     await understanding.run();
     return understanding.accept(decisionFromProposal);
   }

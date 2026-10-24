@@ -72,7 +72,7 @@ const environment = initializeObserver(provider);
 const output = await environment.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings, signal, progress });
 ```
 
-上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node，或直接使用 `@capix/server-runtime`：先构造 Scene 并向 Resources 注册供给，再 `const runner = new Runner(scene, resources).build()`，最后 `runner.run(input, options)`。可选 Interactions 作为第三参数接入；无需持有另一个已绑定场景，也不必使用 Observer 的装配。可运行的最小示例见 [examples/runner.mjs](examples/runner.mjs)。
+上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node，或直接使用 `@capix/server-runtime`：先构造 Scene 并向 Resources 注册供给，再 `const runner = new Runner(scene, resources).build()`，最后 `runner.run(input, options)`。可选 Interactions 作为第三参数接入；无需持有另一个已绑定场景，也不必使用 Observer 的装配。可运行入口见 [examples/runner.mjs](examples/runner.mjs)，完整资源与具名子调用例子见 [examples/dictionary.mjs](examples/dictionary.mjs)。
 
 回答在正式追加消息后交付，随后处理记忆。启用持久化时，正式追加先提交到数据库。后处理失败保留已成立的回答。当前只有生成回答明确声明的、针对完整模型输出被拒绝的一次再次生成；没有通用自动重试、后台补偿、动态调度或默认服务未完成调用恢复。
 

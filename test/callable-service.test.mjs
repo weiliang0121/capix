@@ -25,14 +25,12 @@ test('Scene members share Callable behavior, while only the exactly bound task p
   const model = new ModelInteractions(new ModelSource(provider));
   t.after(() => model.close());
   const definition = createConversationStructure();
-  const node = defineNode()({ name: 'scene-health-check', observation: [invocationRecording()], run: { execute: () => 'ready' } });
-  const group = defineGroup()({ name: 'unrelated-group', members: [], observation: [invocationRecording()], run: { execute: () => 'ready' } });
+  const node = defineNode()({ name: 'scene-health-check', observation: [invocationRecording()], run: () => 'ready' });
+  const group = defineGroup()({ name: 'unrelated-group', members: [], observation: [invocationRecording()], run: () => 'ready' });
   const original = definition.scene.run;
   definition.scene.add(node, group);
-  definition.scene.setRun({
-    ...original,
-    uses: definition.scene.members,
-    async execute(work) {
+  definition.scene.setRun(
+    async function (work) {
       for (const member of [node, group]) {
         const call = work.children.create(member, null);
         await call.run();
@@ -40,7 +38,9 @@ test('Scene members share Callable behavior, while only the exactly bound task p
       }
       return original.execute(work);
     },
-  });
+    original.deps,
+    { uses: definition.scene.members, accept: original.accept },
+  );
 
   const runner = createConversationRunner(definition, entities, model, { observations: [recording] });
   const progress = [];
@@ -108,26 +108,24 @@ test('a conversation task nested under multiple groups retains its full ancestry
     name: 'inner',
     members: [conversation],
     observation: [invocationRecording()],
-    run: {
-      requires: conversationSceneRequests,
-      async execute(work) {
-        const accepted = acceptConversationRequest(work.input, work.resources.messages.append, false);
-        const call = work.children.create(conversation, accepted);
-        await call.run();
-        return call.accept();
-      },
+    deps: conversationSceneRequests,
+    async run(work) {
+      const accepted = acceptConversationRequest(work.input, work.resources.messages.append, false);
+      const call = work.children.create(conversation, accepted);
+      await call.run();
+      return call.accept();
     },
   });
   const forward = (child) => ({
     uses: [child],
-    async execute(work) {
+    async run(work) {
       const call = work.children.create(child, work.input);
       await call.run();
       return call.accept();
     },
   });
-  const outer = defineGroup()({ name: 'outer', members: [inner], observation: [invocationRecording()], run: forward(inner) });
-  const root = defineScene()({ name: 'nested-conversation', members: [outer], observation: [invocationRecording()], run: forward(outer) });
+  const outer = defineGroup()({ name: 'outer', members: [inner], observation: [invocationRecording()], ...forward(inner) });
+  const root = defineScene()({ name: 'nested-conversation', members: [outer], observation: [invocationRecording()], ...forward(outer) });
   const definition = { scene: root, conversation, ...capabilities };
 
   const runner = createConversationRunner(definition, entities, model, { observations: [recording] });
@@ -154,7 +152,7 @@ test('a conversation task nested under multiple groups retains its full ancestry
 test('a Driver may run an explicitly marked root task without a synthetic Scene parent', async () => {
   const recorder = new Recorder(new RecordBook());
   const recording = bindRecording(recorder);
-  const task = defineGroup()({ name: 'root-task', observation: [invocationRecording({ role: 'conversation-task' })], run: { execute: () => ({ kind: 'answer', content: 'done' }) } });
+  const task = defineGroup()({ name: 'root-task', observation: [invocationRecording({ role: 'conversation-task' })], run: () => ({ kind: 'answer', content: 'done' }) });
   const driver = new Driver({ observations: [recording] });
   const bound = driver.build(task, { providers: [], source: { capture: () => null } });
   const snapshots = [];
@@ -178,35 +176,31 @@ test('a Driver may run an explicitly marked root task without a synthetic Scene 
 test('a nested task change refreshes every containing task without refreshing an unrelated sibling task', async () => {
   const recorder = new Recorder(new RecordBook());
   const recording = bindRecording(recorder);
-  const leaf = defineNode()({ name: 'leaf', observation: [invocationRecording()], run: { execute: () => 'done' } });
+  const leaf = defineNode()({ name: 'leaf', observation: [invocationRecording()], run: () => 'done' });
   const compose = (name, child) =>
     defineGroup()({
       name,
       members: [child],
       observation: [invocationRecording({ role: 'conversation-task' })],
-      run: {
-        async execute(work) {
-          const call = work.children.create(child, work.input);
-          await call.run();
-          return call.accept((value) => value);
-        },
+      async run(work) {
+        const call = work.children.create(child, work.input);
+        await call.run();
+        return call.accept((value) => value);
       },
     });
   const inner = compose('inner-task', leaf);
   const outer = compose('outer-task', inner);
-  const sibling = defineGroup()({ name: 'sibling-task', observation: [invocationRecording({ role: 'conversation-task' })], run: { execute: () => 'sibling' } });
+  const sibling = defineGroup()({ name: 'sibling-task', observation: [invocationRecording({ role: 'conversation-task' })], run: () => 'sibling' });
   const scene = defineScene()({
     members: [sibling, outer],
     observation: [invocationRecording()],
-    run: {
-      async execute(work) {
-        for (const member of [sibling, outer]) {
-          const call = work.children.create(member, null);
-          await call.run();
-          await call.accept((value) => value);
-        }
-        return null;
-      },
+    async run(work) {
+      for (const member of [sibling, outer]) {
+        const call = work.children.create(member, null);
+        await call.run();
+        await call.accept((value) => value);
+      }
+      return null;
     },
   });
   let changedOwner;

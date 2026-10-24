@@ -47,7 +47,7 @@ async function run(environment, content) {
 function executionRuntime(execute, { changes, recording, accept, parentAccept } = {}) {
   class E extends Group {
     observation = recording ? [invocationRecording({ role: 'conversation-task' })] : undefined;
-    run = { requires: {}, execute, ...(accept ? { accept } : {}) };
+    run = { deps: {}, execute, ...(accept ? { accept } : {}) };
   }
   const execution = new E();
   class R extends Scene {
@@ -57,7 +57,7 @@ function executionRuntime(execute, { changes, recording, accept, parentAccept } 
     }
     observation = recording ? [invocationRecording()] : undefined;
     run = {
-      requires: {},
+      deps: {},
       execute: async (work) => {
         const child = work.children.create(execution, work.input, { key: 'test' });
         const output = await child.run();

@@ -5,11 +5,11 @@ import { Node, defineNode, defineGroup, reception, resolveDeclaration } from '@c
 const metadata = { name: 'test', label: 'test', source: 'test', callee: 'local' };
 const identity = { check: (value) => value, encode: (value) => value, decode: (value) => value };
 function makeChild() {
-  return defineNode()({ ...metadata, run: { execute: (work) => work.input } });
+  return defineNode()({ ...metadata, run: (work) => work.input });
 }
 
 function parent(children, receptions) {
-  return defineGroup()({ ...metadata, members: children, receptions, run: { execute: (work) => work.input } });
+  return defineGroup()({ ...metadata, members: children, receptions, run: (work) => work.input });
 }
 
 test('reception registration rejects repeated contracts and targets outside its direct children', () => {
@@ -48,10 +48,10 @@ for (const receptions of [[], [reception(makeChild(), identity)]]) {
       source = 'test';
       callee = 'local';
       receptions = receptions;
-      run = { requires: {}, execute: (work) => work.input };
+      run = { deps: {}, execute: (work) => work.input };
     }
     assert.throws(() => resolveDeclaration(new InvalidLeaf()), /Nodes cannot declare receptions/);
-    const factory = defineNode()({ ...metadata, receptions, run: { execute: (work) => work.input } });
+    const factory = defineNode()({ ...metadata, receptions, run: (work) => work.input });
     assert.throws(() => resolveDeclaration(factory), /Nodes cannot declare receptions/);
   });
 }
@@ -95,6 +95,6 @@ test('invalid reception value contracts are rejected during binding', () => {
   for (const field of ['check', 'encode', 'decode']) {
     const child = makeChild();
     const invalid = reception(child, { ...identity, [field]: undefined });
-    assert.throws(() => resolveDeclaration(parent([child], [invalid])), /Reception requires check, encode and decode functions/);
+    assert.throws(() => resolveDeclaration(parent([child], [invalid])), /Reception needs check, encode and decode functions/);
   }
 });

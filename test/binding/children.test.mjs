@@ -6,11 +6,11 @@ import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, In
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 function operation(execute = (work) => work.input) {
-  return new Group({ name: 'child', label: 'Child', source: 'test', maxRounds: 1, raises: [], run: { requires: {}, execute } });
+  return new Group({ name: 'child', label: 'Child', source: 'test', maxRounds: 1, raises: [], deps: {}, run: execute });
 }
 
 function assemble(child, run, options = {}) {
-  const execution = new Group({ maxRounds: 1, raises: [], ...options, run: { requires: {}, ...run } }).add(child);
+  const execution = new Group({ maxRounds: 1, raises: [], ...options, deps: run.deps ?? {}, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) }).add(child);
   return installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
 }
 
@@ -60,7 +60,7 @@ test('a handler with no creation grants can accept an earlier delivery through i
     {
       raises: [rejected],
       exceptions: {
-        requires: {},
+        deps: {},
         uses: [],
         accepts: [rejected],
         async handle(work) {
@@ -134,7 +134,7 @@ for (const boundary of ['phase', 'round']) {
         {
           maxRounds: boundary === 'round' ? 2 : 1,
           raises: [rejected],
-          exceptions: { requires: {}, uses: [], accepts: [rejected], handle: useRetained },
+          exceptions: { deps: {}, uses: [], accepts: [rejected], handle: useRetained },
         },
       );
       await assert.rejects(runtime.run(null, {}), new RegExp(`inactive declaration ${boundary}`));
@@ -154,25 +154,23 @@ test('building child access does not execute members and a reused builder keeps 
   const parents = [];
   let builder;
   const structure = new Group({
-    run: {
-      async execute(work) {
-        const invocation = parents.at(-1);
-        const context = invocation.context;
-        const references = builder.references(invocation);
-        const allowed = [definition];
-        const bindings = builder.build(invocation, { validate: () => context.requireRunning(), uses: allowed, references });
-        accessObjects.push(bindings);
-        assert.ok(Object.isFrozen(bindings));
-        for (const field of ['parent', 'view', 'validate', 'calls', 'allowed', 'bound']) assert.equal(field in bindings, false);
-        assert.equal(calls, work.input === 'first' ? 0 : 1);
-        allowed.length = 0;
-        // Editing the input array cannot revoke or widen the already-built access object.
-        const call = bindings.create(definition, work.input);
-        assert.equal(calls, work.input === 'first' ? 0 : 1);
-        assert.equal(await call.run(), work.input);
-        const reception = builder.build(invocation, { validate: () => context.requireRunning(), uses: [], references });
-        return reception.open(call.ref).accept();
-      },
+    async run(work) {
+      const invocation = parents.at(-1);
+      const context = invocation.context;
+      const references = builder.references(invocation);
+      const allowed = [definition];
+      const bindings = builder.build(invocation, { validate: () => context.requireRunning(), uses: allowed, references });
+      accessObjects.push(bindings);
+      assert.ok(Object.isFrozen(bindings));
+      for (const field of ['parent', 'view', 'validate', 'calls', 'allowed', 'bound']) assert.equal(field in bindings, false);
+      assert.equal(calls, work.input === 'first' ? 0 : 1);
+      allowed.length = 0;
+      // Editing the input array cannot revoke or widen the already-built access object.
+      const call = bindings.create(definition, work.input);
+      assert.equal(calls, work.input === 'first' ? 0 : 1);
+      assert.equal(await call.run(), work.input);
+      const reception = builder.build(invocation, { validate: () => context.requireRunning(), uses: [], references });
+      return reception.open(call.ref).accept();
     },
   }).add(definition);
   new CallableBuilder().build(structure, {
@@ -234,20 +232,21 @@ test('resuming a saved final child delivery needs no child invocation constructi
   const definition = new Group({
     maxRounds: 1,
     raises: [],
-    run: { requires: {}, execute: () => assert.fail('final child work cannot execute again') },
-    checkpoint: { key: 'test.lazy.final-child', version: 1, input: codec, output: codec, points: [checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { execute: () => assert.fail('final child work cannot resume') } })] },
+    deps: {},
+    run: () => assert.fail('final child work cannot execute again'),
+    checkpoint: { key: 'test.lazy.final-child', version: 1, input: codec, output: codec, points: [checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { run: () => assert.fail('final child work cannot resume') } })] },
   });
   const bound = new BoundChildren([resolveDeclaration(definition)]);
   const builder = new ChildBindingsBuilder(bound);
   const store = new MemoryCheckpointStore();
   const childIdentity = { contextId: 'child-context', kind: 'group', parentContextId: 'parent-context' };
   const childContract = { key: definition.checkpoint.key, version: 1 };
-  store.save({ id: 'child-cp', formatVersion: 4, contract: childContract, point: 'saved', frame: { owner: childIdentity, round: 1, phase: 'execute', input: 'child', currentInput: 'child', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'child-cp', formatVersion: 5, contract: childContract, point: 'saved', frame: { owner: childIdentity, round: 1, phase: 'execute', input: 'child', currentInput: 'child', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   store.finish('child-context', 1, { status: 'succeeded', output: { answer: 'saved' }, progress: { round: 1, phase: 'receive', currentInput: 'child' } });
   const saved = store.save(
     {
       id: 'parent-cp',
-      formatVersion: 4,
+      formatVersion: 5,
       contract: { key: 'test.lazy.parent', version: 1 },
       point: 'waiting',
       frame: { owner: { contextId: 'parent-context', kind: 'scene' }, round: 1, phase: 'execute', input: 'parent', currentInput: 'parent', nextChildOrder: 1, children: [{ identity: childIdentity, target: { position: 0 }, contract: childContract, round: 1, order: 0, input: 'child', state: { kind: 'waiting' } }] },

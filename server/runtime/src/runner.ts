@@ -18,6 +18,7 @@ import type { CheckpointStore } from './checkpoint/contract.js';
 import { Scene } from './structure/scene.js';
 import { Resources } from './resource/resources.js';
 import { Interactions } from './interaction/interactions.js';
+import type { AnyCallable } from './binding/declarations.js';
 
 export interface RunnerOptions<Options extends object = {}> extends InvocationCapabilities {
   readonly hooks?: readonly CallableHookBinding<Options>[];
@@ -30,7 +31,7 @@ export type RunnerArguments<Options extends object> = {} extends Options ? [opti
 type RunnerChange = { kind: 'established' } | ({ boundId: string } & ({ kind: 'acquired' | 'released' } | { kind: 'rejected'; reason: 'busy'; error: unknown } | { kind: 'entry-failed'; error: unknown }));
 
 /** One fixed scene and supply set; build and run do not expose another structural object. */
-export class Runner<Structure extends Scene<any, any, any, any, any>, Options extends object = {}> {
+export class Runner<Structure extends Extract<AnyCallable, { readonly kind: 'scene' }>, Options extends object = {}> {
   readonly id = randomUUID();
   readonly #scene: Structure;
   readonly #resources: Resources<Options>;

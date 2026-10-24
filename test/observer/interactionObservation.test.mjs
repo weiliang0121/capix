@@ -57,7 +57,7 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
         observation: [
           ...model.observation,
           defineObservation({
-            requires: {},
+            deps: {},
             observe(fact) {
               if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'succeeded' && fact.change.result.output.kind === 'pending') pending.resolve();
             },

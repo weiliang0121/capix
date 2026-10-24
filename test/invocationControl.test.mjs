@@ -104,35 +104,33 @@ test('an already entered reception finishes with its original Work before the pa
   t.after(() => release.resolve());
   const writes = [];
   const writer = new ResourceOffer('test.control.reception-write', (_source, activity) => ({ append: (value) => activity.runSync('append', {}, () => writes.push(value)) }));
-  const child = defineGroup()({ run: { execute: () => 'child output' } });
+  const child = defineGroup()({ run: () => 'child output' });
   let reception;
   let parentAccepted = false;
   let childFacts;
   const definition = defineScene()({
     members: [child],
-    run: {
-      requires: { writer: writer.request() },
-      uses: [child],
-      async execute(work) {
-        const call = work.children.create(child, null);
-        await call.run();
-        reception = track(
-          call.accept(async (output) => {
-            entered.resolve();
-            await release.promise;
-            work.resources.writer.append(output);
-            assert.equal(work.children.open(call.ref).ref, call.ref, 'the original execute Work stays valid until its reception exits');
-            return 'accepted child';
-          }),
-        );
-        childFacts = () => work.children.facts.get(call.ref);
-        return 'parent output';
-      },
-      accept(work) {
-        parentAccepted = true;
-        assert.deepEqual(writes, ['child output']);
-        return work.delivered;
-      },
+    deps: { writer: writer.request() },
+    uses: [child],
+    async run(work) {
+      const call = work.children.create(child, null);
+      await call.run();
+      reception = track(
+        call.accept(async (output) => {
+          entered.resolve();
+          await release.promise;
+          work.resources.writer.append(output);
+          assert.equal(work.children.open(call.ref).ref, call.ref, 'the original execute Work stays valid until its reception exits');
+          return 'accepted child';
+        }),
+      );
+      childFacts = () => work.children.facts.get(call.ref);
+      return 'parent output';
+    },
+    accept(work) {
+      parentAccepted = true;
+      assert.deepEqual(writes, ['child output']);
+      return work.delivered;
     },
   });
   const runtime = installCallable(definition, { providers: [writer.provide(() => null)], source: { runtime: () => null, capture: () => null } });
@@ -393,20 +391,16 @@ test('a later reception diagnostic does not replace an unhandled parent declared
 test('an unawaited author child fault is owned by the parent without a second unhandled Promise rejection', { timeout: 2000 }, async () => {
   const failure = new Error('unawaited author child fault');
   const child = defineGroup()({
-    run: {
-      execute() {
-        throw failure;
-      },
+    run() {
+      throw failure;
     },
   });
   const definition = defineScene()({
     members: [child],
-    run: {
-      uses: [child],
-      execute(work) {
-        work.children.create(child, null).run();
-        return 'parent candidate';
-      },
+    uses: [child],
+    run(work) {
+      work.children.create(child, null).run();
+      return 'parent candidate';
     },
   });
   const runtime = installCallable(definition, { providers: [], source: { capture: () => null } });
@@ -422,24 +416,20 @@ test('an unawaited child declared failure keeps its original delivery without au
   const exception = rejected.create('child declined', {});
   const child = defineGroup()({
     raises: [rejected],
-    run: {
-      async execute() {
-        await release.promise;
-        throw exception;
-      },
+    async run() {
+      await release.promise;
+      throw exception;
     },
   });
   let childFacts;
   const definition = defineScene()({
     members: [child],
-    run: {
-      uses: [child],
-      execute(work) {
-        const call = work.children.create(child, null);
-        call.run();
-        childFacts = () => work.children.facts.get(call.ref);
-        return 'parent candidate';
-      },
+    uses: [child],
+    run(work) {
+      const call = work.children.create(child, null);
+      call.run();
+      childFacts = () => work.children.facts.get(call.ref);
+      return 'parent candidate';
     },
   });
   const runtime = installCallable(definition, { providers: [], source: { capture: () => null } });

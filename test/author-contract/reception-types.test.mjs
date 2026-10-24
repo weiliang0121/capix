@@ -15,10 +15,10 @@ type Input = { readonly path: string };
 type Result = { readonly text: string };
 type Receipt = { readonly location: string; readonly bytes: number };
 const metadata = { name: 'child', label: 'child', source: 'test', callee: 'local' };
-const child = defineNode<Input, Result>()({ ...metadata, run: { execute: work => ({ text: work.input.path }) } });
-const other = defineNode<number, boolean>()({ ...metadata, run: { execute: work => work.input > 0 } });
-const nested = defineGroup<Input, Result>()({ ...metadata, run: { execute: work => ({ text: work.input.path }) } });
-const task = defineGroup<Input, Result>()({ members: [nested], run: { execute: work => work.children.create(nested, work.input).run() } });
+const child = defineNode<Input, Result>()({ ...metadata, run: work => ({ text: work.input.path }) });
+const other = defineNode<number, boolean>()({ ...metadata, run: work => work.input > 0 });
+const nested = defineGroup<Input, Result>()({ ...metadata, run: work => ({ text: work.input.path }) });
+const task = defineGroup<Input, Result>()({ members: [nested], run: work => work.children.create(nested, work.input).run() });
 declare const receiptValue: ReceptionValue<Receipt>;
 declare const countValue: ReceptionValue<number>;
 declare const undefinedValue: ReceptionValue<undefined>;
@@ -32,22 +32,22 @@ const taskSaved = reception(task, receiptValue);
 const wrongSaved = reception(other, receiptValue);
 declare const receipt: Receipt;
 
-const firstParent = defineGroup<Input, Receipt>()({ ...metadata, members: [child], receptions: [saved], run: { async execute(work) {
+const firstParent = defineGroup<Input, Receipt>()({ ...metadata, members: [child], receptions: [saved], async run(work) {
   const call = work.children.create(child, work.input);
   const result: Result = await call.run();
   const accepted: Receipt = await call.accept(saved, output => ({ location: output.text, bytes: output.text.length }));
   const history: Receipt = work.children.facts.accepted(call.ref, saved);
   expectType<string>(result.text);
   return history;
-} } });
-const secondParent = defineGroup<Input, number>()({ ...metadata, members: [child], receptions: [counted], run: { async execute(work) {
+} });
+const secondParent = defineGroup<Input, number>()({ ...metadata, members: [child], receptions: [counted], async run(work) {
   const call = work.children.create(child, work.input);
   await call.run();
   return call.accept(counted, result => result.text.length);
-} } });
-defineGroup<Input, Receipt>()({ ...metadata, members: [child, nested], receptions: [saved, nestedSaved], run: { execute: () => receipt } });
-defineGroup<Input, Receipt>()({ members: [nested], receptions: [nestedSaved], run: { execute: () => receipt } });
-defineScene<Input, Receipt>()({ members: [task], receptions: [taskSaved], run: { execute: () => receipt } });
+} });
+defineGroup<Input, Receipt>()({ ...metadata, members: [child, nested], receptions: [saved, nestedSaved], run: () => receipt });
+defineGroup<Input, Receipt>()({ members: [nested], receptions: [nestedSaved], run: () => receipt });
+defineScene<Input, Receipt>()({ members: [task], receptions: [taskSaved], run: () => receipt });
 
 declare const call: ChildCall<typeof child>;
 expectType<Promise<Result>>(call.accept());
@@ -138,28 +138,28 @@ const forged: ReceptionDefinition<typeof child, Receipt> = { child, value: recei
 
 // Parent registration is constrained by children; reception cannot infer extra children.
 // @ts-expect-error unknown child's reception cannot expand registration
-defineGroup<Input, Receipt>()({ ...metadata, members: [child], receptions: [wrongSaved], run: { execute: () => receipt } });
+defineGroup<Input, Receipt>()({ ...metadata, members: [child], receptions: [wrongSaved], run: () => receipt });
 // @ts-expect-error no children were registered
-defineGroup<Input, Receipt>()({ ...metadata, receptions: [saved], run: { execute: () => receipt } });
+defineGroup<Input, Receipt>()({ ...metadata, receptions: [saved], run: () => receipt });
 // @ts-expect-error E cannot register an A reception
-defineGroup<Input, Receipt>()({ members: [nested], receptions: [saved], run: { execute: () => receipt } });
+defineGroup<Input, Receipt>()({ members: [nested], receptions: [saved], run: () => receipt });
 // @ts-expect-error parent registration cannot widen the registered member signature
-defineScene<Input, Receipt>()({ members: [other], receptions: [nestedSaved], run: { execute: () => receipt } });
+defineScene<Input, Receipt>()({ members: [other], receptions: [nestedSaved], run: () => receipt });
 // @ts-expect-error A cannot declare receptions
-defineNode<Input, Receipt>()({ ...metadata, receptions: [saved], run: { execute: () => receipt } });
+defineNode<Input, Receipt>()({ ...metadata, receptions: [saved], run: () => receipt });
 // @ts-expect-error even an empty A reception registry is forbidden
-defineNode<Input, Receipt>()({ ...metadata, receptions: [], run: { execute: () => receipt } });
+defineNode<Input, Receipt>()({ ...metadata, receptions: [], run: () => receipt });
 class BadLeaf extends Node<Input, Result> {
   readonly name = 'leaf'; readonly label = 'leaf'; readonly source = 'test'; readonly callee = 'local';
   // @ts-expect-error named classes have the same A registration boundary
   readonly receptions = [saved];
-  readonly run = { requires: {}, execute: (work: NodeWork<Input, Result>) => ({ text: work.input.path }) };
+  readonly run = { deps: {}, execute: (work: NodeWork<Input, Result>) => ({ text: work.input.path }) };
 }
 class NamedParent extends Group<Input, Receipt> {
   readonly name = 'parent'; readonly label = 'parent'; readonly source = 'test';
   constructor() { super(); this.add(child); }
   readonly receptions = [saved];
-  readonly run = { requires: {}, execute: (_work: GroupWork<Input, Receipt>) => receipt };
+  readonly run = { deps: {}, execute: (_work: GroupWork<Input, Receipt>) => receipt };
 }
 
 // Identity, registration and relation status remain runtime facts, not TS brands.

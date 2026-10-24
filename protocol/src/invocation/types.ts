@@ -14,7 +14,7 @@ export interface InvocationRelationIdentity {
   readonly parentRound: number;
   readonly key?: string;
 }
-export type InvocationRelationPhase = 'attached' | 'returned' | 'receiving' | 'accepted' | 'failed';
+export type InvocationRelationPhase = 'attached' | 'returned' | 'receiving' | 'accepted' | 'handled' | 'failed';
 
 /** Identity of the call that caused an entity change, at any REOA level. */
 export interface InvocationOrigin {

@@ -8,7 +8,7 @@ class Answer extends Group {
   name = 'answer';
   label = 'answer';
   source = 'test';
-  run = { requires: {}, execute: () => 'fixed answer' };
+  run = { deps: {}, execute: () => 'fixed answer' };
 }
 
 function assemble(execution, transcript, progress = []) {
@@ -29,7 +29,7 @@ test('fixed transcript writes require a real direct-child reception and cannot b
   const transcript = new Transcript();
   class Main extends Group {
     run = {
-      requires: { messages: TranscriptResource.append.request() },
+      deps: { messages: TranscriptResource.append.request() },
       execute(work) {
         assert.throws(() => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'not accepted' }] }), /active direct-child reception/);
         return 'caught';
@@ -50,7 +50,7 @@ test('fixed transcript writes derive parent and child identity from the actual r
       this.add(answer);
     }
     run = {
-      requires: { messages: TranscriptResource.append.request() },
+      deps: { messages: TranscriptResource.append.request() },
       async execute(work) {
         const child = work.children.create(answer, null);
         await child.run();
@@ -85,7 +85,7 @@ for (const stale of [undefined, 'endpoint', 'view']) {
       }
       maxRounds = 2;
       run = {
-        requires: { messages: TranscriptResource.append.request() },
+        deps: { messages: TranscriptResource.append.request() },
         async execute(work) {
           const endpoint = work.resources.messages;
           if (work.round === 1) {
@@ -160,9 +160,9 @@ test('a checkpoint writer retained from a previous round cannot save the current
   let writer;
   class Root extends Scene {
     maxRounds = 2;
-    checkpoint = { key: 'test.round-writer', version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { requires: {}, execute: () => null } }] };
+    checkpoint = { key: 'test.round-writer', version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { deps: {}, run: () => null } }] };
     run = {
-      requires: {},
+      deps: {},
       execute: (work) => {
         if (work.round === 1) writer = work.checkpoint;
         else assert.throws(() => writer.save(this.checkpoint.points[0], null, {}), /inactive declaration|outside its executing round/);
@@ -186,7 +186,7 @@ test('parallel fixed appends bind each effect to its own asynchronous reception'
       this.add(answer);
     }
     run = {
-      requires: { messages: TranscriptResource.append.request() },
+      deps: { messages: TranscriptResource.append.request() },
       async execute(work) {
         const first = work.children.create(answer, null);
         const second = work.children.create(answer, null);

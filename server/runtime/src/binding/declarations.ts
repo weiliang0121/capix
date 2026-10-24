@@ -1,7 +1,8 @@
 import type { CallableKind } from '@capix/protocol';
 import { isFunction } from 'es-toolkit/predicate';
 import type { ChildCallable } from '../definition/children.js';
-import type { Scene } from '../structure/scene.js';
+import type { CallableStructure } from '../structure/callable.js';
+import type { Composite } from '../definition/composition.js';
 import { resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
 import { isResourceRefinement, type ResourceRefinement } from '../resource/offer.js';
 import type { ChildBindingOptions } from './contract.js';
@@ -9,14 +10,14 @@ import { collectDefinitionRequirements, collectResourceSupply, type ChildResourc
 import { childKinds } from '../definition/kind.js';
 import { originalReception, snapshotDefinition, type CallableSnapshot } from './snapshot.js';
 
-export type AnyCallable = Scene<any, any, any, any, any> | ChildCallable;
+export type AnyCallable = (CallableStructure<'scene'> & Composite) | ChildCallable;
 
 /** Fixed interpretation of one structural position, without values or call state. */
 export interface ResolvedCallable<Definition extends AnyCallable = AnyCallable> {
   readonly kind: Definition['kind'];
   readonly definition: Definition;
   readonly declaration: CallableSnapshot;
-  readonly requires: ResourceRequirements;
+  readonly deps: ResourceRequirements;
   /** Offers routed through this position; local Work still receives only local requests. */
   readonly supply: ResourceRequirements;
   readonly members: readonly ResolvedChild[];
@@ -42,7 +43,7 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
     if (!Object.hasOwn(childKinds, current.kind) || (allowed && !allowed.includes(current.kind))) throw new Error('Invalid member definition kind');
     const declaration = snapshotDefinition(current);
     observations.push({ definition: current, parent: parent?.definition });
-    const requires = collectDefinitionRequirements(declaration, options.observationProvides);
+    const deps = collectDefinitionRequirements(declaration, options.observationProvides);
     const definitions: readonly ChildCallable[] = 'members' in declaration ? (declaration.members ?? []) : [];
     const receptions = new Set<object>();
     for (const reception of declaration.receptions ?? []) {
@@ -65,7 +66,7 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
       if (!definitions.some((member) => member === child)) throw new Error('Declaration uses a member outside its owner');
     }
     const selected = refinements.get(current);
-    const node = { kind: declaration.kind, definition: current, declaration, requires, refinements: selected };
+    const node = { kind: declaration.kind, definition: current, declaration, deps, refinements: selected };
     encountered.add(current);
     path.add(current);
     const members = definitions.map((member) => visit(member, node) as ResolvedChild);
@@ -76,7 +77,7 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
         const local = new Set(options.resourceScopes?.get(member.definition) ?? []);
         return Object.fromEntries(Object.entries(member.supply).filter(([, request]) => !local.has(request.offer)));
       });
-    const supply = collectResourceSupply([requires, ...inherited]);
+    const supply = collectResourceSupply([deps, ...inherited]);
     if (selected) checkRefinements(supply, selected);
     return Object.freeze({ ...node, supply, members: Object.freeze(members) });
   };

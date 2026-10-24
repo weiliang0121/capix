@@ -6,7 +6,7 @@ import { Scene, Group, ExceptionContract, ResourceOffer } from '@capix/server-ru
 class TestExecutionDefinition extends Group {
   constructor(execute) {
     super();
-    this.run = { requires: {}, execute };
+    this.run = { deps: {}, execute };
   }
 }
 
@@ -14,7 +14,7 @@ class Main extends Scene {
   constructor(children, execute) {
     super();
     this.add(...children);
-    this.run = { requires: {}, uses: children, execute };
+    this.run = { deps: {}, uses: children, execute };
   }
 }
 
@@ -236,7 +236,7 @@ test('cancellation after R content preparation retains content without creating 
 test('E supplies are fulfilled without exposing them to R work', async () => {
   const secret = new ResourceOffer('test.secret', (source) => source);
   const execution = new TestExecutionDefinition((work) => work.resources.secret);
-  execution.run.requires = { secret: secret.request() };
+  execution.run.deps = { secret: secret.request() };
   const runtime = assemble(
     new Main(
       [execution],
@@ -286,7 +286,7 @@ test('R handles a declared E exception through the ordinary child relationship',
     }),
   );
   definition.exceptions = {
-    requires: {},
+    deps: {},
     accepts: [rejected],
     handle: (work) => {
       const [relation] = work.children.facts.values();
@@ -341,7 +341,7 @@ test('E capture failures cannot masquerade as a declared E work exception', asyn
   const execution = new TestExecutionDefinition(() => assert.fail('must not execute'));
   execution.raises = [rejected];
   const definition = new Main([execution], forward(execution));
-  definition.exceptions = { requires: {}, accepts: [rejected], handle: () => assert.fail('capture errors are structural') };
+  definition.exceptions = { deps: {}, accepts: [rejected], handle: () => assert.fail('capture errors are structural') };
   const runtime = assemble(definition, {
     memberSource: {
       capture: () => {
@@ -359,7 +359,7 @@ test('omitted observation installation leaves declarations and their dependencie
   const execution = new TestExecutionDefinition(() => 'done');
   execution.observation = [
     {
-      requires: { extra: onlyObservation.request() },
+      deps: { extra: onlyObservation.request() },
       observe() {
         observed++;
       },
@@ -378,7 +378,7 @@ test('an explicit empty observation installation enables resource-free declarati
   const execution = new TestExecutionDefinition(() => 'done');
   execution.observation = [
     {
-      requires: {},
+      deps: {},
       observe(event) {
         events.push(event.kind);
       },
@@ -399,8 +399,8 @@ test('observation installations cannot satisfy work or exception-handler resourc
   const installation = { provides: { local: installed.request() }, bindInvocation: () => ({ observe() {} }) };
   for (const phase of ['run', 'exceptions']) {
     const execution = new TestExecutionDefinition(() => 'done');
-    if (phase === 'run') execution.run.requires = { forbidden: installed.request() };
-    else execution.exceptions = { requires: { forbidden: installed.request() }, accepts: [], handle: () => assert.fail('not reached') };
+    if (phase === 'run') execution.run.deps = { forbidden: installed.request() };
+    else execution.exceptions = { deps: { forbidden: installed.request() }, accepts: [], handle: () => assert.fail('not reached') };
     assert.throws(() => assemble(new Main([execution], forward(execution)), { observations: [installation] }), /Expected one resource provider/);
   }
 });

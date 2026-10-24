@@ -10,11 +10,9 @@ let calls = 0;
 const definition = (checkpoint) =>
   defineGroup()({
     ...(checkpoint ? { checkpoint: { key: 'same-contract', version: 1, input: codec, output: codec, points: [] } } : {}),
-    run: {
-      execute: (work) => {
-        calls++;
-        return work.input;
-      },
+    run: (work) => {
+      calls++;
+      return work.input;
     },
   });
 const a = definition(true);
@@ -46,7 +44,7 @@ const point = checkpointPoint()({
   },
   resume: {
     uses: [a, b, plain],
-    execute: (work, state, saved) => {
+    run: (work, state, saved) => {
       const chosen = work.children.facts.get(saved.chosen);
       assert.equal(work.children.facts.require(a, saved.chosen).ref, saved.repeated);
       assert.equal(calls, 0, 'saved successful deliveries must not execute');
@@ -57,21 +55,19 @@ const point = checkpointPoint()({
 const root = defineScene()({
   members: variant === 'swapped' ? [b, b, a, plain] : [a, a, b, plain],
   checkpoint: { key: 'author-parent', version: variant === 'version' ? 2 : 1, input: codec, output: codec, points: [point] },
-  run: {
-    execute: async (work) => {
-      const first = work.children.create(a, 'first', { key: 'same-key' });
-      const second = work.children.create(a, 'second', { key: 'same-key' });
-      const other = work.children.create(b, 'other', { key: 'same-key' });
-      const noCheckpoint = work.children.create(plain, 'plain', { key: 'same-key' });
-      await Promise.all([first.run(), second.run(), other.run(), noCheckpoint.run()]);
-      await first.accept((value) => value);
-      if (variant === 'live-acceptance') await other.accept(() => new Date());
-      const refs = { chosen: variant === 'wrong-declaration' ? other.ref : first.ref, all: [second.ref, first.ref], repeated: first.ref };
-      if (variant === 'forged-reference') refs.chosen = {};
-      const selected = variant === 'forged-point' ? { ...point } : point;
-      work.checkpoint.save(selected, { expected: 'first', count: 2 }, refs);
-      return 'unreachable';
-    },
+  run: async (work) => {
+    const first = work.children.create(a, 'first', { key: 'same-key' });
+    const second = work.children.create(a, 'second', { key: 'same-key' });
+    const other = work.children.create(b, 'other', { key: 'same-key' });
+    const noCheckpoint = work.children.create(plain, 'plain', { key: 'same-key' });
+    await Promise.all([first.run(), second.run(), other.run(), noCheckpoint.run()]);
+    await first.accept((value) => value);
+    if (variant === 'live-acceptance') await other.accept(() => new Date());
+    const refs = { chosen: variant === 'wrong-declaration' ? other.ref : first.ref, all: [second.ref, first.ref], repeated: first.ref };
+    if (variant === 'forged-reference') refs.chosen = {};
+    const selected = variant === 'forged-point' ? { ...point } : point;
+    work.checkpoint({ point: selected, state: { expected: 'first', count: 2 }, refs: refs });
+    return 'unreachable';
   },
 });
 const store = new MemoryCheckpointStore();

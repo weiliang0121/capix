@@ -18,7 +18,7 @@ export function savedCheckpointFacts(frame: DecodedCheckpointFrame, references: 
     const ref = Object.freeze({}) as ChildReference<ChildContract>;
     const state = saved.state;
     const returned = state.kind === 'waiting' ? undefined : state.kind === 'returned' ? Object.freeze({ status: 'succeeded' as const, output: state.output }) : Object.freeze({ status: 'failed' as const, diagnostic: decodeCheckpointDiagnostic(state.error), failure: state.failure });
-    const reception = state.kind !== 'returned' ? Object.freeze({ status: 'pending' as const }) : state.reception.kind === 'accepted' ? Object.freeze({ status: 'accepted' as const, value: state.reception.output }) : state.reception.kind === 'failed' ? Object.freeze({ status: 'failed' as const, diagnostic: decodeCheckpointDiagnostic(state.reception.error), failure: state.reception.failure }) : Object.freeze({ status: state.reception.kind });
+    const reception = state.kind === 'failed' && state.reception ? Object.freeze({ status: 'handled' as const, value: state.reception.output }) : state.kind !== 'returned' ? Object.freeze({ status: 'pending' as const }) : state.reception.kind === 'accepted' ? Object.freeze({ status: 'accepted' as const, value: state.reception.output }) : state.reception.kind === 'failed' ? Object.freeze({ status: 'failed' as const, diagnostic: decodeCheckpointDiagnostic(state.reception.error), failure: state.reception.failure }) : Object.freeze({ status: state.reception.kind });
     const fact: ChildFact<ChildContract> = Object.freeze({ ref, ...(saved.key !== undefined ? { key: saved.key } : {}), parentRound: round(saved.round), order: saved.order, input: saved.input, returned, reception, ...(state.kind !== 'waiting' ? { progress: Object.freeze({ ...state.progress, round: round(state.progress.round) }) } : {}) });
     const entry = Object.freeze({ saved, ref, definition, fact });
     entries.set(ref, entry);
@@ -42,6 +42,13 @@ export function savedCheckpointFacts(frame: DecodedCheckpointFrame, references: 
       const binding = receptions.require(contract, entry.definition as Definition);
       const state = entry.saved.state;
       if (state.kind !== 'returned' || state.reception.kind !== 'accepted' || state.reception.contract?.position !== binding.position) throw new Error('Saved child has no accepted value under this reception contract');
+      return state.reception.output as Value;
+    },
+    handled: <Definition extends ChildContract, Value>(ref: ChildReference<Definition>, contract: ReceptionDefinition<NoInfer<Definition>, Value>): Value => {
+      const entry = requireEntry(ref);
+      const binding = receptions.require(contract, entry.definition as Definition);
+      const state = entry.saved.state;
+      if (state.kind !== 'failed' || state.reception?.kind !== 'handled' || state.reception.contract?.position !== binding.position) throw new Error('Saved child has no handled value under this reception contract');
       return state.reception.output as Value;
     },
     require: <Definition extends ChildContract>(definition: Definition, ref: ChildReference) => {

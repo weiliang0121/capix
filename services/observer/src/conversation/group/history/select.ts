@@ -30,7 +30,7 @@ export class SelectHistory extends Group<SelectionInput, Selection, Conversation
   protected readonly purpose: 'selection';
   protected readonly outputContract;
 
-  static readonly requires = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() } as const);
+  static readonly deps = Object.freeze({ settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), timeoutMs: ModelSettingsResource.timeout.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() } as const);
 
   readonly points;
 
@@ -59,7 +59,7 @@ export class SelectHistory extends Group<SelectionInput, Selection, Conversation
           const child = waitingChild(facts, facts.references.child, 'request');
           if (facts.children.values().length !== 1 || !isEqual(child.input, facts.input) || basis.end < basis.start) throw new Error('Selection preparation checkpoint changed input');
         },
-        resume: { uses: this.members, execute: (work, basis, saved) => this.receiveRequest(work, work.children.resume(saved.child), basis) },
+        resume: { uses: this.members, run: (work, basis, saved) => this.receiveRequest(work, work.children.resume(saved.child), basis) },
       }),
       acceptanceWaiting: point({
         name: 'acceptanceWaiting',
@@ -71,7 +71,7 @@ export class SelectHistory extends Group<SelectionInput, Selection, Conversation
           const model = acceptedChild(facts.children.requireUnique(this.requestModel, { parentRound: 1 }));
           if (facts.children.values().length !== 3 || model.key !== 'model' || !isEqual(child.input.output, model.reception.value)) throw new Error('Selection acceptance checkpoint changed feedback');
         },
-        resume: { uses: [this.acceptOutput], execute: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.child)) },
+        resume: { uses: [this.acceptOutput], run: (work, _state, saved) => this.receiveAcceptance(work, work.children.resume(saved.child)) },
       }),
       modelWaiting: point({
         name: 'modelWaiting',
@@ -83,7 +83,7 @@ export class SelectHistory extends Group<SelectionInput, Selection, Conversation
           const request = acceptedChild(facts.children.requireUnique(this.prepareRequest, { parentRound: 1 }));
           if (facts.children.values().length !== 2 || request.key !== 'request' || !isEqual(request.input, facts.input) || !isEqual(model.input, request.reception.value) || basis.end < basis.start) throw new Error('Selection checkpoint differs from prepared model request');
         },
-        resume: { uses: [this.requestModel, this.acceptOutput], execute: (work, basis, saved) => this.receiveModel(work, work.children.resume(saved.child), basis) },
+        resume: { uses: [this.requestModel, this.acceptOutput], run: (work, basis, saved) => this.receiveModel(work, work.children.resume(saved.child), basis) },
       }),
       result: point({
         name: 'result',
@@ -94,38 +94,38 @@ export class SelectHistory extends Group<SelectionInput, Selection, Conversation
           const accepted = acceptedChild(facts.children.requireUnique(this.acceptOutput, { parentRound: 1 }));
           if (accepted.key !== 'acceptance' || !isEqual(accepted.reception.value, output)) throw new Error('Selection checkpoint differs from accepted result');
         },
-        resume: { execute: (_work, output) => output },
+        resume: { run: (_work, output) => output },
       }),
     };
 
-    this.setDefinition({ observation: [invocationRecording()], name: 'selection', label: '选择历史', source: 'services/observer/src/conversation/group/history/select.ts · SelectHistory', run: { requires: SelectHistory.requires, uses: this.members, execute: this.execute.bind(this) }, checkpoint: { key: 'observer.select-history', version: 2, input: selectionInputCodec, output: selectionCodec, points: Object.values(this.points) } });
+    this.setDefinition({ observation: [invocationRecording()], name: 'selection', label: '选择历史', source: 'services/observer/src/conversation/group/history/select.ts · SelectHistory', deps: SelectHistory.deps, uses: this.members, run: this.execute.bind(this), checkpoint: { key: 'observer.select-history', version: 2, input: selectionInputCodec, output: selectionCodec, points: Object.values(this.points) } });
   }
 
   private async execute(work: GroupWork<SelectionInput, Selection, ConversationResources>): Promise<Selection> {
     const request = work.children.create(this.prepareRequest, work.input, { key: 'request' });
     const range = work.resources.history;
     const basis = { start: range.start, end: range.end - 1 };
-    work.checkpoint?.save(this.points.requestWaiting, basis, { child: request.ref });
+    work.checkpoint?.({ point: this.points.requestWaiting, state: basis, refs: { child: request.ref } });
     return this.receiveRequest(work, request, basis);
   }
   private async receiveRequest(work: GroupWork<SelectionInput, Selection, object>, request: ChildCall<PrepareModelRequest<SelectionInput, ModelRequestResources & HistoryResources>>, basis: SelectionBasis): Promise<Selection> {
     await request.run();
     const prepared = await request.accept();
     const model = work.children.create(this.requestModel, prepared, { key: 'model' });
-    work.checkpoint?.save(this.points.modelWaiting, basis, { child: model.ref });
+    work.checkpoint?.({ point: this.points.modelWaiting, state: basis, refs: { child: model.ref } });
     return this.receiveModel(work, model, basis);
   }
   private async receiveModel(work: GroupWork<SelectionInput, Selection, object>, model: ChildCall<RequestModel>, basis: SelectionBasis): Promise<Selection> {
     await model.run();
     const output = await model.accept();
     const acceptance = work.children.create(this.acceptOutput, { output, basis }, { key: 'acceptance' });
-    work.checkpoint?.save(this.points.acceptanceWaiting, null, { child: acceptance.ref });
+    work.checkpoint?.({ point: this.points.acceptanceWaiting, state: null, refs: { child: acceptance.ref } });
     return this.receiveAcceptance(work, acceptance);
   }
   private async receiveAcceptance(work: GroupWork<SelectionInput, Selection, object>, acceptance: ChildCall<AcceptModelOutput<ModelAcceptanceInput & { basis: SelectionBasis }, Selection>>): Promise<Selection> {
     await acceptance.run();
     const result = await acceptance.accept();
-    work.checkpoint?.save(this.points.result, result, {});
+    work.checkpoint?.({ point: this.points.result, state: result, refs: {} });
     return result;
   }
 }

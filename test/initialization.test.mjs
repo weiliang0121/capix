@@ -112,13 +112,13 @@ test('declarations are checked before resource access or invocation construction
     name = 'test';
     label = 'test';
     source = 'test';
-    run = { requires: { value: resource.request() }, execute: this.execute.bind(this) };
+    run = { deps: { value: resource.request() }, execute: this.execute.bind(this) };
     execute() {
       assert.fail('must not execute');
     }
   }
   class Root extends Group {
-    run = { requires: {}, execute: this.execute.bind(this) };
+    run = { deps: {}, execute: this.execute.bind(this) };
     constructor() {
       super();
       this.add(new Work());
@@ -186,12 +186,12 @@ test('lazy access never shifts the capture point of configuration, history or me
   const { runtime, transcript, memories } = createEnvironment({ messages: [{ role: 'user', content: '培训周五' }] });
   const change = { action: 'create', memoryId: null, change: '确认时间', sourceIndexes: [0], result: { topic: '培训', content: '周五', sourceIndexes: [0] } };
   const memory = memories.apply([change])[0];
-  const requires = { settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), memories: MemoryResource.snapshot.request() };
-  const resources = bindResources(requires, [ModelSettingsResource.snapshot.provide((source) => source.settings), TranscriptResource.fixedRange.provide((source) => source.transcriptRange), MemoryResource.snapshot.provide(() => memories)]);
+  const deps = { settings: ModelSettingsResource.snapshot.request(), history: TranscriptResource.fixedRange.request(), memories: MemoryResource.snapshot.request() };
+  const resources = bindResources(deps, [ModelSettingsResource.snapshot.provide((source) => source.settings), TranscriptResource.fixedRange.provide((source) => source.transcriptRange), MemoryResource.snapshot.provide(() => memories)]);
   const configuration = { ...settings };
   const root = runtime.executionInvocationBuilder.create(null, {
     context: {},
-    requires,
+    deps,
     establish: () => ({ resources: resources(captureSource({ settings: configuration, transcript })) }),
     work: {
       maxRounds: 1,

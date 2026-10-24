@@ -9,11 +9,9 @@ const codec = { encode: (value) => value, decode: (value) => value };
 let runs = 0;
 let acceptances = 0;
 const child = defineGroup()({
-  run: {
-    execute: (work) => {
-      runs++;
-      return work.input;
-    },
+  run: (work) => {
+    runs++;
+    return work.input;
   },
 });
 const dateValue = {
@@ -64,7 +62,7 @@ const point = checkpointPoint()({
     checkValues(facts.children, Object.fromEntries(Object.entries(facts.references).map(([name, fact]) => [name, fact.ref])));
   },
   resume: {
-    execute(work, _state, refs) {
+    run(work, _state, refs) {
       const first = checkValues(work.children.facts, refs);
       if (variant === 'wrong-contract') work.children.facts.accepted(refs.first, anotherDateReception);
       assert.equal(runs, 0);
@@ -77,24 +75,22 @@ const root = defineScene()({
   members: [child],
   receptions: variant === 'swap' ? [emptyReception, dateReception, anotherDateReception] : [dateReception, emptyReception, anotherDateReception],
   checkpoint: { key: 'typed-reception-parent', version: variant === 'version' ? 2 : 1, input: codec, output: codec, points: [point] },
-  run: {
-    async execute(work) {
-      const first = work.children.create(child, '2026-01-01T00:00:00.000Z', { key: 'same-key' });
-      const second = work.children.create(child, '2026-02-01T00:00:00.000Z', { key: 'same-key' });
-      const empty = work.children.create(child, 'unused');
-      await Promise.all([first.run(), second.run(), empty.run()]);
-      await first.accept(dateReception, (value) => {
-        acceptances++;
-        return new Date(value);
-      });
-      await second.accept(dateReception, (value) => {
-        acceptances++;
-        return new Date(value);
-      });
-      await empty.accept(emptyReception, () => undefined);
-      work.checkpoint.save(point, { pid: process.pid }, { first: first.ref, second: second.ref, empty: empty.ref });
-      return 'unreachable';
-    },
+  async run(work) {
+    const first = work.children.create(child, '2026-01-01T00:00:00.000Z', { key: 'same-key' });
+    const second = work.children.create(child, '2026-02-01T00:00:00.000Z', { key: 'same-key' });
+    const empty = work.children.create(child, 'unused');
+    await Promise.all([first.run(), second.run(), empty.run()]);
+    await first.accept(dateReception, (value) => {
+      acceptances++;
+      return new Date(value);
+    });
+    await second.accept(dateReception, (value) => {
+      acceptances++;
+      return new Date(value);
+    });
+    await empty.accept(emptyReception, () => undefined);
+    work.checkpoint({ point: point, state: { pid: process.pid }, refs: { first: first.ref, second: second.ref, empty: empty.ref } });
+    return 'unreachable';
   },
 });
 const store = new MemoryCheckpointStore();

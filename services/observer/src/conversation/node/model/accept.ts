@@ -15,7 +15,7 @@ export interface ModelAcceptanceInput {
 export class AcceptModelOutput<Input extends ModelAcceptanceInput, Output> extends Node<Input, Output> {
   private readonly resultPoint: InvocationCheckpointPoint<Input, Output, 'node', Output, Record<string, never>, {}, never>;
 
-  static readonly requires = Object.freeze({});
+  static readonly deps = Object.freeze({});
 
   constructor(private readonly contract: ModelOutputContract<Input, Output>) {
     super();
@@ -39,10 +39,10 @@ export class AcceptModelOutput<Input extends ModelAcceptanceInput, Output> exten
         checkCompletion(basis.output);
         if (!isEqual(this.contract.accept(parseContent(basis.output.content), basis), result)) throw new Error('Accepted model checkpoint differs from declared output');
       },
-      resume: { requires: {}, execute: (_work, result) => result },
+      resume: { deps: {}, run: (_work, result) => result },
     });
 
-    this.setDefinition({ checkpoint: { key: 'observer.accept-model-output', version: 1, input, output, points: [this.resultPoint] }, observation: [invocationRecording()], raises: [modelOutputRejected], run: { requires: AcceptModelOutput.requires, execute: this.execute.bind(this) }, name: 'acceptModelOutput', label: '接纳模型结果', source: 'services/observer/src/conversation/node/model/accept.ts · AcceptModelOutput', callee: 'processing' });
+    this.setDefinition({ checkpoint: { key: 'observer.accept-model-output', version: 1, input, output, points: [this.resultPoint] }, observation: [invocationRecording()], raises: [modelOutputRejected], deps: AcceptModelOutput.deps, run: this.execute.bind(this), name: 'acceptModelOutput', label: '接纳模型结果', source: 'services/observer/src/conversation/node/model/accept.ts · AcceptModelOutput', callee: 'processing' });
   }
 
   private execute(work: NodeWork<Input, Output>): Output {
@@ -50,7 +50,7 @@ export class AcceptModelOutput<Input extends ModelAcceptanceInput, Output> exten
     try {
       const value = parseContent(work.input.output.content);
       const output = this.contract.accept(value, work.input);
-      work.checkpoint?.save(this.resultPoint, output, {});
+      work.checkpoint?.({ point: this.resultPoint, state: output, refs: {} });
       return output;
     } catch (error) {
       if (error instanceof RuntimeError && (error.code === 'INVALID_JSON' || error.code === 'EMPTY_OUTPUT' || error.code === 'OUTPUT_SHAPE')) {

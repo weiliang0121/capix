@@ -19,14 +19,14 @@ const crash = (name) => {
   if (mode === 'start' && boundary === name) process.exit(74);
 };
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
-const point = (execute, requires = {}, uses = [], references = {}) => ({ state: codec, references, resume: { requires, uses, execute } });
+const point = (execute, deps = {}, uses = [], references = {}) => ({ state: codec, references, resume: { deps, uses, run: execute } });
 const cp = (key, points) => ({ key, version: 1, input: codec, output: codec, points: Object.entries(points).map(([name, value]) => ({ name, ...value })) });
 class Model extends Node {
   name = 'model';
   label = 'model';
   source = 'test';
   run = {
-    requires: {},
+    deps: {},
     execute: () => {
       put('modelCalls', Number(saved('modelCalls') ?? 0) + 1);
       return { content: 'fixed answer' };
@@ -44,42 +44,34 @@ class Request extends Group {
   }
   checkpoint = cp('chain.request', { feedback: point((_work, state) => state.output) });
   run = {
-    requires: {},
+    deps: {},
     execute: async (work) => {
       const request = work.children.create(model, { prompt: 'question' });
       await request.run();
       const output = await request.accept((value) => value);
-      work.checkpoint.save(this.checkpoint.points[0], { output }, {});
+      work.checkpoint({ point: this.checkpoint.points[0], state: { output }, refs: {} });
       crash('feedback');
       return output;
     },
   };
 }
 const request = new Request();
-const requires = { messages: TranscriptResource.append.request() };
+const deps = { messages: TranscriptResource.append.request() };
 async function consume(work, child, allowCrash, points) {
   await child.run();
   if (allowCrash) crash('delivery');
   const output = await child.accept((value) => {
-    work.checkpoint.save(
-      points.find((point) => point.name === 'reception'),
-      null,
-      { child: child.ref },
-    );
+    work.checkpoint({ point: points.find((point) => point.name === 'reception'), state: null, refs: { child: child.ref } });
     const receipt = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: value.content }] });
     if (allowCrash) crash('entity');
     return { receipt, answer: value.content };
   });
-  work.checkpoint.save(
-    points.find((point) => point.name === 'accepted'),
-    { output },
-    {},
-  );
+  work.checkpoint({ point: points.find((point) => point.name === 'accepted'), state: { output }, refs: {} });
   if (allowCrash) crash('accepted');
   return output;
 }
 const resume = (work, _state, saved) => consume(work, work.children.resume(saved.child), false, executionPoints);
-const executionPoints = cp('chain.execution', { waiting: point(resume, requires, [request], { child: childReference(request) }), reception: point(resume, requires, [request], { child: childReference(request) }), accepted: point((_work, state) => state.output) }).points;
+const executionPoints = cp('chain.execution', { waiting: point(resume, deps, [request], { child: childReference(request) }), reception: point(resume, deps, [request], { child: childReference(request) }), accepted: point((_work, state) => state.output) }).points;
 class Conversation extends Group {
   constructor() {
     super();
@@ -87,10 +79,10 @@ class Conversation extends Group {
   }
   checkpoint = { key: 'chain.execution', version: 1, input: codec, output: codec, points: executionPoints };
   run = {
-    requires,
+    deps,
     execute: async (work) => {
       const child = work.children.create(request, { prompt: 'question' }, { key: 'answer' });
-      work.checkpoint.save(this.checkpoint.points[0], null, { child: child.ref });
+      work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: { child: child.ref } });
       return consume(work, child, true, executionPoints);
     },
   };
@@ -114,10 +106,10 @@ class Root extends Scene {
     ),
   });
   run = {
-    requires: {},
+    deps: {},
     execute: async (work) => {
       const child = work.children.create(conversation, { question: 'question' });
-      work.checkpoint.save(this.checkpoint.points[0], null, { child: child.ref });
+      work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: { child: child.ref } });
       await child.run();
       return child.accept((output) => output);
     },

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { MemoryCheckpointStore } from '@capix/server-runtime';
 
 function image(id = 'cp-1', contextId = 'scope-1') {
-  return { id, formatVersion: 4, contract: { key: 'fixture', version: 1 }, point: 'accepted', frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: { content: 'input' }, currentInput: { content: 'input' }, nextChildOrder: 0, children: [] }, state: { content: 'saved' }, references: {} };
+  return { id, formatVersion: 5, contract: { key: 'fixture', version: 1 }, point: 'accepted', frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: { content: 'input' }, currentInput: { content: 'input' }, nextChildOrder: 0, children: [] }, state: { content: 'saved' }, references: {} };
 }
 
 test('memory checkpoint storage fixes caller values and rejects stale or duplicate progress', () => {

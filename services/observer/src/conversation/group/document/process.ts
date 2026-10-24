@@ -25,7 +25,7 @@ export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOu
   readonly readText;
   readonly generation;
 
-  static readonly requires = Object.freeze({ ...GenerateAnswer.requires, reader: FileResources.readText.request() });
+  static readonly deps = Object.freeze({ ...GenerateAnswer.deps, reader: FileResources.readText.request() });
   readonly points;
 
   constructor() {
@@ -44,7 +44,7 @@ export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOu
           const child = waitingChild(facts, facts.references.child, 'read');
           if (facts.children.values().length !== 1 || !isEqual(child.input, { path: facts.input.sourcePath })) throw new Error('Document checkpoint changed source path');
         },
-        resume: { uses: this.members, execute: (work, _state, saved) => this.receiveDocument(work, work.children.resume(saved.child)) },
+        resume: { uses: this.members, run: (work, _state, saved) => this.receiveDocument(work, work.children.resume(saved.child)) },
       }),
       generating: checkpointPoint<'group', DocumentProcessingInput, GenerationOutput, AnswerGenerationEvent>()({
         name: 'generating',
@@ -56,7 +56,7 @@ export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOu
           const read = acceptedChild(facts.children.requireUnique(this.readText, { parentRound: 1 }));
           if (facts.children.values().length !== 2 || read.key !== 'read' || !isEqual(read.reception.value, read.returned.output) || !isEqual(child.input, this.generationInput(facts.input, read.returned.output))) throw new Error('Document checkpoint changed fixed document');
         },
-        resume: { uses: [this.generation], execute: (work, _state, saved) => this.receiveGeneration(work, work.children.resume(saved.child)) },
+        resume: { uses: [this.generation], run: (work, _state, saved) => this.receiveGeneration(work, work.children.resume(saved.child)) },
       }),
       result: checkpointPoint<'group', DocumentProcessingInput, GenerationOutput, AnswerGenerationEvent>()({
         name: 'result',
@@ -67,7 +67,7 @@ export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOu
           const child = acceptedChild(facts.children.requireUnique(this.generation, { parentRound: 1 }));
           if (facts.children.values().length !== 2 || child.key !== 'generation' || !isEqual(child.reception.value, output)) throw new Error('Document checkpoint differs from accepted generation');
         },
-        resume: { execute: (_work, output) => output },
+        resume: { run: (_work, output) => output },
       }),
     };
 
@@ -84,13 +84,15 @@ export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOu
         output: answerCheckpointCodecs.output,
         points: Object.values(this.points),
       },
-      run: { requires: ProcessDocument.requires, uses: this.members, execute: this.execute.bind(this) },
+      deps: ProcessDocument.deps,
+      uses: this.members,
+      run: this.execute.bind(this),
     });
   }
 
   private async execute(work: DocumentWork): Promise<GenerationOutput> {
     const read = work.children.create(this.readText, { path: work.input.sourcePath }, { key: 'read' });
-    work.checkpoint?.save(this.points.reading, null, { child: read.ref });
+    work.checkpoint?.({ point: this.points.reading, state: null, refs: { child: read.ref } });
     return this.receiveDocument(work, read);
   }
   private generationInput(input: DocumentProcessingInput, document: TextDocument): GenerationInput {
@@ -107,13 +109,13 @@ export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOu
         },
       },
     });
-    work.checkpoint?.save(this.points.generating, null, { child: generation.ref });
+    work.checkpoint?.({ point: this.points.generating, state: null, refs: { child: generation.ref } });
     return this.receiveGeneration(work, generation);
   }
   private async receiveGeneration(work: DocumentWork, generation: ChildCall<GenerateAnswer>): Promise<GenerationOutput> {
     await generation.run();
     const output = await generation.accept();
-    work.checkpoint?.save(this.points.result, output, {});
+    work.checkpoint?.({ point: this.points.result, state: output, refs: {} });
     return output;
   }
 }

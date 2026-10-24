@@ -2,8 +2,8 @@ import { bindResources, ResourceOffer, TranscriptResource, type ResourceRequirem
 
 type Resources = { settings: { timeoutMs: number } };
 const settings = new ResourceOffer('settings', (source: { timeout: number }) => Object.freeze({ timeoutMs: source.timeout }));
-const requires: ResourceRequirements<Resources> = { settings: settings.request() };
-const bind = bindResources(requires, [settings.provide((parent: { timeout: number }) => parent)]);
+const deps: ResourceRequirements<Resources> = { settings: settings.request() };
+const bind = bindResources(deps, [settings.provide((parent: { timeout: number }) => parent)]);
 const value: number = bind({ timeout: 1000 }).values.settings.timeoutMs;
 void value;
 // @ts-expect-error source must match the contract published by the resource

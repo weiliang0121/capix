@@ -19,7 +19,7 @@ export interface InvocationDescription {
   readonly callee?: string;
 }
 
-export type InvocationRelationChange = { readonly kind: 'attached' } | { readonly kind: 'returned'; readonly result: InvocationResult<unknown> } | { readonly kind: 'receiving' } | { readonly kind: 'accepted'; readonly output: unknown } | { readonly kind: 'failed'; readonly error: unknown; readonly source: 'work' | 'observation'; readonly failure?: InvocationFailure };
+export type InvocationRelationChange = { readonly kind: 'attached' } | { readonly kind: 'returned'; readonly result: InvocationResult<unknown> } | { readonly kind: 'receiving' } | { readonly kind: 'accepted' | 'handled'; readonly output: unknown } | { readonly kind: 'failed'; readonly error: unknown; readonly source: 'work' | 'observation'; readonly failure?: InvocationFailure };
 
 export type InvocationChange = { readonly kind: 'started'; readonly input: unknown } | { readonly kind: 'process'; readonly process: InvocationProcess; readonly processSequence: number; readonly round: number } | { readonly kind: 'relation'; readonly relation: InvocationRelationIdentity; readonly change: InvocationRelationChange } | { readonly kind: 'finished'; readonly state: ContextState<unknown> };
 
@@ -42,6 +42,19 @@ export interface ResourceObservation {
   readonly interactionId?: string;
   /** Resource-owned synchronous projection, only evaluated by an interested observer. */
   readonly describe: () => unknown;
+}
+
+/** Business annotations are a separate channel; their payload cannot establish lifecycle facts. */
+export interface BusinessEvent {
+  readonly event: string;
+  readonly [field: string]: unknown;
+}
+
+export interface BusinessObservation {
+  readonly identity: InvocationIdentity;
+  readonly sequence: number;
+  readonly occurredAt: string;
+  readonly event: Readonly<BusinessEvent>;
 }
 
 /** Facts of the installed driver, ordered independently from individual calls. */

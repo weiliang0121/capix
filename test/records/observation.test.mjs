@@ -175,7 +175,7 @@ test('record installation supplies a scoped writer, not an automatic second call
   let writer;
   const declaration = defineObservation(
     {
-      requires: { writer: InvocationRecordAccess.request() },
+      deps: { writer: InvocationRecordAccess.request() },
       observe(event, ports) {
         writer = ports.writer;
         writer.observe(event);

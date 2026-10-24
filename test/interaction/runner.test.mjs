@@ -50,24 +50,20 @@ function resource(onExpose = () => {}) {
 
 function scene(offer, onStart = () => {}) {
   const node = new Node({
-    run: {
-      requires: { echo: offer.request() },
-      async execute(work) {
-        const endpoint = work.resources.echo;
-        const ref = work.input.ref ?? endpoint.start({ text: work.input.text });
-        onStart(ref, endpoint);
-        const result = work.input.read ? endpoint.read(ref) : await endpoint.wait(ref, { waitMs: work.input.waitMs ?? 1000, signal: work.signal });
-        return { ref, result };
-      },
+    deps: { echo: offer.request() },
+    async run(work) {
+      const endpoint = work.resources.echo;
+      const ref = work.input.ref ?? endpoint.start({ text: work.input.text });
+      onStart(ref, endpoint);
+      const result = work.input.read ? endpoint.read(ref) : await endpoint.wait(ref, { waitMs: work.input.waitMs ?? 1000, signal: work.signal });
+      return { ref, result };
     },
   });
   const root = new Scene().add(node);
-  root.setRun({
-    async execute(work) {
-      const child = work.children.create(node, work.input);
-      await child.run();
-      return child.accept();
-    },
+  root.setRun(async function (work) {
+    const child = work.children.create(node, work.input);
+    await child.run();
+    return child.accept();
   });
   return root;
 }
@@ -123,7 +119,7 @@ test('required interaction dependency fails before build installation and can be
 
 test('unused interaction resource registration does not require an interaction host', async () => {
   const resources = new Resources().registerInteraction(resource(), contract);
-  const root = new Scene({ run: { execute: (work) => work.input } });
+  const root = new Scene({ run: (work) => work.input });
   const runner = new Runner(root, resources).build();
   assert.equal(await runner.run('no interaction requested'), 'no interaction requested');
 });

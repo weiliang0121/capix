@@ -15,7 +15,7 @@ interface Delta {
   readonly text: string;
 }
 
-const scene = new Scene<Input, Result>({ run: { execute: (work) => ({ length: work.input.text.length }) } });
+const scene = new Scene<Input, Result>({ run: (work) => ({ length: work.input.text.length }) });
 const resources = new Resources();
 const runner = new Runner(scene, resources).build();
 expectType<typeof runner>(runner.build());

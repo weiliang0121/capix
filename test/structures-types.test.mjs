@@ -47,17 +47,15 @@ test('structure author contract counterexamples fail at their own call sites', (
 test('an explicitly annotated callback cannot enlarge the installed phase action grant', async () => {
   let childCalls = 0;
   const child = new Node({
-    run: {
-      execute: () => {
-        childCalls++;
-        return 'unreachable';
-      },
+    run: () => {
+      childCalls++;
+      return 'unreachable';
     },
   });
   const group = new Group();
   group.add(child);
   // TypeScript annotations are erased; actual authority comes from uses.
-  group.setRun({ uses: [], execute: (work) => work.children.create(child, null).run() });
+  group.setRun((work) => work.children.create(child, null).run(), undefined, { uses: [] });
   const driver = new Driver();
   const bound = driver.build(group, { providers: [], source: { capture: () => null } });
   await assert.rejects(driver.run(bound, null, {}), /not declared.*phase uses/);
@@ -69,19 +67,15 @@ test('constructor exception configuration grants no actions when uses is omitted
   const failure = new ExceptionContract('structures.failure');
   let childCalls = 0;
   const child = new Node({
-    run: {
-      execute: () => {
-        childCalls++;
-        return 'unreachable';
-      },
+    run: () => {
+      childCalls++;
+      return 'unreachable';
     },
   });
   const group = new Group({
     raises: [failure],
-    run: {
-      execute: () => {
-        throw failure.create('enter exception handler', null);
-      },
+    run: () => {
+      throw failure.create('enter exception handler', null);
     },
     exceptions: {
       accepts: [failure],

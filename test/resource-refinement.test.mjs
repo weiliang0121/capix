@@ -23,7 +23,7 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
     },
   });
   const dormant = new ResourceOffer('test.dormant', () => assert.fail('unrequested endpoint'), 'access');
-  const requires = { bounded: offer.request(), dormant: dormant.request() };
+  const deps = { bounded: offer.request(), dormant: dormant.request() };
   const attempt = new Node({
     name: 'leaf',
     label: 'Leaf',
@@ -31,13 +31,11 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
     callee: 'test',
     maxRounds: 1,
     raises: [],
-    run: {
-      requires: { bounded: offer.request() },
-      execute(context) {
-        const endpoint = context.resources.bounded;
-        endpoints.push(endpoint);
-        return endpoint.read();
-      },
+    deps: { bounded: offer.request() },
+    run(context) {
+      const endpoint = context.resources.bounded;
+      endpoints.push(endpoint);
+      return endpoint.read();
     },
   });
   const operation = new Group({
@@ -46,28 +44,24 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
     source: 'test',
     maxRounds: 1,
     raises: [],
-    run: {
-      requires,
-      async execute(context) {
-        const endpoint = context.resources.bounded;
-        const own = endpoint.read();
-        endpoints.push(endpoint);
-        const output = await context.children.create(attempt, context.input).run();
-        return { own, output, after: endpoint.read() };
-      },
+    deps,
+    async run(context) {
+      const endpoint = context.resources.bounded;
+      const own = endpoint.read();
+      endpoints.push(endpoint);
+      const output = await context.children.create(attempt, context.input).run();
+      return { own, output, after: endpoint.read() };
     },
   }).add(attempt);
   const execution = new Group({
     maxRounds: 1,
     raises: [],
-    run: {
-      requires,
-      async execute(context) {
-        const before = context.resources.bounded.read();
-        const results = [];
-        for (const input of context.input) results.push(await context.children.create(operation, input).run());
-        return { before, results, after: context.resources.bounded.read() };
-      },
+    deps,
+    async run(context) {
+      const before = context.resources.bounded.read();
+      const results = [];
+      for (const input of context.input) results.push(await context.children.create(operation, input).run());
+      return { before, results, after: context.resources.bounded.read() };
     },
   }).add(operation);
   const definition = runtimeDefinition(execution);
@@ -113,10 +107,10 @@ test('child input refines O and A supplies without recapturing or mutating ances
 
 test('refinement is fixed during call creation, before input can change or work starts', () => {
   const { offer } = fixture();
-  const requires = { bounded: offer.request() };
-  const parent = bindResources(requires, [offer.provide((source) => source)])({ allowed: ['a', 'b'] });
+  const deps = { bounded: offer.request() };
+  const parent = bindResources(deps, [offer.provide((source) => source)])({ allowed: ['a', 'b'] });
   const input = { allowed: ['a'] };
-  const child = parent.select(requires, requires, { input, refinements: [offer.refine((value) => value.allowed)] });
+  const child = parent.select(deps, deps, { input, refinements: [offer.refine((value) => value.allowed)] });
   input.allowed.push('b');
   assert.deepEqual(child.values.bounded.read(), ['a']);
   assert.deepEqual(parent.values.bounded.read(), ['a', 'b']);
@@ -172,12 +166,12 @@ test('only offer-issued refinements are accepted; copied or fabricated rules can
   const forged = { offer: issued.offer, apply: () => ({ allowed: ['outside'] }) };
   const copied = { ...issued };
   const inherited = Object.create(issued);
-  const requires = { bounded: offer.request() };
-  const parent = bindResources(requires, [offer.provide((source) => source)])({ allowed: ['a'] });
+  const deps = { bounded: offer.request() };
+  const parent = bindResources(deps, [offer.provide((source) => source)])({ allowed: ['a'] });
   for (const rule of [forged, copied, inherited]) {
     assert.throws(() => bindChildResources(operation, [rule]), /not issued by an offer/);
     assert.throws(() => installCallable(definition, { ...options, childResources: [{ definition: operation, refinements: [rule] }] }), /not issued by an offer/);
-    assert.throws(() => parent.select(requires, requires, { input: { allowed: ['outside'] }, refinements: [rule] }), /not issued by an offer/);
+    assert.throws(() => parent.select(deps, deps, { input: { allowed: ['outside'] }, refinements: [rule] }), /not issued by an offer/);
   }
   assert.equal(issued.apply, undefined);
   assert.ok(Object.isFrozen(issued));
@@ -185,5 +179,5 @@ test('only offer-issued refinements are accepted; copied or fabricated rules can
     issued.offer = { name: 'substituted' };
   }, TypeError);
   assert.deepEqual(counters, { capture: 0, refine: 0, describe: 0, dormant: 0 });
-  assert.throws(() => parent.select(requires, requires, { input: { allowed: ['outside'] }, refinements: [issued] }), /Cannot widen access/);
+  assert.throws(() => parent.select(deps, deps, { input: { allowed: ['outside'] }, refinements: [issued] }), /Cannot widen access/);
 });

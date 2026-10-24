@@ -22,7 +22,7 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
   readonly startWaiting;
   readonly followWaiting;
   readonly feedbackAccepted;
-  static readonly requires = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
+  static readonly deps = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
 
   readonly regeneration;
 
@@ -35,7 +35,7 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
     this.followModel = new FollowModel();
     this.regeneration = Object.freeze({
       declaration: modelRegenerationDeclaration,
-      requires: RequestModel.requires,
+      deps: RequestModel.deps,
       allows: (parent: ModelParentFacts, evidence: ModelRegenerationEvidence) => allowsModelRegeneration(parent, evidence, this),
       input: (parent: ModelParentFacts, evidence: ModelRegenerationEvidence) => modelRegenerationInput(parent, evidence, this),
       entry: defineChildEntry<RequestModel, { request: ModelRequest; evidence: ModelRegenerationEvidence }>(this, {
@@ -61,9 +61,9 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
         if (facts.children.values().length !== 1 || child.returned || !isEqual(child.input, facts.input)) throw new Error('Model start checkpoint changed request');
       },
       resume: {
-        requires: {},
+        deps: {},
         uses: this.members,
-        execute: async (work, _state, saved) => {
+        run: async (work, _state, saved) => {
           const initial = work.children.resume(saved.start);
           await initial.run();
           return this.receiveInitial(work, await initial.accept(), initial.ref);
@@ -81,13 +81,13 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
         if (facts.children.values().length !== 2 || result.kind !== 'pending' || follow.returned || !isEqual(follow.input, { ...result.interaction, expected: { request: facts.input, purpose: this.purpose } })) throw new Error('Model follow checkpoint changed interaction');
       },
       resume: {
-        requires: {},
+        deps: {},
         uses: [this.followModel],
-        execute: async (work, _state, saved) => {
+        run: async (work, _state, saved) => {
           const follow = work.children.resume(saved.follow);
           await follow.run();
           const output = await follow.accept();
-          work.checkpoint?.save(this.feedbackAccepted, output, { start: saved.start, follow: [follow.ref] });
+          work.checkpoint?.({ point: this.feedbackAccepted, state: output, refs: { start: saved.start, follow: [follow.ref] } });
           return output;
         },
       },
@@ -108,7 +108,7 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
           if (facts.children.values().length !== 2 || facts.references.follow.length !== 1 || !follow || !isEqual(follow.input, { ...result.interaction, expected: { request: facts.input, purpose: this.purpose } }) || !isEqual(acceptedOutput(follow), output)) throw new Error('Model feedback checkpoint differs from followed feedback');
         }
       },
-      resume: { requires: {}, uses: [], execute: (_work, output) => output },
+      resume: { deps: {}, uses: [], run: (_work, output) => output },
     });
 
     this.setDefinition({
@@ -124,7 +124,9 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
       source: 'services/observer/src/conversation/group/model/request.ts · RequestModel',
       observation: [invocationRecording(description)],
       checkpoint: { key: `observer.request-model.${purpose}`, version: 3, input: requestCodec, output: outputCodec, points: [this.startWaiting, this.followWaiting, this.feedbackAccepted] },
-      run: { requires: RequestModel.requires, uses: this.members, execute: this.execute.bind(this) },
+      deps: RequestModel.deps,
+      uses: this.members,
+      run: this.execute.bind(this),
     });
   }
 
@@ -143,7 +145,7 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
         },
       },
     });
-    work.checkpoint?.save(this.startWaiting, {}, { start: initial.ref });
+    work.checkpoint?.({ point: this.startWaiting, state: {}, refs: { start: initial.ref } });
     try {
       await initial.run();
       return await this.receiveInitial(work, await initial.accept(), initial.ref);
@@ -158,12 +160,12 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
     if (result.kind === 'received') output = result.output;
     else {
       const follow = work.children.create(this.followModel, { ...result.interaction, expected: { request: work.input, purpose: this.purpose } }, { key: 'follow' });
-      work.checkpoint?.save(this.followWaiting, {}, { start: initial, follow: follow.ref });
+      work.checkpoint?.({ point: this.followWaiting, state: {}, refs: { start: initial, follow: follow.ref } });
       await follow.run();
       output = await follow.accept();
       followed.push(follow.ref);
     }
-    work.checkpoint?.save(this.feedbackAccepted, output, { start: initial, follow: followed });
+    work.checkpoint?.({ point: this.feedbackAccepted, state: output, refs: { start: initial, follow: followed } });
     return output;
   }
 }

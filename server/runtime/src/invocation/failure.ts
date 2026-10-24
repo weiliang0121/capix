@@ -5,9 +5,24 @@ import type { InvocationExceptionOrigin } from './provenance.js';
 export interface InvocationFailure extends InvocationFailureFact {
   readonly error: unknown;
   readonly origin?: InvocationExceptionOrigin;
+  /** Live processing failure may be received by a parent; diagnostic history grants no authority. */
+  readonly receptionAllowed?: boolean;
 }
 export type InvocationPhase = InvocationFailureFact['phase'];
 
 export function failureFact(failure: InvocationFailure): InvocationFailureFact {
   return { kind: failure.kind, phase: failure.phase, contextId: failure.contextId, ...(failure.contract ? { contract: failure.contract } : {}) };
+}
+
+/** Error inspection must not execute user accessors or iterators during failure ownership. */
+export function containsFailure(error: AggregateError, failure: unknown): boolean {
+  try {
+    const cause = Object.getOwnPropertyDescriptor(error, 'cause');
+    if (cause && 'value' in cause && cause.value === failure) return true;
+    const errors = Object.getOwnPropertyDescriptor(error, 'errors');
+    if (!errors || !('value' in errors) || !Array.isArray(errors.value)) return false;
+    return Object.entries(Object.getOwnPropertyDescriptors(errors.value)).some(([key, descriptor]) => /^(0|[1-9]\d*)$/.test(key) && 'value' in descriptor && descriptor.value === failure);
+  } catch {
+    return false;
+  }
 }

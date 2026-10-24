@@ -80,7 +80,7 @@ test('checkpoint installation reuses the host SQLite connection and recovers met
   next.close();
 });
 
-for (const formatVersion of [1, 2, 3, 99]) {
+for (const formatVersion of [1, 2, 3, 4, 99]) {
   test(`checkpoint format ${formatVersion} refuses recovery without preventing healthy content and new calls`, async (t) => {
     const path = temporary(t);
     const host = new ObserverConversations(provider, [], { persistence: SqliteObserverStore.open(path) });
@@ -110,7 +110,7 @@ for (const formatVersion of [1, 2, 3, 99]) {
     await current.runner.run({ messages: [{ role: 'user', content: 'after upgrade' }] }, { settings });
     assert.equal(current.transcript.length, 4);
     const latest = current.checkpointRuns.list(conversation.id).find((candidate) => candidate.rootContextId !== run.rootContextId);
-    assert.equal(current.checkpoints.read(latest.rootContextId).image.formatVersion, 4);
+    assert.equal(current.checkpoints.read(latest.rootContextId).image.formatVersion, 5);
   });
 }
 

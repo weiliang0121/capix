@@ -28,10 +28,12 @@ function resume(work: ResumeWork<'node', string, string, { reader: Reader }>) {
 
 export const definition = defineNode<string, string>()({
   ...metadata,
-  run: { requires: { reader }, execute: read, accept },
-  exceptions: { requires: { logger }, accepts: [], handle },
+  deps: { reader },
+  run: read,
+  accept,
+  exceptions: { deps: { logger }, accepts: [], handle },
 });
-export const point = checkpointPoint<'node', string, string>()({ name: 'read', state, references: {}, resume: { requires: { reader }, execute: resume } });
+export const point = checkpointPoint<'node', string, string>()({ name: 'read', state, references: {}, resume: { deps: { reader }, run: resume } });
 
 function emptyRun(work: NodeWork<string, string>) {
   return work.input;
@@ -46,6 +48,6 @@ function emptyResume(work: ResumeWork<'node', string, string>) {
   return work.input;
 }
 
-// Omitting requires means no resources, even when the function is defined separately.
-export const emptyDefinition = defineNode<string, string>()({ ...metadata, run: { execute: emptyRun, accept: emptyAccept }, exceptions: { accepts: [], handle: emptyHandle } });
-export const emptyPoint = checkpointPoint<'node', string, string>()({ name: 'empty', state, references: {}, resume: { execute: emptyResume } });
+// Omitting deps means no resources, even when the function is defined separately.
+export const emptyDefinition = defineNode<string, string>()({ ...metadata, run: emptyRun, accept: emptyAccept, exceptions: { accepts: [], handle: emptyHandle } });
+export const emptyPoint = checkpointPoint<'node', string, string>()({ name: 'empty', state, references: {}, resume: { run: emptyResume } });

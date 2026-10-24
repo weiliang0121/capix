@@ -10,7 +10,7 @@ function restore(definition, { round = 1, currentInput = { stage: 'saved' } } = 
   const store = new MemoryCheckpointStore();
   const events = [];
   const contextId = `restored-round-${round}`;
-  store.save({ id: 'saved-image', formatVersion: 4, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, kind: 'scene' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [], ...(round === 2 ? { continuation: { fromRound: 1, stage: 'accept', reason: 'saved continuation' } } : {}) }, state: { source: 'durable' }, references: {} }, 0);
+  store.save({ id: 'saved-image', formatVersion: 5, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, kind: 'scene' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [], ...(round === 2 ? { continuation: { fromRound: 1, stage: 'accept', reason: 'saved continuation' } } : {}) }, state: { source: 'durable' }, references: {} }, 0);
   const { kind, members, ...configuration } = definition;
   const runtime = installCallable(new Scene(configuration), {
     providers: [],
@@ -40,26 +40,24 @@ for (const continuation of ['accept', 'exception']) {
       maxRounds: 2,
       raises: [rejected],
       output,
-      run: {
-        requires: {},
-        execute(work) {
-          execution.push({ kind: 'normal', id: undefined, round: work.round });
-          assert.equal(work.round, 2);
-          assert.deepEqual(work.initialInput, { stage: 'original' });
-          assert.equal(work.input, nextInput);
-          assert.throws(() => writers[0].emit('stale preview'), { code: 'OUTPUT_CLOSED' });
-          writers.push(work.output);
-          work.output.emit('new preview');
-          work.checkpoint.save(definition.checkpoint.points[0], { source: 'second round' }, {});
-          return final;
-        },
-        accept(work) {
-          assert.throws(() => writers.at(-1).emit('after execute'), { code: 'OUTPUT_CLOSED' });
-          return work.round === 1 ? work.continue(nextInput, 'advance after restored work') : work.delivered;
-        },
+      deps: {},
+      run(work) {
+        execution.push({ kind: 'normal', id: undefined, round: work.round });
+        assert.equal(work.round, 2);
+        assert.deepEqual(work.initialInput, { stage: 'original' });
+        assert.equal(work.input, nextInput);
+        assert.throws(() => writers[0].emit('stale preview'), { code: 'OUTPUT_CLOSED' });
+        writers.push(work.output);
+        work.output.emit('new preview');
+        work.checkpoint({ point: definition.checkpoint.points[0], state: { source: 'second round' }, refs: {} });
+        return final;
+      },
+      accept(work) {
+        assert.throws(() => writers.at(-1).emit('after execute'), { code: 'OUTPUT_CLOSED' });
+        return work.round === 1 ? work.continue(nextInput, 'advance after restored work') : work.delivered;
       },
       exceptions: {
-        requires: {},
+        deps: {},
         accepts: [rejected],
         handle(work) {
           assert.equal(continuation, 'exception');
@@ -79,8 +77,8 @@ for (const continuation of ['accept', 'exception']) {
             references: {},
             state: codec,
             resume: {
-              requires: {},
-              execute(work, state) {
+              deps: {},
+              run(work, state) {
                 execution.push({ kind: 'restored', id: undefined, round: work.round });
                 assert.deepEqual(work.initialInput, { stage: 'original' });
                 assert.deepEqual(work.input, { stage: 'saved' });
@@ -136,7 +134,8 @@ test('restoring an existing second round preserves its round and current input w
     maxRounds: 2,
     raises: [],
     output,
-    run: { requires: {}, execute: () => assert.fail('normal work must not replay') },
+    deps: {},
+    run: () => assert.fail('normal work must not replay'),
     checkpoint: {
       key: 'test.restored-output.second-round',
       version: 1,
@@ -148,8 +147,8 @@ test('restoring an existing second round preserves its round and current input w
           references: {},
           state: codec,
           resume: {
-            requires: {},
-            execute(work) {
+            deps: {},
+            run(work) {
               resumes++;
               assert.equal(work.round, 2);
               assert.deepEqual(work.initialInput, { stage: 'original' });

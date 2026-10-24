@@ -26,7 +26,7 @@ class CaptureStore extends MemoryCheckpointStore {
     return head;
   }
 }
-function harness(operation, providers, store, requires = operation.run.requires) {
+function harness(operation, providers, store, deps = operation.run.deps) {
   const checkpoint = (key, child) => ({
     key,
     version: 1,
@@ -38,9 +38,9 @@ function harness(operation, providers, store, requires = operation.run.requires)
         state: codec,
         references: { child: childReference(child) },
         resume: {
-          requires: {},
+          deps: {},
           uses: [child],
-          async execute(work, _state, saved) {
+          async run(work, _state, saved) {
             const call = work.children.resume(saved.child);
             await call.run();
             return call.accept();
@@ -56,10 +56,10 @@ function harness(operation, providers, store, requires = operation.run.requires)
     }
     checkpoint = checkpoint('effects.execution', operation);
     run = {
-      requires,
+      deps,
       execute: async (work) => {
         const call = work.children.create(operation, work.input, { key: 'operation' });
-        work.checkpoint.save(this.checkpoint.points[0], {}, { child: call.ref });
+        work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
         await call.run();
         return call.accept();
       },
@@ -73,10 +73,10 @@ function harness(operation, providers, store, requires = operation.run.requires)
     }
     checkpoint = checkpoint('effects.runtime', execution);
     run = {
-      requires: {},
+      deps: {},
       execute: async (work) => {
         const call = work.children.create(execution, work.input, { key: 'execution' });
-        work.checkpoint.save(this.checkpoint.points[0], {}, { child: call.ref });
+        work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
         await call.run();
         return call.accept();
       },

@@ -1,5 +1,5 @@
 import type { FileReceipt, FileTask } from '@capix/protocol';
-import { ResourceOffer, type ProgressChannel } from '@capix/server-runtime';
+import { ResourceOffer, type ProgressChannel, type ResourceOperation } from '@capix/server-runtime';
 import type { WorkspaceFiles } from './workspace.js';
 import type { FileProgress, FileTaskInspection, TextDocument } from './types.js';
 import { isRelativeFilePath } from './path.js';
@@ -18,22 +18,23 @@ export interface FileCreator {
   createText(path: string, text: string, signal?: AbortSignal): Promise<FileReceipt>;
   createFixed(position: string, path: string, text: string, signal?: AbortSignal): Promise<FileReceipt>;
 }
-export interface FileInspector {
-  inspect(task: FileTask, signal?: AbortSignal): Promise<FileTaskInspection>;
-}
+export type FileInspector = ReturnType<typeof FileResources.inspect.request> extends import('@capix/server-runtime').ResourceRequest<infer Value> ? Value : never;
 export function documentDescriptor(document: TextDocument): FileReceipt {
   return Object.freeze({ path: document.path, bytes: document.bytes, digest: document.digest });
 }
 export const FileResources = Object.freeze({
-  inspect: new ResourceOffer<FileResourceSource, FileInspector>(
-    'workspace-files.inspect',
-    (source, activity) =>
-      Object.freeze({
-        inspect: (task: FileTask, signal?: AbortSignal) => activity.runAsync('inspect', { input: () => ({ task }), output: (result) => result }, () => source.files.checkTask(task, { signal, constraint: source.constraint })),
-      }),
-    'access',
-    { describe: (source) => ({ constraint: source.constraint ?? null, maxReadBytes: source.files.configuration.maxReadBytes, overwrite: false }) },
-  ),
+  inspect: new ResourceOffer({
+    name: 'workspace-files.inspect',
+    methods: {
+      inspect(source: FileResourceSource, task: FileTask, operation: ResourceOperation): Promise<FileTaskInspection> {
+        return source.files.checkTask(task, { signal: operation.signal, constraint: source.constraint });
+      },
+    },
+    observation: {
+      source: (source) => ({ constraint: source.constraint ?? null, maxReadBytes: source.files.configuration.maxReadBytes, overwrite: false }),
+      methods: { inspect: { input: (task) => ({ task }), output: (result) => result } },
+    },
+  }),
   readText: new ResourceOffer<FileResourceSource, FileReader, FileResourceSource, string>(
     'workspace-files.read-text',
     (source, activity) =>

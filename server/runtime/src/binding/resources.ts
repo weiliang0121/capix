@@ -7,10 +7,10 @@ import type { ChildCallable, CallableInput } from '../definition/children.js';
 type RefinableDefinition = ChildCallable;
 
 interface ResourceDeclarations {
-  readonly run: { readonly requires: ResourceRequirements };
-  readonly exceptions?: { readonly requires: ResourceRequirements };
+  readonly run: { readonly deps: ResourceRequirements };
+  readonly exceptions?: { readonly deps: ResourceRequirements };
   readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
-  readonly checkpoint?: { readonly points: readonly { readonly name: string; readonly resume: { readonly requires: ResourceRequirements } }[] };
+  readonly checkpoint?: { readonly points: readonly { readonly name: string; readonly resume: { readonly deps: ResourceRequirements } }[] };
 }
 
 /** Declaration identity locates a trusted assembly rule; content never receives this binding. */
@@ -35,27 +35,27 @@ export function bindChildResources<Definition extends RefinableDefinition>(defin
  * Installed observation supplies cover only observation requests, never run/exception/checkpoint requests.
  */
 export function collectDefinitionRequirements(definition: ResourceDeclarations, observationProvides?: ResourceRequirements): ResourceRequirements {
-  const requires: Record<string, ResourceRequest<unknown>> = {};
+  const deps: Record<string, ResourceRequest<unknown>> = {};
   const observationOffers = new Set(resourceRequests(observationProvides ?? {}).map((request) => request.offer));
-  for (const [name, request] of Object.entries(definition.run.requires)) requires[`run.${name}`] = request;
-  for (const [name, request] of Object.entries(definition.exceptions?.requires ?? {})) requires[`exceptions.${name}`] = request;
+  for (const [name, request] of Object.entries(definition.run.deps)) deps[`run.${name}`] = request;
+  for (const [name, request] of Object.entries(definition.exceptions?.deps ?? {})) deps[`exceptions.${name}`] = request;
   for (const point of definition.checkpoint?.points ?? []) {
-    for (const [name, request] of Object.entries(point.resume.requires)) requires[`checkpoint.${point.name}.${name}`] = request;
+    for (const [name, request] of Object.entries(point.resume.deps)) deps[`checkpoint.${point.name}.${name}`] = request;
   }
   for (const [index, declaration] of (observationProvides ? (definition.observation ?? []) : []).entries()) {
-    for (const [name, request] of Object.entries(declaration.requires)) {
-      if (!observationOffers.has(request.offer)) requires[`observation.${index}.${name}`] = request;
+    for (const [name, request] of Object.entries(declaration.deps)) {
+      if (!observationOffers.has(request.offer)) deps[`observation.${index}.${name}`] = request;
     }
   }
-  return Object.freeze(requires);
+  return Object.freeze(deps);
 }
 
 /** Internal supply routing retains offer identities, independently of each phase's local aliases. */
 export function collectResourceSupply(requirements: readonly ResourceRequirements[]): ResourceRequirements {
   const supply: Record<string, ResourceRequest<unknown>> = {};
   const offers = new Set<ResourceRequest<unknown>['offer']>();
-  for (const requires of requirements) {
-    for (const request of resourceRequests(requires)) {
+  for (const deps of requirements) {
+    for (const request of resourceRequests(deps)) {
       if (offers.has(request.offer)) continue;
       offers.add(request.offer);
       supply[`supply.${offers.size - 1}`] = request;

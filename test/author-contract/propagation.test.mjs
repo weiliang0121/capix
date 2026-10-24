@@ -8,27 +8,23 @@ const metadata = { name: 'fixture', label: 'fixture', source: 'test' };
 function runtime(operation) {
   const execution = defineGroup()({
     members: [operation],
-    run: {
-      async execute(work) {
-        const child = work.children.create(operation, work.input);
-        await child.run();
-        return child.accept();
-      },
+    async run(work) {
+      const child = work.children.create(operation, work.input);
+      await child.run();
+      return child.accept();
     },
   });
   const root = defineScene()({
     members: [execution],
-    run: {
-      async execute(work) {
-        const child = work.children.create(execution, work.input);
-        await child.run();
-        return child.accept();
-      },
+    async run(work) {
+      const child = work.children.create(execution, work.input);
+      await child.run();
+      return child.accept();
     },
   });
   return installCallable(root, { providers: [], source: { capture: () => null } });
 }
-const attempt = (execute, raises = []) => defineNode()({ ...metadata, callee: 'fixture', raises, run: { execute } });
+const attempt = (execute, raises = []) => defineNode()({ ...metadata, callee: 'fixture', raises, run: execute });
 
 for (const selected of [0, 1]) {
   test(`author Work identifies selected child ${selected} when one declaration throws the same exception concurrently`, async () => {
@@ -40,16 +36,14 @@ for (const selected of [0, 1]) {
     const operation = defineGroup()({
       ...metadata,
       members: [child],
-      run: {
-        async execute(work) {
-          const calls = [work.children.create(child, 'first', { key: 'same' }), work.children.create(child, 'second', { key: 'same' })];
-          refs = calls.map((call) => call.ref);
-          const outcomes = await Promise.allSettled(calls.map((call) => call.run()));
-          assert.ok(outcomes[selected].reason instanceof ChildCallFailure);
-          assert.equal(outcomes[selected].reason.exception, exception);
-          assert.notEqual(outcomes[0].reason, outcomes[1].reason);
-          throw outcomes[selected].reason;
-        },
+      async run(work) {
+        const calls = [work.children.create(child, 'first', { key: 'same' }), work.children.create(child, 'second', { key: 'same' })];
+        refs = calls.map((call) => call.ref);
+        const outcomes = await Promise.allSettled(calls.map((call) => call.run()));
+        assert.ok(outcomes[selected].reason instanceof ChildCallFailure);
+        assert.equal(outcomes[selected].reason.exception, exception);
+        assert.notEqual(outcomes[0].reason, outcomes[1].reason);
+        throw outcomes[selected].reason;
       },
       exceptions: {
         accepts: [rejected],
@@ -77,20 +71,18 @@ for (const mode of ['rethrow', 'unwrap', 'replace', 'swallow']) {
       ...metadata,
       raises: [rejected],
       members: [child],
-      run: {
-        async execute(work) {
-          const call = work.children.create(child, 'input');
-          ref = call.ref;
-          try {
-            await call.run();
-          } catch (error) {
-            assert.ok(error instanceof ChildCallFailure);
-            if (mode === 'rethrow') throw error;
-            if (mode === 'unwrap') throw error.exception;
-            if (mode === 'replace') throw rejected.create('local', {});
-          }
-          return 'swallowed';
-        },
+      async run(work) {
+        const call = work.children.create(child, 'input');
+        ref = call.ref;
+        try {
+          await call.run();
+        } catch (error) {
+          assert.ok(error instanceof ChildCallFailure);
+          if (mode === 'rethrow') throw error;
+          if (mode === 'unwrap') throw error.exception;
+          if (mode === 'replace') throw rejected.create('local', {});
+        }
+        return 'swallowed';
       },
       exceptions: {
         accepts: [rejected],
@@ -117,18 +109,16 @@ test('author nested run preserves inner source and independent outer failed rece
   const operation = defineGroup()({
     ...metadata,
     members: [outer, inner],
-    run: {
-      async execute(work) {
-        const first = work.children.create(outer, 'outer');
-        outerRef = first.ref;
-        const second = work.children.create(inner, 'inner');
-        innerRef = second.ref;
-        assert.equal(await first.run(), value);
-        return first.accept(async (delivered) => {
-          assert.equal(delivered, value);
-          return second.run();
-        });
-      },
+    async run(work) {
+      const first = work.children.create(outer, 'outer');
+      outerRef = first.ref;
+      const second = work.children.create(inner, 'inner');
+      innerRef = second.ref;
+      assert.equal(await first.run(), value);
+      return first.accept(async (delivered) => {
+        assert.equal(delivered, value);
+        return second.run();
+      });
     },
     exceptions: {
       accepts: [rejected],
@@ -158,21 +148,19 @@ test('accepted continuation exposes previous precise source and enables a separa
     ...metadata,
     maxRounds: 2,
     members: [failing, repair],
-    run: {
-      uses: [failing],
-      async execute(work) {
-        if (work.round === 2) {
-          assert.equal(work.initialInput, 'initial');
-          assert.equal(work.input, 'next');
-          assert.deepEqual(work.continuation, { fromRound: 1, stage: 'handling', reason: 'repaired', origin: { kind: 'child-return', child: source } });
-          assert.equal(work.children.facts.require(failing, source).returned.status, 'failed');
-          assert.equal(work.children.facts.require(repair, repaired).reception.value, 'fixed');
-          return 'done';
-        }
-        const child = work.children.create(failing, work.input);
-        source = child.ref;
-        return child.run();
-      },
+    uses: [failing],
+    async run(work) {
+      if (work.round === 2) {
+        assert.equal(work.initialInput, 'initial');
+        assert.equal(work.input, 'next');
+        assert.deepEqual(work.continuation, { fromRound: 1, stage: 'handling', reason: 'repaired', origin: { kind: 'child-return', child: source } });
+        assert.equal(work.children.facts.require(failing, source).returned.status, 'failed');
+        assert.equal(work.children.facts.require(repair, repaired).reception.value, 'fixed');
+        return 'done';
+      }
+      const child = work.children.create(failing, work.input);
+      source = child.ref;
+      return child.run();
     },
     exceptions: {
       accepts: [rejected],
@@ -202,11 +190,9 @@ test('declining after a caught repair rejection preserves the original unhandled
   const operation = defineGroup()({
     ...metadata,
     members: [first, repair],
-    run: {
-      uses: [first],
-      execute(work) {
-        return work.children.create(first, 'initial').run();
-      },
+    uses: [first],
+    run(work) {
+      return work.children.create(first, 'initial').run();
     },
     exceptions: {
       accepts: [rejected],

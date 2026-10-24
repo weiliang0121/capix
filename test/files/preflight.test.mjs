@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WorkspaceFiles, FileAccessException, FileResources } from '@capix/observer-service/assembly';
 import { CheckFileTask } from '@capix/observer-service/conversation';
-import { bindResources, InvocationCancelled } from '@capix/server-runtime';
+import { bindResources, InvocationCancelled, Resource, Resources, Scene, Runner } from '@capix/server-runtime';
 import { Transcript } from '@capix/server-runtime/content';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { bindChild } from '../fixtures/observer.mjs';
@@ -225,10 +225,62 @@ test('inspector resource has a narrow endpoint, enforces the supplied constraint
   assert.deepEqual(Object.keys(inspector), ['inspect']);
   assert.equal((await inspector.inspect({ sourcePath: 'other.md' })).reason, 'constraint');
   assert.equal((await inspector.inspect({ sourcePath: 'source.md' })).kind, 'ready');
+  assert.ok(observations.some((detail) => detail?.constraint?.sourcePath === 'source.md'));
+  assert.ok(observations.some((detail) => detail?.action === 'inspect' && detail.input?.task?.sourcePath === 'source.md'));
+  assert.ok(observations.some((detail) => detail?.action === 'inspect' && detail.output?.kind === 'ready'));
   assert.equal(JSON.stringify(observations).includes(root), false);
   assert.equal(JSON.stringify(observations).includes('private body'), false);
   active = false;
   await assert.rejects(inspector.inspect({ sourcePath: 'source.md' }), /call closed/);
+});
+
+test('the inspector method receives invocation cancellation through its operation endpoint', async (t) => {
+  const { files } = await workspace(t);
+  const controller = new AbortController();
+  let entered;
+  const started = new Promise((resolve) => {
+    entered = resolve;
+  });
+  t.mock.method(files, 'checkTask', async (_task, options) => {
+    assert.ok(options.signal instanceof AbortSignal);
+    assert.equal(options.signal.aborted, false);
+    entered();
+    await new Promise((resolve) => options.signal.addEventListener('abort', resolve, { once: true }));
+    return { kind: 'ready', task: { sourcePath: 'source.md' } };
+  });
+  const scene = new Scene({ deps: { inspector: FileResources.inspect.request() }, run: (work) => work.resources.inspector.inspect(work.input) });
+  const runner = new Runner(scene, new Resources().register(new Resource({ files }), FileResources.inspect)).build();
+  const result = runner.run({ sourcePath: 'source.md' }, { signal: controller.signal });
+  await started;
+  controller.abort('stop inspection');
+  await assert.rejects(result, (error) => error instanceof InvocationCancelled);
+});
+
+test('the inspector method supports explicit failure reception and otherwise preserves the original error', async (t) => {
+  const { files } = await workspace(t);
+  const failure = new Error('filesystem unavailable');
+  t.mock.method(files, 'checkTask', () => {
+    throw failure;
+  });
+  let handled = 0;
+  const scene = new Scene({
+    deps: { inspector: FileResources.inspect.request() },
+    run: (work) =>
+      work.resources.inspector.inspect(work.input, {
+        result: {
+          failed(error) {
+            assert.equal(error, failure);
+            handled++;
+            return 'unavailable';
+          },
+        },
+      }),
+  });
+  const runner = new Runner(scene, new Resources().register(new Resource({ files }), FileResources.inspect)).build();
+  assert.equal(await runner.run({ sourcePath: 'source.md' }), 'unavailable');
+  assert.equal(handled, 1);
+  const strict = new Scene({ deps: { inspector: FileResources.inspect.request() }, run: (work) => work.resources.inspector.inspect(work.input) });
+  await assert.rejects(new Runner(strict, new Resources().register(new Resource({ files }), FileResources.inspect)).build().run({ sourcePath: 'source.md' }), (error) => error === failure);
 });
 
 test('preflight O accepts the real inspect A result and preserves the content instruction', async (t) => {
@@ -237,7 +289,7 @@ test('preflight O accepts the real inspect A result and preserves the content in
   const runtime = createBoundRuntime();
   const definition = new CheckFileTask();
   const operation = bindChild(runtime, definition);
-  const binding = bindResources(CheckFileTask.requires, [FileResources.inspect.provide((source) => source)]);
+  const binding = bindResources(CheckFileTask.deps, [FileResources.inspect.provide((source) => source)]);
   const transcript = new Transcript([{ role: 'user', content: 'translate source.md' }]);
   const input = { task: { sourcePath: join(root, 'source.md') }, instruction: '翻译成白话文' };
   const result = await invoke(lifecycleFor(runtime).execution({ input: transcript.get(0), transcript, resourceBinding: () => binding({ files }), settings: {} }), (context) => operation.call(callFor(context), input));

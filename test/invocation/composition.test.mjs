@@ -6,14 +6,14 @@ import { runtimeDefinition, recordDefinitions, recordedCall } from '../fixtures/
 
 const metadata = { name: 'composed', label: 'Composed', source: 'test', callee: 'test' };
 function attempt(name, execute = (value) => value) {
-  return defineNode()({ ...metadata, name, run: { execute: (work) => execute(work.input) } });
+  return defineNode()({ ...metadata, name, run: (work) => execute(work.input) });
 }
 function composed(sequence) {
-  return defineGroup()({ ...metadata, members: [...new Set(sequence.steps.map((step) => step.use))], run: { execute: (work) => sequence.run(work.input, work.children) } });
+  return defineGroup()({ ...metadata, members: [...new Set(sequence.steps.map((step) => step.use))], run: (work) => sequence.run(work.input, work.children) });
 }
 function install(composition, recorder) {
   const calls = [];
-  const execution = defineGroup()({ members: [...new Set(composition.steps.map((step) => step.use))], run: { execute: (work) => composition.run(work.input, work.children) } });
+  const execution = defineGroup()({ members: [...new Set(composition.steps.map((step) => step.use))], run: (work) => composition.run(work.input, work.children) });
   const definition = runtimeDefinition(execution);
   if (recorder) recordDefinitions(definition);
   const runtime = installCallable(definition, {
@@ -148,12 +148,10 @@ test('direct calls attach and return without pretending parent acceptance took p
   let facts;
   const execution = defineGroup()({
     members: [operation],
-    run: {
-      execute(work) {
-        facts = work.children.facts;
-        saved = work.children.create(operation, null);
-        return saved.run();
-      },
+    run(work) {
+      facts = work.children.facts;
+      saved = work.children.create(operation, null);
+      return saved.run();
     },
   });
   const runtime = installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
@@ -172,7 +170,7 @@ test('a terminal reporting failure remains a failed delivery with a succeeded ch
     observation: [
       defineObservation(
         {
-          requires: {},
+          deps: {},
           observe(fact) {
             if (fact.kind === 'finished') throw error;
           },
@@ -180,7 +178,7 @@ test('a terminal reporting failure remains a failed delivery with a succeeded ch
         { failure: 'propagate' },
       ),
     ],
-    run: { execute: () => 'completed' },
+    run: () => 'completed',
   });
   const installed = install(new Sequence().step('work', { use, input: () => null }));
   await assert.rejects(installed.runtime.run(null, {}), (observed) => observed.code === 'OBSERVATION_FAILED' && observed.cause === error);

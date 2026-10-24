@@ -20,7 +20,7 @@ type PreparationWork = GroupWork<AcceptedConversationInput, PreparedConversation
 
 /** Capture current material after optional maintenance; creation of E does not fix these values. */
 export class PrepareConversationContext extends Group<AcceptedConversationInput, PreparedConversationContext, PreparationResources> {
-  static readonly requires = Object.freeze({ activeContent: ActiveContentResource.read.request() });
+  static readonly deps = Object.freeze({ activeContent: ActiveContentResource.read.request() });
 
   readonly waiting;
   readonly completed;
@@ -29,7 +29,7 @@ export class PrepareConversationContext extends Group<AcceptedConversationInput,
     super();
 
     if (maintenance) this.add(maintenance);
-    const requires = PrepareConversationContext.requires;
+    const deps = PrepareConversationContext.deps;
     const point = checkpointPoint<'group', AcceptedConversationInput, PreparedConversationContext>();
     this.waiting = maintenance
       ? point({
@@ -41,7 +41,7 @@ export class PrepareConversationContext extends Group<AcceptedConversationInput,
             const child = waitingChild(facts, facts.references.child, 'maintenance');
             if (facts.children.values().length !== 1 || child.input.phase !== 'before-request') throw new Error('Preparation checkpoint changed maintenance');
           },
-          resume: { requires, uses: this.members, execute: (work, _state, saved) => this.receive(work, work.children.resume(saved.child)) },
+          resume: { deps, uses: this.members, run: (work, _state, saved) => this.receive(work, work.children.resume(saved.child)) },
         })
       : undefined;
     this.completed = point({
@@ -56,16 +56,16 @@ export class PrepareConversationContext extends Group<AcceptedConversationInput,
           if (facts.children.values().length !== 1 || child.key !== 'maintenance' || child.input.phase !== 'before-request') throw new Error('Prepared checkpoint has no accepted maintenance');
         } else if (facts.children.values().length) throw new Error('Unconfigured maintenance cannot create calls');
       },
-      resume: { execute: (_work, output) => output },
+      resume: { run: (_work, output) => output },
     });
 
-    this.setDefinition({ name: 'prepareContext', label: '准备对话材料', source: 'services/observer/src/conversation/group/context/prepare.ts · PrepareConversationContext', observation: [invocationRecording<AcceptedConversationInput, PreparedConversationContext>({ output: describePreparedConversationContext, relationAccepted: (output, relation) => (relation.key === 'maintenance' ? describeActiveContent(output as ActiveContentSnapshot) : output) })], run: { requires, uses: this.members, execute: this.execute.bind(this) }, checkpoint: { key: 'observer.prepare-context', version: 1, input: acceptedCheckpointInput, output: preparedConversationContextCodec, points: this.waiting ? [this.waiting, this.completed] : [this.completed] } });
+    this.setDefinition({ name: 'prepareContext', label: '准备对话材料', source: 'services/observer/src/conversation/group/context/prepare.ts · PrepareConversationContext', observation: [invocationRecording<AcceptedConversationInput, PreparedConversationContext>({ output: describePreparedConversationContext, relationAccepted: (output, relation) => (relation.key === 'maintenance' ? describeActiveContent(output as ActiveContentSnapshot) : output) })], deps, uses: this.members, run: this.execute.bind(this), checkpoint: { key: 'observer.prepare-context', version: 1, input: acceptedCheckpointInput, output: preparedConversationContextCodec, points: this.waiting ? [this.waiting, this.completed] : [this.completed] } });
   }
 
   private async execute(work: PreparationWork): Promise<PreparedConversationContext> {
     if (!this.maintenance) return this.capture(work);
     const child = work.children.create(this.maintenance, { phase: 'before-request' }, { key: 'maintenance' });
-    if (this.waiting) work.checkpoint?.save(this.waiting, null, { child: child.ref });
+    if (this.waiting) work.checkpoint?.({ point: this.waiting, state: null, refs: { child: child.ref } });
     return this.receive(work, child);
   }
 
@@ -77,7 +77,7 @@ export class PrepareConversationContext extends Group<AcceptedConversationInput,
 
   private capture(work: PreparationWork): PreparedConversationContext {
     const output = prepareMaterial(work.input, work.resources.activeContent.capture());
-    work.checkpoint?.save(this.completed, output, {});
+    work.checkpoint?.({ point: this.completed, state: output, refs: {} });
     return output;
   }
 }
