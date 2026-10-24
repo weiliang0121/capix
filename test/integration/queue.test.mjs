@@ -120,7 +120,7 @@ test('HTTP: readiness racing another caller retains the same waiting item and re
         submit: (request, receive, signal) => {
           if (!raced) {
             raced = true;
-            competing = environment.driver.run(environment.scene, input('another caller'), { settings });
+            competing = environment.runner.run(input('another caller'), { settings });
           }
           return io.submit(request, receive, signal);
         },

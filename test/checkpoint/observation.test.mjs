@@ -104,7 +104,7 @@ test('default Observer assembly consumes checkpoint metadata even if an optional
   });
   const conversation = host.create();
   const environment = host.open(conversation.id);
-  assert.equal((await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'hello' }] }, { settings })).content, 'reply');
+  assert.equal((await environment.runner.run({ messages: [{ role: 'user', content: 'hello' }] }, { settings })).content, 'reply');
   const [run] = environment.checkpointRuns.list(conversation.id);
   const snapshot = environment.checkpointObservation.query(run.rootContextId);
   assert.ok(snapshot.events.length > 3);

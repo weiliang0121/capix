@@ -1,9 +1,9 @@
-import { Driver } from '@capix/server-runtime';
+import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import { ActiveContent } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
-import { ConversationSubmission, buildConversation, createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service';
+import { ConversationSubmission, createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import { ClientSubmission } from '@capix/client-runtime';
 
@@ -109,10 +109,10 @@ test('full declared streaming chain stays within a wire budget and client recons
   t.after(() => interactions.close());
   const transcript = new Transcript();
   const memories = new Memories(transcript);
-  const driver = new Driver();
-  const scene = buildConversation(driver, createConversationStructure(), { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() }, interactions);
+
+  const runner = createConversationRunner(createConversationStructure(), { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() }, interactions);
   const client = new ClientSubmission('volume-conversation', { messages: [{ role: 'user', content: '模拟问题' }] });
-  const submission = new ConversationSubmission(client.id, client.conversationId, { admission: () => ({ conversationId: client.conversationId, transcriptId: transcript.id, status: driver.isRunning(scene) ? 'busy' : 'ready' }) });
+  const submission = new ConversationSubmission(client.id, client.conversationId, { admission: () => ({ conversationId: client.conversationId, transcriptId: transcript.id, status: runner.isRunning ? 'busy' : 'ready' }) });
   const frames = [];
   const detach = submission.connectFrames((frame) => {
     frames.push(frame);
@@ -126,7 +126,7 @@ test('full declared streaming chain stays within a wire budget and client recons
       }
     });
   });
-  submission.start((signal) => driver.run(scene, client.input, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 }, signal, progress: submission.progress, activity: submission.activity, answerProgress: submission.answerProgress }));
+  submission.start((signal) => runner.run(client.input, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 10000 }, signal, progress: submission.progress, activity: submission.activity, answerProgress: submission.answerProgress }));
   const final = await completed;
   await tick();
   detach();

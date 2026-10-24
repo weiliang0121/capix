@@ -1,4 +1,4 @@
-import { Driver } from '@capix/server-runtime';
+import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 import { submissionSnapshot as submission, submissionSnapshots } from '../fixtures/submissions.mjs';
@@ -12,7 +12,7 @@ import { ClientRuntime } from '@capix/client-runtime';
 import { ProgressChannel, defineObservation } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
-import { ConversationSubmission, createObserverServer, ObserverConversations, buildConversation, createConversationStructure, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
+import { ConversationSubmission, createObserverServer, ObserverConversations, createConversationStructure, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
 import { withRuntimeDefinition, reconfigure } from '../fixtures/assembly.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
@@ -488,11 +488,10 @@ test('answer is delivered before memory finishes, and closing observation does n
 
 test('the concrete conversation can deliver without a Recorder or any execution records', async () => {
   const entities = createEnvironment();
-  const driver = new Driver();
-  const scene = buildConversation(driver, createConversationStructure(), entities, new ModelInteractions(new ModelSource(provider)));
+
+  const runner = createConversationRunner(createConversationStructure(), entities, new ModelInteractions(new ModelSource(provider)));
   const received = [];
-  const output = await driver.run(
-    scene,
+  const output = await runner.run(
     { messages: [{ role: 'user', content: '问题' }] },
     {
       settings,
@@ -509,7 +508,7 @@ test('the concrete conversation can deliver without a Recorder or any execution 
     ['input', 'execution', 'task', 'answer'],
   );
   assert.equal(received[0].range.transcriptId, entities.transcript.id);
-  assert.equal(driver.recorder, undefined);
+  assert.equal(runner.recorder, undefined);
   assert.equal(entities.transcript.length, 2);
 });
 
@@ -695,7 +694,7 @@ test('HTTP cancellation retains an answer while memory feedback completes indepe
   const terminal = frames.at(-1);
   assert.equal(terminal.result.status, 'cancelled');
   assert.deepEqual(terminal.answer, requested.answer);
-  assert.equal(observer.driver.isRunning(observer.scene), false);
+  assert.equal(observer.runner.isRunning, false);
   assert.equal(observer.transcript.length, 2);
   assert.equal(observer.memories.snapshot().length, 0);
   assert.deepEqual(submission(await client.read(id)), terminal);
@@ -733,7 +732,7 @@ test('HTTP cancellation ends local work without cancelling external delivery or 
   const response = await run('取消调用', { id });
   await entering;
   await response.body.cancel();
-  assert.equal(observer.driver.isRunning(observer.scene), true, 'disconnecting delivery does not request cancellation');
+  assert.equal(observer.runner.isRunning, true, 'disconnecting delivery does not request cancellation');
   const client = new ConversationHttpTransport(base);
   await client.cancel(id);
   const frames = [];
@@ -746,7 +745,7 @@ test('HTTP cancellation ends local work without cancelling external delivery or 
   );
   assert.equal(frames.at(-1).result.status, 'cancelled');
   assert.equal(frames.at(-1).cancelRequested, true);
-  assert.equal(observer.driver.isRunning(observer.scene), false);
+  assert.equal(observer.runner.isRunning, false);
   assert.equal(observer.transcript.length, 1);
   assert.equal(observer.interactions.active, true);
   assert.equal(externalSignal.aborted, false);
@@ -837,7 +836,7 @@ for (const fault of [false, true]) {
     try {
       await returned;
       const interim = await get(`/api/submissions/${id}`);
-      assert.equal(observer.driver.isRunning(observer.scene), false, 'the R invocation has genuinely ended');
+      assert.equal(observer.runner.isRunning, false, 'the R invocation has genuinely ended');
       assert.equal(observer.interactions.active, true);
       assert.equal(interim.cancelRequested, true);
       if (fault) {

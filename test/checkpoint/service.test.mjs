@@ -29,7 +29,7 @@ test('normal new conversation calls install CP and register real input plus fixe
   const conversation = host.create();
   const environment = host.open(conversation.id);
   const options = { settings: { ...settings } };
-  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'hello' }] }, options);
+  await environment.runner.run({ messages: [{ role: 'user', content: 'hello' }] }, options);
   const [run] = environment.checkpointRuns.list(conversation.id);
   assert.equal(run.conversationId, conversation.id);
   assert.deepEqual(run.input, { transcriptId: environment.transcript.id, start: 0, end: 1, revision: 1 });
@@ -42,7 +42,7 @@ test('normal new conversation calls install CP and register real input plus fixe
   assert.equal(run.settings.model, 'test');
   await assert.rejects(host.recover(conversation.id, run.rootContextId));
   assert.equal(environment.transcript.length, 2);
-  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'again' }] }, { settings });
+  await environment.runner.run({ messages: [{ role: 'user', content: 'again' }] }, { settings });
   assert.equal(environment.checkpointRuns.list(conversation.id).length, 2);
   assert.equal(environment.checkpointRuns.read(host.list().defaultConversationId, run.rootContextId), undefined);
   host.close();
@@ -56,7 +56,7 @@ test('checkpoint installation reuses the host SQLite connection and recovers met
   const environment = host.open(conversation.id);
   assert.equal(environment.checkpoints, persistence.checkpoints);
   assert.equal(environment.checkpointRuns, persistence.checkpointRuns);
-  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'persist' }] }, { settings });
+  await environment.runner.run({ messages: [{ role: 'user', content: 'persist' }] }, { settings });
   const [run] = environment.checkpointRuns.list(conversation.id);
   const saved = persistence.checkpoints.read(run.rootContextId);
   host.close();
@@ -86,7 +86,7 @@ for (const formatVersion of [1, 2, 3, 99]) {
     const host = new ObserverConversations(provider, [], { persistence: SqliteObserverStore.open(path) });
     const conversation = host.list().conversations[0];
     const environment = host.open(conversation.id);
-    await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'before upgrade' }] }, { settings });
+    await environment.runner.run({ messages: [{ role: 'user', content: 'before upgrade' }] }, { settings });
     const [run] = environment.checkpointRuns.list(conversation.id);
     const original = environment.transcript.exportState();
     host.close();
@@ -107,7 +107,7 @@ for (const formatVersion of [1, 2, 3, 99]) {
     assert.throws(() => persistence.checkpoints.read(run.rootContextId), { code: 'CHECKPOINT_FORMAT_UNSUPPORTED' });
     await assert.rejects(restored.recover(conversation.id, run.rootContextId), { code: 'CHECKPOINT_FORMAT_UNSUPPORTED' });
     const current = restored.open(conversation.id);
-    await current.driver.run(current.scene, { messages: [{ role: 'user', content: 'after upgrade' }] }, { settings });
+    await current.runner.run({ messages: [{ role: 'user', content: 'after upgrade' }] }, { settings });
     assert.equal(current.transcript.length, 4);
     const latest = current.checkpointRuns.list(conversation.id).find((candidate) => candidate.rootContextId !== run.rootContextId);
     assert.equal(current.checkpoints.read(latest.rootContextId).image.formatVersion, 4);
@@ -119,8 +119,7 @@ test('capture preserves the full accepted history when capacity checking rejects
   const conversation = host.create();
   const environment = host.open(conversation.id);
   await assert.rejects(
-    environment.driver.run(
-      environment.scene,
+    environment.runner.run(
       {
         messages: [
           { role: 'user', content: 'large'.repeat(20000) },
@@ -193,7 +192,7 @@ test('host recovery rejects different orchestration configuration before any pro
   const host = new ObserverConversations(provider, [], { persistence: SqliteObserverStore.open(path) });
   const conversation = host.list().conversations[0];
   const environment = host.open(conversation.id);
-  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'hello' }] }, { settings });
+  await environment.runner.run({ messages: [{ role: 'user', content: 'hello' }] }, { settings });
   const [run] = environment.checkpointRuns.list(conversation.id);
   host.close();
   const restored = new ObserverConversations(

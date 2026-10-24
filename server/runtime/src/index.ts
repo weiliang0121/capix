@@ -22,6 +22,8 @@ export * from './exception/contract.js';
 export * from './composition/sequence.js';
 
 export * from './driver.js';
+export * from './runner.js';
+export { callableHooks, type CallableHookDeclaration, type CallableHookBinding } from './binding/hooks.js';
 
 // Application assembly and independent resource supplies.
 export * from './binding/callable.js';
@@ -29,12 +31,14 @@ export * from './binding/observation.js';
 export * from './binding/resources.js';
 export { ResourceOffer, type ResourceRequest, type ResourceProvider, type ResourceRefinement, type ResourceRequests, type ResourcesOf } from './resource/offer.js';
 export * from './resource/bindings.js';
+export { Resources, CapturedResources } from './resource/resources.js';
 export { ResourceActivity, type ResourceInteractionDescription, type ResourceOwner } from './resource/activity.js';
 export * from './initializer.js';
 
 // Independent external interactions; waiting invocations do not own delivery or retained feedback.
 export * from './interaction/contract.js';
 export * from './interaction/interaction.js';
+export * from './interaction/interactions.js';
 
 // Business-facing context and invocation views, results and shared time.
 export * from './context/view.js';

@@ -1,8 +1,9 @@
+import { createConversationRunner } from './fixtures/conversation-runner.mjs';
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { defineScene, defineGroup, defineNode, Driver, ProgressChannel, invocationRecording, bindRecording, Recorder, RecordBook } from '@capix/server-runtime';
-import { createConversationStructure, ConversationGroup, PrepareConversationContext, GenerateAnswer, ExtractMemory, DefaultConversationDecision, acceptConversationRequest, conversationSceneRequests, ModelInteractions, ModelSource, buildConversation, initializeObserver, observeExecution, observeOverview, subscribeExecutions } from '@capix/observer-service';
+import { createConversationStructure, ConversationGroup, PrepareConversationContext, GenerateAnswer, ExtractMemory, DefaultConversationDecision, acceptConversationRequest, conversationSceneRequests, ModelInteractions, ModelSource, initializeObserver, observeExecution, observeOverview, subscribeExecutions } from '@capix/observer-service';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { ObservationReplica } from '@capix/client-runtime';
@@ -40,11 +41,11 @@ test('Scene members share Callable behavior, while only the exactly bound task p
       return original.execute(work);
     },
   });
-  const driver = new Driver({ observations: [recording] });
-  const scene = buildConversation(driver, definition, entities, model);
+
+  const runner = createConversationRunner(definition, entities, model, { observations: [recording] });
   const progress = [];
   const activity = [];
-  await driver.run(scene, input, {
+  await runner.run(input, {
     settings,
     progress: new ProgressChannel({
       receive: (fact) => {
@@ -80,7 +81,7 @@ test('task snapshots preserve actual nested calls and receive final Scene accept
   const snapshots = [];
   const stop = subscribeExecutions(environment.recording, (snapshot) => snapshots.push(snapshot));
   t.after(stop);
-  const result = await observeExecution(environment.driver, environment.scene, environment.recording, input, { settings });
+  const result = await observeExecution(environment.runner, environment.recording, input, { settings });
   validateExecutionRecordSnapshot(result);
   assert.equal(result.execution.role, 'conversation-task');
   assert.equal(result.execution.structureKind, 'group');
@@ -128,9 +129,9 @@ test('a conversation task nested under multiple groups retains its full ancestry
   const outer = defineGroup()({ name: 'outer', members: [inner], observation: [invocationRecording()], run: forward(inner) });
   const root = defineScene()({ name: 'nested-conversation', members: [outer], observation: [invocationRecording()], run: forward(outer) });
   const definition = { scene: root, conversation, ...capabilities };
-  const driver = new Driver({ observations: [recording] });
-  const scene = buildConversation(driver, definition, entities, model);
-  const snapshot = await observeExecution(driver, scene, recording, input, { settings });
+
+  const runner = createConversationRunner(definition, entities, model, { observations: [recording] });
+  const snapshot = await observeExecution(runner, recording, input, { settings });
   validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(
     snapshot.ancestors.map((call) => call.name),

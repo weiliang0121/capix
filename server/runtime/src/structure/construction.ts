@@ -1,6 +1,6 @@
 import type { AnyCallable } from '../binding/declarations.js';
 import type { CallableBinding } from '../binding/contract.js';
-import type { CallableSources } from '../binding/sources.js';
+import type { CallInstallation } from '../binding/calls.js';
 import type { CallableInvocationBuilder } from '../invocation/builders/callable.js';
 
 declare const builtOptions: unique symbol;
@@ -13,7 +13,7 @@ export type BuiltOptions<Structure> = Structure extends { readonly [builtOptions
 /** Fixed construction data owned by the original callable; no current invocation is retained. */
 export interface CallableConstruction {
   readonly binding: CallableBinding<any, any, object>;
-  readonly sources: CallableSources<any>;
+  readonly calls: CallInstallation<any>;
   readonly invocations: CallableInvocationBuilder;
 }
 

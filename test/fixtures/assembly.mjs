@@ -1,6 +1,6 @@
 import { mock } from 'node:test';
 import { CallableBuilder } from '@capix/server-runtime';
-import { GenerateAnswer } from '@capix/observer-service/conversation';
+import { ConversationGroup, GenerateAnswer } from '@capix/observer-service/conversation';
 
 /** Test mutations use the same full replacement contract as author configuration. */
 export function reconfigure(callable, changes) {
@@ -12,12 +12,12 @@ export function reconfigure(callable, changes) {
 /** Configure a host-created declaration before its synchronous binding, without adding a production hook. */
 export function withRuntimeDefinition(configure, initialize) {
   if (!configure) return initialize();
-  const build = CallableBuilder.prototype.build;
-  const patched = mock.method(CallableBuilder.prototype, 'build', function (definition, options) {
-    const conversation = options.bindings?.[0]?.definition;
+  const build = CallableBuilder.prototype.buildResources;
+  const patched = mock.method(CallableBuilder.prototype, 'buildResources', function (definition, resources, interactions, options) {
+    const conversation = definition.members?.find((member) => member instanceof ConversationGroup);
     const generation = conversation?.members.find((member) => member instanceof GenerateAnswer);
     configure(definition, { conversation, generation });
-    return build.call(this, definition, options);
+    return build.call(this, definition, resources, interactions, options);
   });
   try {
     return initialize();

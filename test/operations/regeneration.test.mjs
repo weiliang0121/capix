@@ -1,10 +1,11 @@
+import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import { reconfigure } from '../fixtures/assembly.mjs';
 import { ActiveContent } from '@capix/observer-service';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildConversation, createConversationStructure } from '@capix/observer-service';
-import { Driver, RuntimeError, CallableRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix/server-runtime';
+import { createConversationStructure } from '@capix/observer-service';
+import { RuntimeError, CallableRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix/server-runtime';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const answer = { kind: 'answer', content: '修正后的回答' };
@@ -32,9 +33,9 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
   const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() };
   const definition = createConversationStructure();
   configureDefinition?.(definition);
-  const driver = new Driver({ observations: recording ? [recording] : undefined });
-  const scene = buildConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
-  const environment = { ...entities, definition, recording, book: recorder?.book, driver, scene };
+
+  const runner = createConversationRunner(definition, entities, new ModelInteractions(new ModelSource(provider)), { observations: recording ? [recording] : undefined });
+  const environment = { ...entities, definition, recording, book: recorder?.book, runner, scene: runner.scene };
   let invocation;
   return {
     ...environment,
@@ -43,8 +44,7 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
       return invocation;
     },
     run: () =>
-      environment.driver.run(
-        environment.scene,
+      environment.runner.run(
         { messages },
         {
           settings: configuration,

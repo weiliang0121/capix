@@ -29,9 +29,9 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 独立实体：Transcript、Memories、SelectionUsage、模型供给、记录容器……
                       │ 通过资源契约提供受控访问
 结构：Scene / Group / Node = Callable + 可选 Composite
-                      │ driver.build：解算接线、安装调用构造能力
+                      │ runner.build：解算接线、安装调用构造能力
                  原结构（身份不变）
-                      │ Driver 启动一次调用
+                      │ Runner 启动一次调用
                 Invocation ↔ CallableContext
                       │ 当前阶段 Work
                 业务处理与显式子调用
@@ -44,7 +44,7 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 
 - `new Node/Group/Scene` 直接构造结构；普通 `*Definition` 配置可经构造器或 `setDefinition` 传入。`setRun` 替换整个 run 阶段，`run`、`exceptions`、`observation` 是平级部分。
 - Scene / Group 通过 `add` 注册可用的 Group / Node，组合体自己的处理函数选择、调用、接纳成员。Node 不具有成员调用端口。
-- `driver.build` 在原结构上完成一次构建，返回同一对象的 `BuiltCallable` 类型；构建后拒绝结构修改。每个成员只属于一个父结构，处理逻辑与资源实体可以复用。`Driver` 管理入口占用，每次运行建立新的 Invocation 和 CallableContext。
+- `new Runner(scene, resources, interactions?).build()` 在原结构上完成一次构建，返回运行器本身；构建后拒绝结构修改。每个成员只属于一个父结构，处理逻辑与资源实体可以复用。每个 Runner 固定一个场景并管理其入口占用，每次运行建立新的 Invocation 和 CallableContext。
 - `Invocation` 统一协调调用阶段、直接子关系与交付；Context 保存本次现场。业务作者只取得本阶段 Work、具名资源与受控动作，见 [可调用结构](docs/callable-structures.md)。
 - 独立实体由宿主建立，结构绑定其访问形式。资源捕获边界按准确声明身份配置，不因结构叫 Group 就自动重新捕获。
 - 观测消费类型化事实，记录是内置的可选结果形式。没有记录，业务调用与内容变化仍然成立。
@@ -69,10 +69,10 @@ services/observer/src/
 import { initializeObserver } from '@capix/observer-service/assembly';
 
 const environment = initializeObserver(provider);
-const output = await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings, signal, progress });
+const output = await environment.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings, signal, progress });
 ```
 
-上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node，或直接使用 `@capix/server-runtime`：先 `new Driver(capabilities)`，再 `const builtScene = driver.build(scene, options)`，最后 `driver.run(builtScene, input, options)`。`builtScene === scene`，不必使用 Observer 的装配。
+上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node，或直接使用 `@capix/server-runtime`：先构造 Scene 并向 Resources 注册供给，再 `const runner = new Runner(scene, resources).build()`，最后 `runner.run(input, options)`。可选 Interactions 作为第三参数接入；无需持有另一个已绑定场景，也不必使用 Observer 的装配。可运行的最小示例见 [examples/runner.mjs](examples/runner.mjs)。
 
 回答在正式追加消息后交付，随后处理记忆。启用持久化时，正式追加先提交到数据库。后处理失败保留已成立的回答。当前只有生成回答明确声明的、针对完整模型输出被拒绝的一次再次生成；没有通用自动重试、后台补偿、动态调度或默认服务未完成调用恢复。
 

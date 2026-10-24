@@ -41,7 +41,7 @@ function fixture(messages = []) {
   return environment;
 }
 async function run(environment, content) {
-  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content }] }, { settings });
+  await environment.runner.run({ messages: [{ role: 'user', content }] }, { settings });
 }
 
 function executionRuntime(execute, { changes, recording, accept, parentAccept } = {}) {

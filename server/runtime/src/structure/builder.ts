@@ -1,5 +1,8 @@
 import { types } from 'node:util';
-import { CallableBinder, type CallableBindingOptions } from '../binding/callable.js';
+import { CallableBinder, type CallableBindingOptions, type CallableBindings } from '../binding/callable.js';
+import type { Resources } from '../resource/resources.js';
+import type { CallableCallsOptions } from '../binding/calls.js';
+import type { Interactions } from '../interaction/interactions.js';
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
 import { BoundChildren } from '../binding/children/bound.js';
 import { InvocationWorkBinding } from '../binding/work.js';
@@ -22,12 +25,20 @@ export class CallableBuilder {
   }
 
   build<Structure extends AnyCallable, Options, Source>(structure: Structure, options: CallableBindingOptions<NoInfer<CallableInput<Structure>>, Options, Source>): BuiltCallable<Structure, Options> {
+    return this.construct(structure, () => this.binder.bind(structure, options));
+  }
+
+  buildResources<Structure extends AnyCallable, Options extends object>(structure: Structure, resources: Resources<Options>, interactions?: Interactions, options: CallableCallsOptions<Options> = {}): BuiltCallable<Structure, Options> {
+    return this.construct(structure, () => this.binder.bindResources(structure, resources, interactions, options));
+  }
+
+  private construct<Structure extends AnyCallable, Options>(structure: Structure, resolve: () => CallableBindings<Structure, Options>): BuiltCallable<Structure, Options> {
     const tree = checkTree(structure);
     const reserved = new Set(tree);
     const original = tree.map((structure) => ({ structure, descriptors: Object.getOwnPropertyDescriptors(structure) }));
     for (const current of tree) beginStructureBuild(current);
     try {
-      const { root, sources } = this.binder.bind(structure, options);
+      const { root, calls } = resolve();
       const invocations = new CallableInvocationBuilder(this.capabilities);
       const prepared: { structure: AnyCallable; construction: CallableConstruction; fields: PropertyDescriptorMap }[] = [];
       const prepare = (node: ResolvedCallable): void => {
@@ -52,7 +63,7 @@ export class CallableBuilder {
           if (existing && !existing.configurable && !fixed) throw new Error(`Callable structure field cannot be fixed: ${key}`);
           if (!existing || existing.configurable) fields[key] = { value, enumerable: true, writable: false, configurable: false };
         }
-        prepared.push({ structure: node.definition, construction: { binding, sources, invocations }, fields });
+        prepared.push({ structure: node.definition, construction: { binding, calls, invocations }, fields });
         for (const member of node.members) prepare(member);
       };
       prepare(root);

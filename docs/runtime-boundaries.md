@@ -1,6 +1,6 @@
 # 运行结构、调用与资源访问边界
 
-当前结构为 Scene / Group / Node；共同机制为 Callable，成员组合为 Composite。完整角色表见 [项目组织](organization.md)，作者示例见 [可调用结构](callable-structures.md)。运行时表示这些结构和独立实体实际协作的活动状态，不是某个 Scene 或 Driver 的别名。
+当前结构为 Scene / Group / Node；共同机制为 Callable，成员组合为 Composite。完整角色表见 [项目组织](organization.md)，作者示例见 [可调用结构](callable-structures.md)。运行时表示这些结构和独立实体实际协作的活动状态，不是某个 Scene 或 Runner 的别名。
 
 ## 结构配置与整体构建
 
@@ -12,58 +12,54 @@ Scene 与 Group 都声明自己的普通输入、输出、run 和 members；Node
 | CallableBinding           | 原结构需要安装的固定接线契约，不增加运行实体                  |
 | CallableBuilder           | 完成原结构的绑定与运行能力装配，成功后一次性发布              |
 | CallableInvocationBuilder | 持有安装归属，用同一机制建立任何 kind 的 Context 和调用       |
-| Driver                    | 宿主入口、占用、实际结束后释放                                |
+| Runner                    | 固定场景的宿主入口、占用、实际结束后释放                      |
 
 Scene/Group/Node 本身是注册身份，普通 Definition 配置没有独立身份。Scene 是根，Group/Node 只有一个父结构；同父重复 add 不增加位置，跨父添加或循环拒绝。业务配置经构造器或 setDefinition 安装，setRun 替换完整阶段。构建提前解算全树，固定配置容器、函数入口和资源接线，但保留业务方法 receiver。原结构承载这些装配结果，不产生第二棵 Bound 树。
 
 ```text
-new Driver(capabilities)
-  → 固定调用机制接入
+new Runner(scene, resources, interactions?, mechanisms)
+  → 固定一个场景与机制接入
 
-Driver.build(structure, bindingOptions)
-  → CallableBuilder.build
-      → CallableBinder.bind：检查配置、成员、资源与来源契约
+runner.build()
+  → CallableBuilder.buildResources
+      → CallableBinder.bindResources：检查配置、成员、资源 scope 与 hooks
       → 建立固定 work 接线和 CallableInvocationBuilder
       → 将运行能力安装到原结构，完整成功后固定配置
-  → 返回同一个结构的 BuiltCallable 类型
+  → 返回同一个 Runner
 
-Driver.run(builtScene, input, options)
-  → 核验构建归属，取得本场景入口占用，检查预取消，validate
-  → 建立本次固定 CallableCallBindings
-  → root capture，构造根 Invocation / CallableContext
+runner.run(input, options)
+  → 固定 options 顶层字段，取得入口占用，检查预取消、validate
+  → 建立本次 CallableCallBindings
+  → ResourceInstallation 打开固定供给，构造根 Invocation / Context
   → Invocation.run → 当前阶段 Work → 业务
   → 实际返回或失败，释放占用
 ```
 
 build 成功后拒绝结构 setter、add 和再次构建。修改业务逻辑或供应规则需另建结构；输入和资源内容变化仍按次处理。build 不取得本次资源值、不执行业务；失败不留下部分可运行结构。固定结构与构建归属不等于固定一次运行的现场。
 
-构建后的场景归属于其 Driver；跨 Driver、伪造结构及独立 CallableBuilder 构建的结构均不能通过该 Driver 入口运行。场景入口独立占用，使用 `Driver.isRunning(scene)` 查询；同一个 Driver 的其他场景不受影响。占用不在 Context，也不扩展为每个 Node 的执行锁。构造、业务、观测任一失败都释放；Driver 不隐式建立等待队列。入口观测仍包含 driverId 与 boundId，boundId 指该构建安装的稳定身份，不代表第二个 Bound 对象。
+Runner 固定一个场景，不能在 run 时替换。使用 `runner.isRunning` 查询占用；不同 Runner 互不影响。占用不在 Context，也不扩展为每个 Node 的执行锁。构造、业务、观测失败都释放；Runner 不隐式排队。入口观测暂沿用 driverId 与 boundId，boundId 指构建安装身份，不代表第二个 Bound 对象。
 
-CallableInvocationBuilder 直接构造 CallableContext，以自身作为固定安装归属。建立子调用时，资源选择前后均核对父活动及归属，因为资源收窄会执行宿主逻辑，可能同步触发取消。子 Context 只继承父信号，不保留父对象。不同构建即使来自同一 Driver，也不共享构造归属。
+CallableInvocationBuilder 直接构造 CallableContext，以自身作为固定安装归属。建立子调用时，资源选择前后均核对父活动及归属，因为资源收窄可能同步触发取消。子 Context 只继承父信号，不保留父对象。不同构建不共享构造归属。
 
 ## 来源、供应与访问窗口
 
 Transcript、Memories、Provider、Interaction 等由宿主建立。结构只绑定其资源访问形式，不拥有实体生命。ResourceOffer 声明访问、capture、timing、describe 与可选 refine；资源检查范围是否扩大，绑定不能代为授权。
 
-装配解算本层 requires 和子树 supply，父 Work 只取得本阶段 requires。普通成员继承固定供给，但为本次调用建立独立端点；只有明确 `CallableSourceBinding.capture` 的位置建立独立来源边界，其子树不会泄漏到上游供给捕获。
+装配解算本层 requires 和子树 supply，父 Work 只取得本阶段 requires。普通成员继承本次固定供给；局部 `Resources.capture` 只覆盖该位置登记的 offer，不重建其他祖先供给。
 
 ```ts
-const sourceBinding = bindCallSource(task, {
-  capture: (input, options) => captureTaskBasis(input, options),
-  started: (options) => options.started,
-});
-const driver = new Driver();
-const builtScene = driver.build(scene, {
-  providers,
-  source: { capture: (input, options) => captureSceneBasis(input, options) },
-  bindings: [sourceBinding],
-});
-await driver.run(builtScene, input, options);
+const resources = new Resources<RunOptions>();
+resources.register(Messages.append, transcript);
+resources.capture(group, (input, options) => captureBasis(input, options)).register(Materials.read, (snapshot) => snapshot.material);
+const runner = new Runner(scene, resources, undefined, {
+  hooks: [callableHooks(group, { started: (_input, options) => options.started })],
+}).build();
+await runner.run(input, options);
 ```
 
-这里的 task 可以是 Group 或 Node，独立捕获不由 kind 决定。仅绑定 progress/started/output 不会隐式创建新供给边界。来源方法在绑定时固定；本次 options 与接线归属由内部固定对象传递，不存入业务 Work，不需要祖先 Context 链。
+捕获位置可以是 Scene、Group 或 Node，不由 kind 决定。started/progress/output 单独接线，不隐式创建资源范围。本次 options 与安装归属由内部固定对象传递，不进入业务 Work，不依赖祖先 Context 链。
 
-`timing: 'binding'` 指本次供应建立时捕获，不是静态解算时取得实体；`timing: 'access'` 在真实访问时兑现。观测关闭不会触发 describe 或提前兑现惰性 Provider。`childResources` 只可收窄准确注册成员已申请的供应，不改变父、兄弟或无关资源。
+`timing: 'binding'` 指本次供给建立时捕获，不是静态构建时取得实体；`timing: 'access'` 在真实访问时兑现。观测关闭不会触发 describe 或提前初始化 Provider。`resources.refine` 只收窄准确成员已申请的供应，不改变父、兄弟或无关资源。
 
 资源端点验证本地调用、阶段/轮次及固定控制信号，不递归查询祖先状态。阶段变化不重新解算声明。正常 execute→accept 共享本轮正常资源端点；异常处理、局部继续与恢复有明确窗口，旧端点不可跨窗口复用。CP resume 离开后其独立窗口永久关闭。
 
@@ -73,13 +69,13 @@ await driver.run(builtScene, input, options);
 
 ```mermaid
 sequenceDiagram
-    participant Driver
+    participant Runner
     participant Scene
     participant Content as Transcript
     participant Builder as CallableInvocationBuilder
-    participant Source as 明确的 Task 来源绑定
+    participant Source as 明确的资源 scope / 调用 hooks
     participant Task as Task Group
-    Driver->>Scene: 启动普通调用
+    Runner->>Scene: 启动普通调用
     Scene->>Content: 正式 append 输入
     Content-->>Scene: 已落实位置
     Scene->>Builder: create(task, acceptedInput)
@@ -92,10 +88,10 @@ sequenceDiagram
     Task->>Task: 决策、回答落实、记忆收尾
     Task-->>Scene: 真实返回
     Scene->>Scene: 接纳
-    Scene-->>Driver: 最终交付
+    Scene-->>Runner: 最终交付
 ```
 
-输入已落实而 Task 尚未建立时失败，保留内容及 Scene 的事实，不伪造 Task。配置与原文定位在 Task 构造时捕获；真正模型材料由 prepareContext 在可选维护后一次捕获，其后各能力使用同一份固定材料。默认不隐式裁剪或分段，容量超限明确失败。
+输入已落实而 Task 尚未建立时失败，保留内容及 Scene 的事实，不伪造 Task。模型配置在根校验时固定，原文定位在 Task 构造时捕获；真正模型材料由 prepareContext 在可选维护后一次捕获，其后各能力使用同一份固定材料。默认不隐式裁剪或分段，容量超限明确失败。
 
 started 在 Context 建立后、调用 started 事实前同步运行，必须返回 undefined。异步或其他返回拒绝；意外 Promise 的迟到拒绝被消费，不承诺撤销已经开始的副作用。恢复旧调用不重复 started；恢复活动中新建调用正常登记。被动 progress 不能替代这个严格建立钩子。
 
@@ -132,7 +128,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 
 ## 进展、观测与记录
 
-progress 是被动元数据出口，消费者失败停用并隔离，不修改运行结果；绑定工厂本身失败仍是构造错误。服务依据真实调用身份、实体写入和 Driver 的最终交付解释提交状态，不依赖 Recorder 推断。
+progress 是被动元数据出口，消费者失败停用并隔离，不修改运行结果；绑定工厂本身失败仍是构造错误。服务依据真实调用身份、实体写入和 Runner 的最终交付解释提交状态，不依赖 Recorder 推断。
 
 可选观测默认隔离，可显式传播；必要变化捕获保留严格失败。已成立事实不回滚，不由观察错误触发业务重做。记录只是一个预设载体，可替换或完全不安装。
 

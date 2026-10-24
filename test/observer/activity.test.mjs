@@ -1,8 +1,8 @@
-import { Driver } from '@capix/server-runtime';
+import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ConversationSubmission, createConversationStructure, buildConversation } from '@capix/observer-service';
+import { ConversationSubmission, createConversationStructure } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
@@ -31,9 +31,8 @@ test('submission exposes live REOA calls and parent acceptance without installin
   const gate = new Promise((resolve) => {
     release = resolve;
   });
-  const driver = new Driver();
-  const scene = buildConversation(
-    driver,
+
+  const runner = createConversationRunner(
     createConversationStructure(),
     environment,
     new ModelInteractions(
@@ -49,7 +48,7 @@ test('submission exposes live REOA calls and parent acceptance without installin
     ),
   );
   const submission = new ConversationSubmission('activity', 'conversation');
-  submission.start((signal) => driver.run(scene, input, { settings, signal, progress: submission.progress, activity: submission.activity }));
+  submission.start((signal) => runner.run(input, { settings, signal, progress: submission.progress, activity: submission.activity }));
   await entering;
   const during = submission.snapshot;
   assert.equal(during.result, undefined);
@@ -83,9 +82,8 @@ test('submission exposes live REOA calls and parent acceptance without installin
 
 test('activity keeps failed child and new retry identities while the parent succeeds in its second round', async () => {
   let answers = 0;
-  const driver = new Driver();
-  const scene = buildConversation(
-    driver,
+
+  const runner = createConversationRunner(
     createConversationStructure(),
     createEnvironment(),
     new ModelInteractions(
@@ -98,7 +96,7 @@ test('activity keeps failed child and new retry identities while the parent succ
     ),
   );
   const submission = new ConversationSubmission('retry-activity', 'conversation');
-  submission.start((signal) => driver.run(scene, input, { settings, signal, progress: submission.progress, activity: submission.activity }));
+  submission.start((signal) => runner.run(input, { settings, signal, progress: submission.progress, activity: submission.activity }));
   const snapshot = await complete(submission);
   assert.equal(snapshot.result.status, 'completed');
   assert.equal(snapshot.activities.integrity.status, 'complete');
@@ -115,9 +113,8 @@ test('activity keeps failed child and new retry identities while the parent succ
 
 test('activity source failure is independent of committed content and actual submission completion', async () => {
   const environment = createEnvironment();
-  const driver = new Driver();
-  const scene = buildConversation(
-    driver,
+
+  const runner = createConversationRunner(
     createConversationStructure(),
     environment,
     new ModelInteractions(
@@ -132,7 +129,7 @@ test('activity source failure is independent of committed content and actual sub
   submission.activity.publish(fact('orphan', 'node', 'started', 1, {}, 'missing-parent'));
   assert.equal(submission.snapshot.activities.integrity.status, 'incomplete');
   const retained = submission.snapshot.activities;
-  submission.start((signal) => driver.run(scene, input, { settings, signal, progress: submission.progress, activity: submission.activity }));
+  submission.start((signal) => runner.run(input, { settings, signal, progress: submission.progress, activity: submission.activity }));
   const finished = await complete(submission);
   assert.equal(finished.activities, retained);
   assert.equal(finished.integrity.status, 'complete');

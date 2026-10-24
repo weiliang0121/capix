@@ -70,7 +70,12 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
     path.add(current);
     const members = definitions.map((member) => visit(member, node) as ResolvedChild);
     path.delete(current);
-    const inherited = members.filter((member) => !captures.has(member.definition)).map((member) => member.supply);
+    const inherited = members
+      .filter((member) => !captures.has(member.definition))
+      .map((member) => {
+        const local = new Set(options.resourceScopes?.get(member.definition) ?? []);
+        return Object.fromEntries(Object.entries(member.supply).filter(([, request]) => !local.has(request.offer)));
+      });
     const supply = collectResourceSupply([requires, ...inherited]);
     if (selected) checkRefinements(supply, selected);
     return Object.freeze({ ...node, supply, members: Object.freeze(members) });

@@ -1,9 +1,9 @@
-import { Driver } from '@capix/server-runtime';
+import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource, ActiveContent } from '@capix/observer-service';
 import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, buildConversation, createConversationStructure } from '@capix/observer-service';
+import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, createConversationStructure } from '@capix/observer-service';
 
 import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, SelectionUsage, bindRecording } from '@capix/server-runtime';
 
@@ -13,7 +13,7 @@ const content = (topic, value, sourceIndexes) => ({ topic, content: value, sourc
 const change = (result, explanation, indexes = result.sourceIndexes, memoryId = null) => ({ action: memoryId === null ? 'create' : 'update', memoryId, change: explanation, sourceIndexes: indexes, result });
 
 async function run(environment, message, options = settings) {
-  return observeExecution(environment.driver, environment.scene, environment.recording, { messages: [{ role: 'user', content: message }] }, { settings: options });
+  return observeExecution(environment.runner, environment.recording, { messages: [{ role: 'user', content: message }] }, { settings: options });
 }
 
 test('updates preserve Memory identity while immutable MemoryRecords describe each applied change and its actual operation', async () => {
@@ -197,9 +197,8 @@ test('recording observes the actual changed fact; registration failure propagate
   const recording = bindRecording(recorder, { failure: 'propagate' });
   const transcript = new Transcript([], { observation: recording.transcript });
   const memories = new Memories(transcript, { observation: recording.memory });
-  const driver = new Driver({ observations: [recording] });
-  const scene = buildConversation(
-    driver,
+
+  const runner = createConversationRunner(
     createConversationStructure(),
     { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
     new ModelInteractions(
@@ -211,8 +210,9 @@ test('recording observes the actual changed fact; registration failure propagate
         },
       }),
     ),
+    { observations: [recording] },
   );
-  await assert.rejects(driver.run(scene, { messages: [{ role: 'user', content: '预算150' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'memory record registration failed');
+  await assert.rejects(runner.run({ messages: [{ role: 'user', content: '预算150' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause.message === 'memory record registration failed');
   const memory = memories.values()[0];
   assert.equal(memory.content, '150');
   assert.equal(MemoryRecordHelper.find(book, memory.id).length, 0);

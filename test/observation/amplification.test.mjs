@@ -15,7 +15,7 @@ test('overview groups long-conversation operation ownership without rescanning e
     },
   });
   try {
-    for (let index = 0; index < 16; index++) await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: `question ${index}` }] }, { settings });
+    for (let index = 0; index < 16; index++) await environment.runner.run({ messages: [{ role: 'user', content: `question ${index}` }] }, { settings });
     const expected = observeOverview(environment);
     const records = [...environment.book.values()];
     let ownershipReads = 0;

@@ -1,7 +1,6 @@
-import type { InvocationControls, CallableInvocationCallbacks, ProgressChannel, InvocationProgress } from '@capix/server-runtime';
+import type { InvocationControls, CallableInvocationCallbacks, CheckpointStore, ProgressChannel, InvocationProgress } from '@capix/server-runtime';
 import type { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import type { ModelSettings, GenerationOutput } from '@capix/protocol';
-import type { ConversationTaskResources } from '../resources.js';
 import type { ConversationProgress } from '../progress.js';
 import type { AcceptedConversationInput } from '../accept.js';
 import type { WorkspaceFiles, FileProgress } from '../../files/index.js';
@@ -19,7 +18,7 @@ export interface ConversationRunOptions extends InvocationControls {
   activity?: ProgressChannel<InvocationProgress>;
   fileProgress?: ProgressChannel<FileProgress>;
   answerProgress?: ProgressChannel<AnswerProgress>;
-  executionCallbacks?: CallableInvocationCallbacks<AcceptedConversationInput, GenerationOutput, ConversationTaskResources>;
+  executionCallbacks?: CallableInvocationCallbacks<AcceptedConversationInput, GenerationOutput, object>;
 }
 
 export interface ConversationEntities {
@@ -30,8 +29,9 @@ export interface ConversationEntities {
   files?: WorkspaceFiles;
 }
 
-/** Service restoration association; the store comes from the installed Driver. */
+/** Service restoration association uses the same store installed by its Runner. */
 export interface ConversationBindingOptions {
+  checkpoints?: CheckpointStore;
   checkpointRuns?: ConversationCheckpointRuns;
   conversationId?: string;
 }

@@ -19,7 +19,7 @@ for (const content of messages) {
   if (scenario.budgets?.[results.length]) settings.contextBudget = scenario.budgets[results.length];
   const previousMemories = environment.memories.values().map((memory) => memory.toJSON());
   const input = { role: 'user', content };
-  const facts = await observeExecution(environment.driver, environment.scene, environment.recording, { messages: [input] }, { settings, transcript: environment.transcript });
+  const facts = await observeExecution(environment.runner, environment.recording, { messages: [input] }, { settings, transcript: environment.transcript });
   const currentMemories = environment.memories.values().map((memory) => memory.toJSON());
   const segments = environment.transcript.segments().map(({ start, end }) => ({ start, end }));
   results.push({ previousMemories, facts, currentMemories, segments });

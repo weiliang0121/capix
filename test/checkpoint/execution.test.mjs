@@ -26,7 +26,7 @@ async function captureExecution(t, fileTask) {
     if (image.contract.key === 'observer.conversation.task') images.push(image);
     return result;
   };
-  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '整理资料' }], ...(fileTask ? { fileTask } : {}) }, { settings });
+  await environment.runner.run({ messages: [{ role: 'user', content: '整理资料' }], ...(fileTask ? { fileTask } : {}) }, { settings });
   const definition = environment.structure.conversation;
   const resolved = resolveDeclaration(definition, {});
   const children = new BoundChildren(resolved.members, () => assert.fail('validation must not initialize children'));

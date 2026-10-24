@@ -1,10 +1,10 @@
 import type { ModelInitialization } from '../conversation/model/types.js';
-import { Clock, Driver, MemoryCheckpointStore, RuntimeError, type CheckpointInstallation } from '@capix/server-runtime';
+import { Clock, Runner, Resources, MemoryCheckpointStore, RuntimeError, type CheckpointInstallation } from '@capix/server-runtime';
 import { RecordBook, Recorder, bindRecording } from '@capix/server-runtime/recording';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import type { Message, RecordingArchive } from '@capix/protocol';
 import { createConversationStructure } from '../conversation/scene.js';
-import { buildConversation } from '../conversation/binding.js';
+import { registerConversationResources, type ConversationRunOptions } from '../conversation/binding.js';
 import { MemoryConversationCheckpointRuns } from '../conversation/checkpoints.js';
 import { RecordSource } from '../observation/record/source.js';
 import { CheckpointObservation, bindCheckpointObservation } from '../observation/checkpoints.js';
@@ -111,12 +111,13 @@ export function initializeObserver(provider: ModelInitialization, messages: read
     const conversationId = options.conversationId ?? persistence?.conversationForTranscript(transcript.id)?.id ?? transcript.id;
     const observation = new CheckpointObservation(conversationId, checkpointRuns);
     checkpointObservation = observation;
-    const driver = new Driver({ clock, observations: [recording], changes, checkpoints: { store: checkpoints, observation: bindCheckpointObservation(observation, options.checkpointObservation) } });
-    const scene = buildConversation(driver, structure, { transcript, memories, active, selectionUsage, files: options.files }, interactions, { checkpointRuns, conversationId });
+    const resources = new Resources<ConversationRunOptions>();
+    const calls = registerConversationResources(resources, structure, { transcript, memories, active, selectionUsage, files: options.files }, interactions, { checkpointRuns, conversationId, checkpoints });
+    const runner = new Runner(structure.scene, resources, undefined, { ...calls, clock, observations: [recording], changes, checkpoints: { store: checkpoints, observation: bindCheckpointObservation(observation, options.checkpointObservation) } }).build();
     releaseObservation = content.observe(recording);
     // Fresh in-memory input is a real append after observation binds; restored content stays silent.
     if (!options.content && !persistence) transcript.append(...messages);
-    return new ObserverEnvironment({ conversationId, content, selectionUsage, files: options.files, model, interactions, book, clock, recorder, recording, driver, scene, structure, recordSource, recordingArchives, persistence, checkpoints, checkpointRuns, checkpointObservation: observation }, { ownsContent: !options.content, ownsPersistence: !options.shared, releaseObservation });
+    return new ObserverEnvironment({ conversationId, content, selectionUsage, files: options.files, model, interactions, book, clock, recorder, recording, resources, runner, structure, recordSource, recordingArchives, persistence, checkpoints, checkpointRuns, checkpointObservation: observation }, { ownsContent: !options.content, ownsPersistence: !options.shared, releaseObservation });
   } catch (error) {
     const failures: unknown[] = [error];
     const releases = [

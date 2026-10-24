@@ -43,7 +43,7 @@ for (const mode of ['content', 'running', 'finished']) {
       { persistence: store },
     );
     assert.equal(modelCalls, 0);
-    assert.equal(environment.driver.isRunning(environment.scene), false);
+    assert.equal(environment.runner.isRunning, false);
     if (mode === 'content') {
       assert.equal(environment.transcript.get(0).content, 'durable before memory application');
       assert.equal(environment.transcript.revision, 1);

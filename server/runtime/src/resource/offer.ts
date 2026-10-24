@@ -93,15 +93,18 @@ export class ResourceOffer<Source, Value, Captured = Source, Selection = never> 
     return refinement;
   }
   provide<ProviderSource>(select: (source: ProviderSource) => Source): ResourceProvider<ProviderSource> {
+    // Fix callback entry points without freezing the host receiver or its entity state.
+    const capture = this.#options.capture?.bind(this.#options);
+    const describe = this.#options.describe?.bind(this.#options);
     return Object.freeze({
       offer: this.#identity,
       timing: this.timing,
       resolve: (source: ProviderSource) => {
         const value = select(source);
-        return this.#options.capture ? this.#options.capture(value) : value;
+        return capture ? capture(value) : value;
       },
       expose: (captured: unknown, activity: ResourceActivity) => this.#expose(captured as Captured, activity),
-      describe: (captured: unknown) => this.#options.describe?.(captured as Captured) ?? null,
+      describe: (captured: unknown) => describe?.(captured as Captured) ?? null,
     });
   }
 }

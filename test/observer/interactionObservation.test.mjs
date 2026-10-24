@@ -66,7 +66,7 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
       });
     },
   );
-  const running = observer.driver.run(observer.scene, { messages: [{ role: 'user', content: 'sensitive prompt never in metadata' }] }, { settings });
+  const running = observer.runner.run({ messages: [{ role: 'user', content: 'sensitive prompt never in metadata' }] }, { settings });
   // Avoid depending on network or provider timing: wait for the actual local A1 deadline fact.
   await pending.promise;
   const interaction = observer.interactions.states().find((state) => state.request.purpose === 'answer');
@@ -126,7 +126,7 @@ test('saved interaction metadata is read through restored call links without con
   );
   const firstId = original.list().defaultConversationId;
   const environment = original.open(firstId);
-  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'saved request' }] }, { settings });
+  await environment.runner.run({ messages: [{ role: 'user', content: 'saved request' }] }, { settings });
   const resource = [...environment.book.values()].find((record) => record.kind === 'resource' && record.access === 'model-interaction.create' && record.phase === 'returned');
   const ref = resource.value.output.id;
   const callId = resource.parentId;

@@ -1,4 +1,4 @@
-import { Driver } from '@capix/server-runtime';
+import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import { ActiveContent } from '@capix/observer-service';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
@@ -6,7 +6,7 @@ import test from 'node:test';
 import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { buildConversation, createConversationStructure, ConversationSubmission, WorkspaceFiles } from '@capix/observer-service';
+import { createConversationStructure, ConversationSubmission, WorkspaceFiles } from '@capix/observer-service';
 import { ProgressChannel } from '@capix/server-runtime';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import { Recorder, RecordBook, bindRecording } from '@capix/server-runtime/recording';
@@ -49,8 +49,8 @@ async function fixture(t, { recorded = true, answers = [answer], memoryFailure =
   const memories = new Memories(transcript, { observation: recording?.memory });
   const entities = { transcript, memories, active: new ActiveContent(transcript, memories), files, selectionUsage: new SelectionUsage() };
   const definition = createConversationStructure({ files: true });
-  const driver = new Driver({ observations: recording ? [recording] : undefined });
-  const scene = buildConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider)));
+
+  const runner = createConversationRunner(definition, entities, new ModelInteractions(new ModelSource(provider)), { observations: recording ? [recording] : undefined });
   const progress = [];
   const fileProgress = new ProgressChannel({
     receive(fact) {
@@ -65,13 +65,12 @@ async function fixture(t, { recorded = true, answers = [answer], memoryFailure =
     transcript,
     recorder,
     progress,
-    driver,
-    scene,
+    runner,
+    scene: runner.scene,
     counts: () => ({ reads, writes }),
     invocation: () => invocation,
     run: (fileTask = { sourcePath: 'source.txt', output: { path: 'summary.txt' } }, options = {}) =>
-      driver.run(
-        scene,
+      runner.run(
         { messages: [{ role: 'user', content: '请总结这份文档' }], ...(fileTask ? { fileTask } : {}) },
         {
           settings,
@@ -154,7 +153,7 @@ for (const kind of ['needs-info', 'unknown']) {
 test('malformed file tasks fail before accepting transcript input or reading files', async (t) => {
   const f = await fixture(t);
   for (const fileTask of [null, {}, { sourcePath: '../source.txt' }, { sourcePath: 'source.txt', output: { path: 'source.txt' } }, { sourcePath: 'source.txt', output: { path: '/outside' } }, { sourcePath: 'source.txt', unknown: true }]) {
-    await assert.rejects(f.driver.run(f.scene, { messages: [{ role: 'user', content: 'bad' }], fileTask }, { settings }), (error) => error.code === 'INVALID_INPUT' || error.cause?.code === 'INVALID_INPUT');
+    await assert.rejects(f.runner.run({ messages: [{ role: 'user', content: 'bad' }], fileTask }, { settings }), (error) => error.code === 'INVALID_INPUT' || error.cause?.code === 'INVALID_INPUT');
   }
   assert.equal(f.transcript.length, 0);
   assert.deepEqual(f.counts(), { reads: 0, writes: 0 });
@@ -163,9 +162,8 @@ test('malformed file tasks fail before accepting transcript input or reading fil
 test('disabled file capability rejects before accepting input', async () => {
   const transcript = new Transcript();
   const memories = new Memories(transcript);
-  const driver = new Driver();
-  const scene = buildConversation(
-    driver,
+
+  const runner = createConversationRunner(
     createConversationStructure(),
     { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
     new ModelInteractions(
@@ -174,7 +172,7 @@ test('disabled file capability rejects before accepting input', async () => {
       }),
     ),
   );
-  await assert.rejects(driver.run(scene, { messages: [{ role: 'user', content: 'hello' }], fileTask: { sourcePath: 'source.txt' } }, { settings }));
+  await assert.rejects(runner.run({ messages: [{ role: 'user', content: 'hello' }], fileTask: { sourcePath: 'source.txt' } }, { settings }));
   assert.equal(transcript.length, 0);
 });
 
@@ -227,13 +225,11 @@ test('cancellation immediately after confirmed publication preserves file fact b
 });
 
 test('declared file support requires the bound workspace entity', () => {
-  const driver = new Driver();
   const transcript = new Transcript();
   const memories = new Memories(transcript);
   assert.throws(
     () =>
-      buildConversation(
-        driver,
+      createConversationRunner(
         createConversationStructure({ files: true }),
         { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
         new ModelInteractions(

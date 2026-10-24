@@ -64,7 +64,7 @@ export function createObserverServer(options: ObserverServerOptions) {
     if (!configured) return Object.freeze({ conversationId, transcriptId, status: 'unavailable', error: Object.freeze({ code: 'KEY_MISSING', message: '服务端尚未配置模型凭据；请配置并重启。' }) });
     const failure = conversations.model.failure;
     if (failure) return Object.freeze({ conversationId, transcriptId, status: 'unavailable', error: failure });
-    return Object.freeze({ conversationId, transcriptId, status: (observer && observer.driver.isRunning(observer.scene)) || !submissions.available ? 'busy' : 'ready' });
+    return Object.freeze({ conversationId, transcriptId, status: (observer && observer.runner.isRunning) || !submissions.available ? 'busy' : 'ready' });
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -236,7 +236,7 @@ export function createObserverServer(options: ObserverServerOptions) {
       }
       submission.start(async (signal) => {
         const observer = conversations.open(conversationId);
-        return observer.driver.run(observer.scene, data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, answerProgress: submission.answerProgress, signal });
+        return observer.runner.run(data.input, { settings: runSettings, progress: submission.progress, activity: submission.activity, fileProgress: submission.fileProgress, answerProgress: submission.answerProgress, signal });
       });
       // This controller only detaches the initial HTTP waiter; it is never passed to runtime.run.
       const waiting = new AbortController();

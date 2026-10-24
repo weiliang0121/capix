@@ -1,4 +1,4 @@
-import { Driver } from '@capix/server-runtime';
+import { createConversationRunner } from './fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence, defineNode } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
-import { buildConversation, createConversationStructure, GenerateAnswer } from '@capix/observer-service';
+import { createConversationStructure, GenerateAnswer } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 
@@ -36,11 +36,10 @@ test('Observer narrows resources at each action, captures fixed values and expir
     for (const child of current.members ?? []) inspect(child);
   };
   inspect(definition.conversation);
-  const driver = new Driver();
-  const scene = buildConversation(driver, definition, entities, new ModelInteractions(new ModelSource(provider())));
+
+  const runner = createConversationRunner(definition, entities, new ModelInteractions(new ModelSource(provider())));
   let first;
-  await driver.run(
-    scene,
+  await runner.run(
     { messages: [{ role: 'user', content: '你好' }] },
     {
       settings,
@@ -76,7 +75,7 @@ test('Observer narrows resources at each action, captures fixed values and expir
     'ordinary deterministic decisions need no inherited history or model capabilities',
   );
   views.length = 0;
-  await driver.run(scene, { messages: [{ role: 'user', content: '继续' }] }, { settings: { ...settings, timeoutMs: 2000 } });
+  await runner.run({ messages: [{ role: 'user', content: '继续' }] }, { settings: { ...settings, timeoutMs: 2000 } });
   assert.equal(views[0].resources.history.end, 3);
   const nextGeneration = views.find((view) => view.definition === definition.generation).resources;
   assert.equal(nextGeneration.timeoutMs, 2000);
@@ -336,7 +335,7 @@ test('model offers separate creation and reading while preserving provider metho
       return execute.call(this, work);
     },
   });
-  const driver = new Driver();
-  const scene = buildConversation(driver, definition, entities, new ModelInteractions(new ModelSource(model)));
-  await driver.run(scene, { messages: [{ role: 'user', content: '你好' }] }, { settings });
+
+  const runner = createConversationRunner(definition, entities, new ModelInteractions(new ModelSource(model)));
+  await runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
 });

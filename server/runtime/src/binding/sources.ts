@@ -6,6 +6,7 @@ import type { InvocationProgress } from '../invocation/progress.js';
 import type { CallableInvocationStarted } from '../invocation/builders/callable.js';
 import type { ChildCallable, CallableInput } from '../definition/children.js';
 import type { AnyCallable, ResolvedCallable } from './declarations.js';
+import { CallableCallBindings, type CallAccess, type CallInstallation } from './calls.js';
 
 /** Host input establishes one root supply. The callable lifecycle remains independent of this source. */
 export interface CallableCallSource<Input, Options, Source> {
@@ -29,13 +30,6 @@ export function bindCallSource<Definition extends ChildCallable, Options, Source
   return Object.freeze({ definition, ...source });
 }
 
-export interface CallableSourceAccess {
-  readonly resources?: ResourceBindings;
-  readonly started?: CallableInvocationStarted<any, any, any>;
-  readonly progress?: ProgressReceiver<InvocationProgress>;
-  readonly output?: InvocationOutputReceiver<any, any>;
-}
-
 interface FixedSource<Options> {
   readonly capture?: (input: unknown, options: Options) => ResourceBindings;
   readonly started?: (options: Options) => CallableInvocationStarted<any, any, any> | undefined;
@@ -43,26 +37,8 @@ interface FixedSource<Options> {
   readonly output?: (input: unknown, options: Options) => InvocationOutputReceiver<any, any> | undefined;
 }
 
-/** Fixed per-call host conditions. This is not a source resolver stored in Context or a lifecycle manager. */
-export class CallableCallBindings<Options = unknown> {
-  constructor(
-    private readonly owner: CallableSources<Options>,
-    private readonly options: Options,
-  ) {
-    Object.freeze(this);
-  }
-
-  belongsTo(owner: CallableSources<Options>): boolean {
-    return this.owner === owner;
-  }
-
-  open(definition: AnyCallable, input: unknown, restoring: boolean): CallableSourceAccess {
-    return this.owner.open(definition, input, this.options, restoring);
-  }
-}
-
-/** Static source wiring. No current input, options, capture or live endpoint is cached here. */
-export class CallableSources<Options = unknown> {
+/** Legacy host-source adapter. New resource assembly uses CallableCalls instead. */
+export class CallableSources<Options = unknown> implements CallInstallation<Options> {
   constructor(
     private readonly sources: ReadonlyMap<AnyCallable, FixedSource<Options>>,
     private readonly validate?: (options: Options) => void,
@@ -78,11 +54,11 @@ export class CallableSources<Options = unknown> {
     return value;
   }
 
-  open(definition: AnyCallable, input: unknown, options: Options, restoring: boolean): CallableSourceAccess {
+  open(definition: AnyCallable, input: unknown, options: Options, restoring: boolean): CallAccess {
     const source = this.sources.get(definition);
     if (!source) throw new Error('Callable source is not registered in this installation');
     return {
-      resources: source.capture?.(input, options),
+      supply: source.capture?.(input, options).supply,
       started: restoring ? undefined : source.started?.(options),
       progress: source.progress?.(input, options),
       output: source.output?.(input, options),

@@ -21,13 +21,14 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | Node                             | 直接处理，不声明成员                          | Callable                          |
 | CallableBinder / CallableBinding | 解算声明、接线，产出绑定契约                  | 不执行业务                        |
 | CallableBuilder / BuiltCallable  | 完成原结构的装配 / 表达已构建类型             | 不产生第二个结构对象              |
-| Driver                           | 固定机制、构建入口、宿主启动与结束释放        | 构建归属固定，占用按场景隔离      |
+| Runner                           | 固定场景与机制、构建、启动与结束释放          | 一个 Runner 一个场景入口          |
+| Resources / Interactions         | 资源供给注册 / 可选交互注册                   | 不持有调用进度                    |
 | Invocation / CallableContext     | 单次调用与本层真实状态                        | 不按结构种类派生循环              |
 | Work                             | 当前阶段的资源、输出、CP、成员行动及事实      | 业务不接收内部 Invocation/Context |
 
 `Callable` 是结构公共配置基类，`CallableContract` 是只读调用签名；`Composite` 是成员组合切面。作者直接 new Scene/Group/Node，构造器或 setDefinition 接收普通 Definition 配置；defineScene/defineGroup/defineNode 仅为创建同样结构的类型推导便捷函数。Scene 在本版作为安装根，Group/Node 可作为成员，Node 的 members 同时在类型与运行检查中拒绝。结构对象经 add 注册 `members`；一次调用实际发生的子调用仍使用 `work.children`。成员注册不代表自动遍历或执行。
 
-宿主先显式创建 `Driver(capabilities)`，再调用 `driver.build(scene, options)`。CallableBuilder 协调 Binder 的静态解算和运行能力装配，原 Scene/Group/Node 承载固定结果；返回值就是原 scene，`BuiltCallable<Structure, Options>` 仅表达完成构建的类型。`driver.run(scene, input, options)` 创建并执行一次调用，`driver.resume(scene, contextId, options)` 按保存依据恢复；两者显式消费原结构。
+宿主显式创建 `new Runner(scene, resources, interactions?).build()`，返回同一个 Runner。CallableBuilder 协调 Binder 的静态解算和运行能力装配，原 Scene/Group/Node 承载固定结果；内部 BuiltCallable 仅表达完成构建的类型。`runner.run(input, options)` 建立调用，`runner.resume(contextId, options)` 按保存依据恢复；无需重复传入场景。
 
 每个结构只占据一个位置：Scene 是根，Group/Node 单父归属；共享逻辑和资源时分别创建结构实例。构建成功后配置固定，不支持运行中换绑或空闲时修改再构建。需要新结构时复用配置工厂及独立实体。每次构建建立独立 CallableInvocationBuilder 作为 Context 的安装归属；它不缓存本次输入、信号或 Work。Context 直接构造，无独立 ContextBuilder。低层扩展者从 `/construction` 使用 Binder、CallableBuilder、CallableInvocationBuilder 和 CallableContext，内部职责分离不增加作者必须操作的步骤。
 
@@ -40,7 +41,7 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | `definition/`                                    | 作者声明、签名、阶段 Work、成员与接纳契约                |
 | `binding/`                                       | 声明解算、来源与资源接线、阶段访问签发                   |
 | `structure/`                                     | Callable/Scene/Group/Node 与同体构建结果，不持有单次状态 |
-| `driver.ts`                                      | 宿主调用入口与占用                                       |
+| `runner.ts`                                      | 宿主调用入口与占用                                       |
 | `context/`                                       | 本次状态与固定构造归属                                   |
 | `invocation/`、`invocation/builders/`            | 本次调用、控制、周期、关系与通用构造                     |
 | `checkpoint/`                                    | 保存格式、核验、恢复与事实出口                           |
@@ -59,21 +60,21 @@ Clock、Initializer、ProgressChannel 是共享能力，位于包内根文件。
 
 类型参数按实际含义命名 Input、Output、Resources、ExceptionResources、Delta；结构判别使用 Kind。签名消费只依赖 CallableContract 的 kind 和 I/O/Delta，完整注册使用实际结构对象。类型见证不产生运行字段，不替代声明对象身份、阶段资格或恢复位置的检查。
 
-| 名称                                   | 内容                                         |
-| -------------------------------------- | -------------------------------------------- |
-| CallableCallSource                     | 根输入对应的按次校验、来源捕获和出口         |
-| CallableSourceBinding                  | 明确成员声明的独立捕获或出口，不由 kind 推断 |
-| CallableCallBindings                   | 内部、一次根调用的固定接线依据               |
-| InvocationWorkBinding                  | 可复用的声明到调用工作适配                   |
-| InvocationAccess                       | 本次调用引用认证与阶段 Work 签发             |
-| ChildCall / ChildReference / ChildFact | 当前阶段动作、可跨阶段保留引用、只读事实     |
-| InvocationFact / DriverFact            | 单次调用事实、驱动入口事实                   |
+| 名称                                   | 内容                                     |
+| -------------------------------------- | ---------------------------------------- |
+| Resources                              | 资源实体注册、明确成组捕获与收窄         |
+| callableHooks                          | 独立校验、必要建立登记与进展/输出出口    |
+| CallableCallBindings                   | 内部、一次根调用的固定接线依据           |
+| InvocationWorkBinding                  | 可复用的声明到调用工作适配               |
+| InvocationAccess                       | 本次调用引用认证与阶段 Work 签发         |
+| ChildCall / ChildReference / ChildFact | 当前阶段动作、可跨阶段保留引用、只读事实 |
+| InvocationFact / DriverFact            | 单次调用事实、驱动入口事实               |
 
 来源、资源供应和本层资源访问分开：父层不为了子层需求扩张自己的 Work。每次调用只打开已接线端点；显式来源边界才重新捕获固定依据。资源不再隐式收口于某个 E 层。
 
 ## 内容与记录
 
-Transcript、Memories、SelectionUsage、Provider、Interaction 是独立实体，声明和 Driver 不拥有其生命周期。资源描述允许申请的访问形式。Invocation、实体和变化生产者不依赖 Recorder。
+Transcript、Memories、SelectionUsage、Provider、Interaction 是独立实体，声明和 Runner 不拥有其生命周期。资源描述允许申请的访问形式。Invocation、实体和变化生产者不依赖 Recorder。
 
 新记录用 `kind: 'invocation'`、`structureKind`、真实 parentId 和可选 role 表达调用。`conversation-task` 是 Observer 明确标记的业务角色，不是所有 Group 的含义。记录根仍为 `kind: 'runtime'`，只是既有载体身份。旧 REOA 记录保持只读，由服务投影成通用调用树，不能用它们恢复新结构。
 
@@ -106,11 +107,11 @@ ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 
 | ExecutionDefinition、OperationDefinition                        | Group；对话任务由服务类表达                                                    |
 | AttemptDefinition                                               | Node                                                                           |
 | 四套 Binder / Bound / Context / Builder                         | CallableBinder / CallableBuilder / CallableContext / CallableInvocationBuilder |
-| BoundRuntime 的占用                                             | Driver                                                                         |
+| BoundRuntime 的占用                                             | Runner                                                                         |
 | 声明 children、level                                            | members、kind                                                                  |
-| E 隐式捕获与出口                                                | 按准确声明安装 CallableSourceBinding                                           |
+| E 隐式捕获与出口                                                | Resources.capture + 独立 callableHooks                                         |
 | ConversationRuntimeDefinition / ConversationExecutionDefinition | ConversationScene / ConversationGroup                                          |
-| BoundConversationRuntime                                        | BuiltConversationScene（原结构的已构建类型）与 Driver（驱动者）                |
+| BoundConversationRuntime                                        | ConversationScene + Resources + Runner                                         |
 | 活记录 REOA 判别与分层数组                                      | invocation 记录、通用 calls 树、明确任务 role                                  |
 
-`driver.bind` 和 BoundCallable 已移除；旧运行 API 不保留重复别名；旧持久记录按数据兼容边界保留。动态能力注册、调度器、任意执行重放与自动接纳不由此次结构调整引入。
+Observer 已移除 buildConversation、ConversationCallSource 与旧 provider 数组，直接使用 Resources / Runner。Driver 和旧 source 构造适配暂保留给低层兼容测试；它们不是推荐服务 API，退役不要求再次改动生产链。旧持久记录按数据兼容边界保留。动态能力注册、调度器、任意执行重放与自动接纳不由此次结构调整引入。

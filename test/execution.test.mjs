@@ -1,4 +1,4 @@
-import { Driver } from '@capix/server-runtime';
+import { createConversationRunner } from './fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { ExecutionFixture } from './fixtures/behavior.mjs';
@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Recorder, RecordBook } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
-import { buildConversation, createConversationStructure } from '@capix/observer-service';
+import { createConversationStructure } from '@capix/observer-service';
 
 import { TestOperation } from './fixtures/operation.mjs';
 import { createInput, transcriptFor } from './fixtures/observer.mjs';
@@ -60,7 +60,7 @@ test('one Execution and Operation can be called again after success and failure 
   );
 });
 
-test('buildConversation, createConversationStructure returns answers without a recorder and uses the configuration of each call', async () => {
+test('createConversationStructure returns answers without a recorder and uses the configuration of each call', async () => {
   const requests = [];
   const provider = {
     async invoke(request, purpose) {
@@ -69,10 +69,10 @@ test('buildConversation, createConversationStructure returns answers without a r
     },
   };
   const entities = createEnvironment();
-  const driver = new Driver();
-  const scene = buildConversation(driver, createConversationStructure(), entities, new ModelInteractions(new ModelSource(provider)));
+
+  const runner = createConversationRunner(createConversationStructure(), entities, new ModelInteractions(new ModelSource(provider)));
   for (const model of ['one', 'two']) {
-    const answer = await driver.run(scene, { messages: [{ role: 'user', content: model }] }, { settings: { ...settings, model } });
+    const answer = await runner.run({ messages: [{ role: 'user', content: model }] }, { settings: { ...settings, model } });
     assert.deepEqual(answer, { kind: 'answer', content: 'done' });
     assert.equal(entities.transcript.current('assistant').content, 'done');
   }

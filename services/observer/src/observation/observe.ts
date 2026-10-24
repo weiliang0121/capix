@@ -4,11 +4,10 @@ import type { RecordingInstallation } from '@capix/server-runtime/recording';
 import { InvocationBoundaryRecord } from '@capix/server-runtime/recording';
 import { callRecord, isTaskRecord, recordSubtree, taskSnapshot } from './calls.js';
 
-import type { Driver } from '@capix/server-runtime';
-import type { ConversationRunOptions, BuiltConversationScene } from '../conversation/binding.js';
+import type { ConversationRunOptions, ConversationRunner } from '../conversation/binding.js';
 
 /** Observe one invocation by Context identity, independent of its input value. */
-export async function observeExecution(driver: Driver, scene: BuiltConversationScene, recording: RecordingInstallation, input: unknown, options: ConversationRunOptions, publish: (snapshot: ExecutionRecordSnapshot) => void = () => {}): Promise<ExecutionRecordSnapshot> {
+export async function observeExecution(runner: ConversationRunner, recording: RecordingInstallation, input: unknown, options: ConversationRunOptions, publish: (snapshot: ExecutionRecordSnapshot) => void = () => {}): Promise<ExecutionRecordSnapshot> {
   let contextId: string | undefined;
   let latest: ExecutionRecordSnapshot | undefined;
   const unsubscribe = subscribeExecutions(recording, (snapshot) => {
@@ -18,7 +17,7 @@ export async function observeExecution(driver: Driver, scene: BuiltConversationS
   });
   try {
     try {
-      await driver.run(scene, input, {
+      await runner.run(input, {
         ...options,
         executionCallbacks: {
           started: (context) => {

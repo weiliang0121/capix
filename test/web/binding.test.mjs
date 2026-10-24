@@ -25,7 +25,7 @@ async function recordedRound() {
   const feed = new ObservationFeed(environment);
   const frames = [];
   feed.connect((frame) => frames.push(frame));
-  const final = await observeExecution(environment.driver, environment.scene, environment.recording, request, { settings }, (value) => snapshots.push(value));
+  const final = await observeExecution(environment.runner, environment.recording, request, { settings }, (value) => snapshots.push(value));
   await settle();
   feed.close();
   return { transcriptId: environment.transcript.id, frames, snapshots, final, overview: observeOverview(environment), messages: environment.transcript.snapshot(), memory: observeMemory(environment.memories, environment.book) };

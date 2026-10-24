@@ -43,6 +43,7 @@ export { UnderstandRequest } from './conversation/group/request/understand.js';
 export type { RequestUnderstandingInput } from './conversation/group/request/input.js';
 export { requestOutputContract, type RequestProposal } from './conversation/group/request/output.js';
 export * from './conversation/decision/types.js';
+export { ConversationTaskResource, type TaskSelection } from './conversation/decision/selection.js';
 export { DefaultConversationDecision } from './conversation/decision/default.js';
 export { FunctionConversationDecision } from './conversation/decision/function.js';
 export { CheckFileTask } from './conversation/group/preflight/check.js';

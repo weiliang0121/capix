@@ -1,3 +1,4 @@
+import { createConversationRunner } from './fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
@@ -8,7 +9,7 @@ import { test } from 'node:test';
 import { Invocation, InvocationContext, RecordBook, Recorder, TranscriptRecord, MemoryRecord, observeMemory } from '@capix/server-runtime';
 import { Driver, defineNode } from '@capix/server-runtime';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
-import { initializeObserver, buildConversation, createConversationStructure, observeExecution, observeOverview, acceptConversationInput } from '@capix/observer-service';
+import { initializeObserver, createConversationStructure, observeExecution, observeOverview, acceptConversationInput } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const createRecorder = (book = new RecordBook()) => new Recorder(book);
@@ -140,7 +141,7 @@ test('content registration failure preserves the applied fact and does not prete
   assert.equal(transcript.current('user').content, 'accepted');
 });
 
-test('separate drivers and bindings share entities without absorbing their lifetimes', async () => {
+test('separate runners share entities without absorbing their lifetimes', async () => {
   const provider = {
     async invoke(request, purpose) {
       const input = JSON.parse(request.messages[1].content);
@@ -150,12 +151,12 @@ test('separate drivers and bindings share entities without absorbing their lifet
     },
   };
   const environment = initializeObserver(provider);
-  const run = async (driver, scene, text) => observeExecution(driver, scene, environment.recording, { messages: [{ role: 'user', content: text }] }, { settings });
-  const first = await run(environment.driver, environment.scene, '我在北京');
+  const run = async (runner, text) => observeExecution(runner, environment.recording, { messages: [{ role: 'user', content: text }] }, { settings });
+  const first = await run(environment.runner, '我在北京');
   const memory = environment.memories.values()[0];
-  const driver = new Driver({ observations: [environment.recording], changes: environment.changes });
-  const next = buildConversation(driver, createConversationStructure(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)));
-  const second = await run(driver, next, '继续');
+
+  const nextRunner = createConversationRunner(createConversationStructure(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)), { observations: [environment.recording], changes: environment.changes });
+  const second = await run(nextRunner, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.memories.get(memory.id), memory);
   assert.equal(environment.selectionUsage.get(environment.transcript.get(0)), 1);

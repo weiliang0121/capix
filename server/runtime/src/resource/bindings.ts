@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { ResourceActivity, ResourceSession, type ResourceOwner } from './activity.js';
 import { Initializer } from '../initializer.js';
-import { ResourceRequest, applyResourceRefinement, isResourceRefinement, type ResourceProvider, type ResourceValue, type ResourceRefinement } from './offer.js';
+import { ResourceSupply } from './supply.js';
+import { ResourceRequest, type ResourceProvider, type ResourceValue, type ResourceRefinement } from './offer.js';
 
 export type ResourceRequirements<Resources extends object = object> = { readonly [Key in keyof Resources]: ResourceRequest<Resources[Key]> };
 
@@ -12,6 +13,7 @@ export function resourceRequests<Resources extends object>(requires: ResourceReq
 /** Supply captures survive phase changes; local endpoints do not cross declaration phases. */
 export class ResourceBindings<Resources extends object = object> {
   readonly values: Readonly<Resources>;
+  readonly supply: ResourceSupply;
   readonly #entries: readonly ResourceValue[];
   readonly #initial: ResourceRequirements;
   readonly #locals = new Map<string, Map<ResourceValue, { activity: ResourceActivity; endpoint: Initializer<unknown> }>>();
@@ -26,13 +28,8 @@ export class ResourceBindings<Resources extends object = object> {
   readonly #closed = new Set<string>();
 
   constructor(requires: ResourceRequirements<Resources>, available: readonly ResourceValue[] = [], initial: ResourceRequirements = requires, supply: ResourceRequirements = requires) {
-    const entries: ResourceValue[] = [];
-    for (const request of resourceRequests(supply)) {
-      const entry = available.find((value) => value.offer === request.offer);
-      if (!entry) throw new Error(`Unfulfilled resource request: ${request.offer.name}`);
-      if (!entries.includes(entry)) entries.push(entry);
-    }
-    this.#entries = Object.freeze(entries);
+    this.supply = new ResourceSupply(available).select(supply);
+    this.#entries = this.supply.entries;
     this.#initial = initial;
     this.values = this.view(initial as ResourceRequirements<Resources>);
   }
@@ -99,22 +96,9 @@ export class ResourceBindings<Resources extends object = object> {
   }
 
   select<SelectedResources extends object, Input = unknown>(requires: ResourceRequirements<SelectedResources>, initial: ResourceRequirements = requires, selection?: { readonly input: Input; readonly refinements: readonly ResourceRefinement<Input>[]; readonly supply?: ResourceRequirements }): ResourceBindings<SelectedResources> {
-    if (!selection?.refinements.length) return new ResourceBindings(requires, this.#entries, initial, selection?.supply);
-    const selected = new ResourceBindings(requires, this.#entries, initial, selection?.supply);
-    const refinements = new Map<ResourceValue['offer'], ResourceRefinement<Input>>();
-    for (const refinement of selection.refinements) {
-      if (!isResourceRefinement(refinement)) throw new Error('Resource refinement was not issued by an offer');
-      if (!selected.#entries.some((entry) => entry.offer === refinement.offer)) throw new Error(`Refined resource is not requested: ${refinement.offer.name}`);
-      if (refinements.has(refinement.offer)) throw new Error(`Duplicate resource refinement: ${refinement.offer.name}`);
-      refinements.set(refinement.offer, refinement);
-    }
-    const entries = selected.#entries.map((entry) => {
-      const refinement = refinements.get(entry.offer);
-      if (!refinement) return entry;
-      const captured = applyResourceRefinement(refinement, entry.offer, entry.capture(), selection.input);
-      return Object.freeze({ ...entry, supplyId: randomUUID(), capture: () => captured, get: () => captured });
-    });
-    return new ResourceBindings(requires, entries, initial, selection?.supply);
+    let supply = this.supply.select(selection?.supply ?? requires);
+    if (selection?.refinements.length) supply = supply.refine(selection.input, selection.refinements);
+    return new ResourceBindings(requires, supply.entries, initial, selection?.supply);
   }
 
   /** Combine supply captures for a distinct declaration, without exposing another declaration's endpoints. */

@@ -50,7 +50,7 @@ let activeAfterRecovery;
 let concurrentRecovery;
 let independentRef;
 try {
-  if (mode === 'start') result = await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '你好，验证新对话。' }] }, { settings: { model: 'fixed-model', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 } });
+  if (mode === 'start') result = await environment.runner.run({ messages: [{ role: 'user', content: '你好，验证新对话。' }] }, { settings: { model: 'fixed-model', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 } });
   else {
     const run = persistence.checkpointRuns.list(conversationId)[0];
     if (mode === 'changed') environment.transcript.append({ role: 'user', content: '后续新问题。' });

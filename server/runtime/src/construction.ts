@@ -1,4 +1,4 @@
-/** Low-level callable construction. Applications normally bind a Scene and use its Driver. */
+/** Low-level callable construction. New hosts normally use Runner with Scene and Resources. */
 export type { BuiltCallable, AnyBuiltCallable, BuiltOptions } from './structure/construction.js';
 export { callableConstruction } from './structure/construction.js';
 export * from './structure/builder.js';
@@ -7,6 +7,7 @@ export * from './binding/children/bound.js';
 export * from './binding/children/builder.js';
 export * from './binding/receptions.js';
 export * from './binding/callable.js';
+export * from './binding/calls.js';
 export * from './binding/sources.js';
 export * from './binding/contract.js';
 export * from './binding/declarations.js';
@@ -19,6 +20,7 @@ export * from './invocation/children.js';
 export * from './invocation/relation.js';
 export type { InvocationReceptionBinding } from './invocation/reception.js';
 export type { InvocationCapabilities } from './invocation/capabilities.js';
+export { ResourceSupply } from './resource/supply.js';
 
 export * from './checkpoint/work.js';
 export * from './checkpoint/facts.js';

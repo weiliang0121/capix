@@ -23,7 +23,7 @@ test('QA projection preserves missing answers and binds repeated answers to actu
       { role: 'assistant', content: '相同的回答' },
     ]).snapshot(),
   );
-  const run = async () => observeExecution(environment.driver, environment.scene, environment.recording, { messages: [{ role: 'user', content: '相同的输入' }] }, { settings, transcript: environment.transcript });
+  const run = async () => observeExecution(environment.runner, environment.recording, { messages: [{ role: 'user', content: '相同的输入' }] }, { settings, transcript: environment.transcript });
   const failed = await run();
   failure = '';
   const completed = await run();

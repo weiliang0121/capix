@@ -1,4 +1,4 @@
-import { Driver } from '@capix/server-runtime';
+import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 import { resourceFact } from '../fixtures/observer.mjs';
@@ -35,7 +35,7 @@ for (const fails of [false, true]) {
       ],
     };
     const messagesBefore = input.messages;
-    const facts = await observeExecution(environment.driver, environment.scene, environment.recording, input, { settings, transcript: environment.transcript });
+    const facts = await observeExecution(environment.runner, environment.recording, input, { settings, transcript: environment.transcript });
     const selection = facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).find((operation) => operation.name === 'prepareContext');
     assert.equal(selection.status, 'succeeded');
     assert.deepEqual(readOutput(selection.value).selection, { historyIndexes: [0, 1] });
@@ -48,7 +48,7 @@ for (const fails of [false, true]) {
 }
 
 test('message counts accumulate independently and never enter model requests', async () => {
-  const { buildConversation, createConversationStructure } = await import('@capix/observer-service');
+  const { createConversationStructure } = await import('@capix/observer-service');
   const { createBoundRuntime } = await import('@capix/server-runtime');
   const { Transcript } = await import('@capix/server-runtime');
   const entities = createEnvironment({ messages: [{ role: 'user', content: '我在北京' }] });
@@ -56,9 +56,8 @@ test('message counts accumulate independently and never enter model requests', a
   const original = transcript.get(0);
   const requests = [];
   let fails = false;
-  const driver = new Driver();
-  const scene = buildConversation(
-    driver,
+
+  const runner = createConversationRunner(
     createConversationStructure(),
     entities,
     new ModelInteractions(
@@ -79,7 +78,7 @@ test('message counts accumulate independently and never enter model requests', a
     ),
   );
   const run = async () => {
-    return driver.run(scene, { messages: [{ role: 'user', content: '继续' }] }, { settings });
+    return runner.run({ messages: [{ role: 'user', content: '继续' }] }, { settings });
   };
   await run();
   assert.equal(requests.length, 1);

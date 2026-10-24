@@ -1,9 +1,9 @@
-import { Driver } from '@capix/server-runtime';
+import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
 import { ServerResponse } from 'node:http';
-import { ConversationSubmission, createConversationStructure, ModelInteractions, ModelSource, ObserverConversations, buildConversation, createObserverServer } from '@capix/observer-service';
+import { ConversationSubmission, createConversationStructure, ModelInteractions, ModelSource, ObserverConversations, createObserverServer } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
@@ -41,11 +41,11 @@ function commit(submission, content, source = { contextId: 'answer-call', round:
 }
 function bind(provider, environment = createEnvironment()) {
   const interactions = new ModelInteractions(new ModelSource(provider));
-  const driver = new Driver();
-  const scene = buildConversation(driver, createConversationStructure(), environment, interactions);
+
+  const runner = createConversationRunner(createConversationStructure(), environment, interactions);
   const submission = new ConversationSubmission('stream', 'conversation');
-  submission.start((signal) => driver.run(scene, input, { settings, signal, progress: submission.progress, answerProgress: submission.answerProgress }));
-  return { environment, interactions, driver, scene, submission };
+  submission.start((signal) => runner.run(input, { settings, signal, progress: submission.progress, answerProgress: submission.answerProgress }));
+  return { environment, interactions, runner, scene: runner.scene, submission };
 }
 
 test('candidate reception is provisional; a matching explicit commit supplies the formal message locator', async () => {

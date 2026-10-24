@@ -34,6 +34,6 @@ if (mode === 'content') {
     [],
     { persistence: store },
   );
-  await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: 'crash window' }] }, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 } });
+  await environment.runner.run({ messages: [{ role: 'user', content: 'crash window' }] }, { settings: { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 } });
 }
 throw new Error('Crash checkpoint was not reached');

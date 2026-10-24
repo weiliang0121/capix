@@ -136,7 +136,7 @@ test('second writer is excluded, unknown schema and broken metadata cannot becom
 test('restored environment continues a new QA while retaining original queryable record trees', async (t) => {
   const disk = fixture(t);
   const first = initializeObserver(provider, [], { persistence: disk.open() });
-  await first.driver.run(first.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings });
+  await first.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
   const expected = first.book.exportState();
   const oldRoot = first.recording.root.id;
   const oldTranscript = first.transcript.id;
@@ -151,7 +151,7 @@ test('restored environment continues a new QA while retaining original queryable
   const snapshot = CallableRecordHelper.snapshot(restored.recorder, execution.id);
   validateExecutionRecordSnapshot(snapshot);
   assert.equal(snapshot.execution.status, 'succeeded');
-  await restored.driver.run(restored.scene, { messages: [{ role: 'user', content: '下一轮' }] }, { settings });
+  await restored.runner.run({ messages: [{ role: 'user', content: '下一轮' }] }, { settings });
   assert.equal(restored.transcript.length, 4);
   const overview = observeOverview(restored);
   assert.equal(overview.executions.length, 2);
@@ -166,7 +166,7 @@ test('optional record saving failure preserves content and saves an honest incom
   installTrigger(disk.path, "CREATE TRIGGER reject_operation BEFORE INSERT ON records WHEN NEW.kind = 'invocation' AND json_extract(NEW.body, '$.structureKind') = 'group' BEGIN SELECT RAISE(ABORT, 'fixture'); END;");
   const store = disk.open();
   const first = initializeObserver(provider, [], { persistence: store });
-  await first.driver.run(first.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings });
+  await first.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
   assert.equal(first.transcript.length, 2);
   assert.equal(store.failure, undefined, 'record constraint failure is not a content failure');
   assert.throws(() => first.recordSource.assertComplete(), /不完整/);

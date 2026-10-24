@@ -19,7 +19,7 @@ function environment(invoke) {
   return { ...value, modelCreations: () => created };
 }
 function run(env, configuration = settings) {
-  return env.driver.run(env.scene, { messages: [{ role: 'user', content: '你好' }] }, { settings: configuration });
+  return env.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings: configuration });
 }
 const attempts = (env) => [...env.book.values()].filter((record) => record instanceof CallableRecord && record.structureKind === 'node');
 const operations = (env) => [...env.book.values()].filter((record) => record instanceof CallableRecord && record.structureKind === 'group' && record.role !== 'conversation-task');

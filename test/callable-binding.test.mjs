@@ -279,9 +279,9 @@ test('call construction scopes are authenticated to their exact bound installati
   const builder = new CallableBuilder();
   const first = builder.build(defineScene()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
   const second = builder.build(defineScene()({ run: { execute: () => null } }), { providers: [], source: { capture: () => null } });
-  const own = callableConstruction(first).sources.begin({});
-  assert.throws(() => callableConstruction(second).sources.require(own), /another binding installation/);
-  assert.throws(() => callableConstruction(first).sources.require({}), /another binding installation/);
+  const own = callableConstruction(first).calls.begin({});
+  assert.throws(() => callableConstruction(second).calls.require(own), /another binding installation/);
+  assert.throws(() => callableConstruction(first).calls.require({}), /another binding installation/);
   assert.doesNotThrow(() => createRootInvocation(first, null, {}, {}));
 });
 

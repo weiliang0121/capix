@@ -47,7 +47,7 @@ test('default active material does not segment or truncate history to satisfy ca
   environment.transcript.append({ role: 'user', content: '培训周五15点。' + '原始说明。'.repeat(6000) }, { role: 'assistant', content: '收到。' });
   const original = environment.transcript.ref(0);
   const memory = environment.memories.apply([{ action: 'create', memoryId: null, change: '接纳初始记忆', sourceIndexes: [0], result: { topic: '培训', content: '培训周五15点。', sourceIndexes: [0] } }])[0];
-  const facts = await observeExecution(environment.driver, environment.scene, environment.recording, { messages: [{ role: 'user', content: '培训几点？' }] }, { settings });
+  const facts = await observeExecution(environment.runner, environment.recording, { messages: [{ role: 'user', content: '培训几点？' }] }, { settings });
   assert.equal(facts.execution.status, 'failed');
   assert.match(JSON.stringify(facts.execution.value.error), /CAPACITY_EXCEEDED/);
   assert.equal(facts.resources.find((fact) => fact.parentId === facts.execution.id && fact.access === 'transcript.fixedRange' && fact.phase === 'available').value.start, 0);
@@ -101,7 +101,7 @@ test('explicitly filtering active membership preserves original messages and tra
   const originals = environment.transcript.snapshot();
   const before = environment.content.active.capture();
   environment.content.active.apply({ basis: before.basis, messageIndexes: [2, 3], memoryIds: [] });
-  const facts = await observeExecution(environment.driver, environment.scene, environment.recording, { messages: [{ role: 'user', content: '继续刚才那个' }] }, { settings });
+  const facts = await observeExecution(environment.runner, environment.recording, { messages: [{ role: 'user', content: '继续刚才那个' }] }, { settings });
   assert.equal(facts.execution.status, 'succeeded', JSON.stringify(facts.execution.value.error));
   assert.deepEqual(
     requests.map(({ purpose }) => purpose),

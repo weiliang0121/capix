@@ -10,6 +10,7 @@ import type { InvocationFact, InvocationDescription } from '../../observation/fa
 import { bindInvocationObservation } from '../../binding/observation.js';
 import { attachInvocationResources } from '../resources.js';
 import { ResourceBindings, type ResourceRequirements } from '../../resource/bindings.js';
+import { ResourceSupply } from '../../resource/supply.js';
 import type { ResourceRefinement } from '../../resource/offer.js';
 import type { InvocationCapabilities } from '../capabilities.js';
 import { InvocationChangeEmitter } from '../changes.js';
@@ -30,6 +31,7 @@ export interface CallableInvocationRequest<Input, Output, Resources extends obje
   readonly progress?: ProgressReceiver<InvocationProgress>;
   readonly output?: InvocationOutputReceiver<Output>;
   readonly resources?: ResourceBindings;
+  readonly supplied?: ResourceSupply;
   readonly requires?: ResourceRequirements<Resources>;
   readonly initial?: ResourceRequirements;
   readonly supply?: ResourceRequirements;
@@ -59,9 +61,11 @@ export class CallableInvocationBuilder {
   create<Input, Output, Resources extends object = object>(input: Input, request: CallableInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, CallableContext<Input, Output, Resources>> {
     const parent = request.parent;
     if (parent) this.check(parent);
-    const supplied = request.resources ?? parent?.context.resources ?? new ResourceBindings({});
+    if (request.supplied && request.resources) throw new Error('Call construction must provide one resource supply');
+    const supplied = request.supplied ?? request.resources?.supply ?? parent?.context.resources.supply ?? new ResourceSupply();
     const requires = request.requires ?? ({} as ResourceRequirements<Resources>);
-    const resources = supplied.select(requires, request.initial, { input, refinements: request.refinements ?? [], supply: request.supply });
+    const selected = supplied.select(request.supply ?? requires).refine(input, request.refinements ?? []);
+    const resources = new ResourceBindings(requires, selected.entries, request.initial, request.supply);
     // Resource capture/refinement may run host code; recheck before establishing the child.
     if (parent) this.check(parent);
     const controls = parent ? { signal: parent.context.signal } : request.controls;

@@ -34,7 +34,7 @@ test('one initialized world preserves messages and records while reusing its exe
   for (const [index, text] of ['first', 'failure', 'last'].entries()) {
     const input = { messages: [{ role: 'user', content: text }] };
     const published = [];
-    snapshots.push(await observeExecution(environment.driver, environment.scene, environment.recording, input, { settings: { ...settings, model: String(index) }, transcript }, (snapshot) => published.push(snapshot)));
+    snapshots.push(await observeExecution(environment.runner, environment.recording, input, { settings: { ...settings, model: String(index) }, transcript }, (snapshot) => published.push(snapshot)));
     streamed.push(published);
   }
   assert.deepEqual(
@@ -126,7 +126,7 @@ test('a cancelled call does not leave its signal on the reusable model operation
   cancelled.abort(new Error('cancel first call'));
   for (const signal of [cancelled.signal, new AbortController().signal]) {
     const input = { messages: [{ role: 'user', content: 'input' }] };
-    const completion = observeExecution(environment.driver, environment.scene, environment.recording, input, { settings, signal, transcript: environment.transcript });
+    const completion = observeExecution(environment.runner, environment.recording, input, { settings, signal, transcript: environment.transcript });
     if (signal.aborted) {
       await assert.rejects(completion, { code: 'INVOCATION_CANCELLED' });
       assert.equal(environment.transcript.length, 0);
@@ -156,7 +156,7 @@ test('configuration updates and Transcript appends take effect only in the next 
   for (const content of ['first', 'next']) {
     const input = { messages: [{ role: 'user', content }] };
     assert.equal(Object.hasOwn(input, 'transcript'), false);
-    snapshots.push(await observeExecution(environment.driver, environment.scene, environment.recording, input, { settings: configuration, transcript: environment.transcript }));
+    snapshots.push(await observeExecution(environment.runner, environment.recording, input, { settings: configuration, transcript: environment.transcript }));
   }
   assert.deepEqual(
     requests.map((request) => request.model),

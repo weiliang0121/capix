@@ -27,7 +27,7 @@ test('prepared and maintained material records reference large message bodies wh
   try {
     environment.memories.apply([{ action: 'create', memoryId: null, change: 'initial memory', sourceIndexes: [0], result: { topic: 'topic', content: 'historic memory value', sourceIndexes: [0] } }]);
     const memory = environment.memories.snapshot()[0];
-    const snapshot = await observeExecution(environment.driver, environment.scene, environment.recording, { messages: [{ role: 'user', content: 'question' }] }, { settings });
+    const snapshot = await observeExecution(environment.runner, environment.recording, { messages: [{ role: 'user', content: 'question' }] }, { settings });
     assert.equal(snapshot.execution.status, 'succeeded');
     const preparation = snapshot.calls.find((item) => item.name === 'prepareContext');
     const maintenance = snapshot.calls.filter((item) => item.name === 'maintainContext');

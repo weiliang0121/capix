@@ -1,7 +1,7 @@
 import type { CallableContext } from '../context/callable.js';
 import type { InvocationWork } from '../invocation/work.js';
 import type { ResourceRequirements } from '../resource/bindings.js';
-import type { ResourceRefinement } from '../resource/offer.js';
+import type { ResourceRefinement, ResourceIdentity } from '../resource/offer.js';
 import type { BoundChildren } from './children/bound.js';
 import type { ObservationInstallation } from './observation.js';
 import type { ChildResourceBinding } from './resources.js';
@@ -15,6 +15,7 @@ export interface ChildBindingOptions {
   readonly observations?: readonly ObservationInstallation[];
   readonly childResources?: readonly ChildResourceBinding[];
   readonly sources?: readonly ChildCallable[];
+  readonly resourceScopes?: ReadonlyMap<AnyCallable, readonly ResourceIdentity[]>;
 }
 
 export interface CallableBinding<Input, Output, Resources extends object> {

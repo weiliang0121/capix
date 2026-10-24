@@ -19,9 +19,12 @@
 ```ts
 const model = new ModelSource(provider);
 const interactions = new ModelInteractions(model, { persistence: store.interactions });
-const driver = new Driver(capabilities);
-const scene = buildConversation(driver, structure, entities, interactions);
+const resources = new Resources<ConversationRunOptions>();
+const calls = registerConversationResources(resources, structure, entities, interactions, { checkpoints });
+const runner = new Runner(structure.scene, resources, undefined, { ...capabilities, ...calls }).build();
 ```
+
+Observer 的 ModelInteractions 作为普通资源注册，继续负责 SSE、模型超时与固定请求校验；它不冒充通用 Interactions。通用交互注册是另一种可选接法，见 [Runner / Resources](runner-resources-pilot.md)。
 
 业务只取得资源端点。`create.start(request, purpose, { timeoutMs })` 返回 `{ id }`，不接收 Invocation 的取消信号；`read.wait` 返回 `received | pending`，`read.result` 取得已接收反馈或抛出真实失败。读取端点没有发送方法，不能凭缺少结果自动重发。读取 Node 使用自己的 Context 和资源端点；不能复用已经结束的发起 Node 端点。
 
@@ -64,7 +67,7 @@ Interaction → Provider → 固定反馈 → 可被多个 Node 读取
 | 父层结构/观测传播失败       | 原调用失败；已发交互可以独立保存迟到反馈，不重开 Context、不追加回答  |
 | 必要持久化失败              | 不把未保存反馈作为成功交付，也不重做外部工作                          |
 
-局部等待结束不代表发送已经结束。Provider 只接收交互自身的超时信号，不继承调用的 signal；不响应该信号的 Provider 仍可能继续运行。服务接纳依据 Driver 占用、提交容量与已知服务故障，不因为先前已取消调用的交互仍在进行而标记 busy。当前没有另设外部并发容量上限，active 只表达实际在途状态，不冒充容量不足。已经可读取的交互错误或已归属的结构错误不因同时取消而改写为 cancelled；等待结束后才到达的错误独立保留在交互上，不反向改写旧调用。
+局部等待结束不代表发送已经结束。Provider 只接收交互自身的超时信号，不继承调用的 signal；不响应该信号的 Provider 仍可能继续运行。服务接纳依据 Runner 占用、提交容量与已知服务故障，不因为先前已取消调用的交互仍在进行而标记 busy。当前没有另设外部并发容量上限，active 只表达实际在途状态，不冒充容量不足。已经可读取的交互错误或已归属的结构错误不因同时取消而改写为 cancelled；等待结束后才到达的错误独立保留在交互上，不反向改写旧调用。
 
 宿主 `settled()` 用于等待当前全部活动交互，不接受调用 owner。环境关闭拒绝仍有活动交互；宿主应在停止接纳后独立等待外部工作收尾，再关闭存储。调用取消不执行这项宿主等待，也不能关掉反馈保存。进程实际退出只能保留已保存事实，不承诺完成清理。关闭记录不改变以上行为。
 

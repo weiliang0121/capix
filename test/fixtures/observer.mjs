@@ -1,9 +1,30 @@
-import { CallableContext, Transcript, TranscriptRangeRef, bindResources, CallableBuilder, callableConstruction, Memories, SelectionUsage } from '@capix/server-runtime';
+import { CallableContext, Transcript, TranscriptRangeRef, bindResources, CallableBuilder, callableConstruction, Memories, SelectionUsage, TranscriptResource, MemoryResource, SelectionUsageResource } from '@capix/server-runtime';
 import { fixtureState } from './runtime.mjs';
 import { resolveDeclaration } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 
-import { createConversationStructure, ActiveContent, acceptConversationInput, initializeObserver, observeExecution, conversationProviders, ModelSource, ModelInteractions } from '@capix/observer-service';
+import { createConversationStructure, ActiveContent, acceptConversationInput, initializeObserver, observeExecution, ActiveContentResource, ConversationTaskResource, ModelSettingsResource, ModelResource, ConversationMaterialUsageResource, ModelSource, ModelInteractions } from '@capix/observer-service';
+
+// Manual Context fixtures bypass host assembly; their supply is explicit and test-local.
+const conversationProviders = [
+  ActiveContentResource.read.provide((source) => source.active),
+  ActiveContentResource.manage.provide((source) => source.active),
+  ConversationTaskResource.provide((source) => ({ progress: source.taskProgress })),
+  ModelSettingsResource.snapshot.provide((source) => source.settings),
+  ModelSettingsResource.timeout.provide((source) => source.settings.timeoutMs),
+  TranscriptResource.fixedRange.provide((source) => {
+    if (!source.transcriptRange) throw new Error('Execution Transcript range is required');
+    return source.transcriptRange;
+  }),
+  ModelResource.create.provide((source) => source.model),
+  ModelResource.read.provide((source) => source.model),
+  MemoryResource.snapshot.provide((source) => source.memorySnapshot ?? source.memories),
+  MemoryResource.apply.provide((source) => source.memories),
+  TranscriptResource.append.provide((source) => ({ transcript: source.transcript, progress: source.messageProgress })),
+  TranscriptResource.segmentation.provide((source) => source.transcript),
+  ConversationMaterialUsageResource.provide((source) => source),
+  SelectionUsageResource.record.provide((source) => source.selectionUsage),
+];
 
 const transcripts = new WeakMap();
 export const transcriptFor = (input) => transcripts.get(input);
@@ -55,9 +76,9 @@ export function bindChild(runtime, definition) {
     })),
     source: { capture: () => null },
   });
-  const { binding, invocations, sources } = callableConstruction(built);
+  const { binding, invocations, calls } = callableConstruction(built);
   state.builder = invocations;
-  state.construction = sources.begin({});
+  state.construction = calls.begin({});
   return {
     definition,
     create(parent, input, options = {}) {
@@ -82,7 +103,7 @@ export function createInput({ content, history }) {
 export function observeFixture(input, settings, provider, publish, signal) {
   const environment = initializeObserver(provider, transcriptFor(input).snapshot().slice(0, -1));
   transcripts.set(input, environment.transcript);
-  return observeExecution(environment.driver, environment.scene, environment.recording, { messages: [input] }, { settings, signal }, publish);
+  return observeExecution(environment.runner, environment.recording, { messages: [input] }, { settings, signal }, publish);
 }
 
 export function resourceFact(snapshot, access) {

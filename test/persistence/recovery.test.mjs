@@ -38,7 +38,7 @@ function fixture(t) {
     },
   };
 }
-const run = (environment, content = '提问') => environment.driver.run(environment.scene, { messages: [{ role: 'user', content }] }, { settings });
+const run = (environment, content = '提问') => environment.runner.run({ messages: [{ role: 'user', content }] }, { settings });
 
 for (const [name, damage] of [
   ['identity', (database, sourceId) => database.prepare("UPDATE records SET body = json_set(body, '$.id', 'wrong') WHERE source_id = ? AND kind = 'invocation'").run(sourceId)],

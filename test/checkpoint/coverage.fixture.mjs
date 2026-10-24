@@ -91,7 +91,7 @@ const environment = conversations.open(conversationId);
 let result;
 let error;
 try {
-  if (mode === 'start') result = await environment.driver.run(environment.scene, { messages: [{ role: 'user', content: '整理文件并保存。' }] }, { settings: { model: 'fixed', contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 1000 } });
+  if (mode === 'start') result = await environment.runner.run({ messages: [{ role: 'user', content: '整理文件并保存。' }] }, { settings: { model: 'fixed', contextBudget: 32768, maxOutputTokens: 1024, timeoutMs: 1000 } });
   else {
     if (mode === 'changedFile') writeFileSync(join(workspace, 'notes.md'), '后来改动');
     const run = persistence.checkpointRuns.list(conversationId)[0];
