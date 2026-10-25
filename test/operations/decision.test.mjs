@@ -90,7 +90,7 @@ test('default decision maps model proposals without claiming that proposed file 
 test('disabled file mode has no model child or resource requests', async () => {
   const definition = new DefaultConversationDecision({ files: false });
   assert.deepEqual(definition.members, []);
-  assert.deepEqual(definition.run.deps, {});
+  assert.deepEqual(definition.deps, {});
   const { result, requests } = await decide({ definition });
   assert.deepEqual(result, { kind: 'invoke', capability: 'answer', arguments: {} });
   assert.equal(requests.length, 0);
@@ -103,7 +103,7 @@ test('a function decision uses the same operation contract and supports asynchro
     return { kind: 'invoke', capability: 'answer', arguments: {} };
   });
   assert.deepEqual(definition.members, []);
-  assert.deepEqual(definition.run.deps, {});
+  assert.deepEqual(definition.deps, {});
   const { input, result, requests } = await decide({ definition });
   assert.equal(inputs[0], input);
   assert.deepEqual(result, { kind: 'invoke', capability: 'answer', arguments: {} });

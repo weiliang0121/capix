@@ -1,7 +1,11 @@
 /** Conversation declarations and their business contracts. */
 export * from './conversation/accept.js';
 export * from './conversation/binding.js';
+export * from './conversation/binding/contract.js';
+export * from './conversation/binding/capture.js';
+export * from './conversation/binding/calls.js';
 export * from './conversation/scene.js';
+export * from './conversation/structure.js';
 export * from './conversation/conversation.js';
 export * from './conversation/resources.js';
 export * from './conversation/segment.js';

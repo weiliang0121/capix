@@ -26,7 +26,7 @@ class CaptureStore extends MemoryCheckpointStore {
     return head;
   }
 }
-function harness(operation, providers, store, deps = operation.run.deps) {
+function harness(operation, providers, store, deps = operation.deps) {
   const checkpoint = (key, child) => ({
     key,
     version: 1,
@@ -55,14 +55,12 @@ function harness(operation, providers, store, deps = operation.run.deps) {
       this.add(operation);
     }
     checkpoint = checkpoint('effects.execution', operation);
-    run = {
-      deps,
-      execute: async (work) => {
-        const call = work.children.create(operation, work.input, { key: 'operation' });
-        work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
-        await call.run();
-        return call.accept();
-      },
+    deps = deps;
+    run = async (work) => {
+      const call = work.children.create(operation, work.input, { key: 'operation' });
+      work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
+      await call.run();
+      return call.accept();
     };
   }
   const execution = new Execution();
@@ -72,14 +70,12 @@ function harness(operation, providers, store, deps = operation.run.deps) {
       this.add(execution);
     }
     checkpoint = checkpoint('effects.runtime', execution);
-    run = {
-      deps: {},
-      execute: async (work) => {
-        const call = work.children.create(execution, work.input, { key: 'execution' });
-        work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
-        await call.run();
-        return call.accept();
-      },
+    deps = {};
+    run = async (work) => {
+      const call = work.children.create(execution, work.input, { key: 'execution' });
+      work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
+      await call.run();
+      return call.accept();
     };
   }
   return installCallable(new Root(), { checkpoints: { store }, providers, source: { capture: () => null } });

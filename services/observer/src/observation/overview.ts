@@ -9,10 +9,11 @@ import type { SelectionInput } from '../conversation/group/history/input.js';
 import type { describePreparedConversationContext } from '../conversation/content/observation.js';
 
 /** Interpret explicit task roles while preserving the actual callable tree. No body is cloned here. */
-export function observeOverview(observer: { readonly book: RecordBook; readonly transcript: Transcript; readonly recordingArchives?: readonly RecordingArchive[] }): ObserverOverview {
-  const observation = inspectExecutions(observer.book, observer.transcript);
+export function observeOverview(observer: { readonly records: { readonly book: RecordBook; readonly archives?: readonly RecordingArchive[] }; readonly transcript: Transcript }): ObserverOverview {
+  const { book, archives } = observer.records;
+  const observation = inspectExecutions(book, observer.transcript);
   const executions: ExecutionSummary[] = observation.executions.map((execution) => {
-    const snapshot = taskView(observer.book, execution.id);
+    const snapshot = taskView(book, execution.id);
     const startedAt = snapshot.execution.value.startedAt;
     if (startedAt === undefined) throw new Error('Conversation task has no recorded start');
     const start = Date.parse(startedAt);
@@ -28,9 +29,9 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
     const preparation = snapshot.calls.find((call) => call.name === 'prepareContext');
     const prepared = preparation?.status === 'succeeded' ? (readOutput(preparation.value) as ReturnType<typeof describePreparedConversationContext>) : undefined;
     const captured = snapshot.calls.find((call) => call.name === 'selection')?.value.input as SelectionInput | undefined;
-    const range = executionTranscript(observer.book, execution.id);
+    const range = executionTranscript(book, execution.id);
     const durationMs = calls.find((call) => call.id === execution.id)?.durationMs;
-    const archive = executionArchive(observer.book, observer.recordingArchives, execution.id);
+    const archive = executionArchive(book, archives, execution.id);
     const ownIds = new Set(snapshot.calls.map((call) => call.id));
     // A terminal boundary is the exact monotonic extent of that call. Its wall-clock
     // process timestamps have millisecond precision and must not extend that extent.
@@ -47,5 +48,5 @@ export function observeOverview(observer: { readonly book: RecordBook; readonly 
       memoryChanges: snapshot.memories.map((change) => ({ id: change.id, memoryId: change.memoryId, operationId: change.callId ?? change.operationId, action: change.value.action, change: change.value.change })),
     };
   });
-  return { transcriptId: observer.transcript.id, messages: observation.messages, executions, ...(observer.recordingArchives?.length ? { archives: observer.recordingArchives } : {}) };
+  return { transcriptId: observer.transcript.id, messages: observation.messages, executions, ...(archives?.length ? { archives } : {}) };
 }

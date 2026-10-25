@@ -5,13 +5,14 @@ import { test } from 'node:test';
 import { Group, Node, InvocationEntry, Sequence, ResourceOffer, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
 import { CallableBuilder, callableConstruction } from '@capix/server-runtime/construction';
 
-const resource = new ResourceOffer('test.value', (value) => value, 'binding');
+const resource = new ResourceOffer({ name: 'test.value', expose: (value) => value, timing: 'binding' });
 class Read extends Node {
   name = 'read';
   label = 'Read';
   source = 'test';
   callee = 'test';
-  run = { deps: { value: resource.request() }, execute: this.execute.bind(this) };
+  deps = { value: resource.request() };
+  run = this.execute.bind(this);
   execute(work) {
     return `${work.input}:${work.resources.value}`;
   }
@@ -20,7 +21,8 @@ class Work extends Group {
   name = 'work';
   label = 'Work';
   source = 'test';
-  run = { deps: { value: resource.request() }, execute: this.execute.bind(this) };
+  deps = { value: resource.request() };
+  run = this.execute.bind(this);
   leaf = new Read();
   sequence = new Sequence().step('read', { use: this.leaf, input: ({ input }) => input });
   constructor() {
@@ -32,7 +34,8 @@ class Work extends Group {
   }
 }
 class Main extends Group {
-  run = { deps: { value: resource.request() }, execute: this.execute.bind(this) };
+  deps = { value: resource.request() };
+  run = this.execute.bind(this);
   operation = new Work();
   constructor() {
     super();
@@ -95,7 +98,7 @@ test('one Driver builds independent roots and rejects foreign child references',
   });
   const createExecution = () => {
     const execution = new Main();
-    execution.run.execute = async (work) => {
+    execution.run = async (work) => {
       if (work.input === 'right') return work.children.open(previous).run();
       const child = work.children.create(execution.operation, work.input);
       await child.run();
@@ -146,8 +149,8 @@ test('one Driver builds independent roots and rejects foreign child references',
 
 test('business Work and child facts exclude lifecycle, binding and relation mutation', async () => {
   const definition = new Main();
-  const original = definition.operation.run.execute;
-  definition.operation.run.execute = async function (work) {
+  const original = definition.operation.run;
+  definition.operation.run = async function (work) {
     for (const name of ['context', 'invocation', 'complete', 'fail', 'startRound', 'record', 'source', 'run']) assert.equal(work[name], undefined);
     assert.equal(work.resources.select, undefined);
     assert.equal(work.children.attach, undefined);
@@ -185,7 +188,7 @@ test('a completed parent cannot keep using its old creation or alternative-entry
     accepted++;
     return input;
   });
-  definition.run.execute = async function (work) {
+  definition.run = async function (work) {
     previous = work.children;
     const child = work.children.create(definition.operation, work.input);
     await child.run();
@@ -207,7 +210,7 @@ test('undeclared entries fail before admission and attachment', async () => {
     accepted = true;
     return 'wrong';
   });
-  definition.run.execute = (work) => {
+  definition.run = (work) => {
     assert.throws(() => work.children.create(unknown, null), /not declared/);
     assert.throws(() => work.children.entry(alternative, null), /not declared/);
     assert.equal(work.children.facts.values().length, 0);
@@ -247,12 +250,12 @@ test('building nested structures retains exact member identities without opening
 test('E construction follows R reservation, validation, ordinary input preparation, capture and started', async () => {
   const order = [];
   const execution = new Main();
-  execution.run.execute = (work) => {
+  execution.run = (work) => {
     order.push('work');
     return work.input;
   };
   const definition = runtimeDefinition(execution);
-  definition.run.execute = async (work) => {
+  definition.run = async (work) => {
     order.push('prepare');
     const child = work.children.create(execution, { text: work.input });
     await child.run();
@@ -315,23 +318,21 @@ test('pre-cancelled R skips E capture; capture failure releases R reservation', 
 });
 
 test('R resource endpoints remain scoped to R while E receives its own resource window', async () => {
-  const access = new ResourceOffer('test.input', (_source, activity) => ({ touch: () => activity.runSync('touch', {}, () => 'value') }));
+  const access = new ResourceOffer({ name: 'test.input', expose: (_source, activity) => ({ touch: () => activity.runSync('touch', {}, () => 'value') }) });
   let saved;
   const main = new Main();
-  main.run.execute = () => {
+  main.run = () => {
     assert.equal(saved.touch(), 'value');
     return 'done';
   };
   const definition = runtimeDefinition(main);
-  definition.run = {
-    deps: { access: access.request() },
-    async execute(work) {
-      saved = work.resources.access;
-      const input = saved.touch();
-      const child = work.children.create(main, input);
-      await child.run();
-      return child.accept();
-    },
+  definition.deps = { access: access.request() };
+  definition.run = async function (work) {
+    saved = work.resources.access;
+    const input = saved.touch();
+    const child = work.children.create(main, input);
+    await child.run();
+    return child.accept();
   };
   const runtime = installCallable(definition, {
     providers: [access.provide(() => null), resource.provide(() => 'value')],

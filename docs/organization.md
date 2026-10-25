@@ -80,7 +80,7 @@ Transcript、Memories、SelectionUsage、Provider、Interaction 是独立实体�
 
 `ExecutionRecordSnapshot` 仍是 Observer 查询选定任务的跨端名字，正文为 `execution`、通用 `calls`、`rootCall`、可选中间 `ancestors`、`boundaries` 及内容/资源变化；它不是内核 E 层。内核 CallableRecordHelper 允许显式选择任意调用子树，不负责判断业务任务。
 
-Checkpoint Frame v4 与声明版本分别核验。v1/v2/v3 明确拒绝续接，不影响健康历史内容与记录读取。新 Scene/Task 声明契约也已更新，详见 [Checkpoint](checkpoints.md)。
+Checkpoint Frame v5 与声明版本分别核验。v1/v2/v3/v4 明确拒绝续接，不影响健康历史内容与记录读取。新 Scene/Task 声明契约也已更新，详见 [Checkpoint](checkpoints.md)。
 
 ## 服务、客户端与公开入口
 

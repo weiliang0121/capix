@@ -58,14 +58,12 @@ function harness(t, provider, store, events = [], facts = [], generation = new G
       this.add(generation);
     }
     checkpoint = parentCheckpoint('fixture.answer.execution', generation);
-    run = {
-      deps: GenerateAnswer.deps,
-      execute: async (work) => {
-        const call = work.children.create(generation, work.input, { key: 'generation', output: { receive: (event) => void events.push(event) } });
-        work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
-        await call.run();
-        return call.accept();
-      },
+    deps = GenerateAnswer.deps;
+    run = async (work) => {
+      const call = work.children.create(generation, work.input, { key: 'generation', output: { receive: (event) => void events.push(event) } });
+      work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
+      await call.run();
+      return call.accept();
     };
   }
   const execution = new Execution();
@@ -75,14 +73,12 @@ function harness(t, provider, store, events = [], facts = [], generation = new G
       this.add(execution);
     }
     checkpoint = parentCheckpoint('fixture.answer.runtime', execution);
-    run = {
-      deps: {},
-      execute: async (work) => {
-        const call = work.children.create(execution, work.input, { key: 'execution' });
-        work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
-        await call.run();
-        return call.accept();
-      },
+    deps = {};
+    run = async (work) => {
+      const call = work.children.create(execution, work.input, { key: 'execution' });
+      work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
+      await call.run();
+      return call.accept();
     };
   }
   const runtime = installCallable(new Root(), {

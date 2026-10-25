@@ -52,14 +52,12 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
       this.add(model);
     }
     checkpoint = parentCheckpoint('fixture.model.execution', model);
-    run = {
-      deps: RequestModel.deps,
-      execute: async (work) => {
-        const call = work.children.create(model, work.input, { key: 'model' });
-        work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
-        await call.run();
-        return call.accept();
-      },
+    deps = RequestModel.deps;
+    run = async (work) => {
+      const call = work.children.create(model, work.input, { key: 'model' });
+      work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
+      await call.run();
+      return call.accept();
     };
   }
   const execution = new Execution();
@@ -69,14 +67,12 @@ function harness(t, provider, store, facts = [], progress = () => {}, model = ne
       this.add(execution);
     }
     checkpoint = parentCheckpoint('fixture.model.runtime', execution);
-    run = {
-      deps: {},
-      execute: async (work) => {
-        const call = work.children.create(execution, work.input, { key: 'execution' });
-        work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
-        await call.run();
-        return call.accept();
-      },
+    deps = {};
+    run = async (work) => {
+      const call = work.children.create(execution, work.input, { key: 'execution' });
+      work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
+      await call.run();
+      return call.accept();
     };
   }
   const runtime = installCallable(new Root(), {

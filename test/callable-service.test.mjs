@@ -36,10 +36,10 @@ test('Scene members share Callable behavior, while only the exactly bound task p
         await call.run();
         await call.accept((value) => value);
       }
-      return original.execute(work);
+      return original(work);
     },
-    original.deps,
-    { uses: definition.scene.members, accept: original.accept },
+    definition.scene.deps,
+    { uses: definition.scene.members, accept: definition.scene.accept },
   );
 
   const runner = createConversationRunner(definition, entities, model, { observations: [recording] });
@@ -79,9 +79,9 @@ test('task snapshots preserve actual nested calls and receive final Scene accept
   const environment = initializeObserver(provider);
   t.after(() => environment.close());
   const snapshots = [];
-  const stop = subscribeExecutions(environment.recording, (snapshot) => snapshots.push(snapshot));
+  const stop = subscribeExecutions(environment.records.installation, (snapshot) => snapshots.push(snapshot));
   t.after(stop);
-  const result = await observeExecution(environment.runner, environment.recording, input, { settings });
+  const result = await observeExecution(environment.runner, environment.records.installation, input, { settings });
   validateExecutionRecordSnapshot(result);
   assert.equal(result.execution.role, 'conversation-task');
   assert.equal(result.execution.structureKind, 'group');
@@ -138,7 +138,7 @@ test('a conversation task nested under multiple groups retains its full ancestry
   assert.equal(snapshot.ancestors[0].parentId, snapshot.rootCall.id);
   assert.equal(snapshot.execution.parentId, snapshot.ancestors.at(-1).id);
   assert.ok(snapshot.ancestors.every((call) => !snapshot.calls.some((own) => own.id === call.id)));
-  assert.equal(observeOverview({ book: recorder.book, transcript: entities.transcript }).executions.length, 1);
+  assert.equal(observeOverview({ records: { book: recorder.book }, transcript: entities.transcript }).executions.length, 1);
 
   const entries = [...recorder.book.values()].map((record) => ({ kind: record.kind, data: record.toJSON() }));
   const replica = ObservationReplica.receive(undefined, baseline({ entries }));

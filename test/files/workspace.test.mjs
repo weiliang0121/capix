@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { WorkspaceFiles, FileAccessException, FileResources, isRelativeFilePath } from '@capix/observer-service/assembly';
-import { ProgressChannel, InvocationCancelled, bindResources } from '@capix/server-runtime';
+import { ProgressChannel, InvocationCancelled, bindResources, Resource, Resources, Node, Scene, Runner } from '@capix/server-runtime';
 
 async function workspace(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'capix-files-'));
@@ -245,6 +245,67 @@ test('resource endpoints restrict exact task paths and observation contains only
   scope.close();
   await assert.rejects(reader.readText('input.txt'), /Call closed/);
   await assert.rejects(creator.createText('output.txt', 'later'), /Call closed/);
+});
+
+test('the file reader gets the call signal through its operation while keeping the registered path scope', async (t) => {
+  const { files } = await workspace(t);
+  const controller = new AbortController();
+  let entered;
+  let handled = false;
+  const started = new Promise((resolve) => {
+    entered = resolve;
+  });
+  t.mock.method(files, 'readText', async (path, signal) => {
+    assert.equal(path, 'input.txt');
+    assert.ok(signal instanceof AbortSignal);
+    entered();
+    await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+    return { path, text: 'late', bytes: 4, digest: 'late' };
+  });
+  const read = new Node({
+    deps: { files: FileResources.readText.request() },
+    run: (work) =>
+      work.resources.files.readText(work.input, {
+        result: {
+          failed() {
+            handled = true;
+            return 'hidden';
+          },
+        },
+      }),
+  });
+  const scene = new Scene({ uses: [read], run: (work) => work.children.invoke(read, work.input) }).add(read);
+  const resources = new Resources().register(new Resource({ files, constraint: { sourcePath: 'input.txt' } }), FileResources.readText).refine(
+    read,
+    FileResources.readText.refine((path) => path),
+  );
+  const runner = new Runner(scene, resources).build();
+  const result = runner.run('input.txt', { signal: controller.signal });
+  await started;
+  controller.abort('stop read');
+  await assert.rejects(result, InvocationCancelled);
+  assert.equal(handled, false);
+});
+
+test('the file read method exposes explicit ordinary-failure reception without changing its default error', async (t) => {
+  const { files } = await workspace(t);
+  const failure = new Error('read IO failed');
+  t.mock.method(files, 'readText', () => {
+    throw failure;
+  });
+  const scope = resourceBinding(files, { sourcePath: 'input.txt', output: { path: 'output.txt' } });
+  await assert.rejects(scope.bound.values.reader.readText('input.txt'), (error) => error === failure);
+  assert.equal(
+    await scope.bound.values.reader.readText('input.txt', {
+      result: {
+        failed(error) {
+          assert.equal(error, failure);
+          return 'unavailable';
+        },
+      },
+    }),
+    'unavailable',
+  );
 });
 
 test('returned resource observation may fail after publication without changing the producer receipt', async (t) => {

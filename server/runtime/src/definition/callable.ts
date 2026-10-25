@@ -13,11 +13,11 @@ import type { DefinitionReceptions } from './reception.js';
 
 export type { InvocationCheckpointPoint, InvocationCheckpointDefinition } from './checkpoint.js';
 
-export interface InvocationRunDefinition<Input, Output, Kind extends CallableKind, Resources extends object, Delta = never, Allowed extends ChildContractsOf<Kind> = ChildContractsOf<Kind>> {
+export interface CallableRunDefinition<Input, Output, Kind extends CallableKind, Resources extends object, Delta = never, Allowed extends ChildContractsOf<Kind> = ChildContractsOf<Kind>> {
   readonly deps: ResourceRequirements<Resources>;
   /** Omitted means all children declared by this owner. */
   readonly uses?: readonly Allowed[];
-  execute(work: ExecuteWork<Kind, Input, Output, Resources, Allowed, Delta>): Output | Promise<Output>;
+  run(work: ExecuteWork<Kind, Input, Output, Resources, Allowed, Delta>): Output | Promise<Output>;
   accept?(work: AcceptWork<Kind, Input, Output, Resources, Allowed>): Output | Continue<Input> | Promise<Output | Continue<Input>>;
 }
 

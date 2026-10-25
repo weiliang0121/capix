@@ -13,25 +13,25 @@ function describeSnapshot(snapshot: ActiveContentSnapshot) {
   return { ...snapshot.basis, messageCount: snapshot.messages.length, memoryCount: snapshot.memories.length };
 }
 
-/** Endpoints read at the explicit capture action, not when an E or its resource bindings are created. */
+/** Material is read by the explicit capture operation, not by structure or resource construction. */
 export const ActiveContentResource = Object.freeze({
-  read: new ResourceOffer(
-    'active-content.read',
-    (content: ActiveContent, activity): ActiveContentReader =>
+  read: new ResourceOffer({
+    name: 'active-content.read',
+    expose: (content: ActiveContent, activity): ActiveContentReader =>
       Object.freeze({
         capture: () => activity.runSync('capture', { output: describeSnapshot }, () => content.capture()),
       }),
-    'access',
-    { describe: () => ({ capability: 'active-content.read' }) },
-  ),
-  manage: new ResourceOffer(
-    'active-content.manage',
-    (content: ActiveContent, activity): ActiveContentManager =>
+    timing: 'access',
+    describe: () => ({ capability: 'active-content.read' }),
+  }),
+  manage: new ResourceOffer({
+    name: 'active-content.manage',
+    expose: (content: ActiveContent, activity): ActiveContentManager =>
       Object.freeze({
         capture: () => activity.runSync('capture', { output: describeSnapshot }, () => content.capture()),
         apply: (selection: ActiveContentSelection) => activity.runSync('apply', { input: () => selection, output: describeSnapshot }, () => content.apply(selection)),
       }),
-    'access',
-    { describe: () => ({ capability: 'active-content.manage' }) },
-  ),
+    timing: 'access',
+    describe: () => ({ capability: 'active-content.manage' }),
+  }),
 });

@@ -108,7 +108,7 @@ test('closing the record source also detaches the feed from supplementary conten
   const frames = [];
   try {
     feed.connect((frame) => frames.push(frame));
-    environment.recordSource.close();
+    environment.records.source.close();
     environment.transcript.append({ role: 'user', content: 'content remains independent' });
     environment.consumer.flush();
     await settle();
@@ -134,7 +134,7 @@ test('record delivery discards queued healthy changes on invalidation while mess
     environment.transcripts.connect((frame) => messages.push(frame));
     environment.transcript.append({ role: 'user', content: 'first' });
     environment.consumer.flush();
-    environment.recordSource.invalidate(new Error('record mapper failed'));
+    environment.records.source.invalidate(new Error('record mapper failed'));
     await settle();
     assert.deepEqual(
       records.map((frame) => frame.type),

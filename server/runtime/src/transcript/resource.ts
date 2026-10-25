@@ -58,9 +58,9 @@ export class TranscriptRangeReader {
 }
 
 export const TranscriptResource = Object.freeze({
-  append: new ResourceOffer(
-    'transcript.append',
-    (source: Transcript | TranscriptAppendSource, activity) => {
+  append: new ResourceOffer({
+    name: 'transcript.append',
+    expose: (source: Transcript | TranscriptAppendSource, activity) => {
       const transcript = source instanceof Transcript ? source : source.transcript;
       const progress = source instanceof Transcript || !source.progress ? undefined : new ProgressChannel(source.progress);
       return Object.freeze({
@@ -86,20 +86,23 @@ export const TranscriptResource = Object.freeze({
         },
       });
     },
-    'access',
-    { describe: (source) => ({ transcriptId: (source instanceof Transcript ? source : source.transcript).id }) },
-  ),
-  segmentation: new ResourceOffer(
-    'transcript.segmentation',
-    (transcript: Transcript, activity) =>
+    timing: 'access',
+    describe: (source) => ({ transcriptId: (source instanceof Transcript ? source : source.transcript).id }),
+  }),
+  segmentation: new ResourceOffer({
+    name: 'transcript.segmentation',
+    expose: (transcript: Transcript, activity) =>
       Object.freeze({
         current: () => activity.runSync('current', { output: (reader) => reader.locate() }, () => new TranscriptRangeReader(new TranscriptRangeRef(transcript, transcript.activeStart, transcript.length), activity)),
         start: (index: number) => activity.runSync('start', { input: () => ({ start: index }), output: () => ({ transcriptId: transcript.id, start: transcript.activeStart, end: transcript.length, revision: transcript.revision }) }, () => transcript.startSegment(index, { origin: activity.origin, observation: activity.transcriptObservation })),
       }),
-    'access',
-    { describe: (transcript) => ({ transcriptId: transcript.id }) },
-  ),
-  fixedRange: new ResourceOffer<TranscriptRangeRef, TranscriptRangeReader, { range: TranscriptRangeRef; revision: number }>('transcript.fixedRange', (captured: { range: TranscriptRangeRef; revision: number }, activity) => new TranscriptRangeReader(captured.range, activity, captured.revision), 'binding', {
+    timing: 'access',
+    describe: (transcript) => ({ transcriptId: transcript.id }),
+  }),
+  fixedRange: new ResourceOffer<TranscriptRangeRef, TranscriptRangeReader, { range: TranscriptRangeRef; revision: number }>({
+    name: 'transcript.fixedRange',
+    expose: (captured: { range: TranscriptRangeRef; revision: number }, activity) => new TranscriptRangeReader(captured.range, activity, captured.revision),
+    timing: 'binding',
     capture: (range) => ({ range, revision: range.transcript.revision }),
     describe: ({ range, revision }: { range: TranscriptRangeRef; revision: number }) => ({ transcriptId: range.transcript.id, start: range.start, end: range.end, revision }),
   }),

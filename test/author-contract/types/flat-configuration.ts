@@ -4,6 +4,12 @@ declare function expect<Value>(value: Value): void;
 declare const count: ResourceRequest<number>;
 declare const text: ResourceRequest<string>;
 const node = new Node<number, string>();
+expect<((work: NodeWork<number, string, object>) => string | Promise<string>) | undefined>(node.run);
+expect<object>(node.deps);
+// @ts-expect-error structures retain the same flat processing shape as their configuration
+node.run = { deps: {}, execute: () => 'old' };
+// @ts-expect-error processing does not expose a nested phase object
+node.run?.execute;
 node.setRun(
   (work) => {
     expect<number>(work.input);

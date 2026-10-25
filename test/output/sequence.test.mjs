@@ -12,12 +12,10 @@ test('Sequence binds declared output explicitly while final parent acceptance re
     label = 'source';
     source = 'test';
     output = output;
-    run = {
-      deps: {},
-      execute(work) {
-        work.output.emit('child text');
-        return 'result';
-      },
+    deps = {};
+    run = function (work) {
+      work.output.emit('child text');
+      return 'result';
     };
   })();
   const execution = new (class extends Group {
@@ -26,28 +24,26 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       super();
       this.add(operation);
     }
-    run = {
-      deps: {},
-      async execute(work) {
-        const composition = new Sequence().step('source', {
-          use: operation,
-          input: () => null,
-          output: () => ({
-            receive(event) {
-              if (event.kind === 'delta') {
-                phases.push('delta');
-                work.output.emit(event.delta.toUpperCase());
-              }
-              if (event.kind === 'completed') phases.push('child-completed');
-            },
-          }),
-          accept: (_scope, value) => {
-            phases.push('parent-accept');
-            return value;
+    deps = {};
+    run = async function (work) {
+      const composition = new Sequence().step('source', {
+        use: operation,
+        input: () => null,
+        output: () => ({
+          receive(event) {
+            if (event.kind === 'delta') {
+              phases.push('delta');
+              work.output.emit(event.delta.toUpperCase());
+            }
+            if (event.kind === 'completed') phases.push('child-completed');
           },
-        });
-        return (await composition.run(work.input, work.children)).source;
-      },
+        }),
+        accept: (_scope, value) => {
+          phases.push('parent-accept');
+          return value;
+        },
+      });
+      return (await composition.run(work.input, work.children)).source;
     };
   })();
   const runtime = new (class extends Scene {
@@ -55,13 +51,11 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       super();
       this.add(execution);
     }
-    run = {
-      deps: {},
-      async execute(work) {
-        const child = work.children.create(execution, null);
-        await child.run();
-        return child.accept();
-      },
+    deps = {};
+    run = async function (work) {
+      const child = work.children.create(execution, null);
+      await child.run();
+      return child.accept();
     };
   })();
   const events = [];

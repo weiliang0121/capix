@@ -65,7 +65,7 @@ test('failed Runner builds can be corrected, but reentrant build never publishes
     bindInvocation: () => ({ observe() {} }),
   };
   runner = new Runner(root, new Resources(), undefined, { observations: [install] });
-  assert.throws(() => runner.build(), /requires execute/);
+  assert.throws(() => runner.build(), /needs a run function/);
   root.setRun((work) => work.input);
   assert.equal(runner.build(), runner);
   assert.equal(checked, true);
@@ -406,7 +406,7 @@ test('Runner host validation retains its receiver and rejects asynchronous admis
 });
 
 test('child validation precedes capture while started factories still follow the fixed capture', async () => {
-  const number = new ResourceOffer('runner.validated-capture', (value) => value);
+  const number = new ResourceOffer({ name: 'runner.validated-capture', expose: (value) => value });
   const child = new Node();
   child.setRun((work) => work.resources.number, { number: number.request() });
   const root = new Scene().add(child);
@@ -476,7 +476,7 @@ test('run and resume fix top-level options before delayed child capture without 
     const entered = deferred();
     const proceed = deferred();
     const store = new MemoryCheckpointStore();
-    const value = new ResourceOffer('runner.fixed-options', (captured) => captured);
+    const value = new ResourceOffer({ name: 'runner.fixed-options', expose: (captured) => captured });
     const child = new Node();
     child.setRun((work) => work.resources.value, { value: value.request() });
     const root = new Scene().add(child);

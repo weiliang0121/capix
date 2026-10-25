@@ -52,11 +52,11 @@ tenantRunner.resume('saved');
 // @ts-expect-error options retain their declared field types
 tenantRunner.run({ text: 'hello' }, { tenant: 1 });
 
-const number = new ResourceOffer<number, number>('runner.number', (value) => value);
+const number = new ResourceOffer<number, number>({ name: 'runner.number', expose: (value) => value });
 resources.register(number, 3);
 // @ts-expect-error fixed supply is checked against the resource source type
 resources.register(number, '3');
-const text = new ResourceOffer<string, string>('runner.text', (value) => value);
+const text = new ResourceOffer<string, string>({ name: 'runner.text', expose: (value) => value });
 const scope = tenantResources.capture(scene, (input, options) => {
   expectType<Input>(input);
   expectType<Options>(options);
@@ -78,7 +78,10 @@ tenantResources.capture(scene, async (input) => ({ number: input.text.length }))
 // @ts-expect-error grouped selectors remain synchronous
 scope.register(number, async (snapshot) => snapshot.number);
 
-const files = new ResourceOffer<{ root: string }, { root: string }, { root: string }, string>('runner.files', (value) => value, 'access', {
+const files = new ResourceOffer<{ root: string }, { root: string }, string>({
+  name: 'runner.files',
+  expose: (value) => value,
+  timing: 'access',
   refine(value, path) {
     return { root: `${value.root}/${path}` };
   },
@@ -103,7 +106,7 @@ interface Reply {
 declare const modelContract: InteractionContract<Request, Reply>;
 declare const wrongRequest: InteractionContract<number, Reply>;
 declare const wrongReply: InteractionContract<Request, number>;
-const models = new ResourceOffer<InteractionChannel<Request, Reply>, InteractionChannel<Request, Reply>>('runner.models', (channel) => channel);
+const models = new ResourceOffer<InteractionChannel<Request, Reply>, InteractionChannel<Request, Reply>>({ name: 'runner.models', expose: (channel) => channel });
 resources.registerInteraction(models, modelContract);
 // @ts-expect-error request contract must match the resource's interaction channel
 resources.registerInteraction(models, wrongRequest);

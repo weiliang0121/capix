@@ -218,7 +218,8 @@ test('append commit reaches its local receiver before resource returned observat
 
 test('assembly selects local execution progress by declaration and each run receives a separate identity', async () => {
   class Echo extends Group {
-    run = { deps: {}, execute: (work) => work.input };
+    deps = {};
+    run = (work) => work.input;
   }
   const execution = new Echo();
   const facts = [];
@@ -259,14 +260,10 @@ test('assembly selects local execution progress by declaration and each run rece
 });
 
 function delegated(child) {
-  return {
-    deps: {},
-    uses: [child],
-    async execute(work) {
-      const call = work.children.create(child, work.input, { key: 'child' });
-      const result = await call.run();
-      return call.accept(() => result);
-    },
+  return async (work) => {
+    const call = work.children.create(child, work.input, { key: 'child' });
+    const result = await call.run();
+    return call.accept(() => result);
   };
 }
 
@@ -276,7 +273,8 @@ function hierarchy() {
     label = '测试能力';
     source = 'private-source';
     callee = 'private-provider';
-    run = { deps: {}, execute: (work) => work.input };
+    deps = {};
+    run = (work) => work.input;
   })();
   const operation = new (class extends Group {
     name = 'compose';
@@ -286,6 +284,7 @@ function hierarchy() {
       super();
       this.add(attempt);
     }
+    uses = [attempt];
     run = delegated(attempt);
   })();
   const execution = new (class extends Group {
@@ -293,6 +292,7 @@ function hierarchy() {
       super();
       this.add(operation);
     }
+    uses = [operation];
     run = delegated(operation);
   })();
   return runtimeDefinition(execution);
@@ -498,12 +498,10 @@ test('child cancellation is distinguished in parent return progress and never ac
   const facts = [];
   const definition = hierarchy();
   const attempt = definition.members[0].members[0].members[0];
-  attempt.run = {
-    deps: {},
-    execute() {
-      controller.abort();
-      throw new InvocationCancelled(controller.signal);
-    },
+  attempt.deps = {};
+  attempt.run = function () {
+    controller.abort();
+    throw new InvocationCancelled(controller.signal);
   };
   const runtime = installCallable(definition, {
     providers: [],

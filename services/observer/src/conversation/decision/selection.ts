@@ -6,9 +6,9 @@ export interface TaskSelection {
 }
 
 /** A per-execution service decision port. Delivery consumes the fact; it does not choose work. */
-export const ConversationTaskResource = new ResourceOffer<{ readonly progress?: ProgressReceiver<ConversationTask> }, TaskSelection>(
-  'conversation.task-selection',
-  ({ progress }, activity) => {
+export const ConversationTaskResource = new ResourceOffer<{ readonly progress?: ProgressReceiver<ConversationTask> }, TaskSelection>({
+  name: 'conversation.task-selection',
+  expose: ({ progress }, activity) => {
     let selected = false;
     const changes = progress ? new ProgressChannel(progress) : undefined;
     return Object.freeze({
@@ -21,5 +21,5 @@ export const ConversationTaskResource = new ResourceOffer<{ readonly progress?: 
       },
     });
   },
-  'access',
-);
+  timing: 'access',
+});

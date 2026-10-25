@@ -1,4 +1,10 @@
 import { Resource, Resources, ResourceOffer, type ResourceOperation, type OperationOptions, type ResourcesOf } from '@capix/server-runtime';
+
+// @ts-expect-error resource declarations use a configuration object, not positional arguments
+new ResourceOffer('legacy', (source: { text: string }) => source.text);
+// @ts-expect-error a configuration must declare an endpoint
+new ResourceOffer({ name: 'missing-endpoint' });
+
 const offer = new ResourceOffer({
   methods: {
     read(source: { text: string }, input: number) {
@@ -68,4 +74,57 @@ endpoint.stream(0, {
   delta(value: number) {
     return value;
   },
+});
+
+// A precise endpoint keeps its actual synchronous type and infers its origin independently.
+const precise = new ResourceOffer({
+  expose(source: { count: number }, activity) {
+    return { read: () => activity.runSync('read', {}, () => source.count) };
+  },
+});
+resources.register(new Resource({ count: 1 }), precise);
+// @ts-expect-error no capture means the source is exactly the exposure source
+resources.register(new Resource({ text: 'wrong' }), precise);
+declare const preciseEndpoint: ResourcesOf<{ value: ReturnType<typeof precise.request> }>['value'];
+const synchronous: number = preciseEndpoint.read();
+
+const snapshot = new ResourceOffer({
+  timing: 'binding',
+  capture: (source: { items: number[] }) => Object.freeze([...source.items]),
+  expose: (captured: readonly number[]) => captured,
+  describe: (captured) => ({ count: captured.length }),
+  refine: (captured, count: number) => captured.slice(0, count),
+});
+resources.register(new Resource({ items: [1] }), snapshot);
+snapshot.refine((input: { count: number }) => input.count);
+// @ts-expect-error refinements accept the offer's declared selection type
+snapshot.refine((input: string) => input);
+// @ts-expect-error the registration takes the pre-capture origin
+resources.register(new Resource([1]), snapshot);
+declare const snapshotEndpoint: ResourcesOf<{ value: ReturnType<typeof snapshot.request> }>['value'];
+const fixed: readonly number[] = snapshotEndpoint;
+
+const capturedMethods = new ResourceOffer({
+  capture: (source: { values: readonly number[] }) => ({ values: source.values, offset: 0 }),
+  methods: {
+    read(source: { values: readonly number[]; offset: number }, index: number) {
+      return source.values[source.offset + index];
+    },
+  },
+  refine: (captured, offset: number) => ({ ...captured, offset }),
+});
+resources.register(new Resource({ values: [1] }), capturedMethods);
+capturedMethods.refine((input: number) => input);
+// @ts-expect-error methods capture retains its actual origin type
+resources.register(new Resource({ count: 1 }), capturedMethods);
+// @ts-expect-error methods refinements cannot use another selection type
+capturedMethods.refine((input: string) => input);
+new ResourceOffer({
+  // @ts-expect-error an offer cannot mix ordinary methods with a second endpoint constructor
+  methods: {
+    read(source: { value: number }) {
+      return source.value;
+    },
+  },
+  expose: (source: { value: number }) => source.value,
 });

@@ -1,5 +1,5 @@
 import { Group, defineGroup, defineChildEntry } from '@capix/server-runtime';
-import type { Node, Scene, SceneWork, GroupWork, NodeWork, AcceptWork, HandleWork, ResumeWork, InvocationRunDefinition, InvocationExceptionDefinition, InvocationCheckpointPoint, ChildReference, ChildEntryInput, ChildrenOf, CallableInput, CallableOutput } from '@capix/server-runtime';
+import type { Node, Scene, SceneWork, GroupWork, NodeWork, AcceptWork, HandleWork, ResumeWork, CallableRunDefinition, InvocationExceptionDefinition, InvocationCheckpointPoint, ChildReference, ChildEntryInput, ChildrenOf, CallableInput, CallableOutput } from '@capix/server-runtime';
 
 declare const execution: Group<string, number>;
 declare const operation: Group<string, number>;
@@ -33,13 +33,11 @@ export class NamedExecution extends Group<string, number> {
     super();
     this.add(operation);
   }
-  readonly run: InvocationRunDefinition<string, number, 'group', Record<string, never>> = {
-    deps: {},
-    execute: executionHelper,
-    accept(work) {
-      expectType<Promise<number>>(work.children.create(operation, work.input).run());
-      return work.delivered;
-    },
+  readonly deps: CallableRunDefinition<string, number, 'group', Record<string, never>>['deps'] = {};
+  readonly run: CallableRunDefinition<string, number, 'group', Record<string, never>>['run'] = executionHelper;
+  readonly accept: CallableRunDefinition<string, number, 'group', Record<string, never>>['accept'] = function (work) {
+    expectType<Promise<number>>(work.children.create(operation, work.input).run());
+    return work.delivered;
   };
   readonly exceptions: InvocationExceptionDefinition<string, number, 'group', Record<string, never>> = {
     deps: {},

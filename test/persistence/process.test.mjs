@@ -49,15 +49,15 @@ for (const mode of ['content', 'running', 'finished']) {
       assert.equal(environment.transcript.revision, 1);
       return;
     }
-    assert.equal(environment.recordingArchives[0].state, 'open');
-    const old = environment.book.values().find((record) => record instanceof CallableRecord && record.role === 'conversation-task');
+    assert.equal(environment.records.archives[0].state, 'open');
+    const old = environment.records.book.values().find((record) => record instanceof CallableRecord && record.role === 'conversation-task');
     assert.ok(old);
     assert.equal(old.historical, true);
     const overview = observeOverview(environment);
     assert.equal(overview.executions[0].archive.state, 'open');
     assert.equal(old.status, mode === 'running' ? 'running' : 'succeeded');
     const archive = overview.executions[0].archive;
-    const detail = { ...CallableRecordHelper.snapshot(environment.recorder, old.id), archive };
+    const detail = { ...CallableRecordHelper.snapshot(environment.records.recorder, old.id), archive };
     validateExecutionRecordSnapshot(detail);
     if (mode === 'finished') assert.equal(environment.transcript.get(1).content, 'durable answer');
     const frames = [];

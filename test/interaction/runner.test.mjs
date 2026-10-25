@@ -23,28 +23,31 @@ function deferred() {
 }
 
 function resource(onExpose = () => {}) {
-  return new ResourceOffer('runner.echo', (channel, activity) => {
-    const endpoint = {
-      start(request) {
-        return activity.runSync('start', {}, () => channel.start(request));
-      },
-      read(ref) {
-        return activity.runSync('read', {}, () => channel.read(ref));
-      },
-      wait(ref, controls) {
-        return activity.runAsync('wait', {}, async () => {
-          try {
-            return await channel.wait(ref, controls);
-          } catch (error) {
-            // The exchange owns no invocation. This adapter identifies this local wait's stop.
-            if (controls.signal?.aborted && error === controls.signal.reason) throw new InvocationCancelled(controls.signal);
-            throw error;
-          }
-        });
-      },
-    };
-    onExpose(endpoint);
-    return endpoint;
+  return new ResourceOffer({
+    name: 'runner.echo',
+    expose: (channel, activity) => {
+      const endpoint = {
+        start(request) {
+          return activity.runSync('start', {}, () => channel.start(request));
+        },
+        read(ref) {
+          return activity.runSync('read', {}, () => channel.read(ref));
+        },
+        wait(ref, controls) {
+          return activity.runAsync('wait', {}, async () => {
+            try {
+              return await channel.wait(ref, controls);
+            } catch (error) {
+              // The exchange owns no invocation. This adapter identifies this local wait's stop.
+              if (controls.signal?.aborted && error === controls.signal.reason) throw new InvocationCancelled(controls.signal);
+              throw error;
+            }
+          });
+        },
+      };
+      onExpose(endpoint);
+      return endpoint;
+    },
   });
 }
 

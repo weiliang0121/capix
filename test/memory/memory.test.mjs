@@ -13,7 +13,7 @@ const content = (topic, value, sourceIndexes) => ({ topic, content: value, sourc
 const change = (result, explanation, indexes = result.sourceIndexes, memoryId = null) => ({ action: memoryId === null ? 'create' : 'update', memoryId, change: explanation, sourceIndexes: indexes, result });
 
 async function run(environment, message, options = settings) {
-  return observeExecution(environment.runner, environment.recording, { messages: [{ role: 'user', content: message }] }, { settings: options });
+  return observeExecution(environment.runner, environment.records.installation, { messages: [{ role: 'user', content: message }] }, { settings: options });
 }
 
 test('updates preserve Memory identity while immutable MemoryRecords describe each applied change and its actual operation', async () => {
@@ -54,7 +54,7 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
   const first = await run(environment, '聚餐预算200元，键盘预算300元。');
   const memory = environment.memories.values()[0];
   const original = memory.snapshot();
-  const firstRecord = MemoryRecordHelper.find(environment.book, memory.id)[0];
+  const firstRecord = MemoryRecordHelper.find(environment.records.book, memory.id)[0];
   const second = await run(environment, '聚餐改为150，键盘不变。');
   const third = await run(environment, '谢谢。');
   for (const facts of [first, second, third]) {
@@ -87,7 +87,7 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
   assert.equal(memory.content, '用户聚餐预算150元。');
   assert.equal(original.content, '用户聚餐预算200元。');
   assert.equal(firstRecord.value.result.content, original.content);
-  const records = MemoryRecordHelper.find(environment.book, memory.id);
+  const records = MemoryRecordHelper.find(environment.records.book, memory.id);
   assert.equal(records.length, 2);
   assert.ok(records.every((record) => record instanceof MemoryRecord && record instanceof BaseRecord));
   assert.notEqual(records[0].id, records[1].id);
@@ -106,7 +106,7 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
   assert.throws(() => records[1].value.sourceIndexes.push(99), TypeError);
   assert.equal(environment.transcript.length, 6);
   assert.ok(environment.transcript.snapshot().every((message) => Object.keys(message).sort().join() === 'content,role'));
-  const observation = observeMemory(environment.memories, environment.book);
+  const observation = observeMemory(environment.memories, environment.records.book);
   assert.equal(observation.items.length, 2);
   assert.equal(observation.items[0].records.length, 2);
   assert.deepEqual(observation.items[0].sources[0], { transcriptId: environment.transcript.id, index: 0 });
@@ -164,7 +164,7 @@ test('failed extraction leaves current memory and its records unchanged and keep
   assert.equal(facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).find((item) => item.name === 'answer').status, 'succeeded');
   assert.equal(environment.transcript.current('assistant').content, '正式回答');
   assert.equal(memory.content, '200');
-  assert.equal(MemoryRecordHelper.find(environment.book, memory.id).length, 1);
+  assert.equal(MemoryRecordHelper.find(environment.records.book, memory.id).length, 1);
   assert.equal(purposes.length, 4);
 });
 

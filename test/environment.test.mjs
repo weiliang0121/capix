@@ -26,7 +26,7 @@ test('one initialized world preserves messages and records while reusing its exe
   const environment = initializeObserver(provider, [{ role: 'user', content: 'initial' }]);
   const transcript = environment.transcript;
   assert.equal(environment.transcript, transcript);
-  assert.equal([...environment.book.values()].length, 2); // Initial transcript + Runtime scope.
+  assert.equal([...environment.records.book.values()].length, 2); // Initial transcript + Runtime scope.
   assert.equal(requests.length, 0);
   assert.equal(Object.hasOwn(environment.scene, 'context'), false);
   const snapshots = [];
@@ -34,7 +34,7 @@ test('one initialized world preserves messages and records while reusing its exe
   for (const [index, text] of ['first', 'failure', 'last'].entries()) {
     const input = { messages: [{ role: 'user', content: text }] };
     const published = [];
-    snapshots.push(await observeExecution(environment.runner, environment.recording, input, { settings: { ...settings, model: String(index) }, transcript }, (snapshot) => published.push(snapshot)));
+    snapshots.push(await observeExecution(environment.runner, environment.records.installation, input, { settings: { ...settings, model: String(index) }, transcript }, (snapshot) => published.push(snapshot)));
     streamed.push(published);
   }
   assert.deepEqual(
@@ -64,10 +64,10 @@ test('one initialized world preserves messages and records while reusing its exe
     operationIds,
   );
   assert.equal(new Set(snapshots.map((snapshot) => snapshot.execution.id)).size, 3);
-  const records = [...environment.book.values()];
+  const records = [...environment.records.book.values()];
   assert.equal(new Set(records.filter((record) => 'status' in record && 'contextId' in record).map((record) => record.contextId)).size, records.filter((record) => 'status' in record && 'contextId' in record).length);
   for (const snapshot of snapshots) {
-    assert.ok(environment.book.get(snapshot.execution.id));
+    assert.ok(environment.records.book.get(snapshot.execution.id));
     assert.equal(taskBoundaries(snapshot)[0].sequence, 2);
     assert.equal(taskBoundaries(snapshot).at(-1).callId, snapshot.execution.id);
   }
@@ -109,7 +109,7 @@ test('invalid submissions cannot replace an initialized Transcript or partially 
       (error) => error.code === 'INVALID_INPUT',
     );
     assert.equal(environment.transcript.length, 1);
-    assert.equal([...environment.book.values()].length, 2); // Initial transcript + Runtime scope.
+    assert.equal([...environment.records.book.values()].length, 2); // Initial transcript + Runtime scope.
   }
 });
 
@@ -126,7 +126,7 @@ test('a cancelled call does not leave its signal on the reusable model operation
   cancelled.abort(new Error('cancel first call'));
   for (const signal of [cancelled.signal, new AbortController().signal]) {
     const input = { messages: [{ role: 'user', content: 'input' }] };
-    const completion = observeExecution(environment.runner, environment.recording, input, { settings, signal, transcript: environment.transcript });
+    const completion = observeExecution(environment.runner, environment.records.installation, input, { settings, signal, transcript: environment.transcript });
     if (signal.aborted) {
       await assert.rejects(completion, { code: 'INVOCATION_CANCELLED' });
       assert.equal(environment.transcript.length, 0);
@@ -156,7 +156,7 @@ test('configuration updates and Transcript appends take effect only in the next 
   for (const content of ['first', 'next']) {
     const input = { messages: [{ role: 'user', content }] };
     assert.equal(Object.hasOwn(input, 'transcript'), false);
-    snapshots.push(await observeExecution(environment.runner, environment.recording, input, { settings: configuration, transcript: environment.transcript }));
+    snapshots.push(await observeExecution(environment.runner, environment.records.installation, input, { settings: configuration, transcript: environment.transcript }));
   }
   assert.deepEqual(
     requests.map((request) => request.model),

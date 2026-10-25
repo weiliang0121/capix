@@ -7,7 +7,10 @@ import { runtimeDefinition, recordDefinitions } from './fixtures/declarations.mj
 function fixture({ recorded = false, built = true, mapOperation = (input) => input.allowed, mapAttempt = (input) => input.leaf } = {}) {
   const counters = { capture: 0, refine: 0, describe: 0, dormant: 0 };
   const endpoints = [];
-  const offer = new ResourceOffer('test.bounded', (source, activity) => Object.freeze({ read: () => activity.runSync('read', {}, () => source.allowed) }), 'access', {
+  const offer = new ResourceOffer({
+    name: 'test.bounded',
+    expose: (source, activity) => Object.freeze({ read: () => activity.runSync('read', {}, () => source.allowed) }),
+    timing: 'access',
     capture(source) {
       counters.capture++;
       return Object.freeze({ allowed: Object.freeze([...source.allowed]) });
@@ -22,7 +25,7 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
       return { allowed: source.allowed };
     },
   });
-  const dormant = new ResourceOffer('test.dormant', () => assert.fail('unrequested endpoint'), 'access');
+  const dormant = new ResourceOffer({ name: 'test.dormant', expose: () => assert.fail('unrequested endpoint'), timing: 'access' });
   const deps = { bounded: offer.request(), dormant: dormant.request() };
   const attempt = new Node({
     name: 'leaf',
@@ -147,13 +150,13 @@ test('assembly rejects unknown targets, duplicate bindings, and refinements outs
   assert.throws(() => installCallable(definition, { ...options, childResources: [bindChildResources(unknown, [offer.refine((input) => input.allowed)])] }), /registered member/);
   assert.throws(() => installCallable(definition, { ...options, childResources: [options.childResources[0], options.childResources[0]] }), /Duplicate child resource binding/);
   assert.throws(() => bindChildResources(operation, [offer.refine(() => []), offer.refine(() => [])]), /Duplicate resource refinement/);
-  const other = new ResourceOffer('other', (source) => source, 'access', { refine: (source) => source });
+  const other = new ResourceOffer({ name: 'other', expose: (source) => source, timing: 'access', refine: (source) => source });
   assert.throws(() => installCallable(definition, { ...options, childResources: [bindChildResources(operation, [other.refine(() => [])])] }), /Refined resource is not requested/);
   assert.deepEqual(counters, { capture: 0, refine: 0, describe: 0, dormant: 0 });
 });
 
 test('offers without refinement cannot create narrowing rules and low-level selection cannot introduce offers', () => {
-  const ordinary = new ResourceOffer('ordinary', (source) => source);
+  const ordinary = new ResourceOffer({ name: 'ordinary', expose: (source) => source });
   assert.throws(() => ordinary.refine(() => null), /does not support refinement/);
   const { offer } = fixture();
   const parent = bindResources({ ordinary: ordinary.request() }, [ordinary.provide(() => null)])(null);

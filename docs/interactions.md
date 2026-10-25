@@ -20,8 +20,13 @@
 const model = new ModelSource(provider);
 const interactions = new ModelInteractions(model, { persistence: store.interactions });
 const resources = new Resources<ConversationRunOptions>();
-const calls = registerConversationResources(resources, structure, entities, interactions, { checkpoints });
-const runner = new Runner(structure.scene, resources, undefined, { ...capabilities, ...calls }).build();
+const capture = new ConversationCallCapture(structure.scene, entities, { checkpoints });
+registerConversationResources(resources, structure, entities, interactions, capture);
+const runner = new Runner(structure.scene, resources, undefined, {
+  ...capabilities,
+  validate: (options) => capture.validate(options),
+  hooks: conversationCallHooks(structure, capture),
+}).build();
 ```
 
 Observer 的 ModelInteractions 作为普通资源注册，继续负责 SSE、模型超时与固定请求校验；它不冒充通用 Interactions。通用交互注册是另一种可选接法，见 [Runner / Resources](runner-resources-pilot.md)。

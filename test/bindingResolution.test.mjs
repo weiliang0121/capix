@@ -68,7 +68,7 @@ test('declaration checks finish once per structure before any call and never rep
 });
 
 test('nodes sharing behavior use the root supply without granting it to their parents', async () => {
-  const value = new ResourceOffer('test.resolution.parent-scope', (source) => source, 'binding');
+  const value = new ResourceOffer({ name: 'test.resolution.parent-scope', expose: (source) => source, timing: 'binding' });
   const deps = { value: value.request() };
   let captures = 0;
   const behavior = { deps, execute: (work) => work.resources.value };
@@ -94,8 +94,8 @@ test('nodes sharing behavior use the root supply without granting it to their pa
 });
 
 test('built children, resource aliases and work functions stay fixed while business instances remain live', async () => {
-  const oldResource = new ResourceOffer('test.resolution.original', (value) => value);
-  const newResource = new ResourceOffer('test.resolution.replacement', (value) => value);
+  const oldResource = new ResourceOffer({ name: 'test.resolution.original', expose: (value) => value });
+  const newResource = new ResourceOffer({ name: 'test.resolution.replacement', expose: (value) => value });
   const originalRequires = { value: oldResource.request() };
   const replacementRequires = { replacement: newResource.request() };
   const originalLeaf = attempt('original-leaf', { deps: originalRequires, execute: (context) => `${context.input}:${context.resources.value}` });
@@ -104,7 +104,9 @@ test('built children, resource aliases and work functions stay fixed while busin
   const replacementOperation = operation('replacement-operation', [replacementLeaf], { deps: replacementRequires, uses: [replacementLeaf], execute: (context) => context.children.create(replacementLeaf, context.input).run() });
   class Main extends Group {
     #prefix = 'initial';
-    run = { deps: originalRequires, uses: [originalOperation], execute: this.execute.bind(this) };
+    deps = originalRequires;
+    uses = [originalOperation];
+    run = this.execute.bind(this);
     constructor() {
       super();
       this.add(originalOperation);
@@ -132,25 +134,25 @@ test('built children, resource aliases and work functions stay fixed while busin
   assert.equal(captured, 0);
   main.setPrefix('live');
   assert.throws(() => main.members.splice(0, 1, replacementOperation), TypeError);
-  assert.throws(() => main.run.uses.splice(0, 1, replacementOperation), TypeError);
+  assert.throws(() => main.uses.splice(0, 1, replacementOperation), TypeError);
   assert.throws(() => {
-    main.run.deps = replacementRequires;
+    main.deps = replacementRequires;
   }, TypeError);
   assert.throws(() => {
-    main.run.execute = () => assert.fail('replacement work');
+    main.run = () => assert.fail('replacement work');
   }, TypeError);
   originalRequires.value = newResource.request();
   assert.throws(() => {
     originalOperation.members.length = 0;
   }, TypeError);
   assert.throws(() => {
-    originalOperation.run.uses.length = 0;
+    originalOperation.uses.length = 0;
   }, TypeError);
   assert.throws(() => {
-    originalOperation.run.execute = () => null;
+    originalOperation.run = () => null;
   }, TypeError);
   assert.throws(() => {
-    originalLeaf.run.execute = () => null;
+    originalLeaf.run = () => null;
   }, TypeError);
   assert.equal(await existing.run('first', {}), 'live:first:old');
   assert.equal(await existing.run('second', {}), 'live:second:old');
@@ -181,7 +183,7 @@ test('fixed run callbacks keep their original receiver without freezing its busi
 });
 
 test('E captures resources after ordinary R input preparation and fixes its declared run receiver', async () => {
-  const value = new ResourceOffer('test.resolution.value', (source) => source);
+  const value = new ResourceOffer({ name: 'test.resolution.value', expose: (source) => source });
   const run = {
     prefix: 'original',
     deps: { value: value.request() },
@@ -198,10 +200,11 @@ test('E captures resources after ordinary R input preparation and fixes its decl
   };
   const existing = assemble(definition, options);
   run.prefix = 'live';
-  run.deps.value = new ResourceOffer('test.resolution.unavailable', (source) => source).request();
+  run.deps.value = new ResourceOffer({ name: 'test.resolution.unavailable', expose: (source) => source }).request();
   run.execute = () => assert.fail('mutated original run must not execute');
   assert.throws(() => {
-    main.run = { deps: {}, execute: (work) => `new:${work.input}` };
+    main.deps = {};
+    main.run = (work) => `new:${work.input}`;
   }, TypeError);
   assert.equal(await existing.run('one', {}), 'live:one:resource:one');
   const replacement = execution([], { deps: {}, execute: (work) => `new:${work.input}` });
@@ -228,7 +231,7 @@ test('observation declarations are fixed before lazy construction while consumer
   const definition = runtimeDefinition(main);
   const existing = assemble(definition, { observations: [] });
   observation.observe = () => assert.fail('mutated observer must not run');
-  observation.deps.unavailable = new ResourceOffer('test.resolution.observer', (value) => value).request();
+  observation.deps.unavailable = new ResourceOffer({ name: 'test.resolution.observer', expose: (value) => value }).request();
   assert.throws(() => main.observation.splice(0, 1, replacement), TypeError);
   assert.equal(await existing.run('first', {}), 'first');
   assert.equal(observation.starts, 1);
@@ -261,7 +264,7 @@ test('checkpoint contracts, codecs and continuation callbacks use the same fixed
   codec.encode = () => assert.fail('mutated codec must not be written');
   point.check = () => assert.fail('mutated point check must not run');
   resume.run = () => assert.fail('mutated continuation must not run');
-  resume.deps.unavailable = new ResourceOffer('test.resolution.checkpoint-missing', (value) => value).request();
+  resume.deps.unavailable = new ResourceOffer({ name: 'test.resolution.checkpoint-missing', expose: (value) => value }).request();
   checkpoint.points[0] = { name: 'saved', references: {}, state: codec, resume: { deps: {}, run: () => 'new continuation' } };
   checkpoint.version = 2;
   assert.equal(await existing.resume('original-root', {}), 'original continuation');

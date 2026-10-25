@@ -123,7 +123,7 @@ export function createObserverServer(options: ObserverServerOptions) {
       const id = target();
       const observer = conversations.open(id);
       const feed = feedFor(id);
-      observer.recordSource.assertComplete();
+      observer.records.source.assertComplete();
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
       const write = observationWriter(res);
       const unsubscribe = feed.connect((frame) => {
@@ -144,12 +144,12 @@ export function createObserverServer(options: ObserverServerOptions) {
     }
     if (req.method === 'GET' && url.pathname === '/api/memory') {
       const observer = conversations.open(target());
-      observer.recordSource.assertComplete();
-      return json(res, 200, observeMemory(observer.memories, observer.book));
+      observer.records.source.assertComplete();
+      return json(res, 200, observeMemory(observer.memories, observer.records.book));
     }
     if (req.method === 'GET' && url.pathname === '/api/executions') {
       const observer = conversations.open(target());
-      observer.recordSource.assertComplete();
+      observer.records.source.assertComplete();
       return json(res, 200, observeOverview(observer));
     }
     if (req.method === 'GET' && (url.pathname === '/api/transcript' || url.pathname === '/api/transcript/observe')) {
@@ -174,11 +174,11 @@ export function createObserverServer(options: ObserverServerOptions) {
     }
     if (req.method === 'GET' && url.pathname === '/api/execution') {
       const observer = conversations.open(target());
-      observer.recordSource.assertComplete();
+      observer.records.source.assertComplete();
       const id = url.searchParams.get('id') || '';
-      if (!isTaskRecord(observer.book.get(id))) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
-      const archive = executionArchive(observer.book, observer.recordingArchives, id);
-      return json(res, 200, { ...taskSnapshot(observer.book, id), ...(archive ? { archive } : {}) });
+      if (!isTaskRecord(observer.records.book.get(id))) return json(res, 404, { error: '未找到执行记录。' } satisfies ErrorResponse);
+      const archive = executionArchive(observer.records.book, observer.records.archives, id);
+      return json(res, 200, { ...taskSnapshot(observer.records.book, id), ...(archive ? { archive } : {}) });
     }
     if (req.method === 'GET' && url.pathname === '/api/source') {
       const path = url.searchParams.get('file') || '';

@@ -8,7 +8,7 @@ const codec = { encode: (value) => value, decode: (value) => value };
 
 test('actual factories bind R/E/O/A, preserve alternate input and function receivers without executing at definition time', async () => {
   let executions = 0;
-  const resource = new ResourceOffer('test.factory.value', () => 4);
+  const resource = new ResourceOffer({ name: 'test.factory.value', expose: () => 4 });
   const run = {
     factor: 3,
     deps: { value: resource.request() },

@@ -25,14 +25,14 @@ test('Observer narrows resources at each action, captures fixed values and expir
   const definition = createConversationStructure();
   const views = [];
   const inspect = (current) => {
-    const execute = current.run.execute;
+    const execute = current.run;
     current.setRun(
       function (work) {
         views.push({ definition: current, resources: { ...work.resources } });
         return execute.call(this, work);
       },
-      current.run.deps,
-      { uses: current.run.uses, accept: current.run.accept },
+      current.deps,
+      { uses: current.uses, accept: current.accept },
     );
     for (const child of current.members ?? []) inspect(child);
   };
@@ -141,8 +141,8 @@ test('a leaf missing its declared resource fails before attaching a child invoca
 });
 
 test('requests select published offer identity, not a matching name or local alias', () => {
-  const offered = new ResourceOffer('messages.read', (source) => Object.freeze({ read: () => source.text }));
-  const unrelated = new ResourceOffer('messages.read', (source) => source);
+  const offered = new ResourceOffer({ name: 'messages.read', expose: (source) => Object.freeze({ read: () => source.text }) });
+  const unrelated = new ResourceOffer({ name: 'messages.read', expose: (source) => source });
   const providers = [offered.provide((parent) => parent)];
   assert.throws(() => bindResources({ history: unrelated.request() }, providers), /received 0/);
   const bound = bindResources({ history: offered.request() }, providers)({ text: 'hello' });
@@ -154,8 +154,8 @@ test('requests select published offer identity, not a matching name or local ali
 
 test('assembly validates requests without resolving sources, and rejects duplicate providers', () => {
   let resolved = false;
-  const offer = new ResourceOffer('source', (source) => source);
-  const other = new ResourceOffer('other', (source) => source);
+  const offer = new ResourceOffer({ name: 'source', expose: (source) => source });
+  const other = new ResourceOffer({ name: 'other', expose: (source) => source });
   const provider = offer.provide(() => {
     resolved = true;
     return {};
@@ -169,8 +169,8 @@ test('assembly validates requests without resolving sources, and rejects duplica
 });
 
 test('publication supplies the access form; construction only binds the source and captures requests', () => {
-  const offer = new ResourceOffer('read', (source) => Object.freeze({ read: () => source.text }));
-  const unused = new ResourceOffer('unused', (source) => source);
+  const offer = new ResourceOffer({ name: 'read', expose: (source) => Object.freeze({ read: () => source.text }) });
+  const unused = new ResourceOffer({ name: 'unused', expose: (source) => source });
   const deps = { reader: offer.request() };
   const bind = bindResources(deps, [
     offer.provide((parent) => parent),
@@ -191,8 +191,8 @@ test('publication supplies the access form; construction only binds the source a
 });
 
 test('sequence preserves distinct offers even when children use the same alias', () => {
-  const one = new ResourceOffer('one', (source) => source);
-  const two = new ResourceOffer('two', (source) => source);
+  const one = new ResourceOffer({ name: 'one', expose: (source) => source });
+  const two = new ResourceOffer({ name: 'two', expose: (source) => source });
   const execute = () => {
     throw new Error('must not execute during assembly');
   };
@@ -318,7 +318,7 @@ test('model offers separate creation and reading while preserving provider metho
   };
   const definition = createConversationStructure();
   const generation = definition.generation;
-  const execute = generation.run.execute;
+  const execute = generation.run;
   generation.setRun(
     function (work) {
       const creator = work.resources.modelCreator;
@@ -334,8 +334,8 @@ test('model offers separate creation and reading while preserving provider metho
       assert.equal(work.transcriptRange, undefined);
       return execute.call(this, work);
     },
-    generation.run.deps,
-    { uses: generation.run.uses, accept: generation.run.accept },
+    generation.deps,
+    { uses: generation.uses, accept: generation.accept },
   );
 
   const runner = createConversationRunner(definition, entities, new ModelInteractions(new ModelSource(model)));

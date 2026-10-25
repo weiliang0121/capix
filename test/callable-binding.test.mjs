@@ -91,10 +91,13 @@ test('one fixed supply is shared while each call receives its own revocable reso
   let resolves = 0;
   const endpoints = [];
   const source = { value: 7 };
-  const offer = new ResourceOffer('callable.shared', (value, activity) => {
-    const endpoint = { read: () => activity.runSync('read', {}, () => value) };
-    endpoints.push(endpoint);
-    return endpoint;
+  const offer = new ResourceOffer({
+    name: 'callable.shared',
+    expose: (value, activity) => {
+      const endpoint = { read: () => activity.runSync('read', {}, () => value) };
+      endpoints.push(endpoint);
+      return endpoint;
+    },
   });
   const node = defineNode()({ deps: { data: offer.request() }, run: (work) => work.resources.data.read() });
   const group = defineGroup()({
@@ -130,7 +133,7 @@ test('one fixed supply is shared while each call receives its own revocable reso
 test('explicit sources can be attached to a deep group or node and do not depend on a special first layer', async () => {
   const captures = [];
   const starts = [];
-  const offer = new ResourceOffer('callable.source', (value) => value);
+  const offer = new ResourceOffer({ name: 'callable.source', expose: (value) => value });
   const inherited = defineNode()({ deps: { value: offer.request() }, run: (work) => work.resources.value });
   const rootReader = defineNode()({ deps: { value: offer.request() }, run: (work) => work.resources.value });
   const independent = defineNode()({ deps: { value: offer.request() }, run: (work) => work.resources.value });
@@ -203,7 +206,10 @@ test('a source boundary failure preserves its parent facts without attaching a f
 
 test('resource narrowing stays local even when the parent has no endpoint for the supplied resource', async () => {
   let captures = 0;
-  const offer = new ResourceOffer('callable.narrow', (values) => values, 'access', {
+  const offer = new ResourceOffer({
+    name: 'callable.narrow',
+    expose: (values) => values,
+    timing: 'access',
     capture(values) {
       captures++;
       return Object.freeze([...values]);
@@ -275,7 +281,7 @@ test('binding rejects node members, undeclared source targets and duplicate regi
 });
 
 test('host source methods and receivers are fixed during binding without freezing host state', async () => {
-  const offer = new ResourceOffer('callable.fixed-source', (value) => value);
+  const offer = new ResourceOffer({ name: 'callable.fixed-source', expose: (value) => value });
   const scene = defineScene()({ deps: { value: offer.request() }, run: (work) => work.resources.value });
   const source = {
     value: 'initial',

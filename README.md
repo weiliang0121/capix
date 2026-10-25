@@ -49,7 +49,7 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 - 独立实体由宿主建立，结构绑定其访问形式。资源捕获边界按准确声明身份配置，不因结构叫 Group 就自动重新捕获。
 - 观测消费类型化事实，记录是内置的可选结果形式。没有记录，业务调用与内容变化仍然成立。
 
-新记录为 `RecordingRootRecord → CallableRecord` 的真实调用树，保存 `structureKind` 和直接父子关系。Observer 用明确的 `conversation-task` 角色识别对话任务；不是所有 Group 都是一个 QA。任务详情沿用服务契约名 `ExecutionRecordSnapshot`，内部使用通用 `calls` 列表；旧 REOA 记录保留只读投影。Checkpoint 已升级为 Frame v4，旧格式不自动迁移或恢复，但不影响健康消息、记忆与历史记录读取。
+新记录为 `RecordingRootRecord → CallableRecord` 的真实调用树，保存 `structureKind` 和直接父子关系。Observer 用明确的 `conversation-task` 角色识别对话任务；不是所有 Group 都是一个 QA。任务详情沿用服务契约名 `ExecutionRecordSnapshot`，内部使用通用 `calls` 列表；旧 REOA 记录保留只读投影。Checkpoint 已升级为 Frame v5，旧格式不自动迁移或恢复，但不影响健康消息、记忆与历史记录读取。
 
 ## 同一个服务中的两种职责
 

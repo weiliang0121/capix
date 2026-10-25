@@ -116,14 +116,12 @@ test('equivalent children have independent parent Accepted values in factory and
       this.add(namedChild);
     }
     receptions = [count];
-    run = {
-      deps: {},
-      async execute(work) {
-        const call = work.children.create(namedChild, 'hello');
-        await call.run();
-        await call.accept(count, (result) => result.length);
-        return work.children.facts.accepted(call.ref, count);
-      },
+    deps = {};
+    run = async function (work) {
+      const call = work.children.create(namedChild, 'hello');
+      await call.run();
+      await call.accept(count, (result) => result.length);
+      return work.children.facts.accepted(call.ref, count);
     };
   }
   assert.equal(await runtime(factoryParent).run(null, {}), 'text:hello');

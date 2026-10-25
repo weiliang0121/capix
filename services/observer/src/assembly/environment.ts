@@ -1,15 +1,15 @@
 import { RuntimeError, type Resources, type Clock, type ChangeBuffer, type CheckpointStore, type InvocationControls } from '@capix/server-runtime';
-import type { RecordBook, Recorder, RecordingInstallation } from '@capix/server-runtime/recording';
 import type { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
-import type { ObserverChange, RecordingArchive } from '@capix/protocol';
-import type { ConversationStructure, ConversationScene } from '../conversation/scene.js';
-import type { ConversationRunner, ConversationRunOptions } from '../conversation/binding.js';
+import type { ObserverChange } from '@capix/protocol';
+import type { ConversationScene } from '../conversation/scene.js';
+import type { ConversationStructure } from '../conversation/structure.js';
+import type { ConversationRunner, ConversationRunOptions } from '../conversation/binding/contract.js';
 import type { ConversationCheckpointRuns } from '../conversation/checkpoints.js';
 import { conversationCheckpointConfiguration, validateConversationCheckpointRestoration } from '../conversation/binding/checkpoint.js';
 import type { ModelSource } from '../conversation/model/source.js';
 import type { ModelInteractions } from '../conversation/model/interactions.js';
 import type { TranscriptFeed } from '../conversation/transcript/feed.js';
-import type { RecordSource } from '../observation/record/source.js';
+import type { ObserverRecording } from '../observation/record/installation.js';
 import type { CheckpointObservation } from '../observation/checkpoints.js';
 import type { WorkspaceFiles } from '../files/index.js';
 import type { SqliteObserverStore } from '../persistence/store.js';
@@ -23,15 +23,11 @@ export interface ObserverEnvironmentParts {
   readonly files?: WorkspaceFiles;
   readonly model: ModelSource;
   readonly interactions: ModelInteractions;
-  readonly book: RecordBook;
   readonly clock: Clock;
-  readonly recorder: Recorder;
-  readonly recording: RecordingInstallation;
+  readonly records: ObserverRecording;
   readonly resources: Resources<ConversationRunOptions>;
   readonly runner: ConversationRunner;
   readonly structure: ConversationStructure;
-  readonly recordSource: RecordSource;
-  readonly recordingArchives: readonly RecordingArchive[];
   readonly persistence?: SqliteObserverStore;
   readonly checkpoints: CheckpointStore;
   readonly checkpointRuns: ConversationCheckpointRuns;
@@ -48,19 +44,15 @@ export class ObserverEnvironment {
   readonly files?: WorkspaceFiles;
   readonly model: ModelSource;
   readonly interactions: ModelInteractions;
-  readonly book: RecordBook;
   readonly clock: Clock;
-  readonly recorder: Recorder;
-  readonly recording: RecordingInstallation;
+  readonly records: ObserverRecording;
   readonly resources: Resources<ConversationRunOptions>;
   readonly runner: ConversationRunner;
   readonly scene: ConversationScene;
   readonly changes: ChangeBuffer<ObserverChange>;
   readonly structure: ConversationStructure;
   readonly consumer: ChangeConsumer;
-  readonly recordSource: RecordSource;
   readonly transcripts: TranscriptFeed;
-  readonly recordingArchives: readonly RecordingArchive[];
   readonly persistence?: SqliteObserverStore;
   readonly checkpoints: CheckpointStore;
   readonly checkpointRuns: ConversationCheckpointRuns;
@@ -83,16 +75,12 @@ export class ObserverEnvironment {
     this.files = parts.files;
     this.model = parts.model;
     this.interactions = parts.interactions;
-    this.book = parts.book;
     this.clock = parts.clock;
-    this.recorder = parts.recorder;
-    this.recording = parts.recording;
+    this.records = parts.records;
     this.resources = parts.resources;
     this.runner = parts.runner;
     this.scene = parts.structure.scene;
     this.structure = parts.structure;
-    this.recordSource = parts.recordSource;
-    this.recordingArchives = parts.recordingArchives;
     this.persistence = parts.persistence;
     this.checkpoints = parts.checkpoints;
     this.checkpointRuns = parts.checkpointRuns;
@@ -126,8 +114,7 @@ export class ObserverEnvironment {
       () => this.lifetime.releaseObservation(),
       () => this.interactions.close(),
       () => this.checkpointObservation.close(),
-      () => this.persistence?.sealRecording(this.recorder.id, this.recorder.revision),
-      () => this.recordSource.close(),
+      () => this.records.close(),
       () => {
         if (this.lifetime.ownsContent) this.content.close();
       },

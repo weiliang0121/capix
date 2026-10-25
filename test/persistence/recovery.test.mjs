@@ -53,7 +53,7 @@ for (const [name, damage] of [
     const left = first.open(leftId);
     await run(left);
     await run(first.open(rightId), '其他对话');
-    const sourceId = left.recorder.id;
+    const sourceId = left.records.recorder.id;
     first.close();
     disk.edit((database) => damage(database, sourceId));
 
@@ -65,11 +65,11 @@ for (const [name, damage] of [
     assert.equal(environment.transcript, content.transcript);
     assert.equal(environment.memories, content.memories);
     assert.throws(
-      () => environment.recordSource.assertComplete(),
+      () => environment.records.source.assertComplete(),
       (error) => error.code === 'SOURCE_INCOMPLETE',
     );
     assert.equal(restored.persistence.failure, undefined);
-    assert.doesNotThrow(() => restored.open(rightId).recordSource.assertComplete());
+    assert.doesNotThrow(() => restored.open(rightId).records.source.assertComplete());
     await run(environment, '继续健康内容');
     assert.equal(content.transcript.length, 4);
     assert.equal(restored.persistence.failure, undefined);

@@ -17,23 +17,21 @@ function assemble(execution, providers = [], recorder) {
 test('peer declarations share fixed supplies but have separate aliases and phase endpoints', async () => {
   let captures = 0;
   let late = 0;
-  const shared = new ResourceOffer('test.shared', (source, activity) => ({ read: () => activity.runSync('read', {}, () => source) }), 'binding');
-  const recovery = new ResourceOffer('test.recovery', (source, activity) => ({ read: () => activity.runSync('read', {}, () => source) }), 'access');
+  const shared = new ResourceOffer({ name: 'test.shared', expose: (source, activity) => ({ read: () => activity.runSync('read', {}, () => source) }), timing: 'binding' });
+  const recovery = new ResourceOffer({ name: 'test.recovery', expose: (source, activity) => ({ read: () => activity.runSync('read', {}, () => source) }), timing: 'access' });
   const recorder = new Recorder(new RecordBook());
   let call;
   class Main extends Group {
     raises = [rejected];
-    run = {
-      deps: { value: shared.request() },
-      execute(work) {
-        assert.deepEqual(Object.keys(work.resources), ['value']);
-        assert.equal(work.resources.value.read(), 7);
-        if (work.round === 1) {
-          assert.equal(late, 0);
-          throw rejected.create('expected', { at: 1 });
-        }
-        return work.input;
-      },
+    deps = { value: shared.request() };
+    run = function (work) {
+      assert.deepEqual(Object.keys(work.resources), ['value']);
+      assert.equal(work.resources.value.read(), 7);
+      if (work.round === 1) {
+        assert.equal(late, 0);
+        throw rejected.create('expected', { at: 1 });
+      }
+      return work.input;
     };
     maxRounds = 2;
     exceptions = {
@@ -81,9 +79,10 @@ test('peer declarations share fixed supplies but have separate aliases and phase
 });
 
 test('handler-only lazy resources are not obtained on the success path', async () => {
-  const unused = new ResourceOffer('test.unused', (value) => value, 'access');
+  const unused = new ResourceOffer({ name: 'test.unused', expose: (value) => value, timing: 'access' });
   class Main extends Group {
-    run = { deps: {}, execute: () => 'done' };
+    deps = {};
+    run = () => 'done';
     exceptions = { deps: { unused: unused.request() }, accepts: [rejected], handle: () => assert.fail('not entered') };
   }
   const runtime = assemble(new Main(), [unused.provide(() => assert.fail('handler resource must remain lazy'))]);
@@ -98,17 +97,16 @@ test('a caught child error blocks later child entry admission and reception work
     name = 'good';
     label = 'good';
     source = 'test';
-    run = { deps: {}, execute: () => 'done' };
+    deps = {};
+    run = () => 'done';
   }
   class Bad extends Group {
     name = 'bad';
     label = 'bad';
     source = 'test';
-    run = {
-      deps: {},
-      execute: () => {
-        throw failure;
-      },
+    deps = {};
+    run = () => {
+      throw failure;
     };
   }
   const good = new Good();
@@ -122,25 +120,23 @@ test('a caught child error blocks later child entry admission and reception work
       super();
       this.add(good, bad);
     }
-    run = {
-      deps: {},
-      async execute(work) {
-        const completed = work.children.create(good, null);
-        assert.equal(await completed.run(), 'done');
-        await assert.rejects(work.children.create(bad, null).run(), (error) => error === failure);
-        assert.throws(
-          () => work.children.entry(entry, null),
-          (error) => error === failure,
-        );
-        await assert.rejects(
-          completed.accept(() => {
-            receptionEffects++;
-            return 'accepted';
-          }),
-          (error) => error === failure,
-        );
-        return 'caught';
-      },
+    deps = {};
+    run = async function (work) {
+      const completed = work.children.create(good, null);
+      assert.equal(await completed.run(), 'done');
+      await assert.rejects(work.children.create(bad, null).run(), (error) => error === failure);
+      assert.throws(
+        () => work.children.entry(entry, null),
+        (error) => error === failure,
+      );
+      await assert.rejects(
+        completed.accept(() => {
+          receptionEffects++;
+          return 'accepted';
+        }),
+        (error) => error === failure,
+      );
+      return 'caught';
     };
   }
   await assert.rejects(assemble(new Main()).run(null, {}), (error) => error === failure);
@@ -149,16 +145,14 @@ test('a caught child error blocks later child entry admission and reception work
 });
 
 test('retained work endpoints cannot be used during exception handling even if its error is caught', async () => {
-  const resource = new ResourceOffer('test.phase', (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }));
+  const resource = new ResourceOffer({ name: 'test.phase', expose: (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }) });
   let saved;
   class Main extends Group {
     raises = [rejected];
-    run = {
-      deps: { value: resource.request() },
-      execute(work) {
-        saved = work.resources.value;
-        throw rejected.create('expected', null);
-      },
+    deps = { value: resource.request() };
+    run = function (work) {
+      saved = work.resources.value;
+      throw rejected.create('expected', null);
     };
     exceptions = {
       deps: {},
@@ -178,7 +172,8 @@ test('child use grants are separate for run and handler, and invalid ownership f
     name = 'work';
     label = 'work';
     source = 'test';
-    run = { deps: {}, execute: () => 'child' };
+    deps = {};
+    run = () => 'child';
   }
   const child = new Work();
   class Main extends Group {
@@ -187,12 +182,10 @@ test('child use grants are separate for run and handler, and invalid ownership f
       this.add(child);
     }
     raises = [rejected];
-    run = {
-      deps: {},
-      uses: [child],
-      execute: () => {
-        throw rejected.create('expected', null);
-      },
+    deps = {};
+    uses = [child];
+    run = () => {
+      throw rejected.create('expected', null);
     };
     exceptions = {
       deps: {},
@@ -225,12 +218,10 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
   let descriptions = 0;
   let call;
   class Main extends Group {
-    run = {
-      deps: {},
-      execute(work) {
-        assert.equal(work.input, input);
-        return output;
-      },
+    deps = {};
+    run = function (work) {
+      assert.equal(work.input, input);
+      return output;
     };
     observation = [
       invocationRecording(
@@ -271,13 +262,14 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
 });
 
 test('exception content can perform declared child work using only its granted resources', async () => {
-  const resource = new ResourceOffer('test.repair', (value) => value, 'access');
+  const resource = new ResourceOffer({ name: 'test.repair', expose: (value) => value, timing: 'access' });
   let resolved = 0;
   class Repair extends Group {
     name = 'repair';
     label = 'repair';
     source = 'test';
-    run = { deps: { value: resource.request() }, execute: (work) => work.resources.value };
+    deps = { value: resource.request() };
+    run = (work) => work.resources.value;
   }
   const child = new Repair();
   class Main extends Group {
@@ -286,12 +278,10 @@ test('exception content can perform declared child work using only its granted r
       super();
       this.add(child);
     }
-    run = {
-      deps: {},
-      uses: [],
-      execute: () => {
-        throw rejected.create('needs repair', null);
-      },
+    deps = {};
+    uses = [];
+    run = () => {
+      throw rejected.create('needs repair', null);
     };
     exceptions = {
       deps: { repair: resource.request() },
@@ -315,7 +305,7 @@ test('exception content can perform declared child work using only its granted r
 });
 
 test('handler resource failure exits as an error without repeating work or handling', async () => {
-  const resource = new ResourceOffer('test.failed-repair', (value) => value, 'access');
+  const resource = new ResourceOffer({ name: 'test.failed-repair', expose: (value) => value, timing: 'access' });
   const failure = new Error('repair unavailable');
   let executions = 0;
   let handlings = 0;
@@ -324,12 +314,10 @@ test('handler resource failure exits as an error without repeating work or handl
   class Main extends Group {
     raises = [rejected];
     maxRounds = 2;
-    run = {
-      deps: {},
-      execute: () => {
-        executions++;
-        throw rejected.create('expected', null);
-      },
+    deps = {};
+    run = () => {
+      executions++;
+      throw rejected.create('expected', null);
     };
     exceptions = {
       deps: { repair: resource.request() },
@@ -366,17 +354,18 @@ for (const position of ['capture', 'expose']) {
   test(`a declared exception thrown by resource ${position} remains a binding error`, async () => {
     let handled = 0;
     const failure = rejected.create('not a business rejection', null);
-    const resource = new ResourceOffer(
-      'test.binding-failure',
-      () => {
+    const resource = new ResourceOffer({
+      name: 'test.binding-failure',
+      expose: () => {
         if (position === 'expose') throw failure;
         return 1;
       },
-      'access',
-    );
+      timing: 'access',
+    });
     class Main extends Group {
       raises = [rejected];
-      run = { deps: { value: resource.request() }, execute: (work) => work.resources.value };
+      deps = { value: resource.request() };
+      run = (work) => work.resources.value;
       exceptions = {
         deps: {},
         accepts: [rejected],
@@ -403,7 +392,8 @@ for (const gap of ['runtime', 'execution']) {
       name = 'child';
       label = 'child';
       source = 'test';
-      run = { deps: {}, execute: () => 'done' };
+      deps = {};
+      run = () => 'done';
       observation = [invocationRecording()];
     }
     const child = new Child();
@@ -412,7 +402,8 @@ for (const gap of ['runtime', 'execution']) {
         super();
         this.add(child);
       }
-      run = { deps: {}, execute: () => 'done' };
+      deps = {};
+      run = () => 'done';
       observation = gap === 'runtime' ? [invocationRecording()] : undefined;
     }
     const execution = new Main();

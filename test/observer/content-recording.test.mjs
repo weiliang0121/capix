@@ -27,7 +27,7 @@ test('prepared and maintained material records reference large message bodies wh
   try {
     environment.memories.apply([{ action: 'create', memoryId: null, change: 'initial memory', sourceIndexes: [0], result: { topic: 'topic', content: 'historic memory value', sourceIndexes: [0] } }]);
     const memory = environment.memories.snapshot()[0];
-    const snapshot = await observeExecution(environment.runner, environment.recording, { messages: [{ role: 'user', content: 'question' }] }, { settings });
+    const snapshot = await observeExecution(environment.runner, environment.records.installation, { messages: [{ role: 'user', content: 'question' }] }, { settings });
     assert.equal(snapshot.execution.status, 'succeeded');
     const preparation = snapshot.calls.find((item) => item.name === 'prepareContext');
     const maintenance = snapshot.calls.filter((item) => item.name === 'maintainContext');
@@ -61,7 +61,7 @@ test('prepared and maintained material records reference large message bodies wh
     assert.equal(environment.checkpoints.read(snapshot.execution.contextId).image.state.prepared.material.messages[0].message.content, history.content);
     assert.ok(requests.find((entry) => entry.purpose === 'answer').request.messages.some((message) => message.content.includes(history.content)));
 
-    const selection = observeSelection(environment.book, environment.transcript);
+    const selection = observeSelection(environment.records.book, environment.transcript);
     assert.equal(selection.messages[0].count, 1);
     assert.deepEqual(selection.executions[0].selections[0].indexes, [0]);
     const overview = observeOverview(environment);
@@ -71,7 +71,7 @@ test('prepared and maintained material records reference large message bodies wh
     assert.deepEqual(projected.executions[0].availableMemoryIds, [memory.id]);
 
     environment.memories.apply([{ action: 'update', memoryId: memory.id, change: 'later memory', sourceIndexes: [0], result: { topic: 'topic', content: 'current memory value', sourceIndexes: [0] } }]);
-    const detail = projectDetail(snapshot, observeMemory(environment.memories, environment.book));
+    const detail = projectDetail(snapshot, observeMemory(environment.memories, environment.records.book));
     assert.equal(detail.memory.incoming[0].content, 'historic memory value');
     assert.equal(detail.calls.get(preparation.id).memory.incoming[0].content, 'historic memory value');
   } finally {

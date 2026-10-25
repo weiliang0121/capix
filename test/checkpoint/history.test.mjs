@@ -11,13 +11,11 @@ function harness(store, resume, calls, reception = false) {
   class Child extends Group {
     raises = [rejected];
     checkpoint = { key: 'fixture.history.child', version: 1, input: codec, output: codec, points: [] };
-    run = {
-      deps: {},
-      execute() {
-        calls.child++;
-        if (reception) return { answer: 'successful child output' };
-        throw rejected.create('invalid first output', { source: 'model' });
-      },
+    deps = {};
+    run = function () {
+      calls.child++;
+      if (reception) return { answer: 'successful child output' };
+      throw rejected.create('invalid first output', { source: 'model' });
     };
   }
   const child = new Child();
@@ -39,24 +37,22 @@ function harness(store, resume, calls, reception = false) {
         return work.continue({ retry: true }, 'one declared retry');
       },
     };
-    run = {
-      deps: {},
-      uses: [child],
-      execute: async (work) => {
-        if (work.round === 1) {
-          const call = work.children.create(child, {}, { key: 'rejected' });
-          const output = await call.run();
-          if (reception) {
-            const receive = () => {
-              throw rejected.create('parent refused successful output', { source: 'acceptance' });
-            };
-            return reception === 'typed' ? call.accept(contract, receive) : call.accept(receive);
-          }
-          return output;
+    deps = {};
+    uses = [child];
+    run = async (work) => {
+      if (work.round === 1) {
+        const call = work.children.create(child, {}, { key: 'rejected' });
+        const output = await call.run();
+        if (reception) {
+          const receive = () => {
+            throw rejected.create('parent refused successful output', { source: 'acceptance' });
+          };
+          return reception === 'typed' ? call.accept(contract, receive) : call.accept(receive);
         }
-        work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: {} });
-        return 'second round result';
-      },
+        return output;
+      }
+      work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: {} });
+      return 'second round result';
     };
   }
   return installCallable(new Root(), { source, providers: [], checkpoints: { store } });

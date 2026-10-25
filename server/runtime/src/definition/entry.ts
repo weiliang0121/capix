@@ -26,12 +26,6 @@ export class InvocationEntry<Definition extends ChildCallable, EntryInput> imple
   ) {
     Object.freeze(this);
   }
-  get run() {
-    return this.definition.run;
-  }
-  get exceptions() {
-    return this.definition.exceptions;
-  }
 }
 
 export function defineChildEntry<Definition extends ChildCallable, Input>(definition: Definition, entry: { readonly accept: (request: ChildEntryInput<Input>) => NoInfer<CallableInput<Definition>> }): InvocationEntry<Definition, Input> {

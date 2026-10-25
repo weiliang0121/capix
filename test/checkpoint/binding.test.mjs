@@ -51,12 +51,10 @@ function assemble(definition, options = {}) {
 test('checkpoint declarations do not change normal execution when persistence is absent', async () => {
   class Root extends Scene {
     checkpoint = checkpoint('test.optional', () => assert.fail('not resuming'));
-    run = {
-      deps: {},
-      execute(work) {
-        assert.equal(work.checkpoint, undefined);
-        return work.initialInput;
-      },
+    deps = {};
+    run = function (work) {
+      assert.equal(work.checkpoint, undefined);
+      return work.initialInput;
     };
   }
   const runtime = assemble(new Root());
@@ -66,16 +64,16 @@ test('checkpoint declarations do not change normal execution when persistence is
 });
 
 test('a checkpoint continuation exposes only its declared resources, and installs the original work identity', async () => {
-  const normal = new ResourceOffer('test.checkpoint.normal', () => assert.fail('normal work endpoint must not be exposed'), 'binding');
+  const normal = new ResourceOffer({ name: 'test.checkpoint.normal', expose: () => assert.fail('normal work endpoint must not be exposed'), timing: 'binding' });
   let resumed = 0;
-  const continuation = new ResourceOffer(
-    'test.checkpoint.resume',
-    (value) => {
+  const continuation = new ResourceOffer({
+    name: 'test.checkpoint.resume',
+    expose: (value) => {
       resumed++;
       return { read: () => value };
     },
-    'binding',
-  );
+    timing: 'binding',
+  });
   class Root extends Scene {
     checkpoint = checkpoint(
       'test.resources',
@@ -89,7 +87,8 @@ test('a checkpoint continuation exposes only its declared resources, and install
       },
       { continuation: continuation.request() },
     );
-    run = { deps: { normal: normal.request() }, execute: () => assert.fail('normal execution cannot be replayed') };
+    deps = { normal: normal.request() };
+    run = () => assert.fail('normal execution cannot be replayed');
   }
   const store = storeOf(head('test.resources', 'root-1', 'scene', { answer: 'saved answer' }));
   const runtime = assemble(new Root(), {
@@ -111,7 +110,8 @@ test('resuming a direct member uses fixed input without repeating parent prepara
       assert.deepEqual(work.initialInput, { original: 'child-1' });
       return state.answer;
     });
-    run = { deps: {}, execute: () => assert.fail('child execute must not repeat') };
+    deps = {};
+    run = () => assert.fail('child execute must not repeat');
   }
   const child = new Child();
   class Root extends Scene {
@@ -129,7 +129,8 @@ test('resuming a direct member uses fixed input without repeating parent prepara
       {},
       [child],
     );
-    run = { deps: {}, execute: () => assert.fail('parent execute must not repeat') };
+    deps = {};
+    run = () => assert.fail('parent execute must not repeat');
   }
   const relation = { target: { position: 0 }, identity: { contextId: 'child-1', kind: 'group', parentContextId: 'parent-1' }, contract: { key: 'test.child', version: 1 }, round: 1, order: 0, key: 'selected-execution', input: { original: 'child-1' }, state: { kind: 'waiting' } };
   const store = storeOf(head('test.parent', 'parent-1', 'scene', {}, [relation]), head('test.child', 'child-1', 'group', { answer: 'fixed response' }, [], 'parent-1'));
@@ -154,12 +155,10 @@ test('a new member created within recovery still registers its new call before w
   const order = [];
   let identity;
   class Child extends Group {
-    run = {
-      deps: {},
-      execute(work) {
-        order.push('execute');
-        return work.input;
-      },
+    deps = {};
+    run = function (work) {
+      order.push('execute');
+      return work.input;
     };
   }
   const child = new Child();
@@ -178,7 +177,8 @@ test('a new member created within recovery still registers its new call before w
       {},
       [child],
     );
-    run = { deps: {}, execute: () => assert.fail('parent execute must not repeat') };
+    deps = {};
+    run = () => assert.fail('parent execute must not repeat');
   }
   const runtime = assemble(new Root(), {
     checkpoints: { store: storeOf(head('test.parent-new-child', 'parent-1', 'scene', {})) },
@@ -205,39 +205,44 @@ test('a new member created within recovery still registers its new call before w
 });
 
 test('checkpoint-only resources and children must be covered during assembly', () => {
-  const missing = new ResourceOffer('test.checkpoint.missing', (value) => value);
+  const missing = new ResourceOffer({ name: 'test.checkpoint.missing', expose: (value) => value });
   class Root extends Scene {
     checkpoint = checkpoint('test.invalid-resource', () => null, { missing: missing.request() });
-    run = { deps: {}, execute: () => null };
+    deps = {};
+    run = () => null;
   }
   assert.throws(() => assemble(new Root()), /Expected one resource provider/);
   class Unknown extends Group {
     name = 'unknown';
     label = 'unknown';
     source = 'test';
-    run = { deps: {}, execute: () => null };
+    deps = {};
+    run = () => null;
   }
   const unknown = new Unknown();
   class BadChild extends Group {
     checkpoint = checkpoint('test.invalid-child', () => null, {}, [unknown]);
-    run = { deps: {}, execute: () => null };
+    deps = {};
+    run = () => null;
   }
   class BadRoot extends Scene {
     constructor() {
       super();
       this.add(new BadChild());
     }
-    run = { deps: {}, execute: () => null };
+    deps = {};
+    run = () => null;
   }
   assert.throws(() => assemble(new BadRoot()), /outside its owner/);
 });
 
 test('restoration rejects incompatible ownership and contract before constructing resource captures', async () => {
   let captures = 0;
-  const resource = new ResourceOffer('test.checkpoint.guard', (value) => value);
+  const resource = new ResourceOffer({ name: 'test.checkpoint.guard', expose: (value) => value });
   class Root extends Scene {
     checkpoint = checkpoint('test.guard', () => null, { value: resource.request() });
-    run = { deps: {}, execute: () => assert.fail('not running') };
+    deps = {};
+    run = () => assert.fail('not running');
   }
   for (const saved of [head('other.contract', 'root-1', 'scene', {}), head('test.guard', 'root-1', 'group', {}, [], 'another-parent')]) {
     const runtime = assemble(new Root(), {
@@ -258,9 +263,10 @@ test('restoration rejects incompatible ownership and contract before constructin
 
 test('restored work and newly created descendants use the recovery observation source', async () => {
   const facts = [];
-  const resource = new ResourceOffer('test.checkpoint.observed', (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }));
+  const resource = new ResourceOffer({ name: 'test.checkpoint.observed', expose: (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }) });
   class Child extends Group {
-    run = { deps: { value: resource.request() }, execute: (work) => work.resources.value.read() };
+    deps = { value: resource.request() };
+    run = (work) => work.resources.value.read();
   }
   const child = new Child();
   class Root extends Scene {
@@ -278,7 +284,8 @@ test('restored work and newly created descendants use the recovery observation s
       {},
       [child],
     );
-    run = { deps: {}, execute: () => assert.fail('not running original work') };
+    deps = {};
+    run = () => assert.fail('not running original work');
   }
   const runtime = assemble(new Root(), {
     checkpoints: { store: storeOf(head('test.observation', 'root-1', 'scene', {})), observation: { observe: (fact) => facts.push(fact) } },
@@ -300,7 +307,8 @@ for (const failure of [undefined, 'propagate']) {
     const facts = [];
     class Root extends Scene {
       checkpoint = checkpoint('test.expected', () => assert.fail('incompatible work must not run'));
-      run = { deps: {}, execute: () => assert.fail('not normal execution') };
+      deps = {};
+      run = () => assert.fail('not normal execution');
     }
     const runtime = assemble(new Root(), {
       checkpoints: {
@@ -339,7 +347,7 @@ for (const stage of ['point', 'codec', 'capture']) {
   test(`a restore ${stage} construction failure is observed once before invocation installation`, async () => {
     const expected = new Error(`${stage} unavailable`);
     const facts = [];
-    const resource = new ResourceOffer(`test.restore.${stage}`, () => assert.fail('unavailable work must not expose a resource'), 'binding');
+    const resource = new ResourceOffer({ name: `test.restore.${stage}`, expose: () => assert.fail('unavailable work must not expose a resource'), timing: 'binding' });
     class Root extends Scene {
       checkpoint = {
         ...checkpoint('test.construction', () => assert.fail('not resuming'), { resource: resource.request() }),
@@ -353,7 +361,8 @@ for (const stage of ['point', 'codec', 'capture']) {
               }
             : codec,
       };
-      run = { deps: {}, execute: () => assert.fail('not normal execution') };
+      deps = {};
+      run = () => assert.fail('not normal execution');
     }
     const saved = head('test.construction', 'root-1', 'scene', {});
     if (stage === 'point') saved.image.point = 'unknown-point';

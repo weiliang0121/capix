@@ -137,18 +137,18 @@ test('restored environment continues a new QA while retaining original queryable
   const disk = fixture(t);
   const first = initializeObserver(provider, [], { persistence: disk.open() });
   await first.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
-  const expected = first.book.exportState();
-  const oldRoot = first.recording.root.id;
+  const expected = first.records.book.exportState();
+  const oldRoot = first.records.installation.root.id;
   const oldTranscript = first.transcript.id;
-  const execution = first.book.values().find((record) => record instanceof CallableRecord && record.role === 'conversation-task');
+  const execution = first.records.book.values().find((record) => record instanceof CallableRecord && record.role === 'conversation-task');
   first.close();
   const restored = initializeObserver(provider, [], { persistence: disk.open() });
   disk.track(restored);
   assert.equal(restored.transcript.id, oldTranscript);
-  assert.notEqual(restored.recording.root.id, oldRoot);
-  assert.equal(restored.recordingArchives[0].state, 'sealed');
-  for (const entry of expected.entries) assert.deepEqual(restored.book.get(entry.data.id).toJSON(), entry.data);
-  const snapshot = CallableRecordHelper.snapshot(restored.recorder, execution.id);
+  assert.notEqual(restored.records.installation.root.id, oldRoot);
+  assert.equal(restored.records.archives[0].state, 'sealed');
+  for (const entry of expected.entries) assert.deepEqual(restored.records.book.get(entry.data.id).toJSON(), entry.data);
+  const snapshot = CallableRecordHelper.snapshot(restored.records.recorder, execution.id);
   validateExecutionRecordSnapshot(snapshot);
   assert.equal(snapshot.execution.status, 'succeeded');
   await restored.runner.run({ messages: [{ role: 'user', content: '下一轮' }] }, { settings });
@@ -157,7 +157,7 @@ test('restored environment continues a new QA while retaining original queryable
   assert.equal(overview.executions.length, 2);
   assert.equal(overview.executions[0].archive.state, 'sealed');
   assert.equal(overview.executions[1].archive, undefined);
-  assert.ok(restored.recorder.tree.children(oldRoot).every((record) => record.historical));
+  assert.ok(restored.records.recorder.tree.children(oldRoot).every((record) => record.historical));
 });
 
 test('optional record saving failure preserves content and saves an honest incomplete archive prefix', async (t) => {
@@ -169,7 +169,7 @@ test('optional record saving failure preserves content and saves an honest incom
   await first.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });
   assert.equal(first.transcript.length, 2);
   assert.equal(store.failure, undefined, 'record constraint failure is not a content failure');
-  assert.throws(() => first.recordSource.assertComplete(), /不完整/);
+  assert.throws(() => first.records.source.assertComplete(), /不完整/);
   first.close();
   const reopened = disk.open();
   const state = reopened.loadRecording();
@@ -177,6 +177,6 @@ test('optional record saving failure preserves content and saves an honest incom
   const restored = initializeObserver(provider, [], { persistence: reopened });
   disk.track(restored);
   assert.equal(restored.transcript.length, 2);
-  assert.equal(restored.recordingArchives[0].state, 'incomplete');
-  assert.doesNotThrow(() => restored.recordSource.assertComplete(), 'new source may be healthy without concealing archive gap');
+  assert.equal(restored.records.archives[0].state, 'incomplete');
+  assert.doesNotThrow(() => restored.records.source.assertComplete(), 'new source may be healthy without concealing archive gap');
 });

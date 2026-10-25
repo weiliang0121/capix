@@ -46,20 +46,20 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
     this.output = declaration.output;
     this.maxRounds = declaration.maxRounds;
     this.raises = declaration.raises;
-    this.accept = declaration.run.accept ? this.receive.bind(this) : undefined;
+    this.accept = declaration.accept ? this.receive.bind(this) : undefined;
     this.exceptions = declaration.exceptions ? { accepts: declaration.exceptions.accepts, handle: this.handle.bind(this) } : undefined;
     this.checkpoint = declaration.checkpoint ? this.bindCheckpoint(declaration.checkpoint) : undefined;
   }
 
   async execute(_context: Context, invocation: Invocation<Input, Output, Context>) {
-    const run = this.declaration.run;
-    const access = this.accessFor(invocation).enter('run', run.deps, run.uses);
-    return authorOutput(await run.execute(this.executionWork(invocation, access) as never));
+    const declaration = this.declaration;
+    const access = this.accessFor(invocation).enter('run', declaration.deps, declaration.uses);
+    return authorOutput(await declaration.run(this.executionWork(invocation, access) as never));
   }
 
   private async receive(_context: Context, output: Output, invocation: Invocation<Input, Output, Context>) {
-    const run = this.declaration.run;
-    const access = this.accessFor(invocation).enter('receive', run.deps, run.uses);
+    const declaration = this.declaration;
+    const access = this.accessFor(invocation).enter('receive', declaration.deps, declaration.uses);
     const proposals = new WeakMap<AcceptanceProposal, Continuation<Input>>();
     const work = Object.freeze({
       ...access.base,
@@ -73,7 +73,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
         return proposal as unknown as Continue<Input>;
       },
     });
-    const result = await run.accept!(work as never);
+    const result = await declaration.accept!(work as never);
     if (result instanceof AcceptanceProposal) {
       const continuation = proposals.get(result);
       if (!continuation) throw new Error('Continuation was not issued by this acceptance phase');

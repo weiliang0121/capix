@@ -33,7 +33,7 @@ export * from './binding/observation.js';
 export * from './binding/resources.js';
 export { Resource } from './resource/resource.js';
 export type { ResourceOperation, ResourceMethods } from './resource/methods.js';
-export { ResourceOffer, type ResourceRequest, type ResourceProvider, type ResourceRefinement, type ResourceRequests, type ResourcesOf } from './resource/offer.js';
+export { ResourceOffer, type ResourceExposureDeclaration, type ResourceRequest, type ResourceProvider, type ResourceRefinement, type ResourceRequests, type ResourcesOf } from './resource/offer.js';
 export * from './resource/bindings.js';
 export { Resources, CapturedResources } from './resource/resources.js';
 export { ResourceActivity, type ResourceInteractionDescription, type ResourceOwner } from './resource/activity.js';

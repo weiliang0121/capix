@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { ProgressChannel, Resources, Runner } from '@capix/server-runtime';
 import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import { initializeObserver } from '@capix/observer-service/assembly';
-import { ActiveContent, createConversationStructure, ModelInteractions, ModelSource, registerConversationResources } from '@capix/observer-service/conversation';
+import { ActiveContent, createConversationStructure, ModelInteractions, ModelSource, registerConversationResources, ConversationCallCapture, conversationCallHooks } from '@capix/observer-service/conversation';
 
 const settings = () => ({ model: 'initial-model', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 });
 const input = (content) => ({ messages: [{ role: 'user', content }] });
@@ -134,8 +134,9 @@ test('conversation registration fixes entity identities without freezing the cal
   t.after(() => model.close());
   const structure = createConversationStructure();
   const resources = new Resources();
-  const calls = registerConversationResources(resources, structure, entities, model);
-  const runner = new Runner(structure.scene, resources, undefined, calls).build();
+  const capture = new ConversationCallCapture(structure.scene, entities);
+  registerConversationResources(resources, structure, entities, model, capture);
+  const runner = new Runner(structure.scene, resources, undefined, { validate: (options) => capture.validate(options), hooks: conversationCallHooks(structure, capture) }).build();
 
   const replacement = new Transcript();
   entities.transcript = replacement;
@@ -151,4 +152,34 @@ test('conversation registration fixes entity identities without freezing the cal
     active.capture().messages.map(({ index }) => index),
     [0, 1],
   );
+});
+
+test('separate resource and call registration rejects mixed conversation ownership before installing supply', () => {
+  const transcript = new Transcript([{ role: 'user', content: 'same input' }]);
+  const memories = new Memories(transcript);
+  const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() };
+  const structure = createConversationStructure();
+  const capture = new ConversationCallCapture(structure.scene, entities);
+  const other = createConversationStructure();
+  const resources = new Resources();
+  const model = new ModelInteractions(
+    new ModelSource({
+      invoke() {
+        throw new Error('No model call is permitted during registration');
+      },
+    }),
+  );
+  try {
+    assert.throws(() => registerConversationResources(resources, other, entities, model, capture), /another scene/);
+    assert.throws(() => conversationCallHooks(other, capture), /another scene/);
+    for (const key of ['transcript', 'memories', 'active', 'selectionUsage', 'files']) {
+      assert.throws(() => registerConversationResources(resources, structure, { ...entities, [key]: {} }, model, capture), new RegExp(`different ${key} entity`));
+    }
+    assert.equal(resources.snapshot(structure.scene).registrations.length, 0);
+    assert.equal(resources.snapshot(structure.scene).scopes.length, 0);
+    assert.equal(registerConversationResources(resources, structure, entities, model, capture), undefined);
+    assert.equal(conversationCallHooks(structure, capture).length, 2);
+  } finally {
+    model.close();
+  }
 });

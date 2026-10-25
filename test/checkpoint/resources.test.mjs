@@ -8,7 +8,8 @@ class Answer extends Group {
   name = 'answer';
   label = 'answer';
   source = 'test';
-  run = { deps: {}, execute: () => 'fixed answer' };
+  deps = {};
+  run = () => 'fixed answer';
 }
 
 function assemble(execution, transcript, progress = []) {
@@ -28,12 +29,10 @@ function assemble(execution, transcript, progress = []) {
 test('fixed transcript writes require a real direct-child reception and cannot be swallowed', async () => {
   const transcript = new Transcript();
   class Main extends Group {
-    run = {
-      deps: { messages: TranscriptResource.append.request() },
-      execute(work) {
-        assert.throws(() => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'not accepted' }] }), /active direct-child reception/);
-        return 'caught';
-      },
+    deps = { messages: TranscriptResource.append.request() };
+    run = function (work) {
+      assert.throws(() => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'not accepted' }] }), /active direct-child reception/);
+      return 'caught';
     };
   }
   await assert.rejects(assemble(new Main(), transcript).run(null, {}), /active direct-child reception/);
@@ -49,18 +48,16 @@ test('fixed transcript writes derive parent and child identity from the actual r
       super();
       this.add(answer);
     }
-    run = {
-      deps: { messages: TranscriptResource.append.request() },
-      async execute(work) {
-        const child = work.children.create(answer, null);
-        await child.run();
-        return child.accept((content) => {
-          const first = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
-          const confirmed = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
-          assert.equal(first, confirmed);
-          return confirmed;
-        });
-      },
+    deps = { messages: TranscriptResource.append.request() };
+    run = async function (work) {
+      const child = work.children.create(answer, null);
+      await child.run();
+      return child.accept((content) => {
+        const first = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+        const confirmed = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+        assert.equal(first, confirmed);
+        return confirmed;
+      });
     };
   }
   const receipt = await assemble(new Main(), transcript, progress).run(null, {});
@@ -84,26 +81,24 @@ for (const stale of [undefined, 'endpoint', 'view']) {
         this.add(answer);
       }
       maxRounds = 2;
-      run = {
-        deps: { messages: TranscriptResource.append.request() },
-        async execute(work) {
-          const endpoint = work.resources.messages;
-          if (work.round === 1) {
-            firstEndpoint = endpoint;
-            firstValues = work.resources;
-          } else assert.notEqual(endpoint, firstEndpoint);
-          const child = work.children.create(answer, null);
-          await child.run();
-          return child.accept((content) => {
-            if (stale && work.round === 2) {
-              const retained = stale === 'view' ? firstValues.messages : firstEndpoint;
-              return retained.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
-            }
-            return endpoint.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
-          });
-        },
-        accept: (work) => (work.round === 1 ? work.continue(work.initialInput, 'second round') : work.delivered),
+      deps = { messages: TranscriptResource.append.request() };
+      run = async function (work) {
+        const endpoint = work.resources.messages;
+        if (work.round === 1) {
+          firstEndpoint = endpoint;
+          firstValues = work.resources;
+        } else assert.notEqual(endpoint, firstEndpoint);
+        const child = work.children.create(answer, null);
+        await child.run();
+        return child.accept((content) => {
+          if (stale && work.round === 2) {
+            const retained = stale === 'view' ? firstValues.messages : firstEndpoint;
+            return retained.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+          }
+          return endpoint.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+        });
       };
+      accept = (work) => (work.round === 1 ? work.continue(work.initialInput, 'second round') : work.delivered);
     }
     const execution = assemble(new Main(), transcript, progress).run(null, {});
     if (stale) {
@@ -161,15 +156,13 @@ test('a checkpoint writer retained from a previous round cannot save the current
   class Root extends Scene {
     maxRounds = 2;
     checkpoint = { key: 'test.round-writer', version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { deps: {}, run: () => null } }] };
-    run = {
-      deps: {},
-      execute: (work) => {
-        if (work.round === 1) writer = work.checkpoint;
-        else assert.throws(() => writer.save(this.checkpoint.points[0], null, {}), /inactive declaration|outside its executing round/);
-        return null;
-      },
-      accept: (work) => (work.round === 1 ? work.continue(work.initialInput, 'next') : work.delivered),
+    deps = {};
+    run = (work) => {
+      if (work.round === 1) writer = work.checkpoint;
+      else assert.throws(() => writer.save(this.checkpoint.points[0], null, {}), /inactive declaration|outside its executing round/);
+      return null;
     };
+    accept = (work) => (work.round === 1 ? work.continue(work.initialInput, 'next') : work.delivered);
   }
   const runtime = installCallable(new Root(), { checkpoints: { store }, providers: [], source: { capture: () => null } });
   await assert.rejects(runtime.run(null, {}), /inactive declaration|outside its executing round/);
@@ -185,30 +178,28 @@ test('parallel fixed appends bind each effect to its own asynchronous reception'
       super();
       this.add(answer);
     }
-    run = {
-      deps: { messages: TranscriptResource.append.request() },
-      async execute(work) {
-        const first = work.children.create(answer, null);
-        const second = work.children.create(answer, null);
-        await first.run();
-        await second.run();
-        const gate = Promise.withResolvers();
-        const accepting = first.accept(async (content) => {
-          await gate.promise;
-          return work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
-        });
-        await second.accept((content) => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }));
-        gate.resolve();
-        await accepting;
-        assert.deepEqual(
-          transcript.exportState().appends.map((item) => item.request.operation.childContextId),
-          progress
-            .filter((f) => f.kind === 'started' && f.description?.name === 'answer')
-            .map((f) => f.identity.contextId)
-            .reverse(),
-        );
-        return 'accepted';
-      },
+    deps = { messages: TranscriptResource.append.request() };
+    run = async function (work) {
+      const first = work.children.create(answer, null);
+      const second = work.children.create(answer, null);
+      await first.run();
+      await second.run();
+      const gate = Promise.withResolvers();
+      const accepting = first.accept(async (content) => {
+        await gate.promise;
+        return work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+      });
+      await second.accept((content) => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] }));
+      gate.resolve();
+      await accepting;
+      assert.deepEqual(
+        transcript.exportState().appends.map((item) => item.request.operation.childContextId),
+        progress
+          .filter((f) => f.kind === 'started' && f.description?.name === 'answer')
+          .map((f) => f.identity.contextId)
+          .reverse(),
+      );
+      return 'accepted';
     };
   }
   assert.equal(await assemble(new Main(), transcript, progress).run(null, {}), 'accepted');

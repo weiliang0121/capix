@@ -31,7 +31,10 @@ test('resource static assembly records nothing, binding captures once, per-call 
   const { recorder, record, owner } = scope();
   let captures = 0;
   let descriptions = 0;
-  const settings = new ResourceOffer('settings.snapshot', (source) => source, 'binding', {
+  const settings = new ResourceOffer({
+    name: 'settings.snapshot',
+    expose: (source) => source,
+    timing: 'binding',
     capture: (source) => {
       captures++;
       return Object.freeze({ ...source });
@@ -74,7 +77,7 @@ test('resource static assembly records nothing, binding captures once, per-call 
 
 test('shared lazy supplies create one provider but give separate calls separately attributed endpoints', async () => {
   let captures = 0;
-  const model = new ResourceOffer('model.invoke', (provider, activity) => Object.freeze({ invoke: (value) => activity.runAsync('invoke', { input: () => value, output: (result) => result }, () => provider.invoke(value)) }), 'access', { describe: () => ({ provider: 'fixture' }) });
+  const model = new ResourceOffer({ name: 'model.invoke', expose: (provider, activity) => Object.freeze({ invoke: (value) => activity.runAsync('invoke', { input: () => value, output: (result) => result }, () => provider.invoke(value)) }), timing: 'access', describe: () => ({ provider: 'fixture' }) });
   const bind = bindResources({ model: model.request() }, [
     model.provide(() => {
       captures++;
@@ -121,7 +124,7 @@ test('shared lazy supplies create one provider but give separate calls separatel
 
 test('without recording, resource descriptors and operation summaries are not evaluated', async () => {
   const fail = () => assert.fail('description must not run');
-  const offer = new ResourceOffer('plain', (source, activity) => ({ sync: () => activity.runSync('sync', { input: fail, output: fail }, () => source), async: () => activity.runAsync('async', { input: fail, output: fail }, async () => source) }), 'binding', { describe: fail });
+  const offer = new ResourceOffer({ name: 'plain', expose: (source, activity) => ({ sync: () => activity.runSync('sync', { input: fail, output: fail }, () => source), async: () => activity.runAsync('async', { input: fail, output: fail }, async () => source) }), timing: 'binding', describe: fail });
   const bound = bindResources({ value: offer.request() }, [offer.provide(() => 12)])(null);
   bound.attach({ contextId: 'no-record', validate: () => {} });
   bound.start();
@@ -192,15 +195,15 @@ for (const phase of ['started', 'returned', 'threw'])
     const { recorder, owner } = scope(new RejectingRecorder(new RecordBook()));
     let executions = 0;
     const cause = new Error('operation failure');
-    const action = new ResourceOffer(
-      'action',
-      (_source, activity) => () =>
+    const action = new ResourceOffer({
+      name: 'action',
+      expose: (_source, activity) => () =>
         activity.runAsync('operate', {}, async () => {
           executions++;
           if (phase === 'threw') throw cause;
           return 'committed';
         }),
-    );
+    });
     const bound = bindResources({ action: action.request() }, [action.provide(() => null)])(null);
     bound.attach(owner);
     bound.start();
@@ -223,7 +226,7 @@ for (const phase of ['started', 'returned', 'threw'])
 test('failed lazy supply is cached and recorded for each actual call without reinitializing', () => {
   let attempts = 0;
   const cause = new Error('supply unavailable');
-  const offer = new ResourceOffer('lazy', (source) => source);
+  const offer = new ResourceOffer({ name: 'lazy', expose: (source) => source });
   const first = bindResources({ value: offer.request() }, [
     offer.provide(() => {
       attempts++;
@@ -269,8 +272,8 @@ test('retained writer endpoint cannot mutate after a call ends even without reco
 });
 
 test('resource access names cannot ambiguously identify different offers in the same binding', () => {
-  const first = new ResourceOffer('same', (value) => value);
-  const second = new ResourceOffer('same', (value) => value);
+  const first = new ResourceOffer({ name: 'same', expose: (value) => value });
+  const second = new ResourceOffer({ name: 'same', expose: (value) => value });
   assert.throws(() => bindResources({ one: first.request(), two: second.request() }, [first.provide(() => 1), second.provide(() => 2)]), /same access name/);
   const bindings = bindResources({ one: first.request(), alias: first.request() }, [first.provide(() => 1)])(null);
   assert.equal(bindings.values.one, bindings.values.alias);

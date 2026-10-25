@@ -1,7 +1,7 @@
-import { bindResources, ResourceOffer, TranscriptResource, type ResourceRequirements, type AttemptContext } from '@capix/server-runtime';
+import { bindResources, ResourceOffer, TranscriptResource, type ResourceRequirements, type NodeWork, type GroupWork, type SceneWork } from '@capix/server-runtime';
 
 type Resources = { settings: { timeoutMs: number } };
-const settings = new ResourceOffer('settings', (source: { timeout: number }) => Object.freeze({ timeoutMs: source.timeout }));
+const settings = new ResourceOffer({ name: 'settings', expose: (source: { timeout: number }) => Object.freeze({ timeoutMs: source.timeout }) });
 const deps: ResourceRequirements<Resources> = { settings: settings.request() };
 const bind = bindResources(deps, [settings.provide((parent: { timeout: number }) => parent)]);
 const value: number = bind({ timeout: 1000 }).values.settings.timeoutMs;
@@ -11,23 +11,22 @@ settings.provide(() => 'not settings');
 // @ts-expect-error request result must match the capability's resource interface
 const wrong: ResourceRequirements<Resources> = { settings: TranscriptResource.fixedRange.request() };
 void wrong;
-declare const context: AttemptContext<string, string, Resources>;
-// @ts-expect-error undeclared aliases are not exposed by this context
-context.resources.values.history;
+declare const work: NodeWork<string, string, Resources>;
+// @ts-expect-error undeclared aliases are not exposed by this work
+work.resources.history;
 // @ts-expect-error bindings cannot replace a resource reference
-context.resources.values.settings = { timeoutMs: 1 };
+work.resources.settings = { timeoutMs: 1 };
 
 // @ts-expect-error parent operation is not a public resource path
-context.operationContext;
-import type { ExecutionContext, OperationContext } from '@capix/server-runtime';
-declare const execution: ExecutionContext;
-declare const operation: OperationContext;
+work.operationContext;
+declare const scene: SceneWork<unknown, unknown, Resources>;
+declare const group: GroupWork<unknown, unknown, Resources>;
 // @ts-expect-error construction metadata is not a business resource
-execution.settings;
+scene.settings;
 // @ts-expect-error raw collection references remain internal
-execution.transcriptRange;
+scene.transcriptRange;
 // @ts-expect-error ancestors are private lifecycle links
-operation.executionContext;
+group.executionContext;
 
 interface MutableSource {
   readonly current: number;
@@ -35,7 +34,7 @@ interface MutableSource {
 interface CapturedSource {
   readonly fixed: number;
 }
-const captured = new ResourceOffer<MutableSource, number, CapturedSource>('captured', (value: CapturedSource) => value.fixed, 'binding', { capture: (source) => ({ fixed: source.current }), describe: (value: CapturedSource) => value });
+const captured = new ResourceOffer<MutableSource, number, CapturedSource>({ name: 'captured', expose: (value: CapturedSource) => value.fixed, timing: 'binding', capture: (source) => ({ fixed: source.current }), describe: (value: CapturedSource) => value });
 captured.provide(() => ({ current: 4 }));
 // @ts-expect-error capture does not erase the source declaration
 captured.provide(() => ({ fixed: 4 }));

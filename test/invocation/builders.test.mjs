@@ -51,7 +51,10 @@ test('resource refinement cancellation prevents child registration and observati
       },
     ],
   });
-  const resource = new ResourceOffer('test.refined', (value) => value, 'access', {
+  const resource = new ResourceOffer({
+    name: 'test.refined',
+    expose: (value) => value,
+    timing: 'access',
     refine(value) {
       controller.abort(cause);
       return value;
@@ -90,7 +93,7 @@ test('reused builders bind each invocation to its own signal, settings and input
   const firstController = new AbortController();
   const secondController = new AbortController();
   const mutableSettings = { ...settings };
-  const configuration = new ResourceOffer('test.settings', (source) => source);
+  const configuration = new ResourceOffer({ name: 'test.settings', expose: (source) => source });
   const deps = { settings: configuration.request() };
   const resourceBinding = bindResources(deps, [configuration.provide((source) => source.settings)]);
   const observed = [];

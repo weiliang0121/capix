@@ -151,11 +151,11 @@ test('separate runners share entities without absorbing their lifetimes', async 
     },
   };
   const environment = initializeObserver(provider);
-  const run = async (runner, text) => observeExecution(runner, environment.recording, { messages: [{ role: 'user', content: text }] }, { settings });
+  const run = async (runner, text) => observeExecution(runner, environment.records.installation, { messages: [{ role: 'user', content: text }] }, { settings });
   const first = await run(environment.runner, '我在北京');
   const memory = environment.memories.values()[0];
 
-  const nextRunner = createConversationRunner(createConversationStructure(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)), { observations: [environment.recording], changes: environment.changes });
+  const nextRunner = createConversationRunner(createConversationStructure(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)), { observations: [environment.records.installation], changes: environment.changes });
   const second = await run(nextRunner, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.memories.get(memory.id), memory);
@@ -165,11 +165,11 @@ test('separate runners share entities without absorbing their lifetimes', async 
   assert.equal(observation.executions.length, 2);
   assert.equal(environment.transcript.current('assistant').content, '已了解');
   assert.equal(observation.messages[0].count, 1);
-  const change = [...environment.book.values()].find((r) => r instanceof MemoryRecord);
+  const change = [...environment.records.book.values()].find((r) => r instanceof MemoryRecord);
   const apply = first.calls.filter((item) => item.structureKind === 'node').find((r) => r.name === 'applyMemory');
   assert.equal(change.callId, apply.id);
   assert.equal(change.contextId, apply.contextId);
-  const response = [...environment.book.values()].find((r) => r instanceof TranscriptRecord && r.value.action === 'append' && environment.transcript.get(r.value.start)?.role === 'assistant');
+  const response = [...environment.records.book.values()].find((r) => r instanceof TranscriptRecord && r.value.action === 'append' && environment.transcript.get(r.value.start)?.role === 'assistant');
   assert.equal(response.callId, first.execution.id);
 });
 

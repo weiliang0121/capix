@@ -138,7 +138,7 @@ test('successful build locks the whole structure while retaining its original id
     group.members = [second];
   }, TypeError);
   assert.throws(() => {
-    first.run = { execute: () => 'replacement' };
+    first.run = () => 'replacement';
   }, TypeError);
   assert.throws(() => {
     first.name = 'replacement';
@@ -152,8 +152,8 @@ test('successful build locks the whole structure while retaining its original id
 });
 
 test('configuration replacement before build selects the final resource contract', async () => {
-  const oldOffer = new ResourceOffer('structures.old', (value) => value);
-  const newOffer = new ResourceOffer('structures.new', (value) => value);
+  const oldOffer = new ResourceOffer({ name: 'structures.old', expose: (value) => value });
+  const newOffer = new ResourceOffer({ name: 'structures.new', expose: (value) => value });
   const node = new Node();
   node.setRun((work) => work.resources.old, { old: oldOffer.request() });
   node.setRun((work) => work.resources.next, { next: newOffer.request() });
@@ -183,7 +183,7 @@ test('setDefinition replaces optional business mechanisms while preserving add m
   assert.equal(group.output, undefined);
   assert.equal(group.observation, undefined);
   assert.equal(group.maxRounds, 1);
-  assert.equal(group.run.accept, undefined);
+  assert.equal(group.accept, undefined);
   const driver = new Driver();
   assert.equal(await driver.run(build(driver, group), null, {}), 'new');
 });
@@ -222,7 +222,8 @@ test('unconfigured structures and uses outside the added members fail before exe
 
 test('setRun replaces a subclass field without keeping a second hidden definition', async () => {
   class Custom extends Node {
-    run = { deps: {}, execute: () => 'original' };
+    deps = {};
+    run = () => 'original';
   }
   const node = new Custom();
   const driver = new Driver();
@@ -488,7 +489,7 @@ test('direct configuration mutation by a binding hook rejects the build before i
   assert.equal(await driver.run(build(driver, group), null, {}), 'group');
 });
 
-test('binding hooks cannot rewrite an already resolved nested entry while its business receiver remains mutable', async () => {
+test('binding rejects rewritten processing fields and preserves the business receiver after repair', async () => {
   const handler = {
     suffix: 'before',
     execute() {
@@ -496,6 +497,8 @@ test('binding hooks cannot rewrite an already resolved nested entry while its bu
     },
   };
   const child = new Node({ run: handler.execute.bind(handler) });
+  const original = child.run;
+  let rewrite = true;
   const group = new Group({
     async run(work) {
       const call = work.children.create(child, null);
@@ -508,13 +511,16 @@ test('binding hooks cannot rewrite an already resolved nested entry while its bu
       {
         check(structure) {
           if (structure !== group) return;
-          child.run.execute = () => 'replacement';
+          if (rewrite) child.run = () => 'replacement';
           handler.suffix = 'after';
         },
         bindInvocation: () => ({ observe() {} }),
       },
     ],
   });
+  assert.throws(() => build(driver, group), /configuration changed while building: run/);
+  rewrite = false;
+  child.setRun(original);
   const ready = build(driver, group);
   assert.equal(await driver.run(ready, null, {}), 'original:after');
   handler.suffix = 'later';
@@ -553,4 +559,45 @@ test('factory configuration reads inherited getters and keeps the same concrete 
   assert.deepEqual(group.members, [child]);
   const driver = new Driver();
   assert.equal(await driver.run(build(driver, group), 1, {}), 12);
+});
+
+test('configuration and built structures retain flat processing fields and capture receivers once', async () => {
+  const reads = { run: 0, accept: 0 };
+  const config = {
+    prefix: 'configured:',
+    suffix: ':accepted',
+    deps: {},
+    uses: [],
+    get run() {
+      reads.run++;
+      return function (work) {
+        return this.prefix + work.input;
+      };
+    },
+    get accept() {
+      reads.accept++;
+      return function (work) {
+        return work.delivered + this.suffix;
+      };
+    },
+  };
+  const node = new Node(config);
+  assert.equal(typeof node.run, 'function');
+  assert.equal(typeof node.accept, 'function');
+  assert.equal(node.deps, config.deps);
+  assert.equal(node.uses, config.uses);
+  assert.deepEqual(reads, { run: 1, accept: 1 });
+  const driver = new Driver();
+  const ready = build(driver, node);
+  assert.equal(ready, node);
+  assert.equal(typeof ready.run, 'function');
+  assert.equal(Object.isFrozen(ready.deps), true);
+  assert.equal(Object.isFrozen(ready.uses), true);
+  assert.notEqual(ready.deps, config.deps);
+  config.prefix = 'live:';
+  assert.equal(await driver.run(ready, 'input', {}), 'live:input:accepted');
+  assert.deepEqual(reads, { run: 1, accept: 1 });
+  for (const field of ['deps', 'uses', 'run', 'accept']) {
+    assert.equal(Object.getOwnPropertyDescriptor(ready, field).writable, false);
+  }
 });

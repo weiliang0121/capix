@@ -4,7 +4,7 @@ import type { RecordingInstallation } from '@capix/server-runtime/recording';
 import { InvocationBoundaryRecord } from '@capix/server-runtime/recording';
 import { callRecord, isTaskRecord, recordSubtree, taskSnapshot } from './calls.js';
 
-import type { ConversationRunOptions, ConversationRunner } from '../conversation/binding.js';
+import type { ConversationRunOptions, ConversationRunner } from '../conversation/binding/contract.js';
 
 /** Observe one invocation by Context identity, independent of its input value. */
 export async function observeExecution(runner: ConversationRunner, recording: RecordingInstallation, input: unknown, options: ConversationRunOptions, publish: (snapshot: ExecutionRecordSnapshot) => void = () => {}): Promise<ExecutionRecordSnapshot> {

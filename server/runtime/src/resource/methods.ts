@@ -19,9 +19,13 @@ export type ResourceMethods<Methods extends ResourceMethodDeclarations> = {
   readonly [Name in keyof Methods]: <const Options extends OperationOptions<MethodOutput<Methods[Name]>, unknown, unknown, MethodDelta<Methods[Name]>> = {}>(input: MethodInput<Methods[Name]>, options?: Options & OperationOptions<MethodOutput<Methods[Name]>, unknown, unknown, MethodDelta<Methods[Name]>>) => Promise<OperationResult<MethodOutput<Methods[Name]>, Options>>;
 };
 
-export interface ResourceMethodsDeclaration<Methods extends ResourceMethodDeclarations> {
+export interface ResourceMethodsDeclaration<Methods extends ResourceMethodDeclarations, Source = ResourceMethodsSource<Methods>, Selection = never> {
   readonly name?: string;
   readonly methods: Methods;
+  readonly expose?: never;
+  readonly timing?: 'binding' | 'access';
+  readonly capture?: (source: Source) => ResourceMethodsSource<Methods>;
+  readonly refine?: (captured: ResourceMethodsSource<Methods>, selection: Selection) => ResourceMethodsSource<Methods>;
   readonly observation?: ResourceMethodsObservation<Methods>;
 }
 

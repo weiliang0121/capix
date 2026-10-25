@@ -64,9 +64,9 @@ export class Sequence<Input, Outputs = Record<never, never>, Uses extends ChildC
   get requests(): readonly ResourceRequest<unknown>[] {
     return Object.freeze(
       this.entries.flatMap(({ use }) => {
-        const run = use.run;
-        if (!run) throw new Error('Sequence member requires a configured run stage');
-        return resourceRequests(collectDefinitionRequirements({ run, exceptions: use.exceptions }));
+        const definition = use instanceof InvocationEntry ? use.definition : use;
+        if (!definition.run) throw new Error('Sequence member requires a configured run stage');
+        return resourceRequests(collectDefinitionRequirements({ deps: definition.deps, exceptions: definition.exceptions }));
       }),
     );
   }

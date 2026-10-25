@@ -1,4 +1,4 @@
-import type { CallableDescription, InvocationRunDefinition, InvocationExceptionDefinition, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
+import type { CallableDescription, CallableRunDefinition, InvocationExceptionDefinition, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
 import type { ObservationDeclaration } from '../definition/observation.js';
 import type { CallableKind } from '@capix/protocol';
 import type { CheckpointCodec } from '../checkpoint/contract.js';
@@ -10,11 +10,10 @@ import { checkMemberName } from '../structure/members.js';
 import type { AnyCallable } from './declarations.js';
 
 /** Fixed execution configuration. It has no author setters or callable identity. */
-export interface CallableSnapshot<Input = any, Output = any, Kind extends CallableKind = any, Resources extends object = any, ExceptionResources extends object = any, Delta = any> extends Omit<CallableDescription<Input, Output, Kind, Delta>, 'kind' | 'members'> {
+export interface CallableSnapshot<Input = any, Output = any, Kind extends CallableKind = any, Resources extends object = any, ExceptionResources extends object = any, Delta = any> extends Omit<CallableDescription<Input, Output, Kind, Delta>, 'kind' | 'members'>, CallableRunDefinition<Input, Output, Kind, Resources, Delta> {
   readonly kind: Kind;
   readonly maxRounds: 1 | 2;
   readonly raises: readonly ExceptionContract<unknown>[];
-  readonly run: InvocationRunDefinition<Input, Output, Kind, Resources, Delta>;
   readonly exceptions?: InvocationExceptionDefinition<Input, Output, Kind, ExceptionResources>;
   readonly members?: readonly ChildCallable[];
   readonly names?: NamedMembers;
@@ -32,7 +31,7 @@ export function snapshotDefinition(definition: AnyCallable): CallableSnapshot {
   if (definition.kind === 'node' && members !== undefined) throw new Error('Nodes cannot declare members');
   if (definition.kind === 'node' && definition.receptions !== undefined) throw new Error('Nodes cannot declare receptions');
   const run = definition.run;
-  if (!run || typeof run.execute !== 'function') throw new Error('Callable definition needs a run function');
+  if (typeof run !== 'function') throw new Error('Callable definition needs a run function');
   const exceptions = definition.exceptions;
   const output = definition.output;
   return Object.freeze({
@@ -44,7 +43,10 @@ export function snapshotDefinition(definition: AnyCallable): CallableSnapshot {
     maxRounds: definition.maxRounds ?? 1,
     raises: Object.freeze([...(definition.raises ?? [])]),
     output: output ? Object.freeze({ result: output.result.bind(output), delta: output.delta?.bind(output) }) : undefined,
-    run: Object.freeze({ deps: Object.freeze({ ...run.deps }), uses: run.uses ? Object.freeze([...run.uses]) : undefined, execute: run.execute.bind(run), accept: run.accept?.bind(run) }),
+    deps: Object.freeze({ ...definition.deps }),
+    uses: definition.uses ? Object.freeze([...definition.uses]) : undefined,
+    run: run.bind(definition),
+    accept: definition.accept?.bind(definition),
     exceptions: exceptions ? Object.freeze({ deps: Object.freeze({ ...exceptions.deps }), uses: exceptions.uses ? Object.freeze([...exceptions.uses]) : undefined, accepts: Object.freeze([...exceptions.accepts]), handle: exceptions.handle.bind(exceptions) }) : undefined,
     observation: definition.observation ? Object.freeze(definition.observation.map(snapshotObservation)) : undefined,
     checkpoint: definition.checkpoint ? snapshotCheckpoint<any, any, any, any>(definition.checkpoint) : undefined,

@@ -9,12 +9,14 @@ import { bindDelivery } from './delivery.js';
 
 export interface ObservationEnvironment {
   readonly consumer: ChangeConsumer;
-  readonly recordSource: RecordSource;
-  readonly recording: RecordingInstallation;
+  readonly records: {
+    readonly source: RecordSource;
+    readonly installation: RecordingInstallation;
+    readonly book: RecordBook;
+    readonly archives?: readonly RecordingArchive[];
+  };
   readonly transcript: Transcript;
-  readonly book: RecordBook;
   readonly memories: Memories;
-  readonly recordingArchives?: readonly RecordingArchive[];
 }
 /** Each connection consumes an atomic source opening; delivery never runs in a producer. */
 export class ObservationFeed {
@@ -22,10 +24,10 @@ export class ObservationFeed {
   constructor(private readonly observer: ObservationEnvironment) {}
 
   connect(listener: (frame: ObservationUpdate) => void): () => void {
-    const { consumer, recordSource, recording, transcript, book, memories } = this.observer;
+    const { consumer, records, transcript, memories } = this.observer;
     const scopeId = randomUUID();
     let sequence = 0;
-    const source = { open: (receiver: RecordReceiver) => recordSource.open(receiver, (book) => activeRecords(book, recording.root.id)) };
+    const source = { open: (receiver: RecordReceiver) => records.source.open(receiver, (book) => activeRecords(book, records.installation.root.id)) };
     const delivery = bindDelivery<readonly RecordEntry[], ObserverChange, ObservationUpdate>(source, {
       attach: (sink) => {
         const position = consumer.position;
@@ -43,7 +45,7 @@ export class ObservationFeed {
           scopeId,
           sequence,
           overview: observeOverview(this.observer),
-          memory: observeMemory(memories, book),
+          memory: observeMemory(memories, records.book),
           transcript: { id: transcript.id, revision: transcript.revision, starts: transcript.segments().map((segment) => segment.start) },
           memories: { id: memories.id, sequence: memories.sequence },
           recorder: { id: source.sourceId, revision: source.revision },

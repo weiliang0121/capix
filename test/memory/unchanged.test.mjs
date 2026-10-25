@@ -60,7 +60,7 @@ test('a real change and an unchanged update complete together; only the change i
     },
   });
   const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
-  const run = (content) => observeExecution(environment.runner, environment.recording, { messages: [{ role: 'user', content }] }, { settings });
+  const run = (content) => observeExecution(environment.runner, environment.records.installation, { messages: [{ role: 'user', content }] }, { settings });
   await run('内部预演可用链接，键盘预算300。');
   const keyboard = environment.memories.values().find((memory) => memory.topic === '键盘');
   const keyboardContent = keyboard.snapshot();
@@ -72,8 +72,8 @@ test('a real change and an unchanged update complete together; only the change i
   const invoked = facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).find((item) => item.parentId === operation.id && item.name === 'requestModel');
   assert.equal(JSON.parse(readOutput(invoked.value).content).memories.length, 2);
   assert.equal(keyboard.snapshot(), keyboardContent);
-  assert.equal(MemoryRecordHelper.find(environment.book, keyboard.id).length, 1);
+  assert.equal(MemoryRecordHelper.find(environment.records.book, keyboard.id).length, 1);
   const rehearsal = environment.memories.values().find((memory) => memory.topic === '预演');
   assert.equal(rehearsal.content, '使用离线包');
-  assert.equal(MemoryRecordHelper.find(environment.book, rehearsal.id).length, 2);
+  assert.equal(MemoryRecordHelper.find(environment.records.book, rehearsal.id).length, 2);
 });

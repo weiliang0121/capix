@@ -61,15 +61,13 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
       this.add(operation);
     }
     checkpoint = checkpoint('active.fixture.e', operation);
-    run = {
-      deps: {},
-      async execute(work) {
-        const child = work.children.create(operation, work.input);
-        work.checkpoint({ point: thisCheckpoint.points[0], state: null, refs: { child: child.ref } });
-        options.afterCreated?.();
-        await child.run();
-        return child.accept();
-      },
+    deps = {};
+    run = async function (work) {
+      const child = work.children.create(operation, work.input);
+      work.checkpoint({ point: thisCheckpoint.points[0], state: null, refs: { child: child.ref } });
+      options.afterCreated?.();
+      await child.run();
+      return child.accept();
     };
   }
   const execution = new E();
@@ -80,14 +78,12 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
       this.add(execution);
     }
     checkpoint = checkpoint('active.fixture.r', execution);
-    run = {
-      deps: {},
-      execute: async (work) => {
-        const child = work.children.create(execution, work.input);
-        work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: { child: child.ref } });
-        await child.run();
-        return child.accept();
-      },
+    deps = {};
+    run = async (work) => {
+      const child = work.children.create(execution, work.input);
+      work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: { child: child.ref } });
+      await child.run();
+      return child.accept();
     };
   }
   return installCallable(new R(), {
@@ -158,15 +154,13 @@ test('a composed maintenance O may write content and choose from the new explici
     name = 'policy';
     label = 'policy';
     source = 'test';
-    run = {
-      deps,
-      execute(work) {
-        calls++;
-        assert.equal(work.input.phase, 'after-content');
-        work.resources.memoryWriter.apply([createMemory('new understanding')]);
-        const material = work.resources.activeContentManager.capture();
-        return { basis: material.basis, messageIndexes: [], memoryIds: material.memories.map((memory) => memory.id) };
-      },
+    deps = deps;
+    run = function (work) {
+      calls++;
+      assert.equal(work.input.phase, 'after-content');
+      work.resources.memoryWriter.apply([createMemory('new understanding')]);
+      const material = work.resources.activeContentManager.capture();
+      return { basis: material.basis, messageIndexes: [], memoryIds: material.memories.map((memory) => memory.id) };
     };
   }
   const material = await runtime(new MaintainConversationContent(new Policy()), content).run({ phase: 'after-content' }, {});
@@ -244,14 +238,12 @@ test('preparation and maintenance resume their actual waiting child before accep
     source = 'test';
     completed = checkpointPoint()({ name: 'completed', state: codec, references: {}, resume: { run: (_work, output) => output } });
     checkpoint = { key: 'active.fixture.policy', version: 1, input: codec, output: codec, points: [this.completed] };
-    run = {
-      deps: {},
-      execute: (work) => {
-        calls++;
-        const decision = { basis: work.input.material.basis, messageIndexes: [0], memoryIds: [] };
-        work.checkpoint({ point: this.completed, state: decision, refs: {} });
-        return decision;
-      },
+    deps = {};
+    run = (work) => {
+      calls++;
+      const decision = { basis: work.input.material.basis, messageIndexes: [0], memoryIds: [] };
+      work.checkpoint({ point: this.completed, state: decision, refs: {} });
+      return decision;
     };
   }
   const store = new CapturedStore();

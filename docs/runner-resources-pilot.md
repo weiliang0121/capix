@@ -117,7 +117,7 @@ sequenceDiagram
 
 ## Observer 完整链迁移
 
-`initializeObserver` 显式创建 Resources，以 `registerConversationResources` 登记供应和取得调用 hooks，再创建 Runner。环境、HTTP、observeExecution 与恢复入口均使用 `runner.run/resume`，无需再次传 scene。具体时序见 [服务装配](service-assembly.md)。
+`initializeObserver` 显式创建 Resources，显式建立 ConversationCallCapture，以 `registerConversationResources` 只登记供给，再将独立 conversationCallHooks 和 validate 连接到 Runner。环境、HTTP、observeExecution 与恢复入口均使用 `runner.run/resume`，无需再次传 scene。具体时序见 [服务装配](service-assembly.md)。
 
 原来源对象的职责已拆开：
 
@@ -138,7 +138,7 @@ sequenceDiagram
 ## 第二层尚待收敛的接缝
 
 1. `callableHooks` 仍是按调用输入/参数返回端口的工厂，必要登记与被动通知的形状还可简化；不能把严格登记降格为可丢通知。
-2. 服务 `registerConversationResources` 同时登记供给、返回 validate/hooks；两者已经分离执行，但作者配置入口仍可更清晰。
+2. 服务资源登记与 validate/hooks 已分开，见 service-assembly.md；当前已不再由资源函数返回运行接线。
 3. 手动装配要让服务恢复核对的 checkpoints 与 Runner 的 store 是同一个实例；生产入口明确复用同一端口，注册 helper 本身无法验证另一对象的配置。
 4. 通用 Interactions 与服务 ModelInteractions 的形状未归并。归并前必须覆盖模型流式、固定请求核验、超时和观测，不只替换名称。
 5. Driver、旧 CallableSources 和对应 Binder/Builder 适配仍供低层兼容测试；Runner 与 Observer 不经过它们。退役需要迁移直接以 Group/Node 为根的构造测试。`bindResources` 还用于记录预设的局部资源访问，不能随旧 source 一并删除。

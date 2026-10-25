@@ -10,13 +10,16 @@ export interface CapturedMemories {
 }
 
 export const MemoryResource = Object.freeze({
-  snapshot: new ResourceOffer<Memories | CapturedMemories, Readonly<MemorySnapshot>, CapturedMemories>('memories.snapshot', (captured: CapturedMemories) => captured.items, 'binding', {
+  snapshot: new ResourceOffer<Memories | CapturedMemories, Readonly<MemorySnapshot>, CapturedMemories>({
+    name: 'memories.snapshot',
+    expose: (captured: CapturedMemories) => captured.items,
+    timing: 'binding',
     capture: (memories) => ('items' in memories ? memories : { memoriesId: memories.id, sequence: memories.sequence, items: Object.freeze(memories.snapshot().map((memory) => Object.freeze(memory))) }),
     describe: (captured: CapturedMemories) => ({ memoriesId: captured.memoriesId, sequence: captured.sequence, memoryIds: captured.items.map((memory) => memory.id) }),
   }),
-  apply: new ResourceOffer(
-    'memories.apply',
-    (memories: Memories, activity) =>
+  apply: new ResourceOffer({
+    name: 'memories.apply',
+    expose: (memories: Memories, activity) =>
       Object.freeze({
         apply(changes: readonly MemoryChange[]): void {
           const startSequence = memories.sequence;
@@ -29,7 +32,7 @@ export const MemoryResource = Object.freeze({
           });
         },
       }),
-    'access',
-    { describe: (memories) => ({ memoriesId: memories.id }) },
-  ),
+    timing: 'access',
+    describe: (memories) => ({ memoriesId: memories.id }),
+  }),
 });

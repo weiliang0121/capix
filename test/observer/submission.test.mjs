@@ -174,7 +174,7 @@ test('active discovery follows the service lifetime even when projection fails, 
   assert.equal(store.get('active'), active, 'completion retains ID lookup until eviction');
 });
 
-test('conversation binding selects its declared E instead of giving every R child the same public meaning', async () => {
+test('conversation hooks select the configured group without treating every scene member as a conversation', async () => {
   const environment = createEnvironment();
   const definition = createConversationStructure();
   const other = defineGroup()({ members: [], run: () => null });
@@ -185,10 +185,10 @@ test('conversation binding selects its declared E instead of giving every R chil
       const unrelated = work.children.create(other, work.input, { key: 'unrelated' });
       await unrelated.run();
       await unrelated.accept(() => undefined);
-      return originalRun.execute(work);
+      return originalRun(work);
     },
-    originalRun.deps,
-    { uses: definition.scene.members, accept: originalRun.accept },
+    definition.scene.deps,
+    { uses: definition.scene.members, accept: definition.scene.accept },
   );
 
   const runner = createConversationRunner(definition, environment, new ModelInteractions(new ModelSource(provider)));

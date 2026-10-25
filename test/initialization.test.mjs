@@ -16,13 +16,13 @@ function environment(invoke) {
     created++;
     return { invoke };
   });
-  return { ...value, modelCreations: () => created };
+  return Object.assign(value, { modelCreations: () => created });
 }
 function run(env, configuration = settings) {
   return env.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings: configuration });
 }
-const attempts = (env) => [...env.book.values()].filter((record) => record instanceof CallableRecord && record.structureKind === 'node');
-const operations = (env) => [...env.book.values()].filter((record) => record instanceof CallableRecord && record.structureKind === 'group' && record.role !== 'conversation-task');
+const attempts = (env) => [...env.records.book.values()].filter((record) => record instanceof CallableRecord && record.structureKind === 'node');
+const operations = (env) => [...env.records.book.values()].filter((record) => record instanceof CallableRecord && record.structureKind === 'group' && record.role !== 'conversation-task');
 
 test('unused operations and model providers stay inactive; bound O identities survive later calls', async () => {
   let fail = true;
@@ -106,19 +106,21 @@ test('an initializer retains failure and rejects recursive creation without impl
 });
 
 test('declarations are checked before resource access or invocation construction', () => {
-  const resource = new ResourceOffer('test.dependency', (value) => value);
-  const unrelated = new ResourceOffer('test.unrelated', (value) => value);
+  const resource = new ResourceOffer({ name: 'test.dependency', expose: (value) => value });
+  const unrelated = new ResourceOffer({ name: 'test.unrelated', expose: (value) => value });
   class Work extends Group {
     name = 'test';
     label = 'test';
     source = 'test';
-    run = { deps: { value: resource.request() }, execute: this.execute.bind(this) };
+    deps = { value: resource.request() };
+    run = this.execute.bind(this);
     execute() {
       assert.fail('must not execute');
     }
   }
   class Root extends Group {
-    run = { deps: {}, execute: this.execute.bind(this) };
+    deps = {};
+    run = this.execute.bind(this);
     constructor() {
       super();
       this.add(new Work());
@@ -146,7 +148,10 @@ test('declarations are checked before resource access or invocation construction
 
 test('lazy resource supplies share capture including failure, while access endpoints are local', () => {
   let created = 0;
-  const resource = new ResourceOffer('test.lazy', (captured) => captured, 'access', {
+  const resource = new ResourceOffer({
+    name: 'test.lazy',
+    expose: (captured) => captured,
+    timing: 'access',
     capture: (source) => {
       created++;
       return Object.freeze({ source });
@@ -163,7 +168,7 @@ test('lazy resource supplies share capture including failure, while access endpo
   assert.equal(created, 2);
   let failed = 0;
   const failure = new Error('source unavailable');
-  const broken = new ResourceOffer('test.failed', (source) => source);
+  const broken = new ResourceOffer({ name: 'test.failed', expose: (source) => source });
   const pending = bindResources({ one: broken.request() }, [
     broken.provide(() => {
       failed++;

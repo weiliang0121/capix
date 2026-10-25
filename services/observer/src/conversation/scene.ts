@@ -2,26 +2,11 @@ import { z } from 'zod';
 import { invocationRecording } from '@capix/server-runtime/recording';
 import { Scene, checkpointPoint, childReference, type SceneWork } from '@capix/server-runtime';
 import type { GenerationOutput } from '@capix/protocol';
-import { PrepareConversationContext } from './group/context/prepare.js';
-import { MaintainConversationContent, type ContextMaintenanceConfiguration } from './group/context/maintain.js';
 import { acceptConversationRequest } from './accept.js';
 import { conversationSceneRequests, type ConversationSceneResources } from './resources.js';
-import { GenerateAnswer } from './group/answer/generate.js';
-import { ExtractMemory } from './group/memory/extract.js';
-import { ProcessDocument } from './group/document/process.js';
-import { SaveResult } from './group/document/save.js';
-import { DefaultConversationDecision } from './decision/default.js';
-import type { ConversationDecisionFactory } from './decision/types.js';
-import { CheckFileTask } from './group/preflight/check.js';
-import { ConversationGroup, type ConversationCapabilities } from './conversation.js';
+import { ConversationGroup } from './conversation.js';
+import type { ConversationStructureOptions } from './structure.js';
 import { checkpointCodec, conversationCheckpointInput, conversationCheckpointOutput } from './checkpoint.js';
-
-export interface ConversationDefinitionOptions {
-  readonly files?: boolean;
-  readonly decision?: ConversationDecisionFactory;
-  readonly maxDecisionSteps?: number;
-  readonly maintenance?: ContextMaintenanceConfiguration;
-}
 
 /** Scene behavior owns admission and calls its explicitly supplied conversation group. */
 export class ConversationScene extends Scene<unknown, GenerationOutput, ConversationSceneResources> {
@@ -33,7 +18,7 @@ export class ConversationScene extends Scene<unknown, GenerationOutput, Conversa
 
   constructor(
     private readonly conversation: ConversationGroup,
-    options: ConversationDefinitionOptions = {},
+    options: ConversationStructureOptions = {},
   ) {
     super();
     this.filesEnabled = Boolean(options.files);
@@ -77,32 +62,4 @@ export class ConversationScene extends Scene<unknown, GenerationOutput, Conversa
     await child.run();
     return child.accept();
   }
-}
-
-/** Construction references have no identity or lifetime beyond the structures they name. */
-export interface ConversationStructure extends ConversationCapabilities {
-  readonly scene: ConversationScene;
-  readonly conversation: ConversationGroup;
-}
-
-/** Construct once, retaining the exact targets needed by later source and resource bindings. */
-export function createConversationStructure(options: ConversationDefinitionOptions = {}): ConversationStructure {
-  const files = Boolean(options.files);
-  const preparation = new PrepareConversationContext(createMaintenance(options.maintenance));
-  const maintenance = createMaintenance(options.maintenance);
-  const generation = new GenerateAnswer({ files });
-  const extraction = new ExtractMemory();
-  const decision = options.decision ? options.decision.create() : new DefaultConversationDecision({ files });
-  const preflight = files ? new CheckFileTask() : undefined;
-  const document = files ? new ProcessDocument() : undefined;
-  const save = files ? new SaveResult() : undefined;
-  const capabilities: ConversationCapabilities = { preparation, generation, extraction, decision, maintenance, preflight, document, save };
-  const conversation = new ConversationGroup(capabilities, { maxDecisionSteps: options.maxDecisionSteps });
-  const scene = new ConversationScene(conversation, options);
-  return { scene, conversation, ...capabilities };
-}
-
-function createMaintenance(configuration: ContextMaintenanceConfiguration | undefined): MaintainConversationContent | undefined {
-  if (!configuration) return undefined;
-  return new MaintainConversationContent(typeof configuration === 'function' ? configuration : configuration.create());
 }

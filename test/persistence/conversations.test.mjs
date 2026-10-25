@@ -45,14 +45,14 @@ test('two persisted conversations retain separate messages, memories, records an
   await right.runner.run({ messages: [{ role: 'user', content: '第二段主题' }] }, { settings });
   const leftMemory = remember(left, '第一段记忆');
   const rightMemory = remember(right, '第二段记忆');
-  const leftRecords = left.book.exportState();
-  const rightRecords = right.book.exportState();
-  assert.ok(left.book.values().some((record) => record instanceof TranscriptRecord));
+  const leftRecords = left.records.book.exportState();
+  const rightRecords = right.records.book.exportState();
+  assert.ok(left.records.book.values().some((record) => record instanceof TranscriptRecord));
   assert.ok(
-    left.book.values().some((record) => record instanceof MemoryRecord && record.memoryId === leftMemory.id),
+    left.records.book.values().some((record) => record instanceof MemoryRecord && record.memoryId === leftMemory.id),
     'content direct changes keep the installed recording fallback',
   );
-  assert.ok(right.book.values().some((record) => record instanceof MemoryRecord && record.memoryId === rightMemory.id));
+  assert.ok(right.records.book.values().some((record) => record instanceof MemoryRecord && record.memoryId === rightMemory.id));
   const leftId = left.transcript.id;
   const rightId = right.transcript.id;
   assert.notEqual(leftId, rightId);
@@ -70,8 +70,8 @@ test('two persisted conversations retain separate messages, memories, records an
   assert.equal(restoredLeft.memories.values()[0].id, leftMemory.id);
   assert.equal(restoredRight.memories.values()[0].id, rightMemory.id);
   assert.equal(restoredRight.memories.get(leftMemory.id), undefined);
-  for (const entry of leftRecords.entries) assert.deepEqual(restoredLeft.book.get(entry.data.id).toJSON(), entry.data);
-  for (const entry of rightRecords.entries) assert.equal(restoredLeft.book.get(entry.data.id), undefined);
+  for (const entry of leftRecords.entries) assert.deepEqual(restoredLeft.records.book.get(entry.data.id).toJSON(), entry.data);
+  for (const entry of rightRecords.entries) assert.equal(restoredLeft.records.book.get(entry.data.id), undefined);
   assert.equal(observeOverview(restoredLeft).executions.length, 1);
   assert.equal(observeOverview(restoredRight).executions.length, 1);
   await restoredRight.runner.run({ messages: [{ role: 'user', content: '只继续第二段' }] }, { settings });

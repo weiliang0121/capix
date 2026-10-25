@@ -70,7 +70,7 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
   // Avoid depending on network or provider timing: wait for the actual local A1 deadline fact.
   await pending.promise;
   const interaction = observer.interactions.states().find((state) => state.request.purpose === 'answer');
-  const create = [...observer.book.values()].find((record) => record.kind === 'resource' && record.access === 'model-interaction.create' && record.phase === 'returned' && record.value.output?.id === interaction.id);
+  const create = [...observer.records.book.values()].find((record) => record.kind === 'resource' && record.access === 'model-interaction.create' && record.phase === 'returned' && record.value.output?.id === interaction.id);
   assert.ok(create);
   const callId = create.parentId;
   const ref = create.value.output.id;
@@ -95,7 +95,7 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
   assert.equal(sends, 1);
   assert.equal(states.at(-1).retained, 'memory');
   assert.doesNotMatch(JSON.stringify(states), /sensitive|messages|content|prompt|usage/);
-  const readers = [...observer.book.values()].filter((record) => record.kind === 'resource' && record.access === 'model-interaction.read' && record.phase === 'started' && record.value.action === 'result');
+  const readers = [...observer.records.book.values()].filter((record) => record.kind === 'resource' && record.access === 'model-interaction.read' && record.phase === 'started' && record.value.action === 'result');
   assert.ok(readers.length);
   assert.deepEqual((await transport.interactions(id, readers.find((record) => record.value.input.id === ref).parentId)).interactionIds, [ref]);
   const fresh = conversations.create();
@@ -105,10 +105,10 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
   const unlinked = await fetch(`${base}/api/interaction/observe?conversationId=${id}&callId=${callId}&id=other`);
   assert.notEqual(unlinked.status, 200);
   assert.equal((await unlinked.json()).code, 'INTERACTION_NOT_FOUND');
-  const root = [...observer.book.values()].find((record) => record.kind === 'runtime');
+  const root = [...observer.records.book.values()].find((record) => record.kind === 'runtime');
   const rootResponse = await fetch(`${base}/api/interactions?conversationId=${id}&callId=${root.id}`);
   assert.equal((await rootResponse.json()).code, 'CALL_NOT_FOUND');
-  const runtime = [...observer.book.values()].find((record) => record.kind === 'invocation' && record.structureKind === 'scene');
+  const runtime = [...observer.records.book.values()].find((record) => record.kind === 'invocation' && record.structureKind === 'scene');
   assert.deepEqual((await transport.interactions(id, runtime.id)).interactionIds, []);
 });
 
@@ -127,7 +127,7 @@ test('saved interaction metadata is read through restored call links without con
   const firstId = original.list().defaultConversationId;
   const environment = original.open(firstId);
   await environment.runner.run({ messages: [{ role: 'user', content: 'saved request' }] }, { settings });
-  const resource = [...environment.book.values()].find((record) => record.kind === 'resource' && record.access === 'model-interaction.create' && record.phase === 'returned');
+  const resource = [...environment.records.book.values()].find((record) => record.kind === 'resource' && record.access === 'model-interaction.create' && record.phase === 'returned');
   const ref = resource.value.output.id;
   const callId = resource.parentId;
   original.close();

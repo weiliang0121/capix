@@ -6,7 +6,7 @@ import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
 const codec = { encode: structuredClone, decode: structuredClone };
 
 function readable(name, options) {
-  return new ResourceOffer(name, (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }), 'access', options);
+  return new ResourceOffer({ name, expose: (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }), timing: 'access', ...options });
 }
 
 test('Resources supplies a shared entity through independent call endpoints, without capturing at build', async () => {
@@ -14,21 +14,19 @@ test('Resources supplies a shared entity through independent call endpoints, wit
   let captures = 0;
   let dormantCaptures = 0;
   const endpoints = [];
-  const value = new ResourceOffer(
-    'runner.fixed',
-    (snapshot, activity) => {
+  const value = new ResourceOffer({
+    name: 'runner.fixed',
+    expose: (snapshot, activity) => {
       const endpoint = { read: () => activity.runSync('read', {}, () => snapshot) };
       endpoints.push(endpoint);
       return endpoint;
     },
-    'access',
-    {
-      capture(source) {
-        captures++;
-        return source.value;
-      },
+    timing: 'access',
+    capture(source) {
+      captures++;
+      return source.value;
     },
-  );
+  });
   const dormant = readable('runner.dormant', {
     capture() {
       dormantCaptures++;
@@ -207,12 +205,14 @@ test('a built Runner uses fixed registrations while later scope registration can
 
 test('registered resource capture keeps its method while preserving the host receiver state', async () => {
   const policy = {
+    name: 'runner.fixed-capture-contract',
     prefix: 'initial',
+    expose: (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }),
     capture(value) {
       return `${this.prefix}:${value}`;
     },
   };
-  const offer = readable('runner.fixed-capture-contract', policy);
+  const offer = new ResourceOffer(policy);
   const scene = new Scene({ deps: { value: offer.request() }, run: (work) => work.resources.value.read() });
   const resources = new Resources();
   resources.register(offer, 'entity');
@@ -315,10 +315,13 @@ test('resource registration checks exact identity, duplicate supply and conflict
 test('declared failure handling and continuation renew access windows without recapturing the supply', async () => {
   let captures = 0;
   const endpoints = [];
-  const offer = new ResourceOffer('runner.phase', (value, activity) => {
-    const endpoint = { read: () => activity.runSync('read', {}, () => value) };
-    endpoints.push(endpoint);
-    return endpoint;
+  const offer = new ResourceOffer({
+    name: 'runner.phase',
+    expose: (value, activity) => {
+      const endpoint = { read: () => activity.runSync('read', {}, () => value) };
+      endpoints.push(endpoint);
+      return endpoint;
+    },
   });
   const failure = new ExceptionContract('RUNNER_PHASE_FIXTURE');
   const scene = new Scene({

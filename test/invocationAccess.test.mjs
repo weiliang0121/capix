@@ -63,10 +63,13 @@ test('overlapping calls through one bound O retain independent access and child 
   const accepted = [];
   const scopes = new Map();
   let exposed = 0;
-  const resource = new ResourceOffer('test.invocationAccess.owner', (_value, activity) => {
-    exposed++;
-    const token = {};
-    return { token, touch: () => activity.runSync('touch', {}, () => token) };
+  const resource = new ResourceOffer({
+    name: 'test.invocationAccess.owner',
+    expose: (_value, activity) => {
+      exposed++;
+      const token = {};
+      return { token, touch: () => activity.runSync('touch', {}, () => token) };
+    },
   });
   const deps = { owner: resource.request() };
   const leaf = new Node({
@@ -146,13 +149,19 @@ test('overlapping calls through one bound O retain independent access and child 
 
 test('checkpoint continuation hands its child delivery to normal acceptance with the correct phase resource view', async () => {
   const realized = [];
-  const normal = new ResourceOffer('test.invocationAccess.normal', () => {
-    realized.push('normal');
-    return 'normal access';
+  const normal = new ResourceOffer({
+    name: 'test.invocationAccess.normal',
+    expose: () => {
+      realized.push('normal');
+      return 'normal access';
+    },
   });
-  const continuation = new ResourceOffer('test.invocationAccess.continuation', () => {
-    realized.push('continuation');
-    return 'continuation access';
+  const continuation = new ResourceOffer({
+    name: 'test.invocationAccess.continuation',
+    expose: () => {
+      realized.push('continuation');
+      return 'continuation access';
+    },
   });
   const child = new Group({ maxRounds: 1, raises: [], deps: {}, run: () => ({ answer: 'child output' }) });
   const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
@@ -216,7 +225,7 @@ test('checkpoint continuation hands its child delivery to normal acceptance with
 test('a restored point closes retained resource views, endpoints and checkpoint actions before normal acceptance', async (t) => {
   for (const retained of ['view', 'endpoint', 'checkpoint']) {
     await t.test(retained, async () => {
-      const offer = new ResourceOffer(`test.resume-window.${retained}`, (_source, activity) => ({ read: () => activity.runSync('read', {}, () => 'fixed value') }));
+      const offer = new ResourceOffer({ name: `test.resume-window.${retained}`, expose: (_source, activity) => ({ read: () => activity.runSync('read', {}, () => 'fixed value') }) });
       const codec = { encode: (value) => value, decode: (value) => value };
       let oldWork;
       let oldEndpoint;
@@ -268,9 +277,12 @@ test('execute and restored point bodies seal output while entered reception reta
       const reads = [];
       const final = { answer: 'final' };
       const codec = { encode: (value) => value, decode: (value) => value };
-      const resource = new ResourceOffer(`test.output-reception-window.${mode}`, (_source, activity) => ({
-        read: () => activity.runSync('read', {}, () => 'phase resource'),
-      }));
+      const resource = new ResourceOffer({
+        name: `test.output-reception-window.${mode}`,
+        expose: (_source, activity) => ({
+          read: () => activity.runSync('read', {}, () => 'phase resource'),
+        }),
+      });
       const child = new Group({ maxRounds: 1, raises: [], deps: {}, run: () => 'child result' });
       let reception;
       let receptionFinished = false;

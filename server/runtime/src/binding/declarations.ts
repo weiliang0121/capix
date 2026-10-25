@@ -1,5 +1,4 @@
 import type { CallableKind } from '@capix/protocol';
-import { isFunction } from 'es-toolkit/predicate';
 import type { ChildCallable } from '../definition/children.js';
 import type { CallableStructure } from '../structure/callable.js';
 import type { Composite } from '../definition/composition.js';
@@ -38,7 +37,6 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
   const observations: { definition: AnyCallable; parent?: AnyCallable }[] = [];
   const visit = (current: AnyCallable, parent?: { readonly kind: CallableKind; readonly definition: AnyCallable }): ResolvedCallable => {
     if (path.has(current)) throw new Error('Cyclic member declaration');
-    if (!isFunction(current.run?.execute)) throw new Error('Callable definition requires execute');
     const allowed: readonly CallableKind[] | undefined = parent && childKinds[parent.kind];
     if (!Object.hasOwn(childKinds, current.kind) || (allowed && !allowed.includes(current.kind))) throw new Error('Invalid member definition kind');
     const declaration = snapshotDefinition(current);
@@ -62,7 +60,7 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
       }
     }
     const checkpointUses = points.flatMap((point) => [...(point.resume.uses ?? [])]);
-    for (const child of [...(declaration.run.uses ?? definitions), ...(declaration.exceptions?.uses ?? []), ...checkpointUses]) {
+    for (const child of [...(declaration.uses ?? definitions), ...(declaration.exceptions?.uses ?? []), ...checkpointUses]) {
       if (!definitions.some((member) => member === child)) throw new Error('Declaration uses a member outside its owner');
     }
     const selected = refinements.get(current);

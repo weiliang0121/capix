@@ -34,7 +34,7 @@ test('closing one environment releases its recording without closing borrowed co
   const messages = [];
   const stop = content.transcripts.connect((frame) => messages.push(frame));
   t.after(stop);
-  const revision = environment.recorder.revision;
+  const revision = environment.records.recorder.revision;
   environment.close();
   assert.equal(environment.closed, true);
   assert.equal(content.closed, false);
@@ -45,7 +45,7 @@ test('closing one environment releases its recording without closing borrowed co
   content.consumer.flush();
   assert.equal(messages.at(-1).type, 'delta');
   assert.equal(messages.at(-1).event.change.messages[0].content, 'The content lifetime continues');
-  assert.equal(environment.recorder.revision, revision, 'a detached recording never receives later content');
+  assert.equal(environment.records.recorder.revision, revision, 'a detached recording never receives later content');
   host.close();
   assert.equal(content.closed, true);
 });
@@ -76,7 +76,7 @@ test('host shutdown finishes other environments and shared resources after one r
   const seal = store.sealRecording.bind(store);
   t.mock.method(store, 'sealRecording', (id, revision) => {
     sealed.push(id);
-    if (id === first.recorder.id) throw failure;
+    if (id === first.records.recorder.id) throw failure;
     seal(id, revision);
   });
   let databaseClosed = false;
@@ -89,7 +89,7 @@ test('host shutdown finishes other environments and shared resources after one r
     () => host.close(),
     (error) => error === failure,
   );
-  assert.deepEqual(sealed, [first.recorder.id, second.recorder.id]);
+  assert.deepEqual(sealed, [first.records.recorder.id, second.records.recorder.id]);
   assert.equal(first.closed, true);
   assert.equal(second.closed, true);
   assert.equal(first.content.closed, true);

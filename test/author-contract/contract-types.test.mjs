@@ -88,7 +88,7 @@ const invalidOutput: ChildOptions<typeof view> = { output: { receive(event) { if
 // @ts-expect-error phase Allowed cannot expand to a different contract
 consumer.children.create(nested, 1);
 
-// Entry consumers need input adaptation, not Sequence's implementation getters.
+// Entry consumers need input adaptation, not the full processing configuration.
 const entry = defineChildEntry(read, { accept(request: { input: string }) { return { path: request.input }; } });
 const entryView: ChildEntry<typeof view, string> = entry;
 consumer.children.entry(entryView, 'notes.md');
@@ -104,16 +104,17 @@ consumer.children.entry(customEntry, 'notes.md');
 consumer.children.entry(entryView, 2);
 // @ts-expect-error caller sees no complete run declaration through entryView
 entryView.run;
-// The actual entry retains these for assembly/composition.
-entry.run?.deps;
-entry.exceptions;
+// Assembly/composition follows the retained concrete structure explicitly.
+entry.definition.deps;
+entry.definition.exceptions;
 
 // Shared class registration rules preserve leaf restrictions beyond literals.
 class BadLeaf extends Node<Input, Result> {
   readonly name = 'bad'; readonly label = 'bad'; readonly source = 'test'; readonly callee = 'local';
   // @ts-expect-error a named leaf class cannot declare children
   readonly members = [read];
-  readonly run = { deps: {}, execute: (work: ExecuteWork<'node', Input, Result>) => ({ content: work.input.path }) };
+  readonly deps = {};
+readonly run = (work: ExecuteWork<'node', Input, Result>) => ({ content: work.input.path });
 }
 class GoodLeaf extends Node<Input, Result> {
   readonly name = 'good'; readonly label = 'good'; readonly source = 'test'; readonly callee = 'local';

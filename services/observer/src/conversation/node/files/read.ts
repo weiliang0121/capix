@@ -23,7 +23,7 @@ export class ReadText extends Node<{ readonly path: string }, TextDocument, { re
       checkpoint: { key: 'observer.read-text', version: 1, input: checkpointCodec(z.strictObject({ path: z.string().min(1) })), output: textDocumentCodec, points: [this.resultPoint] },
       deps: { reader: FileResources.readText.request() },
       run: async (work: NodeWork<{ readonly path: string }, TextDocument, { readonly reader: FileReader }>) => {
-        const result = await work.resources.reader.readText(work.input.path, work.signal);
+        const result = await work.resources.reader.readText(work.input.path);
         work.checkpoint?.({ point: this.resultPoint, state: result, refs: {} });
         return result;
       },

@@ -66,6 +66,16 @@ export interface ResourceCapture<Source, Captured, Selection = never> {
   readonly refine?: (captured: Captured, selection: Selection) => Captured;
 }
 
+/** Precise low-level exposure for synchronous values, subscriptions and fixed-effect endpoints. */
+export interface ResourceExposureDeclaration<Source, Value, Captured = Source, Selection = never> extends ResourceCapture<Source, Captured, Selection> {
+  readonly name?: string;
+  readonly expose: (captured: Captured, activity: ResourceActivity) => Value;
+  readonly methods?: never;
+  readonly timing?: 'binding' | 'access';
+}
+
+type ResourceDeclaration = ResourceMethodsDeclaration<ResourceMethodDeclarations, any, any> | ResourceExposureDeclaration<any, any, any, any>;
+
 /** The resource owns capture, its public endpoint, and the typed description of runtime use. */
 class ResourceOfferImplementation<Source, Value, Captured = Source, Selection = never> {
   readonly #identity: ResourceIdentity;
@@ -73,17 +83,29 @@ class ResourceOfferImplementation<Source, Value, Captured = Source, Selection = 
   readonly #options: ResourceCapture<Source, Captured, Selection>;
   readonly timing: 'binding' | 'access';
 
-  constructor(name: string, expose: (source: Source, activity: ResourceActivity) => Value, timing?: 'binding' | 'access', options?: ResourceCapture<Source, Source, Selection>);
-  constructor(name: string, expose: (captured: Captured, activity: ResourceActivity) => Value, timing: 'binding' | 'access', options: ResourceCapture<Source, Captured, Selection> & { capture: (source: Source) => Captured });
-  constructor(declaration: ResourceMethodsDeclaration<ResourceMethodDeclarations>);
-  constructor(nameOrDeclaration: string | ResourceMethodsDeclaration<ResourceMethodDeclarations>, expose?: ((captured: Captured, activity: ResourceActivity) => Value) | ((source: Source, activity: ResourceActivity) => Value), timing: 'binding' | 'access' = 'access', options: ResourceCapture<Source, Captured, Selection> | ResourceCapture<Source, Source, Selection> = {}) {
-    const name = typeof nameOrDeclaration === 'string' ? nameOrDeclaration : (nameOrDeclaration.name ?? `resource:${randomUUID()}`);
+  constructor(declaration: ResourceDeclaration) {
+    if (!declaration || typeof declaration !== 'object' || Array.isArray(declaration)) throw new TypeError('Resource access requires a configuration object');
+    const name = declaration.name ?? `resource:${randomUUID()}`;
     if (!isNonBlankString(name)) throw new TypeError('Resource access requires a stable name');
     this.#identity = Object.freeze({ name });
-    this.#expose = (typeof nameOrDeclaration === 'string' ? expose : resourceMethods(nameOrDeclaration.methods, nameOrDeclaration.observation)) as (captured: Captured, activity: ResourceActivity) => Value;
-    if (!this.#expose) throw new TypeError('Resource access requires an endpoint declaration');
-    this.#options = (typeof nameOrDeclaration === 'string' ? options : { describe: nameOrDeclaration.observation?.source?.bind(nameOrDeclaration.observation) }) as ResourceCapture<Source, Captured, Selection>;
-    this.timing = timing;
+    if (declaration.methods && declaration.expose) throw new TypeError('Resource declaration must use either methods or precise exposure');
+    if (declaration.methods) {
+      this.#expose = resourceMethods(declaration.methods, declaration.observation) as (captured: Captured, activity: ResourceActivity) => Value;
+      this.#options = {
+        capture: declaration.capture?.bind(declaration),
+        refine: declaration.refine?.bind(declaration),
+        describe: declaration.observation?.source?.bind(declaration.observation),
+      } as ResourceCapture<Source, Captured, Selection>;
+    } else {
+      if (typeof declaration.expose !== 'function') throw new TypeError('Resource access requires an endpoint declaration');
+      this.#expose = declaration.expose.bind(declaration);
+      this.#options = {
+        capture: declaration.capture?.bind(declaration),
+        refine: declaration.refine?.bind(declaration),
+        describe: declaration.describe?.bind(declaration),
+      };
+    }
+    this.timing = declaration.timing ?? 'access';
     Object.freeze(this);
   }
   request(): ResourceRequest<Value> {
@@ -114,11 +136,12 @@ class ResourceOfferImplementation<Source, Value, Captured = Source, Selection = 
   }
 }
 
-/** The two constructor forms produce the same offer object; methods infer their complete endpoint type. */
+/** Both endpoint declarations produce the same offer object; methods infer their complete endpoint type. */
 export type ResourceOffer<Source, Value, Captured = Source, Selection = never> = ResourceOfferImplementation<Source, Value, Captured, Selection>;
 export interface ResourceOfferConstructor {
-  new <const Methods extends ResourceMethodDeclarations>(declaration: ResourceMethodsDeclaration<Methods>): ResourceOffer<ResourceMethodsSource<Methods>, ResourceMethods<Methods>>;
-  new <Source, Value, Captured = Source, Selection = never>(name: string, expose: (source: Source, activity: ResourceActivity) => Value, timing?: 'binding' | 'access', options?: ResourceCapture<Source, Source, Selection>): ResourceOffer<Source, Value, Captured, Selection>;
-  new <Source, Value, Captured, Selection = never>(name: string, expose: (captured: Captured, activity: ResourceActivity) => Value, timing: 'binding' | 'access', options: ResourceCapture<Source, Captured, Selection> & { capture: (source: Source) => Captured }): ResourceOffer<Source, Value, Captured, Selection>;
+  new <const Methods extends ResourceMethodDeclarations, Source, Selection = never>(declaration: ResourceMethodsDeclaration<Methods, Source, Selection> & { readonly capture: (source: Source) => ResourceMethodsSource<Methods> }): ResourceOffer<Source, ResourceMethods<Methods>, ResourceMethodsSource<Methods>, Selection>;
+  new <const Methods extends ResourceMethodDeclarations, Selection = never>(declaration: ResourceMethodsDeclaration<Methods, ResourceMethodsSource<Methods>, Selection> & { readonly capture?: never }): ResourceOffer<ResourceMethodsSource<Methods>, ResourceMethods<Methods>, ResourceMethodsSource<Methods>, Selection>;
+  new <Source, Value, Selection = never>(declaration: ResourceExposureDeclaration<Source, Value, Source, Selection> & { readonly capture?: never }): ResourceOffer<Source, Value, Source, Selection>;
+  new <Source, Value, Captured = Source, Selection = never>(declaration: ResourceExposureDeclaration<Source, Value, Captured, Selection> & { readonly capture: (source: Source) => Captured }): ResourceOffer<Source, Value, Captured, Selection>;
 }
 export const ResourceOffer: ResourceOfferConstructor = ResourceOfferImplementation;

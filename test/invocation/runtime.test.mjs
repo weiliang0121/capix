@@ -6,7 +6,8 @@ import { Scene, Group, ExceptionContract, ResourceOffer } from '@capix/server-ru
 class TestExecutionDefinition extends Group {
   constructor(execute) {
     super();
-    this.run = { deps: {}, execute };
+    this.deps = {};
+    this.run = execute;
   }
 }
 
@@ -14,7 +15,9 @@ class Main extends Scene {
   constructor(children, execute) {
     super();
     this.add(...children);
-    this.run = { deps: {}, uses: children, execute };
+    this.deps = {};
+    this.uses = children;
+    this.run = execute;
   }
 }
 
@@ -234,9 +237,9 @@ test('cancellation after R content preparation retains content without creating 
 });
 
 test('E supplies are fulfilled without exposing them to R work', async () => {
-  const secret = new ResourceOffer('test.secret', (source) => source);
+  const secret = new ResourceOffer({ name: 'test.secret', expose: (source) => source });
   const execution = new TestExecutionDefinition((work) => work.resources.secret);
-  execution.run.deps = { secret: secret.request() };
+  execution.deps = { secret: secret.request() };
   const runtime = assemble(
     new Main(
       [execution],
@@ -354,7 +357,7 @@ test('E capture failures cannot masquerade as a declared E work exception', asyn
 });
 
 test('omitted observation installation leaves declarations and their dependencies dormant', async () => {
-  const onlyObservation = new ResourceOffer('test.observation-only', (value) => value);
+  const onlyObservation = new ResourceOffer({ name: 'test.observation-only', expose: (value) => value });
   let observed = 0;
   const execution = new TestExecutionDefinition(() => 'done');
   execution.observation = [
@@ -395,11 +398,11 @@ test('an explicit empty observation installation enables resource-free declarati
 });
 
 test('observation installations cannot satisfy work or exception-handler resource requests', () => {
-  const installed = new ResourceOffer('test.installed', (value) => value);
+  const installed = new ResourceOffer({ name: 'test.installed', expose: (value) => value });
   const installation = { provides: { local: installed.request() }, bindInvocation: () => ({ observe() {} }) };
   for (const phase of ['run', 'exceptions']) {
     const execution = new TestExecutionDefinition(() => 'done');
-    if (phase === 'run') execution.run.deps = { forbidden: installed.request() };
+    if (phase === 'run') execution.deps = { forbidden: installed.request() };
     else execution.exceptions = { deps: { forbidden: installed.request() }, accepts: [], handle: () => assert.fail('not reached') };
     assert.throws(() => assemble(new Main([execution], forward(execution)), { observations: [installation] }), /Expected one resource provider/);
   }

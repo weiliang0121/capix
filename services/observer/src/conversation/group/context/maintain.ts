@@ -87,7 +87,7 @@ export class MaintainConversationContent extends Group<ContextMaintenanceRequest
 
   private async execute(work: MaintenanceWork): Promise<ActiveContentSnapshot> {
     const input = Object.freeze({ phase: work.input.phase, material: work.resources.activeContentManager.capture(), settings: work.resources.settings });
-    if (typeof this.policy === 'function') return this.accept(work, input, await this.policy(input));
+    if (typeof this.policy === 'function') return this.acceptDecision(work, input, await this.policy(input));
     const child = work.children.create(this.policy, input, { key: 'policy' });
     if (this.waiting) work.checkpoint?.({ point: this.waiting, state: input, refs: { child: child.ref } });
     return this.receive(work, child, input);
@@ -96,10 +96,10 @@ export class MaintainConversationContent extends Group<ContextMaintenanceRequest
   private async receive(work: MaintenanceWork, child: ChildCall<ContextMaintenanceOperation>, input: ContextMaintenanceInput): Promise<ActiveContentSnapshot> {
     await child.run();
     const decision = await child.accept((output) => activeContentSelectionSchema.parse(output));
-    return this.accept(work, input, decision);
+    return this.acceptDecision(work, input, decision);
   }
 
-  private accept(work: MaintenanceWork, input: ContextMaintenanceInput, value: ContextMaintenanceDecision): ActiveContentSnapshot {
+  private acceptDecision(work: MaintenanceWork, input: ContextMaintenanceInput, value: ContextMaintenanceDecision): ActiveContentSnapshot {
     const decision = activeContentSelectionSchema.parse(value);
     work.checkpoint?.({ point: this.accepted, state: { input, decision }, refs: {} });
     return this.install(work, input, decision);

@@ -6,7 +6,7 @@ import type { ConversationScene } from '../scene.js';
 import { validateSettings } from '../model/settings.js';
 import type { AcceptedConversationInput } from '../accept.js';
 import { checkpointTranscriptFingerprint, type ConversationCheckpointRun } from '../checkpoints.js';
-import type { ConversationBindingOptions, ConversationEntities, ConversationRunOptions } from './contract.js';
+import type { ConversationCheckpointOptions, ConversationEntities, ConversationRunOptions } from './contract.js';
 import { conversationCheckpointConfiguration, validateConversationCheckpointRestoration } from './checkpoint.js';
 import { messageProgress } from './progress.js';
 
@@ -21,11 +21,22 @@ export class ConversationCallCapture {
   readonly #captures = new WeakMap<ConversationRunOptions, Capture>();
 
   constructor(
-    private readonly definition: ConversationScene,
+    private readonly scene: ConversationScene,
     private readonly entities: ConversationEntities,
-    private readonly capabilities: ConversationBindingOptions,
+    private readonly capabilities: ConversationCheckpointOptions = {},
   ) {
+    this.entities = Object.freeze({ ...entities });
+    this.capabilities = Object.freeze({ ...capabilities });
     if (capabilities.checkpointRuns && (!capabilities.checkpoints || !capabilities.conversationId)) throw new Error('Checkpoint run association requires a conversation and checkpoint store');
+  }
+
+  /** Resource supply and call hooks must describe the same installed conversation. */
+  assertScope(scene: ConversationScene, entities?: ConversationEntities): void {
+    if (scene !== this.scene) throw new Error('Conversation call capture belongs to another scene');
+    if (!entities) return;
+    for (const key of ['transcript', 'memories', 'active', 'selectionUsage', 'files'] as const) {
+      if (entities[key] !== this.entities[key]) throw new Error(`Conversation call capture has a different ${key} entity`);
+    }
   }
 
   validate(options: ConversationRunOptions): undefined {
@@ -37,7 +48,7 @@ export class ConversationCallCapture {
       if (!known || !isEqual(known, restored)) throw new Error('Checkpoint run is not registered in this conversation');
       const checkpoints = this.capabilities.checkpoints;
       if (!checkpoints) throw new Error('Checkpoint restoration requires a checkpoint store');
-      validateConversationCheckpointRestoration(restored, { configuration: conversationCheckpointConfiguration(this.definition, this.entities.files), transcript: this.entities.transcript, memories: this.entities.memories, checkpoints });
+      validateConversationCheckpointRestoration(restored, { configuration: conversationCheckpointConfiguration(this.scene, this.entities.files), transcript: this.entities.transcript, memories: this.entities.memories, checkpoints });
     }
     this.#captures.set(options, { settings: Object.freeze({ ...(restored?.settings ?? options.settings) }) });
   }
@@ -88,6 +99,6 @@ export class ConversationCallCapture {
     const capture = this.#captures.get(options);
     if (!capture?.input || !capture.transcript || !rootContextId) throw new Error('Checkpoint construction basis is incomplete');
     const memories = this.entities.memories;
-    runs.register({ conversationId: this.capabilities.conversationId!, rootContextId, executionContextId, settings: capture.settings, configuration: conversationCheckpointConfiguration(this.definition, this.entities.files), transcript: capture.transcript, input: capture.input, memories: { id: memories.id, sequence: memories.sequence, items: memories.snapshot() } });
+    runs.register({ conversationId: this.capabilities.conversationId!, rootContextId, executionContextId, settings: capture.settings, configuration: conversationCheckpointConfiguration(this.scene, this.entities.files), transcript: capture.transcript, input: capture.input, memories: { id: memories.id, sequence: memories.sequence, items: memories.snapshot() } });
   }
 }

@@ -103,7 +103,7 @@ test('an already entered reception finishes with its original Work before the pa
   const release = deferred();
   t.after(() => release.resolve());
   const writes = [];
-  const writer = new ResourceOffer('test.control.reception-write', (_source, activity) => ({ append: (value) => activity.runSync('append', {}, () => writes.push(value)) }));
+  const writer = new ResourceOffer({ name: 'test.control.reception-write', expose: (_source, activity) => ({ append: (value) => activity.runSync('append', {}, () => writes.push(value)) }) });
   const child = defineGroup()({ run: () => 'child output' });
   let reception;
   let parentAccepted = false;

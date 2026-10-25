@@ -345,8 +345,8 @@ test('failure before a complete execution record produces a terminal transport e
         work.resources.messages.append(work.input.messages);
         throw new Error('private diagnostic must not be an HTTP message');
       },
-      definition.run.deps,
-      { uses: definition.run.uses, accept: definition.run.accept },
+      definition.deps,
+      { uses: definition.uses, accept: definition.accept },
     );
   });
   const stream = await updates(await run());
@@ -364,13 +364,13 @@ test('transport validates origin, input and source boundary before accepting wor
   assert.equal(submission(await invalid.json()).result.error.code, 'INVALID_INPUT');
   assert.equal(observer.transcript.length, 0);
   assert.equal(
-    [...observer.book.values()].some((record) => record.kind === 'invocation' && record.role === 'conversation-task'),
+    [...observer.records.book.values()].some((record) => record.kind === 'invocation' && record.role === 'conversation-task'),
     false,
     'rejected E input creates no QA',
   );
-  const failedRuntime = [...observer.book.values()].find((record) => record.kind === 'invocation' && record.structureKind === 'scene');
+  const failedRuntime = [...observer.records.book.values()].find((record) => record.kind === 'invocation' && record.structureKind === 'scene');
   assert.equal(failedRuntime.status, 'failed', 'R records the rejected child admission');
-  assert.equal(observer.recording.root.childIds.includes(failedRuntime.id), true);
+  assert.equal(observer.records.installation.root.childIds.includes(failedRuntime.id), true);
   for (const path of ['.env', '../../.env', 'services/observer/src/../../../../.env']) assert.equal((await fetch(base + '/api/source?file=' + encodeURIComponent(path))).status, 404);
   const blocked = await new Promise((resolve, reject) => {
     const req = request(base + '/api/config', { headers: { Host: 'outside.example' } }, (res) => {
@@ -644,7 +644,7 @@ test('invalid settings with a valid submission ID are retained as explicit rejec
   assert.equal(observer.transcript.length, 0);
   assert.equal(modelCalls, 0);
   assert.equal(
-    [...observer.book.values()].some((record) => record.kind === 'invocation' && record.structureKind === 'scene'),
+    [...observer.records.book.values()].some((record) => record.kind === 'invocation' && record.structureKind === 'scene'),
     false,
   );
   const transport = new ConversationHttpTransport(base);

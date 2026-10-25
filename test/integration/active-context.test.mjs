@@ -71,7 +71,7 @@ test('configured maintenance runs as normal O before capture and once after cont
   );
   assert.deepEqual(environment.content.active.capture().messages, []);
   assert.equal(environment.transcript.length, 4);
-  const records = [...environment.book.values()];
+  const records = [...environment.records.book.values()];
   const maintenance = records.filter((record) => record.name === 'maintainContext');
   assert.equal(maintenance.length, 2);
   assert.ok(maintenance.every((record) => record.status === 'succeeded'));

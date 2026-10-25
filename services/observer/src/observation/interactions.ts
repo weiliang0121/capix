@@ -6,16 +6,16 @@ import type { ObserverEnvironment } from '../assembly/environment.js';
 import type { ModelInteractionRequest } from '../conversation/model/interactions.js';
 import type { ModelOutput } from '../conversation/model/types.js';
 
-type InteractionEnvironment = Pick<ObserverEnvironment, 'recordSource' | 'book' | 'persistence' | 'interactions'>;
+type InteractionEnvironment = Pick<ObserverEnvironment, 'persistence' | 'interactions'> & { readonly records: Pick<ObserverEnvironment['records'], 'source' | 'book'> };
 
 /** The call grants access through its direct, recorded resource usage. No global ID guessing. */
 export function callInteractionLinks(environment: InteractionEnvironment, callId: string): CallInteractionLinks {
-  environment.recordSource.assertComplete();
-  const call = environment.book.get(callId);
+  environment.records.source.assertComplete();
+  const call = environment.records.book.get(callId);
   if (!(call instanceof CompositeRecord) || !['invocation', 'runtime-call', 'execution', 'operation', 'attempt'].includes(call.kind)) throw new RuntimeError('CALL_NOT_FOUND', '找不到指定对话中的调用。');
   const ids = new Set<string>();
   for (const childId of call.childIds) {
-    const resource = environment.book.get(childId);
+    const resource = environment.records.book.get(childId);
     if (!(resource instanceof ResourceRecord) || resource.parentId !== callId || !isPlainObject(resource.value)) continue;
     const value = resource.value;
     const ref = resource.access === 'model-interaction.create' && resource.phase === 'returned' && value.action === 'start' ? value.output : resource.access === 'model-interaction.read' && resource.phase === 'started' && (value.action === 'wait' || value.action === 'result' || value.action === 'subscribe') ? value.input : undefined;

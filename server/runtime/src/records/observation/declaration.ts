@@ -19,15 +19,17 @@ export interface InvocationRecordWriter {
 }
 
 /** Only observation declarations may request this locally supplied writer. */
-export const InvocationRecordAccess = new ResourceOffer<InvocationRecording, InvocationRecordWriter>('observation.call-record', (recording, activity) =>
-  Object.freeze({
-    observe(fact: InvocationFact, description?: InvocationRecordDescription): undefined {
-      activity.validate();
-      recording.observeDescribed(fact, description);
-      return undefined;
-    },
-  }),
-);
+export const InvocationRecordAccess = new ResourceOffer<InvocationRecording, InvocationRecordWriter>({
+  name: 'observation.call-record',
+  expose: (recording, activity) =>
+    Object.freeze({
+      observe(fact: InvocationFact, description?: InvocationRecordDescription): undefined {
+        activity.validate();
+        recording.observeDescribed(fact, description);
+        return undefined;
+      },
+    }),
+});
 
 /** Call records are produced here, not by an implicit Invocation recording path. */
 export function invocationRecording<Input = unknown, Output = unknown>(description: InvocationRecordDescription<Input, Output> = {}, options: { failure?: 'isolate' | 'propagate' } = {}) {

@@ -122,9 +122,12 @@ test('cancellation from resource start observation prevents synchronous and asyn
   for (const asynchronous of [false, true]) {
     const controller = new AbortController();
     const effects = [];
-    const offer = new ResourceOffer('test.effect', (_source, activity) => ({
-      run: () => (asynchronous ? activity.runAsync('effect', {}, async () => effects.push('effect')) : activity.runSync('effect', {}, () => effects.push('effect'))),
-    }));
+    const offer = new ResourceOffer({
+      name: 'test.effect',
+      expose: (_source, activity) => ({
+        run: () => (asynchronous ? activity.runAsync('effect', {}, async () => effects.push('effect')) : activity.runSync('effect', {}, () => effects.push('effect'))),
+      }),
+    });
     const resources = bindResources({ effect: offer.request() }, [offer.provide(() => null)])(null);
     resources.attach({
       contextId: 'test',
@@ -150,7 +153,9 @@ class Main extends Scene {
   constructor(execute, { children = [], deps = {} } = {}) {
     super();
     this.add(...children);
-    this.run = { deps, uses: children, execute };
+    this.deps = deps;
+    this.uses = children;
+    this.run = execute;
   }
 }
 
@@ -161,7 +166,8 @@ function runtime(definition, providers = []) {
 test('cancellation blocks new children before entry and releases Runtime occupancy', async () => {
   const controller = new AbortController();
   const execution = new (class extends Group {
-    run = { deps: {}, execute: () => assert.fail('child must not run') };
+    deps = {};
+    run = () => assert.fail('child must not run');
     entry = { deps: {}, accept: () => assert.fail('entry must not run') };
   })();
   let parent;
@@ -186,7 +192,8 @@ test('cancellation blocks new children before entry and releases Runtime occupan
 test('a returned child is not accepted after parent cancellation', async () => {
   const controller = new AbortController();
   const execution = new (class extends Group {
-    run = { deps: {}, execute: () => 'child result' };
+    deps = {};
+    run = () => 'child result';
   })();
   let relation;
   let acceptances = 0;
@@ -212,7 +219,7 @@ test('a returned child is not accepted after parent cancellation', async () => {
 test('cached resource endpoints stop later writes but preserve already established effects', async () => {
   const controller = new AbortController();
   const writes = [];
-  const offer = new ResourceOffer('test.write', (_source, activity) => ({ append: (value) => activity.runSync('append', {}, () => writes.push(value)) }));
+  const offer = new ResourceOffer({ name: 'test.write', expose: (_source, activity) => ({ append: (value) => activity.runSync('append', {}, () => writes.push(value)) }) });
   const bound = runtime(
     new Main(
       (work) => {

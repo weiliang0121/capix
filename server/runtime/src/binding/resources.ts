@@ -7,7 +7,7 @@ import type { ChildCallable, CallableInput } from '../definition/children.js';
 type RefinableDefinition = ChildCallable;
 
 interface ResourceDeclarations {
-  readonly run: { readonly deps: ResourceRequirements };
+  readonly deps: ResourceRequirements;
   readonly exceptions?: { readonly deps: ResourceRequirements };
   readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
   readonly checkpoint?: { readonly points: readonly { readonly name: string; readonly resume: { readonly deps: ResourceRequirements } }[] };
@@ -37,7 +37,7 @@ export function bindChildResources<Definition extends RefinableDefinition>(defin
 export function collectDefinitionRequirements(definition: ResourceDeclarations, observationProvides?: ResourceRequirements): ResourceRequirements {
   const deps: Record<string, ResourceRequest<unknown>> = {};
   const observationOffers = new Set(resourceRequests(observationProvides ?? {}).map((request) => request.offer));
-  for (const [name, request] of Object.entries(definition.run.deps)) deps[`run.${name}`] = request;
+  for (const [name, request] of Object.entries(definition.deps)) deps[`run.${name}`] = request;
   for (const [name, request] of Object.entries(definition.exceptions?.deps ?? {})) deps[`exceptions.${name}`] = request;
   for (const point of definition.checkpoint?.points ?? []) {
     for (const [name, request] of Object.entries(point.resume.deps)) deps[`checkpoint.${point.name}.${name}`] = request;

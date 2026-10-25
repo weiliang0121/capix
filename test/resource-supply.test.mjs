@@ -19,13 +19,16 @@ test('transitive supplies retain offers while parents receive only their own res
   const captures = { history: 0, model: 0, dormant: 0 };
   const endpoints = [];
   const facts = [];
-  const history = new ResourceOffer('supply.history', (value) => value);
-  const model = new ResourceOffer('supply.model', (value, activity) => {
-    const endpoint = { read: () => activity.runSync('read', {}, () => value) };
-    endpoints.push(endpoint);
-    return endpoint;
+  const history = new ResourceOffer({ name: 'supply.history', expose: (value) => value });
+  const model = new ResourceOffer({
+    name: 'supply.model',
+    expose: (value, activity) => {
+      const endpoint = { read: () => activity.runSync('read', {}, () => value) };
+      endpoints.push(endpoint);
+      return endpoint;
+    },
   });
-  const dormant = new ResourceOffer('supply.dormant', () => assert.fail('unused descendant must stay lazy'));
+  const dormant = new ResourceOffer({ name: 'supply.dormant', expose: () => assert.fail('unused descendant must stay lazy') });
   const leaf = attempt('model', { deps: { value: model.request() }, execute: (work) => work.resources.value.read() });
   const unused = attempt('unused', { deps: { value: dormant.request() }, execute: () => null });
   const parent = operation('parent', [leaf, unused], {
@@ -82,25 +85,23 @@ test('a pure forwarding operation narrows descendant supply without owning an en
   let captures = 0;
   let exposes = 0;
   let refinements = 0;
-  const offer = new ResourceOffer(
-    'supply.refined',
-    (source, activity) => {
+  const offer = new ResourceOffer({
+    name: 'supply.refined',
+    expose: (source, activity) => {
       exposes++;
       return { read: () => activity.runSync('read', {}, () => source) };
     },
-    'access',
-    {
-      capture(source) {
-        captures++;
-        return Object.freeze([...source]);
-      },
-      refine(source, selected) {
-        refinements++;
-        if (selected.some((value) => !source.includes(value))) throw new Error('Cannot widen access');
-        return Object.freeze([...selected]);
-      },
+    timing: 'access',
+    capture(source) {
+      captures++;
+      return Object.freeze([...source]);
     },
-  );
+    refine(source, selected) {
+      refinements++;
+      if (selected.some((value) => !source.includes(value))) throw new Error('Cannot widen access');
+      return Object.freeze([...selected]);
+    },
+  });
   const leaf = attempt('read', { deps: { value: offer.request() }, execute: (work) => work.resources.value.read() });
   const parent = operation('forward', [leaf], {
     deps: {},
@@ -125,16 +126,14 @@ test('a pure forwarding operation narrows descendant supply without owning an en
 
 test('R and E keep independent capture sources even when they use the same offer', async () => {
   const captures = [];
-  const offer = new ResourceOffer('supply.boundary', (value) => value, 'binding');
+  const offer = new ResourceOffer({ name: 'supply.boundary', expose: (value) => value, timing: 'binding' });
   const leaf = attempt('leaf', { deps: { value: offer.request() }, execute: (work) => work.resources.value });
   const parent = operation('forward', [leaf], { deps: {}, execute: (work) => work.children.create(leaf, null).run() });
   const main = execution([parent], { deps: {}, execute: (work) => work.children.create(parent, null).run() });
   const definition = runtimeDefinition(main);
-  definition.run = {
-    deps: { value: offer.request() },
-    async execute(work) {
-      return [work.resources.value, await work.children.create(main, 'prepared').run()];
-    },
+  definition.deps = { value: offer.request() };
+  definition.run = async function (work) {
+    return [work.resources.value, await work.children.create(main, 'prepared').run()];
   };
   const runtime = installCallable(definition, {
     providers: [
@@ -151,7 +150,7 @@ test('R and E keep independent capture sources even when they use the same offer
 });
 
 test('observation-only supplies never satisfy a business descendant requirement', async () => {
-  const offer = new ResourceOffer('supply.observer-only', (value) => value);
+  const offer = new ResourceOffer({ name: 'supply.observer-only', expose: (value) => value });
   const leaf = attempt('leaf', { deps: {}, execute: () => 'ok' });
   leaf.observation = [
     {
@@ -182,8 +181,8 @@ test('observation-only supplies never satisfy a business descendant requirement'
 });
 
 test('identity aggregation still rejects missing, duplicate and name-conflicting providers', () => {
-  const first = new ResourceOffer('supply.shared-name', (source) => source);
-  const second = new ResourceOffer('supply.shared-name', (source) => source);
+  const first = new ResourceOffer({ name: 'supply.shared-name', expose: (source) => source });
+  const second = new ResourceOffer({ name: 'supply.shared-name', expose: (source) => source });
   const leaf = attempt('leaf', { deps: { value: first.request() }, execute: () => null });
   const parent = operation('parent', [leaf], { deps: {}, execute: () => null });
   const main = execution([parent], { deps: {}, execute: () => null });
@@ -191,6 +190,7 @@ test('identity aggregation still rejects missing, duplicate and name-conflicting
   const source = { capture: () => null };
   assert.throws(() => installCallable(definition, { providers: [], source }), /Expected one resource provider/);
   assert.throws(() => installCallable(definition, { providers: [first.provide(() => null), first.provide(() => null)], source }), /Expected one resource provider/);
-  parent.run = { deps: { value: second.request() }, execute: () => null };
+  parent.deps = { value: second.request() };
+  parent.run = () => null;
   assert.throws(() => installCallable(definition, { providers: [first.provide(() => null), second.provide(() => null)], source }), /Different resource offers/);
 });

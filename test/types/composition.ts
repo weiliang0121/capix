@@ -1,7 +1,7 @@
 import { Sequence, InvocationEntry, defineGroup, defineScene, type Group, type Node, type ChildCalls, type GroupWork, type SceneWork, Driver, Scene } from '@capix/server-runtime';
 import { bindChildResources, type ResourceRefinement } from '@capix/server-runtime';
 
-const bounded = new ResourceOffer<{ readonly allowed: readonly string[] }, readonly string[], { readonly allowed: readonly string[] }, string>('bounded', (source) => source.allowed, 'access', { refine: (source, selected) => ({ allowed: source.allowed.filter((value) => value === selected) }) });
+const bounded = new ResourceOffer<{ readonly allowed: readonly string[] }, readonly string[], string>({ name: 'bounded', expose: (source) => source.allowed, timing: 'access', refine: (source, selected) => ({ allowed: source.allowed.filter((value) => value === selected) }) });
 declare const fileOperation: Group<{ readonly path: string }, string>;
 bindChildResources(fileOperation, [bounded.refine<{ readonly path: string }>((input) => input.path)]);
 // @ts-expect-error only a resource offer can issue the nominal refinement contract
@@ -116,13 +116,13 @@ parent.complete('done');
 // @ts-expect-error child facts do not publish reception mutation
 parent.children.facts.values()[0]?.accept(() => null);
 
-import { ExceptionContract, ResourceOffer, type InvocationRunDefinition, type InvocationExceptionDefinition } from '@capix/server-runtime';
+import { ExceptionContract, ResourceOffer, type CallableRunDefinition, type InvocationExceptionDefinition } from '@capix/server-runtime';
 const issue = new ExceptionContract<{ reason: string }>('test.issue');
-const workValue = new ResourceOffer('work-value', (value: number) => value);
-const handlingValue = new ResourceOffer('handling-value', (value: string) => value);
-const run: InvocationRunDefinition<string, string, 'group', { value: number }> = {
+const workValue = new ResourceOffer({ name: 'work-value', expose: (value: number) => value });
+const handlingValue = new ResourceOffer({ name: 'handling-value', expose: (value: string) => value });
+const run: CallableRunDefinition<string, string, 'group', { value: number }> = {
   deps: { value: workValue.request() },
-  execute(work) {
+  run(work) {
     const value: number = work.resources.value;
     // @ts-expect-error work does not acquire the handler's resource aliases
     work.resources.repair;
@@ -139,7 +139,7 @@ const exceptions: InvocationExceptionDefinition<string, string, 'group', { repai
     return work.return(repair);
   },
 };
-const composed: Group<string, string, { value: number }, { repair: string }> = defineGroup<string, string>()({ name: 'typed', label: 'typed', source: 'test', members: [], maxRounds: 1, raises: [issue], deps: run.deps, uses: [], run: run.execute, accept: run.accept, exceptions: { ...exceptions, uses: [] } });
+const composed: Group<string, string, { value: number }, { repair: string }> = defineGroup<string, string>()({ name: 'typed', label: 'typed', source: 'test', members: [], maxRounds: 1, raises: [issue], deps: run.deps, uses: [], run: run.run, accept: run.accept, exceptions: { ...exceptions, uses: [] } });
 const composedResult: Promise<string> = children.create(composed, 'input').run();
 void composedResult;
 const childFact = operation.children.facts.get(operation.children.create(leaf, 'input').ref);
@@ -147,7 +147,7 @@ const childFact = operation.children.facts.get(operation.children.create(leaf, '
 childFact.resources;
 
 import { defineObservation, type InvocationFact, type DriverFact, type ObservationDefinition, type ObservationDeclaration } from '@capix/server-runtime';
-const counter = new ResourceOffer('counter', (value: { increment(): void }) => value);
+const counter = new ResourceOffer({ name: 'counter', expose: (value: { increment(): void }) => value });
 const callProbe: ObservationDeclaration<InvocationFact> = defineObservation<InvocationFact, { counter: { increment(): void } }>({
   deps: { counter: counter.request() },
   observe(fact, ports) {

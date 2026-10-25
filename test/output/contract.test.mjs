@@ -332,32 +332,30 @@ function composeLevel(Base, child, label, receives, explicit = false) {
       super();
       if (Base !== Node && child) this.add(child);
     }
-    run = {
-      deps: {},
-      execute: async (work) => {
-        assert.ok(work.output);
-        work.output.emit(label);
-        if (!child) return label;
-        const call = work.children.create(
-          child,
-          'input',
-          explicit
-            ? {
-                output: {
-                  receive(event) {
-                    receives.push({ level: label, event });
-                  },
+    deps = {};
+    run = async (work) => {
+      assert.ok(work.output);
+      work.output.emit(label);
+      if (!child) return label;
+      const call = work.children.create(
+        child,
+        'input',
+        explicit
+          ? {
+              output: {
+                receive(event) {
+                  receives.push({ level: label, event });
                 },
-              }
-            : undefined,
-        );
-        await call.run();
-        return call.accept();
-      },
-      accept: (work) => {
-        assert.equal('output' in work, false);
-        return work.delivered;
-      },
+              },
+            }
+          : undefined,
+      );
+      await call.run();
+      return call.accept();
+    };
+    accept = (work) => {
+      assert.equal('output' in work, false);
+      return work.delivered;
     };
   })();
 }
@@ -458,12 +456,10 @@ test('bound fallback has no writer and remains subject to the declared result co
   const runtime = new (class extends Scene {
     output = contract;
     raises = [rejected];
-    run = {
-      deps: {},
-      execute(work) {
-        work.output.emit('tentative');
-        throw rejected.create('fallback', {});
-      },
+    deps = {};
+    run = function (work) {
+      work.output.emit('tentative');
+      throw rejected.create('fallback', {});
     };
     exceptions = {
       deps: {},
@@ -515,19 +511,17 @@ test('one failing explicit E output consumer does not disable its other binding'
       super();
       this.add(execution);
     }
-    run = {
-      deps: {},
-      async execute(work) {
-        const child = work.children.create(execution, 'input', {
-          output: {
-            receive() {
-              throw new Error('one consumer failed');
-            },
+    deps = {};
+    run = async function (work) {
+      const child = work.children.create(execution, 'input', {
+        output: {
+          receive() {
+            throw new Error('one consumer failed');
           },
-        });
-        await child.run();
-        return child.accept();
-      },
+        },
+      });
+      await child.run();
+      return child.accept();
     };
   })();
   const events = [];
@@ -606,12 +600,10 @@ test('a previous work view cannot create children after the invocation moves to 
   let executions = 0;
   let saved;
   const child = new (class extends Group {
-    run = {
-      deps: {},
-      execute: () => {
-        executions++;
-        return 'child';
-      },
+    deps = {};
+    run = () => {
+      executions++;
+      return 'child';
     };
   })();
   const definition = new (class extends Scene {
@@ -620,17 +612,15 @@ test('a previous work view cannot create children after the invocation moves to 
       super();
       this.add(child);
     }
-    run = {
-      deps: {},
-      uses: [child],
-      execute(work) {
-        if (work.round === 1) saved = work;
-        else assert.throws(() => saved.children.create(child, 'stale'), /inactive declaration round/);
-        return 'work';
-      },
-      accept(work) {
-        return work.round === 1 ? work.continue('next', 'continue') : work.delivered;
-      },
+    deps = {};
+    uses = [child];
+    run = function (work) {
+      if (work.round === 1) saved = work;
+      else assert.throws(() => saved.children.create(child, 'stale'), /inactive declaration round/);
+      return 'work';
+    };
+    accept = function (work) {
+      return work.round === 1 ? work.continue('next', 'continue') : work.delivered;
     };
   })();
   const runtime = installCallable(definition, { providers: [], source: { entry: () => ({}), capture: () => ({}) } });
@@ -643,7 +633,8 @@ for (const handled of [false, true]) {
     const rejected = new ExceptionContract('ACCEPT_FROM_CURRENT_VIEW');
     let saved;
     const child = new (class extends Group {
-      run = { deps: {}, execute: () => 'child' };
+      deps = {};
+      run = () => 'child';
     })();
     const definition = new (class extends Scene {
       constructor() {
@@ -651,20 +642,18 @@ for (const handled of [false, true]) {
         this.add(child);
       }
       raises = [rejected];
-      run = {
-        deps: {},
-        uses: [child],
-        async execute(work) {
-          const call = work.children.create(child, 'input');
-          saved = call.ref;
-          const output = await call.run();
-          if (handled) throw rejected.create('use existing result', {});
-          return output;
-        },
-        async accept(work) {
-          assert.equal('output' in work, false);
-          return work.children.open(saved).accept();
-        },
+      deps = {};
+      uses = [child];
+      run = async function (work) {
+        const call = work.children.create(child, 'input');
+        saved = call.ref;
+        const output = await call.run();
+        if (handled) throw rejected.create('use existing result', {});
+        return output;
+      };
+      accept = async function (work) {
+        assert.equal('output' in work, false);
+        return work.children.open(saved).accept();
       };
       exceptions = {
         deps: {},

@@ -48,7 +48,8 @@ for (const receptions of [[], [reception(makeChild(), identity)]]) {
       source = 'test';
       callee = 'local';
       receptions = receptions;
-      run = { deps: {}, execute: (work) => work.input };
+      deps = {};
+      run = (work) => work.input;
     }
     assert.throws(() => resolveDeclaration(new InvalidLeaf()), /Nodes cannot declare receptions/);
     const factory = defineNode()({ ...metadata, receptions, run: (work) => work.input });

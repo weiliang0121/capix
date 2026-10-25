@@ -25,10 +25,10 @@ test('reference counts follow accepted active material, independently of generat
       { role: 'assistant', content: '已了解。' },
     ]).snapshot(),
   );
-  const project = () => observeSelection(environment.book, environment.transcript);
+  const project = () => observeSelection(environment.records.book, environment.transcript);
   const run = async (content) => {
     const input = { messages: [{ role: 'user', content }] };
-    return observeExecution(environment.runner, environment.recording, input, { settings, transcript: environment.transcript });
+    return observeExecution(environment.runner, environment.records.installation, input, { settings, transcript: environment.transcript });
   };
   assert.deepEqual(
     project().messages.map((item) => item.count),
@@ -87,8 +87,8 @@ test('execution rejects a foreign Transcript and does not mutate either running 
     { role: 'user', content: '另一份消息' },
     { role: 'user', content: '继续' },
   ]);
-  await assert.rejects(observeExecution(environment.runner, environment.recording, other.current('user'), { settings, transcript: other }), { code: 'INVALID_INPUT' });
-  assert.deepEqual(observeSelection(environment.book, environment.transcript), { transcriptId: environment.transcript.id, messages: [], executions: [] });
+  await assert.rejects(observeExecution(environment.runner, environment.records.installation, other.current('user'), { settings, transcript: other }), { code: 'INVALID_INPUT' });
+  assert.deepEqual(observeSelection(environment.records.book, environment.transcript), { transcriptId: environment.transcript.id, messages: [], executions: [] });
   assert.equal(other.length, 2);
   assert.equal(environment.runner.isRunning, false);
 });

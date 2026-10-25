@@ -30,12 +30,10 @@ test('terminal checkpoint persistence failure still delivers the owned child err
   let returned;
   class Child extends Group {
     checkpoint = checkpoint('child', () => assert.fail('not resuming'));
-    run = {
-      deps: {},
-      execute: (work) => {
-        work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: {} });
-        return 'result';
-      },
+    deps = {};
+    run = (work) => {
+      work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: {} });
+      return 'result';
     };
   }
   const child = new Child();
@@ -44,19 +42,17 @@ test('terminal checkpoint persistence failure still delivers the owned child err
       super();
       this.add(child);
     }
-    run = {
-      deps: {},
-      uses: [child],
-      async execute(work) {
-        const call = work.children.create(child, {});
-        try {
-          await call.run();
-        } catch {
-          /* A declaration cannot clear a structural child failure. */
-        }
-        returned = work.children.facts.values()[0].returned;
-        return 'must not succeed';
-      },
+    deps = {};
+    uses = [child];
+    run = async function (work) {
+      const call = work.children.create(child, {});
+      try {
+        await call.run();
+      } catch {
+        /* A declaration cannot clear a structural child failure. */
+      }
+      returned = work.children.facts.values()[0].returned;
+      return 'must not succeed';
     };
   }
   const runtime = installCallable(new Root(), { source, providers: [], checkpoints: { store } });
@@ -68,11 +64,13 @@ test('terminal checkpoint persistence failure still delivers the owned child err
 test('a cached resumed child cannot be reused through a different declaration contract', async () => {
   class ChildA extends Group {
     checkpoint = checkpoint('child-a', () => assert.fail('terminal child cannot run'));
-    run = { deps: {}, execute: () => assert.fail('terminal child cannot run') };
+    deps = {};
+    run = () => assert.fail('terminal child cannot run');
   }
   class ChildB extends Group {
     checkpoint = checkpoint('child-b', () => assert.fail('wrong child cannot run'));
-    run = { deps: {}, execute: () => assert.fail('wrong child cannot run') };
+    deps = {};
+    run = () => assert.fail('wrong child cannot run');
   }
   const a = new ChildA();
   const b = new ChildB();
@@ -91,7 +89,8 @@ test('a cached resumed child cannot be reused through a different declaration co
       },
       [a, b],
     );
-    run = { deps: {}, execute: () => assert.fail('not running original work') };
+    deps = {};
+    run = () => assert.fail('not running original work');
   }
   const store = new MemoryCheckpointStore();
   store.save(savedRoot([returnedChild()]), 0);
@@ -115,7 +114,8 @@ for (const reception of ['pending', 'receiving']) {
           },
         },
       };
-      run = { deps: {}, execute: () => assert.fail('terminal child cannot execute work') };
+      deps = {};
+      run = () => assert.fail('terminal child cannot execute work');
     }
     const child = new Child();
     class Root extends Scene {
@@ -145,7 +145,8 @@ for (const reception of ['pending', 'receiving']) {
         },
         [child],
       );
-      run = { deps: {}, execute: () => assert.fail('not running original work') };
+      deps = {};
+      run = () => assert.fail('not running original work');
     }
     const saved = returnedChild();
     saved.state.output = { wire: 7 };
@@ -207,7 +208,8 @@ test('a final child delivery preserves its own second-round input without rerunn
   class Child extends Group {
     maxRounds = 2;
     checkpoint = checkpoint('child-a', () => assert.fail('terminal child cannot resume'));
-    run = { deps: {}, execute: () => assert.fail('terminal child cannot execute') };
+    deps = {};
+    run = () => assert.fail('terminal child cannot execute');
   }
   const child = new Child();
   class Root extends Scene {
@@ -229,7 +231,8 @@ test('a final child delivery preserves its own second-round input without rerunn
       },
       [child],
     );
-    run = { deps: {}, execute: () => assert.fail('not running original work') };
+    deps = {};
+    run = () => assert.fail('not running original work');
   }
   const relation = returnedChild();
   relation.state = { kind: 'waiting' };
@@ -256,7 +259,8 @@ test('two runtime structures cannot continue the same work through a shared chec
       await pending;
       return 'finished once';
     });
-    run = { deps: {}, execute: () => assert.fail('not running original work') };
+    deps = {};
+    run = () => assert.fail('not running original work');
   }
   const store = new MemoryCheckpointStore();
   store.save(savedRoot([]), 0);
@@ -273,7 +277,8 @@ test('two runtime structures cannot continue the same work through a shared chec
 
 test('ordinary parallel child receptions remain supported without checkpoint or fixed entity access', async () => {
   class Child extends Group {
-    run = { deps: {}, execute: () => 1 };
+    deps = {};
+    run = () => 1;
   }
   const child = new Child();
   class Root extends Scene {
@@ -281,24 +286,22 @@ test('ordinary parallel child receptions remain supported without checkpoint or 
       super();
       this.add(child);
     }
-    run = {
-      deps: {},
-      uses: [child],
-      async execute(work) {
-        const first = work.children.create(child, {});
-        const second = work.children.create(child, {});
-        await Promise.all([first.run(), second.run()]);
-        return Promise.all([
-          first.accept(async (output) => {
-            await Promise.resolve();
-            return output;
-          }),
-          second.accept(async (output) => {
-            await Promise.resolve();
-            return output;
-          }),
-        ]);
-      },
+    deps = {};
+    uses = [child];
+    run = async function (work) {
+      const first = work.children.create(child, {});
+      const second = work.children.create(child, {});
+      await Promise.all([first.run(), second.run()]);
+      return Promise.all([
+        first.accept(async (output) => {
+          await Promise.resolve();
+          return output;
+        }),
+        second.accept(async (output) => {
+          await Promise.resolve();
+          return output;
+        }),
+      ]);
     };
   }
   const runtime = installCallable(new Root(), { source, providers: [] });
@@ -324,7 +327,8 @@ test('a rejected continuation check publishes its failure without closing the sa
         },
       ],
     };
-    run = { deps: {}, execute: () => assert.fail('not running original work') };
+    deps = {};
+    run = () => assert.fail('not running original work');
   }
   const runtime = installCallable(new Root(), { source, providers: [], checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } });
   await assert.rejects(runtime.resume('root-context', {}), /incompatible/);

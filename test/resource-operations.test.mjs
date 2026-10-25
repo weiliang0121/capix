@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { Resource, Resources, ResourceOffer, Runner, Scene, bindResources, ChangeCaptureError, InvocationCancelled, ExceptionContract } from '@capix/server-runtime';
+import { Resource, Resources, ResourceOffer, Runner, Scene, Node, bindResources, ChangeCaptureError, InvocationCancelled, ExceptionContract } from '@capix/server-runtime';
 
 function binding(offer, origin, overrides = {}) {
   const faults = [];
@@ -23,6 +23,97 @@ function binding(offer, origin, overrides = {}) {
   access.start();
   return { access, endpoint: access.values.value, faults, facts };
 }
+
+test('named exposure preserves synchronous values and fixes callback entries with their original receiver', () => {
+  const source = { values: [1, 2] };
+  const calls = [];
+  const declaration = {
+    name: 'snapshot',
+    timing: 'binding',
+    capture(value) {
+      assert.equal(this, declaration);
+      calls.push('capture');
+      return Object.freeze([...value.values]);
+    },
+    expose(value) {
+      assert.equal(this, declaration);
+      calls.push('expose');
+      return value;
+    },
+    describe(value) {
+      assert.equal(this, declaration);
+      return { count: value.length };
+    },
+    refine(value, length) {
+      assert.equal(this, declaration);
+      return value.slice(0, length);
+    },
+  };
+  const offer = new ResourceOffer(declaration);
+  const rule = offer.refine((length) => length);
+  for (const method of ['capture', 'expose', 'describe', 'refine']) declaration[method] = () => assert.fail('declaration entry changed after publication');
+  const { access, endpoint, facts } = binding(offer, source);
+  assert.deepEqual(calls, ['capture', 'expose']);
+  assert.deepEqual(endpoint, [1, 2]);
+  assert.equal(endpoint, access.values.value);
+  source.values.push(3);
+  assert.deepEqual(endpoint, [1, 2]);
+  const child = access.select({ value: offer.request() }, undefined, { input: 1, refinements: [rule] });
+  child.attach({ contextId: 'child', validate() {} });
+  child.start();
+  assert.deepEqual(child.values.value, [1]);
+  assert.deepEqual(access.values.value, [1, 2]);
+  assert.ok(facts.some((fact) => fact.describe()?.count === 2));
+});
+
+test('method capture and refinement preserve independent child scopes while sharing one immutable supply', async () => {
+  const source = { values: [1, 2, 3] };
+  let captures = 0;
+  const offer = new ResourceOffer({
+    capture(origin) {
+      captures++;
+      return Object.freeze([...origin.values]);
+    },
+    refine(values, selection) {
+      if (!values.includes(selection)) throw new Error('Cannot widen resource scope');
+      return Object.freeze([selection]);
+    },
+    methods: {
+      read(values) {
+        return values;
+      },
+    },
+  });
+  const child = new Node({ deps: { source: offer.request() }, run: (work) => work.resources.source.read(undefined) });
+  const scene = new Scene({
+    deps: { source: offer.request() },
+    uses: [child],
+    async run(work) {
+      const full = await work.resources.source.read(undefined);
+      const subsets = await Promise.all(work.input.map((selection) => work.children.invoke(child, selection)));
+      assert.equal(await work.resources.source.read(undefined), full);
+      return { full, subsets };
+    },
+  }).add(child);
+  const resources = new Resources().register(new Resource(source), offer).refine(
+    child,
+    offer.refine((input) => input),
+  );
+  const runner = new Runner(scene, resources).build();
+  assert.equal(captures, 0);
+  assert.deepEqual(await runner.run([1, 3]), { full: [1, 2, 3], subsets: [[1], [3]] });
+  assert.equal(captures, 1);
+  await assert.rejects(runner.run([4]), /Cannot widen resource scope/);
+});
+
+test('an offer rejects mixed endpoint declarations', () => {
+  assert.throws(() => new ResourceOffer({ methods: { read: () => 1 }, expose: () => 1 }), /either methods or precise exposure/);
+});
+
+test('an offer requires a configuration object and rejects the removed positional constructor', () => {
+  assert.throws(() => new ResourceOffer('legacy', (value) => value, 'binding', { capture: (value) => value }), /requires a configuration object/);
+  assert.throws(() => new ResourceOffer({ name: 'missing-endpoint' }), /requires an endpoint declaration/);
+});
 
 test('resource methods register an origin directly and preserve successful values by reference', async () => {
   const origin = { value: { text: 'one' } };
@@ -601,4 +692,10 @@ test('resource method declarations infer source, input, result branches and delt
 test('resource method contract counterexamples fail rather than being widened by callbacks', () => {
   const errors = diagnostics(typeSource.replaceAll('@ts-expect-error', 'expected error'));
   assert.equal(errors.length, typeSource.match(/@ts-expect-error/g).length);
+});
+
+test('resource requests preserve source types and business Work only exposes declared access', () => {
+  const file = fileURLToPath(new URL('./types/resources.ts', import.meta.url));
+  const errors = ts.getPreEmitDiagnostics(ts.createProgram([file], { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext }));
+  assert.equal(errors.length, 0, ts.formatDiagnosticsWithColorAndContext(errors, { getCanonicalFileName: (file) => file, getCurrentDirectory: () => process.cwd(), getNewLine: () => '\n' }));
 });

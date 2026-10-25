@@ -1,6 +1,7 @@
-import type { InvocationControls, CallableInvocationCallbacks, CheckpointStore, ProgressChannel, InvocationProgress } from '@capix/server-runtime';
+import type { Runner, InvocationControls, CallableInvocationCallbacks, CheckpointStore, ProgressChannel, InvocationProgress } from '@capix/server-runtime';
 import type { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
 import type { ModelSettings, GenerationOutput } from '@capix/protocol';
+import type { ConversationScene } from '../scene.js';
 import type { ConversationProgress } from '../progress.js';
 import type { AcceptedConversationInput } from '../accept.js';
 import type { WorkspaceFiles, FileProgress } from '../../files/index.js';
@@ -14,7 +15,7 @@ export interface ConversationRunOptions extends InvocationControls {
   checkpointRun?: ConversationCheckpointRun;
   /** One passive channel for this submission. Reusing it explicitly shares its failure state. */
   progress?: ProgressChannel<ConversationProgress>;
-  /** Optional passive REOA metadata; a failed activity consumer does not disable content progress. */
+  /** Optional passive call metadata; a failed activity consumer does not disable content progress. */
   activity?: ProgressChannel<InvocationProgress>;
   fileProgress?: ProgressChannel<FileProgress>;
   answerProgress?: ProgressChannel<AnswerProgress>;
@@ -30,8 +31,10 @@ export interface ConversationEntities {
 }
 
 /** Service restoration association uses the same store installed by its Runner. */
-export interface ConversationBindingOptions {
+export interface ConversationCheckpointOptions {
   checkpoints?: CheckpointStore;
   checkpointRuns?: ConversationCheckpointRuns;
   conversationId?: string;
 }
+
+export type ConversationRunner = Runner<ConversationScene, ConversationRunOptions>;

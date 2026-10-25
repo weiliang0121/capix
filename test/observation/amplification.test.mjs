@@ -17,7 +17,7 @@ test('overview groups long-conversation operation ownership without rescanning e
   try {
     for (let index = 0; index < 16; index++) await environment.runner.run({ messages: [{ role: 'user', content: `question ${index}` }] }, { settings });
     const expected = observeOverview(environment);
-    const records = [...environment.book.values()];
+    const records = [...environment.records.book.values()];
     let ownershipReads = 0;
     const projected = records.map(
       (record) =>
@@ -29,7 +29,7 @@ test('overview groups long-conversation operation ownership without rescanning e
           },
         }),
     );
-    const scans = t.mock.method(environment.book, 'values', () => projected.values());
+    const scans = t.mock.method(environment.records.book, 'values', () => projected.values());
     assert.deepEqual(observeOverview(environment), expected);
     const operations = records.filter((record) => record instanceof CallableRecord).length;
     assert.ok(ownershipReads <= operations * 6, `${ownershipReads} ownership reads for ${operations} operations`);
@@ -85,7 +85,7 @@ test('restored execution identities keep absent and populated overview groups in
     const state = recorder.book.exportState();
     for (const id of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
       const restored = RecordBook.restore(JSON.parse(JSON.stringify(state, (_key, value) => (value === execution.id ? id : value))));
-      const overview = observeOverview({ book: restored, transcript });
+      const overview = observeOverview({ records: { book: restored }, transcript });
       assert.equal(overview.executions.length, 1);
       assert.equal(overview.executions[0].id, id);
       assert.deepEqual(

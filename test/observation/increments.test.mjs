@@ -47,7 +47,9 @@ async function run(environment, content) {
 function executionRuntime(execute, { changes, recording, accept, parentAccept } = {}) {
   class E extends Group {
     observation = recording ? [invocationRecording({ role: 'conversation-task' })] : undefined;
-    run = { deps: {}, execute, ...(accept ? { accept } : {}) };
+    deps = {};
+    run = execute;
+    accept = accept;
   }
   const execution = new E();
   class R extends Scene {
@@ -56,13 +58,11 @@ function executionRuntime(execute, { changes, recording, accept, parentAccept } 
       this.add(execution);
     }
     observation = recording ? [invocationRecording()] : undefined;
-    run = {
-      deps: {},
-      execute: async (work) => {
-        const child = work.children.create(execution, work.input, { key: 'test' });
-        const output = await child.run();
-        return child.accept(() => (parentAccept ? parentAccept(output) : output));
-      },
+    deps = {};
+    run = async (work) => {
+      const child = work.children.create(execution, work.input, { key: 'test' });
+      const output = await child.run();
+      return child.accept(() => (parentAccept ? parentAccept(output) : output));
     };
   }
   return installCallable(new R(), { changes, observations: recording ? [recording] : [], providers: [], source: { entry: () => ({}), capture: () => ({}) } });
@@ -157,7 +157,7 @@ test('multi-round observation deltas reconstruct records and content locations e
     assert.equal(replica.memory.items[0].content, 'memory 4');
     assert.equal(replica.memory.items[0].records.length, 3);
     assert.equal(replica.snapshots.size, 4);
-    for (const [id, snapshot] of replica.snapshots) assert.deepEqual(snapshot, wire(CallableRecordHelper.snapshot(environment.recorder, id)));
+    for (const [id, snapshot] of replica.snapshots) assert.deepEqual(snapshot, wire(CallableRecordHelper.snapshot(environment.records.recorder, id)));
     assert.ok(frames.slice(1).every((frame) => frame.type === 'delta' && !('snapshot' in frame)));
     assert.deepEqual(
       frames.map((frame) => frame.sequence),
@@ -181,7 +181,7 @@ test('multi-round observation deltas reconstruct records and content locations e
     assert.equal(baseline.memory.items[0].content, 'memory 4');
     assert.deepEqual(
       materialized.filter((record) => record.kind !== 'memory').map((record) => record.id),
-      [environment.recording.root.id],
+      [environment.records.installation.root.id],
       'opening must select current records before materializing historical bodies',
     );
   } finally {
@@ -447,10 +447,10 @@ test('joining during an active call seeds local source positions and continues t
   const pending = new Promise((resolve) => {
     release = resolve;
   });
-  const runtime = executionRuntime(() => pending, { recording: environment.recording, changes: environment.changes });
+  const runtime = executionRuntime(() => pending, { recording: environment.records.installation, changes: environment.changes });
   const running = runtime.run('input', {});
   await settle();
-  const record = [...environment.book.values()].find((record) => record.kind === 'invocation' && record.role === 'conversation-task');
+  const record = [...environment.records.book.values()].find((record) => record.kind === 'invocation' && record.role === 'conversation-task');
   let replica;
   let failure;
   const stop = feed.connect((frame) => {
@@ -468,7 +468,7 @@ test('joining during an active call seeds local source positions and continues t
     await running;
     await settle();
     assert.equal(failure, undefined);
-    assert.deepEqual(replica.snapshots.get(record.id), wire(CallableRecordHelper.snapshot(environment.recorder, record.id)));
+    assert.deepEqual(replica.snapshots.get(record.id), wire(CallableRecordHelper.snapshot(environment.records.recorder, record.id)));
     assert.equal(replica.invocationEvents.get(record.contextId).change.status, 'succeeded');
   } finally {
     release('output');
@@ -485,10 +485,10 @@ test('reconnecting while R accepts a completed E preserves the child and the par
   const accepted = new Promise((resolve) => {
     release = resolve;
   });
-  const runtime = executionRuntime(() => 'child output', { recording: environment.recording, changes: environment.changes, parentAccept: () => accepted });
+  const runtime = executionRuntime(() => 'child output', { recording: environment.records.installation, changes: environment.changes, parentAccept: () => accepted });
   const pending = runtime.run('input', {});
   await settle();
-  const execution = [...environment.book.values()].find((record) => record.kind === 'invocation' && record.role === 'conversation-task');
+  const execution = [...environment.records.book.values()].find((record) => record.kind === 'invocation' && record.role === 'conversation-task');
   let replica;
   let failure;
   const stop = feed.connect((frame) => {
@@ -509,7 +509,7 @@ test('reconnecting while R accepts a completed E preserves the child and the par
     assert.equal(await pending, 'accepted output');
     await settle();
     assert.equal(failure, undefined);
-    assert.deepEqual(replica.snapshots.get(execution.id), wire(CallableRecordHelper.snapshot(environment.recorder, execution.id)));
+    assert.deepEqual(replica.snapshots.get(execution.id), wire(CallableRecordHelper.snapshot(environment.records.recorder, execution.id)));
     assert.equal(replica.snapshots.get(execution.id).rootCall.value.relationChanges.at(-1).change.kind, 'accepted');
   } finally {
     release('accepted output');
@@ -534,8 +534,8 @@ test('actual recording failure terminates HTTP observation, rejects later health
   });
   await runtime.initialize();
   await until(() => !runtime.getSnapshot().observation.loading);
-  const original = environment.recorder.add.bind(environment.recorder);
-  environment.recorder.add = (record) => {
+  const original = environment.records.recorder.add.bind(environment.records.recorder);
+  environment.records.recorder.add = (record) => {
     if (record.kind === 'transcript') throw new Error('record storage unavailable');
     return original(record);
   };

@@ -48,7 +48,7 @@ const result = await runner.run('hello'); // 你好
 可运行版本见 [examples/dictionary.mjs](../examples/dictionary.mjs)。
 
 - 构造器配置和 `setDefinition` 表达同一组业务字段；`setDefinition` 全量替换业务配置，未提供的可选机制清除，已经 add 的成员保留。
-- `setRun(fn, deps?, options?)` 全量替换 run 阶段。普通配置使用平级 `deps` 与函数 `run`；高级 options 可设置 uses 和 accept。资源与动作类型从本次配置推导，不沿用上一阶段的资源类型。
+- `setRun(fn, deps?, options?)` 全量替换 run 阶段。普通配置、结构字段和构建快照均使用平级 `deps / uses / run / accept`，内部不再转译成旧的 `run.execute`；高级 options 可设置 uses 和 accept。资源与动作类型从本次配置推导，不沿用上一阶段的资源类型。
 - 构造器显式给出 I/O 后，需要资源时可提供第三泛型；希望资源就地推导时，用 `setRun` 或 `setDefinition`。I/O 和 Delta 属于节点固定签名，不随 setter 改变。
 - `add` 仅注册可用成员，不推导顺序或自动执行。Scene 是根；每个 Group/Node 只能有一个父结构。同父重复添加不新增位置，跨父添加拒绝，不隐式移走。需要复用时共享处理函数、配置工厂或资源实体，并建立不同结构实例。
 - `add` 整批检查 kind 与循环，失败不部分安装。未配置 run 的结构可以先组织，但不能绑定运行。Node 没有 add，也不能获得 children 或 receptions。
@@ -80,7 +80,7 @@ const result = await runner.run('hello'); // 你好
 
 资源实体由宿主建立。静态绑定检查申请、唯一供给、显式来源边界与收窄规则；调用期间使用已经解算好的接线建立本次端点。
 
-`Resources.register(new Resource(entity), offer)` 将资源实体与访问方法显式配对。`Resource` 固定实体归属，`ResourceOffer({ methods })` 只定义公开方法，内核签发受控方法端点。实体仍由宿主持有，包装不会撤销已经发生的外部副作用，也不会自动关闭实体。已有按次 capture/refine 与固定写入适配仍可使用低层 `Resources.register(offer, supply)`。普通成员沿用已经捕获的供给，为本层和阶段建立自己的访问窗口。需要按次材料时，用 `resources.capture(structure, fn).register(offer, select)`；捕获由准确结构身份决定，不来自 Group 的结构种类。局部 scope 只覆盖登记的 offer，其余继承本次祖先已经收窄的供给。
+`Resources.register(new Resource(entity), offer)` 将资源实体与访问方法显式配对。`Resource` 固定实体归属，`ResourceOffer({ methods })` 只定义公开方法，内核签发受控方法端点。实体仍由宿主持有，包装不会撤销已经发生的外部副作用，也不会自动关闭实体。需要同步返回、订阅清理或固定写入凭据时，offer 使用具名的 `expose / capture / refine / timing / describe` 配置；登记方式仍可使用 `Resource(entity), offer`。低层精细适配保留窗口和凭据，不强制变为普通异步 methods。ResourceOffer 的声明统一为对象配置，不再接受位置参数构造。普通成员沿用已经捕获的供给，为本层和阶段建立自己的访问窗口。需要按次材料时，用 `resources.capture(structure, fn).register(offer, select)`；捕获由准确结构身份决定，不来自 Group 的结构种类。局部 scope 只覆盖登记的 offer，其余继承本次祖先已经收窄的供给。
 
 必要登记、进展与输出使用独立 `callableHooks` 接入 Runner，资源捕获不兼任这些职责。恢复旧调用不重复 started；恢复中新建调用照常登记。详细供给与回调顺序见 [Runner / Resources](runner-resources-pilot.md)。
 

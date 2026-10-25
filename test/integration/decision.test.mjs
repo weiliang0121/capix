@@ -107,7 +107,7 @@ for (const recording of [true, false]) {
     assert.deepEqual(f.inputs[1].progress.answer, answer);
     assert.equal(f.environment.transcript.length, 2);
     assert.equal(f.environment.runner.isRunning, false);
-    if (!recording) assert.equal(f.environment.recorder, undefined);
+    if (!recording) assert.equal(f.environment.records, undefined);
   });
 }
 
@@ -182,7 +182,7 @@ for (const recording of [true, false]) {
       assert.equal(input.results, undefined, 'an old result remains on its memory, not a new accepted operation');
     }
     assert.deepEqual(f.environment.memories.values()[0].toJSON(), memory);
-    if (!recording) assert.equal(f.environment.recorder, undefined);
+    if (!recording) assert.equal(f.environment.records, undefined);
   });
 }
 
@@ -214,7 +214,7 @@ test('forged memory source after publication preserves the file and answer witho
   assert.equal(f.fileProgress.filter((fact) => fact.kind === 'created').length, 1);
   assert.equal(f.modelCalls.filter((call) => call.purpose === 'answer').length, 1);
   assert.equal(f.modelCalls.filter((call) => call.purpose === 'memory').length, 1);
-  assert.equal([...f.environment.book.values()].filter((record) => record.kind === 'invocation' && record.name === 'saveResult').length, 1);
+  assert.equal([...f.environment.records.book.values()].filter((record) => record.kind === 'invocation' && record.name === 'saveResult').length, 1);
 });
 
 test('decisions cannot replace save arguments, repeat answer/save effects, or finish before the promised save', async (t) => {
@@ -387,8 +387,8 @@ test('decision, preflight and selected work remain real recorded calls with acce
   const task = { sourcePath: 'input.txt', output: { path: 'result.md' } };
   const f = await fixture(t, filePolicy(task));
   await f.run();
-  const execution = [...f.environment.book.values()].find((record) => record.kind === 'invocation' && record.role === 'conversation-task');
-  const snapshot = CallableRecordHelper.snapshot(f.environment.recorder, execution.id);
+  const execution = [...f.environment.records.book.values()].find((record) => record.kind === 'invocation' && record.role === 'conversation-task');
+  const snapshot = CallableRecordHelper.snapshot(f.environment.records.recorder, execution.id);
   validateExecutionRecordSnapshot(snapshot);
   assert.equal(snapshot.execution.status, 'succeeded');
   const direct = snapshot.calls.filter((record) => record.parentId === snapshot.execution.id);

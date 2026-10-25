@@ -151,12 +151,15 @@ test('work failure and failing observation preserve both causes without entering
 test('formal observation ports expire after each synchronous callback; asynchronous declarations are rejected', async () => {
   let retained;
   let writes = 0;
-  const offer = new ResourceOffer('test.observation-writer', (_value, activity) => ({
-    write() {
-      activity.validate();
-      writes++;
-    },
-  }));
+  const offer = new ResourceOffer({
+    name: 'test.observation-writer',
+    expose: (_value, activity) => ({
+      write() {
+        activity.validate();
+        writes++;
+      },
+    }),
+  });
   const requirements = { writer: offer.request() };
   const resources = bindResources(requirements, [offer.provide(() => null)])(undefined);
   const run = call({
@@ -182,9 +185,9 @@ test('one observation declaration gives each call its own first start and synchr
   let exposed = 0;
   const retained = new Map();
   const observed = new Map();
-  const offer = new ResourceOffer(
-    'test.reused-observation',
-    (value, activity) => {
+  const offer = new ResourceOffer({
+    name: 'test.reused-observation',
+    expose: (value, activity) => {
       exposed++;
       return {
         read() {
@@ -193,8 +196,8 @@ test('one observation declaration gives each call its own first start and synchr
         },
       };
     },
-    'binding',
-  );
+    timing: 'binding',
+  });
   const deps = { reader: offer.request() };
   const resources = bindResources(deps, [offer.provide(() => 'shared supply')])(undefined);
   const declaration = defineObservation(
@@ -226,13 +229,16 @@ test('one observation declaration gives each call its own first start and synchr
 });
 
 test('observation declaration fixes its requested resource aliases before binding', async () => {
-  const approved = new ResourceOffer('test.approved-observation', (value, activity) => ({
-    read() {
-      activity.validate();
-      return value;
-    },
-  }));
-  const replacement = new ResourceOffer('test.replacement-observation', () => assert.fail('replacement must not be exposed'));
+  const approved = new ResourceOffer({
+    name: 'test.approved-observation',
+    expose: (value, activity) => ({
+      read() {
+        activity.validate();
+        return value;
+      },
+    }),
+  });
+  const replacement = new ResourceOffer({ name: 'test.replacement-observation', expose: () => assert.fail('replacement must not be exposed') });
   const deps = { reader: approved.request() };
   const request = deps.reader;
   let retained;
@@ -265,12 +271,15 @@ test('failed installed observation is skipped with its dependent declarations in
   const supplied = [];
   const inherited = [];
   let failNext = true;
-  const writer = new ResourceOffer('test.installed-observation-writer', (contextId, activity) => ({
-    write() {
-      activity.validate();
-      events.push(`${contextId}:dependent`);
-    },
-  }));
+  const writer = new ResourceOffer({
+    name: 'test.installed-observation-writer',
+    expose: (contextId, activity) => ({
+      write() {
+        activity.validate();
+        events.push(`${contextId}:dependent`);
+      },
+    }),
+  });
   const installation = {
     provides: { writer: writer.request() },
     bindInvocation(setup) {
@@ -441,7 +450,7 @@ test('an availability check failure follows the observer isolation policy', asyn
 test('resource construction and its observation failure retain both causes', () => {
   const original = new Error('capture');
   const observed = new Error('unavailable observer');
-  const offer = new ResourceOffer('test.capture-fails', () => ({}));
+  const offer = new ResourceOffer({ name: 'test.capture-fails', expose: () => ({}) });
   const resources = bindResources({ value: offer.request() }, [
     offer.provide(() => {
       throw original;
@@ -466,7 +475,7 @@ test('resource construction and its observation failure retain both causes', () 
 test('the invocation error channel preserves a resource fault and its reporting fault together', async () => {
   const original = new Error('resource construction');
   const observed = new Error('resource report');
-  const offer = new ResourceOffer('test.resource-double-fault', () => ({}));
+  const offer = new ResourceOffer({ name: 'test.resource-double-fault', expose: () => ({}) });
   const resources = bindResources({ value: offer.request() }, [
     offer.provide(() => {
       throw original;

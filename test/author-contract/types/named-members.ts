@@ -45,7 +45,7 @@ new Group<number, string>({
     return '';
   },
 }).add({ primary });
-const count = new ResourceOffer('count', (x: number) => x);
+const count = new ResourceOffer({ name: 'count', expose: (x: number) => x });
 new Group<number, string>().add({ primary }).setRun(
   (work) => {
     const n: number = work.resources.count;

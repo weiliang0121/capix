@@ -61,14 +61,12 @@ function assemble(operation, store, providers) {
       this.add(operation);
     }
     checkpoint = parentCheckpoint('fixture.operations.e', operation);
-    run = {
-      deps: operation.run.deps,
-      execute: async (work) => {
-        const call = work.children.create(operation, work.input, { key: 'operation' });
-        work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
-        await call.run();
-        return call.accept();
-      },
+    deps = operation.deps;
+    run = async (work) => {
+      const call = work.children.create(operation, work.input, { key: 'operation' });
+      work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
+      await call.run();
+      return call.accept();
     };
   }
   const execution = new E();
@@ -78,14 +76,12 @@ function assemble(operation, store, providers) {
       this.add(execution);
     }
     checkpoint = parentCheckpoint('fixture.operations.r', execution);
-    run = {
-      deps: {},
-      execute: async (work) => {
-        const call = work.children.create(execution, work.input, { key: 'execution' });
-        work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
-        await call.run();
-        return call.accept();
-      },
+    deps = {};
+    run = async (work) => {
+      const call = work.children.create(execution, work.input, { key: 'execution' });
+      work.checkpoint({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
+      await call.run();
+      return call.accept();
     };
   }
   return installCallable(new R(), { checkpoints: { store }, providers, source: { capture: () => null } });

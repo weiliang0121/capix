@@ -109,7 +109,7 @@ function checkTree(root: AnyCallable): readonly AnyCallable[] {
   return [...seen];
 }
 
-const configurationFields = ['id', 'kind', 'members', 'names', 'name', 'label', 'source', 'callee', 'maxRounds', 'raises', 'output', 'run', 'exceptions', 'observation', 'checkpoint', 'receptions'] as const;
+const configurationFields = ['id', 'kind', 'members', 'names', 'name', 'label', 'source', 'callee', 'maxRounds', 'raises', 'output', 'deps', 'uses', 'run', 'accept', 'exceptions', 'observation', 'checkpoint', 'receptions'] as const;
 
 function sameDescriptor(before: PropertyDescriptor | undefined, after: PropertyDescriptor | undefined): boolean {
   if (!before || !after) return before === after;

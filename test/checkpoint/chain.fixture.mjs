@@ -25,12 +25,10 @@ class Model extends Node {
   name = 'model';
   label = 'model';
   source = 'test';
-  run = {
-    deps: {},
-    execute: () => {
-      put('modelCalls', Number(saved('modelCalls') ?? 0) + 1);
-      return { content: 'fixed answer' };
-    },
+  deps = {};
+  run = () => {
+    put('modelCalls', Number(saved('modelCalls') ?? 0) + 1);
+    return { content: 'fixed answer' };
   };
 }
 const model = new Model();
@@ -43,16 +41,14 @@ class Request extends Group {
     this.add(model);
   }
   checkpoint = cp('chain.request', { feedback: point((_work, state) => state.output) });
-  run = {
-    deps: {},
-    execute: async (work) => {
-      const request = work.children.create(model, { prompt: 'question' });
-      await request.run();
-      const output = await request.accept((value) => value);
-      work.checkpoint({ point: this.checkpoint.points[0], state: { output }, refs: {} });
-      crash('feedback');
-      return output;
-    },
+  deps = {};
+  run = async (work) => {
+    const request = work.children.create(model, { prompt: 'question' });
+    await request.run();
+    const output = await request.accept((value) => value);
+    work.checkpoint({ point: this.checkpoint.points[0], state: { output }, refs: {} });
+    crash('feedback');
+    return output;
   };
 }
 const request = new Request();
@@ -78,13 +74,11 @@ class Conversation extends Group {
     this.add(request);
   }
   checkpoint = { key: 'chain.execution', version: 1, input: codec, output: codec, points: executionPoints };
-  run = {
-    deps,
-    execute: async (work) => {
-      const child = work.children.create(request, { prompt: 'question' }, { key: 'answer' });
-      work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: { child: child.ref } });
-      return consume(work, child, true, executionPoints);
-    },
+  deps = deps;
+  run = async (work) => {
+    const child = work.children.create(request, { prompt: 'question' }, { key: 'answer' });
+    work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: { child: child.ref } });
+    return consume(work, child, true, executionPoints);
   };
 }
 const conversation = new Conversation();
@@ -105,14 +99,12 @@ class Root extends Scene {
       { child: childReference(conversation) },
     ),
   });
-  run = {
-    deps: {},
-    execute: async (work) => {
-      const child = work.children.create(conversation, { question: 'question' });
-      work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: { child: child.ref } });
-      await child.run();
-      return child.accept((output) => output);
-    },
+  deps = {};
+  run = async (work) => {
+    const child = work.children.create(conversation, { question: 'question' });
+    work.checkpoint({ point: this.checkpoint.points[0], state: null, refs: { child: child.ref } });
+    await child.run();
+    return child.accept((output) => output);
   };
 }
 const facts = [];

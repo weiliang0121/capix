@@ -1,5 +1,5 @@
 import { Group, defineGroup, defineChildEntry } from '@capix/server-runtime';
-import type { Node, Scene, SceneWork, GroupWork, NodeWork, AcceptWork, HandleWork, ResumeWork, InvocationRunDefinition, InvocationExceptionDefinition, InvocationCheckpointPoint, ChildReference, ChildEntryInput } from '@capix/server-runtime';
+import type { Node, Scene, SceneWork, GroupWork, NodeWork, AcceptWork, HandleWork, ResumeWork, CallableRunDefinition, InvocationExceptionDefinition, InvocationCheckpointPoint, ChildReference, ChildEntryInput } from '@capix/server-runtime';
 
 declare const scene: Scene<string, number>;
 declare const execution: Group<string, number>;
@@ -25,7 +25,7 @@ resumeWork.children.resume(sceneReference);
 executionWork.children.entry(defineChildEntry(scene, { accept: ({ input }: ChildEntryInput<number>) => String(input) }), 1);
 
 type InvalidWork = GroupWork<string, number, Record<string, never>, typeof scene>;
-type InvalidRun = InvocationRunDefinition<string, number, 'group', Record<string, never>, never, typeof scene>;
+type InvalidRun = CallableRunDefinition<string, number, 'group', Record<string, never>, never, typeof scene>;
 type InvalidException = InvocationExceptionDefinition<string, number, 'group', Record<string, never>, typeof scene>;
 type InvalidPoint = InvocationCheckpointPoint<string, number, 'group', number, Record<string, never>, Record<string, never>, typeof scene>;
 
@@ -34,12 +34,10 @@ class InvalidExecution extends Group<string, number> {
     super();
     this.add(operation);
   }
-  readonly run: InvocationRunDefinition<string, number, 'group', Record<string, never>, never, typeof operation> = {
-    deps: {},
-    execute(work) {
-      work.children.create(attempt, work.input);
-      return 0;
-    },
+  readonly deps: CallableRunDefinition<string, number, 'group', Record<string, never>, never, typeof operation>['deps'] = {};
+  readonly run: CallableRunDefinition<string, number, 'group', Record<string, never>, never, typeof operation>['run'] = function (work) {
+    work.children.create(attempt, work.input);
+    return 0;
   };
 }
 

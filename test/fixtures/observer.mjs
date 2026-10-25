@@ -103,7 +103,7 @@ export function createInput({ content, history }) {
 export function observeFixture(input, settings, provider, publish, signal) {
   const environment = initializeObserver(provider, transcriptFor(input).snapshot().slice(0, -1));
   transcripts.set(input, environment.transcript);
-  return observeExecution(environment.runner, environment.recording, { messages: [input] }, { settings, signal }, publish);
+  return observeExecution(environment.runner, environment.records.installation, { messages: [input] }, { settings, signal }, publish);
 }
 
 export function resourceFact(snapshot, access) {

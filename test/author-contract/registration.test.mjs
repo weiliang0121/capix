@@ -42,7 +42,8 @@ for (const children of [[], [defineNode()({ ...metadata, run: (work) => work.inp
       source = 'test';
       callee = 'local';
       members = children;
-      run = { deps: {}, execute: () => ++called };
+      deps = {};
+      run = () => ++called;
     }
     assert.throws(() => assemble(new InvalidLeaf()), /Nodes cannot declare members/);
     assert.throws(() => defineNode()({ ...metadata, members: children, run: () => ++called }), /Node cannot have members/);
@@ -57,7 +58,8 @@ test('a class and its complete factory path retain the receiver and original out
     source = 'test';
     callee = 'local';
     outputValue = { content: 'original' };
-    run = { deps: {}, execute: () => this.outputValue };
+    deps = {};
+    run = () => this.outputValue;
   }
   const reader = new Reader();
   const runtime = assemble(reader);

@@ -153,13 +153,15 @@ class BadLeaf extends Node<Input, Result> {
   readonly name = 'leaf'; readonly label = 'leaf'; readonly source = 'test'; readonly callee = 'local';
   // @ts-expect-error named classes have the same A registration boundary
   readonly receptions = [saved];
-  readonly run = { deps: {}, execute: (work: NodeWork<Input, Result>) => ({ text: work.input.path }) };
+  readonly deps = {};
+readonly run = (work: NodeWork<Input, Result>) => ({ text: work.input.path });
 }
 class NamedParent extends Group<Input, Receipt> {
   readonly name = 'parent'; readonly label = 'parent'; readonly source = 'test';
   constructor() { super(); this.add(child); }
   readonly receptions = [saved];
-  readonly run = { deps: {}, execute: (_work: GroupWork<Input, Receipt>) => receipt };
+  readonly deps = {};
+readonly run = (_work: GroupWork<Input, Receipt>) => receipt;
 }
 
 // Identity, registration and relation status remain runtime facts, not TS brands.
