@@ -1,6 +1,6 @@
 import { ProgressChannel } from '../progress.js';
 import { RuntimeError } from '../errors/error.js';
-import type { InvocationOutputEvent, InvocationOutputWriter, OutputDeclaration } from './contract.js';
+import type { InvocationOutputEvent, InvocationOutputWriter, OutputDeclaration } from '@capix/contracts';
 
 /** One producer-owned segment. Delivery is passive and never controls its lifetime. */
 export class InvocationOutputSection<Result> {

@@ -1,5 +1,4 @@
-import type { ChildContract, ChildReference, ChildFact, ChildFacts } from '../../definition/children.js';
-import type { ExceptionOrigin, ContinuationFact } from '../../definition/checkpoint.js';
+import type { ChildContract, ChildReference, ChildFact, ChildFacts, ExceptionOrigin, ContinuationFact, ReceptionDefinition } from '@capix/contracts';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { InvocationRelation, InvocationTarget } from '../../invocation/relation.js';
 import type { InvocationExceptionOrigin } from '../../invocation/provenance.js';
@@ -10,7 +9,6 @@ import { RuntimeErrorHelper } from '../../errors/helper.js';
 import { isInvocationCancelled } from '../../invocation/cancellation.js';
 import type { BoundChildren } from './bound.js';
 import type { BoundReceptions } from '../receptions.js';
-import type { ReceptionDefinition } from '../../definition/reception.js';
 
 interface ReferenceEntry {
   readonly definition: ChildContract;

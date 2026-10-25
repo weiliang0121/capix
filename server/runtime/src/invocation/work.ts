@@ -1,5 +1,5 @@
 import type { InvocationCheckpointWork } from '../checkpoint/work.js';
-import type { OutputDeclaration } from '../output/contract.js';
+import type { OutputDeclaration } from '@capix/contracts';
 import type { Invocation } from './invocation.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationFailure } from './failure.js';

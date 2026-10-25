@@ -1,10 +1,9 @@
 import type { AnyCallable } from '../binding/declarations.js';
 import type { ChildResourceBinding } from '../binding/resources.js';
-import type { CallableInput } from '../definition/signature.js';
-import type { ChildCallable } from '../definition/children.js';
+import { type ChildCallable, Callable } from '@capix/structure';
+import type { CallableInput } from '@capix/contracts';
 import type { InteractionContract } from '../interaction/contract.js';
 import type { InteractionChannel, Interactions } from '../interaction/interactions.js';
-import { Callable } from '../structure/callable.js';
 import { ResourceOffer, type ResourceIdentity, type ResourceProvider, type ResourceRefinement, Resource } from '@capix/resources';
 
 export interface ResourceRegistration {

@@ -1,5 +1,5 @@
-import { defineGroup, defineChildEntry } from '@capix/server-runtime';
-import type { Node, Scene, Group, SceneWork, GroupWork, NodeWork, ResumeWork, CallableWork, InvocationCheckpointPoint, ChildReference, ChildEntryInput } from '@capix/server-runtime';
+import { defineGroup } from '@capix/server-runtime';
+import type { Node, Scene, Group, SceneWork, GroupWork, NodeWork, ResumeWork, CallableWork, InvocationCheckpointPoint, ChildReference } from '@capix/server-runtime';
 declare const scene: Scene<string, number>;
 declare const operation: Group<string, number>;
 declare const node: Node<string, number>;
@@ -12,7 +12,7 @@ rootWork.children.invoke(scene, 'input');
 groupWork.children.invoke(scene, 'input');
 nodeWork.children;
 resume.children.resume(sceneRef);
-groupWork.children.entry(defineChildEntry(scene, { accept: ({ input }: ChildEntryInput<number>) => String(input) }), 1);
+groupWork.children.create(scene, String(1));
 type InvalidWork = GroupWork<string, number, {}, typeof scene>;
 type InvalidRun = CallableWork<'node', string, number, {}, typeof operation>;
 type InvalidPoint = InvocationCheckpointPoint<string, number, 'group', number, {}, Record<string, never>, typeof scene>;

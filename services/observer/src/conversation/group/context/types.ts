@@ -1,5 +1,5 @@
 import type { ModelSettings } from '@capix/protocol';
-import type { Group } from '@capix/server-runtime';
+import type { Group } from '@capix/structure';
 import type { ActiveContentSelection, ActiveContentSnapshot } from '../../content/active.js';
 import type { AnswerMessageContext } from '../../node/context/assemble.js';
 

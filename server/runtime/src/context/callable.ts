@@ -1,5 +1,5 @@
 import { InvocationResources } from '../invocation/resource-access.js';
-import type { CallableKind } from '@capix/protocol';
+import type { CallableKind } from '@capix/contracts';
 import { InvocationContext, type InvocationControls } from './context.js';
 import { type ResourceRequirements } from '@capix/resources';
 import { requireNotCancelled } from '../invocation/cancellation.js';

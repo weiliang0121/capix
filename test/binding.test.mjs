@@ -3,7 +3,7 @@ import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, InvocationEntry, Sequence, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { Group, Node, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
 import { ResourceOffer } from '@capix/resources';
 import { CallableBuilder, callableConstruction } from '@capix/server-runtime/construction';
 
@@ -25,13 +25,12 @@ class Work extends Group {
   deps = { value: resource.request() };
   run = this.execute.bind(this);
   leaf = new Read();
-  sequence = new Sequence().step('read', { use: this.leaf, input: ({ input }) => input });
   constructor() {
     super();
     this.add(this.leaf);
   }
   async execute(work) {
-    return (await this.sequence.run(work.input, work.children)).read;
+    return work.children.invoke(this.leaf, work.input);
   }
 }
 class Main extends Group {
@@ -180,14 +179,14 @@ test('plain configurations build concrete structures without business subclassin
   assert.equal(await runtime.run('hello', {}), 5);
 });
 
-test('a completed parent cannot keep using its old creation or alternative-entry actions', async () => {
+test('a completed parent cannot create or invoke children even after ordinary input preparation', async () => {
   const definition = new Main();
   let previous;
-  let accepted = 0;
-  const alternative = new InvocationEntry(definition.operation, ({ input }) => {
-    accepted++;
+  let prepared = 0;
+  const prepare = (input) => {
+    prepared++;
     return input;
-  });
+  };
   definition.run = async function (work) {
     previous = work.children;
     const child = work.children.create(definition.operation, work.input);
@@ -197,27 +196,28 @@ test('a completed parent cannot keep using its old creation or alternative-entry
   const runtime = bind(definition, () => 'resource');
   await runtime.run('first', {});
   assert.throws(() => previous.create(definition.operation, 'ended'), /already ended/);
-  assert.throws(() => previous.entry(alternative, 'ended'), /already ended/);
-  assert.equal(accepted, 0);
+  const input = prepare('ended');
+  await assert.rejects(previous.invoke(definition.operation, input), /already ended/);
+  assert.equal(prepared, 1, 'plain input preparation is ordinary business code, outside the call window guard');
   assert.equal(await runtime.run('second', {}), 'second:resource');
 });
 
-test('undeclared entries fail before admission and attachment', async () => {
+test('undeclared children fail before attachment or execution through create and invoke', async () => {
   const definition = new Main();
   const unknown = new Work();
-  let accepted = false;
-  const alternative = new InvocationEntry(unknown, () => {
-    accepted = true;
+  let executed = false;
+  unknown.run = () => {
+    executed = true;
     return 'wrong';
-  });
-  definition.run = (work) => {
+  };
+  definition.run = async (work) => {
     assert.throws(() => work.children.create(unknown, null), /not declared/);
-    assert.throws(() => work.children.entry(alternative, null), /not declared/);
+    await assert.rejects(work.children.invoke(unknown, null), /not declared/);
     assert.equal(work.children.facts.values().length, 0);
     return 'done';
   };
   await assert.rejects(bind(definition, () => 'value').run(null, {}), /not declared/);
-  assert.equal(accepted, false);
+  assert.equal(executed, false);
 });
 
 test('assembly rejects invalid levels and cycles without activating resource providers', () => {

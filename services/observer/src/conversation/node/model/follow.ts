@@ -1,6 +1,6 @@
 import type { ModelInteractionReader } from '../../model/resources.js';
 import { isEqual } from 'es-toolkit/predicate';
-import { Node, checkpointPoint, type NodeWork } from '@capix/server-runtime';
+import { Node, checkpointPoint, type NodeWork } from '@capix/structure';
 import { ModelResource } from '../../model/resources.js';
 import type { ModelInteractionRef, ModelInteractionExpectation } from '../../model/interactions.js';
 import type { ModelOutput } from '../../model/types.js';

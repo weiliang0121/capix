@@ -1,11 +1,11 @@
 import { InvocationResources } from '../invocation/resource-access.js';
-import type { InvocationOutputReceiver } from '../output/contract.js';
+import type { ChildCallable } from '@capix/structure';
+import type { InvocationOutputReceiver, CallableInput } from '@capix/contracts';
 import type { ResourceProvider } from '@capix/resources';
 import { ResourceSupply, checkResourceProviders, resourceRequests } from '@capix/resources';
 import type { ProgressReceiver } from '../progress.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 import type { CallableInvocationStarted } from '../invocation/builders/callable.js';
-import type { ChildCallable, CallableInput } from '../definition/children.js';
 import type { AnyCallable, ResolvedCallable } from './declarations.js';
 import { CallableCallBindings, type CallAccess, type CallInstallation } from './calls.js';
 

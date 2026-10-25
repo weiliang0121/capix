@@ -1,7 +1,7 @@
 import type { CheckpointBinding } from '../checkpoint/work.js';
 import type { InvocationIdentity } from './identity.js';
 import type { ChildInvocationView } from './view.js';
-import type { InvocationOutputReceiver } from '../output/contract.js';
+import type { InvocationOutputReceiver, RuntimeErrorValue } from '@capix/contracts';
 import type { InvocationRelationChange } from '../observation/facts.js';
 import { combineFaults } from '../observation/error.js';
 import type { InvocationFailure } from './failure.js';
@@ -9,7 +9,6 @@ import type { InvocationRelationView, InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationResult } from './result.js';
 import type { InvocationPropagationScope } from './provenance.js';
-import type { RuntimeErrorValue } from '@capix/protocol';
 import type { InvocationReceptionBinding } from './reception.js';
 
 export interface InvocationRelationOptions {

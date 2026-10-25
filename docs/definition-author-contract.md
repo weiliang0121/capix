@@ -8,7 +8,7 @@
 >
 > 本文件是本轮唯一方案，包含完整契约、实施条件与验证结果，不再要求交叉阅读两份讨论稿。保留 D01–D10 与 C1–C7 编号供审阅定位。作者契约回归位于 `test/author-contract/`，均使用正式公开接口；类型门槛含独立编译失败用例。验证结果与兼容边界见 §12。
 
-> **后续 P02 修订（2026-10-18）：** 本文保留 v6 的实施基线，其中 E 专属 `entry.accept/admit`、EntryInput/EntryResources 及相应验收项已被替代。当前 R/E 使用普通调用输入，服务 R 正式追加输入，材料准备/维护作为普通 O；显式 InvocationEntry 子输入适配仍保留。现行边界见 [运行边界](runtime-boundaries.md) 与 [活跃材料](active-content.md)，修订依据见 [P02 实施记录](codex-type-factorization.md#14-p02-最小闭环的实施结果)。其他 Work、交付错误、引用与 Frame v2 契约保持原义。
+> **后续 P02 修订（2026-10-18）：** 本文保留 v6 的实施基线，其中 E 专属 `entry.accept/admit`、EntryInput/EntryResources 及相应验收项已被替代。当前 R/E 使用普通调用输入，服务 R 正式追加输入，材料准备/维护作为普通 O；当时显式 InvocationEntry 子输入适配仍保留；2026-10-25 已进一步移除，输入转换改普通业务函数，现行说明见 [结构包](structure-package.md)。现行边界见 [运行边界](runtime-boundaries.md) 与 [活跃材料](active-content.md)，修订依据见 [P02 实施记录](codex-type-factorization.md#14-p02-最小闭环的实施结果)。其他 Work、交付错误、引用与 Frame v2 契约保持原义。
 
 > **后续元信息议题（2026-10-19，仅设计收敛）：** 声明元信息辅助理解，正式契约决定合法范围，catalog 的显式选择键关联真实声明。共同描述、可选源码及记录兼容的规则与实施门槛见 [§17 设计闭环](codex-type-factorization.md#17-声明元信息能力契约与候选目录的设计闭环)。本文件的 name/label/source/callee 仍描述已实施接口，不把该设计伪代码当作当前 API。
 
@@ -151,7 +151,7 @@ Work 不是未来能力的任意容器。时钟、预算等若属于可申请资
 
 ### 4.1 两种 entry 不混同
 
-> 以下 E entry 描述是 v6 历史基线，已由后续 P02 替代；当前不再有 E 专属 entry。下文 InvocationEntry 的显式子输入适配仍有效。
+> 以下 E entry 描述是 v6 历史基线，已由后续 P02 替代；当前不再有 E 专属 entry。下文 InvocationEntry 也是历史接口，2026-10-25 已移除，改为普通输入转换后调用 create/invoke。
 
 E 的 `entry.accept/admit` 发生在 E Context 建立前，继续按现有入口资源契约工作。绑定源的 validate/capture/started 时机也不变。
 

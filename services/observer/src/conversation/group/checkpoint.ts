@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isEqual } from 'es-toolkit/predicate';
-import type { ChildFact, CheckpointFacts } from '@capix/server-runtime';
+import type { ChildFact, CheckpointFacts } from '@capix/structure';
 import { checkpointCodec } from '../checkpoint.js';
 import { modelIndexesSchema, modelTextSchema } from '../model/schema.js';
 

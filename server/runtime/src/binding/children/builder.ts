@@ -1,4 +1,4 @@
-import type { ChildCalls, ChildContract, ResumeChildCalls } from '../../definition/children.js';
+import type { ChildCalls, ChildContract, ResumeChildCalls } from '@capix/contracts';
 import type { BoundChildren } from './bound.js';
 import { InvocationChildBindings, type ChildBindingsParent } from './binding.js';
 import { InvocationChildReferences } from './references.js';

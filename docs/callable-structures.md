@@ -1,6 +1,6 @@
 # Scene、Group、Node 与共同调用
 
-状态：2026-10-25，统一操作模型。结构持有配置，`run` 组织操作，Invocation 协调本次活动与真实交付。当前契约替代此前的 setter、独立接纳阶段及调用级异常声明，迁移范围见 [全仓迁移](callable-operation-migration.md)。
+状态：2026-10-25，统一操作模型、独立结构包与共同契约。结构持有配置，`run` 组织操作，Invocation 协调本次活动与真实交付。当前契约替代此前的 setter、独立接纳阶段及调用级异常声明，迁移范围见 [全仓迁移](callable-operation-migration.md)，包边界见 [结构包](structure-package.md)。
 
 ## 对象与切面
 
@@ -17,12 +17,15 @@
 | Invocation / CallableContext     | 本次活动协调 / 本次语义状态                | 可复用业务结构                      |
 | Work                             | 业务在当前窗口可用的输入与操作端点         | 内部 Invocation、Context 或绑定对象 |
 
+`@capix/structure` 持有结构及作者配置，`@capix/contracts` 持有两侧共用的端口；运行装配、Invocation 与恢复实现由 `@capix/server-runtime` 提供。Runtime 根入口重导相同结构对象，既有导入不产生第二套类或身份。
+
 Scene 和 Group 具有成员组合能力，Node 在类型和构建检查中都拒绝成员。Scene 用作根，Group/Node 是合法成员。空 Group 仍是组合体。结构共享处理函数和资源实体，一个 Group/Node 实例只占据一个父位置；重复加入同一父去重，跨父共享和循环拒绝。
 
 ## 配置、构建、调用
 
 ```ts
-import { Runner, Resources, Scene, defineNode } from '@capix/server-runtime';
+import { Scene, defineNode } from '@capix/structure';
+import { Runner, Resources } from '@capix/server-runtime';
 import { Resource, ResourceOffer } from '@capix/resources';
 
 const dictionary = new Resource(new Map([['hello', '你好']]));
@@ -37,8 +40,7 @@ const translate = defineNode<string, string>()({
   deps: { dictionary: lookup.request() },
   run: (work) => work.resources.dictionary.translate(work.input),
 });
-const scene = new Scene<string, string>().add({ translate });
-scene.run = (work) => work.children.translate.invoke(work.input);
+const scene = new Scene(translate);
 const resources = new Resources().register(dictionary, lookup);
 const runner = new Runner(scene, resources).build();
 const result = await runner.run('hello'); // 你好
@@ -48,7 +50,11 @@ const result = await runner.run('hello'); // 你好
 
 `Node<Input, Output, Resources, Delta>`、Group、Scene 保留相同的四个类型参数。资源从明确的第三泛型检查；需要就地推导 deps/成员/Delta 时用 `defineNode/defineGroup/defineScene`，它们创建同一个结构类型，不建立平行 Definition 树。`*Definition` 是普通配置类型。类子类和函数工厂都可使用，内核不要求继承组织业务。
 
+`new Scene(child)` 显式配置单子委托，推导本层 I/O 并沿正常 invoke 接纳最终结果；不继承子资源申请、增量声明或 CP。后续 add 不改变该目标，build 前仍可配置同签名 run。
+
 `add` 只登记成员，不自动调用。普通 run 可以操作所有已登记成员，无需重复写 uses；同签名未登记对象仍被准确身份检查拒绝。`add({translate})` 的返回值携带名字类型；接住返回值后，后续赋值的 run 可直接使用 `work.children.translate`。名字便于访问，不是恢复身份，也不能覆盖保留的机制方法名。
+
+结构包可以独立构造并检查成员关系，构造与 add 都不执行业务。Runtime 使用结构包 `/construction` 的配置状态端口协调全树构建；具体接线和构造能力不进入结构包。
 
 `runner.build()` 提前解算全树，检查资源供给、成员、输出和 CP，完整成功后将固定接线及调用构造能力安装到原结构。固定函数入口、配置容器和成员位置，保留业务 receiver 及闭包；没有 BoundCallable 或第二棵结构树。build 不捕获本次资源、不执行业务、不创建 Context。
 
@@ -82,11 +88,19 @@ return content;
 
 `work.output.emit` 发出本层增量，操作的 delta 接收下层增量，需要明确转发。切换备用来源不会自动撤销已经显示的预览，替换、丢弃和正式输出要有明确协议。
 
+## Group 预设与公共申请
+
+Sequence 以 `new Sequence([node, {node, input?, result?, delta?}, …])` 一次配置固定推进，默认传递前一步接收值，末步作为整体结果。复杂回调用参数标注或 satisfies SequenceStep 提供类型，构造核验完整链路。Dynamic 以 `new Dynamic({options, decide, maxSteps?})` 一次配置候选及决策成员，整体I/O由决策输入与finish分支推导；决定通过类型关联的call/finish表达，默认最多8个候选动作。两者复用普通 Group、真实子调用与失败接收，不改变内核位置或运行机制。
+
+`withDependencies(common)` 的 node/group/scene 工厂在配置处理函数时就合并公共申请，供给仍显式由 Resources.capture/register 兑现，不在运行期追加未知字段。共享材料是普通资源，每次 Group 调用可有独立材料，各成员取得自身窗口的端点。预设当前不自动保存或恢复材料，也不自动建立 CP。API 与迁移差异见 [结构包](structure-package.md)，可执行例子见 [presets.mjs](../examples/presets.mjs)。
+
 ## Work、观测与恢复
 
 普通 CallableWork 只有 input/resources/signal、组合体 children、可选 output、checkpoint 和 observation。没有普通 round/initialInput/continuation、return/continue/unhandled 或独立异常阶段。资源与子调用端点随当前调用/恢复窗口有效，窗口关闭后不可复用；父子活动约束不重新解算祖先的可变配置。
 
 `work.observation({event,...})` 是业务事实，内核补充身份、时间与序号；它不能伪造生命周期。宿主通过 observer.business 消费，默认不写入 Recorder/UI。生命周期和资源观测由机制发布。结构没有 observation 消费者配置；宿主的 ObservationInstallation.declarations 在 build 时选择声明并固定到接线。记录使用 `bindRecording(...).describe(structure, projection)` 登记描述、角色和脱敏规则。
+
+输入转换使用普通业务函数，不再有 InvocationEntry/defineChildEntry 或 children.entry。转换本身不是受控端点；实际 create/invoke 与资源操作各自检查活动窗口。
 
 通常使用 invoke。需要“创建→保存 waiting CP→启动/接收”的边界时，可用 create→checkpoint→call.invoke；需要更细中间步骤时保留 create/run/accept/open/facts。ChildCall.invoke 的接收选项不能晚改创建时已经固定的 output/delta/key。
 

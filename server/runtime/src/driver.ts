@@ -13,7 +13,7 @@ import type { InvocationControls } from './context/context.js';
 import { snapshotInvocationCapabilities, type InvocationCapabilities } from './invocation/capabilities.js';
 import { type CallableBindingOptions } from './binding/callable.js';
 import type { AnyCallable } from './binding/declarations.js';
-import type { CallableInput, CallableOutput } from './definition/signature.js';
+import type { CallableInput, CallableOutput } from '@capix/contracts';
 import type { CheckpointStore } from './checkpoint/contract.js';
 
 type DriverChange = { kind: 'established' } | ({ boundId: string } & ({ kind: 'acquired' | 'released' } | { kind: 'rejected'; reason: 'busy'; error: unknown } | { kind: 'entry-failed'; error: unknown }));

@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, MemoryCheckpointStore, checkpointPoint, childReference, defineChildEntry, defineGroup, defineScene } from '@capix/server-runtime';
+import { ExceptionContract, MemoryCheckpointStore, checkpointPoint, childReference, defineGroup, defineScene } from '@capix/server-runtime';
 import { InvocationContext } from '@capix/server-runtime/construction';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
@@ -69,7 +69,7 @@ test('checkpoint resumes a declared point without replaying run or interpreting 
   assert.equal(resumed, 1);
 });
 
-test('ChildEntry admission cannot change the already selected child definition', async () => {
+test('ordinary input adaptation retains the explicitly selected child identity and records its actual input', async () => {
   let originalCalls = 0;
   let replacementCalls = 0;
   const original = defineGroup()({
@@ -84,28 +84,21 @@ test('ChildEntry admission cannot change the already selected child definition',
       return `replacement:${work.input}`;
     },
   });
-  const entry = defineChildEntry(original, {
-    accept({ input }) {
-      // Both definitions are permitted. This checks target identity, not merely
-      // the uses gate. Reflect.set also works when entry identity is immutable.
-      Reflect.set(entry, 'definition', replacement);
-      return `${input}:admitted`;
-    },
-  });
+  const prepare = (input) => `${input}:prepared`;
   const root = defineScene()({
     members: [original, replacement],
     async run(work) {
-      const child = work.children.entry(entry, work.input);
+      const child = work.children.create(original, prepare(work.input));
       await child.run();
       const accepted = await child.accept();
       const fact = work.children.facts.require(original, child.ref);
-      assert.equal(fact.input, 'request:admitted');
+      assert.equal(fact.input, 'request:prepared');
       assert.equal(fact.reception.value, accepted);
       return accepted;
     },
   });
 
-  assert.equal(await runtime(root).run('request', {}), 'original:request:admitted');
+  assert.equal(await runtime(root).run('request', {}), 'original:request:prepared');
   assert.equal(originalCalls, 1);
   assert.equal(replacementCalls, 0);
 });

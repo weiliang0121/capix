@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { Group, RuntimeError, reception, checkpointPoint, childReference, type GroupWork, type ResumeWork, type ChildContract, type ChildrenOf, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/server-runtime';
+import { Group, reception, checkpointPoint, childReference, type GroupWork, type ResumeWork, type ChildContract, type ChildrenOf, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@capix/structure';
 import { isEqual } from 'es-toolkit';
 import type { GenerationOutput, ConversationTask } from '@capix/protocol';
 import { conversationTaskRequests, type ConversationTaskResources } from './resources.js';

@@ -88,63 +88,57 @@ conversationCapability({ ...options, output: { receive: (event) => { if (event.k
 });
 
 const sequenceSetup = `
-import {Sequence, InvocationEntry, type ChildCalls, type ChildCallable, type Group} from '@capix/server-runtime';
+import {Sequence, Node, type SequenceStep, type CallableOutput, type ChildCalls, type Group} from '@capix/server-runtime';
 declare const read: Group<{ path: string }, { content: string }, {}, { text: string }>;
 declare const summary: Group<{ text: string }, { summary: string }>;
 declare const exists: Group<{ path: string }, { exists: boolean }>;
-declare const readOnly: ChildCalls<typeof read>;
 declare const both: ChildCalls<typeof read | typeof summary>;
-declare const all: ChildCalls<typeof read | typeof summary | typeof exists>;
-const sequence = new Sequence<string>()
-  .step('read', { use: read, input: ({ input }) => ({ path: input }), delta: (value,_scope) => {const text:string=value.text;void text;} })
-  .step('summary', { use: summary, input: ({ outputs }) => ({ text: outputs.read.content }), result: {succeeded: (value, _scope) => value.summary.length} });
+const readStep = { node: read, input: ({ input }) => ({ path: input }), delta: (value, _scope) => { const text: string = value.text; void text; } } satisfies SequenceStep<typeof read, string>;
+const summaryStep = { node: summary, input: ({ previous }) => ({ text: previous.content }), result: { succeeded: (value, _scope) => value.summary.length } } satisfies SequenceStep<typeof summary, string, { content: string }>;
+const sequence = new Sequence([readStep, summaryStep]);
 `;
 
-test('Sequence preserves each accepted output while requiring only its complete phase grant', () => {
+test('Sequence carries the final accepted type as an ordinary Group signature', () => {
   accepts(`${sequenceSetup}
-const output: Promise<Readonly<{ read: { content: string }; summary: number }>> = sequence.run('notes.md', both);
-const wider: Promise<Readonly<{ read: { content: string }; summary: number }>> = sequence.run('notes.md', all);
-const alternative = new Sequence<number>().step('read', { use: read, input: ({ input }) => ({ path: String(input) }) });
-const adapted: Promise<Readonly<{ read: { content: string } }>> = alternative.run(12, readOnly);
-const empty: Promise<Readonly<{}>> = new Sequence<string>().run('empty', readOnly);
-void output; void wider; void adapted; void empty;
+const output: CallableOutput<typeof sequence> = 1;
+const group: Group<string, number> = sequence;
+const alternative = new Sequence([{ node: read, input: ({ input }: { input: number }) => ({ path: String(input) }) }]);
+const adapted: CallableOutput<typeof alternative> = { content: 'value' };
+const emptySequence = new Sequence([]);
+const empty: CallableOutput<typeof emptySequence> = 'empty';
+void output; void group; void adapted; void empty;
 `);
 });
 
-test('Sequence rejects a missing grant for both direct and adapted child input', () => {
+test('Sequence rejects incompatible implicit and explicitly adapted inputs', () => {
   rejects(
     `${sequenceSetup}
-sequence.run('notes.md', readOnly);
-new Sequence<number>().step('summary', { use: summary, input: ({ input }) => ({text: String(input)}) }).run(12, readOnly);
+new Sequence([new Node<string, string>(), read]);
+new Sequence([{ node: summary, input: () => ({ text: 1 }) }]);
 `,
     [2345, 2345],
   );
 });
 
-test('explicit Sequence annotations retain the used declarations instead of erasing their phase grant', () => {
+test('Sequence final-result annotations cannot claim the retired named-output map', () => {
   accepts(`${sequenceSetup}
-const explicit: Sequence<string, { read: { content: string }; summary: number }, typeof read | typeof summary> = sequence;
-const result: Promise<Readonly<{ read: { content: string }; summary: number }>> = explicit.run('notes.md', both);
-declare const unrestricted: ChildCalls;
-const widened: Sequence<string, { read: { content: string }; summary: number }, ChildCallable> = sequence;
-widened.run('notes.md', unrestricted);
+const explicit: Group<string, number> = sequence;
+const result: CallableOutput<typeof explicit> = 12;
 void result;
 `);
   rejects(
     `${sequenceSetup}
-const erased: Sequence<string, { read: { content: string }; summary: number }> = sequence;
-const widened: Sequence<string, { read: { content: string }; summary: number }, ChildCallable> = sequence;
-widened.run('notes.md', readOnly);
+const erased: Group<string, { read: { content: string }; summary: number }> = sequence;
 `,
-    [2322, 2345],
+    [2322],
   );
 });
 
-test('helpers preserve supported unions and dynamic dispatch narrows input before selecting a declaration', () => {
+test('presets preserve supported unions and ordinary dispatch still narrows child inputs', () => {
   accepts(`${sequenceSetup}
 declare const selected: typeof read | typeof exists;
-const one = new Sequence<string>().step('selected', { use: selected, input: ({ input }) => ({ path: input }) });
-const unionOutput: Promise<Readonly<{ selected: { content: string } | { exists: boolean } }>> = one.run('notes.md', all);
+const one = new Sequence([{ node: selected, input: ({ input }: { input: string }) => ({ path: input }) }]);
+const unionOutput: CallableOutput<typeof one> = { exists: true };
 type Request = { kind: 'read'; input: { path: string } } | { kind: 'summary'; input: { text: string } };
 function dispatch(request: Request) {
   if (request.kind === 'read') return both.create(read, request.input).run();

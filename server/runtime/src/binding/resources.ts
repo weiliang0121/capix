@@ -1,14 +1,11 @@
+import { callableDependencies, type CallableDependencies } from '@capix/structure/construction';
 import { isResourceRefinement, type ResourceRequest, type ResourceRefinement, resourceRequests, type ResourceRequirements } from '@capix/resources';
 import type { ObservationDeclaration } from '../definition/observation.js';
 import type { InvocationFact } from '../observation/facts.js';
-import type { ChildCallable, CallableInput } from '../definition/children.js';
+import type { ChildCallable } from '@capix/structure';
+import type { CallableInput } from '@capix/contracts';
 
 type RefinableDefinition = ChildCallable;
-
-interface ResourceDeclarations {
-  readonly deps?: ResourceRequirements;
-  readonly checkpoint?: { readonly points: readonly { readonly name: string; readonly resume: { readonly deps: ResourceRequirements } }[] };
-}
 
 /** Declaration identity locates a trusted assembly rule; content never receives this binding. */
 export interface ChildResourceBinding {
@@ -31,13 +28,9 @@ export function bindChildResources<Definition extends RefinableDefinition>(defin
  * Undefined observationProvides disables observation requirements; an empty map enables them without local supplies.
  * Installed observation supplies cover only observation requests, never run/checkpoint requests.
  */
-export function collectDefinitionRequirements(definition: ResourceDeclarations, observationProvides?: ResourceRequirements, observations: readonly ObservationDeclaration<InvocationFact>[] = []): ResourceRequirements {
-  const deps: Record<string, ResourceRequest<unknown>> = {};
+export function collectDefinitionRequirements(definition: CallableDependencies, observationProvides?: ResourceRequirements, observations: readonly ObservationDeclaration<InvocationFact>[] = []): ResourceRequirements {
+  const deps: Record<string, ResourceRequest<unknown>> = { ...callableDependencies(definition) };
   const observationOffers = new Set(resourceRequests(observationProvides ?? {}).map((request) => request.offer));
-  for (const [name, request] of Object.entries(definition.deps ?? {})) deps[`run.${name}`] = request;
-  for (const point of definition.checkpoint?.points ?? []) {
-    for (const [name, request] of Object.entries(point.resume.deps)) deps[`checkpoint.${point.name}.${name}`] = request;
-  }
   for (const [index, declaration] of (observationProvides ? observations : []).entries()) {
     for (const [name, request] of Object.entries(declaration.deps)) {
       if (!observationOffers.has(request.offer)) deps[`observation.${index}.${name}`] = request;

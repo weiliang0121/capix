@@ -1,13 +1,10 @@
 import { createCallableInvocation, restoreCallableInvocation } from '../../invocation/builders/structure.js';
-import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls } from '../../definition/children.js';
-import type { OperationOptions } from '@capix/resources/operation';
+import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls, ReceptionDefinition, OperationOptions } from '@capix/contracts';
 import { InvocationCancelled } from '../../invocation/cancellation.js';
-import type { ChildEntry } from '../../definition/entry.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import { ChildCallFailure } from '../../invocation/provenance.js';
 import type { BoundChildren } from './bound.js';
 import type { InvocationChildReferences } from './references.js';
-import type { ReceptionDefinition } from '../../definition/reception.js';
 import type { BoundReceptions } from '../receptions.js';
 import { combineOutputReceivers } from '../../output/delivery.js';
 
@@ -36,7 +33,6 @@ export class InvocationChildBindings {
       ...Object.fromEntries([...(options.names ?? [])].filter(([, definition]) => options.allowed.has(definition)).map(([name, definition]) => [name, Object.freeze({ invoke: (input: unknown, reception?: InvocationChildOperationOptions<ChildContract>) => this.invoke(definition, input, reception ?? {}) })])),
       invoke: this.invoke.bind(this),
       create: this.create.bind(this),
-      entry: this.entry.bind(this),
       open: this.open.bind(this),
       facts: options.references.facts,
       ...(options.restoring ? { resume: this.resume.bind(this) } : {}),
@@ -119,16 +115,6 @@ export class InvocationChildBindings {
       this.requireAllowed(definition);
       const child = createCallableInvocation(this.options.children.get(definition), this.options.parent, input, { ...options, declarationPosition: this.options.children.position(definition) });
       return this.handle(this.options.references.forTarget(definition, child));
-    });
-  }
-
-  private entry<D extends ChildContract, Input>(entry: ChildEntry<D, Input>, input: Input, options: ChildOptions<D> = {}): ChildCall<D> {
-    return this.guard(() => {
-      const definition = entry.definition;
-      this.requireAllowed(definition);
-      const parent = this.options.parent;
-      const accepted = entry.accept({ input, key: options.key, facts: { children: this.options.references.facts } });
-      return this.create(definition, accepted, options);
     });
   }
 

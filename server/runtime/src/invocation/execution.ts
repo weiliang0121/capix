@@ -3,7 +3,7 @@ import { requireNotCancelled } from './cancellation.js';
 import type { InvocationFailure, InvocationPhase } from './failure.js';
 import type { InvocationExecutionWork, InvocationProcess } from './work.js';
 import { InvocationOutputSection } from '../output/section.js';
-import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputWriter } from '../output/contract.js';
+import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputWriter } from '@capix/contracts';
 import { ProgressChannel } from '../progress.js';
 
 export interface InvocationExecutionControls {

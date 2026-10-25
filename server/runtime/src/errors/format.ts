@@ -3,7 +3,7 @@ import { isArray } from 'es-toolkit/compat';
 import { isNativeError } from 'node:util/types';
 import { zipObject } from 'es-toolkit/array';
 import { isError, isString, isUndefined } from 'es-toolkit/predicate';
-import type { RuntimeErrorDetail, RuntimeErrorValue } from '@capix/protocol';
+import type { RuntimeErrorDetail, RuntimeErrorValue } from '@capix/contracts';
 import { ErrorTraversal, formatLimits } from './traversal.js';
 import { formatDetail, formatText } from './detail.js';
 

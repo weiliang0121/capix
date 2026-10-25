@@ -1,13 +1,13 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { defineScene, defineGroup, defineNode, defineChildEntry, checkpointPoint, MemoryCheckpointStore } from '@capix/server-runtime';
+import { defineScene, defineGroup, defineNode, checkpointPoint, MemoryCheckpointStore } from '@capix/server-runtime';
 import { ResourceOffer } from '@capix/resources';
 
 const metadata = { name: 'test', label: 'Test', source: 'test' };
 const codec = { encode: (value) => value, decode: (value) => value };
 
-test('actual factories bind R/E/O/A, preserve alternate input and function receivers without executing at definition time', async () => {
+test('actual factories preserve explicitly adapted inputs and function receivers without executing at definition time', async () => {
   let executions = 0;
   const resource = new ResourceOffer({ name: 'test.factory.value', expose: () => 4 });
   const run = {
@@ -22,28 +22,19 @@ test('actual factories bind R/E/O/A, preserve alternate input and function recei
   const second = defineNode()({ ...metadata, deps: run.deps, run: run.execute.bind(run) });
   assert.notEqual(leaf, second);
   assert.equal(executions, 0);
-  const entryContent = {
+  const adaptation = {
     base: 2,
-    accept({ input }) {
+    prepare(input) {
       return input + this.base;
     },
   };
-  const entry = defineChildEntry(leaf, entryContent);
-  assert.ok(Object.isFrozen(entry));
-  assert.equal(Object.isFrozen(entryContent), false);
-  assert.throws(() => {
-    entry.definition = second;
-  }, TypeError);
-  assert.throws(() => {
-    entry.accept = () => 0;
-  }, TypeError);
-  entryContent.base = 3;
+  adaptation.base = 3;
   const operation = defineGroup()({
     ...metadata,
     members: [leaf],
     deps: { value: resource.request() },
     async run(work) {
-      const child = work.children.entry(entry, work.input);
+      const child = work.children.create(leaf, adaptation.prepare(work.input));
       await child.run();
       return child.accept();
     },

@@ -18,20 +18,15 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       return 'result';
     };
   })();
-  const execution = new (class extends Group {
-    output = output;
-    constructor() {
-      super();
-      this.add(operation);
-    }
-    deps = {};
-    run = async function (work) {
-      const composition = new Sequence().step('source', {
-        use: operation,
+  const execution = new Sequence(
+    [
+      {
+        node: operation,
+        key: 'source',
         input: () => null,
-        delta(value) {
+        delta(value, scope) {
           phases.push('delta');
-          work.output.emit(value.toUpperCase());
+          scope.output.emit(value.toUpperCase());
         },
         result: {
           succeeded(value) {
@@ -39,10 +34,10 @@ test('Sequence binds declared output explicitly while final parent acceptance re
             return value;
           },
         },
-      });
-      return (await composition.run(work.input, work.children)).source;
-    };
-  })();
+      },
+    ],
+    { output },
+  );
   const runtime = new (class extends Scene {
     constructor() {
       super();

@@ -14,6 +14,9 @@ importers:
       '@capix/client-runtime':
         specifier: workspace:*
         version: link:client/runtime
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:contracts
       '@capix/observer-service':
         specifier: workspace:*
         version: link:services/observer
@@ -26,6 +29,9 @@ importers:
       '@capix/server-runtime':
         specifier: workspace:*
         version: link:server/runtime
+      '@capix/structure':
+        specifier: workspace:*
+        version: link:server/structure
       '@types/node':
         specifier: 22.19.11
         version: 22.19.11
@@ -130,25 +136,49 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
 
-  protocol: {}
+  contracts: {}
+
+  protocol:
+    dependencies:
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   server/resources:
     dependencies:
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
 
   server/runtime:
     dependencies:
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
       '@capix/resources':
         specifier: workspace:*
         version: link:../resources
+      '@capix/structure':
+        specifier: workspace:*
+        version: link:../structure
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
+
+  server/structure:
+    dependencies:
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/resources':
+        specifier: workspace:*
+        version: link:../resources
 
   services/observer:
     dependencies:
@@ -161,6 +191,9 @@ importers:
       '@capix/server-runtime':
         specifier: workspace:*
         version: link:../../server/runtime
+      '@capix/structure':
+        specifier: workspace:*
+        version: link:../../server/structure
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0

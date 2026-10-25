@@ -8,7 +8,7 @@ import type { InvocationFact } from '../observation/facts.js';
 import type { ChildResourceBinding } from './resources.js';
 import type { AnyCallable } from './declarations.js';
 import type { CallableSnapshot } from './snapshot.js';
-import type { ChildCallable } from '../definition/children.js';
+import type { ChildCallable } from '@capix/structure';
 
 /** Assembly conditions are fixed once and shared by the single callable binder. */
 export interface ChildBindingOptions {

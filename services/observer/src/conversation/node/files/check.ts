@@ -1,5 +1,5 @@
 import { checkLeafResult, inspectionCodec, fileTaskCodec } from '../../group/checkpoint.js';
-import { Node, checkpointPoint, type NodeWork } from '@capix/server-runtime';
+import { Node, checkpointPoint, type NodeWork } from '@capix/structure';
 import type { FileTask } from '@capix/protocol';
 import { FileResources, type FileInspector, type FileTaskInspection } from '../../../files/index.js';
 

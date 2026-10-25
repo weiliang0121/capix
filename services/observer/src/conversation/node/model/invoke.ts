@@ -1,6 +1,6 @@
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../resources.js';
-import { Node, checkpointPoint, type NodeWork } from '@capix/server-runtime';
+import { Node, checkpointPoint, type NodeWork } from '@capix/structure';
 import { interactionRefCodec, interactionResultCodec, modelRequestCodec } from '../../model/checkpoint.js';
 import { checkLeafResult } from '../../group/checkpoint.js';
 import { checkCapacity } from '../../model/capacity.js';

@@ -29,6 +29,8 @@
     "zod": "4.6.5",
     "@capix/client-runtime": "workspace:*",
     "@capix/client-http": "workspace:*",
-    "@capix/resources": "workspace:*"
+    "@capix/resources": "workspace:*",
+    "@capix/structure": "workspace:*",
+    "@capix/contracts": "workspace:*"
   }
 }

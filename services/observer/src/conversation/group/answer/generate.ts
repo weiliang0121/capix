@@ -1,4 +1,5 @@
-import { Group, RuntimeError, checkpointPoint, childReference, reception, type ChildCall, type ChildrenOf, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildFact } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, reception, type ChildCall, type ChildrenOf, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildFact } from '@capix/structure';
 import { z } from 'zod';
 import { isEqual } from 'es-toolkit/predicate';
 import type { GenerationOutput, FileTask } from '@capix/protocol';

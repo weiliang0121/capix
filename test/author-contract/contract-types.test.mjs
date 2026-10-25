@@ -6,8 +6,8 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/consumer-contract.ts', import.meta.url));
 const source = `
-import {Node, Group, defineNode, defineChildEntry, defineGroup, defineScene} from '@capix/server-runtime';
-import type { ChildCall, ChildCalls, ChildContract, ChildContractsOf, ChildEntry, ChildOptions, ChildReference, CallableMembers, CallableContract, CallableInput, CallableOutput, CallableWork, InvocationOutputReceiver, GroupWork } from '@capix/server-runtime';
+import {Node, Group, defineNode, defineGroup, defineScene} from '@capix/server-runtime';
+import type { ChildCall, ChildCalls, ChildContract, ChildContractsOf, ChildOptions, ChildReference, CallableContract, CallableInput, CallableOutput, CallableWork, InvocationOutputReceiver, GroupWork } from '@capix/server-runtime';
 import type { ResourceRequest } from '@capix/resources';
 
 declare function expectType<T>(value: T): void;
@@ -85,27 +85,18 @@ const invalidOutput: ChildOptions<typeof view> = { output: { receive(event) { if
 // @ts-expect-error phase Allowed cannot expand to a different contract
 consumer.children.create(nested, 1);
 
-// Entry consumers need input adaptation, not the full processing configuration.
-const entry = defineChildEntry(read, { accept(request: { input: string }) { return { path: request.input }; } });
-const entryView: ChildEntry<typeof view, string> = entry;
-consumer.children.entry(entryView, 'notes.md');
-const customEntry: ChildEntry<typeof view, string> = { definition: view, accept(request) {
-  expectType<string>(request.input);
-  // @ts-expect-error input adaptation no longer exposes retry state
-  request.facts.round;
-  expectType<string | undefined>(request.key);
-  request.facts.children.get(call.ref);
-  return { path: request.input };
-} };
-consumer.children.entry(customEntry, 'notes.md');
-// @ts-expect-error input adaptation does not widen its external input
-consumer.children.entry(entryView, 2);
-// @ts-expect-error caller sees no complete run declaration through entryView
-entryView.run;
+// A caller can adapt input with an ordinary typed function and retain the shallow target.
+const prepareInput = (input: string): Input => ({ path: input });
+consumer.children.create(view, prepareInput('notes.md'));
+// @ts-expect-error ordinary adaptation retains its declared input contract
+prepareInput(2);
+const wrongPreparation = (input: string) => ({ path: input.length });
+// @ts-expect-error the real child still checks the prepared input type
+consumer.children.create(view, wrongPreparation('notes.md'));
 // Assembly/composition follows the retained concrete structure explicitly.
-entry.definition.deps;
+read.deps;
 // @ts-expect-error structure has no exception interpreter
-entry.definition.exceptions;
+read.exceptions;
 
 // Shared class registration rules preserve leaf restrictions beyond literals.
 class BadLeaf extends Node<Input, Result> {
@@ -122,9 +113,9 @@ class GoodLeaf extends Node<Input, Result> {
   private project(input: Input): Result { return { content: this.prefix + input.path }; }
 }
 const named = new GoodLeaf();
-const classRegistration: CallableMembers<'group'> = { members: [named, nested] };
-// @ts-expect-error common registration type retains the parent's exact position
-const invalidClassRegistration: CallableMembers<'node'> = { members: [named] };
+const classRegistration = new Group<Input, Result>().add(named, nested);
+// @ts-expect-error the actual Node constructor cannot register members
+const invalidClassRegistration = new Node<Input, Result>({ members: [named], run: () => ({ content: '' }) });
 const namedParent = defineGroup<Input, Result>()({ ...metadata, members: [named], run: work => work.children.create(named, work.input).run() });
 
 // Ordinary processing rejects the removed stage declaration vocabulary.

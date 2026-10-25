@@ -1,11 +1,9 @@
-import type { CallableKind } from '@capix/protocol';
-import type { ChildCallable } from '../definition/children.js';
-import type { CallableStructure } from '../structure/callable.js';
-import type { Composite } from '../definition/composition.js';
+import type { CallableKind } from '@capix/contracts';
+import type { ChildCallable, CallableStructure, Composite } from '@capix/structure';
 import { resourceRequests, type ResourceRequirements, isResourceRefinement, type ResourceRefinement } from '@capix/resources';
 import type { ChildBindingOptions } from './contract.js';
 import { collectDefinitionRequirements, collectResourceSupply, type ChildResourceBinding } from './resources.js';
-import { childKinds } from '../definition/kind.js';
+import { childKinds } from '@capix/structure/construction';
 import { originalReception, snapshotDefinition, snapshotObservation, type CallableSnapshot } from './snapshot.js';
 import type { InvocationObservationDeclaration } from './observation.js';
 
@@ -57,7 +55,7 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
     for (const point of points) {
       if (!point.name || names.has(point.name)) throw new Error('Checkpoint points need distinct registered names');
       names.add(point.name);
-      for (const slot of Object.values(point.references as import('../definition/checkpoint.js').CheckpointReferenceSlots)) {
+      for (const slot of Object.values(point.references as import('@capix/structure').CheckpointReferenceSlots)) {
         if (!definitions.some((member) => member === slot.definition)) throw new Error('Checkpoint reference targets a member outside its owner');
       }
     }

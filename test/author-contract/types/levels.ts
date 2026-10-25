@@ -1,5 +1,5 @@
-import { Group, defineGroup, defineChildEntry } from '@capix/server-runtime';
-import type { Node, SceneWork, GroupWork, NodeWork, ResumeWork, CallableRun, InvocationCheckpointPoint, ChildReference, ChildEntryInput, ChildrenOf, CallableInput, CallableOutput } from '@capix/server-runtime';
+import { Group, defineGroup } from '@capix/server-runtime';
+import type { Node, SceneWork, GroupWork, NodeWork, ResumeWork, CallableRun, InvocationCheckpointPoint, ChildReference, ChildrenOf, CallableInput, CallableOutput } from '@capix/server-runtime';
 declare const operation: Group<string, number>;
 declare const node: Node<string, number>;
 declare function expectType<T>(value: T): void;
@@ -24,9 +24,9 @@ export class NamedGroup extends Group<string, number> {
   readonly run: CallableRun<string, number, 'group', Record<string, never>> = groupHelper;
 }
 export const factory = defineGroup<string, number>()({ members: [operation], run: rootHelper });
-const entry = defineChildEntry(operation, { accept: ({ input }: ChildEntryInput<number>) => String(input) });
+const prepareInput = (input: number) => String(input);
 export function recovery(work: ResumeWork<'group', string, number>, reference: ChildReference<typeof operation>) {
-  expectType<Promise<number>>(work.children.entry(entry, 1).invoke());
+  expectType<Promise<number>>(work.children.invoke(operation, prepareInput(1)));
   expectType<Promise<number>>(work.children.resume(reference).invoke());
 }
 export function historical(work: ResumeWork<'group', string, number, Record<string, never>, never>, reference: ChildReference<typeof node>) {

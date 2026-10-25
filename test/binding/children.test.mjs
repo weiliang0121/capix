@@ -1,7 +1,7 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, InvocationEntry, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
+import { Group, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
 import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, CallableContext, CallableBuilder, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
@@ -152,24 +152,26 @@ test('a builder rejects an unknown declaration before creating any child invocat
   assert.throws(() => callableConstruction(declared), /not been built/);
 });
 
-test('alternative entry acceptance can cancel its parent without creating or starting the child', async () => {
+test('cancellation during ordinary input preparation prevents subsequent child creation and invocation', async () => {
   const controller = new AbortController();
-  let accepted = 0;
+  let prepared = 0;
   const child = operation(() => assert.fail('cancelled input must not start child work'));
-  const entry = new InvocationEntry(child, ({ input }) => {
-    accepted++;
+  const prepare = (input) => {
+    prepared++;
     controller.abort();
     return input;
-  });
+  };
   const runtime = assemble(child, {
-    execute(work) {
-      assert.throws(() => work.children.entry(entry, 'input'), /取消/);
+    async execute(work) {
+      const input = prepare('input');
+      assert.throws(() => work.children.create(child, input), /取消/);
+      await assert.rejects(work.children.invoke(child, input), /取消/);
       assert.equal(work.children.facts.values().length, 0);
       return 'caught';
     },
   });
   await assert.rejects(runtime.run(null, { signal: controller.signal }), /取消/);
-  assert.equal(accepted, 1);
+  assert.equal(prepared, 1);
 });
 
 test('resuming a saved final child delivery needs no child invocation construction', async () => {

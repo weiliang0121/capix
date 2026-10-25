@@ -1,11 +1,8 @@
 import type { CheckpointReferences, CheckpointReference } from '../checkpoint/contract.js';
 import { decodeCheckpointDiagnostic, type DecodedCheckpointFrame, type DecodedCheckpointChild } from '../checkpoint/facts.js';
-import type { CheckpointFacts } from '../definition/checkpoint.js';
-import type { ChildContract, ChildFact, ChildFacts, ChildReference } from '../definition/children.js';
-import type { ContinuationFact } from '../definition/checkpoint.js';
+import type { CheckpointFacts, ChildContract, ChildFact, ChildFacts, ChildReference, ContinuationFact, ReceptionDefinition } from '@capix/contracts';
 import type { BoundChildren } from './children/bound.js';
 import { BoundReceptions } from './receptions.js';
-import type { ReceptionDefinition } from '../definition/reception.js';
 
 /** Saved checks get decoded facts and inert references, never a live action registry. */
 export function savedCheckpointFacts(frame: DecodedCheckpointFrame, references: CheckpointReferences, children: BoundChildren, receptions = new BoundReceptions([], children)): CheckpointFacts<unknown> {

@@ -1,6 +1,4 @@
-/** Structural description, never a dispatch policy for the common invocation mechanism. */
-export const callableKinds = ['scene', 'group', 'node'] as const;
-export type CallableKind = (typeof callableKinds)[number];
+export { callableKinds, type CallableKind } from '@capix/contracts';
 /** Read-only vocabulary of historical REOA records. */
 export type LegacyInvocationLevel = 'runtime' | 'execution' | 'operation' | 'attempt';
 export const invocationProcessStages = ['execute', 'receive', 'handling', 'control'] as const;

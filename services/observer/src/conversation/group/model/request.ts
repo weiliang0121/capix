@@ -1,6 +1,6 @@
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../resources.js';
-import { Group, checkpointPoint, childReference, childReferences, type GroupWork, type ResumeWork, type ChildReference, type CheckpointFacts, type ChildFact, type ChildrenOf } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, childReferences, type GroupWork, type ResumeWork, type ChildReference, type CheckpointFacts, type ChildFact, type ChildrenOf } from '@capix/structure';
 import { isEqual } from 'es-toolkit/predicate';
 import type { ModelRequest, ModelOutput, Purpose, ModelTextDelta } from '../../model/types.js';
 import { InvokeModel } from '../../node/model/invoke.js';

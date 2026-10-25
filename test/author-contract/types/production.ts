@@ -1,7 +1,7 @@
 import type { CheckpointCodec } from '@capix/server-runtime';
 import type { ResourceRequest } from '@capix/resources';
-import { checkpointPoint, childReference, childReferences, defineNode, defineChildEntry, defineGroup, defineScene } from '@capix/server-runtime';
-import type { ChildReference, ChildEntryFacts as EntryFacts, GroupWork } from '@capix/server-runtime';
+import { checkpointPoint, childReference, childReferences, defineNode, defineGroup, defineScene } from '@capix/server-runtime';
+import type { ChildReference, GroupWork } from '@capix/server-runtime';
 import type { ResourcesOf } from '@capix/resources';
 
 const metadata = { label: 'test', source: 'test' };
@@ -314,23 +314,15 @@ defineNode<string, string>()({
   run: (work) => work.input,
 });
 
-const alternate = defineChildEntry(readText, {
-  accept({ input, facts }: { readonly input: { readonly filename: string }; readonly facts: EntryFacts }) {
-    // @ts-expect-error input adaptation has no framework continuation
-    facts.continuation;
-    // @ts-expect-error Alternate entry facts do not grant child action capability.
-    facts.children.create(readText, { path: input.filename });
-    return { path: input.filename };
-  },
-});
+const prepareRead = (input: { readonly filename: string }): ReadInput => ({ path: input.filename });
 defineGroup<ReadInput, string>()({
   ...metadata,
-  name: 'alternate-entry',
+  name: 'prepared-input',
   members: [readText],
   run: async (work) => {
-    const child = work.children.entry(alternate, { filename: work.input.path });
-    // @ts-expect-error An alternate entry keeps its own input contract.
-    work.children.entry(alternate, { path: work.input.path });
+    const child = work.children.create(readText, prepareRead({ filename: work.input.path }));
+    // @ts-expect-error ordinary input preparation keeps its own argument contract
+    prepareRead({ path: work.input.path });
     await child.run();
     return child.accept((output) => output.text);
   },

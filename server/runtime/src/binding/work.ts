@@ -1,11 +1,10 @@
-import type { CallableKind } from '@capix/protocol';
-import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
+import type { CallableKind, ChildReference } from '@capix/contracts';
+import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@capix/structure';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationCheckpointWork } from '../checkpoint/work.js';
 import type { CheckpointReferences, CheckpointReference } from '../checkpoint/contract.js';
 import type { InvocationWork } from '../invocation/work.js';
 import type { Invocation } from '../invocation/invocation.js';
-import type { ChildReference } from '../definition/children.js';
 import type { BoundChildren } from './children/bound.js';
 import { ChildBindingsBuilder } from './children/builder.js';
 import { InvocationAccess } from './access.js';
@@ -48,7 +47,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
     const registry = this.accessFor(invocation).references;
     const saved = Object.freeze(Object.fromEntries(Object.entries(references).map(([name, value]) => [name, Array.isArray(value) ? Object.freeze(value.map((ref) => registry.fromSaved(ref))) : registry.fromSaved(value as CheckpointReference)])));
     try {
-      return await point.resume.run({ ...this.executionWork(invocation, access), initialInput: invocation.context.input, round: invocation.context.progress.round, ...(invocation.context.continuation ? { continuation: registry.continuation(invocation.context.continuation) } : {}) } as never, state, saved as import('../definition/checkpoint.js').SavedReferences<any>);
+      return await point.resume.run({ ...this.executionWork(invocation, access), initialInput: invocation.context.input, round: invocation.context.progress.round, ...(invocation.context.continuation ? { continuation: registry.continuation(invocation.context.continuation) } : {}) } as never, state, saved as import('@capix/structure').SavedReferences<any>);
     } finally {
       invocation.sealOutput();
       const settling = invocation.children.settleAcceptances();
@@ -100,7 +99,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
           state: point.state,
           references: Object.fromEntries(
             Object.entries(point.references).map(([name, slot]) => {
-              const reference = slot as { definition: import('../definition/children.js').ChildContract; many: boolean };
+              const reference = slot as { definition: import('@capix/structure').ChildContract; many: boolean };
               return [name, { cardinality: reference.many ? ('many' as const) : ('one' as const), position: this.children.position(reference.definition) }];
             }),
           ),

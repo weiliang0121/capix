@@ -1,9 +1,8 @@
 import { InvocationResources } from '../resource-access.js';
-import type { CallableKind } from '@capix/protocol';
+import type { CallableKind, InvocationOutputReceiver } from '@capix/contracts';
 import { restoreCheckpointContinuation } from '../../checkpoint/continuation.js';
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
 import { prepareCheckpointRestoration } from '../../checkpoint/restoration.js';
-import type { InvocationOutputReceiver } from '../../output/contract.js';
 import type { ProgressReceiver } from '../../progress.js';
 import type { InvocationProgress } from '../progress.js';
 import type { InvocationObservationDeclaration } from '../../binding/observation.js';

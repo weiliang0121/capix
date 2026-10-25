@@ -1,4 +1,4 @@
-import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/structure';
 import { isEqual } from 'es-toolkit';
 import { ActiveContentResource, type ActiveContentReader } from '../../content/resource.js';
 import type { ActiveContentSnapshot } from '../../content/active.js';

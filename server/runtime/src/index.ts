@@ -1,25 +1,8 @@
 // Declarations and business composition.
-export * from './definition/callable.js';
-export * from './definition/work.js';
-export * from './definition/factory.js';
-export * from './definition/checkpoint.js';
-export * from './definition/reception.js';
+export * from '@capix/structure';
 export { ChildCallFailure } from './invocation/provenance.js';
-export * from './definition/scene.js';
-export * from './definition/group.js';
-export * from './definition/node.js';
-export * from './structure/callable.js';
-export * from './structure/scene.js';
-export * from './structure/group.js';
-export * from './structure/node.js';
-export * from './definition/composition.js';
-export * from './definition/children.js';
-export type { ChildKind } from './definition/kind.js';
-export type { CallableKind } from '@capix/protocol';
-export * from './definition/entry.js';
 export * from './definition/observation.js';
 export * from './exception/contract.js';
-export * from './composition/sequence.js';
 
 export * from './driver.js';
 export * from './runner.js';
@@ -40,7 +23,6 @@ export * from './interaction/interactions.js';
 // Business-facing context and invocation views, results and shared time.
 export * from './context/view.js';
 export * from './invocation/view.js';
-export type { OutputDeclaration, InvocationOutputWriter, InvocationOutputEvent, InvocationOutputReceiver } from './output/contract.js';
 export * from './invocation/identity.js';
 export * from './invocation/progress.js';
 export { InvocationCancelled, isInvocationCancelled } from './invocation/cancellation.js';

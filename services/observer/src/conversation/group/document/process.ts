@@ -3,7 +3,7 @@ import { isEqual } from 'es-toolkit/predicate';
 import { checkpointCodec } from '../../checkpoint.js';
 import { answerCheckpointCodecs } from '../answer/checkpoint.js';
 import { answerMessageContextSchema, memorySchema, fileTaskSchema, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
-import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall, type ChildrenOf } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall, type ChildrenOf } from '@capix/structure';
 import type { GenerationOutput } from '@capix/protocol';
 import { FileResources, type TextDocument, type FileReader } from '../../../files/index.js';
 import { GenerateAnswer, type GenerationInput } from '../answer/generate.js';

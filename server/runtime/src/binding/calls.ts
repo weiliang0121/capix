@@ -1,4 +1,4 @@
-import type { InvocationOutputReceiver } from '../output/contract.js';
+import type { InvocationOutputReceiver } from '@capix/contracts';
 import type { ResourceInstallation } from '../resource/installation.js';
 import type { ResourceSupply } from '@capix/resources';
 import type { ProgressReceiver } from '../progress.js';

@@ -1,4 +1,4 @@
-import type { RuntimeErrorValue } from '@capix/protocol';
+import type { RuntimeErrorValue } from '@capix/contracts';
 import type { ProgressReceiver } from '../progress.js';
 
 /** A versioned data boundary, independent of any invocation or recording preset. */

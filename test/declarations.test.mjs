@@ -2,7 +2,7 @@ import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, Group, Node, InvocationEntry, Recorder, RecordBook, bindCallSource, CallableRecordHelper, bindRecording, checkpointPoint } from '@capix/server-runtime';
+import { ExceptionContract, Group, Node, Recorder, RecordBook, bindCallSource, CallableRecordHelper, bindRecording, checkpointPoint } from '@capix/server-runtime';
 import { ResourceOffer } from '@capix/resources';
 import { validateExecutionRecordSnapshot, readOutput } from '@capix/protocol';
 
@@ -71,16 +71,19 @@ test('checkpoint-only resource requirements remain lazy on the normal path', asy
   assert.equal(await runtime.run(null, {}), 'done');
 });
 
-test('a caught child error blocks later child entry admission and reception work', async () => {
+test('a caught child error blocks later child creation and reception work', async () => {
   const failure = new Error('child failed');
-  let entryEffects = 0;
+  let executions = 0;
   let receptionEffects = 0;
   class Good extends Group {
     name = 'good';
     label = 'good';
     source = 'test';
     deps = {};
-    run = () => 'done';
+    run = () => {
+      executions++;
+      return 'done';
+    };
   }
   class Bad extends Group {
     name = 'bad';
@@ -93,10 +96,6 @@ test('a caught child error blocks later child entry admission and reception work
   }
   const good = new Good();
   const bad = new Bad();
-  const entry = new InvocationEntry(good, ({ input }) => {
-    entryEffects++;
-    return input;
-  });
   class Main extends Group {
     constructor() {
       super();
@@ -108,7 +107,7 @@ test('a caught child error blocks later child entry admission and reception work
       assert.equal(await completed.run(), 'done');
       await assert.rejects(work.children.create(bad, null).run(), (error) => error === failure);
       assert.throws(
-        () => work.children.entry(entry, null),
+        () => work.children.create(good, null),
         (error) => error === failure,
       );
       await assert.rejects(
@@ -122,7 +121,7 @@ test('a caught child error blocks later child entry admission and reception work
     };
   }
   await assert.rejects(assemble(new Main()).run(null, {}), (error) => error === failure);
-  assert.equal(entryEffects, 0);
+  assert.equal(executions, 1);
   assert.equal(receptionEffects, 0);
 });
 

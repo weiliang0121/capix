@@ -2,7 +2,7 @@ import { InvocationCheckpoint } from '../checkpoint/invocation.js';
 import type { CheckpointInstallation, CheckpointRestoration, CheckpointWriter } from '../checkpoint/contract.js';
 import type { CheckpointBinding } from '../checkpoint/work.js';
 import type { InvocationTarget } from './relation.js';
-import type { InvocationOutputWriter, InvocationOutputReceiver } from '../output/contract.js';
+import type { InvocationOutputWriter, InvocationOutputReceiver } from '@capix/contracts';
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from '../clock.js';
 import { DeclaredException } from '../exception/contract.js';

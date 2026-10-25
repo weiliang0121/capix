@@ -6,8 +6,8 @@ import type { EventConsumer, InvocationObserver } from '../../observation/observ
 import type { Recorder } from '../recorder.js';
 import { RecordingRootHelper } from '../root/helper.js';
 import { InvocationRecordAccess, invocationRecording, type InvocationRecordDescription } from './declaration.js';
-import type { CallableInput, CallableOutput } from '../../definition/signature.js';
-import { assertStructureConfigurable } from '../../structure/configuration.js';
+import type { CallableInput, CallableOutput } from '@capix/contracts';
+import { assertStructureConfigurable } from '@capix/structure/construction';
 import { InvocationRecording } from './invocation.js';
 import { memoryRecord, transcriptRecord } from './mapping.js';
 

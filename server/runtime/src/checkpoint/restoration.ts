@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { CheckpointContract, CheckpointFact, CheckpointInstallation, CheckpointRestoration } from './contract.js';
+import type { CheckpointFact, CheckpointInstallation, CheckpointRestoration } from './contract.js';
+import type { CheckpointContract } from '@capix/contracts';
 import type { InvocationIdentity } from '../invocation/identity.js';
 import { cloneCheckpointHead } from './value.js';
 import { ObserverSession } from '../observation/session.js';

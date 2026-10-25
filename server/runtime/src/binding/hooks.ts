@@ -1,5 +1,4 @@
-import type { CallableInput, CallableOutput, CallableDelta } from '../definition/signature.js';
-import type { InvocationOutputReceiver } from '../output/contract.js';
+import type { CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver } from '@capix/contracts';
 import type { ProgressReceiver } from '../progress.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 import type { CallableInvocationStarted } from '../invocation/builders/callable.js';

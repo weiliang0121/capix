@@ -1,5 +1,5 @@
-import type { RuntimeErrorDetail, RuntimeErrorValue } from '@capix/protocol';
-import type { CheckpointChild, CheckpointChildReception, CheckpointHandledReception, CheckpointReferences, InvocationCheckpointFrame, CheckpointValue } from './contract.js';
+import type { RuntimeErrorDetail, RuntimeErrorValue, CheckpointValue } from '@capix/contracts';
+import type { CheckpointChild, CheckpointChildReception, CheckpointHandledReception, CheckpointReferences, InvocationCheckpointFrame } from './contract.js';
 import type { CheckpointBinding, CheckpointChildBinding, CheckpointReferenceSlot } from './work.js';
 import { checkpointReferenceChild } from './value.js';
 import type { InvocationReceptionBinding } from '../invocation/reception.js';

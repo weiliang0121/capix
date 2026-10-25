@@ -49,7 +49,7 @@ test('alias registration is atomic and rejects reserved names, conflicting alias
   assert.deepEqual(group.names, { primary });
   assert.deepEqual(group.members, [primary]);
   assert.doesNotThrow(() => new Group().add(fresh, replacement));
-  for (const name of ['create', 'invoke', 'open', 'facts', 'resume', 'entry', 'constructor', '__proto__', 'toString', '']) {
+  for (const name of ['create', 'invoke', 'open', 'facts', 'resume', 'constructor', '__proto__', 'toString', '']) {
     const node = new Node({ run: () => 0 });
     assert.throws(() => group.add({ [name]: node }), /reserved|empty/);
     assert.doesNotThrow(() => new Group().add(node));

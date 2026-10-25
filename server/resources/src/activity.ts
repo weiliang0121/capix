@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { OperationOptions, OperationOutcome, OperationResult } from './operation/contract.js';
+import type { OperationOptions, OperationOutcome, OperationResult } from '@capix/contracts';
 import { receiveOperation } from './operation/receive.js';
 import type { ResourceOperation } from './methods.js';
 import type { ResourceObservation } from './facts.js';

@@ -9,11 +9,12 @@ function attempt(name, execute = (value) => value) {
   return defineNode()({ ...metadata, name, run: (work) => execute(work.input) });
 }
 function composed(sequence) {
-  return defineGroup()({ ...metadata, members: [...new Set(sequence.steps.map((step) => step.use))], run: (work) => sequence.run(work.input, work.children) });
+  Object.assign(sequence, metadata);
+  return sequence;
 }
 function install(composition, recorder, observations = []) {
   const calls = [];
-  const execution = defineGroup()({ members: [...new Set(composition.steps.map((step) => step.use))], run: (work) => composition.run(work.input, work.children) });
+  const execution = composition;
   const definition = runtimeDefinition(execution);
   const runtime = installCallable(definition, {
     providers: [],
@@ -41,35 +42,38 @@ function deferred() {
 test('parent owns a child before it runs and distinguishes its return from parent acceptance', async () => {
   const entered = deferred();
   const release = deferred();
-  const inner = new Sequence().step('leaf', { use: attempt('leaf', (input) => input + 1), input: ({ input }) => input });
+  const inner = new Sequence([{ node: attempt('leaf', (input) => input + 1), key: 'leaf' }]);
   const operation = composed(inner);
   let installed;
-  const composition = new Sequence().step('work', {
-    use: operation,
-    input: ({ input }) => {
-      assert.equal(installed.calls[0].children.values().length, 0);
-      return input;
-    },
-    result: {
-      async succeeded(output, _scope) {
-        const child = installed.calls[0].children.values()[0];
-        assert.equal(child.key, 'work');
-        assert.equal(child.invocation.context.status, 'succeeded');
-        assert.deepEqual(child.returned, { status: 'succeeded', output: { leaf: 2 } });
-        assert.equal(child.reception.status, 'receiving');
-        entered.resolve();
-        await release.promise;
-        return output.leaf * 2;
+  const composition = new Sequence([
+    {
+      node: operation,
+      key: 'work',
+      input: ({ input }) => {
+        assert.equal(installed.calls[0].children.values().length, 0);
+        return input;
+      },
+      result: {
+        async succeeded(output, _scope) {
+          const child = installed.calls[0].children.values()[0];
+          assert.equal(child.key, 'work');
+          assert.equal(child.invocation.context.status, 'succeeded');
+          assert.deepEqual(child.returned, { status: 'succeeded', output: 2 });
+          assert.equal(child.reception.status, 'receiving');
+          entered.resolve();
+          await release.promise;
+          return output * 2;
+        },
       },
     },
-  });
+  ]);
   installed = install(composition);
   const running = installed.runtime.run(1, {});
   await entered.promise;
   const invocation = installed.calls[0];
   assert.equal(invocation.context.status, 'running');
   release.resolve();
-  assert.deepEqual(await running, { work: 4 });
+  assert.equal(await running, 4);
   const child = invocation.children.values()[0];
   assert.deepEqual(child.reception, { status: 'accepted', output: 4 });
   assert.equal(child.invocation.children.values()[0].key, 'leaf');
@@ -82,11 +86,12 @@ test('child failure keeps accepted predecessors and prevents later child creatio
   const failure = attempt('failure', () => {
     throw error;
   });
-  const sequence = new Sequence()
-    .step('first', { use: first, input: ({ input }) => input })
-    .step('second', { use: failure, input: ({ outputs }) => outputs.first })
-    .step('third', { use: first, input: () => assert.fail('must not prepare later input') });
-  const installed = install(new Sequence().step('operation', { use: composed(sequence), input: ({ input }) => input }));
+  const sequence = new Sequence([
+    { node: first, key: 'first' },
+    { node: failure, key: 'second' },
+    { node: first, key: 'third', input: () => assert.fail('must not prepare later input') },
+  ]);
+  const installed = install(new Sequence([{ node: composed(sequence), key: 'operation' }]));
   await assert.rejects(installed.runtime.run(1, {}), (value) => value === error);
   const observed = installed.calls[0].children.values()[0].invocation;
   assert.equal(observed.children.values().length, 2);
@@ -102,18 +107,20 @@ test('child failure keeps accepted predecessors and prevents later child creatio
 test('parent acceptance failure retains successful child and does not start next work or retry', async () => {
   let effects = 0;
   const error = new Error('parent append failed');
-  const use = composed(new Sequence().step('leaf', { use: attempt('leaf', () => ++effects), input: () => null }));
-  const sequence = new Sequence()
-    .step('first', {
-      use,
+  const use = composed(new Sequence([{ node: attempt('leaf', () => ++effects), key: 'leaf', input: () => null }]));
+  const sequence = new Sequence([
+    {
+      node: use,
+      key: 'first',
       input: () => null,
       result: {
         succeeded: () => {
           throw error;
         },
       },
-    })
-    .step('second', { use, input: () => null });
+    },
+    { node: use, key: 'second', input: () => null },
+  ]);
   const installed = install(sequence);
   await assert.rejects(installed.runtime.run(1, {}), (value) => value === error);
   assert.equal(effects, 1);
@@ -129,11 +136,11 @@ test('parent acceptance failure retains successful child and does not start next
 test('shared definitions and composition retain independent O/O/A relationships per call', async () => {
   const recorder = new Recorder(new RecordBook());
   const leaf = attempt('identity');
-  const inner = composed(new Sequence().step('leaf', { use: leaf, input: ({ input }) => input }));
-  const outer = composed(new Sequence().step('inner', { use: inner, input: ({ input }) => input }));
-  const installed = install(new Sequence().step('outer', { use: outer, input: ({ input }) => input }), recorder);
-  assert.deepEqual(await installed.runtime.run('one', {}), { outer: { inner: { leaf: 'one' } } });
-  assert.deepEqual(await installed.runtime.run('two', {}), { outer: { inner: { leaf: 'two' } } });
+  const inner = composed(new Sequence([{ node: leaf, key: 'leaf' }]));
+  const outer = composed(new Sequence([{ node: inner, key: 'inner' }]));
+  const installed = install(new Sequence([{ node: outer, key: 'outer' }]), recorder);
+  assert.deepEqual(await installed.runtime.run('one', {}), 'one');
+  assert.deepEqual(await installed.runtime.run('two', {}), 'two');
   const [first, second] = installed.calls;
   const outerCall = first.children.values()[0].invocation;
   const innerCall = outerCall.children.values()[0].invocation;
@@ -146,7 +153,7 @@ test('shared definitions and composition retain independent O/O/A relationships 
 });
 
 test('direct calls attach and return without pretending parent acceptance took place', async () => {
-  const operation = composed(new Sequence());
+  const operation = composed(new Sequence([]));
   let saved;
   let facts;
   const execution = defineGroup()({
@@ -178,7 +185,7 @@ test('a terminal reporting failure remains a failed delivery with a succeeded ch
     },
     { failure: 'propagate' },
   );
-  const installed = install(new Sequence().step('work', { use, input: () => null }), undefined, [{ bindInvocation: () => ({ observe() {} }), declarations: (structure) => (structure === use ? [declaration] : []) }]);
+  const installed = install(new Sequence([{ node: use, key: 'work', input: () => null }]), undefined, [{ bindInvocation: () => ({ observe() {} }), declarations: (structure) => (structure === use ? [declaration] : []) }]);
   await assert.rejects(installed.runtime.run(null, {}), (observed) => observed.code === 'OBSERVATION_FAILED' && observed.cause === error);
   const child = installed.calls[0].children.values()[0];
   assert.equal(child.invocation.context.status, 'succeeded');
@@ -188,20 +195,26 @@ test('a terminal reporting failure remains a failed delivery with a succeeded ch
 });
 
 test('input preparation failure creates no child and repeated positions produce separate calls', async () => {
-  const use = composed(new Sequence());
+  const use = composed(new Sequence([]));
   const error = new Error('cannot prepare input');
   const failed = install(
-    new Sequence().step('work', {
-      use,
-      input: () => {
-        throw error;
+    new Sequence([
+      {
+        node: use,
+        key: 'work',
+        input: () => {
+          throw error;
+        },
       },
-    }),
+    ]),
   );
   await assert.rejects(failed.runtime.run(1, {}), (value) => value === error);
   assert.equal(failed.calls[0].children.values().length, 0);
-  const repeated = composed(new Sequence());
-  const sequence = new Sequence().step('one', { use: repeated, input: () => null }).step('two', { use: repeated, input: () => null });
+  const repeated = composed(new Sequence([]));
+  const sequence = new Sequence([
+    { node: repeated, key: 'one', input: () => null },
+    { node: repeated, key: 'two', input: () => null },
+  ]);
   const installed = install(sequence);
   await installed.runtime.run(1, {});
   const children = installed.calls[0].children.values();
@@ -210,5 +223,5 @@ test('input preparation failure creates no child and repeated positions produce 
     ['one', 'two'],
   );
   assert.notEqual(children[0].invocation.context, children[1].invocation.context);
-  assert.throws(() => sequence.step('one', { use, input: () => null }), /unique/);
+  assert.throws(() => sequence.add(repeated), /locked/);
 });

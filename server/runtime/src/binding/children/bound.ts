@@ -1,7 +1,7 @@
-import type { ChildContract, ChildCallable } from '../../definition/children.js';
+import type { ChildCallable, NamedMembers } from '@capix/structure';
+import type { ChildContract } from '@capix/contracts';
 import type { CheckpointBinding } from '../../checkpoint/work.js';
-import type { NamedMembers } from '../../definition/composition.js';
-import { checkMemberName } from '../../structure/members.js';
+import { checkMemberName } from '@capix/structure/construction';
 import type { ResolvedChild } from '../declarations.js';
 
 /** Reusable child structures; no parent invocation or phase access is retained here. */

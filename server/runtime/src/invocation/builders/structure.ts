@@ -1,5 +1,5 @@
 import { combineOutputReceivers } from '../../output/delivery.js';
-import type { CallableInput, CallableOutput } from '../../definition/signature.js';
+import type { CallableInput, CallableOutput } from '@capix/contracts';
 import type { AnyCallable } from '../../binding/declarations.js';
 import type { CallableCallBindings } from '../../binding/calls.js';
 import { callableConstruction, type AnyBuiltCallable, type BuiltCallable, type BuiltOptions } from '../../structure/construction.js';

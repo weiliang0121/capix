@@ -2,7 +2,8 @@ import { isEqual } from 'es-toolkit/predicate';
 import { checkLeafResult } from '../../group/checkpoint.js';
 import { modelOutputSchema } from '../../model/interactions.js';
 import { modelOutputRejected } from '../../model/rejection.js';
-import { Node, checkpointPoint, cloneCheckpointValue, type CheckpointValue, type CheckpointCodec, type InvocationCheckpointPoint, type NodeWork, RuntimeError, isNonBlankString } from '@capix/server-runtime';
+import { cloneCheckpointValue, RuntimeError, isNonBlankString } from '@capix/server-runtime';
+import { Node, checkpointPoint, type CheckpointValue, type CheckpointCodec, type InvocationCheckpointPoint, type NodeWork } from '@capix/structure';
 
 import type { ModelOutput } from '../../model/types.js';
 import type { ModelOutputContract } from '../../model/contract.js';

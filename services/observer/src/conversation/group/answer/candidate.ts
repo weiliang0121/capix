@@ -1,4 +1,4 @@
-import { Group, checkpointPoint, childReference, type ChildCall, type ChildrenOf, type GroupWork, type ResumeWork, type CheckpointFacts } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, type ChildCall, type ChildrenOf, type GroupWork, type ResumeWork, type CheckpointFacts } from '@capix/structure';
 import type { GenerationOutput } from '@capix/protocol';
 import { isEqual } from 'es-toolkit/predicate';
 import { RequestModel } from '../model/request.js';

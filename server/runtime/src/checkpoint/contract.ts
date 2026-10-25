@@ -1,18 +1,7 @@
 import type { InvocationIdentity } from '../invocation/identity.js';
-import type { InvocationFailureFact } from '@capix/protocol';
+import type { InvocationFailureFact, CheckpointValue, CheckpointContract } from '@capix/contracts';
 
-export type CheckpointValue = null | boolean | number | string | readonly CheckpointValue[] | { readonly [key: string]: CheckpointValue };
-
-/** Encoding is explicit; decoders must reject incompatible saved business values. */
-export interface CheckpointCodec<Value> {
-  encode(value: Value): CheckpointValue;
-  decode(value: CheckpointValue): Value;
-}
-
-export interface CheckpointContract {
-  readonly key: string;
-  readonly version: number;
-}
+export type { CheckpointValue, CheckpointCodec, CheckpointContract } from '@capix/contracts';
 
 /** Persistent association is scoped by the owning checkpoint contract/version. */
 export interface CheckpointReference {

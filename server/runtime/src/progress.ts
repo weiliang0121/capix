@@ -1,8 +1,5 @@
-/** A passive, synchronous receiver. It cannot participate in accepting or rejecting work. */
-export interface ProgressReceiver<Fact> {
-  receive(fact: Readonly<Fact>): undefined;
-  failed?(error: unknown): undefined;
-}
+import type { ProgressReceiver } from '@capix/contracts';
+export type { ProgressReceiver } from '@capix/contracts';
 
 export interface ProgressFailure {
   readonly error: unknown;

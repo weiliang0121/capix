@@ -6,7 +6,7 @@ import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, Sequence, defineNode } from '@capix/server-runtime';
+import { TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, Sequence, defineNode, Scene, Runner, Resources } from '@capix/server-runtime';
 import { ResourceAccessClosed, ResourceOffer, checkResourceRequests } from '@capix/resources';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { createConversationStructure, GenerateAnswer } from '@capix/observer-service';
@@ -199,12 +199,19 @@ test('sequence preserves distinct offers even when children use the same alias',
   const metadata = { name: 'test', label: 'test', source: 'test' };
   const first = defineNode()({ ...metadata, deps: { value: one.request() }, run: execute });
   const second = defineNode()({ ...metadata, deps: { value: two.request() }, run: execute });
-  const sequence = new Sequence().step('first', { use: first, input: () => null }).step('second', { use: second, input: () => null });
-  assert.equal(sequence.steps[0].use, first);
-  assert.equal(sequence.steps[1].use, second);
-  assert.equal(sequence.requests.length, 2);
-  assert.throws(() => checkResourceRequests({ value: one.request() }, sequence.requests), /not provided: two/);
-  checkResourceRequests({ first: one.request(), second: two.request() }, sequence.requests);
+  const sequence = new Sequence([
+    { node: first, input: () => null },
+    { node: second, input: () => null },
+  ]);
+  assert.equal(sequence.steps[0].node, first);
+  assert.equal(sequence.steps[1].node, second);
+  const scene = new Scene().add({ sequence });
+  scene.run = (work) => work.children.sequence.invoke(work.input);
+  const resources = new Resources().register(one, {});
+  const runner = new Runner(scene, resources);
+  assert.throws(() => runner.build(), /two/);
+  resources.register(two, {});
+  runner.build();
 });
 
 test('fixed-range offer delivers only bounded immutable message access, without exposing the entity', () => {

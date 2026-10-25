@@ -1,5 +1,6 @@
 import { RuntimeError } from '../errors/error.js';
-import type { CheckpointValue, CheckpointImage, CheckpointDelivery, CheckpointHead, CheckpointChild, CheckpointReference } from './contract.js';
+import type { CheckpointImage, CheckpointDelivery, CheckpointHead, CheckpointChild, CheckpointReference } from './contract.js';
+import type { CheckpointValue } from '@capix/contracts';
 
 export const CHECKPOINT_MAX_BYTES = 8 * 1024 * 1024;
 const fail = (message: string): never => {

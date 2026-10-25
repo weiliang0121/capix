@@ -1,4 +1,4 @@
-import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/structure';
 import type { FileReceipt } from '@capix/protocol';
 import { FileResources, type FileCreator } from '../../../files/index.js';
 import { CreateText, createTextCheckpointInput, fileReceiptCheckpoint, type CreateTextInput } from '../../node/files/create.js';

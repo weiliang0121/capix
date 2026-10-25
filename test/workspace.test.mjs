@@ -6,10 +6,12 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const packages = [
-  { path: 'protocol', allowed: [] },
-  { path: 'server/resources', allowed: ['@capix/protocol'] },
-  { path: 'server/runtime', allowed: ['@capix/protocol', '@capix/resources'] },
-  { path: 'services/observer', allowed: ['@capix/protocol', '@capix/resources', '@capix/server-runtime'] },
+  { path: 'contracts', allowed: [] },
+  { path: 'protocol', allowed: ['@capix/contracts'] },
+  { path: 'server/resources', allowed: ['@capix/contracts', '@capix/protocol'] },
+  { path: 'server/structure', allowed: ['@capix/contracts', '@capix/resources'] },
+  { path: 'server/runtime', allowed: ['@capix/contracts', '@capix/protocol', '@capix/resources', '@capix/structure'] },
+  { path: 'services/observer', allowed: ['@capix/protocol', '@capix/resources', '@capix/structure', '@capix/server-runtime'] },
   { path: 'client/runtime', allowed: ['@capix/protocol'] },
   { path: 'client/http', allowed: ['@capix/protocol', '@capix/client-runtime'] },
   { path: 'apps/observer', allowed: ['@capix/protocol', '@capix/client-runtime', '@capix/client-http'] },
@@ -53,7 +55,7 @@ test('workspace production imports follow one-way public package boundaries', as
           assert.ok(manifests.get(packageName)?.exports?.[entry], `${relative(root, file)} must use a public package export: ${specifier}`);
         }
         if (specifier.startsWith('.')) assert.ok(!relative(dir, resolve(dirname(file), specifier)).startsWith('..'), `${relative(root, file)} crosses a package boundary: ${specifier}`);
-        if (pkg.path === 'protocol' || pkg.path.startsWith('client/')) assert.ok(!specifier.startsWith('node:') && !['react', 'express', 'radix-ui'].includes(specifier), `${pkg.path} cannot depend on ${specifier}`);
+        if (pkg.path === 'contracts' || pkg.path === 'protocol' || pkg.path.startsWith('client/')) assert.ok(!specifier.startsWith('node:') && !['react', 'express', 'radix-ui'].includes(specifier), `${pkg.path} cannot depend on ${specifier}`);
       }
     }
   }

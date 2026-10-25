@@ -1,4 +1,5 @@
 import type { InvocationRelationIdentity } from '@capix/protocol';
+import type { BusinessEvent } from '@capix/contracts';
 import type { InvocationIdentity } from '../invocation/identity.js';
 import type { ContextState } from '../context/context.js';
 import type { InvocationProcess } from '../invocation/work.js';
@@ -34,11 +35,7 @@ export type InvocationFact = InvocationChange & {
 
 export type { ResourceObservation } from '@capix/resources';
 
-/** Business annotations are a separate channel; their payload cannot establish lifecycle facts. */
-export interface BusinessEvent {
-  readonly event: string;
-  readonly [field: string]: unknown;
-}
+export type { BusinessEvent } from '@capix/contracts';
 
 export interface BusinessObservation {
   readonly identity: InvocationIdentity;

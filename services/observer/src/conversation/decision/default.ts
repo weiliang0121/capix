@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { checkpointCodec } from '../checkpoint.js';
 import { isEqual } from 'es-toolkit/predicate';
 import { decisionInputCodec, decisionCodec } from '../group/checkpoint.js';
-import { Group, checkpointPoint, childReference, type GroupWork } from '@capix/server-runtime';
+import { Group, checkpointPoint, childReference, type GroupWork } from '@capix/structure';
 import type { ModelCallResources } from '../resources.js';
 import { UnderstandRequest } from '../group/request/understand.js';
 import type { RequestProposal } from '../group/request/output.js';

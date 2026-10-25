@@ -1,4 +1,4 @@
-import { Group } from '@capix/server-runtime';
+import { Group } from '@capix/structure';
 import type { RecordingInstallation } from '@capix/server-runtime/recording';
 import { documentDescriptor, type TextDocument } from '../files/index.js';
 import type { ModelRequest } from './model/types.js';

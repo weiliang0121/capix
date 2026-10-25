@@ -34,6 +34,7 @@
     "es-toolkit": "1.52.0",
     "@capix/server-runtime": "workspace:*",
     "zod": "4.6.5",
-    "@capix/resources": "workspace:*"
+    "@capix/resources": "workspace:*",
+    "@capix/structure": "workspace:*"
   }
 }

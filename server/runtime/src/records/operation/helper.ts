@@ -1,8 +1,7 @@
-import type { InvocationFailureFact } from '@capix/protocol';
+import type { InvocationFailureFact, RuntimeErrorValue } from '@capix/contracts';
 import { InvocationRecordHelper } from '../invocation/helper.js';
 
 import type { Recorder } from '../recorder.js';
-import type { RuntimeErrorValue } from '@capix/protocol';
 import type { RecordBook } from '../book.js';
 import { AttemptRecordHelper } from '../attempt/helper.js';
 import { ExecutionRecord } from '../execution/record.js';

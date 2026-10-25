@@ -5,10 +5,10 @@ import { selectionInputCodec, selectionCodec, emptyCheckpointState, originalChec
 import { TranscriptResource } from '@capix/server-runtime/content';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ConversationResources, type ModelRequestResources, type HistoryResources } from '../../resources.js';
-import { checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/server-runtime';
+import { checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/structure';
 import type { ModelSettings } from '@capix/protocol';
 import type { Selection } from '../../model/types.js';
-import { Group } from '@capix/server-runtime';
+import { Group } from '@capix/structure';
 import { type TranscriptRangeReader } from '@capix/server-runtime/content';
 import { historyMessages, type SelectionInput } from './input.js';
 import { selectionOutputContract, type SelectionBasis } from './output.js';

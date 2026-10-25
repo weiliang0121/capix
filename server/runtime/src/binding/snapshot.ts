@@ -1,19 +1,15 @@
-import type { CallableDescription, CallableRun, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
+import type { CallableDescription, CallableRun, InvocationCheckpointDefinition, InvocationCheckpointPoint, DefinitionReceptions, ChildCallable, NamedMembers } from '@capix/structure';
+import type { ReceptionDefinition, ChildContract, CallableKind, CheckpointCodec } from '@capix/contracts';
 import type { ObservationDeclaration } from '../definition/observation.js';
-import type { CallableKind } from '@capix/protocol';
-import type { CheckpointCodec } from '../checkpoint/contract.js';
-import type { ReceptionDefinition, DefinitionReceptions } from '../definition/reception.js';
-import type { ChildContract, ChildCallable } from '../definition/children.js';
 import type { ResourceRequirements } from '@capix/resources';
-import type { NamedMembers } from '../definition/composition.js';
-import { checkMemberName } from '../structure/members.js';
+import { checkMemberName } from '@capix/structure/construction';
 import type { AnyCallable } from './declarations.js';
 
 /** Fixed execution configuration. It has no author setters or callable identity. */
 export interface CallableSnapshot<Input = any, Output = any, Kind extends CallableKind = any, Resources extends object = any, Delta = any> extends Omit<CallableDescription<Input, Output, Kind, Delta>, 'kind' | 'members'> {
   readonly kind: Kind;
   readonly deps: ResourceRequirements<Resources>;
-  readonly run: CallableRun<Input, Output, Kind, Resources, import('../definition/children.js').ChildContractsOf<Kind>, Delta>;
+  readonly run: CallableRun<Input, Output, Kind, Resources, import('@capix/structure').ChildContractsOf<Kind>, Delta>;
   readonly members?: readonly ChildCallable[];
   readonly names?: NamedMembers;
 }
@@ -93,7 +89,7 @@ export function originalCheckpointPoint(point: object): object {
   return pointOrigins.get(point) ?? point;
 }
 
-function snapshotCheckpointPoint<Input, Output, Kind extends CallableKind, State, Resources extends object, Slots extends InvocationCheckpointPoint<Input, Output, Kind, State>['references'], Allowed extends import('../definition/children.js').ChildContractsOf<Kind>, Delta>(point: InvocationCheckpointPoint<Input, Output, Kind, State, Resources, Slots, Allowed, Delta>): InvocationCheckpointPoint<Input, Output, Kind, State, Resources, Slots, Allowed, Delta> {
+function snapshotCheckpointPoint<Input, Output, Kind extends CallableKind, State, Resources extends object, Slots extends InvocationCheckpointPoint<Input, Output, Kind, State>['references'], Allowed extends import('@capix/structure').ChildContractsOf<Kind>, Delta>(point: InvocationCheckpointPoint<Input, Output, Kind, State, Resources, Slots, Allowed, Delta>): InvocationCheckpointPoint<Input, Output, Kind, State, Resources, Slots, Allowed, Delta> {
   const resume = point.resume;
   const fixed = Object.freeze({
     name: point.name,

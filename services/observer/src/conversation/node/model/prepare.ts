@@ -3,7 +3,8 @@ import { checkLeafResult } from '../../group/checkpoint.js';
 import { ModelSettingsResource } from '../../model/resources.js';
 import type { ResourceRequirements } from '@capix/resources';
 import type { ModelRequestResources } from '../../resources.js';
-import { Node, checkpointPoint, cloneCheckpointValue, type CheckpointValue } from '@capix/server-runtime';
+import { cloneCheckpointValue } from '@capix/server-runtime';
+import { Node, checkpointPoint, type CheckpointValue } from '@capix/structure';
 
 import type { ModelRequest } from '../../model/types.js';
 import { checkCapacity } from '../../model/capacity.js';

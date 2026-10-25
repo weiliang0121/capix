@@ -1,4 +1,4 @@
-import type { InvocationFailureFact } from '@capix/protocol';
+import type { InvocationFailureFact } from '@capix/contracts';
 import type { InvocationExceptionOrigin } from './provenance.js';
 
 /** Delivery classification is independent of whether work already established effects. */

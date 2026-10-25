@@ -2,7 +2,7 @@ import { isEqual } from 'es-toolkit/predicate';
 import { checkpointCodec } from '../../checkpoint.js';
 import { answerMessageContextSchema, checkLeafResult } from '../../group/checkpoint.js';
 import type { Message } from '@capix/protocol';
-import { type NodeWork, Node, checkpointPoint } from '@capix/server-runtime';
+import { type NodeWork, Node, checkpointPoint } from '@capix/structure';
 
 /** Fixed material captured by the parent after active-content maintenance. */
 export interface AnswerMessageContext {

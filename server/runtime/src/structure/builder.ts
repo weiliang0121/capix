@@ -7,11 +7,11 @@ import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
 import { BoundChildren } from '../binding/children/bound.js';
 import { InvocationWorkBinding } from '../binding/work.js';
 import type { CallableContext } from '../context/callable.js';
-import type { CallableInput } from '../definition/signature.js';
+import { Callable } from '@capix/structure';
+import type { CallableInput } from '@capix/contracts';
 import { CallableInvocationBuilder } from '../invocation/builders/callable.js';
 import { snapshotInvocationCapabilities, type InvocationCapabilities } from '../invocation/capabilities.js';
-import { Callable } from './callable.js';
-import { assertStructureConfigurable, beginStructureBuild, endStructureBuild, lockStructureConfiguration, structureParent } from './configuration.js';
+import { assertStructureConfigurable, beginStructureBuild, endStructureBuild, lockStructureConfiguration, structureParent } from '@capix/structure/construction';
 import { installCallableConstruction, type BuiltCallable, type CallableConstruction } from './construction.js';
 
 /** Prepare the complete tree before committing construction data to the original structures. */

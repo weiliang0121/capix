@@ -1,4 +1,4 @@
-import type { CheckpointCodec } from '../checkpoint/contract.js';
+import type { CheckpointCodec } from '@capix/contracts';
 
 /** One fixed contract in a parent's registration, shared by live and restored relations. */
 export interface InvocationReceptionBinding {

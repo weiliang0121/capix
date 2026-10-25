@@ -1,4 +1,4 @@
-import { Sequence, InvocationEntry, defineGroup, defineScene, Group, type Node, type ChildCalls, type GroupWork, type SceneWork, Driver, Scene } from '@capix/server-runtime';
+import { Sequence, defineGroup, defineScene, Group, type SequenceStep, type Node, type ChildCalls, type GroupWork, type SceneWork, Driver, Scene } from '@capix/server-runtime';
 import { bindChildResources } from '@capix/server-runtime';
 import { type ResourceRefinement } from '@capix/resources';
 
@@ -28,32 +28,35 @@ declare const operation: GroupWork<string, string, {}, typeof leaf>;
 declare const runtimeWork: SceneWork<string, number, {}, typeof execution>;
 declare const children: ChildCalls;
 
-const sequence = new Sequence<string>().step('length', { use: length, input: ({ input }) => input }).step('format', { use: format, input: ({ outputs }) => outputs.length, result: { succeeded: (value, _scope) => ({ text: value }) } });
-const result: Promise<Readonly<{ length: number; format: { text: string } }>> = sequence.run('hello', children);
+const formatStep = { node: format, result: { succeeded: (value, _scope) => ({ text: value }) } } satisfies SequenceStep<typeof format, string, number>;
+const sequence = new Sequence([length, formatStep]);
+const result: Promise<{ text: string }> = children.invoke(sequence, 'hello');
 void result;
-new Sequence<string>().step('bad', {
-  use: length,
+const invalidInput = {
+  node: length,
   // @ts-expect-error input must match the declared input
   input: () => 123,
-});
-new Sequence<string>().step('first', {
-  use: length,
-  // @ts-expect-error a later output is unavailable before its step
-  input: ({ outputs }) => outputs.future,
-});
-// @ts-expect-error composition positions must be unique
-sequence.step('length', { use: length, input: () => 'again' });
+} satisfies SequenceStep<typeof length, string>;
+const invalidPrevious = {
+  node: length,
+  // @ts-expect-error the first previous value is the original string, not a future result map
+  input: ({ previous }) => previous.future,
+} satisfies SequenceStep<typeof length, string>;
+void invalidInput;
+void invalidPrevious;
+// @ts-expect-error default input must match the preceding accepted result
+new Sequence([sequence, length]);
 // @ts-expect-error A cannot be a direct child of this E grant
 parent.children.create(leaf, 'hello');
 // @ts-expect-error a definition has no runtime call entry
 length.create(parent, 'hello');
 // @ts-expect-error the selected declaration retains its input
 children.create(length, 123);
-const alternative = new InvocationEntry(leaf, ({ input }: { input: number }) => String(input));
-const alternativeOutput: Promise<string> = operation.children.entry(alternative, 1).run();
+const prepareInput = (input: number) => String(input);
+const alternativeOutput: Promise<string> = operation.children.create(leaf, prepareInput(1)).run();
 void alternativeOutput;
-// @ts-expect-error alternative entry enforces its own input contract
-operation.children.entry(alternative, 'wrong');
+// @ts-expect-error ordinary input preparation enforces its own argument contract
+prepareInput('wrong');
 
 const lengthCall = children.create(length, 'hello');
 const acceptedLength: Promise<{ text: string }> = lengthCall.accept((delivered) => ({ text: delivered.toFixed() }));
@@ -67,7 +70,7 @@ lengthCall.accept((delivered) => {
 });
 // @ts-expect-error an author Work is not a child reference
 children.open(parent);
-const acceptedAlternative: Promise<number> = operation.children.entry(alternative, 1).accept((delivered) => delivered.length);
+const acceptedAlternative: Promise<number> = operation.children.create(leaf, prepareInput(1)).accept((delivered) => delivered.length);
 void acceptedAlternative;
 
 // @ts-expect-error raw object syntax has no checked declaration signature; use the factory or a named class
@@ -82,7 +85,7 @@ const objectDefinition: Group<string, number> = defineGroup<string, number>()({
   deps: {},
   run: (work) => work.input.length,
 });
-const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string>().step('length', { use: objectDefinition, input: ({ input }) => input }).run('hello', children);
+const objectOutput: Promise<number> = children.invoke(new Sequence([objectDefinition]), 'hello');
 void objectOutput;
 const runtimeDefinition: Scene<string, number> = defineScene<string, number>()({
   members: [execution],
@@ -129,21 +132,22 @@ const run: CallableRun<string, string, 'group', { value: number }> = (work) => {
 const composed = new Group<string, string, { value: number }>({ deps: { value: workValue.request() }, run });
 const composedResult: Promise<string> = children.invoke(composed, 'input');
 void composedResult;
-const fallback = new Sequence<string>().step('length', { use: length, input: ({ input }) => input, result: { failed: () => 'unavailable' as const } });
-const fallbackResult: Promise<Readonly<{ length: number | 'unavailable' }>> = fallback.run('input', children);
+const fallback = new Sequence([{ node: length, result: { failed: () => 'unavailable' as const } }]);
+const fallbackResult: Promise<number | 'unavailable'> = children.invoke(fallback, 'input');
 void fallbackResult;
 // @ts-expect-error success still returns the untransformed child result
-const lostSuccess: Promise<Readonly<{ length: 'unavailable' }>> = fallback.run('input', children);
+const lostSuccess: Promise<'unavailable'> = children.invoke(fallback, 'input');
 void lostSuccess;
-const alternatives = new Sequence<string>().step('length', {
-  use: length,
+const alternativeStep = {
+  node: length,
   input: ({ input }) => input,
   result: { succeeded: (value) => value.toFixed(), failed: (failure) => ({ failure }) },
-});
-const alternativesResult: Promise<Readonly<{ length: string | { failure: unknown } }>> = alternatives.run('input', children);
+} satisfies SequenceStep<typeof length, string>;
+const alternatives = new Sequence([alternativeStep]);
+const alternativesResult: Promise<string | { failure: unknown }> = children.invoke(alternatives, 'input');
 void alternativesResult;
 // @ts-expect-error a handled failure does not share the success result type
-const lostFailure: Promise<Readonly<{ length: string }>> = alternatives.run('input', children);
+const lostFailure: Promise<string> = children.invoke(alternatives, 'input');
 void lostFailure;
 const childFact = operation.children.facts.get(operation.children.create(leaf, 'input').ref);
 // @ts-expect-error child facts do not grant its resources to the parent

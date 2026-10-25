@@ -1,6 +1,6 @@
 import { InvocationResources } from '../invocation/resource-access.js';
 import type { InvocationContext } from '../context/context.js';
-import type { ChildContract } from '../definition/children.js';
+import type { ChildContract } from '@capix/contracts';
 import type { Invocation } from '../invocation/invocation.js';
 import type { ResourceRequirements } from '@capix/resources';
 import type { ChildBindingsBuilder } from './children/builder.js';

@@ -1,6 +1,5 @@
-import type { CallableKind } from '@capix/protocol';
+import type { CallableKind } from '@capix/contracts';
 import type { ResourceRequirements } from '@capix/resources';
-import type { InvocationFact } from '../observation/facts.js';
 
 export interface ObservationDefinition<Fact, Ports extends object> {
   readonly deps: ResourceRequirements<Ports>;
