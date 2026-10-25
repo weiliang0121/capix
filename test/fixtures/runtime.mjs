@@ -1,6 +1,8 @@
+import { ResourceBindings } from './resources.mjs';
 import { installCallable } from './driver.mjs';
 import { randomUUID } from 'node:crypto';
-import { RecordingRootHelper, RuntimeCallRecord, CallableRecord, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, ResourceRecord, TranscriptRecord, MemoryRecord, defineScene, CallableInvocationBuilder, bindRecording, invocationRecording, ResourceBindings } from '@capix/server-runtime';
+import { RecordingRootHelper, RuntimeCallRecord, CallableRecord, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, ResourceRecord, TranscriptRecord, MemoryRecord, defineScene, CallableInvocationBuilder, bindRecording, invocationRecording } from '@capix/server-runtime';
+
 import { rememberCall } from './calls.mjs';
 
 const states = new WeakMap();

@@ -22,7 +22,8 @@ Scene 和 Group 具有成员组合能力，Node 在类型和构建检查中都�
 ## 配置、构建、调用
 
 ```ts
-import { Runner, Resources, Resource, ResourceOffer, Scene, defineNode } from '@capix/server-runtime';
+import { Runner, Resources, Scene, defineNode } from '@capix/server-runtime';
+import { Resource, ResourceOffer } from '@capix/resources';
 
 const dictionary = new Resource(new Map([['hello', '你好']]));
 const lookup = new ResourceOffer({

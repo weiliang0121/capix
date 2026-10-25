@@ -6,7 +6,7 @@ import type { ChildEntry } from './entry.js';
 import type { InvocationFailureFact, RuntimeErrorValue, CallableKind } from '@capix/protocol';
 import type { ReceptionDefinition } from './reception.js';
 import type { ChildKind } from './kind.js';
-import type { OperationOptions, OperationResult, Reception } from '../operation/contract.js';
+import type { OperationOptions, OperationResult, Reception } from '@capix/resources/operation';
 
 // Heterogeneous storage erases IO; call sites retain the concrete definition.
 export type ChildCallable = (CallableStructure<'group'> & Composite) | (CallableStructure<'node'> & { readonly members?: never });

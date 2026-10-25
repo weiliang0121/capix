@@ -1,6 +1,8 @@
+import { bindResources } from '../fixtures/resources.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bindResources, InvocationCancelled, isInvocationCancelled } from '@capix/server-runtime';
+import { InvocationCancelled, isInvocationCancelled } from '@capix/server-runtime';
+
 import { DeepSeekProvider, ModelResource, ModelSource, ModelInteractions } from '@capix/observer-service';
 
 const request = { model: 'fixture', messages: [], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 1, stream: false };

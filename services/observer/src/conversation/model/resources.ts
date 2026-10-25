@@ -1,5 +1,7 @@
 import type { ModelInteractions, ModelInteractionCreator, ModelInteractionRef, ModelInteractionResult, ModelInteractionExpectation } from './interactions.js';
-import { ResourceOffer, type ResourceActivity, type OperationOptions, type OperationResult, type ProgressReceiver } from '@capix/server-runtime';
+import { type ProgressReceiver } from '@capix/server-runtime';
+import { ResourceOffer, type ResourceEndpointActivity } from '@capix/resources';
+import { type OperationOptions, type OperationResult } from '@capix/resources/operation';
 import type { ModelSettings } from '@capix/protocol';
 import type { ModelOutput, ModelTextDelta } from './types.js';
 
@@ -44,14 +46,14 @@ export const ModelResource = Object.freeze({
 });
 
 /** Synchronous identity handoff keeps the first checkpoint adjacent to dispatch; the external lifetime remains independent. */
-function exposeModelCreator(interactions: ModelInteractions, activity: ResourceActivity): ModelInteractionCreator {
+function exposeModelCreator(interactions: ModelInteractions, activity: ResourceEndpointActivity): ModelInteractionCreator {
   return Object.freeze<ModelInteractionCreator>({
     start: (request, purpose, controls) => activity.runSync('start', { input: () => ({ model: request.model, purpose }), output: (ref) => ref }, () => interactions.start(request, purpose, controls)),
   });
 }
 
 /** Subscription registration must hand cleanup to its caller or undo that registration on failure. */
-function exposeModelReader(interactions: ModelInteractions, activity: ResourceActivity): ModelInteractionReader {
+function exposeModelReader(interactions: ModelInteractions, activity: ResourceEndpointActivity): ModelInteractionReader {
   return Object.freeze<ModelInteractionReader>({
     subscribe: (ref, receiver) => {
       let detach: (() => void) | undefined;

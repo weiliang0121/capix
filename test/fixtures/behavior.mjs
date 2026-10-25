@@ -1,6 +1,6 @@
+import { ResourceBindings } from './resources.mjs';
 import { randomUUID } from 'node:crypto';
 import { captureSource } from './observer.mjs';
-import { ResourceBindings } from '@capix/server-runtime';
 
 // Low-level mechanism fixtures deliberately retain actual Context/Invocation access.
 // Business definitions are separately verified through installCallable's restricted views.

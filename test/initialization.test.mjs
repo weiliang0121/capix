@@ -1,10 +1,12 @@
+import { bindResources } from './fixtures/resources.mjs';
 import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 import { captureSource } from './fixtures/observer.mjs';
 import { createEnvironment } from './fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Initializer, ResourceOffer, bindResources, TranscriptResource, MemoryResource, Group, CallableRecord } from '@capix/server-runtime';
+import { Initializer, TranscriptResource, MemoryResource, Group, CallableRecord } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import { initializeObserver, ModelSettingsResource } from '@capix/observer-service';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };

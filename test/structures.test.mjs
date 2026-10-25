@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Driver, Scene, Group, Node, ResourceOffer, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
+import { Driver, Scene, Group, Node, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import { CallableBuilder, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
 
 const build = (driver, structure, providers = []) => driver.build(structure, { providers, source: { capture: () => null } });

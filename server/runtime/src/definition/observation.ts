@@ -1,5 +1,5 @@
 import type { CallableKind } from '@capix/protocol';
-import type { ResourceRequirements } from '../resource/bindings.js';
+import type { ResourceRequirements } from '@capix/resources';
 import type { InvocationFact } from '../observation/facts.js';
 
 export interface ObservationDefinition<Fact, Ports extends object> {

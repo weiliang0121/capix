@@ -1,7 +1,10 @@
+import { bindResources } from '../fixtures/resources.mjs';
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import { installCallable } from '../fixtures/driver.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Invocation, InvocationContext, InvocationCancelled, isInvocationCancelled, RuntimeError, Scene, Group, ExceptionContract, ResourceOffer, bindResources } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationCancelled, isInvocationCancelled, RuntimeError, Scene, Group, ExceptionContract } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import { observeCall } from '../fixtures/observation.mjs';
 
 function call(controller, execute, extra = {}) {
@@ -110,6 +113,7 @@ test('cancellation from resource start observation prevents synchronous and asyn
     });
     const resources = bindResources({ effect: offer.request() }, [offer.provide(() => null)])(null);
     resources.attach({
+      failures: invocationResourceFailures,
       contextId: 'test',
       validate: () => {
         if (controller.signal.aborted) throw new InvocationCancelled(controller.signal);

@@ -1,7 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, ResourceOffer, bindCallSource } from '@capix/server-runtime';
+import { Scene, Group, bindCallSource } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 

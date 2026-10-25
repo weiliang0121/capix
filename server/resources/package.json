@@ -1,0 +1,23 @@
+{
+  "name": "@capix/resources",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./operation": {
+      "types": "./dist/operation.d.ts",
+      "import": "./dist/operation.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@capix/protocol": "workspace:*"
+  }
+}

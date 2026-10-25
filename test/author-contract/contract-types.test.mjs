@@ -7,7 +7,8 @@ const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedInd
 const entry = fileURLToPath(new URL('./types/consumer-contract.ts', import.meta.url));
 const source = `
 import {Node, Group, defineNode, defineChildEntry, defineGroup, defineScene} from '@capix/server-runtime';
-import type {ChildCall, ChildCalls, ChildContract, ChildContractsOf, ChildEntry, ChildOptions, ChildReference, CallableMembers, CallableContract, CallableInput, CallableOutput, CallableWork, InvocationOutputReceiver, GroupWork, ResourceRequest} from '@capix/server-runtime';
+import type { ChildCall, ChildCalls, ChildContract, ChildContractsOf, ChildEntry, ChildOptions, ChildReference, CallableMembers, CallableContract, CallableInput, CallableOutput, CallableWork, InvocationOutputReceiver, GroupWork } from '@capix/server-runtime';
+import type { ResourceRequest } from '@capix/resources';
 
 declare function expectType<T>(value: T): void;
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;

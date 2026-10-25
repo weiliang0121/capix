@@ -1,7 +1,6 @@
 import type { CallableKind } from '@capix/protocol';
 import type { CheckpointCodec, CheckpointContract } from '../checkpoint/contract.js';
-import type { ResourceRequirements } from '../resource/bindings.js';
-import type { ResourceRequests, ResourcesOf } from '../resource/offer.js';
+import type { ResourceRequirements, ResourceRequests, ResourcesOf } from '@capix/resources';
 import type { ChildContract, ChildContractsOf, ChildFact, ChildFacts, ChildReference } from './children.js';
 import type { ResumeWork } from './work.js';
 import type { DefinitionReceptions } from './reception.js';

@@ -1,5 +1,5 @@
-import type { OperationOptions, OperationResult } from '../operation/contract.js';
-import type { ResourceActivity } from './activity.js';
+import type { OperationOptions, OperationResult } from './operation/contract.js';
+import type { ResourceEndpointActivity } from './endpoint.js';
 
 /** A producer endpoint belonging to one resource operation, sealed when that operation returns. */
 export interface ResourceOperation<Delta = never> {
@@ -41,7 +41,7 @@ export interface ResourceMethodsObservation<Methods extends ResourceMethodDeclar
 }
 
 /** Explicit methods are the operation boundary; properties on the entity are never intercepted. */
-export function resourceMethods<Methods extends ResourceMethodDeclarations>(methods: Methods, observation?: ResourceMethodsObservation<Methods>): (origin: ResourceMethodsSource<Methods>, activity: ResourceActivity) => ResourceMethods<Methods> {
+export function resourceMethods<Methods extends ResourceMethodDeclarations>(methods: Methods, observation?: ResourceMethodsObservation<Methods>): (origin: ResourceMethodsSource<Methods>, activity: ResourceEndpointActivity) => ResourceMethods<Methods> {
   const entries = Object.entries(methods).map(([name, method]) => {
     if (typeof method !== 'function') throw new TypeError(`Resource method must be a function: ${name}`);
     const description = observation?.methods?.[name];

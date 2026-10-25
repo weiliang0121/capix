@@ -1,3 +1,4 @@
+import { InvocationResources } from '../resource-access.js';
 import type { CallableKind } from '@capix/protocol';
 import { restoreCheckpointContinuation } from '../../checkpoint/continuation.js';
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
@@ -9,9 +10,8 @@ import type { InvocationObservationDeclaration } from '../../binding/observation
 import type { InvocationFact, InvocationDescription } from '../../observation/facts.js';
 import { bindInvocationObservation } from '../../binding/observation.js';
 import { attachInvocationResources } from '../resources.js';
-import { ResourceBindings, type ResourceRequirements } from '../../resource/bindings.js';
-import { ResourceSupply } from '../../resource/supply.js';
-import type { ResourceRefinement } from '../../resource/offer.js';
+import { type ResourceRequirements, ResourceSupply } from '@capix/resources';
+import type { ResourceRefinement } from '@capix/resources';
 import type { InvocationCapabilities } from '../capabilities.js';
 import { InvocationChangeEmitter } from '../changes.js';
 import { Invocation, type InvocationStarted } from '../invocation.js';
@@ -30,7 +30,7 @@ export interface CallableInvocationRequest<Input, Output, Resources extends obje
   readonly restore?: CheckpointRestoration;
   readonly progress?: ProgressReceiver<InvocationProgress>;
   readonly output?: InvocationOutputReceiver<Output>;
-  readonly resources?: ResourceBindings;
+  readonly resources?: InvocationResources;
   readonly supplied?: ResourceSupply;
   readonly deps?: ResourceRequirements<Resources>;
   readonly initial?: ResourceRequirements;
@@ -65,7 +65,7 @@ export class CallableInvocationBuilder {
     const supplied = request.supplied ?? request.resources?.supply ?? parent?.context.resources.supply ?? new ResourceSupply();
     const deps = request.deps ?? ({} as ResourceRequirements<Resources>);
     const selected = supplied.select(request.supply ?? deps).refine(input, request.refinements ?? []);
-    const resources = new ResourceBindings(deps, selected.entries, request.initial, request.supply);
+    const resources = new InvocationResources(deps, selected.entries, request.initial, request.supply);
     // Resource capture/refinement may run host code; recheck before establishing the child.
     if (parent) this.check(parent);
     const controls = parent ? { signal: parent.context.signal } : request.controls;

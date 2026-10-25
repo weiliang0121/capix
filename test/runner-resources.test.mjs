@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, Node, Resources, Runner, ResourceOffer, MemoryCheckpointStore, checkpointPoint, childReference, ExceptionContract } from '@capix/server-runtime';
+import { Scene, Group, Node, Resources, Runner, MemoryCheckpointStore, checkpointPoint, childReference, ExceptionContract } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
 
 const codec = { encode: structuredClone, decode: structuredClone };
@@ -317,16 +318,17 @@ test('missing resource failure does not lock the scene and unused registrations 
   assert.throws(() => runner.build(), /built|build|configuration/i);
 });
 
-test('resource registration checks exact identity, duplicate supply and conflicting access names', () => {
+test('resource registration checks exact identity and duplicate supply while allowing equal descriptive names', async () => {
   const first = readable('runner.same-name');
   const second = readable('runner.same-name');
   const resources = new Resources();
   resources.register(first, 'one');
   assert.throws(() => resources.register(first, 'duplicate'), /duplicate|registered/i);
-  const scene = new Scene({ deps: { first: first.request(), second: second.request() }, run: () => null });
+  const scene = new Scene({ deps: { first: first.request(), second: second.request() }, run: (work) => [work.resources.first.read(), work.resources.second.read()] });
   assert.throws(() => new Runner(scene, resources).build(), /resource|supply|register|provider/i);
   resources.register(second, 'two');
-  assert.throws(() => new Runner(scene, resources).build(), /name|conflict|different/i);
+  assert.notEqual(first.id, second.id);
+  assert.deepEqual(await new Runner(scene, resources).build().run(null), ['one', 'two']);
   assert.throws(() => resources.capture({}, () => null), /callable|structure|Scene|Group|Node/i);
 });
 
@@ -403,11 +405,14 @@ test('fixed content writes still require actual parent reception and retain exac
   const invalid = new Scene({
     deps: { messages: TranscriptResource.append.request() },
     run(work) {
-      assert.throws(() => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'unaccepted' }] }), /active direct-child reception/);
+      assert.throws(
+        () => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'unaccepted' }] }),
+        (error) => error.name === 'ResourcePortError' && /active direct-child reception/.test(error.cause?.message),
+      );
       return 'caught';
     },
   });
-  await assert.rejects(new Runner(invalid, resources).build().run(null), /active direct-child reception/);
+  await assert.rejects(new Runner(invalid, resources).build().run(null), (error) => error.name === 'ResourcePortError' && /active direct-child reception/.test(error.cause?.message));
   assert.equal(transcript.length, 2, 'catching an access fault does not turn it into a valid write');
 });
 

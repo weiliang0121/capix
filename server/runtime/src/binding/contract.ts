@@ -1,7 +1,6 @@
 import type { CallableContext } from '../context/callable.js';
 import type { InvocationWork } from '../invocation/work.js';
-import type { ResourceRequirements } from '../resource/bindings.js';
-import type { ResourceRefinement, ResourceIdentity } from '../resource/offer.js';
+import type { ResourceRequirements, ResourceRefinement, ResourceIdentity } from '@capix/resources';
 import type { BoundChildren } from './children/bound.js';
 import type { ObservationInstallation } from './observation.js';
 import type { InvocationObservationDeclaration } from './observation.js';

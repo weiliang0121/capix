@@ -1,11 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
 import type { Interactions } from '../interaction/interactions.js';
-import { Initializer } from '../initializer.js';
-import { resourceRequests, checkResourceProviders } from './bindings.js';
-import type { ResourceProvider, ResourceValue } from './offer.js';
+import { resourceRequests, checkResourceProviders, ResourceSupply } from '@capix/resources';
+import type { ResourceProvider, ResourceIdentity } from '@capix/resources';
 import type { ResourcePlan, ResourceCaptureScope } from './resources.js';
-import { ResourceSupply } from './supply.js';
 
 interface InstalledScope<Options> {
   readonly resolved: ResolvedCallable;
@@ -24,7 +21,7 @@ export class ResourceInstallation<Options> {
       const requested = resourceRequests(resolved.supply);
       const needed = new Set(requested.map((request) => request.offer));
       const local = (scope?.registrations ?? []).filter((entry) => needed.has(entry.offer)).map((entry) => entry.bind(interactions));
-      const localOffers = new Set(local.map((entry) => entry.offer));
+      const localOffers = new Set<ResourceIdentity>(local.map((entry) => entry.offer));
       const fixed = resolved === root ? plan.registrations.filter((entry) => needed.has(entry.offer) && !localOffers.has(entry.offer)).map((entry) => entry.bind(interactions)) : [];
       const available = [...(resolved === root ? fixed : inherited).filter((entry) => !localOffers.has(entry.offer)), ...local];
       checkResourceProviders(requested, available);
@@ -37,17 +34,8 @@ export class ResourceInstallation<Options> {
   open(structure: AnyCallable, input: unknown, options: Options, inherited?: ResourceSupply): ResourceSupply {
     const scope = this.scopes.get(structure);
     if (!scope) throw new Error('Callable resource scope is not installed');
-    const base = inherited ?? captureSupply(scope.fixed, undefined);
+    const base = inherited ?? ResourceSupply.capture(scope.fixed, undefined);
     const snapshot = scope.capture?.(input, options);
-    return base.overlay(captureSupply(scope.local, snapshot)).select(scope.resolved.supply);
+    return base.overlay(ResourceSupply.capture(scope.local, snapshot)).select(scope.resolved.supply);
   }
-}
-
-function captureSupply(providers: readonly ResourceProvider<unknown>[], source: unknown): ResourceSupply {
-  const entries: ResourceValue[] = providers.map((provider) => {
-    const captured = new Initializer(() => provider.resolve(source));
-    if (provider.timing === 'binding') captured.get();
-    return Object.freeze({ offer: provider.offer, supplyId: randomUUID(), timing: provider.timing, capture: () => captured.get(), expose: provider.expose, describe: provider.describe, get: () => captured.get() });
-  });
-  return new ResourceSupply(entries);
 }

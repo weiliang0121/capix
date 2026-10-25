@@ -1,6 +1,6 @@
 import type { CallableKind } from '@capix/protocol';
 import type { OutputDeclaration } from '../output/contract.js';
-import type { ResourceRequirements } from '../resource/bindings.js';
+import type { ResourceRequirements } from '@capix/resources';
 import type { ChildContractsOf } from './children.js';
 import type { InvocationCheckpointDefinition } from './checkpoint.js';
 import type { CallableWork } from './work.js';

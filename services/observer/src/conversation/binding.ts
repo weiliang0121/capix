@@ -1,4 +1,5 @@
-import { Resource, type Resources } from '@capix/server-runtime';
+import { type Resources } from '@capix/server-runtime';
+import { Resource } from '@capix/resources';
 import { TranscriptResource, MemoryResource, SelectionUsageResource, type CapturedMemories } from '@capix/server-runtime/content';
 import type { ModelInteractions } from './model/interactions.js';
 import { ModelResource, ModelSettingsResource } from './model/resources.js';

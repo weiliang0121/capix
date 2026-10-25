@@ -1,7 +1,7 @@
 import { Transcript } from './transcript.js';
 import type { Message, TranscriptRangeLocator } from '@capix/protocol';
-import { ResourceOffer } from '../resource/offer.js';
-import type { ResourceActivity } from '../resource/activity.js';
+import { ResourceOffer } from '@capix/resources';
+import type { ResourceEndpointActivity } from '@capix/resources';
 import { TranscriptRangeRef } from './ref.js';
 import { ProgressChannel, type ProgressReceiver } from '../progress.js';
 import type { TranscriptAppendProgress } from './progress.js';
@@ -15,13 +15,13 @@ export interface TranscriptAppendSource {
 /** Fixed message membership; endpoints retain private entity access, records only retain locators. */
 export class TranscriptRangeReader {
   readonly #range: TranscriptRangeRef;
-  readonly #activity?: ResourceActivity;
+  readonly #activity?: ResourceEndpointActivity;
   readonly start: number;
   readonly end: number;
   readonly transcriptId: string;
   readonly revision: number;
 
-  constructor(range: TranscriptRangeRef, activity?: ResourceActivity, revision = range.transcript.revision) {
+  constructor(range: TranscriptRangeRef, activity?: ResourceEndpointActivity, revision = range.transcript.revision) {
     this.#range = range;
     this.#activity = activity;
     this.start = range.start;

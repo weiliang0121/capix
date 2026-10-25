@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { Resource, ResourceOffer, Resources, Runner, Scene, Node, ChangeCaptureError } from '@capix/server-runtime';
+import { Resources, Runner, Scene, Node, ChangeCaptureError } from '@capix/server-runtime';
+import { Resource, ResourceOffer } from '@capix/resources';
 
 test('parent failure reception cannot turn a child necessary capture fault into a handled business outcome', async () => {
   const failure = new ChangeCaptureError({ kind: 'already-committed' }, new Error('capture failed'));

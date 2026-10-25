@@ -2,6 +2,7 @@ import { InvocationStopped } from '../invocation/stop.js';
 import { ObservationError } from '../observation/error.js';
 import { ChangeCaptureError } from '../changes/error.js';
 import { PersistenceError } from '../errors/persistence.js';
+import { ResourceAccessClosed, ResourcePortError } from '@capix/resources';
 
 /** Failure reception is for operation outcomes, never for control or required fact delivery. */
 export function isProtectedOperationFailure(error: unknown): boolean {
@@ -12,7 +13,7 @@ export function isProtectedOperationFailure(error: unknown): boolean {
     if (current === null || (typeof current !== 'object' && typeof current !== 'function') || visited.has(current)) continue;
     visited.add(current);
     try {
-      if (current instanceof InvocationStopped || current instanceof ObservationError || current instanceof ChangeCaptureError || current instanceof PersistenceError) return true;
+      if (current instanceof InvocationStopped || current instanceof ObservationError || current instanceof ChangeCaptureError || current instanceof PersistenceError || current instanceof ResourceAccessClosed || current instanceof ResourcePortError) return true;
       if (!(current instanceof AggregateError)) continue;
       // Error values are untrusted. Never execute an errors getter or array iterator
       // while deciding whether a business receiver may consume the original failure.

@@ -1,5 +1,7 @@
 import type { FileReceipt, FileTask } from '@capix/protocol';
-import { ResourceOffer, type ProgressChannel, type ResourceActivity, type ResourceOperation, type ResourceRequest, type OperationOptions, type OperationResult } from '@capix/server-runtime';
+import { type ProgressChannel } from '@capix/server-runtime';
+import { ResourceOffer, type ResourceEndpointActivity, type ResourceOperation, type ResourceRequest } from '@capix/resources';
+import { type OperationOptions, type OperationResult } from '@capix/resources/operation';
 import type { WorkspaceFiles } from './workspace.js';
 import type { FileProgress, FileTaskInspection, TextDocument } from './types.js';
 import { isRelativeFilePath } from './path.js';
@@ -57,7 +59,7 @@ export const FileResources = Object.freeze({
 });
 
 /** Fixed writes need the calling identity as well as the ordinary resource-operation boundary. */
-function exposeFileCreator(source: FileResourceSource, activity: ResourceActivity): FileCreator {
+function exposeFileCreator(source: FileResourceSource, activity: ResourceEndpointActivity): FileCreator {
   return Object.freeze<FileCreator>({
     createFixed: (position, path, text, options) =>
       activity.operate(

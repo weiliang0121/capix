@@ -34,7 +34,7 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 
 ## 包与目录
 
-仓库只有一个根 pnpm workspace 与锁文件，六个实际包：protocol、server/runtime、client/runtime、client/http、services/observer、apps/observer。跨包只用公开出口，服务端与客户端互不依赖。
+仓库只有一个根 pnpm workspace 与锁文件，七个实际包：protocol、server/resources、server/runtime、client/runtime、client/http、services/observer、apps/observer。跨包只用公开出口，服务端与客户端互不依赖。
 
 | 位置                                             | 归属                                                     |
 | ------------------------------------------------ | -------------------------------------------------------- |
@@ -55,6 +55,8 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 `structure/callable.ts` 对应结构共同基类，构建前允许配置，构建成功后承载固定接线与调用构造能力；不再保留 `structure/bound.ts` 或第二棵 Bound 树。`invocation/builders/callable.ts` 协调资源选择、Context 建立、恢复与调用接线；不为其中一次简单构造再建立子 Builder。`binding/children/builder.ts` 则固定成员及接纳接线，分别构造单次引用认证和阶段动作窗口。binding/children 管理已声明成员及本阶段行动，invocation/children 管理真实父子关系，不能混成一个全能 Children 管理者。
 
 Clock、Initializer、ProgressChannel 是共享能力，位于包内根文件。单文件目录是否保留由语义边界决定，不以文件数量判断。
+
+资源基础机制已拆入 `@capix/resources`，其定义、供给、访问窗口与操作接收不依赖 Runtime。`Resources` 与 `ResourceInstallation` 暂留 Runtime，负责具体结构树和可选 Interaction 接线；资源包通过固定宿主端口接受调用约束。包边界与下一步接缝见 [资源包](resources-package.md)。
 
 ## 类型与身份
 
@@ -88,14 +90,16 @@ Observer 的 ConversationScene 接纳输入并调用 ConversationGroup；后者�
 
 ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 只收发与接纳协议。应用 binding 负责读模型、调用图、几何布局与帧合并，React 消费 props/Store。当前客户端实际依赖对话与 Observer 契约，不宣称已是任意业务的通用客户端。
 
-| 目的                               | 公开入口                                                                             |
-| ---------------------------------- | ------------------------------------------------------------------------------------ |
-| 定义、组合、装配、资源、异常与观测 | `@capix/server-runtime`                                                              |
-| 内容实体                           | `@capix/server-runtime/content`                                                      |
-| 记录预设与查询                     | `@capix/server-runtime/recording`                                                    |
-| 低层构造与机制扩展                 | `@capix/server-runtime/construction`                                                 |
-| 对话声明 / 观测 / 环境 / HTTP      | `@capix/observer-service/conversation`、`/observation`、`/assembly`、`/http`         |
-| 跨端数据                           | `@capix/protocol/content`、`/invocation`、`/recording`、`/conversation`、`/observer` |
+| 目的                             | 公开入口                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------ |
+| 结构、调用、资源装配、异常与观测 | `@capix/server-runtime`                                                              |
+| 资源定义、供给与受控访问         | `@capix/resources`                                                                   |
+| 资源与子调用共用的操作契约       | `@capix/resources/operation`                                                         |
+| 内容实体                         | `@capix/server-runtime/content`                                                      |
+| 记录预设与查询                   | `@capix/server-runtime/recording`                                                    |
+| 低层构造与机制扩展               | `@capix/server-runtime/construction`                                                 |
+| 对话声明 / 观测 / 环境 / HTTP    | `@capix/observer-service/conversation`、`/observation`、`/assembly`、`/http`         |
+| 跨端数据                         | `@capix/protocol/content`、`/invocation`、`/recording`、`/conversation`、`/observer` |
 
 根出口按职责分组，不为减少名称建立门面，不导入其他包的私有路径。
 

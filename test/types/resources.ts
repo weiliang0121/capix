@@ -1,10 +1,11 @@
-import { bindResources, ResourceOffer, TranscriptResource, type ResourceRequirements, type NodeWork, type GroupWork, type SceneWork } from '@capix/server-runtime';
+import { TranscriptResource, type NodeWork, type GroupWork, type SceneWork } from '@capix/server-runtime';
+import { Resource, ResourceOffer, Resources as ResourceRegistry, type ResourceRequirements } from '@capix/resources';
 
 type Resources = { settings: { timeoutMs: number } };
 const settings = new ResourceOffer({ name: 'settings', expose: (source: { timeout: number }) => Object.freeze({ timeoutMs: source.timeout }) });
 const deps: ResourceRequirements<Resources> = { settings: settings.request() };
-const bind = bindResources(deps, [settings.provide((parent: { timeout: number }) => parent)]);
-const value: number = bind({ timeout: 1000 }).values.settings.timeoutMs;
+const binding = new ResourceRegistry().register(new Resource({ timeout: 1000 }), settings).bind(deps);
+const value: number = binding.open().endpoints.settings.timeoutMs;
 void value;
 // @ts-expect-error source must match the contract published by the resource
 settings.provide(() => 'not settings');

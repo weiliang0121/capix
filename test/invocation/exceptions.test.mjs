@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Node, Scene, Runner, Resources, ExceptionContract, Resource, ResourceOffer, callableHooks } from '@capix/server-runtime';
+import { Node, Scene, Runner, Resources, ExceptionContract, callableHooks } from '@capix/server-runtime';
+import { Resource, ResourceOffer } from '@capix/resources';
 import { Invocation, InvocationContext } from '@capix/server-runtime/construction';
 
 const runtime = (scene, options = {}, resources = new Resources()) => new Runner(scene, resources, undefined, options).build();

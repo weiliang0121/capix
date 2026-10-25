@@ -1,4 +1,5 @@
-import { Runner, Resources, Group, Node, Scene, checkpointPoint, childReference, reception, defineGroup, defineNode, defineScene, type BuiltCallable, type CallableInput, type CallableOutput, type CallableDelta, type ResourceRequest, type CheckpointCodec, type ChildReference, type NodeWork } from '@capix/server-runtime';
+import { Runner, Resources, Group, Node, Scene, checkpointPoint, childReference, reception, defineGroup, defineNode, defineScene, type BuiltCallable, type CallableInput, type CallableOutput, type CallableDelta, type CheckpointCodec, type ChildReference, type NodeWork } from '@capix/server-runtime';
+import { type ResourceRequest } from '@capix/resources';
 declare function expectType<Value>(value: Value): void;
 interface Input {
   readonly path: string;

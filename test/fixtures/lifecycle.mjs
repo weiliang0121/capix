@@ -1,3 +1,4 @@
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import { contextWithSource } from './observer.mjs';
 import { Invocation, InvocationChildren, CallableContext, bindInvocationObservation, invocationRecording, Clock } from '@capix/server-runtime';
 import { fixtureState } from './runtime.mjs';
@@ -129,6 +130,7 @@ export function lifecycleFor(runtime) {
 
 function attach(context, invocation) {
   context.resources.attach({
+    failures: invocationResourceFailures,
     contextId: context.id,
     validate: () => {
       invocation.requireHealthy();

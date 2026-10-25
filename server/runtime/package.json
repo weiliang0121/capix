@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@capix/protocol": "workspace:*",
-    "es-toolkit": "1.52.0"
+    "es-toolkit": "1.52.0",
+    "@capix/resources": "workspace:*"
   }
 }

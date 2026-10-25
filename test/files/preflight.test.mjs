@@ -1,3 +1,5 @@
+import { bindResources } from '../fixtures/resources.mjs';
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import filesystem, { mkdtemp, writeFile, mkdir, symlink, rm, readdir } from 'node:fs/promises';
@@ -6,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WorkspaceFiles, FileAccessException, FileResources } from '@capix/observer-service/assembly';
 import { CheckFileTask } from '@capix/observer-service/conversation';
-import { bindResources, InvocationCancelled, Resource, Resources, Scene, Runner } from '@capix/server-runtime';
+import { InvocationCancelled, Resources, Scene, Runner } from '@capix/server-runtime';
+import { Resource } from '@capix/resources';
 import { Transcript } from '@capix/server-runtime/content';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { bindChild } from '../fixtures/observer.mjs';
@@ -212,6 +215,7 @@ test('inspector resource has a narrow endpoint, enforces the supplied constraint
   const resources = bindResources({ inspector: request }, [FileResources.inspect.provide((source) => source)])({ files, constraint: { sourcePath: 'source.md' } });
   let active = true;
   resources.attach({
+    failures: invocationResourceFailures,
     contextId: 'preflight-call',
     validate: () => assert.ok(active, 'call closed'),
     observation: {

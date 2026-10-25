@@ -2,7 +2,7 @@ import type { CallableKind } from '@capix/protocol';
 import type { OutputDeclaration } from '../output/contract.js';
 import type { ChildrenOf } from './children.js';
 import type { InvocationCheckpointDefinition } from './checkpoint.js';
-import type { ResourceRequests, ResourcesOf } from '../resource/offer.js';
+import type { ResourceRequests, ResourcesOf } from '@capix/resources';
 import type { CallableWork } from './work.js';
 import { Scene } from '../structure/scene.js';
 import { Group } from '../structure/group.js';

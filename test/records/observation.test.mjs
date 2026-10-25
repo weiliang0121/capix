@@ -1,6 +1,9 @@
+import { ResourceAccessClosed } from '@capix/resources';
+import { ResourceBindings } from '../fixtures/resources.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindRecording, bindInvocationObservation, invocationRecording, Recorder, RecordBook, ChangeBuffer, ResourceBindings, CallableRecordHelper, CallableRecord, defineObservation, InvocationRecordAccess } from '@capix/server-runtime';
+import { bindRecording, bindInvocationObservation, invocationRecording, Recorder, RecordBook, ChangeBuffer, CallableRecordHelper, CallableRecord, defineObservation, InvocationRecordAccess } from '@capix/server-runtime';
+
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 
 function fixture(options) {
@@ -184,7 +187,7 @@ test('record installation supplies a scoped writer, not an automatic second call
   const observation = bindInvocationObservation({ ...scope.setup, resources: scope.resources, declarations: [declaration] }, []);
   assert.equal(observation.publish(fact), undefined);
   assert.ok(scope.record);
-  assert.throws(() => writer.observe(fact), /window has ended/);
+  assert.throws(() => writer.observe(fact), ResourceAccessClosed);
 });
 
 test('failed scoped recording disables dependent children while later calls retain independent state', () => {

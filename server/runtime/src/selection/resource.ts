@@ -1,4 +1,4 @@
-import { ResourceOffer } from '../resource/offer.js';
+import { ResourceOffer } from '@capix/resources';
 import type { SelectionUsage } from './usage.js';
 import type { Message } from '@capix/protocol';
 

@@ -1,4 +1,5 @@
-import { bindInvocationObservation, defineObservation, ResourceBindings } from '@capix/server-runtime';
+import { ResourceBindings } from './resources.mjs';
+import { bindInvocationObservation, defineObservation } from '@capix/server-runtime';
 
 /** Focused call-mechanism tests observe real facts without installing the record preset. */
 export function observeCall(observe, failure = 'propagate') {

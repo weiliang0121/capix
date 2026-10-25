@@ -32,17 +32,7 @@ export type InvocationFact = InvocationChange & {
   readonly monotonicTime: number;
 };
 
-export interface ResourceObservation {
-  readonly contextId: string;
-  readonly access: string;
-  readonly supplyId: string;
-  readonly sequence: number;
-  readonly occurredAt: string;
-  readonly phase: 'bound' | 'available' | 'unavailable' | 'started' | 'returned' | 'threw';
-  readonly interactionId?: string;
-  /** Resource-owned synchronous projection, only evaluated by an interested observer. */
-  readonly describe: () => unknown;
-}
+export type { ResourceObservation } from '@capix/resources';
 
 /** Business annotations are a separate channel; their payload cannot establish lifecycle facts. */
 export interface BusinessEvent {

@@ -1,8 +1,11 @@
+import { bindResources } from './fixtures/resources.mjs';
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { lifecycleFor, callFor, recordFor } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, TranscriptRangeRef, Transcript, Memories, MemoryResource, ChangeBuffer, Recorder, RecordBook, CallableRecordHelper, ResourceRecord, snapshotValue } from '@capix/server-runtime';
+import { TranscriptResource, TranscriptRangeRef, Transcript, Memories, MemoryResource, ChangeBuffer, Recorder, RecordBook, CallableRecordHelper, ResourceRecord, snapshotValue } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 
 function scope(recorder = new Recorder(new RecordBook()), contextId = 'call') {
   const runtime = createBoundRuntime({ recorder });
@@ -13,6 +16,7 @@ function scope(recorder = new Recorder(new RecordBook()), contextId = 'call') {
     recorder,
     record,
     owner: {
+      failures: invocationResourceFailures,
       contextId: context.id,
       validate: () => {
         if (record.status !== 'running') throw new Error('Call has ended');
@@ -126,7 +130,7 @@ test('without recording, resource descriptors and operation summaries are not ev
   const fail = () => assert.fail('description must not run');
   const offer = new ResourceOffer({ name: 'plain', expose: (source, activity) => ({ sync: () => activity.runSync('sync', { input: fail, output: fail }, () => source), async: () => activity.runAsync('async', { input: fail, output: fail }, async () => source) }), timing: 'binding', describe: fail });
   const bound = bindResources({ value: offer.request() }, [offer.provide(() => 12)])(null);
-  bound.attach({ contextId: 'no-record', validate: () => {} });
+  bound.attach({ failures: invocationResourceFailures, contextId: 'no-record', validate: () => {} });
   bound.start();
   assert.equal(bound.values.value.sync(), 12);
   assert.equal(await bound.values.value.async(), 12);
@@ -155,8 +159,8 @@ test('content origins exist with no recorder and child writer endpoints do not r
   const memories = new Memories(transcript, { changes });
   const bound = bindResources({ messages: TranscriptResource.append.request(), memory: MemoryResource.apply.request() }, [TranscriptResource.append.provide(() => transcript), MemoryResource.apply.provide(() => memories)])(null);
   const child = bound.select({ messages: TranscriptResource.append.request(), memory: MemoryResource.apply.request() });
-  bound.attach({ contextId: 'parent', validate: () => {} });
-  child.attach({ contextId: 'child', validate: () => {} });
+  bound.attach({ failures: invocationResourceFailures, contextId: 'parent', validate: () => {} });
+  child.attach({ failures: invocationResourceFailures, contextId: 'child', validate: () => {} });
   bound.start();
   child.start();
   bound.values.messages.append([{ role: 'user', content: 'parent' }]);
@@ -257,6 +261,7 @@ test('retained writer endpoint cannot mutate after a call ends even without reco
   const bound = bindResources({ messages: TranscriptResource.append.request() }, [TranscriptResource.append.provide(() => transcript)])(null);
   let active = true;
   bound.attach({
+    failures: invocationResourceFailures,
     contextId: 'call',
     validate: () => {
       if (!active) throw new Error('Call has ended');
@@ -271,10 +276,13 @@ test('retained writer endpoint cannot mutate after a call ends even without reco
   assert.equal(transcript.length, 1);
 });
 
-test('resource access names cannot ambiguously identify different offers in the same binding', () => {
+test('resource access names describe offers while exact identity controls fulfillment', () => {
   const first = new ResourceOffer({ name: 'same', expose: (value) => value });
   const second = new ResourceOffer({ name: 'same', expose: (value) => value });
-  assert.throws(() => bindResources({ one: first.request(), two: second.request() }, [first.provide(() => 1), second.provide(() => 2)]), /same access name/);
+  const distinct = bindResources({ one: first.request(), two: second.request() }, [first.provide(() => 1), second.provide(() => 2)])(null);
+  assert.equal(distinct.values.one, 1);
+  assert.equal(distinct.values.two, 2);
+  assert.notEqual(first.id, second.id);
   const bindings = bindResources({ one: first.request(), alias: first.request() }, [first.provide(() => 1)])(null);
   assert.equal(bindings.values.one, bindings.values.alias);
 });

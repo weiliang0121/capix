@@ -1,27 +1,31 @@
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { Resource, Resources, ResourceOffer, Runner, Scene, Node, bindResources, ChangeCaptureError, InvocationCancelled, ExceptionContract } from '@capix/server-runtime';
+import { Resources, Runner, Scene, Node, ChangeCaptureError, InvocationCancelled, ExceptionContract } from '@capix/server-runtime';
+import { Resource, ResourceOffer, ResourceBinding, Resources as ResourceRegistry } from '@capix/resources';
 
 function binding(offer, origin, overrides = {}) {
   const faults = [];
   const facts = [];
-  const access = bindResources({ value: offer.request() }, [offer.provide(() => origin)])(null);
-  access.attach({
-    contextId: 'resource-operation',
-    validate() {},
-    error: (error) => faults.push(error),
-    observation: {
-      publish: (fact) => {
-        facts.push(fact);
+  const access = new ResourceRegistry()
+    .register(new Resource(origin), offer)
+    .bind({ value: offer.request() })
+    .open({
+      failures: invocationResourceFailures,
+      contextId: 'resource-operation',
+      validate() {},
+      error: (error) => faults.push(error),
+      observation: {
+        publish: (fact) => {
+          facts.push(fact);
+        },
       },
-    },
-    ...overrides,
-  });
-  access.start();
-  return { access, endpoint: access.values.value, faults, facts };
+      ...overrides,
+    });
+  return { access, endpoint: access.endpoints.value, faults, facts };
 }
 
 test('named exposure preserves synchronous values and fixes callback entries with their original receiver', () => {
@@ -55,14 +59,12 @@ test('named exposure preserves synchronous values and fixes callback entries wit
   const { access, endpoint, facts } = binding(offer, source);
   assert.deepEqual(calls, ['capture', 'expose']);
   assert.deepEqual(endpoint, [1, 2]);
-  assert.equal(endpoint, access.values.value);
+  assert.equal(endpoint, access.endpoints.value);
   source.values.push(3);
   assert.deepEqual(endpoint, [1, 2]);
-  const child = access.select({ value: offer.request() }, undefined, { input: 1, refinements: [rule] });
-  child.attach({ contextId: 'child', validate() {} });
-  child.start();
-  assert.deepEqual(child.values.value, [1]);
-  assert.deepEqual(access.values.value, [1, 2]);
+  const child = ResourceBinding.fromSupply({ value: offer.request() }, access.supply.refine(1, [rule])).open({ failures: invocationResourceFailures, contextId: 'child', validate() {} });
+  assert.deepEqual(child.endpoints.value, [1]);
+  assert.deepEqual(access.endpoints.value, [1, 2]);
   assert.ok(facts.some((fact) => fact.describe()?.count === 2));
 });
 
@@ -253,7 +255,7 @@ test('closed windows and in-flight cancellation bypass business failure receptio
   controller.abort();
   finish();
   await assert.rejects(result, InvocationCancelled);
-  access.close('run');
+  access.close();
   await assert.rejects(
     endpoint.read(undefined, {
       result: {
@@ -337,7 +339,7 @@ test('source failures racing window closure are retained with and without failur
           }
         : undefined,
     );
-    access.close('run');
+    access.close();
     release();
     await assert.rejects(result, (error) => error instanceof AggregateError && error.cause === failure && error.errors[0] === failure && /closed/.test(error.errors[1].message));
     assert.equal(handled, 0);

@@ -142,15 +142,15 @@ R 最终通过 `run(input, controls)` 驱动唯一已装配 E；现有 `run(work
 - [历史范围资源](../server/runtime/src/transcript/resource.ts) 不返回 Transcript 或 MessageRef，slice 只能收窄；追加端点只返回普通消息及索引。
 - [记忆资源](../server/runtime/src/memory/resource.ts) 返回快照，apply 不返回 Memory 实例。
 - [模型资源](../services/observer/src/conversation/model/resources.ts) 通过包装对象提供 invoke，保留供应者方法的接收对象；没有把 Provider 原实例直接交给 A。
-- [ResourceBindings](../server/runtime/src/resource/bindings.ts) 按资源公开项目身份匹配，子层只能选择父层已提供的项目；配置、范围和记忆快照固定时机，模型及部分访问对象按需兑现。
+- [ResourceBinding / ResourceAccess](../server/resources/src/binding.ts) 按资源公开项目身份匹配，子层只能选择父层已提供的项目；配置、范围和记忆快照固定时机，模型及部分访问对象按需兑现。
 
 不过 [InvocationDefinition](../server/runtime/src/definition/invocation.ts) 的 execute/receive 仍接收完整的 Context 与 Invocation。当前业务实际只需要其中一部分：
 
-| 业务实际需要                                               | 当前额外可达                                                        | 建议边界                 |
-| ---------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------ |
-| input/currentInput、signal、id、进度、资源值、continueWith | Context.startRound/receiving/complete/fail，ResourceBindings.select | 本层工作现场的实际窄视图 |
-| 本次来源、直接子调用证据                                   | Invocation.record、run、原 Context                                  | 本次调用的受限端点       |
-| 建立已声明的直接子调用、读取其状态和结果                   | 完整子 Invocation、可修改的关系对象                                 | 子调用句柄与只读关系证据 |
+| 业务实际需要                                               | 当前额外可达                                                           | 建议边界                 |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------ |
+| input/currentInput、signal、id、进度、资源值、continueWith | Context.startRound/receiving/complete/fail，InvocationResources.select | 本层工作现场的实际窄视图 |
+| 本次来源、直接子调用证据                                   | Invocation.record、run、原 Context                                     | 本次调用的受限端点       |
+| 建立已声明的直接子调用、读取其状态和结果                   | 完整子 Invocation、可修改的关系对象                                    | 子调用句柄与只读关系证据 |
 
 一条具体旁路是：
 

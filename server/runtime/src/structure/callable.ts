@@ -4,7 +4,7 @@ import { initializeStructureConfiguration } from './configuration.js';
 import type { CallableDescription, CallableDefinition, CallableRun, EmptyResources } from '../definition/callable.js';
 import type { ChildContractsOf } from '../definition/children.js';
 import type { invocationSignature, InvocationSignature } from '../definition/signature.js';
-import type { ResourceRequirements } from '../resource/bindings.js';
+import type { ResourceRequirements } from '@capix/resources';
 
 /** Heterogeneous storage erases I/O and resources; author objects retain them. */
 export type CallableStructure<Kind extends CallableKind> = Callable<any, any, Kind, any, any>;

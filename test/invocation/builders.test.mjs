@@ -1,7 +1,9 @@
+import { bindResources, ResourceBindings } from '../fixtures/resources.mjs';
 import { captureSource } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, ChangeBuffer, bindResources, ResourceOffer, ResourceBindings, CallableInvocationBuilder } from '@capix/server-runtime';
+import { Recorder, RecordBook, ChangeBuffer, CallableInvocationBuilder } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };

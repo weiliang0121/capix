@@ -1,6 +1,6 @@
 import { createCallableInvocation, restoreCallableInvocation } from '../../invocation/builders/structure.js';
 import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls } from '../../definition/children.js';
-import type { OperationOptions } from '../../operation/contract.js';
+import type { OperationOptions } from '@capix/resources/operation';
 import { InvocationCancelled } from '../../invocation/cancellation.js';
 import type { ChildEntry } from '../../definition/entry.js';
 import type { Invocation } from '../../invocation/invocation.js';

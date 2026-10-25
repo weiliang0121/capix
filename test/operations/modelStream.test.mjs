@@ -1,6 +1,9 @@
+import { bindResources } from '../fixtures/resources.mjs';
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ProgressChannel, isInvocationCancelled, bindResources } from '@capix/server-runtime';
+import { ProgressChannel, isInvocationCancelled } from '@capix/server-runtime';
+
 import { DeepSeekProvider, ModelInteractions, ModelSource, ModelResource, modelInteractionContract } from '@capix/observer-service';
 
 const request = { model: 'fixture', messages: [], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 256, stream: true };
@@ -278,6 +281,7 @@ test('strict subscribe-return observation failure detaches the registered consum
   await first.promise;
   const binding = bindResources({ reader: ModelResource.read.request() }, [ModelResource.read.provide(() => host)])(null);
   binding.attach({
+    failures: invocationResourceFailures,
     contextId: 'owner',
     validate() {},
     observation: {

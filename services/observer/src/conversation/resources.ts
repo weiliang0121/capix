@@ -1,5 +1,5 @@
 import type { ModelInteractionReader } from './model/resources.js';
-import type { ResourceRequest } from '@capix/server-runtime';
+import type { ResourceRequest } from '@capix/resources';
 import { TranscriptResource, MemoryResource, type TranscriptRangeReader } from '@capix/server-runtime/content';
 import type { ModelSettings } from '@capix/protocol';
 import { ConversationTaskResource, type TaskSelection } from './decision/selection.js';

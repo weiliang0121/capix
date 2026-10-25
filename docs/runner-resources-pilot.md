@@ -28,7 +28,7 @@ const result = await runner.run(input);
 | `Resources.register(offer, entity)` | 登记实体与资源定义的供给关系             | 本次输入、当前端点             |
 | `Resources.capture(target, fn)`     | 明确某个结构建立调用时的成组捕获         | 活调用与持续更新的全局上下文   |
 | `ResourceSupply`（内部）            | 保存本次子树固定供给，可选择、覆盖、收窄 | 生命周期、阶段、端点           |
-| `ResourceBindings`（内部）          | 将供给兑现为本次调用、阶段、轮次的端点   | 资源实体的所有权               |
+| `InvocationResources`（内部）       | 将供给兑现为本次调用、阶段、轮次的端点   | 资源实体的所有权               |
 | `work.resources`                    | 只公开本阶段申请的访问形式               | 注册表、供给管道、祖先 Context |
 
 普通供给直接注册：
@@ -101,7 +101,7 @@ sequenceDiagram
 
 这条路径直接使用新资源安装，未调用旧 `bindCallableSources`。它与旧路径共享 CallableBuilder 的全树提交、InvocationBuilder、Invocation、阶段窗口、异常、输出、接纳和 CP，避免建立第二套运行循环。Observer 已使用 Runner；入口占用暂沿用现有 DriverFact 协议，不为入口命名修改持久记录格式。
 
-`ResourceInstallation` 只处理供给；`CallableCalls` 组合调用校验、资源捕获和宿主回调。供给直接交给 InvocationBuilder，在该处建立最终访问窗口，没有先构造中转 ResourceBindings 再创建另一个端点集合。
+`ResourceInstallation` 只处理供给；`CallableCalls` 组合调用校验、资源捕获和宿主回调。供给直接交给 InvocationBuilder，在该处建立最终访问窗口，由 InvocationResources 选择阶段，再通过资源包 ResourceAccess 建立端点窗口。
 
 ## 与资源分开的宿主回调
 
@@ -141,6 +141,6 @@ sequenceDiagram
 2. 服务资源登记与 validate/hooks 已分开，见 service-assembly.md；当前已不再由资源函数返回运行接线。
 3. 手动装配要让服务恢复核对的 checkpoints 与 Runner 的 store 是同一个实例；生产入口明确复用同一端口，注册 helper 本身无法验证另一对象的配置。
 4. 通用 Interactions 与服务 ModelInteractions 的形状未归并。归并前必须覆盖模型流式、固定请求核验、超时和观测，不只替换名称。
-5. Driver、旧 CallableSources 和对应 Binder/Builder 适配仍供低层兼容测试；Runner 与 Observer 不经过它们。退役需要迁移直接以 Group/Node 为根的构造测试。`bindResources` 还用于记录预设的局部资源访问，不能随旧 source 一并删除。
+5. Driver、旧 CallableSources 和对应 Binder/Builder 适配仍供低层兼容测试；Runner 与 Observer 不经过它们。退役需要迁移直接以 Group/Node 为根的构造测试。记录预设已使用 ResourceSupply 与 ResourceBinding/ResourceAccess；旧 bindResources 仅保留在测试 fixture，不再是正式资源包接口。
 
 这轮完成服务运行链迁移，未拆包、未改 CP Frame 或业务声明版本，也未把上述接缝表述为已完成收敛。

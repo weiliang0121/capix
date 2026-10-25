@@ -1,49 +1,26 @@
-import { isUndefined } from 'es-toolkit/predicate';
 import { randomUUID } from 'node:crypto';
-import type { ResourceActivity } from './activity.js';
-import { isNonBlankString } from '../value/string.js';
+import type { ResourceEndpointActivity } from './endpoint.js';
 import { resourceMethods, type ResourceMethodDeclarations, type ResourceMethods, type ResourceMethodsDeclaration, type ResourceMethodsSource } from './methods.js';
 
-export interface ResourceIdentity {
-  readonly name: string;
-}
-export interface ResourceValue {
-  readonly offer: ResourceIdentity;
-  readonly supplyId: string;
-  readonly timing: 'binding' | 'access';
-  capture(): unknown;
-  expose(captured: unknown, activity: ResourceActivity): unknown;
-  describe(captured: unknown): unknown;
-  get(): unknown;
-}
+import { ResourceRequest, type ResourceIdentity } from './request.js';
+import type { ResourceEndpointDefinition, ResourceProvider } from './provider.js';
 
-/** A formal request for a published access form. Object identity controls fulfillment; name identifies facts. */
-export class ResourceRequest<Value> {
-  constructor(readonly offer: ResourceIdentity) {
-    Object.freeze(this);
-  }
-  read(values: readonly Pick<ResourceValue, 'offer' | 'get'>[]): Value {
-    const binding = values.find((value) => value.offer === this.offer);
-    const value = binding?.get();
-    if (!binding || isUndefined(value)) throw new Error(`Unfulfilled resource request: ${this.offer.name}`);
-    return value as Value;
-  }
-}
-export type ResourceRequests = Readonly<Record<string, ResourceRequest<unknown>>>;
-export type ResourcesOf<Deps extends ResourceRequests> = { readonly [Key in keyof Deps]: Deps[Key] extends ResourceRequest<infer Value> ? Value : never };
+export { ResourceRequest, type ResourceIdentity, type ResourceRequests, type ResourcesOf } from './request.js';
+export type { ResourceProvider } from './provider.js';
 
-export interface ResourceProvider<Source> {
-  readonly offer: ResourceIdentity;
-  readonly timing: 'binding' | 'access';
-  resolve(source: Source): unknown;
-  expose(captured: unknown, activity: ResourceActivity): unknown;
-  describe(captured: unknown): unknown;
-}
 declare const refinementInput: unique symbol;
 
 export interface ResourceRefinement<Input> {
   readonly offer: ResourceIdentity;
   readonly [refinementInput]: (input: Input) => void;
+}
+
+class IssuedResourceRefinement<Input> implements ResourceRefinement<Input> {
+  declare readonly [refinementInput]: (input: Input) => void;
+
+  constructor(readonly offer: ResourceIdentity) {
+    Object.freeze(this);
+  }
 }
 
 const refinements = new WeakMap<object, { readonly offer: ResourceIdentity; readonly apply: (captured: unknown, input: unknown) => unknown }>();
@@ -69,7 +46,7 @@ export interface ResourceCapture<Source, Captured, Selection = never> {
 /** Precise low-level exposure for synchronous values, subscriptions and fixed-effect endpoints. */
 export interface ResourceExposureDeclaration<Source, Value, Captured = Source, Selection = never> extends ResourceCapture<Source, Captured, Selection> {
   readonly name?: string;
-  readonly expose: (captured: Captured, activity: ResourceActivity) => Value;
+  readonly expose: (captured: Captured, activity: ResourceEndpointActivity) => Value;
   readonly methods?: never;
   readonly timing?: 'binding' | 'access';
 }
@@ -78,60 +55,65 @@ type ResourceDeclaration = ResourceMethodsDeclaration<ResourceMethodDeclarations
 
 /** The resource owns capture, its public endpoint, and the typed description of runtime use. */
 class ResourceOfferImplementation<Source, Value, Captured = Source, Selection = never> {
-  readonly #identity: ResourceIdentity;
-  readonly #expose: (captured: Captured, activity: ResourceActivity) => Value;
-  readonly #options: ResourceCapture<Source, Captured, Selection>;
-  readonly timing: 'binding' | 'access';
+  readonly #identity: ResourceEndpointDefinition;
+  readonly #createEndpoint: (captured: Captured, activity: ResourceEndpointActivity) => Value;
+  readonly #capture?: (source: Source) => unknown;
+  readonly #refine?: (captured: unknown, selection: Selection) => unknown;
+  readonly #describe?: (captured: Captured) => unknown;
 
   constructor(declaration: ResourceDeclaration) {
     if (!declaration || typeof declaration !== 'object' || Array.isArray(declaration)) throw new TypeError('Resource access requires a configuration object');
-    const name = declaration.name ?? `resource:${randomUUID()}`;
-    if (!isNonBlankString(name)) throw new TypeError('Resource access requires a stable name');
-    this.#identity = Object.freeze({ name });
+    const id = randomUUID();
+    const name = declaration.name ?? `resource:${id}`;
+    if (typeof name !== 'string' || !/\S/.test(name)) throw new TypeError('Resource access name must be nonempty');
     if (declaration.methods && declaration.expose) throw new TypeError('Resource declaration must use either methods or precise exposure');
     if (declaration.methods) {
-      this.#expose = resourceMethods(declaration.methods, declaration.observation) as (captured: Captured, activity: ResourceActivity) => Value;
-      this.#options = {
-        capture: declaration.capture?.bind(declaration),
-        refine: declaration.refine?.bind(declaration),
-        describe: declaration.observation?.source?.bind(declaration.observation),
-      } as ResourceCapture<Source, Captured, Selection>;
+      this.#createEndpoint = resourceMethods(declaration.methods, declaration.observation) as (captured: Captured, activity: ResourceEndpointActivity) => Value;
+      this.#describe = declaration.observation?.source?.bind(declaration.observation);
     } else {
       if (typeof declaration.expose !== 'function') throw new TypeError('Resource access requires an endpoint declaration');
-      this.#expose = declaration.expose.bind(declaration);
-      this.#options = {
-        capture: declaration.capture?.bind(declaration),
-        refine: declaration.refine?.bind(declaration),
-        describe: declaration.describe?.bind(declaration),
-      };
+      this.#createEndpoint = declaration.expose.bind(declaration);
+      this.#describe = declaration.describe?.bind(declaration);
     }
-    this.timing = declaration.timing ?? 'access';
+    this.#capture = declaration.capture?.bind(declaration);
+    this.#refine = declaration.refine?.bind(declaration);
+    this.#identity = Object.freeze({
+      id,
+      name,
+      timing: declaration.timing ?? 'access',
+      createEndpoint: (material: unknown, activity: ResourceEndpointActivity) => this.#createEndpoint(material as Captured, activity),
+      describe: (material: unknown) => this.#describe?.(material as Captured) ?? null,
+    });
     Object.freeze(this);
+  }
+  get id(): string {
+    return this.#identity.id;
+  }
+  get name(): string {
+    return this.#identity.name;
+  }
+  get timing(): 'binding' | 'access' {
+    return this.#identity.timing;
   }
   request(): ResourceRequest<Value> {
     return new ResourceRequest<Value>(this.#identity);
   }
   /** Trusted assembly maps child input to a resource-owned refinement, never to a replacement source. */
   refine<Input>(select: (input: Input) => Selection): ResourceRefinement<Input> {
-    const refine = this.#options.refine;
+    const refine = this.#refine;
     if (!refine) throw new Error(`Resource does not support refinement: ${this.#identity.name}`);
-    const refinement = Object.freeze({ offer: this.#identity }) as ResourceRefinement<Input>;
-    refinements.set(refinement, { offer: this.#identity, apply: (captured, input) => refine(captured as Captured, select(input as Input)) });
+    const refinement = new IssuedResourceRefinement<Input>(this.#identity);
+    refinements.set(refinement, { offer: this.#identity, apply: (captured, input) => refine(captured, select(input as Input)) });
     return refinement;
   }
   provide<ProviderSource>(select: (source: ProviderSource) => Source): ResourceProvider<ProviderSource> {
-    // Fix callback entry points without freezing the host receiver or its entity state.
-    const capture = this.#options.capture?.bind(this.#options);
-    const describe = this.#options.describe?.bind(this.#options);
+    if (typeof select !== 'function') throw new TypeError('Resource source selection must be a function');
     return Object.freeze({
       offer: this.#identity,
-      timing: this.timing,
-      resolve: (source: ProviderSource) => {
+      readMaterial: (source: ProviderSource) => {
         const value = select(source);
-        return capture ? capture(value) : value;
+        return this.#capture ? this.#capture(value) : value;
       },
-      expose: (captured: unknown, activity: ResourceActivity) => this.#expose(captured as Captured, activity),
-      describe: (captured: unknown) => describe?.(captured as Captured) ?? null,
     });
   }
 }

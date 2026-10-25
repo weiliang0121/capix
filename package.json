@@ -28,6 +28,7 @@
     "@capix/observer-service": "workspace:*",
     "zod": "4.6.5",
     "@capix/client-runtime": "workspace:*",
-    "@capix/client-http": "workspace:*"
+    "@capix/client-http": "workspace:*",
+    "@capix/resources": "workspace:*"
   }
 }

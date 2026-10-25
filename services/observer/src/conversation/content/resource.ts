@@ -1,4 +1,4 @@
-import { ResourceOffer } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import type { ActiveContent, ActiveContentSelection, ActiveContentSnapshot } from './active.js';
 
 export interface ActiveContentReader {

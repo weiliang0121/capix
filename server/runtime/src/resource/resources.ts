@@ -5,8 +5,7 @@ import type { ChildCallable } from '../definition/children.js';
 import type { InteractionContract } from '../interaction/contract.js';
 import type { InteractionChannel, Interactions } from '../interaction/interactions.js';
 import { Callable } from '../structure/callable.js';
-import { ResourceOffer, type ResourceIdentity, type ResourceProvider, type ResourceRefinement } from './offer.js';
-import { Resource } from './resource.js';
+import { ResourceOffer, type ResourceIdentity, type ResourceProvider, type ResourceRefinement, Resource } from '@capix/resources';
 
 export interface ResourceRegistration {
   readonly offer: ResourceIdentity;

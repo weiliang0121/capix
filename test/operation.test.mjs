@@ -1,3 +1,4 @@
+import { bindResources } from './fixtures/resources.mjs';
 import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { callFor } from './fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
@@ -5,7 +6,8 @@ import { createInput, sourceFor, contextFor, transcriptFor } from './fixtures/ob
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
-import { TranscriptResource, bindResources } from '@capix/server-runtime';
+import { TranscriptResource } from '@capix/server-runtime';
+
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 
 import { SelectHistory, AssembleAnswerContext, answerOutputContract, selectionOutputContract } from '@capix/observer-service';

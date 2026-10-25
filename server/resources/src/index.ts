@@ -1,0 +1,13 @@
+export { Resource } from './resource.js';
+export { Resources } from './resources.js';
+export { ResourceOffer, type ResourceRefinement, type ResourceCapture, type ResourceExposureDeclaration, type ResourceOfferConstructor, isResourceRefinement, applyResourceRefinement } from './offer.js';
+export { ResourceRequest, type ResourceIdentity, type ResourceRequests, type ResourcesOf, type ResourceRequirements, resourceRequests, checkResourceRequests } from './request.js';
+export { type ResourceProvider, type ResourceEndpointDefinition, checkResourceProviders } from './provider.js';
+export { type ResourceOperation, type ResourceMethodDeclarations, type ResourceMethodsSource, type ResourceMethods, type ResourceMethodsDeclaration, type ResourceMethodsObservation } from './methods.js';
+export { ResourceBinding } from './binding.js';
+export { ResourceAccess, type ResourceAccessHooks } from './access.js';
+export { ResourceSupply, type ResourceSupplyEntry } from './supply.js';
+export { ResourceActivity, type ResourceOperationDescription } from './activity.js';
+export { ResourceEndpointActivity } from './endpoint.js';
+export { captureResourceOwner, ResourceAccessClosed, ResourcePortError, type ResourceOwner, type ResourceFailurePolicy, type ResourceWindow } from './ports.js';
+export type { ResourceEventConsumer, ResourceObservation } from './facts.js';

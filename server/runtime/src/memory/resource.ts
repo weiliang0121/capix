@@ -1,4 +1,4 @@
-import { ResourceOffer } from '../resource/offer.js';
+import { ResourceOffer } from '@capix/resources';
 import type { Memories } from './memories.js';
 import type { MemoryChange } from './change.js';
 

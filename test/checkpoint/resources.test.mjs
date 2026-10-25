@@ -31,11 +31,14 @@ test('fixed transcript writes require a real direct-child reception and cannot b
   class Main extends Group {
     deps = { messages: TranscriptResource.append.request() };
     run = function (work) {
-      assert.throws(() => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'not accepted' }] }), /active direct-child reception/);
+      assert.throws(
+        () => work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: 'not accepted' }] }),
+        (error) => error.name === 'ResourcePortError' && /active direct-child reception/.test(error.cause?.message),
+      );
       return 'caught';
     };
   }
-  await assert.rejects(assemble(new Main(), transcript).run(null, {}), /active direct-child reception/);
+  await assert.rejects(assemble(new Main(), transcript).run(null, {}), (error) => error.name === 'ResourcePortError' && /active direct-child reception/.test(error.cause?.message));
   assert.equal(transcript.length, 0);
 });
 

@@ -1,3 +1,5 @@
+import { bindResources } from '../fixtures/resources.mjs';
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import filesystem, { mkdtemp, writeFile, readFile, mkdir, symlink, readdir, rm, open, rename } from 'node:fs/promises';
@@ -6,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { WorkspaceFiles, FileAccessException, FileResources, isRelativeFilePath } from '@capix/observer-service/assembly';
-import { ProgressChannel, InvocationCancelled, bindResources, Resource, Resources, Node, Scene, Runner } from '@capix/server-runtime';
+import { ProgressChannel, InvocationCancelled, Resources, Node, Scene, Runner } from '@capix/server-runtime';
+import { Resource } from '@capix/resources';
 
 async function workspace(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'capix-files-'));
@@ -210,6 +213,7 @@ function resourceBinding(files, task, progress, observation) {
   const bound = parent.select(requests, requests, { input: task, refinements: [FileResources.readText.refine((input) => input.sourcePath), FileResources.createText.refine((input) => input.output.path)] });
   let active = true;
   bound.attach({
+    failures: invocationResourceFailures,
     contextId: 'file-call',
     validate() {
       if (!active) throw new Error('Call closed');

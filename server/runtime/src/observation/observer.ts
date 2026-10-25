@@ -1,5 +1,6 @@
+import { InvocationResources } from '../invocation/resource-access.js';
 import type { TranscriptEvent, MemoryEvent } from '@capix/protocol';
-import type { ResourceBindings } from '../resource/bindings.js';
+
 import type { InvocationFact, ResourceObservation, DriverFact, BusinessObservation } from './facts.js';
 
 export interface EventConsumer<Event> {
@@ -8,7 +9,7 @@ export interface EventConsumer<Event> {
 
 /** A concrete installed capability may handle several typed sources without defining a carrier base. */
 export interface InvocationObserver {
-  readonly resources?: ResourceBindings;
+  readonly resources?: InvocationResources;
   observe(fact: InvocationFact): void;
   business?(fact: BusinessObservation): void;
   resource?(fact: ResourceObservation): void;

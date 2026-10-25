@@ -1,8 +1,8 @@
 import type { ChildCall, ChildCalls, ChildCallable, ChildOperationOptions, CallableDelta, CallableInput, CallableOutput } from '../definition/children.js';
 import { collectDefinitionRequirements } from '../binding/resources.js';
-import { resourceRequests } from '../resource/bindings.js';
-import type { OperationResult } from '../operation/contract.js';
-import type { ResourceRequest } from '../resource/offer.js';
+import { resourceRequests } from '@capix/resources';
+import type { OperationResult } from '@capix/resources/operation';
+import type { ResourceRequest } from '@capix/resources';
 import { isNonBlankString } from '../value/string.js';
 
 export interface SequenceScope<Input, Outputs> {

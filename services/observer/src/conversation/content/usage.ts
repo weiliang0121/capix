@@ -1,4 +1,4 @@
-import { ResourceOffer } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import type { SelectionUsage, Transcript } from '@capix/server-runtime/content';
 import type { ActiveContentSnapshot } from './active.js';
 

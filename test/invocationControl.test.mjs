@@ -1,7 +1,8 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, ResourceOffer, defineGroup, defineScene, isInvocationCancelled } from '@capix/server-runtime';
+import { ExceptionContract, defineGroup, defineScene, isInvocationCancelled } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import { CallableInvocationBuilder } from '@capix/server-runtime/construction';
 
 function deferred() {

@@ -7,7 +7,8 @@ const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedInd
 const entry = fileURLToPath(new URL('./types/checkpoint-contract.ts', import.meta.url));
 const source = `
 import {checkpointPoint, childReference, childReferences, defineNode, defineGroup, defineScene} from '@capix/server-runtime';
-import type {AuthorCheckpointWriter, CheckpointCodec, CheckpointPointOwner, ChildReference, ChildReferenceSlot, CallableContract, InvocationCheckpointDefinition, InvocationCheckpointPoint, ResourceRequest} from '@capix/server-runtime';
+import type { AuthorCheckpointWriter, CheckpointCodec, CheckpointPointOwner, ChildReference, ChildReferenceSlot, CallableContract, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@capix/server-runtime';
+import type { ResourceRequest } from '@capix/resources';
 
 type Input = { readonly query: string };
 type Output = { readonly answer: string };

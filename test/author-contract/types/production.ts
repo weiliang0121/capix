@@ -1,6 +1,8 @@
-import type { CheckpointCodec, ResourceRequest } from '@capix/server-runtime';
+import type { CheckpointCodec } from '@capix/server-runtime';
+import type { ResourceRequest } from '@capix/resources';
 import { checkpointPoint, childReference, childReferences, defineNode, defineChildEntry, defineGroup, defineScene } from '@capix/server-runtime';
-import type { ChildReference, ChildEntryFacts as EntryFacts, GroupWork, ResourcesOf } from '@capix/server-runtime';
+import type { ChildReference, ChildEntryFacts as EntryFacts, GroupWork } from '@capix/server-runtime';
+import type { ResourcesOf } from '@capix/resources';
 
 const metadata = { label: 'test', source: 'test' };
 

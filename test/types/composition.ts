@@ -1,5 +1,6 @@
 import { Sequence, InvocationEntry, defineGroup, defineScene, Group, type Node, type ChildCalls, type GroupWork, type SceneWork, Driver, Scene } from '@capix/server-runtime';
-import { bindChildResources, type ResourceRefinement } from '@capix/server-runtime';
+import { bindChildResources } from '@capix/server-runtime';
+import { type ResourceRefinement } from '@capix/resources';
 
 const bounded = new ResourceOffer<{ readonly allowed: readonly string[] }, readonly string[], string>({ name: 'bounded', expose: (source) => source.allowed, timing: 'access', refine: (source, selected) => ({ allowed: source.allowed.filter((value) => value === selected) }) });
 declare const fileOperation: Group<{ readonly path: string }, string>;
@@ -114,7 +115,8 @@ parent.complete('done');
 // @ts-expect-error child facts do not publish reception mutation
 parent.children.facts.values()[0]?.accept(() => null);
 
-import { ResourceOffer, type CallableRun } from '@capix/server-runtime';
+import { type CallableRun } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 const workValue = new ResourceOffer({ name: 'work-value', expose: (value: number) => value });
 const run: CallableRun<string, string, 'group', { value: number }> = (work) => {
   const value: number = work.resources.value;

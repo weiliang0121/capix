@@ -1,7 +1,9 @@
+import { bindResources } from './fixtures/resources.mjs';
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, ResourceOffer, bindResources, bindChildResources, bindCallSource } from '@capix/server-runtime';
+import { Group, Node, bindChildResources, bindCallSource } from '@capix/server-runtime';
+import { ResourceAccessClosed, ResourceOffer } from '@capix/resources';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {
@@ -78,7 +80,7 @@ test('transitive supplies retain offers while parents receive only their own res
   assert.ok(modelFacts.length > 0);
   assert.ok(modelFacts.every((fact) => fact.kind === 'node'));
   assert.ok(!facts.some((fact) => fact.access === 'supply.dormant' || fact.name === undefined));
-  for (const endpoint of endpoints) assert.throws(() => endpoint.read(), /ended|running/);
+  for (const endpoint of endpoints) assert.throws(() => endpoint.read(), ResourceAccessClosed);
 });
 
 test('a pure forwarding operation narrows descendant supply without owning an endpoint or affecting siblings', async () => {
@@ -181,7 +183,7 @@ test('observation-only supplies never satisfy a business descendant requirement'
   assert.throws(() => installCallable(runtimeDefinition(next), options), /Expected one resource provider/);
 });
 
-test('identity aggregation still rejects missing, duplicate and name-conflicting providers', () => {
+test('identity aggregation rejects missing and duplicate providers while allowing descriptive names to repeat', () => {
   const first = new ResourceOffer({ name: 'supply.shared-name', expose: (source) => source });
   const second = new ResourceOffer({ name: 'supply.shared-name', expose: (source) => source });
   const leaf = attempt('leaf', { deps: { value: first.request() }, execute: () => null });
@@ -193,5 +195,5 @@ test('identity aggregation still rejects missing, duplicate and name-conflicting
   assert.throws(() => installCallable(definition, { providers: [first.provide(() => null), first.provide(() => null)], source }), /Expected one resource provider/);
   parent.deps = { value: second.request() };
   parent.run = () => null;
-  assert.throws(() => installCallable(definition, { providers: [first.provide(() => null), second.provide(() => null)], source }), /Different resource offers/);
+  assert.doesNotThrow(() => installCallable(definition, { providers: [first.provide(() => null), second.provide(() => null)], source }));
 });

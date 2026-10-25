@@ -57,7 +57,7 @@ TranscriptRecord 正文保存追加或分段范围，不重复原文。消息 UI
 
 ## 资源运行事实
 
-ResourceOffer 是资源模块公开的契约：来源捕获、正式访问端点、兑现时机及可记录描述。共享供给保存 capture 的结果或错误；每次调用有独立 ResourceBindings、ResourceSession 和 ResourceActivity。run/恢复端点分别受当前窗口约束，共享本次资源顺序与捕获供给；不共享带父调用身份的闭包。配置与 Provider 分别描述数据与能力；Provider 实例、连接和函数不序列化进入记录。
+ResourceOffer 是资源模块公开的契约：来源捕获、正式访问端点、兑现时机及可记录描述。共享供给保存 capture 的结果或错误；每次调用由 InvocationResources 协调独立的 ResourceAccess 窗口，每个窗口共享 ResourceActivity；资源专属元信息由 ResourceEndpointActivity 固定。run/恢复端点分别受当前窗口约束，共享本次资源顺序与捕获供给；不共享带父调用身份的闭包。配置与 Provider 分别描述数据与能力；Provider 实例、连接和函数不序列化进入记录。
 
 ResourceRecord 使用同一 BaseRecord、Recorder 与记录树。公共字段为 parentId、access、supplyId、sequence、occurredAt、phase 及可选 interactionId，value 由资源定义并经通用快照规则留存。phase 区分 bound、available、unavailable、started、returned、threw；它们是运行事实，不给每个资源增加一套可推进状态机。
 

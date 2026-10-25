@@ -20,7 +20,7 @@ export * from './invocation/children.js';
 export * from './invocation/relation.js';
 export type { InvocationReceptionBinding } from './invocation/reception.js';
 export type { InvocationCapabilities } from './invocation/capabilities.js';
-export { ResourceSupply } from './resource/supply.js';
+export { invocationResourceFailures } from './invocation/resources.js';
 
 export * from './checkpoint/work.js';
 export * from './checkpoint/facts.js';
@@ -28,3 +28,5 @@ export * from './checkpoint/continuation.js';
 export { inspectChildCallFailure } from './invocation/provenance.js';
 
 export { savedCheckpointFacts } from './binding/checkpoint.js';
+
+export { InvocationResources, type InvocationResourceOwner } from './invocation/resource-access.js';

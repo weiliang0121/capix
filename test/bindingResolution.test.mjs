@@ -1,7 +1,8 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, Node, ResourceOffer, MemoryCheckpointStore, defineObservation } from '@capix/server-runtime';
+import { Scene, Group, Node, MemoryCheckpointStore, defineObservation } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {

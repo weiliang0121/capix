@@ -1,4 +1,6 @@
-import { CallableContext, Transcript, TranscriptRangeRef, bindResources, CallableBuilder, callableConstruction, Memories, SelectionUsage, TranscriptResource, MemoryResource, SelectionUsageResource } from '@capix/server-runtime';
+import { bindResources } from './resources.mjs';
+import { CallableContext, Transcript, TranscriptRangeRef, CallableBuilder, callableConstruction, Memories, SelectionUsage, TranscriptResource, MemoryResource, SelectionUsageResource } from '@capix/server-runtime';
+
 import { fixtureState } from './runtime.mjs';
 import { resolveDeclaration } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
@@ -63,15 +65,8 @@ export function bindChild(runtime, definition) {
   const built = new CallableBuilder(state.capabilities).build(definition, {
     providers: offers.map((offer) => ({
       offer,
-      timing: 'access',
-      resolve() {
+      readMaterial() {
         throw new Error('Fixture resources must come from the explicit parent');
-      },
-      expose() {
-        throw new Error('Fixture resources must come from the explicit parent');
-      },
-      describe() {
-        return null;
       },
     })),
     source: { capture: () => null },

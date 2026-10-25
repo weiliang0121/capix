@@ -1,5 +1,5 @@
+import { InvocationResources } from '../invocation/resource-access.js';
 import type { ContextState, InvocationContext } from './context.js';
-import type { ResourceBindings } from '../resource/bindings.js';
 
 /** Business sees the live call values, never lifecycle mutation or binding machinery. */
 export interface InvocationContextView<Input = unknown, Output = unknown> {
@@ -19,7 +19,7 @@ export interface CallableContextView<Input = unknown, Output = unknown, Resource
   readonly kind: import('@capix/protocol').CallableKind;
 }
 
-export type ContextViewOf<Context extends InvocationContext<any, any>> = Context extends InvocationContext<infer Input, infer Output> & { readonly resources: ResourceBindings<infer Resources>; readonly signal: AbortSignal; readonly kind: import('@capix/protocol').CallableKind } ? CallableContextView<Input, Output, Resources> : Context extends InvocationContext<infer Input, infer Output> ? InvocationContextView<Input, Output> : never;
+export type ContextViewOf<Context extends InvocationContext<any, any>> = Context extends InvocationContext<infer Input, infer Output> & { readonly resources: InvocationResources<infer Resources>; readonly signal: AbortSignal; readonly kind: import('@capix/protocol').CallableKind } ? CallableContextView<Input, Output, Resources> : Context extends InvocationContext<infer Input, infer Output> ? InvocationContextView<Input, Output> : never;
 
 export type ContextViewResources<ContextView extends InvocationContextView<any, any>, Resources extends object> = Omit<ContextView, 'resources'> & { readonly resources: { readonly values: Readonly<Resources> } };
 

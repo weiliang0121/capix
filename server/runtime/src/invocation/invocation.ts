@@ -199,6 +199,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       return this.failDelivery(error);
     } finally {
       this.#control.close();
+      if ('resources' in this.context) (this.context.resources as { closeAll(): void }).closeAll();
       this.#checkpoint?.release();
     }
   }

@@ -1,4 +1,4 @@
-import type { ResourceProvider } from '../resource/offer.js';
+import type { ResourceProvider } from '@capix/resources';
 import type { CallableInput } from '../definition/signature.js';
 import type { InvocationCapabilities } from '../invocation/capabilities.js';
 import { collectObservationProvides, type ChildResourceBinding } from './resources.js';

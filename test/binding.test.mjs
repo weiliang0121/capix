@@ -1,8 +1,10 @@
+import { ResourceAccessClosed } from '@capix/resources';
 import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, InvocationEntry, Sequence, ResourceOffer, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { Group, Node, InvocationEntry, Sequence, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { ResourceOffer } from '@capix/resources';
 import { CallableBuilder, callableConstruction } from '@capix/server-runtime/construction';
 
 const resource = new ResourceOffer({ name: 'test.value', expose: (value) => value, timing: 'binding' });
@@ -337,6 +339,6 @@ test('R resource endpoints remain scoped to R while E receives its own resource 
     source: { runtime: () => null, capture: () => null },
   });
   assert.equal(await runtime.run('input', {}), 'done');
-  assert.throws(() => saved.touch(), /ended/);
+  assert.throws(() => saved.touch(), ResourceAccessClosed);
   assert.equal(runtime.running, false);
 });

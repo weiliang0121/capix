@@ -1,3 +1,4 @@
+import { bindResources } from './fixtures/resources.mjs';
 import { createConversationRunner } from './fixtures/conversation-runner.mjs';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import { createEnvironment } from './fixtures/environment.mjs';
@@ -5,7 +6,8 @@ import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, ResourceOffer, TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, checkResourceRequests, Sequence, defineNode } from '@capix/server-runtime';
+import { TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, Sequence, defineNode } from '@capix/server-runtime';
+import { ResourceAccessClosed, ResourceOffer, checkResourceRequests } from '@capix/resources';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { createConversationStructure, GenerateAnswer } from '@capix/observer-service';
 
@@ -61,8 +63,8 @@ test('Observer narrows resources at each action, captures fixed values and expir
   assert.deepEqual(Object.keys(entry).sort(), ['history', 'messages', 'selectionUsage', 'tasks']);
   assert.deepEqual(generation.settings, settings);
   assert.equal(generation.timeoutMs, 1000);
-  assert.throws(() => entry.history.read(0), /running|ended/i);
-  assert.throws(() => preparation.activeContent.capture(), /running|ended/i);
+  assert.throws(() => entry.history.read(0), ResourceAccessClosed);
+  assert.throws(() => preparation.activeContent.capture(), ResourceAccessClosed);
   assert.equal(first.record, undefined);
   assert.deepEqual(
     first.children.values().map((relation) => relation.key),

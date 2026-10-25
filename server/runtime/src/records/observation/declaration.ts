@@ -1,7 +1,7 @@
 import type { InvocationRelationIdentity } from '@capix/protocol';
 import { defineObservation } from '../../definition/observation.js';
 import type { InvocationFact } from '../../observation/facts.js';
-import { ResourceOffer } from '../../resource/offer.js';
+import { ResourceOffer } from '@capix/resources';
 import type { InvocationRecording } from './invocation.js';
 
 export interface InvocationRecordDescription<Input = unknown, Output = unknown> {

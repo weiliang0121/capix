@@ -1,5 +1,4 @@
-import { isResourceRefinement, type ResourceRequest, type ResourceRefinement } from '../resource/offer.js';
-import { resourceRequests, type ResourceRequirements } from '../resource/bindings.js';
+import { isResourceRefinement, type ResourceRequest, type ResourceRefinement, resourceRequests, type ResourceRequirements } from '@capix/resources';
 import type { ObservationDeclaration } from '../definition/observation.js';
 import type { InvocationFact } from '../observation/facts.js';
 import type { ChildCallable, CallableInput } from '../definition/children.js';

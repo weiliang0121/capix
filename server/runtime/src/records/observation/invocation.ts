@@ -1,3 +1,4 @@
+import { InvocationResources } from '../../invocation/resource-access.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import { pick } from 'es-toolkit/object';
 import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedRelationChange, InvocationOrigin } from '@capix/protocol';
@@ -6,7 +7,7 @@ import { RuntimeErrorHelper } from '../../errors/helper.js';
 import { failureFact } from '../../invocation/failure.js';
 import type { InvocationFact, ResourceObservation } from '../../observation/facts.js';
 import type { InvocationObserver } from '../../observation/observer.js';
-import { bindResources, resourceRequests, type ResourceBindings } from '../../resource/bindings.js';
+import { ResourceSupply, resourceRequests } from '@capix/resources';
 import { CallableRecord } from '../callable/record.js';
 import { InvocationBoundaryRecordHelper } from '../invocation/boundary/helper.js';
 import { InvocationRecordHelper } from '../invocation/helper.js';
@@ -19,7 +20,7 @@ import { memoryRecord, recordedResult, transcriptRecord } from './mapping.js';
 
 /** A local handle, never registered by Context ID in a global collection. */
 export class InvocationRecording implements InvocationObserver {
-  readonly resources: ResourceBindings<{ record: InvocationRecordWriter }>;
+  readonly resources: InvocationResources<{ record: InvocationRecordWriter }>;
   readonly #childRecordings = new Map<string, InvocationRecording>();
   readonly #pendingAttachments: Extract<InvocationFact, { kind: 'relation' }>[] = [];
   #record?: CallableRecord;
@@ -36,7 +37,7 @@ export class InvocationRecording implements InvocationObserver {
     this.#enabled = (setup.declarations ?? []).some((declaration) => resourceRequests(declaration.deps).some((request) => request.offer === InvocationRecordAccess.request().offer));
     if (parentRecording && parentRecording.installation !== installation) throw new Error('Recording parent belongs to another installation');
     if (parentRecording) parentRecording.#childRecordings.set(setup.identity.contextId, this);
-    this.resources = bindResources({ record: InvocationRecordAccess.request() }, [InvocationRecordAccess.provide(() => this)])(undefined);
+    this.resources = new InvocationResources({ record: InvocationRecordAccess.request() }, ResourceSupply.capture([InvocationRecordAccess.provide(() => this)], undefined).entries);
   }
   get record(): CallableRecord | undefined {
     return this.#record;

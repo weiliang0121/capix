@@ -10,8 +10,9 @@
 
 ## 包与职责边界
 
-- 一个根 pnpm Workspace 与锁文件，六个实际包：`@capix/protocol`、`@capix/server-runtime`、`@capix/client-runtime`、`@capix/client-http`、`@capix/observer-service`、`@capix/observer-app`。跨包只能使用公开出口，不导入其他包的 src/dist 私有路径，不为每个对象建包。
+- 一个根 pnpm Workspace 与锁文件，七个实际包：`@capix/protocol`、`@capix/resources`、`@capix/server-runtime`、`@capix/client-runtime`、`@capix/client-http`、`@capix/observer-service`、`@capix/observer-app`。跨包只能使用公开出口，不导入其他包的 src/dist 私有路径，不为每个对象建包。
 - protocol 只包含真实跨端契约，内部按 content/invocation/recording/conversation/observer 分组；无 Node、HTTP 实现、数据库或 UI 依赖。服务端与客户端不互相依赖。Trace、几何布局、搜索与视口属于应用投影。
+- server/resources 提供独立的资源定义、登记、固定接线、单次访问与操作接收：Resources.bind(deps) 固定登记，ResourceBinding.open(owner?) 打开不可重开的 ResourceAccess；每窗口共享 ResourceActivity，各操作保持局部状态。ResourceSupplyEntry.readMaterial 仅取材料，端点由 Offer 创建，Request 只保存类型化身份；Offer UUID 与准确对象身份区分供给，name 仅描述。公开 `@capix/resources` 及 `/operation`。不依赖 Runtime、结构或调用类型；宿主经 ResourceOwner 的固定故障策略与窗口端口接入。Runtime 的 Resources/ResourceInstallation 仍负责结构范围与 Interaction 装配。资源事实归资源包，内容事件类型暂显式依赖 protocol；不据此新增通用扩展注册机制。见 [资源包](docs/resources-package.md)。
 - server/runtime 提供 Scene/Group/Node 可调用结构、声明/绑定、Invocation/Context、资源、异常和类型化观测出口；内容实体与可选记录预设暂同包，分别有 `/content` 与 `/recording` 入口。低层构造有 `/construction` 入口；根入口按职责分组，不为减少导出数量建立门面。
 - `structure/` 放 Callable/Scene/Group/Node 与同体构建契约；`callable.ts` 是共同结构基类，构建成功后承载固定接线和调用构造能力，不建立 BoundCallable 或平行结构树。`binding/` 放 Binder 与接线，`context/`、`invocation/` 分别持有单次状态与调用；共同构造流程位于 `invocation/builders/callable.ts`。Clock、Initializer、ProgressChannel 是共享能力，直接位于包内根文件；记录预设的声明、安装、单次句柄及映射集中在 `records/observation/`，历史记录恢复仍归 `records/restoration/`。生产者变化发布归 `changes/publish.ts`，不因可选观察端口而归属观测。
 - services/observer 的 conversation 提供业务 Scene/Group/Node、模型契约和绑定、消息同步；observation 提供来源/记录投影/观测交付；assembly 建立独立实体和共享消费；http 负责宿主交付。不得让 conversation 依赖环境初始化来取得隐式对象。
@@ -26,7 +27,7 @@
 ## 运行结构与访问
 
 - Runner/Resources 已用于 Observer 全部生产运行、HTTP 提交、观测辅助与恢复入口，迁移范围见 [迁移说明](docs/runner-resources-pilot.md)。宿主使用 `new Runner(scene, resources, interactions?).build()` 和 `runner.run(input, options?)`；Scene/Resources 必需，Interactions 可选，build 返回原 Runner，不暴露 readyScene。旧 Driver/source 仅剩低层构造兼容与专门内核测试，共用结构构建、Invocation 与访问窗口；新服务代码不再使用旧入口。本轮未拆包。
-- Resources 按 offer 身份登记固定实体，`capture(structure, fn).register(...)` 声明按次成组捕获，`refine(child, ...)` 由资源自身限制收窄。每次 build 固定注册快照，只解算当前树可达 scope；本地 scope 仅覆盖对应资源，继承其他本次已收窄供给。ResourceInstallation 只打开供给，CallableCalls 组合独立调用端口；内部 ResourceSupply 持有捕获，InvocationBuilder 统一创建 ResourceBindings 并签发调用/阶段/轮次端点。父 Work 不因子树供给扩大权限。必要登记与 progress/output 使用独立 callableHooks，validate 在捕获前，started 工厂在捕获后，回调仍在 Context 建立后同步执行。Runner 浅固定每次 options 顶层字段，嵌套实体保持原引用，恢复固定依据仍由宿主核对。
+- Resources 按 offer 身份登记固定实体，`capture(structure, fn).register(...)` 声明按次成组捕获，`refine(child, ...)` 由资源自身限制收窄。每次 build 固定注册快照，只解算当前树可达 scope；本地 scope 仅覆盖对应资源，继承其他本次已收窄供给。ResourceInstallation 只打开供给，CallableCalls 组合独立调用端口；内部 ResourceSupply 持有捕获；InvocationResources 只协调调用阶段/轮次，按固定供给打开 ResourceAccess，退出时关闭。资源包不解释调用阶段。父 Work 不因子树供给扩大权限。必要登记与 progress/output 使用独立 callableHooks，validate 在捕获前，started 工厂在捕获后，回调仍在 Context 建立后同步执行。Runner 浅固定每次 options 顶层字段，嵌套实体保持原引用，恢复固定依据仍由宿主核对。
 - Interactions 登记契约与发送/持久端口，resource 的 registerInteraction 在构建时只核验和接线；端点仍由 ResourceActivity 控制。引用为 `{id, contract}`，start 每次建立新交互，不按内容去重。调用结束不结束交互，反馈读取不重发，宿主 settled 后方可 close。每契约默认保留128条已结束缓存，持久反馈可再次读取，未知/无反馈不伪造成功。
 
 - Scene/Group/Node 由构造器或 build 前普通字段赋值形成配置；公开字段为身份/kind、可选 name/label/source、deps、run、output、checkpoint。删除 setRun/setDefinition/configure/replace 与普通 accept/exceptions/raises/maxRounds/uses/observation/callee；赋值只修改指定字段，不隐式清空。结构本身是调用、成员和 CP 的注册身份，不建立平行 Definition 树。Scene/Group.add 整批核验位置、单父归属和循环，同父同对象去重，跨父共享拒绝；Node 无成员或 CP receptions。define* 创建同一结构并推导资源/成员/Delta。build 原子固定整树，失败可修正，成功后拒绝配置改写/add/再次构建。保留业务 receiver，不深度冻结闭包，不在共享字段保存单次状态。

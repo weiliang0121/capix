@@ -1,5 +1,6 @@
+import { InvocationResources } from '../invocation/resource-access.js';
 import type { ObservationDeclaration, ObservationDeclarationScope } from '../definition/observation.js';
-import { resourceRequests, type ResourceBindings, type ResourceRequirements } from '../resource/bindings.js';
+import { ResourceBinding, resourceRequests, type ResourceRequirements } from '@capix/resources';
 import type { InvocationFact, InvocationIdentity, InvocationDescription, DriverFact } from '../observation/facts.js';
 import type { EventConsumer, InvocationObserver, DriverObserver } from '../observation/observer.js';
 import { InvocationObservation } from '../observation/invocation.js';
@@ -14,7 +15,7 @@ export interface InvocationObservationSetup {
   readonly identity: InvocationIdentity;
   readonly description?: InvocationDescription;
   readonly declarations?: readonly InvocationObservationDeclaration[];
-  readonly resources: ResourceBindings;
+  readonly resources: InvocationResources;
 }
 
 export interface ObservationInstallation {
@@ -29,23 +30,14 @@ export interface ObservationInstallation {
 }
 
 /** Each binding grants this declaration a separate synchronous resource window. */
-function bindObservation<Fact>(declaration: ObservationDeclaration<Fact>, resources: ResourceBindings): (fact: Fact) => undefined {
-  const local = resources.select(declaration.deps);
-  let active = false;
-  let started = false;
-  local.restrict(() => {
-    if (!active) throw new Error('Observation access window has ended');
-  });
+function bindObservation<Fact>(declaration: ObservationDeclaration<Fact>, resources: InvocationResources): (fact: Fact) => undefined {
+  const binding = ResourceBinding.fromSupply(declaration.deps, resources.supply);
   return (fact: Fact): undefined => {
-    active = true;
+    const access = binding.open();
     try {
-      if (!started) {
-        started = true;
-        local.start();
-      }
-      return declaration.observe(fact, local.values);
+      return declaration.observe(fact, access.endpoints);
     } finally {
-      active = false;
+      access.close();
     }
   };
 }

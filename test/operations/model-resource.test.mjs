@@ -1,6 +1,9 @@
+import { bindResources } from '../fixtures/resources.mjs';
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindResources, InvocationCancelled, isInvocationCancelled, PersistenceError } from '@capix/server-runtime';
+import { InvocationCancelled, isInvocationCancelled, PersistenceError } from '@capix/server-runtime';
+
 import { ModelResource, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
 
 const request = { model: 'fixture', messages: [], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 1, stream: false };
@@ -9,6 +12,7 @@ function endpoint(interactions, controller = new AbortController(), observation)
   const requests = { creator: ModelResource.create.request(), reader: ModelResource.read.request() };
   const resources = bindResources(requests, [ModelResource.create.provide((value) => value), ModelResource.read.provide((value) => value)])(interactions);
   resources.attach({
+    failures: invocationResourceFailures,
     contextId: 'model-resource',
     signal: controller.signal,
     validate() {

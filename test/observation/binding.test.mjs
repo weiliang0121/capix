@@ -1,6 +1,9 @@
+import { ResourceBindings, bindResources } from '../fixtures/resources.mjs';
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, InvocationChangeEmitter, ResourceBindings, ResourceOffer, bindResources, bindInvocationObservation, defineObservation, Transcript, Driver, defineNode } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationChangeEmitter, bindInvocationObservation, defineObservation, Transcript, Driver, defineNode } from '@capix/server-runtime';
+import { ResourceAccessClosed, ResourceOffer } from '@capix/resources';
 
 function call({ observe, failure, work, parent, declarations, resources, capture, installations = [] } = {}) {
   const context = new InvocationContext({ mutable: new Map() });
@@ -176,12 +179,12 @@ test('formal observation ports expire after each synchronous callback; asynchron
   });
   await run.run();
   assert.equal(writes, 4);
-  assert.throws(() => retained.write(), /window has ended/);
+  assert.throws(() => retained.write(), ResourceAccessClosed);
   const asyncRun = call({ observe: async () => {}, failure: 'propagate' });
   await assert.rejects(asyncRun.run(), (error) => error.cause?.message === 'Observation must complete synchronously');
 });
 
-test('one observation declaration gives each call its own first start and synchronous resource window', async () => {
+test('each observation callback gets a new synchronous window and never reactivates earlier endpoints', async () => {
   let exposed = 0;
   const retained = new Map();
   const observed = new Map();
@@ -205,11 +208,11 @@ test('one observation declaration gives each call its own first start and synchr
       deps,
       observe(fact, ports) {
         const contextId = fact.identity.contextId;
-        for (const [otherId, endpoint] of retained) {
-          if (otherId !== contextId) assert.throws(() => endpoint.read(), /window has ended/);
+        for (const endpoint of retained.values()) {
+          assert.throws(() => endpoint.read(), ResourceAccessClosed);
         }
         const previous = retained.get(contextId);
-        if (previous) assert.equal(ports.reader, previous);
+        if (previous) assert.notEqual(ports.reader, previous);
         retained.set(contextId, ports.reader);
         observed.set(contextId, (observed.get(contextId) ?? 0) + 1);
         assert.equal(ports.reader.read(), 'shared supply');
@@ -221,11 +224,11 @@ test('one observation declaration gives each call its own first start and synchr
   const second = call({ resources, declarations: [declaration] });
   assert.equal(exposed, 0);
   assert.deepEqual(await Promise.all([first.run(), second.run()]), ['output', 'output']);
-  assert.equal(exposed, 2);
+  assert.equal(exposed, 8);
   assert.equal(observed.get(first.context.id), 4);
   assert.equal(observed.get(second.context.id), 4);
   assert.notEqual(retained.get(first.context.id), retained.get(second.context.id));
-  for (const endpoint of retained.values()) assert.throws(() => endpoint.read(), /window has ended/);
+  for (const endpoint of retained.values()) assert.throws(() => endpoint.read(), ResourceAccessClosed);
 });
 
 test('observation declaration fixes its requested resource aliases before binding', async () => {
@@ -263,7 +266,7 @@ test('observation declaration fixes its requested resource aliases before bindin
   const resources = bindResources({ approved: approved.request(), replacement: replacement.request() }, [approved.provide(() => 'approved'), replacement.provide(() => null)])(undefined);
   assert.equal(await call({ resources, declarations: [declaration] }).run(), 'output');
   assert.equal(observed, 4);
-  assert.throws(() => retained.read(), /window has ended/);
+  assert.throws(() => retained.read(), ResourceAccessClosed);
 });
 
 test('failed installed observation is skipped with its dependent declarations in children and recovers in a later root call', async () => {
@@ -457,6 +460,7 @@ test('resource construction and its observation failure retain both causes', () 
     }),
   ])(undefined);
   resources.attach({
+    failures: invocationResourceFailures,
     contextId: 'call',
     validate() {},
     observation: {
@@ -492,6 +496,7 @@ test('the invocation error channel preserves a resource fault and its reporting 
     },
   });
   resources.attach({
+    failures: invocationResourceFailures,
     contextId: context.id,
     validate() {},
     error: (error) => invocation.reject(error),

@@ -1,7 +1,10 @@
+import { bindResources } from './fixtures/resources.mjs';
+import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, InvocationCancelled, RuntimeError, ProgressChannel, Transcript, TranscriptResource, bindResources, Group, Node, bindCallSource } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationCancelled, RuntimeError, ProgressChannel, Transcript, TranscriptResource, Group, Node, bindCallSource } from '@capix/server-runtime';
+
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 const message = (content) => ({ role: 'user', content });
@@ -199,6 +202,7 @@ test('append commit reaches its local receiver before resource returned observat
     })),
   ])(null);
   binding.attach({
+    failures: invocationResourceFailures,
     contextId: 'owner',
     validate() {},
     observation: {

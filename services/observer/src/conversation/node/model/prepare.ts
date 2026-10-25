@@ -1,7 +1,7 @@
 import { modelRequestCodec } from '../../model/checkpoint.js';
 import { checkLeafResult } from '../../group/checkpoint.js';
 import { ModelSettingsResource } from '../../model/resources.js';
-import type { ResourceRequirements } from '@capix/server-runtime';
+import type { ResourceRequirements } from '@capix/resources';
 import type { ModelRequestResources } from '../../resources.js';
 import { Node, checkpointPoint, cloneCheckpointValue, type CheckpointValue } from '@capix/server-runtime';
 

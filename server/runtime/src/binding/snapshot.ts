@@ -4,7 +4,7 @@ import type { CallableKind } from '@capix/protocol';
 import type { CheckpointCodec } from '../checkpoint/contract.js';
 import type { ReceptionDefinition, DefinitionReceptions } from '../definition/reception.js';
 import type { ChildContract, ChildCallable } from '../definition/children.js';
-import type { ResourceRequirements } from '../resource/bindings.js';
+import type { ResourceRequirements } from '@capix/resources';
 import type { NamedMembers } from '../definition/composition.js';
 import { checkMemberName } from '../structure/members.js';
 import type { AnyCallable } from './declarations.js';

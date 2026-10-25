@@ -1,7 +1,8 @@
+import { InvocationResources } from '../invocation/resource-access.js';
 import type { InvocationContext } from '../context/context.js';
 import type { ChildContract } from '../definition/children.js';
 import type { Invocation } from '../invocation/invocation.js';
-import type { ResourceBindings, ResourceRequirements } from '../resource/bindings.js';
+import type { ResourceRequirements } from '@capix/resources';
 import type { ChildBindingsBuilder } from './children/builder.js';
 import type { InvocationChildReferences } from './children/references.js';
 
@@ -10,13 +11,13 @@ export type AccessPhase = 'run' | `checkpoint:${string}`;
 /** Single-call facts survive phases; actions and resources are issued for a specific phase/round. */
 export class InvocationAccess<Input, Output, Context extends InvocationContext<Input, Output>> {
   readonly references: InvocationChildReferences;
-  readonly #resources: ResourceBindings;
+  readonly #resources: InvocationResources;
 
   constructor(
     private readonly invocation: Invocation<Input, Output, Context>,
     private readonly childBindingsBuilder: ChildBindingsBuilder,
   ) {
-    this.#resources = (invocation.context as Context & { resources: ResourceBindings }).resources;
+    this.#resources = (invocation.context as Context & { resources: InvocationResources }).resources;
     this.references = childBindingsBuilder.references(invocation);
   }
 

@@ -80,22 +80,23 @@ const output = await environment.runner.run({ messages: [{ role: 'user', content
 
 ## 包与公开入口
 
-| 包                        | 当前职责                                                                          |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| `@capix/protocol`         | 跨端内容、调用元数据、记录、对话与 Observer 契约，内部按领域分组                  |
-| `@capix/server-runtime`   | Callable 机制、结构声明与绑定、资源和观测出口；同时提供独立内容实体与可选记录预设 |
-| `@capix/client-runtime`   | 无 UI 的提交、消息同步、观测接收与按需详情；当前组合仍针对对话和 Observer 契约    |
-| `@capix/client-http`      | HTTP 基础收发及对话、观测适配                                                     |
-| `@capix/observer-service` | 参考服务的业务、观测和环境装配                                                    |
-| `@capix/observer-app`     | React 观测应用、视图投影、Store 与交互                                            |
+| 包                        | 当前职责                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `@capix/protocol`         | 跨端内容、调用元数据、记录、对话与 Observer 契约，内部按领域分组               |
+| `@capix/resources`        | 资源定义、申请、供给、受控端点与操作接收；独立于调用内核                       |
+| `@capix/server-runtime`   | Callable 机制、结构声明与绑定、资源装配和观测出口；同时提供内容实体与记录预设  |
+| `@capix/client-runtime`   | 无 UI 的提交、消息同步、观测接收与按需详情；当前组合仍针对对话和 Observer 契约 |
+| `@capix/client-http`      | HTTP 基础收发及对话、观测适配                                                  |
+| `@capix/observer-service` | 参考服务的业务、观测和环境装配                                                 |
+| `@capix/observer-app`     | React 观测应用、视图投影、Store 与交互                                         |
 
-服务端的 `/content`、`/recording`、`/construction` 分别提供内容实体、可选记录和底层构造入口。服务包的 `/conversation`、`/observation`、`/assembly`、`/http` 对应装配职责。根入口仍提供按职责分组的导出；不为减少对象数量新增统一门面。所有跨包导入必须经过公开出口。
+服务端的 `/content`、`/recording`、`/construction` 分别提供内容实体、可选记录和底层构造入口。服务包的 `/conversation`、`/observation`、`/assembly`、`/http` 对应装配职责。根入口仍提供按职责分组的导出；不为减少对象数量新增统一门面。所有跨包导入必须经过公开出口。资源基础对象从 `@capix/resources` 导入；子调用与资源共用的操作契约从 `@capix/resources/operation` 导入。场景资源登记 `Resources` 留在 Runtime，边界见 [资源包](docs/resources-package.md)。
 
 服务端与客户端不互相依赖；HTTP 适配依赖客户端端口；UI 通过应用绑定将客户端状态投影到 Store。实体实例、网络契约和 UI 读模型不互相替代。
 
 ## 本地启动与检查
 
-固定工具链：Node **22.23.2**、pnpm **10.7.1**、TypeScript **6.0.3**。一个根 Workspace 和锁文件，六个实际包，没有新建空壳功能包。
+固定工具链：Node **22.23.2**、pnpm **10.7.1**、TypeScript **6.0.3**。一个根 Workspace 和锁文件，七个实际包，没有新建空壳功能包。
 
 ```sh
 pnpm install --frozen-lockfile

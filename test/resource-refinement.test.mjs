@@ -1,7 +1,9 @@
+import { bindResources } from './fixtures/resources.mjs';
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, ResourceOffer, bindResources, bindChildResources, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { Group, Node, bindChildResources, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { ResourceAccessClosed, ResourceOffer } from '@capix/resources';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function fixture({ recorded = false, built = true, mapOperation = (input) => input.allowed, mapAttempt = (input) => input.leaf } = {}) {
@@ -97,7 +99,7 @@ test('child input refines O and A supplies without recapturing or mutating ances
     after: ['a', 'b', 'c'],
   });
   assert.deepEqual(counters, { capture: 1, refine: 4, describe: 0, dormant: 0 });
-  for (const endpoint of endpoints) assert.throws(() => endpoint.read(), /ended|running/);
+  for (const endpoint of endpoints) assert.throws(() => endpoint.read(), ResourceAccessClosed);
   await runtime.run([{ allowed: ['b'], leaf: ['b'] }], {});
   assert.equal(counters.capture, 2);
 });

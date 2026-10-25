@@ -1,6 +1,7 @@
+import { InvocationResources } from '../invocation/resource-access.js';
 import type { InvocationOutputReceiver } from '../output/contract.js';
-import type { ResourceProvider } from '../resource/offer.js';
-import { bindResources, type ResourceBindings } from '../resource/bindings.js';
+import type { ResourceProvider } from '@capix/resources';
+import { ResourceSupply, checkResourceProviders, resourceRequests } from '@capix/resources';
 import type { ProgressReceiver } from '../progress.js';
 import type { InvocationProgress } from '../invocation/progress.js';
 import type { CallableInvocationStarted } from '../invocation/builders/callable.js';
@@ -31,7 +32,7 @@ export function bindCallSource<Definition extends ChildCallable, Options, Source
 }
 
 interface FixedSource<Options> {
-  readonly capture?: (input: unknown, options: Options) => ResourceBindings;
+  readonly capture?: (input: unknown, options: Options) => InvocationResources;
   readonly started?: (options: Options) => CallableInvocationStarted<any, any, any> | undefined;
   readonly progress?: (input: unknown, options: Options) => ProgressReceiver<InvocationProgress> | undefined;
   readonly output?: (input: unknown, options: Options) => InvocationOutputReceiver<any, any> | undefined;
@@ -81,7 +82,11 @@ export function bindCallableSources<Input, Options, Source>(root: ResolvedCallab
   const validate = source.validate?.bind(source);
   const visit = (resolved: ResolvedCallable): void => {
     if (fixed.has(resolved.definition)) return;
-    const capture = bindResources(resolved.supply, providers);
+    const requests = resourceRequests(resolved.supply);
+    checkResourceProviders(requests, providers);
+    const offers = new Set(requests.map((request) => request.offer));
+    const selected = providers.filter((provider) => offers.has(provider.offer)).map((provider) => Object.freeze({ offer: provider.offer, readMaterial: provider.readMaterial.bind(provider) }));
+    const capture = (value: Source) => new InvocationResources(resolved.supply, ResourceSupply.capture(selected, value).entries);
     if (resolved === root) {
       fixed.set(resolved.definition, {
         capture: (input, options) => capture(rootCapture(input as Input, options)),

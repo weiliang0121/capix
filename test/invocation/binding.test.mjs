@@ -1,7 +1,9 @@
+import { ResourceBindings } from '../fixtures/resources.mjs';
 import { createEnvironment } from '../fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, ExecutionRecordHelper, InvocationBoundaryRecordHelper, TranscriptRecord, MemoryRecord, bindRecording, bindInvocationObservation, invocationRecording, ResourceBindings } from '@capix/server-runtime';
+import { Recorder, RecordBook, ExecutionRecordHelper, InvocationBoundaryRecordHelper, TranscriptRecord, MemoryRecord, bindRecording, bindInvocationObservation, invocationRecording } from '@capix/server-runtime';
+
 import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 
 const operation = { id: 'work', name: 'work', label: 'Work', source: 'test' };
