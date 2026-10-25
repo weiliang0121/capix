@@ -274,7 +274,7 @@ test('the file reader gets the call signal through its operation while keeping t
         },
       }),
   });
-  const scene = new Scene({ uses: [read], run: (work) => work.children.invoke(read, work.input) }).add(read);
+  const scene = new Scene({ run: (work) => work.children.invoke(read, work.input) }).add(read);
   const resources = new Resources().register(new Resource({ files, constraint: { sourcePath: 'input.txt' } }), FileResources.readText).refine(
     read,
     FileResources.readText.refine((path) => path),
@@ -324,3 +324,98 @@ test('returned resource observation may fail after publication without changing 
     ['started', 'created'],
   );
 });
+
+test('file creation uses common result reception while fixed writes keep their original receipt after receiver failure', async (t) => {
+  const { root, files } = await workspace(t);
+  const createText = files.createText.bind(files);
+  let writes = 0;
+  t.mock.method(files, 'createText', (...args) => {
+    writes++;
+    return createText(...args);
+  });
+  const scope = resourceBinding(files, { sourcePath: 'input.txt', output: { path: 'output.txt' } });
+  const failure = new Error('receipt consumer failed');
+  let receipt;
+  await assert.rejects(
+    scope.bound.values.creator.createFixed('saved', 'output.txt', 'once', {
+      result: {
+        succeeded: (value) => {
+          receipt = value;
+          throw failure;
+        },
+        failed: () => assert.fail('a success receiver failure is not a new write outcome'),
+      },
+    }),
+    (error) => error === failure,
+  );
+  assert.equal(await readFile(join(root, 'output.txt'), 'utf8'), 'once');
+  scope.close();
+  const resumed = resourceBinding(files, { sourcePath: 'input.txt', output: { path: 'output.txt' } });
+  assert.equal(await resumed.bound.values.creator.createFixed('saved', 'output.txt', 'once', { result: { succeeded: (value) => value.digest } }), receipt.digest);
+  assert.equal(writes, 1, 'new consumption of the fixed receipt never republishes the file');
+  assert.equal(
+    await resumed.bound.values.creator.createText('output.txt', 'other', {
+      result: {
+        failed: (error) => {
+          assert.ok(isFailure('exists')(error));
+          return 'already exists';
+        },
+      },
+    }),
+    'already exists',
+  );
+  const creator = resumed.bound.values.creator;
+  resumed.close();
+  await assert.rejects(creator.createText('output.txt', 'closed', { result: { failed: () => assert.fail('a closed resource window is not an ordinary write outcome') } }), /Call closed/);
+});
+
+for (const stage of ['read', 'create', 'complete']) {
+  test(`fixed file ${stage} persistence failure cannot become an ordinary resource fallback`, async (t) => {
+    const failure = new Error(`${stage} store unavailable`);
+    let saved;
+    let writes = 0;
+    let fallbacks = 0;
+    const { root, files } = await workspace(t, {
+      persistence: {
+        read() {
+          if (stage === 'read') throw failure;
+          return saved;
+        },
+        create(state) {
+          if (stage === 'create') throw failure;
+          saved = state;
+        },
+        complete(state) {
+          if (stage === 'complete') throw failure;
+          saved = state;
+        },
+      },
+    });
+    const createText = files.createText.bind(files);
+    t.mock.method(files, 'createText', (...args) => {
+      writes++;
+      return createText(...args);
+    });
+    const scope = resourceBinding(files, { sourcePath: 'input.txt', output: { path: 'output.txt' } });
+    await assert.rejects(
+      scope.bound.values.creator.createFixed('saved', 'output.txt', 'once', {
+        result: {
+          failed() {
+            fallbacks++;
+            return 'silently replaced';
+          },
+        },
+      }),
+      (error) => error.code === 'PERSISTENCE_FAILED' && error.cause === failure,
+    );
+    assert.equal(fallbacks, 0);
+    assert.equal(writes, stage === 'complete' ? 1 : 0);
+    if (stage === 'complete') {
+      assert.equal(await readFile(join(root, 'output.txt'), 'utf8'), 'once');
+      assert.equal(saved.receipt, undefined, 'failed durable receipt stays pending');
+      await assert.rejects(scope.bound.values.creator.createFixed('saved', 'output.txt', 'once'), { code: 'FILE_CREATION_UNCONFIRMED' });
+      assert.equal(writes, 1, 'an uncertain durable write never authorizes a resend');
+    } else await assert.rejects(readFile(join(root, 'output.txt')), { code: 'ENOENT' });
+    scope.close();
+  });
+}

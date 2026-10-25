@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { Interaction } from '@capix/server-runtime';
+import { Interaction, PersistenceError } from '@capix/server-runtime';
 import { Transcript, Memories } from '@capix/server-runtime/content';
 import { SqliteObserverStore, initializeObserver } from '@capix/observer-service';
 
@@ -135,7 +135,10 @@ for (const [label, mutate] of [
     store.interactions.commit({ expectedRevision: 0, state: started });
     assert.throws(() => store.interactions.commit(mutate(started)), /保存或加载失败/);
     assert.equal(store.failure.code, 'PERSISTENCE_UNAVAILABLE');
-    assert.throws(() => create(store), /存储不可用/);
+    assert.throws(
+      () => create(store),
+      (error) => error instanceof PersistenceError && error.operation === 'interaction.create' && error.cause.code === 'PERSISTENCE_UNAVAILABLE' && /存储不可用/.test(error.cause.message),
+    );
     store.close();
     assert.deepEqual(disk.open().interactions.read(interaction.id), started);
   });
@@ -173,7 +176,7 @@ test('failed dispatch registration prevents physical sending', async (t) => {
         sends += 1;
         return reply;
       }),
-    /保存或加载失败/,
+    (error) => error instanceof PersistenceError && error.operation === 'interaction.commit' && error.cause.code === 'PERSISTENCE_UNAVAILABLE' && /保存或加载失败/.test(error.cause.message),
   );
   await interaction.settled();
   assert.equal(sends, 0);

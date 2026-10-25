@@ -69,43 +69,40 @@ test('fixed transcript writes derive parent and child identity from the actual r
 });
 
 for (const stale of [undefined, 'endpoint', 'view']) {
-  test(`a second work round ${stale ? `rejects a retained old ${stale}` : 'obtains a new endpoint with the new reception'}`, async () => {
-    const transcript = new Transcript();
-    const answer = new Answer();
-    let firstEndpoint;
-    let firstValues;
-    const progress = [];
+  test(`a later invocation ${stale ? `rejects the old ${stale}` : 'gets a fresh resource endpoint and reception'}`, async () => {
+    const transcript = new Transcript(),
+      answer = new Answer(),
+      progress = [];
+    let firstEndpoint, firstValues;
     class Main extends Group {
       constructor() {
         super();
         this.add(answer);
       }
-      maxRounds = 2;
       deps = { messages: TranscriptResource.append.request() };
-      run = async function (work) {
+      run = async (work) => {
         const endpoint = work.resources.messages;
-        if (work.round === 1) {
+        if (!firstEndpoint) {
           firstEndpoint = endpoint;
           firstValues = work.resources;
         } else assert.notEqual(endpoint, firstEndpoint);
-        const child = work.children.create(answer, null);
-        await child.run();
-        return child.accept((content) => {
-          if (stale && work.round === 2) {
-            const retained = stale === 'view' ? firstValues.messages : firstEndpoint;
-            return retained.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
-          }
-          return endpoint.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+        return work.children.invoke(answer, null, {
+          result: {
+            succeeded(content) {
+              const retained = stale && work.input === 'second' ? (stale === 'view' ? firstValues.messages : firstEndpoint) : endpoint;
+              return retained.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content }] });
+            },
+          },
         });
       };
-      accept = (work) => (work.round === 1 ? work.continue(work.initialInput, 'second round') : work.delivered);
     }
-    const execution = assemble(new Main(), transcript, progress).run(null, {});
+    const runtime = assemble(new Main(), transcript, progress);
+    assert.equal((await runtime.run('first', {})).start, 0);
     if (stale) {
-      await assert.rejects(execution, /inactive declaration round/);
+      await assert.rejects(runtime.run('second', {}), /already ended|window|inactive/);
       assert.equal(transcript.length, 1);
     } else {
-      assert.equal((await execution).start, 1);
+      assert.equal((await runtime.run('second', {})).start, 1);
       assert.equal(transcript.length, 2);
       assert.deepEqual(
         transcript.exportState().appends.map((saved) => saved.request.operation.childContextId),
@@ -117,7 +114,7 @@ for (const stale of [undefined, 'endpoint', 'view']) {
 
 test('concurrent receptions retain separate identities across await', async () => {
   const context = new InvocationContext(null);
-  context.startRound(1, null);
+  context.start();
   const children = new InvocationChildren(context);
   const make = () => {
     const child = new InvocationContext(null);
@@ -149,23 +146,22 @@ test('concurrent receptions retain separate identities across await', async () =
   assert.throws(() => children.reception, /active direct-child reception/);
 });
 
-test('a checkpoint writer retained from a previous round cannot save the current work', async () => {
-  const codec = { encode: (value) => value, decode: (value) => value };
-  const store = new MemoryCheckpointStore();
+test('a checkpoint writer retained from a completed invocation cannot save later work', async () => {
+  const codec = { encode: (value) => value, decode: (value) => value },
+    store = new MemoryCheckpointStore();
   let writer;
   class Root extends Scene {
-    maxRounds = 2;
-    checkpoint = { key: 'test.round-writer', version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { deps: {}, run: () => null } }] };
-    deps = {};
+    checkpoint = { key: 'test.closed-writer', version: 1, input: codec, output: codec, points: [{ name: 'saved', state: codec, references: {}, resume: { deps: {}, run: () => null } }] };
     run = (work) => {
-      if (work.round === 1) writer = work.checkpoint;
-      else assert.throws(() => writer.save(this.checkpoint.points[0], null, {}), /inactive declaration|outside its executing round/);
-      return null;
+      if (!writer) writer = work.checkpoint;
+      else assert.throws(() => writer({ point: this.checkpoint.points[0], state: null, refs: {} }), /already ended|window|inactive/);
+      work.checkpoint({ point: this.checkpoint.points[0], state: work.input, refs: {} });
+      return work.input;
     };
-    accept = (work) => (work.round === 1 ? work.continue(work.initialInput, 'next') : work.delivered);
   }
   const runtime = installCallable(new Root(), { checkpoints: { store }, providers: [], source: { capture: () => null } });
-  await assert.rejects(runtime.run(null, {}), /inactive declaration|outside its executing round/);
+  assert.equal(await runtime.run('first', {}), 'first');
+  assert.equal(await runtime.run('second', {}), 'second');
   assert.equal(runtime.running, false);
 });
 
@@ -208,7 +204,7 @@ test('parallel fixed appends bind each effect to its own asynchronous reception'
 
 test('a callback escaping its completed reception cannot borrow a later reception identity', async () => {
   const context = new InvocationContext(null);
-  context.startRound(1, null);
+  context.start();
   const children = new InvocationChildren(context);
   const relation = () => {
     const child = new InvocationContext(null);

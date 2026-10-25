@@ -17,7 +17,7 @@ export function lifecycleFor(runtime) {
       const observation = bindInvocationObservation({ identity, description, declarations, resources: context.resources }, state.recording ? [state.recording] : [], parent.observation);
       const clock = state.recorder?.clock ?? new Clock();
       if (execute) {
-        const invocation = state.decorate(new Invocation({ context, parent: { invocation: parent }, identity, description, observation, clock, work: { execute, raises: description?.raises, maxRounds: 1 }, signal: context.signal }));
+        const invocation = state.decorate(new Invocation({ context, parent: { invocation: parent }, identity, description, observation, clock, work: { execute }, signal: context.signal }));
         attach(context, invocation);
         return { invocation, root, parent };
       }

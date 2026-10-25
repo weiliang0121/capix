@@ -7,9 +7,7 @@ import type { ChildCallable, CallableInput } from '../definition/children.js';
 type RefinableDefinition = ChildCallable;
 
 interface ResourceDeclarations {
-  readonly deps: ResourceRequirements;
-  readonly exceptions?: { readonly deps: ResourceRequirements };
-  readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
+  readonly deps?: ResourceRequirements;
   readonly checkpoint?: { readonly points: readonly { readonly name: string; readonly resume: { readonly deps: ResourceRequirements } }[] };
 }
 
@@ -32,17 +30,16 @@ export function bindChildResources<Definition extends RefinableDefinition>(defin
 /**
  * Collect this declaration's requirements across phases; this does not resolve resource values.
  * Undefined observationProvides disables observation requirements; an empty map enables them without local supplies.
- * Installed observation supplies cover only observation requests, never run/exception/checkpoint requests.
+ * Installed observation supplies cover only observation requests, never run/checkpoint requests.
  */
-export function collectDefinitionRequirements(definition: ResourceDeclarations, observationProvides?: ResourceRequirements): ResourceRequirements {
+export function collectDefinitionRequirements(definition: ResourceDeclarations, observationProvides?: ResourceRequirements, observations: readonly ObservationDeclaration<InvocationFact>[] = []): ResourceRequirements {
   const deps: Record<string, ResourceRequest<unknown>> = {};
   const observationOffers = new Set(resourceRequests(observationProvides ?? {}).map((request) => request.offer));
-  for (const [name, request] of Object.entries(definition.deps)) deps[`run.${name}`] = request;
-  for (const [name, request] of Object.entries(definition.exceptions?.deps ?? {})) deps[`exceptions.${name}`] = request;
+  for (const [name, request] of Object.entries(definition.deps ?? {})) deps[`run.${name}`] = request;
   for (const point of definition.checkpoint?.points ?? []) {
     for (const [name, request] of Object.entries(point.resume.deps)) deps[`checkpoint.${point.name}.${name}`] = request;
   }
-  for (const [index, declaration] of (observationProvides ? (definition.observation ?? []) : []).entries()) {
+  for (const [index, declaration] of (observationProvides ? observations : []).entries()) {
     for (const [name, request] of Object.entries(declaration.deps)) {
       if (!observationOffers.has(request.offer)) deps[`observation.${index}.${name}`] = request;
     }

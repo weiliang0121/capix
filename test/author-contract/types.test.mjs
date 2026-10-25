@@ -18,8 +18,8 @@ for (const [file, codes] of [
   ['rejected-point-owner.ts', [2322, 2769]],
   ['rejected-child-call.ts', [2345, 2345]],
   ['rejected-result.ts', [2769]],
-  ['rejected-level-work.ts', [2345, 2345, 2345, 2339, 2345, 2345, 2345, 2345, 2344, 2344, 2344, 2344, 2345, 2345, 2345]],
-  ['rejected-helper-resources.ts', [2769, 2769, 2769, 2769, 2322]],
+  ['rejected-level-work.ts', [2345, 2345, 2339, 2345, 2345, 2344, 2344, 2344, 2345]],
+  ['rejected-helper-resources.ts', [2769, 2769, 2322]],
 ]) {
   test(`author contract rejects ${file} without suppression directives`, () => {
     const entry = fileURLToPath(new URL(`./types/${file}`, import.meta.url));

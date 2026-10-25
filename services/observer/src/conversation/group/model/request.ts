@@ -1,8 +1,6 @@
-import { invocationRecording, type InvocationRecordDescription } from '@capix/server-runtime/recording';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources } from '../../resources.js';
-import { defineChildEntry, Group, RuntimeError, checkpointPoint, childReference, childReferences, type GroupWork, type ResumeWork, type ChildReference, type CheckpointFacts, type ChildFact, type ChildrenOf } from '@capix/server-runtime';
-import { allowsModelRegeneration, modelRegenerationDeclaration, modelRegenerationInput, prepareRegenerationRequest, type ModelParentFacts, type ModelRegenerationEvidence } from '../../model/regeneration.js';
+import { Group, checkpointPoint, childReference, childReferences, type GroupWork, type ResumeWork, type ChildReference, type CheckpointFacts, type ChildFact, type ChildrenOf } from '@capix/server-runtime';
 import { isEqual } from 'es-toolkit/predicate';
 import type { ModelRequest, ModelOutput, Purpose, ModelTextDelta } from '../../model/types.js';
 import { InvokeModel } from '../../node/model/invoke.js';
@@ -15,7 +13,7 @@ type ModelWork = GroupWork<ModelRequest, ModelOutput, object, ChildrenOf<'group'
 const emptyState = checkpointCodec(z.strictObject({}));
 
 /** One external request with bounded local waits; following never regenerates or resends. */
-export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallResources, Record<string, never>, ModelTextDelta> {
+export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallResources, ModelTextDelta> {
   readonly invokeModel;
   readonly followModel;
 
@@ -24,31 +22,12 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
   readonly feedbackAccepted;
   static readonly deps = Object.freeze({ timeoutMs: ModelSettingsResource.timeout.request(), settings: ModelSettingsResource.snapshot.request(), modelCreator: ModelResource.create.request(), modelReader: ModelResource.read.request() });
 
-  readonly regeneration;
-
-  constructor(
-    private readonly purpose: Purpose,
-    description: InvocationRecordDescription<ModelRequest, ModelOutput> = {},
-  ) {
+  constructor(private readonly purpose: Purpose) {
     super();
 
     this.followModel = new FollowModel();
-    this.regeneration = Object.freeze({
-      declaration: modelRegenerationDeclaration,
-      deps: RequestModel.deps,
-      allows: (parent: ModelParentFacts, evidence: ModelRegenerationEvidence) => allowsModelRegeneration(parent, evidence, this),
-      input: (parent: ModelParentFacts, evidence: ModelRegenerationEvidence) => modelRegenerationInput(parent, evidence, this),
-      entry: defineChildEntry<RequestModel, { request: ModelRequest; evidence: ModelRegenerationEvidence }>(this, {
-        accept: ({ input, facts, key }) => {
-          const evidence = modelRegenerationInput(facts, input.evidence, this);
-          const previous = facts.children.require(this, input.evidence.previous);
-          if (key !== previous.key || !isEqual(input.request, prepareRegenerationRequest(evidence))) throw new RuntimeError('MODEL_REGENERATION_NOT_ALLOWED', '再次生成必须保留原请求与对应的错误反馈。');
-          return input.request;
-        },
-      }),
-    });
 
-    this.invokeModel = new InvokeModel(purpose, description);
+    this.invokeModel = new InvokeModel(purpose);
     this.add(this.invokeModel, this.followModel);
     const point = checkpointPoint<'group', ModelRequest, ModelOutput, ModelTextDelta>();
     this.startWaiting = point({
@@ -65,8 +44,8 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
         uses: this.members,
         run: async (work, _state, saved) => {
           const initial = work.children.resume(saved.start);
-          await initial.run();
-          return this.receiveInitial(work, await initial.accept(), initial.ref);
+
+          return this.receiveInitial(work, await initial.invoke(), initial.ref);
         },
       },
     });
@@ -85,8 +64,8 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
         uses: [this.followModel],
         run: async (work, _state, saved) => {
           const follow = work.children.resume(saved.follow);
-          await follow.run();
-          const output = await follow.accept();
+
+          const output = await follow.invoke();
           work.checkpoint?.({ point: this.feedbackAccepted, state: output, refs: { start: saved.start, follow: [follow.ref] } });
           return output;
         },
@@ -111,23 +90,19 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
       resume: { deps: {}, uses: [], run: (_work, output) => output },
     });
 
-    this.setDefinition({
-      output: {
-        result: (value: unknown) => value as ModelOutput,
-        delta: (value: unknown): ModelTextDelta => {
-          if (!value || typeof value !== 'object' || !('text' in value) || typeof value.text !== 'string' || !value.text.length) throw new TypeError('Model text delta required');
-          return value as ModelTextDelta;
-        },
+    this.output = {
+      result: (value: unknown) => value as ModelOutput,
+      delta: (value: unknown): ModelTextDelta => {
+        if (!value || typeof value !== 'object' || !('text' in value) || typeof value.text !== 'string' || !value.text.length) throw new TypeError('Model text delta required');
+        return value as ModelTextDelta;
       },
-      name: 'requestModel',
-      label: '请求模型',
-      source: 'services/observer/src/conversation/group/model/request.ts · RequestModel',
-      observation: [invocationRecording(description)],
-      checkpoint: { key: `observer.request-model.${purpose}`, version: 3, input: requestCodec, output: outputCodec, points: [this.startWaiting, this.followWaiting, this.feedbackAccepted] },
-      deps: RequestModel.deps,
-      uses: this.members,
-      run: this.execute.bind(this),
-    });
+    };
+    this.name = 'requestModel';
+    this.label = '请求模型';
+    this.source = 'services/observer/src/conversation/group/model/request.ts · RequestModel';
+    this.checkpoint = { key: `observer.request-model.${purpose}`, version: 3, input: requestCodec, output: outputCodec, points: [this.startWaiting, this.followWaiting, this.feedbackAccepted] };
+    this.deps = RequestModel.deps;
+    this.run = this.execute.bind(this);
   }
 
   private async execute(work: GroupWork<ModelRequest, ModelOutput, ModelCallResources, ChildrenOf<'group'>, ModelTextDelta>): Promise<ModelOutput> {
@@ -147,8 +122,7 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
     });
     work.checkpoint?.({ point: this.startWaiting, state: {}, refs: { start: initial.ref } });
     try {
-      await initial.run();
-      return await this.receiveInitial(work, await initial.accept(), initial.ref);
+      return await this.receiveInitial(work, await initial.invoke(), initial.ref);
     } finally {
       detach();
     }
@@ -161,8 +135,8 @@ export class RequestModel extends Group<ModelRequest, ModelOutput, ModelCallReso
     else {
       const follow = work.children.create(this.followModel, { ...result.interaction, expected: { request: work.input, purpose: this.purpose } }, { key: 'follow' });
       work.checkpoint?.({ point: this.followWaiting, state: {}, refs: { start: initial, follow: follow.ref } });
-      await follow.run();
-      output = await follow.accept();
+
+      output = await follow.invoke();
       followed.push(follow.ref);
     }
     work.checkpoint?.({ point: this.feedbackAccepted, state: output, refs: { start: initial, follow: followed } });

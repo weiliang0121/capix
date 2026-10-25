@@ -313,7 +313,7 @@ test('a pre-cancelled entry releases occupancy without capturing a host source',
   assert.equal(captured, 1);
 });
 
-test('same-signature members retain exact phase authorization independently of their structural types', async () => {
+test('same-signature structures retain exact member identity independently of their structural types', async () => {
   let called = 0;
   const allowed = defineNode()({ run: () => 1 });
   const other = defineNode()({
@@ -323,8 +323,7 @@ test('same-signature members retain exact phase authorization independently of t
     },
   });
   const scene = defineScene()({
-    members: [allowed, other],
-    uses: [allowed],
+    members: [allowed],
     run(work) {
       try {
         work.children.create(other, null);

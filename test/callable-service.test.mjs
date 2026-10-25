@@ -2,7 +2,7 @@ import { createConversationRunner } from './fixtures/conversation-runner.mjs';
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { defineScene, defineGroup, defineNode, Driver, ProgressChannel, invocationRecording, bindRecording, Recorder, RecordBook } from '@capix/server-runtime';
+import { defineScene, defineGroup, defineNode, Driver, ProgressChannel, bindRecording, Recorder, RecordBook } from '@capix/server-runtime';
 import { createConversationStructure, ConversationGroup, PrepareConversationContext, GenerateAnswer, ExtractMemory, DefaultConversationDecision, acceptConversationRequest, conversationSceneRequests, ModelInteractions, ModelSource, initializeObserver, observeExecution, observeOverview, subscribeExecutions } from '@capix/observer-service';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 import { createEnvironment } from './fixtures/environment.mjs';
@@ -25,12 +25,13 @@ test('Scene members share Callable behavior, while only the exactly bound task p
   const model = new ModelInteractions(new ModelSource(provider));
   t.after(() => model.close());
   const definition = createConversationStructure();
-  const node = defineNode()({ name: 'scene-health-check', observation: [invocationRecording()], run: () => 'ready' });
-  const group = defineGroup()({ name: 'unrelated-group', members: [], observation: [invocationRecording()], run: () => 'ready' });
+  const node = defineNode()({ name: 'scene-health-check', run: () => 'ready' });
+  const group = defineGroup()({ name: 'unrelated-group', members: [], run: () => 'ready' });
   const original = definition.scene.run;
   definition.scene.add(node, group);
-  definition.scene.setRun(
-    async function (work) {
+  Object.assign(definition.scene, {
+    deps: definition.scene.deps,
+    run: async function (work) {
       for (const member of [node, group]) {
         const call = work.children.create(member, null);
         await call.run();
@@ -38,9 +39,7 @@ test('Scene members share Callable behavior, while only the exactly bound task p
       }
       return original(work);
     },
-    definition.scene.deps,
-    { uses: definition.scene.members, accept: definition.scene.accept },
-  );
+  });
 
   const runner = createConversationRunner(definition, entities, model, { observations: [recording] });
   const progress = [];
@@ -107,7 +106,7 @@ test('a conversation task nested under multiple groups retains its full ancestry
   const inner = defineGroup()({
     name: 'inner',
     members: [conversation],
-    observation: [invocationRecording()],
+
     deps: conversationSceneRequests,
     async run(work) {
       const accepted = acceptConversationRequest(work.input, work.resources.messages.append, false);
@@ -117,15 +116,14 @@ test('a conversation task nested under multiple groups retains its full ancestry
     },
   });
   const forward = (child) => ({
-    uses: [child],
     async run(work) {
       const call = work.children.create(child, work.input);
       await call.run();
       return call.accept();
     },
   });
-  const outer = defineGroup()({ name: 'outer', members: [inner], observation: [invocationRecording()], ...forward(inner) });
-  const root = defineScene()({ name: 'nested-conversation', members: [outer], observation: [invocationRecording()], ...forward(outer) });
+  const outer = defineGroup()({ name: 'outer', members: [inner], ...forward(inner) });
+  const root = defineScene()({ name: 'nested-conversation', members: [outer], ...forward(outer) });
   const definition = { scene: root, conversation, ...capabilities };
 
   const runner = createConversationRunner(definition, entities, model, { observations: [recording] });
@@ -152,7 +150,8 @@ test('a conversation task nested under multiple groups retains its full ancestry
 test('a Driver may run an explicitly marked root task without a synthetic Scene parent', async () => {
   const recorder = new Recorder(new RecordBook());
   const recording = bindRecording(recorder);
-  const task = defineGroup()({ name: 'root-task', observation: [invocationRecording({ role: 'conversation-task' })], run: () => ({ kind: 'answer', content: 'done' }) });
+  const task = defineGroup()({ name: 'root-task', run: () => ({ kind: 'answer', content: 'done' }) });
+  recording.describe(task, { role: 'conversation-task' });
   const driver = new Driver({ observations: [recording] });
   const bound = driver.build(task, { providers: [], source: { capture: () => null } });
   const snapshots = [];
@@ -176,12 +175,11 @@ test('a Driver may run an explicitly marked root task without a synthetic Scene 
 test('a nested task change refreshes every containing task without refreshing an unrelated sibling task', async () => {
   const recorder = new Recorder(new RecordBook());
   const recording = bindRecording(recorder);
-  const leaf = defineNode()({ name: 'leaf', observation: [invocationRecording()], run: () => 'done' });
+  const leaf = defineNode()({ name: 'leaf', run: () => 'done' });
   const compose = (name, child) =>
     defineGroup()({
       name,
       members: [child],
-      observation: [invocationRecording({ role: 'conversation-task' })],
       async run(work) {
         const call = work.children.create(child, work.input);
         await call.run();
@@ -190,10 +188,11 @@ test('a nested task change refreshes every containing task without refreshing an
     });
   const inner = compose('inner-task', leaf);
   const outer = compose('outer-task', inner);
-  const sibling = defineGroup()({ name: 'sibling-task', observation: [invocationRecording({ role: 'conversation-task' })], run: () => 'sibling' });
+  const sibling = defineGroup()({ name: 'sibling-task', run: () => 'sibling' });
+  for (const task of [inner, outer, sibling]) recording.describe(task, { role: 'conversation-task' });
   const scene = defineScene()({
     members: [sibling, outer],
-    observation: [invocationRecording()],
+
     async run(work) {
       for (const member of [sibling, outer]) {
         const call = work.children.create(member, null);

@@ -1,324 +1,229 @@
-import { observeCall } from '../fixtures/observation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, ExceptionContract, Recorder, RecordBook, invocationRecording } from '@capix/server-runtime';
-import { createBoundRuntime, observeCall as snapshotCall } from '../fixtures/runtime.mjs';
-import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
+import { Node, Scene, Runner, Resources, ExceptionContract, Resource, ResourceOffer, callableHooks } from '@capix/server-runtime';
+import { Invocation, InvocationContext } from '@capix/server-runtime/construction';
 
-const rejected = new ExceptionContract('TEST_OUTPUT_REJECTED');
-const make = (work, extra = {}) => new Invocation({ context: new InvocationContext('input'), signal: new AbortController().signal, work: { maxRounds: 1, ...work }, ...extra });
-const handlers = (handle) => ({ accepts: [rejected], handle });
+const runtime = (scene, options = {}, resources = new Resources()) => new Runner(scene, resources, undefined, options).build();
+const make = (execute, options = {}) => new Invocation({ context: new InvocationContext('input'), signal: new AbortController().signal, work: { execute }, ...options });
 
-test('an explicit producer exception reaches its matching handler without records', async () => {
-  const cause = new Error('invalid output');
-  const facts = { output: 'bad' };
-  const exception = rejected.create('rejected', facts, { cause });
-  let handled = 0;
-  const call = make({
-    raises: [rejected],
-    execute() {
-      throw exception;
+test('a local result receiver handles ordinary and typed domain errors without raises declarations', async () => {
+  const contract = new ExceptionContract('DOMAIN_REJECTED');
+  for (const error of [new Error('ordinary'), contract.create('domain', { detail: 7 })]) {
+    let received;
+    const child = new Node({
+      run() {
+        throw error;
+      },
+    });
+    const scene = new Scene({
+      run: (work) =>
+        work.children.invoke(child, null, {
+          result: {
+            failed(value) {
+              received = value;
+              return 'fallback';
+            },
+          },
+        }),
+    }).add(child);
+    assert.equal(await runtime(scene).run(null), 'fallback');
+    assert.equal(received, error);
+  }
+});
+
+test('success and failure receiver errors never recurse into the same failed callback', async () => {
+  for (const sourceFails of [false, true]) {
+    const receptionError = new Error('receiver');
+    let failures = 0;
+    const child = new Node({
+      run() {
+        if (sourceFails) throw new Error('source');
+        return 1;
+      },
+    });
+    const scene = new Scene({
+      run: (work) =>
+        work.children.invoke(child, null, {
+          result: {
+            succeeded() {
+              throw receptionError;
+            },
+            failed() {
+              failures++;
+              throw receptionError;
+            },
+          },
+        }),
+    }).add(child);
+    await assert.rejects(runtime(scene).run(null), (error) => error === receptionError);
+    assert.equal(failures, Number(sourceFails));
+  }
+});
+
+test('a precise checkpoint handle uses the same result receiver and preserves failed facts', async () => {
+  const failure = new Error('candidate');
+  const child = new Node({
+    run() {
+      throw failure;
     },
-    exceptions: handlers((context, received) => {
-      handled++;
-      assert.equal(context.progress.phase, 'handling');
-      assert.equal(received, exception);
-      assert.equal(received.facts, facts);
-      assert.equal(received.cause, cause);
-      return { kind: 'return', output: 'fallback' };
-    }),
   });
-  assert.equal(await call.run(), 'fallback');
-  assert.equal(handled, 1);
-  assert.equal(call.failure, undefined);
+  let fact;
+  const scene = new Scene({
+    async run(work) {
+      const call = work.children.create(child, null);
+      const value = await call.invoke({
+        result: {
+          failed: (error) => {
+            assert.equal(error, failure);
+            return 7;
+          },
+        },
+      });
+      fact = work.children.facts.get(call.ref);
+      return value;
+    },
+  }).add(child);
+  assert.equal(await runtime(scene).run(null), 7);
+  assert.equal(fact.returned.status, 'failed');
+  assert.deepEqual(fact.reception, { status: 'handled', value: 7 });
+});
+
+test('a result receiver can use another registered node as the replacement', async () => {
+  const failing = new Node({
+    run() {
+      throw new Error('unavailable');
+    },
+  });
+  const backup = new Node({ run: (work) => work.input * 2 });
+  const scene = new Scene({ run: (work) => work.children.invoke(failing, null, { result: { failed: () => work.children.invoke(backup, 3) } }) }).add(failing, backup);
+  assert.equal(await runtime(scene).run(null), 6);
+});
+
+test('raw child failures are not erased by catch and relabel', async () => {
+  const failure = new Error('child');
+  const child = new Node({
+    run() {
+      throw failure;
+    },
+  });
+  const scene = new Scene({
+    async run(work) {
+      try {
+        await work.children.create(child, null).run();
+      } catch {}
+      return 'not authorized';
+    },
+  }).add(child);
+  await assert.rejects(runtime(scene).run(null), (error) => error === failure);
+});
+
+test('required resource observation failures cannot be consumed as source errors', async () => {
+  let fallback = 0;
+  const offer = new ResourceOffer({
+    methods: {
+      read(origin) {
+        return origin;
+      },
+    },
+  });
+  const scene = new Scene({ deps: { read: offer.request() }, run: (work) => work.resources.read.read(null, { result: { failed: () => ++fallback } }) });
+  const observation = {
+    failure: 'propagate',
+    bindInvocation: () => ({
+      observe() {},
+      resource() {
+        throw new Error('durable fact');
+      },
+    }),
+  };
+  await assert.rejects(runtime(scene, { observations: [observation] }, new Resources().register(new Resource(1), offer)).run(null));
+  assert.equal(fallback, 0);
+});
+
+test('a successful child context and rejected terminal delivery remain separate', async () => {
+  let call;
+  const failure = new Error('terminal observation');
+  const child = new Node({ run: () => 1 });
+  const scene = new Scene({ run: (work) => work.children.invoke(child, null, { result: { failed: () => assert.fail('cannot consume terminal observer failure') } }) }).add(child);
+  const hooks = [
+    callableHooks(child, {
+      started: () => (_context, invocation) => {
+        call = invocation;
+      },
+    }),
+  ];
+  const observation = {
+    failure: 'propagate',
+    bindInvocation: ({ identity }) => ({
+      observe(fact) {
+        if (identity.kind === 'node' && fact.kind === 'finished') throw failure;
+      },
+    }),
+  };
+  await assert.rejects(runtime(scene, { hooks, observations: [observation] }).run(null));
   assert.equal(call.context.status, 'succeeded');
+  assert.equal(call.failure.receptionAllowed, false);
 });
 
-test('unknown throws and undeclared or identity-mismatched exceptions cannot enter handling', async () => {
-  const unknown = new Error('bug');
-  const undeclared = rejected.create('missing raises', {});
-  for (const thrown of [unknown, undeclared]) {
-    const call = make({
-      execute() {
-        throw thrown;
-      },
-      exceptions: handlers(() => assert.fail('must not handle')),
-    });
-    await assert.rejects(call.run(), (error) => (thrown === unknown ? error === unknown : error.code === 'UNDECLARED_EXCEPTION' && error.cause === undeclared));
-    assert.equal(call.failure.kind, 'error');
-  }
-  const otherIdentity = new ExceptionContract(rejected.name);
-  const exception = rejected.create('known but not accepted here', {});
-  const call = make({
-    raises: [rejected],
-    execute() {
-      throw exception;
-    },
-    exceptions: { accepts: [otherIdentity], handle: () => assert.fail('identity differs') },
-  });
-  await assert.rejects(call.run(), (error) => error === exception);
-  assert.equal(call.failure.kind, 'exception');
-});
-
-test('a failed child may deliver a declared exception to its direct parent handler', async () => {
-  const exception = rejected.create('rejected', {});
-  let child;
-  const parent = make({
-    execute: async (_context, owner) => {
-      child = make(
-        {
-          raises: [rejected],
-          execute() {
-            throw exception;
+test('a protected child failure is owned before a registered receiver checks simultaneous cancellation', async () => {
+  const controller = new AbortController(),
+    fault = new Error('strict terminal observer');
+  let fallbacks = 0;
+  const child = new Node({ run: () => 'candidate' });
+  const scene = new Scene({
+    run: (work) =>
+      work.children.invoke(child, null, {
+        result: {
+          failed: () => {
+            fallbacks++;
+            return 'masked';
           },
         },
-        { parent: { invocation: owner } },
-      );
-      return child.run();
-    },
-    exceptions: handlers(() => ({ kind: 'return', output: 'accepted fallback' })),
-  });
-  assert.equal(await parent.run(), 'accepted fallback');
-  assert.equal(child.context.status, 'failed');
-  assert.equal(child.failure.kind, 'exception');
-  assert.equal(parent.children.values()[0].returned.failure.kind, 'exception');
-});
-
-test('catching child errors cannot erase or relabel the error delivery', async () => {
-  const error = new Error('child structure failed');
-  for (const relabel of [false, true]) {
-    const parent = make({
-      raises: [rejected],
-      execute: async (_context, owner) => {
-        try {
-          await make(
-            {
-              execute() {
-                throw error;
-              },
-            },
-            { parent: { invocation: owner } },
-          ).run();
-        } catch {
-          if (relabel) throw rejected.create('pretend expected', {});
-        }
-        return 'pretend success';
-      },
-      exceptions: handlers(() => assert.fail('cannot handle a child error')),
-    });
-    await assert.rejects(parent.run(), (actual) => actual === error);
-    assert.equal(parent.failure.kind, 'error');
-    assert.equal(parent.context.status, 'failed');
-  }
-});
-
-test('handler failure and malformed decisions terminate once without recursive handling', async () => {
-  const exception = rejected.create('bad output', {});
-  for (const action of [
-    () => {
-      throw new Error('handler bug');
-    },
-    () => ({ kind: 'retry' }),
-    () => ({ kind: 'return' }),
-    () => ({ kind: 'continue', input: 'next', reason: ' ' }),
-    () => {
-      throw exception;
-    },
-  ]) {
-    let calls = 0;
-    const call = make({
-      raises: [rejected],
-      execute() {
-        throw exception;
-      },
-      exceptions: handlers(() => {
-        calls++;
-        return action();
       }),
-    });
-    await assert.rejects(call.run());
-    assert.equal(calls, 1);
-    assert.equal(call.failure.kind, 'error');
-    assert.equal(call.failure.phase, 'handling');
-  }
-});
-
-test('a caught formal endpoint error also prevents a handler fallback', async () => {
-  const failure = new Error('endpoint failed');
-  const call = make({
-    raises: [rejected],
-    execute() {
-      throw rejected.create('rejected', {});
-    },
-    exceptions: handlers((_context, _exception, owner) => {
-      try {
-        owner.reject(failure);
-        throw failure;
-      } catch {}
-      return { kind: 'return', output: 'fallback' };
+  }).add(child);
+  const observation = {
+    failure: 'propagate',
+    bindInvocation: ({ identity }) => ({
+      observe(fact) {
+        if (identity.kind === 'node' && fact.kind === 'finished') {
+          controller.abort();
+          throw fault;
+        }
+      },
     }),
-  });
-  await assert.rejects(call.run(), (error) => error === failure);
-  assert.equal(call.failure.kind, 'error');
+  };
+  await assert.rejects(runtime(scene, { observations: [observation] }).run(null, { signal: controller.signal }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause === fault);
+  assert.equal(fallbacks, 0);
 });
 
-test('an acceptance exception is handled separately from normal output acceptance', async () => {
-  const output = { value: 'raw' };
-  let accepted = 0;
-  const call = make({
-    raises: [rejected],
-    execute: () => output,
-    accept(_context, actual) {
-      assert.equal(actual, output);
-      accepted++;
-      throw rejected.create('cannot accept', { output });
-    },
-    exceptions: handlers(() => ({ kind: 'return', output: 'alternate' })),
-  });
-  assert.equal(await call.run(), 'alternate');
-  assert.equal(accepted, 1);
-  assert.equal(call.context.progress.result.output, output);
-});
-
-test('handled continuation keeps one owner and creates a new work round', async () => {
-  const inputs = [];
-  const call = make({
-    maxRounds: 2,
-    raises: [rejected],
-    execute(context) {
-      inputs.push(context.currentInput);
-      if (inputs.length === 1) throw rejected.create('retry declared output', {});
-      return 'done';
-    },
-    exceptions: handlers(() => ({ kind: 'continue', input: 'corrected', reason: 'explicit correction' })),
-  });
-  assert.equal(await call.run(), 'done');
-  assert.deepEqual(inputs, ['input', 'corrected']);
-  assert.equal(call.context.input, 'input');
-});
-
-test('successful child context and failed final delivery remain distinct', async () => {
-  let child;
-  const failure = new Error('record finish failed');
-  const parent = make({
-    execute: async (_context, owner) => {
-      child = make(
-        { execute: () => 'created effect' },
-        {
-          parent: { invocation: owner },
-          observation: observeCall((fact) => {
-            if (fact.kind === 'finished') throw failure;
-          }),
-        },
-      );
-      try {
-        await child.run();
-      } catch {}
-      return 'pretend success';
-    },
-  });
-  await assert.rejects(parent.run(), (error) => error.code === 'OBSERVATION_FAILED' && error.cause === failure);
-  assert.equal(child.context.status, 'succeeded');
-  assert.equal(child.failure.kind, 'error');
-  assert.equal(child.failure.phase, 'observation');
-  assert.equal(parent.context.status, 'failed');
-});
-
-test('record-only IO descriptions preserve live values and handling output references', async () => {
-  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
-  const input = { text: 'original', internal: new Map() };
-  const output = { text: 'fallback', internal: new Map() };
-  const call = runtime.executionInvocationBuilder.create(input, {
-    context: {},
-    observation: [invocationRecording({ input: (value) => ({ text: value.text }), output: (value) => ({ text: value.text }) })],
-    work: {
-      maxRounds: 1,
-      raises: [rejected],
-      execute(current) {
-        assert.equal(current.input, input);
-        throw rejected.create('expected', null);
+for (const domain of [false, true]) {
+  test(`a child ${domain ? 'domain' : 'ordinary'} failure racing cancellation retains the source cause without reception`, async () => {
+    const controller = new AbortController();
+    const failure = domain ? new ExceptionContract('RACING_CHILD').create('source failure', {}) : new Error('source failure');
+    let fallbacks = 0;
+    const child = new Node({
+      run() {
+        controller.abort();
+        throw failure;
       },
-      exceptions: handlers(() => ({ kind: 'return', output })),
-    },
+    });
+    const scene = new Scene({ run: (work) => work.children.invoke(child, null, { result: { failed: () => ++fallbacks } }) }).add(child);
+    await assert.rejects(runtime(scene).run(null, { signal: controller.signal }), (error) => error === failure || error.cause === failure);
+    assert.equal(fallbacks, 0);
   });
-  const context = call.context;
-  assert.equal(await call.run(), output);
-  assert.equal(context.state.output, output);
-  const snapshot = snapshotCall(runtime.recording, call);
-  validateExecutionRecordSnapshot(snapshot);
-  assert.deepEqual(snapshot.execution.value.input, { text: 'original' });
-  assert.deepEqual(readOutput(snapshot.execution.value), { text: 'fallback' });
-  assert.equal(snapshot.execution.value.processes.at(-1).stage, 'handling');
-});
+}
 
-test('failed record delivery exposes error category without live failure objects', async () => {
-  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
-  const exception = rejected.create('expected rejection', { value: 1 });
-  const call = runtime.executionInvocationBuilder.create('input', {
-    context: {},
-    work: {
-      maxRounds: 1,
-      raises: [rejected],
-      execute() {
-        throw exception;
-      },
-    },
+test('repeated child start and a preconstructed child after parent failure cannot run business', async () => {
+  let count = 0;
+  let second;
+  const parent = make(async (_context, owner) => {
+    const first = make(() => ++count, { parent: { invocation: owner } });
+    second = make(() => ++count, { parent: { invocation: owner } });
+    await first.run();
+    await assert.rejects(first.run(), /once|started/);
+    await assert.rejects(second.run());
   });
-  const context = call.context;
-  await assert.rejects(call.run(), (error) => error.exception === exception && error.cause === exception);
-  const snapshot = snapshotCall(runtime.recording, call);
-  validateExecutionRecordSnapshot(snapshot);
-  assert.deepEqual(snapshot.execution.value.failure, { kind: 'exception', phase: 'execute', contextId: context.id, contract: rejected.name });
-  assert.equal(Object.hasOwn(snapshot.execution.value.processes.at(-1).failure, 'error'), false);
-});
-
-test('a repeated child entry is a parent error even if the first child call succeeded', async () => {
-  let child;
-  const parent = make({
-    execute: async (_context, owner) => {
-      child = make({ execute: () => 'once' }, { parent: { invocation: owner } });
-      await child.callView.run();
-      try {
-        await child.callView.run();
-      } catch {}
-      return 'ignored duplicate entry';
-    },
-  });
-  await assert.rejects(parent.run(), /already started/);
-  assert.equal(child.context.status, 'succeeded');
-  assert.equal(parent.failure.kind, 'error');
-  assert.equal(parent.children.values()[0].returned.status, 'succeeded');
-});
-
-test('a preconstructed child cannot start work after its parent has an error', async () => {
-  let effects = 0;
-  const parent = make({
-    execute: async (_context, owner) => {
-      const next = make(
-        {
-          execute: () => {
-            effects++;
-            return 'effect';
-          },
-        },
-        { parent: { invocation: owner } },
-      );
-      try {
-        await make(
-          {
-            execute() {
-              throw new Error('first failed');
-            },
-          },
-          { parent: { invocation: owner } },
-        ).run();
-      } catch {}
-      try {
-        await next.callView.run();
-      } catch {}
-      return 'done';
-    },
-  });
-  await assert.rejects(parent.run(), /first failed/);
-  assert.equal(effects, 0);
+  await assert.rejects(parent.run(), /once|started/);
+  assert.equal(count, 1);
+  assert.equal(second.context.status, 'failed');
 });

@@ -7,6 +7,7 @@ import { RuntimeErrorHelper } from '../errors/helper.js';
 import type { OperationOptions, OperationOutcome, OperationResult } from '../operation/contract.js';
 import { receiveOperation } from '../operation/receive.js';
 import { isProtectedOperationFailure } from '../operation/failure.js';
+import { isInvocationCancelled } from '../invocation/cancellation.js';
 import type { ResourceOperation } from './methods.js';
 
 /** Internal call binding only. Business receives the resource endpoint, never this provenance port. */
@@ -168,7 +169,7 @@ export class ResourceActivity {
       } catch (windowFailure) {
         // Both facts exist. Keep the original operation fault, and do not run a
         // business receiver after cancellation or closure of its access window.
-        const combined = windowFailure === failure ? failure : new AggregateError([failure, windowFailure], 'Resource operation failed after its access window became unavailable', { cause: failure });
+        const combined = this.combineWindowFailure(failure, windowFailure);
         this.failed(action, interactionId, combined);
         throw combined;
       }
@@ -182,6 +183,15 @@ export class ResourceActivity {
       } catch (observation) {
         throw new AggregateError([failure, observation], 'Resource operation and failure observation both failed', { cause: failure });
       }
+    }
+    // Publication is reentrant: a receiver may cancel or close the current window.
+    // Do not enter business reception after that change, even if the source already returned.
+    try {
+      this.session.checkWindow();
+    } catch (windowFailure) {
+      const error = outcome.status === 'failed' ? this.combineWindowFailure(outcome.failure, windowFailure) : windowFailure;
+      this.session.error(error);
+      throw error;
     }
     try {
       const result = await receiveOperation<Output, unknown, Options>(outcome, reception);
@@ -224,6 +234,12 @@ export class ResourceActivity {
     }
     this.publish('returned', () => ({ action, output: detail.output?.(output) ?? null }), interactionId);
     return output;
+  }
+
+  private combineWindowFailure(failure: unknown, windowFailure: unknown): unknown {
+    const signal = this.session.owner?.signal;
+    if (windowFailure === failure || (signal && isInvocationCancelled(failure, signal) && isInvocationCancelled(windowFailure, signal))) return failure;
+    return new AggregateError([failure, windowFailure], 'Resource operation failed after its access window became unavailable', { cause: failure });
   }
 
   private failed(action: string, interactionId: string, error: unknown): void {

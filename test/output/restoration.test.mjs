@@ -7,67 +7,41 @@ const codec = { encode: (value) => structuredClone(value), decode: (value) => st
 const output = { result: (value) => value, delta: (value) => value };
 
 function restore(definition, { round = 1, currentInput = { stage: 'saved' } } = {}) {
-  const store = new MemoryCheckpointStore();
-  const events = [];
+  const store = new MemoryCheckpointStore(),
+    events = [];
   const contextId = `restored-round-${round}`;
   store.save({ id: 'saved-image', formatVersion: 5, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, kind: 'scene' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [], ...(round === 2 ? { continuation: { fromRound: 1, stage: 'accept', reason: 'saved continuation' } } : {}) }, state: { source: 'durable' }, references: {} }, 0);
-  const { kind, members, ...configuration } = definition;
-  const runtime = installCallable(new Scene(configuration), {
+  let captures = 0;
+  const runtime = installCallable(new Scene(definition), {
     providers: [],
     checkpoints: { store },
     source: {
-      capture: () => null,
+      capture: () => {
+        captures++;
+        return null;
+      },
       output: () => ({
-        receive(event) {
+        receive: (event) => {
           events.push(event);
         },
       }),
     },
   });
-  return { runtime, store, events, contextId };
+  return { runtime, store, events, contextId, captures: () => captures };
 }
 
-for (const continuation of ['accept', 'exception']) {
-  test(`restored execute continues through ${continuation} into one normal round with a new output segment and the original Context identity`, async () => {
-    const rejected = new ExceptionContract(`test.restored-output.${continuation}`);
-    const writers = [];
-    const execution = [];
-    const nextInput = { stage: 'next' };
-    const final = { answer: 'final result' };
+for (const failed of [false, true]) {
+  test(`restored work has its own bounded output section and ${failed ? 'discards a rejected candidate' : 'commits its direct final result'}`, async () => {
+    const rejected = new ExceptionContract('test.restored-output').create('invalid restored candidate', {});
+    const final = { answer: 'restored result' };
+    let writer,
+      executions = 0;
     const definition = {
-      kind: 'scene',
-      members: [],
-      maxRounds: 2,
-      raises: [rejected],
       output,
       deps: {},
-      run(work) {
-        execution.push({ kind: 'normal', id: undefined, round: work.round });
-        assert.equal(work.round, 2);
-        assert.deepEqual(work.initialInput, { stage: 'original' });
-        assert.equal(work.input, nextInput);
-        assert.throws(() => writers[0].emit('stale preview'), { code: 'OUTPUT_CLOSED' });
-        writers.push(work.output);
-        work.output.emit('new preview');
-        work.checkpoint({ point: definition.checkpoint.points[0], state: { source: 'second round' }, refs: {} });
-        return final;
-      },
-      accept(work) {
-        assert.throws(() => writers.at(-1).emit('after execute'), { code: 'OUTPUT_CLOSED' });
-        return work.round === 1 ? work.continue(nextInput, 'advance after restored work') : work.delivered;
-      },
-      exceptions: {
-        deps: {},
-        accepts: [rejected],
-        handle(work) {
-          assert.equal(continuation, 'exception');
-          assert.equal(work.round, 1);
-          assert.throws(() => writers[0].emit('after rejection'), { code: 'OUTPUT_CLOSED' });
-          return work.continue(nextInput, 'advance after restored rejection');
-        },
-      },
+      run: () => assert.fail('normal work must not replay'),
       checkpoint: {
-        key: `test.restored-output.${continuation}`,
+        key: 'test.restored-output',
         version: 1,
         input: codec,
         output: codec,
@@ -79,14 +53,16 @@ for (const continuation of ['accept', 'exception']) {
             resume: {
               deps: {},
               run(work, state) {
-                execution.push({ kind: 'restored', id: undefined, round: work.round });
+                executions++;
+                assert.equal(work.round, 1);
                 assert.deepEqual(work.initialInput, { stage: 'original' });
                 assert.deepEqual(work.input, { stage: 'saved' });
                 assert.deepEqual(state, { source: 'durable' });
-                writers.push(work.output);
+                writer = work.output;
                 work.output.emit('restored preview');
-                if (continuation === 'exception') throw rejected.create('restore needs correction', {});
-                return { answer: 'restored result' };
+                work.checkpoint({ point: definition.checkpoint.points[0], state: { source: 'resumed' }, refs: {} });
+                if (failed) throw rejected;
+                return final;
               },
             },
           },
@@ -94,80 +70,45 @@ for (const continuation of ['accept', 'exception']) {
       },
     };
     const { runtime, store, events, contextId } = restore(definition);
-    assert.equal(await runtime.resume(contextId, {}), final);
-    assert.deepEqual(execution, [
-      { kind: 'restored', id: undefined, round: 1 },
-      { kind: 'normal', id: undefined, round: 2 },
-    ]);
-    assert.notEqual(writers[0], writers[1]);
-    assert.throws(() => writers[1].emit('after completion'), { code: 'OUTPUT_CLOSED' });
+    if (failed) await assert.rejects(runtime.resume(contextId, {}), (error) => error === rejected);
+    else assert.equal(await runtime.resume(contextId, {}), final);
+    assert.equal(executions, 1);
+    assert.throws(() => writer.emit('late'), { code: 'OUTPUT_CLOSED' });
     assert.deepEqual(
-      events.map((event) => [event.round, event.sequence, event.kind]),
-      [
-        [1, 1, 'started'],
-        [1, 2, 'delta'],
-        [1, 3, 'sealed'],
-        [1, 4, 'discarded'],
-        [2, 1, 'started'],
-        [2, 2, 'delta'],
-        [2, 3, 'sealed'],
-        [2, 4, 'completed'],
-      ],
+      events.map((event) => event.kind),
+      ['started', 'delta', 'sealed', failed ? 'discarded' : 'completed'],
     );
-    assert.ok(events.every((event) => event.contextId === contextId));
-    assert.equal(events[3].reason, continuation === 'exception' ? 'exception' : 'continue');
-    assert.equal(events.at(-1).result, final);
+    assert.deepEqual(
+      events.map((event) => event.sequence),
+      [1, 2, 3, 4],
+    );
+    assert.ok(events.every((event) => event.contextId === contextId && event.round === 1));
+    if (failed) assert.equal(events.at(-1).reason, 'exception');
+    else assert.equal(events.at(-1).result, final);
     const head = store.read(contextId);
-    assert.equal(head.image.frame.round, 2);
-    assert.deepEqual(head.image.frame.input, { stage: 'original' });
-    assert.deepEqual(head.image.frame.currentInput, nextInput);
-    assert.deepEqual(head.delivery, { status: 'succeeded', output: final, progress: { round: 2, currentInput: nextInput, phase: 'receive' } });
+    assert.equal(head.image.frame.round, 1);
+    assert.deepEqual(head.image.state, { source: 'resumed' });
+    assert.deepEqual(head.delivery, failed ? { status: 'failed' } : { status: 'succeeded', output: final, progress: { round: 1, currentInput: { stage: 'saved' }, phase: 'execute' } });
   });
 }
 
-test('restoring an existing second round preserves its round and current input without invoking normal execute', async () => {
-  let resumes = 0;
-  const currentInput = { stage: 'saved second round' };
+test('retired second-round checkpoints are readable data but rejected before capture or output', async () => {
   const definition = {
-    kind: 'scene',
-    members: [],
-    maxRounds: 2,
-    raises: [],
     output,
-    deps: {},
-    run: () => assert.fail('normal work must not replay'),
+    run: () => assert.fail('normal work cannot run'),
     checkpoint: {
       key: 'test.restored-output.second-round',
       version: 1,
       input: codec,
       output: codec,
-      points: [
-        {
-          name: 'saved',
-          references: {},
-          state: codec,
-          resume: {
-            deps: {},
-            run(work) {
-              resumes++;
-              assert.equal(work.round, 2);
-              assert.deepEqual(work.initialInput, { stage: 'original' });
-              assert.deepEqual(work.input, currentInput);
-              work.output.emit('second round preview');
-              return 'resumed final';
-            },
-          },
-        },
-      ],
+      points: [{ name: 'saved', references: {}, state: codec, resume: { deps: {}, run: () => assert.fail('retired continuation cannot run') } }],
     },
   };
-  const { runtime, store, events, contextId } = restore(definition, { round: 2, currentInput });
-  assert.equal(await runtime.resume(contextId, {}), 'resumed final');
-  assert.equal(resumes, 1);
-  assert.ok(events.every((event) => event.contextId === contextId && event.round === 2));
-  assert.deepEqual(
-    events.map((event) => event.kind),
-    ['started', 'delta', 'sealed', 'completed'],
-  );
-  assert.deepEqual(store.read(contextId).delivery.progress, { round: 2, currentInput, phase: 'receive' });
+  const { runtime, store, events, contextId, captures } = restore(definition, { round: 2 });
+  const saved = store.read(contextId);
+  await assert.rejects(runtime.resume(contextId, {}), /retired multi-round/);
+  assert.equal(captures(), 0);
+  assert.equal(events.length, 0);
+  assert.equal(store.read(contextId), saved);
+  assert.equal(runtime.running, false);
 });

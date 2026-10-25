@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { defineObservation } from '@capix/server-runtime';
 import { ObserverConversations, SqliteObserverStore, createObserverServer } from '@capix/observer-service';
 import { ObservationHttpTransport } from '@capix/client-http';
-import { withRuntimeDefinition, reconfigure } from '../fixtures/assembly.mjs';
+import { observeModelPending } from '../fixtures/model-observation.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 2000 };
 const output = (value) => ({ id: 'provider-feedback', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -18,10 +18,10 @@ function deferred() {
   });
   return { promise, resolve };
 }
-async function setup(t, provider, options = {}, configureDefinition) {
-  const conversations = new ObserverConversations(provider, [], options);
+async function setup(t, provider, options = {}, observations = []) {
+  const conversations = new ObserverConversations(provider, [], { ...options, observations });
   const id = conversations.list().defaultConversationId;
-  const observer = withRuntimeDefinition(configureDefinition, () => conversations.open(id));
+  const observer = conversations.open(id);
   const server = createObserverServer({ conversations, settings, configured: true });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -51,20 +51,7 @@ test('A1 and A2 link the same interaction; pending call return, live external fe
       },
     },
     {},
-    (_scene, { generation }) => {
-      const model = generation.requestModel;
-      reconfigure(model, {
-        observation: [
-          ...model.observation,
-          defineObservation({
-            deps: {},
-            observe(fact) {
-              if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'succeeded' && fact.change.result.output.kind === 'pending') pending.resolve();
-            },
-          }),
-        ],
-      });
-    },
+    [observeModelPending(() => pending.resolve())],
   );
   const running = observer.runner.run({ messages: [{ role: 'user', content: 'sensitive prompt never in metadata' }] }, { settings });
   // Avoid depending on network or provider timing: wait for the actual local A1 deadline fact.

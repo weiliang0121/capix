@@ -15,7 +15,7 @@ function selectionSnapshot(id, indexes) {
   const start = { id: `start-${operationId}`, parentId: operationId, scopeId: value.rootCall.id, callId: operationId, sequence: 3, offsetMs: 1, occurredAt: value.execution.value.startedAt, value: { type: 'call', scope: 'work' } };
   const end = { ...start, id: `end-${operationId}`, sequence: 4, offsetMs: 2, value: { type: 'return', scope: 'work' } };
   value.execution.childIds.push(operationId);
-  value.calls.push({ structureKind: 'group', id: operationId, parentId: id, contextId: `context-${operationId}`, executionId: id, operationInstanceId: `instance-${operationId}`, name: 'selection', label: '选择历史', source: '', caller: 'execution', callee: 'selection', status: 'succeeded', childIds: [start.id, end.id], value: { startedAt: value.execution.value.startedAt, input: {}, output: { historyIndexes: indexes }, processes: [], relationChanges: [] } });
+  value.calls.push({ structureKind: 'group', id: operationId, parentId: id, contextId: `context-${operationId}`, executionId: id, operationInstanceId: `instance-${operationId}`, name: 'selection', label: '选择历史', source: '', caller: 'execution', status: 'succeeded', childIds: [start.id, end.id], value: { startedAt: value.execution.value.startedAt, input: {}, output: { historyIndexes: indexes }, processes: [], relationChanges: [] } });
   value.boundaries.push(start, end);
   return value;
 }

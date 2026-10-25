@@ -1,7 +1,6 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
-import { reconfigure } from '../fixtures/assembly.mjs';
 import { ActiveContent } from '@capix/observer-service';
-import { ModelInteractions, ModelSource } from '@capix/observer-service';
+import { ModelInteractions, ModelSource, modelRegenerationInput, modelOutputRejected } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationStructure } from '@capix/observer-service';
@@ -82,28 +81,27 @@ for (const [raw, code] of [
     assert.ok(repeated.messages.at(-1).content.includes(code));
     assert.equal(original.messages.length + 2, repeated.messages.length);
     const generation = f.generation();
-    assert.equal(generation.context.progress.round, 2);
+    assert.equal(generation.context.progress.round, 1);
     assert.deepEqual(
       generation.children.values().map((relation) => [relation.key, relation.round]),
       [
         ['context', 1],
         ['request', 1],
-        ['model', 1],
-        ['acceptance', 1],
-        ['request', 2],
-        ['model', 2],
-        ['acceptance', 2],
+        ['candidate', 1],
+        ['regeneration', 1],
+        ['candidate', 1],
       ],
     );
-    const rejected = generation.children.values()[3];
+    const rejected = generation.children.values()[2];
     assert.equal(rejected.returned.error.code, 'MODEL_OUTPUT_REJECTED');
     assert.equal(rejected.returned.error.facts.code, code);
     assert.equal(rejected.returned.error.cause.code, code);
     assert.equal(rejected.invocation.view.failure.kind, 'exception');
     assert.equal(rejected.invocation.context.status, 'failed');
-    assert.equal(f.recordFor(generation).value.processes.filter((process) => process.type === 'continue').length, 1);
-    assert.ok(f.recordFor(generation).value.processes.some((process) => process.round === 2));
-    const previous = generation.children.values()[2];
+    assert.equal(f.recordFor(generation).value.processes.filter((process) => process.type === 'continue').length, 0);
+    assert.equal(rejected.reception.status, 'handled');
+    assert.notEqual(rejected.invocation.context.id, generation.children.values()[4].invocation.context.id);
+    const previous = rejected.invocation.children.values()[0];
     assert.equal(previous.returned.output.content, raw);
     assert.equal(f.recordFor(previous.invocation).value.input.messages.length, original.messages.length);
   });
@@ -111,7 +109,7 @@ for (const [raw, code] of [
 
 test('second invalid response stops with its original error and leaves both failed acceptances', async () => {
   const f = fixture([output('bad first'), output('bad second')]);
-  await assert.rejects(f.run(), (error) => error.code === 'UNHANDLED_EXCEPTION' && error.cause.facts.code === 'INVALID_JSON');
+  await assert.rejects(f.run(), (error) => error.code === 'MODEL_OUTPUT_REJECTED' && error.facts.code === 'INVALID_JSON');
   assert.deepEqual(
     f.calls.map((call) => call.purpose),
     ['answer', 'answer'],
@@ -119,9 +117,9 @@ test('second invalid response stops with its original error and leaves both fail
   assert.equal(f.transcript.length, 1);
   const generation = f.generation();
   const children = generation.children.values();
-  assert.equal(children[3].invocation.context.status, 'failed');
-  assert.equal(children[6].invocation.context.status, 'failed');
-  assert.equal(generation.context.state.error, children[6].returned.error);
+  assert.equal(children[2].invocation.context.status, 'failed');
+  assert.equal(children[4].invocation.context.status, 'failed');
+  assert.equal(generation.context.state.error, children[4].returned.error);
   assert.equal(generation.context.state.error.facts.code, 'INVALID_JSON');
 });
 
@@ -160,9 +158,9 @@ test('feedback capacity overflow stops before a second external call without tru
     ['answer'],
   );
   const children = f.generation().children.values();
-  assert.equal(children.at(-1).key, 'request');
-  assert.equal(children.at(-1).round, 2);
-  assert.equal(children[2].returned.output.content.length, 15000);
+  assert.equal(children.at(-1).key, 'regeneration');
+  assert.equal(children.at(-1).round, 1);
+  assert.equal(children[2].invocation.children.values()[0].returned.output.content.length, 15000);
 });
 
 test('regeneration works without records and keeps per-call evidence isolated', async () => {
@@ -174,7 +172,7 @@ test('regeneration works without records and keeps per-call evidence isolated', 
   assert.deepEqual(await f.run(), answer);
   assert.equal(f.generation().context.progress.round, 1);
   assert.notEqual(first, f.generation());
-  assert.equal(first.children.values().length, 7);
+  assert.equal(first.children.values().length, 5);
 });
 
 test('record failure cannot be classified as an output rejection or trigger a second request', async (t) => {
@@ -192,58 +190,27 @@ test('record failure cannot be classified as an output rejection or trigger a se
   assert.equal(f.generation().context.progress.round, 1);
 });
 
-test('regeneration declaration rejects invalid evidence and missing feedback before constructing a child', async (t) => {
-  let checked = false;
-  const f = fixture([output('bad'), output(JSON.stringify(answer))], {
-    configureDefinition(definition) {
-      const behavior = definition.generation;
-      const handle = behavior.exceptions.handle;
-      const capability = behavior.requestModel.regeneration;
-      assert.equal(capability.declaration.maxAdditionalCalls, 1);
-      assert.deepEqual(capability.declaration.rejectionCodes, ['INVALID_JSON', 'EMPTY_OUTPUT', 'OUTPUT_SHAPE']);
-      reconfigure(behavior, {
-        exceptions: {
-          ...behavior.exceptions,
-          handle(work) {
-            const children = work.children.facts.values();
-            const facts = { round: work.round, continuation: work.continuation, children: work.children.facts };
-            const evidence = { previous: children[2].ref, rejection: children[3].ref };
-            const invalid = { previous: children[1].ref, rejection: children[3].ref };
-            assert.equal(capability.allows(facts, evidence), true);
-            assert.equal(capability.allows(facts, invalid), false);
-            // Pure declaration contract checks do not invoke a formal child endpoint.
-            assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[0].request, evidence: invalid }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
-            assert.throws(() => capability.entry.accept({ facts, input: { request: f.calls[0].request, evidence }, key: 'model' }), { code: 'MODEL_REGENERATION_NOT_ALLOWED' });
-            assert.equal(work.children.facts.values().length, 4);
-            checked = true;
-            return handle(work);
-          },
-        },
-      });
-    },
-  });
-  assert.deepEqual(await f.run(), answer);
-  assert.equal(checked, true);
+test('regeneration policy admits only complete model-output validation failures', () => {
+  const request = { model: 'fixture', messages: [], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 256, stream: true };
+  const response = output('bad');
+  const allowed = modelOutputRejected.create('invalid', { code: 'INVALID_JSON', output: response });
+  assert.deepEqual(modelRegenerationInput(request, allowed), { request, output: response, error: { code: 'INVALID_JSON', message: 'invalid' } });
+  assert.equal(modelRegenerationInput(request, new RuntimeError('INVALID_JSON', 'unrelated')), undefined);
+  assert.equal(modelRegenerationInput(request, modelOutputRejected.create('partial', { code: 'INVALID_JSON', output: output('partial', 'length') })), undefined);
+  assert.equal(modelRegenerationInput(request, modelOutputRejected.create('other', { code: 'NETWORK_ERROR', output: response })), undefined);
 });
 
-test('parent may decline an eligible regeneration without changing child capability', async (t) => {
+test('a business run can consume a single candidate without enabling regeneration', async () => {
   const f = fixture([output('bad')], {
-    configureDefinition(definition) {
-      const behavior = definition.generation;
-      reconfigure(behavior, {
-        exceptions: {
-          ...behavior.exceptions,
-          handle(work) {
-            const children = work.children.facts.values();
-            const facts = { round: work.round, continuation: work.continuation, children: work.children.facts };
-            assert.equal(behavior.requestModel.regeneration.allows(facts, { previous: children[2].ref, rejection: children[3].ref }), true);
-            return work.unhandled;
-          },
-        },
-      });
+    configureDefinition({ generation }) {
+      generation.run = async (work) => {
+        const context = await work.children.invoke(generation.assembleContext, work.input.context);
+        const request = await work.children.invoke(generation.prepareRequest, { ...context, memories: work.input.memories });
+        return work.children.invoke(generation.candidate, request);
+      };
     },
   });
-  await assert.rejects(f.run(), (error) => error.code === 'UNHANDLED_EXCEPTION' && error.cause.facts.code === 'INVALID_JSON');
+  await assert.rejects(f.run(), (error) => error.code === 'MODEL_OUTPUT_REJECTED' && error.facts.code === 'INVALID_JSON');
   assert.deepEqual(
     f.calls.map((call) => call.purpose),
     ['answer'],

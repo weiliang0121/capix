@@ -6,7 +6,7 @@ import { observeCall } from '../fixtures/observation.mjs';
 
 function call(controller, execute, extra = {}) {
   const { work, ...options } = extra;
-  return new Invocation({ context: new InvocationContext(null), signal: controller.signal, work: { maxRounds: 1, execute, ...work }, ...options });
+  return new Invocation({ context: new InvocationContext(null), signal: controller.signal, work: { execute, ...work }, ...options });
 }
 
 test('cancellation identity belongs to the exact control signal, never a code or nested cause', () => {
@@ -55,32 +55,23 @@ test('an already owned failure cannot be replaced by a later cancelled result', 
   assert.equal(invocation.failure.error, fault);
 });
 
-test('abort before normal acceptance stops acceptance without erasing the returned output', async () => {
+test('abort after business return preserves the candidate and prevents final delivery', async () => {
   const controller = new AbortController();
-  let accepted = 0;
-  const invocation = call(
-    controller,
-    () => {
-      controller.abort();
-      return 'returned';
-    },
-    { work: { accept: () => accepted++ } },
-  );
+  const invocation = call(controller, () => {
+    controller.abort();
+    return 'returned';
+  });
   await assert.rejects(invocation.run(), (error) => isInvocationCancelled(error, controller.signal));
-  assert.equal(accepted, 0);
   assert.equal(invocation.context.progress.result.output, 'returned');
   assert.equal(invocation.context.state.error, invocation.failure.error);
 });
 
-test('cancellation does not retroactively change a completed acceptance', async () => {
+test('cancellation after terminal completion cannot rewrite the successful outcome', async () => {
   const controller = new AbortController();
   const invocation = call(controller, () => 'result', {
-    work: {
-      accept: (_context, output) => {
-        controller.abort();
-        return output;
-      },
-    },
+    observation: observeCall((fact) => {
+      if (fact.kind === 'finished') controller.abort();
+    }),
   });
   assert.equal(await invocation.run(), 'result');
   assert.equal(invocation.context.status, 'succeeded');
@@ -97,25 +88,14 @@ test('strict failure while reporting cancellation remains a composite failure', 
   assert.equal(isInvocationCancelled(invocation.context.state.error, controller.signal), true);
 });
 
-test('cancellation from a process observer stops execution or handling before business work', async () => {
-  for (const stage of ['execute', 'handling']) {
-    const controller = new AbortController();
-    const rejected = new ExceptionContract('TEST_REJECTED');
-    const invocation = call(
-      controller,
-      () => {
-        if (stage === 'execute') assert.fail('execution must not start');
-        throw rejected.create('test', {});
-      },
-      {
-        work: { raises: [rejected], exceptions: { accepts: [rejected], handle: () => assert.fail('handling must not start') } },
-        observation: observeCall((fact) => {
-          if (fact.kind === 'process' && fact.process.stage === stage && fact.process.type === 'start') controller.abort();
-        }),
-      },
-    );
-    await assert.rejects(invocation.run(), (error) => isInvocationCancelled(error, controller.signal));
-  }
+test('cancellation from the entry process observer prevents business work', async () => {
+  const controller = new AbortController();
+  const invocation = call(controller, () => assert.fail('must not execute'), {
+    observation: observeCall((fact) => {
+      if (fact.kind === 'process' && fact.process.type === 'start') controller.abort();
+    }),
+  });
+  await assert.rejects(invocation.run(), (error) => isInvocationCancelled(error, controller.signal));
 });
 
 test('cancellation from resource start observation prevents synchronous and asynchronous effects', async () => {
@@ -154,7 +134,6 @@ class Main extends Scene {
     super();
     this.add(...children);
     this.deps = deps;
-    this.uses = children;
     this.run = execute;
   }
 }

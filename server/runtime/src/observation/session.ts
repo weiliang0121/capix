@@ -8,15 +8,20 @@ export class ObserverSession<Observer extends { available?(): boolean } = Invoca
     readonly observer: Observer,
     readonly failure: 'isolate' | 'propagate',
     private readonly invalidated?: (error: unknown) => void,
+    private readonly parent?: ObserverSession,
   ) {}
+  available(): boolean {
+    return this.active && this.parent?.available() !== false && this.observer.available?.() !== false;
+  }
   stop(error: unknown): void {
+    if (!this.active) return;
     this.active = false;
     this.invalidated?.(error);
   }
   publish(work: (observer: Observer) => unknown): unknown | undefined {
     if (!this.active) return undefined;
     try {
-      if (this.observer.available?.() === false) {
+      if (!this.available()) {
         this.active = false;
         return undefined;
       }

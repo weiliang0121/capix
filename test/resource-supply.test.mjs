@@ -5,13 +5,13 @@ import { Group, Node, ResourceOffer, bindResources, bindChildResources, bindCall
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {
-  return new Node({ name, label: name, source: 'test', callee: 'test', deps: run.deps, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) });
+  return new Node({ name, label: name, source: 'test', deps: run.deps, run: run.execute.bind(run) });
 }
 function operation(name, children, run) {
-  return new Group({ name, label: name, source: 'test', deps: run.deps, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) }).add(...children);
+  return new Group({ name, label: name, source: 'test', deps: run.deps, run: run.execute.bind(run) }).add(...children);
 }
 function execution(children, run) {
-  return new Group({ deps: run.deps, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) }).add(...children);
+  return new Group({ deps: run.deps, run: run.execute.bind(run) }).add(...children);
 }
 
 // Offer identities, local aliases, resource captures and business access are separate boundaries.
@@ -152,7 +152,7 @@ test('R and E keep independent capture sources even when they use the same offer
 test('observation-only supplies never satisfy a business descendant requirement', async () => {
   const offer = new ResourceOffer({ name: 'supply.observer-only', expose: (value) => value });
   const leaf = attempt('leaf', { deps: {}, execute: () => 'ok' });
-  leaf.observation = [
+  const observation = [
     {
       deps: { value: offer.request() },
       observe(_fact, resources) {
@@ -167,6 +167,7 @@ test('observation-only supplies never satisfy a business descendant requirement'
     source: { capture: () => null },
     observations: [
       {
+        declarations: (structure) => (structure === leaf ? observation : []),
         provides: { value: offer.request() },
         bindInvocation() {
           return { observe() {}, resources: bindResources({ value: offer.request() }, [offer.provide(() => 'observer')])(null) };

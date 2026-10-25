@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import { Group, RuntimeError, reception, checkpointPoint, childReference, type GroupWork, type ResumeWork, type ChildContract, type ChildrenOf, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@capix/server-runtime';
 import { isEqual } from 'es-toolkit';
 import type { GenerationOutput, ConversationTask } from '@capix/protocol';
@@ -7,8 +6,6 @@ import { conversationTaskRequests, type ConversationTaskResources } from './reso
 import { prepareMemoryInput } from './group/memory/input.js';
 import type { PrepareConversationContext, PreparedConversationContext } from './group/context/prepare.js';
 import type { MaintainConversationContent } from './group/context/maintain.js';
-import type { ActiveContentSnapshot } from './content/active.js';
-import { describeActiveContent, describePreparedConversationContext } from './content/observation.js';
 import type { ExtractMemory } from './group/memory/extract.js';
 import { type AcceptedConversationInput } from './accept.js';
 import type { GenerateAnswer } from './group/answer/generate.js';
@@ -19,7 +16,7 @@ import type { CheckFileTask } from './group/preflight/check.js';
 import { modelTextSchema } from './model/schema.js';
 import type { ConversationDecisionGroup } from './decision/types.js';
 import { acceptConversationDecision, conversationCapability, reviseDecision, type ConversationCapability, type ConversationCapabilityCall } from './decision/capability.js';
-import { checkpointCodec, decisionAcceptanceSchema, executionProgressSchema, acceptedCheckpointInput, conversationCheckpointOutput, executionWaitingState, executionDecisionState, executionCapabilityState, executionAcceptedState, type ExecutionProgress, type ExecutionContinuation, type ExecutionWaitingState, type ExecutionDecisionState, type ExecutionCapabilityState, type DecisionAcceptance } from './checkpoint.js';
+import { checkpointCodec, decisionAcceptanceSchema, executionProgressSchema, acceptedCheckpointInput, conversationCheckpointOutput, executionWaitingState, executionDecisionState, executionCapabilityState, executionAcceptedState, type ExecutionProgress, type ExecutionContinuation, type ExecutionWaitingState, type ExecutionDecisionState, type ExecutionCapabilityState } from './checkpoint.js';
 
 export interface ConversationCapabilities {
   readonly preparation: PrepareConversationContext;
@@ -41,7 +38,7 @@ const output = z.strictObject({ path });
 const fileArguments = z.strictObject({ task: z.union([z.strictObject({ sourcePath: path, output: output.optional() }), z.strictObject({ output })]), instruction: modelTextSchema });
 
 /** Compose one conversation request from accepted decisions and child deliveries. */
-export class ConversationGroup extends Group<AcceptedConversationInput, GenerationOutput, ConversationTaskResources, Record<string, never>, AnswerProgress> {
+export class ConversationGroup extends Group<AcceptedConversationInput, GenerationOutput, ConversationTaskResources, AnswerProgress> {
   readonly decisionReception;
   readonly maxDecisionSteps: number;
 
@@ -201,27 +198,12 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
         })
       : undefined;
 
-    this.setDefinition({
-      name: 'conversationTask',
-      label: '本次对话任务',
-      output: { result: answerStream.result, delta: (value: unknown) => value as AnswerProgress },
-      observation: [
-        invocationRecording<AcceptedConversationInput, GenerationOutput>({
-          role: 'conversation-task',
-          input: ({ message, fileTask }) => ({ ...message, ...(fileTask ? { fileTask } : {}) }),
-          relationAccepted: (output, relation) => {
-            if (relation.key === 'preparation') return describePreparedConversationContext(output as PreparedConversationContext);
-            if (relation.key === 'maintenance') return describeActiveContent(output as ActiveContentSnapshot);
-            return output;
-          },
-        }),
-      ],
-      deps: conversationTaskRequests,
-      uses: this.members,
-      run: this.execute.bind(this),
-      receptions: [this.decisionReception],
-      checkpoint: { key: 'observer.conversation.task', version: 6, input: acceptedCheckpointInput, output: conversationCheckpointOutput, points: [this.preparationWaiting, this.preparationAccepted, this.decisionWaiting, this.decisionAccepted, ...this.capabilityWaiting.values(), ...this.capabilityAccepted.values(), this.extractionWaiting, this.completed, ...(this.maintenanceWaiting ? [this.maintenanceWaiting] : []), ...(this.maintenanceCompleted ? [this.maintenanceCompleted] : [])] },
-    });
+    this.name = 'conversationTask';
+    this.label = '本次对话任务';
+    this.output = { result: answerStream.result, delta: (value: unknown) => value as AnswerProgress };
+    this.deps = conversationTaskRequests;
+    this.run = this.execute.bind(this);
+    this.checkpoint = { receptions: [this.decisionReception], key: 'observer.conversation.task', version: 7, input: acceptedCheckpointInput, output: conversationCheckpointOutput, points: [this.preparationWaiting, this.preparationAccepted, this.decisionWaiting, this.decisionAccepted, ...this.capabilityWaiting.values(), ...this.capabilityAccepted.values(), this.extractionWaiting, this.completed, ...(this.maintenanceWaiting ? [this.maintenanceWaiting] : []), ...(this.maintenanceCompleted ? [this.maintenanceCompleted] : [])] };
   }
 
   private async execute(work: Work): Promise<GenerationOutput> {
@@ -231,10 +213,13 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
   }
 
   private async receivePreparation(work: Work, child: ChildCall<PrepareConversationContext>): Promise<GenerationOutput> {
-    await child.run();
-    const prepared = await child.accept((delivered) => {
-      work.resources.selectionUsage.add(delivered.context.selectedMessages);
-      return delivered;
+    const prepared = await child.invoke({
+      result: {
+        succeeded: (delivered) => {
+          work.resources.selectionUsage.add(delivered.context.selectedMessages);
+          return delivered;
+        },
+      },
     });
     const state = { prepared, progress: {}, step: 0, checkedCandidates: [] };
     work.checkpoint?.({ point: this.preparationAccepted, state: state, refs: { active: child.ref } });
@@ -261,23 +246,27 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
   }
 
   private async receiveDecision(work: Work, state: ExecutionWaitingState, child: ChildCall<ConversationDecisionGroup>): Promise<GenerationOutput> {
-    await child.run();
     const capabilities = this.catalog(work, state.prepared);
-    const accepted = await child.accept(this.decisionReception, (delivered) => {
-      const checked = new Set(state.checkedCandidates);
-      let progress = state.progress;
-      let choice = acceptConversationDecision(delivered, capabilities, progress, (conclusion) => (conclusion.kind === 'settled' ? Boolean(progress.answer && (!progress.file?.task.output || progress.answer.kind !== 'answer' || progress.saved)) : !progress.answer));
-      if (choice.kind === 'invoke' && choice.capability === 'checkFile') {
-        const signature = JSON.stringify(fileArguments.parse(choice.arguments));
-        if (checked.has(signature)) choice = reviseDecision('REPEATED_CANDIDATE', '该文件候选已检查过，请使用已有反馈修改候选或提出具体问题，不重复检查相同候选。');
-        else checked.add(signature);
-      }
-      if (choice.kind === 'finish' && choice.conclusion.kind !== 'settled') {
-        const answer: GenerationOutput = choice.conclusion.kind === 'clarify' ? { kind: 'needs-info', content: choice.conclusion.question } : { kind: 'unknown', content: choice.conclusion.explanation };
-        work.resources.tasks.select({ kind: choice.conclusion.kind });
-        progress = { ...progress, ...this.appendAnswer(work, answer, work.children.facts.get(child.ref).order) };
-      }
-      return { choice, progress, checkedCandidates: [...checked] };
+    const accepted = await child.invoke({
+      reception: this.decisionReception,
+      result: {
+        succeeded: (delivered) => {
+          const checked = new Set(state.checkedCandidates);
+          let progress = state.progress;
+          let choice = acceptConversationDecision(delivered, capabilities, progress, (conclusion) => (conclusion.kind === 'settled' ? Boolean(progress.answer && (!progress.file?.task.output || progress.answer.kind !== 'answer' || progress.saved)) : !progress.answer));
+          if (choice.kind === 'invoke' && choice.capability === 'checkFile') {
+            const signature = JSON.stringify(fileArguments.parse(choice.arguments));
+            if (checked.has(signature)) choice = reviseDecision('REPEATED_CANDIDATE', '该文件候选已检查过，请使用已有反馈修改候选或提出具体问题，不重复检查相同候选。');
+            else checked.add(signature);
+          }
+          if (choice.kind === 'finish' && choice.conclusion.kind !== 'settled') {
+            const answer: GenerationOutput = choice.conclusion.kind === 'clarify' ? { kind: 'needs-info', content: choice.conclusion.question } : { kind: 'unknown', content: choice.conclusion.explanation };
+            work.resources.tasks.select({ kind: choice.conclusion.kind });
+            progress = { ...progress, ...this.appendAnswer(work, answer, work.children.facts.get(child.ref).order) };
+          }
+          return { choice, progress, checkedCandidates: [...checked] };
+        },
+      },
     });
     const next: ExecutionDecisionState = { ...state, ...accepted };
     work.checkpoint?.({ point: this.decisionAccepted, state: next, refs: { active: child.ref } });
@@ -302,16 +291,14 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
   }
 
   private async receiveCapability(work: Work, state: ExecutionCapabilityState, child: ConversationCapabilityCall, capability = this.catalog(work, state.prepared).get(state.capability)!): Promise<GenerationOutput> {
-    await child.run();
-    const progress = await capability.accept(child, state.progress);
+    const progress = await capability.receive(child, state.progress);
     const next = { prepared: state.prepared, progress, step: state.step + 1, checkedCandidates: state.checkedCandidates };
     work.checkpoint?.({ point: this.capabilityAccepted.get(state.capability)!, state: next, refs: { active: child.ref } });
     return this.advance(work, next);
   }
 
   private async receiveExtraction(work: Work, state: ExecutionWaitingState, child: ChildCall<ExtractMemory>): Promise<GenerationOutput> {
-    await child.run();
-    await child.accept((delivered) => delivered);
+    await child.invoke({ result: { succeeded: (delivered) => delivered } });
     work.checkpoint?.({ point: this.completed, state: state, refs: { active: child.ref } });
     return this.finishContent(work, state);
   }
@@ -326,8 +313,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
   }
 
   private async receiveMaintenance(work: Work, state: ExecutionContinuation, child: ChildCall<MaintainConversationContent>): Promise<GenerationOutput> {
-    await child.run();
-    await child.accept();
+    await child.invoke();
     work.checkpoint?.({ point: this.maintenanceCompleted!, state: state, refs: { active: child.ref } });
     return state.progress.answer!;
   }
@@ -384,11 +370,18 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
         create: (value: unknown, state: ExecutionProgress) => {
           emptyArguments.parse(value);
           selectTask(state);
-          return work.children.create(definitions.generation, input(state), { key: 'generation', output: { receive: receiveGeneration } });
+          return work.children.create(definitions.generation, input(state), {
+            key: 'generation',
+            output: {
+              receive: (event) => {
+                if (event.kind === 'delta') receiveGeneration(event.delta);
+              },
+            },
+          });
         },
-        accept: (child, state) => {
+        receive: (child, state) => {
           const fact = work.children.facts.require(definitions.generation, child.ref);
-          return work.children.open(fact.ref).accept((answer) => receiveAnswer(answer, state, 'answer', fact.order));
+          return work.children.open(fact.ref).invoke({ result: { succeeded: (answer) => receiveAnswer(answer, state, 'answer', fact.order) } });
         },
       },
     ];
@@ -472,7 +465,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
     if (child.key !== 'decision' || child.returned?.status !== 'succeeded' || child.reception.status !== 'accepted' || !isEqual(facts.children.accepted(decided.ref, this.decisionReception).choice, { kind: 'finish', conclusion: { kind: 'settled' } })) throw new Error('Memory continuation requires the accepted settled decision');
   }
 
-  private checkCapabilityInput(facts: Facts, state: ExecutionCapabilityState, actual: unknown): void {
+  private checkCapabilityInput(_facts: Facts, state: ExecutionCapabilityState, actual: unknown): void {
     const progress = state.progress;
     const generation = { context: state.prepared.context, memories: state.prepared.material.memories, ...(progress.file ? { task: { fileTask: progress.file.task, instruction: progress.file.instruction } } : {}) };
     let expected: unknown;

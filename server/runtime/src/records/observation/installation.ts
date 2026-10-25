@@ -5,8 +5,9 @@ import { ObservationError } from '../../observation/error.js';
 import type { EventConsumer, InvocationObserver } from '../../observation/observer.js';
 import type { Recorder } from '../recorder.js';
 import { RecordingRootHelper } from '../root/helper.js';
-import { checkRecordingDeclaration } from './check.js';
-import { InvocationRecordAccess } from './declaration.js';
+import { InvocationRecordAccess, invocationRecording, type InvocationRecordDescription } from './declaration.js';
+import type { CallableInput, CallableOutput } from '../../definition/signature.js';
+import { assertStructureConfigurable } from '../../structure/configuration.js';
 import { InvocationRecording } from './invocation.js';
 import { memoryRecord, transcriptRecord } from './mapping.js';
 
@@ -17,6 +18,7 @@ export interface RecordingOptions {
 
 /** One optional record installation. Shared output does not share per-call state. */
 export class RecordingInstallation implements ObservationInstallation {
+  readonly #descriptions = new WeakMap<object, InvocationRecordDescription>();
   readonly root;
   readonly provides = Object.freeze({ record: InvocationRecordAccess.request() });
   readonly transcript: EventConsumer<TranscriptEvent> = this.consumer((event) => this.recorder.add(transcriptRecord(event)));
@@ -29,8 +31,15 @@ export class RecordingInstallation implements ObservationInstallation {
     this.root = RecordingRootHelper.create(recorder);
     this.failure = options.failure ?? 'isolate';
   }
-  check(definition: ObservationDeclarationScope, parent?: ObservationDeclarationScope): void {
-    checkRecordingDeclaration(definition, parent, InvocationRecordAccess.request().offer);
+  describe<Structure extends ObservationDeclarationScope>(structure: Structure, description: InvocationRecordDescription<CallableInput<Structure>, CallableOutput<Structure>>): this {
+    assertStructureConfigurable(structure);
+    if (this.#descriptions.has(structure)) throw new Error('Recording description is already registered for this structure');
+    // Only the heterogeneous installation erases the already checked callable signature.
+    this.#descriptions.set(structure, description as InvocationRecordDescription);
+    return this;
+  }
+  declarations(structure: ObservationDeclarationScope) {
+    return [invocationRecording(this.#descriptions.get(structure))];
   }
   bindInvocation(setup: InvocationObservationSetup, parent?: InvocationObserver): InvocationRecording {
     if (parent && !(parent instanceof InvocationRecording)) throw new Error('Recording parent belongs to another observation capability');

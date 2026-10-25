@@ -78,7 +78,6 @@ childBuilder.build(parentCall, { validate: () => parentCall.requireActive() });
 type ExecutionResources = { label: string };
 type CallContext = CallableContext<string, number, ExecutionResources>;
 const work: InvocationOptions<string, number, CallContext>['work'] = {
-  maxRounds: 1,
   execute(context, invocation) {
     const label: string = context.resources.values.label;
     const input: string = invocation.context.currentInput;

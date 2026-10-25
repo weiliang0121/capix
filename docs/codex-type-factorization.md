@@ -1,5 +1,7 @@
 # CAPiX 实现空间、候选维度与类型表达（Codex 讨论结果 v4）
 
+> **2026-10-25 历史材料声明：** 本文保留当时推演和实施记录，不是当前作者 API。统一操作模型已删除 setter、普通 accept/exceptions/raises/maxRounds/uses/observation 与旧两轮解释器；当前契约以 [可调用结构](callable-structures.md)、[操作失败](exceptions.md)、[Checkpoint](checkpoints.md) 及 [全仓迁移](callable-operation-migration.md) 为准。下文旧版本状态只表示当时完成度，不构成兼容承诺。
+
 > **2026-10-20 结构迁移：** 当前采用 Scene / Group / Node 及共同 Callable / Composite，旧 REOA 名称和位置表在本文保留为设计讨论历史。已实施契约以 [可调用结构](callable-structures.md)、[运行边界](runtime-boundaries.md) 为准。资源捕获按明确声明绑定，内核不再设 E 专属接线；Checkpoint 使用 Frame v4。
 
 > 状态：P02「entry 与 R/E 输入边界」及 P03/P04「结构、调用、能力与 Work」的窄闭环已实施，结果与限制分别见 §14 / §15；2026-10-19 的候选收敛与契约类型收尾见 §16，后续 P06 受限类型整理见 §19。概念讨论和 Fable 审查保留在 §12 / §13。其余前置问题继续开放，不整体启动原类型因式分解批次；§5 的历史源码证据基线仍为 `894fddf`。

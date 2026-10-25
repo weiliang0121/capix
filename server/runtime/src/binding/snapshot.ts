@@ -1,20 +1,19 @@
-import type { CallableDescription, CallableRunDefinition, InvocationExceptionDefinition, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
+import type { CallableDescription, CallableRun, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
 import type { ObservationDeclaration } from '../definition/observation.js';
 import type { CallableKind } from '@capix/protocol';
 import type { CheckpointCodec } from '../checkpoint/contract.js';
-import type { ReceptionDefinition } from '../definition/reception.js';
+import type { ReceptionDefinition, DefinitionReceptions } from '../definition/reception.js';
 import type { ChildContract, ChildCallable } from '../definition/children.js';
-import type { ExceptionContract } from '../exception/contract.js';
+import type { ResourceRequirements } from '../resource/bindings.js';
 import type { NamedMembers } from '../definition/composition.js';
 import { checkMemberName } from '../structure/members.js';
 import type { AnyCallable } from './declarations.js';
 
 /** Fixed execution configuration. It has no author setters or callable identity. */
-export interface CallableSnapshot<Input = any, Output = any, Kind extends CallableKind = any, Resources extends object = any, ExceptionResources extends object = any, Delta = any> extends Omit<CallableDescription<Input, Output, Kind, Delta>, 'kind' | 'members'>, CallableRunDefinition<Input, Output, Kind, Resources, Delta> {
+export interface CallableSnapshot<Input = any, Output = any, Kind extends CallableKind = any, Resources extends object = any, Delta = any> extends Omit<CallableDescription<Input, Output, Kind, Delta>, 'kind' | 'members'> {
   readonly kind: Kind;
-  readonly maxRounds: 1 | 2;
-  readonly raises: readonly ExceptionContract<unknown>[];
-  readonly exceptions?: InvocationExceptionDefinition<Input, Output, Kind, ExceptionResources>;
+  readonly deps: ResourceRequirements<Resources>;
+  readonly run: CallableRun<Input, Output, Kind, Resources, import('../definition/children.js').ChildContractsOf<Kind>, Delta>;
   readonly members?: readonly ChildCallable[];
   readonly names?: NamedMembers;
 }
@@ -29,28 +28,22 @@ export function snapshotDefinition(definition: AnyCallable): CallableSnapshot {
     if (!members?.includes(member)) throw new Error('Named member is outside its owner');
   }
   if (definition.kind === 'node' && members !== undefined) throw new Error('Nodes cannot declare members');
-  if (definition.kind === 'node' && definition.receptions !== undefined) throw new Error('Nodes cannot declare receptions');
+  if (definition.kind === 'node' && definition.checkpoint?.receptions !== undefined) throw new Error('Nodes cannot declare checkpoint receptions');
+  for (const field of ['setRun', 'setDefinition', 'accept', 'exceptions', 'raises', 'maxRounds', 'uses', 'observation', 'callee', 'receptions']) {
+    if (field in definition) throw new Error(`Unsupported callable configuration field: ${field}`);
+  }
   const run = definition.run;
   if (typeof run !== 'function') throw new Error('Callable definition needs a run function');
-  const exceptions = definition.exceptions;
   const output = definition.output;
   return Object.freeze({
     kind: definition.kind,
     name: definition.name,
     label: definition.label,
     source: definition.source,
-    callee: definition.callee,
-    maxRounds: definition.maxRounds ?? 1,
-    raises: Object.freeze([...(definition.raises ?? [])]),
     output: output ? Object.freeze({ result: output.result.bind(output), delta: output.delta?.bind(output) }) : undefined,
     deps: Object.freeze({ ...definition.deps }),
-    uses: definition.uses ? Object.freeze([...definition.uses]) : undefined,
     run: run.bind(definition),
-    accept: definition.accept?.bind(definition),
-    exceptions: exceptions ? Object.freeze({ deps: Object.freeze({ ...exceptions.deps }), uses: exceptions.uses ? Object.freeze([...exceptions.uses]) : undefined, accepts: Object.freeze([...exceptions.accepts]), handle: exceptions.handle.bind(exceptions) }) : undefined,
-    observation: definition.observation ? Object.freeze(definition.observation.map(snapshotObservation)) : undefined,
     checkpoint: definition.checkpoint ? snapshotCheckpoint<any, any, any, any>(definition.checkpoint) : undefined,
-    receptions: definition.receptions ? Object.freeze(definition.receptions.map(snapshotReception)) : undefined,
     ...(members ? { members: Object.freeze([...members]), names: Object.freeze({ ...names }) } : {}),
   });
 }
@@ -70,8 +63,13 @@ function snapshotReception<Definition extends ChildContract, Value>(reception: R
   return fixed;
 }
 
-function snapshotObservation<Fact>(declaration: ObservationDeclaration<Fact>): ObservationDeclaration<Fact> {
+export function snapshotObservation<Fact>(declaration: ObservationDeclaration<Fact>): ObservationDeclaration<Fact> {
   return Object.freeze({ deps: Object.freeze({ ...declaration.deps }), failure: declaration.failure, observe: declaration.observe.bind(declaration) });
+}
+
+function snapshotReceptions<Kind extends CallableKind>(receptions: DefinitionReceptions<Kind>): DefinitionReceptions<Kind> {
+  // Mapping fixes codecs while retaining the same child identities and kind.
+  return Object.freeze(receptions.map(snapshotReception)) as DefinitionReceptions<Kind>;
 }
 
 function snapshotCodec<Value>(codec: CheckpointCodec<Value>): CheckpointCodec<Value> {
@@ -85,6 +83,7 @@ function snapshotCheckpoint<Input, Output, Kind extends CallableKind, Delta>(che
     input: snapshotCodec(checkpoint.input),
     output: snapshotCodec(checkpoint.output),
     points: Object.freeze(checkpoint.points.map(snapshotCheckpointPoint)),
+    receptions: checkpoint.receptions ? snapshotReceptions<Kind>(checkpoint.receptions) : undefined,
   });
 }
 

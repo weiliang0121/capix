@@ -227,7 +227,7 @@ test('assembly attempt consumes fixed input material and needs no recorder', asy
         input,
         deps: {},
         description: new TestOperation(runtime),
-        work: { maxRounds: 1, execute: (_context, invocation) => attempt.call(invocation, input) },
+        work: { execute: (_context, invocation) => attempt.call(invocation, input) },
       })
       .run(),
   );

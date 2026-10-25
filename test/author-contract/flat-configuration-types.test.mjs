@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { Driver, Node, defineNode, ExceptionContract } from '@capix/server-runtime';
+import { Driver, Node, defineNode } from '@capix/server-runtime';
 
 const entry = fileURLToPath(new URL('./types/flat-configuration.ts', import.meta.url));
 const source = readFileSync(entry, 'utf8');
@@ -18,7 +18,7 @@ function format(errors) {
   return ts.formatDiagnosticsWithColorAndContext(errors, { getCanonicalFileName: (file) => file, getCurrentDirectory: () => process.cwd(), getNewLine: () => '\n' });
 }
 
-test('flat callable configurations infer resources, phases, output and checkpoint ownership', () => {
+test('flat callable configurations infer resources, member operations, output and checkpoint ownership', () => {
   const errors = diagnostics(source);
   assert.equal(errors.length, 0, format(errors));
 });
@@ -33,7 +33,7 @@ test('flat callable counterexamples fail at their own author call sites', () => 
 
 const emptyBinding = { providers: [], source: { capture: () => null } };
 
-test('configuration, factory and setter callbacks keep their specified receivers', async () => {
+test('configuration, factory and assigned callbacks keep their specified receivers', async () => {
   const driver = new Driver();
   const configuration = {
     count: 0,
@@ -51,9 +51,9 @@ test('configuration, factory and setter callbacks keep their specified receivers
 
   const setter = new Node();
   setter.prefix = 'structure';
-  setter.setRun(function (work) {
+  setter.run = function (work) {
     return `${this.prefix}:${work.input}`;
-  });
+  };
   assert.equal(await driver.run(driver.build(setter, emptyBinding), 4, {}), 'structure:4');
 
   const receiver = {
@@ -63,7 +63,7 @@ test('configuration, factory and setter callbacks keep their specified receivers
     },
   };
   const explicit = new Node();
-  explicit.setRun(receiver.run.bind(receiver));
+  explicit.run = receiver.run.bind(receiver);
   assert.equal(await driver.run(driver.build(explicit, emptyBinding), 5, {}), 'external:5');
 
   const factoryConfiguration = {
@@ -77,30 +77,8 @@ test('configuration, factory and setter callbacks keep their specified receivers
   assert.equal(factoryConfiguration.count, 1);
 });
 
-test('flat configuration retains explicit continuation, declared exception handling and result identity', async () => {
+test('producer result validation preserves the actual successful reference', async () => {
   const driver = new Driver();
-  const continued = new Node({ maxRounds: 2, run: (work) => work.input * 2, accept: (work) => (work.round === 1 ? work.continue(work.input + 1, 'one retry') : work.delivered) });
-  assert.equal(await driver.run(driver.build(continued, emptyBinding), 3, {}), 8);
-
-  const failure = new ExceptionContract('flat.failure');
-  const exceptions = {
-    count: 0,
-    accepts: [failure],
-    handle(work) {
-      this.count++;
-      return work.return(`handled:${this.count}`);
-    },
-  };
-  const recovered = new Node({
-    raises: [failure],
-    run() {
-      throw failure.create('expected', null);
-    },
-    exceptions,
-  });
-  assert.equal(await driver.run(driver.build(recovered, emptyBinding), null, {}), 'handled:1');
-  assert.equal(exceptions.count, 1);
-
   const output = { value: 1 };
   const direct = new Node({
     output: {

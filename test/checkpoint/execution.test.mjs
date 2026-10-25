@@ -30,7 +30,7 @@ async function captureExecution(t, fileTask) {
   const definition = environment.structure.conversation;
   const resolved = resolveDeclaration(definition, {});
   const children = new BoundChildren(resolved.members, () => assert.fail('validation must not initialize children'));
-  const receptions = new BoundReceptions(resolved.declaration.receptions, children);
+  const receptions = new BoundReceptions(resolved.declaration.checkpoint.receptions, children);
   const check = (image) => {
     const point = definition.checkpoint.points.find((point) => point.name === image.point);
     const decoded = decodeCheckpointFrame(image.frame, definition.checkpoint, children.checkpointLayout(), receptions.bindings());

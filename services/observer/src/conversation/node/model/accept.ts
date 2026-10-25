@@ -1,7 +1,6 @@
 import { isEqual } from 'es-toolkit/predicate';
 import { checkLeafResult } from '../../group/checkpoint.js';
 import { modelOutputSchema } from '../../model/interactions.js';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import { modelOutputRejected } from '../../model/rejection.js';
 import { Node, checkpointPoint, cloneCheckpointValue, type CheckpointValue, type CheckpointCodec, type InvocationCheckpointPoint, type NodeWork, RuntimeError, isNonBlankString } from '@capix/server-runtime';
 
@@ -42,7 +41,12 @@ export class AcceptModelOutput<Input extends ModelAcceptanceInput, Output> exten
       resume: { deps: {}, run: (_work, result) => result },
     });
 
-    this.setDefinition({ checkpoint: { key: 'observer.accept-model-output', version: 1, input, output, points: [this.resultPoint] }, observation: [invocationRecording()], raises: [modelOutputRejected], deps: AcceptModelOutput.deps, run: this.execute.bind(this), name: 'acceptModelOutput', label: '接纳模型结果', source: 'services/observer/src/conversation/node/model/accept.ts · AcceptModelOutput', callee: 'processing' });
+    this.checkpoint = { key: 'observer.accept-model-output', version: 1, input, output, points: [this.resultPoint] };
+    this.deps = AcceptModelOutput.deps;
+    this.run = this.execute.bind(this);
+    this.name = 'acceptModelOutput';
+    this.label = '接纳模型结果';
+    this.source = 'services/observer/src/conversation/node/model/accept.ts · AcceptModelOutput';
   }
 
   private execute(work: NodeWork<Input, Output>): Output {

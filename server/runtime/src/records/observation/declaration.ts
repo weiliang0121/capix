@@ -33,12 +33,16 @@ export const InvocationRecordAccess = new ResourceOffer<InvocationRecording, Inv
 
 /** Call records are produced here, not by an implicit Invocation recording path. */
 export function invocationRecording<Input = unknown, Output = unknown>(description: InvocationRecordDescription<Input, Output> = {}, options: { failure?: 'isolate' | 'propagate' } = {}) {
+  const input = description.input?.bind(description);
+  const output = description.output?.bind(description);
+  const relationAccepted = description.relationAccepted?.bind(description);
+  const relationHandled = description.relationHandled?.bind(description);
   const mapped: InvocationRecordDescription = {
     ...(description.role !== undefined ? { role: description.role } : {}),
-    ...(description.input ? { input: (input: unknown) => description.input!(input as Input) } : {}),
-    ...(description.output ? { output: (output: unknown) => description.output!(output as Output) } : {}),
-    ...(description.relationAccepted ? { relationAccepted: description.relationAccepted } : {}),
-    ...(description.relationHandled ? { relationHandled: description.relationHandled } : {}),
+    ...(input ? { input: (value: unknown) => input(value as Input) } : {}),
+    ...(output ? { output: (value: unknown) => output(value as Output) } : {}),
+    ...(relationAccepted ? { relationAccepted } : {}),
+    ...(relationHandled ? { relationHandled } : {}),
   };
   return defineObservation<InvocationFact, { record: InvocationRecordWriter }>(
     {

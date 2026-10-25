@@ -1,10 +1,8 @@
 import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/server-runtime';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import type { ModelSettings } from '@capix/protocol';
 import { isEqual } from 'es-toolkit';
 import { ActiveContentResource, type ActiveContentManager } from '../../content/resource.js';
 import type { ActiveContentSnapshot } from '../../content/active.js';
-import { describeActiveContent } from '../../content/observation.js';
 import { ModelSettingsResource } from '../../model/resources.js';
 import { originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
 import { activeContentSnapshotCodec, contextMaintenanceRequestCodec, contextMaintenanceInputCodec, maintenanceAcceptedCodec, maintenanceCompletedCodec } from './checkpoint.js';
@@ -82,7 +80,12 @@ export class MaintainConversationContent extends Group<ContextMaintenanceRequest
       resume: { run: (_work, state) => state.material },
     });
 
-    this.setDefinition({ name: 'maintainContext', label: '维护活跃材料', source: 'services/observer/src/conversation/group/context/maintain.ts · MaintainConversationContent', observation: [invocationRecording<ContextMaintenanceRequest, ActiveContentSnapshot>({ output: describeActiveContent })], deps, uses: this.members, run: this.execute.bind(this), checkpoint: { key: 'observer.maintain-context', version: 1, input: contextMaintenanceRequestCodec, output: activeContentSnapshotCodec, points: this.waiting ? [this.waiting, this.accepted, this.completed] : [this.accepted, this.completed] } });
+    this.name = 'maintainContext';
+    this.label = '维护活跃材料';
+    this.source = 'services/observer/src/conversation/group/context/maintain.ts · MaintainConversationContent';
+    this.deps = deps;
+    this.run = this.execute.bind(this);
+    this.checkpoint = { key: 'observer.maintain-context', version: 1, input: contextMaintenanceRequestCodec, output: activeContentSnapshotCodec, points: this.waiting ? [this.waiting, this.accepted, this.completed] : [this.accepted, this.completed] };
   }
 
   private async execute(work: MaintenanceWork): Promise<ActiveContentSnapshot> {
@@ -94,8 +97,7 @@ export class MaintainConversationContent extends Group<ContextMaintenanceRequest
   }
 
   private async receive(work: MaintenanceWork, child: ChildCall<ContextMaintenanceOperation>, input: ContextMaintenanceInput): Promise<ActiveContentSnapshot> {
-    await child.run();
-    const decision = await child.accept((output) => activeContentSelectionSchema.parse(output));
+    const decision = await child.invoke({ result: { succeeded: (output) => activeContentSelectionSchema.parse(output) } });
     return this.acceptDecision(work, input, decision);
   }
 

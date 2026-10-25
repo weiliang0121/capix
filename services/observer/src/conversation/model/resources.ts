@@ -1,6 +1,17 @@
-import type { ModelInteractions, ModelInteractionCreator, ModelInteractionReader } from './interactions.js';
-import { ResourceOffer, type ResourceActivity } from '@capix/server-runtime';
+import type { ModelInteractions, ModelInteractionCreator, ModelInteractionRef, ModelInteractionResult, ModelInteractionExpectation } from './interactions.js';
+import { ResourceOffer, type ResourceActivity, type OperationOptions, type OperationResult, type ProgressReceiver } from '@capix/server-runtime';
 import type { ModelSettings } from '@capix/protocol';
+import type { ModelOutput, ModelTextDelta } from './types.js';
+
+type WaitOptions = OperationOptions<ModelInteractionResult, unknown, unknown> & { readonly signal?: AbortSignal; readonly waitMs: number };
+type ResultOptions = OperationOptions<ModelOutput, unknown, unknown> & { readonly signal?: AbortSignal; readonly expected?: ModelInteractionExpectation };
+
+/** A resource endpoint adds controlled operation reception to the independent interaction entity. */
+export interface ModelInteractionReader {
+  subscribe(interaction: ModelInteractionRef, receiver: ProgressReceiver<ModelTextDelta>): () => void;
+  wait<const Options extends WaitOptions>(interaction: ModelInteractionRef, options: Options): Promise<OperationResult<ModelInteractionResult, Options>>;
+  result<const Options extends ResultOptions = {}>(interaction: ModelInteractionRef, options?: Options): Promise<OperationResult<ModelOutput, Options>>;
+}
 
 /** Configuration values and provider access have separate contracts and evidence. */
 export const ModelSettingsResource = Object.freeze({
@@ -32,7 +43,7 @@ export const ModelResource = Object.freeze({
   }),
 });
 
-/** Starting an interaction returns its identity synchronously; its lifetime remains independent. */
+/** Synchronous identity handoff keeps the first checkpoint adjacent to dispatch; the external lifetime remains independent. */
 function exposeModelCreator(interactions: ModelInteractions, activity: ResourceActivity): ModelInteractionCreator {
   return Object.freeze<ModelInteractionCreator>({
     start: (request, purpose, controls) => activity.runSync('start', { input: () => ({ model: request.model, purpose }), output: (ref) => ref }, () => interactions.start(request, purpose, controls)),
@@ -55,7 +66,7 @@ function exposeModelReader(interactions: ModelInteractions, activity: ResourceAc
         throw error;
       }
     },
-    wait: (ref, controls) => activity.runAsync('wait', { input: () => ref, output: (result) => ({ kind: result.kind, interaction: result.interaction }) }, () => interactions.wait(ref, controls)),
-    result: (ref, controls) => activity.runAsync('result', { input: () => ref, output: (result) => ({ id: result.id, model: result.model, finishReason: result.finishReason, usage: result.usage }) }, () => interactions.result(ref, controls)),
+    wait: (ref, options) => activity.operate('wait', { input: () => ref, output: (result: ModelInteractionResult) => ({ kind: result.kind, interaction: result.interaction }) }, (operation) => interactions.wait(ref, { signal: operation.signal ?? options.signal ?? new AbortController().signal, waitMs: options.waitMs }), options),
+    result: (ref, options) => activity.operate('result', { input: () => ref, output: (result: ModelOutput) => ({ id: result.id, model: result.model, finishReason: result.finishReason, usage: result.usage }) }, (operation) => interactions.result(ref, { signal: operation.signal ?? options?.signal ?? new AbortController().signal, expected: options?.expected }), options),
   });
 }

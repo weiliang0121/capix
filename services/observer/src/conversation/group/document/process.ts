@@ -4,9 +4,8 @@ import { checkpointCodec } from '../../checkpoint.js';
 import { answerCheckpointCodecs } from '../answer/checkpoint.js';
 import { answerMessageContextSchema, memorySchema, fileTaskSchema, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
 import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall, type ChildrenOf } from '@capix/server-runtime';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import type { GenerationOutput } from '@capix/protocol';
-import { FileResources, documentDescriptor, type TextDocument, type FileReader } from '../../../files/index.js';
+import { FileResources, type TextDocument, type FileReader } from '../../../files/index.js';
 import { GenerateAnswer, type GenerationInput } from '../answer/generate.js';
 import { ReadText } from '../../node/files/read.js';
 import type { ModelCallResources } from '../../resources.js';
@@ -21,7 +20,7 @@ export interface DocumentProcessingResources extends ModelCallResources {
 }
 
 /** Read and generate only. E commits the answer before submitting a separate save operation. */
-export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOutput, DocumentProcessingResources, Record<string, never>, AnswerGenerationEvent> {
+export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOutput, DocumentProcessingResources, AnswerGenerationEvent> {
   readonly readText;
   readonly generation;
 
@@ -71,23 +70,19 @@ export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOu
       }),
     };
 
-    this.setDefinition({
-      output: { result: answerStream.result, delta: (value: unknown) => value as AnswerGenerationEvent },
-      name: 'processDocument',
-      label: '处理文档',
-      source: 'services/observer/src/conversation/group/document/process.ts · ProcessDocument',
-      observation: [invocationRecording({ relationAccepted: (output, relation) => (relation.key === 'read' ? documentDescriptor(output as TextDocument) : output) })],
-      checkpoint: {
-        key: 'observer.process-document',
-        version: 3,
-        input: checkpointCodec(z.strictObject({ sourcePath: z.string().min(1), context: answerMessageContextSchema, memories: z.array(memorySchema), task: z.strictObject({ fileTask: fileTaskSchema, instruction: z.string().min(1) }).optional() })),
-        output: answerCheckpointCodecs.output,
-        points: Object.values(this.points),
-      },
-      deps: ProcessDocument.deps,
-      uses: this.members,
-      run: this.execute.bind(this),
-    });
+    this.output = { result: answerStream.result, delta: (value: unknown) => value as AnswerGenerationEvent };
+    this.name = 'processDocument';
+    this.label = '处理文档';
+    this.source = 'services/observer/src/conversation/group/document/process.ts · ProcessDocument';
+    this.checkpoint = {
+      key: 'observer.process-document',
+      version: 4,
+      input: checkpointCodec(z.strictObject({ sourcePath: z.string().min(1), context: answerMessageContextSchema, memories: z.array(memorySchema), task: z.strictObject({ fileTask: fileTaskSchema, instruction: z.string().min(1) }).optional() })),
+      output: answerCheckpointCodecs.output,
+      points: Object.values(this.points),
+    };
+    this.deps = ProcessDocument.deps;
+    this.run = this.execute.bind(this);
   }
 
   private async execute(work: DocumentWork): Promise<GenerationOutput> {
@@ -99,13 +94,12 @@ export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOu
     return { context: input.context, memories: input.memories, ...(input.task ? { task: input.task } : {}), document };
   }
   private async receiveDocument(work: DocumentWork, read: ChildCall<ReadText>): Promise<GenerationOutput> {
-    await read.run();
-    const document = await read.accept();
+    const document = await read.invoke();
     const generation = work.children.create(this.generation, this.generationInput(work.input, document), {
       key: 'generation',
       output: {
         receive: (event) => {
-          work.output.emit(event);
+          if (event.kind === 'delta') work.output.emit(event.delta);
         },
       },
     });
@@ -113,8 +107,7 @@ export class ProcessDocument extends Group<DocumentProcessingInput, GenerationOu
     return this.receiveGeneration(work, generation);
   }
   private async receiveGeneration(work: DocumentWork, generation: ChildCall<GenerateAnswer>): Promise<GenerationOutput> {
-    await generation.run();
-    const output = await generation.accept();
+    const output = await generation.invoke();
     work.checkpoint?.({ point: this.points.result, state: output, refs: {} });
     return output;
   }

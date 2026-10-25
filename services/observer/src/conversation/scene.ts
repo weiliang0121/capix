@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import { Scene, checkpointPoint, childReference, type SceneWork } from '@capix/server-runtime';
 import type { GenerationOutput } from '@capix/protocol';
 import { acceptConversationRequest } from './accept.js';
@@ -39,27 +38,23 @@ export class ConversationScene extends Scene<unknown, GenerationOutput, Conversa
         uses: [conversation],
         run: async (work, _state, saved) => {
           const child = work.children.resume(saved.execution);
-          await child.run();
-          return child.accept();
+
+          return child.invoke();
         },
       },
     });
-    this.setDefinition({
-      name: 'conversation',
-      label: '对话场景',
-      observation: [invocationRecording()],
-      checkpoint: { key: 'observer.conversation.scene', version: 4, input: conversationCheckpointInput, output: conversationCheckpointOutput, points: [this.executionWaiting] },
-      deps: conversationSceneRequests,
-      uses: [conversation],
-      run: this.execute.bind(this),
-    });
+    this.name = 'conversation';
+    this.label = '对话场景';
+    this.checkpoint = { key: 'observer.conversation.scene', version: 5, input: conversationCheckpointInput, output: conversationCheckpointOutput, points: [this.executionWaiting] };
+    this.deps = conversationSceneRequests;
+    this.run = this.execute.bind(this);
   }
 
   private async execute(work: SceneWork<unknown, GenerationOutput, ConversationSceneResources>): Promise<GenerationOutput> {
     const accepted = acceptConversationRequest(work.input, work.resources.messages.append, this.filesEnabled);
     const child = work.children.create(this.conversation, accepted, { key: 'conversation' });
     work.checkpoint?.({ point: this.executionWaiting, state: {}, refs: { execution: child.ref } });
-    await child.run();
-    return child.accept();
+
+    return child.invoke();
   }
 }

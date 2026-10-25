@@ -17,14 +17,15 @@ export interface ObservationDeclaration<Fact> {
 /** Static declaration shape for capability-specific checks; never a live invocation. */
 export interface ObservationDeclarationScope {
   readonly kind: CallableKind;
-  readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
+  readonly id?: string;
 }
 
 /** Declare consumption without selecting, realizing or activating any resource. */
 export function defineObservation<Fact, Ports extends object>(definition: ObservationDefinition<Fact, Ports>, options: { failure?: 'isolate' | 'propagate' } = {}): ObservationDeclaration<Fact> {
+  const observe = definition.observe.bind(definition);
   return Object.freeze({
     deps: Object.freeze({ ...definition.deps }),
     failure: options.failure,
-    observe: (fact: Fact, ports: Readonly<object>) => definition.observe(fact, ports as Readonly<Ports>),
+    observe: (fact: Fact, ports: Readonly<object>) => observe(fact, ports as Readonly<Ports>),
   });
 }

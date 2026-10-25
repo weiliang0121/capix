@@ -1,5 +1,6 @@
 import { isPromise } from 'node:util/types';
 import { RuntimeError } from '../errors/error.js';
+import { PersistenceError } from '../errors/persistence.js';
 import { isNonBlankString } from '../value/string.js';
 import type { InteractionContract, InteractionOptions, InteractionPersistence, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
 import { Interaction } from './interaction.js';
@@ -171,17 +172,26 @@ class RegisteredInteractions<Request, Reply> {
     if (!ref || !isNonBlankString(ref.id) || ref.contract !== this.#options.contract.key) throw new RuntimeError('INTERACTION_CONTRACT_MISMATCH', 'Interaction reference must belong to this registered contract');
     let interaction = this.#exchanges.get(ref.id);
     if (!interaction) {
-      const saved = this.#read?.(ref.id);
-      if (isPromise(saved)) {
-        void saved.catch(() => undefined);
-        throw new TypeError('Interaction persistence reads must be synchronous');
+      let saved: InteractionState | undefined;
+      try {
+        saved = this.#read?.(ref.id);
+        if (isPromise(saved)) {
+          void saved.catch(() => undefined);
+          throw new TypeError('Interaction persistence reads must be synchronous');
+        }
+      } catch (cause) {
+        throw new PersistenceError('interaction.read', cause);
       }
       this.requireOpen();
       if (saved !== undefined) {
         // Restore checks the persisted contract and codecs; no sender is reconstructed.
-        interaction = Interaction.restore(saved, this.#options);
+        try {
+          interaction = Interaction.restore(saved, this.#options);
+          if (interaction.id !== ref.id) throw new RuntimeError('INTERACTION_IDENTITY', 'Saved interaction does not match the requested identity');
+        } catch (cause) {
+          throw new PersistenceError('interaction.restore', cause);
+        }
         this.requireOpen();
-        if (interaction.id !== ref.id) throw new RuntimeError('INTERACTION_IDENTITY', 'Saved interaction does not match the requested identity');
         this.#exchanges.set(interaction.id, interaction);
         this.prune();
       }

@@ -32,5 +32,6 @@ function readCheckpoint(installation: CheckpointInstallation | undefined, contra
   if (image.contract.key !== contract.key || image.contract.version !== contract.version) throw new Error('Checkpoint declaration is incompatible');
   if (image.frame.owner.contextId !== contextId || image.frame.owner.kind !== owner.kind || image.frame.owner.parentContextId !== owner.parentContextId) throw new Error('Checkpoint work belongs to another scope');
   if (head.delivery) throw new Error('A terminal checkpoint work cannot execute again');
+  if (image.frame.round !== 1 || image.frame.continuation !== undefined) throw new Error('Checkpoint belongs to the retired multi-round execution model');
   return Object.freeze({ head });
 }

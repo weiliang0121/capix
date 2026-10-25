@@ -2,7 +2,7 @@ import type { CheckpointCodec, ResourceRequest } from '@capix/server-runtime';
 import { checkpointPoint, childReference, childReferences, defineNode, defineChildEntry, defineGroup, defineScene } from '@capix/server-runtime';
 import type { ChildReference, ChildEntryFacts as EntryFacts, GroupWork, ResourcesOf } from '@capix/server-runtime';
 
-const metadata = { label: 'test', source: 'test', callee: 'test' };
+const metadata = { label: 'test', source: 'test' };
 
 declare function expectType<T>(value: T): void;
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -39,7 +39,8 @@ export const readText = defineNode<ReadInput, Document>()({
     type Inferred = Expect<Equal<typeof work.resources.reader, Reader>>;
     expectType<Inferred>(true);
     expectType<ReadInput>(work.input);
-    expectType<ReadInput>(work.initialInput);
+    // @ts-expect-error normal processing has one input
+    work.initialInput;
     // @ts-expect-error A has no child access, regardless of phase.
     work.children;
     // @ts-expect-error No declared Delta produces no output writer.
@@ -49,27 +50,6 @@ export const readText = defineNode<ReadInput, Document>()({
     // @ts-expect-error Input is not inferred to any.
     work.input.missing;
     return work.resources.reader.read(work.input.path);
-  },
-  accept(work) {
-    expectType<Document>(work.delivered);
-    expectType<Reader>(work.resources.reader);
-    // @ts-expect-error accept does not own an output segment.
-    work.output;
-    // @ts-expect-error A accept still has no children.
-    work.children;
-    return work.delivered;
-  },
-  exceptions: {
-    accepts: [],
-    deps: { logger },
-    handle(work) {
-      work.resources.logger.report('read failed');
-      // @ts-expect-error Exception resources are not unioned with run resources.
-      work.resources.reader;
-      // @ts-expect-error A handling still has no children.
-      work.children;
-      return work.unhandled;
-    },
   },
 });
 
@@ -125,7 +105,6 @@ export const operation = defineGroup<ReadInput, string>()({
   name: 'operation',
   members: [readText, count],
   deps,
-  uses: [readText],
   async run(work) {
     const child = work.children.create(readText, work.input);
     expectType<Promise<Document>>(child.run());
@@ -136,7 +115,6 @@ export const operation = defineGroup<ReadInput, string>()({
     child.accept<number>();
     // @ts-expect-error Child input is fixed by the supplied declaration.
     work.children.create(readText, 3);
-    // @ts-expect-error Explicit run uses is narrower than registered children.
     work.children.create(count, 3);
     // @ts-expect-error Normal execute does not have a restore endpoint.
     work.children.resume(child.ref);
@@ -153,39 +131,6 @@ export const operation = defineGroup<ReadInput, string>()({
     work.checkpoint?.({ point: waitingPoint, state: { offset: 1 }, refs: { source: child.ref } });
     return readAndAccept(work);
   },
-  accept(work) {
-    expectType<string>(work.delivered);
-    expectType<Reader>(work.resources.reader);
-    work.children.create(readText, work.input);
-    // @ts-expect-error accept retains run's explicit uses restriction.
-    work.children.create(count, 1);
-    // @ts-expect-error No recovery endpoint in normal accept.
-    work.children.resume;
-    // @ts-expect-error Checkpoint save belongs to execute.
-    work.checkpoint;
-    return work.round === 1 ? work.continue(work.input, 'again') : work.delivered;
-  },
-  exceptions: {
-    accepts: [],
-    deps: { logger },
-    uses: [count],
-    handle(work) {
-      expectType<Logger>(work.resources.logger);
-      // @ts-expect-error Separate exception requirements do not expose run resources.
-      work.resources.reader;
-      work.children.create(count, 1);
-      // @ts-expect-error Exception uses do not borrow run uses.
-      work.children.create(readText, work.input);
-      // Read-only facts cover all direct children irrespective of uses.
-      const fact = work.children.facts.requireUnique(readText, { parentRound: 1 });
-      work.children.open(fact.ref).accept();
-      // @ts-expect-error No recovery endpoint in handling.
-      work.children.resume(fact.ref);
-      // @ts-expect-error Return has the declared parent output type.
-      work.return(2);
-      return work.return('recovered');
-    },
-  },
   checkpoint: { key: 'operation', version: 1, input: inputCodec, output: stringCodec, points: [waitingPoint] },
 });
 
@@ -198,38 +143,6 @@ defineGroup<ReadInput, number>()({
     work.children.create(readText, work.input);
     work.children.create(count, 1);
     return 1;
-  },
-  exceptions: {
-    accepts: [],
-    handle(work) {
-      // Omitted exception uses means none, but historical facts remain available.
-      // @ts-expect-error Default exception uses does not allow new calls.
-      work.children.create(count, 1);
-      work.children.facts.list(readText);
-      return work.unhandled;
-    },
-  },
-});
-
-defineGroup<ReadInput, string>()({
-  ...metadata,
-  name: 'uses-must-be-registered',
-  members: [readText],
-  // @ts-expect-error A non-child cannot become callable merely by adding it to uses.
-  uses: [count],
-  run: () => '',
-});
-
-defineGroup<ReadInput, string>()({
-  ...metadata,
-  name: 'exception-uses-must-be-registered',
-  members: [readText],
-  run: () => '',
-  exceptions: {
-    accepts: [],
-    // @ts-expect-error Exception uses must also be part of the parent's registered children.
-    uses: [count],
-    handle: (work) => work.unhandled,
   },
 });
 
@@ -261,18 +174,6 @@ checkpointPoint<'node', ReadInput, string>()({
       work.children;
       return work.input.path;
     },
-  },
-});
-
-defineGroup<ReadInput, number>()({
-  ...metadata,
-  name: 'empty-uses',
-  members: [count],
-  uses: [],
-  run(work) {
-    // @ts-expect-error Explicit empty uses must not fall back to all children.
-    work.children.create(count, 1);
-    return 1;
   },
 });
 
@@ -363,11 +264,6 @@ defineNode<string, string>()({
     work.output.emit(1);
     return work.input;
   },
-  accept(work) {
-    // @ts-expect-error A declared Delta still does not grant accept a writer.
-    work.output.emit('late');
-    return work.delivered;
-  },
 });
 
 defineNode<string, string>()({
@@ -416,16 +312,9 @@ defineNode<string, string>()({
   run: (work) => work.input,
 });
 
-defineGroup<ReadInput, string>()({
-  ...metadata,
-  name: 'cannot-forge-control',
-  run: () => '',
-  // @ts-expect-error A plain tagged value is not a branded Continue decision.
-  accept: (work) => ({ kind: 'continue', input: work.input, reason: 'not a control token' }),
-});
-
 const alternate = defineChildEntry(readText, {
   accept({ input, facts }: { readonly input: { readonly filename: string }; readonly facts: EntryFacts }) {
+    // @ts-expect-error input adaptation has no framework continuation
     facts.continuation;
     // @ts-expect-error Alternate entry facts do not grant child action capability.
     facts.children.create(readText, { path: input.filename });
@@ -447,7 +336,7 @@ defineGroup<ReadInput, string>()({
 
 // Structurally equal definitions cannot get distinct per-object brands from TS.
 // This deliberately compiles. Exact definition/ref/point identity remains a binding/runtime check.
-const sameShape = defineNode<ReadInput, Document>()({ ...metadata, name: 'another-reader', deps: { reader }, run: () => ({ text: '' }), exceptions: { accepts: [], deps: { logger }, handle: (work) => work.unhandled } });
+const sameShape = defineNode<ReadInput, Document>()({ ...metadata, name: 'another-reader', deps: { reader }, run: () => ({ text: '' }) });
 defineGroup<ReadInput, string>()({
   ...metadata,
   name: 'identity-deps-runtime-check',

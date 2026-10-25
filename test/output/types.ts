@@ -1,4 +1,4 @@
-import { Node, Group, type NodeWork, type GroupWork, type AcceptWork, type ChildCalls, type OutputDeclaration } from '@capix/server-runtime';
+import { Node, Group, type NodeWork, type GroupWork, type ChildCalls, type OutputDeclaration } from '@capix/server-runtime';
 
 const text: OutputDeclaration<string, string> = {
   result(value) {
@@ -10,11 +10,10 @@ const text: OutputDeclaration<string, string> = {
     return value;
   },
 };
-class Leaf extends Node<string, string, Record<string, never>, Record<string, never>, string> {
+class Leaf extends Node<string, string, Record<string, never>, string> {
   name = 'leaf';
   label = 'Leaf';
   source = 'test';
-  callee = 'test';
   readonly output = text;
   readonly deps = {};
   readonly run = function (work: NodeWork<string, string, Record<string, never>, string>) {
@@ -23,13 +22,8 @@ class Leaf extends Node<string, string, Record<string, never>, Record<string, ne
     work.output.emit(42);
     return work.input;
   };
-  readonly accept = function (work: AcceptWork<'node', string, string, Record<string, never>>) {
-    // @ts-expect-error reception does not own a writer
-    work.output.emit('late');
-    return work.delivered;
-  };
 }
-class Parent extends Group<string, string, Record<string, never>, Record<string, never>, string> {
+class Parent extends Group<string, string, Record<string, never>, string> {
   name = 'parent';
   label = 'Parent';
   source = 'test';
@@ -58,7 +52,7 @@ class Parent extends Group<string, string, Record<string, never>, Record<string,
   };
 }
 void new Parent();
-declare const typed: Node<string, string, Record<string, never>, Record<string, never>, string>;
+declare const typed: Node<string, string, Record<string, never>, string>;
 declare const children: ChildCalls<typeof typed>;
 children.create(typed, 'input', {
   output: {

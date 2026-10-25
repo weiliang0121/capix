@@ -24,7 +24,7 @@ declare const checkDelta: (value: unknown) => string;
 declare const lookup: ResourceRequest<{ readonly at: (cursor: number) => string }>;
 declare const writer: AuthorCheckpointWriter<'group', Input, Output, string>;
 
-const metadata = { label: 'test', source: 'test', callee: 'test' };
+const metadata = { label: 'test', source: 'test' };
 const read = defineNode<ChildInput, ChildOutput>()({ ...metadata, name: 'read', run: work => ({ text: work.input.path }) });
 const wrongRead = defineNode<{ readonly path: number }, ChildOutput>()({ ...metadata, name: 'wrong-read', run: work => ({ text: String(work.input.path) }) });
 const nested = defineGroup<ChildInput, ChildOutput>()({ ...metadata, name: 'nested', run: work => ({ text: work.input.path }) });
@@ -110,7 +110,7 @@ const shallowPoint = checkpointPoint<'group', Input, Output, string>()({ name: '
   return { answer: result.text };
 } } });
 
-const checkpoint: InvocationCheckpointDefinition<Input, Output, 'group', string> = { key: 'op', version: 1, input: inputCodec, output: outputCodec, points: [waiting, settled, shallowPoint] };
+const checkpoint = { key: 'op', version: 1, input: inputCodec, output: outputCodec, points: [waiting, settled, shallowPoint] } satisfies InvocationCheckpointDefinition<Input, Output, 'group', string>;
 defineGroup<Input, Output>()({ ...metadata, name: 'operation', members: [read, nested], output: { result: checkOutput, delta: checkDelta }, checkpoint, run: work => ({ answer: work.input.query }) });
 defineNode<Input, Output>()({ ...metadata, name: 'leaf', checkpoint: { key: 'a', version: 1, input: inputCodec, output: outputCodec, points: [leafPoint] }, run: work => ({ answer: work.input.query }) });
 defineGroup<Input, Output>()({ members: [nested], checkpoint: { key: 'e', version: 1, input: inputCodec, output: outputCodec, points: [executionPoint] }, run: work => ({ answer: work.input.query }) });

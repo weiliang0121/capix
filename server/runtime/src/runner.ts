@@ -5,7 +5,6 @@ import { bindDriverObservation } from './binding/observation.js';
 import type { CallableHookBinding } from './binding/hooks.js';
 import type { EventConsumer } from './observation/observer.js';
 import type { DriverFact } from './observation/facts.js';
-import { DeclaredException } from './exception/contract.js';
 import { requireNotCancelled } from './invocation/cancellation.js';
 import { RuntimeError } from './errors/error.js';
 import type { BuiltCallable } from './structure/construction.js';
@@ -127,31 +126,26 @@ export class Runner<Structure extends Extract<AnyCallable, { readonly kind: 'sce
   }
 
   private async perform(request: { input: CallableInput<Structure> } | { contextId: string }, options: Options & InvocationControls): Promise<CallableOutput<Structure>> {
-    try {
-      // Fix this call's parameter bag before entry observers or host callbacks can run.
-      // Resource entities and the cancellation signal retain their original identities.
-      const fixedOptions = this.snapshotOptions(options);
-      const structure = this.#built;
-      if (!structure) throw new Error('Runner must be built before running');
-      return await this.reserve(structure.id, () => {
-        let invocation;
+    // Fix this call's parameter bag before entry observers or host callbacks can run.
+    // Resource entities and the cancellation signal retain their original identities.
+    const fixedOptions = this.snapshotOptions(options);
+    const structure = this.#built;
+    if (!structure) throw new Error('Runner must be built before running');
+    return await this.reserve(structure.id, () => {
+      let invocation;
+      try {
+        if (fixedOptions.signal) requireNotCancelled(fixedOptions.signal);
+        invocation = 'contextId' in request ? restoreRootInvocation(structure, request.contextId, fixedOptions, fixedOptions) : createRootInvocation(structure, request.input, fixedOptions, fixedOptions);
+      } catch (error) {
         try {
-          if (fixedOptions.signal) requireNotCancelled(fixedOptions.signal);
-          invocation = 'contextId' in request ? restoreRootInvocation(structure, request.contextId, fixedOptions, fixedOptions) : createRootInvocation(structure, request.input, fixedOptions, fixedOptions);
-        } catch (error) {
-          try {
-            this.publish({ kind: 'entry-failed', boundId: structure.id, error });
-          } catch (observation) {
-            throw new AggregateError([error, observation], 'Call construction and observation both failed', { cause: error });
-          }
-          throw error;
+          this.publish({ kind: 'entry-failed', boundId: structure.id, error });
+        } catch (observation) {
+          throw new AggregateError([error, observation], 'Call construction and observation both failed', { cause: error });
         }
-        return invocation.run();
-      });
-    } catch (error) {
-      if (error instanceof DeclaredException) throw new RuntimeError('UNHANDLED_EXCEPTION', '运行异常未被接纳处理。', undefined, { cause: error });
-      throw error;
-    }
+        throw error;
+      }
+      return invocation.run();
+    });
   }
 
   private snapshotOptions(options: Options & InvocationControls): Options & InvocationControls {

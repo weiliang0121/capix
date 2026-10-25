@@ -1,8 +1,9 @@
 import type { ModelInitialization } from '../conversation/model/types.js';
-import { Clock, Runner, Resources, MemoryCheckpointStore, type CheckpointInstallation } from '@capix/server-runtime';
+import { Clock, Runner, Resources, MemoryCheckpointStore, type CheckpointInstallation, type ObservationInstallation } from '@capix/server-runtime';
 import { SelectionUsage } from '@capix/server-runtime/content';
 import type { Message } from '@capix/protocol';
 import { createConversationStructure } from '../conversation/structure.js';
+import { registerConversationRecording } from '../conversation/recording.js';
 import { registerConversationResources } from '../conversation/binding.js';
 import type { ConversationRunOptions } from '../conversation/binding/contract.js';
 import { ConversationCallCapture } from '../conversation/binding/capture.js';
@@ -26,6 +27,7 @@ export interface ObserverInitializationOptions {
   readonly maxDecisionSteps?: number;
   readonly maintenance?: ContextMaintenanceConfiguration;
   readonly persistence?: SqliteObserverStore;
+  readonly observations?: readonly ObservationInstallation[];
   readonly checkpointObservation?: CheckpointInstallation['observation'];
   readonly conversationId?: string;
   readonly content?: ConversationContent;
@@ -48,6 +50,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
     const { transcript, memories, active } = content;
     const selectionUsage = new SelectionUsage();
     const structure = createConversationStructure({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps, maintenance: options.maintenance });
+    registerConversationRecording(records.installation, structure);
     const model = options.model ?? new ModelSource(provider);
     interactions = new ModelInteractions(model, { persistence: persistence?.interactions });
     const checkpoints = persistence?.checkpoints ?? new MemoryCheckpointStore();
@@ -63,7 +66,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
       validate: (options) => capture.validate(options),
       hooks: conversationCallHooks(structure, capture),
       clock,
-      observations: [records.installation],
+      observations: [records.installation, ...(options.observations ?? [])],
       changes,
       checkpoints: { store: checkpoints, observation: bindCheckpointObservation(observation, options.checkpointObservation) },
     }).build();

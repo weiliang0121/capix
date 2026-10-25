@@ -121,7 +121,7 @@ test('file published before receipt commit remains unknown after restart and is 
       },
     },
   });
-  await assert.rejects(files.createFixed(operation, 'result.md', 'original'), /interrupted/);
+  await assert.rejects(files.createFixed(operation, 'result.md', 'original'), (error) => error.code === 'PERSISTENCE_FAILED' && /interrupted/.test(error.cause?.message));
   assert.equal(await readFile(join(fixture.root, 'result.md'), 'utf8'), 'original');
   store.close();
   const reopened = fixture.open();

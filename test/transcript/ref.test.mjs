@@ -61,7 +61,7 @@ test('resource facts hold plain range locators; calls consume selected content a
   assert.equal(facts.execution.status, 'succeeded');
   assert.deepEqual(
     facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).map((record) => record.name),
-    ['prepareContext', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
+    ['prepareContext', 'conversationDecision', 'answer', 'answerCandidate', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
   );
   assert.equal(facts.calls.filter((item) => item.structureKind === 'node').length, 8);
   assert.equal(facts.boundaries.filter((event) => event.callId !== facts.rootCall.id).length, 2 * (1 + facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).length + facts.calls.filter((item) => item.structureKind === 'node').length));

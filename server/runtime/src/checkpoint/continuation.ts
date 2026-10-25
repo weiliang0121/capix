@@ -1,9 +1,17 @@
-import type { InvocationContinuationFact } from '../invocation/continuation.js';
+import type { InvocationExceptionOrigin } from '../invocation/provenance.js';
 import type { CheckpointChild, CheckpointContinuation, InvocationCheckpointFrame } from './contract.js';
 import { checkpointReference, checkpointReferenceChild } from './value.js';
 
-/** The Context owns the accepted transition; checkpoint only encodes its reference. */
-export function captureCheckpointContinuation(continuation: InvocationContinuationFact | undefined, children: readonly CheckpointChild[]): CheckpointContinuation | undefined {
+/** Inert transition metadata for decoding historical checkpoint frames. */
+export interface CheckpointContinuationFact {
+  readonly fromRound: 1;
+  readonly stage: 'accept' | 'handling';
+  readonly reason: string;
+  readonly origin?: InvocationExceptionOrigin;
+}
+
+/** Historical metadata is preserved, never used to drive current business execution. */
+export function captureCheckpointContinuation(continuation: CheckpointContinuationFact | undefined, children: readonly CheckpointChild[]): CheckpointContinuation | undefined {
   if (!continuation) return undefined;
   const { origin, ...accepted } = continuation;
   if (!origin || origin.kind === 'self') return Object.freeze({ ...accepted, ...(origin ? { origin } : {}) });
@@ -13,7 +21,7 @@ export function captureCheckpointContinuation(continuation: InvocationContinuati
 }
 
 /** Wire references are verified against the complete frame before installation. */
-export function restoreCheckpointContinuation(frame: InvocationCheckpointFrame): InvocationContinuationFact | undefined {
+export function restoreCheckpointContinuation(frame: InvocationCheckpointFrame): CheckpointContinuationFact | undefined {
   const continuation = frame.continuation;
   if (!continuation) return undefined;
   const { origin, ...accepted } = continuation;

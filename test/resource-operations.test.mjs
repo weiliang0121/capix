@@ -87,7 +87,6 @@ test('method capture and refinement preserve independent child scopes while shar
   const child = new Node({ deps: { source: offer.request() }, run: (work) => work.resources.source.read(undefined) });
   const scene = new Scene({
     deps: { source: offer.request() },
-    uses: [child],
     async run(work) {
       const full = await work.resources.source.read(undefined);
       const subsets = await Promise.all(work.input.map((selection) => work.children.invoke(child, selection)));
@@ -284,7 +283,6 @@ test('source failures racing cancellation retain the original fault and never ru
         },
       });
       const scene = new Scene({
-        raises: [declared],
         deps: { files: offer.request() },
         run: (work) =>
           work.resources.files.read(
@@ -699,3 +697,48 @@ test('resource requests preserve source types and business Work only exposes dec
   const errors = ts.getPreEmitDiagnostics(ts.createProgram([file], { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext }));
   assert.equal(errors.length, 0, ts.formatDiagnosticsWithColorAndContext(errors, { getCanonicalFileName: (file) => file, getCurrentDirectory: () => process.cwd(), getNewLine: () => '\n' }));
 });
+
+for (const failed of [false, true]) {
+  test(`cancellation published with a resource ${failed ? 'failure' : 'success'} prevents entering its result receiver`, async () => {
+    const controller = new AbortController();
+    const failure = new Error('source failure');
+    let received = 0;
+    const offer = new ResourceOffer({
+      methods: {
+        read() {
+          if (failed) throw failure;
+          return 'value';
+        },
+      },
+    });
+    const scene = new Scene({
+      deps: { read: offer.request() },
+      run: (work) =>
+        work.resources.read.read(undefined, {
+          result: {
+            succeeded: () => {
+              received++;
+              return 'accepted';
+            },
+            failed: () => {
+              received++;
+              return 'handled';
+            },
+          },
+        }),
+    });
+    const observations = [
+      {
+        bindInvocation: () => ({
+          observe() {},
+          resource(fact) {
+            if (fact.phase === (failed ? 'threw' : 'returned')) controller.abort();
+          },
+        }),
+      },
+    ];
+    const runner = new Runner(scene, new Resources().register(new Resource(null), offer), undefined, { observations }).build();
+    await assert.rejects(runner.run(null, { signal: controller.signal }), (error) => (failed ? error instanceof AggregateError && error.cause === failure : error instanceof InvocationCancelled));
+    assert.equal(received, 0);
+  });
+}

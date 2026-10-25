@@ -1,5 +1,5 @@
 import { installCallable } from './fixtures/driver.mjs';
-import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/declarations.mjs';
+import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Group, Node, InvocationEntry, Sequence, ResourceOffer, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
@@ -10,7 +10,6 @@ class Read extends Node {
   name = 'read';
   label = 'Read';
   source = 'test';
-  callee = 'test';
   deps = { value: resource.request() };
   run = this.execute.bind(this);
   execute(work) {
@@ -50,7 +49,6 @@ class Main extends Group {
 function bind(main, source, options = {}) {
   const definition = runtimeDefinition(main);
   const observations = options.recorder ? [bindRecording(options.recorder, { failure: 'propagate' })] : undefined;
-  if (observations) recordDefinitions(definition);
   return installCallable(definition, { observations, providers: [resource.provide((value) => value)], source: { capture: () => source() }, bindings: [bindCallSource(main, { started: (options) => options.execution?.started })] });
 }
 

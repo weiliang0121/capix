@@ -54,7 +54,7 @@ test('checkpoint declarations do not change normal execution when persistence is
     deps = {};
     run = function (work) {
       assert.equal(work.checkpoint, undefined);
-      return work.initialInput;
+      return work.input;
     };
   }
   const runtime = assemble(new Root());

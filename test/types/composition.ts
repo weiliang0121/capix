@@ -1,4 +1,4 @@
-import { Sequence, InvocationEntry, defineGroup, defineScene, type Group, type Node, type ChildCalls, type GroupWork, type SceneWork, Driver, Scene } from '@capix/server-runtime';
+import { Sequence, InvocationEntry, defineGroup, defineScene, Group, type Node, type ChildCalls, type GroupWork, type SceneWork, Driver, Scene } from '@capix/server-runtime';
 import { bindChildResources, type ResourceRefinement } from '@capix/server-runtime';
 
 const bounded = new ResourceOffer<{ readonly allowed: readonly string[] }, readonly string[], string>({ name: 'bounded', expose: (source) => source.allowed, timing: 'access', refine: (source, selected) => ({ allowed: source.allowed.filter((value) => value === selected) }) });
@@ -27,12 +27,12 @@ declare const operation: GroupWork<string, string, {}, typeof leaf>;
 declare const runtimeWork: SceneWork<string, number, {}, typeof execution>;
 declare const children: ChildCalls;
 
-const sequence = new Sequence<string>().step('length', { use: length, input: ({ input }) => input }).step('format', { use: format, input: ({ outputs }) => outputs.length, accept: (_scope, value) => ({ text: value }) });
+const sequence = new Sequence<string>().step('length', { use: length, input: ({ input }) => input }).step('format', { use: format, input: ({ outputs }) => outputs.length, result: { succeeded: (value, _scope) => ({ text: value }) } });
 const result: Promise<Readonly<{ length: number; format: { text: string } }>> = sequence.run('hello', children);
 void result;
-// @ts-expect-error input must match the declared input
 new Sequence<string>().step('bad', {
   use: length,
+  // @ts-expect-error input must match the declared input
   input: () => 123,
 });
 new Sequence<string>().step('first', {
@@ -70,15 +70,14 @@ const acceptedAlternative: Promise<number> = operation.children.entry(alternativ
 void acceptedAlternative;
 
 // @ts-expect-error raw object syntax has no checked declaration signature; use the factory or a named class
-const rawDefinition: Group<string, number> = { kind: 'group', name: 'raw', label: 'raw', source: 'test', members: [], maxRounds: 1, raises: [], deps: {}, run: (work) => work.input.length };
+const rawDefinition: Group<string, number> = { kind: 'group', name: 'raw', label: 'raw', source: 'test', members: [], deps: {}, run: (work) => work.input.length };
 void rawDefinition;
 const objectDefinition: Group<string, number> = defineGroup<string, number>()({
   name: 'length',
   label: 'length',
   source: 'test',
   members: [],
-  maxRounds: 1,
-  raises: [],
+
   deps: {},
   run: (work) => work.input.length,
 });
@@ -86,8 +85,7 @@ const objectOutput: Promise<Readonly<{ length: number }>> = new Sequence<string>
 void objectOutput;
 const runtimeDefinition: Scene<string, number> = defineScene<string, number>()({
   members: [execution],
-  maxRounds: 1,
-  raises: [],
+
   deps: {},
   async run(work) {
     const child = work.children.create(execution, work.input);
@@ -116,32 +114,35 @@ parent.complete('done');
 // @ts-expect-error child facts do not publish reception mutation
 parent.children.facts.values()[0]?.accept(() => null);
 
-import { ExceptionContract, ResourceOffer, type CallableRunDefinition, type InvocationExceptionDefinition } from '@capix/server-runtime';
-const issue = new ExceptionContract<{ reason: string }>('test.issue');
+import { ResourceOffer, type CallableRun } from '@capix/server-runtime';
 const workValue = new ResourceOffer({ name: 'work-value', expose: (value: number) => value });
-const handlingValue = new ResourceOffer({ name: 'handling-value', expose: (value: string) => value });
-const run: CallableRunDefinition<string, string, 'group', { value: number }> = {
-  deps: { value: workValue.request() },
-  run(work) {
-    const value: number = work.resources.value;
-    // @ts-expect-error work does not acquire the handler's resource aliases
-    work.resources.repair;
-    return String(value);
-  },
+const run: CallableRun<string, string, 'group', { value: number }> = (work) => {
+  const value: number = work.resources.value;
+  // @ts-expect-error only this node dependencies exist in its Work
+  work.resources.repair;
+  // @ts-expect-error ordinary work has no local continuation interpreter
+  work.continue('retry');
+  return String(value);
 };
-const exceptions: InvocationExceptionDefinition<string, string, 'group', { repair: string }> = {
-  deps: { repair: handlingValue.request() },
-  accepts: [issue],
-  handle(work) {
-    const repair: string = work.resources.repair;
-    // @ts-expect-error handling does not implicitly inherit work aliases
-    work.resources.value;
-    return work.return(repair);
-  },
-};
-const composed: Group<string, string, { value: number }, { repair: string }> = defineGroup<string, string>()({ name: 'typed', label: 'typed', source: 'test', members: [], maxRounds: 1, raises: [issue], deps: run.deps, uses: [], run: run.run, accept: run.accept, exceptions: { ...exceptions, uses: [] } });
-const composedResult: Promise<string> = children.create(composed, 'input').run();
+const composed = new Group<string, string, { value: number }>({ deps: { value: workValue.request() }, run });
+const composedResult: Promise<string> = children.invoke(composed, 'input');
 void composedResult;
+const fallback = new Sequence<string>().step('length', { use: length, input: ({ input }) => input, result: { failed: () => 'unavailable' as const } });
+const fallbackResult: Promise<Readonly<{ length: number | 'unavailable' }>> = fallback.run('input', children);
+void fallbackResult;
+// @ts-expect-error success still returns the untransformed child result
+const lostSuccess: Promise<Readonly<{ length: 'unavailable' }>> = fallback.run('input', children);
+void lostSuccess;
+const alternatives = new Sequence<string>().step('length', {
+  use: length,
+  input: ({ input }) => input,
+  result: { succeeded: (value) => value.toFixed(), failed: (failure) => ({ failure }) },
+});
+const alternativesResult: Promise<Readonly<{ length: string | { failure: unknown } }>> = alternatives.run('input', children);
+void alternativesResult;
+// @ts-expect-error a handled failure does not share the success result type
+const lostFailure: Promise<Readonly<{ length: string }>> = alternatives.run('input', children);
+void lostFailure;
 const childFact = operation.children.facts.get(operation.children.create(leaf, 'input').ref);
 // @ts-expect-error child facts do not grant its resources to the parent
 childFact.resources;

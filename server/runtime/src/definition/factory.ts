@@ -1,82 +1,47 @@
 import type { CallableKind } from '@capix/protocol';
 import type { OutputDeclaration } from '../output/contract.js';
-import type { ExceptionContract } from '../exception/contract.js';
-import type { InvocationFact } from '../observation/facts.js';
-import type { ObservationDeclaration } from './observation.js';
-import type { ChildCallable, ChildrenOf } from './children.js';
+import type { ChildrenOf } from './children.js';
 import type { InvocationCheckpointDefinition } from './checkpoint.js';
 import type { ResourceRequests, ResourcesOf } from '../resource/offer.js';
-import type { AcceptWork, Continue, ExecuteWork, HandleWork, Resolution } from './work.js';
+import type { CallableWork } from './work.js';
 import { Scene } from '../structure/scene.js';
 import { Group } from '../structure/group.js';
 import { Node } from '../structure/node.js';
+import type { CallableDefinition } from './callable.js';
 import type { ReceptionRegistration } from './reception.js';
-import type { Callable } from '../structure/callable.js';
-import type { InferredCallableDefinition } from './callable.js';
 
-type RunAllowed<Children extends readonly ChildCallable[], Uses extends readonly NoInfer<Children[number]>[] | undefined> = Uses extends readonly Children[number][] ? Uses[number] : Children[number];
 type FactoryMembers<Kind extends CallableKind, Children extends readonly ChildrenOf<Kind>[]> = Kind extends 'node' ? { readonly members?: never } : { readonly members?: Children };
-interface Metadata {
+interface DefinitionOptions<Kind extends CallableKind, Input, Output, Children extends readonly ChildrenOf<Kind>[], Deps extends ResourceRequests, Delta> {
   readonly name?: string;
   readonly label?: string;
   readonly source?: string;
-  readonly callee?: string;
-}
-
-interface DefinitionOptions<Kind extends CallableKind, Input, Output, Children extends readonly ChildrenOf<Kind>[], Deps extends ResourceRequests, Uses extends readonly NoInfer<Children[number]>[] | undefined, ExceptionDeps extends ResourceRequests, ExceptionUses extends readonly NoInfer<Children[number]>[], Delta> {
-  readonly maxRounds?: 1 | 2;
-  readonly raises?: readonly ExceptionContract<unknown>[];
-  readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
-  readonly checkpoint?: InvocationCheckpointDefinition<Input, Output, Kind, NoInfer<Delta>>;
-  readonly receptions?: Kind extends 'node' ? never : readonly ReceptionRegistration<NoInfer<Children[number]>>[];
+  readonly checkpoint?: Omit<InvocationCheckpointDefinition<Input, Output, Kind, NoInfer<Delta>>, 'receptions'> & { readonly receptions?: Kind extends 'node' ? never : readonly ReceptionRegistration<NoInfer<Children[number]>>[] };
   readonly deps?: Deps;
-  readonly uses?: Uses;
-  readonly run: (work: ExecuteWork<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, RunAllowed<Children, Uses>, Delta>) => Output | Promise<Output>;
-  readonly accept?: (work: AcceptWork<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, RunAllowed<Children, Uses>>) => Output | Continue<Input> | Promise<Output | Continue<Input>>;
-  readonly exceptions?: {
-    readonly deps?: ExceptionDeps;
-    readonly uses?: ExceptionUses;
-    readonly accepts: readonly ExceptionContract<unknown>[];
-    readonly handle: (work: HandleWork<Kind, Input, Output, ResourcesOf<NoInfer<ExceptionDeps>>, ExceptionUses[number]>) => Resolution<Input, Output> | Promise<Resolution<Input, Output>>;
-  };
+  readonly run: (work: CallableWork<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, Children[number], Delta>) => Output | Promise<Output>;
 }
 
-type FactoryDefinition<Kind extends CallableKind, Input, Output, Resources extends object, ExceptionResources extends object, Delta> = Kind extends 'scene' ? Scene<Input, Output, Resources, ExceptionResources, Delta> : Kind extends 'group' ? Group<Input, Output, Resources, ExceptionResources, Delta> : Node<Input, Output, Resources, ExceptionResources, Delta>;
+type FactoryDefinition<Kind extends CallableKind, Input, Output, Resources extends object, Delta> = Kind extends 'scene' ? Scene<Input, Output, Resources, Delta> : Kind extends 'group' ? Group<Input, Output, Resources, Delta> : Node<Input, Output, Resources, Delta>;
 
 export interface DefinitionFactory<Kind extends CallableKind, Input, Output> {
-  <Delta, const Children extends readonly ChildrenOf<Kind>[] = readonly [], const Deps extends ResourceRequests = Readonly<Record<never, never>>, const Uses extends readonly NoInfer<Children[number]>[] | undefined = undefined, const ExceptionDeps extends ResourceRequests = Readonly<Record<never, never>>, const ExceptionUses extends readonly NoInfer<Children[number]>[] = readonly []>(options: DefinitionOptions<Kind, Input, Output, Children, Deps, Uses, ExceptionDeps, ExceptionUses, NoInfer<Delta>> & FactoryMembers<Kind, Children> & Metadata & { readonly output: OutputDeclaration<Output, Delta> & { readonly delta: (value: unknown) => Delta } }): FactoryDefinition<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, ResourcesOf<NoInfer<ExceptionDeps>>, Delta>;
-  <const Children extends readonly ChildrenOf<Kind>[] = readonly [], const Deps extends ResourceRequests = Readonly<Record<never, never>>, const Uses extends readonly NoInfer<Children[number]>[] | undefined = undefined, const ExceptionDeps extends ResourceRequests = Readonly<Record<never, never>>, const ExceptionUses extends readonly NoInfer<Children[number]>[] = readonly []>(options: DefinitionOptions<Kind, Input, Output, Children, Deps, Uses, ExceptionDeps, ExceptionUses, never> & FactoryMembers<Kind, Children> & Metadata & { readonly output?: OutputDeclaration<Output, never> }): FactoryDefinition<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, ResourcesOf<NoInfer<ExceptionDeps>>, never>;
+  <Delta, const Children extends readonly ChildrenOf<Kind>[] = readonly [], const Deps extends ResourceRequests = Readonly<Record<never, never>>>(options: DefinitionOptions<Kind, Input, Output, Children, Deps, NoInfer<Delta>> & FactoryMembers<Kind, Children> & { readonly output: OutputDeclaration<Output, Delta> & { readonly delta: (value: unknown) => Delta } }): FactoryDefinition<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, Delta>;
+  <const Children extends readonly ChildrenOf<Kind>[] = readonly [], const Deps extends ResourceRequests = Readonly<Record<never, never>>>(options: DefinitionOptions<Kind, Input, Output, Children, Deps, never> & FactoryMembers<Kind, Children> & { readonly output?: OutputDeclaration<Output, never> }): FactoryDefinition<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, never>;
 }
 
-/** Inference convenience: factories create the same Scene/Group/Node author objects as constructors. */
+/** Inference convenience over the same constructor configuration and member registration. */
 function factory<Kind extends CallableKind, Input, Output>(kind: Kind): DefinitionFactory<Kind, Input, Output> {
-  const create = <Delta, const Children extends readonly ChildrenOf<Kind>[] = readonly [], const Deps extends ResourceRequests = Readonly<Record<never, never>>, const Uses extends readonly NoInfer<Children[number]>[] | undefined = undefined, const ExceptionDeps extends ResourceRequests = Readonly<Record<never, never>>, const ExceptionUses extends readonly NoInfer<Children[number]>[] = readonly []>(options: DefinitionOptions<Kind, Input, Output, Children, Deps, Uses, ExceptionDeps, ExceptionUses, Delta> & FactoryMembers<Kind, Children> & Metadata & { readonly output?: OutputDeclaration<Output, Delta> }) => {
+  const create = <Delta, const Children extends readonly ChildrenOf<Kind>[] = readonly [], const Deps extends ResourceRequests = Readonly<Record<never, never>>>(options: DefinitionOptions<Kind, Input, Output, Children, Deps, Delta> & FactoryMembers<Kind, Children> & { readonly output?: OutputDeclaration<Output, Delta> }) => {
     if (kind === 'node' && options.members !== undefined) throw new TypeError('Node cannot have members');
-    const structure = kind === 'scene' ? new Scene<Input, Output, ResourcesOf<Deps>, ResourcesOf<ExceptionDeps>, Delta>() : kind === 'group' ? new Group<Input, Output, ResourcesOf<Deps>, ResourcesOf<ExceptionDeps>, Delta>() : new Node<Input, Output, ResourcesOf<Deps>, ResourcesOf<ExceptionDeps>, Delta>();
     const members = options.members;
-    const definition = {
-      name: options.name,
-      label: options.label,
-      source: options.source,
-      callee: options.callee,
-      maxRounds: options.maxRounds,
-      raises: options.raises,
-      observation: options.observation,
-      checkpoint: options.checkpoint,
-      receptions: options.receptions,
-      output: options.output,
-      deps: options.deps,
-      uses: options.uses,
-      run: options.run.bind(options),
-      accept: options.accept?.bind(options),
-      exceptions: options.exceptions,
-    };
-    // The factory has checked the member-relative phase signatures above. The
-    // constructor kind selection and the setter's broader position type meet here.
-    const callable = structure as unknown as Callable<Input, Output, Kind, Delta>;
-    callable.setDefinition(definition as InferredCallableDefinition<Input, Output, Kind, Deps, Uses, ExceptionDeps, ExceptionUses, Delta>);
+    for (const field of ['setRun', 'setDefinition', 'accept', 'exceptions', 'raises', 'maxRounds', 'uses', 'observation', 'callee', 'receptions']) {
+      if (field in options) throw new TypeError(`Unsupported callable configuration field: ${field}`);
+    }
+    const configuration = { name: options.name, label: options.label, source: options.source, deps: options.deps, run: options.run, output: options.output, checkpoint: options.checkpoint };
+    // The factory narrows callable members by registration; the constructor has
+    // the whole kind's legal contract. Both refer to the same runtime objects.
+    const definition = { ...configuration, run: options.run.bind(options) } as CallableDefinition<Input, Output, Kind, ResourcesOf<Deps>, Delta>;
+    const structure = kind === 'scene' ? new Scene<Input, Output, ResourcesOf<Deps>, Delta>(definition as CallableDefinition<Input, Output, 'scene', ResourcesOf<Deps>, Delta>) : kind === 'group' ? new Group<Input, Output, ResourcesOf<Deps>, Delta>(definition as CallableDefinition<Input, Output, 'group', ResourcesOf<Deps>, Delta>) : new Node<Input, Output, ResourcesOf<Deps>, Delta>(definition as CallableDefinition<Input, Output, 'node', ResourcesOf<Deps>, Delta>);
     if ('add' in structure) structure.add(...(members ?? []));
-    return structure as FactoryDefinition<Kind, Input, Output, ResourcesOf<Deps>, ResourcesOf<ExceptionDeps>, Delta>;
+    return structure as FactoryDefinition<Kind, Input, Output, ResourcesOf<Deps>, Delta>;
   };
   return create as DefinitionFactory<Kind, Input, Output>;
 }

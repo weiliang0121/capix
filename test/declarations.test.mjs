@@ -1,91 +1,72 @@
 import { installCallable } from './fixtures/driver.mjs';
-import { runtimeDefinition, recordDefinitions, recordedCall } from './fixtures/declarations.mjs';
+import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, Group, InvocationEntry, ResourceOffer, Recorder, RecordBook, bindCallSource, CallableRecordHelper, bindRecording, invocationRecording } from '@capix/server-runtime';
+import { ExceptionContract, Group, Node, InvocationEntry, ResourceOffer, Recorder, RecordBook, bindCallSource, CallableRecordHelper, bindRecording, checkpointPoint } from '@capix/server-runtime';
 import { validateExecutionRecordSnapshot, readOutput } from '@capix/protocol';
 
 const rejected = new ExceptionContract('test.rejected');
+const codec = { encode: (value) => value, decode: (value) => value };
 
-function assemble(execution, providers = [], recorder) {
-  const definition = runtimeDefinition(execution);
-  const observations = recorder ? [bindRecording(recorder, { failure: 'propagate' })] : undefined;
-  if (observations) recordDefinitions(definition);
-  return installCallable(definition, { providers, observations, source: { capture: () => null }, bindings: [bindCallSource(execution, { started: (options) => options.execution?.started })] });
+function assemble(execution, providers = [], recording) {
+  return installCallable(runtimeDefinition(execution), {
+    providers,
+    observations: recording ? [recording] : undefined,
+    source: { capture: () => null },
+    bindings: [bindCallSource(execution, { started: (options) => options.execution?.started })],
+  });
 }
 
-test('peer declarations share fixed supplies but have separate aliases and phase endpoints', async () => {
+test('members share fixed supplies while aliases and resource windows stay local', async () => {
   let captures = 0;
   let late = 0;
   const shared = new ResourceOffer({ name: 'test.shared', expose: (source, activity) => ({ read: () => activity.runSync('read', {}, () => source) }), timing: 'binding' });
-  const recovery = new ResourceOffer({ name: 'test.recovery', expose: (source, activity) => ({ read: () => activity.runSync('read', {}, () => source) }), timing: 'access' });
-  const recorder = new Recorder(new RecordBook());
-  let call;
-  class Main extends Group {
-    raises = [rejected];
-    deps = { value: shared.request() };
-    run = function (work) {
-      assert.deepEqual(Object.keys(work.resources), ['value']);
+  const repair = new ResourceOffer({ name: 'test.repair', expose: (source) => source, timing: 'access' });
+  const failed = new Node({
+    run: () => {
+      throw new Error('expected');
+    },
+  });
+  const recovery = new Node({
+    deps: { value: shared.request(), extra: repair.request() },
+    run(work) {
+      assert.deepEqual(Object.keys(work.resources), ['value', 'extra']);
       assert.equal(work.resources.value.read(), 7);
-      if (work.round === 1) {
-        assert.equal(late, 0);
-        throw rejected.create('expected', { at: 1 });
-      }
-      return work.input;
-    };
-    maxRounds = 2;
-    exceptions = {
-      deps: { recovered: shared.request(), late: recovery.request() },
-      accepts: [rejected],
-      handle(work) {
-        assert.equal(work.exception.contract, rejected);
-        assert.deepEqual(Object.keys(work.resources), ['recovered', 'late']);
-        assert.equal(work.resources.recovered.read(), 7);
-        assert.equal(work.resources.late.read(), 9);
-        return work.continue(work.input + 1, 'resolved');
-      },
-    };
-  }
-  const runtime = assemble(
-    new Main(),
-    [
-      shared.provide(() => {
-        captures++;
-        return 7;
-      }),
-      recovery.provide(() => {
-        late++;
-        return 9;
-      }),
-    ],
-    recorder,
-  );
-  assert.equal(
-    await runtime.run(1, {
-      execution: {
-        started: (_context, invocation) => {
-          call = invocation;
-        },
-      },
+      assert.equal(work.resources.extra, 9);
+      return work.input + 1;
+    },
+  });
+  const main = new Group({
+    deps: { original: shared.request() },
+    run(work) {
+      assert.deepEqual(Object.keys(work.resources), ['original']);
+      assert.equal(work.resources.original.read(), 7);
+      assert.equal(late, 0);
+      return work.children.invoke(failed, work.input, { result: { failed: () => work.children.invoke(recovery, work.input) } });
+    },
+  }).add(failed, recovery);
+  const runtime = assemble(main, [
+    shared.provide(() => {
+      captures++;
+      return 7;
     }),
-    2,
-  );
+    repair.provide(() => {
+      late++;
+      return 9;
+    }),
+  ]);
+  assert.equal(await runtime.run(1, {}), 2);
   assert.equal(captures, 1);
   assert.equal(late, 1);
-  const snapshot = CallableRecordHelper.snapshot(recorder, recordedCall(recorder, call).id);
-  validateExecutionRecordSnapshot(snapshot);
-  assert.equal(snapshot.resources.filter((fact) => fact.access === 'test.shared' && fact.phase === 'bound').length, 1);
-  assert.equal(snapshot.resources.filter((fact) => fact.access === 'test.shared' && fact.phase === 'available').length, 1);
 });
 
-test('handler-only lazy resources are not obtained on the success path', async () => {
-  const unused = new ResourceOffer({ name: 'test.unused', expose: (value) => value, timing: 'access' });
-  class Main extends Group {
-    deps = {};
-    run = () => 'done';
-    exceptions = { deps: { unused: unused.request() }, accepts: [rejected], handle: () => assert.fail('not entered') };
-  }
-  const runtime = assemble(new Main(), [unused.provide(() => assert.fail('handler resource must remain lazy'))]);
+test('checkpoint-only resource requirements remain lazy on the normal path', async () => {
+  const unused = new ResourceOffer({ name: 'test.resume-only', expose: (value) => value, timing: 'access' });
+  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { deps: { unused: unused.request() }, run: (work) => work.resources.unused } });
+  const main = new Group({ run: () => 'done', checkpoint: { key: 'test.resume-only', version: 1, input: codec, output: codec, points: [point] } });
+  const definition = runtimeDefinition(main);
+  assert.throws(() => installCallable(definition, { providers: [], source: { capture: () => null } }), /Expected one resource provider/);
+  const runtime = installCallable(definition, { providers: [unused.provide(() => assert.fail('resume resource must remain lazy'))], source: { capture: () => null } });
   assert.equal(await runtime.run(null, {}), 'done');
 });
 
@@ -144,105 +125,55 @@ test('a caught child error blocks later child entry admission and reception work
   assert.equal(receptionEffects, 0);
 });
 
-test('retained work endpoints cannot be used during exception handling even if its error is caught', async () => {
+test('retained resource endpoints expire when their invocation finishes', async () => {
   const resource = new ResourceOffer({ name: 'test.phase', expose: (value, activity) => ({ read: () => activity.runSync('read', {}, () => value) }) });
   let saved;
-  class Main extends Group {
-    raises = [rejected];
-    deps = { value: resource.request() };
-    run = function (work) {
+  const main = new Group({
+    deps: { value: resource.request() },
+    run(work) {
       saved = work.resources.value;
-      throw rejected.create('expected', null);
-    };
-    exceptions = {
-      deps: {},
-      accepts: [rejected],
-      handle(work) {
-        assert.throws(() => saved.read(), /inactive declaration phase/);
-        return work.return('not allowed');
-      },
-    };
-  }
-  const runtime = assemble(new Main(), [resource.provide(() => 1)]);
-  await assert.rejects(runtime.run(null, {}), /inactive declaration phase/);
-});
-
-test('child use grants are separate for run and handler, and invalid ownership fails at assembly', async () => {
-  class Work extends Group {
-    name = 'work';
-    label = 'work';
-    source = 'test';
-    deps = {};
-    run = () => 'child';
-  }
-  const child = new Work();
-  class Main extends Group {
-    constructor() {
-      super();
-      this.add(child);
-    }
-    raises = [rejected];
-    deps = {};
-    uses = [child];
-    run = () => {
-      throw rejected.create('expected', null);
-    };
-    exceptions = {
-      deps: {},
-      accepts: [rejected],
-      handle(work) {
-        work.children.create(child, null);
-        return work.return('not allowed');
-      },
-    };
-  }
-  await assert.rejects(assemble(new Main()).run(null, {}), /not declared/);
-  const invalid = new Group({
-    deps: {},
-    run: () => 'done',
-    exceptions: {
-      deps: {},
-      uses: [new Work()],
-      accepts: [rejected],
-      handle(work) {
-        return work.return('done');
-      },
+      return saved.read();
     },
   });
-  assert.throws(() => assemble(invalid), /outside its owner/);
+  assert.equal(await assemble(main, [resource.provide(() => 1)]).run(null, {}), 1);
+  assert.throws(() => saved.read(), /inactive|ended|closed|finished/);
 });
 
-test('observation maps recorded IO only, and is dormant without a recorder', async () => {
+test('checkpoint action grants reject structures outside the registered member set', () => {
+  const foreign = new Node({ run: () => 'foreign' });
+  const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { uses: [foreign], run: (work) => work.children.invoke(foreign, null) } });
+  const main = new Group({ run: () => 'done', checkpoint: { key: 'test.bad-members', version: 1, input: codec, output: codec, points: [point] } });
+  assert.throws(() => assemble(main), /outside its owner|not declared/);
+});
+
+test('host recording maps recorded IO without changing business values', async () => {
   const input = { hidden: 'source', public: 2 };
   const output = { hidden: 'result', public: 3 };
   let descriptions = 0;
   let call;
-  class Main extends Group {
-    deps = {};
-    run = function (work) {
-      assert.equal(work.input, input);
-      return output;
-    };
-    observation = [
-      invocationRecording(
-        {
-          input(value) {
-            descriptions++;
-            return { public: value.public };
-          },
-          output(value) {
-            descriptions++;
-            return { public: value.public };
-          },
-        },
-        { failure: 'propagate' },
-      ),
-    ];
-  }
-  assert.equal(await assemble(new Main()).run(input, {}), output);
+  const create = () =>
+    new Group({
+      run(work) {
+        assert.equal(work.input, input);
+        return output;
+      },
+    });
+  const description = {
+    input(value) {
+      descriptions++;
+      return { public: value.public };
+    },
+    output(value) {
+      descriptions++;
+      return { public: value.public };
+    },
+  };
+  assert.equal(await assemble(create()).run(input, {}), output);
   assert.equal(descriptions, 0);
   const recorder = new Recorder(new RecordBook());
-  const runtime = assemble(new Main(), [], recorder);
+  const main = create();
+  const recording = bindRecording(recorder, { failure: 'propagate' }).describe(main, description);
+  const runtime = assemble(main, [], recording);
   assert.equal(
     await runtime.run(input, {
       execution: {
@@ -261,40 +192,25 @@ test('observation maps recorded IO only, and is dormant without a recorder', asy
   assert.ok(descriptions > 0);
 });
 
-test('exception content can perform declared child work using only its granted resources', async () => {
+test('fallback invokes a registered member with its own resources and records handled failure', async () => {
   const resource = new ResourceOffer({ name: 'test.repair', expose: (value) => value, timing: 'access' });
   let resolved = 0;
-  class Repair extends Group {
-    name = 'repair';
-    label = 'repair';
-    source = 'test';
-    deps = { value: resource.request() };
-    run = (work) => work.resources.value;
-  }
-  const child = new Repair();
-  class Main extends Group {
-    raises = [rejected];
-    constructor() {
-      super();
-      this.add(child);
-    }
-    deps = {};
-    uses = [];
-    run = () => {
+  let facts;
+  const failed = new Node({
+    run: () => {
       throw rejected.create('needs repair', null);
-    };
-    exceptions = {
-      deps: { repair: resource.request() },
-      uses: [child],
-      accepts: [rejected],
-      async handle(work) {
-        const call = work.children.create(child, null);
-        await call.run();
-        return work.return(await call.accept());
-      },
-    };
-  }
-  const runtime = assemble(new Main(), [
+    },
+  });
+  const repair = new Node({ deps: { value: resource.request() }, run: (work) => work.resources.value });
+  const main = new Group({
+    async run(work) {
+      assert.deepEqual(Object.keys(work.resources), []);
+      const answer = await work.children.invoke(failed, null, { result: { failed: () => work.children.invoke(repair, null) } });
+      facts = work.children.facts.values();
+      return answer;
+    },
+  }).add(failed, repair);
+  const runtime = assemble(main, [
     resource.provide(() => {
       resolved++;
       return 'repaired';
@@ -302,80 +218,84 @@ test('exception content can perform declared child work using only its granted r
   ]);
   assert.equal(await runtime.run(null, {}), 'repaired');
   assert.equal(resolved, 1);
+  assert.deepEqual(
+    facts.map((fact) => [fact.returned.status, fact.reception.status]),
+    [
+      ['failed', 'handled'],
+      ['succeeded', 'accepted'],
+    ],
+  );
 });
 
-test('handler resource failure exits as an error without repeating work or handling', async () => {
+test('fallback resource capture failure cannot repeat the original call or enter another result handler', async () => {
   const resource = new ResourceOffer({ name: 'test.failed-repair', expose: (value) => value, timing: 'access' });
   const failure = new Error('repair unavailable');
   let executions = 0;
   let handlings = 0;
-  let acquisition = 0;
-  let call;
-  class Main extends Group {
-    raises = [rejected];
-    maxRounds = 2;
-    deps = {};
-    run = () => {
+  let acquisitions = 0;
+  let forbidden = 0;
+  const failed = new Node({
+    run: () => {
       executions++;
-      throw rejected.create('expected', null);
-    };
-    exceptions = {
-      deps: { repair: resource.request() },
-      accepts: [rejected],
-      handle(work) {
-        handlings++;
-        work.resources.repair;
-        return work.continue(null, 'impossible');
-      },
-    };
-  }
-  const runtime = assemble(new Main(), [
+      throw new Error('expected');
+    },
+  });
+  const repair = new Node({ deps: { repair: resource.request() }, run: (work) => work.resources.repair });
+  const main = new Group({
+    run(work) {
+      return work.children.invoke(failed, null, {
+        result: {
+          failed: () => {
+            handlings++;
+            return work.children.invoke(repair, null, {
+              result: {
+                failed: () => {
+                  forbidden++;
+                  return 'must not hide capture failure';
+                },
+              },
+            });
+          },
+        },
+      });
+    },
+  }).add(failed, repair);
+  const runtime = assemble(main, [
     resource.provide(() => {
-      acquisition++;
+      acquisitions++;
       throw failure;
     }),
   ]);
-  await assert.rejects(
-    runtime.run(null, {
-      execution: {
-        started: (_context, invocation) => {
-          call = invocation;
-        },
-      },
-    }),
-    (error) => error === failure,
-  );
-  assert.deepEqual([executions, handlings, acquisition], [1, 1, 1]);
-  assert.equal(call.failure.kind, 'error');
+  await assert.rejects(runtime.run(null, {}), (error) => error === failure);
+  assert.deepEqual([executions, handlings, acquisitions, forbidden], [1, 1, 1, 0]);
   assert.equal(runtime.running, false);
 });
 
 for (const position of ['capture', 'expose']) {
-  test(`a declared exception thrown by resource ${position} remains a binding error`, async () => {
+  test(`declared exceptions thrown by resource ${position} stay technical and bypass ordinary fallback`, async () => {
     let handled = 0;
     const failure = rejected.create('not a business rejection', null);
     const resource = new ResourceOffer({
       name: 'test.binding-failure',
+      timing: 'access',
       expose: () => {
         if (position === 'expose') throw failure;
         return 1;
       },
-      timing: 'access',
     });
-    class Main extends Group {
-      raises = [rejected];
-      deps = { value: resource.request() };
-      run = (work) => work.resources.value;
-      exceptions = {
-        deps: {},
-        accepts: [rejected],
-        handle: (work) => {
-          handled++;
-          return work.return('incorrect');
-        },
-      };
-    }
-    const runtime = assemble(new Main(), [
+    const child = new Node({ deps: { value: resource.request() }, run: (work) => work.resources.value });
+    const main = new Group({
+      run: (work) =>
+        work.children.invoke(child, null, {
+          result: {
+            failed: () => {
+              handled++;
+              return 'incorrect';
+            },
+          },
+        }),
+    }).add(child);
+    const runtime = assemble(main, [
       resource.provide(() => {
         if (position === 'capture') throw failure;
         return 1;
@@ -386,31 +306,15 @@ for (const position of ['capture', 'expose']) {
   });
 }
 
-for (const gap of ['runtime', 'execution']) {
-  test(`recording declarations reject a static ${gap} parent gap`, () => {
-    class Child extends Group {
-      name = 'child';
-      label = 'child';
-      source = 'test';
-      deps = {};
-      run = () => 'done';
-      observation = [invocationRecording()];
-    }
-    const child = new Child();
-    class Main extends Group {
-      constructor() {
-        super();
-        this.add(child);
-      }
-      deps = {};
-      run = () => 'done';
-      observation = gap === 'runtime' ? [invocationRecording()] : undefined;
-    }
-    const execution = new Main();
-    const definition = runtimeDefinition(execution);
-    if (gap === 'execution') definition.observation = [invocationRecording()];
-    const installation = bindRecording(new Recorder(new RecordBook()));
-    assert.throws(() => installCallable(definition, { observations: [installation], providers: [], source: { entry: () => null, capture: () => null } }), /recording declaration on its direct parent/);
-    assert.doesNotThrow(() => installCallable(definition, { providers: [], source: { entry: () => null, capture: () => null } }));
-  });
-}
+test('host recording covers every registered ancestor without business observation fields', async () => {
+  const child = new Node({ run: () => 'done' });
+  const main = new Group({ run: (work) => work.children.invoke(child, null) }).add(child);
+  const recorder = new Recorder(new RecordBook());
+  const recording = bindRecording(recorder, { failure: 'propagate' });
+  assert.equal(await assemble(main, [], recording).run(null, {}), 'done');
+  const calls = [...recorder.book.values()].filter((record) => record.kind === 'invocation');
+  assert.equal(calls.length, 3);
+  const records = new Map([...recorder.book.values()].map((record) => [record.id, record]));
+  for (const call of calls) assert.ok(records.has(call.parentId));
+  for (const structure of [main, child]) assert.equal('observation' in structure, false);
+});

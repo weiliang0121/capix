@@ -179,7 +179,7 @@ test('async started is rejected immediately and its late failure is consumed', a
   assert.match(invocation.context.state.error.message, /synchronously/);
 });
 
-test('started registers a single invocation once across its local continuation', async () => {
+test('started registers one invocation even when business code performs several local steps', async () => {
   let registrations = 0;
   const inputs = [];
   const invocation = new Invocation({
@@ -189,81 +189,51 @@ test('started registers a single invocation once across its local continuation',
       registrations++;
     },
     work: {
-      maxRounds: 2,
       execute(context) {
-        inputs.push(context.currentInput);
-        return context.currentInput + 1;
-      },
-      accept(context, output) {
-        return context.progress.round === 1 ? context.continueWith(output, 'advance once') : output;
+        let value = context.input;
+        for (let index = 0; index < 2; index++) {
+          inputs.push(value);
+          value++;
+        }
+        return value;
       },
     },
   });
   assert.equal(await invocation.run(), 2);
   assert.equal(registrations, 1);
+  assert.equal(invocation.context.progress.round, 1);
   assert.deepEqual(inputs, [0, 1]);
 });
 
-test('constructing a low-level call does not read stage contracts before started can install acceptance', async () => {
-  const reads = [];
-  const processes = [];
-  const initial = { answer: 'work result' };
-  const accepted = { answer: 'accepted result' };
+test('low-level work fixes its output contract and preserves its execution receiver', async () => {
+  const value = { answer: 'result' };
+  let reads = 0;
   let started = false;
-  let receive;
-  const read = (name) => {
-    assert.equal(started, true, `${name} must not be read during construction`);
-    reads.push(name);
-  };
   const work = {
-    get maxRounds() {
-      read('maxRounds');
-      return 1;
-    },
     get output() {
-      read('output');
-      return { result: (value) => value };
-    },
-    get accept() {
-      read('accept');
-      return receive;
-    },
-    get exceptions() {
-      read('exceptions');
-      return undefined;
+      reads++;
+      return {
+        result: (actual) => {
+          assert.equal(actual, value);
+          return actual;
+        },
+      };
     },
     execute() {
       assert.equal(this, work);
-      return initial;
+      assert.equal(started, true);
+      return value;
     },
   };
-  const context = new InvocationContext('input');
   const invocation = new Invocation({
-    context,
+    context: new InvocationContext(null),
     signal: signal(),
     work,
-    started(current, call) {
-      assert.deepEqual(reads, []);
-      assert.equal(current, context);
-      assert.equal(call, invocation);
+    started() {
       started = true;
-      receive = function (currentContext, output, currentCall) {
-        assert.equal(this, work);
-        assert.equal(currentContext, context);
-        assert.equal(currentCall, invocation);
-        assert.equal(output, initial);
-        return accepted;
-      };
     },
-    observation: observeCall((fact) => {
-      if (fact.kind === 'process') processes.push(fact.process);
-    }),
   });
-  assert.deepEqual(reads, []);
-  assert.equal(await invocation.run(), accepted);
-  assert.equal(context.state.output, accepted);
-  for (const key of ['maxRounds', 'output', 'accept']) assert.ok(reads.includes(key));
-  const returned = processes.find((process) => process.stage === 'receive' && process.type === 'return');
-  assert.equal(returned.output, accepted);
-  assert.equal('reuse' in returned, false);
+  assert.equal(reads, 1);
+  assert.equal(await invocation.run(), value);
+  assert.equal(reads, 1);
 });

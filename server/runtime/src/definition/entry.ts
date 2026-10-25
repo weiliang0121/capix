@@ -1,9 +1,6 @@
 import type { ChildContract, ChildCallable, ChildFacts, CallableInput } from './children.js';
-import type { ContinuationFact } from './work.js';
 
 export interface ChildEntryFacts {
-  readonly round: 1 | 2;
-  readonly continuation?: ContinuationFact;
   readonly children: ChildFacts;
 }
 export interface ChildEntryInput<Input> {

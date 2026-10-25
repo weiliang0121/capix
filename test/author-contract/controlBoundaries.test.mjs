@@ -11,111 +11,63 @@ function runtime(definition, store) {
   return installCallable(definition, { providers: [], source: { capture: () => null }, ...(store ? { checkpoints: { store } } : {}) });
 }
 
-// The construction entry can produce the real mechanism control value. It is not
-// evidence that the current author Work issued a continuation proposal.
-function mechanismContinuation() {
-  return new InvocationContext('outside-author-work').continueWith('forged-next', 'not issued by the current Work');
-}
+test('ordinary control-shaped return data never changes invocation execution', async () => {
+  const value = { kind: 'continue', input: 'business-input', reason: 'ordinary data' };
+  let executions = 0;
+  const definition = defineScene()({
+    run(work) {
+      executions++;
+      assert.equal('continue' in work, false);
+      assert.equal('round' in work, false);
+      return value;
+    },
+  });
+  assert.equal(await runtime(definition).run('initial', {}), value);
+  assert.equal(executions, 1);
+  assert.equal('continueWith' in new InvocationContext(null), false);
+});
 
-function businessValue() {
-  return { kind: 'continue', input: 'business-input', reason: 'ordinary result data' };
-}
-
-for (const boundary of ['execute', 'accept', 'handler-return']) {
-  for (const forged of [true, false]) {
-    test(`author ${boundary} ${forged ? 'rejects a mechanism Continuation' : 'preserves ordinary continue-tagged output'}`, async () => {
-      const value = forged ? mechanismContinuation() : businessValue();
-      let executions = 0;
-      let acceptances = 0;
-      const definition = defineScene()({
-        maxRounds: 2,
-        ...(boundary === 'handler-return' ? { raises: [rejected] } : {}),
-        run(work) {
-          executions++;
-          assert.equal(work.round, 1, 'a raw mechanism value cannot initiate another author round');
-          if (boundary === 'handler-return') throw rejected.create('enter the handler', {});
-          return boundary === 'execute' ? value : 'candidate';
+test('checkpoint resumes a declared point without replaying run or interpreting return data', async () => {
+  const value = { kind: 'continue', input: 'business-input', reason: 'ordinary data' };
+  let normal = 0;
+  let resumed = 0;
+  function definition() {
+    const point = checkpointPoint()({
+      name: 'prepared',
+      state: codec,
+      references: {},
+      resume: {
+        run(work, state) {
+          resumed++;
+          assert.equal(work.round, 1);
+          assert.deepEqual(state, { ready: true });
+          return value;
         },
-        accept(work) {
-          acceptances++;
-          return boundary === 'accept' ? value : work.delivered;
-        },
-        ...(boundary === 'handler-return'
-          ? {
-              exceptions: {
-                accepts: [rejected],
-                handle(work) {
-                  return work.return(value);
-                },
-              },
-            }
-          : {}),
-      });
-
-      if (forged) await assert.rejects(runtime(definition).run('initial', {}), /control must be issued by the current author phase/);
-      else assert.equal(await runtime(definition).run('initial', {}), value, 'business output retains its identity');
-      assert.equal(executions, 1);
-      assert.equal(acceptances, boundary === 'handler-return' || (boundary === 'execute' && forged) ? 0 : 1);
+      },
+    });
+    return defineScene()({
+      checkpoint: { key: 'author.control.resume', version: 2, input: codec, output: codec, points: [point] },
+      run(work) {
+        normal++;
+        work.checkpoint({ point, state: { ready: true } });
+        return 'original';
+      },
     });
   }
-}
-
-for (const forged of [true, false]) {
-  test(`author checkpoint resume ${forged ? 'rejects a mechanism Continuation' : 'preserves ordinary continue-tagged output'}`, async () => {
-    const value = forged ? mechanismContinuation() : businessValue();
-    let resumed = 0;
-    let normalExecutions = 0;
-    let acceptances = 0;
-    function createDefinition() {
-      const point = checkpointPoint()({
-        name: 'prepared',
-        state: codec,
-        references: {},
-        resume: {
-          run(work, state) {
-            resumed++;
-            assert.equal(work.round, 1);
-            assert.deepEqual(state, { ready: true });
-            return value;
-          },
-        },
-      });
-      return defineScene()({
-        maxRounds: 2,
-        checkpoint: { key: 'author.control.resume', version: 1, input: codec, output: codec, points: [point] },
-        run(work) {
-          normalExecutions++;
-          work.checkpoint({ point: point, state: { ready: true }, refs: {} });
-          return 'initial result';
-        },
-        accept(work) {
-          acceptances++;
-          return work.delivered;
-        },
-      });
+  let image;
+  class Capture extends MemoryCheckpointStore {
+    save(value, revision) {
+      image = value;
+      return super.save(value, revision);
     }
-    let saved;
-    class CapturingStore extends MemoryCheckpointStore {
-      save(image, revision) {
-        const head = super.save(image, revision);
-        saved = image;
-        return head;
-      }
-    }
-    assert.equal(await runtime(createDefinition(), new CapturingStore()).run('initial', {}), 'initial result');
-    assert.ok(saved, 'the first invocation reached the durable author boundary');
-    // Restore only the captured image, as if the process ended at save. A final
-    // delivery from the completed fixture invocation is deliberately excluded.
-    const restoredStore = new MemoryCheckpointStore();
-    restoredStore.save(saved, 0);
-    const restored = runtime(createDefinition(), restoredStore);
-    if (forged) await assert.rejects(restored.resume(saved.frame.owner.contextId, {}), /control must be issued by the current author phase/);
-    else assert.equal(await restored.resume(saved.frame.owner.contextId, {}), value);
-    assert.equal(resumed, 1);
-    assert.equal(normalExecutions, 1, 'resume does not replay ordinary execute');
-    assert.equal(acceptances, forged ? 1 : 2, 'a rejected resume result does not enter author acceptance');
-  });
-}
+  }
+  assert.equal(await runtime(definition(), new Capture()).run('initial', {}), 'original');
+  const restored = new MemoryCheckpointStore();
+  restored.save(image, 0);
+  assert.equal(await runtime(definition(), restored).resume(image.frame.owner.contextId, {}), value);
+  assert.equal(normal, 1);
+  assert.equal(resumed, 1);
+});
 
 test('ChildEntry admission cannot change the already selected child definition', async () => {
   let originalCalls = 0;
@@ -186,6 +138,8 @@ test('built child checkpoint layout and processing reject later structure mutati
   assert.throws(() => {
     operation.kind = 'node';
   }, /read only/);
-  assert.throws(() => operation.setRun(() => 'changed after build'), /configuration is locked after build/);
+  assert.throws(() => {
+    operation.run = () => 'changed after build';
+  }, /read only|locked/);
   assert.equal(await installed.run('input', {}), 'delivered');
 });

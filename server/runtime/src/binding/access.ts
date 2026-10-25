@@ -5,7 +5,7 @@ import type { ResourceBindings, ResourceRequirements } from '../resource/binding
 import type { ChildBindingsBuilder } from './children/builder.js';
 import type { InvocationChildReferences } from './children/references.js';
 
-export type AccessPhase = 'run' | 'receive' | 'exceptions' | `checkpoint:${string}`;
+export type AccessPhase = 'run' | `checkpoint:${string}`;
 
 /** Single-call facts survive phases; actions and resources are issued for a specific phase/round. */
 export class InvocationAccess<Input, Output, Context extends InvocationContext<Input, Output>> {
@@ -21,7 +21,7 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
   }
 
   enter(phase: AccessPhase, deps: ResourceRequirements, uses?: readonly ChildContract[]) {
-    const resourcePhase = phase === 'receive' ? 'run' : phase;
+    const resourcePhase = phase;
     this.#resources.activate(resourcePhase, deps);
     const context = this.invocation.context;
     const round = context.progress.round;
@@ -31,8 +31,7 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
         this.invocation.requireActive();
         if (!open) throw new Error('Work access window is closed');
         if (context.progress.round !== round) throw new Error('Work belongs to an inactive declaration round');
-        const expected = phase === 'exceptions' ? 'handling' : phase === 'receive' ? 'receive' : 'execute';
-        if (context.progress.phase !== expected) throw new Error('Work belongs to an inactive declaration phase');
+        if (context.progress.phase !== 'execute') throw new Error('Work belongs to an inactive declaration phase');
       } catch (error) {
         this.invocation.reject(error);
         throw error;
@@ -41,15 +40,12 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
     const children = this.childBindingsBuilder.build(this.invocation, { uses, validate, references: this.references, restoring: phase.startsWith('checkpoint:') });
     const base = {
       input: context.currentInput,
-      initialInput: context.input,
-      round: round as 1 | 2,
       resources: this.#resources.view(deps, resourcePhase),
       signal: (context as Context & { signal: AbortSignal }).signal,
       observation: (event: import('../observation/facts.js').BusinessEvent) => {
         validate();
         this.invocation.observeBusiness(event);
       },
-      ...(context.continuation ? { continuation: this.references.continuation(context.continuation) } : {}),
     };
     const close = () => {
       open = false;

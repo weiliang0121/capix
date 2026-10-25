@@ -44,20 +44,18 @@ async function run(environment, content) {
   await environment.runner.run({ messages: [{ role: 'user', content }] }, { settings });
 }
 
-function executionRuntime(execute, { changes, recording, accept, parentAccept } = {}) {
+function executionRuntime(execute, { changes, recording, parentAccept } = {}) {
   class E extends Group {
-    observation = recording ? [invocationRecording({ role: 'conversation-task' })] : undefined;
     deps = {};
     run = execute;
-    accept = accept;
   }
   const execution = new E();
+  recording?.describe(execution, { role: 'conversation-task' });
   class R extends Scene {
     constructor() {
       super();
       this.add(execution);
     }
-    observation = recording ? [invocationRecording()] : undefined;
     deps = {};
     run = async (work) => {
       const child = work.children.create(execution, work.input, { key: 'test' });
@@ -119,7 +117,7 @@ test('record registration captures its child and parent reference together; proc
   assert.deepEqual(initial.change.entry.data.childIds, [], 'old parent snapshot remains fixed');
   assert.deepEqual(added.change.entry.data.value.processes, [], 'registration did not mutate into the final record');
   const process = events.filter((event) => event.change.kind === 'process-appended' && event.change.id === added.change.entry.data.id);
-  assert.equal(process.length, 3);
+  assert.equal(process.length, 2);
   assert.ok(process.every((event) => !('entry' in event.change) && !('processes' in event.change)));
   assert.equal(events.find((event) => event.change.kind === 'finished' && event.change.id === added.change.entry.data.id).change.result.resultOf, 2);
   assert.deepEqual(
@@ -329,12 +327,12 @@ test('real HTTP applies successive deltas, memory and failed rounds without per-
   assert.equal(runtime.getSnapshot().observation.error, undefined);
   const failed = [...runtime.getSnapshot().observation.records.values()].find((snapshot) => snapshot.execution.status === 'failed');
   assert.equal(failed.execution.value.failure.kind, 'exception');
-  const handling = failed.calls.find((operation) => operation.name === 'answer').value.processes.filter((process) => process.stage === 'handling');
-  assert.deepEqual(
-    handling.map((process) => process.type),
-    ['start', 'continue', 'start', 'unhandled'],
-  );
-  assert.ok(handling.filter((process) => 'failure' in process).every((process) => process.failure.kind === 'exception'));
+  const candidates = failed.calls.filter((call) => call.name === 'answerCandidate');
+  assert.equal(candidates.length, 2);
+  assert.ok(candidates.every((call) => call.status === 'failed'));
+  const policy = failed.calls.find((call) => call.name === 'answer');
+  assert.equal(policy.value.relationChanges.filter((entry) => entry.change.kind === 'handled').length, 1);
+  assert.ok(failed.calls.every((call) => call.value.processes.every((process) => process.stage !== 'handling')));
   await until(() => runtime.getSnapshot().messages.length === 7);
   assert.equal(runtime.getSnapshot().observation.memory.items[0].content, 'memory 4');
   assert.deepEqual(requests, ['/api/observe']);

@@ -55,7 +55,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       this.#restore = cloneCheckpointHead(restore.head);
       this.#head = this.#restore;
       const image = this.#restore.image;
-      if (!work || this.#restore.delivery || image.contract.key !== work.key || image.contract.version !== work.version || !isEqual(image.frame.owner, invocation.identity) || image.frame.round > invocation.maxRounds || !work.points[image.point]) throw new Error('Incompatible checkpoint continuation');
+      if (!work || this.#restore.delivery || image.contract.key !== work.key || image.contract.version !== work.version || !isEqual(image.frame.owner, invocation.identity) || image.frame.round !== 1 || image.frame.continuation !== undefined || !work.points[image.point]) throw new Error('Incompatible checkpoint continuation');
       if (invocation.context.progress.round !== image.frame.round || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.currentInput)), image.frame.currentInput) || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.input)), image.frame.input)) throw new Error('Checkpoint input changed during binding');
       if (!isEqual(invocation.context.continuation, restoreCheckpointContinuation(image.frame))) throw new Error('Checkpoint continuation changed during binding');
       checkCheckpointReferences(image.frame, image.references, work.points[image.point]!.references);

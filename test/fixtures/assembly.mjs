@@ -2,10 +2,9 @@ import { mock } from 'node:test';
 import { CallableBuilder } from '@capix/server-runtime';
 import { ConversationGroup, GenerateAnswer } from '@capix/observer-service/conversation';
 
-/** Test mutations use the same full replacement contract as author configuration. */
+/** Assign only the requested fields while the host-created structure is still configurable. */
 export function reconfigure(callable, changes) {
-  const { name, label, source, callee, maxRounds, raises, output, deps, uses, run, accept, exceptions, observation, checkpoint, receptions } = callable;
-  callable.setDefinition({ name, label, source, callee, maxRounds, raises, output, deps, uses, run, accept, exceptions, observation, checkpoint, receptions, ...changes });
+  Object.assign(callable, changes);
   return callable;
 }
 

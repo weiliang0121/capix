@@ -56,7 +56,7 @@ function construct<Structure extends AnyCallable>(structure: Structure, input: C
   const initial = restore ? declaration.checkpoint?.points.find((point) => point.name === restore.head.image.point)?.resume.deps : declaration.deps;
   if (!initial) throw new Error('Checkpoint point is not declared');
   const access = scope.open(structure, input, !!restore, parent?.context.resources.supply);
-  const { name, label, source, callee } = declaration;
+  const { name, label, source } = declaration;
   return invocations.create<CallableInput<Structure>, CallableOutput<Structure>, object>(input, {
     kind: declaration.kind,
     controls,
@@ -70,8 +70,8 @@ function construct<Structure extends AnyCallable>(structure: Structure, input: C
     initial,
     refinements: binding.refinements,
     supplied: access.supply,
-    observation: declaration.observation,
-    description: { id: structure.id, name, label, source, callee },
+    observation: binding.observations,
+    description: { id: structure.id, name, label, source },
     work: binding.work,
     started: access.started,
     progress: access.progress,

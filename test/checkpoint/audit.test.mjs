@@ -43,7 +43,6 @@ test('terminal checkpoint persistence failure still delivers the owned child err
       this.add(child);
     }
     deps = {};
-    uses = [child];
     run = async function (work) {
       const call = work.children.create(child, {});
       try {
@@ -206,7 +205,6 @@ test('fixed child deliveries require explicit final progress and stable sibling 
 
 test('a final child delivery preserves its own second-round input without rerunning child work', async () => {
   class Child extends Group {
-    maxRounds = 2;
     checkpoint = checkpoint('child-a', () => assert.fail('terminal child cannot resume'));
     deps = {};
     run = () => assert.fail('terminal child cannot execute');
@@ -287,7 +285,6 @@ test('ordinary parallel child receptions remain supported without checkpoint or 
       this.add(child);
     }
     deps = {};
-    uses = [child];
     run = async function (work) {
       const first = work.children.create(child, {});
       const second = work.children.create(child, {});

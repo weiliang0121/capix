@@ -397,7 +397,7 @@ test('decision, preflight and selected work remain real recorded calls with acce
     ['prepareContext', 'conversationDecision', 'checkFileTask', 'conversationDecision', 'processDocument', 'conversationDecision', 'saveResult', 'conversationDecision', 'memory'],
   );
   const preflight = direct.find((record) => record.name === 'checkFileTask');
-  assert.ok(snapshot.calls.some((record) => record.parentId === preflight.id && record.callee === 'filesystem'));
+  assert.ok(snapshot.calls.some((record) => record.parentId === preflight.id && record.name === 'inspectFileTask'));
   for (const record of direct) {
     assert.equal(record.status, 'succeeded');
     assert.ok(snapshot.execution.value.relationChanges.some((change) => change.identity.childContextId === record.contextId && change.change.kind === 'accepted'));

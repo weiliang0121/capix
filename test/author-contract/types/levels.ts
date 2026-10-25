@@ -1,70 +1,37 @@
 import { Group, defineGroup, defineChildEntry } from '@capix/server-runtime';
-import type { Node, Scene, SceneWork, GroupWork, NodeWork, AcceptWork, HandleWork, ResumeWork, CallableRunDefinition, InvocationExceptionDefinition, InvocationCheckpointPoint, ChildReference, ChildEntryInput, ChildrenOf, CallableInput, CallableOutput } from '@capix/server-runtime';
-
-declare const execution: Group<string, number>;
+import type { Node, SceneWork, GroupWork, NodeWork, ResumeWork, CallableRun, InvocationCheckpointPoint, ChildReference, ChildEntryInput, ChildrenOf, CallableInput, CallableOutput } from '@capix/server-runtime';
 declare const operation: Group<string, number>;
-declare const attempt: Node<string, number>;
+declare const node: Node<string, number>;
 declare function expectType<T>(value: T): void;
-
 export function rootHelper(work: SceneWork<string, number>): Promise<number> {
-  return work.children.create(execution, work.input).run();
+  return work.children.invoke(operation, work.input);
 }
-
-export function executionHelper(work: GroupWork<string, number>): Promise<number> {
-  return work.children.create(operation, work.input).run();
+export function groupHelper(work: GroupWork<string, number>) {
+  expectType<Promise<number>>(work.children.invoke(operation, work.input));
+  return work.children.invoke(node, work.input);
 }
-
-export function operationHelper(work: GroupWork<string, number>) {
-  expectType<Promise<number>>(work.children.create(operation, work.input).run());
-  expectType<Promise<number>>(work.children.create(attempt, work.input).run());
-}
-
 export function leafHelper(work: NodeWork<string, number>): number {
   return work.input.length;
 }
-
-// Helpers preserve the actual child's I/O rather than falling back to an untyped union.
 export function specificHelper<Definition extends ChildrenOf<'group'>>(work: GroupWork<string, number, Record<string, never>, Definition>, child: Definition, input: CallableInput<Definition>) {
-  expectType<Promise<CallableOutput<Definition>>>(work.children.create(child, input).run());
+  expectType<Promise<CallableOutput<Definition>>>(work.children.invoke(child, input));
 }
-
-export class NamedExecution extends Group<string, number> {
+export class NamedGroup extends Group<string, number> {
   constructor() {
     super();
     this.add(operation);
   }
-  readonly deps: CallableRunDefinition<string, number, 'group', Record<string, never>>['deps'] = {};
-  readonly run: CallableRunDefinition<string, number, 'group', Record<string, never>>['run'] = executionHelper;
-  readonly accept: CallableRunDefinition<string, number, 'group', Record<string, never>>['accept'] = function (work) {
-    expectType<Promise<number>>(work.children.create(operation, work.input).run());
-    return work.delivered;
-  };
-  readonly exceptions: InvocationExceptionDefinition<string, number, 'group', Record<string, never>> = {
-    deps: {},
-    uses: [operation],
-    accepts: [],
-    handle(work) {
-      expectType<Promise<number>>(work.children.create(operation, work.input).run());
-      return work.unhandled;
-    },
-  };
+  readonly run: CallableRun<string, number, 'group', Record<string, never>> = groupHelper;
 }
-
-export const factoryExecution = defineGroup<string, number>()({ members: [operation], run: executionHelper });
-
+export const factory = defineGroup<string, number>()({ members: [operation], run: rootHelper });
 const entry = defineChildEntry(operation, { accept: ({ input }: ChildEntryInput<number>) => String(input) });
-export function stageHelpers(accept: AcceptWork<'group', string, number>, handle: HandleWork<'group', string, number>, resume: ResumeWork<'group', string, number>, reference: ChildReference<typeof operation>) {
-  expectType<Promise<number>>(accept.children.entry(entry, 1).run());
-  expectType<Promise<number>>(handle.children.create(operation, handle.input).run());
-  expectType<Promise<number>>(resume.children.resume(reference).run());
+export function recovery(work: ResumeWork<'group', string, number>, reference: ChildReference<typeof operation>) {
+  expectType<Promise<number>>(work.children.entry(entry, 1).invoke());
+  expectType<Promise<number>>(work.children.resume(reference).invoke());
 }
-
-// No new child action rights are required to read old relations and accept a saved delivery.
-export function historicalHelper(work: ResumeWork<'group', string, number, Record<string, never>, never>, reference: ChildReference<typeof attempt>) {
+export function historical(work: ResumeWork<'group', string, number, Record<string, never>, never>, reference: ChildReference<typeof node>) {
   expectType<string>(work.children.facts.get(reference).input);
-  expectType<string>(work.children.facts.require(attempt, reference).input);
-  expectType<Promise<number>>(work.children.open(reference).accept());
+  expectType<Promise<number>>(work.children.open(reference).invoke());
 }
-
 declare const point: InvocationCheckpointPoint<string, number, 'group', number>;
 expectType<readonly ChildrenOf<'group'>[] | undefined>(point.resume.uses);

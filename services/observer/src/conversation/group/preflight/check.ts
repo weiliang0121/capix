@@ -1,7 +1,6 @@
 import { isEqual } from 'es-toolkit/predicate';
 import { preflightInputCodec, preflightCodec, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
 import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/server-runtime';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import { FileResources, type FileInspector } from '../../../files/index.js';
 import { InspectFileTask } from '../../node/files/check.js';
 import type { FilePreflightInput, FilePreflightOutput } from './types.js';
@@ -43,7 +42,12 @@ export class CheckFileTask extends Group<FilePreflightInput, FilePreflightOutput
       resume: { run: (_work, output) => output },
     });
 
-    this.setDefinition({ name: 'checkFileTask', label: '预检文件任务', source: 'services/observer/src/conversation/group/preflight/check.ts · CheckFileTask', observation: [invocationRecording()], checkpoint: { key: 'observer.file-preflight', version: 2, input: preflightInputCodec, output: preflightCodec, points: [this.inspecting, this.result] }, deps: CheckFileTask.deps, uses: this.members, run: this.execute.bind(this) });
+    this.name = 'checkFileTask';
+    this.label = '预检文件任务';
+    this.source = 'services/observer/src/conversation/group/preflight/check.ts · CheckFileTask';
+    this.checkpoint = { key: 'observer.file-preflight', version: 2, input: preflightInputCodec, output: preflightCodec, points: [this.inspecting, this.result] };
+    this.deps = CheckFileTask.deps;
+    this.run = this.execute.bind(this);
   }
 
   private async execute(work: PreflightWork): Promise<FilePreflightOutput> {
@@ -52,8 +56,7 @@ export class CheckFileTask extends Group<FilePreflightInput, FilePreflightOutput
     return this.receive(work, child);
   }
   private async receive(work: PreflightWork, child: ChildCall<InspectFileTask>): Promise<FilePreflightOutput> {
-    await child.run();
-    const output = await child.accept((result) => (result.kind === 'ready' ? Object.freeze({ ...result, instruction: work.input.instruction }) : result));
+    const output = await child.invoke({ result: { succeeded: (result) => (result.kind === 'ready' ? Object.freeze({ ...result, instruction: work.input.instruction }) : result) } });
     work.checkpoint?.({ point: this.result, state: output, refs: {} });
     return output;
   }

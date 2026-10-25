@@ -26,6 +26,9 @@ export interface ChildReference<Definition = unknown> {
 export interface ChildCall<Definition extends ChildContract> {
   readonly ref: ChildReference<Definition>;
   readonly key?: string;
+  invoke(): Promise<CallableOutput<Definition>>;
+  invoke<Value, const Options extends ChildInvocationReceptionOptions<Definition, NoInfer<Value>>>(options: Options & { readonly reception: ReceptionDefinition<Definition, Value> }): Promise<OperationResult<CallableOutput<Definition>, Options>>;
+  invoke<const Options extends ChildInvocationOptions<Definition>>(options: Options & ChildInvocationOptions<Definition>): Promise<OperationResult<CallableOutput<Definition>, Options>>;
   run(): Promise<CallableOutput<Definition>>;
   accept(): Promise<CallableOutput<Definition>>;
   accept<Value>(receive: (output: CallableOutput<Definition>) => Value | Promise<Value>): Promise<Value>;
@@ -64,6 +67,10 @@ export type ChildOperationOptions<Definition extends ChildContract> = ChildOptio
 
 /** A registered reception fixes the accepted type before either callback is considered. */
 export type ChildReceptionOptions<Definition extends ChildContract, Value> = ChildOptions<Definition> & Pick<OperationOptions<CallableOutput<Definition>, unknown, unknown, CallableDelta<Definition>>, 'delta'> & { readonly reception: ReceptionDefinition<Definition, Value> } & ([CallableOutput<Definition>] extends [Value] ? { readonly result?: Reception<CallableOutput<Definition>, unknown, NoInfer<Value>> } : { readonly result: Reception<CallableOutput<Definition>, unknown, NoInfer<Value>> & { readonly succeeded: (value: CallableOutput<Definition>) => NoInfer<Value> | PromiseLike<NoInfer<Value>> } });
+
+/** A saved child handle already fixed its output route at creation. */
+export type ChildInvocationOptions<Definition extends ChildContract> = Pick<ChildOperationOptions<Definition>, 'result' | 'reception'> & { readonly delta?: never; readonly output?: never; readonly key?: never };
+export type ChildInvocationReceptionOptions<Definition extends ChildContract, Value> = Omit<ChildReceptionOptions<Definition, Value>, 'delta' | 'output' | 'key'> & { readonly delta?: never; readonly output?: never; readonly key?: never };
 
 export interface ChildCalls<Allowed extends ChildContract = ChildContract> {
   invoke<Definition extends Allowed | CallableShape<Allowed>>(definition: Definition, input: NoInfer<CallableInput<Definition>>): Promise<CallableOutput<Definition>>;

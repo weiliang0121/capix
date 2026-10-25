@@ -34,7 +34,7 @@ async function assertPending(call, message) {
 }
 
 function root(builders, work, controls = {}) {
-  return builders.create('initial', { kind: 'scene', description: { id: 'invocation-control-fixture' }, controls, work: { maxRounds: 1, ...work } });
+  return builders.create('initial', { kind: 'scene', description: { id: 'invocation-control-fixture' }, controls, work: { ...work } });
 }
 
 test('a normal parent waits for a started child and its finally without implicitly accepting the result', { timeout: 2000 }, async (t) => {
@@ -54,7 +54,6 @@ test('a normal parent waits for a started child and its finally without implicit
         kind: 'group',
         parent: owner,
         work: {
-          maxRounds: 1,
           async execute() {
             try {
               await body.promise;
@@ -88,7 +87,7 @@ test('a created but unstarted child does not block parent completion or acquire 
   let child;
   const parent = root(builders, {
     execute(_context, owner) {
-      child = builders.create('unused', { kind: 'group', parent: owner, work: { maxRounds: 1, execute: () => assert.fail('unused child must not execute') } });
+      child = builders.create('unused', { kind: 'group', parent: owner, work: { execute: () => assert.fail('unused child must not execute') } });
       return 'complete';
     },
   });
@@ -98,7 +97,7 @@ test('a created but unstarted child does not block parent completion or acquire 
   await assert.rejects(child.run(), /ended|closed|closing/i);
 });
 
-test('an already entered reception finishes with its original Work before the parent changes phase', { timeout: 2000 }, async (t) => {
+test('an already entered reception finishes with its original Work before the parent completes', { timeout: 2000 }, async (t) => {
   const entered = deferred();
   const release = deferred();
   t.after(() => release.resolve());
@@ -106,12 +105,10 @@ test('an already entered reception finishes with its original Work before the pa
   const writer = new ResourceOffer({ name: 'test.control.reception-write', expose: (_source, activity) => ({ append: (value) => activity.runSync('append', {}, () => writes.push(value)) }) });
   const child = defineGroup()({ run: () => 'child output' });
   let reception;
-  let parentAccepted = false;
   let childFacts;
   const definition = defineScene()({
     members: [child],
     deps: { writer: writer.request() },
-    uses: [child],
     async run(work) {
       const call = work.children.create(child, null);
       await call.run();
@@ -127,17 +124,11 @@ test('an already entered reception finishes with its original Work before the pa
       childFacts = () => work.children.facts.get(call.ref);
       return 'parent output';
     },
-    accept(work) {
-      parentAccepted = true;
-      assert.deepEqual(writes, ['child output']);
-      return work.delivered;
-    },
   });
   const runtime = installCallable(definition, { providers: [writer.provide(() => null)], source: { runtime: () => null, capture: () => null } });
   const parentRun = track(runtime.run(null));
   await entered.promise;
   await assertPending(parentRun, 'an asynchronous reception belongs to the parent work');
-  assert.equal(parentAccepted, false, 'parent acceptance cannot overtake an entered execute-stage reception');
   assert.equal(childFacts().reception.status, 'receiving');
   release.resolve();
   assert.deepEqual(await reception.result, { status: 'fulfilled', value: 'accepted child' });
@@ -156,20 +147,20 @@ for (const failureKind of ['declared', 'fault']) {
     let childRun;
     let accepted = 0;
     const parent = root(builders, {
-      raises: failureKind === 'declared' ? [rejected] : [],
       execute(_context, owner) {
         child = builders.create('independent child', {
           kind: 'group',
           parent: owner,
           work: {
-            maxRounds: 1,
             async execute() {
               await release.promise;
               return 'child output';
             },
-            accept(_context, output) {
-              accepted++;
-              return output;
+            output: {
+              result(output) {
+                accepted++;
+                return output;
+              },
             },
           },
         });
@@ -190,58 +181,40 @@ for (const failureKind of ['declared', 'fault']) {
   });
 }
 
-for (const transition of ['receive', 'next-round']) {
-  test(`a started child survives its parent's ordinary ${transition} transition`, { timeout: 2000 }, async (t) => {
-    const builders = new CallableInvocationBuilder();
-    const entered = deferred();
-    const release = deferred();
-    t.after(() => release.resolve());
-    let child;
-    let childRun;
-    let accepted = 0;
-    const parent = root(builders, {
-      maxRounds: transition === 'next-round' ? 2 : 1,
-      execute(context, owner) {
-        if (context.progress.round === 2) {
-          entered.resolve();
-          return 'parent output';
-        }
-        child = builders.create('child input', {
-          kind: 'group',
-          parent: owner,
-          work: {
-            maxRounds: 1,
-            async execute() {
-              await release.promise;
-              return 'child output';
-            },
-            accept(_context, output) {
-              accepted++;
-              return output;
-            },
+test('an in-flight child survives subsequent business steps in its parent run', { timeout: 2000 }, async (t) => {
+  const builders = new CallableInvocationBuilder();
+  const release = deferred();
+  const advanced = deferred();
+  t.after(() => release.resolve());
+  let child;
+  let childRun;
+  const parent = root(builders, {
+    async execute(_context, owner) {
+      child = builders.create('child input', {
+        kind: 'group',
+        parent: owner,
+        work: {
+          async execute() {
+            await release.promise;
+            return 'child output';
           },
-        });
-        childRun = track(child.run());
-        return 'parent output';
-      },
-      accept(context, output) {
-        if (transition === 'next-round' && context.progress.round === 1) return context.continueWith('next', 'continue independently of the started child');
-        if (transition === 'receive') entered.resolve();
-        return output;
-      },
-    });
-    const parentRun = track(parent.run());
-    await entered.promise;
-    await assertPending(parentRun, 'the parent may advance locally while still owning started child work');
-    release.resolve();
-    assert.deepEqual(await childRun.result, { status: 'fulfilled', value: 'child output' });
-    assert.deepEqual(await parentRun.result, { status: 'fulfilled', value: 'parent output' });
-    assert.equal(accepted, 1);
-    assert.equal(parent.children.get(child).round, 1, 'the relationship keeps its original entrance round');
-    assert.equal(parent.context.progress.round, transition === 'next-round' ? 2 : 1);
-    assert.equal(parent.children.get(child).reception.status, 'pending');
+        },
+      });
+      childRun = track(child.run());
+      await Promise.resolve();
+      advanced.resolve();
+      return 'parent output';
+    },
   });
-}
+  const completion = track(parent.run());
+  await advanced.promise;
+  await assertPending(completion, 'subsequent local steps do not cancel the in-flight child');
+  release.resolve();
+  assert.deepEqual(await childRun.result, { status: 'fulfilled', value: 'child output' });
+  assert.deepEqual(await completion.result, { status: 'fulfilled', value: 'parent output' });
+  assert.equal(parent.context.progress.round, 1);
+  assert.equal(parent.children.get(child).reception.status, 'pending');
+});
 
 test('cancellation waits for real child exit and preserves effects established before the request', { timeout: 2000 }, async (t) => {
   const builders = new CallableInvocationBuilder();
@@ -263,7 +236,6 @@ test('cancellation waits for real child exit and preserves effects established b
           kind: 'group',
           parent: owner,
           work: {
-            maxRounds: 1,
             async execute() {
               effects.push('established');
               try {
@@ -274,7 +246,7 @@ test('cancellation waits for real child exit and preserves effects established b
                 await cleanup.promise;
               }
             },
-            accept: () => assert.fail('cancelled child must not begin normal acceptance'),
+            output: { result: () => assert.fail('cancelled child must not validate final output') },
           },
         });
         childRun = track(child.run());
@@ -312,7 +284,6 @@ test('catching an owned child fault cannot clear it or skip another started chil
         kind: 'group',
         parent: owner,
         work: {
-          maxRounds: 1,
           async execute() {
             await release.promise;
             return 'sibling output';
@@ -324,7 +295,6 @@ test('catching an owned child fault cannot clear it or skip another started chil
         kind: 'group',
         parent: owner,
         work: {
-          maxRounds: 1,
           execute: () => {
             throw failure;
           },
@@ -361,9 +331,8 @@ test('a later reception diagnostic does not replace an unhandled parent declared
   let reception;
   let child;
   const parent = root(builders, {
-    raises: [rejected],
     async execute(_context, owner) {
-      child = builders.create(null, { kind: 'group', parent: owner, work: { maxRounds: 1, execute: () => 'child output' } });
+      child = builders.create(null, { kind: 'group', parent: owner, work: { execute: () => 'child output' } });
       await child.run();
       reception = track(
         owner.children.get(child).accept(async () => {
@@ -397,7 +366,6 @@ test('an unawaited author child fault is owned by the parent without a second un
   });
   const definition = defineScene()({
     members: [child],
-    uses: [child],
     run(work) {
       work.children.create(child, null).run();
       return 'parent candidate';
@@ -415,7 +383,6 @@ test('an unawaited child declared failure keeps its original delivery without au
   const rejected = new ExceptionContract('CONTROL_UNOBSERVED_CHILD');
   const exception = rejected.create('child declined', {});
   const child = defineGroup()({
-    raises: [rejected],
     async run() {
       await release.promise;
       throw exception;
@@ -424,7 +391,6 @@ test('an unawaited child declared failure keeps its original delivery without au
   let childFacts;
   const definition = defineScene()({
     members: [child],
-    uses: [child],
     run(work) {
       const call = work.children.create(child, null);
       call.run();

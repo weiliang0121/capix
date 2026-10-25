@@ -1,8 +1,9 @@
+import type { ModelInteractionReader } from './model/resources.js';
 import type { ResourceRequest } from '@capix/server-runtime';
 import { TranscriptResource, MemoryResource, type TranscriptRangeReader } from '@capix/server-runtime/content';
 import type { ModelSettings } from '@capix/protocol';
 import { ConversationTaskResource, type TaskSelection } from './decision/selection.js';
-import type { ModelInteractionCreator, ModelInteractionReader } from './model/interactions.js';
+import type { ModelInteractionCreator } from './model/interactions.js';
 import { ConversationMaterialUsageResource } from './content/usage.js';
 
 type Offered<Offer extends { request(): ResourceRequest<unknown> }> = ReturnType<Offer['request']> extends ResourceRequest<infer Value> ? Value : never;

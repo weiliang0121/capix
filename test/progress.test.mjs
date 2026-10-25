@@ -5,7 +5,7 @@ import { Invocation, InvocationContext, InvocationCancelled, RuntimeError, Progr
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 const message = (content) => ({ role: 'user', content });
-const invocation = (options = {}) => new Invocation({ context: new InvocationContext('input'), work: { maxRounds: 1, execute: () => 'answer' }, signal: new AbortController().signal, ...options });
+const invocation = (options = {}) => new Invocation({ context: new InvocationContext('input'), work: { execute: () => 'answer' }, signal: new AbortController().signal, ...options });
 
 test('passive progress does not expose Context and receiver faults never change the call result', async () => {
   const error = new Error('projection unavailable');
@@ -272,7 +272,6 @@ function hierarchy() {
     name = 'echo';
     label = '测试能力';
     source = 'private-source';
-    callee = 'private-provider';
     deps = {};
     run = (work) => work.input;
   })();
@@ -284,7 +283,6 @@ function hierarchy() {
       super();
       this.add(attempt);
     }
-    uses = [attempt];
     run = delegated(attempt);
   })();
   const execution = new (class extends Group {
@@ -292,7 +290,6 @@ function hierarchy() {
       super();
       this.add(operation);
     }
-    uses = [operation];
     run = delegated(operation);
   })();
   return runtimeDefinition(execution);
@@ -392,30 +389,22 @@ test('local progress failure disables only its receiver while ancestor keeps the
   assert.equal(factsById.size, facts.length);
 });
 
-test('process progress preserves distinct local rounds without exposing continuation content', async () => {
+test('process progress reports the single business run without exposing its input or result', async () => {
   const facts = [];
   const call = invocation({
-    work: {
-      maxRounds: 2,
-      execute: (context) => context.currentInput,
-      accept: (context, output) => (context.progress.round === 1 ? context.continueWith('private-followup', 'private-reason') : output),
-    },
+    work: { execute: () => 'private-result' },
     progress: {
       receive: (fact) => {
         facts.push(fact);
       },
     },
   });
-  assert.equal(await call.run(), 'private-followup');
+  assert.equal(await call.run(), 'private-result');
   assert.deepEqual(
     facts.filter((fact) => fact.kind === 'process').map((fact) => [fact.round, fact.stage, fact.action]),
     [
       [1, 'execute', 'start'],
       [1, 'execute', 'return'],
-      [1, 'receive', 'continue'],
-      [2, 'execute', 'start'],
-      [2, 'execute', 'return'],
-      [2, 'receive', 'return'],
     ],
   );
   assert.doesNotMatch(JSON.stringify(facts), /private-/);
@@ -429,7 +418,6 @@ test('finished progress calls only same-control cancellation cancelled, retainin
     const call = invocation({
       signal: controller.signal,
       work: {
-        maxRounds: 1,
         execute() {
           controller.abort();
           if (mode === 'cancelled') throw new InvocationCancelled(controller.signal);
@@ -462,7 +450,6 @@ test('passive descriptions never execute getters or leak source and callee', asy
     },
     label: 'safe label',
     source: 'private-source',
-    callee: 'private-provider',
   };
   const call = invocation({
     description,

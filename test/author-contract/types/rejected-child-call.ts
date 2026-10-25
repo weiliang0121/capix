@@ -1,7 +1,7 @@
-/** Deliberately fails without expect-error: uses and child input must be real constraints. */
+/** Deliberately fails: child input and registered child contracts stay exact. */
 import { defineNode, defineGroup } from '@capix/server-runtime';
 
-const child = defineNode<{ readonly path: string }, string>()({ name: 'child', label: 'Child', source: 'test', callee: 'test', run: (work) => work.input.path });
+const child = defineNode<{ readonly path: string }, string>()({ name: 'child', label: 'Child', source: 'test', run: (work) => work.input.path });
 defineGroup<string, string>()({
   name: 'bad-input',
   label: 'Parent',
@@ -12,14 +12,11 @@ defineGroup<string, string>()({
     return '';
   },
 });
+const other = defineNode<number, number>()({ run: (work) => work.input });
 defineGroup<string, string>()({
-  name: 'no-uses',
-  label: 'Parent',
-  source: 'test',
   members: [child],
-  uses: [],
   run(work) {
-    work.children.create(child, { path: 'x' });
+    work.children.invoke(other, 1);
     return '';
   },
 });

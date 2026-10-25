@@ -69,7 +69,7 @@ export class InvocationRelation<Output = unknown> {
   readonly order: number;
   readonly key?: string;
   readonly declarationPosition?: number;
-  readonly receiveFailure: boolean;
+  #receiveFailure: boolean;
 
   constructor(
     identity: InvocationRelationSetup<Output>,
@@ -80,7 +80,7 @@ export class InvocationRelation<Output = unknown> {
     this.order = identity.order;
     this.key = identity.key;
     this.declarationPosition = identity.declarationPosition;
-    this.receiveFailure = identity.receiveFailure ?? false;
+    this.#receiveFailure = identity.receiveFailure ?? false;
     const relation = this;
     this.view = Object.freeze({
       get invocation() {
@@ -96,6 +96,17 @@ export class InvocationRelation<Output = unknown> {
         return relation.reception;
       },
     });
+  }
+
+  get receiveFailure(): boolean {
+    return this.#receiveFailure;
+  }
+
+  /** A precise checkpoint handle may install its receiver before starting the saved child. */
+  receiveFailures(): void {
+    this.owner.requireHealthy();
+    if (this.#returned || this.#reception.status !== 'pending') throw new Error('Failure reception must be chosen before child execution');
+    this.#receiveFailure = true;
   }
 
   get invocation(): InvocationTarget<Output> {
@@ -125,7 +136,7 @@ export class InvocationRelation<Output = unknown> {
   returnedWith(result: InvocationResult<Output>): void {
     if (this.#returned) throw new Error('Child invocation has already returned');
     this.#returned = Object.freeze(result);
-    if (result.status === 'failed' && result.failure && !this.receiveFailure) this.owner.fail(result.failure);
+    if (result.status === 'failed' && result.failure && (!this.receiveFailure || !result.failure.receptionAllowed)) this.owner.fail(result.failure);
     this.owner.publish(this, { kind: 'returned', result: this.#returned });
   }
 

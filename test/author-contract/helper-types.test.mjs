@@ -37,7 +37,7 @@ const capabilitySetup = `
 import {z} from 'zod';
 import type {ChildCalls, Group} from '@capix/server-runtime';
 import {conversationCapability} from './capability.js';
-declare const read: Group<{ path: string }, { content: string }, {}, {}, { text: string }>;
+declare const read: Group<{ path: string }, { content: string }, {}, { text: string }>;
 declare const summary: Group<{ text: string }, { summary: string }>;
 declare const readOnly: ChildCalls<typeof read>;
 declare const both: ChildCalls<typeof read | typeof summary>;
@@ -89,23 +89,22 @@ conversationCapability({ ...options, output: { receive: (event) => { if (event.k
 
 const sequenceSetup = `
 import {Sequence, InvocationEntry, type ChildCalls, type ChildCallable, type Group} from '@capix/server-runtime';
-declare const read: Group<{ path: string }, { content: string }, {}, {}, { text: string }>;
+declare const read: Group<{ path: string }, { content: string }, {}, { text: string }>;
 declare const summary: Group<{ text: string }, { summary: string }>;
 declare const exists: Group<{ path: string }, { exists: boolean }>;
 declare const readOnly: ChildCalls<typeof read>;
 declare const both: ChildCalls<typeof read | typeof summary>;
 declare const all: ChildCalls<typeof read | typeof summary | typeof exists>;
 const sequence = new Sequence<string>()
-  .step('read', { use: read, input: ({ input }) => ({ path: input }), output: () => ({ receive: event => { if (event.kind === 'delta') { const text: string = event.delta.text; void text; } return undefined; } }) })
-  .step('summary', { use: summary, input: ({ outputs }) => ({ text: outputs.read.content }), accept: (_scope, value) => value.summary.length });
+  .step('read', { use: read, input: ({ input }) => ({ path: input }), delta: (value,_scope) => {const text:string=value.text;void text;} })
+  .step('summary', { use: summary, input: ({ outputs }) => ({ text: outputs.read.content }), result: {succeeded: (value, _scope) => value.summary.length} });
 `;
 
 test('Sequence preserves each accepted output while requiring only its complete phase grant', () => {
   accepts(`${sequenceSetup}
 const output: Promise<Readonly<{ read: { content: string }; summary: number }>> = sequence.run('notes.md', both);
 const wider: Promise<Readonly<{ read: { content: string }; summary: number }>> = sequence.run('notes.md', all);
-const entry = new InvocationEntry(read, ({ input }: { input: number }) => ({ path: String(input) }));
-const alternative = new Sequence<number>().step('read', { use: entry, input: ({ input }) => input });
+const alternative = new Sequence<number>().step('read', { use: read, input: ({ input }) => ({ path: String(input) }) });
 const adapted: Promise<Readonly<{ read: { content: string } }>> = alternative.run(12, readOnly);
 const empty: Promise<Readonly<{}>> = new Sequence<string>().run('empty', readOnly);
 void output; void wider; void adapted; void empty;
@@ -116,8 +115,7 @@ test('Sequence rejects a missing grant for both direct and adapted child input',
   rejects(
     `${sequenceSetup}
 sequence.run('notes.md', readOnly);
-const entry = new InvocationEntry(summary, ({ input }: { input: number }) => ({ text: String(input) }));
-new Sequence<number>().step('summary', { use: entry, input: ({ input }) => input }).run(12, readOnly);
+new Sequence<number>().step('summary', { use: summary, input: ({ input }) => ({text: String(input)}) }).run(12, readOnly);
 `,
     [2345, 2345],
   );

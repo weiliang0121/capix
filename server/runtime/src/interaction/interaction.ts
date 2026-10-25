@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { RuntimeError } from '../errors/error.js';
+import { PersistenceError } from '../errors/persistence.js';
 import { RuntimeErrorHelper } from '../errors/helper.js';
 import { isNonBlankString } from '../value/string.js';
 import type { InteractionFact, InteractionFeedback, InteractionOptions, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
@@ -24,10 +25,14 @@ export class Interaction<Request, Reply> {
     this.#observation = options.observation ? new ProgressChannel(options.observation) : undefined;
     const captured = captureInteractionValue(request);
     this.#state = Object.freeze({ id: randomUUID(), contract: this.#options.contract.key, revision: 0, request: captureInteractionValue(this.#options.contract.request(captured)), delivery: 'prepared' });
-    const committed: unknown = this.#options.persistence?.create(this.#state);
-    if (committed !== undefined) {
-      void Promise.resolve(committed).catch(() => undefined);
-      throw new TypeError('Interaction persistence must be synchronous');
+    try {
+      const committed: unknown = this.#options.persistence?.create(this.#state);
+      if (committed !== undefined) {
+        void Promise.resolve(committed).catch(() => undefined);
+        throw new TypeError('Interaction persistence must be synchronous');
+      }
+    } catch (cause) {
+      throw new PersistenceError('interaction.create', cause);
     }
     this.#observation?.publish(Object.freeze({ type: 'changed', state: this.#state }));
   }
@@ -174,10 +179,14 @@ export class Interaction<Request, Reply> {
     this.requireMutable();
     this.#mutating = true;
     try {
-      const committed: unknown = this.#options.persistence?.commit(Object.freeze({ expectedRevision: this.#state.revision, state }));
-      if (committed !== undefined) {
-        void Promise.resolve(committed).catch(() => undefined);
-        throw new TypeError('Interaction persistence must be synchronous');
+      try {
+        const committed: unknown = this.#options.persistence?.commit(Object.freeze({ expectedRevision: this.#state.revision, state }));
+        if (committed !== undefined) {
+          void Promise.resolve(committed).catch(() => undefined);
+          throw new TypeError('Interaction persistence must be synchronous');
+        }
+      } catch (cause) {
+        throw new PersistenceError('interaction.commit', cause);
       }
       this.#state = state;
       this.#observation?.publish(Object.freeze({ type: 'changed', state }));

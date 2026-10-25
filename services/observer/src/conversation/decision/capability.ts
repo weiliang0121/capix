@@ -7,9 +7,9 @@ import { modelTextSchema } from '../model/schema.js';
 // validates selectable arguments and constructs that child's exact input before calling.
 type CapabilityContract = ChildContractsOf<'group'>;
 
-// Heterogeneous dispatch carries only identity and start; the adapter reopens
-// the exact declaration before accepting its result.
-export type ConversationCapabilityCall = Pick<ChildCall<CapabilityContract>, 'ref' | 'run'>;
+// Heterogeneous dispatch carries only the authenticated reference; the adapter
+// reopens its exact member and owns the complete operation reception.
+export type ConversationCapabilityCall = Pick<ChildCall<CapabilityContract>, 'ref'>;
 
 /** A service-local adapter between selectable arguments and the real declared child. */
 export interface ConversationCapability<State> {
@@ -18,7 +18,7 @@ export interface ConversationCapability<State> {
   available(state: State): boolean;
   validate(value: unknown): boolean;
   create(value: unknown, state: State): ConversationCapabilityCall;
-  accept(child: ConversationCapabilityCall, state: State): Promise<State>;
+  receive(child: ConversationCapabilityCall, state: State): Promise<State>;
 }
 
 /** This adapter creates one declared capability; historical lookup does not grant creation. */
@@ -46,9 +46,9 @@ export function conversationCapability<Arguments, State, Definition extends Capa
     available: options.available,
     validate: (value: unknown) => options.schema.safeParse(value).success,
     create: (value: unknown, state: State) => children.create(options.use, options.input(options.schema.parse(value), state), { key: options.key, output: options.output }),
-    accept: (child: ConversationCapabilityCall, state: State) => {
+    receive: (child: ConversationCapabilityCall, state: State) => {
       const selected = children.open(children.facts.require(options.use, child.ref).ref);
-      return selected.accept((delivered) => options.accept(delivered, state, selected));
+      return selected.invoke({ result: { succeeded: (delivered) => options.accept(delivered, state, selected) } });
     },
   });
 }

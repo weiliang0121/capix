@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Interaction, Interactions } from '@capix/server-runtime';
+import { Interaction, Interactions, PersistenceError } from '@capix/server-runtime';
 
 function contract(key = 'registry.echo.v1') {
   return {
@@ -161,11 +161,17 @@ test('cross-contract, unknown and mismatched persisted references cannot read or
   const ref = ca.start({ text: 'a' });
   await exchanges.settled();
   assert.throws(() => cb.read(ref), { code: 'INTERACTION_CONTRACT_MISMATCH' });
-  assert.throws(() => cb.read({ ...ref, contract: 'b' }), /Invalid persisted interaction identity/);
+  assert.throws(
+    () => cb.read({ ...ref, contract: 'b' }),
+    (error) => error instanceof PersistenceError && /Invalid persisted interaction identity/.test(error.cause.message),
+  );
   assert.throws(() => ca.read({ id: 'unknown', contract: 'a' }), { code: 'INTERACTION_UNKNOWN' });
   await assert.rejects(ca.wait({ id: 'unknown', contract: 'a' }, { waitMs: 0 }), { code: 'INTERACTION_UNKNOWN' });
   storage.values.set('incorrect-id', storage.values.get(ref.id));
-  assert.throws(() => ca.read({ id: 'incorrect-id', contract: 'a' }), { code: 'INTERACTION_IDENTITY' });
+  assert.throws(
+    () => ca.read({ id: 'incorrect-id', contract: 'a' }),
+    (error) => error instanceof PersistenceError && error.cause.code === 'INTERACTION_IDENTITY',
+  );
   assert.equal(sends, 1);
 });
 
@@ -251,7 +257,7 @@ test('preparation rejects host close reentry and dispatch persistence failure pr
   });
   assert.throws(
     () => exchanges.bind(boundary).start({ text: 'input' }),
-    (error) => error === failure,
+    (error) => error instanceof PersistenceError && error.cause === failure,
   );
   await exchanges.settled();
   assert.equal(exchanges.active, false);
@@ -302,7 +308,10 @@ test('invalid registration and retention fail before work; async persistence rea
       },
     },
   });
-  assert.throws(() => exchanges.bind(boundary).read({ id: 'missing', contract: boundary.key }), /reads must be synchronous/);
+  assert.throws(
+    () => exchanges.bind(boundary).read({ id: 'missing', contract: boundary.key }),
+    (error) => error instanceof PersistenceError && error.cause instanceof TypeError && /reads must be synchronous/.test(error.cause.message),
+  );
   await new Promise((resolve) => setImmediate(resolve));
 });
 

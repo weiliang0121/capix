@@ -85,15 +85,7 @@ class NamedGroup extends Group<number, string> {
   constructor() {
     super();
     this.add(this.child);
-    this.setRun(
-      async (work) => {
-        const child = work.children.create(this.child, work.input);
-        await child.run();
-        return child.accept();
-      },
-      {},
-      { uses: [this.child] },
-    );
+    this.run = (work) => work.children.invoke(this.child, work.input);
   }
 }
 const authored = new NamedGroup();

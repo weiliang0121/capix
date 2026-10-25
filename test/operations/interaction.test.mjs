@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { defineObservation, isInvocationCancelled } from '@capix/server-runtime';
 import { initializeObserver, ModelInteractions, ModelSource } from '@capix/observer-service';
-import { withRuntimeDefinition, reconfigure } from '../fixtures/assembly.mjs';
+import { observeModelPending } from '../fixtures/model-observation.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const request = { model: 'fixture', messages: [], response_format: { type: 'json_object' }, thinking: { type: 'disabled' }, max_tokens: 1, stream: false };
@@ -32,36 +32,21 @@ function memoryPersistence() {
     },
   };
 }
-function conversation(provider, configureDefinition) {
+function conversation(provider, observation) {
   const calls = [];
-  const environment = withRuntimeDefinition(configureDefinition, () =>
-    initializeObserver({
+  const environment = initializeObserver(
+    {
       invoke: async (input, purpose, signal) => {
         calls.push({ input, purpose, signal });
         if (purpose === 'selection') return output('{"historyIndexes":[]}');
         if (purpose === 'memory') return output('{"memories":[]}');
         return provider(input, signal);
       },
-    }),
+    },
+    [],
+    { observations: observation ? [observation] : [] },
   );
   return { environment, calls };
-}
-function watchPending(generation, callback, options) {
-  const definition = generation.requestModel;
-  reconfigure(definition, {
-    observation: [
-      ...definition.observation,
-      defineObservation(
-        {
-          deps: {},
-          observe(fact) {
-            if (fact.kind === 'relation' && fact.change.kind === 'returned' && fact.change.result.status === 'succeeded' && fact.change.result.output.kind === 'pending') callback();
-          },
-        },
-        options,
-      ),
-    ],
-  });
 }
 
 test('production request O accepts A1 pending and creates A2 which reads the same exchange without a second send', async () => {
@@ -69,11 +54,10 @@ test('production request O accepts A1 pending and creates A2 which reads the sam
   let pending = 0;
   const { environment, calls } = conversation(
     () => response.promise,
-    (_scene, { generation }) =>
-      watchPending(generation, () => {
-        pending += 1;
-        response.resolve(output(JSON.stringify(answer)));
-      }),
+    observeModelPending(() => {
+      pending += 1;
+      response.resolve(output(JSON.stringify(answer)));
+    }),
   );
   let execution;
   assert.deepEqual(
@@ -93,7 +77,11 @@ test('production request O accepts A1 pending and creates A2 which reads the sam
   assert.equal(pending, 1);
   assert.equal(calls.filter((call) => call.purpose === 'answer').length, 1);
   const generation = execution.children.values().find((child) => child.key === 'generation').invocation;
-  const model = generation.children.values().find((child) => child.key === 'model').invocation;
+  const model = generation.children
+    .values()
+    .find((child) => child.key === 'candidate')
+    .invocation.children.values()
+    .find((child) => child.key === 'model').invocation;
   const [first, follow] = model.children.values();
   assert.equal(first.key, 'start');
   assert.equal(first.reception.status, 'accepted');
@@ -122,7 +110,11 @@ test('a fast provider reply completes the initial A without creating a follow ca
     },
   );
   const generation = execution.children.values().find((child) => child.key === 'generation').invocation;
-  const model = generation.children.values().find((child) => child.key === 'model').invocation;
+  const model = generation.children
+    .values()
+    .find((child) => child.key === 'candidate')
+    .invocation.children.values()
+    .find((child) => child.key === 'model').invocation;
   assert.equal(model.children.values().length, 1);
   assert.equal(model.children.values()[0].returned.output.kind, 'received');
   environment.close();
@@ -206,7 +198,7 @@ test('cancellation ends the invocation while its independent provider saves a la
   const pending = deferred();
   const { environment, calls } = conversation(
     () => response.promise,
-    (_scene, { generation }) => watchPending(generation, () => pending.resolve()),
+    observeModelPending(() => pending.resolve()),
   );
   const running = environment.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings, signal: controller.signal });
   const rejected = assert.rejects(running, (error) => isInvocationCancelled(error, controller.signal));
@@ -232,14 +224,12 @@ test('a parent observation fault does not erase or replay an already-started ind
   const response = deferred();
   const { environment, calls } = conversation(
     () => response.promise,
-    (_scene, { generation }) =>
-      watchPending(
-        generation,
-        () => {
-          throw new Error('parent observer fault');
-        },
-        { failure: 'propagate' },
-      ),
+    observeModelPending(
+      () => {
+        throw new Error('parent observer fault');
+      },
+      { failure: 'propagate' },
+    ),
   );
   await assert.rejects(environment.runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings }), (error) => error.code === 'OBSERVATION_FAILED' && error.cause?.message === 'parent observer fault');
   assert.equal(environment.runner.isRunning, false);

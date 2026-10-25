@@ -61,7 +61,7 @@ test('updates preserve Memory identity while immutable MemoryRecords describe ea
     assert.equal(facts.execution.status, 'succeeded');
     assert.deepEqual(
       facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).map((item) => item.name),
-      ['prepareContext', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
+      ['prepareContext', 'conversationDecision', 'answer', 'answerCandidate', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
     );
     const decisions = facts.calls.filter((item) => item.structureKind === 'group' && item.id !== facts.execution.id).filter((item) => item.name === 'conversationDecision');
     assert.deepEqual(

@@ -61,7 +61,7 @@ test('fixed preparation and two model stages produce a causal trace with active 
     JSON.parse(provider.calls[0].request.messages[1].content).history.map((m) => m.index),
     [0, 1],
   );
-  assert.equal(trace.nodes.filter((node) => node.operation !== 'conversationDecision').length, 14);
+  assert.equal(trace.nodes.filter((node) => node.operation !== 'conversationDecision').length, 15);
   assert.equal(trace.nodes.filter((node) => node.operation === 'conversationDecision').length, 2);
   assert.equal(
     trace.nodes.some((node) => node.operation === 'input'),
@@ -71,7 +71,7 @@ test('fixed preparation and two model stages produce a causal trace with active 
   assert.ok(records.some((t) => t.nodes.find((n) => n.operation === 'invokeModel' && n.group === 'answer')?.status === 'running'));
   assert.equal(records[0].nodes[0].status, 'running');
   for (const stage of ['answer', 'memory']) {
-    const owner = trace.nodes.find((node) => node.operation === stage);
+    const owner = trace.nodes.find((node) => node.operation === (stage === 'answer' ? 'answerCandidate' : stage));
     const request = trace.nodes.find((node) => node.operation === 'requestModel' && node.parentId === owner.id);
     assert.equal(request.group, stage);
     assert.equal(trace.nodes.find((node) => node.parentId === request.id).group, stage);
@@ -200,7 +200,7 @@ test('Transcript rejects invalid messages before execution or model calls begin'
 test('Named action sequence records nested call and return boundaries rather than adjacent stage edges', async () => {
   const { trace } = await run(scripted([output(JSON.stringify(reply))]));
   const { calls, events } = trace.callSequence;
-  assert.equal(calls.filter((call) => call.operation !== 'conversationDecision').length, 14);
+  assert.equal(calls.filter((call) => call.operation !== 'conversationDecision').length, 15);
   const decisions = calls.filter((call) => call.operation === 'conversationDecision');
   assert.equal(decisions.length, 2);
   assert.ok(decisions.every((call) => call.parentId === calls.find((parent) => parent.operation === 'conversationTask').id));
@@ -223,13 +223,14 @@ test('Named action sequence records nested call and return boundaries rather tha
   });
   assert.equal(active.size, 0);
   const selection = calls.find((call) => call.operation === 'answer');
-  const request = calls.find((call) => call.operation === 'requestModel' && call.parentId === selection.id);
+  const candidate = calls.find((call) => call.operation === 'answerCandidate' && call.parentId === selection.id);
+  const request = calls.find((call) => call.operation === 'requestModel' && call.parentId === candidate.id);
   const invoke = calls.find((call) => call.operation === 'invokeModel' && call.parentId === request.id);
   assert.equal(invoke.parentId, request.id);
-  assert.equal(request.parentId, selection.id);
+  assert.equal(request.parentId, candidate.id);
   assert.equal(invoke.caller, 'group');
   assert.equal(invoke.callee, 'node');
-  assert.equal(invoke.target, 'provider');
+  assert.equal(invoke.target, undefined, 'node kind does not classify the external resource');
   const firstEnd = events.find((e) => e.callId === calls.find((c) => c.operation === 'prepareContext').id && e.value.type === 'return');
   const secondStart = events.find((e) => e.callId === calls.find((c) => c.operation === 'answer').id && e.value.type === 'call');
   assert.ok(firstEnd.sequence < secondStart.sequence);
@@ -243,7 +244,7 @@ test('failure propagates through calls, is caught by Observer execution, and nev
   const { calls, events } = trace.callSequence;
   assert.deepEqual(
     events.filter((e) => e.value.type === 'throw').map((e) => calls.find((c) => c.id === e.callId).operation),
-    ['acceptModelOutput', 'answer', 'conversationTask'],
+    ['acceptModelOutput', 'answerCandidate', 'answer', 'conversationTask'],
   );
   assert.equal(events.at(-1).callId, calls.find((c) => c.operation === 'conversationTask').id);
   assert.equal(events.at(-1).value.type, 'throw');

@@ -1,37 +1,30 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, ExceptionContract, InvocationEntry, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
+import { Group, InvocationEntry, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
 import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, CallableContext, CallableBuilder, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 function operation(execute = (work) => work.input) {
-  return new Group({ name: 'child', label: 'Child', source: 'test', maxRounds: 1, raises: [], deps: {}, run: execute });
+  return new Group({ name: 'child', label: 'Child', source: 'test', deps: {}, run: execute });
 }
 
 function assemble(child, run, options = {}) {
-  const execution = new Group({ maxRounds: 1, raises: [], ...options, deps: run.deps ?? {}, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) }).add(child);
+  const execution = new Group({ ...options, deps: run.deps ?? {}, run: run.execute.bind(run) }).add(child);
   return installCallable(runtimeDefinition(execution), { providers: [], source: { capture: () => null } });
 }
 
-test('run and acceptance share an exact child reference across distinct Work actions', async () => {
+test('an exact child reference separates returned output from parent reception', async () => {
   const delivered = { value: 7 };
   const child = operation(() => delivered);
   let call;
-  let executing;
   let facts;
   const runtime = assemble(child, {
     async execute(work) {
-      executing = work;
       facts = work.children.facts;
       call = work.children.create(child, null);
-      return call.run();
-    },
-    accept(work) {
-      assert.equal(work.delivered, delivered);
-      assert.notEqual(work, executing);
-      assert.notEqual(work.children, executing.children);
-      assert.equal(work.children.facts.get(call.ref).reception.status, 'pending');
+      assert.equal(await call.run(), delivered);
+      assert.equal(facts.get(call.ref).reception.status, 'pending');
       return work.children.open(call.ref).accept((value) => {
         assert.equal(value, delivered);
         return value.value * 2;
@@ -40,40 +33,6 @@ test('run and acceptance share an exact child reference across distinct Work act
   });
   assert.equal(await runtime.run(null, {}), 14);
   assert.equal(facts.get(call.ref).reception.status, 'accepted');
-});
-
-test('a handler with no creation grants can accept an earlier delivery through its current handle', async () => {
-  const rejected = new ExceptionContract('test.childBinding.receive');
-  const delivered = { answer: 'retained' };
-  const child = operation(() => delivered);
-  let call;
-  const runtime = assemble(
-    child,
-    {
-      uses: [child],
-      async execute(work) {
-        call = work.children.create(child, null);
-        await call.run();
-        throw rejected.create('continue by accepting the existing delivery', {});
-      },
-    },
-    {
-      raises: [rejected],
-      exceptions: {
-        deps: {},
-        uses: [],
-        accepts: [rejected],
-        async handle(work) {
-          const answer = await work.children.open(call.ref).accept((value) => {
-            assert.equal(value, delivered);
-            return value.answer;
-          });
-          return work.return(answer);
-        },
-      },
-    },
-  );
-  assert.equal(await runtime.run(null, {}), 'retained');
 });
 
 test('one reusable binding rejects a reference from a previous parent activity', async () => {
@@ -98,50 +57,36 @@ test('one reusable binding rejects a reference from a previous parent activity',
   assert.equal(foreignReceipts, 0);
 });
 
-for (const boundary of ['phase', 'round']) {
-  for (const action of ['create', 'accept']) {
-    test(`a retained child handle cannot ${action} across an expired ${boundary}`, async () => {
-      const rejected = new ExceptionContract(`test.childBinding.${boundary}.${action}`);
-      let calls = 0;
-      let receptions = 0;
-      let retained;
-      const child = operation(() => {
-        calls++;
-        return 'delivered';
-      });
-      const useRetained = () => {
-        if (action === 'create') return retained.children.create(child, null);
-        return retained.call.accept(() => {
+for (const action of ['create', 'accept']) {
+  test(`a retained child handle cannot ${action} after its invocation exits`, async () => {
+    let calls = 0;
+    let receptions = 0;
+    let retained;
+    const child = operation(() => {
+      calls++;
+      return 'delivered';
+    });
+    const runtime = assemble(child, {
+      async execute(work) {
+        const call = work.children.create(child, null);
+        await call.run();
+        retained = { children: work.children, call };
+        return 'finished';
+      },
+    });
+    assert.equal(await runtime.run(null, {}), 'finished');
+    if (action === 'create') assert.throws(() => retained.children.create(child, null), /inactive|closed|ended|finished/);
+    else
+      await assert.rejects(
+        retained.call.accept(() => {
           receptions++;
           return 'accepted';
-        });
-      };
-      const runtime = assemble(
-        child,
-        {
-          async execute(work) {
-            if (work.round === 2) return useRetained();
-            const call = work.children.create(child, null);
-            await call.run();
-            retained = { children: work.children, call };
-            if (boundary === 'phase') throw rejected.create('switch to handler', {});
-            return 'next';
-          },
-          accept(work) {
-            return work.round === 1 ? work.continue('next', 'verify previous access expires') : work.delivered;
-          },
-        },
-        {
-          maxRounds: boundary === 'round' ? 2 : 1,
-          raises: [rejected],
-          exceptions: { deps: {}, uses: [], accepts: [rejected], handle: useRetained },
-        },
+        }),
+        /inactive|closed|ended|finished/,
       );
-      await assert.rejects(runtime.run(null, {}), new RegExp(`inactive declaration ${boundary}`));
-      assert.equal(calls, 1);
-      assert.equal(receptions, 0);
-    });
-  }
+    assert.equal(calls, 1);
+    assert.equal(receptions, 0);
+  });
 }
 
 test('building child access does not execute members and a reused builder keeps invocation state separate', async () => {
@@ -200,7 +145,7 @@ test('a builder rejects an unknown declaration before creating any child invocat
   const unknown = operation();
   const bound = new BoundChildren([resolveDeclaration(declared)]);
   const builder = new ChildBindingsBuilder(bound);
-  const parent = new Invocation({ context: new InvocationContext(null), signal: new AbortController().signal, work: { maxRounds: 1, execute: () => null } });
+  const parent = new Invocation({ context: new InvocationContext(null), signal: new AbortController().signal, work: { execute: () => null } });
   assert.throws(() => builder.build(parent, { validate: () => {}, uses: [unknown], references: builder.references(parent) }), /outside|not declared/);
   assert.equal(bound.get(declared), declared);
   assert.equal(parent.children.values().length, 0);
@@ -230,8 +175,6 @@ test('alternative entry acceptance can cancel its parent without creating or sta
 test('resuming a saved final child delivery needs no child invocation construction', async () => {
   const codec = { encode: (value) => value, decode: (value) => value };
   const definition = new Group({
-    maxRounds: 1,
-    raises: [],
     deps: {},
     run: () => assert.fail('final child work cannot execute again'),
     checkpoint: { key: 'test.lazy.final-child', version: 1, input: codec, output: codec, points: [checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { run: () => assert.fail('final child work cannot resume') } })] },
@@ -263,7 +206,6 @@ test('resuming a saved final child delivery needs no child invocation constructi
     checkpoints: { store },
     restore: { head: saved },
     work: {
-      maxRounds: 1,
       execute: () => assert.fail('normal parent work must not replay'),
       checkpoint: {
         key: 'test.lazy.parent',

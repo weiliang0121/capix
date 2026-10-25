@@ -52,7 +52,7 @@ export * from './invocation/identity.js';
 export * from './invocation/progress.js';
 export { InvocationCancelled, isInvocationCancelled } from './invocation/cancellation.js';
 export * from './progress.js';
-export type { InvocationResult, Continuation, InvocationResolution } from './invocation/result.js';
+export type { InvocationResult } from './invocation/result.js';
 export type { InvocationFailure, InvocationPhase } from './invocation/failure.js';
 export * from './clock.js';
 
@@ -74,6 +74,7 @@ export * from './content.js';
 
 // Shared error conversion and value predicates used by content declarations.
 export * from './errors/error.js';
+export * from './errors/persistence.js';
 export * from './errors/helper.js';
 export * from './value/array.js';
 export * from './value/object.js';

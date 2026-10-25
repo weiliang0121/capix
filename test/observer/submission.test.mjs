@@ -180,16 +180,15 @@ test('conversation hooks select the configured group without treating every scen
   const other = defineGroup()({ members: [], run: () => null });
   const originalRun = definition.scene.run;
   definition.scene.add(other);
-  definition.scene.setRun(
-    async (work) => {
+  Object.assign(definition.scene, {
+    deps: definition.scene.deps,
+    run: async (work) => {
       const unrelated = work.children.create(other, work.input, { key: 'unrelated' });
       await unrelated.run();
       await unrelated.accept(() => undefined);
       return originalRun(work);
     },
-    definition.scene.deps,
-    { uses: definition.scene.members, accept: definition.scene.accept },
-  );
+  });
 
   const runner = createConversationRunner(definition, environment, new ModelInteractions(new ModelSource(provider)));
   const received = [];

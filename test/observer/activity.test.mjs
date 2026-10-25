@@ -80,7 +80,7 @@ test('submission exposes live REOA calls and parent acceptance without installin
   assert.equal(environment.runtime.recording, undefined);
 });
 
-test('activity keeps failed child and new retry identities while the parent succeeds in its second round', async () => {
+test('activity keeps failed child and new retry identities while the parent succeeds with one explicit retry', async () => {
   let answers = 0;
 
   const runner = createConversationRunner(
@@ -102,9 +102,12 @@ test('activity keeps failed child and new retry identities while the parent succ
   assert.equal(snapshot.activities.integrity.status, 'complete');
   const generation = snapshot.activities.calls.find((call) => call.kind === 'group' && call.label === '生成回答');
   assert.equal(generation.status, 'succeeded');
-  assert.equal(generation.round, 2);
+  assert.equal(generation.round, 1);
   const children = snapshot.activities.calls.filter((call) => call.parentContextId === generation.contextId);
-  const modelCalls = children.filter((call) => call.kind === 'group' && call.label === '请求模型');
+  const candidates = children.filter((call) => call.kind === 'group' && call.label === '生成回答候选');
+  assert.equal(candidates.length, 2);
+  assert.equal(candidates[0].relation.phase, 'handled');
+  const modelCalls = snapshot.activities.calls.filter((call) => candidates.some((candidate) => call.parentContextId === candidate.contextId) && call.kind === 'group' && call.label === '请求模型');
   assert.equal(modelCalls.length, 2);
   assert.notEqual(modelCalls[0].contextId, modelCalls[1].contextId);
   for (const model of modelCalls) assert.equal(snapshot.activities.calls.filter((call) => call.parentContextId === model.contextId && call.kind === 'node' && call.label === '发起模型调用').length, 1);

@@ -106,7 +106,7 @@ export class InvocationRecording implements InvocationObserver {
           structureKind: fact.identity.kind,
           parentId: parentRecord?.id ?? this.installation.root.id,
           ...(description.id !== undefined ? { structureId: description.id } : {}),
-          ...pick(description, ['name', 'label', 'source', 'callee']),
+          ...pick(description, ['name', 'label', 'source']),
           ...(this.#recordDescription.role !== undefined || description.role !== undefined ? { role: this.#recordDescription.role ?? description.role } : {}),
         },
         { input, startedAt: fact.occurredAt },
@@ -121,11 +121,7 @@ export class InvocationRecording implements InvocationObserver {
     const record = this.requireRecord();
     const process = fact.process;
     let body;
-    if ('reuse' in process) {
-      const previous = record.value.processes.at(-1);
-      if (!previous || previous.stage !== 'execute' || previous.type !== 'return' || previous.round !== fact.round) throw new Error('Default acceptance must follow its execution result');
-      body = { stage: 'receive' as const, type: 'return' as const, resultOf: previous.sequence };
-    } else if ('error' in process) body = { ...process, error: RuntimeErrorHelper.format(process.error), ...(process.failure ? { failure: failureFact(process.failure) } : {}) };
+    if ('error' in process) body = { ...process, error: RuntimeErrorHelper.format(process.error), ...(process.failure ? { failure: failureFact(process.failure) } : {}) };
     else if ('input' in process && this.#recordDescription.input) body = { ...process, input: this.#recordDescription.input(process.input) };
     else if ('output' in process && this.#recordDescription.output) body = { ...process, output: this.#recordDescription.output(process.output) };
     else body = process;
@@ -161,7 +157,7 @@ export class InvocationRecording implements InvocationObserver {
     if (state.status === 'failed') InvocationRecordHelper.finish(this.recorder, record, (current) => current.fail(RuntimeErrorHelper.format(state.error), state.failure ? failureFact(state.failure) : undefined));
     else {
       const last = record.value.processes.at(-1);
-      const resultOf = (last?.stage === 'receive' || last?.stage === 'handling') && last.type === 'return' ? ('resultOf' in last ? last.resultOf : last.sequence) : undefined;
+      const resultOf = last?.type === 'return' ? ('resultOf' in last ? last.resultOf : last.sequence) : undefined;
       const output = isUndefined(resultOf) ? (this.#recordDescription.output ? this.#recordDescription.output(state.output) : state.output) : undefined;
       InvocationRecordHelper.finish(this.recorder, record, (current) => current.complete(output, resultOf));
     }

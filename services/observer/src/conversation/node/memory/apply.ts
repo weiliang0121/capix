@@ -1,4 +1,3 @@
-import { invocationRecording } from '@capix/server-runtime/recording';
 import { MemoryResource } from '@capix/server-runtime/content';
 import type { MemoryWriteResources } from '../../resources.js';
 import { Node, checkpointPoint, type NodeWork } from '@capix/server-runtime';
@@ -19,7 +18,12 @@ export class ApplyMemory extends Node<MemoryExtraction, MemoryExtraction, Memory
 
     this.preparedPoint = checkpointPoint<'node', MemoryExtraction, MemoryExtraction>()({ name: 'prepared', state: checkpointCodec(z.null()), references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { deps: ApplyMemory.deps, run: (work) => this.apply(work) } });
 
-    this.setDefinition({ observation: [invocationRecording()], name: 'applyMemory', label: '落实记忆', source: 'services/observer/src/conversation/node/memory/apply.ts · ApplyMemory', callee: 'processing', deps: ApplyMemory.deps, run: this.execute.bind(this), checkpoint: { key: 'observer.apply-memory', version: 1, input: memoryCheckpointOutput, output: memoryCheckpointOutput, points: [this.preparedPoint] } });
+    this.name = 'applyMemory';
+    this.label = '落实记忆';
+    this.source = 'services/observer/src/conversation/node/memory/apply.ts · ApplyMemory';
+    this.deps = ApplyMemory.deps;
+    this.run = this.execute.bind(this);
+    this.checkpoint = { key: 'observer.apply-memory', version: 1, input: memoryCheckpointOutput, output: memoryCheckpointOutput, points: [this.preparedPoint] };
   }
 
   private execute(work: NodeWork<MemoryExtraction, MemoryExtraction, MemoryWriteResources>): MemoryExtraction {

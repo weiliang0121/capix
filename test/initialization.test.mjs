@@ -36,9 +36,10 @@ test('unused operations and model providers stay inactive; bound O identities su
   const first = operations(env);
   assert.deepEqual(
     first.map((operation) => operation.name),
-    ['prepareContext', 'conversationDecision', 'answer', 'requestModel'],
+    ['prepareContext', 'conversationDecision', 'answer', 'answerCandidate', 'requestModel'],
   );
   assert.equal(first[3].parentId, first[2].id);
+  assert.equal(first[4].parentId, first[3].id);
   assert.equal(
     attempts(env).some((record) => record.name === 'acceptModelOutput'),
     false,
@@ -199,7 +200,6 @@ test('lazy access never shifts the capture point of configuration, history or me
     deps,
     establish: () => ({ resources: resources(captureSource({ settings: configuration, transcript })) }),
     work: {
-      maxRounds: 1,
       execute: (context) => {
         assert.equal(context.resources.values.settings.model, 'fixture');
         assert.equal(context.resources.values.history.end, 1);

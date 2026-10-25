@@ -5,7 +5,7 @@ import { Invocation, InvocationContext, InvocationChangeEmitter, ResourceBinding
 function call({ observe, failure, work, parent, declarations, resources, capture, installations = [] } = {}) {
   const context = new InvocationContext({ mutable: new Map() });
   const identity = { contextId: context.id, kind: 'node', ...(parent ? { parentContextId: parent.context.id } : {}) };
-  return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { maxRounds: 1, execute: () => 'output', ...work }, observation: bindInvocationObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ deps: {}, observe: observe ?? (() => undefined) }, { failure })] }, installations, parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
+  return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { execute: () => 'output', ...work }, observation: bindInvocationObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ deps: {}, observe: observe ?? (() => undefined) }, { failure })] }, installations, parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
 }
 
 function observer(observe, failure) {
@@ -30,7 +30,7 @@ test('isolated observer stops once while a healthy observer receives all actual 
   assert.equal(broken, 1);
   assert.deepEqual(
     healthy.map((fact) => fact.eventSequence),
-    [1, 2, 3, 4, 5],
+    [1, 2, 3, 4],
   );
   assert.equal(healthy.at(-1).state.status, 'succeeded');
 });
@@ -175,7 +175,7 @@ test('formal observation ports expire after each synchronous callback; asynchron
     ],
   });
   await run.run();
-  assert.equal(writes, 5);
+  assert.equal(writes, 4);
   assert.throws(() => retained.write(), /window has ended/);
   const asyncRun = call({ observe: async () => {}, failure: 'propagate' });
   await assert.rejects(asyncRun.run(), (error) => error.cause?.message === 'Observation must complete synchronously');
@@ -222,8 +222,8 @@ test('one observation declaration gives each call its own first start and synchr
   assert.equal(exposed, 0);
   assert.deepEqual(await Promise.all([first.run(), second.run()]), ['output', 'output']);
   assert.equal(exposed, 2);
-  assert.equal(observed.get(first.context.id), 5);
-  assert.equal(observed.get(second.context.id), 5);
+  assert.equal(observed.get(first.context.id), 4);
+  assert.equal(observed.get(second.context.id), 4);
   assert.notEqual(retained.get(first.context.id), retained.get(second.context.id));
   for (const endpoint of retained.values()) assert.throws(() => endpoint.read(), /window has ended/);
 });
@@ -262,7 +262,7 @@ test('observation declaration fixes its requested resource aliases before bindin
   assert.deepEqual(declaration.deps, { reader: request });
   const resources = bindResources({ approved: approved.request(), replacement: replacement.request() }, [approved.provide(() => 'approved'), replacement.provide(() => null)])(undefined);
   assert.equal(await call({ resources, declarations: [declaration] }).run(), 'output');
-  assert.equal(observed, 5);
+  assert.equal(observed, 4);
   assert.throws(() => retained.read(), /window has ended/);
 });
 
@@ -441,7 +441,7 @@ test('an availability check failure follows the observer isolation policy', asyn
       },
     },
   ]);
-  const invocation = new Invocation({ context, identity, observation, signal: new AbortController().signal, work: { maxRounds: 1, execute: () => 'done' } });
+  const invocation = new Invocation({ context, identity, observation, signal: new AbortController().signal, work: { execute: () => 'done' } });
   assert.equal(await invocation.run(), 'done');
   assert.equal(invalidated, 1);
   assert.equal(seen.at(-1).kind, 'finished');
@@ -486,7 +486,6 @@ test('the invocation error channel preserves a resource fault and its reporting 
     context,
     signal: new AbortController().signal,
     work: {
-      maxRounds: 1,
       execute() {
         return resources.values.value;
       },

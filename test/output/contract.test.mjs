@@ -14,7 +14,7 @@ const contract = {
     return value;
   },
 };
-const make = (work, options = {}) => new Invocation({ context: new InvocationContext('input'), signal: new AbortController().signal, work: { maxRounds: 1, output: contract, ...work }, ...options });
+const make = (work, options = {}) => new Invocation({ context: new InvocationContext('input'), signal: new AbortController().signal, work: { output: contract, ...work }, ...options });
 
 test('declared output preserves final IO and installs terminal state before delivery', async () => {
   const events = [];
@@ -47,87 +47,65 @@ test('declared output preserves final IO and installs terminal state before deli
   assert.equal(events.at(-1).result, 'prefix');
 });
 
-test('a microtask queued by sealed output sees receiving progress and acceptance already started', async () => {
-  let finish;
-  const accepted = new Promise((resolve) => {
-    finish = resolve;
-  });
-  let observed;
-  const checked = new Promise((resolve) => {
-    observed = resolve;
-  });
-  let acceptanceStarted = false;
+test('a microtask queued by sealing sees the returned execute result before final delivery', async () => {
+  const checked = Promise.withResolvers();
   const call = make(
-    {
-      execute: () => 'work result',
-      accept() {
-        acceptanceStarted = true;
-        return accepted;
-      },
-    },
+    { execute: () => 'work result' },
     {
       output: {
         receive(event) {
-          if (event.kind === 'sealed') queueMicrotask(() => observed({ phase: call.context.progress.phase, acceptanceStarted }));
+          if (event.kind === 'sealed') queueMicrotask(() => checked.resolve({ phase: call.context.progress.phase, result: call.context.progress.result }));
         },
       },
     },
   );
-  const completion = call.run();
-  try {
-    const state = await checked;
-    assert.equal(state.phase, 'receive');
-    assert.equal(state.acceptanceStarted, true);
-  } finally {
-    finish('accepted result');
-    await completion;
-  }
+  assert.equal(await call.run(), 'work result');
+  const state = await checked.promise;
+  assert.equal(state.phase, 'execute');
+  assert.deepEqual(state.result, { status: 'succeeded', output: 'work result' });
 });
 
-test('writer is sealed before accept and each continuation receives a different writer', async () => {
-  const events = [];
-  const writers = [];
-  const call = make(
-    {
-      maxRounds: 2,
-      execute(context, invocation) {
-        writers.push(invocation.outputWriter);
-        if (writers.length > 1) assert.throws(() => writers[0].emit('stale'), { code: 'OUTPUT_CLOSED' });
-        invocation.outputWriter.emit(String(context.progress.round));
-        return 'value';
-      },
-      accept(context) {
-        assert.throws(() => writers.at(-1).emit('late'), { code: 'OUTPUT_CLOSED' });
-        return context.progress.round === 1 ? context.continueWith('again', 'test') : 'final';
+test('each independent call receives a different writer and completed writers stay sealed', async () => {
+  const events = [],
+    writers = [];
+  const work = {
+    execute(_context, invocation) {
+      writers.push(invocation.outputWriter);
+      invocation.outputWriter.emit(String(writers.length));
+      return 'final';
+    },
+  };
+  const first = make(work, {
+    output: {
+      receive: (event) => {
+        events.push(event);
       },
     },
-    {
-      output: {
-        receive: (event) => {
-          events.push(event);
-        },
+  });
+  assert.equal(await first.run(), 'final');
+  const second = make(work, {
+    output: {
+      receive: (event) => {
+        events.push(event);
       },
     },
-  );
-  assert.equal(await call.run(), 'final');
+  });
+  assert.equal(await second.run(), 'final');
   assert.notEqual(writers[0], writers[1]);
+  for (const writer of writers) assert.throws(() => writer.emit('late'), { code: 'OUTPUT_CLOSED' });
   assert.deepEqual(
     events.filter((event) => event.kind === 'delta').map((event) => event.delta),
     ['1', '2'],
   );
-  assert.ok(events.some((event) => event.kind === 'discarded' && event.round === 1));
-  assert.throws(() => writers[1].emit('after final'), { code: 'OUTPUT_CLOSED' });
-  assert.equal(call.context.status, 'succeeded');
 });
 
-for (const phase of ['execute', 'accept']) {
-  test(`a declared ${phase} exception discards its preview and validates the fallback`, async () => {
-    const rejected = new ExceptionContract('OUTPUT_TEST');
+for (const domain of [false, true]) {
+  test(`a ${domain ? 'domain' : 'regular'} failure discards its own candidate without a final completion`, async () => {
+    const error = domain ? new ExceptionContract('OUTPUT_TEST').create('rejected', {}) : new Error('rejected');
     const events = [];
     let checks = 0;
     const call = make(
       {
-        raises: [rejected],
         output: {
           ...contract,
           result(value) {
@@ -137,17 +115,7 @@ for (const phase of ['execute', 'accept']) {
         },
         execute(_context, invocation) {
           invocation.outputWriter.emit('original');
-          if (phase === 'execute') throw rejected.create('fallback', {});
-          return 'original';
-        },
-        accept() {
-          throw rejected.create('fallback', {});
-        },
-        exceptions: {
-          accepts: [rejected],
-          handle() {
-            return { kind: 'return', output: 'fallback' };
-          },
+          throw error;
         },
       },
       {
@@ -158,30 +126,26 @@ for (const phase of ['execute', 'accept']) {
         },
       },
     );
-    assert.equal(await call.run(), 'fallback');
-    assert.equal(checks, 1);
+    await assert.rejects(call.run(), (observed) => observed === error);
+    assert.equal(checks, 0);
     assert.deepEqual(
-      events.filter((event) => event.kind === 'discarded').map((event) => event.reason),
-      ['exception'],
+      events.map((event) => event.kind),
+      ['started', 'delta', 'sealed', 'discarded'],
     );
-    assert.equal(events.at(-1).discarded, true);
+    assert.equal(events.at(-1).reason, domain ? 'exception' : 'failed');
   });
 }
 
-test('fallback violating the declared final type is a nonrecursive producer failure', async () => {
-  const rejected = new ExceptionContract('OUTPUT_FALLBACK');
+test('a locally chosen fallback violating the final type is a nonrecursive producer failure', async () => {
   let handlers = 0;
   const call = make({
-    raises: [rejected],
     execute() {
-      throw rejected.create('fallback', {});
-    },
-    exceptions: {
-      accepts: [rejected],
-      handle() {
+      try {
+        throw new Error('fallback');
+      } catch {
         handlers++;
-        return { kind: 'return', output: 42 };
-      },
+        return 42;
+      }
     },
   });
   await assert.rejects(call.run(), { code: 'OUTPUT_CONTRACT' });
@@ -221,18 +185,14 @@ test('final validation preserves original result identity', async () => {
   assert.equal(await accepted.run(), result);
 });
 
-test('consumer failure is isolated and the failed receiver stays disabled across rounds', async () => {
+test('consumer failure is isolated and the failed receiver stays disabled for later events', async () => {
   let received = 0;
   let failures = 0;
   const call = make(
     {
-      maxRounds: 2,
       execute(_context, invocation) {
         invocation.outputWriter.emit('text');
         return 'final';
-      },
-      accept(context, value) {
-        return context.progress.round === 1 ? context.continueWith('again', 'test') : value;
       },
     },
     {
@@ -252,18 +212,21 @@ test('consumer failure is isolated and the failed receiver stays disabled across
   assert.equal(failures, 1);
 });
 
-test('consumer cancellation during delta delivery stops before successful acceptance', async () => {
+test('consumer cancellation during delta delivery stops before final validation', async () => {
   const controller = new AbortController();
-  let accepted = false;
+  let validated = false;
   const call = make(
     {
       execute(_context, invocation) {
         invocation.outputWriter.emit('part');
         return 'final';
       },
-      accept(_context, value) {
-        accepted = true;
-        return value;
+      output: {
+        ...contract,
+        result(value) {
+          validated = true;
+          return value;
+        },
       },
     },
     {
@@ -276,7 +239,7 @@ test('consumer cancellation during delta delivery stops before successful accept
     },
   );
   await assert.rejects(call.run());
-  assert.equal(accepted, false);
+  assert.equal(validated, false);
   assert.equal(call.context.status, 'failed');
 });
 
@@ -326,7 +289,6 @@ function composeLevel(Base, child, label, receives, explicit = false) {
     name = label;
     label = label;
     source = 'test';
-    callee = 'test';
     output = contract;
     constructor() {
       super();
@@ -352,10 +314,6 @@ function composeLevel(Base, child, label, receives, explicit = false) {
       );
       await call.run();
       return call.accept();
-    };
-    accept = (work) => {
-      assert.equal('output' in work, false);
-      return work.delivered;
     };
   })();
 }
@@ -451,43 +409,49 @@ test('overlapping calls with the same declaration keep output origins, writers a
   }
 });
 
-test('bound fallback has no writer and remains subject to the declared result contract', async () => {
+test('failed child output is discarded independently from the successful parent fallback', async () => {
   const rejected = new ExceptionContract('BOUND_OUTPUT');
-  const runtime = new (class extends Scene {
-    output = contract;
-    raises = [rejected];
-    deps = {};
-    run = function (work) {
+  const events = [],
+    childEvents = [];
+  const child = new Node({
+    output: contract,
+    run(work) {
       work.output.emit('tentative');
       throw rejected.create('fallback', {});
-    };
-    exceptions = {
-      deps: {},
-      accepts: [rejected],
-      handle(work) {
-        assert.equal('output' in work, false);
-        return work.return('fallback');
-      },
-    };
-  })();
-  const events = [];
+    },
+  });
+  const runtime = new Scene({
+    output: contract,
+    run: (work) =>
+      work.children.invoke(child, 'input', {
+        output: {
+          receive: (event) => {
+            childEvents.push(event);
+          },
+        },
+        result: { failed: () => 'fallback' },
+      }),
+  });
+  runtime.add(child);
   const bound = installCallable(runtime, {
     providers: [],
     source: {
-      entry: () => ({}),
       capture: () => ({}),
       output: () => ({
-        receive(event) {
+        receive: (event) => {
           events.push(event);
         },
       }),
     },
   });
   assert.equal(await bound.run('input', {}), 'fallback');
-  assert.equal(events.at(-1).discarded, true);
+  assert.equal(childEvents.at(-1).kind, 'discarded');
+  assert.equal(childEvents.at(-1).reason, 'exception');
+  assert.equal(events.at(-1).kind, 'completed');
+  assert.equal(events.at(-1).result, 'fallback');
 });
 
-test('declared output validation applies to the value transformed by normal acceptance', async () => {
+test('declared output validates the final value selected by business run', async () => {
   let validated;
   const call = make({
     output: {
@@ -497,11 +461,10 @@ test('declared output validation applies to the value transformed by normal acce
         return contract.result(value);
       },
     },
-    execute: () => 'raw',
-    accept: () => 'accepted',
+    execute: () => 'selected',
   });
-  assert.equal(await call.run(), 'accepted');
-  assert.equal(validated, 'accepted');
+  assert.equal(await call.run(), 'selected');
+  assert.equal(validated, 'selected');
 });
 
 test('one failing explicit E output consumer does not disable its other binding', async () => {
@@ -596,76 +559,47 @@ test('final output validation cannot catch and clear a fault already owned by th
   assert.equal(call.failure.kind, 'error');
 });
 
-test('a previous work view cannot create children after the invocation moves to another local round', async () => {
-  let executions = 0;
-  let saved;
-  const child = new (class extends Group {
-    deps = {};
-    run = () => {
+test('a completed work view cannot create children during a later call', async () => {
+  let executions = 0,
+    saved;
+  const child = new Node({
+    run: () => {
       executions++;
       return 'child';
-    };
-  })();
-  const definition = new (class extends Scene {
-    maxRounds = 2;
-    constructor() {
-      super();
-      this.add(child);
-    }
-    deps = {};
-    uses = [child];
-    run = function (work) {
-      if (work.round === 1) saved = work;
-      else assert.throws(() => saved.children.create(child, 'stale'), /inactive declaration round/);
+    },
+  });
+  const definition = new Scene({
+    run(work) {
+      if (!saved) saved = work;
+      else assert.throws(() => saved.children.create(child, 'stale'), /already ended|window|inactive/);
       return 'work';
-    };
-    accept = function (work) {
-      return work.round === 1 ? work.continue('next', 'continue') : work.delivered;
-    };
-  })();
-  const runtime = installCallable(definition, { providers: [], source: { entry: () => ({}), capture: () => ({}) } });
-  await assert.rejects(runtime.run('input', {}), /inactive declaration round/);
-  assert.equal(executions, 0, 'the stale binding cannot establish new child work');
+    },
+  });
+  definition.add(child);
+  const runtime = installCallable(definition, { providers: [], source: { capture: () => ({}) } });
+  assert.equal(await runtime.run('first', {}), 'work');
+  assert.equal(await runtime.run('second', {}), 'work');
+  assert.equal(executions, 0);
 });
 
-for (const handled of [false, true]) {
-  test(`current ${handled ? 'exception' : 'receive'} view can accept a child created by its executing view`, async () => {
-    const rejected = new ExceptionContract('ACCEPT_FROM_CURRENT_VIEW');
-    let saved;
-    const child = new (class extends Group {
-      deps = {};
-      run = () => 'child';
-    })();
-    const definition = new (class extends Scene {
-      constructor() {
-        super();
-        this.add(child);
-      }
-      raises = [rejected];
-      deps = {};
-      uses = [child];
-      run = async function (work) {
+for (const recovered of [false, true]) {
+  test(`a child reference remains receivable after ${recovered ? 'local error recovery' : 'another business step'} in the same run`, async () => {
+    const child = new Node({ run: () => 'child' });
+    const definition = new Scene({
+      async run(work) {
         const call = work.children.create(child, 'input');
-        saved = call.ref;
-        const output = await call.run();
-        if (handled) throw rejected.create('use existing result', {});
-        return output;
-      };
-      accept = async function (work) {
-        assert.equal('output' in work, false);
-        return work.children.open(saved).accept();
-      };
-      exceptions = {
-        deps: {},
-        uses: [child],
-        accepts: [rejected],
-        async handle(work) {
-          assert.equal('output' in work, false);
-          return work.return(await work.children.open(saved).accept());
-        },
-      };
-    })();
-    const runtime = installCallable(definition, { providers: [], source: { entry: () => ({}), capture: () => ({}) } });
+        const ref = call.ref;
+        await call.run();
+        if (recovered) {
+          try {
+            throw new Error('business choice');
+          } catch {}
+        } else await Promise.resolve();
+        return work.children.open(ref).accept();
+      },
+    });
+    definition.add(child);
+    const runtime = installCallable(definition, { providers: [], source: { capture: () => ({}) } });
     assert.equal(await runtime.run('input', {}), 'child');
   });
 }

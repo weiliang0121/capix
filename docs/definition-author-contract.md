@@ -1,5 +1,7 @@
 # 定义作者契约（收敛方案 v6）
 
+> **2026-10-25 历史材料声明：** 本文保留当时推演和实施记录，不是当前作者 API。统一操作模型已删除 setter、普通 accept/exceptions/raises/maxRounds/uses/observation 与旧两轮解释器；当前契约以 [可调用结构](callable-structures.md)、[操作失败](exceptions.md)、[Checkpoint](checkpoints.md) 及 [全仓迁移](callable-operation-migration.md) 为准。下文旧版本状态只表示当时完成度，不构成兼容承诺。
+
 > **2026-10-20 结构迁移：** 当前采用 Scene / Group / Node 及共同 Callable / Composite，旧 REOA 名称和位置表在本文保留为设计讨论历史。已实施契约以 [可调用结构](callable-structures.md)、[运行边界](runtime-boundaries.md) 为准。资源捕获按明确声明绑定，内核不再设 E 专属接线；Checkpoint 使用 Frame v4。
 
 > 状态：已实施，2026-10-17。由 Fable v5 与 Codex v1 合并，源码核对基线为 `1e72e2e`。门槛实验发现的 D06 失败交付调整已由用户确认；正式机制、Observer 声明与回归已迁移。

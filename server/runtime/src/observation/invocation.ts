@@ -17,7 +17,12 @@ export class InvocationObservation {
   /** A child binding inherits only the parent's matching installed consumer. */
   observerFor(installation: ObservationInstallation): InvocationObserver | undefined {
     const session = this.#installed.get(installation);
-    return session?.active ? session.observer : undefined;
+    return session?.available() ? session.observer : undefined;
+  }
+
+  /** Inheritance follows this installation's session, including children already constructed. */
+  sessionFor(installation: ObservationInstallation): ObserverSession | undefined {
+    return this.#installed.get(installation);
   }
 
   publish(fact: InvocationFact): unknown | undefined {

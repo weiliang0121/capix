@@ -26,14 +26,13 @@ test('Observer narrows resources at each action, captures fixed values and expir
   const views = [];
   const inspect = (current) => {
     const execute = current.run;
-    current.setRun(
-      function (work) {
+    Object.assign(current, {
+      deps: current.deps,
+      run: function (work) {
         views.push({ definition: current, resources: { ...work.resources } });
         return execute.call(this, work);
       },
-      current.deps,
-      { uses: current.uses, accept: current.accept },
-    );
+    });
     for (const child of current.members ?? []) inspect(child);
   };
   inspect(definition.conversation);
@@ -115,7 +114,6 @@ test('a leaf missing its declared resource fails before attaching a child invoca
     name = 'leaf';
     label = 'leaf';
     source = 'test';
-    callee = 'test';
     execute() {
       throw new Error('must not execute');
     }
@@ -196,7 +194,7 @@ test('sequence preserves distinct offers even when children use the same alias',
   const execute = () => {
     throw new Error('must not execute during assembly');
   };
-  const metadata = { name: 'test', label: 'test', source: 'test', callee: 'test' };
+  const metadata = { name: 'test', label: 'test', source: 'test' };
   const first = defineNode()({ ...metadata, deps: { value: one.request() }, run: execute });
   const second = defineNode()({ ...metadata, deps: { value: two.request() }, run: execute });
   const sequence = new Sequence().step('first', { use: first, input: () => null }).step('second', { use: second, input: () => null });
@@ -319,8 +317,9 @@ test('model offers separate creation and reading while preserving provider metho
   const definition = createConversationStructure();
   const generation = definition.generation;
   const execute = generation.run;
-  generation.setRun(
-    function (work) {
+  Object.assign(generation, {
+    deps: generation.deps,
+    run: function (work) {
       const creator = work.resources.modelCreator;
       const reader = work.resources.modelReader;
       assert.notEqual(creator, model);
@@ -334,9 +333,7 @@ test('model offers separate creation and reading while preserving provider metho
       assert.equal(work.transcriptRange, undefined);
       return execute.call(this, work);
     },
-    generation.deps,
-    { uses: generation.uses, accept: generation.accept },
-  );
+  });
 
   const runner = createConversationRunner(definition, entities, new ModelInteractions(new ModelSource(model)));
   await runner.run({ messages: [{ role: 'user', content: '你好' }] }, { settings });

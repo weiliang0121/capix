@@ -9,7 +9,7 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 - [项目组织与命名](docs/organization.md)：框架、应用、实体和记录的定位；对象角色、公开入口与本轮迁移表。
 - [可调用结构](docs/callable-structures.md)：Scene / Group / Node、Callable / Composite、绑定与驱动的职责。
 - [运行边界](docs/runtime-boundaries.md)：统一调用、资源窗口、父子接纳与恢复。
-- [异常与错误](docs/exceptions.md)：声明异常和内核错误的不同处理出口。
+- [异常与错误](docs/exceptions.md)：统一操作接收与不可被 fallback 清除的机制故障。
 - [记录机制](docs/recording.md)、[增量观测](docs/observation-increments.md)：可选记录预设、变化生产、来源完整性与交付。
 - [跨端协议](docs/protocol.md)、[客户端运行能力](docs/client-runtime.md)：独立对话交付、实体同步、观测接收、应用绑定与 Store。
 - [消息与分段](docs/transcript.md)、[运行记忆](docs/memory.md)、[活跃材料与维护](docs/active-content.md)：内容实体、单次材料与维护边界。
@@ -36,13 +36,13 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
                       │ 当前阶段 Work
                 业务处理与显式子调用
                       │ 发布已经发生的事实
-           变化捕获                 可选观测声明
+           变化捕获                 宿主安装的观测
                │                   ├─ 记录预设
                │                   └─ 其他同步消费者
                └──────── 环境消费与服务交付
 ```
 
-- `new Node/Group/Scene` 直接构造结构；普通 `*Definition` 配置可经构造器或 `setDefinition` 传入。`setRun` 替换整个 run 阶段，`run`、`exceptions`、`observation` 是平级部分。
+- `new Node/Group/Scene` 直接构造结构；普通 `*Definition` 配置可经构造器传入，也可在 build 前逐项赋值。结构保留 `deps/run/output/checkpoint`，业务正常/失败接收在操作处用 `result` 表达，观测消费者由宿主安装。
 - Scene / Group 通过 `add` 注册可用的 Group / Node，组合体自己的处理函数选择、调用、接纳成员。Node 不具有成员调用端口。
 - `new Runner(scene, resources, interactions?).build()` 在原结构上完成一次构建，返回运行器本身；构建后拒绝结构修改。每个成员只属于一个父结构，处理逻辑与资源实体可以复用。每个 Runner 固定一个场景并管理其入口占用，每次运行建立新的 Invocation 和 CallableContext。
 - `Invocation` 统一协调调用阶段、直接子关系与交付；Context 保存本次现场。业务作者只取得本阶段 Work、具名资源与受控动作，见 [可调用结构](docs/callable-structures.md)。
@@ -74,7 +74,7 @@ const output = await environment.runner.run({ messages: [{ role: 'user', content
 
 上例的 provider、settings、signal 由宿主提供；progress 是为本次请求创建的 `ProgressChannel<ConversationProgress>`，接收可选进展，不参与工作接纳。使用者也可从 `/conversation` 组合已有 Scene / Group / Node，或直接使用 `@capix/server-runtime`：先构造 Scene 并向 Resources 注册供给，再 `const runner = new Runner(scene, resources).build()`，最后 `runner.run(input, options)`。可选 Interactions 作为第三参数接入；无需持有另一个已绑定场景，也不必使用 Observer 的装配。可运行入口见 [examples/runner.mjs](examples/runner.mjs)，完整资源与具名子调用例子见 [examples/dictionary.mjs](examples/dictionary.mjs)。
 
-回答在正式追加消息后交付，随后处理记忆。启用持久化时，正式追加先提交到数据库。后处理失败保留已成立的回答。当前只有生成回答明确声明的、针对完整模型输出被拒绝的一次再次生成；没有通用自动重试、后台补偿、动态调度或默认服务未完成调用恢复。
+回答在正式追加消息后交付，随后处理记忆。启用持久化时，正式追加先提交到数据库。后处理失败保留已成立的回答。当前只有生成回答业务显式组织的、针对完整模型输出被拒绝的一次再次生成；没有通用自动重试、后台补偿、动态调度或默认服务未完成调用恢复。
 
 模型请求通过独立 Interaction 发出。请求模型 Group 接纳首个 Node 的有限等待结果，必要时建立新的 Node 调用读取同一交互；不会因为本地等待结束而重发。反馈先保存再交给业务解释，已保存反馈可按 ID 再次读取，与恢复旧调用分开。
 

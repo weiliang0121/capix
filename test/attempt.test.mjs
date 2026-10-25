@@ -22,11 +22,9 @@ test('one Attempt instance creates independent contexts per call and leaves pare
   const rejection = new ExceptionContract('REJECTED_INPUT');
   const failure = rejection.create('rejected input', {});
   class AcceptText extends AttemptFixture {
-    raises = [rejection];
     name = 'acceptText';
     label = '接纳文本';
     source = 'test/attempt.test.mjs · AcceptText';
-    callee = 'processing';
     execute(context, invocation) {
       rememberCall(invocation);
       contexts.push(context);
@@ -113,7 +111,6 @@ test('Attempt works without a recorder and preserves non-JSON input and output i
     name = 'identity';
     label = '原样返回';
     source = 'test/attempt.test.mjs · Identity';
-    callee = 'processing';
     execute(context, invocation) {
       rememberCall(invocation);
       contexts.push(context);

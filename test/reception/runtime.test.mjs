@@ -6,6 +6,8 @@ import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
 
 const metadata = { name: 'reception-fixture', label: 'Reception fixture', source: 'test' };
 const issue = new ExceptionContract('RECEPTION_FIXTURE');
+const codec = { encode: (value) => value, decode: (value) => value };
+const checkpoint = (receptions) => ({ key: 'fixture.reception', version: 1, input: codec, output: codec, points: [], receptions });
 
 function runtime(operation, providers = []) {
   const execution = defineGroup()({
@@ -28,7 +30,7 @@ function runtime(operation, providers = []) {
 }
 
 function leaf(execute = (work) => work.input) {
-  return defineNode()({ ...metadata, callee: 'local', run: execute });
+  return defineNode()({ ...metadata, run: execute });
 }
 
 function checked(check = (value) => value) {
@@ -44,7 +46,7 @@ function checked(check = (value) => value) {
 }
 
 function parent(child, contracts, execute, options = {}) {
-  return defineGroup()({ ...metadata, members: [child], receptions: contracts, run: execute, ...options });
+  return defineGroup()({ ...metadata, members: [child], checkpoint: checkpoint(contracts), run: execute, ...options });
 }
 
 test('R, E and O each register and consume their own direct-child reception', async () => {
@@ -59,7 +61,7 @@ test('R, E and O each register and consume their own direct-child reception', as
   const executionValue = reception(operation, checked());
   const execution = defineGroup()({
     members: [operation],
-    receptions: [executionValue],
+    checkpoint: checkpoint([executionValue]),
     async run(work) {
       const call = work.children.create(operation, null);
       await call.run();
@@ -70,7 +72,7 @@ test('R, E and O each register and consume their own direct-child reception', as
   const runtimeValue = reception(execution, checked());
   const root = defineScene()({
     members: [execution],
-    receptions: [runtimeValue],
+    checkpoint: checkpoint([runtimeValue]),
     async run(work) {
       const call = work.children.create(execution, null);
       await call.run();
@@ -115,7 +117,7 @@ test('equivalent children have independent parent Accepted values in factory and
       super();
       this.add(namedChild);
     }
-    receptions = [count];
+    checkpoint = checkpoint([count]);
     deps = {};
     run = async function (work) {
       const call = work.children.create(namedChild, 'hello');
@@ -202,31 +204,15 @@ test('concurrent same-key calls are read by their exact references', async () =>
   assert.deepEqual(await runtime(definition).run(null, {}), ['first', 'second']);
 });
 
-test('typed history remains readable in a later phase with no child action grant', async () => {
+test('accepted facts remain readable after the async business operation', async () => {
   const child = leaf();
   const contract = reception(child, checked());
-  let reference;
-  const definition = parent(
-    child,
-    [contract],
-    async (work) => {
-      const call = work.children.create(child, 'candidate');
-      reference = call.ref;
-      await call.run();
-      await call.accept(contract, () => 'accepted');
-      throw issue.create('read in handler', {});
-    },
-    {
-      raises: [issue],
-      exceptions: {
-        accepts: [issue],
-        uses: [],
-        handle(work) {
-          return work.return(work.children.facts.accepted(reference, contract));
-        },
-      },
-    },
-  );
+  const definition = parent(child, [contract], async (work) => {
+    const call = work.children.create(child, 'candidate');
+    await call.invoke({ reception: contract, result: { succeeded: () => 'accepted' } });
+    await Promise.resolve();
+    return work.children.facts.accepted(call.ref, contract);
+  });
   assert.equal(await runtime(definition).run(null, {}), 'accepted');
 });
 
@@ -344,44 +330,30 @@ test('accepted lookup rejects an authentic reference issued to another parent in
   assert.equal(checkedRejection, true);
 });
 
-test('an old phase handle cannot begin a typed reception in parent accept', async () => {
+test('a retained handle cannot begin typed reception after its parent exits', async () => {
   const child = leaf();
   const contract = reception(child, checked());
   let captured;
   let callbacks = 0;
-  let checkedRejection = false;
-  const definition = parent(child, [contract], () => 'unused', {
-    async run(work) {
-      captured = work.children.create(child, 'candidate');
-      await captured.run();
-      return 'delivered';
-    },
-    async accept(work) {
-      await assert.rejects(captured.accept(contract, () => ++callbacks));
-      checkedRejection = true;
-      return work.delivered;
-    },
+  const definition = parent(child, [contract], async (work) => {
+    captured = work.children.create(child, 'candidate');
+    await captured.run();
+    return 'delivered';
   });
-  await assert.rejects(runtime(definition).run(null, {}));
-  assert.equal(checkedRejection, true);
+  assert.equal(await runtime(definition).run(null, {}), 'delivered');
+  await assert.rejects(captured.accept(contract, () => ++callbacks));
   assert.equal(callbacks, 0);
 });
 
-test('opening a saved reference in the current accept phase permits its first reception', async () => {
+test('opening a reference in the same business run permits its first reception', async () => {
   const child = leaf();
   const contract = reception(child, checked());
-  let reference;
-  const definition = parent(child, [contract], () => 'unused', {
-    async run(work) {
-      const call = work.children.create(child, 'candidate');
-      reference = call.ref;
-      await call.run();
-      return 'delivered';
-    },
-    async accept(work) {
-      await work.children.open(reference).accept(contract, () => 'accepted later');
-      return work.children.facts.accepted(reference, contract);
-    },
+  const definition = parent(child, [contract], async (work) => {
+    const call = work.children.create(child, 'candidate');
+    await call.run();
+    await Promise.resolve();
+    await work.children.open(call.ref).accept(contract, () => 'accepted later');
+    return work.children.facts.accepted(call.ref, contract);
   });
   assert.equal(await runtime(definition).run(null, {}), 'accepted later');
 });
@@ -417,7 +389,6 @@ for (const mode of ['technical', 'declared']) {
       }),
     );
     let effects = 0;
-    let handlers = 0;
     let checkedRejection = false;
     const execute = async (work) => {
       const call = work.children.create(child, 'candidate');
@@ -435,21 +406,12 @@ for (const mode of ['technical', 'declared']) {
     const definition = parent(child, [contract], execute, {
       deps: { messages: TranscriptResource.append.request() },
       run: execute,
-      raises: [issue],
-      exceptions: {
-        accepts: [issue],
-        handle(work) {
-          handlers++;
-          return work.return('incorrectly handled');
-        },
-      },
     });
     await assert.rejects(runtime(definition, [TranscriptResource.append.provide(() => transcript)]).run(null, {}));
     assert.equal(checkedRejection, true);
     assert.equal(effects, 1);
     assert.equal(transcript.length, 1);
     assert.deepEqual(transcript.get(0), { role: 'assistant', content: 'already committed' });
-    assert.equal(handlers, 0, 'contract check failure is technical even if its cause is a DeclaredException');
   });
 }
 
@@ -488,50 +450,27 @@ for (const mode of ['fulfilled-promise', 'rejected-promise', 'rejecting-thenable
 }
 
 for (const mode of ['declared', 'technical']) {
-  test(`a ${mode} callback failure keeps its existing propagation semantics`, async () => {
+  test(`a ${mode} callback failure retains its reception provenance`, async () => {
     const child = leaf();
     const contract = reception(child, checked());
-    const failure = mode === 'declared' ? issue.create('business rejection', {}) : new Error('technical callback failure');
+    const failure = mode === 'declared' ? issue.create('business rejection', {}) : new Error('callback failure');
     let reference;
-    let handled = 0;
-    let delivered = false;
-    const definition = parent(
-      child,
-      [contract],
-      async (work) => {
-        const call = work.children.create(child, 'candidate');
-        reference = call.ref;
-        await call.run();
-        try {
-          await call.accept(contract, () => {
+    let parentWork;
+    const definition = parent(child, [contract], async (work) => {
+      parentWork = work;
+      const call = work.children.create(child, 'candidate');
+      reference = call.ref;
+      return call.invoke({
+        reception: contract,
+        result: {
+          succeeded() {
             throw failure;
-          });
-        } catch (error) {
-          assert.equal(error instanceof ChildCallFailure, mode === 'declared');
-          if (mode === 'declared') assert.equal(error.exception, failure);
-          delivered = true;
-          throw error;
-        }
-        return 'must not succeed';
-      },
-      {
-        raises: [issue],
-        exceptions: {
-          accepts: [issue],
-          handle(work) {
-            handled++;
-            assert.equal(work.exception, failure);
-            assert.deepEqual(work.origin, { kind: 'child-reception', child: reference });
-            assert.equal(work.children.facts.get(reference).reception.status, 'failed');
-            return work.return('handled');
           },
         },
-      },
-    );
-    if (mode === 'declared') assert.equal(await runtime(definition).run(null, {}), 'handled');
-    else await assert.rejects(runtime(definition).run(null, {}));
-    assert.equal(delivered, true);
-    assert.equal(handled, mode === 'declared' ? 1 : 0);
+      });
+    });
+    await assert.rejects(runtime(definition).run(null, {}));
+    assert.equal(parentWork.children.facts.get(reference).reception.status, 'failed');
   });
 }
 

@@ -5,7 +5,7 @@ import { ExecutionRecordHelper } from '@capix/server-runtime';
 import { lifecycleFor } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, RecordBook, InvocationRecord } from '@capix/server-runtime';
+import { Recorder, RecordBook, InvocationRecord, Runner, Resources, Scene, Node, CallableRecord, bindRecording } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 
 import { hasOutput, readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
@@ -40,7 +40,6 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
     name = 'work';
     label = 'work';
     source = 'test';
-    callee = 'processing';
     execute() {
       return payload;
     }
@@ -78,8 +77,7 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
   for (const { value } of records) {
     assert.equal(value.resultOf, 2);
     assert.equal(Object.hasOwn(value, 'output'), false);
-    assert.equal(value.processes[2].resultOf, 2);
-    assert.equal(Object.hasOwn(value.processes[2], 'output'), false);
+    assert.equal(value.processes.length, 2);
     assert.equal(readOutput(value), value.processes[1].output);
     assert.equal(Object.isFrozen(readOutput(value)), true);
   }
@@ -96,36 +94,36 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
   const expanded = JSON.parse(serialized);
   for (const { value } of [expanded.execution, ...expanded.operations, ...expanded.attempts]) {
     const output = readOutput(value);
-    value.processes[2].output = output;
-    delete value.processes[2].resultOf;
     value.output = output;
     delete value.resultOf;
   }
-  assert.ok(Buffer.byteLength(JSON.stringify(snapshot.attempts[0].value)) < Buffer.byteLength(JSON.stringify(expanded.attempts[0].value)) * 0.5);
+  assert.ok(Buffer.byteLength(JSON.stringify(snapshot.attempts[0].value)) < Buffer.byteLength(JSON.stringify(expanded.attempts[0].value)) * 0.6);
 });
 
-test('custom acceptors preserve a distinct snapshot even when mutating and returning the same object', async () => {
+test('parent reception keeps the child returned snapshot separate from the transformed result', async () => {
   for (const mutate of [false, true]) {
-    const { runtime, recorder } = fixture();
-    const lifecycle = lifecycleFor(runtime).execution({ input: null, settings: {} });
-    const context = lifecycle.begin();
-    class Custom extends LocalOperation {
-      accept(_context, output) {
-        if (mutate) output.content = 'changed';
-        return output;
-      }
-    }
+    const recorder = new Recorder(new RecordBook());
+    const child = new Node({ run: (work) => work.input });
+    const scene = new Scene().add({ child });
+    scene.run = (work) =>
+      work.children.child.invoke(work.input, {
+        result: {
+          succeeded(value) {
+            if (mutate) value.content = 'changed';
+            return value;
+          },
+        },
+      });
     const input = { content: 'original' };
-    const result = await new Custom(runtime.operationInvocationBuilder).call(callFor(context), input);
-    lifecycle.succeed(context, result);
-    const snapshot = observeCall(runtime.recording, callFor(context));
-    validateExecutionRecordSnapshot(snapshot);
-    const value = snapshot.operations[0].value;
-    assert.equal(value.processes[1].output.content, 'original');
-    assert.equal(value.processes[2].output.content, mutate ? 'changed' : 'original');
-    assert.notEqual(value.processes[1].output, value.processes[2].output);
-    assert.equal(value.resultOf, 3);
-    assert.equal(readOutput(value), value.processes[2].output);
+    const result = await new Runner(scene, new Resources(), undefined, { observations: [bindRecording(recorder)] }).build().run(input);
+    assert.equal(result, input);
+    const records = [...recorder.book.values()].filter((record) => record instanceof CallableRecord);
+    const childRecord = records.find((record) => record.structureKind === 'node');
+    const parentRecord = records.find((record) => record.structureKind === 'scene');
+    assert.equal(readOutput(childRecord.value).content, 'original');
+    assert.equal(readOutput(parentRecord.value).content, mutate ? 'changed' : 'original');
+    assert.notEqual(readOutput(childRecord.value), readOutput(parentRecord.value));
+    assert.equal(childRecord.value.resultOf, 2);
   }
 });
 
@@ -172,13 +170,13 @@ test('observation rejects corrupted compact references rather than silently losi
       v.output = 'duplicate';
     },
     (v) => {
-      v.processes[2].resultOf = 3;
+      v.processes[1].resultOf = 3;
     },
     (v) => {
-      v.processes[2].round = 2;
+      v.processes[1].resultOf = 1;
     },
     (v) => {
-      v.processes[2].output = 'duplicate';
+      v.processes[1].resultOf = 2;
     },
   ]) {
     const changed = structuredClone(snapshot);

@@ -138,7 +138,7 @@ test('Injected Clock measures recording boundaries without becoming live Context
     ['call', 'call', 'return', 'return'],
   );
   assert.equal(during.operations[0].status, 'running');
-  assert.equal(published.length, 10); // Task boundaries/processes plus its own and the Scene's child-return facts.
+  assert.equal(published.length, 9); // Task boundaries/processes plus its own and the Scene's child-return facts.
   assert.equal(published.at(-1).rootCall.value.relationChanges.at(-1).change.kind, 'returned');
   assert.equal(projectExecution(facts).callSequence.calls[1].durationMs, 25);
   assert.equal(projectExecution(facts).durationMs, 50);
@@ -183,7 +183,7 @@ test('record creation captures instance descriptions at begin without storing th
   assert.equal(attemptRecord.source, attemptInstance.source);
   assert.equal(attemptRecord.structureKind, 'node');
   assert.equal(attemptRecord.parentId, operationRecord.id);
-  assert.equal(attemptRecord.callee, 'processing');
+  assert.equal(attemptRecord.callee, undefined);
   assert.equal(attempt.operationContext, undefined);
   attempt.requireActive();
   attemptLifecycle.succeed(attempt, 'action output');

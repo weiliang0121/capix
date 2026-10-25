@@ -12,11 +12,14 @@ test('named registration retains the same structures and invokes through the reg
   assert.equal(registered, group);
   assert.deepEqual(group.members, [primary, backup]);
   assert.deepEqual(group.names, { primary, backup });
-  group.setRun(async (work) => {
-    const first = await work.children.primary.invoke(work.input, { result: { succeeded: (value) => value * 2 } });
-    return work.children.backup.invoke(first);
+  Object.assign(group, {
+    deps: {},
+    run: async (work) => {
+      const first = await work.children.primary.invoke(work.input, { result: { succeeded: (value) => value * 2 } });
+      return work.children.backup.invoke(first);
+    },
   });
-  const scene = new Scene().add({ group }).setRun((work) => work.children.group.invoke(work.input));
+  const scene = Object.assign(new Scene().add({ group }), { deps: {}, run: (work) => work.children.group.invoke(work.input) });
   const driver = new Driver();
   const built = driver.build(scene, binding);
   assert.equal(await driver.run(built, 2, {}), '6');
@@ -26,26 +29,13 @@ test('named registration retains the same structures and invokes through the reg
   assert.throws(() => Object.defineProperty(group, 'names', { value: {} }), TypeError);
 });
 
-test('named ports follow phase uses while acceptance retains the same named operations', async () => {
+test('named ports expose the registered members without a duplicate ordinary phase grant', async () => {
   const primary = new Node({ run: () => 1 });
   const backup = new Node({ run: () => 2 });
   const group = new Group().add({ primary, backup });
-  group.setRun(
-    async (work) => {
-      assert.equal(work.children.backup, undefined);
-      return work.children.primary.invoke(null);
-    },
-    {},
-    {
-      uses: [primary],
-      accept: async (work) => {
-        assert.equal(work.children.backup, undefined);
-        return work.delivered + (await work.children.primary.invoke(null));
-      },
-    },
-  );
+  group.run = async (work) => (await work.children.primary.invoke(null)) + (await work.children.backup.invoke(null));
   const driver = new Driver();
-  assert.equal(await driver.run(driver.build(group, binding), null, {}), 2);
+  assert.equal(await driver.run(driver.build(group, binding), null, {}), 3);
 });
 
 test('alias registration is atomic and rejects reserved names, conflicting aliases and cycles', () => {
@@ -92,7 +82,7 @@ test('names are captured from data properties and cannot change during registrat
   );
   assert.equal(getterCalled, false);
   assert.throws(() => group.add(new Proxy({ other: primary }, {})), /Named members/);
-  group.setRun((work) => work.children.primary.invoke(null));
+  Object.assign(group, { deps: {}, run: (work) => work.children.primary.invoke(null) });
   const driver = new Driver();
   assert.equal(await driver.run(driver.build(group, binding), null, {}), 1);
 });
@@ -110,8 +100,8 @@ test('named invocation validates registered reception values without changing th
     decode: (value) => value,
   });
   const group = new Group().add({ text });
-  group.receptions = [accepted];
-  group.setRun((work) => work.children.text.invoke(null, { reception: accepted, result: { succeeded: (value) => value.length } }));
+  group.checkpoint = { key: 'named-reception', version: 1, input: { encode: (value) => value, decode: (value) => value }, output: { encode: (value) => value, decode: (value) => value }, points: [], receptions: [accepted] };
+  Object.assign(group, { deps: {}, run: (work) => work.children.text.invoke(null, { reception: accepted, result: { succeeded: (value) => value.length } }) });
   const driver = new Driver();
   assert.equal(await driver.run(driver.build(group, binding), null, {}), 5);
   assert.equal(checked, 5);
@@ -126,7 +116,7 @@ test('named invocation validates registered reception values without changing th
     decode: (value) => value,
   });
   const parent = new Group().add({ invalid });
-  parent.receptions = [numeric];
-  parent.setRun((work) => work.children.invalid.invoke(null, { reception: numeric, result: { succeeded: () => 'wrong' } }));
+  parent.checkpoint = { key: 'invalid-named', version: 1, input: { encode: (value) => value, decode: (value) => value }, output: { encode: (value) => value, decode: (value) => value }, points: [], receptions: [numeric] };
+  Object.assign(parent, { deps: {}, run: (work) => work.children.invalid.invoke(null, { reception: numeric, result: { succeeded: () => 'wrong' } }) });
   await assert.rejects(driver.run(driver.build(parent, binding), null, {}));
 });

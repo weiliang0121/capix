@@ -60,7 +60,14 @@ function harness(t, provider, store, events = [], facts = [], generation = new G
     checkpoint = parentCheckpoint('fixture.answer.execution', generation);
     deps = GenerateAnswer.deps;
     run = async (work) => {
-      const call = work.children.create(generation, work.input, { key: 'generation', output: { receive: (event) => void events.push(event) } });
+      const call = work.children.create(generation, work.input, {
+        key: 'generation',
+        output: {
+          receive: (event) => {
+            if (event.kind === 'delta') events.push(event.delta);
+          },
+        },
+      });
       work.checkpoint?.({ point: this.checkpoint.points[0], state: {}, refs: { child: call.ref } });
       await call.run();
       return call.accept();
@@ -161,7 +168,7 @@ for (const boundary of ['modelFeedback', 'modelDelivery', 'answerAccepted']) {
   });
 }
 
-test('installed checkpoints preserve normal second-generation success and its actual final round', async (t) => {
+test('installed checkpoints preserve two candidate identities inside one business execution', async (t) => {
   const store = new CapturedStore();
   const answers = [feedback('invalid JSON'), feedback()];
   let calls = 0;
@@ -177,15 +184,17 @@ test('installed checkpoints preserve normal second-generation success and its ac
   );
   assert.deepEqual(await original.runtime.run(input, {}), answer);
   assert.equal(calls, 2);
-  const generation = store.writes.find((entry) => entry.kind === 'save' && entry.image.point === 'modelWaiting');
+  const generation = store.writes.find((entry) => entry.kind === 'save' && entry.image.point === 'candidateWaiting');
   const final = store.read(generation.image.frame.owner.contextId);
   assert.equal(final.delivery.status, 'succeeded');
-  assert.equal(final.delivery.progress.round, 2);
+  assert.equal(final.delivery.progress.round, 1);
   assert.deepEqual(final.delivery.output, answer);
-  assert.ok(store.writes.some((entry) => entry.kind === 'save' && entry.image.point === 'answerAccepted' && entry.image.frame.round === 2));
+  const completed = store.writes.findLast((entry) => entry.kind === 'save' && entry.image.point === 'answerAccepted' && entry.image.contract.key.startsWith('observer.generate-answer'));
+  assert.equal(completed.image.frame.round, 1);
+  assert.equal(completed.image.frame.children.filter((child) => child.key === 'candidate').length, 2);
 });
 
-test('second-round model feedback resumes with its prior rejection history and never requests a third generation', async (t) => {
+test('second candidate model feedback resumes with its prior rejection history and never requests a third generation', async (t) => {
   const store = new CapturedStore();
   const answers = [feedback('invalid JSON'), feedback()];
   let calls = 0;
@@ -258,16 +267,16 @@ test('answer continuation checks the exact child identity and accepted output be
   const store = new CapturedStore();
   const original = harness(t, { invoke: async () => feedback() }, store);
   await original.runtime.run(input, {});
-  for (const point of ['modelWaiting', 'answerAccepted']) {
-    const boundary = store.writes.findIndex((entry) => entry.kind === 'save' && entry.image.point === point);
+  for (const point of ['candidateWaiting', 'answerAccepted']) {
+    const boundary = store.writes.findIndex((entry) => entry.kind === 'save' && entry.image.point === point && entry.image.contract.key.startsWith('observer.generate-answer'));
     const writes = structuredClone(store.writes.slice(0, boundary + 1));
     const image = writes.at(-1).image;
-    if (point === 'modelWaiting') {
+    if (point === 'candidateWaiting') {
       const unrelated = image.frame.children[0];
-      image.references.model = { contextId: unrelated.identity.contextId, parentContextId: image.frame.owner.contextId, parentRound: unrelated.round, order: unrelated.order, target: unrelated.target };
+      image.references.candidate = { contextId: unrelated.identity.contextId, parentContextId: image.frame.owner.contextId, parentRound: unrelated.round, order: unrelated.order, target: unrelated.target };
     } else image.state.content = 'not the accepted output';
     const restored = harness(t, () => assert.fail('invalid recovery cannot acquire a provider'), restoreWrites(writes));
-    await assert.rejects(restored.runtime.resume(store.writes[0].image.frame.owner.contextId, {}), point === 'modelWaiting' ? /reference|declaration|slot|target/i : /accepted model result/);
+    await assert.rejects(restored.runtime.resume(store.writes[0].image.frame.owner.contextId, {}), point === 'candidateWaiting' ? /reference|declaration|slot|target/i : /accepted candidate/);
   }
 });
 
@@ -287,13 +296,15 @@ for (const stage of ['context', 'request', 'regenerationRequest', 'acceptance'])
     if (stage === 'regenerationRequest') {
       const resume = generation.regenerationWaiting.resume.run;
       generation.regenerationWaiting.resume.run = (work, state, refs) => {
-        const rejection = work.children.facts.require(generation.acceptOutput, work.continuation.origin.child);
+        const rejection = work.children.facts.list(generation.candidate)[0];
         assert.equal(rejection.returned.status, 'failed');
         assert.equal(rejection.returned.diagnostic.code, 'MODEL_OUTPUT_REJECTED');
         assert.equal(rejection.returned.diagnostic.detail.code, 'INVALID_JSON');
-        const previous = work.children.facts.requireUnique(generation.requestModel, { parentRound: 1 });
-        const evidence = generation.requestModel.regeneration.input({ round: work.round, continuation: work.continuation, children: work.children.facts }, { previous: previous.ref, rejection: rejection.ref });
-        assert.equal(evidence.error.code, 'INVALID_JSON');
+        assert.equal(rejection.reception.status, 'handled');
+        const received = work.children.facts.handled(rejection.ref, generation.candidateReception);
+        assert.equal(received.kind, 'retry');
+        assert.equal(received.basis.error.code, 'INVALID_JSON');
+        assert.deepEqual(state, received.basis);
         recoveredRejection = true;
         return resume(work, state, refs);
       };
@@ -317,19 +328,51 @@ for (const stage of ['context', 'request', 'regenerationRequest', 'acceptance'])
   });
 }
 
-test('second-round preparation and model checkpoints retain the actual rejection diagnostic', async (t) => {
+test('retry preparation and candidate checkpoints retain the actual rejection diagnostic', async (t) => {
   const store = new CapturedStore();
   const outputs = [feedback('invalid JSON'), feedback()];
   const original = harness(t, { invoke: async () => outputs.shift() }, store);
   await original.runtime.run(input, {});
-  for (const point of ['regenerationWaiting', 'modelWaiting']) {
-    const boundary = store.writes.findIndex((write) => write.kind === 'save' && write.image.contract.key.startsWith('observer.generate-answer') && write.image.frame.round === 2 && write.image.point === point);
+  for (const point of ['regenerationWaiting', 'candidateWaiting']) {
+    const boundary = store.writes.findIndex((write) => write.kind === 'save' && write.image.contract.key.startsWith('observer.generate-answer') && write.image.point === point && (point !== 'candidateWaiting' || write.image.state.attempt === 2));
     assert.ok(boundary > 0);
     const writes = structuredClone(store.writes.slice(0, boundary + 1));
     const image = writes.at(-1).image;
-    const request = image.frame.children.find((child) => child.round === 2 && child.key === 'request');
+    const request = image.frame.children.find((child) => child.key === 'regeneration');
     request.input.error = { code: 'EMPTY_OUTPUT', message: 'different declared rejection' };
     const restored = harness(t, () => assert.fail('invalid continuation cannot access a model'), restoreWrites(writes));
-    await assert.rejects(restored.runtime.resume(writes[0].image.frame.owner.contextId, {}), /rejection evidence/);
+    await assert.rejects(restored.runtime.resume(writes[0].image.frame.owner.contextId, {}), /rejection|regeneration/i);
   }
+});
+
+test('accepted retry checkpoint restores its handled rejection and creates only the unsent second candidate', async (t) => {
+  const store = new CapturedStore();
+  const outputs = [feedback('invalid JSON'), feedback()];
+  const original = harness(t, { invoke: async () => outputs.shift() }, store);
+  await original.runtime.run(input, {});
+  const boundary = store.writes.findIndex((write) => write.kind === 'save' && write.image.point === 'regenerationReady');
+  assert.ok(boundary > 0);
+  const prefix = store.writes.slice(0, boundary + 1);
+  const image = prefix.at(-1).image;
+  assert.equal(image.frame.children.length, 3);
+  assert.equal(image.frame.children.at(-1).state.reception.kind, 'handled');
+  let requests = 0;
+  const restored = harness(
+    t,
+    {
+      invoke: async (request) => {
+        requests++;
+        assert.ok(request.messages.some((message) => message.role === 'assistant' && message.content === 'invalid JSON'));
+        return feedback();
+      },
+    },
+    restoreWrites(prefix),
+  );
+  assert.deepEqual(await restored.runtime.resume(prefix[0].image.frame.owner.contextId, {}), answer);
+  assert.equal(requests, 1, 'the handled first failure is historical; only the explicitly authorized second candidate is new');
+
+  const changed = structuredClone(prefix);
+  changed.at(-1).image.state.error.code = 'EMPTY_OUTPUT';
+  const invalid = harness(t, () => assert.fail('changed retry evidence cannot start a model'), restoreWrites(changed));
+  await assert.rejects(invalid.runtime.resume(prefix[0].image.frame.owner.contextId, {}), /rejection/i);
 });

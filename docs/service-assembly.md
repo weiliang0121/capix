@@ -70,7 +70,7 @@ sequenceDiagram
     Init-->>Host: 完整的 ObserverEnvironment
 ```
 
-结构的配置在构建前后都保持平级 `deps / uses / run / accept`，不再经过 `run.execute` 的中间包装。内核的 InvocationWork 才负责解释执行、接纳和异常阶段。build 不执行业务或捕获本次输入；它固定入口和容器，保留业务 receiver。构建后禁止改配置；不产生平行 Bound 树。
+结构配置是 `deps / run / output / checkpoint`，构造器和普通赋值表达相同配置。普通 run 使用已登记成员，在操作处通过 `{delta,result}` 完成接收；没有全节点独立接纳/异常阶段。记录描述由宿主在 build 前按结构登记，业务结构不持有观察消费者。build 不执行业务或捕获本次输入；它固定入口和容器，保留业务 receiver。构建后禁止改配置；不产生平行 Bound 树。
 
 `environment.scene`、`environment.structure.scene`、`environment.runner.scene` 是同一对象。每次提交建立自己的 Invocation、Context、Work 和资源窗口，不把这些状态放到共享结构上。
 
@@ -131,7 +131,7 @@ Runner 固定本次 options 顶层；根校验再固定模型配置。本次模�
 
 输入已追加、对话 Group 尚未建立时失败，保留内容与 Scene 事实，不伪造 Group。started 在 Context 建立后、开始事实前同步执行，必须返回 undefined。恢复旧调用不再次登记；恢复中新建调用照常登记。
 
-普通节点可用具名子调用 `.invoke(input, { delta, result })`。当前 Observer 的多步处理普遍有真实的“创建子调用→保存等待 CP→运行→接纳”边界，因此保留显式句柄。这里的精细形式是恢复需要，不是遗漏迁移。
+普通节点可用具名子调用 `.invoke(input, { delta, result })`。当前 Observer 的多步处理普遍有真实的“创建子调用→保存等待 CP→call.invoke 接收”边界，因此保留显式句柄。这里的精细形式是恢复需要，不是遗漏迁移。
 
 ## 所有权与关闭
 
@@ -150,4 +150,4 @@ Runner 固定本次 options 顶层；根校验再固定模型配置。本次模�
 
 环境在调用或外部交互仍在途时拒绝关闭。正常关闭解除内容观察、关闭交互及 CP 观测、seal 当前记录、释放来源，最后按所有权关闭内容及数据库；正常关闭不标为来源不完整。每项清理均尝试，即使其他项失败。
 
-`environment.recover(rootContextId)` 核对恢复登记与内容／配置，Runner 的 validate 再检查准确依据，二者共享同一 CP 存储。Scene / ConversationGroup 版本仍为 4 / 6，Frame v5；本轮不改变成员位置、点契约、交互重发规则或恢复承诺。旧格式拒绝恢复，历史对话内容仍可读取。
+`environment.recover(rootContextId)` 核对恢复登记与内容／配置，Runner 的 validate 再检查准确依据，二者共享同一 CP 存储。Scene / ConversationGroup / GenerateAnswer 契约版本为 5 / 7 / 5，Frame 仍为 v5。回答的一次再生成使用显式业务状态、handled 拒绝事实与新子调用，不再使用调用 round 2。旧声明版本及旧 round 2/continuation 镜像拒绝恢复；交互不重发，历史对话内容和记录仍可读取。

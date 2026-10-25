@@ -38,7 +38,7 @@ async function execute(failAt) {
   return { environment, invocation, error, calls };
 }
 
-test('Observer retains its E/O/A composition without additional execution records', async () => {
+test('Observer composes candidate calls without additional conversation tasks', async () => {
   const { invocation, error, calls, environment } = await execute();
   assert.equal(error, undefined);
   assert.deepEqual(calls, ['answer', 'memory']);
@@ -63,7 +63,7 @@ test('Observer retains its E/O/A composition without additional execution record
   );
   assert.deepEqual(
     generation.invocation.children.values().map((child) => child.key),
-    ['context', 'request', 'model', 'acceptance'],
+    ['context', 'request', 'candidate'],
   );
   assert.deepEqual(generation.returned.output, answer);
   assert.deepEqual(generation.reception.output.response.message, environment.transcript.get(1));
@@ -73,11 +73,10 @@ test('Observer retains its E/O/A composition without additional execution record
 
 test('memory failure preserves the delivered answer and completed generation relationship', async () => {
   const { invocation, environment, error, calls } = await execute('memory');
-  assert.equal(error.code, 'UNHANDLED_EXCEPTION');
-  assert.ok(error.cause instanceof DeclaredException);
-  assert.equal(error.cause.code, 'MODEL_OUTPUT_REJECTED');
-  assert.equal(error.cause.cause.code, 'INVALID_JSON');
-  assert.equal(error.cause.facts.code, 'INVALID_JSON');
+  assert.equal(error.code, 'MODEL_OUTPUT_REJECTED');
+  assert.ok(error instanceof DeclaredException);
+  assert.equal(error.cause.code, 'INVALID_JSON');
+  assert.equal(error.facts.code, 'INVALID_JSON');
   assert.deepEqual(calls, ['answer', 'memory']);
   assert.equal(environment.transcript.length, 2);
   assert.equal(environment.transcript.get(1).content, answer.content);
@@ -87,14 +86,14 @@ test('memory failure preserves the delivered answer and completed generation rel
   assert.equal(generated.invocation.context.status, 'succeeded');
   assert.equal(generated.reception.status, 'accepted');
   assert.equal(extracted.returned.status, 'failed');
-  assert.equal(extracted.returned.error, error.cause);
+  assert.equal(extracted.returned.error, error);
   assert.equal(extracted.invocation.failure.kind, 'exception');
   const extraction = extracted.invocation.children.values();
   const model = extraction.find((child) => child.key === 'model');
   const acceptance = extraction.find((child) => child.key === 'acceptance');
-  assert.equal(error.cause.facts.output, model.returned.output);
-  assert.equal(error.cause.facts.output.content, 'invalid JSON');
-  assert.equal(acceptance.returned.error, error.cause);
+  assert.equal(error.facts.output, model.returned.output);
+  assert.equal(error.facts.output.content, 'invalid JSON');
+  assert.equal(acceptance.returned.error, error);
   assert.deepEqual(
     extraction.map((child) => child.key),
     ['request', 'model', 'acceptance'],
@@ -103,8 +102,8 @@ test('memory failure preserves the delivered answer and completed generation rel
 
 test('invalid model output stays available through the actual child invocation without querying records', async () => {
   const { invocation, error, calls, environment } = await execute('answer');
-  assert.equal(error.code, 'UNHANDLED_EXCEPTION');
-  assert.ok(error.cause instanceof DeclaredException);
+  assert.equal(error.code, 'MODEL_OUTPUT_REJECTED');
+  assert.ok(error instanceof DeclaredException);
   assert.deepEqual(calls, ['answer', 'answer']);
   assert.equal(environment.transcript.length, 1);
   const children = invocation.children.values();
@@ -113,8 +112,12 @@ test('invalid model output stays available through the actual child invocation w
     ['preparation', 'decision', 'generation'],
   );
   const generation = children.find((child) => child.key === 'generation').invocation.children.values();
-  const models = generation.filter((child) => child.key === 'model');
-  const acceptances = generation.filter((child) => child.key === 'acceptance');
+  const candidates = generation.filter((child) => child.key === 'candidate');
+  assert.equal(candidates[0].reception.status, 'handled');
+  assert.equal(candidates[1].reception.status, 'failed');
+  const nested = candidates.flatMap((child) => child.invocation.children.values());
+  const models = nested.filter((child) => child.key === 'model');
+  const acceptances = nested.filter((child) => child.key === 'acceptance');
   assert.equal(models.length, 2);
   assert.equal(acceptances.length, 2);
   assert.equal(models[0].returned.output.content, 'invalid JSON');
@@ -129,7 +132,7 @@ test('invalid model output stays available through the actual child invocation w
     assert.equal(rejection.facts.output, model.returned.output);
     assert.equal(acceptance.invocation.failure.kind, 'exception');
   }
-  assert.equal(acceptances[1].returned.error, error.cause);
-  assert.equal(invocation.failure.error, error.cause);
+  assert.equal(acceptances[1].returned.error, error);
+  assert.equal(invocation.failure.error, error);
   assert.notEqual(acceptances[0].invocation.context, acceptances[1].invocation.context);
 });

@@ -121,7 +121,7 @@ interactions.register(modelContract, {
 // @ts-expect-error registered send must produce the declared reply
 interactions.register(modelContract, { send: () => ({ content: 123 }) });
 
-const streaming = new Scene<Input, Result, {}, {}, Delta>();
+const streaming = new Scene<Input, Result, {}, Delta>();
 const hooks = callableHooks<typeof streaming, Options>(streaming, {
   validate(input, options) {
     expectType<Input>(input);

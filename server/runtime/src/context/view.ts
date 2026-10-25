@@ -1,5 +1,4 @@
 import type { ContextState, InvocationContext } from './context.js';
-import type { Continuation } from '../invocation/result.js';
 import type { ResourceBindings } from '../resource/bindings.js';
 
 /** Business sees the live call values, never lifecycle mutation or binding machinery. */
@@ -10,7 +9,6 @@ export interface InvocationContextView<Input = unknown, Output = unknown> {
   readonly progress: InvocationContext<Input, Output>['progress'];
   readonly state: ContextState<Output>;
   readonly status: ContextState<Output>['status'];
-  continueWith(input: Input, reason: string): Continuation<Input>;
 }
 
 interface ResourceContextView<Input, Output, Resources extends object> extends InvocationContextView<Input, Output> {
@@ -50,7 +48,6 @@ export function invocationContextView<Context extends InvocationContext<any, any
     get status() {
       return context.status;
     },
-    continueWith: (input: unknown, reason: string) => context.continueWith(input, reason),
   };
   if ('resources' in context && 'signal' in context) {
     Object.defineProperties(view, { kind: { enumerable: true, value: 'kind' in context ? context.kind : undefined }, signal: { enumerable: true, value: context.signal } });

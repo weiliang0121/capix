@@ -256,7 +256,7 @@ test('Observer execution observes execution, operations and boundaries from the 
   assert.deepEqual(Object.keys(facts).sort(), ['boundaries', 'calls', 'execution', 'memories', 'resources', 'rootCall', 'transcripts']);
   assert.deepEqual(
     groups(facts).map((record) => record.name),
-    ['prepareContext', 'conversationDecision', 'answer', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
+    ['prepareContext', 'conversationDecision', 'answer', 'answerCandidate', 'requestModel', 'conversationDecision', 'memory', 'requestModel'],
   );
   assert.equal(nodes(facts).length, 8);
   const sequence = projectExecution(facts).callSequence;
@@ -278,7 +278,8 @@ test('Observer execution observes execution, operations and boundaries from the 
   }
   const expectedActions = {
     prepareContext: [],
-    answer: ['assembleContext', 'prepareModelRequest', 'acceptModelOutput'],
+    answer: ['assembleContext', 'prepareModelRequest'],
+    answerCandidate: ['acceptModelOutput'],
     memory: ['prepareModelRequest', 'acceptModelOutput', 'applyMemory'],
     requestModel: ['invokeModel'],
     conversationDecision: [],
@@ -306,10 +307,17 @@ test('Observer execution observes execution, operations and boundaries from the 
       assert.ok(groups(facts).some((parent) => parent.id === operation.parentId));
       continue;
     }
+    if (operation.name === 'answer') {
+      const preparation = attempts.find((attempt) => attempt.name === 'prepareModelRequest');
+      const candidate = groups(facts).find((child) => child.parentId === operation.id && child.name === 'answerCandidate');
+      assert.deepEqual(candidate.value.input, readOutput(preparation.value));
+      assert.deepEqual(readOutput(operation.value), readOutput(candidate.value));
+      continue;
+    }
     const preparation = attempts.find((attempt) => attempt.name === 'prepareModelRequest');
     const invocation = groups(facts).find((child) => child.parentId === operation.id && child.name === 'requestModel');
     const acceptance = attempts.find((attempt) => attempt.name === 'acceptModelOutput');
-    assert.deepEqual(invocation.value.input, readOutput(preparation.value));
+    assert.deepEqual(invocation.value.input, operation.name === 'answerCandidate' ? operation.value.input : readOutput(preparation.value));
     assert.deepEqual(acceptance.value.input.output, readOutput(invocation.value));
     assert.deepEqual(readOutput(operation.value), readOutput(attempts.at(-1).value));
     if (operation.name === 'memory') assert.deepEqual(attempts.at(-1).value.input, readOutput(acceptance.value));
@@ -341,8 +349,11 @@ test('Observer execution observes execution, operations and boundaries from the 
 test('Acceptance rejection preserves raw output and its original cause without recording an accepted result', async () => {
   const facts = await execute('broken-json');
   const answer = groups(facts).find((op) => op.name === 'answer');
-  const invoked = groups(facts).find((operation) => operation.parentId === answer.id && operation.name === 'requestModel');
-  const accepted = nodes(facts).find((attempt) => attempt.parentId === answer.id && attempt.name === 'acceptModelOutput');
+  const candidates = groups(facts).filter((operation) => operation.parentId === answer.id && operation.name === 'answerCandidate');
+  assert.equal(candidates.length, 2);
+  const candidate = candidates.at(-1);
+  const invoked = groups(facts).find((operation) => operation.parentId === candidate.id && operation.name === 'requestModel');
+  const accepted = nodes(facts).find((attempt) => attempt.parentId === candidate.id && attempt.name === 'acceptModelOutput');
   assert.equal(readOutput(invoked.value).content, 'broken-json');
   assert.equal(accepted.value.input.output.content, 'broken-json');
   assert.equal(readOutput(accepted.value), undefined);
@@ -355,7 +366,7 @@ test('Acceptance rejection preserves raw output and its original cause without r
   assert.equal(facts.execution.value.failure.kind, 'exception');
   assert.equal(accepted.value.error.cause.code, 'INVALID_JSON');
   assert.deepEqual(accepted.value.error.detail, { code: 'INVALID_JSON', output: readOutput(invoked.value) });
-  assert.equal(nodes(facts).filter((attempt) => attempt.parentId === answer.id && attempt.name === 'acceptModelOutput' && attempt.status === 'failed').length, 2);
+  assert.equal(nodes(facts).filter((attempt) => candidates.some((candidate) => candidate.id === attempt.parentId) && attempt.name === 'acceptModelOutput' && attempt.status === 'failed').length, 2);
   const runtime = createRecordedRuntime();
   const execution = begin(runtime);
   const failure = new RuntimeError('TEST', 'test');

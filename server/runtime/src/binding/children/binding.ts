@@ -81,24 +81,37 @@ export class InvocationChildBindings {
           ...(outputReceiver ? { output: outputReceiver } : {}),
         });
         const relation = this.options.parent.children.get(child);
-        try {
-          await child.run();
-        } catch (error) {
-          this.checkActive();
-          if (!failed || relation.returned?.status !== 'failed' || !relation.returned.failure?.receptionAllowed || relation.returned.error instanceof InvocationCancelled || child.context.progress.round === 0 || ['setup', 'control', 'observation'].includes(relation.returned.failure?.phase ?? 'setup')) throw error;
-          // The child's original outcome stays failed. Its receiver runs once in this parent's scope.
-          return relation.handle((failure) => {
-            this.checkActive();
-            return failed(failure);
-          }, contract);
-        }
-        // Deliberately outside the source catch: reception errors cannot call result.failed again.
-        return relation.accept((output) => {
-          this.checkActive();
-          return succeeded ? succeeded(output) : output;
-        }, contract);
+        return this.receiveTarget(relation, succeeded, failed, contract);
       }),
     );
+  }
+
+  private async receiveTarget(relation: import('../../invocation/relation.js').InvocationRelation, succeeded?: (value: any) => unknown, failed?: (failure: unknown) => unknown, contract?: import('../../invocation/reception.js').InvocationReceptionBinding): Promise<any> {
+    const child = relation.invocation;
+    try {
+      await child.run();
+    } catch (error) {
+      try {
+        // Test control without first owning cancellation: a completed source failure
+        // and a closed receiver window are separate facts, just as for resource operations.
+        this.options.parent.requireActive();
+        this.checkActive();
+      } catch (windowFailure) {
+        const sourceFailure = relation.returned?.status === 'failed' ? relation.returned.error : error;
+        if (sourceFailure === windowFailure || (sourceFailure instanceof InvocationCancelled && windowFailure instanceof InvocationCancelled)) throw windowFailure;
+        throw new AggregateError([sourceFailure, windowFailure], 'Child operation failed after its reception window became unavailable', { cause: sourceFailure });
+      }
+      if (!failed || relation.returned?.status !== 'failed' || !relation.returned.failure?.receptionAllowed || relation.returned.error instanceof InvocationCancelled || child.context.progress.round === 0 || ['setup', 'control', 'observation'].includes(relation.returned.failure?.phase ?? 'setup')) throw error;
+      return relation.handle((failure) => {
+        this.checkActive();
+        return failed(failure);
+      }, contract);
+    }
+    // A reception failure is never fed back into its own failure callback.
+    return relation.accept((output) => {
+      this.checkActive();
+      return succeeded ? succeeded(output) : output;
+    }, contract);
   }
 
   private create<D extends ChildContract>(definition: D, input: CallableInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
@@ -114,7 +127,7 @@ export class InvocationChildBindings {
       const definition = entry.definition;
       this.requireAllowed(definition);
       const parent = this.options.parent;
-      const accepted = entry.accept({ input, key: options.key, facts: { round: parent.context.progress.round as 1 | 2, continuation: this.options.references.continuation(parent.context.continuation), children: this.options.references.facts } });
+      const accepted = entry.accept({ input, key: options.key, facts: { children: this.options.references.facts } });
       return this.create(definition, accepted, options);
     });
   }
@@ -163,6 +176,20 @@ export class InvocationChildBindings {
           if (!relation.returned) this.requireAllowed(entry.definition);
           return (await relation.invocation.run()) as CallableOutput<D>;
         }),
+      invoke: (options: Pick<InvocationChildOperationOptions<D>, 'result' | 'reception'> = {}) =>
+        this.perform(() =>
+          this.options.parent.children.accepting(async () => {
+            if (!relation.returned) this.requireAllowed(entry.definition);
+            const receiver = options.result;
+            if (receiver?.succeeded !== undefined && typeof receiver.succeeded !== 'function') throw new TypeError('Success receiver must be a function');
+            if (receiver?.failed !== undefined && typeof receiver.failed !== 'function') throw new TypeError('Failure receiver must be a function');
+            const contract = options.reception ? this.options.receptions.require(options.reception, entry.definition as D) : undefined;
+            const succeeded = receiver?.succeeded?.bind(receiver);
+            const failed = receiver?.failed?.bind(receiver);
+            if (failed && !relation.returned) relation.receiveFailures();
+            return this.receiveTarget(relation, succeeded, failed, contract);
+          }),
+        ),
       accept,
     });
   }

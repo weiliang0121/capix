@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { getEventListeners } from 'node:events';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { Interaction, RuntimeError } from '@capix/server-runtime';
+import { Interaction, PersistenceError, RuntimeError } from '@capix/server-runtime';
 
 const contract = {
   key: 'test:echo:v1',
@@ -180,7 +180,7 @@ test('create and dispatch-intent persistence failure prevent all physical sends'
           },
         },
       ),
-    (error) => error === failure,
+    (error) => error instanceof PersistenceError && error.cause === failure,
   );
   let sends = 0;
   const interaction = new Interaction(
@@ -202,9 +202,12 @@ test('create and dispatch-intent persistence failure prevent all physical sends'
         sends += 1;
         return { text: 'reply' };
       }),
-    (error) => error === failure,
+    (error) => error instanceof PersistenceError && error.cause === failure,
   );
-  assert.equal((await waiting).error, failure);
+  const savedFailure = (await waiting).error;
+  assert.ok(savedFailure instanceof PersistenceError);
+  assert.equal(savedFailure.cause, failure);
+  assert.equal(interaction.read().error, savedFailure);
   assert.equal(interaction.exportState().delivery, 'prepared');
   assert.equal(interaction.exportState().revision, 0);
   assert.equal(sends, 0);
@@ -214,7 +217,7 @@ test('create and dispatch-intent persistence failure prevent all physical sends'
         sends += 1;
         return { text: 'reply' };
       }),
-    (error) => error === failure,
+    (error) => error instanceof PersistenceError && error.cause === failure,
   );
   assert.equal(sends, 0);
 });
@@ -236,7 +239,9 @@ test('reply persistence failure never exposes an uncommitted received reply or a
   interaction.start(() => ({ text: 'reply' }));
   const result = await interaction.wait({ waitMs: 1000 });
   await interaction.settled();
-  assert.equal(result.error, failure);
+  assert.ok(result.error instanceof PersistenceError);
+  assert.equal(result.error.cause, failure);
+  assert.equal(interaction.read().error, result.error);
   assert.equal(interaction.read().kind, 'unavailable');
   assert.equal(interaction.exportState().feedback, undefined);
   assert.equal(interaction.exportState().delivery, 'started');
@@ -549,7 +554,7 @@ test('persistence reentry cannot cause a second dispatch or a partial feedback m
         sends += 1;
         return { text: 'reply' };
       }),
-    { code: 'INTERACTION_REENTRANT_MUTATION' },
+    (error) => error instanceof PersistenceError && error.cause.code === 'INTERACTION_REENTRANT_MUTATION',
   );
   assert.equal(interaction.exportState().revision, 0);
   assert.equal(interaction.read().kind, 'unavailable');
@@ -557,9 +562,15 @@ test('persistence reentry cannot cause a second dispatch or a partial feedback m
 });
 
 test('async persistence ports are rejected before dispatch', () => {
-  assert.throws(() => new Interaction({ text: 'request' }, { contract, persistence: { async create() {} } }), /must be synchronous/);
+  assert.throws(
+    () => new Interaction({ text: 'request' }, { contract, persistence: { async create() {} } }),
+    (error) => error instanceof PersistenceError && error.cause instanceof TypeError && /must be synchronous/.test(error.cause.message),
+  );
   const interaction = new Interaction({ text: 'request' }, { contract, persistence: { create() {}, async commit() {} } });
-  assert.throws(() => interaction.start(() => assert.fail('sent with async persistence')), /must be synchronous/);
+  assert.throws(
+    () => interaction.start(() => assert.fail('sent with async persistence')),
+    (error) => error instanceof PersistenceError && error.cause instanceof TypeError && /must be synchronous/.test(error.cause.message),
+  );
   assert.equal(interaction.read().kind, 'unavailable');
 });
 
@@ -577,7 +588,7 @@ test('rejected async persistence is drained after reporting the synchronous cont
           },
         },
       ),
-    /must be synchronous/,
+    (error) => error instanceof PersistenceError && error.cause instanceof TypeError && /must be synchronous/.test(error.cause.message),
   );
   const interaction = new Interaction(
     { text: 'request' },
@@ -591,6 +602,9 @@ test('rejected async persistence is drained after reporting the synchronous cont
       },
     },
   );
-  assert.throws(() => interaction.start(() => assert.fail('sent with async persistence')), /must be synchronous/);
+  assert.throws(
+    () => interaction.start(() => assert.fail('sent with async persistence')),
+    (error) => error instanceof PersistenceError && error.cause instanceof TypeError && /must be synchronous/.test(error.cause.message),
+  );
   await new Promise((resolve) => setImmediate(resolve));
 });

@@ -1,9 +1,7 @@
 import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/server-runtime';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import { isEqual } from 'es-toolkit';
 import { ActiveContentResource, type ActiveContentReader } from '../../content/resource.js';
 import type { ActiveContentSnapshot } from '../../content/active.js';
-import { describeActiveContent, describePreparedConversationContext } from '../../content/observation.js';
 import type { AcceptedConversationInput } from '../../accept.js';
 import { acceptedCheckpointInput } from '../../checkpoint.js';
 import { emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
@@ -59,7 +57,12 @@ export class PrepareConversationContext extends Group<AcceptedConversationInput,
       resume: { run: (_work, output) => output },
     });
 
-    this.setDefinition({ name: 'prepareContext', label: '准备对话材料', source: 'services/observer/src/conversation/group/context/prepare.ts · PrepareConversationContext', observation: [invocationRecording<AcceptedConversationInput, PreparedConversationContext>({ output: describePreparedConversationContext, relationAccepted: (output, relation) => (relation.key === 'maintenance' ? describeActiveContent(output as ActiveContentSnapshot) : output) })], deps, uses: this.members, run: this.execute.bind(this), checkpoint: { key: 'observer.prepare-context', version: 1, input: acceptedCheckpointInput, output: preparedConversationContextCodec, points: this.waiting ? [this.waiting, this.completed] : [this.completed] } });
+    this.name = 'prepareContext';
+    this.label = '准备对话材料';
+    this.source = 'services/observer/src/conversation/group/context/prepare.ts · PrepareConversationContext';
+    this.deps = deps;
+    this.run = this.execute.bind(this);
+    this.checkpoint = { key: 'observer.prepare-context', version: 1, input: acceptedCheckpointInput, output: preparedConversationContextCodec, points: this.waiting ? [this.waiting, this.completed] : [this.completed] };
   }
 
   private async execute(work: PreparationWork): Promise<PreparedConversationContext> {
@@ -70,8 +73,7 @@ export class PrepareConversationContext extends Group<AcceptedConversationInput,
   }
 
   private async receive(work: PreparationWork, child: ChildCall<MaintainConversationContent>): Promise<PreparedConversationContext> {
-    await child.run();
-    await child.accept();
+    await child.invoke();
     return this.capture(work);
   }
 

@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { isPromise } from 'node:util/types';
 import { isEqual } from 'es-toolkit/predicate';
-import { Interaction, InvocationCancelled, RuntimeError, ProgressChannel, isInvocationCancelled, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState, type ProgressReceiver } from '@capix/server-runtime';
+import { Interaction, InvocationCancelled, RuntimeError, PersistenceError, ProgressChannel, isInvocationCancelled, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState, type ProgressReceiver } from '@capix/server-runtime';
 import { ModelSource } from './source.js';
 import type { ModelOutput, ModelRequest, ModelTextDelta, Purpose } from './types.js';
 import { ModelTextBuffer } from './stream.js';
@@ -23,12 +24,6 @@ export interface ModelInteractionCreator {
 export interface ModelInteractionExpectation {
   readonly request: ModelRequest;
   readonly purpose: Purpose;
-}
-export interface ModelInteractionReader {
-  /** Replay the retained prefix synchronously, then receive this exchange's raw increments. */
-  subscribe(interaction: ModelInteractionRef, receiver: ProgressReceiver<ModelTextDelta>): () => void;
-  wait(interaction: ModelInteractionRef, controls: { readonly signal: AbortSignal; readonly waitMs: number }): Promise<ModelInteractionResult>;
-  result(interaction: ModelInteractionRef, controls: { readonly signal: AbortSignal; readonly expected?: ModelInteractionExpectation }): Promise<ModelOutput>;
 }
 export interface ModelInteractionPersistence extends InteractionPersistence<ModelInteractionRequest, ModelOutput> {
   read(id: string): InteractionState<unknown, unknown> | undefined;
@@ -206,10 +201,25 @@ export class ModelInteractions {
     this.requireOpen();
     let interaction = this.#interactions.get(ref.id);
     if (!interaction) {
-      const saved = this.options.persistence?.read(ref.id);
-      if (saved) {
-        interaction = Interaction.restore(saved, { contract: modelInteractionContract, persistence: this.options.persistence });
-        if (interaction.id !== ref.id) throw new RuntimeError('MODEL_INTERACTION_IDENTITY', '保存的模型交互身份与查询身份不一致。');
+      let saved: InteractionState | undefined;
+      try {
+        saved = this.options.persistence?.read(ref.id);
+        if (isPromise(saved)) {
+          void saved.catch(() => undefined);
+          throw new TypeError('Model interaction persistence reads must be synchronous');
+        }
+      } catch (cause) {
+        throw new PersistenceError('model-interaction.read', cause);
+      }
+      this.requireOpen();
+      if (saved !== undefined) {
+        try {
+          interaction = Interaction.restore(saved, { contract: modelInteractionContract, persistence: this.options.persistence });
+          if (interaction.id !== ref.id) throw new RuntimeError('MODEL_INTERACTION_IDENTITY', '保存的模型交互身份与查询身份不一致。');
+        } catch (cause) {
+          throw new PersistenceError('model-interaction.restore', cause);
+        }
+        this.requireOpen();
         this.#interactions.set(interaction.id, interaction);
         this.prune();
       }

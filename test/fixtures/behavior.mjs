@@ -5,14 +5,9 @@ import { ResourceBindings } from '@capix/server-runtime';
 // Low-level mechanism fixtures deliberately retain actual Context/Invocation access.
 // Business definitions are separately verified through installCallable's restricted views.
 function work(owner) {
-  return {
-    maxRounds: owner.maxRounds ?? 1,
-    execute: (context, invocation) => owner.execute(context, invocation),
-    raises: owner.raises,
-    exceptions: owner.exceptions,
-    ...(owner.accept ? { accept: (context, output, invocation) => owner.accept(context, output, invocation) } : {}),
-  };
+  return { execute: (context, invocation) => owner.execute(context, invocation) };
 }
+
 export class ExecutionFixture {
   constructor(builder) {
     this.builder = builder;

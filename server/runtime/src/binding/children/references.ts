@@ -1,9 +1,9 @@
 import type { ChildContract, ChildReference, ChildFact, ChildFacts } from '../../definition/children.js';
-import type { ExceptionOrigin, ContinuationFact } from '../../definition/work.js';
+import type { ExceptionOrigin, ContinuationFact } from '../../definition/checkpoint.js';
 import type { Invocation } from '../../invocation/invocation.js';
 import type { InvocationRelation, InvocationTarget } from '../../invocation/relation.js';
 import type { InvocationExceptionOrigin } from '../../invocation/provenance.js';
-import type { InvocationContinuationFact } from '../../invocation/continuation.js';
+import type { CheckpointContinuationFact } from '../../checkpoint/continuation.js';
 import type { CheckpointReference } from '../../checkpoint/contract.js';
 import { failureFact } from '../../invocation/failure.js';
 import { RuntimeErrorHelper } from '../../errors/helper.js';
@@ -108,7 +108,7 @@ export class InvocationChildReferences {
     return Object.freeze({ kind: origin.kind, child: this.entry(relation).ref });
   }
 
-  continuation(value: InvocationContinuationFact | undefined): ContinuationFact | undefined {
+  continuation(value: CheckpointContinuationFact | undefined): ContinuationFact | undefined {
     return value ? Object.freeze({ fromRound: value.fromRound, stage: value.stage, reason: value.reason, ...(value.origin ? { origin: this.origin(value.origin) } : {}) }) : undefined;
   }
 

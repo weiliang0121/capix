@@ -4,7 +4,6 @@ import { Clock } from './clock.js';
 import { bindDriverObservation } from './binding/observation.js';
 import type { EventConsumer } from './observation/observer.js';
 import type { DriverFact } from './observation/facts.js';
-import { DeclaredException } from './exception/contract.js';
 import { requireNotCancelled } from './invocation/cancellation.js';
 import { RuntimeError } from './errors/error.js';
 import type { AnyBuiltCallable, BuiltCallable, BuiltOptions } from './structure/construction.js';
@@ -98,27 +97,22 @@ export class Driver {
   }
 
   private async perform<Structure extends AnyBuiltCallable>(structure: Structure, request: { input: CallableInput<Structure> } | { contextId: string }, options: BuiltOptions<Structure> & InvocationControls): Promise<CallableOutput<Structure>> {
-    try {
-      const entry = this.entry(structure);
-      return await this.reserve(structure.id, entry, () => {
-        let invocation;
+    const entry = this.entry(structure);
+    return await this.reserve(structure.id, entry, () => {
+      let invocation;
+      try {
+        if (options?.signal) requireNotCancelled(options.signal);
+        invocation = 'contextId' in request ? restoreRootInvocation(structure, request.contextId, options, options) : createRootInvocation(structure, request.input, options, options);
+      } catch (error) {
         try {
-          if (options?.signal) requireNotCancelled(options.signal);
-          invocation = 'contextId' in request ? restoreRootInvocation(structure, request.contextId, options, options) : createRootInvocation(structure, request.input, options, options);
-        } catch (error) {
-          try {
-            this.publish({ kind: 'entry-failed', boundId: structure.id, error });
-          } catch (observation) {
-            throw new AggregateError([error, observation], 'Call construction and observation both failed', { cause: error });
-          }
-          throw error;
+          this.publish({ kind: 'entry-failed', boundId: structure.id, error });
+        } catch (observation) {
+          throw new AggregateError([error, observation], 'Call construction and observation both failed', { cause: error });
         }
-        return invocation.run();
-      });
-    } catch (error) {
-      if (error instanceof DeclaredException) throw new RuntimeError('UNHANDLED_EXCEPTION', '运行异常未被接纳处理。', undefined, { cause: error });
-      throw error;
-    }
+        throw error;
+      }
+      return invocation.run();
+    });
   }
 
   private publish(change: DriverChange): void {

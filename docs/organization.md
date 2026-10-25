@@ -26,7 +26,7 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | Invocation / CallableContext     | 单次调用与本层真实状态                        | 不按结构种类派生循环              |
 | Work                             | 当前阶段的资源、输出、CP、成员行动及事实      | 业务不接收内部 Invocation/Context |
 
-`Callable` 是结构公共配置基类，`CallableContract` 是只读调用签名；`Composite` 是成员组合切面。作者直接 new Scene/Group/Node，构造器或 setDefinition 接收普通 Definition 配置；defineScene/defineGroup/defineNode 仅为创建同样结构的类型推导便捷函数。Scene 在本版作为安装根，Group/Node 可作为成员，Node 的 members 同时在类型与运行检查中拒绝。结构对象经 add 注册 `members`；一次调用实际发生的子调用仍使用 `work.children`。成员注册不代表自动遍历或执行。
+`Callable` 是结构公共配置基类，`CallableContract` 是只读调用签名；`Composite` 是成员组合切面。作者直接 new Scene/Group/Node，构造器或 build 前普通赋值形成配置；defineScene/defineGroup/defineNode 仅为创建同样结构的类型推导便捷函数。Scene 在本版作为安装根，Group/Node 可作为成员，Node 的 members 同时在类型与运行检查中拒绝。结构对象经 add 注册 `members`；一次调用实际发生的子调用仍使用 `work.children`。成员注册不代表自动遍历或执行。
 
 宿主显式创建 `new Runner(scene, resources, interactions?).build()`，返回同一个 Runner。CallableBuilder 协调 Binder 的静态解算和运行能力装配，原 Scene/Group/Node 承载固定结果；内部 BuiltCallable 仅表达完成构建的类型。`runner.run(input, options)` 建立调用，`runner.resume(contextId, options)` 按保存依据恢复；无需重复传入场景。
 
@@ -43,7 +43,7 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | `structure/`                                     | Callable/Scene/Group/Node 与同体构建结果，不持有单次状态 |
 | `runner.ts`                                      | 宿主调用入口与占用                                       |
 | `context/`                                       | 本次状态与固定构造归属                                   |
-| `invocation/`、`invocation/builders/`            | 本次调用、控制、周期、关系与通用构造                     |
+| `invocation/`、`invocation/builders/`            | 本次调用、控制、单次执行、关系与通用构造                 |
 | `checkpoint/`                                    | 保存格式、核验、恢复与事实出口                           |
 | `records/callable/`                              | 新调用记录及选定子树的快照                               |
 | `records/{runtime,execution,operation,attempt}/` | 旧 REOA 记录格式及历史读取兼容                           |
@@ -58,7 +58,7 @@ Clock、Initializer、ProgressChannel 是共享能力，位于包内根文件。
 
 ## 类型与身份
 
-类型参数按实际含义命名 Input、Output、Resources、ExceptionResources、Delta；结构判别使用 Kind。签名消费只依赖 CallableContract 的 kind 和 I/O/Delta，完整注册使用实际结构对象。类型见证不产生运行字段，不替代声明对象身份、阶段资格或恢复位置的检查。
+类型参数按实际含义命名 Input、Output、Resources、Delta；结构判别使用 Kind。签名消费只依赖 CallableContract 的 kind 和 I/O/Delta，完整注册使用实际结构对象。类型见证不产生运行字段，不替代声明对象身份、阶段资格或恢复位置的检查。
 
 | 名称                                   | 内容                                     |
 | -------------------------------------- | ---------------------------------------- |
@@ -80,7 +80,7 @@ Transcript、Memories、SelectionUsage、Provider、Interaction 是独立实体�
 
 `ExecutionRecordSnapshot` 仍是 Observer 查询选定任务的跨端名字，正文为 `execution`、通用 `calls`、`rootCall`、可选中间 `ancestors`、`boundaries` 及内容/资源变化；它不是内核 E 层。内核 CallableRecordHelper 允许显式选择任意调用子树，不负责判断业务任务。
 
-Checkpoint Frame v5 与声明版本分别核验。v1/v2/v3/v4 明确拒绝续接，不影响健康历史内容与记录读取。新 Scene/Task 声明契约也已更新，详见 [Checkpoint](checkpoints.md)。
+Checkpoint Frame v5 与声明版本分别核验；旧 round 2/continuation 执行恢复拒绝，历史诊断仍可读取。v1/v2/v3/v4 明确拒绝续接，不影响健康历史内容与记录读取。新 Scene/Task 声明契约也已更新，详见 [Checkpoint](checkpoints.md)。
 
 ## 服务、客户端与公开入口
 
@@ -115,3 +115,5 @@ ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 
 | 活记录 REOA 判别与分层数组                                      | invocation 记录、通用 calls 树、明确任务 role                                  |
 
 Observer 已移除 buildConversation、ConversationCallSource 与旧 provider 数组，直接使用 Resources / Runner。Driver 和旧 source 构造适配暂保留给低层兼容测试；它们不是推荐服务 API，退役不要求再次改动生产链。旧持久记录按数据兼容边界保留。动态能力注册、调度器、任意执行重放与自动接纳不由此次结构调整引入。
+
+统一操作模型同时移除了结构 setter、普通 accept/exceptions/raises/maxRounds/uses/observation。普通 run 使用登记的成员和 deps，恢复点单独声明 resume.deps/uses；观测消费者经宿主安装。业务循环与备用来源属于 run，内核不再提供独立异常阶段或有限两轮解释器。详见 [全仓迁移](callable-operation-migration.md)。

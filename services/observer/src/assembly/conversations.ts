@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { RuntimeError, type InvocationControls, type CheckpointInstallation } from '@capix/server-runtime';
+import { RuntimeError, type InvocationControls, type CheckpointInstallation, type ObservationInstallation } from '@capix/server-runtime';
 import { Transcript, Memories } from '@capix/server-runtime/content';
 import type { ConversationDescriptor, ConversationListResponse, Message } from '@capix/protocol';
 import type { ModelInitialization } from '../conversation/model/types.js';
@@ -27,7 +27,7 @@ export class ObserverConversations {
   constructor(
     private readonly provider: ModelInitialization,
     messages: readonly Message[] = [],
-    private readonly options: { files?: WorkspaceFiles; decision?: ConversationDecisionFactory; maxDecisionSteps?: number; maintenance?: ContextMaintenanceConfiguration; persistence?: SqliteObserverStore; checkpointObservation?: CheckpointInstallation['observation'] } = {},
+    private readonly options: { observations?: readonly ObservationInstallation[]; files?: WorkspaceFiles; decision?: ConversationDecisionFactory; maxDecisionSteps?: number; maintenance?: ContextMaintenanceConfiguration; persistence?: SqliteObserverStore; checkpointObservation?: CheckpointInstallation['observation'] } = {},
   ) {
     this.model = new ModelSource(provider);
     this.files = options.files;

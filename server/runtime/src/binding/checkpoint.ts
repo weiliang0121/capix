@@ -2,7 +2,7 @@ import type { CheckpointReferences, CheckpointReference } from '../checkpoint/co
 import { decodeCheckpointDiagnostic, type DecodedCheckpointFrame, type DecodedCheckpointChild } from '../checkpoint/facts.js';
 import type { CheckpointFacts } from '../definition/checkpoint.js';
 import type { ChildContract, ChildFact, ChildFacts, ChildReference } from '../definition/children.js';
-import type { ContinuationFact } from '../definition/work.js';
+import type { ContinuationFact } from '../definition/checkpoint.js';
 import type { BoundChildren } from './children/bound.js';
 import { BoundReceptions } from './receptions.js';
 import type { ReceptionDefinition } from '../definition/reception.js';

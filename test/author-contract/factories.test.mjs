@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { defineScene, defineGroup, defineNode, defineChildEntry, checkpointPoint, ResourceOffer, MemoryCheckpointStore } from '@capix/server-runtime';
 
-const metadata = { name: 'test', label: 'Test', source: 'test', callee: 'test' };
+const metadata = { name: 'test', label: 'Test', source: 'test' };
 const codec = { encode: (value) => value, decode: (value) => value };
 
 test('actual factories bind R/E/O/A, preserve alternate input and function receivers without executing at definition time', async () => {

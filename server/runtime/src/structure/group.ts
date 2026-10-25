@@ -7,7 +7,7 @@ import type { EmptyResources } from '../definition/callable.js';
 import { assertStructureConfigurable } from './configuration.js';
 
 /** A callable composite owns its own processing, independently of its registered members. */
-export class Group<Input = unknown, Output = unknown, Resources extends object = EmptyResources, ExceptionResources extends object = EmptyResources, Delta = never> extends Callable<Input, Output, 'group', Delta> implements Composite {
+export class Group<Input = unknown, Output = unknown, Resources extends object = EmptyResources, Delta = never> extends Callable<Input, Output, 'group', Resources, Delta> implements Composite {
   #members: readonly ChildCallable[] = Object.freeze([]);
   #names: NamedMembers = Object.freeze({});
 
@@ -19,9 +19,8 @@ export class Group<Input = unknown, Output = unknown, Resources extends object =
     return this.#members;
   }
 
-  constructor(definition?: GroupDefinition<Input, Output, Resources, ExceptionResources, Delta>) {
-    super('group');
-    if (definition !== undefined) this.configure(definition);
+  constructor(definition?: GroupDefinition<Input, Output, Resources, Delta>) {
+    super('group', definition);
   }
 
   add<const Names extends NamedMembers>(members: MemberRegistration<Names>): this & NamedMemberRegistration<Names>;

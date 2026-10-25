@@ -43,12 +43,11 @@ test('live recording and generic subtree details follow direct members and resto
   const recorder = new Recorder(new RecordBook());
   const recorded = (role) => [invocationRecording(role ? { role } : {}, { failure: 'propagate' })];
   const read = () => 'read value';
-  const node = defineNode()({ name: 'read', observation: recorded(), run: read });
-  const nestedNode = defineNode()({ name: 'read', observation: recorded(), run: read });
+  const node = defineNode()({ name: 'read', run: read });
+  const nestedNode = defineNode()({ name: 'read', run: read });
   const nested = defineGroup()({
     name: 'inner',
     members: [nestedNode],
-    observation: recorded(),
     async run(work) {
       const call = work.children.create(nestedNode, null);
       await call.run();
@@ -57,7 +56,6 @@ test('live recording and generic subtree details follow direct members and resto
   });
   const scene = defineScene()({
     members: [node, nested],
-    observation: recorded(),
     async run(work) {
       const direct = work.children.create(node, null);
       await direct.run();

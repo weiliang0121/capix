@@ -71,11 +71,11 @@ async function fixture(t) {
 function assertFileCalls(snapshot) {
   assert.equal(snapshot.execution.status, 'succeeded');
   assert.equal(snapshot.rootCall.status, 'succeeded');
-  const fileCalls = snapshot.calls.filter((attempt) => attempt.callee === 'filesystem');
+  const fileCalls = snapshot.calls.filter((attempt) => ['inspectFileTask', 'readText', 'createText'].includes(attempt.name));
   assert.deepEqual(
     fileCalls.map((call) => call.name),
     ['inspectFileTask', 'readText', 'createText'],
-    'preflight, read and create retain their declared external actor',
+    'preflight, read and create retain distinct callable identities',
   );
   assert.ok(fileCalls.every((attempt) => attempt.status === 'succeeded'));
   const nested = snapshot.calls.find((call) => call.structureKind === 'group' && call.id !== snapshot.execution.id && call.parentId !== snapshot.execution.id);

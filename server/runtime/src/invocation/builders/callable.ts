@@ -5,7 +5,7 @@ import { prepareCheckpointRestoration } from '../../checkpoint/restoration.js';
 import type { InvocationOutputReceiver } from '../../output/contract.js';
 import type { ProgressReceiver } from '../../progress.js';
 import type { InvocationProgress } from '../progress.js';
-import type { ObservationDeclaration } from '../../definition/observation.js';
+import type { InvocationObservationDeclaration } from '../../binding/observation.js';
 import type { InvocationFact, InvocationDescription } from '../../observation/facts.js';
 import { bindInvocationObservation } from '../../binding/observation.js';
 import { attachInvocationResources } from '../resources.js';
@@ -36,7 +36,7 @@ export interface CallableInvocationRequest<Input, Output, Resources extends obje
   readonly initial?: ResourceRequirements;
   readonly supply?: ResourceRequirements;
   readonly refinements?: readonly ResourceRefinement<Input>[];
-  readonly observation?: readonly ObservationDeclaration<InvocationFact>[];
+  readonly observation?: readonly InvocationObservationDeclaration[];
   readonly description?: InvocationDescription;
   readonly work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>;
   readonly started?: CallableInvocationStarted<Input, Output, Resources>;

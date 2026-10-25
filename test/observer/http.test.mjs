@@ -13,7 +13,8 @@ import { ProgressChannel, defineObservation } from '@capix/server-runtime';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { ConversationSubmission, createObserverServer, ObserverConversations, createConversationStructure, acceptConversationInput, DeepSeekProvider } from '@capix/observer-service';
-import { withRuntimeDefinition, reconfigure } from '../fixtures/assembly.mjs';
+import { withRuntimeDefinition } from '../fixtures/assembly.mjs';
+import { observeModelPending } from '../fixtures/model-observation.mjs';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 10000 };
 const raw = (value) => ({ id: 'test', model: 'fixture', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -22,10 +23,10 @@ const provider = {
     return raw(purpose === 'selection' ? { historyIndexes: [] } : purpose === 'memory' ? { memories: [] } : { kind: 'answer', content: '测试回答' });
   },
 };
-async function setup(t, model = provider, configured = true, submissionRetention, configuration = settings, configureDefinition) {
-  const conversations = new ObserverConversations(model);
+async function setup(t, model = provider, configured = true, submissionRetention, configuration = settings, observations = []) {
+  const conversations = new ObserverConversations(model, [], { observations });
   const conversationId = conversations.list().defaultConversationId;
-  const observer = withRuntimeDefinition(configureDefinition, () => conversations.open(conversationId));
+  const observer = conversations.open(conversationId);
   const server = createObserverServer({ conversations, settings: configuration, configured, submissionRetention });
   assert.equal(server.listening, false, 'service construction must not start listening');
   server.listen(0, '127.0.0.1');
@@ -339,16 +340,15 @@ test('full feedback retention explicitly refuses fresh work and preserves duplic
 });
 
 test('failure before a complete execution record produces a terminal transport error, never silent success', async (t) => {
-  const { run } = await setup(t, provider, true, undefined, settings, (definition) => {
-    definition.setRun(
-      (work) => {
+  const { run } = await withRuntimeDefinition(
+    (definition) => {
+      definition.run = (work) => {
         work.resources.messages.append(work.input.messages);
         throw new Error('private diagnostic must not be an HTTP message');
-      },
-      definition.deps,
-      { uses: definition.uses, accept: definition.accept },
-    );
-  });
+      };
+    },
+    () => setup(t),
+  );
   const stream = await updates(await run());
   assert.equal(stream.at(-1).input.end, 1);
   assert.equal(stream.at(-1).result.status, 'failed');
@@ -810,27 +810,16 @@ for (const fault of [false, true]) {
       true,
       undefined,
       { ...settings, timeoutMs: 1000 },
-      (_scene, { generation }) => {
-        const model = generation.requestModel;
-        reconfigure(model, {
-          observation: [
-            ...model.observation,
-            defineObservation(
-              {
-                deps: {},
-                observe(fact) {
-                  if (fact.kind !== 'relation' || fact.change.kind !== 'returned' || fact.change.result.status !== 'succeeded' || fact.change.result.output.kind !== 'pending') return;
-                  // The public cancellation entry is invoked at the exact synchronous handoff boundary.
-                  capturedSubmission.requestCancellation();
-                  pending();
-                  if (fault) throw new Error('handoff observer fault');
-                },
-              },
-              { failure: 'propagate' },
-            ),
-          ],
-        });
-      },
+      [
+        observeModelPending(
+          () => {
+            capturedSubmission.requestCancellation();
+            pending();
+            if (fault) throw new Error('handoff observer fault');
+          },
+          { failure: 'propagate' },
+        ),
+      ],
     );
     const id = randomUUID();
     const stream = updates(await run('交接处取消', { id }));

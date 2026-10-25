@@ -1,5 +1,4 @@
 import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/server-runtime';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import type { FileReceipt } from '@capix/protocol';
 import { FileResources, type FileCreator } from '../../../files/index.js';
 import { CreateText, createTextCheckpointInput, fileReceiptCheckpoint, type CreateTextInput } from '../../node/files/create.js';
@@ -32,7 +31,12 @@ export class SaveResult extends Group<CreateTextInput, FileReceipt, { readonly c
       resume: { uses: this.members, run: (work, _state, saved) => this.receive(work.children.resume(saved.child)) },
     });
 
-    this.setDefinition({ name: 'saveResult', label: '保存结果', source: 'services/observer/src/conversation/group/document/save.ts · SaveResult', observation: [invocationRecording<CreateTextInput, FileReceipt>({ input: ({ path, text }) => ({ path, bytes: Buffer.byteLength(text, 'utf8') }) })], deps: SaveResult.deps, uses: this.members, run: this.execute.bind(this), checkpoint: { key: 'observer.save-result', version: 2, input: createTextCheckpointInput, output: fileReceiptCheckpoint, points: [this.creationWaiting] } });
+    this.name = 'saveResult';
+    this.label = '保存结果';
+    this.source = 'services/observer/src/conversation/group/document/save.ts · SaveResult';
+    this.deps = SaveResult.deps;
+    this.run = this.execute.bind(this);
+    this.checkpoint = { key: 'observer.save-result', version: 2, input: createTextCheckpointInput, output: fileReceiptCheckpoint, points: [this.creationWaiting] };
   }
 
   private async execute(work: GroupWork<CreateTextInput, FileReceipt, object>): Promise<FileReceipt> {
@@ -41,7 +45,6 @@ export class SaveResult extends Group<CreateTextInput, FileReceipt, { readonly c
     return this.receive(child);
   }
   private async receive(child: ChildCall<CreateText>): Promise<FileReceipt> {
-    await child.run();
-    return child.accept();
+    return child.invoke();
   }
 }

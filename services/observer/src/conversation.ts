@@ -59,3 +59,6 @@ export * from './conversation/content/resource.js';
 export * from './conversation/group/context/prepare.js';
 export * from './conversation/group/context/maintain.js';
 export * from './conversation/content/usage.js';
+
+export * from './conversation/recording.js';
+export * from './conversation/group/answer/candidate.js';

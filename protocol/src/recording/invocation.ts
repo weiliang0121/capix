@@ -13,10 +13,10 @@ export function hasOutput(value: InvocationValue): boolean {
   return Object.hasOwn(value, 'output') || Object.hasOwn(value, 'resultOf');
 }
 
-/** The terminal result must be the last accepted result, never an earlier round. */
+/** New calls return from execute; legacy records may end in receive/handling. */
 export function finalOutputProcess(value: Pick<InvocationValue, 'processes'>, sequence: number): OutputProcess {
   const last = value.processes.at(-1);
-  if (!last || (last.stage !== 'receive' && last.stage !== 'handling') || last.type !== 'return' || sequence !== ('resultOf' in last ? last.resultOf : last.sequence)) throw new Error('Final result must reference the last accepted output');
+  if (!last || last.type !== 'return' || sequence !== ('resultOf' in last ? last.resultOf : last.sequence)) throw new Error('Final result must reference the last returned output');
   return outputProcess(value, sequence);
 }
 

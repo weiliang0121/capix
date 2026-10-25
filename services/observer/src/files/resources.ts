@@ -1,5 +1,5 @@
 import type { FileReceipt, FileTask } from '@capix/protocol';
-import { ResourceOffer, type ProgressChannel, type ResourceActivity, type ResourceOperation, type ResourceRequest } from '@capix/server-runtime';
+import { ResourceOffer, type ProgressChannel, type ResourceActivity, type ResourceOperation, type ResourceRequest, type OperationOptions, type OperationResult } from '@capix/server-runtime';
 import type { WorkspaceFiles } from './workspace.js';
 import type { FileProgress, FileTaskInspection, TextDocument } from './types.js';
 import { isRelativeFilePath } from './path.js';
@@ -12,9 +12,10 @@ export interface FileResourceSource {
   readonly progress?: ProgressChannel<FileProgress>;
 }
 export type FileReader = ReturnType<typeof FileResources.readText.request> extends ResourceRequest<infer Value> ? Value : never;
+type FileCreationOptions = OperationOptions<FileReceipt, unknown, unknown> & { readonly signal?: AbortSignal };
 export interface FileCreator {
-  createText(path: string, text: string, signal?: AbortSignal): Promise<FileReceipt>;
-  createFixed(position: string, path: string, text: string, signal?: AbortSignal): Promise<FileReceipt>;
+  createText<const Options extends FileCreationOptions = {}>(path: string, text: string, options?: Options): Promise<OperationResult<FileReceipt, Options>>;
+  createFixed<const Options extends FileCreationOptions = {}>(position: string, path: string, text: string, options?: Options): Promise<OperationResult<FileReceipt, Options>>;
 }
 export type FileInspector = ReturnType<typeof FileResources.inspect.request> extends ResourceRequest<infer Value> ? Value : never;
 export function documentDescriptor(document: TextDocument): FileReceipt {
@@ -57,18 +58,28 @@ export const FileResources = Object.freeze({
 
 /** Fixed writes need the calling identity as well as the ordinary resource-operation boundary. */
 function exposeFileCreator(source: FileResourceSource, activity: ResourceActivity): FileCreator {
-  return Object.freeze({
-    createFixed: (position: string, path: string, text: string, signal?: AbortSignal) =>
-      activity.runAsync('create-fixed', { input: () => ({ position, path, bytes: Buffer.byteLength(text, 'utf8') }), output: (receipt) => receipt }, () => {
-        if (path !== source.path) throw fileFailure('create', path, 'not-allowed');
-        if (!activity.origin) throw new Error('Fixed file creation requires a calling identity');
-        return source.files.createFixed({ contextId: activity.origin.contextId, position }, path, text, { signal, progress: source.progress });
-      }),
-    createText: (path: string, text: string, signal?: AbortSignal) =>
-      activity.runAsync('create-text', { input: () => ({ path, bytes: Buffer.byteLength(text, 'utf8') }), output: (receipt) => receipt }, () => {
-        if (path !== source.path) throw fileFailure('create', path, 'not-allowed');
-        return source.files.createText(path, text, { signal, progress: source.progress });
-      }),
+  return Object.freeze<FileCreator>({
+    createFixed: (position, path, text, options) =>
+      activity.operate(
+        'create-fixed',
+        { input: () => ({ position, path, bytes: Buffer.byteLength(text, 'utf8') }), output: (receipt: FileReceipt) => receipt },
+        (operation) => {
+          if (path !== source.path) throw fileFailure('create', path, 'not-allowed');
+          if (!activity.origin) throw new Error('Fixed file creation requires a calling identity');
+          return source.files.createFixed({ contextId: activity.origin.contextId, position }, path, text, { signal: operation.signal ?? options?.signal, progress: source.progress });
+        },
+        options,
+      ),
+    createText: (path, text, options) =>
+      activity.operate(
+        'create-text',
+        { input: () => ({ path, bytes: Buffer.byteLength(text, 'utf8') }), output: (receipt: FileReceipt) => receipt },
+        (operation) => {
+          if (path !== source.path) throw fileFailure('create', path, 'not-allowed');
+          return source.files.createText(path, text, { signal: operation.signal ?? options?.signal, progress: source.progress });
+        },
+        options,
+      ),
   });
 }
 

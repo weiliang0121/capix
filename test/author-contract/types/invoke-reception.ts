@@ -1,7 +1,7 @@
 import { Node, Group, reception, type ChildCalls, type ChildReceptionOptions } from '@capix/server-runtime';
 
 declare const calls: ChildCalls;
-const text = new Node<number, string, {}, {}, string>({
+const text = new Node<number, string, {}, string>({
   output: { result: (value) => String(value), delta: (value) => String(value) },
   run(work) {
     work.output.emit('preview');
@@ -66,7 +66,8 @@ const invalidPartial: ChildReceptionOptions<typeof text, number> = { reception: 
 // @ts-expect-error Value cannot be widened from the receiver
 const invalidResult: ChildReceptionOptions<typeof text, number> = { reception: numberValue, result: { succeeded: () => false } };
 
-new Group<number, string>().add({ text }).setRun(async (work) => {
+const owner = new Group<number, string>().add({ text });
+owner.run = async (work) => {
   const mapped: number = await work.children.text.invoke(1, {
     reception: numberValue,
     result: { succeeded: (value) => value.length },
@@ -87,5 +88,5 @@ new Group<number, string>().add({ text }).setRun(async (work) => {
   // @ts-expect-error named delta remains string
   work.children.text.invoke(1, { reception: textValue, delta: (value: number) => {} });
   return recovered + mapped + empty + unlabelled;
-});
+};
 void [succeeded, handled, untouched, onlyFailed, noCallbacks, acceptedUndefined, unlabelledFailure, usingTypedOptions, invalidPartial, invalidResult];

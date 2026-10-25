@@ -2,7 +2,7 @@ import { constants, type Stats } from 'node:fs';
 import { lstat, realpath, open, link, unlink, type FileHandle } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve, relative, sep, dirname, join, isAbsolute } from 'node:path';
-import { DeclaredException, InvocationCancelled, RuntimeError, type ProgressChannel } from '@capix/server-runtime';
+import { DeclaredException, InvocationCancelled, PersistenceError, RuntimeError, type ProgressChannel } from '@capix/server-runtime';
 import { isEqual } from 'es-toolkit/predicate';
 import type { FileCreationOperation, FileCreationState, FileCreationPersistence } from './creation.js';
 import type { FileReceipt, FileTask } from '@capix/protocol';
@@ -58,7 +58,16 @@ export class WorkspaceFiles {
     if (bytes > this.configuration.maxWriteBytes) throw fileFailure('create', path, 'too-large');
     const request = Object.freeze({ operation: Object.freeze({ ...operation }), root: this.#root, path, bytes, digest: digest(Buffer.from(text, 'utf8')) });
     const key = JSON.stringify([operation.contextId, operation.position]);
-    const previous = this.#persistence ? this.#persistence.read(operation) : this.#creations.get(key);
+    let previous: FileCreationState | undefined;
+    try {
+      previous = this.#persistence ? this.#persistence.read(operation) : this.#creations.get(key);
+      if (previous && 'then' in previous && typeof previous.then === 'function') {
+        void Promise.resolve(previous).catch(() => undefined);
+        throw new TypeError('File creation persistence must be synchronous');
+      }
+    } catch (cause) {
+      throw new PersistenceError('workspace-file.read', cause);
+    }
     if (previous) {
       if (!isEqual(previous.request, request)) throw new RuntimeError('FILE_CREATION_CONFLICT', '固定文件创建与原操作不一致。');
       if (!previous.receipt) throw new RuntimeError('FILE_CREATION_UNCONFIRMED', '文件创建已发起但没有确认凭据，不能自动重复写入。');
@@ -68,18 +77,26 @@ export class WorkspaceFiles {
     }
     requireActive(options.signal);
     const pending = Object.freeze({ request });
-    const created: unknown = this.#persistence?.create(pending);
-    if (created !== undefined) {
-      void Promise.resolve(created).catch(() => undefined);
-      throw new TypeError('File creation persistence must be synchronous');
+    try {
+      const created: unknown = this.#persistence?.create(pending);
+      if (created !== undefined) {
+        void Promise.resolve(created).catch(() => undefined);
+        throw new TypeError('File creation persistence must be synchronous');
+      }
+    } catch (cause) {
+      throw new PersistenceError('workspace-file.create', cause);
     }
     this.#creations.set(key, pending);
     const receipt = await this.createText(path, text, { ...options, durable: true });
     const complete = Object.freeze({ request, receipt });
-    const committed: unknown = this.#persistence?.complete(complete);
-    if (committed !== undefined) {
-      void Promise.resolve(committed).catch(() => undefined);
-      throw new TypeError('File creation persistence must be synchronous');
+    try {
+      const committed: unknown = this.#persistence?.complete(complete);
+      if (committed !== undefined) {
+        void Promise.resolve(committed).catch(() => undefined);
+        throw new TypeError('File creation persistence must be synchronous');
+      }
+    } catch (cause) {
+      throw new PersistenceError('workspace-file.complete', cause);
     }
     this.#creations.set(key, complete);
     return receipt;

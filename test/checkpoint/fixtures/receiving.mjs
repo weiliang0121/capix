@@ -47,8 +47,7 @@ const point = checkpointPoint()({
 });
 const root = defineScene()({
   members: [child],
-  receptions: [original, other],
-  checkpoint: { key: 'receiving-parent', version: 1, input: codec, output: codec, points: [point] },
+  checkpoint: { receptions: [original, other], key: 'receiving-parent', version: 1, input: codec, output: codec, points: [point] },
   async run(work) {
     const handle = work.children.create(child, null);
     await handle.run();

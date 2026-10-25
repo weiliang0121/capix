@@ -5,14 +5,21 @@ import type { EventConsumer, InvocationObserver, DriverObserver } from '../obser
 import { InvocationObservation } from '../observation/invocation.js';
 import { ObserverSession, publishSessions } from '../observation/session.js';
 
+/** A fixed host selection keeps its owner even when the declaration needs no resources. */
+export interface InvocationObservationDeclaration extends ObservationDeclaration<InvocationFact> {
+  readonly installation?: ObservationInstallation;
+}
+
 export interface InvocationObservationSetup {
   readonly identity: InvocationIdentity;
   readonly description?: InvocationDescription;
-  readonly declarations?: readonly ObservationDeclaration<InvocationFact>[];
+  readonly declarations?: readonly InvocationObservationDeclaration[];
   readonly resources: ResourceBindings;
 }
 
 export interface ObservationInstallation {
+  /** Host-selected consumers are fixed at build, independently of business configuration. */
+  declarations?(structure: ObservationDeclarationScope): readonly ObservationDeclaration<InvocationFact>[];
   check?(definition: ObservationDeclarationScope, parent?: ObservationDeclarationScope): void;
   readonly failure?: 'isolate' | 'propagate';
   readonly provides?: ResourceRequirements;
@@ -49,16 +56,18 @@ export function bindInvocationObservation(setup: InvocationObservationSetup, ins
   const installed = new Map<ObservationInstallation, ObserverSession>();
   if (!installations) return new InvocationObservation(sessions, installed);
   for (const installation of installations) {
-    const previous = parent?.observerFor(installation);
-    if (parent && (!previous || previous.available?.() === false)) continue;
-    const observer = installation.bindInvocation(setup, previous);
-    const session = new ObserverSession(observer, installation.failure ?? 'isolate', (error) => installation.invalidate?.(error));
+    const previous = parent?.sessionFor(installation);
+    if (parent && (!previous || !previous.available())) continue;
+    const observer = installation.bindInvocation(setup, previous?.observer);
+    const session = new ObserverSession(observer, installation.failure ?? 'isolate', (error) => installation.invalidate?.(error), previous);
     installed.set(installation, session);
     sessions.push(session);
   }
   const suppliers = [...installed.values()];
   const resources = setup.resources.supplement(suppliers.flatMap((session) => (session.observer.resources ? [session.observer.resources] : [])));
   for (const declaration of setup.declarations ?? []) {
+    const owner = declaration.installation ? installed.get(declaration.installation) : undefined;
+    if (declaration.installation && !owner) continue;
     const requests = resourceRequests(declaration.deps);
     const unavailable = requests.some((request) => !resources.provides(request));
     if (unavailable) {
@@ -66,10 +75,10 @@ export function bindInvocationObservation(setup: InvocationObservationSetup, ins
       const inherited = requests.every((request) => resources.provides(request) || installations.some((installation) => resourceRequests(installation.provides ?? {}).some((provided) => provided.offer === request.offer)));
       if (inherited) continue;
     }
-    const dependencies = suppliers.filter((session) => requests.some((request) => session.observer.resources?.provides(request)));
+    const dependencies = suppliers.filter((session) => session === owner || requests.some((request) => session.observer.resources?.provides(request)));
     const observe = bindObservation(declaration, resources);
-    const available = () => dependencies.every((session) => session.active && session.observer.available?.() !== false);
-    const failure = declaration.failure ?? (dependencies.some((session) => session.failure === 'propagate') ? 'propagate' : 'isolate');
+    const available = () => dependencies.every((session) => session.available());
+    const failure = declaration.failure ?? owner?.failure ?? (dependencies.some((session) => session.failure === 'propagate') ? 'propagate' : 'isolate');
     sessions.push(
       new ObserverSession({ observe, available }, failure, (error) => {
         for (const dependency of dependencies) dependency.stop(error);

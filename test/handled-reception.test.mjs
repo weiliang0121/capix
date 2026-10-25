@@ -13,13 +13,11 @@ async function recordedHandling() {
   const failure = new Error('missing source');
   const result = { text: 'fallback', omitted: 'private' };
   const node = new Node({
-    observation: [invocationRecording()],
     run() {
       throw failure;
     },
   });
   const scene = new Scene({
-    observation: [invocationRecording({ output: (output) => output.text, relationHandled: (output) => ({ text: output.text }) })],
     run(work) {
       return work.children.invoke(node, null, {
         result: {
@@ -31,7 +29,9 @@ async function recordedHandling() {
       });
     },
   }).add(node);
-  const runner = new Runner(scene, new Resources(), undefined, { observations: [bindRecording(recorder, { failure: 'propagate' })] }).build();
+  const recording = bindRecording(recorder, { failure: 'propagate' });
+  recording.describe(scene, { output: (output) => output.text, relationHandled: (output) => ({ text: output.text }) });
+  const runner = new Runner(scene, new Resources(), undefined, { observations: [recording] }).build();
   assert.equal(await runner.run(null), result);
   const records = [...recorder.book.values()].filter((record) => record instanceof CallableRecord);
   return { parent: records.find((record) => record.structureKind === 'scene'), child: records.find((record) => record.structureKind === 'node') };

@@ -1,8 +1,8 @@
+import type { ModelInteractionReader } from '../../model/resources.js';
 import { isEqual } from 'es-toolkit/predicate';
 import { Node, checkpointPoint, type NodeWork } from '@capix/server-runtime';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import { ModelResource } from '../../model/resources.js';
-import type { ModelInteractionReader, ModelInteractionRef, ModelInteractionExpectation } from '../../model/interactions.js';
+import type { ModelInteractionRef, ModelInteractionExpectation } from '../../model/interactions.js';
 import type { ModelOutput } from '../../model/types.js';
 import { followInputCodec, modelFeedbackCodec } from '../../model/checkpoint.js';
 import { checkLeafResult } from '../../group/checkpoint.js';
@@ -34,7 +34,12 @@ export class FollowModel extends Node<FollowModelInput, ModelOutput, FollowModel
     });
     this.resultPoint = checkpointPoint<'node', FollowModelInput, ModelOutput>()({ name: 'result', state: modelFeedbackCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { run: (_work, result) => result } });
 
-    this.setDefinition({ name: 'followModel', label: '等待模型反馈', source: 'services/observer/src/conversation/node/model/follow.ts · FollowModel', callee: 'model-interaction', observation: [invocationRecording()], checkpoint: { key: 'observer.follow-model', version: 1, input: followInputCodec, output: modelFeedbackCodec, points: [this.waitingPoint, this.resultPoint] }, deps: { modelReader: ModelResource.read.request() }, run: this.execute.bind(this) });
+    this.name = 'followModel';
+    this.label = '等待模型反馈';
+    this.source = 'services/observer/src/conversation/node/model/follow.ts · FollowModel';
+    this.checkpoint = { key: 'observer.follow-model', version: 1, input: followInputCodec, output: modelFeedbackCodec, points: [this.waitingPoint, this.resultPoint] };
+    this.deps = { modelReader: ModelResource.read.request() };
+    this.run = this.execute.bind(this);
   }
 
   private execute(work: NodeWork<FollowModelInput, ModelOutput, FollowModelResources>): Promise<ModelOutput> {
@@ -42,7 +47,7 @@ export class FollowModel extends Node<FollowModelInput, ModelOutput, FollowModel
     return this.receive(work);
   }
   private async receive(work: NodeWork<FollowModelInput, ModelOutput, FollowModelResources>): Promise<ModelOutput> {
-    const output = await work.resources.modelReader.result(work.input, { signal: work.signal, expected: work.input.expected });
+    const output = await work.resources.modelReader.result(work.input, { expected: work.input.expected });
     work.checkpoint?.({ point: this.resultPoint, state: output, refs: {} });
     return output;
   }

@@ -19,7 +19,7 @@ export interface ContextMaintenanceInput extends ContextMaintenanceRequest {
 }
 
 export type ContextMaintenanceDecision = ActiveContentSelection;
-export type ContextMaintenanceOperation = Group<ContextMaintenanceInput, ContextMaintenanceDecision, any, any, any>;
+export type ContextMaintenanceOperation = Group<ContextMaintenanceInput, ContextMaintenanceDecision, any, any>;
 export type ContextMaintenanceFunction = (input: ContextMaintenanceInput) => ContextMaintenanceDecision | Promise<ContextMaintenanceDecision>;
 /** A single maintenance boundary can consume a concrete, unowned policy structure. */
 export type ContextMaintenancePolicy = ContextMaintenanceFunction | ContextMaintenanceOperation;

@@ -6,8 +6,8 @@ import type { ChildCallable } from '../definition/children.js';
 import type { EmptyResources } from '../definition/callable.js';
 import { assertStructureConfigurable } from './configuration.js';
 
-/** Resources parameters check constructor configuration only; setters infer each replacement phase. */
-export class Scene<Input = unknown, Output = unknown, Resources extends object = EmptyResources, ExceptionResources extends object = EmptyResources, Delta = never> extends Callable<Input, Output, 'scene', Delta> implements Composite {
+/** A callable root with ordinary configuration and explicit member composition. */
+export class Scene<Input = unknown, Output = unknown, Resources extends object = EmptyResources, Delta = never> extends Callable<Input, Output, 'scene', Resources, Delta> implements Composite {
   #members: readonly ChildCallable[] = Object.freeze([]);
   #names: NamedMembers = Object.freeze({});
 
@@ -19,9 +19,8 @@ export class Scene<Input = unknown, Output = unknown, Resources extends object =
     return this.#members;
   }
 
-  constructor(definition?: SceneDefinition<Input, Output, Resources, ExceptionResources, Delta>) {
-    super('scene');
-    if (definition !== undefined) this.configure(definition);
+  constructor(definition?: SceneDefinition<Input, Output, Resources, Delta>) {
+    super('scene', definition);
   }
 
   add<const Names extends NamedMembers>(members: MemberRegistration<Names>): this & NamedMemberRegistration<Names>;

@@ -63,10 +63,13 @@ function scene(offer, onStart = () => {}) {
     },
   });
   const root = new Scene().add(node);
-  root.setRun(async function (work) {
-    const child = work.children.create(node, work.input);
-    await child.run();
-    return child.accept();
+  Object.assign(root, {
+    deps: {},
+    run: async function (work) {
+      const child = work.children.create(node, work.input);
+      await child.run();
+      return child.accept();
+    },
   });
   return root;
 }

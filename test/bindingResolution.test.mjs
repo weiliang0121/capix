@@ -1,19 +1,19 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, Node, ResourceOffer, MemoryCheckpointStore } from '@capix/server-runtime';
+import { Scene, Group, Node, ResourceOffer, MemoryCheckpointStore, defineObservation } from '@capix/server-runtime';
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function attempt(name, run) {
-  return new Node({ name, label: name, source: 'test', callee: 'test', deps: run.deps, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) });
+  return new Node({ name, label: name, source: 'test', deps: run.deps, run: run.execute.bind(run) });
 }
 
 function operation(name, children, run) {
-  return new Group({ name, label: name, source: 'test', deps: run.deps, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) }).add(...children);
+  return new Group({ name, label: name, source: 'test', deps: run.deps, run: run.execute.bind(run) }).add(...children);
 }
 
 function execution(children, run) {
-  return new Group({ deps: run.deps, uses: run.uses, run: run.execute.bind(run), accept: run.accept?.bind(run) }).add(...children);
+  return new Group({ deps: run.deps, run: run.execute.bind(run) }).add(...children);
 }
 
 function assemble(definition, options = {}) {
@@ -99,13 +99,12 @@ test('built children, resource aliases and work functions stay fixed while busin
   const originalRequires = { value: oldResource.request() };
   const replacementRequires = { replacement: newResource.request() };
   const originalLeaf = attempt('original-leaf', { deps: originalRequires, execute: (context) => `${context.input}:${context.resources.value}` });
-  const originalOperation = operation('original-operation', [originalLeaf], { deps: originalRequires, uses: [originalLeaf], execute: (context) => context.children.create(originalLeaf, context.input).run() });
+  const originalOperation = operation('original-operation', [originalLeaf], { deps: originalRequires, execute: (context) => context.children.create(originalLeaf, context.input).run() });
   const replacementLeaf = attempt('replacement-leaf', { deps: replacementRequires, execute: (context) => `${context.input}:${context.resources.replacement}` });
-  const replacementOperation = operation('replacement-operation', [replacementLeaf], { deps: replacementRequires, uses: [replacementLeaf], execute: (context) => context.children.create(replacementLeaf, context.input).run() });
+  const replacementOperation = operation('replacement-operation', [replacementLeaf], { deps: replacementRequires, execute: (context) => context.children.create(replacementLeaf, context.input).run() });
   class Main extends Group {
     #prefix = 'initial';
     deps = originalRequires;
-    uses = [originalOperation];
     run = this.execute.bind(this);
     constructor() {
       super();
@@ -134,7 +133,6 @@ test('built children, resource aliases and work functions stay fixed while busin
   assert.equal(captured, 0);
   main.setPrefix('live');
   assert.throws(() => main.members.splice(0, 1, replacementOperation), TypeError);
-  assert.throws(() => main.uses.splice(0, 1, replacementOperation), TypeError);
   assert.throws(() => {
     main.deps = replacementRequires;
   }, TypeError);
@@ -144,9 +142,6 @@ test('built children, resource aliases and work functions stay fixed while busin
   originalRequires.value = newResource.request();
   assert.throws(() => {
     originalOperation.members.length = 0;
-  }, TypeError);
-  assert.throws(() => {
-    originalOperation.uses.length = 0;
   }, TypeError);
   assert.throws(() => {
     originalOperation.run = () => null;
@@ -182,7 +177,7 @@ test('fixed run callbacks keep their original receiver without freezing its busi
   assert.equal(await assemble(runtimeDefinition(execution([], run))).run('three', {}), 'replacement');
 });
 
-test('E captures resources after ordinary R input preparation and fixes its declared run receiver', async () => {
+test('child scope captures resources after ordinary scene input preparation and fixes its declared run receiver', async () => {
   const value = new ResourceOffer({ name: 'test.resolution.value', expose: (source) => source });
   const run = {
     prefix: 'original',
@@ -227,18 +222,18 @@ test('observation declarations are fixed before lazy construction while consumer
     },
   };
   const main = execution([], { deps: {}, execute: (context) => context.input });
-  main.observation = [observation];
+  const registered = [observation];
   const definition = runtimeDefinition(main);
-  const existing = assemble(definition, { observations: [] });
+  const installation = { declarations: (scope) => (scope === main ? registered : []), bindInvocation: () => ({ observe() {} }) };
+  const existing = assemble(definition, { observations: [installation] });
   observation.observe = () => assert.fail('mutated observer must not run');
   observation.deps.unavailable = new ResourceOffer({ name: 'test.resolution.observer', expose: (value) => value }).request();
-  assert.throws(() => main.observation.splice(0, 1, replacement), TypeError);
+  registered.splice(0, 1, replacement);
   assert.equal(await existing.run('first', {}), 'first');
   assert.equal(observation.starts, 1);
   assert.equal(replacementStarts, 0);
   const next = execution([], { deps: {}, execute: (work) => work.input });
-  next.observation = [replacement];
-  assert.equal(await assemble(runtimeDefinition(next), { observations: [] }).run('second', {}), 'second');
+  assert.equal(await assemble(runtimeDefinition(next), { observations: [{ declarations: (scope) => (scope === next ? [replacement] : []), bindInvocation: () => ({ observe() {} }) }] }).run('second', {}), 'second');
   assert.equal(replacementStarts, 1);
 });
 
@@ -272,4 +267,23 @@ test('checkpoint contracts, codecs and continuation callbacks use the same fixed
   assert.equal(store.read('original-root').delivery.output, 'original continuation');
   const replacement = assemble(new Scene({ checkpoint, run: () => null }), { checkpoints: { store } });
   await assert.rejects(replacement.resume('new-root', {}), /incompatible/);
+});
+
+test('a factory observation fixes its callback while retaining the consumer receiver through host installation', async () => {
+  const consumer = {
+    deps: {},
+    prefix: 'first',
+    starts: [],
+    observe(fact) {
+      if (fact.kind === 'started') this.starts.push(`${this.prefix}:${fact.input}`);
+    },
+  };
+  const declaration = defineObservation(consumer, { failure: 'propagate' });
+  const main = execution([], { deps: {}, execute: (work) => work.input });
+  const installation = { declarations: (scope) => (scope === main ? [declaration] : []), bindInvocation: () => ({ observe() {} }) };
+  const existing = assemble(runtimeDefinition(main), { observations: [installation] });
+  consumer.observe = () => assert.fail('a replaced consumer method cannot change an already declared callback');
+  consumer.prefix = 'live';
+  assert.equal(await existing.run('input', {}), 'input');
+  assert.deepEqual(consumer.starts, ['live:input']);
 });

@@ -160,8 +160,7 @@ for (const failure of ['encode', 'store']) {
     const point = checkpointPoint()({ name: 'saved', state: codec, references: {}, resume: { run: () => null } });
     const definition = defineScene()({
       members: [child],
-      receptions: [contract],
-      checkpoint: { key: 'reception-failure', version: 1, input: codec, output: codec, points: [point] },
+      checkpoint: { receptions: [contract], key: 'reception-failure', version: 1, input: codec, output: codec, points: [point] },
       async run(work) {
         parentWork = work;
         const handle = work.children.create(child, null);

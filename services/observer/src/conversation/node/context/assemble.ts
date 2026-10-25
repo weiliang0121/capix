@@ -1,7 +1,6 @@
 import { isEqual } from 'es-toolkit/predicate';
 import { checkpointCodec } from '../../checkpoint.js';
 import { answerMessageContextSchema, checkLeafResult } from '../../group/checkpoint.js';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import type { Message } from '@capix/protocol';
 import { type NodeWork, Node, checkpointPoint } from '@capix/server-runtime';
 
@@ -31,7 +30,12 @@ export class AssembleAnswerContext extends Node<AnswerMessageContext, AnswerMess
       resume: { run: (_work, result) => result },
     });
 
-    this.setDefinition({ observation: [invocationRecording()], name: 'assembleContext', label: '确认消息材料', source: 'services/observer/src/conversation/node/context/assemble.ts · AssembleAnswerContext', callee: 'processing', checkpoint: { key: 'observer.assemble-answer-context', version: 2, input: contextCodec, output: contextCodec, points: [this.resultPoint] }, deps: {}, run: this.execute.bind(this) });
+    this.name = 'assembleContext';
+    this.label = '确认消息材料';
+    this.source = 'services/observer/src/conversation/node/context/assemble.ts · AssembleAnswerContext';
+    this.checkpoint = { key: 'observer.assemble-answer-context', version: 2, input: contextCodec, output: contextCodec, points: [this.resultPoint] };
+    this.deps = {};
+    this.run = this.execute.bind(this);
   }
 
   private execute(work: NodeWork<AnswerMessageContext, AnswerMessageContext>): AnswerMessageContext {

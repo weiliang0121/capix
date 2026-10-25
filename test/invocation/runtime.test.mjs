@@ -16,7 +16,6 @@ class Main extends Scene {
     super();
     this.add(...children);
     this.deps = {};
-    this.uses = children;
     this.run = execute;
   }
 }
@@ -275,35 +274,29 @@ test('R acceptance failure preserves the completed E outcome', async () => {
   assert.equal(relation().reception.status, 'failed');
 });
 
-test('R handles a declared E exception through the ordinary child relationship', async () => {
+test('Scene handles a child operation failure through its local result receiver', async () => {
   const rejected = new ExceptionContract('EXECUTION_REJECTED');
+  const error = rejected.create('unavailable', { reason: 'expected' });
   let parent;
   const execution = new TestExecutionDefinition(() => {
-    throw rejected.create('unavailable', { reason: 'expected' });
+    throw error;
   });
-  execution.raises = [rejected];
-  const definition = new Main(
-    [execution],
-    forward(execution, (work) => {
-      parent = work;
-    }),
-  );
-  definition.exceptions = {
-    deps: {},
-    accepts: [rejected],
-    handle: (work) => {
-      const [relation] = work.children.facts.values();
-      assert.equal(relation.returned.failure.kind, 'exception');
-      assert.equal(relation.returned.diagnostic.message, work.exception.message);
-      assert.equal(relation.reception.status, 'pending');
-      assert.equal(work.origin.kind, 'child-return');
-      assert.equal(work.origin.child, relation.ref);
-      return work.return('handled');
-    },
-  };
-  const runtime = assemble(definition);
-  assert.equal(await runtime.run(null, {}), 'handled');
-  assert.equal(parent.children.facts.values()[0].returned.status, 'failed');
+  const definition = new Main([execution], async (work) => {
+    parent = work;
+    return work.children.invoke(execution, work.input, {
+      result: {
+        failed(actual) {
+          assert.equal(actual, error);
+          return 'handled';
+        },
+      },
+    });
+  });
+  const installed = assemble(definition);
+  assert.equal(await installed.run(null, {}), 'handled');
+  const fact = parent.children.facts.values()[0];
+  assert.equal(fact.returned.status, 'failed');
+  assert.equal(fact.reception.status, 'handled');
 });
 
 test('R reports actual terminal observation failure while preserving successful work', async () => {
@@ -339,73 +332,59 @@ test('R reports actual terminal observation failure while preserving successful 
   assert.equal(await runtime.run(null, {}), 'output');
 });
 
-test('E capture failures cannot masquerade as a declared E work exception', async () => {
+test('child capture failures cannot masquerade as a business operation failure', async () => {
   const rejected = new ExceptionContract('CAPTURE_REJECTED');
   const execution = new TestExecutionDefinition(() => assert.fail('must not execute'));
-  execution.raises = [rejected];
-  const definition = new Main([execution], forward(execution));
-  definition.exceptions = { deps: {}, accepts: [rejected], handle: () => assert.fail('capture errors are structural') };
-  const runtime = assemble(definition, {
+  const definition = new Main([execution], (work) => work.children.invoke(execution, null, { result: { failed: () => assert.fail('capture is not business') } }));
+  const installed = assemble(definition, {
     memberSource: {
-      capture: () => {
+      capture() {
         throw rejected.create('invalid', {});
       },
     },
   });
-  await assert.rejects(runtime.run(null, {}), { code: 'INVOCATION_FAILED' });
-  assert.equal(runtime.running, false);
+  await assert.rejects(installed.run(null, {}), { code: 'INVOCATION_FAILED' });
+  assert.equal(installed.running, false);
 });
 
-test('omitted observation installation leaves declarations and their dependencies dormant', async () => {
-  const onlyObservation = new ResourceOffer({ name: 'test.observation-only', expose: (value) => value });
+test('observation resource dependencies exist only when their host installation is present', async () => {
+  const extra = new ResourceOffer({ name: 'test.observation-only', expose: (value) => value });
   let observed = 0;
-  const execution = new TestExecutionDefinition(() => 'done');
-  execution.observation = [
-    {
-      deps: { extra: onlyObservation.request() },
-      observe() {
-        observed++;
-      },
+  const declaration = {
+    deps: { extra: extra.request() },
+    observe() {
+      observed++;
     },
-  ];
-  const definition = new Main([execution], forward(execution));
-  assert.equal(await assemble(definition).run(null, {}), 'done');
+  };
+  const child = new TestExecutionDefinition(() => 'done');
+  assert.equal(await assemble(new Main([child], forward(child))).run(null, {}), 'done');
   assert.equal(observed, 0);
   const other = new TestExecutionDefinition(() => 'done');
-  other.observation = execution.observation;
-  assert.throws(() => assemble(new Main([other], forward(other)), { observations: [] }), /Expected one resource provider/);
+  const installation = { declarations: (structure) => (structure === other ? [declaration] : []), bindInvocation: () => ({ observe() {} }) };
+  assert.throws(() => assemble(new Main([other], forward(other)), { observations: [installation] }), /Expected one resource provider/);
 });
 
-test('an explicit empty observation installation enables resource-free declarations', async () => {
+test('host selects resource-free observation declarations by exact structure identity', async () => {
   const events = [];
-  const execution = new TestExecutionDefinition(() => 'done');
-  execution.observation = [
-    {
-      deps: {},
-      observe(event) {
-        events.push(event.kind);
-      },
+  const child = new TestExecutionDefinition(() => 'done');
+  const declaration = {
+    deps: {},
+    observe(event) {
+      events.push(event.kind);
     },
-  ];
-  const definition = new Main([execution], forward(execution));
-  assert.equal(await assemble(definition).run(null, {}), 'done');
-  assert.deepEqual(events, []);
-  const other = new TestExecutionDefinition(() => 'done');
-  other.observation = execution.observation;
-  assert.equal(await assemble(new Main([other], forward(other)), { observations: [] }).run(null, {}), 'done');
+  };
+  const installation = { declarations: (structure) => (structure === child ? [declaration] : []), bindInvocation: () => ({ observe() {} }) };
+  assert.equal(await assemble(new Main([child], forward(child)), { observations: [installation] }).run(null, {}), 'done');
   assert.equal(events[0], 'started');
   assert.equal(events.at(-1), 'finished');
 });
 
-test('observation installations cannot satisfy work or exception-handler resource requests', () => {
-  const installed = new ResourceOffer({ name: 'test.installed', expose: (value) => value });
-  const installation = { provides: { local: installed.request() }, bindInvocation: () => ({ observe() {} }) };
-  for (const phase of ['run', 'exceptions']) {
-    const execution = new TestExecutionDefinition(() => 'done');
-    if (phase === 'run') execution.deps = { forbidden: installed.request() };
-    else execution.exceptions = { deps: { forbidden: installed.request() }, accepts: [], handle: () => assert.fail('not reached') };
-    assert.throws(() => assemble(new Main([execution], forward(execution)), { observations: [installation] }), /Expected one resource provider/);
-  }
+test('observation installations cannot satisfy business resource requests', () => {
+  const extra = new ResourceOffer({ name: 'test.installed', expose: (value) => value });
+  const installation = { provides: { extra: extra.request() }, bindInvocation: () => ({ observe() {} }) };
+  const child = new TestExecutionDefinition(() => 'done');
+  child.deps = { forbidden: extra.request() };
+  assert.throws(() => assemble(new Main([child], forward(child)), { observations: [installation] }), /Expected one resource provider/);
 });
 
 test('ordinary R input preparation creates only real R/E invocation facts', async () => {

@@ -2,7 +2,7 @@ import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Group, Node, ResourceOffer, bindResources, bindChildResources, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
-import { runtimeDefinition, recordDefinitions } from './fixtures/declarations.mjs';
+import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 function fixture({ recorded = false, built = true, mapOperation = (input) => input.allowed, mapAttempt = (input) => input.leaf } = {}) {
   const counters = { capture: 0, refine: 0, describe: 0, dormant: 0 };
@@ -31,9 +31,7 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
     name: 'leaf',
     label: 'Leaf',
     source: 'test',
-    callee: 'test',
-    maxRounds: 1,
-    raises: [],
+
     deps: { bounded: offer.request() },
     run(context) {
       const endpoint = context.resources.bounded;
@@ -45,8 +43,7 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
     name: 'work',
     label: 'Work',
     source: 'test',
-    maxRounds: 1,
-    raises: [],
+
     deps,
     async run(context) {
       const endpoint = context.resources.bounded;
@@ -57,8 +54,6 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
     },
   }).add(attempt);
   const execution = new Group({
-    maxRounds: 1,
-    raises: [],
     deps,
     async run(context) {
       const before = context.resources.bounded.read();
@@ -69,7 +64,6 @@ function fixture({ recorded = false, built = true, mapOperation = (input) => inp
   }).add(operation);
   const definition = runtimeDefinition(execution);
   const recorder = new Recorder(new RecordBook());
-  if (recorded) recordDefinitions(definition);
   const options = {
     providers: [
       offer.provide((source) => source),

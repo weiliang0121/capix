@@ -283,9 +283,11 @@ test('a started child checks its own activity instead of reinterpreting manually
         new Promise((resolve) => {
           resume = resolve;
         }),
-      accept: (_context, output) => {
-        accepted++;
-        return output;
+      output: {
+        result: (output) => {
+          accepted++;
+          return output;
+        },
       },
     },
   });

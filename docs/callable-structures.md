@@ -1,34 +1,28 @@
 # Scene、Group、Node 与共同调用
 
-本次结构调整将原 REOA 的位置规则与公共调用机制分开。Scene、Group、Node 表达可复用结构的角色；调用、资源、异常、输出、接纳与 checkpoint 不按三个名字各实现一套。
+状态：2026-10-25，统一操作模型。结构持有配置，`run` 组织操作，Invocation 协调本次活动与真实交付。当前契约替代此前的 setter、独立接纳阶段及调用级异常声明，迁移范围见 [全仓迁移](callable-operation-migration.md)。
 
 ## 对象与切面
 
-| 对象／切面                  | 负责什么                                         | 不负责什么                         |
-| --------------------------- | ------------------------------------------------ | ---------------------------------- |
-| Callable / CallableContract | 结构共有的调用配置 / 只读 I/O 签名               | 不持有一次调用的进度               |
-| Composite                   | 声明可用成员                                     | 不自动遍历、调度或接纳成员         |
-| Node                        | 基础可调用节点                                   | 不取得成员调用端口                 |
-| Group                       | 组合成员，完成自己的整体处理                     | 不限定固定顺序、并行或模型决策方式 |
-| Scene                       | 向宿主表达整体场景，自身可调用                   | 不持有入口占用，不代替驱动者       |
-| CallableBinder              | 解算声明、资源申请与显式来源绑定                 | 不执行业务，不缓存当前输入         |
-| CallableBuilder             | 协调完整构建，把固定接线与调用构造能力装入原结构 | 不创建本次 Context 或执行业务      |
-| BuiltCallable               | 原结构完成构建后的类型，固定接线与调用构造能力   | 不是第二个结构，不持有本次 Context |
-| Runner                      | 固定一个场景与资源供给，管理构建、占用和启动     | 不替业务选择成员                   |
-| Invocation                  | 协调一次调用的工作阶段、控制与交付               | 不识别“对话任务”之类的业务角色     |
-| CallableContext             | 本次输入、进度、终态与资源窗口                   | 不引用祖先 Context 来获取资源      |
-| Work                        | 本阶段业务可用的资源与动作                       | 不暴露 Invocation 或构造绑定       |
+| 对象／切面                       | 负责什么                                   | 不负责什么                          |
+| -------------------------------- | ------------------------------------------ | ----------------------------------- |
+| Callable / CallableContract      | 结构公共配置 / 只读 I/O/Delta 签名         | 本次输入或进度                      |
+| Composite                        | 登记可用成员与名字                         | 自动遍历或调度                      |
+| Node                             | 直接处理                                   | 成员调用端口                        |
+| Group                            | 组合成员，实现自己的整体处理               | 限定顺序、并行或决策方式            |
+| Scene                            | 向宿主表达整体场景，自身也可调用           | 入口占用                            |
+| Resources / Interactions         | 固定资源供给 / 可选交互登记                | 本次调用状态                        |
+| CallableBinder / CallableBuilder | 解算接线 / 完整构建后安装到原结构          | 执行业务或捕获本次输入              |
+| Runner                           | 固定场景、资源与机制，管理构建、启动和占用 | 替业务选择成员                      |
+| Invocation / CallableContext     | 本次活动协调 / 本次语义状态                | 可复用业务结构                      |
+| Work                             | 业务在当前窗口可用的输入与操作端点         | 内部 Invocation、Context 或绑定对象 |
 
-Scene 和 Group 具有成员组合能力。Node 在类型和绑定阶段均拒绝成员声明。空 Group 仍具有组合能力，不能用成员数量判断对象种类。当前 Scene 用作宿主入口，成员为 Group 或 Node；嵌套 Scene 不在本轮范围。
-
-`members` 是结构对象中已注册的可用成员，通过 `scene.add(group)`、`group.add(node)` 或 `scene.add(node)` 建立。`work.children` 是本次调用在当前阶段获得的子调用端口。声明中没有调用顺序；每个组合体自己的 `run` 决定何时调用成员。`invoke` 在本次父调用中完成创建、运行与接收，仍分别记录子返回和父接纳。
+Scene 和 Group 具有成员组合能力，Node 在类型和构建检查中都拒绝成员。Scene 用作根，Group/Node 是合法成员。空 Group 仍是组合体。结构共享处理函数和资源实体，一个 Group/Node 实例只占据一个父位置；重复加入同一父去重，跨父共享和循环拒绝。
 
 ## 配置、构建、调用
 
-业务先构造一个闭合的节点，再把节点组织成组合体或场景。业务配置仍存在，但不再另建一个有注册身份的 Definition 对象树。`NodeDefinition`、`GroupDefinition`、`SceneDefinition` 是普通配置类型；Node、Group、Scene 本身才是成员、uses、接纳契约和 checkpoint 引用的目标。
-
 ```ts
-import { Runner, Resources, Resource, ResourceOffer, Scene, Node } from '@capix/server-runtime';
+import { Runner, Resources, Resource, ResourceOffer, Scene, defineNode } from '@capix/server-runtime';
 
 const dictionary = new Resource(new Map([['hello', '你好']]));
 const lookup = new ResourceOffer({
@@ -38,65 +32,42 @@ const lookup = new ResourceOffer({
     },
   },
 });
-const translate = new Node<string, string>().setRun((work) => work.resources.dictionary.translate(work.input), { dictionary: lookup.request() });
-const scene = new Scene<string, string>().add({ translate }).setRun((work) => work.children.translate.invoke(work.input));
+const translate = defineNode<string, string>()({
+  deps: { dictionary: lookup.request() },
+  run: (work) => work.resources.dictionary.translate(work.input),
+});
+const scene = new Scene<string, string>().add({ translate });
+scene.run = (work) => work.children.translate.invoke(work.input);
 const resources = new Resources().register(dictionary, lookup);
 const runner = new Runner(scene, resources).build();
 const result = await runner.run('hello'); // 你好
 ```
 
-可运行版本见 [examples/dictionary.mjs](../examples/dictionary.mjs)。
+可运行版本见 [dictionary.mjs](../examples/dictionary.mjs)。作者可以用构造器传完整配置，也可以先构造、逐项赋值，再注册成员。两个入口表达同一组字段：可选 name/label/source、deps、run、output、checkpoint。赋值只改变指定字段，没有整份配置替换或隐式清空语义。
 
-- 构造器配置和 `setDefinition` 表达同一组业务字段；`setDefinition` 全量替换业务配置，未提供的可选机制清除，已经 add 的成员保留。
-- `setRun(fn, deps?, options?)` 全量替换 run 阶段。普通配置、结构字段和构建快照均使用平级 `deps / uses / run / accept`，内部不再转译成旧的 `run.execute`；高级 options 可设置 uses 和 accept。资源与动作类型从本次配置推导，不沿用上一阶段的资源类型。
-- 构造器显式给出 I/O 后，需要资源时可提供第三泛型；希望资源就地推导时，用 `setRun` 或 `setDefinition`。I/O 和 Delta 属于节点固定签名，不随 setter 改变。
-- `add` 仅注册可用成员，不推导顺序或自动执行。Scene 是根；每个 Group/Node 只能有一个父结构。同父重复添加不新增位置，跨父添加拒绝，不隐式移走。需要复用时共享处理函数、配置工厂或资源实体，并建立不同结构实例。
-- `add` 整批检查 kind 与循环，失败不部分安装。未配置 run 的结构可以先组织，但不能绑定运行。Node 没有 add，也不能获得 children 或 receptions。
-- `runner.build()` 完整成功后固定整棵结构的业务入口、机制配置、成员顺序和资源接线；之后拒绝 `setRun`、`setDefinition`、`add` 和再次构建。构建失败不留下部分可运行的结构，修正配置后可再次尝试。业务闭包与 receiver 不深度冻结，处理函数不能把本次输入、资源端点或进度写入共享字段。
+`Node<Input, Output, Resources, Delta>`、Group、Scene 保留相同的四个类型参数。资源从明确的第三泛型检查；需要就地推导 deps/成员/Delta 时用 `defineNode/defineGroup/defineScene`，它们创建同一个结构类型，不建立平行 Definition 树。`*Definition` 是普通配置类型。类子类和函数工厂都可使用，内核不要求继承组织业务。
 
-构建期间整树暂时禁止配置修改及重入构建；完整声明入口先固定，再执行宿主的检查回调。原配置对象中的业务状态仍由业务持有，改变它不会重新选择已固定的函数入口。Proxy 结构和无法固定的结构字段在安装前拒绝，避免出现只有部分节点装配成功的状态。
+`add` 只登记成员，不自动调用。普通 run 可以操作所有已登记成员，无需重复写 uses；同签名未登记对象仍被准确身份检查拒绝。`add({translate})` 的返回值携带名字类型；接住返回值后，后续赋值的 run 可直接使用 `work.children.translate`。名字便于访问，不是恢复身份，也不能覆盖保留的机制方法名。
 
-构造器与 setter 的类型精度有明确差别：构造器的 I/O、Resources、ExceptionResources、Delta 固定，行动端口按结构 kind 检查；独立调用 `setRun` / `setDefinition` 才能从本次 uses 推导更窄的行动集合。两种入口都执行同样的运行期范围检查：run 省略 uses 表示全部已注册成员，exceptions 省略 uses 表示没有新增子行动。需要静态收窄的组合处理优先用 setter。
+`runner.build()` 提前解算全树，检查资源供给、成员、输出和 CP，完整成功后将固定接线及调用构造能力安装到原结构。固定函数入口、配置容器和成员位置，保留业务 receiver 及闭包；没有 BoundCallable 或第二棵结构树。build 不捕获本次资源、不执行业务、不创建 Context。
 
-现有 `ChildCalls<Allowed>` 的泛型方法在显式手写某些 Work 注解时可能丢失列表的静态收窄；它不是注册或权限证明。内核仍在每次创建、启动和恢复时核验准确对象与本阶段 uses，违规不执行子处理。这里没有为构造方式调整顺带重写整个 Work 型变契约。
+成功后配置字段不可赋值、成员不可新增、不可再次 build；失败不发布部分运行能力，允许修正后重建。构建期间拒绝 add/重入，检查解释字段是否被宿主回调修改；Proxy 结构和不能固定的字段也被拒绝。业务不能把单次输入、Work、资源端点或进度存在共享结构字段。需要改变结构或供应规则时建立新结构，仍可复用原有独立实体。
 
-`defineNode/defineGroup/defineScene` 保留为同时推导资源、成员与输出增量的构造便捷函数，返回同样的 Node/Group/Scene 实例；没有第二套声明实体或转换身份表。
+宿主使用 `new Runner(scene, resources, interactions?, options?).build()`，build 返回原 Runner。`runner.run(input, options?)` 创建一次调用，`runner.resume(contextId, options?)` 进入明确恢复点；`runner.isRunning` 表示这个 Runner 的入口占用。普通运行只执行一次 run；业务的循环或备用来源由 run 显式组织，每次子调用都有新身份。
 
-处理函数消费阶段 Work。成功返回保持真实引用，子返回和父接纳分别记录。注册身份、阶段行动范围、恢复引用和资源申请仍独立检查。
+## 资源和操作接收
 
-具名 `add({ translate })` 把同一个成员登记为 `work.children.translate`，没有第二份结构或调用身份。`add` 的返回值携带名字类型，因此使用链式写法或接住返回值；TypeScript 不会追溯修改之前变量的类型。省略 uses 可使用全部成员，显式 uses 限制本阶段端口。同签名不同对象的身份仍在运行期准确核验。名字不是 CP 身份，名称冲突、机制保留名与跨父共享会被拒绝。
+`Resources.register(new Resource(entity), offer)` 将实体与公开方法配对。Resource 不转移实体的关闭责任，offer 不自动授予所有节点权限；Work 只取得本层 deps。`ResourceOffer({methods})` 的方法取得 source、业务参数和本次 operation 控制端口，内核签发受控资源方法。
 
-宿主显式创建 `Runner(scene, resources, interactions?, options?)`。`runner.build()` 内部先由 CallableBinder 解算结构与资源接线，再由 CallableBuilder 将调用构造能力安装到原 Scene/Group/Node；返回 Runner 本身。内部 `BuiltCallable` 只是原结构完成构建后的类型，不增加 Bound 对象或平行结构树。
+固定实体外，需要按次材料时用 `resources.capture(structure, fn).register(offer, select)`。局部 scope 仅覆盖登记的 offer；其余继承本次已收窄供给。`resources.refine` 根据准确子输入收窄资源，资源自行检查不可扩大。捕获位置与 kind 无关，子树供给需求不扩张父 Work。同步返回、订阅清理或固定写入凭据仍可使用低层 expose/capture/refine/timing，不能为统一外观丢掉真实时序和凭据。
 
-构建不执行按次捕获或业务，也不创建 Invocation。每次 `runner.run(input, options)` 才取得入口占用、固定本次宿主参数、捕获供给、建立 Invocation/CallableContext 并执行。`resume(contextId, options)` 与 `isRunning` 使用同一个固定场景。不同 Runner 入口各自占用，节点不会因为单父归属而被隐式串行化。
-
-构建固定声明字段、业务方法入口及 receiver，并建立独立 CallableInvocationBuilder 作为安装归属。成员使用已完成的接线，单次调用仍由统一 Builder 建立 Context 和 Invocation；运行循环不根据 Scene/Group/Node 分派不同执行机制。Runner 从其 Scene 推导 I/O、从 Resources 推导宿主参数，不接受额外场景切换参数。未构建时不能运行。
-
-一个结构只完成一次构建。改变业务结构或资源供应规则时，建立新结构并重新构建；可以继续使用同一消息、记忆或其他资源实体，不需要清空对话。每次输入、模型参数、文件路径与内容变化不是结构修改，按既有接线形成独立调用范围。
-
-普通使用可以省略 Runner 的机制配置：时钟使用系统实现，观测和 checkpoint 不安装。显式安装的机制在该 Runner 内固定；需要不同安装时由宿主创建不同 Runner。注入不转移实体、记录载体或数据库的关闭责任。
-
-## 资源与宿主接线
-
-资源实体由宿主建立。静态绑定检查申请、唯一供给、显式来源边界与收窄规则；调用期间使用已经解算好的接线建立本次端点。
-
-`Resources.register(new Resource(entity), offer)` 将资源实体与访问方法显式配对。`Resource` 固定实体归属，`ResourceOffer({ methods })` 只定义公开方法，内核签发受控方法端点。实体仍由宿主持有，包装不会撤销已经发生的外部副作用，也不会自动关闭实体。需要同步返回、订阅清理或固定写入凭据时，offer 使用具名的 `expose / capture / refine / timing / describe` 配置；登记方式仍可使用 `Resource(entity), offer`。低层精细适配保留窗口和凭据，不强制变为普通异步 methods。ResourceOffer 的声明统一为对象配置，不再接受位置参数构造。普通成员沿用已经捕获的供给，为本层和阶段建立自己的访问窗口。需要按次材料时，用 `resources.capture(structure, fn).register(offer, select)`；捕获由准确结构身份决定，不来自 Group 的结构种类。局部 scope 只覆盖登记的 offer，其余继承本次祖先已经收窄的供给。
-
-必要登记、进展与输出使用独立 `callableHooks` 接入 Runner，资源捕获不兼任这些职责。恢复旧调用不重复 started；恢复中新建调用照常登记。详细供给与回调顺序见 [Runner / Resources](runner-resources-pilot.md)。
-
-本层 Work 仅获得本阶段申请的端点。子树供给需求不扩张父 Work。固定构造绑定沿调用链传递，Context 不保存祖先或来源解析器；Builder 不保存单次输入。
-
-进入新阶段需要新的动作资格。已签发端点不能跨越原窗口继续使用；父层终止通过固定控制关系限制在途子调用，不递归重新解算祖先的可变状态。
-
-## 操作与接收
-
-资源方法和具名子调用使用同一接收形状，省略 result 时保留原值，失败继续向上传播：
+资源方法和子调用共用操作接收形状：
 
 ```ts
 const content = await work.children.translate.invoke(work.input, {
-  delta: (text) => work.output.emit(text), // 显式转发；不是自动加入本层输出
+  delta: (part) => work.output.emit(part),
   result: {
-    succeeded: (value) => checkTranslation(value),
+    succeeded: checkTranslation,
     failed: (failure) => work.children.backup.invoke(work.input),
   },
 });
@@ -104,32 +75,22 @@ work.observation({ event: 'translation-received', length: content.length });
 return content;
 ```
 
-`result` 是本次操作的接收规则，不是整个节点的异常扫描器。只执行对应的一条分支；分支回调的失败不会再次进入同一 result.failed。部分分支独立推导类型：只提供 failed 时，返回类型包含原成功类型与备用值类型。注册 reception codec 时，成功和失败接收值必须符合该契约。
+成功默认保留原引用，失败默认继续交付。只执行对应分支；回调失败不再次进入同一 failed。只提供 failed 时，返回类型保留原成功类型与备用值类型。`result` 是这一次操作的接收，不是全节点错误扫描器；取消、越界、必要捕获、CP 和严格观测失败不允许 fallback 掩盖。
 
-子失败被处理后，原子调用仍是 failed，父关系成为 handled；成功交付接纳后成为 accepted。同一个 Error 被并行调用复用不会混淆来源。取消、越过窗口、必要捕获、CP 或强制观测故障不允许业务备用分支掩盖。资格来自内核实际失败边界，不依靠错误文本或仅凭发生阶段猜测。
+子成功返回与父 accepted 分开；子失败经 failed 处理后仍 returned failed，父关系记 handled。资源方法不变成子 Invocation，仍用资源事实表达。输出 delta 的消费故障隔离；生产者 output.result/output.delta 负责验证最终值和增量，消费侧 result/delta 负责这次接收，两者不混用。
 
-资源方法没有变成子 Invocation，不制造父子接纳关系。资源的正常/异常接收使用相同处理协议，资源事实仍由资源活动记录。资源适配者可用本次 `operation.signal` 和 `operation.emit(delta)`；业务不必再次传入信号。可选 observation 投影明确选择记录什么，内核不自动保存参数正文。
+`work.output.emit` 发出本层增量，操作的 delta 接收下层增量，需要明确转发。切换备用来源不会自动撤销已经显示的预览，替换、丢弃和正式输出要有明确协议。
 
-Delta 消费者是被动出口，消费故障隔离；最终结果仍须通过声明的输出检查。父层选择备用来源时，已经展示的增量不会自动撤回，替换、清空或追加由明确的输出 Delta 契约表达。`work.output.emit` 是本层输出，operation.delta 是接收下层输出，二者方向不同。
+## Work、观测与恢复
 
-业务注释使用 `work.observation({ event, ...detail })`，调用身份、序号、时间由内核补充，不能伪造 started/finished 等生命周期事实。宿主通过 `InvocationObserver.business` 读取；当前不会自动写入 Recorder 或 UI。CP 使用 `work.checkpoint?.({ point, state, refs })`，恢复点写 `resume: { deps, uses, run }`。详情见 [Checkpoint](checkpoints.md)。
+普通 CallableWork 只有 input/resources/signal、组合体 children、可选 output、checkpoint 和 observation。没有普通 round/initialInput/continuation、return/continue/unhandled 或独立异常阶段。资源与子调用端点随当前调用/恢复窗口有效，窗口关闭后不可复用；父子活动约束不重新解算祖先的可变配置。
 
-一般调用使用 invoke。需要在子执行前保存 waiting CP、保留引用或在运行与接纳之间执行额外逻辑时，仍可显式 create → run → accept。Observer 原有这些恢复点不会因改成短写法而被删除。节点的高级 accept / exceptions 与有限两轮继续机制暂保留，特别是回答契约拒绝后的再次生成；普通资源/子调用的失败处理已经不需要它们。本轮没有把有凭据的轮次续接替换成无记录的 JavaScript 重试循环。
+`work.observation({event,...})` 是业务事实，内核补充身份、时间与序号；它不能伪造生命周期。宿主通过 observer.business 消费，默认不写入 Recorder/UI。生命周期和资源观测由机制发布。结构没有 observation 消费者配置；宿主的 ObservationInstallation.declarations 在 build 时选择声明并固定到接线。记录使用 `bindRecording(...).describe(structure, projection)` 登记描述、角色和脱敏规则。
 
-## 保留的运行边界
+通常使用 invoke。需要“创建→保存 waiting CP→启动/接收”的边界时，可用 create→checkpoint→call.invoke；需要更细中间步骤时保留 create/run/accept/open/facts。ChildCall.invoke 的接收选项不能晚改创建时已经固定的 output/delta/key。
 
-- 子调用返回、父层接纳与实体落实是不同事实。
-- 正式接纳契约保留 V 的真实引用；codec 只用于 checkpoint。
-- 局部继续仍复用本层 Context，新的子调用建立新 Context。
-- 技术错误保持归属，不因业务 catch 被清除；声明异常通过独立交付错误保留准确来源。
-- 结束阶段排空已开始的接纳，最终交付前等待已启动子调用退出；未启动关系不阻止结束。
-- 输出增量只通过显式消费者传递，旧阶段 writer 退出后封口。
-- Interaction 有独立生命周期；本地调用取消不重发或取消外部交互。
+恢复点使用 `work.checkpoint?.({point,state,refs})`，checkpoint 配置含 key/version、codecs、points 和可选 receptions。具名 reception 是恢复编码契约，属于 checkpoint；普通接收不要求它，也不增加全节点 accept 阶段。恢复点的 resume.deps/uses 明确当前恢复行动，ResumeWork 保留历史事实查询接口。Frame v5 仍可读取历史诊断格式，但新运行只有一轮；旧 round 2/continuation 执行恢复明确拒绝。详情见 [Checkpoint](checkpoints.md)。
 
-## 观测、历史与恢复
+保留的边界是：返回、父接纳、实体落实和 CP 提交各自独立；接纳排空后才关闭窗口；最终交付等待已启动子调用退出；未启动关系不阻塞；不自动接纳或停止兄弟。Interaction 独立生存，本地取消不重发请求、不取消外部发送。记录和恢复不能替代实体自己的固定效果凭据。
 
-实时记录使用通用调用树和实际结构种类。对话任务的角色由服务明确标记，不能把每个 Group 都投影成 QA。任务位于深层 Group 时，详情显式携带中间祖先路径，保留子树与根之间的真实归属。旧 REOA 记录保留只读解释，不据此复原新的运行结构。
-
-当前统一接收使用 Checkpoint Frame v5，新增失败子交付已被父层处理的事实；默认 Observer 的成员顺序、CP key/version、点和接纳契约保持。维护策略的前后两个位置使用独立结构，自定义维护的宿主恢复继续明确拒绝。Frame 保存实际调用身份、结构种类、成员位置及父接纳契约。旧 v1／v2／v3／v4 明确拒绝、不自动迁移或续接；消息、记忆和健康历史记录的读取不依赖旧 checkpoint 可以恢复。新的树结构仍要求准确直接归属、声明版本与注册位置，不能以名称、角色或相同输入代替身份。
-
-本次不增加全局调度、自动收集执行循环、运行期能力注册、任意位置恢复或外部副作用重放。
+当前没有配置热更新、动态注册、全局调度、任意位置恢复或外部效果自动重放。

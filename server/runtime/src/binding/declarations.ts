@@ -7,7 +7,8 @@ import { isResourceRefinement, type ResourceRefinement } from '../resource/offer
 import type { ChildBindingOptions } from './contract.js';
 import { collectDefinitionRequirements, collectResourceSupply, type ChildResourceBinding } from './resources.js';
 import { childKinds } from '../definition/kind.js';
-import { originalReception, snapshotDefinition, type CallableSnapshot } from './snapshot.js';
+import { originalReception, snapshotDefinition, snapshotObservation, type CallableSnapshot } from './snapshot.js';
+import type { InvocationObservationDeclaration } from './observation.js';
 
 export type AnyCallable = (CallableStructure<'scene'> & Composite) | ChildCallable;
 
@@ -16,6 +17,7 @@ export interface ResolvedCallable<Definition extends AnyCallable = AnyCallable> 
   readonly kind: Definition['kind'];
   readonly definition: Definition;
   readonly declaration: CallableSnapshot;
+  readonly observations: readonly InvocationObservationDeclaration[];
   readonly deps: ResourceRequirements;
   /** Offers routed through this position; local Work still receives only local requests. */
   readonly supply: ResourceRequirements;
@@ -41,10 +43,11 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
     if (!Object.hasOwn(childKinds, current.kind) || (allowed && !allowed.includes(current.kind))) throw new Error('Invalid member definition kind');
     const declaration = snapshotDefinition(current);
     observations.push({ definition: current, parent: parent?.definition });
-    const deps = collectDefinitionRequirements(declaration, options.observationProvides);
+    const selectedObservations = Object.freeze((options.observations ?? []).flatMap((installation) => (installation.declarations?.(current) ?? []).map((declaration) => Object.freeze({ ...snapshotObservation(declaration), installation }))));
+    const deps = collectDefinitionRequirements(declaration, options.observationProvides, selectedObservations);
     const definitions: readonly ChildCallable[] = 'members' in declaration ? (declaration.members ?? []) : [];
     const receptions = new Set<object>();
-    for (const reception of declaration.receptions ?? []) {
+    for (const reception of declaration.checkpoint?.receptions ?? []) {
       const original = originalReception(reception);
       if (receptions.has(original)) throw new Error('Duplicate parent reception contract');
       receptions.add(original);
@@ -60,11 +63,11 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
       }
     }
     const checkpointUses = points.flatMap((point) => [...(point.resume.uses ?? [])]);
-    for (const child of [...(declaration.uses ?? definitions), ...(declaration.exceptions?.uses ?? []), ...checkpointUses]) {
+    for (const child of checkpointUses) {
       if (!definitions.some((member) => member === child)) throw new Error('Declaration uses a member outside its owner');
     }
     const selected = refinements.get(current);
-    const node = { kind: declaration.kind, definition: current, declaration, deps, refinements: selected };
+    const node = { kind: declaration.kind, definition: current, declaration, observations: selectedObservations, deps, refinements: selected };
     encountered.add(current);
     path.add(current);
     const members = definitions.map((member) => visit(member, node) as ResolvedChild);

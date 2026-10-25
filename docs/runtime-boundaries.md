@@ -4,17 +4,17 @@
 
 ## 结构配置与整体构建
 
-Scene 与 Group 都声明自己的普通输入、输出、run 和 members；Node 实现普通处理，没有 members。run / exceptions / observation / checkpoint 平级。成员注册不执行工作，Group 自己选择调用顺序、分支与接纳；Sequence 是可选组合辅助。
+Scene 与 Group 都声明自己的普通输入、输出、run 和 members；Node 实现普通处理，没有 members。结构配置为 deps / run / output / checkpoint；观察消费者由宿主安装，操作接收规则在 run 中明确表达。成员注册不执行工作，Group 自己选择调用顺序、分支与接纳；Sequence 是可选组合辅助。
 
 | 对象                      | 职责                                                          |
 | ------------------------- | ------------------------------------------------------------- |
-| CallableBinder            | 解算固定声明图，核验成员位置、资源、阶段 uses、接纳和 CP 契约 |
+| CallableBinder            | 解算固定声明图，核验成员位置、资源、输出与 CP 的行动/接收契约 |
 | CallableBinding           | 原结构需要安装的固定接线契约，不增加运行实体                  |
 | CallableBuilder           | 完成原结构的绑定与运行能力装配，成功后一次性发布              |
 | CallableInvocationBuilder | 持有安装归属，用同一机制建立任何 kind 的 Context 和调用       |
 | Runner                    | 固定场景的宿主入口、占用、实际结束后释放                      |
 
-Scene/Group/Node 本身是注册身份，普通 Definition 配置没有独立身份。Scene 是根，Group/Node 只有一个父结构；同父重复 add 不增加位置，跨父添加或循环拒绝。业务配置经构造器或 setDefinition 安装，setRun 替换完整阶段。构建提前解算全树，固定配置容器、函数入口和资源接线，但保留业务方法 receiver。原结构承载这些装配结果，不产生第二棵 Bound 树。
+Scene/Group/Node 本身是注册身份，普通 Definition 配置没有独立身份。Scene 是根，Group/Node 只有一个父结构；同父重复 add 不增加位置，跨父添加或循环拒绝。业务配置经构造器或 build 前的普通字段赋值形成；赋值不隐式清空其他配置。构建提前解算全树，固定配置容器、函数入口和资源接线，但保留业务方法 receiver。原结构承载这些装配结果，不产生第二棵 Bound 树。
 
 ```text
 new Runner(scene, resources, interactions?, mechanisms)
@@ -35,7 +35,7 @@ runner.run(input, options)
   → 实际返回或失败，释放占用
 ```
 
-build 成功后拒绝结构 setter、add 和再次构建。修改业务逻辑或供应规则需另建结构；输入和资源内容变化仍按次处理。build 不取得本次资源值、不执行业务；失败不留下部分可运行结构。固定结构与构建归属不等于固定一次运行的现场。
+build 成功后固定配置字段，拒绝 add 和再次构建。修改业务逻辑或供应规则需另建结构；输入和资源内容变化仍按次处理。build 不取得本次资源值、不执行业务；失败不留下部分可运行结构。固定结构与构建归属不等于固定一次运行的现场。
 
 Runner 固定一个场景，不能在 run 时替换。使用 `runner.isRunning` 查询占用；不同 Runner 互不影响。占用不在 Context，也不扩展为每个 Node 的执行锁。构造、业务、观测失败都释放；Runner 不隐式排队。入口观测暂沿用 driverId 与 boundId，boundId 指构建安装身份，不代表第二个 Bound 对象。
 
@@ -45,7 +45,7 @@ CallableInvocationBuilder 直接构造 CallableContext，以自身作为固定�
 
 Transcript、Memories、Provider、Interaction 等由宿主建立。结构只绑定其资源访问形式，不拥有实体生命。ResourceOffer 声明访问、capture、timing、describe 与可选 refine；资源检查范围是否扩大，绑定不能代为授权。
 
-装配解算本层 requires 和子树 supply，父 Work 只取得本阶段 requires。普通成员继承本次固定供给；局部 `Resources.capture` 只覆盖该位置登记的 offer，不重建其他祖先供给。
+装配解算本层 deps 和子树 supply，父 Work 只取得本窗口 deps。普通成员继承本次固定供给；局部 `Resources.capture` 只覆盖该位置登记的 offer，不重建其他祖先供给。
 
 ```ts
 const resources = new Resources<RunOptions>();
@@ -61,7 +61,7 @@ await runner.run(input, options);
 
 `timing: 'binding'` 指本次供给建立时捕获，不是静态构建时取得实体；`timing: 'access'` 在真实访问时兑现。观测关闭不会触发 describe 或提前初始化 Provider。`resources.refine` 只收窄准确成员已申请的供应，不改变父、兄弟或无关资源。
 
-资源端点验证本地调用、阶段/轮次及固定控制信号，不递归查询祖先状态。阶段变化不重新解算声明。正常 execute→accept 共享本轮正常资源端点；异常处理、局部继续与恢复有明确窗口，旧端点不可跨窗口复用。CP resume 离开后其独立窗口永久关闭。
+资源端点验证本地调用、阶段/轮次及固定控制信号，不递归查询祖先状态。阶段变化不重新解算声明。正常 run 及其中的操作接收共用本次业务窗口；恢复有独立窗口，旧端点不可跨窗口复用。普通调用没有轮次切换或独立异常阶段。CP resume 离开后其独立窗口永久关闭。
 
 ## Observer 的输入与材料
 
@@ -83,7 +83,7 @@ sequenceDiagram
     Source-->>Builder: 固定配置、定位与供给
     Builder->>Builder: Context / Invocation
     Builder->>Source: 同步 started
-    Builder->>Task: Work.execute
+    Builder->>Task: run(work)
     Task->>Task: prepareContext，维护后捕获活跃材料
     Task->>Task: 决策、回答落实、记忆收尾
     Task-->>Scene: 真实返回
@@ -101,14 +101,14 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 
 | 内部对象                      | 独立职责                                               |
 | ----------------------------- | ------------------------------------------------------ |
-| InvocationCycle               | execute / receive / handling、有限继续与输出段         |
+| InvocationExecution           | 一次业务入口、输出段与最终结果校验                     |
 | InvocationWork                | 调用机制消费的窄工作契约                               |
 | InvocationWorkBinding         | 固定声明到共同工作契约的适配                           |
 | InvocationChildren / Relation | 实际直接关系、returned/reception、异步接纳与已启动活动 |
 | InvocationCheckpoint          | 本次保存、已保存子事实与恢复缓存                       |
 | checkpoint/children           | CP 子事实编码和检查，不修改活关系                      |
 
-业务只取得 Work，不接收内部 Invocation、Context 或 Frame。成员存在才提供 children 切面。refs/facts 可跨阶段读取，创建/启动/恢复按阶段 uses 检查，打开旧引用不扩大行动范围。已保存成功交付不要求初始化子结构。
+业务只取得 Work，不接收内部 Invocation、Context 或 Frame。成员存在才提供 children 切面。refs/facts 保留准确父归属；普通动作来自已注册成员，恢复动作另外按 resume.uses 检查，打开旧引用不扩大行动范围。已保存成功交付不要求初始化子结构。
 
 固定活动规则：
 
@@ -118,13 +118,13 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 - Interaction 有自己的生命；调用退出不等待其结束、不取消外部发送、不重发未知请求。晚到反馈仍可保存。
 - 技术故障已归属后不能由业务 catch 清除；声明异常按 ChildCallFailure 传播凭据判断，不能扫描原错误对象猜来源。
 
-局部继续复用 Context 并原子安装 continuation/round/currentInput；maxRounds 仍仅支持 1/2。子调用每次有独立身份。真实输出/异常保持引用，记录及持久化才复制为纯数据。详见 [异常边界](exceptions.md)。
+普通调用只执行一次 run，业务循环每次建立新子调用；没有旧 continue/maxRounds 状态机。真实输出/异常保持引用，记录及持久化才复制为纯数据。恢复格式仍能解释历史进度，但新执行拒绝旧 round 2/continuation 镜像。详见 [异常边界](exceptions.md)。
 
 ## 返回、接纳与实体落实
 
-`returned` 不等于 `accepted`。Composite 可登记 reception，接纳开始即固定契约；检查保持真实 V 引用，codec 只用于 CP。facts.accepted 要求准确 ref 与同一契约，undefined 可以是合法成功值。raw accept 不可事后补标签。
+`returned` 不等于 `accepted`。Composite 可在 checkpoint.receptions 登记恢复编码用的 reception，接纳开始即固定契约；检查保持真实 V 引用，codec 只用于 CP。facts.accepted 要求准确 ref 与同一契约，undefined 可以是合法成功值。raw accept 不可事后补标签。
 
-实体写入、父接纳事实和 CP 提交是不同边界。固定写入口用真实调用/接纳范围派生凭据；恢复核对已有凭据，不凭内容相同或记录存在重做。Frame v4 保存完整直接关系、业务 state/refs、接纳契约位置和继续依据，缺失或不兼容明确拒绝。详见 [Checkpoint](checkpoints.md)。
+实体写入、父接纳事实和 CP 提交是不同边界。固定写入口用真实调用/接纳范围派生凭据；恢复核对已有凭据，不凭内容相同或记录存在重做。Frame v5 保存完整直接关系、业务 state/refs、接纳契约位置及 handled 接收事实，缺失或不兼容明确拒绝。详见 [Checkpoint](checkpoints.md)。
 
 ## 进展、观测与记录
 

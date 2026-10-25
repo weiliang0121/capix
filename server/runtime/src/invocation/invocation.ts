@@ -22,7 +22,7 @@ import type { InvocationObservation } from '../observation/invocation.js';
 import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDescription, InvocationRelationIdentity, InvocationRelationChange, BusinessEvent } from '../observation/facts.js';
 import { combineFaults } from '../observation/error.js';
 import { invocationChange, invocationProgress } from './facts.js';
-import { InvocationCycle } from './cycle.js';
+import { InvocationExecution } from './execution.js';
 import { connectInvocationWork, type InvocationWork } from './work.js';
 import { ProgressChannel, type ProgressReceiver } from '../progress.js';
 import type { InvocationProgress } from './progress.js';
@@ -58,7 +58,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   readonly hasProgress: boolean;
   readonly #checkpoint?: InvocationCheckpoint<Input, Output, Context>;
   readonly #control: InvocationControl;
-  readonly #cycle: InvocationCycle<Input, Output>;
+  readonly #execution: InvocationExecution<Input, Output>;
   #sequence = 0;
   #eventSequence = 0;
   #resourceSequence = 0;
@@ -107,7 +107,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     this.view = invocationView(source, context);
     this.callView = childInvocationView(source, context, () => this.run());
     if (options.restore && !options.checkpoints) throw new Error('Checkpoint persistence is missing');
-    this.#cycle = new InvocationCycle(
+    this.#execution = new InvocationExecution(
       options.context,
       connectInvocationWork(options.work, options.context, this),
       {
@@ -121,7 +121,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
         signal: options.signal,
         validate: options.validate,
         output: options.output,
-        process: (process, round = options.context.progress.round) => this.publish({ kind: 'process', process, processSequence: this.nextSequence(), round }),
+        process: (process) => this.publish({ kind: 'process', process, processSequence: this.nextSequence(), round: options.context.progress.round }),
       },
     );
     this.#checkpoint = options.checkpoints ? new InvocationCheckpoint(this, options.checkpoints, options.work.checkpoint, options.signal, options.restore) : undefined;
@@ -148,17 +148,13 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     return this.#failure;
   }
 
-  get exceptionOrigin(): InvocationExceptionOrigin | undefined {
-    return this.#cycle.exceptionFailure?.origin;
-  }
-
   get outputWriter(): InvocationOutputWriter<unknown> {
-    return this.#cycle.outputWriter;
+    return this.#execution.outputWriter;
   }
 
   /** A restored execute body may end before its active receptions have drained. */
   sealOutput(): void {
-    this.#cycle.sealOutput();
+    this.#execution.sealOutput();
   }
 
   get checkpointBinding(): CheckpointBinding | undefined {
@@ -175,10 +171,6 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   get recovering(): boolean {
     return this.restoring || !!this.options.parent?.invocation.recovering;
-  }
-
-  get maxRounds(): number {
-    return this.options.work.maxRounds;
   }
 
   get observation(): InvocationObservation | undefined {
@@ -217,7 +209,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     let output: Output;
     try {
       this.startWork();
-      output = await this.#cycle.run(this.restoring ? () => this.#checkpoint!.resume() : undefined);
+      output = await this.#execution.run(this.restoring ? () => this.#checkpoint!.resume() : undefined);
     } catch (error) {
       this.#control.close();
       await this.children.settle();
@@ -233,7 +225,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     }
     // Terminal observation may fail delivery, but never changes the committed work outcome.
     context.complete(output);
-    this.#cycle.completeOutput(output);
+    this.#execution.completeOutput(output);
     this.publish({ kind: 'finished', state: context.state });
     return output;
   }
@@ -254,15 +246,11 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   private failWork(error: unknown): never {
     const context = this.context;
-    // A handler may inspect or reject repair children before declining its original
-    // exception. That handled failure remains authoritative; a later diagnostic
-    // classification does not replace it, while structural faults remain sticky.
-    const handled = this.#cycle.exceptionFailure;
-    const exit = this.#cycle.exitFailure;
-    const failure = this.#fault ?? (handled && handled.error === error ? handled : exit && exit.error === error ? exit : this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.round ? context.progress.phase : 'setup', true));
+    const exit = this.#execution.exitFailure;
+    const failure = this.#fault ?? (exit && exit.error === error ? exit : this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, context.progress.round ? context.progress.phase : 'setup', true));
     this.#classified = failure;
     const delivered = error instanceof AggregateError ? error : failure.error;
-    this.#cycle.discardOutput('failed');
+    this.#execution.discardOutput(failure.kind === 'exception' ? 'exception' : 'failed');
     context.fail(delivered, Object.freeze({ ...failure, error: delivered, ...(error instanceof AggregateError ? { kind: 'error' as const } : {}) }));
     try {
       this.publish({ kind: 'finished', state: context.state });
@@ -321,8 +309,8 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     }
     const exception = propagation?.exception ?? error;
     const declared = !forceError && exception instanceof DeclaredException;
-    const allowed = declared && (!!propagation || this.options.work.raises?.includes(exception.contract));
-    const actual = forceError && exception instanceof DeclaredException ? new InvocationStopped(phase === 'handling' ? 'EXCEPTION_HANDLER_FAILED' : 'INVOCATION_FAILED', '结构处理抛出的异常不能再次进入业务处理。', undefined, { cause: exception }) : declared && !allowed ? new InvocationStopped('UNDECLARED_EXCEPTION', '工作产生了未声明的异常。', { contract: exception.contract.name }, { cause: exception }) : exception;
+    const allowed = declared;
+    const actual = forceError && exception instanceof DeclaredException ? new InvocationStopped('INVOCATION_FAILED', '必要机制抛出的异常不能由业务失败接收器处理。', undefined, { cause: exception }) : exception;
     const source = propagation?.origin ?? origin ?? Object.freeze({ kind: 'self' as const, phase: phase === 'receive' ? ('accept' as const) : ('execute' as const) });
     const failure: InvocationFailure = Object.freeze({ kind: allowed ? 'exception' : 'error', phase, contextId: this.context.id, ...(allowed ? { contract: exception.contract.name, origin: source } : {}), error: actual, receptionAllowed: !forceError && !isProtectedOperationFailure(actual) });
     this.#classified = failure;

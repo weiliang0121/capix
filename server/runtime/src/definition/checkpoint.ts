@@ -3,7 +3,17 @@ import type { CheckpointCodec, CheckpointContract } from '../checkpoint/contract
 import type { ResourceRequirements } from '../resource/bindings.js';
 import type { ResourceRequests, ResourcesOf } from '../resource/offer.js';
 import type { ChildContract, ChildContractsOf, ChildFact, ChildFacts, ChildReference } from './children.js';
-import type { ContinuationFact, ResumeWork } from './work.js';
+import type { ResumeWork } from './work.js';
+import type { DefinitionReceptions } from './reception.js';
+
+/** Historical diagnostic vocabulary, isolated from ordinary callable processing. */
+export type ExceptionOrigin = { readonly kind: 'self'; readonly phase: 'execute' | 'accept' } | { readonly kind: 'child-return' | 'child-reception'; readonly child: ChildReference };
+export interface ContinuationFact {
+  readonly fromRound: 1;
+  readonly stage: 'accept' | 'handling';
+  readonly reason: string;
+  readonly origin?: ExceptionOrigin;
+}
 
 export interface ChildReferenceSlot<Definition extends ChildContract = ChildContract, Many extends boolean = boolean> {
   readonly definition: Definition;
@@ -54,6 +64,7 @@ export interface InvocationCheckpointDefinition<Input, Output, Kind extends Call
   readonly input: CheckpointCodec<Input>;
   readonly output: CheckpointCodec<Output>;
   readonly points: readonly InvocationCheckpointPoint<Input, Output, Kind, any, any, any, any, Delta>[];
+  readonly receptions?: DefinitionReceptions<Kind>;
 }
 
 export interface AuthorCheckpointWriter<Kind extends CallableKind, Input, Output, Delta = never> {

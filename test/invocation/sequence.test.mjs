@@ -5,76 +5,52 @@ import { Invocation, InvocationContext, Recorder, RecordBook, ExceptionContract 
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const signal = () => new AbortController().signal;
-const firstRound = new ExceptionContract('test.first-round');
-const retryWork = {
-  raises: [firstRound],
-  maxRounds: 2,
-  execute(context, invocation) {
-    if (context.progress.round === 1) throw firstRound.create('first round', {});
-    return context.currentInput;
-  },
-  exceptions: {
-    accepts: [firstRound],
-    handle() {
-      return { kind: 'continue', input: 'next', reason: 'try again' };
-    },
+const businessWork = {
+  execute(context) {
+    let value = context.input;
+    for (let index = 0; index < 2; index++) value = 'next';
+    return value;
   },
 };
 
-test('Invocation owns continuous local sequence across retries, independently of recording', async () => {
+test('Invocation sequences describe its entry and return, not internal business iterations', async () => {
   const seen = [];
   const recorded = new Invocation({
     context: new InvocationContext('first'),
-    work: retryWork,
+    work: businessWork,
     signal: signal(),
     observation: observeCall((fact) => {
-      if (fact.kind === 'process') seen.push({ round: fact.round, type: fact.process.type, sequence: fact.processSequence });
+      if (fact.kind === 'process') seen.push({ round: fact.round, sequence: fact.processSequence });
     }),
   });
-  const unrecorded = new Invocation({ context: new InvocationContext('first'), work: retryWork, signal: signal() });
-  assert.equal(recorded.sequence, 0);
+  const unrecorded = new Invocation({ context: new InvocationContext('first'), work: businessWork, signal: signal() });
   assert.equal(await recorded.run(), 'next');
   assert.equal(await unrecorded.run(), 'next');
-  assert.deepEqual(
-    seen.map((item) => item.sequence),
-    [1, 2, 3, 4, 5, 6, 7],
-  );
-  assert.deepEqual(
-    seen.map((item) => item.round),
-    [1, 1, 1, 1, 2, 2, 2],
-  );
-  assert.equal(recorded.sequence, 7);
-  assert.equal(unrecorded.sequence, 7);
+  assert.deepEqual(seen, [
+    { round: 1, sequence: 1 },
+    { round: 1, sequence: 2 },
+  ]);
+  assert.equal(recorded.sequence, 2);
+  assert.equal(unrecorded.sequence, 2);
 });
 
-test('parallel invocations and nested calls keep separate local sequences', async () => {
-  const runtime = createBoundRuntime({ recorder: new Recorder(new RecordBook()) });
+test('parallel and nested invocations maintain separate local process sequences', async () => {
   let child;
-  const root = runtime.executionInvocationBuilder.create('input', {
-    context: { settings: {} },
+  const root = new Invocation({
+    context: new InvocationContext('root'),
+    signal: signal(),
     work: {
-      maxRounds: 1,
-      async execute(context, invocation) {
-        child = runtime.operationInvocationBuilder.create(invocation, { input: 'child', description: { id: 'op', name: 'op', label: 'Op', source: 'test' }, work: retryWork });
+      execute(_context, parent) {
+        child = new Invocation({ context: new InvocationContext('child'), signal: signal(), parent: { invocation: parent }, work: businessWork });
         return child.run();
       },
     },
   });
-  const independent = new Invocation({ context: new InvocationContext('other'), signal: signal(), work: { maxRounds: 1, execute: (context) => context.input } });
+  const independent = new Invocation({ context: new InvocationContext('other'), signal: signal(), work: businessWork });
   await Promise.all([root.run(), independent.run()]);
-  assert.equal(root.sequence, 3);
-  assert.equal(child.sequence, 7);
-  assert.equal(independent.sequence, 3);
-  const rootRecord = root.record;
-  const childRecord = child.record;
-  assert.deepEqual(
-    rootRecord.value.processes.map((item) => item.sequence),
-    [1, 2, 3],
-  );
-  assert.deepEqual(
-    childRecord.value.processes.map((item) => item.sequence),
-    [1, 2, 3, 4, 5, 6, 7],
-  );
+  assert.equal(root.sequence, 2);
+  assert.equal(child.sequence, 2);
+  assert.equal(independent.sequence, 2);
 });
 
 test('failed registration consumes its occurrence position and does not repeat work', async () => {

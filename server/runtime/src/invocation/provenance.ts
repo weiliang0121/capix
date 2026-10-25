@@ -28,7 +28,7 @@ interface Propagation {
 const credentials = new WeakMap<ChildCallFailure, Propagation>();
 
 /** A child boundary's rejected delivery. Rethrow this value to preserve its source.
- * Throwing exception instead is a new local throw, subject to the local raises contract. */
+ * Throwing exception instead is a new local throw with a local source. */
 export class ChildCallFailure extends Error {
   constructor(readonly exception: DeclaredException) {
     super(exception.message, { cause: exception });

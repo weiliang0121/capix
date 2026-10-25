@@ -92,6 +92,7 @@ export const allowedSources = new Set([
   'services/observer/src/conversation/group/history/select.ts',
   'server/runtime/src/selection/usage.ts',
   'services/observer/src/conversation/group/answer/generate.ts',
+  'services/observer/src/conversation/group/answer/candidate.ts',
   'services/observer/src/conversation/accept.ts',
   'server/runtime/src/transcript/ref.ts',
   'server/runtime/src/transcript/transcript.ts',

@@ -49,7 +49,7 @@ test('Runner fixes one scene and builds itself; every run starts a fresh call', 
   assert.equal(new Set(contexts).size, 2);
   assert.equal(runner.isRunning, false);
   assert.throws(() => runner.build(), /already been built/);
-  assert.throws(() => root.setRun(() => 'replacement'), /built|fixed|configur/i);
+  assert.throws(() => Object.assign(root, { deps: {}, run: () => 'replacement' }), /built|fixed|configur|read only/i);
   assert.throws(() => new Runner(new Node({ run: () => 'leaf' }), new Resources()), /requires a Scene/);
 });
 
@@ -66,7 +66,7 @@ test('failed Runner builds can be corrected, but reentrant build never publishes
   };
   runner = new Runner(root, new Resources(), undefined, { observations: [install] });
   assert.throws(() => runner.build(), /needs a run function/);
-  root.setRun((work) => work.input);
+  Object.assign(root, { deps: {}, run: (work) => work.input });
   assert.equal(runner.build(), runner);
   assert.equal(checked, true);
   assert.equal(await runner.run('healthy'), 'healthy');
@@ -112,10 +112,13 @@ test('pre-cancellation skips host validation; active cancellation waits for a st
     },
   });
   const root = new Scene().add(child);
-  root.setRun(async function (work) {
-    const call = work.children.create(child, null);
-    await call.run();
-    return call.accept();
+  Object.assign(root, {
+    deps: {},
+    run: async function (work) {
+      const call = work.children.create(child, null);
+      await call.run();
+      return call.accept();
+    },
   });
   const runner = new Runner(root, new Resources(), undefined, {
     validate() {
@@ -145,10 +148,13 @@ test('pre-cancellation skips host validation; active cancellation waits for a st
 test('call hooks are registered by exact root/child identity and retain their receiver and built methods', async () => {
   const child = new Node({ run: (work) => `${work.input}:child` });
   const root = new Scene().add(child);
-  root.setRun(async function (work) {
-    const call = work.children.create(child, work.input);
-    await call.run();
-    return call.accept();
+  Object.assign(root, {
+    deps: {},
+    run: async function (work) {
+      const call = work.children.create(child, work.input);
+      await call.run();
+      return call.accept();
+    },
   });
   const established = [];
   const progress = [];
@@ -222,7 +228,7 @@ test('foreign and duplicate hook registrations fail before a structure becomes r
     /Duplicate/,
   );
   // Failed registrations did not lock or partially install the scene.
-  root.setRun(() => 'repaired');
+  Object.assign(root, { deps: {}, run: () => 'repaired' });
   new Runner(root, new Resources()).build();
 });
 
@@ -357,11 +363,10 @@ test('strict host observation failure releases occupancy without hiding the orig
   assert.equal(await runner.run(false), 'ok');
 });
 
-test('Runner converts an unhandled declared result without confusing it with admission failure', async () => {
+test('Runner preserves a business error without confusing it with admission failure', async () => {
   const failure = new ExceptionContract('runner.expected-failure');
   const original = failure.create('unable to proceed', { retry: false });
   const root = new Scene({
-    raises: [failure],
     run(work) {
       if (work.input) throw original;
       return 'ok';
@@ -369,7 +374,7 @@ test('Runner converts an unhandled declared result without confusing it with adm
   });
   const facts = [];
   const runner = new Runner(root, new Resources(), undefined, { observations: [observation(facts)] }).build();
-  await assert.rejects(runner.run(true), (error) => error.code === 'UNHANDLED_EXCEPTION' && error.cause === original);
+  await assert.rejects(runner.run(true), (error) => error === original);
   assert.equal(runner.isRunning, false);
   assert.equal(await runner.run(false), 'ok');
   assert.equal(
@@ -408,12 +413,15 @@ test('Runner host validation retains its receiver and rejects asynchronous admis
 test('child validation precedes capture while started factories still follow the fixed capture', async () => {
   const number = new ResourceOffer({ name: 'runner.validated-capture', expose: (value) => value });
   const child = new Node();
-  child.setRun((work) => work.resources.number, { number: number.request() });
+  Object.assign(child, { deps: { number: number.request() }, run: (work) => work.resources.number });
   const root = new Scene().add(child);
-  root.setRun(async function (work) {
-    const call = work.children.create(child, work.input);
-    await call.run();
-    return call.accept();
+  Object.assign(root, {
+    deps: {},
+    run: async function (work) {
+      const call = work.children.create(child, work.input);
+      await call.run();
+      return call.accept();
+    },
   });
   const captured = [];
   const established = [];
@@ -478,7 +486,7 @@ test('run and resume fix top-level options before delayed child capture without 
     const store = new MemoryCheckpointStore();
     const value = new ResourceOffer({ name: 'runner.fixed-options', expose: (captured) => captured });
     const child = new Node();
-    child.setRun((work) => work.resources.value, { value: value.request() });
+    Object.assign(child, { deps: { value: value.request() }, run: (work) => work.resources.value });
     const root = new Scene().add(child);
     const delayed = async (work) => {
       entered.resolve();
@@ -488,7 +496,7 @@ test('run and resume fix top-level options before delayed child capture without 
       return call.accept();
     };
     const point = checkpointPoint()({ name: 'waiting', state: codec, references: {}, resume: { deps: {}, uses: [child], run: delayed } });
-    root.setDefinition({
+    Object.assign(root, {
       checkpoint: { key: 'runner.fixed-options', version: 1, input: codec, output: codec, points: [point] },
       run: delayed,
     });

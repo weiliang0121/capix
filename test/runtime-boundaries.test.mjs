@@ -32,7 +32,6 @@ test('Invocation consumes an established context and rejects concurrent reuse', 
   const invocation = new Invocation({
     context: new InvocationContext('input'),
     work: {
-      maxRounds: 1,
       async execute(context, invocation) {
         rememberCall(invocation);
         executions++;
@@ -180,7 +179,6 @@ test('EOA rejects cross-BoundRuntime contexts independently of the recording lay
     name = 'leaf';
     label = 'leaf';
     source = 'test';
-    callee = 'processing';
     execute() {
       assert.fail('foreign leaf must not run');
     }

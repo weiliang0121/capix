@@ -27,7 +27,6 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   const { runtime, executionLifecycle, execution, operationLifecycle, operation, attempt } = setup();
   const input = { text: 'original' };
   const contract = new ExceptionContract('ATTEMPT_REJECTED');
-  attempt.raises = [contract];
   const failure = contract.create('first processing failed', {});
   await assert.rejects(
     invoke(lifecycleFor(runtime).attempt(operation, attempt, input), () => {
@@ -76,13 +75,12 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   assert.equal(during.attempts[1].status, 'running');
 });
 
-test('declared record participants are extensible names, not ownership or a fixed capability list', () => {
+test('current calls omit callee while historical record participants remain extensible metadata', () => {
   const { runtime, execution, operation, attempt } = setup();
-  attempt.callee = 'filesystem';
   lifecycleFor(runtime).attempt(operation, attempt, {}).begin();
   const snapshot = observeCall(runtime.recording, callFor(execution));
   validateExecutionRecordSnapshot(snapshot);
-  assert.equal(snapshot.attempts[0].callee, 'filesystem');
+  assert.equal(snapshot.attempts[0].callee, undefined);
 
   for (const kind of ['operations', 'attempts']) {
     for (const field of ['callee']) {

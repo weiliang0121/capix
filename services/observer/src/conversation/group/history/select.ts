@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { isEqual } from 'es-toolkit/predicate';
 import { checkpointCodec } from '../../checkpoint.js';
 import { selectionInputCodec, selectionCodec, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
-import { invocationRecording } from '@capix/server-runtime/recording';
 import { TranscriptResource } from '@capix/server-runtime/content';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ConversationResources, type ModelRequestResources, type HistoryResources } from '../../resources.js';
@@ -98,7 +97,12 @@ export class SelectHistory extends Group<SelectionInput, Selection, Conversation
       }),
     };
 
-    this.setDefinition({ observation: [invocationRecording()], name: 'selection', label: '选择历史', source: 'services/observer/src/conversation/group/history/select.ts · SelectHistory', deps: SelectHistory.deps, uses: this.members, run: this.execute.bind(this), checkpoint: { key: 'observer.select-history', version: 2, input: selectionInputCodec, output: selectionCodec, points: Object.values(this.points) } });
+    this.name = 'selection';
+    this.label = '选择历史';
+    this.source = 'services/observer/src/conversation/group/history/select.ts · SelectHistory';
+    this.deps = SelectHistory.deps;
+    this.run = this.execute.bind(this);
+    this.checkpoint = { key: 'observer.select-history', version: 2, input: selectionInputCodec, output: selectionCodec, points: Object.values(this.points) };
   }
 
   private async execute(work: GroupWork<SelectionInput, Selection, ConversationResources>): Promise<Selection> {
@@ -109,22 +113,19 @@ export class SelectHistory extends Group<SelectionInput, Selection, Conversation
     return this.receiveRequest(work, request, basis);
   }
   private async receiveRequest(work: GroupWork<SelectionInput, Selection, object>, request: ChildCall<PrepareModelRequest<SelectionInput, ModelRequestResources & HistoryResources>>, basis: SelectionBasis): Promise<Selection> {
-    await request.run();
-    const prepared = await request.accept();
+    const prepared = await request.invoke();
     const model = work.children.create(this.requestModel, prepared, { key: 'model' });
     work.checkpoint?.({ point: this.points.modelWaiting, state: basis, refs: { child: model.ref } });
     return this.receiveModel(work, model, basis);
   }
   private async receiveModel(work: GroupWork<SelectionInput, Selection, object>, model: ChildCall<RequestModel>, basis: SelectionBasis): Promise<Selection> {
-    await model.run();
-    const output = await model.accept();
+    const output = await model.invoke();
     const acceptance = work.children.create(this.acceptOutput, { output, basis }, { key: 'acceptance' });
     work.checkpoint?.({ point: this.points.acceptanceWaiting, state: null, refs: { child: acceptance.ref } });
     return this.receiveAcceptance(work, acceptance);
   }
   private async receiveAcceptance(work: GroupWork<SelectionInput, Selection, object>, acceptance: ChildCall<AcceptModelOutput<ModelAcceptanceInput & { basis: SelectionBasis }, Selection>>): Promise<Selection> {
-    await acceptance.run();
-    const result = await acceptance.accept();
+    const result = await acceptance.invoke();
     work.checkpoint?.({ point: this.points.result, state: result, refs: {} });
     return result;
   }

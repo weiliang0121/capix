@@ -50,9 +50,9 @@
 
 conversationId 是持续交流的身份，submissionId 是已固定目标的服务请求关联身份，Context.id 是一次内核调用身份，Record.id 是可选观测载体身份，这些身份互不替代。一次提交可关联零个或多个任务调用；即使不启用 Recorder 也能取得消息落实和调用进展。投影 revision 仅表达该提交解释状态的变化，允许连接合并中间状态后交付更高修订；它不是调用顺序、消息 revision 或观测游标。累计事实不可回退，同修订必须等值。
 
-executionId/operationId/parentOperationId 指向记录；消息 index 永不随切段重排。resultOf 只引用同一记录内先前的 execute/receive/handling return 正文；最终结果必须由最后一次 receive.return 或 handling.return 接纳，消费者使用 readOutput，不复制存储正文。
+当前调用记录用 id、parentId 和 childIds 表达真实调用树；业务查询中的 executionId 指向选中的任务记录，旧 operationId/parentOperationId 保留历史解释。消息 index 永不随切段重排。resultOf 只直接引用同一记录内已有的 return 正文，不跨记录或形成引用链；最终结果对应最后一次 return。新调用正常从 execute.return 返回，receive.return/handling.return 仅供历史记录读取。消费者使用 readOutput，不复制存储正文。
 
-服务提交对象拥有运行任务、独立取消控制器与投影，反馈连接只读取。运行信号传给 Driver.run，不借用 HTTP 连接信号；能力不合作时继续等待，不提前释放占用。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接受背压阻塞后仅标记需要重建基线，可写时发送当时的完整基线，不丢弃任意正文片段后继续发送无效增量。慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
+服务提交对象拥有运行任务、独立取消控制器与投影，反馈连接只读取。运行信号传给 Runner.run，不借用 HTTP 连接信号；能力不合作时继续等待，不提前释放占用。当前最多保留 128 项，结束项按 5 分钟 TTL 或容量淘汰，活动项不淘汰；容量不足拒绝登记，不隐含排队。一个连接受背压阻塞后仅标记需要重建基线，可写时发送当时的完整基线，不丢弃任意正文片段后继续发送无效增量。慢连接不反向等待业务。此保留不保证重启恢复、幂等执行或历史重放。
 
 ## 接纳条件与下一笔提交
 
@@ -68,9 +68,9 @@ rejected.retry:admission 是明确未接纳且允许再次尝试受理的声明�
 
 被动 InvocationProgress 由调用结构发布，运行绑定在每次根调用选择所属 Callable 子树来源，服务直接投影明确事实；不从记录、消息数量或两份快照差异反推。ConversationSubmission 的 activity 与内容 progress 通道独立隔离。活动关闭或消费者失败不参与业务接纳，不影响运行。
 
-ConversationActivity 使用 Context 身份，status 为 running/succeeded/failed/cancelled，phase 为 setup/execute/receive/handling/control，round 为本调用处理轮次（0–2）。同一次 Group 继续处理时保留自身身份并更新轮次，新建 Node 有独立身份。短调用完成后仍保留条目。started 之前的建立失败可只有 finishedAt，不补造开始时间。
+ConversationActivity 使用 Context 身份，status 为 running/succeeded/failed/cancelled。当前普通调用只执行一次 run，phase 表达 setup/execute，round 在开始前为 0、执行时为 1；业务再次生成结果时建立新的子调用身份。协议仍保留 receive/handling/control 阶段和旧轮次数据的表达能力，不能据此推断当前内核还产生这些过程阶段或支持第二轮执行。短调用完成后仍保留条目。started 之前的建立失败可只有 finishedAt，不补造开始时间。
 
-relation 描述父层处理该子调用的 attached/returned/receiving/accepted/failed，并保留真实返回 succeeded/failed/cancelled。子调用成功与父层接纳不是同一事实；子调用工作成功但交付失败时可以同时出现 status:succeeded 与 relation.returned:failed。取消请求 ACK 不结束任何条目，只有已发生的调用退出更新其状态。调用进展不替代提交 result，异常重试中的子失败也不推断整轮失败。
+relation 描述父层处理该子调用的 attached/returned/receiving/accepted/handled/failed，并保留真实返回 succeeded/failed/cancelled。accepted 表示接纳成功返回；handled 表示父层完成失败接收，子调用仍然失败。子调用成功与父层接纳不是同一事实；子调用工作成功但交付失败时可以同时出现 status:succeeded 与 relation.returned:failed。取消请求 ACK 不结束任何条目，只有已发生的调用退出更新其状态。调用进展不替代提交 result，业务降级或重新生成过程中的子失败也不推断整次提交失败。
 
 活动仅公开名称、归属和进展元数据，不传输入输出、诊断正文、模型思考、源码或资源对象。label 最多 120 字符，每次提交最多保留 512 个调用位置（包括等待子调用开始的关系）。超限或来源顺序/关系失效后保留已知前缀，activities.integrity 永久变为 ACTIVITY_INCOMPLETE；后续内容与最终 result 继续更新。调用局部 eventSequence 用于服务接纳，不混入交付 revision。查询与 follow 初始基线提供同一有界累计状态；后续只传变化条目，不承诺完整过程事件回放。不同边界事件若映射到相同公开 phase/round，则仍检查来源顺序，但不重复发布相同状态。
 
@@ -94,9 +94,9 @@ availableMemoryIds 来自本轮输入快照，只表示可见，不能宣称模�
 
 ## 异常处理过程与失败分类
 
-ProcessRecord 的 stage 包含 execute、receive、handling、control。receive 仅表示正常结果接纳，handling 表示异常声明的 start/return/continue/unhandled/throw；继续仍属于同一次调用，不新增执行层次。InvocationEvent 的过程 stage/action 与记录契约对应，不携带任意业务 IO。过程条目的 sequence 仅用于过程及 resultOf 引用，eventSequence 则与同调用的关系事实对照先后。
+新调用的 ProcessRecord 记录 execute 的 start/return/throw；run 内各操作通过 result.succeeded/failed 接收，子调用的父层接收另记 relationChanges，不建立独立 receive/handling/control 过程阶段。记录协议保留旧 receive、handling、control 及 continue/unhandled 等过程形态供历史读取，不代表当前仍有异常声明处理器或同调用二次执行。InvocationEvent 的过程 stage/action 与记录契约对应，不携带任意业务 IO。过程条目的 sequence 仅用于过程及 resultOf 引用，eventSequence 则与同调用的关系事实对照先后。
 
-InvocationFailureFact 表达 kind(exception/error)、phase(setup/execute/receive/handling/control/observation)、contextId，以及仅异常适用的 contract。调用失败正文、过程和相应增量可携带这组解释事实；错误正文仍由 RuntimeErrorValue 表达。contract 是服务端契约名称的说明，跨端字符串不赋予处理、重试或恢复资格。
+InvocationFailureFact 表达 kind(exception/error)、phase(setup/execute/receive/handling/control/observation)、contextId，以及仅异常适用的 contract；其中 receive/handling 仍可出现在历史失败事实中。调用失败正文、过程和相应增量可携带这组解释事实；错误正文仍由 RuntimeErrorValue 表达。contract 是服务端契约名称的说明，跨端字符串不赋予处理、重试或恢复资格。
 
 Context 的业务完成状态与调用交付失败可能不同，例如工作成功之后终态记录失败。客户端不能因为最终失败就撤回消息实体中已经成立的回答，也不能把未知状态解读为尚未发生。业务流、记录流和消息实体同步保持各自职责，当前不新增通用恢复指令。
 
@@ -116,7 +116,7 @@ ExecutionRecordSnapshot 保留业务查询名称，execution 是明确选中的�
 
 详情中的 calls 按真实 childIds 深度优先形成稳定数组；祖先路径单独表达，资源依实际产生调用收集。客户端从基线和增量构造相同关系。归属顺序不等于发生时间，实际先后继续读取调用边界、过程和资源各自的 sequence。活动根调用的基线保留已经结束但仍待父层接纳的任务子树；业务任务的展示计数不随结构深度变化。
 
-relationChanges 保留父层真实发生的 attached、returned、receiving、accepted、failed，含父子 Context、父轮次、可选 key/子记录 ID 和 eventSequence。returned 是子层结果，accepted 才是父层完成接纳；failed.source 区分接纳工作与观测故障，不能从任务成功推断根调用接纳成功。交付游标与各来源顺序分开，不承诺旧游标重放或业务恢复。
+relationChanges 保留父层真实发生的 attached、returned、receiving、accepted、handled、failed，含父子 Context、父轮次、可选 key/子记录 ID 和 eventSequence。returned 是子层结果，accepted 是父层完成成功接收，handled 是父层完成失败接收且保留子层失败；failed.source 区分接纳工作与观测故障，不能从任务成功推断根调用接纳成功。交付游标与各来源顺序分开，不承诺旧游标重放或业务恢复。
 
 ObserverOverview 可带 archives（sourceId、rootIds、revision、state），其执行简介和 ExecutionRecordSnapshot 可带对应 archive 来源。state=open/sealed/incomplete 解释持久历史的封存状态；旧 running 不代表仍在执行。归档详情允许缺少尚未保存的边界尾部，不放宽已有身份、归属、顺序及正文规则。当前活动基线与历史来源分开，见 [持久化](persistence.md)。
 

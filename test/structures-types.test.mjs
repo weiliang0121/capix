@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { Driver, Group, Node, ExceptionContract } from '@capix/server-runtime';
+import { Runner, Resources, Group, Node, Scene } from '@capix/server-runtime';
 
 const entry = fileURLToPath(new URL('./types/structures.ts', import.meta.url));
 const source = readFileSync(entry, 'utf8');
@@ -29,7 +29,7 @@ function format(errors) {
   return ts.formatDiagnosticsWithColorAndContext(errors, { getCanonicalFileName: (file) => file, getCurrentDirectory: () => process.cwd(), getNewLine: () => '\n' });
 }
 
-test('structure constructors and phase setters retain I/O, requests, actions and checkpoint ownership', () => {
+test('structure configuration retains I/O, resources, member operations and checkpoint ownership', () => {
   const errors = diagnostics(source);
   assert.equal(errors.length, 0, format(errors));
 });
@@ -44,47 +44,18 @@ test('structure author contract counterexamples fail at their own call sites', (
   );
 });
 
-test('an explicitly annotated callback cannot enlarge the installed phase action grant', async () => {
-  let childCalls = 0;
-  const child = new Node({
-    run: () => {
-      childCalls++;
-      return 'unreachable';
-    },
-  });
-  const group = new Group();
-  group.add(child);
-  // TypeScript annotations are erased; actual authority comes from uses.
-  group.setRun((work) => work.children.create(child, null).run(), undefined, { uses: [] });
-  const driver = new Driver();
-  const bound = driver.build(group, { providers: [], source: { capture: () => null } });
-  await assert.rejects(driver.run(bound, null, {}), /not declared.*phase uses/);
-  assert.equal(childCalls, 0);
-  assert.equal(driver.isRunning(bound), false);
+test('a processing callback cannot call a member outside its actual registration', async () => {
+  let called = 0;
+  const child = new Node({ run: () => ++called });
+  const scene = new Scene({ run: (work) => work.children.invoke(child, null) });
+  const runner = new Runner(scene, new Resources()).build();
+  await assert.rejects(runner.run(null), /not declared|not registered/);
+  assert.equal(called, 0);
+  assert.equal(runner.isRunning, false);
 });
 
-test('constructor exception configuration grants no actions when uses is omitted', async () => {
-  const failure = new ExceptionContract('structures.failure');
-  let childCalls = 0;
-  const child = new Node({
-    run: () => {
-      childCalls++;
-      return 'unreachable';
-    },
-  });
-  const group = new Group({
-    raises: [failure],
-    run: () => {
-      throw failure.create('enter exception handler', null);
-    },
-    exceptions: {
-      accepts: [failure],
-      handle: (work) => work.children.create(child, null).run(),
-    },
-  }).add(child);
-  const driver = new Driver();
-  const bound = driver.build(group, { providers: [], source: { capture: () => null } });
-  await assert.rejects(driver.run(bound, null, {}), /not declared.*phase uses/);
-  assert.equal(childCalls, 0);
-  assert.equal(driver.isRunning(bound), false);
+test('legacy phase configuration is rejected rather than silently installed', () => {
+  for (const field of ['accept', 'exceptions', 'raises', 'maxRounds', 'uses', 'observation', 'callee']) {
+    assert.throws(() => new Node({ run: () => null, [field]: [] }), new RegExp(`Unsupported callable configuration field: ${field}`));
+  }
 });

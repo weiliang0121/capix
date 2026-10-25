@@ -60,7 +60,7 @@ export function createBoundRuntime({ recorder, ...options } = {}) {
       resolve = accept;
       reject = fail;
     });
-    const call = decorate(state.builder.create(null, { kind: 'scene', construction: state.construction, description: { id: runtime.id }, controls, resources: new ResourceBindings({}), observation: recorder ? [invocationRecording({ input: () => null, output: () => null })] : [], work: { maxRounds: 1, execute: () => pending } }));
+    const call = decorate(state.builder.create(null, { kind: 'scene', construction: state.construction, description: { id: runtime.id }, controls, resources: new ResourceBindings({}), observation: recorder ? [invocationRecording({ input: () => null, output: () => null })] : [], work: { execute: () => pending } }));
     const completion = call.run();
     completion.catch(() => {});
     return { call, completion, resolve, reject };

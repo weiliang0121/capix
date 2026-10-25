@@ -89,7 +89,8 @@ test('binding interprets live records, reconciles once, and keeps raw runtime se
   assert.equal(data.conversation.at(-1).body.message.content, '上海周末行程。');
   assert.equal(app.store.getState().matches[0].executionId, id);
   const answer = [...data.details.get(id).calls.values()].find((call) => call.operation === 'answer');
-  assert.equal(answer.children.length, 4);
+  assert.equal(answer.children.length, 3);
+  assert.ok(answer.children.some((child) => child.operation === 'answerCandidate'));
   assert.equal(answer.output.content, '上海周末行程。');
   assert.ok(data.details.get(id).resources.length > 0);
   assert.equal(data.details.get(id).settings.model, 'fixture');

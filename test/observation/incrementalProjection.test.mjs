@@ -87,7 +87,7 @@ test('large execution boundaries and owner contexts are checked through indexes 
   for (let index = 0; index < count; index++) {
     const id = `operation-${index}`;
     const boundary = { id: `call-${id}`, parentId: id, scopeId: value.rootCall.id, callId: id, sequence: index + 3, occurredAt: value.execution.value.startedAt, offsetMs: 0, value: { type: 'call', scope: 'work' } };
-    const operation = { structureKind: 'group', id, parentId: value.execution.id, executionId: value.execution.id, contextId: `context-${id}`, operationInstanceId: 'operation-instance', operation: 'fixture', label: 'Fixture', source: 'fixture', caller: 'execution', callee: 'operation', status: 'running', childIds: [boundary.id], value: { startedAt: value.execution.value.startedAt, input: null, processes: [], relationChanges: [] } };
+    const operation = { structureKind: 'group', id, parentId: value.execution.id, executionId: value.execution.id, contextId: `context-${id}`, operationInstanceId: 'operation-instance', operation: 'fixture', label: 'Fixture', source: 'fixture', caller: 'execution', status: 'running', childIds: [boundary.id], value: { startedAt: value.execution.value.startedAt, input: null, processes: [], relationChanges: [] } };
     Object.defineProperty(operation, 'id', {
       enumerable: true,
       get() {

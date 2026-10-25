@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Node, defineNode, defineGroup, defineScene } from '@capix/server-runtime';
 
-const metadata = { name: 'test', label: 'test', source: 'test', callee: 'test' };
+const metadata = { name: 'test', label: 'test', source: 'test' };
 function assemble(leaf) {
   const operation = defineGroup()({
     ...metadata,
@@ -40,7 +40,6 @@ for (const children of [[], [defineNode()({ ...metadata, run: (work) => work.inp
       name = 'invalid';
       label = 'invalid';
       source = 'test';
-      callee = 'local';
       members = children;
       deps = {};
       run = () => ++called;
@@ -56,7 +55,6 @@ test('a class and its complete factory path retain the receiver and original out
     name = 'read';
     label = 'read';
     source = 'test';
-    callee = 'local';
     outputValue = { content: 'original' };
     deps = {};
     run = () => this.outputValue;

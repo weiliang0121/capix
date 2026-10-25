@@ -1,4 +1,3 @@
-import { invocationRecording } from '@capix/server-runtime/recording';
 import { MemoryResource } from '@capix/server-runtime/content';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ModelCallResources, type MemoryWriteResources } from '../../resources.js';
@@ -58,7 +57,12 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
       applicationWaiting: point({ name: 'applicationWaiting', state: emptyCheckpointState, references: { child: childReference(this.applyMemory) }, check: (_state, facts) => this.check(facts, facts.references.child, 'application'), resume: { uses: [this.applyMemory], run: (work, _state, saved) => this.receiveApplication(work.children.resume(saved.child)) } }),
     };
 
-    this.setDefinition({ observation: [invocationRecording()], name: 'memory', label: '提取记忆体', source: 'services/observer/src/conversation/group/memory/extract.ts · ExtractMemory', deps: ExtractMemory.deps, uses: this.members, run: this.execute.bind(this), checkpoint: { key: 'observer.extract-memory', version: 2, input: memoryCheckpointInput, output: memoryCheckpointOutput, points: Object.values(this.points) } });
+    this.name = 'memory';
+    this.label = '提取记忆体';
+    this.source = 'services/observer/src/conversation/group/memory/extract.ts · ExtractMemory';
+    this.deps = ExtractMemory.deps;
+    this.run = this.execute.bind(this);
+    this.checkpoint = { key: 'observer.extract-memory', version: 2, input: memoryCheckpointInput, output: memoryCheckpointOutput, points: Object.values(this.points) };
   }
 
   protected prepare(input: MemoryInput) {
@@ -72,32 +76,28 @@ messages 是本次可见原文，currentIndexes 标记本轮输入与回答；�
   }
 
   private async receiveRequest(work: MemoryWork, child: ChildCall<PrepareModelRequest<MemoryInput>>): Promise<MemoryExtraction> {
-    await child.run();
-    const request = await child.accept();
+    const request = await child.invoke();
     const model = work.children.create(this.requestModel, request, { key: 'model' });
     work.checkpoint?.({ point: this.points.modelWaiting, state: null, refs: { child: model.ref } });
     return this.receiveModel(work, model);
   }
 
   private async receiveModel(work: MemoryWork, child: ChildCall<RequestModel>): Promise<MemoryExtraction> {
-    await child.run();
-    const output = await child.accept();
+    const output = await child.invoke();
     const acceptance = work.children.create(this.acceptOutput, { output, basis: work.input }, { key: 'acceptance' });
     work.checkpoint?.({ point: this.points.acceptanceWaiting, state: null, refs: { child: acceptance.ref } });
     return this.receiveAcceptance(work, acceptance);
   }
 
   private async receiveAcceptance(work: MemoryWork, child: ChildCall<AcceptModelOutput<ModelAcceptanceInput & { basis: MemoryInput }, MemoryExtraction>>): Promise<MemoryExtraction> {
-    await child.run();
-    const output = await child.accept();
+    const output = await child.invoke();
     const application = work.children.create(this.applyMemory, output, { key: 'application' });
     work.checkpoint?.({ point: this.points.applicationWaiting, state: null, refs: { child: application.ref } });
     return this.receiveApplication(application);
   }
 
   private async receiveApplication(child: ChildCall<ApplyMemory>): Promise<MemoryExtraction> {
-    await child.run();
-    return child.accept();
+    return child.invoke();
   }
 
   private check(facts: CheckpointFacts<MemoryInput>, selected: ChildFact, key: 'request' | 'model' | 'acceptance' | 'application'): void {

@@ -73,8 +73,7 @@ const point = checkpointPoint()({
 });
 const root = defineScene()({
   members: [child],
-  receptions: variant === 'swap' ? [emptyReception, dateReception, anotherDateReception] : [dateReception, emptyReception, anotherDateReception],
-  checkpoint: { key: 'typed-reception-parent', version: variant === 'version' ? 2 : 1, input: codec, output: codec, points: [point] },
+  checkpoint: { receptions: variant === 'swap' ? [emptyReception, dateReception, anotherDateReception] : [dateReception, emptyReception, anotherDateReception], key: 'typed-reception-parent', version: variant === 'version' ? 2 : 1, input: codec, output: codec, points: [point] },
   async run(work) {
     const first = work.children.create(child, '2026-01-01T00:00:00.000Z', { key: 'same-key' });
     const second = work.children.create(child, '2026-02-01T00:00:00.000Z', { key: 'same-key' });

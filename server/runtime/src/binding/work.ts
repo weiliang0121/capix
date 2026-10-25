@@ -1,13 +1,10 @@
 import type { CallableKind } from '@capix/protocol';
 import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '../definition/callable.js';
-import type { Resolution, Continue } from '../definition/work.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationCheckpointWork } from '../checkpoint/work.js';
 import type { CheckpointReferences, CheckpointReference } from '../checkpoint/contract.js';
-import type { DeclaredException } from '../exception/contract.js';
 import type { InvocationWork } from '../invocation/work.js';
 import type { Invocation } from '../invocation/invocation.js';
-import { Continuation, type InvocationResolution } from '../invocation/result.js';
 import type { ChildReference } from '../definition/children.js';
 import type { BoundChildren } from './children/bound.js';
 import { ChildBindingsBuilder } from './children/builder.js';
@@ -16,90 +13,34 @@ import { type CallableSnapshot, originalCheckpointPoint } from './snapshot.js';
 import { savedCheckpointFacts } from './checkpoint.js';
 import { BoundReceptions } from './receptions.js';
 
-/** Private token shape distinguishes a control proposal from ordinary business objects. */
-class AcceptanceProposal {
-  readonly #token = true;
-}
-
-function authorOutput<Output>(value: Output): Output {
-  if (value instanceof Continuation || value instanceof AcceptanceProposal) throw new Error('Invocation control must be issued by the current author phase');
-  return value;
-}
-
 /** Fixed declaration adaptation at one Bound position; each invocation gets its own access state. */
-export class InvocationWorkBinding<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, ExceptionResources extends object, Kind extends CallableKind> implements InvocationWork<Input, Output, Context> {
+export class InvocationWorkBinding<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, Kind extends CallableKind> implements InvocationWork<Input, Output, Context> {
   readonly output: InvocationWork<Input, Output, Context>['output'];
-  readonly maxRounds: 1 | 2;
-  readonly raises: InvocationWork<Input, Output, Context>['raises'];
   readonly checkpoint?: InvocationCheckpointWork<Input, Output, Context>;
-  readonly accept?: InvocationWork<Input, Output, Context>['accept'];
-  readonly exceptions?: InvocationWork<Input, Output, Context>['exceptions'];
   readonly #childBindingsBuilder: ChildBindingsBuilder;
   readonly #accesses = new WeakMap<Invocation<Input, Output, Context>, InvocationAccess<Input, Output, Context>>();
 
   constructor(
-    private readonly declaration: CallableSnapshot<Input, Output, Kind, Resources, ExceptionResources, any>,
+    private readonly declaration: CallableSnapshot<Input, Output, Kind, Resources, any>,
     private readonly children: BoundChildren,
     private readonly composite: boolean,
   ) {
-    this.#childBindingsBuilder = new ChildBindingsBuilder(children, new BoundReceptions(declaration.receptions ?? [], children));
+    this.#childBindingsBuilder = new ChildBindingsBuilder(children, new BoundReceptions(declaration.checkpoint?.receptions ?? [], children));
     this.output = declaration.output;
-    this.maxRounds = declaration.maxRounds;
-    this.raises = declaration.raises;
-    this.accept = declaration.accept ? this.receive.bind(this) : undefined;
-    this.exceptions = declaration.exceptions ? { accepts: declaration.exceptions.accepts, handle: this.handle.bind(this) } : undefined;
     this.checkpoint = declaration.checkpoint ? this.bindCheckpoint(declaration.checkpoint) : undefined;
   }
 
   async execute(_context: Context, invocation: Invocation<Input, Output, Context>) {
     const declaration = this.declaration;
-    const access = this.accessFor(invocation).enter('run', declaration.deps, declaration.uses);
-    return authorOutput(await declaration.run(this.executionWork(invocation, access) as never));
-  }
-
-  private async receive(_context: Context, output: Output, invocation: Invocation<Input, Output, Context>) {
-    const declaration = this.declaration;
-    const access = this.accessFor(invocation).enter('receive', declaration.deps, declaration.uses);
-    const proposals = new WeakMap<AcceptanceProposal, Continuation<Input>>();
-    const work = Object.freeze({
-      ...access.base,
-      ...this.childPort(access),
-      delivered: output,
-      continue: (input: Input, reason: string) => {
-        access.validate();
-        const proposal = new AcceptanceProposal();
-        Object.freeze(proposal);
-        proposals.set(proposal, new Continuation(input, reason));
-        return proposal as unknown as Continue<Input>;
-      },
-    });
-    const result = await declaration.accept!(work as never);
-    if (result instanceof AcceptanceProposal) {
-      const continuation = proposals.get(result);
-      if (!continuation) throw new Error('Continuation was not issued by this acceptance phase');
-      return continuation;
+    const access = this.accessFor(invocation).enter('run', declaration.deps);
+    try {
+      return await declaration.run(this.executionWork(invocation, access) as never);
+    } finally {
+      invocation.sealOutput();
+      const settling = invocation.children.settleAcceptances();
+      if (settling) await settling;
+      access.close();
     }
-    return authorOutput(result as Output);
-  }
-
-  private async handle(_context: Context, exception: DeclaredException, invocation: Invocation<Input, Output, Context>) {
-    const exceptions = this.declaration.exceptions!;
-    const access = this.accessFor(invocation).enter('exceptions', exceptions.deps, exceptions.uses ?? []);
-    const proposals = new WeakMap<Resolution<Input, Output>, InvocationResolution<Input, Output>>();
-    const issue = (value: InvocationResolution<Input, Output>): Resolution<Input, Output> => {
-      access.validate();
-      const proposal = Object.freeze({}) as Resolution<Input, Output>;
-      proposals.set(proposal, Object.freeze(value));
-      return proposal;
-    };
-    const origin = invocation.exceptionOrigin;
-    if (!origin) throw new Error('Exception handler has no established origin');
-    const work = Object.freeze({ ...access.base, ...this.childPort(access), exception, origin: this.accessFor(invocation).references.origin(origin), continue: (input: Input, reason: string) => issue({ kind: 'continue', input, reason }), return: (output: Output) => issue({ kind: 'return', output }), unhandled: issue({ kind: 'unhandled' }) });
-    const result = await exceptions.handle(work as never);
-    const resolution = result && typeof result === 'object' ? proposals.get(result) : undefined;
-    if (!resolution) throw new Error('Exception resolution was not issued by this handling phase');
-    if (resolution.kind === 'return') authorOutput(resolution.output);
-    return resolution;
   }
 
   private async resume(point: InvocationCheckpointPoint<Input, Output, Kind, any, any, any, any, any>, invocation: Invocation<Input, Output, Context>, state: unknown, references: CheckpointReferences) {
@@ -107,7 +48,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
     const registry = this.accessFor(invocation).references;
     const saved = Object.freeze(Object.fromEntries(Object.entries(references).map(([name, value]) => [name, Array.isArray(value) ? Object.freeze(value.map((ref) => registry.fromSaved(ref))) : registry.fromSaved(value as CheckpointReference)])));
     try {
-      return authorOutput(await point.resume.run(this.executionWork(invocation, access) as never, state, saved as import('../definition/checkpoint.js').SavedReferences<any>));
+      return await point.resume.run({ ...this.executionWork(invocation, access), initialInput: invocation.context.input, round: invocation.context.progress.round, ...(invocation.context.continuation ? { continuation: registry.continuation(invocation.context.continuation) } : {}) } as never, state, saved as import('../definition/checkpoint.js').SavedReferences<any>);
     } finally {
       invocation.sealOutput();
       const settling = invocation.children.settleAcceptances();

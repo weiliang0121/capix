@@ -58,8 +58,7 @@ export function harness(store, counters, { failDuringHandling = false, reopen = 
     },
   });
   const scene = new Scene({
-    receptions: [contract],
-    checkpoint: { key: 'fixture.handled.root', version: 1, input: codec, output: codec, points: [point] },
+    checkpoint: { receptions: [contract], key: 'fixture.handled.root', version: 1, input: codec, output: codec, points: [point] },
     async run(work) {
       const value = await work.children.invoke(primary, null, {
         reception: contract,

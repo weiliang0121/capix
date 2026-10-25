@@ -46,8 +46,8 @@ export class CallableBuilder {
         for (const member of node.members) if (structureParent(member.definition) !== node.definition) throw new Error('Callable membership changed while building');
         const children = new BoundChildren(node.members, node.declaration.names);
         const composite = node.declaration.members !== undefined;
-        const work = new InvocationWorkBinding<any, any, CallableContext<any, any, object>, object, object, any>(node.declaration, children, composite);
-        const binding = Object.freeze({ definition: node.definition, declaration: node.declaration, children, composite, deps: node.deps, supply: node.supply, refinements: node.refinements, work });
+        const work = new InvocationWorkBinding<any, any, CallableContext<any, any, object>, object, any>(node.declaration, children, composite);
+        const binding = Object.freeze({ definition: node.definition, declaration: node.declaration, observations: node.observations, children, composite, deps: node.deps, supply: node.supply, refinements: node.refinements, work });
         const fields: PropertyDescriptorMap = {};
         for (const [key, value] of Object.entries(node.declaration)) {
           if (key === 'kind' || key === 'members' || key === 'names') continue;
@@ -109,7 +109,7 @@ function checkTree(root: AnyCallable): readonly AnyCallable[] {
   return [...seen];
 }
 
-const configurationFields = ['id', 'kind', 'members', 'names', 'name', 'label', 'source', 'callee', 'maxRounds', 'raises', 'output', 'deps', 'uses', 'run', 'accept', 'exceptions', 'observation', 'checkpoint', 'receptions'] as const;
+const configurationFields = ['id', 'kind', 'members', 'names', 'name', 'label', 'source', 'output', 'deps', 'run', 'checkpoint'] as const;
 
 function sameDescriptor(before: PropertyDescriptor | undefined, after: PropertyDescriptor | undefined): boolean {
   if (!before || !after) return before === after;

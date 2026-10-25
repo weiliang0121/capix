@@ -2,23 +2,22 @@ import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Sequence, defineNode, defineGroup, Recorder, RecordBook, bindRecording, defineObservation } from '@capix/server-runtime';
-import { runtimeDefinition, recordDefinitions, recordedCall } from '../fixtures/declarations.mjs';
+import { runtimeDefinition, recordedCall } from '../fixtures/declarations.mjs';
 
-const metadata = { name: 'composed', label: 'Composed', source: 'test', callee: 'test' };
+const metadata = { name: 'composed', label: 'Composed', source: 'test' };
 function attempt(name, execute = (value) => value) {
   return defineNode()({ ...metadata, name, run: (work) => execute(work.input) });
 }
 function composed(sequence) {
   return defineGroup()({ ...metadata, members: [...new Set(sequence.steps.map((step) => step.use))], run: (work) => sequence.run(work.input, work.children) });
 }
-function install(composition, recorder) {
+function install(composition, recorder, observations = []) {
   const calls = [];
   const execution = defineGroup()({ members: [...new Set(composition.steps.map((step) => step.use))], run: (work) => composition.run(work.input, work.children) });
   const definition = runtimeDefinition(execution);
-  if (recorder) recordDefinitions(definition);
   const runtime = installCallable(definition, {
     providers: [],
-    observations: recorder ? [bindRecording(recorder)] : [],
+    observations: [...(recorder ? [bindRecording(recorder)] : []), ...observations],
     source: { capture: () => null },
     bindings: [
       {
@@ -51,15 +50,17 @@ test('parent owns a child before it runs and distinguishes its return from paren
       assert.equal(installed.calls[0].children.values().length, 0);
       return input;
     },
-    async accept(_scope, output) {
-      const child = installed.calls[0].children.values()[0];
-      assert.equal(child.key, 'work');
-      assert.equal(child.invocation.context.status, 'succeeded');
-      assert.deepEqual(child.returned, { status: 'succeeded', output: { leaf: 2 } });
-      assert.equal(child.reception.status, 'receiving');
-      entered.resolve();
-      await release.promise;
-      return output.leaf * 2;
+    result: {
+      async succeeded(output, _scope) {
+        const child = installed.calls[0].children.values()[0];
+        assert.equal(child.key, 'work');
+        assert.equal(child.invocation.context.status, 'succeeded');
+        assert.deepEqual(child.returned, { status: 'succeeded', output: { leaf: 2 } });
+        assert.equal(child.reception.status, 'receiving');
+        entered.resolve();
+        await release.promise;
+        return output.leaf * 2;
+      },
     },
   });
   installed = install(composition);
@@ -106,8 +107,10 @@ test('parent acceptance failure retains successful child and does not start next
     .step('first', {
       use,
       input: () => null,
-      accept: () => {
-        throw error;
+      result: {
+        succeeded: () => {
+          throw error;
+        },
       },
     })
     .step('second', { use, input: () => null });
@@ -165,22 +168,17 @@ test('direct calls attach and return without pretending parent acceptance took p
 
 test('a terminal reporting failure remains a failed delivery with a succeeded child context', async () => {
   const error = new Error('finish record failed');
-  const use = defineGroup()({
-    ...metadata,
-    observation: [
-      defineObservation(
-        {
-          deps: {},
-          observe(fact) {
-            if (fact.kind === 'finished') throw error;
-          },
-        },
-        { failure: 'propagate' },
-      ),
-    ],
-    run: () => 'completed',
-  });
-  const installed = install(new Sequence().step('work', { use, input: () => null }));
+  const use = defineGroup()({ ...metadata, run: () => 'completed' });
+  const declaration = defineObservation(
+    {
+      deps: {},
+      observe(fact) {
+        if (fact.kind === 'finished') throw error;
+      },
+    },
+    { failure: 'propagate' },
+  );
+  const installed = install(new Sequence().step('work', { use, input: () => null }), undefined, [{ bindInvocation: () => ({ observe() {} }), declarations: (structure) => (structure === use ? [declaration] : []) }]);
   await assert.rejects(installed.runtime.run(null, {}), (observed) => observed.code === 'OBSERVATION_FAILED' && observed.cause === error);
   const child = installed.calls[0].children.values()[0];
   assert.equal(child.invocation.context.status, 'succeeded');

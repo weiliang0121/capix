@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Node, defineNode, defineGroup, reception, resolveDeclaration } from '@capix/server-runtime';
 
-const metadata = { name: 'test', label: 'test', source: 'test', callee: 'local' };
+const metadata = { name: 'test', label: 'test', source: 'test' };
 const identity = { check: (value) => value, encode: (value) => value, decode: (value) => value };
 function makeChild() {
   return defineNode()({ ...metadata, run: (work) => work.input });
 }
 
 function parent(children, receptions) {
-  return defineGroup()({ ...metadata, members: children, receptions, run: (work) => work.input });
+  return defineGroup()({ ...metadata, members: children, checkpoint: { key: 'parent', version: 1, input: identity, output: identity, points: [], receptions }, run: (work) => work.input });
 }
 
 test('reception registration rejects repeated contracts and targets outside its direct children', () => {
@@ -17,9 +17,9 @@ test('reception registration rejects repeated contracts and targets outside its 
   const accepted = reception(child, identity);
   const owner = parent([child], [accepted, accepted]);
   assert.throws(() => resolveDeclaration(owner), /Duplicate parent reception contract/);
-  owner.receptions = [accepted];
-  const snapshot = resolveDeclaration(owner).declaration.receptions[0];
-  owner.receptions = [accepted, snapshot];
+  owner.checkpoint.receptions = [accepted];
+  const snapshot = resolveDeclaration(owner).declaration.checkpoint.receptions[0];
+  owner.checkpoint.receptions = [accepted, snapshot];
   assert.throws(() => resolveDeclaration(owner), /Duplicate parent reception contract/);
   const sameShapeChild = makeChild();
   assert.throws(() => resolveDeclaration(parent([sameShapeChild], [accepted])), /Reception targets a member outside its owner/);
@@ -34,9 +34,9 @@ test('separate contracts for one child remain legal without duplicating its pare
   const first = reception(child, identity);
   const second = reception(child, identity);
   const resolved = resolveDeclaration(parent([child], [first, second]));
-  assert.equal(resolved.declaration.receptions.length, 2);
-  assert.equal(resolved.declaration.receptions[0].child, child);
-  assert.equal(resolved.declaration.receptions[1].child, child);
+  assert.equal(resolved.declaration.checkpoint.receptions.length, 2);
+  assert.equal(resolved.declaration.checkpoint.receptions[0].child, child);
+  assert.equal(resolved.declaration.checkpoint.receptions[1].child, child);
   assert.throws(() => parent([child], [first]), /already belongs to another parent/);
 });
 
@@ -46,14 +46,13 @@ for (const receptions of [[], [reception(makeChild(), identity)]]) {
       name = 'invalid';
       label = 'invalid';
       source = 'test';
-      callee = 'local';
-      receptions = receptions;
+      checkpoint = { key: 'invalid', version: 1, input: identity, output: identity, points: [], receptions };
       deps = {};
       run = (work) => work.input;
     }
-    assert.throws(() => resolveDeclaration(new InvalidLeaf()), /Nodes cannot declare receptions/);
-    const factory = defineNode()({ ...metadata, receptions, run: (work) => work.input });
-    assert.throws(() => resolveDeclaration(factory), /Nodes cannot declare receptions/);
+    assert.throws(() => resolveDeclaration(new InvalidLeaf()), /Nodes cannot declare checkpoint receptions/);
+    const factory = defineNode()({ ...metadata, checkpoint: { key: 'invalid', version: 1, input: identity, output: identity, points: [], receptions }, run: (work) => work.input });
+    assert.throws(() => resolveDeclaration(factory), /Nodes cannot declare checkpoint receptions/);
   });
 }
 
@@ -77,11 +76,11 @@ test('binding fixes validator and codec functions while preserving their origina
   };
   const accepted = reception(child, value);
   const source = parent([child], [accepted]);
-  const fixed = resolveDeclaration(source).declaration.receptions[0];
+  const fixed = resolveDeclaration(source).declaration.checkpoint.receptions[0];
   value.check = () => assert.fail('modified check must not replace installed function');
   value.encode = () => assert.fail('modified encode must not replace installed function');
   value.decode = () => assert.fail('modified decode must not replace installed function');
-  source.receptions = [];
+  source.checkpoint.receptions = [];
   const input = { result: 1 };
   assert.deepEqual(fixed.value.check(input), input);
   assert.equal(fixed.value.encode(input), input);

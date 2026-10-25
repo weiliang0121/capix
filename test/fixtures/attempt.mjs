@@ -2,8 +2,6 @@ import { AttemptFixture } from './behavior.mjs';
 
 export class TestAttempt extends AttemptFixture {
   source = 'test/fixtures/attempt.mjs · TestAttempt';
-  callee = 'processing';
-
   constructor(runtime, name, work = (input) => input) {
     super(runtime.attemptInvocationBuilder);
     this.name = name;

@@ -37,11 +37,14 @@ test('Resources supplies a shared entity through independent call endpoints, wit
   const unused = new Node({ deps: { value: dormant.request() }, run: () => assert.fail('unselected member must not execute') });
   const scene = new Scene();
   scene.add(child, unused);
-  scene.setRun(async function (work) {
-    assert.deepEqual(Object.keys(work.resources), [], 'subtree supply must not grant parent access');
-    const calls = [work.children.create(child, null), work.children.create(child, null)];
-    await Promise.all(calls.map((call) => call.run()));
-    return Promise.all(calls.map((call) => call.accept()));
+  Object.assign(scene, {
+    deps: {},
+    run: async function (work) {
+      assert.deepEqual(Object.keys(work.resources), [], 'subtree supply must not grant parent access');
+      const calls = [work.children.create(child, null), work.children.create(child, null)];
+      await Promise.all(calls.map((call) => call.run()));
+      return Promise.all(calls.map((call) => call.accept()));
+    },
   });
   const resources = new Resources();
   resources.register(value, entity);
@@ -69,19 +72,25 @@ test('one explicit capture supplies several offers coherently and leaves sibling
   const sibling = pair();
   const group = new Group();
   group.add(leaf);
-  group.setRun(async function (work) {
-    const first = work.children.create(leaf, null);
-    const second = work.children.create(leaf, null);
-    await Promise.all([first.run(), second.run()]);
-    return Promise.all([first.accept(), second.accept()]);
+  Object.assign(group, {
+    deps: {},
+    run: async function (work) {
+      const first = work.children.create(leaf, null);
+      const second = work.children.create(leaf, null);
+      await Promise.all([first.run(), second.run()]);
+      return Promise.all([first.accept(), second.accept()]);
+    },
   });
   const scene = new Scene();
   scene.add(group, sibling);
-  scene.setRun(async function (work) {
-    const scoped = work.children.create(group, work.input);
-    const normal = work.children.create(sibling, null);
-    await Promise.all([scoped.run(), normal.run()]);
-    return [await scoped.accept(), await normal.accept()];
+  Object.assign(scene, {
+    deps: {},
+    run: async function (work) {
+      const scoped = work.children.create(group, work.input);
+      const normal = work.children.create(sibling, null);
+      await Promise.all([scoped.run(), normal.run()]);
+      return [await scoped.accept(), await normal.accept()];
+    },
   });
   const resources = new Resources();
   resources.register(left, 'global-left');
@@ -128,18 +137,24 @@ test('a nested partial capture inherits the actual narrowed ancestor supply', as
   const leaf = new Node({ deps: { files: files.request(), tag: tag.request() }, run: (work) => ({ files: work.resources.files.read(), tag: work.resources.tag.read() }) });
   const group = new Group();
   group.add(leaf);
-  group.setRun(async function (work) {
-    assert.deepEqual(Object.keys(work.resources), []);
-    const call = work.children.create(leaf, work.input[0]);
-    await call.run();
-    return call.accept();
+  Object.assign(group, {
+    deps: {},
+    run: async function (work) {
+      assert.deepEqual(Object.keys(work.resources), []);
+      const call = work.children.create(leaf, work.input[0]);
+      await call.run();
+      return call.accept();
+    },
   });
   const scene = new Scene();
   scene.add(group);
-  scene.setRun(async function (work) {
-    const calls = work.input.map((selection) => work.children.create(group, selection));
-    await Promise.all(calls.map((call) => call.run()));
-    return Promise.all(calls.map((call) => call.accept()));
+  Object.assign(scene, {
+    deps: {},
+    run: async function (work) {
+      const calls = work.input.map((selection) => work.children.create(group, selection));
+      await Promise.all(calls.map((call) => call.run()));
+      return Promise.all(calls.map((call) => call.accept()));
+    },
   });
   const resources = new Resources();
   resources.register(files, ['a', 'b']);
@@ -254,10 +269,13 @@ test('cancellation during a child capture prevents child establishment and relea
     },
   });
   const scene = new Scene().add(child);
-  scene.setRun(async function (work) {
-    const call = work.children.create(child, work.input);
-    await call.run();
-    return call.accept();
+  Object.assign(scene, {
+    deps: {},
+    run: async function (work) {
+      const call = work.children.create(child, work.input);
+      await call.run();
+      return call.accept();
+    },
   });
   const resources = new Resources();
   resources
@@ -312,36 +330,35 @@ test('resource registration checks exact identity, duplicate supply and conflict
   assert.throws(() => resources.capture({}, () => null), /callable|structure|Scene|Group|Node/i);
 });
 
-test('declared failure handling and continuation renew access windows without recapturing the supply', async () => {
+test('operation fallback keeps this call resources active and closes them on exit', async () => {
   let captures = 0;
   const endpoints = [];
   const offer = new ResourceOffer({
     name: 'runner.phase',
-    expose: (value, activity) => {
+    expose(value, activity) {
       const endpoint = { read: () => activity.runSync('read', {}, () => value) };
       endpoints.push(endpoint);
       return endpoint;
     },
   });
-  const failure = new ExceptionContract('RUNNER_PHASE_FIXTURE');
-  const scene = new Scene({
-    raises: [failure],
-    maxRounds: 2,
-    deps: { value: offer.request() },
-    run(work) {
-      assert.equal(work.resources.value.read(), 'fixed');
-      if (work.round === 1) throw failure.create('continue with retained supply', {});
-      return work.input;
-    },
-    exceptions: {
-      accepts: [failure],
-      deps: { value: offer.request() },
-      handle(work) {
-        assert.equal(work.resources.value.read(), 'fixed');
-        return work.continue('continued', 'fixture');
-      },
+  const failed = new Node({
+    run() {
+      throw new Error('source unavailable');
     },
   });
+  const scene = new Scene({
+    deps: { value: offer.request() },
+    async run(work) {
+      assert.equal(work.resources.value.read(), 'fixed');
+      return work.children.invoke(failed, null, {
+        result: {
+          failed() {
+            return work.resources.value.read();
+          },
+        },
+      });
+    },
+  }).add(failed);
   const resources = new Resources();
   resources
     .capture(scene, () => {
@@ -349,10 +366,9 @@ test('declared failure handling and continuation renew access windows without re
       return 'fixed';
     })
     .register(offer, (snapshot) => snapshot);
-  const result = await new Runner(scene, resources).build().run('initial');
-  assert.equal(result, 'continued');
+  assert.equal(await new Runner(scene, resources).build().run('initial'), 'fixed');
   assert.equal(captures, 1);
-  assert.equal(new Set(endpoints).size, 3, 'run, exception handler and next round have distinct endpoints');
+  assert.equal(endpoints.length, 1);
   for (const endpoint of endpoints) assert.throws(() => endpoint.read(), /ended|running|closed|inactive/);
 });
 
@@ -361,8 +377,9 @@ test('fixed content writes still require actual parent reception and retain exac
   const child = new Node({ run: (work) => `answer:${work.input}` });
   const scene = new Scene();
   scene.add(child);
-  scene.setRun(
-    async function (work) {
+  Object.assign(scene, {
+    deps: { messages: TranscriptResource.append.request() },
+    run: async function (work) {
       const call = work.children.create(child, work.input);
       await call.run();
       return call.accept((content) => {
@@ -371,8 +388,7 @@ test('fixed content writes still require actual parent reception and retain exac
         return first;
       });
     },
-    { messages: TranscriptResource.append.request() },
-  );
+  });
   const resources = new Resources();
   resources.register(TranscriptResource.append, transcript);
   const runner = new Runner(scene, resources).build();

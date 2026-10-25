@@ -66,13 +66,11 @@ function completedPair() {
   execution.publish({ kind: 'started', input: null }, 15);
   execution.publish({ kind: 'process', processSequence: 1, round: 1, process: { stage: 'execute', type: 'start', input: null } }, 16);
   execution.publish({ kind: 'process', processSequence: 2, round: 1, process: { stage: 'execute', type: 'return', output: 2 } }, 20);
-  execution.publish({ kind: 'process', processSequence: 3, round: 1, process: { stage: 'receive', type: 'return', reuse: true } }, 21);
   execution.publish({ kind: 'finished', state: { status: 'succeeded', output: 2 } }, 22);
   runtime.publish({ kind: 'relation', relation, change: { kind: 'returned', result: { status: 'succeeded', output: 2 } } }, 23);
   runtime.publish({ kind: 'relation', relation, change: { kind: 'receiving' } }, 24);
   runtime.publish({ kind: 'relation', relation, change: { kind: 'accepted', output: 4 } }, 25);
   runtime.publish({ kind: 'process', processSequence: 2, round: 1, process: { stage: 'execute', type: 'return', output: 4 } }, 26);
-  runtime.publish({ kind: 'process', processSequence: 3, round: 1, process: { stage: 'receive', type: 'return', reuse: true } }, 27);
   runtime.publish({ kind: 'finished', state: { status: 'succeeded', output: 4 } }, 30);
   return { ...value, runtime, execution };
 }
@@ -108,11 +106,11 @@ test('record preset keeps R invocation, E timing and parent reception distinct',
   assert.equal(readOutput(snapshot.execution.value), 2);
   assert.deepEqual(
     snapshot.rootCall.value.processes.map((process) => process.sequence),
-    [1, 2, 3],
+    [1, 2],
   );
   assert.deepEqual(
     snapshot.rootCall.value.processes.map((process) => process.eventSequence),
-    [2, 7, 8],
+    [2, 7],
   );
   const appended = changes.take().filter((event) => event.change.kind === 'relation-appended');
   assert.equal(appended.length, 4);

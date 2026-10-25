@@ -29,18 +29,15 @@ test('Sequence binds declared output explicitly while final parent acceptance re
       const composition = new Sequence().step('source', {
         use: operation,
         input: () => null,
-        output: () => ({
-          receive(event) {
-            if (event.kind === 'delta') {
-              phases.push('delta');
-              work.output.emit(event.delta.toUpperCase());
-            }
-            if (event.kind === 'completed') phases.push('child-completed');
+        delta(value) {
+          phases.push('delta');
+          work.output.emit(value.toUpperCase());
+        },
+        result: {
+          succeeded(value) {
+            phases.push('parent-accept');
+            return value;
           },
-        }),
-        accept: (_scope, value) => {
-          phases.push('parent-accept');
-          return value;
         },
       });
       return (await composition.run(work.input, work.children)).source;
@@ -80,5 +77,5 @@ test('Sequence binds declared output explicitly while final parent acceptance re
     events.filter((event) => event.kind === 'delta').map((event) => event.delta),
     ['CHILD TEXT'],
   );
-  assert.deepEqual(phases, ['delta', 'child-completed', 'parent-accept']);
+  assert.deepEqual(phases, ['delta', 'parent-accept']);
 });
