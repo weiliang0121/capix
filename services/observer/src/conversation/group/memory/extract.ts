@@ -1,4 +1,4 @@
-import { MemoryResource } from '@capix/server-runtime/content';
+import { MemoryResource } from '@capix/memory';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ModelCallResources, type MemoryWriteResources } from '../../resources.js';
 import { checkpointPoint, childReference, type GroupWork, type ChildCall, type CheckpointFacts, type ChildFact } from '@capix/structure';

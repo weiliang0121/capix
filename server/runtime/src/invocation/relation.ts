@@ -3,7 +3,7 @@ import type { InvocationIdentity } from './identity.js';
 import type { ChildInvocationView } from './view.js';
 import type { InvocationOutputReceiver, RuntimeErrorValue } from '@capix/contracts';
 import type { InvocationRelationChange } from '../observation/facts.js';
-import { combineFaults } from '../observation/error.js';
+import { combineFaults } from '@capix/changes';
 import type { InvocationFailure } from './failure.js';
 import type { InvocationRelationView, InvocationView } from './view.js';
 import type { InvocationContext } from '../context/context.js';

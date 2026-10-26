@@ -1,4 +1,4 @@
-import { RuntimeError } from './error.js';
+import { RuntimeError } from '@capix/contracts';
 
 /** A required persistence port failed; an operation fallback cannot replace its missing fact. */
 export class PersistenceError extends RuntimeError {

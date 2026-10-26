@@ -1,5 +1,5 @@
 import type { FileReceipt, FileTask } from '@capix/protocol';
-import { type ProgressChannel } from '@capix/server-runtime';
+import { type ProgressChannel } from '@capix/changes';
 import { ResourceOffer, type ResourceEndpointActivity, type ResourceOperation, type ResourceRequest } from '@capix/resources';
 import { type OperationOptions, type OperationResult } from '@capix/resources/operation';
 import type { WorkspaceFiles } from './workspace.js';

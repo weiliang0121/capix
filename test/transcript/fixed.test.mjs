@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeBuffer, ProgressChannel } from '@capix/server-runtime';
-import { Transcript } from '@capix/server-runtime/content';
+import { ChangeBuffer, ProgressChannel } from '@capix/changes';
+import { Transcript } from '@capix/transcript';
 
 function request(transcript, content = 'fixed answer', position = 'answer-message') {
   return { contract: { key: 'transcript.append', version: 1 }, operation: { parentContextId: 'parent', childContextId: 'child', position }, transcriptId: transcript.id, messages: [{ role: 'assistant', content }] };

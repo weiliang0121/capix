@@ -1,7 +1,8 @@
-import { type Clock, type ChangeCapture } from '@capix/server-runtime';
+import { type Clock } from '@capix/server-runtime';
+import { type ChangeCapture } from '@capix/changes';
 import { RecordBook, Recorder, bindRecording, type RecordingInstallation } from '@capix/server-runtime/recording';
 import type { RecordChangeEvent, RecordingArchive } from '@capix/protocol';
-import type { ChangeConsumer } from '../../assembly/changes.js';
+import type { ChangeConsumer } from '@capix/observer-content';
 import type { SqliteObserverStore } from '../../persistence/store.js';
 import { RecordSource } from './source.js';
 

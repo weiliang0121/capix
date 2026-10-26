@@ -3,7 +3,8 @@ import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import { installCallable } from '../fixtures/driver.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Invocation, InvocationContext, InvocationCancelled, isInvocationCancelled, RuntimeError, Scene, Group, ExceptionContract } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationCancelled, isInvocationCancelled, Scene, Group, ExceptionContract } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
 import { ResourceOffer } from '@capix/resources';
 import { observeCall } from '../fixtures/observation.mjs';
 

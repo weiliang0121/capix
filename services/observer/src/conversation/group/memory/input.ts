@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FileReceipt, MemoryResultSource } from '@capix/protocol';
 import type { AnswerMessageContext } from '../../node/context/assemble.js';
-import type { Memory } from '@capix/server-runtime/content';
+import type { Memory } from '@capix/memory';
 
 export interface MemoryInput {
   readonly currentIndexes: readonly number[];

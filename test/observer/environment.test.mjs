@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ConversationContent, ObserverEnvironment, ObserverConversations, SqliteObserverStore, ModelInteractions, initializeObserver } from '@capix/observer-service';
+import { ConversationContent } from '@capix/observer-content';
+import { ObserverEnvironment, ObserverConversations, SqliteObserverStore, ModelInteractions, initializeObserver } from '@capix/observer-service';
 
 const provider = {
   invoke() {

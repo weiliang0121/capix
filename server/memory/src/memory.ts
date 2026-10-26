@@ -1,11 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { isNonBlankString } from '../value/string.js';
-import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
+import { isNonBlankString, isNonEmptyArray, hasUniqueItems, isObject } from './validation.js';
 import type { MemoryContent } from '@capix/protocol';
-import type { Transcript } from '../transcript/transcript.js';
+import type { Transcript } from '@capix/transcript';
 import { prepareMemoryResultSources } from './source.js';
 import type { MemoryState } from './persistence.js';
-import { isObject } from '../value/object.js';
 
 const contents = new WeakMap<Memory, { readonly id: string; content: MemoryContent }>();
 

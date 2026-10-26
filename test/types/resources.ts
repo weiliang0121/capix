@@ -1,4 +1,5 @@
-import { TranscriptResource, type NodeWork, type GroupWork, type SceneWork } from '@capix/server-runtime';
+import { TranscriptResource } from '@capix/transcript';
+import { type NodeWork, type GroupWork, type SceneWork } from '@capix/server-runtime';
 import { Resource, ResourceOffer, Resources as ResourceRegistry, type ResourceRequirements } from '@capix/resources';
 
 type Resources = { settings: { timeoutMs: number } };

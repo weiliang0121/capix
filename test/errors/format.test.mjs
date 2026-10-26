@@ -2,7 +2,8 @@ import { createInput, observeFixture } from '../fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
-import { RuntimeError, RuntimeErrorHelper, snapshotValue } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
+import { RuntimeErrorHelper, snapshotValue } from '@capix/server-runtime';
 
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 

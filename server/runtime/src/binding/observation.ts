@@ -2,7 +2,8 @@ import { InvocationResources } from '../invocation/resource-access.js';
 import type { ObservationDeclaration, ObservationDeclarationScope } from '../definition/observation.js';
 import { ResourceBinding, resourceRequests, type ResourceRequirements } from '@capix/resources';
 import type { InvocationFact, InvocationIdentity, InvocationDescription, DriverFact } from '../observation/facts.js';
-import type { EventConsumer, InvocationObserver, DriverObserver } from '../observation/observer.js';
+import type { EventConsumer } from '@capix/changes';
+import type { InvocationObserver, DriverObserver } from '../observation/observer.js';
 import { InvocationObservation } from '../observation/invocation.js';
 import { ObserverSession, publishSessions } from '../observation/session.js';
 

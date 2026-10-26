@@ -1,4 +1,4 @@
-import type { ProgressChannel } from '@capix/server-runtime';
+import type { ProgressChannel } from '@capix/changes';
 
 export type Purpose = 'selection' | 'understanding' | 'answer' | 'memory';
 export type ModelInitialization = ModelProvider | (() => ModelProvider);

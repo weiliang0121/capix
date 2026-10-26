@@ -1,5 +1,5 @@
-import { ProgressChannel } from '../progress.js';
-import { RuntimeError } from '../errors/error.js';
+import { ProgressChannel } from '@capix/changes';
+import { RuntimeError } from '@capix/contracts';
 import type { InvocationOutputEvent, InvocationOutputWriter, OutputDeclaration } from '@capix/contracts';
 
 /** One producer-owned segment. Delivery is passive and never controls its lifetime. */

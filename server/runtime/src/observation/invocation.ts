@@ -1,6 +1,7 @@
 import type { TranscriptEvent, MemoryEvent } from '@capix/protocol';
 import type { InvocationFact, ResourceObservation, BusinessObservation } from './facts.js';
-import type { EventConsumer, InvocationObserver } from './observer.js';
+import type { EventConsumer } from '@capix/changes';
+import type { InvocationObserver } from './observer.js';
 import type { ObservationInstallation } from '../binding/observation.js';
 import { type ObserverSession, publishSessions } from './session.js';
 

@@ -1,4 +1,6 @@
-import { RuntimeError, isObject, type ProgressChannel } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
+import { isObject } from '@capix/server-runtime';
+import { type ProgressChannel } from '@capix/changes';
 import type { ModelOutput, ModelTextDelta } from '../conversation/model/types.js';
 import { modelTextByteLimit } from '../conversation/model/stream.js';
 

@@ -1,31 +1,31 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { conversationTitle } from '../conversation/title.js';
-import { initialActiveContent } from '../conversation/content/active.js';
+import { initialActiveView } from '@capix/view';
 
 /** Local format migrations preserve existing content; unknown versions never create an empty conversation. */
 export function initializeSchema(database: DatabaseSync): void {
   const version = database.prepare('PRAGMA user_version').get()?.user_version;
   if (version === 6) return;
   if (version === 5) {
-    migrateActiveContent(database);
+    migrateActiveView(database);
     return;
   }
   if (version === 4) {
     migrateFixedEffects(database);
-    migrateActiveContent(database);
+    migrateActiveView(database);
     return;
   }
   if (version === 3) {
     migrateTranscriptAppends(database);
     migrateFixedEffects(database);
-    migrateActiveContent(database);
+    migrateActiveView(database);
     return;
   }
   if (version === 1 || version === 2) {
     migrateConversations(database, version === 1);
     migrateTranscriptAppends(database);
     migrateFixedEffects(database);
-    migrateActiveContent(database);
+    migrateActiveView(database);
     return;
   }
   if (version !== 0 || database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").get()) throw new Error('Unsupported Observer persistence schema');
@@ -78,10 +78,10 @@ export function initializeSchema(database: DatabaseSync): void {
   migrateConversations(database);
   migrateTranscriptAppends(database);
   migrateFixedEffects(database);
-  migrateActiveContent(database);
+  migrateActiveView(database);
 }
 
-function migrateActiveContent(database: DatabaseSync): void {
+function migrateActiveView(database: DatabaseSync): void {
   try {
     database.exec(`BEGIN IMMEDIATE;
       CREATE TABLE IF NOT EXISTS active_content (
@@ -97,7 +97,7 @@ function migrateActiveContent(database: DatabaseSync): void {
         .prepare('SELECT id FROM memories WHERE collection_id = ? ORDER BY ordinal')
         .all(row.memories_id!)
         .map((memory) => memory.id as string);
-      const state = initialActiveContent(row.transcript_id as string, row.memories_id as string, starts.at(-1)!, length, ids);
+      const state = initialActiveView(row.transcript_id as string, row.memories_id as string, starts.at(-1)!, length, ids);
       database.prepare('INSERT INTO active_content(transcript_id, memories_id, revision, body) VALUES (?, ?, ?, ?)').run(state.transcriptId, state.memoriesId, state.revision, JSON.stringify(state));
     }
     database.exec('PRAGMA user_version = 6; COMMIT;');

@@ -1,10 +1,10 @@
 import type { ModelSettings } from '@capix/protocol';
 import type { Group } from '@capix/structure';
-import type { ActiveContentSelection, ActiveContentSnapshot } from '../../content/active.js';
+import type { ActiveViewSelection, ActiveViewSnapshot } from '@capix/view';
 import type { AnswerMessageContext } from '../../node/context/assemble.js';
 
 export interface PreparedConversationContext {
-  readonly material: ActiveContentSnapshot;
+  readonly material: ActiveViewSnapshot;
   readonly context: AnswerMessageContext;
   readonly selection: { readonly historyIndexes: readonly number[] };
 }
@@ -14,11 +14,11 @@ export interface ContextMaintenanceRequest {
 }
 
 export interface ContextMaintenanceInput extends ContextMaintenanceRequest {
-  readonly material: ActiveContentSnapshot;
+  readonly material: ActiveViewSnapshot;
   readonly settings: Readonly<ModelSettings>;
 }
 
-export type ContextMaintenanceDecision = ActiveContentSelection;
+export type ContextMaintenanceDecision = ActiveViewSelection;
 export type ContextMaintenanceOperation = Group<ContextMaintenanceInput, ContextMaintenanceDecision, any, any>;
 export type ContextMaintenanceFunction = (input: ContextMaintenanceInput) => ContextMaintenanceDecision | Promise<ContextMaintenanceDecision>;
 /** A single maintenance boundary can consume a concrete, unowned policy structure. */

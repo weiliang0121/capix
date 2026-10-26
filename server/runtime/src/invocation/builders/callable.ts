@@ -3,7 +3,7 @@ import type { CallableKind, InvocationOutputReceiver } from '@capix/contracts';
 import { restoreCheckpointContinuation } from '../../checkpoint/continuation.js';
 import type { CheckpointRestoration } from '../../checkpoint/contract.js';
 import { prepareCheckpointRestoration } from '../../checkpoint/restoration.js';
-import type { ProgressReceiver } from '../../progress.js';
+import type { ProgressReceiver } from '@capix/changes';
 import type { InvocationProgress } from '../progress.js';
 import type { InvocationObservationDeclaration } from '../../binding/observation.js';
 import type { InvocationFact, InvocationDescription } from '../../observation/facts.js';

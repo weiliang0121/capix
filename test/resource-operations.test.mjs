@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { Resources, Runner, Scene, Node, ChangeCaptureError, InvocationCancelled, ExceptionContract } from '@capix/server-runtime';
+import { Resources, Runner, Scene, Node, InvocationCancelled, ExceptionContract } from '@capix/server-runtime';
+import { ChangeCaptureError } from '@capix/changes';
 import { Resource, ResourceOffer, ResourceBinding, Resources as ResourceRegistry } from '@capix/resources';
 
 function binding(offer, origin, overrides = {}) {

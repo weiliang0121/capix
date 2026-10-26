@@ -1,4 +1,4 @@
-import { RuntimeError } from '../errors/error.js';
+import { RuntimeError } from '@capix/contracts';
 import type { CheckpointImage, CheckpointDelivery, CheckpointHead, CheckpointChild, CheckpointReference } from './contract.js';
 import type { CheckpointValue } from '@capix/contracts';
 

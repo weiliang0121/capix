@@ -1,7 +1,7 @@
 import type { ObserverChange, InvocationEvent } from '@capix/protocol';
-import type { ChangeBuffer } from '@capix/server-runtime';
+import type { ChangeBuffer } from '@capix/changes';
 
-/** One environment owns the buffer drain; individual delivery sources only subscribe. */
+/** One Observer host owns the buffer drain; content and recording delivery sources only subscribe. */
 export class ChangeConsumer {
   readonly #listeners = new Set<(change: ObserverChange, position: number) => void>();
   readonly #invocationEvents = new Map<string, InvocationEvent>();

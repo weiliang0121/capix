@@ -1,6 +1,6 @@
 import { InvocationStopped } from '../invocation/stop.js';
 import { ObservationError } from '../observation/error.js';
-import { ChangeCaptureError } from '../changes/error.js';
+import { ChangeCaptureError } from '@capix/changes';
 import { PersistenceError } from '../errors/persistence.js';
 import { ResourceAccessClosed, ResourcePortError } from '@capix/resources';
 

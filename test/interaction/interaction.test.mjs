@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { getEventListeners } from 'node:events';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { Interaction, PersistenceError, RuntimeError } from '@capix/server-runtime';
+import { Interaction, PersistenceError } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
 
 const contract = {
   key: 'test:echo:v1',

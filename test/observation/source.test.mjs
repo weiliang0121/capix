@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeBuffer, Recorder, RecordBook, RecordingRootRecord } from '@capix/server-runtime';
-import { ChangeConsumer, RecordSource, SourceIncomplete, initializeObserver, ObservationFeed } from '@capix/observer-service';
+import { ChangeBuffer } from '@capix/changes';
+import { Recorder, RecordBook, RecordingRootRecord } from '@capix/server-runtime';
+import { ChangeConsumer } from '@capix/observer-content';
+import { RecordSource, SourceIncomplete, initializeObserver, ObservationFeed } from '@capix/observer-service';
 import { ClientRuntime, ObservationSequenceError } from '@capix/client-runtime';
 import { transport } from '../client/fixtures.mjs';
 

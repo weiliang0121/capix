@@ -1,5 +1,5 @@
 import type { ModelInteractions, ModelInteractionCreator, ModelInteractionRef, ModelInteractionResult, ModelInteractionExpectation } from './interactions.js';
-import { type ProgressReceiver } from '@capix/server-runtime';
+import { type ProgressReceiver } from '@capix/changes';
 import { ResourceOffer, type ResourceEndpointActivity } from '@capix/resources';
 import { type OperationOptions, type OperationResult } from '@capix/resources/operation';
 import type { ModelSettings } from '@capix/protocol';

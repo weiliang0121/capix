@@ -6,8 +6,8 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/reception-contract.ts', import.meta.url));
 const source = `
-import {Node, Group, defineNode, defineGroup, defineScene, reception} from '@capix/server-runtime';
-import type {NodeWork, CheckpointCodec, ChildCall, ChildContract, ChildFacts, ChildReference, CallableContract, CallableOutput, GroupWork, ReceptionDefinition, ReceptionValue} from '@capix/server-runtime';
+import { Node, Group, defineNode, defineGroup, defineScene, reception } from '@capix/server-runtime';
+import type { NodeWork, CheckpointCodec, ChildCall, ChildContract, ChildFacts, ChildReference, CallableContract, CallableOutput, GroupWork, ReceptionDefinition, ReceptionValue } from '@capix/server-runtime';
 import {z} from 'zod';
 
 declare function expectType<T>(value: T): void;

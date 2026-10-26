@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Memories, Transcript, Recorder, RecordBook, MemoryRecord, observeMemory, bindRecording, ChangeBuffer } from '@capix/server-runtime';
+import { Memories } from '@capix/memory';
+import { Transcript } from '@capix/transcript';
+import { Recorder, RecordBook, MemoryRecord, observeMemory, bindRecording } from '@capix/server-runtime';
+import { ChangeBuffer } from '@capix/changes';
 
 const create = (text) => ({ action: 'create', memoryId: null, change: 'create', sourceIndexes: [0], result: { topic: 'topic', content: text, sourceIndexes: [0] } });
 const update = (memory, text) => ({ ...create(text), action: 'update', memoryId: memory.id });

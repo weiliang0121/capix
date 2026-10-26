@@ -1,4 +1,4 @@
-import { TranscriptRangeReader } from '@capix/server-runtime/content';
+import { TranscriptRangeReader } from '@capix/transcript';
 
 /** Retain up to two consecutive user/assistant pairs immediately before this input. */
 export function segmentCandidates(range: TranscriptRangeReader): readonly TranscriptRangeReader[] {

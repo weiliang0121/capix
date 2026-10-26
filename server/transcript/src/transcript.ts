@@ -1,18 +1,18 @@
-import { publishFact, type ChangeProvenance } from '../changes/publish.js';
-import type { EventConsumer } from '../observation/observer.js';
+import { publishFact, type ChangeProvenance } from '@capix/changes';
+import type { EventConsumer } from '@capix/changes';
 import { randomUUID } from 'node:crypto';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
-import { isNonBlankString } from '../value/string.js';
-import { isObject } from '../value/object.js';
+import { isNonBlankString } from './validation.js';
+import { isObject } from './validation.js';
 import { MessageRef, TranscriptRangeRef } from './ref.js';
 import type { Message } from '@capix/protocol';
-import type { ChangeCapture } from '../changes/capture.js';
+import type { ChangeCapture } from '@capix/changes';
 import { createTranscriptEvent, type TranscriptEvent } from './event.js';
-import type { ProgressChannel } from '../progress.js';
+import type { ProgressChannel } from '@capix/changes';
 import type { TranscriptAppendProgress } from './progress.js';
 import type { TranscriptCommit, TranscriptPersistence, TranscriptState } from './persistence.js';
 import type { TranscriptAppendOperation, TranscriptAppendReceipt, TranscriptAppendState, TranscriptFixedAppend } from './append.js';
-import { RuntimeError } from '../errors/error.js';
+import { RuntimeError } from '@capix/contracts';
 
 export interface TranscriptOptions {
   observation?: EventConsumer<TranscriptEvent>;

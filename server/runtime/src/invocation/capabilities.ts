@@ -1,7 +1,7 @@
 import type { CheckpointInstallation } from '../checkpoint/contract.js';
 import type { Clock } from '../clock.js';
 import type { InvocationEvent } from '@capix/protocol';
-import type { ChangeCapture } from '../changes/capture.js';
+import type { ChangeCapture } from '@capix/changes';
 import type { ObservationInstallation } from '../binding/observation.js';
 
 /** Stable capabilities supplied at assembly, never threaded through business call arguments. */

@@ -3,9 +3,7 @@ import type { TranscriptEvent, MemoryEvent } from '@capix/protocol';
 
 import type { InvocationFact, ResourceObservation, DriverFact, BusinessObservation } from './facts.js';
 
-export interface EventConsumer<Event> {
-  publish(event: Event): unknown | undefined;
-}
+export type { EventConsumer } from '@capix/changes';
 
 /** A concrete installed capability may handle several typed sources without defining a carrier base. */
 export interface InvocationObserver {

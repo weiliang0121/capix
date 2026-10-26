@@ -1,10 +1,11 @@
-import { RuntimeError } from '@capix/server-runtime';
-import type { Memories, MemoryState, Transcript } from '@capix/server-runtime/content';
+import { RuntimeError } from '@capix/contracts';
+import type { Memories, MemoryState } from '@capix/memory';
+import type { Transcript } from '@capix/transcript';
 import type { Message } from '@capix/protocol';
 import { isEqual } from 'es-toolkit';
 
 /** Current membership belongs to the conversation's content; it has no independent identity. */
-export interface ActiveContentState {
+export interface ActiveViewState {
   readonly transcriptId: string;
   readonly memoriesId: string;
   readonly revision: number;
@@ -12,7 +13,7 @@ export interface ActiveContentState {
   readonly memoryIds: readonly string[];
 }
 
-export interface ActiveContentBasis {
+export interface ActiveViewBasis {
   readonly transcriptId: string;
   readonly memoriesId: string;
   readonly indexRevision: number;
@@ -21,25 +22,25 @@ export interface ActiveContentBasis {
 }
 
 /** Actual immutable values, not handles which could later read updated memory contents. */
-export interface ActiveContentSnapshot {
-  readonly basis: ActiveContentBasis;
+export interface ActiveViewSnapshot {
+  readonly basis: ActiveViewBasis;
   readonly messages: readonly { readonly index: number; readonly message: Readonly<Message> }[];
   readonly memories: readonly MemoryState[];
 }
 
-export interface ActiveContentSelection {
-  readonly basis: ActiveContentBasis;
+export interface ActiveViewSelection {
+  readonly basis: ActiveViewBasis;
   readonly messageIndexes: readonly number[];
   readonly memoryIds: readonly string[];
 }
 
-export interface ActiveContentPersistence {
-  commit(change: { readonly basis: ActiveContentBasis; readonly state: ActiveContentState }): undefined;
+export interface ActiveViewPersistence {
+  commit(change: { readonly basis: ActiveViewBasis; readonly state: ActiveViewState }): undefined;
 }
 
 /** A narrow mutable index over existing content. Source writes and index decisions remain separate facts. */
-export class ActiveContent {
-  #state: ActiveContentState;
+export class ActiveView {
+  #state: ActiveViewState;
   #messageCount: number;
   #memorySequence: number;
   readonly #knownMemories: Set<string>;
@@ -47,12 +48,12 @@ export class ActiveContent {
   constructor(
     private readonly transcript: Transcript,
     private readonly memories: Memories,
-    options: { readonly saved?: ActiveContentState; readonly persistence?: ActiveContentPersistence } = {},
+    options: { readonly saved?: ActiveViewState; readonly persistence?: ActiveViewPersistence } = {},
   ) {
     this.persistence = options.persistence;
-    this.#state = freezeActiveContent(
+    this.#state = freezeActiveView(
       options.saved ??
-        initialActiveContent(
+        initialActiveView(
           transcript.id,
           memories.id,
           transcript.activeStart,
@@ -67,7 +68,7 @@ export class ActiveContent {
     this.#knownMemories = new Set(memories.values().map((memory) => memory.id));
   }
 
-  private readonly persistence?: ActiveContentPersistence;
+  private readonly persistence?: ActiveViewPersistence;
 
   /** Required source capture calls this after the whole source mutation is installed. No observer is involved. */
   synchronize(): void {
@@ -80,13 +81,13 @@ export class ActiveContent {
             .values()
             .map((memory) => memory.id)
             .filter((id) => !this.#knownMemories.has(id));
-    this.#state = appendActiveContent(this.#state, messageIndexes, memoryIds);
+    this.#state = appendActiveView(this.#state, messageIndexes, memoryIds);
     this.#messageCount = this.transcript.length;
     this.#memorySequence = this.memories.sequence;
     for (const id of memoryIds) this.#knownMemories.add(id);
   }
 
-  capture(): ActiveContentSnapshot {
+  capture(): ActiveViewSnapshot {
     this.synchronize();
     return Object.freeze({
       basis: this.basis(),
@@ -107,12 +108,12 @@ export class ActiveContent {
     });
   }
 
-  apply(selection: ActiveContentSelection): ActiveContentSnapshot {
+  apply(selection: ActiveViewSelection): ActiveViewSnapshot {
     this.synchronize();
     if (!isEqual(selection.basis, this.basis())) throw new RuntimeError('ACTIVE_CONTENT_CONFLICT', '活跃材料依据已经变化，需要重新读取后再处理。');
     this.checkMembers(selection.messageIndexes, selection.memoryIds);
     if (isEqual(selection.messageIndexes, this.#state.messageIndexes) && isEqual(selection.memoryIds, this.#state.memoryIds)) return this.capture();
-    const state = freezeActiveContent({ transcriptId: this.transcript.id, memoriesId: this.memories.id, revision: nextRevision(this.#state.revision), messageIndexes: selection.messageIndexes, memoryIds: selection.memoryIds });
+    const state = freezeActiveView({ transcriptId: this.transcript.id, memoriesId: this.memories.id, revision: nextRevision(this.#state.revision), messageIndexes: selection.messageIndexes, memoryIds: selection.memoryIds });
     const result: unknown = this.persistence?.commit({ basis: selection.basis, state });
     if (result !== undefined) {
       void Promise.resolve(result).catch(() => undefined);
@@ -122,12 +123,12 @@ export class ActiveContent {
     return this.capture();
   }
 
-  exportState(): ActiveContentState {
+  exportState(): ActiveViewState {
     this.synchronize();
     return this.#state;
   }
 
-  private basis(): ActiveContentBasis {
+  private basis(): ActiveViewBasis {
     return Object.freeze({ transcriptId: this.transcript.id, memoriesId: this.memories.id, indexRevision: this.#state.revision, transcriptRevision: this.transcript.revision, memorySequence: this.memories.sequence });
   }
 
@@ -138,17 +139,17 @@ export class ActiveContent {
   }
 }
 
-export function initialActiveContent(transcriptId: string, memoriesId: string, start: number, end: number, memoryIds: readonly string[]): ActiveContentState {
-  return freezeActiveContent({ transcriptId, memoriesId, revision: 0, messageIndexes: Array.from({ length: end - start }, (_, offset) => start + offset), memoryIds });
+export function initialActiveView(transcriptId: string, memoriesId: string, start: number, end: number, memoryIds: readonly string[]): ActiveViewState {
+  return freezeActiveView({ transcriptId, memoriesId, revision: 0, messageIndexes: Array.from({ length: end - start }, (_, offset) => start + offset), memoryIds });
 }
 
 /** Source append/create participates in the source's persistence transaction. Existing exclusions stay excluded. */
-export function appendActiveContent(state: ActiveContentState, messageIndexes: readonly number[], memoryIds: readonly string[]): ActiveContentState {
+export function appendActiveView(state: ActiveViewState, messageIndexes: readonly number[], memoryIds: readonly string[]): ActiveViewState {
   if (!messageIndexes.length && !memoryIds.length) return state;
-  return freezeActiveContent({ ...state, revision: nextRevision(state.revision), messageIndexes: [...state.messageIndexes, ...messageIndexes], memoryIds: [...state.memoryIds, ...memoryIds] });
+  return freezeActiveView({ ...state, revision: nextRevision(state.revision), messageIndexes: [...state.messageIndexes, ...messageIndexes], memoryIds: [...state.memoryIds, ...memoryIds] });
 }
 
-export function freezeActiveContent(state: ActiveContentState): ActiveContentState {
+export function freezeActiveView(state: ActiveViewState): ActiveViewState {
   if (!state || typeof state.transcriptId !== 'string' || !state.transcriptId || typeof state.memoriesId !== 'string' || !state.memoriesId || !Number.isSafeInteger(state.revision) || state.revision < 0 || !Array.isArray(state.messageIndexes) || !Array.isArray(state.memoryIds)) throw new TypeError('Invalid active content index');
   if (new Set(state.messageIndexes).size !== state.messageIndexes.length || state.messageIndexes.some((index) => !Number.isSafeInteger(index) || index < 0) || new Set(state.memoryIds).size !== state.memoryIds.length || state.memoryIds.some((id) => typeof id !== 'string' || !id)) throw new TypeError('Invalid active content members');
   return Object.freeze({ transcriptId: state.transcriptId, memoriesId: state.memoriesId, revision: state.revision, messageIndexes: Object.freeze([...state.messageIndexes]), memoryIds: Object.freeze([...state.memoryIds]) });

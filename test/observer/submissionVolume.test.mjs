@@ -1,10 +1,12 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
-import { ActiveContent } from '@capix/observer-service';
+import { ActiveView } from '@capix/view';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 import { ConversationSubmission, createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service';
-import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
+import { MessageUsage } from '@capix/measurement';
 import { ClientSubmission } from '@capix/client-runtime';
 
 const tick = () => new Promise((resolve) => queueMicrotask(resolve));
@@ -110,7 +112,7 @@ test('full declared streaming chain stays within a wire budget and client recons
   const transcript = new Transcript();
   const memories = new Memories(transcript);
 
-  const runner = createConversationRunner(createConversationStructure(), { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() }, interactions);
+  const runner = createConversationRunner(createConversationStructure(), { transcript, memories, active: new ActiveView(transcript, memories), messageUsage: new MessageUsage() }, interactions);
   const client = new ClientSubmission('volume-conversation', { messages: [{ role: 'user', content: '模拟问题' }] });
   const submission = new ConversationSubmission(client.id, client.conversationId, { admission: () => ({ conversationId: client.conversationId, transcriptId: transcript.id, status: runner.isRunning ? 'busy' : 'ready' }) });
   const frames = [];

@@ -1,11 +1,15 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
-import { ModelInteractions, ModelSource, ActiveContent } from '@capix/observer-service';
+import { ModelInteractions, ModelSource } from '@capix/observer-service';
+import { ActiveView } from '@capix/view';
 import { readOutput } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, createConversationStructure } from '@capix/observer-service';
 
-import { observeMemory, Memories, Memory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, Transcript, SelectionUsage, bindRecording } from '@capix/server-runtime';
+import { observeMemory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, bindRecording } from '@capix/server-runtime';
+import { Memories, Memory } from '@capix/memory';
+import { Transcript } from '@capix/transcript';
+import { MessageUsage } from '@capix/measurement';
 
 const settings = { model: 'test', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'test', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -200,7 +204,7 @@ test('recording observes the actual changed fact; registration failure propagate
 
   const runner = createConversationRunner(
     createConversationStructure(),
-    { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
+    { transcript, memories, active: new ActiveView(transcript, memories), messageUsage: new MessageUsage() },
     new ModelInteractions(
       new ModelSource({
         async invoke(_request, purpose) {

@@ -1,5 +1,6 @@
-import { RuntimeError, isObject, isNonEmptyArray, isNonBlankString } from '@capix/server-runtime';
-import { type Transcript } from '@capix/server-runtime/content';
+import { RuntimeError } from '@capix/contracts';
+import { isObject, isNonEmptyArray, isNonBlankString } from '@capix/server-runtime';
+import { type Transcript } from '@capix/transcript';
 
 import type { Message, FileTask } from '@capix/protocol';
 import { isRelativeFilePath } from '../files/index.js';

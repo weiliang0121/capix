@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:server/changes
       '@capix/client-http':
         specifier: workspace:*
         version: link:client/http
@@ -17,6 +20,15 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:contracts
+      '@capix/measurement':
+        specifier: workspace:*
+        version: link:server/measurement
+      '@capix/memory':
+        specifier: workspace:*
+        version: link:server/memory
+      '@capix/observer-content':
+        specifier: workspace:*
+        version: link:services/observer-content
       '@capix/observer-service':
         specifier: workspace:*
         version: link:services/observer
@@ -32,6 +44,12 @@ importers:
       '@capix/structure':
         specifier: workspace:*
         version: link:server/structure
+      '@capix/transcript':
+        specifier: workspace:*
+        version: link:server/transcript
+      '@capix/view':
+        specifier: workspace:*
+        version: link:server/view
       '@types/node':
         specifier: 22.19.11
         version: 22.19.11
@@ -144,6 +162,48 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  server/changes:
+    dependencies:
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+
+  server/measurement:
+    dependencies:
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      '@capix/resources':
+        specifier: workspace:*
+        version: link:../resources
+
+  server/memory:
+    dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../changes
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      '@capix/resources':
+        specifier: workspace:*
+        version: link:../resources
+      '@capix/transcript':
+        specifier: workspace:*
+        version: link:../transcript
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+
   server/resources:
     dependencies:
       '@capix/contracts':
@@ -155,9 +215,15 @@ importers:
 
   server/runtime:
     dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../changes
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@capix/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
@@ -180,8 +246,62 @@ importers:
         specifier: workspace:*
         version: link:../resources
 
+  server/transcript:
+    dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../changes
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      '@capix/resources':
+        specifier: workspace:*
+        version: link:../resources
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+
+  server/view:
+    dependencies:
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/memory':
+        specifier: workspace:*
+        version: link:../memory
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      '@capix/resources':
+        specifier: workspace:*
+        version: link:../resources
+      '@capix/transcript':
+        specifier: workspace:*
+        version: link:../transcript
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+
   services/observer:
     dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../../server/changes
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/measurement':
+        specifier: workspace:*
+        version: link:../../server/measurement
+      '@capix/memory':
+        specifier: workspace:*
+        version: link:../../server/memory
+      '@capix/observer-content':
+        specifier: workspace:*
+        version: link:../observer-content
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
@@ -194,12 +314,39 @@ importers:
       '@capix/structure':
         specifier: workspace:*
         version: link:../../server/structure
+      '@capix/transcript':
+        specifier: workspace:*
+        version: link:../../server/transcript
+      '@capix/view':
+        specifier: workspace:*
+        version: link:../../server/view
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
       zod:
         specifier: 4.6.5
         version: 4.6.5
+
+  services/observer-content:
+    dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../../server/changes
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/memory':
+        specifier: workspace:*
+        version: link:../../server/memory
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      '@capix/transcript':
+        specifier: workspace:*
+        version: link:../../server/transcript
+      '@capix/view':
+        specifier: workspace:*
+        version: link:../../server/view
 
 packages:
 

@@ -3,7 +3,10 @@ import { invocationResourceFailures } from '@capix/server-runtime/construction';
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, InvocationCancelled, RuntimeError, ProgressChannel, Transcript, TranscriptResource, Group, Node, bindCallSource } from '@capix/server-runtime';
+import { Invocation, InvocationContext, InvocationCancelled, Group, Node, bindCallSource } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
+import { ProgressChannel } from '@capix/changes';
+import { Transcript, TranscriptResource } from '@capix/transcript';
 
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 

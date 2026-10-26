@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ProgressChannel, Resources, Runner } from '@capix/server-runtime';
-import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
+import { ProgressChannel } from '@capix/changes';
+import { Resources, Runner } from '@capix/server-runtime';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
+import { MessageUsage } from '@capix/measurement';
 import { initializeObserver } from '@capix/observer-service/assembly';
-import { ActiveContent, createConversationStructure, ModelInteractions, ModelSource, registerConversationResources, ConversationCallCapture, conversationCallHooks } from '@capix/observer-service/conversation';
+import { ActiveView } from '@capix/view';
+import { createConversationStructure, ModelInteractions, ModelSource, registerConversationResources, ConversationCallCapture, conversationCallHooks } from '@capix/observer-service/conversation';
 
 const settings = () => ({ model: 'initial-model', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 });
 const input = (content) => ({ messages: [{ role: 'user', content }] });
@@ -121,8 +125,8 @@ test('Observer Runner keeps progress, preview and necessary registration attache
 test('conversation registration fixes entity identities without freezing the caller assembly bag', async (t) => {
   const original = new Transcript();
   const memories = new Memories(original);
-  const active = new ActiveContent(original, memories);
-  const entities = { transcript: original, memories, active, selectionUsage: new SelectionUsage() };
+  const active = new ActiveView(original, memories);
+  const entities = { transcript: original, memories, active, messageUsage: new MessageUsage() };
   const model = new ModelInteractions(
     new ModelSource({
       async invoke(request, purpose) {
@@ -141,7 +145,7 @@ test('conversation registration fixes entity identities without freezing the cal
   const replacement = new Transcript();
   entities.transcript = replacement;
   entities.memories = new Memories(replacement);
-  entities.active = new ActiveContent(replacement, entities.memories);
+  entities.active = new ActiveView(replacement, entities.memories);
   assert.equal(Object.isFrozen(entities), false);
 
   const result = await runner.run(input('accepted into original world'), { settings: settings() });
@@ -157,7 +161,7 @@ test('conversation registration fixes entity identities without freezing the cal
 test('separate resource and call registration rejects mixed conversation ownership before installing supply', () => {
   const transcript = new Transcript([{ role: 'user', content: 'same input' }]);
   const memories = new Memories(transcript);
-  const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() };
+  const entities = { transcript, memories, active: new ActiveView(transcript, memories), messageUsage: new MessageUsage() };
   const structure = createConversationStructure();
   const capture = new ConversationCallCapture(structure.scene, entities);
   const other = createConversationStructure();
@@ -172,7 +176,7 @@ test('separate resource and call registration rejects mixed conversation ownersh
   try {
     assert.throws(() => registerConversationResources(resources, other, entities, model, capture), /another scene/);
     assert.throws(() => conversationCallHooks(other, capture), /another scene/);
-    for (const key of ['transcript', 'memories', 'active', 'selectionUsage', 'files']) {
+    for (const key of ['transcript', 'memories', 'active', 'messageUsage', 'files']) {
       assert.throws(() => registerConversationResources(resources, structure, { ...entities, [key]: {} }, model, capture), new RegExp(`different ${key} entity`));
     }
     assert.equal(resources.snapshot(structure.scene).registrations.length, 0);

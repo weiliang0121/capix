@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { WorkspaceFiles, FileAccessException, FileResources, isRelativeFilePath } from '@capix/observer-service/assembly';
-import { ProgressChannel, InvocationCancelled, Resources, Node, Scene, Runner } from '@capix/server-runtime';
+import { ProgressChannel } from '@capix/changes';
+import { InvocationCancelled, Resources, Node, Scene, Runner } from '@capix/server-runtime';
 import { Resource } from '@capix/resources';
 
 async function workspace(t, options = {}) {

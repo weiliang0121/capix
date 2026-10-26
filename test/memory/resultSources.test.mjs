@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Memories, Transcript, Recorder, RecordBook, MemoryRecord, observeMemory, bindRecording, ChangeBuffer } from '@capix/server-runtime';
+import { Memories } from '@capix/memory';
+import { Transcript } from '@capix/transcript';
+import { Recorder, RecordBook, MemoryRecord, observeMemory, bindRecording } from '@capix/server-runtime';
+import { ChangeBuffer } from '@capix/changes';
 
 const source = () => ({ id: 'creation-1', kind: 'file-created', answerIndex: 1, receipt: { path: 'answer.md', bytes: 12, digest: 'a'.repeat(64) } });
 const create = (receipt = source()) => ({ action: 'create', memoryId: null, change: '保存结果已接纳', sourceIndexes: [0], sourceResults: [receipt], result: { topic: '文件处理', content: '曾创建 answer.md。', sourceIndexes: [0, 1], sourceResults: [receipt] } });

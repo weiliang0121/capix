@@ -1,6 +1,7 @@
-import type { InvocationProgress, ProgressChannel, ProgressReceiver } from '@capix/server-runtime';
+import type { InvocationProgress } from '@capix/server-runtime';
+import type { ProgressChannel, ProgressReceiver } from '@capix/changes';
 import type { InvocationOutputReceiver } from '@capix/structure';
-import type { TranscriptAppendProgress } from '@capix/server-runtime/content';
+import type { TranscriptAppendProgress } from '@capix/transcript';
 import type { ConversationTask, GenerationOutput } from '@capix/protocol';
 import type { FileProgress } from '../../files/index.js';
 import type { ConversationProgress } from '../progress.js';

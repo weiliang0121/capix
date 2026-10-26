@@ -4,8 +4,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { ChangeBuffer } from '@capix/server-runtime';
-import { Transcript, Memories } from '@capix/server-runtime/content';
+import { ChangeBuffer } from '@capix/changes';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
 import { SqliteObserverStore } from '@capix/observer-service';
 
 function fixture(t) {

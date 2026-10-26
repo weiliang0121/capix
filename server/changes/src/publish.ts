@@ -1,7 +1,7 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import type { InvocationOrigin } from '@capix/protocol';
-import type { EventConsumer } from '../observation/observer.js';
-import { combineFaults } from '../observation/error.js';
+import type { EventConsumer } from './consumer.js';
+import { combineFaults } from './error.js';
 import type { ChangeCapture } from './capture.js';
 import { ChangeCaptureError } from './error.js';
 /** The producer calls this only after the represented change is formally applied. */

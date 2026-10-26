@@ -1,5 +1,5 @@
 import type { Message, FileTask } from '@capix/protocol';
-import type { Memory } from '@capix/server-runtime/content';
+import type { Memory } from '@capix/memory';
 import type { AnswerMessageContext } from '../../node/context/assemble.js';
 import { activeHistorySchema } from '../checkpoint.js';
 

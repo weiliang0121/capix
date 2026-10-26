@@ -1,5 +1,5 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
-import { ActiveContent } from '@capix/observer-service';
+import { ActiveView } from '@capix/view';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -7,8 +7,10 @@ import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createConversationStructure, ConversationSubmission, WorkspaceFiles } from '@capix/observer-service';
-import { ProgressChannel } from '@capix/server-runtime';
-import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
+import { ProgressChannel } from '@capix/changes';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
+import { MessageUsage } from '@capix/measurement';
 import { Recorder, RecordBook, bindRecording } from '@capix/server-runtime/recording';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -47,7 +49,7 @@ async function fixture(t, { recorded = true, answers = [answer], memoryFailure =
   const recording = recorder ? bindRecording(recorder, { failure: recordingFailure }) : undefined;
   const transcript = new Transcript([], { observation: recording?.transcript });
   const memories = new Memories(transcript, { observation: recording?.memory });
-  const entities = { transcript, memories, active: new ActiveContent(transcript, memories), files, selectionUsage: new SelectionUsage() };
+  const entities = { transcript, memories, active: new ActiveView(transcript, memories), files, messageUsage: new MessageUsage() };
   const definition = createConversationStructure({ files: true });
 
   const runner = createConversationRunner(definition, entities, new ModelInteractions(new ModelSource(provider)), { observations: recording ? [recording] : undefined });
@@ -165,7 +167,7 @@ test('disabled file capability rejects before accepting input', async () => {
 
   const runner = createConversationRunner(
     createConversationStructure(),
-    { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
+    { transcript, memories, active: new ActiveView(transcript, memories), messageUsage: new MessageUsage() },
     new ModelInteractions(
       new ModelSource(() => {
         throw new Error('must not initialize provider');
@@ -231,7 +233,7 @@ test('declared file support requires the bound workspace entity', () => {
     () =>
       createConversationRunner(
         createConversationStructure({ files: true }),
-        { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() },
+        { transcript, memories, active: new ActiveView(transcript, memories), messageUsage: new MessageUsage() },
         new ModelInteractions(
           new ModelSource(() => {
             throw new Error('unused');

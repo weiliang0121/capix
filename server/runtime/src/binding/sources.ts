@@ -3,7 +3,7 @@ import type { ChildCallable } from '@capix/structure';
 import type { InvocationOutputReceiver, CallableInput } from '@capix/contracts';
 import type { ResourceProvider } from '@capix/resources';
 import { ResourceSupply, checkResourceProviders, resourceRequests } from '@capix/resources';
-import type { ProgressReceiver } from '../progress.js';
+import type { ProgressReceiver } from '@capix/changes';
 import type { InvocationProgress } from '../invocation/progress.js';
 import type { CallableInvocationStarted } from '../invocation/builders/callable.js';
 import type { AnyCallable, ResolvedCallable } from './declarations.js';

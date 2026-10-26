@@ -1,6 +1,6 @@
 import type { BuiltCallable, CallableInput, Group, GroupWork } from '@capix/server-runtime';
 import { CallableBuilder, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationOptions, type CallableSourceBinding } from '@capix/server-runtime/construction';
-import { Transcript } from '@capix/server-runtime/content';
+import { Transcript } from '@capix/transcript';
 import type { ResourceRecord as ResourceRecordEntity } from '@capix/server-runtime/recording';
 import type { ResourceRecord, ExecutionRecordSnapshot } from '@capix/protocol/recording';
 import type { ConversationRequest } from '@capix/protocol/conversation';
@@ -9,14 +9,15 @@ import type { TranscriptSnapshot } from '@capix/protocol/content';
 import type { ObserverChange } from '@capix/protocol/observer';
 import type { MemoryInput } from '@capix/observer-service/conversation';
 import { defineGroup, defineScene } from '@capix/server-runtime';
-import { ActiveContentResource, MaintainConversationContent, PrepareConversationContext, type ContextMaintenanceInput, type ContextMaintenanceDecision, type ContextMaintenancePolicy } from '@capix/observer-service/conversation';
+import { ActiveViewResource } from '@capix/view';
+import { MaintainConversationContent, PrepareConversationContext, type ContextMaintenanceInput, type ContextMaintenanceDecision, type ContextMaintenancePolicy } from '@capix/observer-service/conversation';
 
 const maintenancePolicy = defineGroup<ContextMaintenanceInput, ContextMaintenanceDecision>()({
   name: 'explicit-policy',
   label: 'Explicit policy',
   source: 'test',
   members: [],
-  deps: { active: ActiveContentResource.read.request() },
+  deps: { active: ActiveViewResource.read.request() },
   run(work) {
     const current = work.resources.active.capture();
     const phase: 'before-request' | 'after-content' = work.input.phase;

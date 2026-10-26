@@ -1,5 +1,5 @@
 import { isEqual } from 'es-toolkit';
-import { RuntimeError } from '../errors/error.js';
+import { RuntimeError } from '@capix/contracts';
 import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery } from './contract.js';
 import { cloneCheckpointImage, cloneCheckpointDelivery } from './value.js';
 

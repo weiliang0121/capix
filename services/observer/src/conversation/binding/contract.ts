@@ -1,11 +1,14 @@
-import type { Runner, InvocationControls, CallableInvocationCallbacks, CheckpointStore, ProgressChannel, InvocationProgress } from '@capix/server-runtime';
-import type { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
+import type { Runner, InvocationControls, CallableInvocationCallbacks, CheckpointStore, InvocationProgress } from '@capix/server-runtime';
+import type { ProgressChannel } from '@capix/changes';
+import type { Transcript } from '@capix/transcript';
+import type { Memories } from '@capix/memory';
+import type { MessageUsage } from '@capix/measurement';
 import type { ModelSettings, GenerationOutput } from '@capix/protocol';
 import type { ConversationScene } from '../scene.js';
 import type { ConversationProgress } from '../progress.js';
 import type { AcceptedConversationInput } from '../accept.js';
 import type { WorkspaceFiles, FileProgress } from '../../files/index.js';
-import type { ActiveContent } from '../content/active.js';
+import type { ActiveView } from '@capix/view';
 import type { AnswerProgress } from '../group/answer/stream.js';
 import type { ConversationCheckpointRun, ConversationCheckpointRuns } from '../checkpoints.js';
 
@@ -23,10 +26,10 @@ export interface ConversationRunOptions extends InvocationControls {
 }
 
 export interface ConversationEntities {
-  active: ActiveContent;
+  active: ActiveView;
   transcript: Transcript;
   memories: Memories;
-  selectionUsage: SelectionUsage;
+  messageUsage: MessageUsage;
   files?: WorkspaceFiles;
 }
 

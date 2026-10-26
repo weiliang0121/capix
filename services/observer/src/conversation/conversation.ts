@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RuntimeError } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
 import { Group, reception, checkpointPoint, childReference, type GroupWork, type ResumeWork, type ChildContract, type ChildrenOf, type ChildCall, type ChildFact, type CheckpointFacts, type InvocationCheckpointPoint } from '@capix/structure';
 import { isEqual } from 'es-toolkit';
 import type { GenerationOutput, ConversationTask } from '@capix/protocol';
@@ -217,7 +217,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
     const prepared = await child.invoke({
       result: {
         succeeded: (delivered) => {
-          work.resources.selectionUsage.add(delivered.context.selectedMessages);
+          work.resources.messageUsage.add(delivered.context.selectedMessages);
           return delivered;
         },
       },

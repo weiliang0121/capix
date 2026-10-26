@@ -4,27 +4,30 @@ Observer 使用 `Scene + Resources + Runner`。先独立定义和持有实体，
 
 ## 从哪里开始阅读
 
-| 入口                                 | 职责                                                            |
-| ------------------------------------ | --------------------------------------------------------------- |
-| `conversation/structure.ts`          | 创建并组合业务结构，保留资源范围和调用 hooks 需要的准确结构引用 |
-| `conversation/scene.ts`              | Scene 本身的输入接纳、子调用和恢复点                            |
-| `conversation/binding.ts`            | 只登记资源、按次捕获范围和路径收窄；返回 `void`                 |
-| `conversation/binding/capture.ts`    | 关联本次模型配置、正式输入位置和 CP 登记依据                    |
-| `conversation/binding/calls.ts`      | 为准确结构登记必要的 started 回调、活动进展和回答输出           |
-| `assembly/content.ts`                | 加载或借用内容，持有实体、活跃索引和消息同步                    |
-| `observation/record/installation.ts` | 记录历史、当前记录安装、来源及持久记录会话的完整生命周期        |
-| `assembly/initialize.ts`             | 建立上述对象，显式配置 Runner，完整成功后交给环境；失败清理     |
-| `assembly/environment.ts`            | 持有已装配对象，提供恢复及关闭；不再重复保存记录安装内部状态    |
-| `assembly/conversations.ts`          | 对话目录、共享实体与按对话加载／缓存                            |
+| 入口                                 | 职责                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| `conversation/structure.ts`          | 创建并组合业务结构，保留资源范围和调用 hooks 需要的准确结构引用                      |
+| `conversation/scene.ts`              | Scene 本身的输入接纳、子调用和恢复点                                                 |
+| `conversation/binding.ts`            | 只登记资源、按次捕获范围和路径收窄；返回 `void`                                      |
+| `conversation/binding/capture.ts`    | 关联本次模型配置、正式输入位置和 CP 登记依据                                         |
+| `conversation/binding/calls.ts`      | 为准确结构登记必要的 started 回调、活动进展和回答输出                                |
+| `assembly/content.ts`                | `loadConversationContent` 按已提供的存储加载、初始化和校验内容，再创建或借用内容组合 |
+| `@capix/observer-content`            | `ConversationContent` 持有实体、活跃索引、内容观察安装与消息同步                     |
+| `observation/record/installation.ts` | 记录历史、当前记录安装、来源及持久记录会话的完整生命周期                             |
+| `assembly/initialize.ts`             | 建立上述对象，显式配置 Runner，完整成功后交给环境；失败清理                          |
+| `assembly/environment.ts`            | 持有已装配对象，提供恢复及关闭；不再重复保存记录安装内部状态                         |
+| `assembly/conversations.ts`          | 对话目录、共享实体与按对话加载／缓存                                                 |
 
 这里没有新增通用装配容器。`ConversationCallCapture` 是服务所需的按次关联，不是内核 Source；它不选择资源、不发送模型请求。`ObserverRecording` 则有真实的安装和关闭生命周期，持有 Recorder、RecordSource 与持久会话，正常关闭和安装失败分别处理。消费端通过 `environment.records.book/source/installation/archives` 访问，不再在环境上保留同义的展开入口。
+
+内容实体从 `@capix/transcript`、`@capix/memory`、`@capix/view` 与 `@capix/measurement` 导入。`@capix/observer-content` 组合内容及同步，只消费宿主提供的窄持久端口，不依赖 Runtime、Observer 服务或 SQLite。内容加载、初始化及借用身份校验仍留在 `assembly/content.ts`；分包不改变环境借用内容、宿主持有内容的关闭关系。具体边界见 [内容实体与独立包](content-entities-packages.md)。
 
 ## 装配主线
 
 ```ts
 const structure = createConversationStructure(configuration);
 const resources = new Resources<ConversationRunOptions>();
-const entities = { transcript, memories, active, selectionUsage, files };
+const entities = { transcript, memories, active, messageUsage, files };
 
 // 服务的输入／恢复依据关联，明确建立一次。
 const capture = new ConversationCallCapture(structure.scene, entities, {
@@ -80,8 +83,8 @@ sequenceDiagram
 
 ```ts
 const active = new Resource(entities.active);
-resources.register(active, ActiveContentResource.read);
-resources.register(active, ActiveContentResource.manage);
+resources.register(active, ActiveViewResource.read);
+resources.register(active, ActiveViewResource.manage);
 ```
 
 Resource 不取得实体关闭所有权。不同 offer 表达不同访问契约；注册不会让所有节点自动获得全部方法，Work 仍由阶段 `deps` 决定。
@@ -135,16 +138,16 @@ Runner 固定本次 options 顶层；根校验再固定模型配置。本次模�
 
 ## 所有权与关闭
 
-| 对象                                        | 建立与持有                                    | 关闭                                       |
-| ------------------------------------------- | --------------------------------------------- | ------------------------------------------ |
-| ModelSource / Provider                      | 宿主共享，发送请求时才兑现 Provider           | 单环境不销毁                               |
-| SQLite / WorkspaceFiles                     | 宿主建立，可由多对话共享                      | 宿主负责                                   |
-| Transcript / Memories / ActiveContent       | ConversationContent 持有                      | 内容所有者负责；活跃索引没有独立生命周期   |
-| Scene / Resources / Runner / SelectionUsage | 环境建立并复用                                | 不持有本次运行状态，也不关闭借用实体       |
-| ModelInteractions                           | 环境建立                                      | 等独立交互结束才能关闭                     |
-| ObserverRecording                           | 环境建立；持有记录安装、来源、历史            | 正常 seal/close；安装失败 abort/invalidate |
-| CP 观测                                     | 环境建立                                      | 环境关闭                                   |
-| ConversationCallCapture                     | 装配建立；WeakMap 按固定 options 关联每次依据 | 不存全局 current，不持有实体关闭权         |
+| 对象                                      | 建立与持有                                            | 关闭                                       |
+| ----------------------------------------- | ----------------------------------------------------- | ------------------------------------------ |
+| ModelSource / Provider                    | 宿主共享，发送请求时才兑现 Provider                   | 单环境不销毁                               |
+| SQLite / WorkspaceFiles                   | 宿主建立，可由多对话共享                              | 宿主负责                                   |
+| Transcript / Memories / ActiveView        | `@capix/observer-content` 的 ConversationContent 持有 | 内容所有者负责；活跃索引没有独立生命周期   |
+| Scene / Resources / Runner / MessageUsage | 环境建立并复用                                        | 不持有本次运行状态，也不关闭借用实体       |
+| ModelInteractions                         | 环境建立                                              | 等独立交互结束才能关闭                     |
+| ObserverRecording                         | 环境建立；持有记录安装、来源、历史                    | 正常 seal/close；安装失败 abort/invalidate |
+| CP 观测                                   | 环境建立                                              | 环境关闭                                   |
+| ConversationCallCapture                   | 装配建立；WeakMap 按固定 options 关联每次依据         | 不存全局 current，不持有实体关闭权         |
 
 初始化失败逐项清理本次记录、观察、交互和自有内容；借用内容及外部数据库保留。清理故障与原错误一起报告。记录历史逻辑损坏只让观测来源失效；真实数据库故障不能退化到内存运行。
 

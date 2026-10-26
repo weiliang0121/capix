@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ObserverConversations, SqliteObserverStore, initializeObserver } from '@capix/observer-service';
-import { ChangeConsumer } from '@capix/observer-service/assembly';
-import { Memories } from '@capix/server-runtime/content';
+import { ChangeConsumer } from '@capix/observer-content';
+import { Memories } from '@capix/memory';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
 const provider = {

@@ -1,10 +1,14 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
-import { ActiveContent } from '@capix/observer-service';
+import { ActiveView } from '@capix/view';
 import { ModelInteractions, ModelSource, modelRegenerationInput, modelOutputRejected } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationStructure } from '@capix/observer-service';
-import { RuntimeError, CallableRecord, InvocationRecord, Recorder, RecordBook, bindRecording, Transcript, Memories, SelectionUsage } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
+import { CallableRecord, InvocationRecord, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
+import { MessageUsage } from '@capix/measurement';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const answer = { kind: 'answer', content: '修正后的回答' };
@@ -29,7 +33,7 @@ function fixture(answers, { recorded = true, signal, configuration = settings, o
   const recording = recorder ? bindRecording(recorder, { failure: recordingFailure }) : undefined;
   const transcript = new Transcript([], { observation: recording?.transcript });
   const memories = new Memories(transcript, { observation: recording?.memory });
-  const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() };
+  const entities = { transcript, memories, active: new ActiveView(transcript, memories), messageUsage: new MessageUsage() };
   const definition = createConversationStructure();
   configureDefinition?.(definition);
 

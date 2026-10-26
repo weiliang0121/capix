@@ -1,7 +1,7 @@
 import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/structure';
 import { isEqual } from 'es-toolkit';
-import { ActiveContentResource, type ActiveContentReader } from '../../content/resource.js';
-import type { ActiveContentSnapshot } from '../../content/active.js';
+import { ActiveViewResource, type ActiveViewReader } from '@capix/view';
+import type { ActiveViewSnapshot } from '@capix/view';
 import type { AcceptedConversationInput } from '../../accept.js';
 import { acceptedCheckpointInput } from '../../checkpoint.js';
 import { emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
@@ -11,14 +11,14 @@ export type { PreparedConversationContext } from './types.js';
 import type { MaintainConversationContent } from './maintain.js';
 
 interface PreparationResources {
-  readonly activeContent: ActiveContentReader;
+  readonly activeView: ActiveViewReader;
 }
 
 type PreparationWork = GroupWork<AcceptedConversationInput, PreparedConversationContext, PreparationResources>;
 
 /** Capture current material after optional maintenance; creation of E does not fix these values. */
 export class PrepareConversationContext extends Group<AcceptedConversationInput, PreparedConversationContext, PreparationResources> {
-  static readonly deps = Object.freeze({ activeContent: ActiveContentResource.read.request() });
+  static readonly deps = Object.freeze({ activeView: ActiveViewResource.read.request() });
 
   readonly waiting;
   readonly completed;
@@ -78,13 +78,13 @@ export class PrepareConversationContext extends Group<AcceptedConversationInput,
   }
 
   private capture(work: PreparationWork): PreparedConversationContext {
-    const output = prepareMaterial(work.input, work.resources.activeContent.capture());
+    const output = prepareMaterial(work.input, work.resources.activeView.capture());
     work.checkpoint?.({ point: this.completed, state: output, refs: {} });
     return output;
   }
 }
 
-function prepareMaterial(input: AcceptedConversationInput, material: ActiveContentSnapshot): PreparedConversationContext {
+function prepareMaterial(input: AcceptedConversationInput, material: ActiveViewSnapshot): PreparedConversationContext {
   const selectedMessages = Object.freeze(material.messages.filter((item) => item.index !== input.messageIndex));
   return Object.freeze({ material, context: Object.freeze({ message: input.message, selectedMessages }), selection: Object.freeze({ historyIndexes: Object.freeze(selectedMessages.map((item) => item.index)) }) });
 }

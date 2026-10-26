@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Scene, Group, Node, Resources, Runner, MemoryCheckpointStore, checkpointPoint, childReference, ExceptionContract } from '@capix/server-runtime';
 import { ResourceOffer } from '@capix/resources';
-import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
+import { Transcript, TranscriptResource } from '@capix/transcript';
 
 const codec = { encode: structuredClone, decode: structuredClone };
 

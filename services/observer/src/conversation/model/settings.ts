@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ModelSettings } from '@capix/protocol';
-import { RuntimeError } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
 
 // Configuration acceptance has always selected known fields, unlike strict model outputs.
 const settingsSchema = z.object({

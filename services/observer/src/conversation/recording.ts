@@ -11,8 +11,8 @@ import { CreateText } from './node/files/create.js';
 import { ReadText } from './node/files/read.js';
 import { PrepareConversationContext } from './group/context/prepare.js';
 import { MaintainConversationContent } from './group/context/maintain.js';
-import { describeActiveContent, describePreparedConversationContext } from './content/observation.js';
-import type { ActiveContentSnapshot } from './content/active.js';
+import { describeActiveView, describePreparedConversationContext } from './content/observation.js';
+import type { ActiveViewSnapshot } from '@capix/view';
 import type { PreparedConversationContext } from './group/context/types.js';
 
 /** Recording is a host consumer: business structures carry neither observers nor projection callbacks. */
@@ -25,7 +25,7 @@ export function registerConversationRecording(recording: RecordingInstallation, 
       recording.describe(current, {
         role: 'conversation-task',
         input: ({ message, fileTask }) => ({ ...message, ...(fileTask ? { fileTask } : {}) }),
-        relationAccepted: (output, relation) => (relation.key === 'preparation' ? describePreparedConversationContext(output as PreparedConversationContext) : relation.key === 'maintenance' ? describeActiveContent(output as ActiveContentSnapshot) : output),
+        relationAccepted: (output, relation) => (relation.key === 'preparation' ? describePreparedConversationContext(output as PreparedConversationContext) : relation.key === 'maintenance' ? describeActiveView(output as ActiveViewSnapshot) : output),
       });
     if (current instanceof GenerateAnswer) {
       recording.describe(current, { input: (input) => (input.document ? { ...input, document: documentDescriptor(input.document) } : input), ...(current.documentEnabled ? { relationHandled: (value: unknown) => describeRetry(value), relationAccepted: (output: unknown, relation: { readonly key?: string }) => (relation.key === 'request' || relation.key === 'regeneration' ? describeModelRequest(output as ModelRequest) : output) } : {}) });
@@ -40,8 +40,8 @@ export function registerConversationRecording(recording: RecordingInstallation, 
     if (current instanceof ProcessDocument) recording.describe(current, { relationAccepted: (output, relation) => (relation.key === 'read' ? documentDescriptor(output as TextDocument) : output) });
     if (current instanceof ReadText) recording.describe(current, { output: documentDescriptor });
     if (current instanceof CreateText || current instanceof SaveResult) recording.describe(current, { input: ({ path, text }) => ({ path, bytes: Buffer.byteLength(text, 'utf8') }) });
-    if (current instanceof PrepareConversationContext) recording.describe(current, { output: describePreparedConversationContext, relationAccepted: (output, relation) => (relation.key === 'maintenance' ? describeActiveContent(output as ActiveContentSnapshot) : output) });
-    if (current instanceof MaintainConversationContent) recording.describe(current, { output: describeActiveContent });
+    if (current instanceof PrepareConversationContext) recording.describe(current, { output: describePreparedConversationContext, relationAccepted: (output, relation) => (relation.key === 'maintenance' ? describeActiveView(output as ActiveViewSnapshot) : output) });
+    if (current instanceof MaintainConversationContent) recording.describe(current, { output: describeActiveView });
   }
 }
 

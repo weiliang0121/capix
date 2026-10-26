@@ -9,7 +9,6 @@ export * from './conversation/structure.js';
 export * from './conversation/conversation.js';
 export * from './conversation/resources.js';
 export * from './conversation/segment.js';
-export * from './conversation/transcript/feed.js';
 export * from './conversation/node/context/assemble.js';
 export * from './conversation/node/memory/apply.js';
 export * from './conversation/node/model/accept.js';
@@ -54,8 +53,6 @@ export { CheckFileTask } from './conversation/group/preflight/check.js';
 export { InspectFileTask } from './conversation/node/files/check.js';
 export type { FilePreflightInput, FilePreflightOutput } from './conversation/group/preflight/types.js';
 
-export * from './conversation/content/active.js';
-export * from './conversation/content/resource.js';
 export * from './conversation/group/context/prepare.js';
 export * from './conversation/group/context/maintain.js';
 export * from './conversation/content/usage.js';

@@ -10,7 +10,7 @@ import { WorkspaceFiles, FileAccessException, FileResources } from '@capix/obser
 import { CheckFileTask } from '@capix/observer-service/conversation';
 import { InvocationCancelled, Resources, Scene, Runner } from '@capix/server-runtime';
 import { Resource } from '@capix/resources';
-import { Transcript } from '@capix/server-runtime/content';
+import { Transcript } from '@capix/transcript';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 import { bindChild } from '../fixtures/observer.mjs';
 import { callFor, lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';

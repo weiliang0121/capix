@@ -4,7 +4,8 @@ import { InvocationRecordHelper, CallableRecord } from '@capix/server-runtime';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationContext, Transcript, Recorder, RecordBook } from '@capix/server-runtime';
+import { InvocationContext, Recorder, RecordBook } from '@capix/server-runtime';
+import { Transcript } from '@capix/transcript';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { TestOperation } from './fixtures/operation.mjs';

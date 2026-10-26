@@ -1,5 +1,9 @@
-import { RuntimeError, type Resources, type Clock, type ChangeBuffer, type CheckpointStore, type InvocationControls } from '@capix/server-runtime';
-import type { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
+import { RuntimeError } from '@capix/contracts';
+import { type Resources, type Clock, type CheckpointStore, type InvocationControls } from '@capix/server-runtime';
+import { type ChangeBuffer } from '@capix/changes';
+import type { Transcript } from '@capix/transcript';
+import type { Memories } from '@capix/memory';
+import type { MessageUsage } from '@capix/measurement';
 import type { ObserverChange } from '@capix/protocol';
 import type { ConversationScene } from '../conversation/scene.js';
 import type { ConversationStructure } from '../conversation/structure.js';
@@ -8,18 +12,18 @@ import type { ConversationCheckpointRuns } from '../conversation/checkpoints.js'
 import { conversationCheckpointConfiguration, validateConversationCheckpointRestoration } from '../conversation/binding/checkpoint.js';
 import type { ModelSource } from '../conversation/model/source.js';
 import type { ModelInteractions } from '../conversation/model/interactions.js';
-import type { TranscriptFeed } from '../conversation/transcript/feed.js';
+import type { TranscriptFeed } from '@capix/observer-content';
 import type { ObserverRecording } from '../observation/record/installation.js';
 import type { CheckpointObservation } from '../observation/checkpoints.js';
 import type { WorkspaceFiles } from '../files/index.js';
 import type { SqliteObserverStore } from '../persistence/store.js';
-import type { ChangeConsumer } from './changes.js';
-import type { ConversationContent } from './content.js';
+import type { ChangeConsumer } from '@capix/observer-content';
+import type { ConversationContent } from '@capix/observer-content';
 
 export interface ObserverEnvironmentParts {
   readonly conversationId: string;
   readonly content: ConversationContent;
-  readonly selectionUsage: SelectionUsage;
+  readonly messageUsage: MessageUsage;
   readonly files?: WorkspaceFiles;
   readonly model: ModelSource;
   readonly interactions: ModelInteractions;
@@ -40,7 +44,7 @@ export class ObserverEnvironment {
   readonly content: ConversationContent;
   readonly transcript: Transcript;
   readonly memories: Memories;
-  readonly selectionUsage: SelectionUsage;
+  readonly messageUsage: MessageUsage;
   readonly files?: WorkspaceFiles;
   readonly model: ModelSource;
   readonly interactions: ModelInteractions;
@@ -71,7 +75,7 @@ export class ObserverEnvironment {
     this.changes = parts.content.changes;
     this.consumer = parts.content.consumer;
     this.transcripts = parts.content.transcripts;
-    this.selectionUsage = parts.selectionUsage;
+    this.messageUsage = parts.messageUsage;
     this.files = parts.files;
     this.model = parts.model;
     this.interactions = parts.interactions;

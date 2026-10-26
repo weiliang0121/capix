@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Clock } from '@capix/server-runtime';
-import { ConversationContent, ObserverRecording } from '@capix/observer-service';
+import { ConversationContent } from '@capix/observer-content';
+import { ObserverRecording } from '@capix/observer-service';
 
 function recording(content, persistence) {
   return new ObserverRecording(content.changes, content.consumer, { clock: new Clock(), persistence, conversationId: 'conversation' });

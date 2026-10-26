@@ -1,9 +1,9 @@
-import { RuntimeError } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
 import { Group, checkpointPoint, childReference, reception, type ChildCall, type ChildrenOf, type GroupWork, type ResumeWork, type CheckpointFacts, type ChildFact } from '@capix/structure';
 import { z } from 'zod';
 import { isEqual } from 'es-toolkit/predicate';
 import type { GenerationOutput, FileTask } from '@capix/protocol';
-import type { Memory } from '@capix/server-runtime/content';
+import type { Memory } from '@capix/memory';
 import type { TextDocument } from '../../../files/index.js';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import type { ModelCallResources, ModelRequestResources } from '../../resources.js';

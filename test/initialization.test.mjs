@@ -5,7 +5,9 @@ import { captureSource } from './fixtures/observer.mjs';
 import { createEnvironment } from './fixtures/environment.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Initializer, TranscriptResource, MemoryResource, Group, CallableRecord } from '@capix/server-runtime';
+import { Initializer, Group, CallableRecord } from '@capix/server-runtime';
+import { TranscriptResource } from '@capix/transcript';
+import { MemoryResource } from '@capix/memory';
 import { ResourceOffer } from '@capix/resources';
 import { initializeObserver, ModelSettingsResource } from '@capix/observer-service';
 

@@ -4,8 +4,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { Transcript, Memories } from '@capix/server-runtime/content';
-import { ConversationContent, SqliteObserverStore } from '@capix/observer-service/assembly';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
+import { ConversationContent } from '@capix/observer-content';
+import { SqliteObserverStore } from '@capix/observer-service/assembly';
 
 const message = (content) => ({ role: 'user', content });
 const createMemory = (content) => ({ action: 'create', memoryId: null, change: '记忆建立', sourceIndexes: [0], result: { topic: '偏好', content, sourceIndexes: [0] } });

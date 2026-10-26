@@ -2,7 +2,7 @@ import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Scene, Group, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
-import { Transcript, TranscriptResource } from '@capix/server-runtime/content';
+import { Transcript, TranscriptResource } from '@capix/transcript';
 import { SelectHistory, UnderstandRequest, DefaultConversationDecision, FunctionConversationDecision, CheckFileTask, ProcessDocument, ModelInteractions, ModelSource, ModelResource, ModelSettingsResource } from '@capix/observer-service/conversation';
 import { FileResources } from '@capix/observer-service/assembly';
 

@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { Transcript, Memories } from '@capix/server-runtime/content';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
 import { SqliteObserverStore } from '@capix/observer-service';
 
 function fixture(t) {

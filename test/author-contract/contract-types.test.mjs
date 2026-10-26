@@ -6,7 +6,7 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/consumer-contract.ts', import.meta.url));
 const source = `
-import {Node, Group, defineNode, defineGroup, defineScene} from '@capix/server-runtime';
+import { Node, Group, defineNode, defineGroup, defineScene } from '@capix/server-runtime';
 import type { ChildCall, ChildCalls, ChildContract, ChildContractsOf, ChildOptions, ChildReference, CallableContract, CallableInput, CallableOutput, CallableWork, InvocationOutputReceiver, GroupWork } from '@capix/server-runtime';
 import type { ResourceRequest } from '@capix/resources';
 

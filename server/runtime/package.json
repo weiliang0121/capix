@@ -15,10 +15,6 @@
     "./recording": {
       "types": "./dist/recording.d.ts",
       "import": "./dist/recording.js"
-    },
-    "./content": {
-      "types": "./dist/content.d.ts",
-      "import": "./dist/content.js"
     }
   },
   "scripts": {
@@ -30,6 +26,8 @@
     "es-toolkit": "1.52.0",
     "@capix/resources": "workspace:*",
     "@capix/structure": "workspace:*",
-    "@capix/contracts": "workspace:*"
+    "@capix/contracts": "workspace:*",
+    "@capix/changes": "workspace:*",
+    "@capix/memory": "workspace:*"
   }
 }

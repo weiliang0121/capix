@@ -1,5 +1,4 @@
 /** Reference application environment, providers and configuration. */
-export * from './assembly/changes.js';
 export * from './assembly/environment.js';
 export * from './assembly/initialize.js';
 export * from './assembly/content.js';

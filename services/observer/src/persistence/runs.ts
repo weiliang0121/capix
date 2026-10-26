@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isEqual } from 'es-toolkit';
-import { RuntimeError } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
 import { copyConversationCheckpointRun, type ConversationCheckpointRun, type ConversationCheckpointRuns } from '../conversation/checkpoints.js';
 
 /** Small host-owned association, using the same exclusive database as content and checkpoints. */

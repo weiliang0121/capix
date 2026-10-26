@@ -34,7 +34,7 @@ test('production v5 image preserves complete relations, child progress and repea
 });
 
 test('production v5 survives a separate process without memory objects', () => {
-  const child = spawnSync(process.execPath, ['--input-type=module', '-e', "import {readFileSync} from 'node:fs'; import {cloneCheckpointImage} from '@capix/server-runtime'; const value=cloneCheckpointImage(JSON.parse(readFileSync(0,'utf8'))); process.stdout.write(JSON.stringify({version:value.formatVersion,position:value.frame.children[0].target.position,ref:value.references.chosen.contextId}));"], { cwd: process.cwd(), input: JSON.stringify(image()), encoding: 'utf8' });
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', "import {readFileSync} from 'node:fs'; import { cloneCheckpointImage } from '@capix/server-runtime'; const value=cloneCheckpointImage(JSON.parse(readFileSync(0,'utf8'))); process.stdout.write(JSON.stringify({version:value.formatVersion,position:value.frame.children[0].target.position,ref:value.references.chosen.contextId}));"], { cwd: process.cwd(), input: JSON.stringify(image()), encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
   assert.deepEqual(JSON.parse(child.stdout), { version: 5, position: 0, ref: 'child' });
 });
@@ -263,7 +263,7 @@ test('production codecs decode complete saved-time IO and progress without re-cl
       '-e',
       `
     import {readFileSync} from 'node:fs';
-    import {cloneCheckpointImage} from '@capix/server-runtime';
+    import { cloneCheckpointImage } from '@capix/server-runtime';
     import {decodeCheckpointFrame} from '@capix/server-runtime/construction';
     class DomainValue { constructor(text) { this.text = text; } render() { return 'domain:' + this.text; } }
     const codec = { decode(v) { if (v?.tag !== 'domain' || typeof v.text !== 'string') throw new Error('invalid domain'); return new DomainValue(v.text); } };

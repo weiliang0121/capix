@@ -1,6 +1,6 @@
 # 活跃材料、准备与维护
 
-这是 P02 的服务侧最小实现，不是新内核实体或通用上下文平台。正式消息由 Transcript 持有，记忆由 Memories 持有；ConversationContent 中的 ActiveContent 只说明这些既有内容中，哪些值参与下一次材料准备。
+这是 P02 的服务侧最小实现，不是新内核实体或通用上下文平台。正式消息由 Transcript 持有，记忆由 Memories 持有；ConversationContent 中的 ActiveView 只说明这些既有内容中，哪些值参与下一次材料准备。
 
 ## 归属与三个时机
 
@@ -10,7 +10,7 @@
 | 任务 Group 的普通输入与来源捕获 | message/messageIndex；固定本次模型配置和原文定位 | 不隐式读取最终工作材料              |
 | prepareContext Group            | 可选维护后捕获本次消息、记忆值，返回固定材料     | 不默认裁剪、不调用选择模型          |
 | maintainContext Group           | 在明确边界执行注入策略、接纳决定并落实索引       | 不递归监听每一次实体写入            |
-| ActiveContent                   | 活跃成员、复合依据、受控 capture/apply           | 不拥有消息/记忆，不产生独立内容身份 |
+| ActiveView                      | 活跃成员、复合依据、受控 capture/apply           | 不拥有消息/记忆，不产生独立内容身份 |
 
 ```text
 Scene 正式 append
@@ -28,7 +28,7 @@ Scene 正式 append
 ## 索引与固定值
 
 ```ts
-interface ActiveContentState {
+interface ActiveViewState {
   transcriptId: string;
   memoriesId: string;
   revision: number;
@@ -36,7 +36,7 @@ interface ActiveContentState {
   memoryIds: readonly string[];
 }
 
-interface ActiveContentBasis {
+interface ActiveViewBasis {
   transcriptId: string;
   memoriesId: string;
   indexRevision: number;
@@ -44,14 +44,14 @@ interface ActiveContentBasis {
   memorySequence: number;
 }
 
-interface ActiveContentSnapshot {
-  basis: ActiveContentBasis;
+interface ActiveViewSnapshot {
+  basis: ActiveViewBasis;
   messages: readonly { index: number; message: Readonly<Message> }[];
   memories: readonly MemoryState[];
 }
 
-interface ActiveContentSelection {
-  basis: ActiveContentBasis;
+interface ActiveViewSelection {
+  basis: ActiveViewBasis;
   messageIndexes: readonly number[];
   memoryIds: readonly string[];
 }
@@ -65,7 +65,7 @@ capture 返回冻结值，不返回以后可能读到新内容的句柄。消息
 
 ## 资源与维护装配
 
-`ActiveContentResource.read` 只提供 capture；manage 提供 capture/apply。两者在 access 时通过当前调用的受控端点访问，不在任务 Group 的来源捕获时提前读取材料。绑定供应 ActiveContent 引用，业务只取得声明申请的端点。索引与必要内容同步独立于 Recorder，关闭观测不会停止索引更新。
+`ActiveViewResource.read` 只提供 capture；manage 提供 capture/apply。两者在 access 时通过当前调用的受控端点访问，不在任务 Group 的来源捕获时提前读取材料。绑定供应 ActiveView 引用，业务只取得声明申请的端点。索引与必要内容同步独立于 Recorder，关闭观测不会停止索引更新。
 
 `maintenance` 宿主配置接受普通函数，或 `{ create(): ContextMaintenanceOperation }` 工厂。输入包含 phase、当前 material 和本次 settings。普通函数适合纯数据规则；需要模型或其他能力时由工厂为 before-request、after-content 两个位置分别建立 Group，由该结构直接申请资源。两个位置不共享同一个结构实例；独立构造 MaintainConversationContent 时仍可传入只属于该维护边界的具体策略 Group。绑定解算保留子树供给；维护 Group 和准备 Group 不为透传而申请子层资源。它继续遵守 Scene/Group 可组合 Group/Node、Node 无成员的结构规则，不要求内核认识维护业务。
 
@@ -108,7 +108,7 @@ prepareContext 返回：
 
 活跃索引给出的成员顺序同样是本次材料的一部分。理解、回答和记忆请求保持该顺序，不再隐式按消息索引重新排序。
 
-任务 Group 的原文 fixedRange 继续用于定位及恢复核验，不参与材料再次装载。SelectionUsage 使用窄资源核对固定材料对应的真实 Transcript 消息，避免 CP 解码值的对象身份变化造成错误计数，也不把 任务 Group 创建之后的维护追加排除在计数外。
+任务 Group 的原文 fixedRange 继续用于定位及恢复核验，不参与材料再次装载。MessageUsage 使用窄资源核对固定材料对应的真实 Transcript 消息，避免 CP 解码值的对象身份变化造成错误计数，也不把 任务 Group 创建之后的维护追加排除在计数外。
 
 准备、维护及相应父层关系的记录映射只保留 basis、消息索引和当时的记忆值，不重复消息正文。记忆值用于解释当时的材料，不能改读更新后的实体。实际业务输出和 CP 仍保存完整材料；自定义策略 Group 的记录内容由它自己的观测声明决定。
 
@@ -118,6 +118,6 @@ SQLite v6 保存 active_content。源消息追加、新记忆创建及新活跃�
 
 普通重启恢复索引，供新的工作捕获。旧工作 CP 恢复则使用已保存材料，不用当前活跃索引重建原输入。Observer 的 Scene/任务 Group 契约为 version 4/6，Frame 为 v4；旧恢复格式和旧声明版本明确拒绝，历史内容仍可读取；宿主暂拒自定义维护的恢复，需先有稳定的策略配置与实现版本契约。
 
-维护预设具有局部 waiting（子策略有 CP 时）、accepted 和 completed 点，准备预设具有等待和固定结果点。当前 ActiveContent.apply 没有固定效果凭据：若索引已落实但 completed 尚未保存，较早 accepted 点发现依据变化就拒绝，不根据目标成员相同猜测完成；completed 续接直接使用已保存结果。局部预设支持不等于任意时刻、任意自定义策略都能恢复。详见 [Checkpoint](checkpoints.md)。
+维护预设具有局部 waiting（子策略有 CP 时）、accepted 和 completed 点，准备预设具有等待和固定结果点。当前 ActiveView.apply 没有固定效果凭据：若索引已落实但 completed 尚未保存，较早 accepted 点发现依据变化就拒绝，不根据目标成员相同猜测完成；completed 续接直接使用已保存结果。局部预设支持不等于任意时刻、任意自定义策略都能恢复。详见 [Checkpoint](checkpoints.md)。
 
 本轮没有增加活跃索引的 HTTP 管理/UI、后台压缩、召回、通用超限调度、跨工作并行写入或新恢复平台。类型因式分解的其他维度继续讨论，见 [讨论及实施记录](codex-type-factorization.md#14-p02-最小闭环的实施结果)。

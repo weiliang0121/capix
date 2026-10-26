@@ -1,7 +1,7 @@
 import type { Message } from '@capix/protocol';
 
-/** Selection counts keyed by immutable message identity, independent of observation records. */
-export class SelectionUsage {
+/** Material-use counts keyed by immutable message identity, scoped to this instance and independent of records. */
+export class MessageUsage {
   readonly #counts = new WeakMap<Readonly<Message>, number>();
 
   get(message: Readonly<Message>): number {

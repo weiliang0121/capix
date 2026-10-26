@@ -6,7 +6,7 @@ import { createInput, sourceFor, contextFor, transcriptFor } from './fixtures/ob
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TestOperation } from './fixtures/operation.mjs';
-import { TranscriptResource } from '@capix/server-runtime';
+import { TranscriptResource } from '@capix/transcript';
 
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 

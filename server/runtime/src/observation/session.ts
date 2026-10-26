@@ -1,6 +1,7 @@
 import { isUndefined } from 'es-toolkit/predicate';
 import type { InvocationObserver } from './observer.js';
-import { ObservationError, combineFaults } from './error.js';
+import { ObservationError } from './error.js';
+import { combineFaults } from '@capix/changes';
 
 export class ObserverSession<Observer extends { available?(): boolean } = InvocationObserver> {
   active = true;

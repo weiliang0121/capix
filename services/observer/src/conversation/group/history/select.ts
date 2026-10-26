@@ -2,14 +2,14 @@ import { z } from 'zod';
 import { isEqual } from 'es-toolkit/predicate';
 import { checkpointCodec } from '../../checkpoint.js';
 import { selectionInputCodec, selectionCodec, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
-import { TranscriptResource } from '@capix/server-runtime/content';
+import { TranscriptResource } from '@capix/transcript';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
 import { type ConversationResources, type ModelRequestResources, type HistoryResources } from '../../resources.js';
 import { checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/structure';
 import type { ModelSettings } from '@capix/protocol';
 import type { Selection } from '../../model/types.js';
 import { Group } from '@capix/structure';
-import { type TranscriptRangeReader } from '@capix/server-runtime/content';
+import { type TranscriptRangeReader } from '@capix/transcript';
 import { historyMessages, type SelectionInput } from './input.js';
 import { selectionOutputContract, type SelectionBasis } from './output.js';
 

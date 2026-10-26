@@ -7,7 +7,8 @@ import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { createInput, observeFixture } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Recorder, BaseRecord, CallableRecord, ExecutionRecord, OperationRecord, RecordBook, ExecutionRecordHelper, OperationRecordHelper, Clock, RuntimeError } from '@capix/server-runtime';
+import { Recorder, BaseRecord, CallableRecord, ExecutionRecord, OperationRecord, RecordBook, ExecutionRecordHelper, OperationRecordHelper, Clock } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 import { test } from 'node:test';
 

@@ -3,7 +3,7 @@
 ## 当前串行运行链路
 
 ```text
-正式输入 + ActiveContent → prepareContext O（可先维护）→ 固定消息 / 记忆材料
+正式输入 + ActiveView → prepareContext O（可先维护）→ 固定消息 / 记忆材料
 固定材料                 → 决策 / GenerateAnswer → 正式回答
 固定记忆 + 本轮 QA + 固定历史 + 已接纳的保存凭据 → ExtractMemory → 记忆落实
 已落实内容               → 可选 after-content 维护 → 下次准备时捕获

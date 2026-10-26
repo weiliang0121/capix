@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { observeFixture, createInput, resourceFact } from './fixtures/observer.mjs';
 import { DeepSeekProvider, acceptConversationInput, answerOutputContract, selectionOutputContract, memoryOutputContract } from '@capix/observer-service';
-import { Transcript, RecordBook, Recorder } from '@capix/server-runtime';
+import { Transcript } from '@capix/transcript';
+import { RecordBook, Recorder } from '@capix/server-runtime';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { projectExecution } from '../apps/observer/.test-dist/observation/project.js';

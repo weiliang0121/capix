@@ -1,6 +1,6 @@
 import type { ModelSettings } from '@capix/protocol';
 import type { ModelRequest } from './types.js';
-import { RuntimeError } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
 
 export function estimateCapacity(request: ModelRequest, settings: ModelSettings) {
   const inputBytes = Buffer.byteLength(JSON.stringify(request), 'utf8');

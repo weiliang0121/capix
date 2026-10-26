@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { isPromise } from 'node:util/types';
 import { isEqual } from 'es-toolkit/predicate';
-import { Interaction, InvocationCancelled, RuntimeError, PersistenceError, ProgressChannel, isInvocationCancelled, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState, type ProgressReceiver } from '@capix/server-runtime';
+import { Interaction, InvocationCancelled, PersistenceError, isInvocationCancelled, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
+import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
 import { ModelSource } from './source.js';
 import type { ModelOutput, ModelRequest, ModelTextDelta, Purpose } from './types.js';
 import { ModelTextBuffer } from './stream.js';

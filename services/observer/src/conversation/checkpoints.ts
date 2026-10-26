@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { isEqual } from 'es-toolkit';
-import { RuntimeError, cloneCheckpointValue, type CheckpointStore, type CheckpointHead } from '@capix/server-runtime';
+import { RuntimeError } from '@capix/contracts';
+import { cloneCheckpointValue, type CheckpointStore, type CheckpointHead } from '@capix/server-runtime';
 import type { ModelSettings, TranscriptRangeLocator } from '@capix/protocol';
-import type { Transcript, Memories } from '@capix/server-runtime/content';
+import type { Transcript } from '@capix/transcript';
+import type { Memories } from '@capix/memory';
 import { validateSettings } from './model/settings.js';
 import { executionProgressSchema, conversationCheckpointOutput, acceptedCheckpointInput } from './checkpoint.js';
 import { memorySchema } from './group/checkpoint.js';
 import { acceptConversationRequest } from './accept.js';
 import { preparedConversationContextSchema } from './group/context/schema.js';
-import type { ActiveContentSnapshot } from './content/active.js';
+import type { ActiveViewSnapshot } from '@capix/view';
 
 /** Fixed construction basis for one R/E call; never a saved Submission or a mutable current conversation. */
 export interface ConversationCheckpointRun {
@@ -242,7 +244,7 @@ function validatePreparedMaterial(run: ConversationCheckpointRun, transcript: Tr
       throw new RuntimeError('CHECKPOINT_CONTENT_CHANGED', '准备材料的输入、选择和正文不一致。');
   }
 
-  function validateMaterial(material: ActiveContentSnapshot): void {
+  function validateMaterial(material: ActiveViewSnapshot): void {
     const basis = material.basis;
     const version = memoryVersions.get(basis.memorySequence);
     if (basis.transcriptId !== transcript.id || basis.memoriesId !== run.memories.id || basis.transcriptRevision !== run.transcript.revision || !version) throw new RuntimeError('CHECKPOINT_CONTENT_CHANGED', '准备材料缺少本次调用范围内的固定来源版本。');

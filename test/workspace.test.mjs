@@ -8,14 +8,38 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const packages = [
   { path: 'contracts', allowed: [] },
   { path: 'protocol', allowed: ['@capix/contracts'] },
+  { path: 'server/changes', allowed: ['@capix/contracts', '@capix/protocol'] },
   { path: 'server/resources', allowed: ['@capix/contracts', '@capix/protocol'] },
   { path: 'server/structure', allowed: ['@capix/contracts', '@capix/resources'] },
-  { path: 'server/runtime', allowed: ['@capix/contracts', '@capix/protocol', '@capix/resources', '@capix/structure'] },
-  { path: 'services/observer', allowed: ['@capix/protocol', '@capix/resources', '@capix/structure', '@capix/server-runtime'] },
+  { path: 'server/transcript', allowed: ['@capix/contracts', '@capix/changes', '@capix/protocol', '@capix/resources'] },
+  { path: 'server/memory', allowed: ['@capix/contracts', '@capix/changes', '@capix/protocol', '@capix/resources', '@capix/transcript'] },
+  { path: 'server/view', allowed: ['@capix/contracts', '@capix/protocol', '@capix/resources', '@capix/transcript', '@capix/memory'] },
+  { path: 'server/measurement', allowed: ['@capix/protocol', '@capix/resources'] },
+  { path: 'server/runtime', allowed: ['@capix/contracts', '@capix/protocol', '@capix/resources', '@capix/structure', '@capix/changes', '@capix/memory'] },
+  { path: 'services/observer-content', allowed: ['@capix/contracts', '@capix/changes', '@capix/protocol', '@capix/transcript', '@capix/memory', '@capix/view'] },
+  { path: 'services/observer', allowed: ['@capix/protocol', '@capix/resources', '@capix/structure', '@capix/server-runtime', '@capix/contracts', '@capix/changes', '@capix/transcript', '@capix/memory', '@capix/view', '@capix/measurement', '@capix/observer-content'] },
   { path: 'client/runtime', allowed: ['@capix/protocol'] },
   { path: 'client/http', allowed: ['@capix/protocol', '@capix/client-runtime'] },
   { path: 'apps/observer', allowed: ['@capix/protocol', '@capix/client-runtime', '@capix/client-http'] },
 ];
+
+test('the boundary inventory covers every workspace package', async () => {
+  const discovered = ['contracts', 'protocol'];
+  for (const directory of ['server', 'client', 'services', 'apps']) {
+    for (const entry of await readdir(resolve(root, directory), { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const path = `${directory}/${entry.name}`;
+      try {
+        const manifest = JSON.parse(await readFile(resolve(root, path, 'package.json'), 'utf8'));
+        assert.ok(manifest.name.startsWith('@capix/'), `${path} must have an explicit package boundary`);
+        discovered.push(path);
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+  }
+  assert.deepEqual(discovered.sort(), packages.map((pkg) => pkg.path).sort());
+});
 async function sources(directory) {
   const files = await readdir(directory, { withFileTypes: true });
   return (

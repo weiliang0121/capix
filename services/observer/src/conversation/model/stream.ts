@@ -1,4 +1,5 @@
-import { ProgressChannel, RuntimeError, type ProgressReceiver } from '@capix/server-runtime';
+import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
+import { RuntimeError } from '@capix/contracts';
 import type { ModelTextDelta } from './types.js';
 
 export const modelTextByteLimit = 4 * 1024 * 1024;

@@ -1,5 +1,6 @@
 import { SqliteObserverStore, initializeObserver } from '@capix/observer-service';
-import { Transcript, Memories } from '@capix/server-runtime/content';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
 
 const mode = process.argv[2];
 const store = SqliteObserverStore.open(process.argv[3]);

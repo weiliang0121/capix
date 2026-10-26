@@ -1,5 +1,6 @@
 import { isEqual } from 'es-toolkit/predicate';
-import type { TranscriptRangeReader, Memory } from '@capix/server-runtime/content';
+import type { TranscriptRangeReader } from '@capix/transcript';
+import type { Memory } from '@capix/memory';
 import type { Message } from '@capix/protocol';
 
 export interface SelectionInput {

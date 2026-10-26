@@ -3,7 +3,7 @@ import { readOutput, type SelectionObservation } from '@capix/protocol';
 
 import type { Selection } from '../conversation/model/types.js';
 import { type RecordBook } from '@capix/server-runtime/recording';
-import { type Transcript } from '@capix/server-runtime/content';
+import { type Transcript } from '@capix/transcript';
 
 import { isTaskRecord, callRecord, taskRecord } from './calls.js';
 

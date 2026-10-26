@@ -1,16 +1,20 @@
 import { bindResources } from './resources.mjs';
-import { CallableContext, Transcript, TranscriptRangeRef, CallableBuilder, callableConstruction, Memories, SelectionUsage, TranscriptResource, MemoryResource, SelectionUsageResource } from '@capix/server-runtime';
+import { CallableContext, CallableBuilder, callableConstruction } from '@capix/server-runtime';
+import { Transcript, TranscriptRangeRef, TranscriptResource } from '@capix/transcript';
+import { Memories, MemoryResource } from '@capix/memory';
+import { MessageUsage, MessageUsageResource } from '@capix/measurement';
 
 import { fixtureState } from './runtime.mjs';
 import { resolveDeclaration } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 
-import { createConversationStructure, ActiveContent, acceptConversationInput, initializeObserver, observeExecution, ActiveContentResource, ConversationTaskResource, ModelSettingsResource, ModelResource, ConversationMaterialUsageResource, ModelSource, ModelInteractions } from '@capix/observer-service';
+import { createConversationStructure, acceptConversationInput, initializeObserver, observeExecution, ConversationTaskResource, ModelSettingsResource, ModelResource, ConversationMaterialUsageResource, ModelSource, ModelInteractions } from '@capix/observer-service';
+import { ActiveView, ActiveViewResource } from '@capix/view';
 
 // Manual Context fixtures bypass host assembly; their supply is explicit and test-local.
 const conversationProviders = [
-  ActiveContentResource.read.provide((source) => source.active),
-  ActiveContentResource.manage.provide((source) => source.active),
+  ActiveViewResource.read.provide((source) => source.active),
+  ActiveViewResource.manage.provide((source) => source.active),
   ConversationTaskResource.provide((source) => ({ progress: source.taskProgress })),
   ModelSettingsResource.snapshot.provide((source) => source.settings),
   ModelSettingsResource.timeout.provide((source) => source.settings.timeoutMs),
@@ -25,7 +29,7 @@ const conversationProviders = [
   TranscriptResource.append.provide((source) => ({ transcript: source.transcript, progress: source.messageProgress })),
   TranscriptResource.segmentation.provide((source) => source.transcript),
   ConversationMaterialUsageResource.provide((source) => source),
-  SelectionUsageResource.record.provide((source) => source.selectionUsage),
+  MessageUsageResource.record.provide((source) => source.messageUsage),
 ];
 
 const transcripts = new WeakMap();
@@ -49,8 +53,8 @@ export function resourceBindingFor(runtime, provider, provided) {
     const transcript = source.transcriptRange?.transcript ?? new Transcript();
     let entities = provided ?? worlds.get(transcript);
     if (!entities) {
-      entities = { transcript, memories: new Memories(transcript, { observation: runtime.recording?.memory }), selectionUsage: new SelectionUsage() };
-      entities.active = new ActiveContent(transcript, entities.memories);
+      entities = { transcript, memories: new Memories(transcript, { observation: runtime.recording?.memory }), messageUsage: new MessageUsage() };
+      entities.active = new ActiveView(transcript, entities.memories);
       worlds.set(transcript, entities);
     }
     return binding({ ...source, ...entities, model, delivery: () => {} });

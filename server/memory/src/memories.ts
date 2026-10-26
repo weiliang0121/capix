@@ -1,21 +1,16 @@
-import { publishFact, type ChangeProvenance } from '../changes/publish.js';
-import type { EventConsumer } from '../observation/observer.js';
+import { publishFact, combineFaults, type ChangeProvenance, type EventConsumer, type ChangeCapture } from '@capix/changes';
 import type { MemoryEvent } from '@capix/protocol';
-import type { ChangeCapture } from '../changes/capture.js';
 import { randomUUID } from 'node:crypto';
 import { isEqual, isNull } from 'es-toolkit/predicate';
 import { Memory, restoreMemory, updateMemory } from './memory.js';
 import type { MemoryChange } from './change.js';
-import type { Transcript } from '../transcript/transcript.js';
-import { isNonBlankString } from '../value/string.js';
-import { isNonEmptyArray, hasUniqueItems } from '../value/array.js';
+import type { Transcript } from '@capix/transcript';
+import { isNonBlankString, isNonEmptyArray, hasUniqueItems, isObject } from './validation.js';
 import { prepareMemoryResultSources } from './source.js';
 import type { MemoriesCommit, MemoriesPersistence, MemoriesState } from './persistence.js';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
-import { isObject } from '../value/object.js';
-import { combineFaults } from '../observation/error.js';
 import type { MemoryFixedApply, MemoryApplyReceipt, MemoryApplyState } from './apply.js';
-import { RuntimeError } from '../errors/error.js';
+import { RuntimeError } from '@capix/contracts';
 
 export interface MemoriesOptions {
   observation?: EventConsumer<MemoryEvent>;

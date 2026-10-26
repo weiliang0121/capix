@@ -1,13 +1,15 @@
 import { type Resources } from '@capix/server-runtime';
 import { Resource } from '@capix/resources';
-import { TranscriptResource, MemoryResource, SelectionUsageResource, type CapturedMemories } from '@capix/server-runtime/content';
+import { TranscriptResource } from '@capix/transcript';
+import { MemoryResource, type CapturedMemories } from '@capix/memory';
+import { MessageUsageResource } from '@capix/measurement';
 import type { ModelInteractions } from './model/interactions.js';
 import { ModelResource, ModelSettingsResource } from './model/resources.js';
 import type { ConversationStructure } from './structure.js';
 import { FileResources, type FileResourceSource } from '../files/index.js';
 import type { DocumentProcessingInput } from './group/document/process.js';
 import type { CreateTextInput } from './node/files/create.js';
-import { ActiveContentResource } from './content/resource.js';
+import { ActiveViewResource } from '@capix/view';
 import { ConversationMaterialUsageResource } from './content/usage.js';
 import { ConversationTaskResource } from './decision/selection.js';
 import type { AcceptedConversationInput } from './accept.js';
@@ -24,13 +26,13 @@ export function registerConversationResources(resources: Resources<ConversationR
 
   const active = new Resource(entities.active);
   const interactions = new Resource(model);
-  const usage = new Resource(entities.selectionUsage);
-  resources.register(active, ActiveContentResource.read).register(active, ActiveContentResource.manage);
+  const usage = new Resource(entities.messageUsage);
+  resources.register(active, ActiveViewResource.read).register(active, ActiveViewResource.manage);
   resources.register(interactions, ModelResource.create).register(interactions, ModelResource.read);
   resources.register(new Resource(entities.memories), MemoryResource.apply);
   resources.register(new Resource(entities.transcript), TranscriptResource.segmentation);
-  resources.register(new Resource({ transcript: entities.transcript, selectionUsage: entities.selectionUsage }), ConversationMaterialUsageResource);
-  resources.register(usage, SelectionUsageResource.record);
+  resources.register(new Resource({ transcript: entities.transcript, messageUsage: entities.messageUsage }), ConversationMaterialUsageResource);
+  resources.register(usage, MessageUsageResource.record);
 
   // Input append belongs to the scene; the actual accepted range is the next scope's basis.
   resources.capture(scene, (_input, options) => ({ transcript: entities.transcript, progress: capture.inputProgress(options) })).register(TranscriptResource.append, (messages) => messages);

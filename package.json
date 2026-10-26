@@ -31,6 +31,12 @@
     "@capix/client-http": "workspace:*",
     "@capix/resources": "workspace:*",
     "@capix/structure": "workspace:*",
-    "@capix/contracts": "workspace:*"
+    "@capix/contracts": "workspace:*",
+    "@capix/changes": "workspace:*",
+    "@capix/transcript": "workspace:*",
+    "@capix/memory": "workspace:*",
+    "@capix/view": "workspace:*",
+    "@capix/measurement": "workspace:*",
+    "@capix/observer-content": "workspace:*"
   }
 }

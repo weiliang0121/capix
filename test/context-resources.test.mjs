@@ -6,7 +6,11 @@ import { resourceBindingFor, bindChild } from './fixtures/observer.mjs';
 import { ExecutionFixture, OperationFixture, AttemptFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { TranscriptResource, Transcript, TranscriptRangeRef, Memories, SelectionUsage, Sequence, defineNode, Scene, Runner, Resources } from '@capix/server-runtime';
+import { TranscriptResource, Transcript, TranscriptRangeRef } from '@capix/transcript';
+import { Memories, MemoryResource } from '@capix/memory';
+import { MessageUsage, MessageUsageResource } from '@capix/measurement';
+import { ChangeBuffer } from '@capix/changes';
+import { Sequence, defineNode, Scene, Runner, Resources } from '@capix/server-runtime';
 import { ResourceAccessClosed, ResourceOffer, checkResourceRequests } from '@capix/resources';
 import { createBoundRuntime } from './fixtures/runtime.mjs';
 import { createConversationStructure, GenerateAnswer } from '@capix/observer-service';
@@ -57,14 +61,14 @@ test('Observer narrows resources at each action, captures fixed values and expir
   const preparation = firstViews.find((view) => view.definition === definition.preparation).resources;
   const generation = firstViews.find((view) => view.definition === definition.generation).resources;
   assert.equal(entry.history.locate().end, 1);
-  assert.deepEqual(Object.keys(preparation), ['activeContent']);
-  assert.equal(preparation.activeContent.transcript, undefined);
+  assert.deepEqual(Object.keys(preparation), ['activeView']);
+  assert.equal(preparation.activeView.transcript, undefined);
   assert.equal(generation.history, undefined, 'generation consumes fixed input material, not a live history reader');
-  assert.deepEqual(Object.keys(entry).sort(), ['history', 'messages', 'selectionUsage', 'tasks']);
+  assert.deepEqual(Object.keys(entry).sort(), ['history', 'messageUsage', 'messages', 'tasks']);
   assert.deepEqual(generation.settings, settings);
   assert.equal(generation.timeoutMs, 1000);
   assert.throws(() => entry.history.read(0), ResourceAccessClosed);
-  assert.throws(() => preparation.activeContent.capture(), ResourceAccessClosed);
+  assert.throws(() => preparation.activeView.capture(), ResourceAccessClosed);
   assert.equal(first.record, undefined);
   assert.deepEqual(
     first.children.values().map((relation) => relation.key),
@@ -263,18 +267,18 @@ test('E requests fail before E attachment, recording or work while the parent R 
 });
 
 test('message and memory access preserves entity validation, change publication and fixed snapshots', async () => {
-  const { MemoryResource, SelectionUsageResource, Recorder, RecordBook, ChangeBuffer } = await import('@capix/server-runtime');
+  const { Recorder, RecordBook } = await import('@capix/server-runtime');
   const recorder = new Recorder(new RecordBook());
   const changes = new ChangeBuffer();
-  const { transcript, memories, selectionUsage } = createEnvironment({ recorder, changes });
+  const { transcript, memories, messageUsage } = createEnvironment({ recorder, changes });
   const bind = bindResources(
     {
       messages: TranscriptResource.append.request(),
       memories: MemoryResource.snapshot.request(),
       writer: MemoryResource.apply.request(),
-      usage: SelectionUsageResource.record.request(),
+      usage: MessageUsageResource.record.request(),
     },
-    [TranscriptResource.append.provide(() => transcript), MemoryResource.snapshot.provide(() => memories), MemoryResource.apply.provide(() => memories), SelectionUsageResource.record.provide(() => selectionUsage)],
+    [TranscriptResource.append.provide(() => transcript), MemoryResource.snapshot.provide(() => memories), MemoryResource.apply.provide(() => memories), MessageUsageResource.record.provide(() => messageUsage)],
   );
   const before = bind(null).values;
   changes.take();
@@ -312,7 +316,7 @@ test('message and memory access preserves entity validation, change publication 
   assert.equal(later.memories[0].content, '周五');
   assert.equal(bind(null).values.memories[0].content, '周六');
   later.usage.add([appended[0].message, appended[0].message]);
-  assert.equal(selectionUsage.get(appended[0].message), 1);
+  assert.equal(messageUsage.get(appended[0].message), 1);
 });
 
 test('model offers separate creation and reading while preserving provider method ownership', async () => {

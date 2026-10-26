@@ -1,4 +1,4 @@
-import { ProgressChannel } from '../progress.js';
+import { ProgressChannel } from '@capix/changes';
 import type { InvocationOutputReceiver } from '@capix/contracts';
 
 /** Explicit receivers remain independent even when installed on the same invocation. */

@@ -1,9 +1,13 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore, ProgressChannel } from '@capix/server-runtime';
-import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
-import { ActiveContent, createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
+import { MemoryCheckpointStore } from '@capix/server-runtime';
+import { ProgressChannel } from '@capix/changes';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
+import { MessageUsage } from '@capix/measurement';
+import { ActiveView } from '@capix/view';
+import { createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
 import { MemoryConversationCheckpointRuns } from '@capix/observer-service/assembly';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
@@ -12,7 +16,7 @@ function binding() {
   const requests = [];
   const transcript = new Transcript();
   const memories = new Memories(transcript);
-  const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage() };
+  const entities = { transcript, memories, active: new ActiveView(transcript, memories), messageUsage: new MessageUsage() };
   const model = new ModelInteractions(
     new ModelSource({
       async invoke(request, purpose) {

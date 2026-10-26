@@ -2,9 +2,10 @@ import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Scene, Group, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
-import { MemoryResource } from '@capix/server-runtime/content';
-import { ConversationContent } from '@capix/observer-service/assembly';
-import { ActiveContentResource, PrepareConversationContext, MaintainConversationContent, ModelSettingsResource } from '@capix/observer-service/conversation';
+import { MemoryResource } from '@capix/memory';
+import { ConversationContent } from '@capix/observer-content';
+import { ActiveViewResource } from '@capix/view';
+import { PrepareConversationContext, MaintainConversationContent, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };
 const codec = { encode: structuredClone, decode: structuredClone };
@@ -88,7 +89,7 @@ function runtime(operation, content, store = new CapturedStore(), options = {}) 
   }
   return installCallable(new R(), {
     checkpoints: { store },
-    providers: [ActiveContentResource.read.provide(() => content.active), ActiveContentResource.manage.provide(() => content.active), ModelSettingsResource.snapshot.provide(() => settings), MemoryResource.apply.provide(() => content.memories)],
+    providers: [ActiveViewResource.read.provide(() => content.active), ActiveViewResource.manage.provide(() => content.active), ModelSettingsResource.snapshot.provide(() => settings), MemoryResource.apply.provide(() => content.memories)],
     source: {
       capture: () => null,
       progress: () => ({
@@ -149,7 +150,7 @@ test('a composed maintenance O may write content and choose from the new explici
   const content = new ConversationContent({ messages: [message('evidence')] });
   t.after(() => content.close());
   let calls = 0;
-  const deps = { activeContentManager: ActiveContentResource.manage.request(), memoryWriter: MemoryResource.apply.request() };
+  const deps = { activeViewManager: ActiveViewResource.manage.request(), memoryWriter: MemoryResource.apply.request() };
   class Policy extends Group {
     name = 'policy';
     label = 'policy';
@@ -159,7 +160,7 @@ test('a composed maintenance O may write content and choose from the new explici
       calls++;
       assert.equal(work.input.phase, 'after-content');
       work.resources.memoryWriter.apply([createMemory('new understanding')]);
-      const material = work.resources.activeContentManager.capture();
+      const material = work.resources.activeViewManager.capture();
       return { basis: material.basis, messageIndexes: [], memoryIds: material.memories.map((memory) => memory.id) };
     };
   }

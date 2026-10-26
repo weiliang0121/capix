@@ -1,5 +1,5 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
-import { ActiveContent } from '@capix/observer-service';
+import { ActiveView } from '@capix/view';
 import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -7,8 +7,10 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initializeObserver, ObserverConversations, createConversationStructure, FunctionConversationDecision, WorkspaceFiles } from '@capix/observer-service';
-import { ProgressChannel } from '@capix/server-runtime';
-import { Transcript, Memories, SelectionUsage } from '@capix/server-runtime/content';
+import { ProgressChannel } from '@capix/changes';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
+import { MessageUsage } from '@capix/measurement';
 import { CallableRecordHelper } from '@capix/server-runtime/recording';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
@@ -51,7 +53,7 @@ async function fixture(t, decide, options = {}) {
       ? (() => {
           const transcript = new Transcript();
           const memories = new Memories(transcript);
-          const entities = { transcript, memories, active: new ActiveContent(transcript, memories), selectionUsage: new SelectionUsage(), files };
+          const entities = { transcript, memories, active: new ActiveView(transcript, memories), messageUsage: new MessageUsage(), files };
           const definition = createConversationStructure({ files: true, decision, maxDecisionSteps: config.maxDecisionSteps });
 
           const runner = createConversationRunner(definition, entities, new ModelInteractions(new ModelSource(provider)));

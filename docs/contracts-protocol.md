@@ -14,7 +14,7 @@
 
 ## 当前依赖
 
-箭头表示依赖；省略服务、客户端及应用。
+箭头表示依赖；本图只展开结构、资源和调用的契约关系。内容实体与变化支持包的关系见 [内容实体与独立包](content-entities-packages.md)。
 
 ```mermaid
 flowchart TD
@@ -39,13 +39,16 @@ flowchart TD
 | ------------------------------ | ------------------------------------------------- | --------------------------------------------------------- |
 | `callable/`                    | kind、I/O/Delta 签名与类型见证                    | Scene/Group/Node、成员位置约束在 structure                |
 | `operation.ts`                 | Outcome、Reception、result/delta 及结果类型计算   | 资源接收在 resources，子调用接收在 Runtime                |
-| `children/`                    | 子调用动作、引用、交付事实、输入适配端口          | 成员注册在 structure，实际关系与窗口在 Runtime            |
+| `children/`                    | 子调用动作、引用、交付事实及类型关联              | 成员注册在 structure，实际关系与窗口在 Runtime            |
 | `work.ts`                      | 输入、资源、signal、业务注释及可组合端口          | 结构组合 CallableWork/ResumeWork；Runtime 签发            |
 | `output.ts` / `observation.ts` | 输出声明、接收和写入端口，业务事件                | 发布、窗口、消费故障处理在 Runtime                        |
 | `checkpoint/`                  | Codec、点的所有者签名、保存端口、refs、已核实事实 | point/resume 配置在 structure，Frame/Store/恢复在 Runtime |
-| `diagnostic.ts`                | 可序列化错误与失败归属事实                        | 错误实例和故障控制在 Runtime，传输解析在 protocol         |
+| `diagnostic.ts`                | 可序列化错误与失败归属事实                        | 故障控制在 Runtime，传输解析在 protocol                   |
+| `errors.ts`                    | RuntimeError 的唯一诊断类实现                     | 各包共享同一错误身份，具体故障策略由对应机制解释          |
 
 契约可以描述方法，它们是进程内的协作端口，不等于可序列化 DTO。协议入口不会整包重导这些方法。只有真实共享的纯值词汇（如 CallableKind、RuntimeErrorValue、InvocationFailureFact）由 protocol 显式重导其单一来源；原协议字段和接纳器不变。
+
+契约包当前的运行时出口是 `callableKinds` 和 `RuntimeError`。后者为资源、内容、变化捕获和调用提供同一诊断类身份，Runtime 只重导它；这不把异常处理、执行状态或错误传输放进契约包。`RuntimeError` 实例也不因此成为协议值。
 
 ChildReference、I/O 签名、CP point owner 等见证只有一个定义。结构和 Runtime 的便捷出口重导同一契约，避免包之间产生两个品牌。见证仅保证静态关联，运行期仍检查准确结构、父关系、注册位置和活动窗口。
 

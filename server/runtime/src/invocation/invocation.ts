@@ -20,11 +20,11 @@ import type { InvocationChangeEmitter } from './changes.js';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationObservation } from '../observation/invocation.js';
 import type { InvocationChange, InvocationFact, InvocationIdentity, InvocationDescription, InvocationRelationIdentity, InvocationRelationChange, BusinessEvent } from '../observation/facts.js';
-import { combineFaults } from '../observation/error.js';
+import { combineFaults } from '@capix/changes';
 import { invocationChange, invocationProgress } from './facts.js';
 import { InvocationExecution } from './execution.js';
 import { connectInvocationWork, type InvocationWork } from './work.js';
-import { ProgressChannel, type ProgressReceiver } from '../progress.js';
+import { ProgressChannel, type ProgressReceiver } from '@capix/changes';
 import type { InvocationProgress } from './progress.js';
 import type { InvocationExceptionOrigin, InvocationPropagationScope } from './provenance.js';
 

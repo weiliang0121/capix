@@ -35,6 +35,13 @@
     "@capix/server-runtime": "workspace:*",
     "zod": "4.6.5",
     "@capix/resources": "workspace:*",
-    "@capix/structure": "workspace:*"
+    "@capix/structure": "workspace:*",
+    "@capix/observer-content": "workspace:*",
+    "@capix/contracts": "workspace:*",
+    "@capix/changes": "workspace:*",
+    "@capix/memory": "workspace:*",
+    "@capix/transcript": "workspace:*",
+    "@capix/view": "workspace:*",
+    "@capix/measurement": "workspace:*"
   }
 }

@@ -1,6 +1,6 @@
 import type { ModelInitialization } from '../conversation/model/types.js';
 import { Clock, Runner, Resources, MemoryCheckpointStore, type CheckpointInstallation, type ObservationInstallation } from '@capix/server-runtime';
-import { SelectionUsage } from '@capix/server-runtime/content';
+import { MessageUsage } from '@capix/measurement';
 import type { Message } from '@capix/protocol';
 import { createConversationStructure } from '../conversation/structure.js';
 import { registerConversationRecording } from '../conversation/recording.js';
@@ -16,7 +16,8 @@ import { ModelInteractions } from '../conversation/model/interactions.js';
 import type { WorkspaceFiles } from '../files/index.js';
 import type { ContextMaintenanceConfiguration } from '../conversation/group/context/maintain.js';
 import type { ConversationDecisionFactory } from '../conversation/decision/types.js';
-import { ConversationContent, loadConversationContent } from './content.js';
+import { ConversationContent } from '@capix/observer-content';
+import { loadConversationContent } from './content.js';
 import { ObserverEnvironment } from './environment.js';
 import type { SqliteObserverStore } from '../persistence/store.js';
 
@@ -48,7 +49,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
   try {
     records = new ObserverRecording(changes, content.consumer, { clock, persistence, conversationId: options.conversationId });
     const { transcript, memories, active } = content;
-    const selectionUsage = new SelectionUsage();
+    const messageUsage = new MessageUsage();
     const structure = createConversationStructure({ files: Boolean(options.files), decision: options.decision, maxDecisionSteps: options.maxDecisionSteps, maintenance: options.maintenance });
     registerConversationRecording(records.installation, structure);
     const model = options.model ?? new ModelSource(provider);
@@ -59,7 +60,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
     const observation = new CheckpointObservation(conversationId, checkpointRuns);
     checkpointObservation = observation;
     const resources = new Resources<ConversationRunOptions>();
-    const entities = { transcript, memories, active, selectionUsage, files: options.files };
+    const entities = { transcript, memories, active, messageUsage, files: options.files };
     const capture = new ConversationCallCapture(structure.scene, entities, { checkpointRuns, conversationId, checkpoints });
     registerConversationResources(resources, structure, entities, interactions, capture);
     const runner = new Runner(structure.scene, resources, undefined, {
@@ -73,7 +74,7 @@ export function initializeObserver(provider: ModelInitialization, messages: read
     releaseObservation = content.observe(records.installation);
     // Fresh in-memory input is a real append after observation binds; restored content stays silent.
     if (!options.content && !persistence) transcript.append(...messages);
-    return new ObserverEnvironment({ conversationId, content, selectionUsage, files: options.files, model, interactions, clock, records, resources, runner, structure, persistence, checkpoints, checkpointRuns, checkpointObservation: observation }, { ownsContent: !options.content, ownsPersistence: !options.shared, releaseObservation });
+    return new ObserverEnvironment({ conversationId, content, messageUsage, files: options.files, model, interactions, clock, records, resources, runner, structure, persistence, checkpoints, checkpointRuns, checkpointObservation: observation }, { ownsContent: !options.content, ownsPersistence: !options.shared, releaseObservation });
   } catch (error) {
     const failures: unknown[] = [error];
     const releases = [

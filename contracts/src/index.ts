@@ -13,3 +13,6 @@ export type * from './observation.js';
 // Recovery values and certified facts; no frame, store or restoration implementation.
 export type * from './checkpoint/index.js';
 export type * from './diagnostic.js';
+
+// Shared diagnostic instance identity; independent of any running host.
+export { RuntimeError } from './errors.js';

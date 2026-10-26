@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Transcript } from '@capix/server-runtime/content';
+import { Transcript } from '@capix/transcript';
 import { ChildCallFailure } from '@capix/server-runtime';
 import { UnderstandRequest, requestOutputContract } from '@capix/observer-service';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';

@@ -1,6 +1,6 @@
 import { isEqual } from 'es-toolkit';
 import type { CallableInvocationCallbacks } from '@capix/server-runtime';
-import { TranscriptRangeRef, type TranscriptAppendProgress } from '@capix/server-runtime/content';
+import { TranscriptRangeRef, type TranscriptAppendProgress } from '@capix/transcript';
 import type { GenerationOutput, ModelSettings } from '@capix/protocol';
 import type { ConversationScene } from '../scene.js';
 import { validateSettings } from '../model/settings.js';
@@ -34,7 +34,7 @@ export class ConversationCallCapture {
   assertScope(scene: ConversationScene, entities?: ConversationEntities): void {
     if (scene !== this.scene) throw new Error('Conversation call capture belongs to another scene');
     if (!entities) return;
-    for (const key of ['transcript', 'memories', 'active', 'selectionUsage', 'files'] as const) {
+    for (const key of ['transcript', 'memories', 'active', 'messageUsage', 'files'] as const) {
       if (entities[key] !== this.entities[key]) throw new Error(`Conversation call capture has a different ${key} entity`);
     }
   }

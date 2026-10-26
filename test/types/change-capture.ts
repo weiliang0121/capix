@@ -1,5 +1,7 @@
 import type { ObserverChange } from '@capix/protocol';
-import { ChangeBuffer, Transcript, Driver, defineScene, type ChangeCapture, type TranscriptEvent } from '@capix/server-runtime';
+import { ChangeBuffer, type ChangeCapture } from '@capix/changes';
+import { Transcript, type TranscriptEvent } from '@capix/transcript';
+import { Driver, defineScene } from '@capix/server-runtime';
 
 // A second local source demonstrates union reuse without inventing a production MemoryEvent.
 type OtherEvent = Readonly<{ kind: 'other-changed'; value: number }>;

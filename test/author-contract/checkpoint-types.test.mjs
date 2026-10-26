@@ -6,7 +6,7 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/checkpoint-contract.ts', import.meta.url));
 const source = `
-import {checkpointPoint, childReference, childReferences, defineNode, defineGroup, defineScene} from '@capix/server-runtime';
+import { checkpointPoint, childReference, childReferences, defineNode, defineGroup, defineScene } from '@capix/server-runtime';
 import type { AuthorCheckpointWriter, CheckpointCodec, CheckpointPointOwner, ChildReference, ChildReferenceSlot, CallableContract, InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@capix/server-runtime';
 import type { ResourceRequest } from '@capix/resources';
 

@@ -8,7 +8,7 @@ import { callableKinds as wireKinds } from '@capix/protocol';
 
 test('contracts own shared vocabulary without a reverse implementation or wire dependency', async () => {
   assert.equal(contracts.callableKinds, wireKinds);
-  assert.deepEqual(Object.keys(contracts), ['callableKinds']);
+  assert.deepEqual(Object.keys(contracts).sort(), ['RuntimeError', 'callableKinds']);
   const root = new URL('../contracts/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
   assert.deepEqual(Object.keys(manifest.dependencies ?? {}), []);

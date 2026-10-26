@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChangeBuffer, ProgressChannel } from '@capix/server-runtime';
-import { Memories, Transcript } from '@capix/server-runtime/content';
+import { ChangeBuffer, ProgressChannel } from '@capix/changes';
+import { Memories } from '@capix/memory';
+import { Transcript } from '@capix/transcript';
 
 const message = (content, role = 'user') => ({ role, content });
 const create = (content, indexes = [0]) => ({ action: 'create', memoryId: null, change: 'new understanding', sourceIndexes: indexes, result: { topic: 'topic', content, sourceIndexes: indexes } });

@@ -3,7 +3,8 @@ import { ModelInteractions, ModelSource } from '@capix/observer-service';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
-import { ProgressChannel, defineGroup } from '@capix/server-runtime';
+import { ProgressChannel } from '@capix/changes';
+import { defineGroup } from '@capix/server-runtime';
 import { ConversationSubmission, createSubmissionStore, createConversationStructure, ConversationGroup, acceptMessages } from '@capix/observer-service';
 import { createEnvironment } from '../fixtures/environment.mjs';
 

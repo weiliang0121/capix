@@ -154,11 +154,11 @@ test('separate runners share entities without absorbing their lifetimes', async 
   const first = await run(environment.runner, '我在北京');
   const memory = environment.memories.values()[0];
 
-  const nextRunner = createConversationRunner(createConversationStructure(), { transcript: environment.transcript, memories: environment.memories, selectionUsage: environment.selectionUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)), { observations: [environment.records.installation], changes: environment.changes });
+  const nextRunner = createConversationRunner(createConversationStructure(), { transcript: environment.transcript, memories: environment.memories, messageUsage: environment.messageUsage, active: environment.content.active }, new ModelInteractions(new ModelSource(provider)), { observations: [environment.records.installation], changes: environment.changes });
   const second = await run(nextRunner, '继续');
   assert.equal(second.execution.status, 'succeeded');
   assert.equal(environment.memories.get(memory.id), memory);
-  assert.equal(environment.selectionUsage.get(environment.transcript.get(0)), 1);
+  assert.equal(environment.messageUsage.get(environment.transcript.get(0)), 1);
   assert.equal(second.calls.filter((item) => item.structureKind === 'group' && item.id !== second.execution.id).find((operation) => operation.name === 'memory').value.input.memories[0].id, memory.id);
   const observation = observeOverview(environment);
   assert.equal(observation.executions.length, 2);

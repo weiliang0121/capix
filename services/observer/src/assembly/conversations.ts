@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { RuntimeError, type InvocationControls, type CheckpointInstallation, type ObservationInstallation } from '@capix/server-runtime';
-import { Transcript, Memories } from '@capix/server-runtime/content';
+import { RuntimeError } from '@capix/contracts';
+import { type InvocationControls, type CheckpointInstallation, type ObservationInstallation } from '@capix/server-runtime';
+import { Transcript } from '@capix/transcript';
+import { Memories } from '@capix/memory';
 import type { ConversationDescriptor, ConversationListResponse, Message } from '@capix/protocol';
 import type { ModelInitialization } from '../conversation/model/types.js';
 import { conversationTitle } from '../conversation/title.js';
@@ -11,7 +13,7 @@ import type { ConversationDecisionFactory } from '../conversation/decision/types
 import type { SqliteObserverStore } from '../persistence/store.js';
 import { initializeObserver } from './initialize.js';
 import type { ObserverEnvironment } from './environment.js';
-import { ConversationContent } from './content.js';
+import { ConversationContent } from '@capix/observer-content';
 
 /** Service-owned association of conversations, content and optional running/observed environments. */
 export class ObserverConversations {

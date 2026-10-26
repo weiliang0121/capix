@@ -1,11 +1,11 @@
-import type { ActiveContentSnapshot } from './active.js';
+import type { ActiveViewSnapshot } from '@capix/view';
 import type { PreparedConversationContext } from '../group/context/types.js';
 
 /** Messages remain in Transcript; historic memory values are needed by the record detail projection. */
-export function describeActiveContent(material: ActiveContentSnapshot) {
+export function describeActiveView(material: ActiveViewSnapshot) {
   return { basis: material.basis, messageIndexes: material.messages.map((item) => item.index), memories: material.memories };
 }
 
 export function describePreparedConversationContext(prepared: PreparedConversationContext) {
-  return { material: describeActiveContent(prepared.material), selection: prepared.selection };
+  return { material: describeActiveView(prepared.material), selection: prepared.selection };
 }

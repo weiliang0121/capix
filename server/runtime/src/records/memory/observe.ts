@@ -1,7 +1,7 @@
 import type { MemoryObservation } from '@capix/protocol';
 import type { RecordBook } from '../book.js';
 import { MemoryRecord } from './record.js';
-import type { Memories } from '../../memory/memories.js';
+import type { Memories } from '@capix/memory';
 
 /** Project current memory content together with its available change records. */
 export function observeMemory(collection: Memories, book: RecordBook): MemoryObservation {

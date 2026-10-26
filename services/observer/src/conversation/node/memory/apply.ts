@@ -1,4 +1,4 @@
-import { MemoryResource } from '@capix/server-runtime/content';
+import { MemoryResource } from '@capix/memory';
 import type { MemoryWriteResources } from '../../resources.js';
 import { Node, checkpointPoint, type NodeWork } from '@capix/structure';
 import { checkpointCodec } from '../../checkpoint.js';

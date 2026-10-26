@@ -26,7 +26,7 @@ CAPiX 是从实际对话链路逐步演进的可观测 Agent 框架，包含服�
 “运行时”表示系统实际协作的活动状态。Scene、Group、Node 是可复用结构的角色；三者都遵守共同的 Callable 契约，Scene 和 Group 另有成员组合能力。
 
 ```text
-独立实体：Transcript、Memories、SelectionUsage、模型供给、记录容器……
+独立实体：Transcript、Memories、MessageUsage、模型供给、记录容器……
                       │ 通过资源契约提供受控访问
 结构：Scene / Group / Node = Callable + 可选 Composite
                       │ runner.build：解算接线、安装调用构造能力

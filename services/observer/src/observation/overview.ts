@@ -1,6 +1,6 @@
 import { readOutput, type ExecutionSummary, type InvocationSummary, type ObserverOverview, type RecordingArchive } from '@capix/protocol';
 import { type RecordBook } from '@capix/server-runtime/recording';
-import { type Transcript } from '@capix/server-runtime/content';
+import { type Transcript } from '@capix/transcript';
 import { executionTranscript } from './evidence.js';
 import { inspectExecutions } from './inspect.js';
 import { executionArchive } from './archive.js';

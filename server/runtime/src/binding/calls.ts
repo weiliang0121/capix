@@ -1,7 +1,7 @@
 import type { InvocationOutputReceiver } from '@capix/contracts';
 import type { ResourceInstallation } from '../resource/installation.js';
 import type { ResourceSupply } from '@capix/resources';
-import type { ProgressReceiver } from '../progress.js';
+import type { ProgressReceiver } from '@capix/changes';
 import type { InvocationProgress } from '../invocation/progress.js';
 import type { CallableInvocationStarted } from '../invocation/builders/callable.js';
 import type { AnyCallable } from './declarations.js';

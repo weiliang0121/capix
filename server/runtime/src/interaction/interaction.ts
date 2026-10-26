@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { RuntimeError } from '../errors/error.js';
+import { RuntimeError } from '@capix/contracts';
 import { PersistenceError } from '../errors/persistence.js';
 import { RuntimeErrorHelper } from '../errors/helper.js';
 import { isNonBlankString } from '../value/string.js';
 import type { InteractionFact, InteractionFeedback, InteractionOptions, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
 import { captureInteractionValue, sameInteractionValue } from './value.js';
-import { ProgressChannel } from '../progress.js';
+import { ProgressChannel } from '@capix/changes';
 
 /** One fixed external exchange. Invocation waiters neither own its delivery nor consume its reply. */
 export class Interaction<Request, Reply> {
