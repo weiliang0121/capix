@@ -1,17 +1,23 @@
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import type { RecordChangeEvent, RecordMutation } from '@capix/protocol';
 import type { ChangeCapture } from '@capix/changes';
 import { captureChange } from '@capix/changes';
 import { snapshotValue } from './value/snapshot.js';
-import { Clock } from '../clock.js';
 import { RecordBook } from './book.js';
 import type { BaseRecord } from './record.js';
 import { RecordTree } from './tree/tree.js';
 import { RecordRegistration } from './registration.js';
 import { writeRecord } from './error.js';
 
+/** Wall time for record dates; monotonic time for observed durations. */
+export interface RecordClock {
+  now(): string;
+  tick(): number;
+}
+
 export interface RecorderOptions {
-  clock?: Clock;
+  clock?: RecordClock;
   changes?: ChangeCapture<RecordChangeEvent>;
 }
 
@@ -23,7 +29,7 @@ export class Recorder {
     return this.#revision;
   }
   readonly tree: RecordTree;
-  readonly clock: Clock;
+  readonly clock: RecordClock;
   private readonly changes?: ChangeCapture<RecordChangeEvent>;
   #registering = false;
   readonly #listeners = new Set<(record: BaseRecord<unknown>, change: 'add' | 'update', related: readonly BaseRecord<unknown>[]) => void>();
@@ -32,7 +38,7 @@ export class Recorder {
     readonly book: RecordBook,
     options: RecorderOptions = {},
   ) {
-    this.clock = options.clock ?? new Clock();
+    this.clock = options.clock ?? { now: () => new Date().toISOString(), tick: () => performance.now() };
     this.changes = options.changes;
     this.tree = new RecordTree(book);
   }

@@ -1,5 +1,5 @@
 import { createRecordScope } from './fixtures/runtime.mjs';
-import { RecordingRootHelper } from '@capix/server-runtime';
+import { RecordingRootHelper } from '@capix/records';
 import { callFor, recordFor } from './fixtures/lifecycle.mjs';
 import { subscribeExecutions } from '@capix/observer-service';
 import { lifecycleFor } from './fixtures/lifecycle.mjs';
@@ -7,7 +7,8 @@ import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { createInput, observeFixture } from './fixtures/observer.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { Recorder, BaseRecord, CallableRecord, ExecutionRecord, OperationRecord, RecordBook, ExecutionRecordHelper, OperationRecordHelper, Clock } from '@capix/server-runtime';
+import { Clock } from '@capix/server-runtime';
+import { Recorder, BaseRecord, CallableRecord, ExecutionRecord, OperationRecord, RecordBook, ExecutionRecordHelper, OperationRecordHelper } from '@capix/records';
 import { RuntimeError } from '@capix/contracts';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 import { test } from 'node:test';

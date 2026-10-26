@@ -4,8 +4,9 @@ import type { ObservationDeclarationScope } from '../../definition/observation.j
 import { ObservationError } from '../../observation/error.js';
 import type { EventConsumer } from '@capix/changes';
 import type { InvocationObserver } from '../../observation/observer.js';
-import type { Recorder } from '../recorder.js';
-import { RecordingRootHelper } from '../root/helper.js';
+import type { Recorder, RecordingRootRecord } from '@capix/records';
+import { RecordWriterResource, type RecordWriter } from '@capix/records/construction';
+import { Resource, Resources, type ResourceBinding } from '@capix/resources';
 import { InvocationRecordAccess, invocationRecording, type InvocationRecordDescription } from './declaration.js';
 import type { CallableInput, CallableOutput } from '@capix/contracts';
 import { assertStructureConfigurable } from '@capix/structure/construction';
@@ -20,16 +21,24 @@ export interface RecordingOptions {
 /** One optional record installation. Shared output does not share per-call state. */
 export class RecordingInstallation implements ObservationInstallation {
   readonly #descriptions = new WeakMap<object, InvocationRecordDescription>();
-  readonly root;
+  readonly root: RecordingRootRecord;
+  /** Fixed entity supply; each observed fact opens its own synchronous window. */
+  readonly records: ResourceBinding<{ record: RecordWriter }>;
   readonly provides = Object.freeze({ record: InvocationRecordAccess.request() });
-  readonly transcript: EventConsumer<TranscriptEvent> = this.consumer((event) => this.recorder.add(transcriptRecord(event)));
-  readonly memory: EventConsumer<MemoryEvent> = this.consumer((event) => this.recorder.add(memoryRecord(event)));
+  readonly transcript: EventConsumer<TranscriptEvent> = this.consumer((event, writer) => writer.add(transcriptRecord(event)));
+  readonly memory: EventConsumer<MemoryEvent> = this.consumer((event, writer) => writer.add(memoryRecord(event)));
   readonly failure: 'isolate' | 'propagate';
   constructor(
     readonly recorder: Recorder,
     private readonly options: RecordingOptions = {},
   ) {
-    this.root = RecordingRootHelper.create(recorder);
+    this.records = new Resources().register(new Resource(recorder), RecordWriterResource).bind({ record: RecordWriterResource.request() });
+    const access = this.records.open();
+    try {
+      this.root = access.endpoints.record.root();
+    } finally {
+      access.close();
+    }
     this.failure = options.failure ?? 'isolate';
   }
   describe<Structure extends ObservationDeclarationScope>(structure: Structure, description: InvocationRecordDescription<CallableInput<Structure>, CallableOutput<Structure>>): this {
@@ -49,13 +58,18 @@ export class RecordingInstallation implements ObservationInstallation {
   invalidate(error: unknown): void {
     this.options.invalidate?.(error);
   }
-  private consumer<Event>(work: (event: Event) => unknown): EventConsumer<Event> {
+  private consumer<Event>(work: (event: Event, writer: RecordWriter) => unknown): EventConsumer<Event> {
     let active = true;
     return {
       publish: (event) => {
         if (!active) return undefined;
         try {
-          work(event);
+          const access = this.records.open();
+          try {
+            work(event, access.endpoints.record);
+          } finally {
+            access.close();
+          }
           return undefined;
         } catch (cause) {
           active = false;

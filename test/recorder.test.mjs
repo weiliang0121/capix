@@ -1,7 +1,7 @@
 import { ExecutionFixture } from './fixtures/behavior.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Recorder, BaseRecord, RecordBook, TranscriptRecord, MemoryRecord, ExecutionRecordHelper } from '@capix/server-runtime';
+import { Recorder, BaseRecord, RecordBook, TranscriptRecord, MemoryRecord, ExecutionRecordHelper } from '@capix/records';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import { createBoundRuntime, observeCall, fixtureState } from './fixtures/runtime.mjs';

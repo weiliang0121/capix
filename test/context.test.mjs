@@ -1,10 +1,11 @@
 import { contextWithSource, sourceFor } from './fixtures/observer.mjs';
 import { callFor, recordFor } from './fixtures/lifecycle.mjs';
-import { InvocationRecordHelper, CallableRecord } from '@capix/server-runtime';
+import { InvocationRecordHelper, CallableRecord } from '@capix/records';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InvocationContext, Recorder, RecordBook } from '@capix/server-runtime';
+import { InvocationContext } from '@capix/server-runtime';
+import { Recorder, RecordBook } from '@capix/records';
 import { Transcript } from '@capix/transcript';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 

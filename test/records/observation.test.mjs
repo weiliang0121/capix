@@ -2,7 +2,8 @@ import { ResourceAccessClosed } from '@capix/resources';
 import { ResourceBindings } from '../fixtures/resources.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bindRecording, bindInvocationObservation, invocationRecording, Recorder, RecordBook, CallableRecordHelper, CallableRecord, defineObservation, InvocationRecordAccess } from '@capix/server-runtime';
+import { bindRecording, bindInvocationObservation, invocationRecording, defineObservation, InvocationRecordAccess } from '@capix/server-runtime';
+import { Recorder, RecordBook, CallableRecordHelper, CallableRecord } from '@capix/records';
 import { ChangeBuffer } from '@capix/changes';
 
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';

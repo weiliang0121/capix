@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RecordBook, Recorder, BaseRecord, CompositeRecord, RecordingRootRecord, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper } from '@capix/server-runtime/recording';
+import { RecordBook, Recorder, BaseRecord, CompositeRecord, RecordingRootRecord, RuntimeCallRecord, ExecutionRecord, OperationRecord, AttemptRecord, InvocationBoundaryRecord, TranscriptRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper } from '@capix/records';
 import { readOutput, validateLegacyExecutionRecordSnapshot } from '@capix/protocol';
 
 const occurredAt = '2026-10-12T00:00:00.000Z';

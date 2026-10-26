@@ -1,16 +1,41 @@
 import type { BuiltCallable, CallableInput, Group, GroupWork } from '@capix/server-runtime';
 import { CallableBuilder, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationOptions, type CallableSourceBinding } from '@capix/server-runtime/construction';
 import { Transcript } from '@capix/transcript';
-import type { ResourceRecord as ResourceRecordEntity } from '@capix/server-runtime/recording';
+import { RecordResource, type ResourceRecord as ResourceRecordEntity } from '@capix/records';
 import type { ResourceRecord, ExecutionRecordSnapshot } from '@capix/protocol/recording';
 import type { ConversationRequest } from '@capix/protocol/conversation';
 import type { InvocationOrigin } from '@capix/protocol/invocation';
 import type { TranscriptSnapshot } from '@capix/protocol/content';
 import type { ObserverChange } from '@capix/protocol/observer';
 import type { MemoryInput } from '@capix/observer-service/conversation';
-import { defineGroup, defineScene } from '@capix/server-runtime';
+import { defineGroup, defineNode, defineScene } from '@capix/server-runtime';
 import { ActiveViewResource } from '@capix/observer-content';
 import { MaintainConversationContent, PrepareConversationContext, type ContextMaintenanceInput, type ContextMaintenanceDecision, type ContextMaintenancePolicy } from '@capix/observer-service/conversation';
+
+const recordReader = defineNode<string, unknown>()({
+  deps: { records: RecordResource.read.request() },
+  run(work) {
+    const entry = work.resources.records.get(work.input);
+    const value: unknown = entry?.data.value;
+    // @ts-expect-error A read endpoint cannot create content.
+    work.resources.records.create('content');
+    // @ts-expect-error Record snapshots do not expose live entity methods.
+    entry?.toJSON();
+    return value;
+  },
+});
+const recordCreator = defineNode<string, string>()({
+  deps: { records: RecordResource.write.request() },
+  run(work) {
+    const entry = work.resources.records.create({ text: work.input });
+    // @ts-expect-error Ordinary content writers cannot mutate invocation records.
+    work.resources.records.update(entry, () => undefined);
+    // @ts-expect-error Writing content does not implicitly grant collection reads.
+    work.resources.records.snapshot();
+    return entry.data.id;
+  },
+});
+void [recordReader, recordCreator];
 
 const maintenancePolicy = defineGroup<ContextMaintenanceInput, ContextMaintenanceDecision>()({
   name: 'explicit-policy',

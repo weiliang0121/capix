@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runner, Resources, Scene, Node, Recorder, RecordBook, bindRecording, invocationRecording, CallableRecord } from '@capix/server-runtime';
+import { Runner, Resources, Scene, Node, bindRecording, invocationRecording } from '@capix/server-runtime';
+import { Recorder, RecordBook, CallableRecord } from '@capix/records';
 import { validateInvocationRecordValue } from '@capix/protocol';
 import { ClientSubmission, SubmissionContractError, ObservationConnectionError } from '@capix/client-runtime';
 import { ConversationHttpTransport, ObservationHttpTransport } from '@capix/client-http';

@@ -28,6 +28,6 @@
     "@capix/structure": "workspace:*",
     "@capix/contracts": "workspace:*",
     "@capix/changes": "workspace:*",
-    "@capix/memory": "workspace:*"
+    "@capix/records": "workspace:*"
   }
 }

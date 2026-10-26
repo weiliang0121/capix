@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SqliteObserverStore, initializeObserver, observeOverview, ObservationFeed } from '@capix/observer-service';
-import { CallableRecord, CallableRecordHelper } from '@capix/server-runtime/recording';
+import { CallableRecord, CallableRecordHelper } from '@capix/records';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 
 for (const mode of ['content', 'running', 'finished']) {

@@ -11,7 +11,8 @@ import { ProgressChannel } from '@capix/changes';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import { MessageUsage } from '@capix/measurement';
-import { Recorder, RecordBook, bindRecording } from '@capix/server-runtime/recording';
+import { bindRecording } from '@capix/server-runtime/recording';
+import { Recorder, RecordBook } from '@capix/records';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const sourceText = 'PRIVATE_SOURCE_MARKER 文档中的资料，不应进入记录正文。';

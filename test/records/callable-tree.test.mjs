@@ -1,7 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CallableRecord, CallableRecordHelper, Recorder, RecordBook, RecordingRootRecord, RuntimeCallRecord, ExecutionRecord, bindRecording, invocationRecording } from '@capix/server-runtime/recording';
+import { bindRecording, invocationRecording } from '@capix/server-runtime/recording';
+import { CallableRecord, CallableRecordHelper, Recorder, RecordBook, RecordingRootRecord, RuntimeCallRecord, ExecutionRecord } from '@capix/records';
 import { defineScene, defineGroup, defineNode } from '@capix/server-runtime';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 

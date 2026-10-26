@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { initializeObserver, acceptConversationInput, observeExecution, memoryOutputContract, createConversationStructure } from '@capix/observer-service';
 
-import { observeMemory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder, bindRecording } from '@capix/server-runtime';
+import { bindRecording } from '@capix/server-runtime';
+import { observeMemory, MemoryRecord, MemoryRecordHelper, RecordBook, BaseRecord, Recorder } from '@capix/records';
 import { Memories, Memory } from '@capix/memory';
 import { Transcript } from '@capix/transcript';
 import { MessageUsage } from '@capix/measurement';

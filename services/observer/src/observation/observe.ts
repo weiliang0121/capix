@@ -1,7 +1,7 @@
 import type { ExecutionRecordSnapshot } from '@capix/protocol';
 import type { RecordingInstallation } from '@capix/server-runtime/recording';
 
-import { InvocationBoundaryRecord } from '@capix/server-runtime/recording';
+import { InvocationBoundaryRecord } from '@capix/records';
 import { callRecord, isTaskRecord, recordSubtree, taskSnapshot } from './calls.js';
 
 import type { ConversationRunOptions, ConversationRunner } from '../conversation/binding/contract.js';

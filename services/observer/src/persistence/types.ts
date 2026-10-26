@@ -1,4 +1,4 @@
-import type { RecordBookState } from '@capix/server-runtime/recording';
+import type { RecordBookState } from '@capix/records';
 import type { RecordingArchive } from '@capix/protocol';
 import type { InteractionPersistence, InteractionState } from '@capix/server-runtime';
 

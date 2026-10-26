@@ -2,7 +2,7 @@ import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createInput, sourceFor, contextFor, transcriptFor, observeFixture } from '../fixtures/observer.mjs';
-import { ExecutionRecord, snapshotValue } from '@capix/server-runtime';
+import { ExecutionRecord, snapshotValue } from '@capix/records';
 
 import { selectionOutputContract } from '@capix/observer-service';
 

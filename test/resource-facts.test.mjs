@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { TranscriptResource, TranscriptRangeRef, Transcript } from '@capix/transcript';
 import { Memories, MemoryResource } from '@capix/memory';
 import { ChangeBuffer } from '@capix/changes';
-import { Recorder, RecordBook, CallableRecordHelper, ResourceRecord, snapshotValue } from '@capix/server-runtime';
+import { Recorder, RecordBook, CallableRecordHelper, ResourceRecord, snapshotValue } from '@capix/records';
 import { ResourceOffer } from '@capix/resources';
 
 function scope(recorder = new Recorder(new RecordBook()), contextId = 'call') {

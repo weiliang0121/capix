@@ -1,6 +1,5 @@
-import { isObjectLike } from '../../value/object.js';
-import { isArray, isFinite } from 'es-toolkit/compat';
-import { isBoolean, isNull, isString } from 'es-toolkit/predicate';
+import { isArray, isFinite, isObject } from 'es-toolkit/compat';
+import { isBoolean, isFunction, isNull, isString } from 'es-toolkit/predicate';
 
 /** Check record content policy without changing the value; this does not validate business contracts. */
 export function assertRecordContent(value: unknown): void {
@@ -10,7 +9,7 @@ export function assertRecordContent(value: unknown): void {
 function checkContent(value: unknown, ancestors: Set<object>): void {
   if (isNull(value) || isString(value) || isBoolean(value)) return;
   if (isFinite(value)) return;
-  if (!isObjectLike(value)) throw new TypeError('Unsupported record content');
+  if (!isObject(value) || isFunction(value)) throw new TypeError('Unsupported record content');
   if (ancestors.has(value)) throw new TypeError('Record content must not be cyclic');
   if (!isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && !isNull(Object.getPrototypeOf(value))) throw new TypeError('Record content must use plain objects and arrays');
 

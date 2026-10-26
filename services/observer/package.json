@@ -42,6 +42,7 @@
     "@capix/memory": "workspace:*",
     "@capix/transcript": "workspace:*",
     "@capix/view": "workspace:*",
-    "@capix/measurement": "workspace:*"
+    "@capix/measurement": "workspace:*",
+    "@capix/records": "workspace:*"
   }
 }

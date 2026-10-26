@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ObserverConversations, SqliteObserverStore, observeOverview } from '@capix/observer-service';
-import { TranscriptRecord, MemoryRecord } from '@capix/server-runtime/recording';
+import { TranscriptRecord, MemoryRecord } from '@capix/records';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
 const provider = {

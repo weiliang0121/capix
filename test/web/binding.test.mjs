@@ -4,7 +4,7 @@ import { installFrames } from './frames.mjs';
 import { ClientRuntime } from '@capix/client-runtime';
 import { initializeObserver, observeExecution, observeOverview, ObservationFeed } from '@capix/observer-service';
 import { Transcript } from '@capix/transcript';
-import { observeMemory } from '@capix/server-runtime';
+import { observeMemory } from '@capix/records';
 import { projectDetail } from '../../apps/observer/.test-dist/binding/details.js';
 import { createApplication } from '../../apps/observer/.test-dist/binding/application.js';
 import { client, deferred, snapshot, transport, submissionDelivery, conversationDescriptor } from '../client/fixtures.mjs';

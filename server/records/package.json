@@ -1,0 +1,27 @@
+{
+  "name": "@capix/records",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./construction": {
+      "types": "./dist/construction.d.ts",
+      "import": "./dist/construction.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@capix/contracts": "workspace:*",
+    "@capix/changes": "workspace:*",
+    "@capix/protocol": "workspace:*",
+    "es-toolkit": "1.52.0",
+    "@capix/resources": "workspace:*"
+  }
+}

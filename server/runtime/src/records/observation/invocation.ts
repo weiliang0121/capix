@@ -8,12 +8,8 @@ import { failureFact } from '../../invocation/failure.js';
 import type { InvocationFact, ResourceObservation } from '../../observation/facts.js';
 import type { InvocationObserver } from '../../observation/observer.js';
 import { ResourceSupply, resourceRequests } from '@capix/resources';
-import { CallableRecord } from '../callable/record.js';
-import { InvocationBoundaryRecordHelper } from '../invocation/boundary/helper.js';
-import { InvocationRecordHelper } from '../invocation/helper.js';
-import type { Recorder } from '../recorder.js';
-import { ResourceRecord } from '../resource/record.js';
-import type { RecordChangeSource } from '../source.js';
+import { CallableRecord, InvocationRecordHelper, ResourceRecord, type RecordChangeSource } from '@capix/records';
+import type { RecordWriter } from '@capix/records/construction';
 import { InvocationRecordAccess, type InvocationRecordDescription, type InvocationRecordWriter } from './declaration.js';
 import type { RecordingInstallation } from './installation.js';
 import { memoryRecord, recordedResult, transcriptRecord } from './mapping.js';
@@ -50,38 +46,35 @@ export class InvocationRecording implements InvocationObserver {
     return undefined;
   }
   observeDescribed(fact: InvocationFact, description: InvocationRecordDescription = {}): void {
-    this.protect(() => {
+    this.protect((writer) => {
       if (fact.identity.contextId !== this.setup.identity.contextId || fact.identity.kind !== this.setup.identity.kind) throw new Error('Call fact belongs to another local observation');
       this.#recordDescription = description;
-      if (fact.kind === 'started') this.begin(fact);
-      else if (fact.kind === 'process') this.process(fact);
+      if (fact.kind === 'started') this.begin(fact, writer);
+      else if (fact.kind === 'process') this.process(fact, writer);
       else if (fact.kind === 'relation') {
         if (!this.#record && fact.change.kind === 'attached') this.#pendingAttachments.push({ ...fact, identity: { ...fact.identity }, relation: { ...fact.relation }, change: { kind: 'attached' } });
-        else this.relation(fact);
-      } else this.finish(fact);
+        else this.relation(fact, writer);
+      } else this.finish(fact, writer);
     });
   }
   resource(fact: ResourceObservation): void {
-    this.protect(() => {
+    this.protect((writer) => {
       const record = this.requireRecord();
       if (fact.contextId !== record.contextId) throw new Error('Resource fact belongs to another call');
-      this.recorder.add(new ResourceRecord({ parentId: record.id, access: fact.access, supplyId: fact.supplyId, sequence: fact.sequence, occurredAt: fact.occurredAt, phase: fact.phase, ...(fact.interactionId ? { interactionId: fact.interactionId } : {}) }, fact.describe()));
+      writer.add(new ResourceRecord({ parentId: record.id, access: fact.access, supplyId: fact.supplyId, sequence: fact.sequence, occurredAt: fact.occurredAt, phase: fact.phase, ...(fact.interactionId ? { interactionId: fact.interactionId } : {}) }, fact.describe()));
     });
   }
   transcript(event: TranscriptEvent): void {
-    this.protect(() => {
+    this.protect((writer) => {
       this.checkOrigin(event.origin);
-      this.recorder.add(transcriptRecord(event, this.source()));
+      writer.add(transcriptRecord(event, this.source()));
     });
   }
   memory(event: MemoryEvent): void {
-    this.protect(() => {
+    this.protect((writer) => {
       this.checkOrigin(event.origin);
-      this.recorder.add(memoryRecord(event, this.source()));
+      writer.add(memoryRecord(event, this.source()));
     });
-  }
-  private get recorder(): Recorder {
-    return this.installation.recorder;
   }
   private requireRecord(): CallableRecord {
     if (!this.#record) throw new Error('The call recording has not started');
@@ -94,13 +87,13 @@ export class InvocationRecording implements InvocationObserver {
     const record = this.requireRecord();
     return { contextId: record.contextId, callId: record.id };
   }
-  private begin(fact: Extract<InvocationFact, { kind: 'started' }>): void {
+  private begin(fact: Extract<InvocationFact, { kind: 'started' }>, writer: RecordWriter): void {
     if (this.#record) throw new Error('A call recording can only start once');
     const input = this.#recordDescription.input ? this.#recordDescription.input(fact.input) : fact.input;
     const description = fact.description ?? this.setup.description ?? {};
     const parentRecord = this.parentRecording?.requireRecord();
     if ((fact.identity.parentContextId !== undefined) !== !!parentRecord || (parentRecord && parentRecord.contextId !== fact.identity.parentContextId)) throw new Error('Call recording parent differs from its invocation relationship');
-    this.#record = this.recorder.add(
+    this.#record = writer.add(
       new CallableRecord(
         {
           contextId: fact.identity.contextId,
@@ -114,11 +107,11 @@ export class InvocationRecording implements InvocationObserver {
       ),
     );
     this.#startedTick = fact.monotonicTime;
-    this.boundary(fact, 'call');
+    this.boundary(fact, 'call', writer);
     // Construction can attach children before this call starts; retain actual fact order.
-    for (const attachment of this.#pendingAttachments.splice(0)) this.relation(attachment, Math.max(0, this.offset(attachment.monotonicTime)));
+    for (const attachment of this.#pendingAttachments.splice(0)) this.relation(attachment, writer, Math.max(0, this.offset(attachment.monotonicTime)));
   }
-  private process(fact: Extract<InvocationFact, { kind: 'process' }>): void {
+  private process(fact: Extract<InvocationFact, { kind: 'process' }>, writer: RecordWriter): void {
     const record = this.requireRecord();
     const process = fact.process;
     let body;
@@ -127,13 +120,13 @@ export class InvocationRecording implements InvocationObserver {
     else if ('output' in process && this.#recordDescription.output) body = { ...process, output: this.#recordDescription.output(process.output) };
     else body = process;
     const entry: ProcessRecord = { ...body, sequence: fact.processSequence, eventSequence: fact.eventSequence, round: fact.round, occurredAt: fact.occurredAt, offsetMs: this.offset(fact.monotonicTime) };
-    this.recorder.update(
+    writer.update(
       record,
       (current) => current.append(entry),
       (current) => ({ kind: 'process-appended', id: current.id, process: current.value.processes.at(-1)! }),
     );
   }
-  private relation(fact: Extract<InvocationFact, { kind: 'relation' }>, offsetMs = this.offset(fact.monotonicTime)): void {
+  private relation(fact: Extract<InvocationFact, { kind: 'relation' }>, writer: RecordWriter, offsetMs = this.offset(fact.monotonicTime)): void {
     const record = this.requireRecord();
     const childRecording = this.#childRecordings.get(fact.relation.childContextId);
     if (fact.relation.parentContextId !== record.contextId) throw new Error('Relation fact belongs to another parent');
@@ -144,25 +137,25 @@ export class InvocationRecording implements InvocationObserver {
     else if (fact.change.kind === 'failed') change = { kind: 'failed', source: fact.change.source, error: RuntimeErrorHelper.format(fact.change.error), ...(fact.change.failure ? { failure: failureFact(fact.change.failure) } : {}) };
     else change = fact.change;
     const relation = { identity: fact.relation, eventSequence: fact.eventSequence, occurredAt: fact.occurredAt, offsetMs, ...(childRecording?.record ? { childId: childRecording.record.id } : {}), change };
-    this.recorder.update(
+    writer.update(
       record,
       (current) => current.appendRelation(relation),
       (current) => ({ kind: 'relation-appended', id: current.id, relation: current.value.relationChanges.at(-1)! }),
     );
   }
-  private finish(fact: Extract<InvocationFact, { kind: 'finished' }>): void {
+  private finish(fact: Extract<InvocationFact, { kind: 'finished' }>, writer: RecordWriter): void {
     const state = fact.state;
     if (!this.#record && state.status === 'failed') return;
     const record = this.requireRecord();
     if (state.status === 'running') throw new Error('A terminal call fact requires an outcome');
-    if (state.status === 'failed') InvocationRecordHelper.finish(this.recorder, record, (current) => current.fail(RuntimeErrorHelper.format(state.error), state.failure ? failureFact(state.failure) : undefined));
+    if (state.status === 'failed') InvocationRecordHelper.finish(writer, record, (current) => current.fail(RuntimeErrorHelper.format(state.error), state.failure ? failureFact(state.failure) : undefined));
     else {
       const last = record.value.processes.at(-1);
       const resultOf = last?.type === 'return' ? ('resultOf' in last ? last.resultOf : last.sequence) : undefined;
       const output = isUndefined(resultOf) ? (this.#recordDescription.output ? this.#recordDescription.output(state.output) : state.output) : undefined;
-      InvocationRecordHelper.finish(this.recorder, record, (current) => current.complete(output, resultOf));
+      InvocationRecordHelper.finish(writer, record, (current) => current.complete(output, resultOf));
     }
-    this.boundary(fact, state.status === 'succeeded' ? 'return' : 'throw');
+    this.boundary(fact, state.status === 'succeeded' ? 'return' : 'throw', writer);
   }
   private timingRoot(): InvocationRecording {
     let recording: InvocationRecording = this;
@@ -174,14 +167,21 @@ export class InvocationRecording implements InvocationObserver {
     if (isUndefined(timingRecording.#startedTick)) throw new Error('Call recording has no timing origin');
     return time - timingRecording.#startedTick;
   }
-  private boundary(fact: InvocationFact, type: 'call' | 'return' | 'throw'): void {
+  private boundary(fact: InvocationFact, type: 'call' | 'return' | 'throw', writer: RecordWriter): void {
     const timingRecording = this.timingRoot();
-    InvocationBoundaryRecordHelper.create(this.recorder, { start: timingRecording.#startedTick!, scopeId: timingRecording.requireRecord().id, callId: this.requireRecord().id, occurredAt: fact.occurredAt, offsetMs: this.offset(fact.monotonicTime) }, type);
+    writer.boundary({ start: timingRecording.#startedTick!, scopeId: timingRecording.requireRecord().id, callId: this.requireRecord().id, occurredAt: fact.occurredAt, offsetMs: this.offset(fact.monotonicTime) }, type);
   }
-  private protect(work: () => void): void {
+  private protect(work: (writer: RecordWriter) => void): void {
     if (!this.available()) return;
     try {
-      work();
+      // Observation owns this window, not the ending business call. No observer is
+      // attached to it: recording a fact must not recursively record its own write.
+      const access = this.installation.records.open();
+      try {
+        work(access.endpoints.record);
+      } finally {
+        access.close();
+      }
     } catch (error) {
       this.#failed = true;
       this.installation.invalidate(error);

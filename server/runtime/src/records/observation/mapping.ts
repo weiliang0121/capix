@@ -2,9 +2,7 @@ import type { MemoryEvent, TranscriptEvent, RecordedInvocationResult } from '@ca
 import { RuntimeErrorHelper } from '../../errors/helper.js';
 import { failureFact } from '../../invocation/failure.js';
 import type { InvocationResult } from '../../invocation/result.js';
-import { MemoryRecord } from '../memory/record.js';
-import type { RecordChangeSource } from '../source.js';
-import { TranscriptRecord } from '../transcript/record.js';
+import { MemoryRecord, TranscriptRecord, type RecordChangeSource } from '@capix/records';
 import type { InvocationRecordDescription } from './declaration.js';
 
 export function recordedResult(result: InvocationResult<unknown>, description?: InvocationRecordDescription): RecordedInvocationResult {

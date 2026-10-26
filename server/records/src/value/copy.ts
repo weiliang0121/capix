@@ -1,6 +1,5 @@
-import { isObjectLike } from '../../value/object.js';
-import { isNull } from 'es-toolkit/predicate';
-import { isArray } from 'es-toolkit/compat';
+import { isFunction, isNull } from 'es-toolkit/predicate';
+import { isArray, isObject } from 'es-toolkit/compat';
 
 /** Copy record content without retaining live entity references. */
 export function copyContent<Content>(value: Content): Content {
@@ -8,7 +7,7 @@ export function copyContent<Content>(value: Content): Content {
 }
 
 function copyValue(value: unknown, ancestors: Set<object>): unknown {
-  if (!isObjectLike(value)) return structuredClone(value);
+  if (!isObject(value) || isFunction(value)) return structuredClone(value);
   if (ancestors.has(value)) throw new TypeError('Record content must not be cyclic');
   if (!isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && !isNull(Object.getPrototypeOf(value))) throw new TypeError('Record content must use plain objects and arrays');
   ancestors.add(value);

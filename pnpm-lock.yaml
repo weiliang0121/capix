@@ -35,6 +35,9 @@ importers:
       '@capix/protocol':
         specifier: workspace:*
         version: link:protocol
+      '@capix/records':
+        specifier: workspace:*
+        version: link:server/records
       '@capix/resources':
         specifier: workspace:*
         version: link:server/resources
@@ -207,6 +210,24 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
 
+  server/records:
+    dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../changes
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      '@capix/resources':
+        specifier: workspace:*
+        version: link:../resources
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+
   server/resources:
     dependencies:
       '@capix/contracts':
@@ -224,12 +245,12 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
-      '@capix/memory':
-        specifier: workspace:*
-        version: link:../memory
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
+      '@capix/records':
+        specifier: workspace:*
+        version: link:../records
       '@capix/resources':
         specifier: workspace:*
         version: link:../resources
@@ -299,6 +320,9 @@ importers:
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
+      '@capix/records':
+        specifier: workspace:*
+        version: link:../../server/records
       '@capix/resources':
         specifier: workspace:*
         version: link:../../server/resources

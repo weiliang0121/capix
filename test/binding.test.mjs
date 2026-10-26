@@ -3,7 +3,8 @@ import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, Node, Driver, bindCallSource, Recorder, RecordBook, bindRecording } from '@capix/server-runtime';
+import { Group, Node, Driver, bindCallSource, bindRecording } from '@capix/server-runtime';
+import { Recorder, RecordBook } from '@capix/records';
 import { ResourceOffer } from '@capix/resources';
 import { CallableBuilder, callableConstruction } from '@capix/server-runtime/construction';
 

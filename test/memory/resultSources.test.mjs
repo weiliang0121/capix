@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Memories } from '@capix/memory';
 import { Transcript } from '@capix/transcript';
-import { Recorder, RecordBook, MemoryRecord, observeMemory, bindRecording } from '@capix/server-runtime';
+import { bindRecording } from '@capix/server-runtime';
+import { Recorder, RecordBook, MemoryRecord, observeMemory } from '@capix/records';
 import { ChangeBuffer } from '@capix/changes';
 
 const source = () => ({ id: 'creation-1', kind: 'file-created', answerIndex: 1, receipt: { path: 'answer.md', bytes: 12, digest: 'a'.repeat(64) } });

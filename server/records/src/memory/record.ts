@@ -1,6 +1,5 @@
 import { isSafeInteger } from 'es-toolkit/compat';
-import { isNonBlankString } from '../../value/string.js';
-import { isUndefined } from 'es-toolkit/predicate';
+import { isString, isUndefined } from 'es-toolkit/predicate';
 import { pick, omitBy } from 'es-toolkit/object';
 import type { MemoryRecord as MemoryRecordData, MemoryRecordValue } from '@capix/protocol';
 import type { RecordChangeSource } from '../source.js';
@@ -26,7 +25,7 @@ export class MemoryRecord extends BaseRecord<MemoryRecordValue> implements Memor
   readonly callId?: string;
   constructor(options: MemoryRecordOptions, value: MemoryRecordValue) {
     super(snapshotValue(value), options.source?.callId);
-    if (!isNonBlankString(options.memoriesId) || !isSafeInteger(options.sequence) || options.sequence < 1) throw new Error('Memory change requires a scope and a positive sequence');
+    if (!isString(options.memoriesId) || !/\S/u.test(options.memoriesId) || !isSafeInteger(options.sequence) || options.sequence < 1) throw new Error('Memory change requires a scope and a positive sequence');
     this.memoryId = options.memoryId;
     this.memoriesId = options.memoriesId;
     this.sequence = options.sequence;

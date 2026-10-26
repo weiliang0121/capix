@@ -2,7 +2,7 @@ import { executionTranscript } from './evidence.js';
 import { readOutput, type SelectionObservation } from '@capix/protocol';
 
 import type { Selection } from '../conversation/model/types.js';
-import { type RecordBook } from '@capix/server-runtime/recording';
+import { type RecordBook } from '@capix/records';
 import { type Transcript } from '@capix/transcript';
 
 import { isTaskRecord, callRecord, taskRecord } from './calls.js';

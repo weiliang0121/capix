@@ -8,7 +8,7 @@ import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import { SqliteObserverStore, initializeObserver, observeOverview } from '@capix/observer-service';
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
-import { CallableRecord, CallableRecordHelper } from '@capix/server-runtime/recording';
+import { CallableRecord, CallableRecordHelper } from '@capix/records';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 };
 const provider = {

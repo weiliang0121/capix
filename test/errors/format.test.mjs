@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { RuntimeError } from '@capix/contracts';
-import { RuntimeErrorHelper, snapshotValue } from '@capix/server-runtime';
+import { RuntimeErrorHelper } from '@capix/server-runtime';
+import { snapshotValue } from '@capix/records';
 
 import { validateExecutionRecordSnapshot } from '@capix/protocol';
 

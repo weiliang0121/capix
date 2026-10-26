@@ -1,5 +1,5 @@
 import type { ExecutionObservation } from '@capix/protocol';
-import { type RecordBook, TranscriptRecord } from '@capix/server-runtime/recording';
+import { type RecordBook, TranscriptRecord } from '@capix/records';
 import { type Transcript } from '@capix/transcript';
 import { observeSelection } from './selection.js';
 

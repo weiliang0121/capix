@@ -5,7 +5,7 @@ import { extname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ConversationAdmission, ConversationSubmissionDiscovery, ConfigurationResponse, ErrorResponse, ModelSettings, SourceResponse, InteractionUpdate } from '@capix/protocol';
 import { isTaskRecord, taskSnapshot } from '../observation/calls.js';
-import { observeMemory } from '@capix/server-runtime/recording';
+import { observeMemory } from '@capix/records';
 import { isObject } from '@capix/server-runtime';
 import { RuntimeError } from '@capix/contracts';
 import type { ObserverConversations } from '../assembly/conversations.js';

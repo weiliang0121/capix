@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readOutput } from '@capix/protocol';
-import { observeMemory } from '@capix/server-runtime';
+import { observeMemory } from '@capix/records';
 import { initializeObserver, observeExecution, observeOverview, observeSelection } from '@capix/observer-service';
 import { projectDetail } from '../../apps/observer/.test-dist/binding/details.js';
 import { updateOverview } from '../../apps/observer/.test-dist/binding/overview.js';

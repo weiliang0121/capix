@@ -247,7 +247,7 @@ test('fixed-range offer delivers only bounded immutable message access, without 
 });
 
 test('E requests fail before E attachment, recording or work while the parent R records the rejected construction', async () => {
-  const { Recorder, RecordBook } = await import('@capix/server-runtime');
+  const { Recorder, RecordBook } = await import('@capix/records');
   const recorder = new Recorder(new RecordBook());
   const runtime = createBoundRuntime({ recorder });
   class Entry extends ExecutionFixture {
@@ -267,7 +267,7 @@ test('E requests fail before E attachment, recording or work while the parent R 
 });
 
 test('message and memory access preserves entity validation, change publication and fixed snapshots', async () => {
-  const { Recorder, RecordBook } = await import('@capix/server-runtime');
+  const { Recorder, RecordBook } = await import('@capix/records');
   const recorder = new Recorder(new RecordBook());
   const changes = new ChangeBuffer();
   const { transcript, memories, messageUsage } = createEnvironment({ recorder, changes });

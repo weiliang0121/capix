@@ -4,7 +4,7 @@ import { mkdirSync, chmodSync, existsSync, openSync, fchmodSync, closeSync } fro
 import { dirname, resolve } from 'node:path';
 import { RuntimeError } from '@capix/contracts';
 import type { InteractionCommit, InteractionState } from '@capix/server-runtime';
-import { snapshotValue } from '@capix/server-runtime/recording';
+import { snapshotValue } from '@capix/records';
 import { isEqual } from 'es-toolkit';
 import type { TranscriptState, TranscriptCommit, TranscriptPersistence, TranscriptAppendState } from '@capix/transcript';
 import type { MemoriesState, MemoriesCommit, MemoriesPersistence, MemoryApplyState } from '@capix/memory';

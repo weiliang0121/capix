@@ -1,10 +1,11 @@
 import { createRecordScope } from '../fixtures/runtime.mjs';
-import { RecordingRootHelper } from '@capix/server-runtime';
+import { RecordingRootHelper } from '@capix/records';
 import { callFor } from '../fixtures/lifecycle.mjs';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BaseRecord, ExecutionRecordHelper, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, RecordBook, Clock, Recorder } from '@capix/server-runtime';
+import { Clock } from '@capix/server-runtime';
+import { BaseRecord, ExecutionRecordHelper, InvocationBoundaryRecord, InvocationBoundaryRecordHelper, RecordBook, Recorder } from '@capix/records';
 import { createBoundRuntime, observeCall } from '../fixtures/runtime.mjs';
 
 import { validateExecutionRecordSnapshot, validateLegacyExecutionRecordSnapshot } from '@capix/protocol';
@@ -109,7 +110,7 @@ test('event helpers reject foreign/non-call targets and leave no event or sequen
 });
 
 test('last event follows execution sequence across interleaved children, with failed writes leaving sequence reusable', async (t) => {
-  const { OperationRecordHelper, AttemptRecordHelper } = await import('@capix/server-runtime');
+  const { OperationRecordHelper, AttemptRecordHelper } = await import('@capix/records');
   class FailingBook extends RecordBook {
     reject = false;
     add(record) {

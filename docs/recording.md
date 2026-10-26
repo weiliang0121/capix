@@ -1,8 +1,10 @@
 # 记录机制与特化处理
 
-记录观测预设位于 `records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 提供事实到记录的映射。`RecordBook` 位于 `records/book.ts`；`records/restoration/` 仍只负责只读历史载体的恢复。
+记录实体由 `@capix/records`（`server/records`）提供：根出口包含 Recorder、RecordBook、RecordTree、各类记录与 Helper、snapshotValue、observeMemory 和普通 RecordResource；`@capix/records/construction` 单独提供宿主 RecordWriterResource 与 RecordWriter。`server/records/src/restoration/` 只负责只读历史载体的恢复，不恢复执行。
 
-Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 Clock。Recorder 本身不分派记录类型，树本体与关系辅助集中在 records/tree/，具体关系规则位于 records/tree/relation.ts，不处理 Context、业务正文或 ExecutionRecordSnapshot。
+Runtime 的 `@capix/server-runtime/recording` 只提供自动观测预设，包括 bindRecording、RecordingInstallation、InvocationRecording、InvocationRecordAccess、invocationRecording 和描述契约；Runtime 根与 `/recording` 不再重导记录实体。预设仍位于 `server/runtime/src/records/observation/`：declaration 定义描述与写端点申请，installation 负责跨调用安装，invocation 持有单次记录状态，mapping 提供事实到记录的映射。实体包不依赖 Runtime、结构或内容实体包。
+
+Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、同步登记单元和 RecordClock。Recorder 本身不分派记录类型，树本体与关系辅助集中在 `server/records/src/tree/`，具体关系规则位于 `tree/relation.ts`，不处理 Context、业务正文或 ExecutionRecordSnapshot。
 
 通用基类使用 BaseRecord，树形记录共用 CompositeRecord；RecordingRootRecord 表达一次记录安装的跨调用范围，InvocationRecord 统一调用正文与状态，CallableRecord 承载 Scene、Group、Node 的实际调用，ResourceRecord 表达正式资源访问事实。RecordingRootRecord 当前只保留创建时间与下级引用；不把记录登记、某次调用结束或驱动者释放占用等同于整个记录范围结束。
 
@@ -13,7 +15,29 @@ Recorder 是环境共享的登记入口。它组合 RecordBook、RecordTree、�
 - update(record, apply, describe?) 要求是 Book 中登记的同一实例，再执行特化更新。如何判断终态、复制正文和检查子记录由具体 Record / Helper 决定。
 - subscribe 接收 record、add/update 分类和 related 数组。子记录新增只发布一次 add，related 包含本次同步变更的直接父记录；不另外发布可能触发缺少边界事件快照的父记录 update。通知时记录与父子关系均已可见。原有两参数消费者可继续工作。通知不是历史快照，不承诺持久化或跨进程传输；有这些需求的消费者应另行捕获数据。
 - 写入失败统一为 RecordingError。通知发生在登记之后，每个订阅者独立隔离；观察失败不回滚登记，也不阻止其他订阅者。
-- Clock 仅作为共享时间来源。调用起点、执行内偏移和事件顺序都属于调用记录特化。
+- RecordClock 只要求 `now(): string` 与 `tick(): number`。Recorder 默认使用 ISO 墙钟与单调时间；宿主可注入兼容的 Runtime Clock，实体包不导入其实现。调用起点、执行内偏移和事件顺序都属于调用记录特化。
+
+## 资源访问与观察窗口
+
+```mermaid
+flowchart LR
+    business["业务节点"] --> content["RecordResource.read / write"]
+    facts["调用 / 资源 / 内容事实"] --> preset["Runtime 记录预设"]
+    preset --> writer["RecordWriterResource · 独立观察窗口"]
+    content --> entity["Recorder / RecordBook / 记录实体"]
+    writer --> entity
+    entity --> changes["记录变化 · 持久化 / 投影消费"]
+```
+
+可运行示例见 [examples/records.mjs](../examples/records.mjs)：同一个 Recorder 同时接收业务内容记录与自动调用记录；构建后运行 `node examples/records.mjs` 即可验证，不依赖模型。
+
+普通业务通过 `RecordResource.read` 的 `get(id)` / `snapshot()` 读取纯数据快照，通过 `RecordResource.write` 的 `create(value)` 创建 `kind: 'custom'` 记录并取得快照。写口只接收内容，由实体生成身份；调用方不能指定调用归属、生命周期事实或任意记录类型。读取与创建保持同步，返回值经过记录正文的复制、检查和冻结，不暴露 Book、Recorder 或活记录对象。
+
+宿主自动记录使用 `@capix/records/construction` 的 RecordWriterResource：`root()` 建立记录安装根，`add(record)` 登记准确记录对象，`update(record, apply, describe?)` 核验同一实例后更新，`boundary(location, type)` 登记调用边界。这个写口在观察窗口中使用活记录句柄，沿用实体、登记及关系检查；普通业务资源不提供这些操作。
+
+RecordingInstallation 在内部用 `@capix/resources` 的 Resources 登记固定 Recorder，并通过 `Resources.bind` 固定 RecordWriterResource 申请。安装根以及每个被消费的调用、资源、消息或记忆事实，分别 `open()` 一个无 ResourceOwner 的访问窗口，在同步写入后的 `finally` 中 `close()`。窗口由观察消费持有，独立于业务 Work 的取消与终态；因此业务工作退出时仍可登记真实终态和边界。窗口关闭后保存的端点立即失效。
+
+这些内部访问窗口不接入被记录调用的资源观察链，不把记录写入再次作为同一预设的资源事实递归消费。Recorder 自身的 RecordChangeEvent 捕获与同步订阅出口继续发布；isolate / propagate、消费者失效和来源完整性规则保持原有含义。该窗口分离不改变业务调用控制、Checkpoint 保存格式或恢复范围。
 
 ## 直接归属与记录树
 
@@ -55,6 +79,8 @@ Memories 和 Transcript 负责审查与落实内容，自身不依赖 Recorder�
 
 TranscriptRecord 正文保存追加或分段范围，不重复原文。消息 UID 和绝对 index 用于跨端定位；TranscriptRangeRef/MessageRef 只可在内部实体适配中使用，不能进入记录正文。snapshotValue 对普通记录数据执行复制、检查、冻结，不再识别并保留这些实体引用。
 
+`observeMemory` 从 `@capix/records` 导入，按结构兼容的只读输入组合当前记忆内容与已有 MemoryRecord。它只要求集合提供 `transcript.id` 和 `values()`，使用协议中的记忆值；记录包不依赖 `@capix/memory`，也不持有或恢复 Memories。
+
 ## 资源运行事实
 
 ResourceOffer 是资源模块公开的契约：来源捕获、正式访问端点、兑现时机及可记录描述。共享供给保存 capture 的结果或错误；每次调用由 InvocationResources 协调独立的 ResourceAccess 窗口，每个窗口共享 ResourceActivity；资源专属元信息由 ResourceEndpointActivity 固定。run/恢复端点分别受当前窗口约束，共享本次资源顺序与捕获供给；不共享带父调用身份的闭包。配置与 Provider 分别描述数据与能力；Provider 实例、连接和函数不序列化进入记录。
@@ -75,13 +101,13 @@ CallableContext 不拥有 settings/transcriptRange 业务字段。配置资源�
 
 Recorder 正式登记或更新之后，固定 RecordChangeEvent 并交给可选捕获器，然后通知原有同步订阅者。自身 id/revision 表达该登记范围；kind 由记录类声明，Recorder 不按 Scene/Group/Node 分派。added 同时描述新记录与父级引用；过程只发送新增条目，finish 只发送终态与结果。通用 update 的 describe 可提供特化变化，省略时使用显式 replaced。没有比较两份快照。
 
-新记录预设通过 InvocationRecordHelper 和 Recorder 更新统一过程、父子关系与终态；CallableRecordHelper.snapshot 按明确选择的调用读取子树。旧 ExecutionRecordHelper、OperationRecordHelper、AttemptRecordHelper 保留历史载体的解释与测试用途，不参与新实时记录生产。实例方法仍维护自身状态约束，正式运行更新不能绕过登记入口。Transcript 和 Memories 自己捕获内容事件，不依赖 Recorder 通知推导业务变化。
+新记录预设通过 InvocationRecordHelper 和观察窗口中的 RecordWriter 更新统一过程、父子关系与终态，写口继续交给 Recorder 正式登记；CallableRecordHelper.snapshot 按明确选择的调用读取子树。旧 ExecutionRecordHelper、OperationRecordHelper、AttemptRecordHelper 保留历史载体的解释与测试用途，不参与新实时记录生产。实例方法仍维护自身状态约束，正式运行更新不能绕过登记入口。Transcript 和 Memories 自己捕获内容事件，不依赖 Recorder 通知推导业务变化。
 
 Service ChangeConsumer 独占共享 ChangeBuffer 的 take；RecordSource 与 feed 订阅它，发送一致基线及后续增量；消息实体正文由独立消息订阅出口交付。旧 subscribeExecutions 保留为本地诊断与测试工具，基于同步登记通知组织执行快照；HTTP 观测不再使用它。
 
 ExecutionRecordSnapshot 保留 Observer 的业务查询名称，内容为所选 execution、其通用 calls 子树、可选 rootCall、中间 ancestors、boundaries、resources、transcripts 和 memories。它不是整棵记录树，不包含根调用的其他任务子树。旧载体由服务只读规范化为这个形状，原载体身份不变；历史中断记录没有起始时间时保留未知。parentId/childIds 可以引用未装载的历史正文。对话由 Runner.run 独立交付，不从记录生成回答。消息正文通过集合 UID 独立加载和持续同步，客户端 binding 将资源定位与消息副本组合；原文未加载不等于空正文。
 
-没有新增 Recorder 子类、插件注册、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。RecordBook.exportState / restore 提供历史载入，具体结构检查位于 records/restoration；恢复的具体记录类型和 ID 保留，historical 记录不可修改，也不能附加新的子记录。该入口不重放登记、通知或调用。
+没有新增 Recorder 子类、插件注册、业务补偿或自动索引框架。Book 仍只存记录；记录特化没有转移进 Book。RecordBook.exportState / restore 提供历史载入，具体结构检查位于 `server/records/src/restoration/`；恢复的具体记录类型和 ID 保留，historical 记录不可修改，也不能附加新的子记录。该入口不重放登记、通知或调用。实体拆包保留既有类名、wire kind 和历史格式，不用重命名载体来表达新的包边界。
 
 ## 局部顺序与索引迁移进度
 

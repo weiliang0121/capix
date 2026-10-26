@@ -2,7 +2,8 @@ import { installCallable } from './fixtures/driver.mjs';
 import { runtimeDefinition, recordedCall } from './fixtures/declarations.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, Group, Node, Recorder, RecordBook, bindCallSource, CallableRecordHelper, bindRecording, checkpointPoint } from '@capix/server-runtime';
+import { ExceptionContract, Group, Node, bindCallSource, bindRecording, checkpointPoint } from '@capix/server-runtime';
+import { Recorder, RecordBook, CallableRecordHelper } from '@capix/records';
 import { ResourceOffer } from '@capix/resources';
 import { validateExecutionRecordSnapshot, readOutput } from '@capix/protocol';
 

@@ -5,6 +5,7 @@ import * as construction from '@capix/server-runtime/construction';
 import * as transcript from '@capix/transcript';
 import * as memory from '@capix/memory';
 import * as recording from '@capix/server-runtime/recording';
+import * as records from '@capix/records';
 import * as protocol from '@capix/protocol';
 import * as recordContract from '@capix/protocol/recording';
 import { createConversationStructure, ConversationGroup, DefaultConversationDecision, PrepareConversationContext, GenerateAnswer, ExtractMemory, PrepareModelRequest, InvokeModel, AcceptModelOutput, ApplyMemory, InspectFileTask } from '@capix/observer-service/conversation';
@@ -19,7 +20,12 @@ test('public role entrypoints resolve to the same implementations without requir
   assert.equal(typeof transcript.Transcript, 'function');
   assert.equal(typeof memory.Memories, 'function');
   assert.equal(runtime.bindRecording, recording.bindRecording);
-  assert.equal(runtime.observeMemory, recording.observeMemory);
+  assert.equal(typeof records.observeMemory, 'function');
+  for (const name of ['Recorder', 'RecordBook', 'RecordTree', 'CallableRecord', 'observeMemory', 'snapshotValue']) {
+    assert.equal(name in runtime, false);
+    assert.equal(name in recording, false);
+    assert.equal(name in records, true);
+  }
   assert.ok(!('observeMemory' in memory));
   assert.ok(!('Recorder' in transcript));
   const bound = new construction.CallableBuilder().build(runtime.defineScene()({ run: () => null }), { providers: [], source: { capture: () => null } });

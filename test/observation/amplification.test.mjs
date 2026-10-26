@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
-import { RecordBook, Recorder, CallableRecord, OperationRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper, observeMemory } from '@capix/server-runtime/recording';
+import { RecordBook, Recorder, CallableRecord, OperationRecord, MemoryRecord, ResourceRecord, ExecutionRecordHelper, OperationRecordHelper, AttemptRecordHelper, observeMemory } from '@capix/records';
 import { initializeObserver, observeOverview } from '@capix/observer-service';
 import { createRecordScope } from '../fixtures/runtime.mjs';
 

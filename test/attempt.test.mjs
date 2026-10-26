@@ -1,10 +1,12 @@
 import { AttemptFixture, OperationFixture } from './fixtures/behavior.mjs';
 import { callFor, rememberCall } from './fixtures/lifecycle.mjs';
-import { ExecutionRecordHelper, ChildCallFailure } from '@capix/server-runtime';
+import { ChildCallFailure } from '@capix/server-runtime';
+import { ExecutionRecordHelper } from '@capix/records';
 import { lifecycleFor, invoke } from './fixtures/lifecycle.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CallableContext, Recorder, RecordBook, ExceptionContract } from '@capix/server-runtime';
+import { CallableContext, ExceptionContract } from '@capix/server-runtime';
+import { Recorder, RecordBook } from '@capix/records';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 
 import { TestOperation } from './fixtures/operation.mjs';

@@ -5,7 +5,8 @@ import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { TestOperation } from './fixtures/operation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Clock, Recorder, RecordBook, CallableContext } from '@capix/server-runtime';
+import { Clock, CallableContext } from '@capix/server-runtime';
+import { Recorder, RecordBook } from '@capix/records';
 import { RuntimeError } from '@capix/contracts';
 import { createBoundRuntime, observeCall } from './fixtures/runtime.mjs';
 

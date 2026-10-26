@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ChangeBuffer, ChangeCaptureError } from '@capix/changes';
 import { Transcript } from '@capix/transcript';
-import { TranscriptRecord, RecordBook, Recorder, bindRecording } from '@capix/server-runtime';
+import { bindRecording } from '@capix/server-runtime';
+import { TranscriptRecord, RecordBook, Recorder } from '@capix/records';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 
 const message = (content) => ({ role: 'user', content });

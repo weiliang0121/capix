@@ -1,10 +1,9 @@
-import type { MemoryObservation } from '@capix/protocol';
+import type { MemoryContent, MemoryObservation } from '@capix/protocol';
 import type { RecordBook } from '../book.js';
 import { MemoryRecord } from './record.js';
-import type { Memories } from '@capix/memory';
 
 /** Project current memory content together with its available change records. */
-export function observeMemory(collection: Memories, book: RecordBook): MemoryObservation {
+export function observeMemory(collection: { readonly transcript: { readonly id: string }; values(): readonly (MemoryContent & { readonly id: string })[] }, book: RecordBook): MemoryObservation {
   const records = new Map<string, MemoryRecord[]>();
   for (const record of book.values()) {
     if (!(record instanceof MemoryRecord)) continue;

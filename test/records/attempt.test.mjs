@@ -1,12 +1,14 @@
 import { callFor, recordFor } from '../fixtures/lifecycle.mjs';
-import { ExecutionRecordHelper, ChildCallFailure } from '@capix/server-runtime';
+import { ChildCallFailure } from '@capix/server-runtime';
+import { ExecutionRecordHelper } from '@capix/records';
 import { lifecycleFor, invoke } from '../fixtures/lifecycle.mjs';
 import { readOutput, validateExecutionRecordSnapshot } from '@capix/protocol';
 import { TestOperation } from '../fixtures/operation.mjs';
 import { TestAttempt } from '../fixtures/attempt.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { ExceptionContract, Recorder, BaseRecord, CallableRecord, OperationRecord, OperationRecordHelper, AttemptRecordHelper, RecordBook } from '@capix/server-runtime';
+import { ExceptionContract } from '@capix/server-runtime';
+import { Recorder, BaseRecord, CallableRecord, OperationRecord, OperationRecordHelper, AttemptRecordHelper, RecordBook } from '@capix/records';
 import { createBoundRuntime, createRecordScope, observeCall } from '../fixtures/runtime.mjs';
 import { test } from 'node:test';
 
