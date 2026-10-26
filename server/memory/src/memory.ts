@@ -43,10 +43,16 @@ export class Memory {
   }
 
   static prepare(transcript: Transcript, content: MemoryContent): MemoryContent {
-    if (!isObject(content) || !isNonBlankString(content.topic) || !isNonBlankString(content.content) || !isNonEmptyArray(content.sourceIndexes) || !hasUniqueItems(content.sourceIndexes)) throw new TypeError('Memory requires topic, content and unique source indexes');
-    for (const index of content.sourceIndexes) transcript.ref(index);
+    if (!isObject(content)) throw new TypeError('Memory requires topic, content and unique source indexes');
+    const topic = content.topic;
+    const text = content.content;
+    const evidence = content.sourceIndexes;
+    if (!isNonBlankString(topic) || !isNonBlankString(text) || !isNonEmptyArray(evidence)) throw new TypeError('Memory requires topic, content and unique source indexes');
+    const sourceIndexes = Object.freeze([...evidence]);
+    if (!isNonEmptyArray(sourceIndexes) || !hasUniqueItems(sourceIndexes)) throw new TypeError('Memory requires topic, content and unique source indexes');
+    for (const index of sourceIndexes) transcript.ref(index);
     const sourceResults = prepareMemoryResultSources(transcript, content.sourceResults);
-    return Object.freeze({ topic: content.topic, content: content.content, sourceIndexes: Object.freeze([...content.sourceIndexes]), ...(sourceResults ? { sourceResults } : {}) });
+    return Object.freeze({ topic, content: text, sourceIndexes, ...(sourceResults ? { sourceResults } : {}) });
   }
 }
 

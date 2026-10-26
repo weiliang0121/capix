@@ -24,14 +24,14 @@ const failures = { isProtected: (error) => error instanceof RuntimeError, isCanc
 const owner = (extra = {}) => ({ contextId: 'content-host', failures, validate() {}, ...extra });
 const memoryBinding = (memories) => new Resources().register(new Resource(memories), MemoryResource.apply).bind({ memory: MemoryResource.apply.request() });
 
-test('content packages load through public roots without importing the callable runtime', async () => {
+test('content packages load through public roots without importing callable structures or runtime', async () => {
   async function inspect(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = new URL(entry.name + (entry.isDirectory() ? '/' : ''), directory);
       if (entry.isDirectory()) await inspect(path);
       else if (entry.name.endsWith('.ts')) {
         const source = await readFile(path, 'utf8');
-        assert.doesNotMatch(source, /@capix\/(?:server-runtime|observer-service)|(?:\.\.\/)+runtime\//, fileURLToPath(path));
+        assert.doesNotMatch(source, /@capix\/(?:structure|server-runtime|observer-service)|(?:\.\.\/)+(?:structure|runtime)\//, fileURLToPath(path));
       }
     }
   }
@@ -39,12 +39,12 @@ test('content packages load through public roots without importing the callable 
     const directory = new URL(`../${pkg.path}/`, import.meta.url);
     const manifest = JSON.parse(await readFile(new URL('package.json', directory), 'utf8'));
     assert.equal(manifest.name, pkg.name);
-    for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!['@capix/server-runtime', '@capix/observer-service'].includes(dependency), `${pkg.name} cannot depend on ${dependency}`);
+    for (const dependency of [...Object.keys(manifest.dependencies ?? {}), ...Object.keys(manifest.peerDependencies ?? {})]) assert.ok(!['@capix/structure', '@capix/server-runtime', '@capix/observer-service'].includes(dependency), `${pkg.name} cannot depend on ${dependency}`);
     await inspect(new URL('src/', directory));
     await inspect(new URL('dist/', directory));
     const exported = await import(pkg.name);
     for (const name of pkg.exports) assert.ok(name in exported, `${pkg.name} must export ${name}`);
-    for (const name of ['Runner', 'Invocation', 'Scene', 'Recorder', 'updateMemory', 'restoreMemory']) assert.equal(name in exported, false, `${pkg.name} must not expose ${name}`);
+    for (const name of ['Runner', 'Invocation', 'Scene', 'Group', 'Node', 'Recorder', 'updateMemory', 'restoreMemory']) assert.equal(name in exported, false, `${pkg.name} must not expose ${name}`);
   }
   for (const path of ['@capix/memory/memory', '@capix/memory/src/memory.js', '@capix/memory/dist/memory.js']) await assert.rejects(import(path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
 });

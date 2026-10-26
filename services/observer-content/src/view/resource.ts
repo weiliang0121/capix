@@ -1,5 +1,6 @@
 import { ResourceOffer } from '@capix/resources';
-import type { ActiveView, ActiveViewSelection, ActiveViewSnapshot } from './active.js';
+import type { ActiveView } from './active.js';
+import type { ActiveViewSelection, ActiveViewSnapshot } from './state.js';
 
 export interface ActiveViewReader {
   capture(): ActiveViewSnapshot;

@@ -72,8 +72,10 @@
 ## 内容、记录与变化
 
 - `@capix/transcript` 的 Transcript 自行接纳并复制冻结消息，只有正式 append/startSegment 改变集合；消息 index 稳定，批量预检查失败不部分追加。Ref/RangeRef 是内部实体访问，记录只保存 UID、范围及版本，不持有活引用。原文仅含正式 user/assistant，不把选择输出当消息。详见 [原文与分段](docs/transcript.md)。
+- 实体包的可选算法可通过明确子出口提供；`@capix/transcript/presets` 的 groupAdjacentPairs 只对同一来源的有序原索引配对，不跨缺口、不丢弃消息、不决定保留或修改分段。服务 segmentCandidates 单独决定候选数量。策略节点用普通 Node/Group 在上层组合，实体和内容包不因此依赖 structure/runtime；子出口不隔离包依赖。
 - `@capix/observer-content` 的 ActiveView 用通用 View 持有消息索引/记忆 ID 成员，由 ConversationContent 持有，无独立 UID 或生命周期；退出活跃集合不删除实体，也不要求替代内容。capture 保存不可变消息/记忆值及 transcriptId/memoriesId/indexRevision/transcriptRevision/memorySequence 复合依据，apply 精确检查依据与成员。源追加/新记忆默认纳入，更新不自动重新纳入已退出的记忆；SQLite v6 将新成员和源变更同事务保存。业务经 read/manage 正式资源访问，不持有实体。详见 [活跃材料](docs/active-content.md)。
 - `@capix/memory` 的 Memories 独占 create/update 正式落实；先检查整批目标、内容和来源，再变更。更新保留 Memory 身份，无变化不占顺序号。业务依据从本轮固定快照、可见原文和 E 已接纳的保存凭据取得，不从 MemoryRecord 恢复。消息索引来源保留，文件创建来源以不可变 sourceResults 补充；模型只引用服务提供的 ID，不能构造凭据。历史创建不保证文件现状，也不强制每次保存形成记忆。下次材料捕获使用届时活跃的记忆；当前不引入长期画像、召回、证据平台或记忆关系图。详见 [记忆](docs/memory.md)。
+- Observer 的活跃默认纳入预设位于 observer-content/view/default-policy，状态契约和校验位于 view/state；ActiveView 来源同步与 SQLite 内容提交共用默认规则。预设不持有实体、不启动调用，内存同步不重复持久提交。Memory 变更值的复制固定与集合目标检查分开，事件及持久正文只消费已接纳值，不保留调用方的可变提案。
 - `@capix/measurement` 的 MessageUsage 按准确消息对象计数，单次 add 去重；当前按 ObserverEnvironment 建立，无独立持久化。材料接纳后即计数，不因后续生成失败回滚，不向模型输入注入计数。分包保留该行为，不顺手改变统计用途。
 - 记录是可选观测结果，Invocation、资源和内容不依赖 Recorder。RecordingInstallation 持有 RecordingRootRecord；新调用统一写 CallableRecord（kind: invocation、structureKind、实际 parentId、可选 role）。记录根保留 kind: runtime。业务任务由服务明确 conversation-task 角色识别，不能把每个 Group 当 QA。旧 runtime-call/execution/operation/attempt 数据保持只读恢复与服务投影，不产生新运行身份。
 - Recorder 组合 RecordBook、RecordTree、同步登记与通知；Book 只持有引用并拒绝重复 ID。Tree 依据直接 parentId/childIds 查询，不重建调用索引。登记同步维护父子引用，失败只清理本次登记，不回滚业务事实。记录正文复制/检查/冻结，拒绝活实体、函数、循环等不受支持内容。

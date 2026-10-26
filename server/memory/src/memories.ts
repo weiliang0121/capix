@@ -1,12 +1,11 @@
 import { publishFact, combineFaults, type ChangeProvenance, type EventConsumer, type ChangeCapture } from '@capix/changes';
 import type { MemoryEvent } from '@capix/protocol';
 import { randomUUID } from 'node:crypto';
-import { isEqual, isNull } from 'es-toolkit/predicate';
+import { isEqual } from 'es-toolkit/predicate';
 import { Memory, restoreMemory, updateMemory } from './memory.js';
-import type { MemoryChange } from './change.js';
+import { prepareMemoryChanges, type MemoryChange } from './change.js';
 import type { Transcript } from '@capix/transcript';
-import { isNonBlankString, isNonEmptyArray, hasUniqueItems, isObject } from './validation.js';
-import { prepareMemoryResultSources } from './source.js';
+import { isNonBlankString, hasUniqueItems, isObject } from './validation.js';
 import type { MemoriesCommit, MemoriesPersistence, MemoriesState } from './persistence.js';
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import type { MemoryFixedApply, MemoryApplyReceipt, MemoryApplyState } from './apply.js';
@@ -93,17 +92,14 @@ export class Memories {
     if (this.#mutating) throw new Error('Memory persistence or change publication cannot reenter mutation');
     this.#mutating = true;
     try {
-      return this.applyBatch(changes, provenance);
+      return this.applyPrepared(prepareMemoryChanges(this.transcript, changes), provenance);
     } finally {
       this.#mutating = false;
     }
   }
 
   confirmFixed(value: MemoryFixedApply): MemoryApplyReceipt | undefined {
-    const request = this.acceptFixed(value);
-    const saved = this.#applies.get(applyKey(request));
-    if (saved && !isEqual(saved.request, request)) throw new RuntimeError('MEMORY_APPLY_CONFLICT', '固定记忆批次与原操作不一致。');
-    return saved?.receipt;
+    return this.confirmAccepted(this.acceptFixed(value));
   }
 
   applyFixed(value: MemoryFixedApply, provenance: ChangeProvenance<MemoryEvent> = {}): MemoryApplyReceipt {
@@ -111,9 +107,9 @@ export class Memories {
     this.#mutating = true;
     try {
       const request = this.acceptFixed(value);
-      const receipt = this.confirmFixed(request);
+      const receipt = this.confirmAccepted(request);
       if (receipt) return receipt;
-      this.applyBatch(request.changes, provenance, request);
+      this.applyPrepared(request.changes, provenance, request);
       return this.#applies.get(applyKey(request))!.receipt;
     } finally {
       this.#mutating = false;
@@ -121,36 +117,31 @@ export class Memories {
   }
 
   private acceptFixed(value: MemoryFixedApply): MemoryFixedApply {
-    if (!isObject(value) || value.contract?.key !== 'memories.apply' || value.contract.version !== 1 || value.memoriesId !== this.id || !isObject(value.operation) || !isNonBlankString(value.operation.contextId) || !isNonBlankString(value.operation.position) || !isArray(value.changes)) throw new TypeError('Invalid fixed memory apply request');
-    const changes = Object.freeze(
-      value.changes.map((change: MemoryChange) => {
-        if (!isObject(change) || !isNonBlankString(change.change) || !isNonEmptyArray(change.sourceIndexes) || !hasUniqueItems(change.sourceIndexes) || (change.action === 'create' ? change.memoryId !== null : change.action !== 'update' || !isNonBlankString(change.memoryId))) throw new TypeError('Invalid fixed memory change');
-        for (const index of change.sourceIndexes) this.transcript.ref(index);
-        const result = Memory.prepare(this.transcript, change.result);
-        const sourceResults = prepareMemoryResultSources(this.transcript, change.sourceResults);
-        if (!change.sourceIndexes.every((index) => result.sourceIndexes.includes(index)) || sourceResults?.some((source) => !result.sourceResults?.some((candidate) => isEqual(source, candidate)))) throw new TypeError('Invalid fixed memory evidence');
-        return Object.freeze({ action: change.action, memoryId: change.memoryId, change: change.change, sourceIndexes: Object.freeze([...change.sourceIndexes]), ...(sourceResults ? { sourceResults } : {}), result }) as MemoryChange;
-      }),
-    );
-    return Object.freeze({ contract: Object.freeze({ key: 'memories.apply', version: 1 }), operation: Object.freeze({ ...value.operation }), memoriesId: this.id, changes });
+    if (!isObject(value)) throw new TypeError('Invalid fixed memory apply request');
+    const contract = value.contract;
+    const origin = value.operation;
+    if (contract?.key !== 'memories.apply' || contract.version !== 1 || value.memoriesId !== this.id || !isObject(origin)) throw new TypeError('Invalid fixed memory apply request');
+    const operation = Object.freeze({ contextId: origin.contextId, position: origin.position });
+    if (!isNonBlankString(operation.contextId) || !isNonBlankString(operation.position)) throw new TypeError('Invalid fixed memory apply request');
+    const changes = prepareMemoryChanges(this.transcript, value.changes);
+    return Object.freeze({ contract: Object.freeze({ key: 'memories.apply', version: 1 }), operation, memoriesId: this.id, changes });
   }
 
-  private applyBatch(changes: readonly MemoryChange[], provenance: ChangeProvenance<MemoryEvent>, request?: MemoryFixedApply): readonly Memory[] {
-    if (!isArray(changes)) throw new TypeError('Memory changes must be an array');
+  private confirmAccepted(request: MemoryFixedApply): MemoryApplyReceipt | undefined {
+    const saved = this.#applies.get(applyKey(request));
+    if (saved && !isEqual(saved.request, request)) throw new RuntimeError('MEMORY_APPLY_CONFLICT', '固定记忆批次与原操作不一致。');
+    return saved?.receipt;
+  }
+
+  private applyPrepared(changes: readonly MemoryChange[], provenance: ChangeProvenance<MemoryEvent>, request?: MemoryFixedApply): readonly Memory[] {
     const targets = new Set<string>();
     // Preparation includes identities and event bodies; nothing after persistence revalidates user data.
-    const prepared = Array.from(changes, (change: MemoryChange) => {
-      if (!isObject(change) || !isNonBlankString(change.change) || !isNonEmptyArray(change.sourceIndexes) || !hasUniqueItems(change.sourceIndexes)) throw new TypeError('Memory change requires an explanation and unique evidence');
-      for (const index of change.sourceIndexes) this.transcript.ref(index);
-      const result = Memory.prepare(this.transcript, change.result);
-      const sourceResults = prepareMemoryResultSources(this.transcript, change.sourceResults);
-      if (!change.sourceIndexes.every((index) => result.sourceIndexes.includes(index))) throw new Error('Memory result must include change evidence');
-      if (sourceResults?.some((source) => !result.sourceResults?.some((candidate) => isEqual(source, candidate)))) throw new Error('Memory result must include the unchanged result sources of this change');
+    const prepared = changes.map((change) => {
+      const result = change.result;
+      const sourceResults = change.sourceResults;
       if (change.action === 'create') {
-        if (!isNull(change.memoryId)) throw new Error('Creating memory cannot specify an existing identity');
         return { change, result, sourceResults, memory: undefined };
       }
-      if (change.action !== 'update') throw new Error('Unknown memory change action');
       const memory = this.#items.get(change.memoryId);
       if (!memory) throw new Error('Memory update target does not exist in this Runtime');
       for (const source of result.sourceResults ?? []) {

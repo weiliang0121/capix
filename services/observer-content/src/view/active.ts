@@ -4,40 +4,8 @@ import { TranscriptViewSource, type Transcript } from '@capix/transcript';
 import type { Message } from '@capix/protocol';
 import { View, type ViewBasis, type ViewReference, type ViewState } from '@capix/view';
 import { isEqual } from 'es-toolkit';
-
-/** Current membership belongs to the conversation's content; it has no independent identity. */
-export interface ActiveViewState {
-  readonly transcriptId: string;
-  readonly memoriesId: string;
-  readonly revision: number;
-  readonly messageIndexes: readonly number[];
-  readonly memoryIds: readonly string[];
-}
-
-export interface ActiveViewBasis {
-  readonly transcriptId: string;
-  readonly memoriesId: string;
-  readonly indexRevision: number;
-  readonly transcriptRevision: number;
-  readonly memorySequence: number;
-}
-
-/** Actual immutable values, not handles which could later read updated memory contents. */
-export interface ActiveViewSnapshot {
-  readonly basis: ActiveViewBasis;
-  readonly messages: readonly { readonly index: number; readonly message: Readonly<Message> }[];
-  readonly memories: readonly MemoryState[];
-}
-
-export interface ActiveViewSelection {
-  readonly basis: ActiveViewBasis;
-  readonly messageIndexes: readonly number[];
-  readonly memoryIds: readonly string[];
-}
-
-export interface ActiveViewPersistence {
-  commit(change: { readonly basis: ActiveViewBasis; readonly state: ActiveViewState }): undefined;
-}
+import { appendActiveView, initialActiveView } from './default-policy.js';
+import { freezeActiveView, type ActiveViewState, type ActiveViewBasis, type ActiveViewSnapshot, type ActiveViewSelection, type ActiveViewPersistence } from './state.js';
 
 type ActiveSources = { readonly messages: TranscriptViewSource; readonly memories: MemoryViewSource };
 
@@ -93,7 +61,8 @@ export class ActiveView {
             .filter((id) => !this.#knownMemories.has(id));
     if (messageIndexes.length || memoryIds.length) {
       const current = activeState(this.#view.exportState());
-      this.#view.applySync(this.#sources, { basis: this.viewBasis(this.basis()), members: members([...current.messageIndexes, ...messageIndexes], [...current.memoryIds, ...memoryIds]) });
+      const next = appendActiveView(current, messageIndexes, memoryIds);
+      this.#view.applySync(this.#sources, { basis: this.viewBasis(this.basis()), members: members(next.messageIndexes, next.memoryIds) });
     }
     this.#messageCount = this.transcript.length;
     this.#memorySequence = this.memories.sequence;
@@ -163,25 +132,4 @@ function activeState(state: ViewState<ActiveSources>): ActiveViewState {
     else memoryIds.push(member.key);
   }
   return freezeActiveView({ transcriptId: state.sources.messages.id, memoriesId: state.sources.memories.id, revision: state.revision, messageIndexes, memoryIds });
-}
-
-export function initialActiveView(transcriptId: string, memoriesId: string, start: number, end: number, memoryIds: readonly string[]): ActiveViewState {
-  return freezeActiveView({ transcriptId, memoriesId, revision: 0, messageIndexes: Array.from({ length: end - start }, (_, offset) => start + offset), memoryIds });
-}
-
-/** Source append/create participates in the source's persistence transaction. Existing exclusions stay excluded. */
-export function appendActiveView(state: ActiveViewState, messageIndexes: readonly number[], memoryIds: readonly string[]): ActiveViewState {
-  if (!messageIndexes.length && !memoryIds.length) return state;
-  return freezeActiveView({ ...state, revision: nextRevision(state.revision), messageIndexes: [...state.messageIndexes, ...messageIndexes], memoryIds: [...state.memoryIds, ...memoryIds] });
-}
-
-export function freezeActiveView(state: ActiveViewState): ActiveViewState {
-  if (!state || typeof state.transcriptId !== 'string' || !state.transcriptId || typeof state.memoriesId !== 'string' || !state.memoriesId || !Number.isSafeInteger(state.revision) || state.revision < 0 || !Array.isArray(state.messageIndexes) || !Array.isArray(state.memoryIds)) throw new TypeError('Invalid active content index');
-  if (new Set(state.messageIndexes).size !== state.messageIndexes.length || state.messageIndexes.some((index) => !Number.isSafeInteger(index) || index < 0) || new Set(state.memoryIds).size !== state.memoryIds.length || state.memoryIds.some((id) => typeof id !== 'string' || !id)) throw new TypeError('Invalid active content members');
-  return Object.freeze({ transcriptId: state.transcriptId, memoriesId: state.memoriesId, revision: state.revision, messageIndexes: Object.freeze([...state.messageIndexes]), memoryIds: Object.freeze([...state.memoryIds]) });
-}
-
-function nextRevision(revision: number): number {
-  if (!Number.isSafeInteger(revision + 1)) throw new RangeError('Active content revision is exhausted');
-  return revision + 1;
 }

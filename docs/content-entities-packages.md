@@ -47,18 +47,29 @@ flowchart TD
 
 目录先表达实体归属，文件再区分实体、访问和持久契约。不是先建一个通用的 `entities/`、`snapshots/` 或 `adapters/` 总目录，再让实体跨目录寻找自己的实现。
 
-| 包                          | 主要文件与公开能力                                                                                                                                                                                                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `server/transcript`         | `transcript.ts`：集合及接纳；`ref.ts`：`MessageRef/TranscriptRangeRef`；`append.ts`：固定追加依据和凭据；`persistence.ts`：状态与同步提交；`resource.ts`：`TranscriptResource/TranscriptRangeReader`；`progress.ts`：追加进展值；`view.ts`：TranscriptViewSource         |
-| `server/memory`             | `memory.ts/memories.ts`：单项与集合；`change.ts/apply.ts`：变更和固定批次；`persistence.ts`：状态与提交；`resource.ts`：`MemoryResource/CapturedMemories`；来源核验留在包内 `source.ts`；`view.ts`：MemoryViewSource                                                     |
-| `server/view`               | `view.ts`：通用成员状态与一致读取；`source.ts/types.ts`：来源与数据契约；`access.ts`：按资源窗口打开端点                                                                                                                                                                 |
-| `server/measurement`        | `usage.ts`：按对象计数；`resource.ts`：受窗口控制的记录端点                                                                                                                                                                                                              |
-| `services/observer-content` | `content.ts`：持有和生命周期；`persistence.ts`：窄持久端口；`observation.ts`：观察安装；`synchronization/consumer.ts`：变化消费；`synchronization/transcript.ts`：原文基线与增量同步；`view/active.ts`：ActiveView 策略和保存形状；`view/resource.ts`：read/manage Offer |
-| `server/changes`            | `capture.ts/buffer.ts`：必要捕获与批次转交；`publish.ts/consumer.ts`：发布端口；`error.ts`：捕获错误及故障合并；`progress.ts`：被动进度通知                                                                                                                              |
+| 包                          | 主要文件与公开能力                                                                                                                                                                                                                                                                                                                                    |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/transcript`         | `transcript.ts`：集合及接纳；`ref.ts`：`MessageRef/TranscriptRangeRef`；`append.ts`：固定追加依据和凭据；`persistence.ts`：状态与同步提交；`resource.ts`：`TranscriptResource/TranscriptRangeReader`；`progress.ts`：追加进展值；`view.ts`：TranscriptViewSource；`presets.ts`：可选相邻配对算法                                                      |
+| `server/memory`             | `memory.ts/memories.ts`：单项与集合；`change.ts/apply.ts`：变更和固定批次；`persistence.ts`：状态与提交；`resource.ts`：`MemoryResource/CapturedMemories`；来源核验留在包内 `source.ts`；`view.ts`：MemoryViewSource                                                                                                                                  |
+| `server/view`               | `view.ts`：通用成员状态与一致读取；`source.ts/types.ts`：来源与数据契约；`access.ts`：按资源窗口打开端点                                                                                                                                                                                                                                              |
+| `server/measurement`        | `usage.ts`：按对象计数；`resource.ts`：受窗口控制的记录端点                                                                                                                                                                                                                                                                                           |
+| `services/observer-content` | `content.ts`：持有和生命周期；`persistence.ts`：窄持久端口；`observation.ts`：观察安装；`synchronization/consumer.ts`：变化消费；`synchronization/transcript.ts`：原文基线与增量同步；`view/active.ts`：ActiveView 来源同步与正式操作；`view/state.ts`：状态契约与校验；`view/default-policy.ts`：默认纳入预设；`view/resource.ts`：read/manage Offer |
+| `server/changes`            | `capture.ts/buffer.ts`：必要捕获与批次转交；`publish.ts/consumer.ts`：发布端口；`error.ts`：捕获错误及故障合并；`progress.ts`：被动进度通知                                                                                                                                                                                                           |
 
-每包只有根公开出口。内部校验、消息事件构造、单项记忆写入不因文件独立就成为公开 API。内容状态和持久端口归对应实体包；它们不会仅因可序列化就全部搬入跨端协议。
+实体包通过显式根出口提供实体、访问和持久契约；消息包另以 `@capix/transcript/presets` 提供可选算法。内部校验、消息事件构造、单项记忆写入不因文件独立就成为公开 API。内容状态和持久端口归对应实体包；它们不会仅因可序列化就全部搬入跨端协议。
 
 `RuntimeError` 的唯一实现归 `@capix/contracts`，Runtime 重导同一类。`ChangeCaptureError` 的唯一实现归 `@capix/changes`。这两个对象的身份保持一致：宿主错误交付和资源失败分类继续识别它们，不能在迁移时复制同名类。
+
+## 实体、预设与策略节点
+
+实体负责所有写入口必须遵守的不变量；预设表达一种可选择的处理方式。是否同包看职责与依赖，不按函数、类或节点形态机械划分。
+
+- `transcript/presets` 的 `groupAdjacentPairs` 只对同一消息集合的有序索引值进行相邻 user → assistant 配对，保留孤立项和原消息身份。它不读写实体、不决定保留数量、不修改分段，也不把过滤后相邻的项当成原文相邻。服务的 `segmentCandidates` 使用该算法，并单独保留最多两对的候选选择规则。
+- Observer 的默认纳入规则位于 `view/default-policy.ts`；状态校验位于 `view/state.ts`。`ActiveView` 与 SQLite 内容提交共用纳入函数，内存安装不重复写入持久层。新消息、新记忆纳入，已退出的记忆更新后仍保持退出；这些是 Observer 的组合策略，不属于通用 View。
+- 策略需要调用资源、模型或子节点时，由普通 Node/Group 承载。作者可在服务中组合资源申请与纯算法；内容实体包不因此反向依赖结构或 Runtime。`/presets` 子出口只分公开入口，不能隔离 package.json 的依赖。
+- `Memories` 对外部变更值先复制校验固定，再检查集合目标、提交并落实；这属于所有策略都必须遵守的实体接纳，不是可选的记忆策略。选择提取内容、合并理解或退出视图仍由上层处理。
+
+本轮没有新增预设中心、通用策略基类或内容运行包。通用 View 与 MessageUsage 的实现边界保持不变；历史分段及持久格式也继续保留。纯算法或结构预设应有明确输入输出、前提和测试，不因为标注为预设就获得任意恢复或事务保证。
 
 ## 创建、使用与关闭
 

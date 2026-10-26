@@ -180,15 +180,20 @@ test('active index and filtered membership survive reopening; source appends and
   const reopened = disk.open();
   const restored = disk.content(reopened);
   assert.deepEqual(indexes(restored.active.capture()), [2, 0]);
+  const excluded = restored.active.exportState();
   restored.memories.apply([updateMemory(memory.id, 'still excluded')]);
+  assert.deepEqual(restored.active.exportState(), excluded, 'an excluded memory update changes neither membership nor its revision');
+  assert.deepEqual(reopened.loadContent().active, excluded, 'source persistence follows the same exclusion rule');
   restored.transcript.append(message('new'));
-  const [created] = restored.memories.apply([createMemory('new')]);
+  const beforeBatch = restored.active.exportState();
+  const [, created] = restored.memories.apply([updateMemory(memory.id, 'excluded in a mixed batch'), createMemory('new')]);
   const snapshot = restored.active.capture();
   assert.deepEqual(indexes(snapshot), [2, 0, 3]);
   assert.deepEqual(
     snapshot.memories.map((item) => item.id),
     [created.id],
   );
+  assert.equal(snapshot.basis.indexRevision, beforeBatch.revision + 1, 'a mixed source batch includes only new members and advances membership once');
   assert.deepEqual(reopened.loadContent().active, restored.active.exportState());
 });
 
