@@ -6,7 +6,7 @@ import { ProgressChannel } from '@capix/changes';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import { MessageUsage } from '@capix/measurement';
-import { ActiveView } from '@capix/view';
+import { ActiveView } from '@capix/observer-content';
 import { createConversationStructure, ModelInteractions, ModelSource } from '@capix/observer-service/conversation';
 import { MemoryConversationCheckpointRuns } from '@capix/observer-service/assembly';
 

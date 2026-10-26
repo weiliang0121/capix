@@ -7,16 +7,15 @@ import { ChangeCaptureError, ChangeBuffer } from '@capix/changes';
 import { Resource, Resources, ResourceAccessClosed } from '@capix/resources';
 import { Transcript, TranscriptResource } from '@capix/transcript';
 import { Memory, Memories, MemoryResource } from '@capix/memory';
-import { ActiveView, ActiveViewResource } from '@capix/view';
-import { ConversationContent } from '@capix/observer-content';
+import { ActiveView, ActiveViewResource, ConversationContent } from '@capix/observer-content';
 
 const packages = [
   { path: 'server/changes', name: '@capix/changes', exports: ['ChangeBuffer', 'ChangeCaptureError', 'ProgressChannel'] },
-  { path: 'server/transcript', name: '@capix/transcript', exports: ['Transcript', 'MessageRef', 'TranscriptRangeRef', 'TranscriptResource'] },
-  { path: 'server/memory', name: '@capix/memory', exports: ['Memory', 'Memories', 'MemoryResource'] },
-  { path: 'server/view', name: '@capix/view', exports: ['ActiveView', 'ActiveViewResource'] },
+  { path: 'server/transcript', name: '@capix/transcript', exports: ['Transcript', 'MessageRef', 'TranscriptRangeRef', 'TranscriptResource', 'TranscriptViewSource'] },
+  { path: 'server/memory', name: '@capix/memory', exports: ['Memory', 'Memories', 'MemoryResource', 'MemoryViewSource'] },
+  { path: 'server/view', name: '@capix/view', exports: ['View', 'openView', 'openViewManager'] },
   { path: 'server/measurement', name: '@capix/measurement', exports: ['MessageUsage', 'MessageUsageResource'] },
-  { path: 'services/observer-content', name: '@capix/observer-content', exports: ['ConversationContent', 'ChangeConsumer', 'TranscriptFeed'] },
+  { path: 'services/observer-content', name: '@capix/observer-content', exports: ['ConversationContent', 'ActiveView', 'ActiveViewResource', 'ChangeConsumer', 'TranscriptFeed'] },
 ];
 
 const create = (content) => ({ action: 'create', memoryId: null, change: 'new understanding', sourceIndexes: [0], result: { topic: 'topic', content, sourceIndexes: [0] } });
@@ -48,6 +47,13 @@ test('content packages load through public roots without importing the callable 
     for (const name of ['Runner', 'Invocation', 'Scene', 'Recorder', 'updateMemory', 'restoreMemory']) assert.equal(name in exported, false, `${pkg.name} must not expose ${name}`);
   }
   for (const path of ['@capix/memory/memory', '@capix/memory/src/memory.js', '@capix/memory/dist/memory.js']) await assert.rejects(import(path), { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' });
+});
+
+test('generic view has no transcript, memory or Observer active-membership policy', async () => {
+  const exported = await import('@capix/view');
+  for (const name of ['Transcript', 'Memories', 'TranscriptViewSource', 'MemoryViewSource', 'ActiveView', 'ActiveViewResource', 'initialActiveView', 'appendActiveView', 'freezeActiveView']) assert.equal(name in exported, false, `@capix/view must not own ${name}`);
+  const manifest = JSON.parse(await readFile(new URL('../server/view/package.json', import.meta.url), 'utf8'));
+  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@capix/contracts', '@capix/resources']);
 });
 
 test('the host content composition uses the package entities and preserves exact source ownership', () => {

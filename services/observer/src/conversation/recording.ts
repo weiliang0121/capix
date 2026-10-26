@@ -12,7 +12,7 @@ import { ReadText } from './node/files/read.js';
 import { PrepareConversationContext } from './group/context/prepare.js';
 import { MaintainConversationContent } from './group/context/maintain.js';
 import { describeActiveView, describePreparedConversationContext } from './content/observation.js';
-import type { ActiveViewSnapshot } from '@capix/view';
+import type { ActiveViewSnapshot } from '@capix/observer-content';
 import type { PreparedConversationContext } from './group/context/types.js';
 
 /** Recording is a host consumer: business structures carry neither observers nor projection callbacks. */

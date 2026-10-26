@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { modelTextSchema } from '../../model/schema.js';
-import type { ActiveViewBasis, ActiveViewSelection, ActiveViewSnapshot } from '@capix/view';
+import type { ActiveViewBasis, ActiveViewSelection, ActiveViewSnapshot } from '@capix/observer-content';
 import type { ContextMaintenanceInput, ContextMaintenanceRequest, PreparedConversationContext } from './types.js';
 
 const indexes = z

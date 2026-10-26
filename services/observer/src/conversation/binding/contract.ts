@@ -8,7 +8,7 @@ import type { ConversationScene } from '../scene.js';
 import type { ConversationProgress } from '../progress.js';
 import type { AcceptedConversationInput } from '../accept.js';
 import type { WorkspaceFiles, FileProgress } from '../../files/index.js';
-import type { ActiveView } from '@capix/view';
+import type { ActiveView } from '@capix/observer-content';
 import type { AnswerProgress } from '../group/answer/stream.js';
 import type { ConversationCheckpointRun, ConversationCheckpointRuns } from '../checkpoints.js';
 

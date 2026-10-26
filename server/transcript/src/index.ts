@@ -6,3 +6,4 @@ export * from './persistence.js';
 export * from './progress.js';
 export type { TranscriptEvent } from './event.js';
 export * from './resource.js';
+export { TranscriptViewSource, type TranscriptViewSummary } from './view.js';

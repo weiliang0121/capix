@@ -1,5 +1,5 @@
 import { checkpointCodec } from '../../checkpoint.js';
-import type { ActiveViewSelection, ActiveViewSnapshot } from '@capix/view';
+import type { ActiveViewSelection, ActiveViewSnapshot } from '@capix/observer-content';
 import type { ContextMaintenanceInput, ContextMaintenanceRequest, PreparedConversationContext } from './types.js';
 import { activeViewSelectionSchema, activeViewSnapshotSchema, contextMaintenanceRequestSchema, contextMaintenanceInputSchema, preparedConversationContextSchema, maintenanceAcceptedSchema, maintenanceCompletedSchema } from './schema.js';
 export const preparedConversationContextCodec = checkpointCodec<PreparedConversationContext>(preparedConversationContextSchema);

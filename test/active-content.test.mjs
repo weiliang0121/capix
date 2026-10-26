@@ -6,13 +6,58 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
-import { ConversationContent } from '@capix/observer-content';
+import { ActiveView, ConversationContent } from '@capix/observer-content';
 import { SqliteObserverStore } from '@capix/observer-service/assembly';
 
 const message = (content) => ({ role: 'user', content });
 const createMemory = (content) => ({ action: 'create', memoryId: null, change: '记忆建立', sourceIndexes: [0], result: { topic: '偏好', content, sourceIndexes: [0] } });
 const updateMemory = (id, content) => ({ ...createMemory(content), action: 'update', memoryId: id });
 const indexes = (snapshot) => snapshot.messages.map((item) => item.index);
+
+test('active view keeps its saved format and only commits explicit changed membership', () => {
+  const transcript = new Transcript([message('source')]);
+  const memories = new Memories(transcript);
+  const [first] = memories.apply([createMemory('first')]);
+  const commits = [];
+  const active = new ActiveView(transcript, memories, {
+    persistence: {
+      commit(change) {
+        assert.equal(active.exportState().revision + 1, change.state.revision, 'persistence runs before installing the selection');
+        commits.push(change);
+      },
+    },
+  });
+  const initial = active.capture();
+  assert.equal(initial.messages[0].message, transcript.get(0), 'immutable formal messages retain their exact identity');
+  const selected = active.apply({ basis: initial.basis, messageIndexes: [], memoryIds: [first.id] });
+  assert.deepEqual(commits, [{ basis: initial.basis, state: { transcriptId: transcript.id, memoriesId: memories.id, revision: 1, messageIndexes: [], memoryIds: [first.id] } }]);
+  transcript.append(message('new message'));
+  const [second] = memories.apply([createMemory('second')]);
+  const current = active.capture();
+  assert.deepEqual(indexes(current), [1]);
+  assert.deepEqual(
+    current.memories.map((item) => item.id),
+    [first.id, second.id],
+  );
+  assert.equal(current.basis.indexRevision, selected.basis.indexRevision + 1, 'one synchronization installs both newly discovered sources');
+  assert.equal(commits.length, 1, 'automatic inclusion belongs to source persistence, not explicit view persistence');
+  const unchanged = active.apply({ basis: current.basis, messageIndexes: [1], memoryIds: [first.id, second.id] });
+  assert.deepEqual(unchanged, current);
+  assert.equal(commits.length, 1, 'source grouping cannot turn an equal selection into a new write');
+  const restored = new ActiveView(transcript, memories, { saved: active.exportState() });
+  assert.deepEqual(restored.capture(), current);
+  assert.deepEqual(Object.keys(active.exportState()), ['transcriptId', 'memoriesId', 'revision', 'messageIndexes', 'memoryIds']);
+});
+
+test('active view rejects asynchronous persistence without installing changed membership', async () => {
+  const transcript = new Transcript([message('source')]);
+  const memories = new Memories(transcript);
+  const active = new ActiveView(transcript, memories, { persistence: { commit: () => Promise.reject(new Error('late persistence rejection')) } });
+  const before = active.capture();
+  assert.throws(() => active.apply({ basis: before.basis, messageIndexes: [], memoryIds: [] }), /synchronously/);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(active.capture(), before);
+});
 
 test('active membership permits noncontiguous filtering, preserves explicit order and adds only newly created content', (t) => {
   const content = new ConversationContent({ messages: [message('zero'), message('one'), message('two')] });

@@ -1,7 +1,8 @@
 import { RuntimeError } from '@capix/contracts';
-import type { Memories, MemoryState } from '@capix/memory';
-import type { Transcript } from '@capix/transcript';
+import { MemoryViewSource, type Memories, type MemoryState } from '@capix/memory';
+import { TranscriptViewSource, type Transcript } from '@capix/transcript';
 import type { Message } from '@capix/protocol';
+import { View, type ViewBasis, type ViewReference, type ViewState } from '@capix/view';
 import { isEqual } from 'es-toolkit';
 
 /** Current membership belongs to the conversation's content; it has no independent identity. */
@@ -38,9 +39,12 @@ export interface ActiveViewPersistence {
   commit(change: { readonly basis: ActiveViewBasis; readonly state: ActiveViewState }): undefined;
 }
 
+type ActiveSources = { readonly messages: TranscriptViewSource; readonly memories: MemoryViewSource };
+
 /** A narrow mutable index over existing content. Source writes and index decisions remain separate facts. */
 export class ActiveView {
-  #state: ActiveViewState;
+  readonly #view: View<ActiveSources>;
+  readonly #sources: ActiveSources;
   #messageCount: number;
   #memorySequence: number;
   readonly #knownMemories: Set<string>;
@@ -51,7 +55,7 @@ export class ActiveView {
     options: { readonly saved?: ActiveViewState; readonly persistence?: ActiveViewPersistence } = {},
   ) {
     this.persistence = options.persistence;
-    this.#state = freezeActiveView(
+    const state = freezeActiveView(
       options.saved ??
         initialActiveView(
           transcript.id,
@@ -61,8 +65,14 @@ export class ActiveView {
           memories.values().map((memory) => memory.id),
         ),
     );
-    if (this.#state.transcriptId !== transcript.id || this.#state.memoriesId !== memories.id || memories.transcript !== transcript) throw new TypeError('Active content belongs to another content scope');
-    this.checkMembers(this.#state.messageIndexes, this.#state.memoryIds);
+    if (state.transcriptId !== transcript.id || state.memoriesId !== memories.id || memories.transcript !== transcript) throw new TypeError('Active content belongs to another content scope');
+    this.checkMembers(state.messageIndexes, state.memoryIds);
+    this.#sources = Object.freeze({ messages: new TranscriptViewSource(transcript), memories: new MemoryViewSource(memories) });
+    this.#view = new View<ActiveSources>({
+      revision: state.revision,
+      sources: { messages: { id: transcript.id, scope: this.#sources.messages.scope }, memories: { id: memories.id, scope: this.#sources.memories.scope } },
+      members: members(state.messageIndexes, state.memoryIds),
+    });
     this.#messageCount = transcript.length;
     this.#memorySequence = memories.sequence;
     this.#knownMemories = new Set(memories.values().map((memory) => memory.id));
@@ -81,7 +91,10 @@ export class ActiveView {
             .values()
             .map((memory) => memory.id)
             .filter((id) => !this.#knownMemories.has(id));
-    this.#state = appendActiveView(this.#state, messageIndexes, memoryIds);
+    if (messageIndexes.length || memoryIds.length) {
+      const current = activeState(this.#view.exportState());
+      this.#view.applySync(this.#sources, { basis: this.viewBasis(this.basis()), members: members([...current.messageIndexes, ...messageIndexes], [...current.memoryIds, ...memoryIds]) });
+    }
     this.#messageCount = this.transcript.length;
     this.#memorySequence = this.memories.sequence;
     for (const id of memoryIds) this.#knownMemories.add(id);
@@ -89,22 +102,17 @@ export class ActiveView {
 
   capture(): ActiveViewSnapshot {
     this.synchronize();
+    const snapshot = this.#view.captureSync(this.#sources);
+    const messages: { readonly index: number; readonly message: Readonly<Message> }[] = [];
+    const memories: MemoryState[] = [];
+    for (const entry of snapshot.entries) {
+      if (entry.source === 'messages') messages.push(Object.freeze({ index: entry.key, message: entry.value }));
+      else memories.push(entry.value);
+    }
     return Object.freeze({
-      basis: this.basis(),
-      messages: Object.freeze(
-        this.#state.messageIndexes.map((index) => {
-          const message = this.transcript.get(index);
-          if (!message) throw new Error('Active message no longer exists');
-          return Object.freeze({ index, message });
-        }),
-      ),
-      memories: Object.freeze(
-        this.#state.memoryIds.map((id) => {
-          const memory = this.memories.get(id);
-          if (!memory) throw new Error('Active memory no longer exists');
-          return Object.freeze(memory.toJSON());
-        }),
-      ),
+      basis: Object.freeze({ transcriptId: snapshot.basis.sources.messages.id, memoriesId: snapshot.basis.sources.memories.id, indexRevision: snapshot.basis.viewRevision, transcriptRevision: Number(snapshot.basis.sources.messages.version), memorySequence: Number(snapshot.basis.sources.memories.version) }),
+      messages: Object.freeze(messages),
+      memories: Object.freeze(memories),
     });
   }
 
@@ -112,24 +120,28 @@ export class ActiveView {
     this.synchronize();
     if (!isEqual(selection.basis, this.basis())) throw new RuntimeError('ACTIVE_CONTENT_CONFLICT', '活跃材料依据已经变化，需要重新读取后再处理。');
     this.checkMembers(selection.messageIndexes, selection.memoryIds);
-    if (isEqual(selection.messageIndexes, this.#state.messageIndexes) && isEqual(selection.memoryIds, this.#state.memoryIds)) return this.capture();
-    const state = freezeActiveView({ transcriptId: this.transcript.id, memoriesId: this.memories.id, revision: nextRevision(this.#state.revision), messageIndexes: selection.messageIndexes, memoryIds: selection.memoryIds });
-    const result: unknown = this.persistence?.commit({ basis: selection.basis, state });
-    if (result !== undefined) {
-      void Promise.resolve(result).catch(() => undefined);
-      throw new TypeError('Active content persistence must complete synchronously');
-    }
-    this.#state = state;
+    const persistence = this.persistence;
+    this.#view.applySync(this.#sources, { basis: this.viewBasis(selection.basis), members: members(selection.messageIndexes, selection.memoryIds) }, persistence ? { commit: ({ state }) => persistence.commit({ basis: selection.basis, state: activeState(state) }) } : undefined);
     return this.capture();
   }
 
   exportState(): ActiveViewState {
     this.synchronize();
-    return this.#state;
+    return activeState(this.#view.exportState());
   }
 
   private basis(): ActiveViewBasis {
-    return Object.freeze({ transcriptId: this.transcript.id, memoriesId: this.memories.id, indexRevision: this.#state.revision, transcriptRevision: this.transcript.revision, memorySequence: this.memories.sequence });
+    return Object.freeze({ transcriptId: this.transcript.id, memoriesId: this.memories.id, indexRevision: this.#view.exportState().revision, transcriptRevision: this.transcript.revision, memorySequence: this.memories.sequence });
+  }
+
+  private viewBasis(basis: ActiveViewBasis): ViewBasis<ActiveSources> {
+    return {
+      viewRevision: basis.indexRevision,
+      sources: {
+        messages: { id: basis.transcriptId, scope: this.#sources.messages.scope, version: String(basis.transcriptRevision) },
+        memories: { id: basis.memoriesId, scope: this.#sources.memories.scope, version: String(basis.memorySequence) },
+      },
+    };
   }
 
   private checkMembers(messageIndexes: readonly number[], memoryIds: readonly string[]): void {
@@ -137,6 +149,20 @@ export class ActiveView {
     if (messageIndexes.some((index) => !Number.isSafeInteger(index) || index < 0 || !this.transcript.get(index))) throw new TypeError('Active message does not exist');
     if (memoryIds.some((id) => typeof id !== 'string' || !this.memories.get(id))) throw new TypeError('Active memory does not exist');
   }
+}
+
+function members(messageIndexes: readonly number[], memoryIds: readonly string[]): readonly ViewReference<ActiveSources>[] {
+  return [...messageIndexes.map((key): ViewReference<ActiveSources> => ({ source: 'messages', key })), ...memoryIds.map((key): ViewReference<ActiveSources> => ({ source: 'memories', key }))];
+}
+
+function activeState(state: ViewState<ActiveSources>): ActiveViewState {
+  const messageIndexes: number[] = [];
+  const memoryIds: string[] = [];
+  for (const member of state.members) {
+    if (member.source === 'messages') messageIndexes.push(member.key);
+    else memoryIds.push(member.key);
+  }
+  return freezeActiveView({ transcriptId: state.sources.messages.id, memoriesId: state.sources.memories.id, revision: state.revision, messageIndexes, memoryIds });
 }
 
 export function initialActiveView(transcriptId: string, memoriesId: string, start: number, end: number, memoryIds: readonly string[]): ActiveViewState {

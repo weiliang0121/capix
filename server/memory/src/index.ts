@@ -5,3 +5,4 @@ export type { MemoryChange } from './change.js';
 export type { MemoryFixedApply, MemoryApplyReceipt, MemoryApplyState } from './apply.js';
 export type { MemoryState, MemoriesState, MemoriesCommit, MemoriesPersistence } from './persistence.js';
 export { MemoryResource, type CapturedMemories } from './resource.js';
+export { MemoryViewSource, type MemoryViewSummary } from './view.js';

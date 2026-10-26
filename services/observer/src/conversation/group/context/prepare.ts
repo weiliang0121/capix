@@ -1,7 +1,7 @@
 import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/structure';
 import { isEqual } from 'es-toolkit';
-import { ActiveViewResource, type ActiveViewReader } from '@capix/view';
-import type { ActiveViewSnapshot } from '@capix/view';
+import { ActiveViewResource, type ActiveViewReader } from '@capix/observer-content';
+import type { ActiveViewSnapshot } from '@capix/observer-content';
 import type { AcceptedConversationInput } from '../../accept.js';
 import { acceptedCheckpointInput } from '../../checkpoint.js';
 import { emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';

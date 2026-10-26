@@ -9,34 +9,35 @@
 | `Message`             | `@capix/protocol/content` | 正式消息的 `role/content` 协议值                           | 不是独立可变实体，没有单独消息生命周期          |
 | `Transcript`          | `@capix/transcript`       | 正式消息集合、稳定索引、分段、修订与固定追加凭据           | 不执行模型或管理调用                            |
 | `Memory` / `Memories` | `@capix/memory`           | 单项记忆身份与内容；集合统一接纳批次、来源、顺序及固定写入 | 不决定应提取什么记忆                            |
-| `ActiveView`          | `@capix/view`             | 已有消息索引和记忆 ID 的活跃成员、固定快照及依据检查       | 不拥有第二份正文，不替业务选择保留内容          |
+| `View`                | `@capix/view`             | 来源契约、成员状态、目录与固定读取、依据核验               | 不拥有正文，不决定业务保留策略                  |
+| `ActiveView`          | `@capix/observer-content` | Observer 消息/记忆活跃策略、旧快照形状及持久适配           | 不拥有第二份正文，不扩展 CP 恢复承诺            |
 | `MessageUsage`        | `@capix/measurement`      | 按准确消息对象累计本环境的材料使用次数                     | 不持久化，不进入模型输入，不决定选择策略        |
 | `ConversationContent` | `@capix/observer-content` | Observer 内容组合、内容同步、可借用的观察安装和关闭        | 不持有 Runner、Provider、模型交互或 SQLite 实现 |
 | 事实捕获与被动通知    | `@capix/changes`          | 捕获、缓冲、转交、发布、进度消费者故障隔离                 | 不拥有实体，不解释业务事实，不自动重做工作      |
 
-`@capix/observer-content` 是包名，对象仍叫 `ConversationContent`。`Memory` 与 `Memories` 放在同一包：集合是正式写入口，单项的更新与恢复方法保留为包内实现。`ActiveView` 独立成包不意味着新增内容身份；它仍没有独立 UID，生命周期由持有者确定。
+`@capix/observer-content` 是包名，对象仍叫 `ConversationContent`。`Memory` 与 `Memories` 放在同一包：集合是正式写入口，单项的更新与恢复方法保留为包内实现。`ActiveView` 是 Observer 的组合策略，使用通用 View，仍没有独立 UID，生命周期由 ConversationContent 确定。
 
 上述包均不反向依赖 Runtime、结构或 Observer 服务实现。各包只通过公开出口协作。
 
-包名按职责命名，对象保留准确语义：`view` 当前提供 `ActiveView`，管理已有内容的可见范围；`measurement` 当前提供 `MessageUsage`，统计消息被接纳为历史材料的次数。单词包名不意味着已实现通用视图引擎或测量平台。代码属性使用 `activeView/messageUsage`，持久化的 `active`、`active_content`、复合依据字段和既有冲突错误码保持不变。
+`view` 提供通用来源与成员机制；TranscriptViewSource、MemoryViewSource 分别由实体包实现，ActiveView 的自动纳入和维护规则留在 observer-content。`measurement` 当前仍只提供 MessageUsage，不宣称通用测量平台。现有 `activeView/messageUsage` 代码属性、持久化的 `active`、`active_content`、复合依据字段和冲突错误码保持不变。通用 View 的操作边界见 [View 包](view-package.md)。
 
 ```mermaid
 flowchart TD
   Service[Observer 服务装配] --> Content[observer-content]
   Service --> Runtime[server-runtime]
-  Content --> Active[view]
+  Content --> View[view]
   Content --> Memory[memory]
   Content --> Transcript[transcript]
   Content --> Changes[changes]
-  Active --> Memory
-  Active --> Transcript
+  Memory --> View
+  Transcript --> View
   Memory --> Transcript
   Memory --> Changes
   Transcript --> Changes
   Runtime --> Changes
   Memory --> Resources[resources]
   Transcript --> Resources
-  Active --> Resources
+  View --> Resources
   Selection[measurement] --> Resources
 ```
 
@@ -46,14 +47,14 @@ flowchart TD
 
 目录先表达实体归属，文件再区分实体、访问和持久契约。不是先建一个通用的 `entities/`、`snapshots/` 或 `adapters/` 总目录，再让实体跨目录寻找自己的实现。
 
-| 包                          | 主要文件与公开能力                                                                                                                                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/transcript`         | `transcript.ts`：集合及接纳；`ref.ts`：`MessageRef/TranscriptRangeRef`；`append.ts`：固定追加依据和凭据；`persistence.ts`：状态与同步提交；`resource.ts`：`TranscriptResource/TranscriptRangeReader`；`progress.ts`：追加进展值 |
-| `server/memory`             | `memory.ts/memories.ts`：单项与集合；`change.ts/apply.ts`：变更和固定批次；`persistence.ts`：状态与提交；`resource.ts`：`MemoryResource/CapturedMemories`；来源核验留在包内 `source.ts`                                         |
-| `server/view`               | `active.ts`：成员状态、复合依据、固定快照、同步和正式 apply；`resource.ts`：read/manage 端点                                                                                                                                    |
-| `server/measurement`        | `usage.ts`：按对象计数；`resource.ts`：受窗口控制的记录端点                                                                                                                                                                     |
-| `services/observer-content` | `content.ts`：持有和生命周期；`persistence.ts`：窄持久端口；`observation.ts`：观察安装；`synchronization/consumer.ts`：变化消费；`synchronization/transcript.ts`：原文基线与增量同步                                            |
-| `server/changes`            | `capture.ts/buffer.ts`：必要捕获与批次转交；`publish.ts/consumer.ts`：发布端口；`error.ts`：捕获错误及故障合并；`progress.ts`：被动进度通知                                                                                     |
+| 包                          | 主要文件与公开能力                                                                                                                                                                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `server/transcript`         | `transcript.ts`：集合及接纳；`ref.ts`：`MessageRef/TranscriptRangeRef`；`append.ts`：固定追加依据和凭据；`persistence.ts`：状态与同步提交；`resource.ts`：`TranscriptResource/TranscriptRangeReader`；`progress.ts`：追加进展值；`view.ts`：TranscriptViewSource         |
+| `server/memory`             | `memory.ts/memories.ts`：单项与集合；`change.ts/apply.ts`：变更和固定批次；`persistence.ts`：状态与提交；`resource.ts`：`MemoryResource/CapturedMemories`；来源核验留在包内 `source.ts`；`view.ts`：MemoryViewSource                                                     |
+| `server/view`               | `view.ts`：通用成员状态与一致读取；`source.ts/types.ts`：来源与数据契约；`access.ts`：按资源窗口打开端点                                                                                                                                                                 |
+| `server/measurement`        | `usage.ts`：按对象计数；`resource.ts`：受窗口控制的记录端点                                                                                                                                                                                                              |
+| `services/observer-content` | `content.ts`：持有和生命周期；`persistence.ts`：窄持久端口；`observation.ts`：观察安装；`synchronization/consumer.ts`：变化消费；`synchronization/transcript.ts`：原文基线与增量同步；`view/active.ts`：ActiveView 策略和保存形状；`view/resource.ts`：read/manage Offer |
+| `server/changes`            | `capture.ts/buffer.ts`：必要捕获与批次转交；`publish.ts/consumer.ts`：发布端口；`error.ts`：捕获错误及故障合并；`progress.ts`：被动进度通知                                                                                                                              |
 
 每包只有根公开出口。内部校验、消息事件构造、单项记忆写入不因文件独立就成为公开 API。内容状态和持久端口归对应实体包；它们不会仅因可序列化就全部搬入跨端协议。
 
@@ -120,17 +121,17 @@ resources.register(new Resource(transcript), TranscriptResource.append);
 
 ## 入口迁移
 
-| 旧入口                                                                  | 当前入口                                 |
-| ----------------------------------------------------------------------- | ---------------------------------------- |
-| Runtime 根或 `@capix/server-runtime/content` 的 Transcript 系列         | `@capix/transcript`                      |
-| Runtime 根或 `/content` 的 Memory/Memories 系列                         | `@capix/memory`                          |
-| 原 `SelectionUsage` / `@capix/selection-usage`                          | `@capix/measurement`                     |
-| 原 `ActiveContent` / `@capix/active-content`                            | `@capix/view`                            |
-| Observer 装配内部的 ConversationContent、ChangeConsumer、TranscriptFeed | `@capix/observer-content`                |
-| Runtime 的 ChangeBuffer、发布/捕获契约、ProgressChannel、EventConsumer  | `@capix/changes`                         |
-| RuntimeError 实现                                                       | `@capix/contracts`；Runtime 仅重导同一类 |
+| 旧入口                                                                              | 当前入口                                 |
+| ----------------------------------------------------------------------------------- | ---------------------------------------- |
+| Runtime 根或 `@capix/server-runtime/content` 的 Transcript 系列                     | `@capix/transcript`                      |
+| Runtime 根或 `/content` 的 Memory/Memories 系列                                     | `@capix/memory`                          |
+| 原 `SelectionUsage` / `@capix/selection-usage`                                      | `@capix/measurement`                     |
+| 原 `ActiveContent` / `@capix/active-content`，以及 `@capix/view` 的 ActiveView 系列 | `@capix/observer-content`                |
+| Observer 装配内部的 ConversationContent、ChangeConsumer、TranscriptFeed             | `@capix/observer-content`                |
+| Runtime 的 ChangeBuffer、发布/捕获契约、ProgressChannel、EventConsumer              | `@capix/changes`                         |
+| RuntimeError 实现                                                                   | `@capix/contracts`；Runtime 仅重导同一类 |
 
-Runtime 的 `/content` 出口已删除，不保留一个重新聚合所有实体的兼容门面。`@capix/observer-content` 也只组合 Observer 内容生命周期，不重导各实体包。客户端继续使用 `@capix/protocol` 的数据契约，不因为服务端分包而依赖实体实现。
+Runtime 的 `/content` 出口已删除，不保留一个重新聚合所有实体的兼容门面。`@capix/observer-content` 组合 Observer 内容生命周期并公开自己的 ActiveView 策略，不重导独立实体包或通用 View。客户端继续使用 `@capix/protocol` 的数据契约，不因为服务端分包而依赖实体实现。
 
 ## 后续逐包整理
 

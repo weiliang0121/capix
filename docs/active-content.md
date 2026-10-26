@@ -1,6 +1,6 @@
 # 活跃材料、准备与维护
 
-这是 P02 的服务侧最小实现，不是新内核实体或通用上下文平台。正式消息由 Transcript 持有，记忆由 Memories 持有；ConversationContent 中的 ActiveView 只说明这些既有内容中，哪些值参与下一次材料准备。
+这是 P02 的服务侧实现。正式消息由 Transcript 持有，记忆由 Memories 持有；`@capix/observer-content` 中的 ActiveView 组合 `@capix/view` 的通用成员与来源机制，说明这些既有内容中哪些值参与下一次材料准备。ActiveView 的业务策略和保存形状仍由 Observer 解释，不是内核的容量策略或通用上下文平台。
 
 ## 归属与三个时机
 
@@ -62,6 +62,14 @@ interface ActiveViewSelection {
 capture 返回冻结值，不返回以后可能读到新内容的句柄。消息正文不可变；记忆更新替换正文，因此旧 MemoryState 保留当时值。索引成员不变但记忆更新时，indexRevision 可以不变，memorySequence 仍区分新的视图内容。不能仅用索引修订判断材料相同。
 
 新追加消息和新建记忆默认纳入；更新已有记忆不改变它当前是否活跃。退出索引不删除实体、不清空历史、不要求摘要或替代记忆。默认初始化使用当前消息段和全部已有记忆；之后正常写入纳入新增内容，不自动切段。
+
+## 通用机制与 Observer 策略
+
+ActiveView 的成员状态由 View 持有；实际捕获通过 `TranscriptViewSource` 与 `MemoryViewSource` 的 whole 范围读取。View 核对来源身份、范围、版本和成员，并形成固定值；ActiveView 仍负责源增量游标、新内容默认纳入、旧 basis 转换和保存格式。
+
+自动纳入发生在源变更已正式落实后，内存同步不再单独提交第二次持久写入。显式 apply 则把通用 View 的待安装状态转换为现有 ActiveViewState，经同步持久端口提交后才安装。没有新成员的正文更新不会推进 indexRevision；相同成员与顺序也不产生保存。
+
+`active_content` SQL 表、保存字段 `active`、准备结果与 CP 中的业务 state 均保持。通用 View 不自动纳入新内容、不定义维护阶段，也不创建来源实体。它不缓存来源端点；ActiveView 由宿主持有固定来源适配器，资源访问仍只透出当前窗口允许的 read/manage 操作。通用来源契约与一致性限制见 [View 包](view-package.md)。
 
 ## 资源与维护装配
 

@@ -19,6 +19,8 @@
     "@capix/contracts": "workspace:*",
     "@capix/memory": "workspace:*",
     "@capix/protocol": "workspace:*",
-    "@capix/transcript": "workspace:*"
+    "@capix/resources": "workspace:*",
+    "@capix/transcript": "workspace:*",
+    "es-toolkit": "1.52.0"
   }
 }

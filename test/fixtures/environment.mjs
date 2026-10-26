@@ -1,4 +1,4 @@
-import { ActiveView } from '@capix/view';
+import { ActiveView } from '@capix/observer-content';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import { MessageUsage } from '@capix/measurement';

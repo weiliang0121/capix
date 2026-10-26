@@ -1,6 +1,6 @@
 import type { TranscriptState, TranscriptPersistence } from '@capix/transcript';
 import type { MemoriesState, MemoriesPersistence } from '@capix/memory';
-import type { ActiveViewState, ActiveViewPersistence } from '@capix/view';
+import type { ActiveViewState, ActiveViewPersistence } from './view/active.js';
 
 /** Stored content is independent of optional recording and of the current service process. */
 export interface ConversationContentState {

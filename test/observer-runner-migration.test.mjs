@@ -6,7 +6,7 @@ import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import { MessageUsage } from '@capix/measurement';
 import { initializeObserver } from '@capix/observer-service/assembly';
-import { ActiveView } from '@capix/view';
+import { ActiveView } from '@capix/observer-content';
 import { createConversationStructure, ModelInteractions, ModelSource, registerConversationResources, ConversationCallCapture, conversationCallHooks } from '@capix/observer-service/conversation';
 
 const settings = () => ({ model: 'initial-model', contextBudget: 32768, maxOutputTokens: 1536, timeoutMs: 1000 });

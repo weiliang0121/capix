@@ -9,7 +9,7 @@ import type { TranscriptSnapshot } from '@capix/protocol/content';
 import type { ObserverChange } from '@capix/protocol/observer';
 import type { MemoryInput } from '@capix/observer-service/conversation';
 import { defineGroup, defineScene } from '@capix/server-runtime';
-import { ActiveViewResource } from '@capix/view';
+import { ActiveViewResource } from '@capix/observer-content';
 import { MaintainConversationContent, PrepareConversationContext, type ContextMaintenanceInput, type ContextMaintenanceDecision, type ContextMaintenancePolicy } from '@capix/observer-service/conversation';
 
 const maintenancePolicy = defineGroup<ContextMaintenanceInput, ContextMaintenanceDecision>()({

@@ -2,7 +2,7 @@ import { ChangeBuffer, type EventConsumer } from '@capix/changes';
 import { RuntimeError } from '@capix/contracts';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
-import { ActiveView } from '@capix/view';
+import { ActiveView } from './view/active.js';
 import type { Message, ObserverChange, TranscriptEvent, MemoryEvent } from '@capix/protocol';
 import { ChangeConsumer } from './synchronization/consumer.js';
 import { TranscriptFeed } from './synchronization/transcript.js';

@@ -15,10 +15,6 @@
   },
   "dependencies": {
     "@capix/contracts": "workspace:*",
-    "@capix/memory": "workspace:*",
-    "@capix/protocol": "workspace:*",
-    "@capix/resources": "workspace:*",
-    "@capix/transcript": "workspace:*",
-    "es-toolkit": "1.52.0"
+    "@capix/resources": "workspace:*"
   }
 }

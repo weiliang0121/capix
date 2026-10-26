@@ -11,7 +11,7 @@ import { executionProgressSchema, conversationCheckpointOutput, acceptedCheckpoi
 import { memorySchema } from './group/checkpoint.js';
 import { acceptConversationRequest } from './accept.js';
 import { preparedConversationContextSchema } from './group/context/schema.js';
-import type { ActiveViewSnapshot } from '@capix/view';
+import type { ActiveViewSnapshot } from '@capix/observer-content';
 
 /** Fixed construction basis for one R/E call; never a saved Submission or a mutable current conversation. */
 export interface ConversationCheckpointRun {

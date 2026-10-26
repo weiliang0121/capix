@@ -1,5 +1,5 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
-import { ActiveView } from '@capix/view';
+import { ActiveView } from '@capix/observer-content';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';

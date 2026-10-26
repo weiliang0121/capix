@@ -1,7 +1,7 @@
 import { ResourceOffer } from '@capix/resources';
 import type { MessageUsage } from '@capix/measurement';
 import type { Transcript } from '@capix/transcript';
-import type { ActiveViewSnapshot } from '@capix/view';
+import type { ActiveViewSnapshot } from '@capix/observer-content';
 
 /** Resolve immutable material positions for counters, without turning current content into request input. */
 export const ConversationMaterialUsageResource = new ResourceOffer({

@@ -9,7 +9,7 @@ import { resolveDeclaration } from '@capix/server-runtime/construction';
 import assert from 'node:assert/strict';
 
 import { createConversationStructure, acceptConversationInput, initializeObserver, observeExecution, ConversationTaskResource, ModelSettingsResource, ModelResource, ConversationMaterialUsageResource, ModelSource, ModelInteractions } from '@capix/observer-service';
-import { ActiveView, ActiveViewResource } from '@capix/view';
+import { ActiveView, ActiveViewResource } from '@capix/observer-content';
 
 // Manual Context fixtures bypass host assembly; their supply is explicit and test-local.
 const conversationProviders = [

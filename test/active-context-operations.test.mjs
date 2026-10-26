@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { Scene, Group, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
 import { MemoryResource } from '@capix/memory';
 import { ConversationContent } from '@capix/observer-content';
-import { ActiveViewResource } from '@capix/view';
+import { ActiveViewResource } from '@capix/observer-content';
 import { PrepareConversationContext, MaintainConversationContent, ModelSettingsResource } from '@capix/observer-service/conversation';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256, timeoutMs: 1000 };

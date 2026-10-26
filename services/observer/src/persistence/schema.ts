@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { conversationTitle } from '../conversation/title.js';
-import { initialActiveView } from '@capix/view';
+import { initialActiveView } from '@capix/observer-content';
 
 /** Local format migrations preserve existing content; unknown versions never create an empty conversation. */
 export function initializeSchema(database: DatabaseSync): void {

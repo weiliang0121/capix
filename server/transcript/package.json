@@ -18,6 +18,7 @@
     "@capix/changes": "workspace:*",
     "@capix/protocol": "workspace:*",
     "@capix/resources": "workspace:*",
+    "@capix/view": "workspace:*",
     "es-toolkit": "1.52.0"
   }
 }

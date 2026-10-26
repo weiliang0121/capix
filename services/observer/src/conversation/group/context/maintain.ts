@@ -1,8 +1,8 @@
 import { Group, checkpointPoint, childReference, type ChildCall, type GroupWork } from '@capix/structure';
 import type { ModelSettings } from '@capix/protocol';
 import { isEqual } from 'es-toolkit';
-import { ActiveViewResource, type ActiveViewManager } from '@capix/view';
-import type { ActiveViewSnapshot } from '@capix/view';
+import { ActiveViewResource, type ActiveViewManager } from '@capix/observer-content';
+import type { ActiveViewSnapshot } from '@capix/observer-content';
 import { ModelSettingsResource } from '../../model/resources.js';
 import { originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
 import { activeViewSnapshotCodec, contextMaintenanceRequestCodec, contextMaintenanceInputCodec, maintenanceAcceptedCodec, maintenanceCompletedCodec } from './checkpoint.js';

@@ -9,7 +9,7 @@ import type { ConversationStructure } from './structure.js';
 import { FileResources, type FileResourceSource } from '../files/index.js';
 import type { DocumentProcessingInput } from './group/document/process.js';
 import type { CreateTextInput } from './node/files/create.js';
-import { ActiveViewResource } from '@capix/view';
+import { ActiveViewResource } from '@capix/observer-content';
 import { ConversationMaterialUsageResource } from './content/usage.js';
 import { ConversationTaskResource } from './decision/selection.js';
 import type { AcceptedConversationInput } from './accept.js';

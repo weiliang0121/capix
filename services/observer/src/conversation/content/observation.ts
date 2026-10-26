@@ -1,4 +1,4 @@
-import type { ActiveViewSnapshot } from '@capix/view';
+import type { ActiveViewSnapshot } from '@capix/observer-content';
 import type { PreparedConversationContext } from '../group/context/types.js';
 
 /** Messages remain in Transcript; historic memory values are needed by the record detail projection. */

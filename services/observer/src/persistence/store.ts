@@ -16,7 +16,7 @@ import { initializeSchema } from './schema.js';
 import { updateRecord } from './records.js';
 import { SqliteCheckpointStore } from './checkpoints.js';
 import { SqliteConversationCheckpointRuns } from './runs.js';
-import { appendActiveView, freezeActiveView, initialActiveView, type ActiveViewPersistence, type ActiveViewState } from '@capix/view';
+import { appendActiveView, freezeActiveView, initialActiveView, type ActiveViewPersistence, type ActiveViewState } from '@capix/observer-content';
 
 type Row = Record<string, string | number | bigint | Uint8Array | null>;
 

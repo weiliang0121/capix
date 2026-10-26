@@ -19,6 +19,7 @@
     "@capix/protocol": "workspace:*",
     "@capix/resources": "workspace:*",
     "@capix/transcript": "workspace:*",
+    "@capix/view": "workspace:*",
     "es-toolkit": "1.52.0"
   }
 }

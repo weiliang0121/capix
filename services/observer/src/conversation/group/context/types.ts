@@ -1,6 +1,6 @@
 import type { ModelSettings } from '@capix/protocol';
 import type { Group } from '@capix/structure';
-import type { ActiveViewSelection, ActiveViewSnapshot } from '@capix/view';
+import type { ActiveViewSelection, ActiveViewSnapshot } from '@capix/observer-content';
 import type { AnswerMessageContext } from '../../node/context/assemble.js';
 
 export interface PreparedConversationContext {
