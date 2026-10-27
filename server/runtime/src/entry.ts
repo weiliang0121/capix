@@ -2,7 +2,8 @@ import { RuntimeError, type CallableInput, type CallableOutput } from '@capix/co
 import { requireNotCancelled, type InvocationControls } from '@capix/invocation';
 import type { AnyBuiltCallable, BuiltCallable, BuiltOptions } from './structure/construction.js';
 import type { AnyCallable } from './binding/declarations.js';
-import { createRootInvocation, restoreRootInvocation } from './construction/calls.js';
+import { createRootInvocation, restoreRootInvocation, type RootInvocationOptions } from './construction/calls.js';
+import { ProgressChannel } from '@capix/changes';
 
 /** Occupancy belongs to its host; this operation does not create another runtime owner. */
 export interface EntryState {
@@ -12,9 +13,9 @@ export interface EntryState {
 export type EntryChange = { kind: 'established' } | ({ boundId: string } & ({ kind: 'acquired' | 'released' } | { kind: 'rejected'; reason: 'busy'; error: unknown } | { kind: 'entry-failed'; error: unknown }));
 
 /** Run one root call, preserving construction failure and release failure independently. */
-export function runEntry<Structure extends AnyCallable, Options>(entry: EntryState, structure: BuiltCallable<Structure, Options>, request: { input: NoInfer<CallableInput<Structure>> } | { contextId: string }, options: NoInfer<Options> & InvocationControls, publish: (change: EntryChange) => void): Promise<CallableOutput<Structure>>;
-export function runEntry<Structure extends AnyBuiltCallable>(entry: EntryState, structure: Structure, request: { input: NoInfer<CallableInput<Structure>> } | { contextId: string }, options: NoInfer<BuiltOptions<Structure>> & InvocationControls, publish: (change: EntryChange) => void): Promise<CallableOutput<Structure>>;
-export async function runEntry<Structure extends AnyBuiltCallable>(entry: EntryState, structure: Structure, request: { input: CallableInput<Structure> } | { contextId: string }, options: BuiltOptions<Structure> & InvocationControls, publish: (change: EntryChange) => void): Promise<CallableOutput<Structure>> {
+export function runEntry<Structure extends AnyCallable, Options>(entry: EntryState, structure: BuiltCallable<Structure, Options>, request: { input: NoInfer<CallableInput<Structure>> } | { contextId: string }, options: NoInfer<Options> & InvocationControls, publish: (change: EntryChange) => void, execution?: RootInvocationOptions<CallableOutput<Structure>>): Promise<CallableOutput<Structure>>;
+export function runEntry<Structure extends AnyBuiltCallable>(entry: EntryState, structure: Structure, request: { input: NoInfer<CallableInput<Structure>> } | { contextId: string }, options: NoInfer<BuiltOptions<Structure>> & InvocationControls, publish: (change: EntryChange) => void, execution?: RootInvocationOptions<CallableOutput<Structure>>): Promise<CallableOutput<Structure>>;
+export async function runEntry<Structure extends AnyBuiltCallable>(entry: EntryState, structure: Structure, request: { input: CallableInput<Structure> } | { contextId: string }, options: BuiltOptions<Structure> & InvocationControls, publish: (change: EntryChange) => void, execution?: RootInvocationOptions<CallableOutput<Structure>>): Promise<CallableOutput<Structure>> {
   const boundId = structure.id;
   if (entry.running) {
     const error = new RuntimeError('RUNTIME_BUSY', '当前环境正在执行，请等待本次调用结束。');
@@ -33,8 +34,9 @@ export async function runEntry<Structure extends AnyBuiltCallable>(entry: EntryS
     publish({ kind: 'acquired', boundId });
     let invocation;
     try {
-      if (options?.signal) requireNotCancelled(options.signal);
-      invocation = 'contextId' in request ? restoreRootInvocation(structure, request.contextId, options, options) : createRootInvocation(structure, request.input, options, options);
+      const controls = execution ?? { signal: options?.signal };
+      if (controls.signal) requireNotCancelled(controls.signal);
+      invocation = 'contextId' in request ? restoreRootInvocation(structure, request.contextId, options, controls) : createRootInvocation(structure, request.input, options, controls);
     } catch (error) {
       try {
         publish({ kind: 'entry-failed', boundId, error });
@@ -43,6 +45,9 @@ export async function runEntry<Structure extends AnyBuiltCallable>(entry: EntryS
       }
       throw error;
     }
+    if (execution?.created) new ProgressChannel(execution.created).publish(invocation.identity);
+    const signal = execution?.signal ?? options?.signal;
+    if (signal) requireNotCancelled(signal);
     return await invocation.run();
   } catch (error) {
     failed = true;

@@ -62,6 +62,42 @@ const result = await runner.run('hello'); // 你好
 
 宿主使用 `new Runner(scene, resources, interactions?, options?).build()`，build 返回原 Runner。`runner.run(input, options?)` 创建一次调用，`runner.resume(contextId, options?)` 进入明确恢复点；`runner.isRunning` 表示这个 Runner 的入口占用。普通运行只执行一次 run；业务的循环或备用来源由 run 显式组织，每次子调用都有新身份。
 
+Runner 自身提供输出消费与当前运行控制，不要求宿主建立另一个 Run 对象：
+
+```ts
+const unsubscribe = runner.output.subscribe({
+  receive(event) {
+    if (event.kind === 'delta') console.log(event.delta);
+  },
+});
+
+const result = await runner.run(input);
+// 需要停止正在执行的调用时：runner.cancel(reason?)
+unsubscribe();
+```
+
+订阅持续到解除或接收器失败，可以跨多次 run/resume；只接收 Scene 根输出，不自动收集所有子输出。Result/Delta 直接从 Scene 推导，不额外经过资源 Options 或 callableHooks。订阅不缓存历史，中途加入从下一条事件开始；事件保留 contextId/round/sequence，并新增 entryId 标识本次入口请求。恢复保留原 contextId，并开始本次新的输出段，entryId 则每次重新生成。接收器同步返回 undefined；同步抛错或返回 Promise 会停用该订阅并隔离故障，其他订阅和执行继续。输出 completed 表达输出段完成，最终交付仍以本次 Promise 为准。
+
+运行观察使用并列的只读出口：
+
+```ts
+const stopObserving = runner.observation.subscribe({
+  receive(event) {
+    if (event.source === 'entry' && event.fact.kind === 'settled') {
+      console.log(event.entryId, event.fact.status);
+    }
+  },
+});
+```
+
+事件为 `{runnerId, entryId, source, fact}`，source 区分入口、调用、资源、CP 和业务注释。只提供固定元数据与有界诊断，不带输入输出正文、Frame、活实体或资源 describe；业务注释只取事件名。订阅不安装 Recorder、不重建场景，也不回放历史；无人消费时跳过投影，后来仍可订阅。建立前失败与忙碌拒绝也有自己的 entryId；attached 关联实际根调用，settled 在包括严格释放观察在内的交付处理后报告最终状态。恢复从独立 CP 反馈路径取得事实，不伪造普通调用重新开始。
+
+entryId 仅关联反馈，不是公开 Run 对象、submissionId、恢复地址或幂等凭据。独立交互晚到反馈仍由交互自身提供。端口边界与实现见 [运行出口](runtime-ports.md)。
+
+`runner.cancel(reason?)` 请求取消当前运行；新发出请求返回 true，空闲或已取消返回 false。它不解除输出订阅、不取消独立 Interaction，也不提前释放未退出的业务。每次入口使用独立取消控制，结束时解除外部 signal 监听；外部信号与 Runner 取消按首次来源生效。宿主 options 保留原 signal，实际 Work 使用本次有效控制信号；外部导致的准确取消在 Runner 交付边界仍归属原外部 signal，不改变业务错误或复合故障。连续运行及释放回调中的重入不会继承上一轮取消状态。
+
+可运行示例见 [runner-output.mjs](../examples/runner-output.mjs)。
+
 ## 资源和操作接收
 
 `Resources.register(new Resource(entity), offer)` 将实体与公开方法配对。Resource 不转移实体的关闭责任，offer 不自动授予所有节点权限；Work 只取得本层 deps。`ResourceOffer({methods})` 的方法取得 source、业务参数和本次 operation 控制端口，内核签发受控资源方法。

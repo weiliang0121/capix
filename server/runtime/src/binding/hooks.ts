@@ -1,6 +1,6 @@
 import type { CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver } from '@capix/contracts';
 import type { ProgressReceiver } from '@capix/changes';
-import type { InvocationProgress } from '@capix/invocation';
+import { requireNotCancelled, type InvocationProgress } from '@capix/invocation';
 import type { CallableInvocationStarted } from '../construction/invocation.js';
 import type { AnyCallable, ResolvedCallable } from './declarations.js';
 import type { PreparedCall } from './calls.js';
@@ -45,16 +45,21 @@ export class CallableHooks<Options> {
     }
   }
 
-  open(structure: AnyCallable, input: unknown, options: Options, restoring: boolean): HookAccess {
+  open(structure: AnyCallable, input: unknown, options: Options, restoring: boolean, signal?: AbortSignal): HookAccess {
     const hooks = this.registrations.get(structure);
     if (!hooks) return {};
     const started = restoring ? undefined : synchronous(hooks.started?.(input, options), 'started');
     if (started !== undefined && typeof started !== 'function') throw new TypeError('Callable started factory must return a callback or undefined');
+    if (signal) requireNotCancelled(signal);
+    const progress = synchronous(hooks.progress?.(input, options), 'progress');
+    if (signal) requireNotCancelled(signal);
+    const output = synchronous(hooks.output?.(input, options), 'output');
+    if (signal) requireNotCancelled(signal);
     return {
       // Recovery preserves the old identity; it must not repeat necessary establishment work.
       started,
-      progress: synchronous(hooks.progress?.(input, options), 'progress'),
-      output: synchronous(hooks.output?.(input, options), 'output'),
+      progress,
+      output,
     };
   }
 }

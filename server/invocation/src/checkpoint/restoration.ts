@@ -4,6 +4,7 @@ import type { CheckpointContract } from '@capix/contracts';
 import type { InvocationIdentity } from '@capix/contracts';
 import { cloneCheckpointHead } from '@capix/checkpoint';
 import { ObserverSession } from '../observation/session.js';
+import { ProgressChannel } from '@capix/changes';
 
 /** Read, validate and optionally construct within one observed restoration-preparation boundary. */
 export function prepareCheckpointRestoration<Value = never>(installation: CheckpointInstallation | undefined, contract: CheckpointContract | undefined, contextId: string, owner: Omit<InvocationIdentity, 'contextId'>, construct?: (restoration: CheckpointRestoration) => Value): Value | CheckpointRestoration {
@@ -12,10 +13,12 @@ export function prepareCheckpointRestoration<Value = never>(installation: Checkp
     return construct ? construct(restoration) : restoration;
   } catch (error) {
     const observation = installation?.observation;
-    if (observation) {
-      const session = new ObserverSession({ observe: (fact: CheckpointFact) => observation.observe(fact), available: () => true }, observation.failure ?? 'isolate');
+    const feedback = installation?.feedback;
+    if (observation || feedback) {
       const fact: CheckpointFact = Object.freeze({ kind: 'failed', stage: 'restore' as const, contextId, owner: Object.freeze({ ...owner, contextId }), recovering: true, activityId: randomUUID(), sequence: 1, occurredAt: new Date().toISOString(), error });
-      const fault = session.publish((observer) => observer.observe(fact));
+      if (feedback) new ProgressChannel(feedback).publish(fact);
+      const session = observation ? new ObserverSession({ observe: (fact: CheckpointFact) => observation.observe(fact), available: () => true }, observation.failure ?? 'isolate') : undefined;
+      const fault = session?.publish((observer) => observer.observe(fact));
       if (fault !== undefined) throw new AggregateError([error, fault], 'Checkpoint construction and its observation both failed', { cause: error });
     }
     throw error;

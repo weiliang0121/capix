@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { isEqual } from 'es-toolkit';
 import type { Invocation } from '../invocation/invocation.js';
 import type { InvocationContext } from '../context/context.js';
-import { InvocationObservation } from '../observation/invocation.js';
-import type { InvocationObserver } from '../observation/observer.js';
+import { ProgressChannel } from '@capix/changes';
+import type { InvocationObservation } from '../observation/invocation.js';
 import { ObserverSession } from '../observation/session.js';
 import type { CheckpointFact, CheckpointInstallation, CheckpointRestoration, CheckpointWriter } from './contract.js';
 import type { CheckpointHead, CheckpointDelivery, CheckpointChild, CheckpointReferences } from '@capix/checkpoint';
@@ -13,6 +13,7 @@ import type { InvocationTarget } from '../invocation/relation.js';
 import { captureCheckpointChildren, decodeCheckpointChild, resolveCheckpointChild } from './children.js';
 import { checkpointChildBinding, checkCheckpointReferences, decodeCheckpointFrame } from './facts.js';
 import { captureCheckpointContinuation, restoreCheckpointContinuation } from './continuation.js';
+import { CheckpointObservation } from './observation.js';
 
 type Event = CheckpointFact extends infer F ? (F extends CheckpointFact ? Omit<F, 'activityId' | 'contextId' | 'owner' | 'recovering' | 'sequence' | 'occurredAt'> : never) : never;
 const active = new WeakMap<object, Set<string>>();
@@ -30,6 +31,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
   readonly #savedChildren = new Map<string, CheckpointChild>();
   readonly #resumedChildren = new Map<string, InvocationTarget>();
   readonly #observer?: ObserverSession<{ observe(fact: CheckpointFact): void; available?(): boolean }>;
+  readonly #feedback?: ProgressChannel<CheckpointFact>;
   constructor(
     private readonly invocation: Invocation<Input, Output, Context>,
     private readonly installation: CheckpointInstallation,
@@ -38,20 +40,8 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     restore?: CheckpointRestoration,
   ) {
     this.#observer = installation.observation ? new ObserverSession({ observe: (fact: CheckpointFact) => installation.observation!.observe(fact), available: () => true }, installation.observation.failure ?? 'isolate') : undefined;
-    this.observation = new InvocationObservation(
-      [
-        new ObserverSession<InvocationObserver>(
-          {
-            observe: (fact) => this.emit({ kind: 'activity', fact }),
-            resource: (fact) => this.emit({ kind: 'resource', fact }),
-            transcript: (fact) => this.emit({ kind: 'transcript', fact }),
-            memory: (fact) => this.emit({ kind: 'memory', fact }),
-          },
-          'propagate',
-        ),
-      ],
-      new Map(),
-    );
+    this.#feedback = installation.feedback ? new ProgressChannel(installation.feedback) : undefined;
+    this.observation = new CheckpointObservation((event) => this.emit(event));
     if (restore) {
       this.#restore = cloneCheckpointHead(restore.head);
       this.#head = this.#restore;
@@ -67,6 +57,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
   }
   private emit(event: Event): void {
     const fact = Object.freeze({ ...event, activityId: this.activityId, contextId: this.invocation.context.id, owner: this.invocation.identity, recovering: this.invocation.recovering, sequence: ++this.#sequence, occurredAt: new Date().toISOString() }) as CheckpointFact;
+    this.#feedback?.publish(fact);
     const error = this.#observer?.publish((observer) => observer.observe(fact));
     if (error !== undefined) throw error;
   }

@@ -22,6 +22,7 @@ const packages = [
   { path: 'server/invocation', allowed: ['@capix/contracts', '@capix/protocol', '@capix/resources', '@capix/changes', '@capix/checkpoint', '@capix/diagnostics'] },
   { path: 'server/runtime', allowed: ['@capix/contracts', '@capix/protocol', '@capix/resources', '@capix/structure', '@capix/changes', '@capix/records', '@capix/checkpoint', '@capix/invocation', '@capix/interaction', '@capix/diagnostics'] },
   { path: 'services/observer-content', allowed: ['@capix/contracts', '@capix/changes', '@capix/protocol', '@capix/resources', '@capix/transcript', '@capix/memory', '@capix/view'] },
+  { path: 'services/conversation', allowed: ['@capix/protocol', '@capix/resources', '@capix/structure', '@capix/transcript', '@capix/server-runtime'] },
   { path: 'services/observer', allowed: ['@capix/protocol', '@capix/resources', '@capix/structure', '@capix/server-runtime', '@capix/contracts', '@capix/changes', '@capix/transcript', '@capix/memory', '@capix/view', '@capix/measurement', '@capix/records', '@capix/observer-content', '@capix/checkpoint', '@capix/invocation', '@capix/interaction'] },
   { path: 'client/runtime', allowed: ['@capix/protocol'] },
   { path: 'client/http', allowed: ['@capix/protocol', '@capix/client-runtime'] },

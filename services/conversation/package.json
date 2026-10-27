@@ -1,0 +1,23 @@
+{
+  "name": "@capix/conversation-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@capix/protocol": "workspace:*",
+    "@capix/resources": "workspace:*",
+    "@capix/structure": "workspace:*",
+    "@capix/transcript": "workspace:*",
+    "@capix/server-runtime": "workspace:*"
+  }
+}

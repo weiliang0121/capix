@@ -5,7 +5,7 @@ import { failureFact } from './failure.js';
 import type { InvocationProgress } from './progress.js';
 
 /** Project established facts without publishing, sequencing or changing their producer. */
-export function invocationProgress(fact: InvocationFact, signal: AbortSignal): InvocationProgress | undefined {
+export function invocationProgress(fact: InvocationFact, signal: AbortSignal): InvocationProgress {
   const description: { name?: string; label?: string } = {};
   // Optional descriptions must not execute getters or break passive progress.
   try {

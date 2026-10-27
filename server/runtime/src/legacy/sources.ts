@@ -7,6 +7,7 @@ import type { ProgressReceiver } from '@capix/changes';
 import type { CallableInvocationStarted } from '../construction/invocation.js';
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
 import { CallableCallScope, type PreparedCall, type CallInstallation } from '../binding/calls.js';
+import type { CallableFeedback } from '../construction/feedback.js';
 
 /** Host input establishes one root supply. The callable lifecycle remains independent of this source. */
 export interface CallableCallSource<Input, Options, Source> {
@@ -44,9 +45,9 @@ export class CallableSources<Options = unknown> implements CallInstallation<Opti
     private readonly validate?: (options: Options) => void,
   ) {}
 
-  begin(options: Options): CallableCallScope<Options> {
+  begin(options: Options, feedback?: CallableFeedback): CallableCallScope<Options> {
     this.validate?.(options);
-    return new CallableCallScope(this, options);
+    return new CallableCallScope(this, options, feedback);
   }
 
   require(value: object | undefined): CallableCallScope<Options> {

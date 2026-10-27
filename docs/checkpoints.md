@@ -2,6 +2,8 @@
 
 状态：2026-10-27，CP 载体与存储由 `@capix/checkpoint` 提供，活调用捕获和续接由 `@capix/invocation` 提供，Runtime 负责结构与恢复 Work 的装配。Frame v5 保持格式，普通调用只执行一次 run；旧 round 2/continuation 的执行恢复明确拒绝。历史设计推演移至 [Checkpoint 设计历史](checkpoint-design-history.md)，其中旧 API 不再作为当前入口。自动恢复、旧提交交付与恢复 UI 尚未接入。
 
+本轮已增加独立被动 `CheckpointInstallation.feedback`，覆盖正常 CP、恢复活动及恢复建立前失败；原 observation 的严格策略和 Store 提交规则保持。Runner 已提供 `observation` 元数据订阅，output 与 observation 都带本次入口 `entryId`，不改变恢复沿用的 Context 身份。该改动只补交付接缝，不扩大可恢复范围，也不把原始 CP 事实直接作为客户端协议。完整出口区分见 [运行出口](runtime-ports.md)。
+
 恢复的目标是：某次 Callable 工作中断后，依据已经保存的事实和声明的续接入口，继续推进该工作。重新建立 Invocation、Context 和资源访问是实现手段；不恢复原 Promise、闭包、调用栈，也不反序列化 Bound 结构。
 
 当前验证覆盖材料准备、普通回答、文件处理与保存、澄清、记忆收尾和有限二次生成；维护预设有局部续接验证，不等于自定义维护已开放宿主恢复。**声明接入不代表任意时刻都能恢复：每次续接仍须取得准确子工作、已保存结果或实体凭据。**未知外部效果不重新执行，明确失败或取消不复活。
@@ -44,15 +46,16 @@ Store 保持同步宿主端口，未强制放入普通业务 deps。最终交付
 
 内核 CP 保持可选；Observer 默认给新产生的调用安装保存端口。新建对话正常聊天即可产生真实 CP，已有对话之后的新调用采用相同规则，不给过去的任务补写 CP。启动不扫描或自动继续旧 QA，没有新增 HTTP 恢复接口或界面恢复按钮。
 
-| 入口                                                                                   | 当前行为                                                                                                                                                    |
-| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CallableDefinition.checkpoint`                                                        | 声明稳定 `key/version`、输入/输出 codec、`points` 数组；每点独立声明 name、`state` codec、引用槽位及 `check(state,facts)` 和 `resume { deps, uses, run }`。 |
-| `new Runner(scene, resources, interactions, { checkpoints: { store, observation? } })` | 注入同步保存端口和可选 CP 观察者，随后通过该 Runner 构建结构。未安装时 `work.checkpoint` 为 undefined，原流程不变。                                         |
-| `work.checkpoint({ point, state, refs })`                                              | 当前运行或恢复工作阶段使用；固定输入、round、直接子关系与声明状态，检查后提交不可变 CP。保存失败属于结构故障。                                              |
-| `runner.resume(contextId, options)`                                                    | 核对绑定归属、当前 head、版本和工作归属，重建本次活动与资源访问，进入声明点；遵守该 Runner 入口占用边界。                                                   |
-| `work.children.resume(saved.ref)`                                                      | 开放子 CP 建立续接；固定成功交付提供结果视图。缺失或明确失败/取消拒绝，不退化为重新发起。                                                                   |
-| `TranscriptResource.append.applyFixed({position,messages})`                            | 真实子接纳中由绑定取得父子身份；实体核对固定依据并返回原凭据，重复确认不再次追加。                                                                          |
-| `MemoryResource.apply.applyFixed({position,changes})`                                  | 由资源端点取得当前 A 身份；整个批次与凭据同事务保存，重复确认不修改记忆或占用新顺序。                                                                       |
+| 入口                                                                                              | 当前行为                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CallableDefinition.checkpoint`                                                                   | 声明稳定 `key/version`、输入/输出 codec、`points` 数组；每点独立声明 name、`state` codec、引用槽位及 `check(state,facts)` 和 `resume { deps, uses, run }`。 |
+| `new Runner(scene, resources, interactions, { checkpoints: { store, observation?, feedback? } })` | 注入同步保存端口、原机制观察者及可选原始被动反馈。未安装时 `work.checkpoint` 为 undefined，原流程不变；订阅不能安装保存端口。                               |
+| `runner.observation.subscribe({ receive })`                                                       | 消费 `{ runnerId, entryId, source, fact }` 固定元数据；CP 事实使用 source: checkpoint，保留 activityId。只实时消费，不回放、不替换 Store 或严格观察。       |
+| `work.checkpoint({ point, state, refs })`                                                         | 当前运行或恢复工作阶段使用；固定输入、round、直接子关系与声明状态，检查后提交不可变 CP。保存失败属于结构故障。                                              |
+| `runner.resume(contextId, options)`                                                               | 核对绑定归属、当前 head、版本和工作归属，重建本次活动与资源访问，进入声明点；遵守该 Runner 入口占用边界。                                                   |
+| `work.children.resume(saved.ref)`                                                                 | 开放子 CP 建立续接；固定成功交付提供结果视图。缺失或明确失败/取消拒绝，不退化为重新发起。                                                                   |
+| `TranscriptResource.append.applyFixed({position,messages})`                                       | 真实子接纳中由绑定取得父子身份；实体核对固定依据并返回原凭据，重复确认不再次追加。                                                                          |
+| `MemoryResource.apply.applyFixed({position,changes})`                                             | 由资源端点取得当前 A 身份；整个批次与凭据同事务保存，重复确认不修改记忆或占用新顺序。                                                                       |
 
 资源端点与 CP writer 保持 phase/round 访问窗口。直接子接纳通过私有异步范围关联固定操作，支持并行接纳；逸出已结束接纳的回调不能借用后续接纳身份。没有增加新的恢复编排器或通用 resume/run/accept 预设，声明共享自己的正常阶段函数，Invocation 仍处理父子运行机制。
 
@@ -114,7 +117,7 @@ FunctionDecision 可保存纯数据候选，候选是否可执行仍由 E 接纳
 
 活跃索引的维护目前没有 `applyFixed` 操作凭据。accepted 点在索引落实前保存决定，恢复时仍要求原复合依据成立；若索引已经改变，即使目标成员碰巧相同，也拒绝把它当作原操作确认。completed 点保存落实后的不可变材料，续接直接返回该值，不再应用索引。不把源内容同事务持久化与索引维护的 CP 原子性混为一谈。
 
-## 宿主入口与观测
+## 宿主入口、严格观察与被动反馈
 
 ```ts
 const environment = conversations.open(conversationId);
@@ -134,9 +137,31 @@ unsubscribe();
 
 内核独立 `CheckpointFact` 出口带稳定 owner 与本次 activityId，区分正常和 recovering 活动。`installed` 表示历史关系基线，`child-restored` 区分续接与固定交付复用；历史安装不重演 started/returned/accepted。恢复调用事实不写原 Recorder/Invocation changes，实体新变化经自身出口发布，旧凭据确认不重复发布。内部事实可能含 IO，不能直接作为公开协议。
 
+当前安装有三个不同端口：
+
+| 端口                  | 权限与数据                                            | 失败和生命周期                                                                           |
+| --------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `store`               | 读取／提交固定 Image、Head 和最终 Delivery；恢复依据  | 必要保存失败影响调用。MemoryCheckpointStore 只保证本进程保存，跨进程持久性取决于宿主实现 |
+| `observation.observe` | 同步观察原始 CheckpointFact；可选 isolate / propagate | 保留现有机制观察策略，故障停用该会话；不参与业务接纳、不回滚已提交数据                   |
+| `feedback.receive`    | 被动消费同一份原始 CheckpointFact；可选 failed 通知   | ProgressChannel 独立隔离故障，不改变保存或交付，也不因严格观察停用而被连带关闭           |
+
+同一 CP 事实只建立一次，feedback 与 observation 共享原事实对象、activityId 和 sequence。原始反馈是同步借用出口，仍可能含 Frame、实际 IO、异常和资源 describe；不能把它直接排队作为持久或跨端数据。恢复调用向 CP 的转发层独立于消费者停用状态，严格 activity/resource 观察失败后，后续真实失败收尾仍能交付给健康的被动端。恢复建立前的读取／契约核验／构造失败也通过该出口发布一次，仍保留原异常及严格观察异常的组合。
+
+保存与通知保持三个不同边界：`store.save` 成功后的严格 saved 通知失败可使当前调用失败，但已保存 Head 不撤销；严格 finishing 失败可阻止随后成功 Delivery 的提交，进入失败交付路径；`store.finish` 完成后的 finished 通知故障被隔离，不能修改最终 Delivery。增加 feedback 不改变这些边界，也不重新开放已终结的 CP。
+
+Runner 在单次入口固定反馈关联，将原始事实同步投影成只读元数据。`source: 'checkpoint'` 下的 installed 只包含轮次、下一子顺序及子数量等基线摘要，不暴露 Frame；activity/resource 保留对应的轻量事实；内容变化只给身份／版本／范围，不携带正文或 describe。正常业务注释使用 `source: 'business'` 且只暴露事件名称；恢复路径原本没有业务注释出口，本轮不增加对应 CP 分支。Runtime 的普通反馈接线只有接收器，不能替换 Store、原严格观察或资源供给。
+
+每次 run/resume 都有新的 entryId，CP 的 contextId 仍沿用原工作身份，activityId 仍属于具体 CP 活动。`runner.output` 的 completed、CP 最终 Delivery 和入口 settled 分别表达输出完成、Store 固定交付与 Runner 的实际返回／拒绝；settled 包含严格 released 观察之后的结果。entryId 是关联值，不是新的 Run 实体、恢复许可或幂等凭据。
+
+订阅可以跨 run/resume 保留，也可以运行中加入；只接收此后的事实，解除订阅不停止调用。没有订阅者时跳过投影，不读取 describe 或保存历史，但仍保留固定接线的必要开销。Runner 不汇总独立 Interaction 的晚到反馈，也不取得它的生命周期；需要关联时仍由宿主组合。
+
 Observer 默认绑定 `CheckpointObservation` 元数据载体：按真实祖先归属查询/订阅，每次最多保留 1024 事件、256 活动，每个安装基线最多 64 个子关系，明确标记裁剪；微任务交付、消费者故障隔离。当前只保留本进程数据，未接 HTTP 或可视化页面，不承诺跨进程观测日志。宿主仍可额外注入原始观察者。CP 保存与观察失败分开：默认 isolate，可显式 propagate；最终交付提交后的通知失败不能改写已固定交付。
 
+该 Observer 载体是既有服务投影，与 Runner 的实时订阅并存；本轮没有将其记录／历史能力搬进 Runner，也没有自动迁移原服务的观察安装。
+
 ## 验证与剩余范围
+
+新增 [checkpoint/feedback](../test/checkpoint/feedback.test.mjs) 定向覆盖事实对象／活动／序号一致、被动消费抛错与异步错误隔离、严格 captured/saved/finishing/finished 的提交边界、恢复 activity/resource 故障后的真实收尾，以及 Invocation 建立前失败的独立交付。[runner-observation](../test/runner-observation.test.mjs) 覆盖入口关联、恢复活动区分、订阅隔离和实际入口结局。这里列出实施覆盖范围，不据此声称本轮全仓验证完成。
 
 `test/checkpoint/coverage.test.mjs` 使用真实 ObserverConversations、SQLite、WorkspaceFiles 与声明链，只有 Provider 为 mock。子进程在材料准备、理解、决策、预检、读取、模型反馈、消息追加、文件创建、记忆提交与父层接纳等位置退出，新进程从宿主恢复。断言模型次数、输入/回答数量、文件凭据、记忆身份与顺序，以及恢复活动归属；澄清和第二次生成另有覆盖。`fixedEffects`、`fixedAppend`、内核历史关系与宿主内容检查测试覆盖事务失败、重复消费、未知窗口及数据冲突。
 

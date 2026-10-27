@@ -14,6 +14,7 @@ export interface InvocationCapabilities {
 /** Keep mechanism selections fixed while their providers retain their own state and receivers. */
 export function snapshotInvocationCapabilities(options: InvocationCapabilities): InvocationCapabilities {
   const observation = options.checkpoints?.observation;
+  const feedback = options.checkpoints?.feedback;
   return Object.freeze({
     ...options,
     observations: options.observations ? Object.freeze([...options.observations]) : undefined,
@@ -21,6 +22,7 @@ export function snapshotInvocationCapabilities(options: InvocationCapabilities):
       ? Object.freeze({
           store: options.checkpoints.store,
           observation: observation ? Object.freeze({ observe: observation.observe.bind(observation), failure: observation.failure }) : undefined,
+          feedback: feedback ? Object.freeze({ receive: feedback.receive.bind(feedback), failed: feedback.failed?.bind(feedback) }) : undefined,
         })
       : undefined,
   });

@@ -23,6 +23,9 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:contracts
+      '@capix/conversation-service':
+        specifier: workspace:*
+        version: link:services/conversation
       '@capix/diagnostics':
         specifier: workspace:*
         version: link:server/diagnostics
@@ -380,6 +383,24 @@ importers:
       '@capix/resources':
         specifier: workspace:*
         version: link:../resources
+
+  services/conversation:
+    dependencies:
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      '@capix/resources':
+        specifier: workspace:*
+        version: link:../../server/resources
+      '@capix/server-runtime':
+        specifier: workspace:*
+        version: link:../../server/runtime
+      '@capix/structure':
+        specifier: workspace:*
+        version: link:../../server/structure
+      '@capix/transcript':
+        specifier: workspace:*
+        version: link:../../server/transcript
 
   services/observer:
     dependencies:

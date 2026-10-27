@@ -18,6 +18,10 @@ const result = await runner.run(input);
 
 交互是可选参数：`new Runner(scene, resources, interactions).build()`。不使用交互的场景无需建立空 Interactions。
 
+宿主通过 `runner.output.subscribe(receiver)` 消费 Scene 根输出，订阅可跨 run/resume，返回的解除函数只停止消费；`runner.cancel(reason?)` 只请求停止当前入口运行。输出类型来自 Scene，接收器隔离与取消归属见 [可调用结构](callable-structures.md)。根输出由 Runner 直接连接到 Invocation，不需要添加宿主 Options、资源申请或 output hook。实际执行仍由已有 Invocation 完成。
+
+`runner.observation.subscribe(receiver)` 提供同一运行的只读元数据。输出与观察通过本次 entryId 关联，恢复沿用 contextId 但使用新的 entryId；最终入口状态看观察中的 entry/settled 或本次 Promise，不从 output.completed 推测。观测不会复制正文、触发资源 describe 或取得独立实体的生命周期。详见 [运行出口](runtime-ports.md)。
+
 最小可运行示例：[examples/runner.mjs](../examples/runner.mjs)。先 `pnpm build`，再 `node examples/runner.mjs`。示例不访问网络、不调用模型。
 
 ## 第二层：定义、注册、获取、使用
@@ -107,7 +111,7 @@ sequenceDiagram
 
 资源捕获不能顺带承担业务登记与输出交付。试点将必要宿主接线独立成 `callableHooks(structure, { validate, started, progress, output })`，放在 Runner 第四参数的 `hooks` 中。普通示例无需配置。
 
-`started` 仍是 Context 已建立、开始事实发布前的严格同步登记，返回必须是 `undefined`；失败阻止业务执行，恢复旧调用不重复登记。`progress/output` 是对应交付端口。这保留了 Observer 的真实需要，没有把必要登记当成可丢弃观测。当前回调工厂仍有较高理解成本。Observer 已用该路径运行，但这不等于第二层概念已收敛；下一轮应依据真实宿主用法评估。
+`started` 仍是 Context 已建立、开始事实发布前的严格同步登记，返回必须是 `undefined`；失败阻止业务执行，恢复旧调用不重复登记。`progress/output` 是对应交付端口。这保留了 Observer 的真实需要，没有把必要登记当成可丢弃观测。Scene 根输出现在可直接使用 Runner 订阅；hooks 继续支持既有服务和内部特定结构的接线，与 Runner 根接收器分别隔离、共同消费，不重复注册根 hook。其余回调工厂仍有较高理解成本，应依据真实宿主用法继续评估。
 
 ## 验收与后续决策
 

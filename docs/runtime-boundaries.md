@@ -225,6 +225,9 @@ sequenceDiagram
 2. **计划、安装结果与本次依据分开。** `CallableBuildPlan` 是解算树与调用接线；原结构上的 `CallableConstruction` 保存最终 binding/calls/invocations；`CallableCallScope` 保存本次根运行的宿主条件和准确归属。`scope.prepare` 返回 `PreparedCall`，明确它提供供给和回调，不是一个资源访问窗口。
 3. **整树发布保持集中。** `structure/install.ts` 负责检查、保留配置、准备全树、复核宿主回调未改写结构、统一安装、finally 解除构建标记。Builder 选择装配条件，Binder 解算固定契约；安装 helper 不引入独立实体或新生命周期。
 4. **入口执行共用明确操作。** `entry.ts` 的 `runEntry` 统一忙碌检查、取得占用、正常或恢复构造、真实调用结束、释放及错误聚合。占用状态仍归 Runner 或 Driver 各根持有。Runner 浅固定 options 和严格 validate 保持；旧 Driver/source 的参数及校验行为保持，不借目录迁移改变兼容语义。
+
+   Runner 的输出订阅与本次取消管理位于 `runner/output.ts`、`runner/cancellation.ts`。公开端点只允许订阅；发布端留在 Runner 内部，由根构造的 `RootInvocationOptions` 连接有效 signal 与输出接收器。资源接线仍消费原宿主 options。取得入口后、宿主校验后、供给准备和构造边界检查取消；已经开始的同步工作不承诺回滚。Runner 边界只映射由本次有效 signal 证明、且首次来自外部 signal 的取消交付，维持旧宿主的准确取消识别；不扫描 cause 或将普通错误归为取消。busy 不替换当前取消归属，旧调用清理核对身份以保留 released 回调里建立的新调用。
+
 5. **静态解算显化步骤。** `resolveDeclaration` 主体保留本层快照/观察/deps、CP 成员检查、成员递归、供给归集与收窄核验；纯辅助函数表达各项检查，全树固定之后才调用宿主 check。没有把一次解算拆成多个管理对象。
 6. **资源安装缩窄。** InstalledScope 只持有 supply、固定及局部 provider、capture；不再保存整个 ResolvedCallable。局部 scope 在构建时一次建索引。本次供给继承和 timing 保持不变。
 7. **Work 与接收配置表达真实前提。** InvocationAccess 和 InvocationWorkBinding 使用准确的 CallableContext 约束，去掉 resources/signal 隐含断言；直接 invoke 与已创建句柄 invoke 共享接收配置校验与方法绑定。显式 create→CP→invoke 的精细时点保留，真实返回与接收事实仍分开。
@@ -246,6 +249,10 @@ sequenceDiagram
 实体写入、父接纳事实和 CP 提交是不同边界。固定写入口用真实调用/接纳范围派生凭据；恢复核对已有凭据，不凭内容相同或记录存在重做。Frame v5 保存完整直接关系、业务 state/refs、接纳契约位置及 handled 接收事实，缺失或不兼容明确拒绝。详见 [Checkpoint](checkpoints.md)。
 
 ## 进展、观测与记录
+
+运行控制、业务输出、进度、机制观测与必要保存的盘点和实施落点见 [运行出口](runtime-ports.md)。`runner.output` 消费场景输出，`runner.observation` 消费入口、调用、资源与 CP 的固定元数据。每次入口以 entryId 关联反馈，不把输出段完成当成 Runner 最终交付成功。
+
+内部 CallableFeedback 只持被动接收器，不能替换固定 CP Store 或严格观察。CallableCallScope 在单次入口固定反馈方法与身份，后代沿用；不写入业务 options 或资源捕获。CP.feedback 与原 observation 使用独立消费边界，恢复转交不因严格观察故障连带停用。Runner 的 settled 来自实际交付路径，包含构造、取消和释放失败；订阅自身故障保持隔离。
 
 progress 是被动元数据出口，消费者失败停用并隔离，不修改运行结果；绑定工厂本身失败仍是构造错误。服务依据真实调用身份、实体写入和 Runner 的最终交付解释提交状态，不依赖 Recorder 推断。
 

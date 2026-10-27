@@ -1,4 +1,5 @@
 import type { InvocationIdentity } from '@capix/contracts';
+import type { ProgressReceiver } from '@capix/changes';
 import type { CheckpointChild, CheckpointDelivery, CheckpointHead, CheckpointImage, CheckpointReferences, CheckpointStore, InvocationCheckpointFrame } from '@capix/checkpoint';
 
 export type CheckpointFact = Readonly<
@@ -15,6 +16,8 @@ export type CheckpointFact = Readonly<
 export interface CheckpointInstallation {
   readonly store: CheckpointStore;
   readonly observation?: { observe(fact: CheckpointFact): void; readonly failure?: 'isolate' | 'propagate' };
+  /** Passive delivery of the same facts; consumer failure never changes checkpoint execution. */
+  readonly feedback?: ProgressReceiver<CheckpointFact>;
 }
 
 export interface CheckpointWriter {

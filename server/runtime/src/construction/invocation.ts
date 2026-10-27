@@ -1,4 +1,4 @@
-import { InvocationResources, restoreCheckpointContinuation, type CheckpointRestoration, prepareCheckpointRestoration, type InvocationProgress, type InvocationFact, type InvocationDescription, attachInvocationResources, InvocationChangeEmitter, Invocation, type InvocationStarted, type InvocationWork, CallableContext, type InvocationControls, type InvocationRelationOptions } from '@capix/invocation';
+import { InvocationResources, requireNotCancelled, restoreCheckpointContinuation, type CheckpointRestoration, prepareCheckpointRestoration, type InvocationProgress, type InvocationFact, type InvocationDescription, attachInvocationResources, InvocationChangeEmitter, Invocation, type InvocationStarted, type InvocationWork, CallableContext, type InvocationControls, type InvocationRelationOptions } from '@capix/invocation';
 import type { CallableKind, InvocationOutputReceiver } from '@capix/contracts';
 import type { ProgressReceiver } from '@capix/changes';
 import type { InvocationObservationDeclaration } from '../binding/observation.js';
@@ -6,6 +6,7 @@ import { bindInvocationObservation } from '../binding/observation.js';
 import { type ResourceRequirements, ResourceSupply } from '@capix/resources';
 import type { ResourceRefinement } from '@capix/resources';
 import type { InvocationCapabilities } from './capabilities.js';
+import { checkpointFeedback, type CallableFeedbackBinding } from './feedback.js';
 
 export type CallableInvocationStarted<Input, Output, Resources extends object = object> = InvocationStarted<Input, Output, CallableContext<Input, Output, Resources>>;
 
@@ -27,6 +28,7 @@ export interface CallableInvocationRequest<Input, Output, Resources extends obje
   readonly description?: InvocationDescription;
   readonly work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>;
   readonly started?: CallableInvocationStarted<Input, Output, Resources>;
+  readonly feedback?: CallableFeedbackBinding;
 }
 
 /** One binding installation's construction authority, shared by all its callable positions. */
@@ -40,14 +42,16 @@ export class CallableInvocationBuilder {
   }
 
   restoration<Input, Output, Resources extends object = object>(contextId: string, work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>, kind: CallableKind, parentContextId?: string): CheckpointRestoration;
-  restoration<Input, Output, Resources extends object, Value>(contextId: string, work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>, kind: CallableKind, parentContextId: string | undefined, construct: (restoration: CheckpointRestoration) => Value): Value;
-  restoration<Input, Output, Resources extends object, Value>(contextId: string, work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>, kind: CallableKind, parentContextId?: string, construct?: (restoration: CheckpointRestoration) => Value): CheckpointRestoration | Value {
-    return prepareCheckpointRestoration(this.capabilities.checkpoints, work.checkpoint, contextId, { kind, ...(parentContextId ? { parentContextId } : {}) }, construct);
+  restoration<Input, Output, Resources extends object, Value>(contextId: string, work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>, kind: CallableKind, parentContextId: string | undefined, construct: (restoration: CheckpointRestoration) => Value, feedback?: CallableFeedbackBinding): Value;
+  restoration<Input, Output, Resources extends object, Value>(contextId: string, work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>, kind: CallableKind, parentContextId?: string, construct?: (restoration: CheckpointRestoration) => Value, feedback?: CallableFeedbackBinding): CheckpointRestoration | Value {
+    return prepareCheckpointRestoration(checkpointFeedback(this.capabilities.checkpoints, feedback?.checkpoint), work.checkpoint, contextId, { kind, ...(parentContextId ? { parentContextId } : {}) }, construct);
   }
 
   create<Input, Output, Resources extends object = object>(input: Input, request: CallableInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, CallableContext<Input, Output, Resources>> {
     const parent = request.parent;
     if (parent) this.check(parent);
+    const controls = parent ? { signal: parent.context.signal } : request.controls;
+    if (controls?.signal) requireNotCancelled(controls.signal);
     if (request.supplied && request.resources) throw new Error('Call construction must provide one resource supply');
     const supplied = request.supplied ?? request.resources?.supply ?? parent?.context.resources.supply ?? new ResourceSupply();
     const deps = request.deps ?? ({} as ResourceRequirements<Resources>);
@@ -55,7 +59,7 @@ export class CallableInvocationBuilder {
     const resources = new InvocationResources(deps, selected.entries, request.initial, request.supply);
     // Resource capture/refinement may run host code; recheck before establishing the child.
     if (parent) this.check(parent);
-    const controls = parent ? { signal: parent.context.signal } : request.controls;
+    if (controls?.signal) requireNotCancelled(controls.signal);
     const context = new CallableContext<Input, Output, Resources>(input, request.kind, controls, resources, this);
     if (request.restore) {
       if (!request.work.checkpoint) throw new Error('Checkpoint declaration is missing');
@@ -64,14 +68,18 @@ export class CallableInvocationBuilder {
     }
     const identity = { contextId: context.id, kind: request.kind, ...(parent ? { parentContextId: parent.context.id } : {}) };
     const recovering = !!request.restore || !!parent?.recovering;
-    const observation = recovering ? undefined : bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources }, this.capabilities.observations, parent?.observation);
+    const installations = request.feedback ? [request.feedback.observation, ...(this.capabilities.observations ?? [])] : this.capabilities.observations;
+    const observation = recovering ? undefined : bindInvocationObservation({ identity, description: request.description, declarations: request.observation, resources }, installations, parent?.observation);
+    // Observation binding runs host code too; cancellation must precede started callbacks.
+    if (parent) this.check(parent);
+    if (controls?.signal) requireNotCancelled(controls.signal);
     const changes = !recovering && this.capabilities.changes ? new InvocationChangeEmitter(identity, this.capabilities.changes) : undefined;
     const invocation = new Invocation<Input, Output, CallableContext<Input, Output, Resources>>({
       ...(parent ? { parent: { invocation: parent, key: request.key, declarationPosition: request.declarationPosition, receiveFailure: request.receiveFailure } } : {}),
       context,
       construction: request.construction ?? parent?.construction,
       work: request.work,
-      checkpoints: this.capabilities.checkpoints,
+      checkpoints: checkpointFeedback(this.capabilities.checkpoints, request.feedback?.checkpoint),
       restore: request.restore,
       progress: request.progress,
       output: request.output,
