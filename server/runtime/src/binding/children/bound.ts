@@ -1,6 +1,6 @@
 import type { ChildCallable, NamedMembers } from '@capix/structure';
 import type { ChildContract } from '@capix/contracts';
-import type { CheckpointBinding } from '../../checkpoint/work.js';
+import type { CheckpointBinding } from '@capix/invocation';
 import { checkMemberName } from '@capix/structure/construction';
 import type { ResolvedChild } from '../declarations.js';
 

@@ -1,23 +1,11 @@
-import { InvocationResources } from '../resource-access.js';
+import { InvocationResources, restoreCheckpointContinuation, type CheckpointRestoration, prepareCheckpointRestoration, type InvocationProgress, type InvocationFact, type InvocationDescription, attachInvocationResources, InvocationChangeEmitter, Invocation, type InvocationStarted, type InvocationWork, CallableContext, type InvocationControls, type InvocationRelationOptions } from '@capix/invocation';
 import type { CallableKind, InvocationOutputReceiver } from '@capix/contracts';
-import { restoreCheckpointContinuation } from '../../checkpoint/continuation.js';
-import type { CheckpointRestoration } from '../../checkpoint/contract.js';
-import { prepareCheckpointRestoration } from '../../checkpoint/restoration.js';
 import type { ProgressReceiver } from '@capix/changes';
-import type { InvocationProgress } from '../progress.js';
 import type { InvocationObservationDeclaration } from '../../binding/observation.js';
-import type { InvocationFact, InvocationDescription } from '../../observation/facts.js';
 import { bindInvocationObservation } from '../../binding/observation.js';
-import { attachInvocationResources } from '../resources.js';
 import { type ResourceRequirements, ResourceSupply } from '@capix/resources';
 import type { ResourceRefinement } from '@capix/resources';
 import type { InvocationCapabilities } from '../capabilities.js';
-import { InvocationChangeEmitter } from '../changes.js';
-import { Invocation, type InvocationStarted } from '../invocation.js';
-import type { InvocationWork } from '../work.js';
-import { CallableContext } from '../../context/callable.js';
-import type { InvocationControls } from '../../context/context.js';
-import type { InvocationRelationOptions } from '../relation.js';
 
 export type CallableInvocationStarted<Input, Output, Resources extends object = object> = InvocationStarted<Input, Output, CallableContext<Input, Output, Resources>>;
 

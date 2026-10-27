@@ -1,12 +1,8 @@
-import { InvocationResources } from '../../invocation/resource-access.js';
+import { InvocationResources, RuntimeErrorHelper, failureFact, type InvocationFact, type ResourceObservation, type InvocationObserver } from '@capix/invocation';
 import { isUndefined } from 'es-toolkit/predicate';
 import { pick } from 'es-toolkit/object';
 import type { MemoryEvent, TranscriptEvent, ProcessRecord, RecordedRelationChange, InvocationOrigin } from '@capix/protocol';
 import type { InvocationObservationSetup } from '../../binding/observation.js';
-import { RuntimeErrorHelper } from '../../errors/helper.js';
-import { failureFact } from '../../invocation/failure.js';
-import type { InvocationFact, ResourceObservation } from '../../observation/facts.js';
-import type { InvocationObserver } from '../../observation/observer.js';
 import { ResourceSupply, resourceRequests } from '@capix/resources';
 import { CallableRecord, InvocationRecordHelper, ResourceRecord, type RecordChangeSource } from '@capix/records';
 import type { RecordWriter } from '@capix/records/construction';

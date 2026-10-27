@@ -1,7 +1,5 @@
 import type { MemoryEvent, TranscriptEvent, RecordedInvocationResult } from '@capix/protocol';
-import { RuntimeErrorHelper } from '../../errors/helper.js';
-import { failureFact } from '../../invocation/failure.js';
-import type { InvocationResult } from '../../invocation/result.js';
+import { RuntimeErrorHelper, failureFact, type InvocationResult } from '@capix/invocation';
 import { MemoryRecord, TranscriptRecord, type RecordChangeSource } from '@capix/records';
 import type { InvocationRecordDescription } from './declaration.js';
 

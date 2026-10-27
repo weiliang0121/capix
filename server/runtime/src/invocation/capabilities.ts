@@ -1,5 +1,4 @@
-import type { CheckpointInstallation } from '../checkpoint/contract.js';
-import type { Clock } from '../clock.js';
+import type { CheckpointInstallation, Clock } from '@capix/invocation';
 import type { InvocationEvent } from '@capix/protocol';
 import type { ChangeCapture } from '@capix/changes';
 import type { ObservationInstallation } from '../binding/observation.js';

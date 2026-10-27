@@ -1,5 +1,5 @@
-import { RuntimeError } from '@capix/contracts';
-import { RuntimeErrorHelper, type CheckpointInstallation, type CheckpointFact, type InvocationIdentity } from '@capix/server-runtime';
+import { RuntimeError, type InvocationIdentity } from '@capix/contracts';
+import { RuntimeErrorHelper, type CheckpointInstallation, type CheckpointFact } from '@capix/invocation';
 import { type CheckpointChild, type InvocationCheckpointFrame } from '@capix/checkpoint';
 import type { ConversationCheckpointRuns } from '../conversation/checkpoints.js';
 

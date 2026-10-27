@@ -30,33 +30,34 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 
 宿主显式创建 `new Runner(scene, resources, interactions?).build()`，返回同一个 Runner。CallableBuilder 协调 Binder 的静态解算和运行能力装配，原 Scene/Group/Node 承载固定结果；内部 BuiltCallable 仅表达完成构建的类型。`runner.run(input, options)` 建立调用，`runner.resume(contextId, options)` 按保存依据恢复；无需重复传入场景。
 
-每个结构只占据一个位置：Scene 是根，Group/Node 单父归属；共享逻辑和资源时分别创建结构实例。构建成功后配置固定，不支持运行中换绑或空闲时修改再构建。需要新结构时复用配置工厂及独立实体。每次构建建立独立 CallableInvocationBuilder 作为 Context 的安装归属；它不缓存本次输入、信号或 Work。Context 直接构造，无独立 ContextBuilder。低层扩展者从 `@capix/server-runtime/construction` 使用 Binder、CallableBuilder、CallableInvocationBuilder 和 CallableContext，内部职责分离不增加作者必须操作的步骤。
+每个结构只占据一个位置：Scene 是根，Group/Node 单父归属；共享逻辑和资源时分别创建结构实例。构建成功后配置固定，不支持运行中换绑或空闲时修改再构建。需要新结构时复用配置工厂及独立实体。每次构建建立独立 CallableInvocationBuilder 作为 Context 的安装归属；它不缓存本次输入、信号或 Work。Context 直接构造，无独立 ContextBuilder。低层扩展者从 `@capix/server-runtime/construction` 使用 Binder、CallableBuilder 和 CallableInvocationBuilder，从 `@capix/invocation` 使用 Invocation/Context 等单次机制；Runtime 既有调用出口仍精确重导同一对象。内部职责分离不增加作者必须操作的步骤。
 
 ## 包与目录
 
-仓库只有一个根 pnpm workspace 与锁文件，十七个实际包。包边界按独立职责和公开契约确定；实体独立拆包不意味着增加生命周期或一层统一平台。跨包只用公开出口，服务端与客户端互不依赖。
+仓库只有一个根 pnpm workspace 与锁文件，十八个实际包。包边界按独立职责和公开契约确定；实体独立拆包不意味着增加生命周期或一层统一平台。跨包只用公开出口，服务端与客户端互不依赖。
 
-| 包                        | 位置                        | 负责什么                                                          |
-| ------------------------- | --------------------------- | ----------------------------------------------------------------- |
-| `@capix/contracts`        | `contracts`                 | 跨包共同端口、签名、操作接收、CP 事实及同一 RuntimeError 诊断身份 |
-| `@capix/protocol`         | `protocol`                  | 跨端纯数据、协议接纳与兼容，显式复用共同纯值类型                  |
-| `@capix/resources`        | `server/resources`          | 资源定义、登记、供给、受控访问与操作接收                          |
-| `@capix/structure`        | `server/structure`          | 可复用结构、成员组织、作者配置、Work 类型组合及预设               |
-| `@capix/changes`          | `server/changes`            | 事实捕获、缓冲转交、发布及被动进度通知                            |
-| `@capix/transcript`       | `server/transcript`         | 正式消息实体、固定引用、追加凭据、持久契约及 Offer                |
-| `@capix/memory`           | `server/memory`             | Memory/Memories、来源、固定批次、持久契约及 Offer                 |
-| `@capix/view`             | `server/view`               | 通用来源契约、成员状态、目录与固定读取、版本检查及资源访问辅助    |
-| `@capix/measurement`      | `server/measurement`        | 按消息对象计数及受控写入                                          |
-| `@capix/records`          | `server/records`            | 记录实体、登记与树、历史读取、快照资源及宿主构造写口              |
-| `@capix/checkpoint`       | `server/checkpoint`         | CP 持久载体、数据核验、版本提交契约与内存存储                     |
-| `@capix/server-runtime`   | `server/runtime`            | 将结构与资源装配为运行能力，执行与恢复单次调用，提供可选记录预设  |
-| `@capix/observer-content` | `services/observer-content` | Observer 内容持有、ActiveView 策略、观察安装、原文同步与关闭      |
-| `@capix/observer-service` | `services/observer`         | 对话业务、模型适配、SQLite、运行环境、观测与 HTTP                 |
-| `@capix/client-runtime`   | `client/runtime`            | 客户端提交、反馈、原文同步及观测接纳                              |
-| `@capix/client-http`      | `client/http`               | HTTP 收发和协议接纳                                               |
-| `@capix/observer-app`     | `apps/observer`             | 浏览器界面与读模型投影                                            |
+| 包                        | 位置                        | 负责什么                                                           |
+| ------------------------- | --------------------------- | ------------------------------------------------------------------ |
+| `@capix/contracts`        | `contracts`                 | 跨包共同端口、签名、操作接收、CP 事实及同一 RuntimeError 诊断身份  |
+| `@capix/protocol`         | `protocol`                  | 跨端纯数据、协议接纳与兼容，显式复用共同纯值类型                   |
+| `@capix/resources`        | `server/resources`          | 资源定义、登记、供给、受控访问与操作接收                           |
+| `@capix/structure`        | `server/structure`          | 可复用结构、成员组织、作者配置、Work 类型组合及预设                |
+| `@capix/changes`          | `server/changes`            | 事实捕获、缓冲转交、发布及被动进度通知                             |
+| `@capix/transcript`       | `server/transcript`         | 正式消息实体、固定引用、追加凭据、持久契约及 Offer                 |
+| `@capix/memory`           | `server/memory`             | Memory/Memories、来源、固定批次、持久契约及 Offer                  |
+| `@capix/view`             | `server/view`               | 通用来源契约、成员状态、目录与固定读取、版本检查及资源访问辅助     |
+| `@capix/measurement`      | `server/measurement`        | 按消息对象计数及受控写入                                           |
+| `@capix/records`          | `server/records`            | 记录实体、登记与树、历史读取、快照资源及宿主构造写口               |
+| `@capix/checkpoint`       | `server/checkpoint`         | CP 持久载体、数据核验、版本提交契约与内存存储                      |
+| `@capix/invocation`       | `server/invocation`         | 单次调用与 Context、直接关系、访问窗口、输出、故障、观测及 CP 续接 |
+| `@capix/server-runtime`   | `server/runtime`            | 结构与供给装配、Runner 入口、作者 Work 适配及可选记录预设          |
+| `@capix/observer-content` | `services/observer-content` | Observer 内容持有、ActiveView 策略、观察安装、原文同步与关闭       |
+| `@capix/observer-service` | `services/observer`         | 对话业务、模型适配、SQLite、运行环境、观测与 HTTP                  |
+| `@capix/client-runtime`   | `client/runtime`            | 客户端提交、反馈、原文同步及观测接纳                               |
+| `@capix/client-http`      | `client/http`               | HTTP 收发和协议接纳                                                |
+| `@capix/observer-app`     | `apps/observer`             | 浏览器界面与读模型投影                                             |
 
-结构、资源、记录、checkpoint 和内容实体包均不反向依赖 Runtime。Observer 服务组合实体与运行；`@capix/observer-content` 不依赖 Observer 服务或 Runtime。内容协作图、目录和迁移入口见 [内容实体与独立包](content-entities-packages.md)。共同契约、跨端协议和具体机制的区别见 [契约与协议](contracts-protocol.md)。
+结构、资源、调用、记录、checkpoint 和内容实体包均不反向依赖 Runtime；调用包也不依赖结构包。Observer 服务组合实体与运行；`@capix/observer-content` 不依赖 Observer 服务或 Runtime。内容协作图、目录和迁移入口见 [内容实体与独立包](content-entities-packages.md)。共同契约、跨端协议和具体机制的区别见 [契约与协议](contracts-protocol.md)。
 
 | 位置                                                  | 归属                                                                    |
 | ----------------------------------------------------- | ----------------------------------------------------------------------- |
@@ -76,16 +77,20 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | `server/runtime/src/structure/`                       | CallableBuilder 与具体同体构建结果                                      |
 | `server/runtime/src/binding/`                         | 声明解算、资源接线、阶段端口适配                                        |
 | `server/runtime/src/runner.ts`                        | 宿主入口与占用                                                          |
-| `server/runtime/src/context/`                         | 本次状态与固定构造归属                                                  |
-| `server/runtime/src/invocation/`                      | 本次调用、控制、单次执行、关系与通用构造                                |
-| `server/runtime/src/checkpoint/`                      | 活关系捕获、声明兼容检查、调用续接与恢复事实出口                        |
+| `server/invocation/src/context/`                      | 本次状态、受控安装与固定构造归属                                        |
+| `server/invocation/src/invocation/`                   | 本次调用、控制、执行、关系、故障归属与资源窗口                          |
+| `server/invocation/src/checkpoint/`                   | 活关系捕获、固定契约检查、调用续接与恢复事实出口                        |
+| `server/invocation/src/observation/`                  | 调用事实、观察会话及消费故障策略                                        |
+| `server/runtime/src/invocation/builders/`             | 从固定结构、供给与宿主选项构造调用                                      |
+| `server/runtime/src/invocation/capabilities.ts`       | 调用构造所需的已安装机制集合                                            |
+| `server/runtime/src/observation/`                     | 结构观察声明、安装与 Driver 入口事实                                    |
 | `server/runtime/src/records/observation/`             | 可选记录安装、单次句柄与事实映射                                        |
 
-共同的 `BusinessEvent`、输出端口、`InvocationIdentity` 及 `CheckpointValue/Codec/Contract` 由契约包单独定义。调用观测、输出窗口、CP 捕获与续接由 Runtime 实现；CP 纯值和 Store 来自 checkpoint 包，具体 SQLite 存储仍归宿主。实体事实发布与通用捕获、进度通知由各实体包和 `@capix/changes` 协作。`@capix/structure/construction` 只提供结构校验、配置构建状态与依赖收集；它不创建 Invocation，也不安装资源。
+共同的 `BusinessEvent`、输出端口、`InvocationIdentity` 及 `CheckpointValue/Codec/Contract` 由契约包单独定义。调用观测、输出窗口、CP 捕获与续接由 invocation 实现，结构与机制安装由 Runtime 连接；CP 纯值和 Store 来自 checkpoint 包，具体 SQLite 存储仍归宿主。实体事实发布与通用捕获、进度通知由各实体包和 `@capix/changes` 协作。`@capix/structure/construction` 只提供结构校验、配置构建状态与依赖收集；它不创建 Invocation，也不安装资源。
 
 `invocation/builders/callable.ts` 协调资源选择、Context 建立、恢复与调用接线。`binding/children/builder.ts` 固定成员及接纳接线，分别构造单次引用认证和阶段动作窗口。binding/children 管理已声明成员及本阶段行动，invocation/children 管理真实父子关系。
 
-Clock、Initializer 仍位于 Runtime 根文件；记录包使用自身的窄 RecordClock 契约，只要求 now/tick，可由宿主注入兼容 Clock。ProgressChannel 与生产者变化支持归 `@capix/changes`。ResourceInstallation 与 Runtime 的 Resources 负责结构范围和可选 Interaction 接线。目录边界按职责划分，不以文件数量决定。
+Clock 位于 `server/invocation/src/clock.ts`，Initializer 留在 Runtime 根文件；记录包使用自身的窄 RecordClock 契约，只要求 now/tick，可由宿主注入兼容 Clock。ProgressChannel 与生产者变化支持归 `@capix/changes`。ResourceInstallation 与 Runtime 的 Resources 负责结构范围和可选 Interaction 接线。目录边界按职责划分，不以文件数量决定。
 
 ## 类型与身份
 
@@ -117,7 +122,7 @@ Recorder、RecordBook、RecordTree、记录载体与 Helper 从 `@capix/records`
 
 `ExecutionRecordSnapshot` 仍是 Observer 查询选定任务的跨端名字，正文为 `execution`、通用 `calls`、`rootCall`、可选中间 `ancestors`、`boundaries` 及内容/资源变化；它不是内核 E 层。记录包的 CallableRecordHelper 允许显式选择任意调用子树，不负责判断业务任务。
 
-Checkpoint Frame v5 与声明版本分别核验。`@capix/checkpoint` 持有 Frame/Image/Head/Delivery、引用纯值、数据检查、CheckpointStore 与 MemoryCheckpointStore；Runtime 保留活动捕获、Context/关系安装、续接和观测。Store 的同步 read/save/finish 是宿主机制端口，不借用已结束的业务资源窗口。旧 round 2/continuation 执行恢复拒绝，历史诊断仍可读取。v1/v2/v3/v4 明确拒绝续接，不影响健康历史内容与记录读取。详见 [Checkpoint](checkpoints.md)。
+Checkpoint Frame v5 与声明版本分别核验。`@capix/checkpoint` 持有 Frame/Image/Head/Delivery、引用纯值、数据检查、CheckpointStore 与 MemoryCheckpointStore；`@capix/invocation` 持有活动捕获、Context/关系安装、续接和观测，Runtime 负责结构契约解算与恢复 Work 适配。Store 的同步 read/save/finish 是宿主机制端口，不借用已结束的业务资源窗口。旧 round 2/continuation 执行恢复拒绝，历史诊断仍可读取。v1/v2/v3/v4 明确拒绝续接，不影响健康历史内容与记录读取。详见 [Checkpoint](checkpoints.md)。
 
 ## 服务、客户端与公开入口
 
@@ -127,7 +132,8 @@ ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 
 
 | 目的                                  | 公开入口                                                                             |
 | ------------------------------------- | ------------------------------------------------------------------------------------ |
-| 调用、资源装配、异常与观测            | `@capix/server-runtime`                                                              |
+| 场景运行入口、资源装配与机制安装      | `@capix/server-runtime`                                                              |
+| 单次调用、关系、窗口、故障与 CP 适配  | `@capix/invocation`                                                                  |
 | 结构、作者契约与组合辅助              | `@capix/structure`                                                                   |
 | 结构检查与配置构建状态                | `@capix/structure/construction`                                                      |
 | 资源定义、供给与受控访问              | `@capix/resources`                                                                   |
@@ -146,7 +152,7 @@ ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 
 | 对话声明 / 观测 / 环境 / HTTP         | `@capix/observer-service/conversation`、`/observation`、`/assembly`、`/http`         |
 | 跨端数据                              | `@capix/protocol/content`、`/invocation`、`/recording`、`/conversation`、`/observer` |
 
-根出口按职责分组，不为减少名称建立门面，不导入其他包的私有路径。Runtime 根入口重导结构包同一对象，既有最小例子可以继续使用；新的独立结构代码可直接依赖 `@capix/structure`。
+根出口按职责分组，不为减少名称建立门面，不导入其他包的私有路径。Runtime 根入口重导结构包同一对象，既有最小例子可以继续使用；新的独立结构代码可直接依赖 `@capix/structure`。原 Runtime 调用出口精确重导 `@capix/invocation` 同一实现，错误类与引用品牌不复制；独立机制消费者直接依赖 invocation。
 
 ## 本轮迁移
 
@@ -163,7 +169,8 @@ ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 
 | BoundConversationRuntime                                        | ConversationScene + Resources + Runner                                         |
 | 活记录 REOA 判别与分层数组                                      | invocation 记录、通用 calls 树、明确任务 role                                  |
 | Runtime 根或 `/recording` 的记录实体与 Helper                   | `@capix/records`；Runtime `/recording` 只保留自动观测预设                      |
-| Runtime 根的 CP Frame/Store/cloneCheckpoint*                    | `@capix/checkpoint`；Runtime 保留调用捕获、恢复安装与观测                      |
+| Runtime 根的 CP Frame/Store/cloneCheckpoint*                    | `@capix/checkpoint`；活调用适配归 invocation，结构装配归 Runtime               |
+| Runtime 内 Invocation/Context、关系、资源窗口与 CP 活动适配     | `@capix/invocation`；Runtime 保留精确重导、构造与作者 Work 接线                |
 
 Observer 已移除 buildConversation、ConversationCallSource 与旧 provider 数组，直接使用 Resources / Runner。Driver 和旧 source 构造适配暂保留给低层兼容测试；它们不是推荐服务 API，退役不要求再次改动生产链。旧持久记录按数据兼容边界保留。动态能力注册、调度器、任意执行重放与自动接纳不由此次结构调整引入。
 

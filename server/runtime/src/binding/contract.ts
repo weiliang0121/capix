@@ -1,10 +1,8 @@
-import type { CallableContext } from '../context/callable.js';
-import type { InvocationWork } from '../invocation/work.js';
+import type { CallableContext, InvocationWork, InvocationFact } from '@capix/invocation';
 import type { ResourceRequirements, ResourceRefinement, ResourceIdentity } from '@capix/resources';
 import type { BoundChildren } from './children/bound.js';
 import type { ObservationInstallation } from './observation.js';
 import type { InvocationObservationDeclaration } from './observation.js';
-import type { InvocationFact } from '../observation/facts.js';
 import type { ChildResourceBinding } from './resources.js';
 import type { AnyCallable } from './declarations.js';
 import type { CallableSnapshot } from './snapshot.js';

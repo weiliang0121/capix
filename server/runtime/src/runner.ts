@@ -1,16 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { isUndefined } from 'es-toolkit/predicate';
-import { Clock } from './clock.js';
+import { Clock, requireNotCancelled, type InvocationControls } from '@capix/invocation';
 import { bindDriverObservation } from './binding/observation.js';
 import type { CallableHookBinding } from './binding/hooks.js';
 import type { EventConsumer } from '@capix/changes';
-import type { DriverFact } from './observation/facts.js';
-import { requireNotCancelled } from './invocation/cancellation.js';
+import type { DriverFact } from './observation/driver.js';
 import { RuntimeError } from '@capix/contracts';
 import type { BuiltCallable } from './structure/construction.js';
 import { CallableBuilder } from './structure/builder.js';
 import { createRootInvocation, restoreRootInvocation } from './invocation/builders/structure.js';
-import type { InvocationControls } from './context/context.js';
 import { snapshotInvocationCapabilities, type InvocationCapabilities } from './invocation/capabilities.js';
 import { Scene } from '@capix/structure';
 import type { CallableInput, CallableOutput } from '@capix/contracts';

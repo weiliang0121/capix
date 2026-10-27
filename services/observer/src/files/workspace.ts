@@ -2,7 +2,7 @@ import { constants, type Stats } from 'node:fs';
 import { lstat, realpath, open, link, unlink, type FileHandle } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve, relative, sep, dirname, join, isAbsolute } from 'node:path';
-import { DeclaredException, InvocationCancelled, PersistenceError } from '@capix/server-runtime';
+import { DeclaredException, InvocationCancelled, PersistenceError } from '@capix/invocation';
 import { RuntimeError } from '@capix/contracts';
 import { type ProgressChannel } from '@capix/changes';
 import { isEqual } from 'es-toolkit/predicate';

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ExceptionContract, DeclaredException } from '@capix/server-runtime';
-import { Invocation, InvocationContext, inspectChildCallFailure } from '@capix/server-runtime/construction';
+import { ExceptionContract, DeclaredException, Invocation, InvocationContext, inspectChildCallFailure } from '@capix/invocation';
 
 const rejected = new ExceptionContract('PRECISE_REJECTION');
 const make = (execute, options = {}) => new Invocation({ context: new InvocationContext('initial'), signal: new AbortController().signal, work: { execute }, ...options });

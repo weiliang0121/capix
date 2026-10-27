@@ -1,13 +1,12 @@
 import { bindResources } from './fixtures/resources.mjs';
-import { invocationResourceFailures } from '@capix/server-runtime/construction';
+import { invocationResourceFailures, Invocation, InvocationContext, InvocationCancelled } from '@capix/invocation';
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, InvocationCancelled, Group, Node, bindCallSource } from '@capix/server-runtime';
+import { Group, Node, bindCallSource } from '@capix/server-runtime';
 import { RuntimeError } from '@capix/contracts';
 import { ProgressChannel } from '@capix/changes';
 import { Transcript, TranscriptResource } from '@capix/transcript';
-
 import { runtimeDefinition } from './fixtures/declarations.mjs';
 
 const message = (content) => ({ role: 'user', content });

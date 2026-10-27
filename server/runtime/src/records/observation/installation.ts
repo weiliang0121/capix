@@ -1,9 +1,8 @@
 import type { MemoryEvent, TranscriptEvent } from '@capix/protocol';
 import type { InvocationObservationSetup, ObservationInstallation } from '../../binding/observation.js';
 import type { ObservationDeclarationScope } from '../../definition/observation.js';
-import { ObservationError } from '../../observation/error.js';
+import { ObservationError, type InvocationObserver } from '@capix/invocation';
 import type { EventConsumer } from '@capix/changes';
-import type { InvocationObserver } from '../../observation/observer.js';
 import type { Recorder, RecordingRootRecord } from '@capix/records';
 import { RecordWriterResource, type RecordWriter } from '@capix/records/construction';
 import { Resource, Resources, type ResourceBinding } from '@capix/resources';

@@ -1,6 +1,6 @@
 import type { InvocationRelationIdentity } from '@capix/protocol';
 import { defineObservation } from '../../definition/observation.js';
-import type { InvocationFact } from '../../observation/facts.js';
+import type { InvocationFact } from '@capix/invocation';
 import { ResourceOffer } from '@capix/resources';
 import type { InvocationRecording } from './invocation.js';
 

@@ -1,4 +1,5 @@
-import type { Runner, InvocationControls, CallableInvocationCallbacks, InvocationProgress } from '@capix/server-runtime';
+import type { Runner, CallableInvocationCallbacks } from '@capix/server-runtime';
+import type { InvocationControls, InvocationProgress } from '@capix/invocation';
 import type { CheckpointStore } from '@capix/checkpoint';
 import type { ProgressChannel } from '@capix/changes';
 import type { Transcript } from '@capix/transcript';

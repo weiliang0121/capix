@@ -6,7 +6,7 @@ import type { Interactions } from '../interaction/interactions.js';
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
 import { BoundChildren } from '../binding/children/bound.js';
 import { InvocationWorkBinding } from '../binding/work.js';
-import type { CallableContext } from '../context/callable.js';
+import type { CallableContext } from '@capix/invocation';
 import { Callable } from '@capix/structure';
 import type { CallableInput } from '@capix/contracts';
 import { CallableInvocationBuilder } from '../invocation/builders/callable.js';

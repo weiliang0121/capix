@@ -1,5 +1,5 @@
 import type { CheckpointReferences, CheckpointReference } from '@capix/checkpoint';
-import { decodeCheckpointDiagnostic, type DecodedCheckpointFrame, type DecodedCheckpointChild } from '../checkpoint/facts.js';
+import { decodeCheckpointDiagnostic, type DecodedCheckpointFrame, type DecodedCheckpointChild } from '@capix/invocation';
 import type { CheckpointFacts, ChildContract, ChildFact, ChildFacts, ChildReference, ContinuationFact, ReceptionDefinition } from '@capix/contracts';
 import type { BoundChildren } from './children/bound.js';
 import { BoundReceptions } from './receptions.js';

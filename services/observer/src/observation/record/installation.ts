@@ -1,4 +1,4 @@
-import { type Clock } from '@capix/server-runtime';
+import { type Clock } from '@capix/invocation';
 import { type ChangeCapture } from '@capix/changes';
 import { bindRecording, type RecordingInstallation } from '@capix/server-runtime/recording';
 import { RecordBook, Recorder } from '@capix/records';

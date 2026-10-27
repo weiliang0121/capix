@@ -1,14 +1,9 @@
-import { combineOutputReceivers } from '../../output/delivery.js';
+import { combineOutputReceivers, type Invocation, type CallableContext, type InvocationControls, type InvocationRelationOptions, type CheckpointRestoration } from '@capix/invocation';
 import type { CallableInput, CallableOutput } from '@capix/contracts';
 import type { AnyCallable } from '../../binding/declarations.js';
 import type { CallableCallBindings } from '../../binding/calls.js';
 import { callableConstruction, type AnyBuiltCallable, type BuiltCallable, type BuiltOptions } from '../../structure/construction.js';
 import type { CallableInvocationStarted } from './callable.js';
-import type { Invocation } from '../invocation.js';
-import type { CallableContext } from '../../context/callable.js';
-import type { InvocationControls } from '../../context/context.js';
-import type { InvocationRelationOptions } from '../relation.js';
-import type { CheckpointRestoration } from '../../checkpoint/contract.js';
 
 export interface CallableInvocationCallbacks<Input, Output, Resources extends object> {
   readonly started?: CallableInvocationStarted<Input, Output, Resources>;

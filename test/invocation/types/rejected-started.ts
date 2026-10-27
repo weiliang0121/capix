@@ -1,4 +1,5 @@
-import type { CallableInvocationCallbacks, InvocationContext, InvocationStarted } from '@capix/server-runtime';
+import type { CallableInvocationCallbacks } from '@capix/server-runtime';
+import type { InvocationContext, InvocationStarted } from '@capix/invocation';
 
 export const asyncStarted: InvocationStarted<string, number, InvocationContext<string, number>> = async () => {};
 

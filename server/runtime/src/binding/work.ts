@@ -1,10 +1,7 @@
 import type { CallableKind, ChildReference } from '@capix/contracts';
 import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@capix/structure';
-import type { InvocationContext } from '../context/context.js';
-import type { InvocationCheckpointWork } from '../checkpoint/work.js';
+import type { InvocationContext, InvocationCheckpointWork, InvocationWork, Invocation } from '@capix/invocation';
 import type { CheckpointReferences, CheckpointReference } from '@capix/checkpoint';
-import type { InvocationWork } from '../invocation/work.js';
-import type { Invocation } from '../invocation/invocation.js';
 import type { BoundChildren } from './children/bound.js';
 import { ChildBindingsBuilder } from './children/builder.js';
 import { InvocationAccess } from './access.js';
@@ -103,7 +100,7 @@ export class InvocationWorkBinding<Input, Output, Context extends InvocationCont
               return [name, { cardinality: reference.many ? ('many' as const) : ('one' as const), position: this.children.position(reference.definition) }];
             }),
           ),
-          check: (_frame: unknown, state: unknown, references: CheckpointReferences, decoded: import('../checkpoint/facts.js').DecodedCheckpointFrame) => point.check?.(state, savedCheckpointFacts(decoded, references, this.children, this.#childBindingsBuilder.receptions) as never),
+          check: (_frame: unknown, state: unknown, references: CheckpointReferences, decoded: import('@capix/invocation').DecodedCheckpointFrame) => point.check?.(state, savedCheckpointFacts(decoded, references, this.children, this.#childBindingsBuilder.receptions) as never),
           execute: (_context: Context, invocation: Invocation<Input, Output, Context>, state: unknown, references: CheckpointReferences) => this.resume(point, invocation, state, references),
         },
       ]),

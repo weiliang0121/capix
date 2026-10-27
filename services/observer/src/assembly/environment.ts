@@ -1,5 +1,6 @@
 import { RuntimeError } from '@capix/contracts';
-import { type Resources, type Clock, type InvocationControls } from '@capix/server-runtime';
+import { type Resources } from '@capix/server-runtime';
+import { type Clock, type InvocationControls } from '@capix/invocation';
 import { type CheckpointStore } from '@capix/checkpoint';
 import { type ChangeBuffer } from '@capix/changes';
 import type { Transcript } from '@capix/transcript';

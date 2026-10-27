@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { RuntimeError } from '@capix/contracts';
-import { type InvocationControls, type CheckpointInstallation, type ObservationInstallation } from '@capix/server-runtime';
+import { type ObservationInstallation } from '@capix/server-runtime';
+import { type InvocationControls, type CheckpointInstallation } from '@capix/invocation';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import type { ConversationDescriptor, ConversationListResponse, Message } from '@capix/protocol';

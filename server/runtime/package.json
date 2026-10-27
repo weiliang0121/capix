@@ -29,6 +29,7 @@
     "@capix/contracts": "workspace:*",
     "@capix/changes": "workspace:*",
     "@capix/records": "workspace:*",
-    "@capix/checkpoint": "workspace:*"
+    "@capix/checkpoint": "workspace:*",
+    "@capix/invocation": "workspace:*"
   }
 }

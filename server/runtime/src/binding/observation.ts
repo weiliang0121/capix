@@ -1,11 +1,8 @@
-import { InvocationResources } from '../invocation/resource-access.js';
+import { InvocationResources, type InvocationFact, type InvocationIdentity, type InvocationDescription, type InvocationObserver, InvocationObservation, ObserverSession, publishSessions } from '@capix/invocation';
 import type { ObservationDeclaration, ObservationDeclarationScope } from '../definition/observation.js';
 import { ResourceBinding, resourceRequests, type ResourceRequirements } from '@capix/resources';
-import type { InvocationFact, InvocationIdentity, InvocationDescription, DriverFact } from '../observation/facts.js';
+import type { DriverFact, DriverObserver } from '../observation/driver.js';
 import type { EventConsumer } from '@capix/changes';
-import type { InvocationObserver, DriverObserver } from '../observation/observer.js';
-import { InvocationObservation } from '../observation/invocation.js';
-import { ObserverSession, publishSessions } from '../observation/session.js';
 
 /** A fixed host selection keeps its owner even when the declaration needs no resources. */
 export interface InvocationObservationDeclaration extends ObservationDeclaration<InvocationFact> {

@@ -1,7 +1,7 @@
 import { observeCall } from '../fixtures/observation.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Invocation, InvocationContext, ExceptionContract } from '@capix/server-runtime';
+import { Invocation, InvocationContext, ExceptionContract } from '@capix/invocation';
 import { Recorder, RecordBook } from '@capix/records';
 import { createBoundRuntime } from '../fixtures/runtime.mjs';
 

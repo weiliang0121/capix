@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Node, Resources, Runner, InvocationCancelled } from '@capix/server-runtime';
+import { Scene, Node, Resources, Runner } from '@capix/server-runtime';
+import { InvocationCancelled, Invocation, InvocationContext } from '@capix/invocation';
 import { Resource, ResourceOffer } from '@capix/resources';
-import { Invocation, InvocationContext } from '@capix/server-runtime/construction';
 
 const make = (execute, options = {}) => new Invocation({ context: new InvocationContext('input'), signal: new AbortController().signal, work: { execute }, ...options });
 const runtime = (scene, options = {}) => new Runner(scene, new Resources(), undefined, options).build();

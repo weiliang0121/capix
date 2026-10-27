@@ -39,6 +39,7 @@
     "@capix/measurement": "workspace:*",
     "@capix/observer-content": "workspace:*",
     "@capix/records": "workspace:*",
-    "@capix/checkpoint": "workspace:*"
+    "@capix/checkpoint": "workspace:*",
+    "@capix/invocation": "workspace:*"
   }
 }

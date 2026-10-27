@@ -1,6 +1,6 @@
 # Callable Checkpoint 与有限恢复
 
-状态：2026-10-26，CP 载体与存储已独立为 `@capix/checkpoint`，Runtime 继续负责调用捕获和续接。Frame v5 保持格式，普通调用只执行一次 run；旧 round 2/continuation 的执行恢复明确拒绝。历史设计推演移至 [Checkpoint 设计历史](checkpoint-design-history.md)，其中旧 API 不再作为当前入口。自动恢复、旧提交交付与恢复 UI 尚未接入。
+状态：2026-10-27，CP 载体与存储由 `@capix/checkpoint` 提供，活调用捕获和续接由 `@capix/invocation` 提供，Runtime 负责结构与恢复 Work 的装配。Frame v5 保持格式，普通调用只执行一次 run；旧 round 2/continuation 的执行恢复明确拒绝。历史设计推演移至 [Checkpoint 设计历史](checkpoint-design-history.md)，其中旧 API 不再作为当前入口。自动恢复、旧提交交付与恢复 UI 尚未接入。
 
 恢复的目标是：某次 Callable 工作中断后，依据已经保存的事实和声明的续接入口，继续推进该工作。重新建立 Invocation、Context 和资源访问是实现手段；不恢复原 Promise、闭包、调用栈，也不反序列化 Bound 结构。
 
@@ -15,26 +15,30 @@
 | `@capix/checkpoint` | Frame/Image/Head/Delivery、持久引用值、纯数据检查与复制冻结、CheckpointStore 和 MemoryCheckpointStore |
 | `@capix/contracts`  | 单次调用身份 InvocationIdentity，Codec、作者保存端口、refs、已核实事实等共同契约                      |
 | `@capix/structure`  | 具名 point、state、resume.deps/uses/run 及 reception 的作者配置关联                                   |
-| Runtime             | 捕获活调用关系、核对当前声明、安装 Context/子关系、签发恢复 Work、调用排他与恢复观测                  |
+| `@capix/invocation` | 捕获活调用关系、核对固定调用契约、安装 Context/子关系、调用排他、续接与恢复观测                       |
+| Runtime             | 解算当前结构的 CP 配置，接线供给、子构造入口与恢复 Work，维护 Runner 入口占用                         |
 | Observer 与独立实体 | SQLite 存储、对话资源依据、业务恢复资格、消息/记忆/文件固定效果确认、外部反馈读取                     |
 
 `server/checkpoint` 只依赖 contracts 和通用值比较工具，不依赖 Runtime、结构、资源、观测或数据库。它核验保存值自身的一致性：完整直接子关系、refs 归属、固定 owner/contract/input、revision 比较提交以及终态不可推进。当前结构是否兼容、宿主内容是否仍允许继续，则由 Runtime 与宿主分别核对。格式检查通过不等于取得恢复许可，也不形成通用任意快照能力。
 
 ```text
 work.checkpoint({ point, state, refs })
-  → Runtime 核验窗口，捕获完整调用关系
+  → Runtime 的作者适配核验 point/refs 与阶段资格
+  → invocation 捕获完整调用关系
   → checkpoint 固定并校验 Image
   → Store 按 revision 保存 Head
 
 runner.resume(contextId)
   → Store 读取 Head，checkpoint 核验保存数据
-  → Runtime 核对当前声明与直接归属
-  → 建立本次 Context、关系和恢复 Work，进入 point.resume
+  → Runtime 用当前结构契约接线，invocation 核对保存身份、输入与直接归属
+  → invocation 安装 Context 与关系，Runtime 签发恢复 Work，进入 point.resume
 ```
 
 Store 保持同步宿主端口，未强制放入普通业务 deps。最终交付在业务工作窗口结束后保存；保存失败仍属于调用必须承担的机制故障。每次恢复沿用稳定 Store 对象以维持本进程排他，不用临时端点身份替代它，也不承诺跨进程租约。
 
-持久类型、MemoryCheckpointStore、cloneCheckpoint*、checkpointReference* 和 CHECKPOINT_MAX_BYTES 从 `@capix/checkpoint` 根入口导入；Runtime 不再重导它们。CheckpointFact、CheckpointInstallation、CheckpointWriter 和 CheckpointRestoration 留在 Runtime，其中 Fact 包含运行观测与内容事件，不能反向进入独立持久包。共同 Codec/Value/Contract 可继续从 contracts、structure 取得同一类型。
+持久类型、MemoryCheckpointStore、cloneCheckpoint*、checkpointReference* 和 CHECKPOINT_MAX_BYTES 从 `@capix/checkpoint` 根入口导入；Runtime 不再重导它们。CheckpointFact、CheckpointInstallation、CheckpointWriter 和 CheckpointRestoration 从 `@capix/invocation` 导入，Runtime 既有出口重导同一定义。其中 Fact 包含运行观测与内容事件，不能反向进入独立持久包。共同 Codec/Value/Contract 可继续从 contracts、structure 取得同一类型。
+
+调用分包不增加恢复点或恢复范围。低层 Invocation 可以直接连接 CheckpointStore 和固定工作契约，不要求建立 Scene/Runner；完整框架仍由 Runtime 解算结构、检查资源与行动资格。`test/invocation-boundary-checkpoint.test.mjs` 验证新 Store、Context 与重建契约之间的续接：等待父层消费固定子交付、已接纳事实直接继续，以及缺失或不一致依据的拒绝。
 
 ## 当前实现与入口
 
@@ -70,7 +74,7 @@ CP 保存或最终交付落盘失败不属于可由业务 `result.failed` 处理
 
 ## 内核事实与保存
 
-持久契约见 [checkpoint/contract.ts](../server/checkpoint/src/contract.ts)，运行安装与观测见 [Runtime checkpoint/contract.ts](../server/runtime/src/checkpoint/contract.ts)，作者配置见 [structure definition/checkpoint.ts](../server/structure/src/definition/checkpoint.ts)。CPF 与业务 state 分开，捕获全部直接子关系，不做正文裁剪。支持运行点、等待关系、成功返回/接纳关系和已经完成处理的子失败。业务循环进度属于 point state；它不重建活异常、不让失败子调用复活。尚未处理或正在处理的失败、结构故障及取消不能当作开放恢复点。
+持久契约见 [checkpoint/contract.ts](../server/checkpoint/src/contract.ts)，运行安装与观测见 [invocation checkpoint/contract.ts](../server/invocation/src/checkpoint/contract.ts)，作者配置见 [structure definition/checkpoint.ts](../server/structure/src/definition/checkpoint.ts)。CPF 与业务 state 分开，捕获全部直接子关系，不做正文裁剪。支持运行点、等待关系、成功返回/接纳关系和已经完成处理的子失败。业务循环进度属于 point state；它不重建活异常、不让失败子调用复活。尚未处理或正在处理的失败、结构故障及取消不能当作开放恢复点。
 
 返回关系与最终交付保存真实子 round、phase、currentInput，不能从较早 CP 或父 round 推测。固定交付视图不伪造原 execute 中间结果或未保存的后代。GenerateAnswer 的显式再次生成核对原拒绝码、诊断与真实 handled 关系，恢复不重置次数或产生第三次生成。
 

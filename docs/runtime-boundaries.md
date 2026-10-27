@@ -120,6 +120,30 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 
 普通调用只执行一次 run，业务循环每次建立新子调用；没有旧 continue/maxRounds 状态机。真实输出/异常保持引用，记录及持久化才复制为纯数据。恢复格式仍能解释历史进度，但新执行拒绝旧 round 2/continuation 镜像。详见 [异常边界](exceptions.md)。
 
+### 调用独立包与装配接缝
+
+2026-10-27：`@capix/invocation` 已作为独立 Workspace 包承载单次执行、直接关系、返回与接纳、故障归属及活动窗口。Runtime 负责把结构和宿主供给接成这种调用。调用包不依赖 Runtime、structure、记录或内容实体；它通过 contracts、resources、changes、checkpoint 与 protocol 的公开出口接入共同机制。
+
+| 实际归属              | 内容                                                                                                 |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| invocation            | Invocation、Context、Control、Execution、Children/Relation、接收与故障来源、输出、调用事实与观察会话 |
+| invocation 的资源适配 | 本次固定供给的阶段访问、关闭与故障归属；资源定义、登记和原子操作仍由 resources 包负责                |
+| invocation 的 CP 适配 | 捕获活关系、安装保存状态、续接和固定交付；Frame/Store 仍由 checkpoint 包负责                         |
+| Runtime 装配          | Runner、结构 Binder/Builder、资源范围解算、调用构造、观测安装及记录预设                              |
+| Runtime 作者适配      | InvocationWorkBinding、InvocationAccess、ChildBindingsBuilder：依据已固定声明和成员签发本次 Work     |
+
+对象按次创建并不自动归属调用包。作者 Work 适配需要理解成员、deps、恢复 uses 与 point；它调用单次机制，但仍是结构向调用的适配。因此 `server/runtime/src/invocation/builders` 与 InvocationCapabilities 留在 Runtime。DriverFact/DriverObserver 描述宿主入口，也留在 Runtime；调用观察会话只按固定对象身份关联，不反向引用观察安装对象的类型。
+
+低层消费者从 `@capix/invocation` 取得单次机制。Runtime 原根入口和 `/construction` 中已有的调用名称精确重导新包的同一对象，不扩大为整个包的通配出口，也不复制错误类。Observer 对 Clock、取消、故障、进展和 CP 端口直接使用新包；结构配置、callableHooks、Runner 和交互装配保持原入口。业务作者仍使用相同的 `run(work)`，没有新增装配步骤。
+
+验证入口：
+
+- `test/invocation-boundary-core.test.mjs`：直接构造调用，验证结果引用与单次启动；业务子失败可以 handled，机制故障不能通过 fallback 清除；资源端点在成功或失败退出后关闭且不可重开。
+- `test/invocation-boundary-checkpoint.test.mjs`：真实保存等待关系与接纳事实，经 JSON 往返在新 Store/Context 和重建的 CP 契约中续接；固定子交付不重跑，已接纳事实不重复回调，缺失或不一致的子依据明确拒绝。
+- `test/invocation-boundary-package.test.mjs`：检查独立编译、声明产出和实际模块加载，不借 Runtime/Structure 反向完成工作；执行覆盖父子接纳、调用观测和真实 CP 保存后的续接。
+
+Invocation 当前仍借助 Context.resources 协调资源窗口的开启与关闭。这是固定供给与本次活动的具体接线，没有为分包新增通用机制注册器。CP 保存格式、声明版本、实体固定效果与恢复资格均保持原样；此次分包不增加任意位置恢复、自动重放或跨进程接管。
+
 ## 返回、接纳与实体落实
 
 `returned` 不等于 `accepted`。Composite 可在 checkpoint.receptions 登记恢复编码用的 reception，接纳开始即固定契约；检查保持真实 V 引用，codec 只用于 CP。facts.accepted 要求准确 ref 与同一契约，undefined 可以是合法成功值。raw accept 不可事后补标签。

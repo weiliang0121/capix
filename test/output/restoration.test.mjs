@@ -1,7 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, ExceptionContract } from '@capix/server-runtime';
+import { Scene } from '@capix/server-runtime';
+import { ExceptionContract } from '@capix/invocation';
 import { MemoryCheckpointStore } from '@capix/checkpoint';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };

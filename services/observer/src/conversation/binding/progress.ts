@@ -1,4 +1,4 @@
-import type { InvocationProgress } from '@capix/server-runtime';
+import type { InvocationProgress } from '@capix/invocation';
 import type { ProgressChannel, ProgressReceiver } from '@capix/changes';
 import type { InvocationOutputReceiver } from '@capix/structure';
 import type { TranscriptAppendProgress } from '@capix/transcript';

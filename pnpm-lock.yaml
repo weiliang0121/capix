@@ -23,6 +23,9 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:contracts
+      '@capix/invocation':
+        specifier: workspace:*
+        version: link:server/invocation
       '@capix/measurement':
         specifier: workspace:*
         version: link:server/measurement
@@ -189,6 +192,27 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
 
+  server/invocation:
+    dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../changes
+      '@capix/checkpoint':
+        specifier: workspace:*
+        version: link:../checkpoint
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/protocol':
+        specifier: workspace:*
+        version: link:../../protocol
+      '@capix/resources':
+        specifier: workspace:*
+        version: link:../resources
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+
   server/measurement:
     dependencies:
       '@capix/protocol':
@@ -260,6 +284,9 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@capix/invocation':
+        specifier: workspace:*
+        version: link:../invocation
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
@@ -326,6 +353,9 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@capix/invocation':
+        specifier: workspace:*
+        version: link:../../server/invocation
       '@capix/measurement':
         specifier: workspace:*
         version: link:../../server/measurement

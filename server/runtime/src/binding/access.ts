@@ -1,7 +1,5 @@
-import { InvocationResources } from '../invocation/resource-access.js';
-import type { InvocationContext } from '../context/context.js';
+import { InvocationResources, type InvocationContext, type Invocation } from '@capix/invocation';
 import type { ChildContract } from '@capix/contracts';
-import type { Invocation } from '../invocation/invocation.js';
 import type { ResourceRequirements } from '@capix/resources';
 import type { ChildBindingsBuilder } from './children/builder.js';
 import type { InvocationChildReferences } from './children/references.js';
@@ -43,7 +41,7 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
       input: context.currentInput,
       resources: this.#resources.view(deps, resourcePhase),
       signal: (context as Context & { signal: AbortSignal }).signal,
-      observation: (event: import('../observation/facts.js').BusinessEvent) => {
+      observation: (event: import('@capix/invocation').BusinessEvent) => {
         validate();
         this.invocation.observeBusiness(event);
       },

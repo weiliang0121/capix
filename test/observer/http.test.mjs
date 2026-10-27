@@ -372,7 +372,15 @@ test('transport validates origin, input and source boundary before accepting wor
   const failedRuntime = [...observer.records.book.values()].find((record) => record.kind === 'invocation' && record.structureKind === 'scene');
   assert.equal(failedRuntime.status, 'failed', 'R records the rejected child admission');
   assert.equal(observer.records.installation.root.childIds.includes(failedRuntime.id), true);
-  for (const path of ['.env', '../../.env', 'services/observer/src/../../../../.env']) assert.equal((await fetch(base + '/api/source?file=' + encodeURIComponent(path))).status, 404);
+  const invocationSource = 'server/invocation/src/invocation/invocation.ts';
+  const located = await fetch(base + '/api/source?file=' + encodeURIComponent(invocationSource));
+  assert.equal(located.status, 200);
+  const source = await located.json();
+  assert.equal(source.path, invocationSource);
+  assert.match(source.content, /export class Invocation</);
+  // Moving the package updates explicit inspection paths; it does not introduce
+  // arbitrary file access or invent an alias for historic source locations.
+  for (const path of ['.env', '../../.env', 'services/observer/src/../../../../.env', 'server/runtime/src/invocation/invocation.ts', 'server/runtime/src/invocation/work.ts', 'server/runtime/src/invocation/cycle.ts', 'server/invocation/package.json']) assert.equal((await fetch(base + '/api/source?file=' + encodeURIComponent(path))).status, 404, path);
   const blocked = await new Promise((resolve, reject) => {
     const req = request(base + '/api/config', { headers: { Host: 'outside.example' } }, (res) => {
       res.resume();

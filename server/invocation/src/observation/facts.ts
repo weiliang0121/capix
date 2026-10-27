@@ -43,12 +43,3 @@ export interface BusinessObservation {
   readonly occurredAt: string;
   readonly event: Readonly<BusinessEvent>;
 }
-
-/** Facts of the installed driver, ordered independently from individual calls. */
-export type DriverFact = Readonly<
-  {
-    driverId: string;
-    sequence: number;
-    occurredAt: string;
-  } & ({ kind: 'established' } | ({ boundId: string } & ({ kind: 'acquired' } | { kind: 'released' } | { kind: 'rejected'; reason: 'busy'; error: unknown } | { kind: 'entry-failed'; error: unknown })))
->;
