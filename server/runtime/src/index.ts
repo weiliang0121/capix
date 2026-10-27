@@ -3,7 +3,7 @@ export * from '@capix/structure';
 export { ChildCallFailure, ExceptionContract, DeclaredException } from '@capix/invocation';
 export * from './definition/observation.js';
 
-export * from './driver.js';
+export * from './legacy/driver.js';
 export * from './runner.js';
 export { callableHooks, type CallableHookDeclaration, type CallableHookBinding } from './binding/hooks.js';
 
@@ -15,9 +15,7 @@ export { Resources, CapturedResources } from './resource/resources.js';
 export * from './initializer.js';
 
 // Independent external interactions; waiting invocations do not own delivery or retained feedback.
-export * from './interaction/contract.js';
-export * from './interaction/interaction.js';
-export * from './interaction/interactions.js';
+export * from '@capix/interaction';
 
 // Business-facing context and invocation views, results and shared time.
 export { invocationContextView, invocationView, childInvocationView, Clock, InvocationCancelled, isInvocationCancelled } from '@capix/invocation';
@@ -36,7 +34,8 @@ export * from './recording.js';
 
 // Shared diagnostics and runtime error conversion.
 export { RuntimeError } from '@capix/contracts';
-export { PersistenceError, RuntimeErrorHelper, isNonEmptyArray, hasUniqueItems, isObject, isObjectLike, isNonBlankString, nonBlankStringPattern } from '@capix/invocation';
+export { PersistenceError, RuntimeErrorHelper } from '@capix/diagnostics';
+export { isNonEmptyArray, hasUniqueItems, isObject, isObjectLike, isNonBlankString, nonBlankStringPattern } from '@capix/invocation';
 
 // Optional checkpoint installation and runtime recovery facts.
 export type { CheckpointFact, CheckpointInstallation, CheckpointWriter, CheckpointRestoration } from '@capix/invocation';

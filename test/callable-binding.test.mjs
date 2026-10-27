@@ -1,9 +1,9 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Driver, bindChildResources, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
+import { Driver, Resources, bindChildResources, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
 import { ResourceOffer } from '@capix/resources';
-import { CallableBuilder, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
+import { CallableBuilder, buildCallableFromSource, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
 
 function install(definition, options = {}) {
   return installCallable(definition, { providers: [], source: { capture: () => null }, ...options });
@@ -25,7 +25,7 @@ test('a root group or node rejects a second source registration instead of silen
   for (const definition of [defineGroup()({ run: () => null }), defineNode()({ run: () => null })]) {
     assert.throws(
       () =>
-        new CallableBuilder().build(definition, {
+        buildCallableFromSource(definition, {
           providers: [],
           source: { capture: () => null },
           bindings: [{ definition, capture: () => 'unused' }],
@@ -262,8 +262,8 @@ test('a driver keeps occupancy on its built callable and constructor failure rel
 
 test('call construction scopes are authenticated to their exact bound installation', () => {
   const builder = new CallableBuilder();
-  const first = builder.build(defineScene()({ run: () => null }), { providers: [], source: { capture: () => null } });
-  const second = builder.build(defineScene()({ run: () => null }), { providers: [], source: { capture: () => null } });
+  const first = builder.build(defineScene()({ run: () => null }), new Resources());
+  const second = builder.build(defineScene()({ run: () => null }), new Resources());
   const own = callableConstruction(first).calls.begin({});
   assert.throws(() => callableConstruction(second).calls.require(own), /another binding installation/);
   assert.throws(() => callableConstruction(first).calls.require({}), /another binding installation/);

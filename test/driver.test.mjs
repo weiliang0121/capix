@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Clock, Driver, checkpointPoint, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
+import { Clock, Driver, Resources, checkpointPoint, defineScene, defineGroup, defineNode } from '@capix/server-runtime';
 import { MemoryCheckpointStore } from '@capix/checkpoint';
 import { CallableBuilder, createCallableInvocation } from '@capix/server-runtime/construction';
 
@@ -57,7 +57,7 @@ test('Driver rejects foreign, standalone-built and forged structures before sour
   const definition = () => defineNode()({ run: () => assert.fail('unowned call must not run') });
   const own = driver.build(definition(), options);
   const foreign = other.build(definition(), options);
-  const bare = new CallableBuilder().build(definition(), options);
+  const bare = new CallableBuilder().build(definition(), new Resources());
   const forged = Object.assign(Object.create(Object.getPrototypeOf(own)), own);
   for (const bound of [foreign, bare, forged, { id: own.id }, null]) {
     await assert.rejects(driver.run(bound, null, {}), (error) => error.code === 'FOREIGN_BINDING');

@@ -127,7 +127,7 @@ Invocation 默认固定到原 deployment；应用需保持端点对应的代码�
 | 记忆整批已提交，调用收尾未保存             | Memories 已有新事实                  | 整批原子性不等于重复消费幂等；重跑 create 仍可能新增               |
 | 服务工作已结束，客户端反馈丢失             | 进程内提交、正式内容可能仍在         | 当前 follow 已处理这类问题，不需要启动执行恢复                     |
 
-具体位置：输入先于 E 建立，见 [entry 流程](../server/runtime/src/structure/execution.ts)（72–95 行）与 [输入追加](../services/observer/src/conversation/accept.ts)（35 行）；父层追加回答见 [receiveAnswer](../services/observer/src/conversation/task.ts)（144 行）；`InvocationRelation.accept` 先运行接纳函数，再标记 accepted（83–90 行）；交互发送/保存见 [Interaction](../server/runtime/src/interaction/interaction.ts)（64–107 行）；文件发布见 [WorkspaceFiles](../services/observer/src/files/workspace.ts)（136 行起）。
+具体位置：输入先于 E 建立，见 [entry 流程](../server/runtime/src/structure/execution.ts)（72–95 行）与 [输入追加](../services/observer/src/conversation/accept.ts)（35 行）；父层追加回答见 [receiveAnswer](../services/observer/src/conversation/task.ts)（144 行）；`InvocationRelation.accept` 先运行接纳函数，再标记 accepted（83–90 行）；交互发送/保存见 [Interaction](../server/interaction/src/interaction.ts)（64–107 行）；文件发布见 [WorkspaceFiles](../services/observer/src/files/workspace.ts)（136 行起）。
 
 这些中断窗口说明：**恢复粒度不能只按 E、O、A 名称选择，而要看一个边界两侧的事实能否对应起来。** 一个 A 内也可能有多个效果；一个父层 accept 也可能不只是纯数据转换。
 

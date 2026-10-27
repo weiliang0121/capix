@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { Group, Node, Driver, bindCallSource, bindRecording } from '@capix/server-runtime';
 import { Recorder, RecordBook } from '@capix/records';
 import { ResourceOffer } from '@capix/resources';
-import { CallableBuilder, callableConstruction } from '@capix/server-runtime/construction';
+import { buildCallableFromSource, callableConstruction } from '@capix/server-runtime/construction';
 
 const resource = new ResourceOffer({ name: 'test.value', expose: (value) => value, timing: 'binding' });
 class Read extends Node {
@@ -235,7 +235,7 @@ test('building nested structures retains exact member identities without opening
   const group = new Group({ run: () => null }).add(left, right);
   const main = new Group({ run: () => null }).add(group);
   const definition = runtimeDefinition(main);
-  const scene = new CallableBuilder().build(definition, { providers: [resource.provide(() => assert.fail('build cannot open resources'))], source: { capture: () => assert.fail('build cannot capture input') } });
+  const scene = buildCallableFromSource(definition, { providers: [resource.provide(() => assert.fail('build cannot open resources'))], source: { capture: () => assert.fail('build cannot capture input') } });
   assert.equal(scene, definition);
   const children = (structure) => callableConstruction(structure).binding.children;
   assert.equal(children(scene).get(main), main);

@@ -1,6 +1,7 @@
 import { isPromise } from 'node:util/types';
 import { RuntimeError } from '@capix/contracts';
-import { PersistenceError, isNonBlankString } from '@capix/invocation';
+import { PersistenceError } from '@capix/diagnostics';
+import { isNonBlankString } from './value.js';
 import type { InteractionContract, InteractionOptions, InteractionPersistence, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
 import { Interaction } from './interaction.js';
 

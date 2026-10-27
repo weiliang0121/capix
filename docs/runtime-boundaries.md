@@ -21,15 +21,15 @@ new Runner(scene, resources, interactions?, mechanisms)
   → 固定一个场景与机制接入
 
 runner.build()
-  → CallableBuilder.buildResources
-      → CallableBinder.bindResources：检查配置、成员、资源 scope 与 hooks
+  → CallableBuilder.build
+      → CallableBinder.bind：检查配置、成员、资源 scope 与 hooks
       → 建立固定 work 接线和 CallableInvocationBuilder
       → 将运行能力安装到原结构，完整成功后固定配置
   → 返回同一个 Runner
 
 runner.run(input, options)
   → 固定 options 顶层字段，取得入口占用，检查预取消、validate
-  → 建立本次 CallableCallBindings
+  → 建立本次 CallableCallScope
   → ResourceInstallation 打开固定供给，构造根 Invocation / Context
   → Invocation.run → 当前阶段 Work → 业务
   → 实际返回或失败，释放占用
@@ -122,7 +122,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 
 ### 调用独立包与装配接缝
 
-2026-10-27：`@capix/invocation` 已作为独立 Workspace 包承载单次执行、直接关系、返回与接纳、故障归属及活动窗口。Runtime 负责把结构和宿主供给接成这种调用。调用包不依赖 Runtime、structure、记录或内容实体；它通过 contracts、resources、changes、checkpoint 与 protocol 的公开出口接入共同机制。
+2026-10-27：`@capix/invocation` 已作为独立 Workspace 包承载单次执行、直接关系、返回与接纳、故障归属及活动窗口。Runtime 负责把结构和宿主供给接成这种调用。调用包不依赖 Runtime、structure、记录或内容实体；它通过 contracts、resources、changes、checkpoint、protocol 与 diagnostics 的公开出口接入共同机制。
 
 | 实际归属              | 内容                                                                                                 |
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -132,7 +132,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 | Runtime 装配          | Runner、结构 Binder/Builder、资源范围解算、调用构造、观测安装及记录预设                              |
 | Runtime 作者适配      | InvocationWorkBinding、InvocationAccess、ChildBindingsBuilder：依据已固定声明和成员签发本次 Work     |
 
-对象按次创建并不自动归属调用包。作者 Work 适配需要理解成员、deps、恢复 uses 与 point；它调用单次机制，但仍是结构向调用的适配。因此 `server/runtime/src/invocation/builders` 与 InvocationCapabilities 留在 Runtime。DriverFact/DriverObserver 描述宿主入口，也留在 Runtime；调用观察会话只按固定对象身份关联，不反向引用观察安装对象的类型。
+对象按次创建并不自动归属调用包。作者 Work 适配需要理解成员、deps、恢复 uses 与 point；它调用单次机制，但仍是结构向调用的适配。因此 `server/runtime/src/construction/` 与 InvocationCapabilities 留在 Runtime。DriverFact/DriverObserver 描述宿主入口，也留在 Runtime；调用观察会话只按固定对象身份关联，不反向引用观察安装对象的类型。
 
 低层消费者从 `@capix/invocation` 取得单次机制。Runtime 原根入口和 `/construction` 中已有的调用名称精确重导新包的同一对象，不扩大为整个包的通配出口，也不复制错误类。Observer 对 Clock、取消、故障、进展和 CP 端口直接使用新包；结构配置、callableHooks、Runner 和交互装配保持原入口。业务作者仍使用相同的 `run(work)`，没有新增装配步骤。
 
@@ -143,6 +143,101 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 - `test/invocation-boundary-package.test.mjs`：检查独立编译、声明产出和实际模块加载，不借 Runtime/Structure 反向完成工作；执行覆盖父子接纳、调用观测和真实 CP 保存后的续接。
 
 Invocation 当前仍借助 Context.resources 协调资源窗口的开启与关闭。这是固定供给与本次活动的具体接线，没有为分包新增通用机制注册器。CP 保存格式、声明版本、实体固定效果与恢复资格均保持原样；此次分包不增加任意位置恢复、自动重放或跨进程接管。
+
+## Runtime 职责与收敛（2026-10-27）
+
+以调用包迁移 `628c732` 为基线，本轮完成 Runtime 主路径与局部接缝整理；跨包退出协议保留为后续议题；独立交互已在后续闭环迁出，相关接线继续由 Runtime 负责。
+
+Runtime 有自己的不变量：把一棵结构与宿主供给固定为同一份安装；只允许属于这份安装的调用使用它；按本次输入与窗口兑现已经确定的能力。它不决定业务执行顺序，也不重新实现 Invocation 状态机。“组织模块”仍需要明确这些职责，不能把剩余文件统称为胶水。
+
+### 目前实际包含什么
+
+| 部分           | 自身负责的事情                                                          | 当前主要位置                                                                                  |
+| -------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 宿主入口       | 固定场景、构建状态、根调用占用及释放                                    | `runner.ts`、`entry.ts`                                                                       |
+| 结构安装       | 快照与解算、核验整树、准备接线、成功后发布到原结构                      | `structure/builder.ts`、`install.ts`、`binding/callable.ts`、`declarations.ts`、`snapshot.ts` |
+| 结构资源接线   | 登记捕获位置和收窄；确定每个位置的供给；调用时兑现供给                  | `resource/`、`binding/resources.ts`                                                           |
+| 单次调用构造   | 固定本次宿主参数，检查安装归属，组合资源、Context、观察及 Invocation    | `binding/calls.ts`、`hooks.ts`、`construction/`                                               |
+| 作者 Work 适配 | 把固定成员、deps、point、reception 转成当前窗口允许的动作               | `binding/work.ts`、`access.ts`、`children/`、`checkpoint.ts`、`receptions.ts`                 |
+| 观察与记录预设 | 选择观察消费者；将真实调用事实写入记录实体                              | `binding/observation.ts`、`definition/observation.ts`、`records/observation/`                 |
+| 可选交互接线   | 将独立交互宿主的契约通道绑定为资源供给；发送与反馈由 interaction 包持有 | `resource/resources.ts`、`resource/installation.ts`、`runner.ts`                              |
+| 旧入口与辅助   | Driver/source 兼容装配；同步惰性初始化                                  | `legacy/`、`initializer.ts`                                                                   |
+
+目录按实际协作划分：`structure/` 负责把构建结果安装到原结构，`binding/` 负责声明与供给、作者端口的接线，`construction/` 负责单次调用构造及机制配置，`legacy/` 隔离旧宿主/source 适配。Runtime 内不再保留名称易混淆的 `invocation/` 目录；单次执行机制在独立 invocation 包。
+
+### 四种范围必须分开
+
+| 范围           | 持有内容                                                                                       | 不持有内容                               |
+| -------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| 一次构建       | 原结构上的 `CallableConstruction`：本位置 binding、共享 calls 接线、共享 invocations 构造权限  | 某次输入、活动端点、正在执行的 Context   |
+| 一次根运行     | `CallableCallScope`：准确安装归属与宿主 options；Runner 路径先浅固定 options，子调用沿用该依据 | 活动阶段、业务结果、外部交互生命         |
+| 一次调用       | Invocation/Context、固定供给、局部观察、引用认证、真实交付与接收事实                           | 可修改结构配置或其他安装的构造权限       |
+| 一个 Work 窗口 | 本阶段申请、允许的子动作、局部有效性与关闭状态                                                 | 跨窗口复用端点或随祖先状态重新解算的权限 |
+
+`CallableCallScope` 是本次根运行的构造依据，不是资源端点窗口。`ResourceInstallation.open` 建立本次供给并执行显式 scope capture；各 offer 的材料按 timing 在供给建立或真实访问时取得。`InvocationResources` 在活动期间打开访问，Work 进一步限制本阶段可用的申请和成员。结构、构造依据、活动窗口不能因为都叫 binding/access 就视为同一个东西。
+
+Runtime 的 `Resources` 扩展的是资源包不解释的结构范围：哪个节点捕获、哪个位置收窄、如何兑现交互通道。Offer、材料、端点和原子操作的有效性仍由资源包持有。这里需要的是分清结构接线与资源机制，不是再建立一个通用资源平台。
+
+### 主路径与回调接缝
+
+```mermaid
+sequenceDiagram
+    participant Host as 宿主
+    participant Runner
+    participant Build as Builder / Binder
+    participant Calls as 本次构造与供给
+    participant Invoke as Invocation 包
+    participant Adapt as Runtime Work 适配
+    participant Business as 业务 run / resume
+    Host->>Runner: build()
+    Runner->>Build: 快照、核验、固定接线
+    Build->>Build: 准备全树 → 复核 → 安装到原结构
+    Build-->>Runner: 已构建的原 Scene
+    Host->>Runner: run(input, options)
+    Runner->>Runner: 固定 options → 检查已构建 → 取得占用 → 检查预取消
+    Runner->>Calls: 校验 → 建立供给 → 构造 Context / Invocation
+    Calls-->>Runner: 根 Invocation
+    Runner->>Invoke: run()
+    Invoke->>Adapt: 执行固定 Work 接线
+    Adapt->>Business: 当前窗口的 work
+    opt 业务选择子成员
+        Business->>Adapt: children.name.invoke(input)
+        Adapt->>Calls: 核验成员与窗口，构造子调用
+        Calls->>Invoke: 同一机制启动子调用
+        Invoke-->>Adapt: 子调用真实交付
+        Adapt->>Invoke: 父关系 accept / handle，执行接收回调
+        Invoke-->>Adapt: 已固定的接收事实
+        Adapt-->>Business: 操作接收结果
+    end
+    Business-->>Adapt: 本层结果或失败
+    Adapt->>Adapt: 封口输出，等已开始接纳，关闭 Work
+    Adapt-->>Invoke: 入口返回
+    Invoke->>Invoke: 完成检查与退出，固定最终交付
+    Invoke-->>Runner: 最终结果或失败
+    Runner->>Runner: 释放占用
+```
+
+这是按接口双向协作，不是包之间的循环依赖：Invocation 消费自己的窄 Work 契约，Runtime 提供适配实现。恢复先核验保存依据、定位固定 point，再进入同一调用构造路径；其 Work 使用 point 的 deps/uses，而非重跑原 run。Interaction 不在这条退出链上，它的发送与反馈可以继续存在。
+
+### 本轮已完成的整理
+
+1. **默认构建使用 Resources。** `CallableBuilder.build(structure, resources, interactions?, options?)` 与 `CallableBinder.bind` 是唯一的现代装配入口。`buildResources/bindResources` 已移除。Driver/source 放入 `legacy/`，显式 `buildCallableFromSource(structure, options, capabilities?)` 供旧宿主和来源专项测试使用；它复用同一个 `installCallable`，不另建结构树或调用机制。
+2. **计划、安装结果与本次依据分开。** `CallableBuildPlan` 是解算树与调用接线；原结构上的 `CallableConstruction` 保存最终 binding/calls/invocations；`CallableCallScope` 保存本次根运行的宿主条件和准确归属。`scope.prepare` 返回 `PreparedCall`，明确它提供供给和回调，不是一个资源访问窗口。
+3. **整树发布保持集中。** `structure/install.ts` 负责检查、保留配置、准备全树、复核宿主回调未改写结构、统一安装、finally 解除构建标记。Builder 选择装配条件，Binder 解算固定契约；安装 helper 不引入独立实体或新生命周期。
+4. **入口执行共用明确操作。** `entry.ts` 的 `runEntry` 统一忙碌检查、取得占用、正常或恢复构造、真实调用结束、释放及错误聚合。占用状态仍归 Runner 或 Driver 各根持有。Runner 浅固定 options 和严格 validate 保持；旧 Driver/source 的参数及校验行为保持，不借目录迁移改变兼容语义。
+5. **静态解算显化步骤。** `resolveDeclaration` 主体保留本层快照/观察/deps、CP 成员检查、成员递归、供给归集与收窄核验；纯辅助函数表达各项检查，全树固定之后才调用宿主 check。没有把一次解算拆成多个管理对象。
+6. **资源安装缩窄。** InstalledScope 只持有 supply、固定及局部 provider、capture；不再保存整个 ResolvedCallable。局部 scope 在构建时一次建索引。本次供给继承和 timing 保持不变。
+7. **Work 与接收配置表达真实前提。** InvocationAccess 和 InvocationWorkBinding 使用准确的 CallableContext 约束，去掉 resources/signal 隐含断言；直接 invoke 与已创建句柄 invoke 共享接收配置校验与方法绑定。显式 create→CP→invoke 的精细时点保留，真实返回与接收事实仍分开。
+
+低层构造 API 有明确调整：旧 `new CallableBuilder(...).build(structure, {source, providers, ...})` 改为 `buildCallableFromSource`；纯资源接线使用新的 Builder.build。内部 scope 的 open 改为 prepare，CallableBindings/CallableCallBindings/CallAccess 分别改为 CallableBuildPlan/CallableCallScope/PreparedCall。根与 `/construction` 按现有职责精确导出这些对象；普通 `new Runner(...).build(); runner.run(input)` 用法不变。
+
+验证入口：`test/runtime-resolution.test.mjs` 覆盖解算顺序、CP 外部成员拒绝与嵌套供给；`test/runtime-work-adapter.test.mjs` 覆盖回调 receiver、固定配置、accepted/handled 与接收故障归属；`test/runtime-entry.test.mjs` 覆盖入口重入、观察失败聚合及旧新宿主差异。既有 Runner、Driver、结构、资源、恢复、服务与客户端回归继续运行。
+
+### 保留的后续议题
+
+- **Work 退出与调用退出的接缝。** Runtime 普通/恢复适配仍执行 `sealOutput → settleAcceptances → close`，InvocationExecution 也保证前两步。前者保护接纳回调期间的 Work，后者保护绕过 Runtime 的低层调用。本轮保留原时序；后续若收敛，应同时验证普通、恢复和低层入口，不直接删掉任一层保障。
+- **交互接线与独立机制。** Interaction/Interactions 已归 `@capix/interaction`，Runtime 保留 Runner 可选参数和资源通道接线；共享 PersistenceError/RuntimeErrorHelper 已归 diagnostics。更完整的外部执行、沙箱和工作区是后续议题，不由本次分包提前定义。
+- **记录预设与公开出口。** 记录连接结构观察声明、调用事实与记录资源，有作为组合预设的依据。Initializer 仍只是一次性同步创建辅助；这些暂不新增包。普通入口、低层构造与历史重导继续明确标注，不为了减少导出数另建门面。
 
 ## 返回、接纳与实体落实
 

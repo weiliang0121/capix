@@ -4,6 +4,32 @@
 
 当前用模型能力验证这一边界，并提供按调用关联读取元数据的 Observer 端点，不增加外部能力平台或恢复调度。
 
+## 独立包与 Runtime 的绑定职责
+
+`@capix/interaction` 位于 `server/interaction`，公开 Interaction、Interactions 及请求/反馈/持久/观察契约。固定值复制与核验是包内实现，不作为额外作者 API。它不依赖 Runtime、Invocation、结构、资源或 Recorder；只消费 contracts、changes、diagnostics 的公共能力及通用值工具。
+
+```ts
+import { Interaction, Interactions } from '@capix/interaction';
+import { PersistenceError } from '@capix/diagnostics';
+import { Resources, Runner } from '@capix/server-runtime';
+```
+
+Runtime 的主责之一就是绑定与运行装配：根据完整结构核验申请，固定资源与机制接线，按次构造 Invocation，并把本阶段端点交给 Work。交互包被抽离后，Runner 仍接受可选 Interactions，Resources.registerInteraction 仍在构建时取得准确契约通道并兑现为资源 provider；此过程不会发送请求。固定安装不取得交互实体的所有权，也不代替交互的发送、持久提交或关闭规则。
+
+| 边界 | 本模块保证                                   | Runtime 组合时负责                               |
+| ---- | -------------------------------------------- | ------------------------------------------------ |
+| 资源 | 申请身份、供给、端点有效性及原子操作         | 结构位置、捕获范围、收窄与阶段访问接线           |
+| 交互 | 请求固定、发送一次、反馈接纳、局部等待与保留 | 核验并绑定交互通道，供资源端点使用               |
+| 调用 | 单次启动、直接关系、真实交付、接收与退出     | 从固定结构建立 Context/Invocation，适配作者 Work |
+
+因此绑定代码应表达模块间的匹配和接线，不重复实现模块内部规则。Runtime 不根据交互保存状态自行决定重发，也不把关闭调用等同于关闭交互。
+
+PersistenceError 与诊断格式化原来借用调用包，现归独立 `@capix/diagnostics`，避免交互反向依赖调用。唯一错误类身份保持，invocation/runtime 的既有诊断出口重导同一对象；持久失败不能被业务 fallback 消费的判断仍在 invocation。Runtime 的交互出口也继续精确重导新包同一对象。
+
+Observer 直接消费新包；ModelInteractions 继续负责模型流式片段、Provider 超时和模型用途，SQLite 保存及调用关联的观察投影仍归服务。没有将通用 Interactions 强加到模型宿主，也没有新增沙箱、工作区或进程恢复能力。
+
+分包验证：`test/interaction/package.test.mjs` 在临时目录编译真实源码与声明，运行独立消费者并禁止加载 Runtime/Invocation/Structure/Resources；还覆盖创建、反馈提交和读取失败穿过资源端点时的准确故障身份。既有 interaction、模型流式、取消、SQLite、CP 与 Observer 回归继续验证原行为。`test/diagnostics.test.mjs` 核对共享错误类和格式化对象身份，格式化算法继续由 `test/errors/format.test.mjs` 验证。
+
 ## 实体、契约与装配
 
 | 对象                      | 职责                                                                  |

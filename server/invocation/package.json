@@ -19,6 +19,7 @@
     "@capix/resources": "workspace:*",
     "@capix/changes": "workspace:*",
     "@capix/checkpoint": "workspace:*",
-    "es-toolkit": "1.52.0"
+    "es-toolkit": "1.52.0",
+    "@capix/diagnostics": "workspace:*"
   }
 }

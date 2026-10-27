@@ -141,6 +141,6 @@ sequenceDiagram
 2. 服务资源登记与 validate/hooks 已分开，见 service-assembly.md；当前已不再由资源函数返回运行接线。
 3. 手动装配要让服务恢复核对的 checkpoints 与 Runner 的 store 是同一个实例；生产入口明确复用同一端口，注册 helper 本身无法验证另一对象的配置。
 4. 通用 Interactions 与服务 ModelInteractions 的形状未归并。归并前必须覆盖模型流式、固定请求核验、超时和观测，不只替换名称。
-5. Driver、旧 CallableSources 和对应 Binder/Builder 适配仍供低层兼容测试；Runner 与 Observer 不经过它们。退役需要迁移直接以 Group/Node 为根的构造测试。记录预设已使用 ResourceSupply 与 ResourceBinding/ResourceAccess；旧 bindResources 仅保留在测试 fixture，不再是正式资源包接口。
+5. Driver、旧 CallableSources 和显式 buildCallableFromSource 适配已隔离到 Runtime legacy/，仍供低层兼容测试；Runner 与 Observer 不经过它们。现代 Builder.build/Binder.bind 消费 Resources，旧适配复用同一整树安装和入口执行。完全退役仍需迁移直接以 Group/Node 为根的专项测试。记录预设已使用 ResourceSupply 与 ResourceBinding/ResourceAccess；旧 bindResources 仅保留在测试 fixture，不再是正式资源包接口。
 
 这轮完成服务运行链迁移，未拆包、未改 CP Frame 或业务声明版本，也未把上述接缝表述为已完成收敛。

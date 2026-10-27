@@ -1,3 +1,4 @@
+import { Resources } from '@capix/server-runtime';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Driver, Scene, Group, Node, checkpointPoint } from '@capix/server-runtime';
@@ -345,7 +346,7 @@ test('a low-level Builder fixes selected mechanisms without freezing provider st
       return 'result';
     },
   });
-  const ready = builder.build(node, { providers: [], source: { capture: () => null } });
+  const ready = builder.build(node, new Resources());
   checkpoints.store = other;
   checkpoints.observation = { observe: () => assert.fail('replacement checkpoint observer must not install') };
   observed.observe = () => assert.fail('replacement checkpoint method must not install');

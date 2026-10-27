@@ -1,11 +1,11 @@
 import { InvocationResources, restoreCheckpointContinuation, type CheckpointRestoration, prepareCheckpointRestoration, type InvocationProgress, type InvocationFact, type InvocationDescription, attachInvocationResources, InvocationChangeEmitter, Invocation, type InvocationStarted, type InvocationWork, CallableContext, type InvocationControls, type InvocationRelationOptions } from '@capix/invocation';
 import type { CallableKind, InvocationOutputReceiver } from '@capix/contracts';
 import type { ProgressReceiver } from '@capix/changes';
-import type { InvocationObservationDeclaration } from '../../binding/observation.js';
-import { bindInvocationObservation } from '../../binding/observation.js';
+import type { InvocationObservationDeclaration } from '../binding/observation.js';
+import { bindInvocationObservation } from '../binding/observation.js';
 import { type ResourceRequirements, ResourceSupply } from '@capix/resources';
 import type { ResourceRefinement } from '@capix/resources';
-import type { InvocationCapabilities } from '../capabilities.js';
+import type { InvocationCapabilities } from './capabilities.js';
 
 export type CallableInvocationStarted<Input, Output, Resources extends object = object> = InvocationStarted<Input, Output, CallableContext<Input, Output, Resources>>;
 

@@ -40,8 +40,8 @@ export { checkpointChildBinding, checkpointReceptionBinding, decodeCheckpointRec
 
 // Shared diagnostic implementations retain object identity across package entrypoints.
 export { RuntimeError } from '@capix/contracts';
-export { PersistenceError } from './errors/persistence.js';
-export { RuntimeErrorHelper } from './errors/helper.js';
+export { PersistenceError } from '@capix/diagnostics';
+export { RuntimeErrorHelper } from '@capix/diagnostics';
 export { isNonEmptyArray, hasUniqueItems } from './value/array.js';
 export { isObjectLike, isObject } from './value/object.js';
 export { nonBlankStringPattern, isNonBlankString } from './value/string.js';

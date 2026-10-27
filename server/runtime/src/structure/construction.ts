@@ -1,7 +1,7 @@
 import type { AnyCallable } from '../binding/declarations.js';
 import type { CallableBinding } from '../binding/contract.js';
 import type { CallInstallation } from '../binding/calls.js';
-import type { CallableInvocationBuilder } from '../invocation/builders/callable.js';
+import type { CallableInvocationBuilder } from '../construction/invocation.js';
 
 declare const builtOptions: unique symbol;
 

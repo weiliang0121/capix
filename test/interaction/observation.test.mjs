@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Interaction } from '@capix/server-runtime';
+import { Interaction } from '@capix/interaction';
 
 const contract = { key: 'test.observation.v1', request: (value) => value, reply: (value) => value };
 

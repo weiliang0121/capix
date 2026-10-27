@@ -1,5 +1,5 @@
 import { bindResources } from './resources.mjs';
-import { CallableContext, CallableBuilder, callableConstruction } from '@capix/server-runtime';
+import { CallableContext, buildCallableFromSource, callableConstruction } from '@capix/server-runtime';
 import { Transcript, TranscriptRangeRef, TranscriptResource } from '@capix/transcript';
 import { Memories, MemoryResource } from '@capix/memory';
 import { MessageUsage, MessageUsageResource } from '@capix/measurement';
@@ -66,15 +66,19 @@ export function bindChild(runtime, definition) {
   // Build real structures first; root provider resolution must never replace that supplied world.
   const resolved = resolveDeclaration(definition, { observationProvides: runtime.recording?.provides });
   const offers = [...new Set(Object.values(resolved.supply).map((request) => request.offer))];
-  const built = new CallableBuilder(state.capabilities).build(definition, {
-    providers: offers.map((offer) => ({
-      offer,
-      readMaterial() {
-        throw new Error('Fixture resources must come from the explicit parent');
-      },
-    })),
-    source: { capture: () => null },
-  });
+  const built = buildCallableFromSource(
+    definition,
+    {
+      providers: offers.map((offer) => ({
+        offer,
+        readMaterial() {
+          throw new Error('Fixture resources must come from the explicit parent');
+        },
+      })),
+      source: { capture: () => null },
+    },
+    state.capabilities,
+  );
   const { binding, invocations, calls } = callableConstruction(built);
   state.builder = invocations;
   state.construction = calls.begin({});

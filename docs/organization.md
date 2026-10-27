@@ -34,7 +34,7 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 
 ## 包与目录
 
-仓库只有一个根 pnpm workspace 与锁文件，十八个实际包。包边界按独立职责和公开契约确定；实体独立拆包不意味着增加生命周期或一层统一平台。跨包只用公开出口，服务端与客户端互不依赖。
+仓库只有一个根 pnpm workspace 与锁文件，二十个实际包。包边界按独立职责和公开契约确定；实体独立拆包不意味着增加生命周期或一层统一平台。跨包只用公开出口，服务端与客户端互不依赖。
 
 | 包                        | 位置                        | 负责什么                                                           |
 | ------------------------- | --------------------------- | ------------------------------------------------------------------ |
@@ -50,6 +50,8 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | `@capix/records`          | `server/records`            | 记录实体、登记与树、历史读取、快照资源及宿主构造写口               |
 | `@capix/checkpoint`       | `server/checkpoint`         | CP 持久载体、数据核验、版本提交契约与内存存储                      |
 | `@capix/invocation`       | `server/invocation`         | 单次调用与 Context、直接关系、访问窗口、输出、故障、观测及 CP 续接 |
+| `@capix/interaction`      | `server/interaction`        | 独立请求发送、反馈接纳、局部等待、保留与交互宿主                   |
+| `@capix/diagnostics`      | `server/diagnostics`        | 唯一持久化错误类和有界诊断转换，不决定执行故障策略                 |
 | `@capix/server-runtime`   | `server/runtime`            | 结构与供给装配、Runner 入口、作者 Work 适配及可选记录预设          |
 | `@capix/observer-content` | `services/observer-content` | Observer 内容持有、ActiveView 策略、观察安装、原文同步与关闭       |
 | `@capix/observer-service` | `services/observer`         | 对话业务、模型适配、SQLite、运行环境、观测与 HTTP                  |
@@ -72,6 +74,8 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | `server/records/src/construction.ts`                  | 宿主观察窗口内的 root/add/update/boundary 写口                          |
 | `server/records/src/restoration/`                     | 历史载体读取，不恢复执行                                                |
 | `server/checkpoint/src/`                              | CP 纯持久载体、一致性检查与 Store，不持有活调用                         |
+| `server/interaction/src/`                             | 交互实体、宿主、请求反馈契约和固定数据检查                              |
+| `server/diagnostics/src/`                             | 通用诊断格式化与必要持久失败身份                                        |
 | `services/observer-content/src/`                      | Observer 内容组合、窄持久端口与同步生命周期；view/ 属于 ActiveView 策略 |
 | `server/structure/src/composition/`                   | 使用公开子调用端口的业务组合辅助                                        |
 | `server/runtime/src/structure/`                       | CallableBuilder 与具体同体构建结果                                      |
@@ -81,14 +85,18 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | `server/invocation/src/invocation/`                   | 本次调用、控制、执行、关系、故障归属与资源窗口                          |
 | `server/invocation/src/checkpoint/`                   | 活关系捕获、固定契约检查、调用续接与恢复事实出口                        |
 | `server/invocation/src/observation/`                  | 调用事实、观察会话及消费故障策略                                        |
-| `server/runtime/src/invocation/builders/`             | 从固定结构、供给与宿主选项构造调用                                      |
-| `server/runtime/src/invocation/capabilities.ts`       | 调用构造所需的已安装机制集合                                            |
+| `server/runtime/src/construction/`                    | 从固定结构、供给与宿主选项构造调用                                      |
+| `server/runtime/src/construction/capabilities.ts`     | 调用构造所需的已安装机制集合                                            |
 | `server/runtime/src/observation/`                     | 结构观察声明、安装与 Driver 入口事实                                    |
 | `server/runtime/src/records/observation/`             | 可选记录安装、单次句柄与事实映射                                        |
 
+交互实体与宿主直接由 `@capix/interaction` 提供；Runtime 只连接可选交互通道与资源供给。共享持久失败类及诊断转换归 `@capix/diagnostics`，调用包解释故障策略；两者不因为共同使用诊断而相互依赖。
+
 共同的 `BusinessEvent`、输出端口、`InvocationIdentity` 及 `CheckpointValue/Codec/Contract` 由契约包单独定义。调用观测、输出窗口、CP 捕获与续接由 invocation 实现，结构与机制安装由 Runtime 连接；CP 纯值和 Store 来自 checkpoint 包，具体 SQLite 存储仍归宿主。实体事实发布与通用捕获、进度通知由各实体包和 `@capix/changes` 协作。`@capix/structure/construction` 只提供结构校验、配置构建状态与依赖收集；它不创建 Invocation，也不安装资源。
 
-`invocation/builders/callable.ts` 协调资源选择、Context 建立、恢复与调用接线。`binding/children/builder.ts` 固定成员及接纳接线，分别构造单次引用认证和阶段动作窗口。binding/children 管理已声明成员及本阶段行动，invocation/children 管理真实父子关系。
+`construction/invocation.ts` 协调资源选择、Context 建立、恢复与调用接线。`binding/children/builder.ts` 固定成员及接纳接线，分别构造单次引用认证和阶段动作窗口。binding/children 管理已声明成员及本阶段行动，invocation/children 管理真实父子关系。
+
+Runtime 的 `structure/install.ts` 保持整树安装的准备、复核与发布；`entry.ts` 共用根运行占用与释放操作，状态仍属于宿主。旧 Driver/source 位于 `legacy/`，只通过显式适配复用安装与调用。默认 Builder.build/Binder.bind 消费 Resources。
 
 Clock 位于 `server/invocation/src/clock.ts`，Initializer 留在 Runtime 根文件；记录包使用自身的窄 RecordClock 契约，只要求 now/tick，可由宿主注入兼容 Clock。ProgressChannel 与生产者变化支持归 `@capix/changes`。ResourceInstallation 与 Runtime 的 Resources 负责结构范围和可选 Interaction 接线。目录边界按职责划分，不以文件数量决定。
 
@@ -100,7 +108,7 @@ Clock 位于 `server/invocation/src/clock.ts`，Initializer 留在 Runtime 根�
 | -------------------------------------- | ---------------------------------------- |
 | Resources                              | 资源实体注册、明确成组捕获与收窄         |
 | callableHooks                          | 独立校验、必要建立登记与进展/输出出口    |
-| CallableCallBindings                   | 内部、一次根调用的固定接线依据           |
+| CallableCallScope                      | 内部、一次根调用的固定接线依据           |
 | InvocationWorkBinding                  | 可复用的声明到调用工作适配               |
 | InvocationAccess                       | 本次调用引用认证与阶段 Work 签发         |
 | ChildCall / ChildReference / ChildFact | 当前阶段动作、可跨阶段保留引用、只读事实 |
@@ -134,6 +142,8 @@ ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 
 | ------------------------------------- | ------------------------------------------------------------------------------------ |
 | 场景运行入口、资源装配与机制安装      | `@capix/server-runtime`                                                              |
 | 单次调用、关系、窗口、故障与 CP 适配  | `@capix/invocation`                                                                  |
+| 独立请求、发送、反馈与交互登记        | `@capix/interaction`                                                                 |
+| 通用诊断格式化与持久化故障身份        | `@capix/diagnostics`                                                                 |
 | 结构、作者契约与组合辅助              | `@capix/structure`                                                                   |
 | 结构检查与配置构建状态                | `@capix/structure/construction`                                                      |
 | 资源定义、供给与受控访问              | `@capix/resources`                                                                   |

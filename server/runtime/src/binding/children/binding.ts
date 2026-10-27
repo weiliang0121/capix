@@ -1,4 +1,4 @@
-import { createCallableInvocation, restoreCallableInvocation } from '../../invocation/builders/structure.js';
+import { createCallableInvocation, restoreCallableInvocation } from '../../construction/calls.js';
 import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls, ReceptionDefinition, OperationOptions } from '@capix/contracts';
 import { InvocationCancelled, type Invocation, ChildCallFailure, combineOutputReceivers } from '@capix/invocation';
 import type { BoundChildren } from './bound.js';
@@ -40,13 +40,8 @@ export class InvocationChildBindings {
     return this.perform(() =>
       this.options.parent.children.accepting(async () => {
         this.requireAllowed(definition);
-        const contract = options.reception ? this.options.receptions.require(options.reception, definition) : undefined;
-        const receiver = options.result;
         if (options.delta !== undefined && typeof options.delta !== 'function') throw new TypeError('Delta receiver must be a function');
-        if (receiver?.succeeded !== undefined && typeof receiver.succeeded !== 'function') throw new TypeError('Success receiver must be a function');
-        if (receiver?.failed !== undefined && typeof receiver.failed !== 'function') throw new TypeError('Failure receiver must be a function');
-        const succeeded = receiver?.succeeded?.bind(receiver);
-        const failed = receiver?.failed?.bind(receiver);
+        const { succeeded, failed, contract } = this.bindReception(definition, options);
         const delta = options.delta?.bind(options);
         const output = options.output;
         const outputReceive = output?.receive.bind(output);
@@ -77,6 +72,14 @@ export class InvocationChildBindings {
         return this.receiveTarget(relation, succeeded, failed, contract);
       }),
     );
+  }
+
+  private bindReception<D extends ChildContract>(definition: D, options: Pick<InvocationChildOperationOptions<D>, 'result' | 'reception'>) {
+    const receiver = options.result;
+    if (receiver?.succeeded !== undefined && typeof receiver.succeeded !== 'function') throw new TypeError('Success receiver must be a function');
+    if (receiver?.failed !== undefined && typeof receiver.failed !== 'function') throw new TypeError('Failure receiver must be a function');
+    const contract = options.reception ? this.options.receptions.require(options.reception, definition) : undefined;
+    return { succeeded: receiver?.succeeded?.bind(receiver), failed: receiver?.failed?.bind(receiver), contract };
   }
 
   private async receiveTarget(relation: import('@capix/invocation').InvocationRelation, succeeded?: (value: any) => unknown, failed?: (failure: unknown) => unknown, contract?: import('@capix/invocation').InvocationReceptionBinding): Promise<any> {
@@ -163,12 +166,7 @@ export class InvocationChildBindings {
         this.perform(() =>
           this.options.parent.children.accepting(async () => {
             if (!relation.returned) this.requireAllowed(entry.definition);
-            const receiver = options.result;
-            if (receiver?.succeeded !== undefined && typeof receiver.succeeded !== 'function') throw new TypeError('Success receiver must be a function');
-            if (receiver?.failed !== undefined && typeof receiver.failed !== 'function') throw new TypeError('Failure receiver must be a function');
-            const contract = options.reception ? this.options.receptions.require(options.reception, entry.definition as D) : undefined;
-            const succeeded = receiver?.succeeded?.bind(receiver);
-            const failed = receiver?.failed?.bind(receiver);
+            const { succeeded, failed, contract } = this.bindReception(entry.definition as D, options);
             if (failed && !relation.returned) relation.receiveFailures();
             return this.receiveTarget(relation, succeeded, failed, contract);
           }),

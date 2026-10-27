@@ -23,6 +23,12 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:contracts
+      '@capix/diagnostics':
+        specifier: workspace:*
+        version: link:server/diagnostics
+      '@capix/interaction':
+        specifier: workspace:*
+        version: link:server/interaction
       '@capix/invocation':
         specifier: workspace:*
         version: link:server/invocation
@@ -192,6 +198,30 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
 
+  server/diagnostics:
+    dependencies:
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+
+  server/interaction:
+    dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../changes
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+
   server/invocation:
     dependencies:
       '@capix/changes':
@@ -203,6 +233,9 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@capix/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
@@ -284,6 +317,12 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@capix/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
+      '@capix/interaction':
+        specifier: workspace:*
+        version: link:../interaction
       '@capix/invocation':
         specifier: workspace:*
         version: link:../invocation
@@ -353,6 +392,9 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@capix/interaction':
+        specifier: workspace:*
+        version: link:../../server/interaction
       '@capix/invocation':
         specifier: workspace:*
         version: link:../../server/invocation

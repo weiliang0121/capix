@@ -57,3 +57,9 @@ Invocation.failure 表达真实最终交付，Context 保存已经成立的语�
 当前调用过程只发布 execute 的 start/return/throw；输出完成检查与调用控制可以产生失败事实，但不构成独立过程阶段。failure.phase 的 control 描述故障归属，不等于存在 control 过程。父子接收事实归 relationChanges，新运行不产生独立 receive/handling/control 过程或 continue。历史记录中的这些阶段及轮次保留只读解释，不能驱动当前执行。记录消费者由宿主安装，描述规则不改变业务 IO；关闭观测不执行正文描述。见 [记录机制](recording.md)。
 
 未引入通用自动补偿、任意重试、跨进程调度或权限平台。内容保存失败仍使服务按真实存储健康决定后续接纳，不由备用分支重提事务。
+
+## 通用诊断与调用故障策略
+
+`@capix/diagnostics` 独立持有 PersistenceError 和 RuntimeErrorHelper，后者把异常转换为有界的诊断纯值。算法保留原来的循环处理、跨 realm 原生错误识别、大小预算和字段读取行为。RuntimeError 基类及 RuntimeErrorValue/Detail 仍来自 contracts；contracts 不因此引入 Node 依赖。
+
+诊断包不决定取消、异常来源、接收资格或重试。Invocation 在自己的操作故障策略中识别真实 PersistenceError，并拒绝业务 failed 回调掩盖必要持久化失败；同一 code 的普通错误不获得该身份。调用与 Runtime 兼容出口重导同一个类和格式化对象，不建立平行错误层次。

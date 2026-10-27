@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { RuntimeError } from '@capix/contracts';
-import { PersistenceError, RuntimeErrorHelper, isNonBlankString } from '@capix/invocation';
+import { PersistenceError, RuntimeErrorHelper } from '@capix/diagnostics';
+import { isNonBlankString } from './value.js';
 import type { InteractionFact, InteractionFeedback, InteractionOptions, InteractionRead, InteractionState, InteractionWait, InteractionWaitOptions } from './contract.js';
 import { captureInteractionValue, sameInteractionValue } from './value.js';
 import { ProgressChannel } from '@capix/changes';

@@ -1,4 +1,3 @@
-import { isObjectLike } from '../value/object.js';
 import { isArray } from 'es-toolkit/compat';
 import { isNativeError } from 'node:util/types';
 import { zipObject } from 'es-toolkit/array';
@@ -13,7 +12,7 @@ type ErrorFields = Record<(typeof errorFieldNames)[number], unknown>;
 /** Identify the thrown value, then map diagnostics under one shared traversal. */
 export function formatError(error: unknown, traversal: ErrorTraversal, depth = 0): RuntimeErrorValue {
   if (!traversal.consume(depth)) return { code: 'ERROR_TRUNCATED', message: '[Truncated: error conversion limit]' };
-  if (!isObjectLike(error)) return formatThrownValue(error, traversal, depth);
+  if (error === null || typeof error !== 'object') return formatThrownValue(error, traversal, depth);
   if (traversal.contains(error)) return { code: 'CIRCULAR_ERROR', message: '[Circular error reference]' };
   try {
     if (!isNativeError(error) && !isError(error)) return formatThrownValue(error, traversal, depth);

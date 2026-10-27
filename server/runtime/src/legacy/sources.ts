@@ -4,9 +4,9 @@ import type { InvocationOutputReceiver, CallableInput } from '@capix/contracts';
 import type { ResourceProvider } from '@capix/resources';
 import { ResourceSupply, checkResourceProviders, resourceRequests } from '@capix/resources';
 import type { ProgressReceiver } from '@capix/changes';
-import type { CallableInvocationStarted } from '../invocation/builders/callable.js';
-import type { AnyCallable, ResolvedCallable } from './declarations.js';
-import { CallableCallBindings, type CallAccess, type CallInstallation } from './calls.js';
+import type { CallableInvocationStarted } from '../construction/invocation.js';
+import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
+import { CallableCallScope, type PreparedCall, type CallInstallation } from '../binding/calls.js';
 
 /** Host input establishes one root supply. The callable lifecycle remains independent of this source. */
 export interface CallableCallSource<Input, Options, Source> {
@@ -44,17 +44,17 @@ export class CallableSources<Options = unknown> implements CallInstallation<Opti
     private readonly validate?: (options: Options) => void,
   ) {}
 
-  begin(options: Options): CallableCallBindings<Options> {
+  begin(options: Options): CallableCallScope<Options> {
     this.validate?.(options);
-    return new CallableCallBindings(this, options);
+    return new CallableCallScope(this, options);
   }
 
-  require(value: object | undefined): CallableCallBindings<Options> {
-    if (!(value instanceof CallableCallBindings) || !value.belongsTo(this)) throw new Error('Call construction belongs to another binding installation');
+  require(value: object | undefined): CallableCallScope<Options> {
+    if (!(value instanceof CallableCallScope) || !value.belongsTo(this)) throw new Error('Call construction belongs to another binding installation');
     return value;
   }
 
-  open(definition: AnyCallable, input: unknown, options: Options, restoring: boolean): CallAccess {
+  prepare(definition: AnyCallable, input: unknown, options: Options, restoring: boolean): PreparedCall {
     const source = this.sources.get(definition);
     if (!source) throw new Error('Callable source is not registered in this installation');
     return {

@@ -7,7 +7,7 @@ import type { InvocationContext } from '../context/context.js';
 import type { InvocationChildren, InvocationChildBaseline } from '../invocation/children.js';
 import type { InvocationRelation, InvocationTarget } from '../invocation/relation.js';
 import type { InvocationReceptionBinding } from '../invocation/reception.js';
-import { RuntimeErrorHelper } from '../errors/helper.js';
+import { RuntimeErrorHelper } from '@capix/diagnostics';
 import { checkpointReceptionBinding, decodeCheckpointDiagnostic, decodeCheckpointReception, decodeCheckpointHandledReception } from './facts.js';
 import { failureFact } from '../invocation/failure.js';
 import { InvocationCancelled } from '../invocation/cancellation.js';

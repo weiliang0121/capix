@@ -1,6 +1,6 @@
 import type { CallableKind, ChildReference } from '@capix/contracts';
 import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@capix/structure';
-import type { InvocationContext, InvocationCheckpointWork, InvocationWork, Invocation } from '@capix/invocation';
+import type { CallableContext, InvocationCheckpointWork, InvocationWork, Invocation } from '@capix/invocation';
 import type { CheckpointReferences, CheckpointReference } from '@capix/checkpoint';
 import type { BoundChildren } from './children/bound.js';
 import { ChildBindingsBuilder } from './children/builder.js';
@@ -10,7 +10,7 @@ import { savedCheckpointFacts } from './checkpoint.js';
 import { BoundReceptions } from './receptions.js';
 
 /** Fixed declaration adaptation at one Bound position; each invocation gets its own access state. */
-export class InvocationWorkBinding<Input, Output, Context extends InvocationContext<Input, Output>, Resources extends object, Kind extends CallableKind> implements InvocationWork<Input, Output, Context> {
+export class InvocationWorkBinding<Input, Output, Context extends CallableContext<Input, Output>, Resources extends object, Kind extends CallableKind> implements InvocationWork<Input, Output, Context> {
   readonly output: InvocationWork<Input, Output, Context>['output'];
   readonly checkpoint?: InvocationCheckpointWork<Input, Output, Context>;
   readonly #childBindingsBuilder: ChildBindingsBuilder;

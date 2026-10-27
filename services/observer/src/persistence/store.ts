@@ -3,7 +3,7 @@ import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { mkdirSync, chmodSync, existsSync, openSync, fchmodSync, closeSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { RuntimeError } from '@capix/contracts';
-import type { InteractionCommit, InteractionState } from '@capix/server-runtime';
+import type { InteractionCommit, InteractionState } from '@capix/interaction';
 import { snapshotValue } from '@capix/records';
 import { isEqual } from 'es-toolkit';
 import type { TranscriptState, TranscriptCommit, TranscriptPersistence, TranscriptAppendState } from '@capix/transcript';

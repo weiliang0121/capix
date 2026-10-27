@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { isPromise } from 'node:util/types';
 import { isEqual } from 'es-toolkit/predicate';
-import { Interaction, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState } from '@capix/server-runtime';
+import { Interaction, type InteractionContract, type InteractionFact, type InteractionPersistence, type InteractionState } from '@capix/interaction';
 import { InvocationCancelled, PersistenceError, isInvocationCancelled } from '@capix/invocation';
 import { RuntimeError } from '@capix/contracts';
 import { ProgressChannel, type ProgressReceiver } from '@capix/changes';

@@ -3,12 +3,12 @@ import type { ResourceInstallation } from '../resource/installation.js';
 import type { ResourceSupply } from '@capix/resources';
 import type { ProgressReceiver } from '@capix/changes';
 import type { InvocationProgress } from '@capix/invocation';
-import type { CallableInvocationStarted } from '../invocation/builders/callable.js';
+import type { CallableInvocationStarted } from '../construction/invocation.js';
 import type { AnyCallable } from './declarations.js';
 import type { CallableHooks, CallableHookBinding } from './hooks.js';
 
 /** Inputs to one invocation construction; resource supply has no access window or call owner. */
-export interface CallAccess {
+export interface PreparedCall {
   readonly supply?: ResourceSupply;
   readonly started?: CallableInvocationStarted<any, any, any>;
   readonly progress?: ProgressReceiver<InvocationProgress>;
@@ -17,9 +17,9 @@ export interface CallAccess {
 
 /** The construction seam shared by explicit resource assembly and the legacy source adapter. */
 export interface CallInstallation<Options> {
-  begin(options: Options): CallableCallBindings<Options>;
-  require(value: object | undefined): CallableCallBindings<Options>;
-  open(structure: AnyCallable, input: unknown, options: Options, restoring: boolean, inherited?: ResourceSupply): CallAccess;
+  begin(options: Options): CallableCallScope<Options>;
+  require(value: object | undefined): CallableCallScope<Options>;
+  prepare(structure: AnyCallable, input: unknown, options: Options, restoring: boolean, inherited?: ResourceSupply): PreparedCall;
 }
 
 export interface CallableCallsOptions<Options> {
@@ -28,7 +28,7 @@ export interface CallableCallsOptions<Options> {
 }
 
 /** One run's host conditions and fixed installation identity, shared by its child constructions. */
-export class CallableCallBindings<Options = unknown> {
+export class CallableCallScope<Options = unknown> {
   constructor(
     private readonly owner: CallInstallation<Options>,
     private readonly options: Options,
@@ -40,8 +40,8 @@ export class CallableCallBindings<Options = unknown> {
     return this.owner === owner;
   }
 
-  open(structure: AnyCallable, input: unknown, restoring: boolean, inherited?: ResourceSupply): CallAccess {
-    return this.owner.open(structure, input, this.options, restoring, inherited);
+  prepare(structure: AnyCallable, input: unknown, restoring: boolean, inherited?: ResourceSupply): PreparedCall {
+    return this.owner.prepare(structure, input, this.options, restoring, inherited);
   }
 }
 
@@ -53,21 +53,21 @@ export class CallableCalls<Options> implements CallInstallation<Options> {
     private readonly validate?: (options: Options) => undefined,
   ) {}
 
-  begin(options: Options): CallableCallBindings<Options> {
+  begin(options: Options): CallableCallScope<Options> {
     const result: unknown = this.validate?.(options);
     if (result !== undefined) {
       void Promise.resolve(result).catch(() => undefined);
       throw new TypeError('Runner validation must return undefined synchronously');
     }
-    return new CallableCallBindings(this, options);
+    return new CallableCallScope(this, options);
   }
 
-  require(value: object | undefined): CallableCallBindings<Options> {
-    if (!(value instanceof CallableCallBindings) || !value.belongsTo(this)) throw new Error('Call construction belongs to another binding installation');
+  require(value: object | undefined): CallableCallScope<Options> {
+    if (!(value instanceof CallableCallScope) || !value.belongsTo(this)) throw new Error('Call construction belongs to another binding installation');
     return value;
   }
 
-  open(structure: AnyCallable, input: unknown, options: Options, restoring: boolean, inherited?: ResourceSupply): CallAccess {
+  prepare(structure: AnyCallable, input: unknown, options: Options, restoring: boolean, inherited?: ResourceSupply): PreparedCall {
     this.hooks.validate(structure, input, options);
     const supply = this.resources.open(structure, input, options, inherited);
     return { supply, ...this.hooks.open(structure, input, options, restoring) };

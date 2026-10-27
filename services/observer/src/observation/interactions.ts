@@ -1,6 +1,6 @@
 import type { CallInteractionLinks, InteractionObservation, InteractionUpdate } from '@capix/protocol';
 import { RuntimeError } from '@capix/contracts';
-import { type InteractionFact, type InteractionRead, type InteractionState } from '@capix/server-runtime';
+import { type InteractionFact, type InteractionRead, type InteractionState } from '@capix/interaction';
 import { RuntimeErrorHelper } from '@capix/invocation';
 import { CompositeRecord, ResourceRecord } from '@capix/records';
 import { isPlainObject } from 'es-toolkit/predicate';

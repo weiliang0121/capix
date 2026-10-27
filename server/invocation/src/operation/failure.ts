@@ -1,7 +1,7 @@
 import { InvocationStopped } from '../invocation/stop.js';
 import { ObservationError } from '../observation/error.js';
 import { ChangeCaptureError } from '@capix/changes';
-import { PersistenceError } from '../errors/persistence.js';
+import { PersistenceError } from '@capix/diagnostics';
 import { ResourceAccessClosed, ResourcePortError } from '@capix/resources';
 
 /** Failure reception is for operation outcomes, never for control or required fact delivery. */

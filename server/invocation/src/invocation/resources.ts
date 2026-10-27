@@ -2,7 +2,7 @@ import { InvocationResources } from './resource-access.js';
 import type { InvocationContext } from '../context/context.js';
 import type { ResourceFailurePolicy } from '@capix/resources';
 import { isProtectedOperationFailure } from '../operation/failure.js';
-import { RuntimeErrorHelper } from '../errors/helper.js';
+import { RuntimeErrorHelper } from '@capix/diagnostics';
 import { isInvocationCancelled } from './cancellation.js';
 import type { Invocation } from './invocation.js';
 

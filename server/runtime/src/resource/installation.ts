@@ -1,11 +1,11 @@
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
-import type { Interactions } from '../interaction/interactions.js';
+import type { Interactions } from '@capix/interaction';
 import { resourceRequests, checkResourceProviders, ResourceSupply } from '@capix/resources';
-import type { ResourceProvider, ResourceIdentity } from '@capix/resources';
+import type { ResourceProvider, ResourceIdentity, ResourceRequirements } from '@capix/resources';
 import type { ResourcePlan, ResourceCaptureScope } from './resources.js';
 
 interface InstalledScope<Options> {
-  readonly resolved: ResolvedCallable;
+  readonly supply: ResourceRequirements;
   readonly fixed: readonly ResourceProvider<unknown>[];
   readonly local: readonly ResourceProvider<unknown>[];
   readonly capture?: ResourceCaptureScope<Options>['capture'];
@@ -16,8 +16,9 @@ export class ResourceInstallation<Options> {
   private readonly scopes = new Map<AnyCallable, InstalledScope<Options>>();
 
   constructor(root: ResolvedCallable, plan: ResourcePlan<Options>, interactions?: Interactions) {
+    const captureScopes = new Map(plan.scopes.map((scope) => [scope.structure, scope]));
     const visit = (resolved: ResolvedCallable, inherited: readonly ResourceProvider<unknown>[]): void => {
-      const scope = plan.scopes.find((entry) => entry.structure === resolved.definition);
+      const scope = captureScopes.get(resolved.definition);
       const requested = resourceRequests(resolved.supply);
       const needed = new Set(requested.map((request) => request.offer));
       const local = (scope?.registrations ?? []).filter((entry) => needed.has(entry.offer)).map((entry) => entry.bind(interactions));
@@ -25,7 +26,7 @@ export class ResourceInstallation<Options> {
       const fixed = resolved === root ? plan.registrations.filter((entry) => needed.has(entry.offer) && !localOffers.has(entry.offer)).map((entry) => entry.bind(interactions)) : [];
       const available = [...(resolved === root ? fixed : inherited).filter((entry) => !localOffers.has(entry.offer)), ...local];
       checkResourceProviders(requested, available);
-      this.scopes.set(resolved.definition, Object.freeze({ resolved, fixed, local, capture: local.length ? scope?.capture : undefined }));
+      this.scopes.set(resolved.definition, Object.freeze({ supply: resolved.supply, fixed, local, capture: local.length ? scope?.capture : undefined }));
       for (const member of resolved.members) visit(member, available);
     };
     visit(root, []);
@@ -36,6 +37,6 @@ export class ResourceInstallation<Options> {
     if (!scope) throw new Error('Callable resource scope is not installed');
     const base = inherited ?? ResourceSupply.capture(scope.fixed, undefined);
     const snapshot = scope.capture?.(input, options);
-    return base.overlay(ResourceSupply.capture(scope.local, snapshot)).select(scope.resolved.supply);
+    return base.overlay(ResourceSupply.capture(scope.local, snapshot)).select(scope.supply);
   }
 }

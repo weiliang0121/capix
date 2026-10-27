@@ -1,4 +1,4 @@
-import { InvocationResources, type InvocationContext, type Invocation } from '@capix/invocation';
+import type { InvocationResources, CallableContext, Invocation } from '@capix/invocation';
 import type { ChildContract } from '@capix/contracts';
 import type { ResourceRequirements } from '@capix/resources';
 import type { ChildBindingsBuilder } from './children/builder.js';
@@ -7,7 +7,7 @@ import type { InvocationChildReferences } from './children/references.js';
 export type AccessPhase = 'run' | `checkpoint:${string}`;
 
 /** Single-call facts survive phases; actions and resources are issued for a specific phase/round. */
-export class InvocationAccess<Input, Output, Context extends InvocationContext<Input, Output>> {
+export class InvocationAccess<Input, Output, Context extends CallableContext<Input, Output>> {
   readonly references: InvocationChildReferences;
   readonly #resources: InvocationResources;
 
@@ -15,7 +15,7 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
     private readonly invocation: Invocation<Input, Output, Context>,
     private readonly childBindingsBuilder: ChildBindingsBuilder,
   ) {
-    this.#resources = (invocation.context as Context & { resources: InvocationResources }).resources;
+    this.#resources = invocation.context.resources;
     this.references = childBindingsBuilder.references(invocation);
   }
 
@@ -40,7 +40,7 @@ export class InvocationAccess<Input, Output, Context extends InvocationContext<I
     const base = {
       input: context.currentInput,
       resources: this.#resources.view(deps, resourcePhase),
-      signal: (context as Context & { signal: AbortSignal }).signal,
+      signal: context.signal,
       observation: (event: import('@capix/invocation').BusinessEvent) => {
         validate();
         this.invocation.observeBusiness(event);

@@ -9,7 +9,7 @@ import ts from 'typescript';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const invocationDirectory = resolve(root, 'server/invocation');
-const dependencies = ['@capix/checkpoint', '@capix/changes', '@capix/contracts', '@capix/protocol', '@capix/resources', 'es-toolkit'];
+const dependencies = ['@capix/diagnostics', '@capix/checkpoint', '@capix/changes', '@capix/contracts', '@capix/protocol', '@capix/resources', 'es-toolkit'];
 
 test('invocation package exposes its call mechanism with only lower dependencies', async () => {
   const manifest = JSON.parse(await readFile(resolve(invocationDirectory, 'package.json'), 'utf8'));

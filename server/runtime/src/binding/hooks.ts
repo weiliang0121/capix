@@ -1,9 +1,9 @@
 import type { CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver } from '@capix/contracts';
 import type { ProgressReceiver } from '@capix/changes';
 import type { InvocationProgress } from '@capix/invocation';
-import type { CallableInvocationStarted } from '../invocation/builders/callable.js';
+import type { CallableInvocationStarted } from '../construction/invocation.js';
 import type { AnyCallable, ResolvedCallable } from './declarations.js';
-import type { CallAccess } from './calls.js';
+import type { PreparedCall } from './calls.js';
 
 /** Host call registration is independent of resource supply and never captures resources. */
 export interface CallableHookDeclaration<Structure extends AnyCallable, Options> {
@@ -23,7 +23,7 @@ export function callableHooks<Structure extends AnyCallable, Options = {}>(struc
   return Object.freeze({ structure, hooks });
 }
 
-type HookAccess = Omit<CallAccess, 'supply'>;
+type HookAccess = Omit<PreparedCall, 'supply'>;
 
 interface FixedHooks<Options> {
   readonly validate?: (input: unknown, options: Options) => undefined;

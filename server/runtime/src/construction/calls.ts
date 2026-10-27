@@ -1,9 +1,9 @@
 import { combineOutputReceivers, type Invocation, type CallableContext, type InvocationControls, type InvocationRelationOptions, type CheckpointRestoration } from '@capix/invocation';
 import type { CallableInput, CallableOutput } from '@capix/contracts';
-import type { AnyCallable } from '../../binding/declarations.js';
-import type { CallableCallBindings } from '../../binding/calls.js';
-import { callableConstruction, type AnyBuiltCallable, type BuiltCallable, type BuiltOptions } from '../../structure/construction.js';
-import type { CallableInvocationStarted } from './callable.js';
+import type { AnyCallable } from '../binding/declarations.js';
+import type { CallableCallScope } from '../binding/calls.js';
+import { callableConstruction, type AnyBuiltCallable, type BuiltCallable, type BuiltOptions } from '../structure/construction.js';
+import type { CallableInvocationStarted } from './invocation.js';
 
 export interface CallableInvocationCallbacks<Input, Output, Resources extends object> {
   readonly started?: CallableInvocationStarted<Input, Output, Resources>;
@@ -37,7 +37,7 @@ export function restoreRootInvocation<Structure extends AnyCallable>(structure: 
   return restore(structure, contextId, scope, controls);
 }
 
-function restore<Structure extends AnyCallable>(structure: Structure, contextId: string, scope: CallableCallBindings, controls: InvocationControls, parent?: Invocation<unknown, unknown, CallableContext>, options: InvocationRelationOptions = {}) {
+function restore<Structure extends AnyCallable>(structure: Structure, contextId: string, scope: CallableCallScope, controls: InvocationControls, parent?: Invocation<unknown, unknown, CallableContext>, options: InvocationRelationOptions = {}) {
   const { binding, invocations } = callableConstruction(structure);
   return invocations.restoration(contextId, binding.work, binding.declaration.kind, parent?.context.id, (restoration) => {
     const input = binding.declaration.checkpoint!.input.decode(restoration.head.image.frame.input) as CallableInput<Structure>;
@@ -45,12 +45,12 @@ function restore<Structure extends AnyCallable>(structure: Structure, contextId:
   });
 }
 
-function construct<Structure extends AnyCallable>(structure: Structure, input: CallableInput<Structure>, scope: CallableCallBindings, controls: InvocationControls, parent?: Invocation<unknown, unknown, CallableContext>, options: InvocationRelationOptions = {}, restore?: CheckpointRestoration): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>> {
+function construct<Structure extends AnyCallable>(structure: Structure, input: CallableInput<Structure>, scope: CallableCallScope, controls: InvocationControls, parent?: Invocation<unknown, unknown, CallableContext>, options: InvocationRelationOptions = {}, restore?: CheckpointRestoration): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>> {
   const { binding, invocations } = callableConstruction(structure);
   const declaration = binding.declaration;
   const initial = restore ? declaration.checkpoint?.points.find((point) => point.name === restore.head.image.point)?.resume.deps : declaration.deps;
   if (!initial) throw new Error('Checkpoint point is not declared');
-  const access = scope.open(structure, input, !!restore, parent?.context.resources.supply);
+  const prepared = scope.prepare(structure, input, !!restore, parent?.context.resources.supply);
   const { name, label, source } = declaration;
   return invocations.create<CallableInput<Structure>, CallableOutput<Structure>, object>(input, {
     kind: declaration.kind,
@@ -64,13 +64,13 @@ function construct<Structure extends AnyCallable>(structure: Structure, input: C
     supply: binding.supply,
     initial,
     refinements: binding.refinements,
-    supplied: access.supply,
+    supplied: prepared.supply,
     observation: binding.observations,
     description: { id: structure.id, name, label, source },
     work: binding.work,
-    started: access.started,
-    progress: access.progress,
-    output: combineOutputReceivers(options.output, access.output),
+    started: prepared.started,
+    progress: prepared.progress,
+    output: combineOutputReceivers(options.output, prepared.output),
     restore,
   });
 }

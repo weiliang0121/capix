@@ -1,5 +1,6 @@
+import { Resources } from '@capix/server-runtime';
 import type { BuiltCallable, CallableInput, Group, GroupWork } from '@capix/server-runtime';
-import { CallableBuilder, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationOptions, type CallableSourceBinding } from '@capix/server-runtime/construction';
+import { CallableBuilder, BoundChildren, ChildBindingsBuilder, type Invocation, type CallableContext, type InvocationContext, type InvocationWorkBinding, type InvocationOptions, type CallableSourceBinding, createRootInvocation } from '@capix/server-runtime/construction';
 import { Transcript } from '@capix/transcript';
 import { RecordResource, type ResourceRecord as ResourceRecordEntity } from '@capix/records';
 import type { ResourceRecord, ExecutionRecordSnapshot } from '@capix/protocol/recording';
@@ -64,8 +65,19 @@ const missingPosition: CallableInput<typeof preparation> = { message: { role: 'u
 void [functionalPolicy, ungroundedPolicy, missingPosition];
 
 const sourceScene = defineScene<string, string>()({ run: (work) => work.input });
-const bound = new CallableBuilder().build(sourceScene, { providers: [], source: { capture: () => null } });
+const bound = new CallableBuilder().build(sourceScene, new Resources());
 const originalScene: typeof sourceScene = bound;
+type CallableWork = InvocationWorkBinding<string, string, CallableContext<string, string>, object, 'scene'>;
+// @ts-expect-error Author Work needs callable resources and signal, not a bare invocation context.
+type MissingWorkResources = InvocationWorkBinding<string, string, InvocationContext<string, string>, object, 'scene'>;
+const configured = new CallableBuilder().build(defineScene<string, number>()({ run: (work) => work.input.length }), new Resources<{ tag: string }>());
+const configuredCall = createRootInvocation(configured, 'input', { tag: 'fixed' });
+const configuredOutput: Promise<number> = configuredCall.run();
+// @ts-expect-error The built structure retains its host options contract.
+createRootInvocation(configured, 'input', {});
+// @ts-expect-error Installing resources does not widen the structure input.
+createRootInvocation(configured, 42, { tag: 'fixed' });
+void configuredOutput;
 // @ts-expect-error R is the bound structure, not the owner of its assembly environment.
 bound.environment;
 // @ts-expect-error child call construction is supplied to binders, not exposed by R.

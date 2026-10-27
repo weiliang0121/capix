@@ -2,22 +2,24 @@
 export type { BuiltCallable, AnyBuiltCallable, BuiltOptions } from './structure/construction.js';
 export { callableConstruction } from './structure/construction.js';
 export * from './structure/builder.js';
-export * from './invocation/builders/structure.js';
+export * from './construction/calls.js';
 export * from './binding/children/bound.js';
 export * from './binding/children/builder.js';
 export * from './binding/receptions.js';
 export * from './binding/callable.js';
 export * from './binding/calls.js';
-export * from './binding/sources.js';
+// Source-based construction is retained only as an explicit legacy adapter.
+export * from './legacy/sources.js';
+export { buildCallableFromSource, type CallableBindingOptions } from './legacy/binding.js';
 export * from './binding/contract.js';
 export * from './binding/declarations.js';
 export * from './binding/work.js';
 export { InvocationContext, CallableContext, Invocation } from '@capix/invocation';
 export type { InvocationControls, ContextState, InvocationStarted, InvocationOptions } from '@capix/invocation';
-export * from './invocation/builders/callable.js';
+export * from './construction/invocation.js';
 export { InvocationChildren, InvocationRelation } from '@capix/invocation';
 export type { ParentInvocation, InvocationChildBaseline, InvocationRelationOptions, InvocationTarget, InvocationRelationReception, InvocationRelationBaseline, InvocationRelationOwner, InvocationRelationSetup, InvocationReceptionBinding } from '@capix/invocation';
-export type { InvocationCapabilities } from './invocation/capabilities.js';
+export type { InvocationCapabilities } from './construction/capabilities.js';
 export { invocationResourceFailures } from '@capix/invocation';
 
 export type { CheckpointChildBinding, CheckpointReferenceSlot, InvocationCheckpointWork, CheckpointBinding, DecodedCheckpointReception, DecodedCheckpointHandledReception, DecodedCheckpointChild, DecodedCheckpointFrame, CheckpointContinuationFact } from '@capix/invocation';

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Group, checkpointPoint } from '@capix/server-runtime';
 import { MemoryCheckpointStore } from '@capix/checkpoint';
-import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, CallableContext, CallableBuilder, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
+import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, CallableContext, buildCallableFromSource, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 
 function operation(execute = (work) => work.input) {
@@ -119,7 +119,7 @@ test('building child access does not execute members and a reused builder keeps 
       return reception.open(call.ref).accept();
     },
   }).add(definition);
-  new CallableBuilder().build(structure, {
+  buildCallableFromSource(structure, {
     providers: [],
     source: {
       capture: () => null,

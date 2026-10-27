@@ -40,6 +40,8 @@
     "@capix/observer-content": "workspace:*",
     "@capix/records": "workspace:*",
     "@capix/checkpoint": "workspace:*",
-    "@capix/invocation": "workspace:*"
+    "@capix/invocation": "workspace:*",
+    "@capix/interaction": "workspace:*",
+    "@capix/diagnostics": "workspace:*"
   }
 }

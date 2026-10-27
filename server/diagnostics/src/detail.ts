@@ -1,4 +1,3 @@
-import { isObjectLike } from '../value/object.js';
 import { isArray, isFinite } from 'es-toolkit/compat';
 import { isNativeError } from 'node:util/types';
 import { isBoolean, isDate, isMap, isNull, isNumber, isSet, isString, isSymbol, isUndefined } from 'es-toolkit/predicate';
@@ -11,7 +10,7 @@ type NestedErrorConverter = (value: unknown, depth: number) => RuntimeErrorDetai
 /** Describe arbitrary content as detached JSON. Nested errors use the caller's error mapping. */
 export function formatDetail(value: unknown, traversal: ErrorTraversal, depth: number, formatNestedError: NestedErrorConverter): RuntimeErrorDetail {
   if (!traversal.consume(depth)) return '[Truncated: error conversion limit]';
-  if (!isObjectLike(value)) return formatScalar(value);
+  if (value === null || typeof value !== 'object') return formatScalar(value);
   if (traversal.contains(value)) return '[Circular reference]';
   try {
     if (isNativeError(value)) return formatNestedError(value, depth + 1);

@@ -62,3 +62,8 @@ export function sameInteractionValue(left: unknown, right: unknown): boolean {
   const rightKeys = Object.keys(right);
   return leftKeys.length === rightKeys.length && leftKeys.every((key) => Object.hasOwn(right, key) && sameInteractionValue(Reflect.get(left, key), Reflect.get(right, key)));
 }
+
+/** Check an identity field without changing the original text. */
+export function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && /\S/.test(value);
+}

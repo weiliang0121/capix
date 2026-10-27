@@ -1,5 +1,5 @@
 import type { CallableKind } from '@capix/contracts';
-import type { ChildCallable, CallableStructure, Composite } from '@capix/structure';
+import type { ChildCallable, CallableStructure, Composite, CheckpointReferenceSlots } from '@capix/structure';
 import { resourceRequests, type ResourceRequirements, isResourceRefinement, type ResourceRefinement } from '@capix/resources';
 import type { ChildBindingOptions } from './contract.js';
 import { collectDefinitionRequirements, collectResourceSupply, type ChildResourceBinding } from './resources.js';
@@ -40,42 +40,21 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
     if (!Object.hasOwn(childKinds, current.kind) || (allowed && !allowed.includes(current.kind))) throw new Error('Invalid member definition kind');
     const declaration = snapshotDefinition(current);
     observations.push({ definition: current, parent: parent?.definition });
-    const selectedObservations = Object.freeze((options.observations ?? []).flatMap((installation) => (installation.declarations?.(current) ?? []).map((declaration) => Object.freeze({ ...snapshotObservation(declaration), installation }))));
+    const selectedObservations = selectObservations(current, options.observations);
     const deps = collectDefinitionRequirements(declaration, options.observationProvides, selectedObservations);
-    const definitions: readonly ChildCallable[] = 'members' in declaration ? (declaration.members ?? []) : [];
-    const receptions = new Set<object>();
-    for (const reception of declaration.checkpoint?.receptions ?? []) {
-      const original = originalReception(reception);
-      if (receptions.has(original)) throw new Error('Duplicate parent reception contract');
-      receptions.add(original);
-      if (!definitions.some((member) => member === reception.child)) throw new Error('Reception targets a member outside its owner');
-    }
-    const points = declaration.checkpoint?.points ?? [];
-    const names = new Set<string>();
-    for (const point of points) {
-      if (!point.name || names.has(point.name)) throw new Error('Checkpoint points need distinct registered names');
-      names.add(point.name);
-      for (const slot of Object.values(point.references as import('@capix/structure').CheckpointReferenceSlots)) {
-        if (!definitions.some((member) => member === slot.definition)) throw new Error('Checkpoint reference targets a member outside its owner');
-      }
-    }
-    const checkpointUses = points.flatMap((point) => [...(point.resume.uses ?? [])]);
-    for (const child of checkpointUses) {
-      if (!definitions.some((member) => member === child)) throw new Error('Declaration uses a member outside its owner');
-    }
+    const declaredMembers: readonly ChildCallable[] = 'members' in declaration ? (declaration.members ?? []) : [];
+    checkCheckpointMembers(declaration, declaredMembers);
     const selected = refinements.get(current);
     const node = { kind: declaration.kind, definition: current, declaration, observations: selectedObservations, deps, refinements: selected };
+
+    // Interpret members only after this position's contracts have been checked.
     encountered.add(current);
     path.add(current);
-    const members = definitions.map((member) => visit(member, node) as ResolvedChild);
+    const members = declaredMembers.map((member) => visit(member, node) as ResolvedChild);
     path.delete(current);
-    const inherited = members
-      .filter((member) => !captures.has(member.definition))
-      .map((member) => {
-        const local = new Set(options.resourceScopes?.get(member.definition) ?? []);
-        return Object.fromEntries(Object.entries(member.supply).filter(([, request]) => !local.has(request.offer)));
-      });
-    const supply = collectResourceSupply([deps, ...inherited]);
+
+    // Route each resolved member's remaining needs through this position.
+    const supply = collectSubtreeSupply(deps, members, captures, options.resourceScopes);
     if (selected) checkRefinements(supply, selected);
     return Object.freeze({ ...node, supply, members: Object.freeze(members) });
   };
@@ -92,6 +71,45 @@ export function resolveDeclaration<Definition extends AnyCallable>(definition: D
   }
   // Traversal preserves the identity and kind of its exact root definition.
   return resolved as ResolvedCallable<Definition>;
+}
+
+function selectObservations(definition: AnyCallable, installations: ChildBindingOptions['observations']): readonly InvocationObservationDeclaration[] {
+  return Object.freeze((installations ?? []).flatMap((installation) => (installation.declarations?.(definition) ?? []).map((declaration) => Object.freeze({ ...snapshotObservation(declaration), installation }))));
+}
+
+/** Check direct-member authority before any descendant or host check is visited. */
+function checkCheckpointMembers(declaration: CallableSnapshot, members: readonly ChildCallable[]): void {
+  const receptions = new Set<object>();
+  for (const reception of declaration.checkpoint?.receptions ?? []) {
+    const original = originalReception(reception);
+    if (receptions.has(original)) throw new Error('Duplicate parent reception contract');
+    receptions.add(original);
+    if (!members.some((member) => member === reception.child)) throw new Error('Reception targets a member outside its owner');
+  }
+  const points = declaration.checkpoint?.points ?? [];
+  const names = new Set<string>();
+  for (const point of points) {
+    if (!point.name || names.has(point.name)) throw new Error('Checkpoint points need distinct registered names');
+    names.add(point.name);
+    for (const slot of Object.values(point.references as CheckpointReferenceSlots)) {
+      if (!members.some((member) => member === slot.definition)) throw new Error('Checkpoint reference targets a member outside its owner');
+    }
+  }
+  const checkpointUses = points.flatMap((point) => [...(point.resume.uses ?? [])]);
+  for (const child of checkpointUses) {
+    if (!members.some((member) => member === child)) throw new Error('Declaration uses a member outside its owner');
+  }
+}
+
+/** Local child supplies satisfy only their offers, without granting those offers to this Work. */
+function collectSubtreeSupply(deps: ResourceRequirements, members: readonly ResolvedChild[], captures: ReadonlySet<AnyCallable>, resourceScopes: ChildBindingOptions['resourceScopes']): ResourceRequirements {
+  const inherited = members
+    .filter((member) => !captures.has(member.definition))
+    .map((member) => {
+      const local = new Set(resourceScopes?.get(member.definition) ?? []);
+      return Object.fromEntries(Object.entries(member.supply).filter(([, request]) => !local.has(request.offer)));
+    });
+  return collectResourceSupply([deps, ...inherited]);
 }
 
 function checkRefinements(supply: ResourceRequirements, refinements: ChildResourceBinding['refinements']): void {
