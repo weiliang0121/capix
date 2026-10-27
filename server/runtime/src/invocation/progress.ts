@@ -1,4 +1,4 @@
-import type { InvocationIdentity } from './identity.js';
+import type { InvocationIdentity } from '@capix/contracts';
 import type { InvocationProcess } from './work.js';
 import type { InvocationRelationIdentity, InvocationRelationChange } from '../observation/facts.js';
 

@@ -1,5 +1,5 @@
 import type { CheckpointBinding } from '../checkpoint/work.js';
-import type { InvocationIdentity } from './identity.js';
+import type { InvocationIdentity } from '@capix/contracts';
 import type { ChildInvocationView } from './view.js';
 import type { InvocationOutputReceiver, RuntimeErrorValue } from '@capix/contracts';
 import type { InvocationRelationChange } from '../observation/facts.js';

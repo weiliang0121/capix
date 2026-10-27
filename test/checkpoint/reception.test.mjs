@@ -2,7 +2,8 @@ import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { cloneCheckpointImage, checkpointReference, defineScene, defineGroup, reception, checkpointPoint, MemoryCheckpointStore } from '@capix/server-runtime';
+import { defineScene, defineGroup, reception, checkpointPoint } from '@capix/server-runtime';
+import { cloneCheckpointImage, checkpointReference, MemoryCheckpointStore } from '@capix/checkpoint';
 import { decodeCheckpointFrame } from '@capix/server-runtime/construction';
 
 const codec = { encode: (value) => value, decode: (value) => value };

@@ -1,7 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, MemoryCheckpointStore, checkpointPoint } from '@capix/server-runtime';
+import { Group, checkpointPoint } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 import { BoundChildren, resolveDeclaration, ChildBindingsBuilder, Invocation, InvocationContext, CallableContext, CallableBuilder, callableConstruction, createRootInvocation } from '@capix/server-runtime/construction';
 import { runtimeDefinition } from '../fixtures/declarations.mjs';
 

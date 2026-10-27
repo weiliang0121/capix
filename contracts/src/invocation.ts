@@ -1,4 +1,4 @@
-import type { CallableKind } from '@capix/contracts';
+import type { CallableKind } from './callable/kind.js';
 
 /** Identity of one call, independent of reusable structures and observation carriers. */
 export interface InvocationIdentity {

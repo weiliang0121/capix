@@ -1,5 +1,6 @@
 import type { ModelInitialization } from '../conversation/model/types.js';
-import { Clock, Runner, Resources, MemoryCheckpointStore, type CheckpointInstallation, type ObservationInstallation } from '@capix/server-runtime';
+import { Clock, Runner, Resources, type CheckpointInstallation, type ObservationInstallation } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 import { MessageUsage } from '@capix/measurement';
 import type { Message } from '@capix/protocol';
 import { createConversationStructure } from '../conversation/structure.js';

@@ -1,6 +1,6 @@
 import type { Invocation } from '../invocation/invocation.js';
 import type { InvocationContext } from '../context/context.js';
-import type { CheckpointReferences, InvocationCheckpointFrame } from './contract.js';
+import type { CheckpointReferences, InvocationCheckpointFrame } from '@capix/checkpoint';
 import type { CheckpointCodec, CheckpointContract, CallableKind } from '@capix/contracts';
 import type { DecodedCheckpointFrame } from './facts.js';
 import type { InvocationReceptionBinding } from '../invocation/reception.js';

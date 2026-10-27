@@ -1,7 +1,8 @@
 import { installCallable } from '../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, MemoryCheckpointStore, cloneCheckpointImage } from '@capix/server-runtime';
+import { Scene, Group } from '@capix/server-runtime';
+import { MemoryCheckpointStore, cloneCheckpointImage } from '@capix/checkpoint';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 // Old continuation facts remain readable for diagnostics. They are deliberately not

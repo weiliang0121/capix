@@ -1,13 +1,13 @@
 import type { InvocationRelationIdentity } from '@capix/protocol';
 import type { BusinessEvent } from '@capix/contracts';
-import type { InvocationIdentity } from '../invocation/identity.js';
+import type { InvocationIdentity } from '@capix/contracts';
 import type { ContextState } from '../context/context.js';
 import type { InvocationProcess } from '../invocation/work.js';
 import type { InvocationResult } from '../invocation/result.js';
 import type { InvocationFailure } from '../invocation/failure.js';
 
 export type { InvocationRelationIdentity } from '@capix/protocol';
-export type { InvocationIdentity } from '../invocation/identity.js';
+export type { InvocationIdentity } from '@capix/contracts';
 
 export interface InvocationDescription {
   /** Host-only description; never grants execution, membership or recovery authority. */

@@ -3,7 +3,7 @@ import type { Invocation } from '../../invocation/invocation.js';
 import type { InvocationRelation, InvocationTarget } from '../../invocation/relation.js';
 import type { InvocationExceptionOrigin } from '../../invocation/provenance.js';
 import type { CheckpointContinuationFact } from '../../checkpoint/continuation.js';
-import type { CheckpointReference } from '../../checkpoint/contract.js';
+import type { CheckpointReference } from '@capix/checkpoint';
 import { failureFact } from '../../invocation/failure.js';
 import { RuntimeErrorHelper } from '../../errors/helper.js';
 import { isInvocationCancelled } from '../../invocation/cancellation.js';

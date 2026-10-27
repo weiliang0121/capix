@@ -1,6 +1,6 @@
 import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
-import { type CheckpointStore } from '@capix/server-runtime';
+import { type CheckpointStore } from '@capix/checkpoint';
 import type { Transcript } from '@capix/transcript';
 import type { Memories } from '@capix/memory';
 import type { WorkspaceFiles } from '../../files/index.js';

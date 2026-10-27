@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { Scene, Group, Node, Runner, Resources, MemoryCheckpointStore, reception, checkpointPoint, childReference } from '@capix/server-runtime';
+import { Scene, Group, Node, Runner, Resources, reception, checkpointPoint, childReference } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 export const iso = '2026-10-25T00:00:00.000Z';

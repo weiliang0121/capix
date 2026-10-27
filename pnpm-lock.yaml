@@ -11,6 +11,9 @@ importers:
       '@capix/changes':
         specifier: workspace:*
         version: link:server/changes
+      '@capix/checkpoint':
+        specifier: workspace:*
+        version: link:server/checkpoint
       '@capix/client-http':
         specifier: workspace:*
         version: link:client/http
@@ -177,6 +180,15 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
 
+  server/checkpoint:
+    dependencies:
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      es-toolkit:
+        specifier: 1.52.0
+        version: 1.52.0
+
   server/measurement:
     dependencies:
       '@capix/protocol':
@@ -242,6 +254,9 @@ importers:
       '@capix/changes':
         specifier: workspace:*
         version: link:../changes
+      '@capix/checkpoint':
+        specifier: workspace:*
+        version: link:../checkpoint
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
@@ -305,6 +320,9 @@ importers:
       '@capix/changes':
         specifier: workspace:*
         version: link:../../server/changes
+      '@capix/checkpoint':
+        specifier: workspace:*
+        version: link:../../server/checkpoint
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts

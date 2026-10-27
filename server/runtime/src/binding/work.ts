@@ -2,7 +2,7 @@ import type { CallableKind, ChildReference } from '@capix/contracts';
 import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@capix/structure';
 import type { InvocationContext } from '../context/context.js';
 import type { InvocationCheckpointWork } from '../checkpoint/work.js';
-import type { CheckpointReferences, CheckpointReference } from '../checkpoint/contract.js';
+import type { CheckpointReferences, CheckpointReference } from '@capix/checkpoint';
 import type { InvocationWork } from '../invocation/work.js';
 import type { Invocation } from '../invocation/invocation.js';
 import type { BoundChildren } from './children/bound.js';

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
-import { cloneCheckpointImage, MemoryCheckpointStore, Scene, Node, Runner, Resources, checkpointPoint } from '@capix/server-runtime';
+import { Scene, Node, Runner, Resources, checkpointPoint } from '@capix/server-runtime';
+import { cloneCheckpointImage, MemoryCheckpointStore } from '@capix/checkpoint';
 import { decodeCheckpointFrame } from '@capix/server-runtime/construction';
 import { capture, harness, iso } from './fixtures/handled.mjs';
 

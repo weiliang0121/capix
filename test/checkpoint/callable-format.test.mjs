@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cloneCheckpointImage } from '@capix/server-runtime';
+import { cloneCheckpointImage } from '@capix/checkpoint';
 
 function image(kind = 'group') {
   return {

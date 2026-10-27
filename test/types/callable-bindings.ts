@@ -1,4 +1,5 @@
-import { Driver, Group, Node, defineNode, defineScene, type BuiltCallable, type BuiltOptions, type CheckpointStore } from '@capix/server-runtime';
+import { Driver, Group, Node, defineNode, defineScene, type BuiltCallable, type BuiltOptions } from '@capix/server-runtime';
+import { type CheckpointStore } from '@capix/checkpoint';
 
 import { createRootInvocation } from '@capix/server-runtime/construction';
 

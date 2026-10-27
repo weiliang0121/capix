@@ -14,7 +14,7 @@ import type { InvocationControls } from './context/context.js';
 import { snapshotInvocationCapabilities, type InvocationCapabilities } from './invocation/capabilities.js';
 import { Scene } from '@capix/structure';
 import type { CallableInput, CallableOutput } from '@capix/contracts';
-import type { CheckpointStore } from './checkpoint/contract.js';
+import type { CheckpointStore } from '@capix/checkpoint';
 import { Resources } from './resource/resources.js';
 import { Interactions } from './interaction/interactions.js';
 import type { AnyCallable } from './binding/declarations.js';

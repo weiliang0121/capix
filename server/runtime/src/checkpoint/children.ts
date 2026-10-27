@@ -1,6 +1,6 @@
 import { isEqual } from 'es-toolkit';
-import type { CheckpointChild, CheckpointHead, InvocationCheckpointFrame } from './contract.js';
-import { cloneCheckpointHead, cloneCheckpointValue } from './value.js';
+import type { CheckpointChild, CheckpointHead, InvocationCheckpointFrame } from '@capix/checkpoint';
+import { cloneCheckpointHead, cloneCheckpointValue } from '@capix/checkpoint';
 import { checkpointTarget } from './target.js';
 import type { CheckpointBinding } from './work.js';
 import type { InvocationContext } from '../context/context.js';

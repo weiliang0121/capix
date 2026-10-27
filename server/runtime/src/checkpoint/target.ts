@@ -1,7 +1,7 @@
 import { InvocationContext } from '../context/context.js';
 import { invocationContextView } from '../context/view.js';
 import type { InvocationTarget } from '../invocation/relation.js';
-import type { CheckpointChild } from './contract.js';
+import type { CheckpointChild } from '@capix/checkpoint';
 import type { CheckpointBinding } from './work.js';
 
 /** Saved direct delivery, with no runnable work, resource access or lifecycle setters in its view. */

@@ -43,6 +43,7 @@
     "@capix/transcript": "workspace:*",
     "@capix/view": "workspace:*",
     "@capix/measurement": "workspace:*",
-    "@capix/records": "workspace:*"
+    "@capix/records": "workspace:*",
+    "@capix/checkpoint": "workspace:*"
   }
 }

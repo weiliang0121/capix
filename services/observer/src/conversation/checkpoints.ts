@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
-import { cloneCheckpointValue, type CheckpointStore, type CheckpointHead } from '@capix/server-runtime';
+import { cloneCheckpointValue, type CheckpointStore, type CheckpointHead } from '@capix/checkpoint';
 import type { ModelSettings, TranscriptRangeLocator } from '@capix/protocol';
 import type { Transcript } from '@capix/transcript';
 import type { Memories } from '@capix/memory';

@@ -14,7 +14,7 @@ import { snapshotInvocationCapabilities, type InvocationCapabilities } from './i
 import { type CallableBindingOptions } from './binding/callable.js';
 import type { AnyCallable } from './binding/declarations.js';
 import type { CallableInput, CallableOutput } from '@capix/contracts';
-import type { CheckpointStore } from './checkpoint/contract.js';
+import type { CheckpointStore } from '@capix/checkpoint';
 
 type DriverChange = { kind: 'established' } | ({ boundId: string } & ({ kind: 'acquired' | 'released' } | { kind: 'rejected'; reason: 'busy'; error: unknown } | { kind: 'entry-failed'; error: unknown }));
 

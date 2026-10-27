@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { CHECKPOINT_MAX_BYTES } from '@capix/server-runtime';
+import { CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
 import { SqliteCheckpointStore } from '@capix/observer-service/assembly';
 
 function fixture(t) {

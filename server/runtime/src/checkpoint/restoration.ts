@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { CheckpointFact, CheckpointInstallation, CheckpointRestoration } from './contract.js';
 import type { CheckpointContract } from '@capix/contracts';
-import type { InvocationIdentity } from '../invocation/identity.js';
-import { cloneCheckpointHead } from './value.js';
+import type { InvocationIdentity } from '@capix/contracts';
+import { cloneCheckpointHead } from '@capix/checkpoint';
 import { ObserverSession } from '../observation/session.js';
 
 /** Read, validate and optionally construct within one observed restoration-preparation boundary. */

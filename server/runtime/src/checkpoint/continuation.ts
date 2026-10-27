@@ -1,6 +1,6 @@
 import type { InvocationExceptionOrigin } from '../invocation/provenance.js';
-import type { CheckpointChild, CheckpointContinuation, InvocationCheckpointFrame } from './contract.js';
-import { checkpointReference, checkpointReferenceChild } from './value.js';
+import type { CheckpointChild, CheckpointContinuation, InvocationCheckpointFrame } from '@capix/checkpoint';
+import { checkpointReference, checkpointReferenceChild } from '@capix/checkpoint';
 
 /** Inert transition metadata for decoding historical checkpoint frames. */
 export interface CheckpointContinuationFact {

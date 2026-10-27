@@ -1,7 +1,7 @@
 import { createConversationRunner } from '../fixtures/conversation-runner.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MemoryCheckpointStore } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 import { ProgressChannel } from '@capix/changes';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';

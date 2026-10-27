@@ -1,8 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
-import { cloneCheckpointImage, cloneCheckpointDelivery, CHECKPOINT_MAX_BYTES } from '@capix/server-runtime';
-import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery } from '@capix/server-runtime';
+import { cloneCheckpointImage, cloneCheckpointDelivery, CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
+import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery } from '@capix/checkpoint';
 
 type Row = Record<string, string | number | bigint | Uint8Array | null>;
 

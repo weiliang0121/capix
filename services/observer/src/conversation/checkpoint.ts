@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { cloneCheckpointValue } from '@capix/server-runtime';
+import { cloneCheckpointValue } from '@capix/checkpoint';
 import { type CheckpointCodec } from '@capix/structure';
 import { answerOutputContract } from './group/answer/output.js';
 import type { GenerationOutput } from '@capix/protocol';

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, Node, Resources, Runner, MemoryCheckpointStore, checkpointPoint, childReference, ExceptionContract } from '@capix/server-runtime';
+import { Scene, Group, Node, Resources, Runner, checkpointPoint, childReference, ExceptionContract } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 import { ResourceOffer } from '@capix/resources';
 import { Transcript, TranscriptResource } from '@capix/transcript';
 

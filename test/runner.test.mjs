@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Runner, Resources, Scene, Node, ExceptionContract, MemoryCheckpointStore, checkpointPoint, callableHooks } from '@capix/server-runtime';
+import { Runner, Resources, Scene, Node, ExceptionContract, checkpointPoint, callableHooks } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 import { ResourceOffer } from '@capix/resources';
 
 const codec = { encode: (value) => value, decode: (value) => value };

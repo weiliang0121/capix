@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { Scene, Group, Node, Sequence, Dynamic, checkpointPoint } from '@capix/structure';
 import { Resource, ResourceOffer } from '@capix/resources';
-import { Resources, Runner, callableHooks, MemoryCheckpointStore, defineObservation } from '@capix/server-runtime';
+import { Resources, Runner, callableHooks, defineObservation } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 
 const build = (scene, resources = new Resources(), capabilities = {}) => new Runner(scene, resources, undefined, capabilities).build();
 const codec = { encode: (value) => value, decode: (value) => value };

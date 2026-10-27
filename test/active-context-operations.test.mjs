@@ -1,7 +1,8 @@
 import { installCallable } from './fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Scene, Group, MemoryCheckpointStore, checkpointPoint, childReference } from '@capix/server-runtime';
+import { Scene, Group, checkpointPoint, childReference } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 import { MemoryResource } from '@capix/memory';
 import { ConversationContent } from '@capix/observer-content';
 import { ActiveViewResource } from '@capix/observer-content';

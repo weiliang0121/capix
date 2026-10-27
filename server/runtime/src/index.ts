@@ -23,7 +23,7 @@ export * from './interaction/interactions.js';
 // Business-facing context and invocation views, results and shared time.
 export * from './context/view.js';
 export * from './invocation/view.js';
-export * from './invocation/identity.js';
+export type { InvocationIdentity } from '@capix/contracts';
 export * from './invocation/progress.js';
 export { InvocationCancelled, isInvocationCancelled } from './invocation/cancellation.js';
 export type { InvocationResult } from './invocation/result.js';
@@ -49,7 +49,5 @@ export * from './value/array.js';
 export * from './value/object.js';
 export * from './value/string.js';
 
-// Explicit checkpoint declarations, persistence and recovery facts.
+// Optional checkpoint installation and runtime recovery facts.
 export * from './checkpoint/contract.js';
-export * from './checkpoint/value.js';
-export * from './checkpoint/store.js';

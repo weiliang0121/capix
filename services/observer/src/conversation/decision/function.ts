@@ -1,5 +1,5 @@
 import { decisionInputCodec, checkLeafResult } from '../group/checkpoint.js';
-import { cloneCheckpointValue } from '@capix/server-runtime';
+import { cloneCheckpointValue } from '@capix/checkpoint';
 import { Group, type CheckpointCodec, checkpointPoint, type GroupWork } from '@capix/structure';
 import type { ConversationDecision, ConversationDecisionInput } from './types.js';
 

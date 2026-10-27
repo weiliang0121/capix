@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { cloneCheckpointValue } from '@capix/server-runtime';
+import { cloneCheckpointValue } from '@capix/checkpoint';
 import { type CheckpointCodec } from '@capix/structure';
 import type { GenerationOutput } from '@capix/protocol';
 import { modelIndexesSchema, modelTextSchema } from '../../model/schema.js';

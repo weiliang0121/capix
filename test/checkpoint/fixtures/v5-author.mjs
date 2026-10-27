@@ -1,7 +1,8 @@
 import { installCallable } from '../../fixtures/driver.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { defineScene, defineGroup, checkpointPoint, childReference, childReferences, MemoryCheckpointStore } from '@capix/server-runtime';
+import { defineScene, defineGroup, checkpointPoint, childReference, childReferences } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 
 const mode = process.argv[2];
 const variant = process.argv[3];

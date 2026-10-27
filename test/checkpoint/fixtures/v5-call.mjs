@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { Invocation, InvocationContext, MemoryCheckpointStore, cloneCheckpointHead, checkpointReference } from '@capix/server-runtime';
+import { Invocation, InvocationContext } from '@capix/server-runtime';
+import { MemoryCheckpointStore, cloneCheckpointHead, checkpointReference } from '@capix/checkpoint';
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const store = new MemoryCheckpointStore();

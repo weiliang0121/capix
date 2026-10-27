@@ -7,7 +7,8 @@ import ts from 'typescript';
 import * as structures from '@capix/structure';
 import { Scene, Group, Node, checkpointPoint, childReference, reception } from '@capix/structure';
 import { Resource, ResourceOffer } from '@capix/resources';
-import { Runner, Resources, MemoryCheckpointStore, Scene as RuntimeScene, Group as RuntimeGroup, Node as RuntimeNode } from '@capix/server-runtime';
+import { Runner, Resources, Scene as RuntimeScene, Group as RuntimeGroup, Node as RuntimeNode } from '@capix/server-runtime';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 
 test('structure authors can configure a complete tree without loading or executing a runtime', () => {
   const child = spawnSync(

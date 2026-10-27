@@ -1,5 +1,5 @@
 import { isEqual } from 'es-toolkit/predicate';
-import { cloneCheckpointValue } from '@capix/server-runtime';
+import { cloneCheckpointValue } from '@capix/checkpoint';
 import { understandingInputCodec, emptyCheckpointState, originalCheckpoint, waitingChild, acceptedChild } from '../checkpoint.js';
 import { Group, checkpointPoint, childReference, type GroupWork, type ChildCall } from '@capix/structure';
 import { ModelSettingsResource, ModelResource } from '../../model/resources.js';
