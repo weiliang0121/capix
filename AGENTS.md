@@ -95,6 +95,7 @@
 ## 对话与交付
 
 - Conversation 是服务持久内容身份，关联独立 Transcript/Memories 与可选记录来源，不等于 R 或 Submission。ObserverConversations 宿主持有共享 DB/provider/files，按对话装配运行与同步；新建内容原子保存，旧库迁成默认对话且保留原 ID/index。文件工作区仍共享。所有提交/接纳/观测明确目标，不设服务全局当前对话。
+- ObserverConversations 构造时固定装配 options 顶层与 observations 数组，惰性打开会话不能因调用方修改原配置而切换持久端口、工作区或策略。实体、工厂与安装保持同一引用，不深拷贝或冻结；固定配置不限制实体正常变化。
 - ClientRuntime 的打开操作在目标有效基线后切换，失败保留旧对话；当前提交未确认结束或等待队列非空时不能新建/切换。入队固定对话身份，切换不取消业务、不销毁服务环境；旧消费与详情不能覆盖新作用域。App binding 同帧更新消息与图谱，草稿按对话保存；新建/历史/配置入口同区。详见 [对话](docs/conversations.md)。
 
 - ConversationQueue 管理有界本地等待、当前提交和自动推进；本地 queueId 与一次 POST 的 submissionId 分开。ClientSubmission 接纳固定输入、远端事实并分别维护反馈和取消控制。成功入队不代表服务接纳，待发内容不进入正式消息集合；不因断流、取消 ACK、服务空闲或 release 放弃未知当前项来推进队列。

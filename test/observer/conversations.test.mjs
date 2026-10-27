@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { ObserverConversations, createObserverServer } from '@capix/observer-service';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ObserverConversations, SqliteObserverStore, WorkspaceFiles, FunctionConversationDecision, createObserverServer } from '@capix/observer-service';
 import { RuntimeError } from '@capix/contracts';
 
 const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 512, timeoutMs: 1000 };
@@ -147,5 +150,100 @@ test('repeated lazy assembly failure releases its record listener while shared c
   }
   assert.equal(content.transcript.length, 3);
   assert.equal(frames.length, 4, 'the established transcript connection survives all assembly failures');
+});
+
+test('lazy environments retain the host persistence after caller configuration is removed or replaced', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'capix-conversation-configuration-'));
+  const persistence = SqliteObserverStore.open(join(directory, 'original.sqlite'));
+  const replacement = SqliteObserverStore.open(join(directory, 'replacement.sqlite'));
+  const options = { persistence };
+  const host = new ObserverConversations(() => assert.fail('assembly must not initialize a model'), [], options);
+  t.after(() => {
+    host.close();
+    persistence.close();
+    replacement.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const firstId = host.list().defaultConversationId;
+  const secondId = host.create().id;
+  options.persistence = undefined;
+  const first = host.open(firstId);
+  options.persistence = replacement;
+  const second = host.open(secondId);
+
+  assert.equal(host.persistence, persistence);
+  for (const environment of [first, second]) {
+    assert.equal(environment.persistence, persistence, 'recording and interaction persistence must use the content host database');
+    assert.equal(environment.checkpoints, persistence.checkpoints, 'lazy assembly cannot silently replace durable checkpoints with memory');
+    assert.equal(environment.checkpointRuns, persistence.checkpointRuns);
+  }
+  assert.equal(options.persistence, replacement, 'the caller still owns its options');
+  assert.equal(Object.isFrozen(options), false);
+});
+
+test('lazy environments retain workspace, policies and observation selection without freezing shared entities', (t) => {
+  const directory = mkdtempSync(join(tmpdir(), 'capix-conversation-policies-'));
+  const files = new WorkspaceFiles({ root: directory });
+  const replacementFiles = new WorkspaceFiles({ root: join(directory, 'replacement') });
+  const decisions = [];
+  const decision = {
+    create() {
+      assert.equal(this, decision, 'the policy factory keeps its receiver');
+      const node = new FunctionConversationDecision(() => assert.fail('assembly must not execute a decision'));
+      decisions.push(node);
+      return node;
+    },
+  };
+  const maintenance = () => assert.fail('assembly must not execute maintenance');
+  const drivers = [];
+  const observation = {
+    bindDriver(identity) {
+      assert.equal(this, observation, 'the observation installation remains the original entity');
+      drivers.push(identity.driverId);
+      return { observe() {} };
+    },
+    bindInvocation() {
+      return { observe() {} };
+    },
+  };
+  const replacementObservation = {
+    bindDriver() {
+      assert.fail('caller edits must not change the fixed observation selection');
+    },
+    bindInvocation() {
+      assert.fail('assembly must not create an invocation');
+    },
+  };
+  const observations = [observation];
+  const options = { files, decision, maintenance, observations, maxDecisionSteps: 3 };
+  const host = new ObserverConversations(() => assert.fail('assembly must not initialize a model'), [], options);
+  t.after(() => {
+    host.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  options.files = replacementFiles;
+  options.decision = { create: () => assert.fail('the original decision factory must be retained') };
+  options.maintenance = undefined;
+  options.maxDecisionSteps = 17;
+  observations[0] = replacementObservation;
+  const first = host.open(host.list().defaultConversationId);
+
+  options.files = undefined;
+  options.observations = [replacementObservation];
+  const second = host.open(host.create().id);
+  assert.equal(host.files, files);
+  assert.equal(decisions.length, 2);
+  assert.notEqual(decisions[0], decisions[1], 'each conversation still owns its own decision structure');
+  for (const [index, environment] of [first, second].entries()) {
+    assert.equal(environment.files, files);
+    assert.equal(environment.structure.decision, decisions[index]);
+    assert.equal(environment.structure.conversation.maxDecisionSteps, 3);
+    assert.ok(environment.structure.maintenance, 'maintenance selection stays fixed across lazy assembly');
+  }
+  assert.equal(drivers.length, 2);
+  assert.notEqual(drivers[0], drivers[1]);
+  for (const value of [options, observations, observation, files, decision]) assert.equal(Object.isFrozen(value), false);
+  assert.equal(observations[0], replacementObservation, 'copying the selection does not modify the caller array');
 });
 import { submissionSnapshots } from '../fixtures/submissions.mjs';

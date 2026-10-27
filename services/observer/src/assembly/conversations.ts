@@ -32,9 +32,11 @@ export class ObserverConversations {
     messages: readonly Message[] = [],
     private readonly options: { observations?: readonly ObservationInstallation[]; files?: WorkspaceFiles; decision?: ConversationDecisionFactory; maxDecisionSteps?: number; maintenance?: ContextMaintenanceConfiguration; persistence?: SqliteObserverStore; checkpointObservation?: CheckpointInstallation['observation'] } = {},
   ) {
+    // Lazy environments share one host configuration; caller-owned containers remain mutable.
+    this.options = Object.freeze({ ...options, observations: options.observations ? Object.freeze([...options.observations]) : undefined });
     this.model = new ModelSource(provider);
-    this.files = options.files;
-    this.persistence = options.persistence;
+    this.files = this.options.files;
+    this.persistence = this.options.persistence;
     const existing = this.persistence?.list();
     if (existing?.conversations.length) {
       if (messages.length) throw new Error('Cannot append startup messages to restored conversations');

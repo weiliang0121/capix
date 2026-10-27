@@ -77,6 +77,8 @@ sequenceDiagram
 
 `environment.scene`、`environment.structure.scene`、`environment.runner.scene` 是同一对象。每次提交建立自己的 Invocation、Context、Work 和资源窗口，不把这些状态放到共享结构上。
 
+`ObserverConversations` 在建立时固定宿主配置容器与观察安装数组，之后按对话惰性装配都使用这一份配置。外部修改原 options 或数组不会让新会话切换工作区、持久端口或策略。资源实体、策略工厂和观察安装仍保持原引用，不被深拷贝或冻结；固定的是装配选择，不是实体内容。
+
 ## 资源怎样登记和使用
 
 固定实体通过 Resource 明示：
