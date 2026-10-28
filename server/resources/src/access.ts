@@ -21,7 +21,7 @@ export class ResourceAccess<Resources extends object = object> implements Resour
   readonly #hooks: ResourceAccessHooks;
   readonly #activity: ResourceActivity;
   readonly #locals = new Map<ResourceSupplyEntry, { activity: ResourceEndpointActivity; endpoint: Initializer<unknown> }>();
-  #closed = false;
+  #closed?: ResourceAccessClosed;
   #started = false;
 
   constructor(deps: ResourceRequirements<Resources>, supply: ResourceSupply | (() => ResourceSupply), owner?: ResourceOwner, hooks: ResourceAccessHooks = {}) {
@@ -44,7 +44,7 @@ export class ResourceAccess<Resources extends object = object> implements Resour
   }
 
   assertOpen(): void {
-    if (this.#closed) throw new ResourceAccessClosed();
+    if (this.#closed) throw this.#closed;
     this.#owner?.validate();
     synchronous(this.#hooks.validate?.(), 'Resource access validation');
   }
@@ -84,7 +84,9 @@ export class ResourceAccess<Resources extends object = object> implements Resour
   }
 
   close(): void {
-    this.#closed = true;
+    if (this.#closed) return;
+    this.#closed = new ResourceAccessClosed();
+    this.#activity.close(this.#closed);
   }
 
   private local(entry: ResourceSupplyEntry) {

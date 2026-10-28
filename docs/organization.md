@@ -138,7 +138,7 @@ Checkpoint Frame v5 与声明版本分别核验。`@capix/checkpoint` 持有 Fra
 
 Observer 的 ConversationScene 接纳输入并调用 ConversationGroup；后者是普通 Group，负责材料准备、决策与结果落实。服务提供模型协议、业务资源、内容同步及对外进展解释。环境拥有实体和关闭边界，HTTP 拥有传输；没有服务自己的另一套内核循环。
 
-并排的 [`@capix/conversation-service`](../services/conversation/README.md) 以正式消息、固定历史、模型资源和原生 Runner 验证最小作者路径。它不替换 Observer，不接入现有 HTTP/客户端，也不宣称覆盖记忆、文件或恢复。
+并排的 [`@capix/conversation-service`](../services/conversation/README.md) 以正式消息、固定历史、模型资源和原生 Runner 验证作者路径。普通模型 Node 提供流式输出，独立交互 Group 组合发送和反馈读取，两者共用 Scene 的消息接纳。它不替换 Observer，不接入现有 HTTP/客户端，也不宣称覆盖记忆、文件或会话执行恢复；独立交互流式仍需明确增量契约。
 
 ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 只收发与接纳协议。应用 binding 负责读模型、调用图、几何布局与帧合并，React 消费 props/Store。当前客户端实际依赖对话与 Observer 契约，不宣称已是任意业务的通用客户端。
 

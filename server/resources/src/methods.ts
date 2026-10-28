@@ -5,6 +5,8 @@ import type { ResourceEndpointActivity } from './endpoint.js';
 export interface ResourceOperation<Delta = never> {
   readonly signal: AbortSignal | undefined;
   emit(delta: Delta): void;
+  /** Synchronous cleanup when this operation finishes, its window closes, or its signal aborts. */
+  onClose(cleanup: (reason: unknown) => void): () => void;
 }
 
 export type ResourceMethodDeclarations = Readonly<Record<string, (origin: never, input: never, operation: never) => unknown>>;

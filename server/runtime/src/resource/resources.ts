@@ -72,7 +72,7 @@ export class Resources<Options extends object = {}> {
   }
 
   /** The resource decides how it exposes interaction access; building never sends a request. */
-  registerInteraction<Request, Reply, Value, Captured, Selection>(offer: ResourceOffer<InteractionChannel<Request, Reply>, Value, Captured, Selection>, contract: InteractionContract<NoInfer<Request>, NoInfer<Reply>>): this {
+  registerInteraction<Request, Reply, Delta, Value, Captured, Selection>(offer: ResourceOffer<InteractionChannel<Request, Reply, Delta>, Value, Captured, Selection>, contract: InteractionContract<NoInfer<Request>, NoInfer<Reply>, NoInfer<Delta>>): this {
     const identity = offer.request().offer;
     addRegistration(
       this.#registrations,

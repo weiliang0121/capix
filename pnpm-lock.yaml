@@ -386,6 +386,9 @@ importers:
 
   services/conversation:
     dependencies:
+      '@capix/interaction':
+        specifier: workspace:*
+        version: link:../../server/interaction
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol

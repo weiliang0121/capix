@@ -14,6 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@capix/interaction": "workspace:*",
     "@capix/protocol": "workspace:*",
     "@capix/resources": "workspace:*",
     "@capix/structure": "workspace:*",

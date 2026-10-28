@@ -94,7 +94,9 @@ ResourceOffer 有独立 UUID `id`；`name` 用于解释和既有资源观测，�
 
 窗口关闭以后，已开始的操作仍可能真实完成。保留真实返回事实，然后拒绝新接收；如果方法失败同时窗口失效，保留两个原因。异步接收回调正在等待时关闭，也会拒绝它后续的资源访问和最终结果。增量消费者是被动预览，失败仅停用本次消费。
 
-`close()` 只结束访问资格，幂等且不可重新打开；不调用原实体的 close，不回滚外部效果，不自动取消独立 Interaction，也不保证排空未 await 的资源操作。宿主应使用 `try { return await execute(...) } finally { access.close() }`，避免在异步工作完成前关闭。
+`close()` 结束访问资格并通知活动操作清理，幂等且不可重新打开；不调用原实体的 close，不回滚外部效果，不自动取消独立 Interaction，也不保证排空未 await 的资源操作。宿主应使用 `try { return await execute(...) } finally { access.close() }`，避免在异步工作完成前关闭。
+
+资源适配作者可以用 `operation.onClose(cleanup)` 登记同步清理，返回解除登记函数。操作真正返回、访问窗口关闭或本次调用信号取消时耗尽清理；用于解除订阅、关闭 reader 并唤醒其挂起的本地读取。关闭不会用 Promise.race 冒充原操作已经退出，适配器仍需让自己的等待真正结束。operation.signal 保持原调用信号；窗口关闭传 ResourceAccessClosed，调用取消传原 signal.reason，不能把二者互相冒充。正常操作结束也清理，但不因此把正常结果变成失败。清理回调必须同步返回 undefined；一个回调故障不能阻止其他清理，非法异步回调的迟到拒绝会被消费。普通节点仍使用 delta/result，无需管理这个资源适配端口。
 
 ## Runtime 接入
 

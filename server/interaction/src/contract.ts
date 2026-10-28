@@ -2,10 +2,12 @@ import type { RuntimeErrorValue } from '@capix/contracts';
 import type { ProgressReceiver } from '@capix/changes';
 
 /** A versioned data boundary, independent of any invocation or recording preset. */
-export interface InteractionContract<Request, Reply> {
+export interface InteractionContract<Request, Reply, Delta = never> {
   readonly key: string;
   request(value: unknown): Request;
   reply(value: unknown): Reply;
+  /** Optional transient process data, decoded by the registered interaction owner. */
+  progress?(value: unknown): Delta;
 }
 
 export interface InteractionFeedback<Reply> {
@@ -37,7 +39,7 @@ export interface InteractionPersistence<Request = unknown, Reply = unknown> {
 }
 
 export interface InteractionOptions<Request, Reply> {
-  readonly contract: InteractionContract<Request, Reply>;
+  readonly contract: Pick<InteractionContract<Request, Reply>, 'key' | 'request' | 'reply'>;
   readonly persistence?: InteractionPersistence<Request, Reply>;
   /** Passive facts after state installation. A failed observer never rejects delivery or feedback. */
   readonly observation?: ProgressReceiver<InteractionFact<Request, Reply>>;

@@ -3,10 +3,11 @@ import type { OperationOptions, OperationOutcome, OperationResult } from '@capix
 import { receiveOperation } from './operation/receive.js';
 import type { ResourceOperation } from './methods.js';
 import type { ResourceObservation } from './facts.js';
-import { ResourceAccessClosed, ResourcePortError, type ResourceOwner, type ResourceWindow } from './ports.js';
+import { ResourcePortError, type ResourceOwner, type ResourceWindow } from './ports.js';
 import type { ResourceSupplyEntry } from './supply.js';
 import { ResourceEndpointActivity, type ResourceOperationSource } from './endpoint.js';
 import { isResourceAccessFailure } from './failure.js';
+import { ResourceOperationLifetime } from './operation/lifetime.js';
 
 export type { ResourceOwner, ResourceFailurePolicy } from './ports.js';
 
@@ -18,6 +19,7 @@ export interface ResourceOperationDescription<Output> {
 /** One executor shared by the endpoints in a single access window. Operation state stays local. */
 export class ResourceActivity {
   #sequence = 0;
+  readonly #operations = new Set<ResourceOperationLifetime>();
   constructor(
     private readonly window: ResourceWindow,
     readonly owner?: ResourceOwner,
@@ -71,6 +73,18 @@ export class ResourceActivity {
     return this.owner?.failures.describe(error) ?? { message: 'Resource operation failed' };
   }
 
+  /** Revoke local consumers, exhausting cleanup even when one adapter fails. */
+  close(reason: unknown): void {
+    const operations = [...this.#operations];
+    this.#operations.clear();
+    const failures: unknown[] = [];
+    for (const operation of operations) {
+      operation.close(reason);
+      if (operation.failure) failures.push(operation.failure);
+    }
+    if (failures.length) this.reject(failures.length === 1 ? failures[0] : new AggregateError(failures, 'Resource operation cleanup failures'));
+  }
+
   async operate<Output, Delta = never, const Options extends OperationOptions<Output, unknown, unknown, Delta> = {}>(source: ResourceOperationSource, action: string, detail: ResourceOperationDescription<Output>, execute: (operation: ResourceOperation<Delta>) => Output | PromiseLike<Output>, options?: Options): Promise<OperationResult<Output, Options>> {
     this.validate();
     let reception: Options | undefined;
@@ -88,11 +102,23 @@ export class ResourceActivity {
     const operationId = randomUUID();
     this.publish(source, 'started', () => ({ action, input: detail.input?.() ?? null }), operationId);
     this.validate();
-    let outputOpen = true;
+    const lifetime = new ResourceOperationLifetime(this.window.signal);
+    this.#operations.add(lifetime);
     const operation: ResourceOperation<Delta> = Object.freeze({
       signal: this.window.signal,
+      onClose: (cleanup: (reason: unknown) => void) => {
+        try {
+          return lifetime.onClose(cleanup);
+        } catch (error) {
+          this.reject(error);
+        }
+      },
       emit: (delta: Delta) => {
-        if (!outputOpen) this.reject(new ResourceAccessClosed('Resource operation output is closed'));
+        try {
+          lifetime.assertOpen();
+        } catch (error) {
+          this.reject(error);
+        }
         this.validate();
         if (!consume) return;
         try {
@@ -111,11 +137,19 @@ export class ResourceActivity {
     } catch (failure) {
       outcome = { status: 'failed', failure };
     } finally {
-      outputOpen = false;
       consume = undefined;
+      lifetime.finish();
+      this.#operations.delete(lifetime);
     }
-    this.returned(source, action, detail, operationId, outcome);
+    try {
+      this.returned(source, action, detail, operationId, outcome);
+    } catch (error) {
+      if (lifetime.failure && error !== lifetime.failure) this.reject(new AggregateError([error, lifetime.failure], 'Resource observation and cleanup both failed', { cause: error }));
+      throw error;
+    }
+    if (lifetime.failure) outcome = { status: 'failed', failure: outcome.status === 'failed' && outcome.failure !== lifetime.failure ? new AggregateError([outcome.failure, lifetime.failure], 'Resource operation and cleanup both failed', { cause: outcome.failure }) : lifetime.failure };
     this.checkReception(outcome);
+    if (lifetime.interruption) this.reject(outcome.status === 'failed' && outcome.failure !== lifetime.interruption.reason ? new AggregateError([outcome.failure, lifetime.interruption.reason], 'Resource operation failed after local consumption ended', { cause: outcome.failure }) : lifetime.interruption.reason);
     if (outcome.status === 'failed' && (this.isProtected(outcome.failure) || !reception?.result?.failed)) this.reject(outcome.failure, true);
     let received: OperationResult<Output, Options>;
     try {
