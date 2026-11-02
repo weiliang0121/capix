@@ -8,6 +8,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const packages = [
   { path: 'contracts', allowed: [] },
   { path: 'protocol', allowed: ['@capix/contracts'] },
+  { path: 'server/model-provider', allowed: [] },
   { path: 'server/diagnostics', allowed: ['@capix/contracts'] },
   { path: 'server/interaction', allowed: ['@capix/contracts', '@capix/changes', '@capix/diagnostics'] },
   { path: 'server/changes', allowed: ['@capix/contracts', '@capix/protocol'] },

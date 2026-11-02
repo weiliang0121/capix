@@ -41,6 +41,9 @@ importers:
       '@capix/memory':
         specifier: workspace:*
         version: link:server/memory
+      '@capix/model-provider':
+        specifier: workspace:*
+        version: link:server/model-provider
       '@capix/observer-content':
         specifier: workspace:*
         version: link:services/observer-content
@@ -281,6 +284,8 @@ importers:
       es-toolkit:
         specifier: 1.52.0
         version: 1.52.0
+
+  server/model-provider: {}
 
   server/records:
     dependencies:

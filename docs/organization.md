@@ -34,7 +34,7 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 
 ## 包与目录
 
-仓库只有一个根 pnpm workspace 与锁文件，二十一个实际包。包边界按独立职责和公开契约确定；实体独立拆包不意味着增加生命周期或一层统一平台。跨包只用公开出口，服务端与客户端互不依赖。
+仓库只有一个根 pnpm workspace 与锁文件，二十二个实际包。包边界按独立职责和公开契约确定；实体独立拆包不意味着增加生命周期或一层统一平台。跨包只用公开出口，服务端与客户端互不依赖。
 
 | 包                            | 位置                        | 负责什么                                                           |
 | ----------------------------- | --------------------------- | ------------------------------------------------------------------ |
@@ -51,6 +51,7 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | `@capix/checkpoint`           | `server/checkpoint`         | CP 持久载体、数据核验、版本提交契约与内存存储                      |
 | `@capix/invocation`           | `server/invocation`         | 单次调用与 Context、直接关系、访问窗口、输出、故障、观测及 CP 续接 |
 | `@capix/interaction`          | `server/interaction`        | 独立请求发送、反馈接纳、局部等待、保留与交互宿主                   |
+| `@capix/model-provider`       | `server/model-provider`     | 独立文本模型通信；固定配置、有界反馈，不持有会话或意图策略         |
 | `@capix/diagnostics`          | `server/diagnostics`        | 唯一持久化错误类和有界诊断转换，不决定执行故障策略                 |
 | `@capix/server-runtime`       | `server/runtime`            | 结构与供给装配、Runner 入口、作者 Work 适配及可选记录预设          |
 | `@capix/observer-content`     | `services/observer-content` | Observer 内容持有、ActiveView 策略、观察安装、原文同步与关闭       |
