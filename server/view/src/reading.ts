@@ -1,5 +1,5 @@
-import type { SourceBindings, SyncSourceBindings, SourceIndex, SourceSnapshot, ViewKey, ViewSource, ViewSources } from './source.js';
-import type { ViewBasis, ViewEntry, ViewIndex, ViewIndexEntry, ViewReference, ViewSnapshot, ViewState } from './types.js';
+import type { SourceBindings, SyncSourceBindings, SourceInspection, SourceSnapshot, ViewKey, ViewSource, ViewSources } from './source.js';
+import type { ViewBasis, ViewEntry, ViewIndex, ViewIndexEntry, ViewReference, ViewSnapshot, ViewState, ViewSourceChecks } from './types.js';
 import { checkKey, checkStamp, conflict, data, exactKeys, object, sameIdentity, sameStamp, synchronous } from './value.js';
 
 /** Freeze method selection for this access, without retaining endpoints in the View. */
@@ -10,8 +10,9 @@ export function sourcePorts<Sources extends ViewSources>(sources: SourceBindings
   exactKeys(sources, slots);
   const entries = slots.map((slot) => {
     const source: ViewSource<ViewKey, unknown, unknown> = sources[slot]!;
-    if (!source || typeof source.index !== 'function' || typeof source.read !== 'function' || typeof source.check !== 'function') throw new TypeError('Invalid view source endpoint');
+    if (!source || typeof source.index !== 'function' || typeof source.inspect !== 'function' || typeof source.read !== 'function' || typeof source.check !== 'function') throw new TypeError('Invalid view source endpoint');
     const index = source.index.bind(source);
+    const inspect = source.inspect.bind(source);
     const read = source.read.bind(source);
     const check = source.check.bind(source);
     const returned = <Value>(result: Value): Value => {
@@ -30,6 +31,10 @@ export function sourcePorts<Sources extends ViewSources>(sources: SourceBindings
           validate?.();
           return returned(index());
         },
+        inspect: (keys: readonly ViewKey[]) => {
+          validate?.();
+          return returned(inspect(keys));
+        },
         read: (keys: readonly ViewKey[], stamp: Parameters<typeof read>[1]) => {
           validate?.();
           return returned(read(keys, stamp));
@@ -44,7 +49,7 @@ export function sourcePorts<Sources extends ViewSources>(sources: SourceBindings
   return Object.freeze(Object.fromEntries(entries)) as SourceBindings<Sources>;
 }
 
-type Directory = SourceIndex<ViewKey, unknown>;
+type Directory = SourceInspection<ViewKey, unknown>;
 type Snapshot = SourceSnapshot<ViewKey, unknown>;
 
 /** A single read session: fixed source methods, source stamps and detached data. */
@@ -63,7 +68,10 @@ export class ViewReading<Sources extends ViewSources> {
 
   async index(): Promise<ViewIndex<Sources>> {
     const directories = new Map<string, Directory>();
-    for (const slot of this.#slots) directories.set(slot, this.directory(slot, await this.#ports[slot]!.index()));
+    for (const slot of this.#slots) {
+      const keys = this.keys(slot);
+      directories.set(slot, this.directory(slot, await this.#ports[slot]!.inspect(keys), keys));
+    }
     const index = this.project(directories, this.state.members);
     await this.check(index.basis);
     return index;
@@ -75,11 +83,26 @@ export class ViewReading<Sources extends ViewSources> {
 
   selectionSync(members: readonly ViewReference<Sources>[], expected?: ViewBasis<Sources>): ViewIndex<Sources> {
     const directories = new Map<string, Directory>();
-    for (const slot of this.#slots) directories.set(slot, this.directory(slot, synchronous(this.#ports[slot]!.index(), 'Source indexing')));
+    for (const slot of this.#slots) {
+      const keys = this.keys(slot, members);
+      directories.set(slot, this.directory(slot, synchronous(this.#ports[slot]!.inspect(keys), 'Source inspection'), keys));
+    }
     const index = this.project(directories, members);
     if (expected) for (const slot of this.#slots) if (!sameStamp(index.basis.sources[slot]!, expected.sources[slot]!)) conflict('View source version has changed');
     this.checkSync(index.basis);
     return index;
+  }
+
+  /** A direct inclusion establishes only its new members, not the readability of retained ones. */
+  additionsSync(members: readonly ViewReference<Sources>[]): ViewSourceChecks<Sources> {
+    const stamps: Record<string, Directory['stamp']> = {};
+    for (const slot of new Set(members.map((member) => member.source))) {
+      const keys = this.keys(slot, members);
+      const inspected = this.directory(slot, synchronous(this.#ports[slot]!.inspect(keys), 'Source inspection'), keys);
+      Object.defineProperty(stamps, slot, { value: inspected.stamp, enumerable: true });
+    }
+    for (const [slot, stamp] of Object.entries(stamps)) this.checked(synchronous(this.#ports[slot]!.check(stamp), 'Source checking'));
+    return Object.freeze(stamps) as ViewSourceChecks<Sources>;
   }
 
   async capture(basis: ViewBasis<Sources>): Promise<ViewSnapshot<Sources>> {
@@ -117,13 +140,14 @@ export class ViewReading<Sources extends ViewSources> {
     if (!result) conflict('View source version has changed');
   }
 
-  private directory(slot: string, value: Directory): Directory {
+  private directory(slot: string, value: Directory, keys: readonly ViewKey[]): Directory {
     const accepted = data(value);
     object(accepted);
     exactKeys(accepted, ['stamp', 'entries']);
     checkStamp(accepted.stamp);
     if (!sameIdentity(accepted.stamp, this.state.sources[slot]!)) conflict('View source identity or scope has changed');
-    this.entries(accepted.entries);
+    const returned = this.entries(accepted.entries);
+    if (returned.size !== keys.length || keys.some((key) => !returned.has(key))) throw new RangeError('Source must inspect every requested member and no others');
     for (const entry of accepted.entries) exactKeys(entry, ['key', 'summary']);
     return accepted;
   }
@@ -163,8 +187,8 @@ export class ViewReading<Sources extends ViewSources> {
     return Object.freeze({ basis: Object.freeze({ viewRevision: this.state.revision, sources: stamps }), members, entries: Object.freeze(entries) as readonly ViewIndexEntry<Sources>[] });
   }
 
-  private keys(slot: string): readonly ViewKey[] {
-    return Object.freeze(this.state.members.filter((member) => member.source === slot).map((member) => member.key));
+  private keys(slot: string, members: readonly ViewReference<Sources>[] = this.state.members): readonly ViewKey[] {
+    return Object.freeze(members.filter((member) => member.source === slot).map((member) => member.key));
   }
 
   private values(basis: ViewBasis<Sources>, snapshots: ReadonlyMap<string, Snapshot>): ViewSnapshot<Sources> {

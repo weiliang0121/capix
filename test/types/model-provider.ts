@@ -35,8 +35,22 @@ provider.complete({ messages: request.messages, responseFormat: { type: 'json_sc
 provider.complete({ messages: [{ role: 'user', content: { prompt: 'hello' } }] });
 // @ts-expect-error The result is a completion envelope, not a parsed business decision.
 result.selected;
-// @ts-expect-error Non-streaming provider does not expose a fictitious delta callback.
-provider.complete(request, { emit: (_text: string) => {} });
+const streamed = await provider.complete(
+  { ...request, stream: true },
+  {
+    emit: (delta) => {
+      const text: string = delta;
+      void text;
+    },
+  },
+);
+const finalText: string = streamed.text;
+const finalReason: string = streamed.finishReason;
+void [finalText, finalReason];
+// @ts-expect-error A stream request is an explicit boolean, not a receiver or transport label.
+provider.complete({ ...request, stream: 'sse' });
+// @ts-expect-error Preview deltas are strings, not final envelopes or structured tool output.
+provider.complete({ ...request, stream: true }, { emit: (_delta: { text: string }) => {} });
 
 declare const error: ProviderError;
 const code: string = error.code;

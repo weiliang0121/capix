@@ -16,6 +16,17 @@ function skillSource(skills) {
     scope: stamp.scope,
     check,
     index: () => ({ stamp, entries: [...values].map(([key, value]) => ({ key, summary: { title: value.title } })) }),
+    inspect(keys) {
+      if (!Array.isArray(keys) || new Set(keys).size !== keys.length) throw new TypeError('Skill keys must be a unique array');
+      return {
+        stamp,
+        entries: keys.map((key) => {
+          const value = values.get(key);
+          if (!value) throw new RangeError('Skill does not exist in this source scope');
+          return { key, summary: { title: value.title } };
+        }),
+      };
+    },
     read(keys, basis) {
       if (!check(basis) || new Set(keys).size !== keys.length || keys.some((key) => !values.has(key))) throw new Error('Invalid skill view selection');
       return { stamp, entries: keys.map((key) => ({ key, value: values.get(key) })) };

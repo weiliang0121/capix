@@ -22,6 +22,7 @@
     "@capix/resources": "workspace:*",
     "@capix/structure": "workspace:*",
     "@capix/transcript": "workspace:*",
-    "@capix/server-runtime": "workspace:*"
+    "@capix/server-runtime": "workspace:*",
+    "zod": "4.6.5"
   }
 }

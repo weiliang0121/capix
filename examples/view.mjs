@@ -24,7 +24,7 @@ const [preference] = memories.apply([
   },
 ]);
 
-// 2. 来源把各实体适配为 index / read / check；槽位名只在这个 View 内使用。
+// 2. 来源提供 index / inspect / read / check；槽位名只在这个 View 内使用。
 const sources = {
   messages: new TranscriptViewSource(transcript),
   memories: new MemoryViewSource(memories),
@@ -46,7 +46,7 @@ const view = new View({
 });
 
 // 3. 资源适配显式连接 View、来源与当前访问窗口。
-// 同一材料提供 read/manage 两种操作；read 端点没有 apply。
+// 同一材料提供 read/manage 两种操作；read 端点不能修改成员。
 const material = new Resource({ view, sources });
 const read = new ResourceOffer({
   expose: ({ view, sources }, activity) => openView(view, sources, activity),

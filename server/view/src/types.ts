@@ -28,10 +28,13 @@ export interface ViewSelection<Sources extends ViewSources> {
   readonly members: readonly ViewReference<Sources>[];
 }
 export interface ViewCommit<Sources extends ViewSources> {
-  readonly basis: ViewBasis<Sources>;
+  /** Only sources actually verified by this mutation; empty for membership removal. */
+  readonly checkedSources: ViewSourceChecks<Sources>;
+  /** Persistence must compare this revision before committing the next state. */
   readonly previous: ViewState<Sources>;
   readonly state: ViewState<Sources>;
 }
+export type ViewSourceChecks<Sources extends ViewSources> = { readonly [Name in keyof Sources]?: SourceStamp };
 /** Host-owned atomic validation and persistence; the view does not coordinate external transactions. */
 export interface ViewPersistence<Sources extends ViewSources> {
   commit(change: ViewCommit<Sources>): undefined;

@@ -1,7 +1,7 @@
 import type { ResourcesOf } from '@capix/resources';
 import { Node } from '@capix/structure';
 import type { ViewSnapshot } from '@capix/view';
-import type { AcceptedConversationInput } from '../scene.js';
+import type { AcceptedConversationMessage } from '../scene.js';
 import { requireText } from '../text.js';
 import { ConversationViewResource, type ConversationMaterialSources } from './view.js';
 
@@ -16,8 +16,8 @@ export interface ConversationMaterialInput {
 }
 
 export function createMaterialPreparation() {
-  const deps = { view: ConversationViewResource.request() };
-  return new Node<AcceptedConversationInput, ConversationMaterialInput, ResourcesOf<typeof deps>>({
+  const deps = { view: ConversationViewResource.read.request() };
+  return new Node<AcceptedConversationMessage, ConversationMaterialInput, ResourcesOf<typeof deps>>({
     name: 'prepare-conversation-materials',
     deps,
     async run(work) {

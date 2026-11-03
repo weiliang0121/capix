@@ -16,6 +16,11 @@ export interface SourceIndex<Key extends ViewKey, Summary> {
   /** Complete directory for this source scope; never a partial page. */
   readonly entries: readonly { readonly key: Key; readonly summary: Summary }[];
 }
+/** Exactly the requested keys, validated with their summaries at one source version. */
+export interface SourceInspection<Key extends ViewKey, Summary> {
+  readonly stamp: SourceStamp;
+  readonly entries: readonly { readonly key: Key; readonly summary: Summary }[];
+}
 export interface SourceSnapshot<Key extends ViewKey, Value> {
   readonly stamp: SourceStamp;
   readonly entries: readonly { readonly key: Key; readonly value: Value }[];
@@ -24,11 +29,13 @@ export interface SourceSnapshot<Key extends ViewKey, Value> {
 /** A read contract. Version validation and value capture happen together inside read. */
 export interface ViewSource<Key extends ViewKey, Summary, Value> {
   index(): Awaitable<SourceIndex<Key, Summary>>;
+  inspect(keys: readonly Key[]): Awaitable<SourceInspection<Key, Summary>>;
   read(keys: readonly Key[], expected: SourceStamp): Awaitable<SourceSnapshot<Key, Value>>;
   check(expected: SourceStamp): Awaitable<boolean>;
 }
 export interface SyncViewSource<Key extends ViewKey, Summary, Value> extends ViewSource<Key, Summary, Value> {
   index(): SourceIndex<Key, Summary>;
+  inspect(keys: readonly Key[]): SourceInspection<Key, Summary>;
   read(keys: readonly Key[], expected: SourceStamp): SourceSnapshot<Key, Value>;
   check(expected: SourceStamp): boolean;
 }

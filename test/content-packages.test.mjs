@@ -54,7 +54,7 @@ test('generic view has no transcript, memory or Observer active-membership polic
   const exported = await import('@capix/view');
   for (const name of ['Transcript', 'Memories', 'TranscriptViewSource', 'MemoryViewSource', 'ActiveView', 'ActiveViewResource', 'initialActiveView', 'appendActiveView', 'freezeActiveView']) assert.equal(name in exported, false, `@capix/view must not own ${name}`);
   const manifest = JSON.parse(await readFile(new URL('../server/view/package.json', import.meta.url), 'utf8'));
-  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@capix/contracts', '@capix/resources']);
+  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ['@capix/contracts', '@capix/diagnostics', '@capix/resources']);
 });
 
 test('the host content composition uses the package entities and preserves exact source ownership', () => {

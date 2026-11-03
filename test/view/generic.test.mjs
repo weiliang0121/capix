@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { PersistenceError } from '@capix/diagnostics';
 import { TranscriptViewSource } from '@capix/transcript';
 import { MemoryViewSource } from '@capix/memory';
 import { View } from '@capix/view';
@@ -9,6 +10,8 @@ test('a three-source view indexes summaries before reading selected immutable va
   const { view, sources, skill, state, memory } = fixture();
   const index = await view.index(sources);
   assert.equal(skill.counts.read, 0, 'indexing cannot read skill bodies');
+  assert.equal(skill.counts.index, 0, 'indexing a view only inspects its selected members');
+  assert.equal(skill.counts.inspect, 1);
   assert.deepEqual(index.members, state.members);
   assert.deepEqual(
     index.entries.map((entry) => [entry.source, entry.key]),
@@ -46,23 +49,23 @@ test('source changes invalidate an earlier directory without silently reading ne
 test('missing sources, changed source identity or scope, missing members and duplicates are rejected', async () => {
   const { view, state, sources, transcript } = fixture();
   await assert.rejects(view.index({ messages: sources.messages, memories: sources.memories }), TypeError);
-  const foreign = { ...sources, skills: { ...sources.skills, index: () => ({ ...sources.skills.index(), stamp: { id: 'other-skills', scope: 'whole', version: '0' } }) } };
+  const foreign = { ...sources, skills: { ...sources.skills, inspect: (keys) => ({ ...sources.skills.inspect(keys), stamp: { id: 'other-skills', scope: 'whole', version: '0' } }) } };
   await assert.rejects(view.index(foreign));
   await assert.rejects(view.index({ ...sources, messages: new TranscriptViewSource(transcript, [0]) }));
   const absent = new View({ ...state, members: [{ source: 'skills', key: 'missing' }] });
   await assert.rejects(absent.index(sources), RangeError);
   assert.throws(() => new View({ ...state, members: [state.members[0], state.members[0]] }), TypeError);
-  const duplicateIndex = {
+  const duplicateInspection = {
     ...sources,
     skills: {
       ...sources.skills,
-      index() {
-        const indexed = sources.skills.index();
+      inspect(keys) {
+        const indexed = sources.skills.inspect(keys);
         return { ...indexed, entries: [indexed.entries[0], indexed.entries[0]] };
       },
     },
   };
-  await assert.rejects(view.index(duplicateIndex), TypeError);
+  await assert.rejects(view.index(duplicateInspection), TypeError);
   const duplicateValues = {
     ...sources,
     skills: {
@@ -90,13 +93,14 @@ test('view membership has its own CAS and failed persistence never installs a ca
         {
           commit(change) {
             assert.deepEqual(change.previous, initial);
+            assert.deepEqual(change.checkedSources, basis.sources);
             assert.equal(change.state.revision, initial.revision + 1);
             assert.deepEqual(view.exportState(), initial);
             throw failure;
           },
         },
       ),
-    (error) => error === failure,
+    (error) => error instanceof PersistenceError && error.operation === 'view.commit' && error.cause === failure,
   );
   assert.deepEqual(view.exportState(), initial);
   const writes = [];
@@ -112,6 +116,7 @@ test('view membership has its own CAS and failed persistence never installs a ca
   assert.equal(installed.revision, initial.revision + 1);
   assert.deepEqual(installed.members, members);
   assert.equal(writes.length, 1);
+  assert.deepEqual(writes[0].checkedSources, basis.sources);
   assert.deepEqual(view.exportState(), installed);
   assert.throws(() => view.applySync(sources, { basis, members: [] }), conflict);
 });
@@ -186,8 +191,8 @@ test('asynchronous sources cannot enter synchronous management or pretend to be 
     ...sources,
     skills: {
       ...sources.skills,
-      async index() {
-        return sources.skills.index();
+      async inspect(keys) {
+        return sources.skills.inspect(keys);
       },
     },
   };
@@ -306,8 +311,8 @@ test('view data rejects accessors, proxies and live objects without invoking the
     ...sources,
     skills: {
       ...sources.skills,
-      index() {
-        return { ...sources.skills.index(), entries: [{ key: 'translate', summary: accessor }] };
+      inspect(keys) {
+        return { ...sources.skills.inspect(keys), entries: [{ key: 'translate', summary: accessor }] };
       },
     },
   };
@@ -346,7 +351,10 @@ test('synchronous persistence rejects async or non-void returns and reentrant ap
     },
     () => 1,
   ]) {
-    assert.throws(() => view.applySync(sources, selection, { commit }), TypeError);
+    assert.throws(
+      () => view.applySync(sources, selection, { commit }),
+      (error) => error instanceof PersistenceError && error.cause instanceof TypeError,
+    );
     assert.equal(view.exportState(), before);
   }
   assert.throws(
@@ -356,7 +364,7 @@ test('synchronous persistence rejects async or non-void returns and reentrant ap
           view.applySync(sources, selection);
         },
       }),
-    conflict,
+    (error) => error instanceof PersistenceError && conflict(error.cause),
   );
   assert.equal(view.exportState(), before);
   await Promise.resolve();
@@ -383,8 +391,8 @@ test('membership storage rejects body payloads and source data cannot extend fix
     ...sources,
     skills: {
       ...sources.skills,
-      index() {
-        const index = sources.skills.index();
+      inspect(keys) {
+        const index = sources.skills.inspect(keys);
         return { ...index, stamp: { ...index.stamp, unregistered: true } };
       },
     },

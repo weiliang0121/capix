@@ -1,15 +1,15 @@
 import type { ModelProvider, ModelReply, ModelRequest } from '@capix/model-provider';
 import { ResourceOffer, type ResourceOperation } from '@capix/resources';
 import { InvocationCancelled } from '@capix/server-runtime';
-import { requireText } from './text.js';
+import { requireString, requireText } from './text.js';
 
 /** Complete provider replies remain visible; each business node decides what to accept. */
 export const CompletionResource = new ResourceOffer({
   name: 'conversation.completion',
   methods: {
-    async complete(model: ModelProvider, request: ModelRequest, operation: ResourceOperation): Promise<ModelReply> {
+    async complete(model: ModelProvider, request: ModelRequest, operation: ResourceOperation<string>): Promise<ModelReply> {
       try {
-        return await model.complete(request, { signal: operation.signal });
+        return await model.complete(request, { signal: operation.signal, ...(request.stream ? { emit: (delta: string) => operation.emit(requireString(delta, 'Model completion delta')) } : {}) });
       } catch (error) {
         if (operation.signal?.aborted && error === operation.signal.reason) throw new InvocationCancelled(operation.signal);
         throw error;
@@ -17,7 +17,7 @@ export const CompletionResource = new ResourceOffer({
     },
   },
   observation: {
-    methods: { complete: { input: (request) => ({ messages: request.messages.length, responseFormat: request.responseFormat }), output: (reply) => ({ model: reply.model, finishReason: reply.finishReason, usage: reply.usage }) } },
+    methods: { complete: { input: (request) => ({ messages: request.messages.length, responseFormat: request.responseFormat, stream: request.stream === true }), output: (reply) => ({ model: reply.model, finishReason: reply.finishReason, usage: reply.usage }) } },
   },
 });
 

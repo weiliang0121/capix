@@ -16,7 +16,7 @@ const packages = [
   { path: 'server/structure', allowed: ['@capix/contracts', '@capix/resources'] },
   { path: 'server/transcript', allowed: ['@capix/contracts', '@capix/diagnostics', '@capix/changes', '@capix/protocol', '@capix/resources', '@capix/view'] },
   { path: 'server/memory', allowed: ['@capix/contracts', '@capix/diagnostics', '@capix/changes', '@capix/protocol', '@capix/resources', '@capix/transcript', '@capix/view'] },
-  { path: 'server/view', allowed: ['@capix/contracts', '@capix/resources'] },
+  { path: 'server/view', allowed: ['@capix/contracts', '@capix/diagnostics', '@capix/resources'] },
   { path: 'server/measurement', allowed: ['@capix/protocol', '@capix/resources'] },
   { path: 'server/records', allowed: ['@capix/contracts', '@capix/protocol', '@capix/changes', '@capix/resources'] },
   { path: 'server/checkpoint', allowed: ['@capix/contracts'] },

@@ -1,6 +1,6 @@
 // pnpm build && node examples/conversation-materials.mjs
 // 离线验证实体、View 与服务装配；固定模型替身不代表真实模型质量。
-import { CompletionResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation } from '@capix/conversation-service';
+import { CompletionResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, createMessageInclusion } from '@capix/conversation-service';
 import { Memories, MemoryViewSource } from '@capix/memory';
 import { Resource } from '@capix/resources';
 import { Resources, Runner } from '@capix/server-runtime';
@@ -33,35 +33,37 @@ const model = {
   async complete(request) {
     const input = JSON.parse(request.messages[1].content);
     received.push(input);
-    const message = input.materials.entries.find((entry) => entry.source === 'messages');
+    const message = input.materials.entries.findLast((entry) => entry.source === 'messages');
     const memory = input.materials.entries.find((entry) => entry.source === 'memories');
     return { id: `offline-${received.length}`, model: 'offline', text: `依据：${message?.value.content ?? '无历史消息'}；偏好：${memory?.value.content ?? '无记忆'}。`, finishReason: 'stop', usage: null };
   },
 };
 
-// 4. 各资源分别登记。准备节点只有 View 读取权限，回答节点只有模型权限。
-const resources = new Resources().register(new Resource(transcript), TranscriptResource.append).register(new Resource({ view, transcript, memories }), ConversationViewResource).register(new Resource(model), CompletionResource);
-const scene = createConversationScene(createMaterialAnswer(), createMaterialPreparation());
+// 4. 宿主选装普通维护节点，在每次正式追加用户/助手消息后纳入该消息。
+// 读取与管理分别登记；准备节点只读取，维护节点只管理，回答节点只申请模型。
+const materials = new Resource({ view, transcript, memories });
+const resources = new Resources().register(new Resource(transcript), TranscriptResource.append).register(materials, ConversationViewResource.read).register(materials, ConversationViewResource.manage).register(new Resource(model), CompletionResource);
+const scene = createConversationScene(createMaterialAnswer(), createMaterialPreparation(), createMessageInclusion());
 const runner = new Runner(scene, resources).build();
 
 console.log('第一次回答：', await runner.run('目前的发布安排是什么？'));
 console.log('本次请求定位：', received[0].query);
 console.table(received[0].materials.entries.map(({ source, key, value }) => ({ source, key, content: value.content })));
+const firstCapture = JSON.stringify(received[0].materials);
 
-// 5. 宿主明确调整下一次的材料：只保留刚才的正式回答和记忆。
-// 退出 View 不删除实体；新消息也不会自动进入 View。
-const index = view.indexSync(sources);
-view.applySync(sources, {
-  basis: index.basis,
-  members: [
-    { source: 'messages', key: transcript.length - 1 },
-    { source: 'memories', key: preference.id },
-  ],
-});
+// 5. 无需在两次提交之间重组 View 成员。策略已纳入前次用户消息和正式回答。
+// 本次用户消息虽已纳入 View，prepare 仍把它作为 query，排除于此前材料之外。
 console.log('第二次回答：', await runner.run('根据刚才的正式回答继续说明。'));
 console.log(
   '前后捕获的消息索引：',
   received.map((input) => input.materials.entries.filter((entry) => entry.source === 'messages').map((entry) => entry.key)),
 );
-console.log('第一份材料仍然不变：', received[0].materials.entries[0].value.content);
+console.log('第一份材料仍然不变：', JSON.stringify(received[0].materials) === firstCapture);
+console.log(
+  '维护后的 View 消息成员：',
+  view
+    .members()
+    .filter((member) => member.source === 'messages')
+    .map((member) => member.key),
+);
 console.log('原始实体仍保留：', { messages: transcript.length, memories: memories.values().length });

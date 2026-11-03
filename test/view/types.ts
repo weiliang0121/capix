@@ -10,6 +10,7 @@ const transcript = new Transcript([{ role: 'user', content: 'Input' }]);
 const memories = new Memories(transcript);
 const skills: SyncViewSource<string, { title: string }, { text: string }> = {
   index: () => ({ stamp, entries: [{ key: 'translate', summary: { title: 'Translate' } }] }),
+  inspect: (keys) => ({ stamp, entries: keys.map((key) => ({ key, summary: { title: key } })) }),
   read: (keys, expected) => ({ stamp: expected, entries: keys.map((key) => ({ key, value: { text: 'Translate faithfully' } })) }),
   check: () => true,
 };
@@ -31,11 +32,13 @@ const view = new View<Sources>(state);
 const controlled = {
   messages: {
     index: () => sources.messages.index(),
+    inspect: (keys: readonly number[]) => sources.messages.inspect(keys),
     read: (keys: readonly number[], expected: SourceStamp) => sources.messages.read(keys, expected),
     check: (expected: SourceStamp) => sources.messages.check(expected),
   },
   memories: {
     index: () => sources.memories.index(),
+    inspect: (keys: readonly string[]) => sources.memories.inspect(keys),
     read: (keys: readonly string[], expected: SourceStamp) => sources.memories.read(keys, expected),
     check: (expected: SourceStamp) => sources.memories.check(expected),
   },
@@ -52,6 +55,9 @@ const asyncControlled = {
   messages: {
     async index() {
       return controlled.messages.index();
+    },
+    async inspect(keys: readonly number[]) {
+      return controlled.messages.inspect(keys);
     },
     async read(keys: readonly number[], expected: SourceStamp) {
       return controlled.messages.read(keys, expected);
@@ -148,6 +154,10 @@ view.index({ messages: sources.messages, skills });
 sources.messages.read(['0'], stamp);
 // @ts-expect-error memory adapters do not accept message indexes
 sources.memories.read([0], stamp);
+// @ts-expect-error metadata inspection preserves source-specific key types
+sources.messages.inspect(['0']);
+// @ts-expect-error memory inspection cannot use message indexes
+sources.memories.inspect([0]);
 
 const read = new ResourceOffer({ expose: (origin: { view: View<Sources>; sources: Sources }, activity) => openView(origin.view, origin.sources, activity) });
 const manage = new ResourceOffer({ expose: (origin: { view: View<Sources>; sources: Sources }, activity) => openViewManager(origin.view, origin.sources, activity) });
@@ -166,6 +176,9 @@ access.endpoints.manage.apply({ basis: index.basis, members: [{ source: 'skills'
 const asynchronous: ViewSource<string, { title: string }, { text: string }> = {
   async index() {
     return skills.index();
+  },
+  async inspect(keys) {
+    return skills.inspect(keys);
   },
   async read(keys, expected) {
     return skills.read(keys, expected);

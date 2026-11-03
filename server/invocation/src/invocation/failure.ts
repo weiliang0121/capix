@@ -5,7 +5,8 @@ import type { InvocationExceptionOrigin } from './provenance.js';
 export interface InvocationFailure extends InvocationFailureFact {
   readonly error: unknown;
   readonly origin?: InvocationExceptionOrigin;
-  /** Live processing failure may be received by a parent; diagnostic history grants no authority. */
+  /** Live reception eligibility, independent of diagnostic kind: ordinary Error can be receivable.
+   * A parent still checks the exact relation, phase and active window; history grants no authority. */
   readonly receptionAllowed?: boolean;
 }
 export type InvocationPhase = InvocationFailureFact['phase'];

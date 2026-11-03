@@ -33,7 +33,7 @@ function fixture(transcript = new Transcript(earlier), ViewType = View) {
 }
 
 function assemble(content, answer, model, material = content) {
-  const resources = new Resources().register(new Resource(content.transcript), TranscriptResource.append).register(new Resource(material), ConversationViewResource);
+  const resources = new Resources().register(new Resource(content.transcript), TranscriptResource.append).register(new Resource(material), ConversationViewResource.read);
   if (model) resources.register(new Resource(model), CompletionResource);
   return new Runner(createConversationScene(answer, createMaterialPreparation()), resources).build();
 }
@@ -179,7 +179,7 @@ test('current and later messages selected by the host are not passed off as earl
     { source: 'messages', key: 5 },
     { source: 'memories', key: content.preference.id },
   ]);
-  const resources = new Resources().register(new Resource(content), ConversationViewResource);
+  const resources = new Resources().register(new Resource(content), ConversationViewResource.read);
   const runner = new Runner(new Scene(createMaterialPreparation()), resources).build();
   const received = await runner.run({ transcriptId: content.transcript.id, index: 4, message: content.transcript.get(4) });
   assert.equal(received.query.index, 4);

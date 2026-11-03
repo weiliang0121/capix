@@ -10,6 +10,11 @@ export class ProviderError extends Error {
   }
 }
 
+/** Internal provenance: consumer failures must not be mistaken for unsafe transport errors. */
+export class ModelEmissionFailure {
+  constructor(readonly failure: unknown) {}
+}
+
 /** Concurrent cancellation does not relabel an independently thrown failure. */
 export function isRequestCancellation(error: unknown, signal: AbortSignal): boolean {
   return signal.aborted && (error === signal.reason || (error instanceof DOMException && error.name === 'AbortError'));

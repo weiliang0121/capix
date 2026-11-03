@@ -2,21 +2,39 @@ import type { ViewSources } from './source.js';
 import type { ViewBasis, ViewReference, ViewState } from './types.js';
 import { checkIdentity, checkKey, checkStamp, conflict, data, exactKeys, object, sameIdentity } from './value.js';
 
-export function members<Sources extends ViewSources>(value: readonly ViewReference<Sources>[], slots: readonly string[]): readonly ViewReference<Sources>[] {
+export function members<Sources extends ViewSources>(value: readonly ViewReference<Sources>[], slots: readonly string[], deduplicate = false): readonly ViewReference<Sources>[] {
   if (!Array.isArray(value)) throw new TypeError('View members must be an array');
   const seen = new Map(slots.map((slot) => [slot, new Set<string | number>()]));
   const accepted = data(value);
-  for (const member of accepted) {
+  const unique = accepted.filter((member) => {
     object(member);
     exactKeys(member, ['source', 'key']);
     if (typeof member.source !== 'string') throw new TypeError('View member source must be named');
     const keys = seen.get(member.source);
     if (!keys) throw new TypeError('View member refers to an unknown source');
     checkKey(member.key);
-    if (keys.has(member.key)) throw new TypeError('View members must be unique');
+    if (keys.has(member.key)) {
+      if (deduplicate) return false;
+      throw new TypeError('View members must be unique');
+    }
+    keys.add(member.key);
+    return true;
+  });
+  return deduplicate ? Object.freeze(unique) : accepted;
+}
+
+/** Derived lookup only; persisted membership and order remain in ViewState. */
+export function memberIndex<Sources extends ViewSources>(members: readonly ViewReference<Sources>[]): ReadonlyMap<string, ReadonlySet<string | number>> {
+  const index = new Map<string, Set<string | number>>();
+  for (const member of members) {
+    let keys = index.get(member.source);
+    if (!keys) {
+      keys = new Set();
+      index.set(member.source, keys);
+    }
     keys.add(member.key);
   }
-  return accepted;
+  return index;
 }
 
 export function state<Sources extends ViewSources>(value: ViewState<Sources>): ViewState<Sources> {

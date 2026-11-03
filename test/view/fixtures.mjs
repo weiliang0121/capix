@@ -12,12 +12,23 @@ export function skillSource() {
     ['translate', { text: 'Translate faithfully.' }],
     ['review', { text: 'Review the output.' }],
   ]);
-  const counts = { index: 0, read: 0, check: 0 };
+  const counts = { index: 0, inspect: 0, read: 0, check: 0 };
   const stamp = () => Object.freeze({ id: 'local-skills', scope: 'whole', version: String(version) });
   const source = {
     index() {
       counts.index++;
       return { stamp: stamp(), entries: [...values.keys()].map((key) => ({ key, summary: { title: key } })) };
+    },
+    inspect(keys) {
+      const expected = stamp();
+      counts.inspect++;
+      if (!Array.isArray(keys) || new Set(keys).size !== keys.length) throw new TypeError('Skill keys must be a unique array');
+      const entries = keys.map((key) => {
+        if (!values.has(key)) throw new RangeError('Skill does not exist');
+        return { key, summary: { title: key } };
+      });
+      if (!source.check(expected)) throw new RuntimeError('VIEW_SOURCE_CONFLICT', 'Skills changed');
+      return { stamp: expected, entries };
     },
     read(keys, expected) {
       if (!source.check(expected)) throw new RuntimeError('VIEW_SOURCE_CONFLICT', 'Skills changed');

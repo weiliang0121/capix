@@ -313,7 +313,9 @@ test('message and memory access preserves entity validation, change publication 
   assert.ok(Object.isFrozen(later.memories[0]));
   assert.ok(Object.isFrozen(later.memories[0].sourceIndexes));
   assert.equal(later.memories[0].transcript, undefined);
-  assert.equal(later.writer.apply([{ ...change, action: 'update', memoryId: later.memories[0].id, result: { ...change.result, content: '周六' } }]), undefined);
+  const applied = later.writer.apply([{ ...change, action: 'update', memoryId: later.memories[0].id, result: { ...change.result, content: '周六' } }]);
+  assert.deepEqual(applied, { memoriesId: memories.id, transcriptId: transcript.id, startSequence: 1, sequence: 2, items: [{ id: later.memories[0].id, ...change.result, content: '周六' }] });
+  assert.ok(Object.isFrozen(applied.items[0]));
   assert.equal(later.memories[0].content, '周五');
   assert.equal(bind(null).values.memories[0].content, '周六');
   later.usage.add([appended[0].message, appended[0].message]);

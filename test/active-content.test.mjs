@@ -55,7 +55,10 @@ test('active view rejects asynchronous persistence without installing changed me
   const memories = new Memories(transcript);
   const active = new ActiveView(transcript, memories, { persistence: { commit: () => Promise.reject(new Error('late persistence rejection')) } });
   const before = active.capture();
-  assert.throws(() => active.apply({ basis: before.basis, messageIndexes: [], memoryIds: [] }), /synchronously/);
+  assert.throws(
+    () => active.apply({ basis: before.basis, messageIndexes: [], memoryIds: [] }),
+    (error) => error instanceof PersistenceError && error.operation === 'view.commit' && error.cause instanceof TypeError && /synchronously/.test(error.cause.message),
+  );
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(active.capture(), before);
 });
@@ -219,7 +222,10 @@ test('index persistence failure rolls back source append and does not install an
   store = disk.open();
   content = disk.content(store);
   const current = content.active.capture();
-  assert.throws(() => content.active.apply({ basis: current.basis, messageIndexes: [], memoryIds: [] }), /保存或加载失败/);
+  assert.throws(
+    () => content.active.apply({ basis: current.basis, messageIndexes: [], memoryIds: [] }),
+    (error) => error instanceof PersistenceError && error.operation === 'view.commit' && error.cause.code === 'PERSISTENCE_UNAVAILABLE' && /保存或加载失败/.test(error.cause.message),
+  );
   assert.deepEqual(content.active.capture(), current);
   assert.equal(store.failure.code, 'PERSISTENCE_UNAVAILABLE');
 });

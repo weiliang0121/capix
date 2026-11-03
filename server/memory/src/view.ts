@@ -39,6 +39,19 @@ export class MemoryViewSource implements MemoryViewContract {
     return Object.freeze({ stamp, entries });
   }
 
+  inspect(keys: readonly string[]): ReturnType<MemoryViewContract['inspect']> {
+    const stamp = this.stamp();
+    const selected = this.acceptKeys(keys);
+    const entries = Object.freeze(
+      selected.map((key) => {
+        if (this.#allowed && !this.#allowed.has(key)) throw new RangeError('Memory is outside the view source scope');
+        return Object.freeze({ key, summary: Object.freeze({ topic: this.requireMemory(key).topic }) });
+      }),
+    );
+    this.requireCurrent(stamp);
+    return Object.freeze({ stamp, entries });
+  }
+
   read(keys: readonly string[], expected: SourceStamp): ReturnType<MemoryViewContract['read']> {
     const basis = Object.freeze({ id: expected.id, scope: expected.scope, version: expected.version });
     this.requireCurrent(basis);

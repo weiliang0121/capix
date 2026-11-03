@@ -52,6 +52,8 @@ MemoryRecord extends BaseRecord<{
 
 消息分组、记忆提取或视图保留等策略由上层函数或节点组织。记忆包只负责所有写入共同遵守的接纳：包内 `prepareMemoryChange` 固定一项变更的说明、来源及完整结果；`Memories` 检查整批目标、重复更新及既有来源凭据，再持久提交、落实并发布。普通 `apply` 和固定 `applyFixed` 使用相同的值接纳规则，后续提案或 getter 不能改写已经接纳项的事件依据。此函数不作为可替换策略或公开写入口。
 
+记忆实体接纳更新后的完整来源，不强制结果累加全部旧 `sourceIndexes` 或 `sourceResults`。原文来源仍须真实、非空且唯一，完整结果须包含本次变更依据；结果中沿用目标当前快照的凭据 ID 时，其内容不得改写。业务提取预设可以决定保留哪些旧来源，但不能把自己的保留策略当作所有记忆或内核的永久约束。
+
 ```text
 准备固定材料 → 决策 / 组装 → 生成 → 追加正式 assistant 消息
                          ↓
@@ -128,7 +130,17 @@ MemoryResultSource {
 
 无 Recorder 时事实照常变化，不产生记录。接纳及批次预检查失败不改变记忆。整批预检查通过后，先经可选 persistence 端口提交，再整批安装内存状态，最后逐项通知；提交失败不改变内存。通知异常发生在整个批次成立之后，仍尝试其余项的事实发布，按安装的 isolate/propagate 处理并保留真实变更，不虚构回滚。已经生成的回答同样不会被删除。请求超预算直接失败，不自动裁剪、重试或压缩。
 
-Memories.exportState / restore 保存并静默恢复集合和 Memory 身份、sequence、正文及来源。没有实现记忆召回、关系组织、并发更新、用户审核或记录补偿。有限 CP 恢复只核对原快照和准确子树中的固定落实凭据，见 [Checkpoint](checkpoints.md)。
+Memories.exportState / restore 保存并静默恢复集合和 Memory 身份、sequence、正文及来源。没有实现记忆召回、关系组织、自动并发合并、用户审核或记录补偿。有限 CP 恢复只核对原快照和准确子树中的固定落实凭据，见 [Checkpoint](checkpoints.md)。
+
+## 普通写入的资源结果与依据
+
+`MemoryResource.apply` 的同步端点 `apply(changes, expected?)` 返回冻结的 `MemoryApplication`：`{memoriesId, transcriptId, startSequence, sequence, items}`。items 仅含实体实际变动记忆的纯值快照，ID 由实体产生；等值更新不产生变动项。返回值不会随下一次更新漂移，不泄露活 Memory，也不代表固定操作凭据。
+
+调用方可提供 `MemoryBasis {memoriesId, transcriptId, sequence}`，资源在正式同步 apply 前核对准确集合与版本；包括空批次在内，冲突都拒绝且不重试。直接实体 apply 保持原语义；既有绑定期 snapshot 与 applyFixed 不变。需要跨模型等待维护原依据时，应将捕获的 basis 保留至写入，而非提交前重新读取最新 sequence。
+
+新的对照服务提供显式选装的普通记忆维护 Group，读取完整消息前缀和记忆全集，提出并校验变更、提交后按真实新 ID 纳入 View。更新允许根据当前记忆内容保留或移除旧 `sourceIndexes`；结果仍须包含本次变更依据，原文索引须在捕获前缀内真实、非空且唯一。当前服务对 `sourceResults` 则原样继承目标记忆的全部旧凭据，模型不能选择或生成它们；这只是本业务预设，不是实体的永久累加规则，也不增加凭据选择 API。该策略与上文 Observer 的固定材料、提取规则和 CP 链路分别维护，详见 [对照服务](../services/conversation/README.md#从正式回答形成后续记忆)。
+
+消息退出 View、记忆退出 View 与修改记忆来源互不自动级联。退出消息不删除记忆来源，更新来源不改变成员资格，更新记忆也不自动重新纳入已退出项。记忆写入和 View 成员提交不是跨实体事务，后一步失败不能抹去前一步已成立的事实。
 
 ## 观测展示
 

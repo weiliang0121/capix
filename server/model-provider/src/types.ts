@@ -9,6 +9,8 @@ export interface ModelRequest {
   readonly maxTokens?: number;
   readonly responseFormat?: 'text' | 'json_object';
   readonly temperature?: number;
+  /** Request incremental transport; final reply acceptance is unchanged. Defaults to false. */
+  readonly stream?: boolean;
 }
 
 export interface ModelReply {
@@ -22,6 +24,8 @@ export interface ModelReply {
 
 export interface ModelControls {
   readonly signal?: AbortSignal;
+  /** Synchronous preview consumer. Its failure stops consumption and is returned unchanged. */
+  readonly emit?: (delta: string) => void;
 }
 
 /** Small injectable capability. Prompts, schemas and result acceptance belong to its consumer. */

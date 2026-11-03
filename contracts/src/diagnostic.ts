@@ -11,7 +11,7 @@ export interface RuntimeErrorValue {
   errors?: RuntimeErrorValue[];
 }
 
-/** Scope and category of an unsuccessful invocation delivery; not a retry instruction. */
+/** Scope and diagnostic category of an unsuccessful delivery; kind alone grants neither reception nor retry. */
 export interface InvocationFailureFact {
   readonly kind: 'exception' | 'error';
   readonly phase: 'setup' | 'execute' | 'receive' | 'handling' | 'control' | 'observation';

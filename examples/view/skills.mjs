@@ -17,6 +17,16 @@ export function createSkillSource() {
       // 目录只有摘要；不把 Skill 正文混入目录。
       return directory;
     },
+    inspect(keys) {
+      if (!Array.isArray(keys) || new Set(keys).size !== keys.length) throw new TypeError('Skill keys must be a unique array');
+      return {
+        stamp,
+        entries: keys.map((key) => {
+          if (!values.has(key)) throw new RangeError('Skill does not exist in this source scope');
+          return { key, summary: { title: '中文翻译' } };
+        }),
+      };
+    },
     read(keys, expected) {
       // 版本核验和取值属于来源的职责。缺项不能静默略过。
       if (!check(expected)) throw new RuntimeError('VIEW_SOURCE_CONFLICT', 'Skill 来源依据已变化');

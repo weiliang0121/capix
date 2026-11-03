@@ -115,7 +115,7 @@ test('a source that closes the window before rejecting cannot leak an unhandled 
     import { openView } from '@capix/view';
     import { fixture } from ${JSON.stringify(fixtures)};
     const closed = error => error instanceof ResourceAccessClosed || (error instanceof AggregateError && error.errors.length > 0 && error.errors.every(closed));
-    for (const method of ['index', 'read', 'check']) {
+    for (const method of ['inspect', 'read', 'check']) {
       const { view, sources } = fixture();
       let access;
       const broken = { ...sources, skills: { ...sources.skills, [method]() {

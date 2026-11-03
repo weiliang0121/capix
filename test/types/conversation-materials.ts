@@ -1,4 +1,4 @@
-import { ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, type AcceptedConversationInput, type ConversationMaterialInput, type ConversationMaterialSources } from '@capix/conversation-service';
+import { CompletionResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, type AcceptedConversationMessage, type ConversationMaterialInput, type ConversationMaterialSources } from '@capix/conversation-service';
 import { Memories } from '@capix/memory';
 import { Resource, type ResourcesOf } from '@capix/resources';
 import { Resources, Runner } from '@capix/server-runtime';
@@ -9,7 +9,7 @@ import { View } from '@capix/view';
 const transcript = new Transcript();
 const memories = new Memories(transcript);
 const view = new View<ConversationMaterialSources>({ revision: 0, sources: { messages: { id: transcript.id, scope: 'whole' }, memories: { id: memories.id, scope: 'whole' } }, members: [] });
-const resources = new Resources().register(new Resource(transcript), TranscriptResource.append).register(new Resource({ view, transcript, memories }), ConversationViewResource);
+const resources = new Resources().register(new Resource(transcript), TranscriptResource.append).register(new Resource({ view, transcript, memories }), ConversationViewResource.read);
 const answer = new Node<ConversationMaterialInput, string, {}, string>({
   run(work) {
     const query: string = work.input.query.content;
@@ -45,7 +45,7 @@ const response: Promise<string> = runner.run('question');
 // @ts-expect-error Host submissions are text, not prepared business material.
 runner.run({ query: 'question', materials: [] });
 
-const deps = { view: ConversationViewResource.request() };
+const deps = { view: ConversationViewResource.read.request() };
 const readOnly = new Node<string, string, ResourcesOf<typeof deps>>({
   deps,
   async run(work) {
@@ -60,11 +60,32 @@ const readOnly = new Node<string, string, ResourcesOf<typeof deps>>({
   },
 });
 
-const accepted: AcceptedConversationInput = { transcriptId: transcript.id, index: 0, message: { role: 'user', content: 'question' } };
+const accepted: AcceptedConversationMessage = { transcriptId: transcript.id, index: 0, message: { role: 'user', content: 'question' } };
 // @ts-expect-error Accepted source identity is required independently of the selected View.
-const missingSource: AcceptedConversationInput = { index: 0, message: { role: 'user', content: 'question' } };
+const missingSource: AcceptedConversationMessage = { index: 0, message: { role: 'user', content: 'question' } };
 const wrong = new Node<number, string, {}, string>({ run: (work) => String(work.input) });
 // @ts-expect-error Preparation and answer must agree on the actual input contract.
 createConversationScene(wrong, createMaterialPreparation());
 createConversationScene(createMaterialAnswer(), createMaterialPreparation());
-void [response, accepted, missingSource, readOnly];
+
+const modelDeps = { model: CompletionResource.request() };
+const streamed = new Node<string, string, ResourcesOf<typeof modelDeps>, string>({
+  deps: modelDeps,
+  async run(work) {
+    const request = { messages: [{ role: 'user' as const, content: work.input }], stream: true };
+    const reply = await work.resources.model.complete(request, {
+      delta: (value) => {
+        const text: string = value;
+        work.output.emit(text);
+        // @ts-expect-error Streamed resource deltas are text, not final provider replies.
+        value.finishReason;
+      },
+    });
+    const finishReason: string = reply.finishReason;
+    // @ts-expect-error A resource delta consumer cannot claim numeric chunks.
+    work.resources.model.complete(request, { delta: (value: number) => void value });
+    void finishReason;
+    return reply.text;
+  },
+});
+void [response, accepted, missingSource, readOnly, streamed];
