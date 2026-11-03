@@ -269,6 +269,9 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@capix/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
@@ -367,6 +370,9 @@ importers:
       '@capix/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@capix/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
@@ -394,6 +400,12 @@ importers:
       '@capix/interaction':
         specifier: workspace:*
         version: link:../../server/interaction
+      '@capix/memory':
+        specifier: workspace:*
+        version: link:../../server/memory
+      '@capix/model-provider':
+        specifier: workspace:*
+        version: link:../../server/model-provider
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
@@ -409,6 +421,9 @@ importers:
       '@capix/transcript':
         specifier: workspace:*
         version: link:../../server/transcript
+      '@capix/view':
+        specifier: workspace:*
+        version: link:../../server/view
 
   services/observer:
     dependencies:

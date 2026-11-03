@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@capix/contracts": "workspace:*",
+    "@capix/diagnostics": "workspace:*",
     "@capix/changes": "workspace:*",
     "@capix/protocol": "workspace:*",
     "@capix/resources": "workspace:*",

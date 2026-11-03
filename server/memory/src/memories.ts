@@ -10,6 +10,7 @@ import type { MemoriesCommit, MemoriesPersistence, MemoriesState } from './persi
 import { isArray, isSafeInteger } from 'es-toolkit/compat';
 import type { MemoryFixedApply, MemoryApplyReceipt, MemoryApplyState } from './apply.js';
 import { RuntimeError } from '@capix/contracts';
+import { PersistenceError } from '@capix/diagnostics';
 
 export interface MemoriesOptions {
   observation?: EventConsumer<MemoryEvent>;
@@ -186,10 +187,15 @@ export class Memories {
   }
 
   private commit(change: MemoriesCommit): void {
-    const result: unknown = this.persistence?.commit(change);
-    if (result !== undefined) {
-      void Promise.resolve(result).catch(() => undefined);
-      throw new TypeError('Memory persistence must complete synchronously and return undefined');
+    try {
+      const result: unknown = this.persistence?.commit(change);
+      if (result !== undefined) {
+        void Promise.resolve(result).catch(() => undefined);
+        throw new TypeError('Memory persistence must complete synchronously and return undefined');
+      }
+    } catch (cause) {
+      if (cause instanceof PersistenceError) throw cause;
+      throw new PersistenceError('memories.commit', cause);
     }
   }
 }

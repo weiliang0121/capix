@@ -24,6 +24,10 @@ export interface MemoriesCommit {
   readonly fixed?: MemoryApplyState;
 }
 
+/**
+ * Commit before installing the batch. The entity marks port failures and invalid
+ * synchronous returns as PersistenceError; that classification does not establish commit outcome.
+ */
 export interface MemoriesPersistence {
   commit(change: MemoriesCommit): undefined;
 }

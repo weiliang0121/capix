@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { PersistenceError } from '@capix/diagnostics';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import { ActiveView, ConversationContent } from '@capix/observer-content';
@@ -206,7 +207,10 @@ test('index persistence failure rolls back source append and does not install an
   store = disk.open();
   let content = disk.content(store);
   const before = content.active.capture();
-  assert.throws(() => content.transcript.append(message('rejected')), /保存或加载失败/);
+  assert.throws(
+    () => content.transcript.append(message('rejected')),
+    (error) => error instanceof PersistenceError && error.operation === 'transcript.commit' && error.cause.code === 'PERSISTENCE_UNAVAILABLE' && /保存或加载失败/.test(error.cause.message),
+  );
   assert.equal(content.transcript.length, 1);
   assert.deepEqual(content.active.capture(), before);
   assert.deepEqual(store.loadContent().active, content.active.exportState());
@@ -229,7 +233,10 @@ test('default inclusion is part of the same transaction as a memory batch', (t) 
   store = disk.open();
   const content = disk.content(store);
   const before = content.active.capture();
-  assert.throws(() => content.memories.apply([createMemory('one'), createMemory('two')]), /保存或加载失败/);
+  assert.throws(
+    () => content.memories.apply([createMemory('one'), createMemory('two')]),
+    (error) => error instanceof PersistenceError && error.operation === 'memories.commit' && error.cause.code === 'PERSISTENCE_UNAVAILABLE' && /保存或加载失败/.test(error.cause.message),
+  );
   assert.equal(content.memories.sequence, 0);
   assert.equal(content.memories.values().length, 0);
   assert.deepEqual(content.active.capture(), before);

@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { PersistenceError } from '@capix/diagnostics';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import { SqliteObserverStore, initializeObserver, observeOverview } from '@capix/observer-service';
@@ -104,18 +105,27 @@ test('SQL failure rolls back the entire append and memory batch before in-memory
   );
   const store = disk.open();
   const content = createContent(store);
-  assert.throws(() => content.transcript.append({ role: 'user', content: 'first' }, { role: 'assistant', content: 'reject' }), /保存或加载失败/);
+  assert.throws(
+    () => content.transcript.append({ role: 'user', content: 'first' }, { role: 'assistant', content: 'reject' }),
+    (error) => error instanceof PersistenceError && error.operation === 'transcript.commit' && error.cause.code === 'PERSISTENCE_UNAVAILABLE' && /保存或加载失败/.test(error.cause.message),
+  );
   assert.equal(content.transcript.length, 0);
   assert.equal(store.loadContent().transcript.messages.length, 0);
   assert.equal(store.failure.code, 'PERSISTENCE_UNAVAILABLE');
-  assert.throws(() => content.transcript.append({ role: 'user', content: 'still blocked' }), /内容存储不可用/);
+  assert.throws(
+    () => content.transcript.append({ role: 'user', content: 'still blocked' }),
+    (error) => error instanceof PersistenceError && error.operation === 'transcript.commit' && error.cause.code === 'PERSISTENCE_UNAVAILABLE' && /内容存储不可用/.test(error.cause.message),
+  );
   store.close();
   const reopened = disk.open();
   const saved = reopened.loadContent();
   const transcript = Transcript.restore(saved.transcript, { persistence: reopened.transcript });
   const memories = Memories.restore(saved.memories, transcript, { persistence: reopened.memories });
   transcript.append({ role: 'user', content: 'first' }, { role: 'assistant', content: 'answer' });
-  assert.throws(() => memories.apply([createMemory('first'), createMemory('reject')]), /保存或加载失败/);
+  assert.throws(
+    () => memories.apply([createMemory('first'), createMemory('reject')]),
+    (error) => error instanceof PersistenceError && error.operation === 'memories.commit' && error.cause.code === 'PERSISTENCE_UNAVAILABLE' && /保存或加载失败/.test(error.cause.message),
+  );
   assert.equal(memories.values().length, 0);
   assert.equal(memories.sequence, 0);
   assert.equal(reopened.loadContent().memories.items.length, 0);

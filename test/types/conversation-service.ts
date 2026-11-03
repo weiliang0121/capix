@@ -39,7 +39,7 @@ scene.run = async (work) => {
   const input: string = work.input;
   const [message] = work.resources.messages.append([{ role: 'user', content: input }]);
   if (!message) throw new Error('Input was not appended');
-  const history: readonly Readonly<Message>[] = await work.resources.history.read(message.index + 1);
+  const history: readonly Readonly<Message>[] = await work.children.prepare.invoke(message);
   const content: string = await work.children.answer.invoke(history, {
     delta(text) {
       const chunk: string = text;
@@ -54,8 +54,10 @@ scene.run = async (work) => {
   await work.children.unregistered.invoke(history);
   // @ts-expect-error The answer child consumes messages rather than raw text.
   await work.children.answer.invoke(input);
-  // @ts-expect-error The history resource reads through a numerical position.
-  await work.resources.history.read(input);
+  // @ts-expect-error Preparation needs the formal append result, not a raw string.
+  await work.children.prepare.invoke(input);
+  // @ts-expect-error History is scoped to the preparation child, not implicitly given to the Scene.
+  work.resources.history;
   // @ts-expect-error The Scene does not inherit its child's model dependency.
   work.resources.model.generate(history);
   return content;

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ChangeBuffer } from '@capix/changes';
+import { PersistenceError } from '@capix/diagnostics';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
 import { SqliteObserverStore } from '@capix/observer-service';
@@ -86,7 +87,10 @@ test('SQLite message mutation and fixed receipt roll back together when receipt 
   const store = disk.open();
   const transcript = create(store);
   const input = request(transcript);
-  assert.throws(() => transcript.applyFixed(input), /保存或加载失败/);
+  assert.throws(
+    () => transcript.applyFixed(input),
+    (error) => error instanceof PersistenceError && error.operation === 'transcript.commit' && error.cause.code === 'PERSISTENCE_UNAVAILABLE' && /保存或加载失败/.test(error.cause.message),
+  );
   assert.equal(transcript.length, 1);
   assert.equal(transcript.confirmFixed(input), undefined);
   assert.equal(transcript.revision, 1);

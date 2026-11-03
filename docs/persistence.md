@@ -40,6 +40,8 @@ Transcript.append / startSegment，Memories.apply
 
 内容实体只知道自己的窄持久端口：`TranscriptPersistence` 接受追加或切段，`MemoriesPersistence` 接受整批 upsert；固定操作同时保存依据与凭据，无变化批次也可独立确认。两者携带实体身份及期望 revision/sequence；存储检查当前版本并原子保存。commit 必须同步结束且返回 undefined，不能将异步任务交给变化消费者后就宣称内容已保存。
 
+Transcript / Memories 在这个必要端口边界统一标记 `PersistenceError`：适配器原异常保留为 cause，已经标记的同类异常保持原身份；错误返回值或 Promise 返回也属于持久端口契约失败。输入预检查与提交后的通知不被这个包装覆盖。分类只保护必要持久事实的交付，不代表存储一定没有写入；确认丢失时仍需核对权威状态，不能据此自动重试。
+
 Transcript 保存稳定 id、消息绝对 index、正文、revision 和分段起点。Memories 保存集合 id、transcriptId、sequence，以及每个 Memory 的稳定 id、正文、消息来源和不可变 sourceResults。更新保留身份与列表次序；无变化不写库、不占顺序。
 
 `active_content` 是内容索引，不引入独立实体 ID。新消息追加、新记忆创建与相应活跃成员在同一个 SQLite 事务中保存；记忆更新保留原成员选择，已退出的记忆不会因更新自动重新加入。内存索引在源变化安装后同步，不能依靠可选 Recorder 推进。显式维护通过复合依据（索引修订、消息 revision、记忆 sequence 和两种集合身份）检查冲突，先同步提交再安装索引。

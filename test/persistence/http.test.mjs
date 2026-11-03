@@ -100,7 +100,13 @@ test('content save failure gates following submissions through server admission 
   db.close();
   const current = await disk.start();
   const first = await run(current.base, 'failed-save');
-  await first.text();
+  const failed = await frames(first);
+  assert.equal(failed.at(-1).result.status, 'failed');
+  assert.equal(failed.at(-1).result.error.code, 'PERSISTENCE_FAILED');
+  assert.ok(
+    failed.every((snapshot) => snapshot.input === undefined && snapshot.answer === undefined),
+    'failed input persistence cannot publish accepted input or answer facts',
+  );
   assert.equal((await get(current.base, '/api/conversation/admission')).status, 'unavailable');
   assert.equal((await get(current.base, '/api/transcript')).messages.length, 0);
   const next = await run(current.base, 'must-not-run');

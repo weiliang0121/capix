@@ -81,7 +81,7 @@ export const TranscriptResource = Object.freeze({
           return activity.runSync('append', { input: () => ({ count: messages.length }), output: (result) => ({ transcriptId: transcript.id, indexes: result.map((item) => item.index), revision: transcript.revision }) }, () => {
             const start = transcript.length;
             transcript.appendFrom(messages, { origin: activity.origin, observation: activity.transcriptObservation, progress });
-            return Object.freeze(messages.map((_, offset) => Object.freeze({ index: start + offset, message: transcript.get(start + offset)! })));
+            return Object.freeze(messages.map((_, offset) => Object.freeze({ transcriptId: transcript.id, index: start + offset, message: transcript.get(start + offset)! })));
           });
         },
       });

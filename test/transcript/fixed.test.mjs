@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ChangeBuffer, ProgressChannel } from '@capix/changes';
+import { PersistenceError } from '@capix/diagnostics';
 import { Transcript } from '@capix/transcript';
 
 function request(transcript, content = 'fixed answer', position = 'answer-message') {
@@ -94,18 +95,22 @@ test('fixed operation becomes confirmable before post-commit change failure and 
 
 test('fixed append persistence failure installs neither the message nor operation receipt', () => {
   let shouldFail = true;
+  const failure = new Error('disk full');
   let transcript;
   transcript = new Transcript([], {
     persistence: {
       commit(change) {
         assert.throws(() => transcript.applyFixed(request(transcript)), /reenter/);
         assert.equal(transcript.confirmFixed(change.fixed.request), undefined);
-        if (shouldFail) throw new Error('disk full');
+        if (shouldFail) throw failure;
       },
     },
   });
   const input = request(transcript);
-  assert.throws(() => transcript.applyFixed(input), /disk full/);
+  assert.throws(
+    () => transcript.applyFixed(input),
+    (error) => error instanceof PersistenceError && error.operation === 'transcript.commit' && error.cause === failure,
+  );
   assert.equal(transcript.length, 0);
   assert.equal(transcript.confirmFixed(input), undefined);
   shouldFail = false;

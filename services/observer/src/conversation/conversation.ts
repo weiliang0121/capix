@@ -339,7 +339,9 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
       const receipt = work.resources.messages.applyFixed({ position: 'answer', messages: [{ role: 'assistant', content: answer.content }] });
       return { answer, response: { index: receipt.start, message: { role: 'assistant', content: answer.content } }, receipt: { ...receipt, count: 1 }, responseOrder: childOrder };
     }
-    return { answer, response: work.resources.messages.append([{ role: 'assistant', content: answer.content }])[0]! };
+    const appended = work.resources.messages.append([{ role: 'assistant', content: answer.content }])[0]!;
+    // Keep this service's versioned reception shape independent of the resource receipt.
+    return { answer, response: { index: appended.index, message: appended.message } };
   }
 
   private catalog(work: Work, prepared: PreparedConversationContext): ReadonlyMap<string, ConversationCapability<ExecutionProgress>> {

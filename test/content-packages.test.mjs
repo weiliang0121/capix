@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { RuntimeError } from '@capix/contracts';
+import { PersistenceError } from '@capix/diagnostics';
 import { ChangeCaptureError, ChangeBuffer } from '@capix/changes';
 import { Resource, Resources, ResourceAccessClosed } from '@capix/resources';
 import { Transcript, TranscriptResource } from '@capix/transcript';
@@ -129,7 +130,7 @@ test('content offers keep fixed writes and active membership inside independent 
   }
 });
 
-test('memory storage failure crosses the offer unchanged and installs neither content nor a receipt', () => {
+test('memory storage failure is classified by the entity and crosses the offer without installing content or a receipt', () => {
   const transcript = new Transcript([{ role: 'user', content: 'input' }]);
   const cause = new Error('storage unavailable');
   const changes = new ChangeBuffer();
@@ -154,15 +155,19 @@ test('memory storage failure crosses the offer unchanged and installs neither co
   );
   try {
     const input = { position: 'remember', changes: [create('remembered')] };
+    let failure;
     assert.throws(
       () => access.endpoints.memory.applyFixed(input),
-      (error) => error === cause,
+      (error) => {
+        failure = error;
+        return error instanceof PersistenceError && error.operation === 'memories.commit' && error.cause === cause;
+      },
     );
     assert.equal(memories.sequence, 0);
     assert.deepEqual(memories.values(), []);
     assert.equal(memories.confirmFixed(fixedRequest(memories, input)), undefined);
     assert.equal(changes.size, 0);
-    assert.ok(reported.includes(cause));
+    assert.ok(reported.includes(failure));
     reject = false;
     const receipt = access.endpoints.memory.applyFixed(input);
     assert.equal(receipt.sequence, 1);

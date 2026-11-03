@@ -12,6 +12,8 @@ Scene 正式追加输入 → 任务 Group 获得 message / messageIndex
        理解 / 回答 / 提取使用同一份固定材料
 ```
 
+`TranscriptResource.append.append` 返回每条正式追加消息的 `{ transcriptId, index, message }`，来源身份由实体提供，index 是稳定的原文位置；调用方按自身业务或持久契约显式投影字段。
+
 默认服务由 Scene 使用普通 append 资源接纳输入；任务 Group 的显式来源绑定固定配置及原文定位，在准备 Group 中才捕获真实材料。没有特化的 E entry。当前输入单独传递，历史数组排除本次 messageIndex，避免重复装载；其他活跃消息完整进入下游请求。不再进行隐式最近轮次保留、模型选择或按容量截取前缀；实际请求超限明确失败，正式输入仍保留。
 
 `ActiveView` 由 `ConversationContent` 持有，只管理已有消息索引和记忆 ID，不复制、删除或修改这些实体。显式维护策略可决定哪些内容退出活跃集合，不要求先生成替代记忆；保留来源索引也不表示运行时沿引用重新加载原文。模型材料、维护边界、持久索引和恢复限制见 [活跃材料与维护](active-content.md)。

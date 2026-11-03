@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ChangeBuffer, ProgressChannel } from '@capix/changes';
+import { PersistenceError } from '@capix/diagnostics';
 import { Memories } from '@capix/memory';
 import { Transcript } from '@capix/transcript';
 
@@ -82,11 +83,11 @@ test('transcript commit failures leave content, segments, progress and changes u
           },
         }),
       }),
-    (error) => error === failure,
+    (error) => error instanceof PersistenceError && error.operation === 'transcript.commit' && error.cause === failure,
   );
   assert.throws(
     () => transcript.startSegment(1),
-    (error) => error === failure,
+    (error) => error instanceof PersistenceError && error.operation === 'transcript.commit' && error.cause === failure,
   );
   assert.deepEqual(transcript.exportState(), initial);
   assert.equal(changes.size, 0);
@@ -199,6 +200,7 @@ test('failed memory batch commit applies nothing and does not reserve sequence o
   const [existing] = original.apply([create('before')]);
   const snapshot = original.exportState();
   const changes = new ChangeBuffer();
+  const failure = new Error('disk full');
   let failed = true;
   let commits = 0;
   const memories = Memories.restore(snapshot, transcript, {
@@ -206,11 +208,14 @@ test('failed memory batch commit applies nothing and does not reserve sequence o
     persistence: {
       commit() {
         commits++;
-        if (failed) throw new Error('disk full');
+        if (failed) throw failure;
       },
     },
   });
-  assert.throws(() => memories.apply([update(existing, 'after'), create('new')]), /disk full/);
+  assert.throws(
+    () => memories.apply([update(existing, 'after'), create('new')]),
+    (error) => error instanceof PersistenceError && error.operation === 'memories.commit' && error.cause === failure,
+  );
   assert.deepEqual(memories.exportState(), snapshot);
   assert.equal(changes.size, 0);
   assert.deepEqual(memories.apply([update(existing, 'before')]), []);
@@ -298,7 +303,10 @@ test('accidentally asynchronous persistence never publishes or mutates content',
       },
     },
   });
-  assert.throws(() => transcript.append(message('input')), /synchronously/);
+  assert.throws(
+    () => transcript.append(message('input')),
+    (error) => error instanceof PersistenceError && error.operation === 'transcript.commit' && error.cause instanceof TypeError && /synchronously/.test(error.cause.message),
+  );
   assert.equal(transcript.length, 0);
   assert.equal(transcript.revision, 0);
   const memories = new Memories(new Transcript([message('input')]), {
@@ -309,7 +317,10 @@ test('accidentally asynchronous persistence never publishes or mutates content',
       },
     },
   });
-  assert.throws(() => memories.apply([create('one')]), /synchronously/);
+  assert.throws(
+    () => memories.apply([create('one')]),
+    (error) => error instanceof PersistenceError && error.operation === 'memories.commit' && error.cause instanceof TypeError && /synchronously/.test(error.cause.message),
+  );
   assert.equal(memories.values().length, 0);
   assert.equal(memories.sequence, 0);
   assert.equal(changes.size, 0);

@@ -13,6 +13,7 @@ import type { TranscriptAppendProgress } from './progress.js';
 import type { TranscriptCommit, TranscriptPersistence, TranscriptState } from './persistence.js';
 import type { TranscriptAppendOperation, TranscriptAppendReceipt, TranscriptAppendState, TranscriptFixedAppend } from './append.js';
 import { RuntimeError } from '@capix/contracts';
+import { PersistenceError } from '@capix/diagnostics';
 
 export interface TranscriptOptions {
   observation?: EventConsumer<TranscriptEvent>;
@@ -204,10 +205,15 @@ export class Transcript {
   }
 
   private commit(change: TranscriptCommit): void {
-    const result: unknown = this.#persistence?.commit(change);
-    if (result !== undefined) {
-      void Promise.resolve(result).catch(() => undefined);
-      throw new TypeError('Transcript persistence must complete synchronously and return undefined');
+    try {
+      const result: unknown = this.#persistence?.commit(change);
+      if (result !== undefined) {
+        void Promise.resolve(result).catch(() => undefined);
+        throw new TypeError('Transcript persistence must complete synchronously and return undefined');
+      }
+    } catch (cause) {
+      if (cause instanceof PersistenceError) throw cause;
+      throw new PersistenceError('transcript.commit', cause);
     }
   }
 

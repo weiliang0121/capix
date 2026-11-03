@@ -17,7 +17,11 @@ export type TranscriptCommit = {
   readonly revision: number;
 } & ({ readonly kind: 'append'; readonly start: number; readonly messages: readonly Readonly<Message>[]; readonly fixed?: TranscriptAppendState } | { readonly kind: 'start-segment'; readonly start: number });
 
-/** Synchronously commit a validated change before the entity makes it visible. */
+/**
+ * Synchronously commit a validated change before the entity makes it visible.
+ * The entity marks port failures and invalid returns as PersistenceError, preserving the cause.
+ * A failure does not prove that the store left the change unapplied.
+ */
 export interface TranscriptPersistence {
   commit(change: TranscriptCommit): undefined;
 }

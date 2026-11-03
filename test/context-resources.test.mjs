@@ -297,7 +297,8 @@ test('message and memory access preserves entity validation, change publication 
   assert.equal(transcript.length, 0);
   assert.equal(changes.take().length, 0);
   const appended = before.messages.append([{ role: 'user', content: '培训周五' }]);
-  assert.deepEqual(Object.keys(appended[0]).sort(), ['index', 'message']);
+  assert.deepEqual(Object.keys(appended[0]).sort(), ['index', 'message', 'transcriptId']);
+  assert.equal(appended[0].transcriptId, transcript.id);
   assert.equal(appended[0].message, transcript.get(0));
   assert.ok(Object.isFrozen(appended[0]));
   const change = { action: 'create', memoryId: null, change: '确认时间', sourceIndexes: [0], result: { topic: '培训', content: '周五', sourceIndexes: [0] } };
