@@ -11,8 +11,8 @@ sequenceDiagram
     participant I as Interaction
     participant C as 消费场景 / 新建 Invocation
     participant T as Transcript
-    H->>S: run(messages)
-    S->>I: start(messages)
+    H->>S: run(request)
+    S->>I: start(request)
     S-->>H: reference
     I->>I: 外部处理完成，反馈保存成功
     H->>C: run(reference)
@@ -35,7 +35,7 @@ pnpm build
 node examples/interaction-message-retry.mjs
 ```
 
-发送与消费分别用普通 Scene 表达。发送场景申请 start，将引用通过正常返回值交给宿主；消费场景只申请 feedback 和消息 append。资源接线本身就限制了消费者重新发送的能力。
+示例 request 使用完整 ModelRequest，反馈保留 ModelReply；消费节点检查正常结束后才提取正文。发送与消费分别用普通 Scene 表达。发送场景申请 start，将引用通过正常返回值交给宿主；消费场景只申请 feedback 和消息 append。资源接线本身就限制了消费者重新发送的能力。
 
 宿主在示例里仅用变量保留引用，不通过被动观测收集恢复依据，也不宣称引用已经持久化。发送、引用保存、反馈保存、消息提交分别有自己的完成边界。这里没有旧调用复活、checkpoint 或执行重放。
 

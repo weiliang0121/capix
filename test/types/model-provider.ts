@@ -1,5 +1,6 @@
 import { ChatCompletionsProvider, ProviderError } from '@capix/model-provider';
-import type { TextModel } from '@capix/conversation-service';
+import { createConversationRunner } from '@capix/conversation-service';
+import { Transcript } from '@capix/transcript';
 
 const provider = new ChatCompletionsProvider({ endpoint: 'https://provider.example/chat/completions', apiKey: 'fixture', model: 'fixture-model', timeoutMs: 1000, maxResponseBytes: 4096, thinking: 'disabled', fetch });
 const request = { messages: [{ role: 'user', content: 'Hello' }] } as const;
@@ -9,16 +10,10 @@ const reason: string = result.finishReason;
 const usage: number | undefined = result.usage?.totalTokens;
 void [text, reason, usage];
 
-// The provider envelope is intentionally not the conversation's text result.
-// The host's explicit adapter decides whether this completion can be accepted.
-const model: TextModel = {
-  async generate(messages, { signal }) {
-    const reply = await provider.complete({ messages }, { signal });
-    if (reply.finishReason !== 'stop') throw new Error('Model completion was not finished');
-    return reply.text;
-  },
-};
-void model;
+// The conversation service consumes the provider directly and accepts its complete reply.
+const conversation = createConversationRunner(new Transcript(), provider);
+const answer: Promise<string> = conversation.run('Hello');
+void answer;
 
 await provider.complete({ messages: [{ role: 'system', content: 'Choose one registered intent.' }, ...request.messages], responseFormat: 'json_object', maxTokens: 256, temperature: 0 });
 // @ts-expect-error A provider configuration must identify its model.

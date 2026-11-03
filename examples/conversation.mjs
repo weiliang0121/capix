@@ -1,15 +1,19 @@
-import { createConversationScene, HistoryResource, ModelResource } from '@capix/conversation-service';
+import { createConversationScene, HistoryResource, CompletionResource } from '@capix/conversation-service';
 import { Resource } from '@capix/resources';
 import { Resources, Runner } from '@capix/server-runtime';
 import { Transcript, TranscriptResource } from '@capix/transcript';
 
-// 宿主提供实体；示例模型只在本地返回文本，不连接外部服务。
+// 宿主提供实体；本地替身实现完整 ModelProvider，换成 ChatCompletionsProvider 无需额外适配。
 const transcript = new Transcript();
-const model = { generate: (messages) => `收到：${messages.at(-1).content}` };
+const model = {
+  async complete({ messages }) {
+    return { id: 'local-reply', model: 'local-demo', text: `收到：${messages.at(-1).content}`, finishReason: 'stop', usage: null };
+  },
+};
 const messages = new Resource(transcript);
 
 // 同一个消息实体提供写入与历史读取；模型单独登记。
-const resources = new Resources().register(messages, TranscriptResource.append).register(messages, HistoryResource).register(new Resource(model), ModelResource);
+const resources = new Resources().register(messages, TranscriptResource.append).register(messages, HistoryResource).register(new Resource(model), CompletionResource);
 
 // 场景负责业务顺序，Runner 负责构建和本次运行。
 const runner = new Runner(createConversationScene(), resources).build();

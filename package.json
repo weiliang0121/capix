@@ -11,13 +11,15 @@
   "scripts": {
     "build": "pnpm -r --sort build",
     "start": "node --env-file-if-exists=.env services/observer/dist/start.js",
+    "conversation": "node services/conversation/dist/start.js",
     "dev": "pnpm --filter @capix/observer-app dev",
     "typecheck": "pnpm -r --sort typecheck",
     "test": "pnpm build && pnpm test:unit",
     "test:unit": "tsc -p apps/observer/tsconfig.test.json && node --test \"test/**/*.test.mjs\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm build && pnpm typecheck && pnpm test:unit && pnpm format:check"
+    "check": "pnpm build && pnpm typecheck && pnpm test:unit && pnpm format:check",
+    "conversation:web": "node services/conversation/dist/web/start.js"
   },
   "devDependencies": {
     "@types/node": "22.19.11",

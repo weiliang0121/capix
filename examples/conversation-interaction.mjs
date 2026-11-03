@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createConversationScene, createInteractionAnswer, createModelReplyNode, HistoryResource, ModelInteractionResource, TextModelInteraction } from '@capix/conversation-service';
+import { createConversationScene, createInteractionAnswer, createCompletionReplyNode, HistoryResource, CompletionInteractionResource, CompletionInteraction } from '@capix/conversation-service';
 import { Interactions } from '@capix/interaction';
 import { Resource } from '@capix/resources';
 import { Resources, Runner, Scene } from '@capix/server-runtime';
@@ -11,7 +11,7 @@ const reply = Promise.withResolvers();
 let reference;
 let sends = 0;
 let publish;
-const interactions = new Interactions().register(TextModelInteraction, {
+const interactions = new Interactions().register(CompletionInteraction, {
   send(_history, controls) {
     sends++;
     publish = controls.publish;
@@ -26,7 +26,7 @@ const interactions = new Interactions().register(TextModelInteraction, {
 });
 const transcript = new Transcript();
 const messages = new Resource(transcript);
-const resources = new Resources().register(messages, TranscriptResource.append).register(messages, HistoryResource).registerInteraction(ModelInteractionResource.start, TextModelInteraction).registerInteraction(ModelInteractionResource.feedback, TextModelInteraction);
+const resources = new Resources().register(messages, TranscriptResource.append).register(messages, HistoryResource).registerInteraction(CompletionInteractionResource.start, CompletionInteraction).registerInteraction(CompletionInteractionResource.feedback, CompletionInteraction);
 const scene = createConversationScene(createInteractionAnswer());
 const runner = new Runner(scene, resources, interactions).build();
 runner.output.subscribe({
@@ -47,12 +47,12 @@ console.log('本次调用已停止：', !runner.isRunning, '外部交互仍在�
 
 // The original call has ended, but its external exchange can still receive its final reply.
 publish('调用结束后仍可产生的预览。');
-reply.resolve('晚到的模型回答');
+reply.resolve({ id: 'late-reply', model: 'local-demo', text: '晚到的模型回答', finishReason: 'stop', usage: null });
 await interactions.settled();
 
 // Grant only feedback reading to a new invocation. Reading cannot dispatch another request.
-const readerResources = new Resources().registerInteraction(ModelInteractionResource.feedback, TextModelInteraction);
-const reading = new Scene({ output: { result: (value) => value, delta: (value) => value } }).add({ read: createModelReplyNode() });
+const readerResources = new Resources().registerInteraction(CompletionInteractionResource.feedback, CompletionInteraction);
+const reading = new Scene({ output: { result: (value) => value, delta: (value) => value } }).add({ read: createCompletionReplyNode() });
 reading.run = (work) => work.children.read.invoke(work.input, { delta: (value) => work.output.emit(value) });
 const reader = new Runner(reading, readerResources, interactions).build();
 reader.output.subscribe({ receive: (event) => void (event.kind === 'delta' && console.log('新调用从头重建预览：', event.delta)) });

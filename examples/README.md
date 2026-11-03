@@ -2,6 +2,8 @@
 
 这些例子沿着“实体与能力 → 资源操作 → 结构 → Runner”展开。先读最小装配，再看服务如何组合材料与业务，最后按需要阅读失败边界。它们不是一套必须全部掌握的配置。
 
+需要完整的可持续使用入口时，直接阅读 [对话装配服务](../services/conversation/README.md)，构建后执行 `pnpm conversation --demo`。它组合这里已经验证的能力，提供连续输入、流式展示、消息／记忆／View 持久化与重载。下面的 examples 继续各自解释一个问题；服务不导入它们，也不另建一套 example 专用装配生命周期。
+
 在仓库根目录先执行：
 
 ```sh
@@ -36,14 +38,15 @@ Sequence / Dynamic 仍是普通 Group 的预设。本例的共享流程材料是
 
 这些入口使用并排的新装配包 [services/conversation](../services/conversation/README.md)。宿主持有实体、模型与可选交互；业务结构申请资源、形成输入并接纳结果。当前没有替换 Observer 的 HTTP 或客户端。
 
-| 阅读入口                                                     | 验证什么                                                                           | 运行                                         |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------- | -------------------------------------------- |
-| [conversation.mjs](conversation.mjs)                         | 正式追加输入，读取固定历史，回答成功后正式追加助手消息；消费 Runner 观测元数据     | `node examples/conversation.mjs`             |
-| [conversation-streaming.mjs](conversation-streaming.mjs)     | 资源增量经回答节点与 Scene 转交到 Runner；预览不作为正式消息保存                   | `node examples/conversation-streaming.mjs`   |
-| [conversation-history.mjs](conversation-history.mjs)         | 总结此前历史，接纳正式回答，在后续提交中改写它；本次请求与历史材料分开             | `node examples/conversation-history.mjs`     |
-| [conversation-materials.mjs](conversation-materials.mjs)     | 选装普通策略纳入正式消息；两次提交通过 View 读取前次消息与预置记忆，本次捕获不漂移 | `node examples/conversation-materials.mjs`   |
-| [conversation-memory.mjs](conversation-memory.mjs)           | 回答后提取并写入记忆，新 ID 纳入 View；后续更新保留 ID，已退出的记忆不自动纳回     | `node examples/conversation-memory.mjs`      |
-| [conversation-interaction.mjs](conversation-interaction.mjs) | 本次调用取消后外部处理仍存活；新调用按同一引用回放预览、读取最终反馈，不重新发送   | `node examples/conversation-interaction.mjs` |
+| 阅读入口                                                                           | 验证什么                                                                           | 运行                                                    |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [conversation.mjs](conversation.mjs)                                               | 正式追加输入，读取固定历史，回答成功后正式追加助手消息；消费 Runner 观测元数据     | `node examples/conversation.mjs`                        |
+| [conversation-streaming.mjs](conversation-streaming.mjs)                           | 资源增量经回答节点与 Scene 转交到 Runner；预览不作为正式消息保存                   | `node examples/conversation-streaming.mjs`              |
+| [conversation-history.mjs](conversation-history.mjs)                               | 总结此前历史，接纳正式回答，在后续提交中改写它；本次请求与历史材料分开             | `node examples/conversation-history.mjs`                |
+| [conversation-materials.mjs](conversation-materials.mjs)                           | 选装普通策略纳入正式消息；两次提交通过 View 读取前次消息与预置记忆，本次捕获不漂移 | `node examples/conversation-materials.mjs`              |
+| [conversation-memory.mjs](conversation-memory.mjs)                                 | 回答后提取并写入记忆，新 ID 纳入 View；后续更新保留 ID，已退出的记忆不自动纳回     | `node examples/conversation-memory.mjs`                 |
+| [conversation-interaction.mjs](conversation-interaction.mjs)                       | 本次调用取消后外部处理仍存活；新调用按同一引用回放预览、读取最终反馈，不重新发送   | `node examples/conversation-interaction.mjs`            |
+| [conversation-completion-interaction.mjs](conversation-completion-interaction.mjs) | 材料回答选装完整模型交互；正式交付引用后取消读取，保留完成原因与用量再次消费       | `node examples/conversation-completion-interaction.mjs` |
 
 材料装配建议接着 `view.mjs` 与 `view-membership.mjs` 阅读：`createConversationScene(createMaterialAnswer(), createMaterialPreparation(), createMessageInclusion())` 将准备、回答与可选维护作为普通成员组合。宿主分别登记 `ConversationViewResource.read/manage`，策略在用户正式追加后、准备前，以及助手正式追加并完成回答接纳后纳入该条消息。准备节点传递独立的本次 query 与固定材料，始终排除当前及更晚的消息；下一次调用自然看到前次已纳入的正式消息，本次捕获不会随 View 后续变化而漂移。
 

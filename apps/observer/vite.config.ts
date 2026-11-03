@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
+import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -7,6 +8,9 @@ export default defineConfig(({ mode }) => {
   const target = environment.OBSERVER_API_ORIGIN || 'http://127.0.0.1:4320';
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      rollupOptions: { input: { observer: fileURLToPath(new URL('./index.html', import.meta.url)), conversation: fileURLToPath(new URL('./conversation.html', import.meta.url)) } },
+    },
     server: {
       port: 5173,
       strictPort: true,

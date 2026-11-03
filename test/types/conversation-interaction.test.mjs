@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-test('conversation interaction types distinguish messages, retained references, reply text and compatible answers', () => {
+test('conversation interaction types distinguish requests, retained references, complete replies and compatible answers', () => {
   const program = ts.createProgram([fileURLToPath(new URL('./conversation-interaction.ts', import.meta.url))], {
     strict: true,
     noUncheckedIndexedAccess: true,

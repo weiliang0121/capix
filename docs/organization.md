@@ -55,7 +55,7 @@ CAPiX 的框架范围包括 C/S 两端。Observer 是参考服务与应用，负
 | `@capix/diagnostics`          | `server/diagnostics`        | 唯一持久化错误类和有界诊断转换，不决定执行故障策略                 |
 | `@capix/server-runtime`       | `server/runtime`            | 结构与供给装配、Runner 入口、作者 Work 适配及可选记录预设          |
 | `@capix/observer-content`     | `services/observer-content` | Observer 内容持有、ActiveView 策略、观察安装、原文同步与关闭       |
-| `@capix/conversation-service` | `services/conversation`     | 并排的最小对话装配；公开资源、结构与 Runner，无客户端适配          |
+| `@capix/conversation-service` | `services/conversation`     | 并排对话装配、内容持久化、记录、CLI 与独立单会话 Web 宿主          |
 | `@capix/observer-service`     | `services/observer`         | 对话业务、模型适配、SQLite、运行环境、观测与 HTTP                  |
 | `@capix/client-runtime`       | `client/runtime`            | 客户端提交、反馈、原文同步及观测接纳                               |
 | `@capix/client-http`          | `client/http`               | HTTP 收发和协议接纳                                                |
@@ -139,7 +139,7 @@ Checkpoint Frame v5 与声明版本分别核验。`@capix/checkpoint` 持有 Fra
 
 Observer 的 ConversationScene 接纳输入并调用 ConversationGroup；后者是普通 Group，负责材料准备、决策与结果落实。服务提供模型协议、业务资源、内容同步及对外进展解释。环境拥有实体和关闭边界，HTTP 拥有传输；没有服务自己的另一套内核循环。
 
-并排的 [`@capix/conversation-service`](../services/conversation/README.md) 以正式消息、固定历史、模型资源和原生 Runner 验证作者路径。普通模型 Node 提供流式输出，独立交互 Group 组合发送和反馈读取，两者共用 Scene 的消息接纳。它不替换 Observer，不接入现有 HTTP/客户端，也不宣称覆盖记忆、文件或会话执行恢复；独立交互流式仍需明确增量契约。
+并排的 [`@capix/conversation-service`](../services/conversation/README.md) 以正式消息、View 材料、记忆策略、模型资源和原生 Runner 验证作者路径。普通模型 Node 与独立交互 Group 都使用完整 ModelProvider 契约，两者共用 Scene 的消息接纳；后者组合发送、过程反馈跟随和最终读取。`assembly` 组合这些公开能力，`persistence` 保存消息／记忆／View 成员，`recording` 安装现有记录预设及服务摘要，`cli` 承担连续输入、反馈展示、可选记录导出和宿主关闭。`web` 建立独立浏览器宿主，`http` 交付消息同步、提交跟随和按需调用详情；客户端复用已有接纳机制，应用保留独立入口。重启后建立新 Runner 继续对话；不恢复旧调用或重发模型请求，不替换 Observer 的 HTTP/客户端。见 [宿主与持久化](conversation-host.md) 和 [浏览器交付](conversation-web.md)。
 
 ClientRuntime 保持无 UI，协调提交、同步和可选观测；client/http 只收发与接纳协议。应用 binding 负责读模型、调用图、几何布局与帧合并，React 消费 props/Store。当前客户端实际依赖对话与 Observer 契约，不宣称已是任意业务的通用客户端。
 

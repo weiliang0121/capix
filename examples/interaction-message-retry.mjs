@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createModelReplyNode, ModelInteractionResource, TextModelInteraction } from '@capix/conversation-service';
+import { createCompletionReplyNode, CompletionInteractionResource, CompletionInteraction } from '@capix/conversation-service';
 import { PersistenceError } from '@capix/diagnostics';
 import { Interactions } from '@capix/interaction';
 import { Resource } from '@capix/resources';
@@ -28,10 +28,10 @@ const transcript = new Transcript([{ role: 'user', content: '请给出发布安�
     },
   },
 });
-const interactions = new Interactions().register(TextModelInteraction, {
+const interactions = new Interactions().register(CompletionInteraction, {
   send() {
     sends++;
-    return '周四复核，周五发布。';
+    return { id: 'saved-reply', model: 'local-demo', text: '周四复核，周五发布。', finishReason: 'stop', usage: null };
   },
   persistence: {
     create(state) {
@@ -49,25 +49,27 @@ const interactions = new Interactions().register(TextModelInteraction, {
 });
 
 // 发送者通过正式返回值把引用交给宿主。观测不是恢复所需依据的保存入口。
-const start = new Node({ deps: { requests: ModelInteractionResource.start.request() }, run: (work) => work.resources.requests.start(work.input) });
-const sender = new Runner(new Scene(start), new Resources().registerInteraction(ModelInteractionResource.start, TextModelInteraction), interactions).build();
+const start = new Node({ deps: { requests: CompletionInteractionResource.start.request() }, run: (work) => work.resources.requests.start(work.input) });
+const sender = new Runner(new Scene(start), new Resources().registerInteraction(CompletionInteractionResource.start, CompletionInteraction), interactions).build();
 
 // 消费者只有读取反馈和追加消息的权限，无法重新发送。
-const accepting = new Scene({ deps: { messages: TranscriptResource.append.request() } }).add({ read: createModelReplyNode(0) });
+const accepting = new Scene({ deps: { messages: TranscriptResource.append.request() } }).add({ read: createCompletionReplyNode(0) });
 accepting.run = (work) =>
   work.children.read.invoke(work.input, {
     result: {
-      succeeded(text) {
+      succeeded(reply) {
+        if (reply.finishReason !== 'stop' || !reply.text.trim()) throw new Error('模型回答不完整');
+        const text = reply.text;
         work.resources.messages.append([{ role: 'assistant', content: text }]);
         return text;
       },
     },
   });
-const consumer = new Runner(accepting, new Resources().register(new Resource(transcript), TranscriptResource.append).registerInteraction(ModelInteractionResource.feedback, TextModelInteraction), interactions).build();
+const consumer = new Runner(accepting, new Resources().register(new Resource(transcript), TranscriptResource.append).registerInteraction(CompletionInteractionResource.feedback, CompletionInteraction), interactions).build();
 
 try {
   // 引用归宿主持有。此处只是内存变量，未承诺发起交互与保存引用的原子提交。
-  const reference = await sender.run(transcript.snapshot());
+  const reference = await sender.run({ messages: transcript.snapshot() });
   await interactions.settled();
   const feedback = structuredClone(savedInteractions.get(reference.id).feedback);
   failNextAnswer = true;
@@ -80,7 +82,7 @@ try {
 
   // 新的 Invocation，继续读取同一反馈；不复活上一调用，不重放发送节点。
   const answer = await consumer.run(reference);
-  assert.equal(answer, feedback.payload);
+  assert.equal(answer, feedback.payload.text);
   assert.equal(transcript.length, 2);
   assert.deepEqual(savedMessages, transcript.snapshot());
   assert.equal(sends, 1);

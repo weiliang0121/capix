@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createConversationScene, createInteractionAnswer, createModelReplyNode, HistoryResource, ModelInteractionResource, ModelReplyPending, TextModelInteraction } from '@capix/conversation-service';
+import { createConversationScene, createInteractionAnswer, createCompletionReplyNode, HistoryResource, CompletionInteractionResource, ModelReplyPending, CompletionInteraction } from '@capix/conversation-service';
 import { PersistenceError } from '@capix/diagnostics';
 import { Interactions } from '@capix/interaction';
 import { Resource } from '@capix/resources';
 import { Resources, Runner, Scene } from '@capix/server-runtime';
+import { modelReply } from './fixtures/conversation-model.mjs';
 import { Transcript, TranscriptResource } from '@capix/transcript';
 
 const question = Object.freeze({ role: 'user', content: 'question' });
@@ -25,11 +26,12 @@ function interactionStore() {
 }
 
 function fixedAnswerWriter(interactions, transcript) {
-  const scene = new Scene({ deps: { messages: TranscriptResource.append.request() } }).add({ reply: createModelReplyNode(1000) });
+  const scene = new Scene({ deps: { messages: TranscriptResource.append.request() } }).add({ reply: createCompletionReplyNode(1000) });
   scene.run = (work) =>
     work.children.reply.invoke(work.input, {
       result: {
-        succeeded(content) {
+        succeeded(reply) {
+          const content = reply.text;
           const append = { position: 'answer', messages: [{ role: 'assistant', content }] };
           const receipt = work.resources.messages.applyFixed(append);
           assert.equal(work.resources.messages.applyFixed(append), receipt, 'the same genuine reception does not write twice');
@@ -37,17 +39,17 @@ function fixedAnswerWriter(interactions, transcript) {
         },
       },
     });
-  const resources = new Resources().register(new Resource(transcript), TranscriptResource.append).registerInteraction(ModelInteractionResource.feedback, TextModelInteraction);
+  const resources = new Resources().register(new Resource(transcript), TranscriptResource.append).registerInteraction(CompletionInteractionResource.feedback, CompletionInteraction);
   return new Runner(scene, resources, interactions).build();
 }
 
 test('retrying the original conversation after message persistence fails sends again and does not recover a reference from the error', async (t) => {
   const requests = [];
   const storage = interactionStore();
-  const interactions = new Interactions().register(TextModelInteraction, {
-    send(history) {
-      requests.push(history);
-      return `answer ${requests.length}`;
+  const interactions = new Interactions().register(CompletionInteraction, {
+    send(request) {
+      requests.push(request.messages);
+      return modelReply(`answer ${requests.length}`);
     },
     persistence: storage,
   });
@@ -65,7 +67,7 @@ test('retrying the original conversation after message persistence fails sends a
     },
   });
   const entity = new Resource(transcript);
-  const resources = new Resources().register(entity, TranscriptResource.append).register(entity, HistoryResource).registerInteraction(ModelInteractionResource.start, TextModelInteraction).registerInteraction(ModelInteractionResource.feedback, TextModelInteraction);
+  const resources = new Resources().register(entity, TranscriptResource.append).register(entity, HistoryResource).registerInteraction(CompletionInteractionResource.start, CompletionInteraction).registerInteraction(CompletionInteractionResource.feedback, CompletionInteraction);
   const runner = new Runner(createConversationScene(createInteractionAnswer({ waitMs: 1000 })), resources, interactions).build();
 
   await assert.rejects(runner.run(question.content), (error) => {
@@ -79,7 +81,7 @@ test('retrying the original conversation after message persistence fails sends a
   assert.equal(requests.length, 1);
   assert.deepEqual(transcript.snapshot(), [question]);
   const firstState = [...storage.states.values()][0];
-  assert.equal(firstState.feedback.payload, 'answer 1', 'external feedback is already saved even though formal answer persistence failed');
+  assert.equal(firstState.feedback.payload.text, 'answer 1', 'external feedback is already saved even though formal answer persistence failed');
 
   // Storage inspection proves the external fact; neither it nor observation is
   // used to manufacture a business retry reference for the original helper.
@@ -94,10 +96,10 @@ test('retrying the original conversation after message persistence fails sends a
 
 test('a fixed append in a new invocation does not deduplicate by the same interaction reference, position or content', async (t) => {
   let sends = 0;
-  const interactions = new Interactions().register(TextModelInteraction, {
+  const interactions = new Interactions().register(CompletionInteraction, {
     send() {
       sends++;
-      return 'saved external answer';
+      return modelReply('saved external answer');
     },
   });
   t.after(async () => {
@@ -105,7 +107,7 @@ test('a fixed append in a new invocation does not deduplicate by the same intera
     interactions.close();
   });
   // The host obtains the reference from start, before any answer persistence.
-  const reference = interactions.bind(TextModelInteraction).start([question]);
+  const reference = interactions.bind(CompletionInteraction).start({ messages: [question] });
   await interactions.settled();
   const transcript = new Transcript();
   const runner = fixedAnswerWriter(interactions, transcript);
@@ -129,17 +131,17 @@ test('a fixed append in a new invocation does not deduplicate by the same intera
 
 test('a lost persistence acknowledgement requires checking the stored revision instead of blindly replaying the append', async (t) => {
   let sends = 0;
-  const interactions = new Interactions().register(TextModelInteraction, {
+  const interactions = new Interactions().register(CompletionInteraction, {
     send() {
       sends++;
-      return 'committed answer';
+      return modelReply('committed answer');
     },
   });
   t.after(async () => {
     await interactions.settled();
     interactions.close();
   });
-  const reference = interactions.bind(TextModelInteraction).start([question]);
+  const reference = interactions.bind(CompletionInteraction).start({ messages: [question] });
   await interactions.settled();
   let stored;
   let loseAcknowledgement = true;

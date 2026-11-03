@@ -13,7 +13,7 @@ function build(scene, transcript) {
 }
 
 for (const kind of ['node', 'group']) {
-  test(`a custom ${kind} replaces the answer without ModelResource and receives the complete accepted prefix`, async () => {
+  test(`a custom ${kind} replaces the answer without CompletionResource and receives the complete accepted prefix`, async () => {
     const requests = [];
     const node = new Node({
       run(work) {

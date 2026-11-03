@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-test('model provider separates configuration, request, response and the service text model contract', () => {
+test('model provider separates configuration, request and response and connects directly to the service', () => {
   const program = ts.createProgram([fileURLToPath(new URL('./model-provider.ts', import.meta.url))], {
     strict: true,
     noUncheckedIndexedAccess: true,

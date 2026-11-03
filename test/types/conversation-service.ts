@@ -1,20 +1,21 @@
-import { createConversationRunner, createConversationScene, ModelResource, type TextModel } from '@capix/conversation-service';
+import { createConversationRunner, createConversationScene, CompletionResource } from '@capix/conversation-service';
+import type { ModelProvider, ModelRequest, ModelReply, ModelMessage } from '@capix/model-provider';
 import type { Message } from '@capix/protocol';
 import { Resource, type ResourcesOf } from '@capix/resources';
 import { Resources, Runner } from '@capix/server-runtime';
 import { Node, Scene } from '@capix/structure';
 import { Transcript } from '@capix/transcript';
 
-const model: TextModel = {
-  generate(messages, controls) {
-    const history: readonly Readonly<Message>[] = messages;
-    const signal: AbortSignal | undefined = controls.signal;
-    const emit: ((delta: string) => void) | undefined = controls.emit;
+const model: ModelProvider = {
+  async complete(request, controls) {
+    const history: readonly ModelMessage[] = request.messages;
+    const signal: AbortSignal | undefined = controls?.signal;
+    const emit: ((delta: string) => void) | undefined = controls?.emit;
     emit?.('preview');
     // @ts-expect-error Model producers can emit only text chunks.
     emit?.(42);
     void [history, signal];
-    return 'answer';
+    return { id: 'reply', model: 'test', text: 'answer', finishReason: 'stop', usage: null };
   },
 };
 const runner = createConversationRunner(new Transcript(), model);
@@ -59,33 +60,33 @@ scene.run = async (work) => {
   // @ts-expect-error History is scoped to the preparation child, not implicitly given to the Scene.
   work.resources.history;
   // @ts-expect-error The Scene does not inherit its child's model dependency.
-  work.resources.model.generate(history);
+  work.resources.model.complete(history);
   return content;
 };
 
-const deps = { model: ModelResource.request() };
-const generated = new Node<readonly Readonly<Message>[], string, ResourcesOf<typeof deps>>({
+const deps = { model: CompletionResource.request() };
+const generated = new Node<ModelRequest, ModelReply, ResourcesOf<typeof deps>>({
   deps,
   run(work) {
-    const result: Promise<string> = work.resources.model.generate(work.input);
-    work.resources.model.generate(work.input, {
+    const result: Promise<ModelReply> = work.resources.model.complete(work.input);
+    work.resources.model.complete(work.input, {
       delta(text) {
         const chunk: string = text;
         void chunk;
       },
     });
     // @ts-expect-error The resource operation retains the model's text delta contract.
-    work.resources.model.generate(work.input, { delta: (value: number) => void value });
+    work.resources.model.complete(work.input, { delta: (value: number) => void value });
     // @ts-expect-error A model method requires messages rather than text.
-    work.resources.model.generate('question');
+    work.resources.model.complete('question');
     // @ts-expect-error An undeclared resource cannot appear through ResourcesOf.
     work.resources.messages.append([]);
     return result;
   },
 });
-const resources = new Resources().register(new Resource(model), ModelResource);
+const resources = new Resources().register(new Resource(model), CompletionResource);
 const customRunner = new Runner(new Scene(generated), resources).build();
-const customResult: Promise<string> = customRunner.run([{ role: 'user', content: 'question' }]);
+const customResult: Promise<ModelReply> = customRunner.run({ messages: [{ role: 'user', content: 'question' }] });
 // @ts-expect-error The delegating Scene retains the Node's message input.
 customRunner.run('question');
 

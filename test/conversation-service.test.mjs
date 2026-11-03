@@ -1,9 +1,44 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createConversationRunner, createConversationScene, HistoryResource, ModelResource } from '@capix/conversation-service';
+import { createConversationRunner, createConversationScene, HistoryResource, CompletionResource } from '@capix/conversation-service';
 import { Resource } from '@capix/resources';
 import { Resources, Runner } from '@capix/server-runtime';
+import { modelReply, textProvider } from './fixtures/conversation-model.mjs';
 import { Transcript, TranscriptResource } from '@capix/transcript';
+
+// Keep string-only stubs in tests; the service consumes the complete provider contract.
+const createTextTestRunner = (transcript, model, options) => createConversationRunner(transcript, textProvider(model), options);
+
+test('the default conversation consumes complete provider replies and accepts only normal finished text', async (t) => {
+  for (const [label, reply] of [
+    ['normal', modelReply('answer')],
+    ['truncated', modelReply('partial', { finishReason: 'length' })],
+    ['invalid metadata', modelReply('answer', { usage: { promptTokens: -1, completionTokens: 1, totalTokens: 0 } })],
+    ['bare text', 'answer'],
+  ]) {
+    await t.test(label, async () => {
+      const transcript = new Transcript();
+      const previews = [];
+      const runner = createConversationRunner(transcript, {
+        async complete(request, controls) {
+          assert.deepEqual(request, { messages: [{ role: 'user', content: 'question' }], responseFormat: 'text', stream: true });
+          controls.emit('preview');
+          return reply;
+        },
+      });
+      runner.output.subscribe({ receive: (event) => void (event.kind === 'delta' && previews.push(event.delta)) });
+      if (label === 'normal') {
+        assert.equal(await runner.run('question'), 'answer');
+        assert.equal(transcript.snapshot().at(-1).content, 'answer');
+      } else {
+        await assert.rejects(runner.run('question'));
+        assert.deepEqual(transcript.snapshot(), [{ role: 'user', content: 'question' }]);
+      }
+      assert.deepEqual(previews, ['preview']);
+      assert.equal(runner.isRunning, false);
+    });
+  }
+});
 
 function deferred() {
   let resolve;
@@ -24,7 +59,7 @@ test('conversation assembly returns the native Runner and carries accepted histo
       return `reply ${this.requests.length}`;
     },
   };
-  const runner = createConversationRunner(transcript, model);
+  const runner = createTextTestRunner(transcript, model);
 
   assert.ok(runner instanceof Runner);
   assert.equal(await runner.run('  first question\n'), 'reply 1');
@@ -47,7 +82,7 @@ test('the public scene and offers also assemble through ordinary Resources and R
   const resources = new Resources()
     .register(messages, TranscriptResource.append)
     .register(messages, HistoryResource)
-    .register(new Resource({ generate: (history) => `read ${history.length} messages` }), ModelResource);
+    .register(new Resource(textProvider({ generate: (history) => `read ${history.length} messages` })), CompletionResource);
   const runner = new Runner(createConversationScene(), resources).build();
 
   assert.equal(await runner.run('current question'), 'read 2 messages');
@@ -66,7 +101,7 @@ test('invalid conversation input produces no message, model request or persisten
     changes: { capture: (event) => void events.push(event) },
   });
   let requests = 0;
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate() {
       requests++;
       return 'answer';
@@ -96,7 +131,7 @@ test('model failure and invalid output preserve the input and allow a later succ
     await t.test(label, async () => {
       const transcript = new Transcript();
       const requests = [];
-      const runner = createConversationRunner(transcript, {
+      const runner = createTextTestRunner(transcript, {
         generate(messages) {
           requests.push(messages);
           return requests.length === 1 ? respond() : '  recovered answer\n';
@@ -121,7 +156,7 @@ test('busy rejection neither appends the rejected input nor replaces the active 
   const response = deferred();
   const transcript = new Transcript();
   let requests = 0;
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate() {
       requests++;
       entered.resolve();
@@ -151,7 +186,7 @@ test('cancellation rejects a late model result before message acceptance and rel
   const transcript = new Transcript();
   let modelSignal;
   let requests = 0;
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate(_messages, { signal }) {
       requests++;
       if (requests > 1) return 'next answer';
@@ -186,13 +221,13 @@ test('independent conversation assemblies do not share structures, occupancy or 
   const secondTranscript = new Transcript();
   const entered = deferred();
   const response = deferred();
-  const first = createConversationRunner(firstTranscript, {
+  const first = createTextTestRunner(firstTranscript, {
     generate() {
       entered.resolve();
       return response.promise;
     },
   });
-  const second = createConversationRunner(secondTranscript, {
+  const second = createTextTestRunner(secondTranscript, {
     generate(messages) {
       assert.deepEqual(messages, [{ role: 'user', content: 'second input' }]);
       return 'second answer';
@@ -219,7 +254,7 @@ test('independent conversation assemblies do not share structures, occupancy or 
 test('an isolated optional observer failure does not change the conversation result', async () => {
   const transcript = new Transcript();
   let observations = 0;
-  const runner = createConversationRunner(
+  const runner = createTextTestRunner(
     transcript,
     { generate: () => 'answer' },
     {
@@ -261,7 +296,7 @@ test('failed assistant persistence cannot publish a formal answer or report succ
       },
     },
   });
-  const runner = createConversationRunner(transcript, { generate: () => 'answer' });
+  const runner = createTextTestRunner(transcript, { generate: () => 'answer' });
 
   await assert.rejects(runner.run('first input'));
   assert.equal(runner.isRunning, false);
@@ -292,7 +327,7 @@ test('failed input persistence prevents both the model call and formal input pub
     },
   });
   let requests = 0;
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate() {
       requests++;
       return 'answer';

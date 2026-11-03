@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createModelReplyNode, ModelInteractionResource, ModelReplyPending, TextModelInteraction } from '@capix/conversation-service';
+import { createCompletionReplyNode, CompletionInteractionResource, ModelReplyPending, CompletionInteraction } from '@capix/conversation-service';
 import { PersistenceError } from '@capix/diagnostics';
 import { Interactions } from '@capix/interaction';
 import { Resource } from '@capix/resources';
 import { Resources, Runner, Scene } from '@capix/server-runtime';
+import { modelReply } from './fixtures/conversation-model.mjs';
 import { Transcript, TranscriptResource } from '@capix/transcript';
 
 const input = Object.freeze({ role: 'user', content: '请总结已有讨论。' });
@@ -82,18 +83,19 @@ function acceptingReader(interactions, transcript) {
     name: 'accept-stored-model-reply',
     deps: { messages: TranscriptResource.append.request() },
     output: { result: (value) => value },
-  }).add({ reply: createModelReplyNode(0) });
+  }).add({ reply: createCompletionReplyNode(0) });
   scene.run = (work) =>
     work.children.reply.invoke(work.input, {
       result: {
-        succeeded(content) {
+        succeeded(reply) {
+          const content = reply.text;
           work.resources.messages.append([{ role: 'assistant', content }]);
           return content;
         },
       },
     });
   // This consumer has no start resource. Its input is the reference retained by the host.
-  const resources = new Resources().register(new Resource(transcript), TranscriptResource.append).registerInteraction(ModelInteractionResource.feedback, TextModelInteraction);
+  const resources = new Resources().register(new Resource(transcript), TranscriptResource.append).registerInteraction(CompletionInteractionResource.feedback, CompletionInteraction);
   const runner = new Runner(scene, resources, interactions).build();
   const outputs = [];
   const observations = [];
@@ -116,21 +118,21 @@ test('a failed assistant commit leaves saved feedback readable and a fresh invoc
   const storage = interactionStore();
   const messages = messagesWithPersistence();
   let sends = 0;
-  const interactions = new Interactions().register(TextModelInteraction, {
+  const interactions = new Interactions().register(CompletionInteraction, {
     send(request) {
       sends++;
-      assert.deepEqual(request, [input]);
-      return answer;
+      assert.deepEqual(request.messages, [input]);
+      return modelReply(answer);
     },
     persistence: storage,
   });
   // Reference ownership comes from the start result, never from passive observation.
-  const channel = interactions.bind(TextModelInteraction);
-  const reference = channel.start([input]);
+  const channel = interactions.bind(CompletionInteraction);
+  const reference = channel.start({ messages: [input] });
   await interactions.settled();
   const savedFeedback = storage.read(reference.id);
   assert.equal(savedFeedback.revision, 2);
-  assert.equal(savedFeedback.feedback.payload, answer);
+  assert.equal(savedFeedback.feedback.payload.text, answer);
   const reader = acceptingReader(interactions, messages.transcript);
   const failure = messages.rejectNextAppend();
 
@@ -172,14 +174,14 @@ test('feedback arriving after local invocation exit survives a later message fai
   const storage = interactionStore();
   const messages = messagesWithPersistence();
   let sends = 0;
-  const interactions = new Interactions().register(TextModelInteraction, {
+  const interactions = new Interactions().register(CompletionInteraction, {
     send() {
       sends++;
       return response.promise;
     },
     persistence: storage,
   });
-  const reference = interactions.bind(TextModelInteraction).start([input]);
+  const reference = interactions.bind(CompletionInteraction).start({ messages: [input] });
   const reader = acceptingReader(interactions, messages.transcript);
 
   await assert.rejects(reader.runner.run(reference), (error) => {
@@ -192,11 +194,11 @@ test('feedback arriving after local invocation exit survives a later message fai
   assert.equal(storage.read(reference.id).feedback, undefined);
   assert.equal(messages.attempts.length, 1, 'an expired read cannot enter successful reception');
   const exitedEvents = reader.observations.length;
-  response.resolve(answer);
+  response.resolve(modelReply(answer));
   await interactions.settled();
   assert.equal(reader.observations.length, exitedEvents, 'late external feedback does not revive the finished invocation');
   const savedFeedback = storage.read(reference.id);
-  assert.equal(savedFeedback.feedback.payload, answer);
+  assert.equal(savedFeedback.feedback.payload.text, answer);
   const failure = messages.rejectNextAppend();
   await assert.rejects(reader.runner.run(reference), (error) => error === failure);
   assertStoredMessages(messages, [input]);
@@ -222,14 +224,14 @@ test('a rebuilt interaction host reads the saved feedback after message failure 
   const storage = interactionStore();
   const messages = messagesWithPersistence();
   let sends = 0;
-  const original = new Interactions().register(TextModelInteraction, {
+  const original = new Interactions().register(CompletionInteraction, {
     send() {
       sends++;
-      return answer;
+      return modelReply(answer);
     },
     persistence: storage,
   });
-  const reference = original.bind(TextModelInteraction).start([input]);
+  const reference = original.bind(CompletionInteraction).start({ messages: [input] });
   await original.settled();
   const first = acceptingReader(original, messages.transcript);
   const failure = messages.rejectNextAppend();
@@ -238,7 +240,7 @@ test('a rebuilt interaction host reads the saved feedback after message failure 
   original.close();
 
   const before = storage.read(reference.id);
-  const restored = new Interactions().register(TextModelInteraction, {
+  const restored = new Interactions().register(CompletionInteraction, {
     send: () => assert.fail('reading saved feedback cannot create another external request'),
     persistence: {
       create: () => assert.fail('reading saved feedback cannot create another interaction'),
@@ -267,14 +269,14 @@ test('repeated successful feedback reads do not resend, but ordinary append does
   const storage = interactionStore();
   const messages = messagesWithPersistence();
   let sends = 0;
-  const interactions = new Interactions().register(TextModelInteraction, {
+  const interactions = new Interactions().register(CompletionInteraction, {
     send() {
       sends++;
-      return answer;
+      return modelReply(answer);
     },
     persistence: storage,
   });
-  const reference = interactions.bind(TextModelInteraction).start([input]);
+  const reference = interactions.bind(CompletionInteraction).start({ messages: [input] });
   await interactions.settled();
   const before = storage.read(reference.id);
   const reader = acceptingReader(interactions, messages.transcript);

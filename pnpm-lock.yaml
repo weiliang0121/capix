@@ -400,6 +400,9 @@ importers:
 
   services/conversation:
     dependencies:
+      '@capix/diagnostics':
+        specifier: workspace:*
+        version: link:../../server/diagnostics
       '@capix/interaction':
         specifier: workspace:*
         version: link:../../server/interaction
@@ -412,6 +415,9 @@ importers:
       '@capix/protocol':
         specifier: workspace:*
         version: link:../../protocol
+      '@capix/records':
+        specifier: workspace:*
+        version: link:../../server/records
       '@capix/resources':
         specifier: workspace:*
         version: link:../../server/resources

@@ -128,3 +128,9 @@ InvocationRecord 表达一次调用的正文机制，新实时载体为 Callable
 记录源在首次观察前建立，并将 invalidate 接入安装。记录观察漏写后 source 永久标为不完整，旧连接以 SOURCE_INCOMPLETE 结束，新完整基线被拒绝；不能通过换游标或再次快照假装补齐丢失事实。isolate 不保证记录完整。多载体声明在部分写入后失败，保留已写数据，并使所依赖的完整性来源失效。单个网络消费失败不使源损坏，消息同步保持独立。
 
 重启后的旧来源作为显式归档加载，不冒充新的健康活动来源。归档保留 open/sealed/incomplete 状态和最后保存的 revision；新的 Recorder/RecordingInstallation 只负责本进程变化。历史 running 表示“未取得结束记录”，不能作为活动调用继续计算耗时或恢复业务。内容实体从自己的持久状态恢复，不从调用记录或 MemoryRecord 反推。
+
+## 新对话服务的可选安装
+
+`@capix/conversation-service/recording` 在 build 前调用 `createConversationRecording(scene, recorder, options?)`，为实际结构树登记服务输入/输出/接收摘要，并复用 `bindRecording`。调用材料保留来源身份、版本、索引和数量，正文长度与数组条数替代反复复制；特殊非 JSON 返回值转成描述。正式消息范围、记忆变更和资源事实继续由已有预设按真实调用归属记录，业务节点没有额外 Recorder 依赖。
+
+CLI `--records PATH` 为宿主选项，未启用不创建记录安装；启用后在内存记录，并在本地入口与独立发送结束后导出完整性标记和 RecordBook 快照。isolate 的 invalidate 使该份来源永久 incomplete，严格失败仍依既有 propagate 处理。单次摘要有界不代表记录总量有界，退出导出也不代表崩溃可恢复。具体文件生命周期与使用见 [对话服务宿主](conversation-host.md)。

@@ -133,7 +133,7 @@ export function deliver(callback: () => void, name: string): void {
 const recordData = z.object({ id, parentId: id.optional(), value: z.unknown() }).passthrough();
 const callBody = z.object({ input: z.unknown(), processes: z.array(z.unknown()) }).passthrough();
 const callRecord = recordData.extend({ contextId: id, status, childIds: z.array(id).optional(), value: callBody });
-const entry = z.discriminatedUnion('kind', [
+export const recordEntryResponse = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('invocation'), data: callRecord.extend({ structureKind: z.enum(['scene', 'group', 'node']), structureId: id.optional(), name: z.string().optional(), label: z.string().optional(), source: z.string().optional(), callee: z.string().optional(), role: z.string().optional(), childIds: z.array(id), value: callBody.extend({ startedAt: z.string() }) }) }),
   z.object({ kind: z.literal('runtime'), data: recordData.extend({ childIds: z.array(id), value: z.object({ createdAt: z.string() }) }) }),
   z.object({ kind: z.literal('runtime-call'), data: callRecord.extend({ runtimeInstanceId: id, value: callBody.extend({ startedAt: z.string() }) }) }),
@@ -146,6 +146,7 @@ const entry = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('resource'), data: recordData.extend({ parentId: id, access: id, supplyId: id, sequence: index.min(1), occurredAt: z.string(), phase: z.enum(['bound', 'available', 'unavailable', 'started', 'returned', 'threw']), interactionId: id.optional() }) }),
   z.object({ kind: z.literal('custom'), data: recordData }),
 ]);
+const entry = recordEntryResponse;
 const failure = z.object({ kind: z.enum(['exception', 'error']), phase: z.enum(['setup', 'execute', 'receive', 'handling', 'control', 'observation']), contextId: id, contract: id.optional() });
 const process = z.object({ sequence: index.min(1), eventSequence: index.min(1), round: index, occurredAt: z.string(), offsetMs: time, stage: z.enum(invocationProcessStages), type: z.enum(invocationProcessActions), failure: failure.optional() }).passthrough();
 const relationIdentity = z.object({ parentContextId: id, childContextId: id, parentRound: index.max(2), key: id.optional() });

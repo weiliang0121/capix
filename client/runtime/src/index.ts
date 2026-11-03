@@ -15,3 +15,6 @@ export type { AnswerPreviewState } from './preview.js';
 export type { ContentAvailability } from './conversation.js';
 
 export type { ClientQueueState, ConversationQueueOptions } from './queue.js';
+
+export { ConversationSession, type ConversationSessionState } from './session/session.js';
+export { SessionConnectionError, type SessionTransport } from './session/transport.js';

@@ -7,6 +7,22 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./assembly": {
+      "types": "./dist/assembly/index.d.ts",
+      "import": "./dist/assembly/index.js"
+    },
+    "./persistence": {
+      "types": "./dist/persistence/index.d.ts",
+      "import": "./dist/persistence/index.js"
+    },
+    "./recording": {
+      "types": "./dist/recording/index.d.ts",
+      "import": "./dist/recording/index.js"
+    },
+    "./web": {
+      "types": "./dist/web/index.d.ts",
+      "import": "./dist/web/index.js"
     }
   },
   "scripts": {
@@ -14,6 +30,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@capix/records": "workspace:*",
+    "@capix/diagnostics": "workspace:*",
     "@capix/memory": "workspace:*",
     "@capix/view": "workspace:*",
     "@capix/model-provider": "workspace:*",

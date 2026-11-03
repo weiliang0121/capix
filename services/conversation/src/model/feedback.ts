@@ -1,12 +1,11 @@
-import type { InteractionChannel, InteractionCursor, InteractionWait } from '@capix/interaction';
+import type { InteractionChannel, InteractionCursor, InteractionReference, InteractionWait } from '@capix/interaction';
 import type { ResourceOperation } from '@capix/resources';
 import { InvocationCancelled } from '@capix/server-runtime';
-import type { ModelMessages } from './interaction.js';
-
-type ModelChannel = InteractionChannel<ModelMessages, string, string>;
+/** Waiting needs the read side only; no request type or send capability enters this operation. */
+type ModelFeedbackChannel<Reply> = Pick<InteractionChannel<unknown, Reply, string>, 'read' | 'wait' | 'openProgress'>;
 
 export interface ModelFeedbackInput {
-  readonly reference: Parameters<ModelChannel['read']>[0];
+  readonly reference: InteractionReference;
   readonly waitMs: number;
 }
 
@@ -41,7 +40,7 @@ function rethrow(error: unknown, operation: ResourceOperation): never {
   throw error;
 }
 
-export async function waitModelFeedback(channel: ModelChannel, input: ModelFeedbackInput, operation: ResourceOperation): Promise<InteractionWait<string>> {
+export async function waitModelFeedback<Reply>(channel: ModelFeedbackChannel<Reply>, input: ModelFeedbackInput, operation: ResourceOperation): Promise<InteractionWait<Reply>> {
   const local = localWait(operation);
   try {
     return await channel.wait(input.reference, { waitMs: input.waitMs, signal: local.signal });
@@ -53,13 +52,13 @@ export async function waitModelFeedback(channel: ModelChannel, input: ModelFeedb
 }
 
 /** Consume the preview within this operation, then read the independently validated reply. */
-export async function followModelFeedback(channel: ModelChannel, input: ModelProgressInput, operation: ResourceOperation<ModelProgressDelta>): Promise<InteractionWait<string>> {
+export async function followModelFeedback<Reply>(channel: ModelFeedbackChannel<Reply>, input: ModelProgressInput, operation: ResourceOperation<ModelProgressDelta>): Promise<InteractionWait<Reply>> {
   if (!Number.isSafeInteger(input.waitMs) || input.waitMs < 0 || input.waitMs > 2_147_483_647) throw new RangeError('Model reply wait must be a nonnegative timer duration');
   const reference = Object.freeze({ id: input.reference.id, contract: input.reference.contract });
   const deadline = performance.now() + input.waitMs;
   const remaining = () => Math.max(0, Math.ceil(deadline - performance.now()));
   const local = localWait(operation);
-  let reader: ReturnType<ModelChannel['openProgress']> | undefined;
+  let reader: ReturnType<ModelFeedbackChannel<Reply>['openProgress']> | undefined;
   const closeReader = () => reader?.close(local.signal.reason);
   try {
     reader = channel.openProgress(reference, input.after);

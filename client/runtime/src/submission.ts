@@ -272,7 +272,7 @@ export class ClientSubmission {
     return this.sent;
   }
 
-  send(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
+  send(transport: Pick<ConversationTransport, 'submit'>, reception: SubmissionReception): Promise<void> {
     if (this.sent || !this.input) throw new Error('同一提交不能重复发送。');
     this.sent = true;
     const input = this.input;
@@ -286,7 +286,7 @@ export class ClientSubmission {
   }
 
   /** A control response accepts facts without pretending a feedback connection is open. */
-  async refresh(transport: ConversationTransport, reception: SubmissionReception, signal?: AbortSignal): Promise<void> {
+  async refresh(transport: Pick<ConversationTransport, 'read'>, reception: SubmissionReception, signal?: AbortSignal): Promise<void> {
     this.bindReception(reception);
     const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000);
     try {
@@ -310,7 +310,7 @@ export class ClientSubmission {
   }
 
   /** Request delivery and actual cancellation are separate facts. Never abort feedback here. */
-  requestCancellation(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
+  requestCancellation(transport: Pick<ConversationTransport, 'cancel'>, reception: SubmissionReception): Promise<void> {
     this.bindReception(reception);
     if (this.state.remote?.result || this.state.remote?.cancelRequested) return Promise.resolve();
     if (this.cancellationTask) return this.cancellationTask;
@@ -322,7 +322,7 @@ export class ClientSubmission {
     return task;
   }
 
-  private async cancel(transport: ConversationTransport, reception: SubmissionReception): Promise<void> {
+  private async cancel(transport: Pick<ConversationTransport, 'cancel'>, reception: SubmissionReception): Promise<void> {
     try {
       if (this.state.remote?.result || this.state.remote?.cancelRequested) return;
       this.cancellationRevision = this.state.remote?.revision ?? -1;

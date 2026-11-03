@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationRunner } from '@capix/conversation-service';
+import { textProvider } from './fixtures/conversation-model.mjs';
 import { Transcript } from '@capix/transcript';
+
+// Keep string-only stubs in tests; the service consumes the complete provider contract.
+const createTextTestRunner = (transcript, model, options) => createConversationRunner(transcript, textProvider(model), options);
 
 const collect = (events) => ({ receive: (event) => void events.push(event) });
 const deltas = (events) => events.filter((event) => event.kind === 'delta').map((event) => event.delta);
@@ -11,7 +15,7 @@ test('conversation forwards model chunks in order while only the complete answer
   const response = Promise.withResolvers();
   const transcript = new Transcript();
   const events = [];
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate(_messages, { emit }) {
       emit('hello');
       emit(' ');
@@ -44,7 +48,7 @@ test('conversation forwards model chunks in order while only the complete answer
 test('final text is authoritative and may differ from the streamed preview', async () => {
   const transcript = new Transcript();
   const events = [];
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate(_messages, { emit }) {
       emit('a preliminary answer');
       return '  corrected final answer\n';
@@ -66,7 +70,7 @@ test('non-text model chunks fail even when no output subscriber exists', async (
     await t.test(JSON.stringify(invalid), async () => {
       const transcript = new Transcript();
       let first = true;
-      const runner = createConversationRunner(transcript, {
+      const runner = createTextTestRunner(transcript, {
         generate(_messages, { emit }) {
           if (first) {
             first = false;
@@ -86,7 +90,7 @@ test('non-text model chunks fail even when no output subscriber exists', async (
 test('preview delivery cannot validate a blank final model answer', async () => {
   const transcript = new Transcript();
   const events = [];
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate(_messages, { emit }) {
       emit('plausible preview');
       return ' \n';
@@ -103,7 +107,7 @@ test('preview delivery cannot validate a blank final model answer', async () => 
 test('model failure after preview does not publish an assistant message or completed output', async () => {
   const transcript = new Transcript();
   const events = [];
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     async generate(_messages, { emit }) {
       emit('partial answer');
       throw new Error('model connection failed');
@@ -128,7 +132,7 @@ test('cancellation rejects late model chunks and the late result without appendi
   const events = [];
   let lateEmit;
   let first = true;
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate(_messages, { emit }) {
       if (!first) return 'next answer';
       first = false;
@@ -164,7 +168,7 @@ test('a retained model emitter cannot publish after successful operation complet
   const transcript = new Transcript();
   const events = [];
   let emit;
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate(_messages, controls) {
       emit = controls.emit;
       emit('preview');
@@ -185,7 +189,7 @@ test('a cooperative direct model preserves exact cancellation through its signal
     const controller = new AbortController();
     const transcript = new Transcript();
     const observations = [];
-    const runner = createConversationRunner(transcript, {
+    const runner = createTextTestRunner(transcript, {
       generate(_messages, { signal }) {
         return new Promise((_resolve, reject) => {
           signal.addEventListener('abort', () => reject(signal.reason), { once: true });
@@ -212,7 +216,7 @@ test('a distinct model failure concurrent with cancellation remains failed rathe
   const fault = new Error('provider failed independently');
   const transcript = new Transcript();
   const observations = [];
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate(_messages, { signal }) {
       return new Promise((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(fault), { once: true });
@@ -235,7 +239,7 @@ test('a failed output consumer does not stop model streaming or formal answer ac
   const transcript = new Transcript();
   const events = [];
   let reports = 0;
-  const runner = createConversationRunner(transcript, {
+  const runner = createTextTestRunner(transcript, {
     generate(_messages, { emit }) {
       emit('first');
       emit('second');

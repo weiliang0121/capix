@@ -96,6 +96,8 @@ const output = await environment.runner.run({ messages: [{ role: 'user', content
 
 ## 本地启动与检查
 
+只体验新内核的典型对话装配，可以在 `pnpm build` 后运行 `pnpm conversation --demo`：连续输入、流式回答、消息／记忆／View 保存及重启续用均走公开能力。浏览器入口用 `pnpm conversation:web --demo`，打开 `http://127.0.0.1:4318`。默认离线且使用独立演示库；真实模型需显式 `--live`，可用 `--records /path/to/new.json` 导出本进程调用记录。目录、宿主生命周期与保存边界见 [新对话服务](services/conversation/README.md)。以下命令仍启动原 Observer 界面与 API。
+
 固定工具链：Node **22.23.2**、pnpm **10.7.1**、TypeScript **6.0.3**。一个根 Workspace 和锁文件，七个实际包，没有新建空壳功能包。
 
 ```sh
