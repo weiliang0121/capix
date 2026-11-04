@@ -427,6 +427,8 @@ sequenceDiagram
 
 ## 当前完成与后续范围
 
+额外组合验证见 [两份材料并行分析再汇总](../../examples/parallel-analysis/README.md)。它通过普通 `createConversationScene` 装载独立回答 Group，验证乱序返回、局部业务失败接收、取消、输出归属和记录事实；仅为离线 example，不改变默认 Web 链路或扩展其 CP 恢复资格。
+
 直接流式、独立发送、本地取消/超时与反馈重读都通过公开资源、结构与 Runner 组合，不需要补写 Invocation/Context、callableHooks 或按次 capture。相关验证入口为 `test/conversation-service.test.mjs`、`test/conversation-streaming.test.mjs`、`test/conversation-interaction.test.mjs` 与 `test/types/conversation-service.ts`。命名成员和资源方法保持准确类型。TypeScript 作者仍需明确结构 I/O，并用 `ResourcesOf<typeof deps>` 表达资源端点；不能从业务函数体反推未知输入，也不以断言假装已经推导。
 
 组合测试覆盖自定义 Node/Group 的输入、接纳和单父归属；交互类型测试验证引用、消息、结果与增量不可混用。取消回归区分准确 signal.reason 与同期独立故障。完整服务新增 `conversation-persistence`、`conversation-assembly`、`conversation-cli` 测试，分别验证存储契约、业务接线和进程重启，不访问真实模型。
