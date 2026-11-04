@@ -1,4 +1,4 @@
-import type { CallableKind, ChildReference } from '@capix/contracts';
+import type { CallableKind, ChildReference, OperationOutcome } from '@capix/contracts';
 import type { InvocationCheckpointDefinition, InvocationCheckpointPoint } from '@capix/structure';
 import type { CallableContext, InvocationCheckpointWork, InvocationWork, Invocation } from '@capix/invocation';
 import type { CheckpointReferences, CheckpointReference } from '@capix/checkpoint';
@@ -15,6 +15,7 @@ export class InvocationWorkBinding<Input, Output, Context extends CallableContex
   readonly checkpoint?: InvocationCheckpointWork<Input, Output, Context>;
   readonly #childBindingsBuilder: ChildBindingsBuilder;
   readonly #accesses = new WeakMap<Invocation<Input, Output, Context>, InvocationAccess<Input, Output, Context>>();
+  readonly #entries = new WeakMap<Invocation<Input, Output, Context>, ReturnType<InvocationAccess<Input, Output, Context>['enter']>>();
 
   constructor(
     private readonly declaration: CallableSnapshot<Input, Output, Kind, Resources, any>,
@@ -26,31 +27,30 @@ export class InvocationWorkBinding<Input, Output, Context extends CallableContex
     this.checkpoint = declaration.checkpoint ? this.bindCheckpoint(declaration.checkpoint) : undefined;
   }
 
-  async execute(_context: Context, invocation: Invocation<Input, Output, Context>) {
+  execute(_context: Context, invocation: Invocation<Input, Output, Context>) {
     const declaration = this.declaration;
     const access = this.accessFor(invocation).enter('run', declaration.deps);
+    this.#entries.set(invocation, access);
+    return declaration.run(this.executionWork(invocation, access) as never);
+  }
+
+  close(_context: Context, invocation: Invocation<Input, Output, Context>): OperationOutcome<void> {
+    const access = this.#entries.get(invocation);
+    this.#entries.delete(invocation);
     try {
-      return await declaration.run(this.executionWork(invocation, access) as never);
-    } finally {
-      invocation.sealOutput();
-      const settling = invocation.children.settleAcceptances();
-      if (settling) await settling;
-      access.close();
+      access?.close();
+      return { status: 'succeeded', value: undefined };
+    } catch (failure) {
+      return { status: 'failed', failure };
     }
   }
 
-  private async resume(point: InvocationCheckpointPoint<Input, Output, Kind, any, any, any, any, any>, invocation: Invocation<Input, Output, Context>, state: unknown, references: CheckpointReferences) {
+  private resume(point: InvocationCheckpointPoint<Input, Output, Kind, any, any, any, any, any>, invocation: Invocation<Input, Output, Context>, state: unknown, references: CheckpointReferences) {
     const access = this.accessFor(invocation).enter(`checkpoint:${point.name}`, point.resume.deps, point.resume.uses ?? []);
+    this.#entries.set(invocation, access);
     const registry = this.accessFor(invocation).references;
     const saved = Object.freeze(Object.fromEntries(Object.entries(references).map(([name, value]) => [name, Array.isArray(value) ? Object.freeze(value.map((ref) => registry.fromSaved(ref))) : registry.fromSaved(value as CheckpointReference)])));
-    try {
-      return await point.resume.run({ ...this.executionWork(invocation, access), initialInput: invocation.context.input, round: invocation.context.progress.round, ...(invocation.context.continuation ? { continuation: registry.continuation(invocation.context.continuation) } : {}) } as never, state, saved as import('@capix/structure').SavedReferences<any>);
-    } finally {
-      invocation.sealOutput();
-      const settling = invocation.children.settleAcceptances();
-      if (settling) await settling;
-      access.close();
-    }
+    return point.resume.run({ ...this.executionWork(invocation, access), initialInput: invocation.context.input, round: invocation.context.progress.round, ...(invocation.context.continuation ? { continuation: registry.continuation(invocation.context.continuation) } : {}) } as never, state, saved as import('@capix/structure').SavedReferences<any>);
   }
 
   private childPort(access: ReturnType<InvocationAccess<Input, Output, Context>['enter']>) {

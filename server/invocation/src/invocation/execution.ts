@@ -3,7 +3,7 @@ import { requireNotCancelled } from './cancellation.js';
 import type { InvocationFailure, InvocationPhase } from './failure.js';
 import type { InvocationExecutionWork, InvocationProcess } from './work.js';
 import { InvocationOutputSection } from '../output/section.js';
-import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputWriter } from '@capix/contracts';
+import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputWriter, OperationOutcome } from '@capix/contracts';
 import { ProgressChannel } from '@capix/changes';
 
 export interface InvocationExecutionControls {
@@ -58,40 +58,74 @@ export class InvocationExecution<Input, Output> {
   }
 
   /** Recovery selects a declared entry; it never replays the original business function. */
-  async run(resume?: () => Promise<Output>): Promise<Output> {
-    this.controls.healthy();
-    requireNotCancelled(this.options.signal);
-    if (!resume) this.context.start();
-    this.options.validate?.();
-    this.controls.healthy();
-    this.#outputSection = new InvocationOutputSection(this.context.id, this.context.progress.round, this.work.output, this.controls, this.#outputDelivery);
-    this.#outputSection.start();
-    this.options.process({ stage: 'execute', type: 'start', input: this.context.currentInput });
-    let output: Output;
+  async run(resume?: () => Output | Promise<Output>): Promise<OperationOutcome<Output, InvocationFailure>> {
+    try {
+      this.controls.healthy();
+      requireNotCancelled(this.options.signal);
+      if (!resume) this.context.start();
+      this.options.validate?.();
+      this.controls.healthy();
+      this.#outputSection = new InvocationOutputSection(this.context.id, this.context.progress.round, this.work.output, this.controls, this.#outputDelivery);
+      this.#outputSection.start();
+      this.options.process({ stage: 'execute', type: 'start', input: this.context.currentInput });
+    } catch (error) {
+      return this.failed(this.controls.classify(error, 'execute', true));
+    }
+    let body: OperationOutcome<Output>;
     try {
       this.controls.active();
-      output = await (resume ? resume() : this.work.execute());
-      this.controls.healthy();
-    } catch (error) {
-      const failure = this.controls.classify(error, 'execute');
-      this.#exitFailure = failure;
-      this.context.returned({ status: 'failed', error: failure.error, failure });
-      this.reportFailure(failure);
-      throw failure.error;
-    } finally {
-      this.sealOutput();
-      const settling = this.controls.settleAcceptances();
-      if (settling) await settling;
+      body = { status: 'succeeded', value: await (resume ? resume() : this.work.execute()) };
+    } catch (failure) {
+      // Capture only. Installing a body failure here would revoke in-flight receptions.
+      body = { status: 'failed', failure };
     }
-    this.context.returned({ status: 'succeeded', output });
-    this.options.process({ stage: 'execute', type: 'return', output });
-    this.controls.healthy();
-    this.options.validate?.();
-    requireNotCancelled(this.options.signal);
-    output = this.#outputSection.validateResult(output);
-    this.controls.healthy();
-    requireNotCancelled(this.options.signal);
-    return output;
+    // Stay in the body's await continuation: no extra Promise boundary before sealing.
+    this.sealOutput();
+    const settling = this.controls.settleAcceptances();
+    if (settling) await settling;
+    // Authenticate the exact body delivery before any cleanup failure can become authoritative.
+    let failure = body.status === 'failed' ? this.controls.classify(body.failure, 'execute') : undefined;
+    const closing = this.work.close();
+    if (closing.status === 'failed') failure = this.closeFailure(failure, closing.failure);
+    if (failure) {
+      this.context.returned({ status: 'failed', error: failure.error, failure });
+      try {
+        this.reportFailure(failure);
+      } catch (error) {
+        return this.failed({ ...this.controls.classify(error, 'execute', true), error, kind: 'error', receptionAllowed: false });
+      }
+      return this.failed(failure);
+    }
+    // The failed branch above always produced a classified failure, even for `throw undefined`.
+    if (body.status === 'failed') throw new Error('Missing execution failure classification');
+    try {
+      let output = body.value;
+      this.controls.healthy();
+      this.context.returned({ status: 'succeeded', output });
+      this.options.process({ stage: 'execute', type: 'return', output });
+      this.controls.healthy();
+      this.options.validate?.();
+      requireNotCancelled(this.options.signal);
+      output = this.#outputSection.validateResult(output);
+      this.controls.healthy();
+      requireNotCancelled(this.options.signal);
+      return { status: 'succeeded', value: output };
+    } catch (error) {
+      return this.failed(this.controls.classify(error, 'execute', true));
+    }
+  }
+
+  private failed(failure: InvocationFailure): OperationOutcome<never, InvocationFailure> {
+    this.#exitFailure = failure;
+    return { status: 'failed', failure };
+  }
+
+  private closeFailure(body: InvocationFailure | undefined, error: unknown): InvocationFailure {
+    const closing = this.controls.classify(error, 'control', true);
+    const primary = body ?? closing;
+    const delivered = body || closing.error !== error ? new AggregateError([primary.error, error], 'Execution and Work close both failed', { cause: primary.error }) : error;
+    this.controls.classify(delivered, 'control', true);
+    return Object.freeze({ ...primary, kind: 'error', error: delivered, receptionAllowed: false });
   }
 
   private reportFailure(failure: InvocationFailure): void {

@@ -34,8 +34,7 @@ export class ResourceAccess<Resources extends object = object> implements Resour
       this.#activity.validate();
       this.endpoints = this.view(deps);
     } catch (error) {
-      this.close();
-      this.#activity.reject(error);
+      this.failOpening(error);
     }
   }
 
@@ -78,8 +77,7 @@ export class ResourceAccess<Resources extends object = object> implements Resour
       }
       this.#activity.validate();
     } catch (error) {
-      this.close();
-      this.#activity.reject(error);
+      this.failOpening(error);
     }
   }
 
@@ -87,6 +85,17 @@ export class ResourceAccess<Resources extends object = object> implements Resour
     if (this.#closed) return;
     this.#closed = new ResourceAccessClosed();
     this.#activity.close(this.#closed);
+  }
+
+  /** Opening owns any partially established operations; preserve its failure through closing. */
+  private failOpening(error: unknown): never {
+    let failure = error;
+    try {
+      this.close();
+    } catch (closing) {
+      failure = new AggregateError([error, closing], 'Resource opening and cleanup both failed', { cause: error });
+    }
+    this.#activity.reject(failure);
   }
 
   private local(entry: ResourceSupplyEntry) {

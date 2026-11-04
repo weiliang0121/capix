@@ -2,7 +2,8 @@ import { InvocationCheckpoint } from '../checkpoint/invocation.js';
 import type { CheckpointInstallation, CheckpointRestoration, CheckpointWriter } from '../checkpoint/contract.js';
 import type { CheckpointBinding } from '../checkpoint/work.js';
 import type { InvocationTarget } from './relation.js';
-import type { InvocationOutputWriter, InvocationOutputReceiver } from '@capix/contracts';
+import type { InvocationOutputWriter, InvocationOutputReceiver, OperationOutcome } from '@capix/contracts';
+import type { InvocationResources } from './resource-access.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from '../clock.js';
 import { DeclaredException } from '../exception/contract.js';
@@ -190,34 +191,60 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
 
   private async deliver(): Promise<Output> {
     try {
-      this.#checkpoint?.begin();
-      const output = await this.runWork();
-      this.#checkpoint?.finish({ status: 'succeeded', output });
-      this.#parentRelation?.returnedWith({ status: 'succeeded', output });
-      return output;
+      let outcome: OperationOutcome<Output>;
+      try {
+        this.#checkpoint?.begin();
+        outcome = { status: 'succeeded', value: await this.runWork() };
+      } catch (failure) {
+        outcome = { status: 'failed', failure };
+      }
+      this.#control.close();
+      // Required local closing precedes durable success and the parent's returned relation.
+      const closing = this.closeResources();
+      if (closing.status === 'failed') {
+        const failure = outcome.status === 'failed' ? new AggregateError([outcome.failure, closing.failure], 'Invocation work and resource close both failed', { cause: outcome.failure }) : closing.failure;
+        this.#classified = Object.freeze({ ...this.classify(failure, 'control', true), kind: 'error', error: failure, receptionAllowed: false });
+        outcome = { status: 'failed', failure };
+      }
+      const delivery = this.finishDelivery(outcome);
+      if (delivery.status === 'failed') throw delivery.failure;
+      return delivery.value;
+    } finally {
+      // These local operations invoke no host code. Never put fallible cleanup before release.
+      this.#control.close();
+      this.#checkpoint?.release();
+    }
+  }
+
+  private closeResources(): OperationOutcome<void> {
+    return 'resources' in this.context ? (this.context.resources as InvocationResources).closeAllResult() : { status: 'succeeded', value: undefined };
+  }
+
+  private finishDelivery(outcome: OperationOutcome<Output>): OperationOutcome<Output> {
+    if (outcome.status === 'failed') return this.failDelivery(outcome.failure);
+    try {
+      this.#checkpoint?.finish({ status: 'succeeded', output: outcome.value });
+      this.#parentRelation?.returnedWith({ status: 'succeeded', output: outcome.value });
+      return outcome;
     } catch (error) {
       return this.failDelivery(error);
-    } finally {
-      this.#control.close();
-      if ('resources' in this.context) (this.context.resources as { closeAll(): void }).closeAll();
-      this.#checkpoint?.release();
     }
   }
 
   private async runWork(): Promise<Output> {
     const context = this.context;
     context.requireRunning();
-    let output: Output;
+    let outcome: OperationOutcome<Output>;
     try {
       this.startWork();
-      output = await this.#execution.run(this.restoring ? () => this.#checkpoint!.resume() : undefined);
-    } catch (error) {
-      this.#control.close();
-      await this.children.settle();
-      return this.failWork(error);
+      const execution = await this.#execution.run(this.restoring ? () => this.#checkpoint!.resume() : undefined);
+      outcome = execution.status === 'succeeded' ? execution : { status: 'failed', failure: execution.failure.error };
+    } catch (failure) {
+      outcome = { status: 'failed', failure };
     }
     this.#control.close();
     await this.children.settle();
+    if (outcome.status === 'failed') return this.failWork(outcome.failure);
     // A child's already-owned fault remains authoritative even if its caller did not await it.
     try {
       this.requireHealthy();
@@ -225,10 +252,10 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       return this.failWork(error);
     }
     // Terminal observation may fail delivery, but never changes the committed work outcome.
-    context.complete(output);
-    this.#execution.completeOutput(output);
+    context.complete(outcome.value);
+    this.#execution.completeOutput(outcome.value);
     this.publish({ kind: 'finished', state: context.state });
-    return output;
+    return outcome.value;
   }
 
   private startWork(): void {
@@ -261,7 +288,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     throw delivered;
   }
 
-  private failDelivery(error: unknown): never {
+  private failDelivery(error: unknown): OperationOutcome<never> {
     const classified = this.#classified && this.#classified.error === error ? this.#classified : this.classify(error, this.context.status === 'succeeded' ? 'observation' : this.context.progress.phase, true);
     let delivered = error instanceof AggregateError ? error : classified.error;
     let receptionAllowed = classified.receptionAllowed === true && !isProtectedOperationFailure(delivered);
@@ -274,7 +301,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     this.#failure = Object.freeze({ ...classified, ...(delivered instanceof AggregateError ? { kind: 'error' as const } : {}), error: delivered, receptionAllowed });
     if (this.context.status === 'running') this.context.fail(delivered, this.#failure);
     this.#parentRelation?.returnedWith({ status: 'failed', error: delivered, failure: this.#failure });
-    throw this.#parentRelation && this.#parentDeliveryScope ? this.options.parent!.invocation.children.deliverReturn(this.#parentRelation, delivered, this.#failure, this.#parentDeliveryScope) : delivered;
+    return { status: 'failed', failure: this.#parentRelation && this.#parentDeliveryScope ? this.options.parent!.invocation.children.deliverReturn(this.#parentRelation, delivered, this.#failure, this.#parentDeliveryScope) : delivered };
   }
 
   requireHealthy(): void {
@@ -294,6 +321,26 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   }
 
   classify(error: unknown, phase: InvocationPhase, forceError = false, origin?: InvocationExceptionOrigin): InvocationFailure {
+    try {
+      return this.classifyFailure(error, phase, forceError, origin);
+    } catch (inspection) {
+      // Thrown values may execute code even during instanceof. Classification must
+      // not skip Work closing or inspect the same untrusted value recursively.
+      const causes = this.#fault && this.#fault.error !== error ? [this.#fault.error, error, inspection] : [error, inspection];
+      const failure: InvocationFailure = Object.freeze({
+        kind: 'error',
+        phase,
+        contextId: this.context.id,
+        error: new InvocationStopped('FAILURE_CLASSIFICATION_FAILED', '调用失败分类未能完成。', undefined, { cause: new AggregateError(causes, 'Invocation failure and classification both failed') }),
+        receptionAllowed: false,
+      });
+      this.#classified = failure;
+      this.#fault = failure;
+      return failure;
+    }
+  }
+
+  private classifyFailure(error: unknown, phase: InvocationPhase, forceError: boolean, origin?: InvocationExceptionOrigin): InvocationFailure {
     if (this.#fault) {
       if (['observation', 'control', 'setup'].includes(phase) || isProtectedOperationFailure(error)) this.#fault = Object.freeze({ ...this.#fault, receptionAllowed: false });
       // A structural report can add a second cause; retain it without allowing

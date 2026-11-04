@@ -146,7 +146,7 @@ Invocation 当前仍借助 Context.resources 协调资源窗口的开启与关�
 
 ## Runtime 职责与收敛（2026-10-27）
 
-以调用包迁移 `628c732` 为基线，本轮完成 Runtime 主路径与局部接缝整理；跨包退出协议保留为后续议题；独立交互已在后续闭环迁出，相关接线继续由 Runtime 负责。
+以调用包迁移 `628c732` 为基线，完成 Runtime 主路径与局部接缝整理；跨包退出契约已在后续闭环落实，见 [调用退出契约](invocation-exit-contract.md)。独立交互也已迁出，相关接线继续由 Runtime 负责。
 
 Runtime 有自己的不变量：把一棵结构与宿主供给固定为同一份安装；只允许属于这份安装的调用使用它；按本次输入与窗口兑现已经确定的能力。它不决定业务执行顺序，也不重新实现 Invocation 状态机。“组织模块”仍需要明确这些职责，不能把剩余文件统称为胶水。
 
@@ -210,9 +210,11 @@ sequenceDiagram
         Adapt-->>Business: 操作接收结果
     end
     Business-->>Adapt: 本层结果或失败
-    Adapt->>Adapt: 封口输出，等已开始接纳，关闭 Work
-    Adapt-->>Invoke: 入口返回
-    Invoke->>Invoke: 完成检查与退出，固定最终交付
+    Adapt-->>Invoke: 原始返回或抛错（无额外 async 包装）
+    Invoke->>Invoke: 封口输出，等待已开始接纳
+    Invoke->>Adapt: 同步 close 当前 Work
+    Adapt-->>Invoke: OperationOutcome
+    Invoke->>Invoke: 等待子调用、关闭剩余窗口、按实际结果固定交付、释放 CP 占用
     Invoke-->>Runner: 最终结果或失败
     Runner->>Runner: 释放占用
 ```
@@ -236,9 +238,9 @@ sequenceDiagram
 
 验证入口：`test/runtime-resolution.test.mjs` 覆盖解算顺序、CP 外部成员拒绝与嵌套供给；`test/runtime-work-adapter.test.mjs` 覆盖回调 receiver、固定配置、accepted/handled 与接收故障归属；`test/runtime-entry.test.mjs` 覆盖入口重入、观察失败聚合及旧新宿主差异。既有 Runner、Driver、结构、资源、恢复、服务与客户端回归继续运行。
 
-### 保留的后续议题
+### 后续闭环与保留议题
 
-- **Work 退出与调用退出的接缝。** Runtime 普通/恢复适配仍执行 `sealOutput → settleAcceptances → close`，InvocationExecution 也保证前两步。前者保护接纳回调期间的 Work，后者保护绕过 Runtime 的低层调用。本轮保留原时序；后续若收敛，应同时验证普通、恢复和低层入口，不直接删掉任一层保障。
+- **退出契约已闭合。** InvocationExecution 统一 `sealOutput → settleAcceptances → Work close`，Runtime 通过 InvocationWork 的可选同步 close 端口返回 OperationOutcome。正文先捕获、接纳排空后认证来源，关闭失败明确归属 control 且不可业务降级。InvocationResources.closeAllResult 耗尽剩余窗口；Invocation 在成功 CP／父交付之前处理关闭结果，最后仅做本地占用释放。原始错误与清理错误均保留，已成立工作／CP 事实不回滚；普通、恢复、低层及微任务边界均有回归。详见 [退出契约](invocation-exit-contract.md)。
 - **交互接线与独立机制。** Interaction/Interactions 已归 `@capix/interaction`，Runtime 保留 Runner 可选参数和资源通道接线；共享 PersistenceError/RuntimeErrorHelper 已归 diagnostics。更完整的外部执行、沙箱和工作区是后续议题，不由本次分包提前定义。
 - **记录预设与公开出口。** 记录连接结构观察声明、调用事实与记录资源，有作为组合预设的依据。Initializer 仍只是一次性同步创建辅助；这些暂不新增包。普通入口、低层构造与历史重导继续明确标注，不为了减少导出数另建门面。
 

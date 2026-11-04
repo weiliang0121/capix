@@ -1,4 +1,5 @@
 import { ResourceAccess, ResourceAccessClosed, captureResourceOwner, ResourceRequest, ResourceSupply, checkResourceRequests, resourceRequests, type ResourceOwner, type ResourceRequirements, type ResourceRefinement, type ResourceSupplyEntry } from '@capix/resources';
+import type { OperationOutcome } from '@capix/contracts';
 
 /** Invocation progress belongs to runtime; the resource package sees only fixed window guards. */
 export interface InvocationResourceOwner extends ResourceOwner {
@@ -89,8 +90,23 @@ export class InvocationResources<Resources extends object = object> {
   }
 
   closeAll(): void {
+    const result = this.closeAllResult();
+    if (result.status === 'failed') throw result.failure;
+  }
+
+  /** Exhaust owned windows synchronously; a failed window never prevents the remaining closes. */
+  closeAllResult(): OperationOutcome<void> {
     this.#ended = true;
-    for (const window of this.#windows.values()) window.close();
+    const failures: unknown[] = [];
+    for (const window of this.#windows.values()) {
+      try {
+        window.close();
+      } catch (failure) {
+        failures.push(failure);
+      }
+    }
+    if (!failures.length) return { status: 'succeeded', value: undefined };
+    return { status: 'failed', failure: failures.length === 1 ? failures[0] : new AggregateError(failures, 'Invocation resource windows failed to close', { cause: failures[0] }) };
   }
 
   select<Values extends object, Input = unknown>(deps: ResourceRequirements<Values>, initial: ResourceRequirements = deps, selection?: { readonly input: Input; readonly refinements: readonly ResourceRefinement<Input>[]; readonly supply?: ResourceRequirements }): InvocationResources<Values> {

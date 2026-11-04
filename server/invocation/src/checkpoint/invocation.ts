@@ -139,7 +139,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       },
     });
   }
-  async resume(): Promise<Output> {
+  resume(): Output | Promise<Output> {
     if (!this.#restore || !this.work) throw new Error('Invocation has no continuation');
     const image = this.#restore.image;
     const point = this.work.points[image.point]!;
