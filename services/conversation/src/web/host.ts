@@ -1,11 +1,9 @@
 import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import type { ModelProvider } from '@capix/model-provider';
-import { RecordBook, Recorder } from '@capix/records';
 import { Runner } from '@capix/server-runtime';
 import { createConversationInteractions, createConversationResources, createMaterialConversationScene, loadConversationContent } from '../assembly/index.js';
 import { ConversationStore } from '../persistence/index.js';
-import { createConversationRecording } from '../recording/index.js';
-import { inspectConversation, inspectConversationCall } from '../recording/inspection.js';
+import { ConversationRecording } from '../recording/index.js';
 import { ConversationEvents } from '../http/events.js';
 import { createConversationServer } from '../http/server.js';
 import { assertConversationRecovery, listConversationRecoveries } from '../recovery/index.js';
@@ -36,13 +34,7 @@ export function createConversationWebHost(options: ConversationWebHostOptions) {
     interactions = createConversationInteractions(options.model, store.interactions);
     const scene = createMaterialConversationScene(budget);
     const events = new ConversationEvents(content.transcript);
-    const recorder = new Recorder(new RecordBook());
-    let integrity: 'intact' | 'incomplete' = 'intact';
-    const recording = createConversationRecording(scene, recorder, {
-      invalidate: () => {
-        integrity = 'incomplete';
-      },
-    });
+    const recording = new ConversationRecording(scene);
     const runner = new Runner(scene, createConversationResources(content, options.model, store.view, configuration), interactions, {
       observations: [recording, events.observation],
       checkpoints: { store: store.checkpoints, feedback: events.checkpoint },
@@ -59,8 +51,9 @@ export function createConversationWebHost(options: ConversationWebHostOptions) {
       mode: options.mode,
       model: options.modelName,
       assertAvailable: () => store.assertAvailable(),
-      inspect: () => inspectConversation(content, recorder, recording.root, integrity),
-      call: (id) => inspectConversationCall(recorder, recording.root, id, integrity),
+      inspect: () => recording.inspect(content),
+      call: (id) => recording.call(id),
+      recording,
       assetsDirectory: options.assetsDirectory,
       recovery: {
         list: () => listConversationRecoveries(content, store, configuration, budget),

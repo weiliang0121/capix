@@ -1,5 +1,5 @@
 import type { Recorder } from '@capix/records';
-import { bindRecording, type RecordingOptions } from '@capix/server-runtime/recording';
+import { bindRecording, type RecordingOptions, type InvocationRecordDescription } from '@capix/server-runtime/recording';
 import type { CallableStructure, Composite } from '@capix/structure';
 import { describeConversationValue } from './description.js';
 
@@ -9,14 +9,19 @@ export function createConversationRecording(scene: CallableStructure<'scene'> & 
   const pending = [scene, ...scene.members];
   for (let index = 0; index < pending.length; index++) {
     const current = pending[index]!;
-    installation.describe(current, {
-      ...(current === scene ? { role: 'conversation' } : {}),
-      input: (value) => describeConversationValue(value),
-      output: (value) => describeConversationValue(value),
-      relationAccepted: (value) => describeConversationValue(value),
-      relationHandled: (value) => describeConversationValue(value),
-    });
+    installation.describe(current, conversationRecordDescription(current === scene));
     if (current !== scene && current.kind === 'group') pending.push(...current.members);
   }
   return installation;
+}
+
+/** Shared projection for static installation and explicitly controlled capture. */
+export function conversationRecordDescription(root: boolean): InvocationRecordDescription {
+  return {
+    ...(root ? { role: 'conversation' } : {}),
+    input: (value) => describeConversationValue(value),
+    output: (value) => describeConversationValue(value),
+    relationAccepted: (value) => describeConversationValue(value),
+    relationHandled: (value) => describeConversationValue(value),
+  };
 }

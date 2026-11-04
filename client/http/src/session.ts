@@ -2,8 +2,8 @@ import { SessionConnectionError, type SessionTransport } from '@capix/client-run
 import type { ConversationSubmissionFrame, ConversationSubmissionRequest, ConversationRecoveryRequest } from '@capix/protocol';
 import { ConversationHttpTransport } from './conversation.js';
 import { HttpError, HttpTransportError } from './errors.js';
-import { acceptResponse } from './responses.js';
-import { acceptCallDetail, inspectionResponse, sessionResponse, recoveriesResponse } from './session-responses.js';
+import { acceptResponse, parseLine } from './responses.js';
+import { acceptCallDetail, inspectionResponse, sessionResponse, recoveriesResponse, recordingResponse } from './session-responses.js';
 
 /** Single-conversation service endpoints; submissions share the established wire receiver. */
 export class SessionHttpTransport extends ConversationHttpTransport implements SessionTransport {
@@ -18,6 +18,25 @@ export class SessionHttpTransport extends ConversationHttpTransport implements S
   }
   async recoveries(signal?: AbortSignal) {
     return acceptResponse(recoveriesResponse, await this.get('/api/recoveries', signal), '可恢复断点');
+  }
+  async recording(signal?: AbortSignal) {
+    return acceptResponse(recordingResponse, await this.get('/api/recording', signal), '记录采集');
+  }
+  startRecording(signal?: AbortSignal) {
+    return this.changeRecording('start', {}, signal);
+  }
+  stopRecording(recorderId: string, signal?: AbortSignal) {
+    return this.changeRecording('stop', { recorderId }, signal);
+  }
+  clearRecording(recorderId: string, signal?: AbortSignal) {
+    return this.changeRecording('clear', { recorderId }, signal);
+  }
+  private async changeRecording(action: 'start' | 'stop' | 'clear', body: { readonly recorderId?: string }, signal?: AbortSignal) {
+    const response = await this.send(`/api/recording/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
+    const state = acceptResponse(recordingResponse, parseLine(await response.text()), '记录采集');
+    const valid = action === 'start' ? state.status === 'recording' : action === 'clear' ? state.status === 'idle' : (state.status === 'stopping' || state.status === 'stopped') && state.recorderId === body.recorderId;
+    if (!valid) throw new HttpTransportError('contract', '记录控制结果与请求不一致。', 'RECORDING_MISMATCH');
+    return state;
   }
   resume(request: ConversationRecoveryRequest, receive: (frame: ConversationSubmissionFrame) => void, signal: AbortSignal) {
     return connection(() => this.feedback('/api/resume', request.submissionId, receive, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal }, request.conversationId), signal);

@@ -1,9 +1,10 @@
 import type { ConversationSession, ClientTrackingStore } from '@capix/client-runtime';
 import type { SessionHttpTransport } from '@capix/client-http';
-import type { ConversationCallDetail, ConversationInspection, ConversationRecoverySummary } from '@capix/protocol';
+import type { ConversationCallDetail, ConversationInspection, ConversationRecoverySummary, ConversationRecordingState } from '@capix/protocol';
 
 type Loading = 'idle' | 'loading' | 'ready' | 'failed';
 type SessionState = ConversationSession['snapshot'];
+type RecordingCommand = 'start' | 'stop' | 'clear';
 export interface ConversationApplicationState {
   readonly session: ConversationSession['snapshot'];
   readonly inspection?: ConversationInspection;
@@ -17,6 +18,9 @@ export interface ConversationApplicationState {
   readonly recoveries?: readonly ConversationRecoverySummary[];
   readonly recoveryStatus: Loading | 'stale';
   readonly recoveryError?: string;
+  readonly recording?: ConversationRecordingState;
+  readonly recordingPending?: RecordingCommand;
+  readonly recordingError?: string;
 }
 
 const trackingKey = 'capix.conversation.tracking.v1';
@@ -43,7 +47,7 @@ export class ConversationApplication {
 
   constructor(
     readonly session: ConversationSession,
-    readonly transport: Pick<SessionHttpTransport, 'inspection' | 'call'> & Partial<Pick<SessionHttpTransport, 'recoveries'>>,
+    readonly transport: Pick<SessionHttpTransport, 'inspection' | 'call'> & Partial<Pick<SessionHttpTransport, 'recoveries' | 'startRecording' | 'stopRecording' | 'clearRecording'>>,
   ) {
     this.#state = { session: session.snapshot, inspectionStatus: 'idle', detailStatus: 'idle', recoveryStatus: 'idle' };
   }
@@ -53,9 +57,11 @@ export class ConversationApplication {
   #inspection?: AbortController;
   #detail?: AbortController;
   #recoveries?: AbortController;
+  #recording?: AbortController;
   #contentId?: string;
   #settled?: string;
   #recoveryOpening = true;
+  #inspectionOpening = true;
 
   readonly snapshot = () => this.#state;
   readonly subscribe = (listener: () => void) => {
@@ -66,6 +72,10 @@ export class ConversationApplication {
   connect(): () => void {
     const generation = ++this.#generation;
     this.#recoveryOpening = true;
+    this.#inspectionOpening = true;
+    this.#recording?.abort();
+    this.#recording = undefined;
+    this.publish({ recording: undefined, recordingPending: undefined, recordingError: undefined });
     this.invalidateRecoveries();
     this.#unsubscribe?.();
     this.#unsubscribe = this.session.subscribe(() => this.changed());
@@ -78,6 +88,8 @@ export class ConversationApplication {
       this.session.stop();
       this.#inspection?.abort();
       this.#detail?.abort();
+      this.#recording?.abort();
+      this.#recording = undefined;
       this.invalidateRecoveries();
       this.#inspection = undefined;
       this.#detail = undefined;
@@ -91,7 +103,17 @@ export class ConversationApplication {
   private changed(): void {
     const current = this.session.snapshot;
     const previous = this.#state.session;
-    if (current.status === 'connecting' && previous.status !== 'connecting') this.#recoveryOpening = true;
+    if (current.status === 'connecting' && previous.status !== 'connecting') {
+      this.#recoveryOpening = true;
+      this.#inspectionOpening = true;
+      this.#recording?.abort();
+      this.#recording = undefined;
+      this.#inspection?.abort();
+      this.#inspection = undefined;
+      this.#detail?.abort();
+      this.#detail = undefined;
+      this.publish({ recording: undefined, recordingPending: undefined, recordingError: undefined });
+    }
     if (!canInspectRecoveries(current) || !sameRecoveryBasis(previous, current)) this.invalidateRecoveries();
     this.publish({ session: current });
     const id = current.info?.transcriptId;
@@ -99,6 +121,11 @@ export class ConversationApplication {
       this.#contentId = id;
       this.#detail?.abort();
       this.publish({ inspection: undefined, detail: undefined, selectedCall: undefined, detailStatus: 'idle' });
+      this.#inspectionOpening = true;
+    }
+    const openingInspection = this.#inspectionOpening && current.status === 'ready' && Boolean(id);
+    if (openingInspection) {
+      this.#inspectionOpening = false;
       void this.refresh();
     }
     if (this.#recoveryOpening && current.status === 'ready') {
@@ -112,7 +139,7 @@ export class ConversationApplication {
     const settled = current.submission?.remote?.result ? current.submission.id : undefined;
     if (settled && settled !== this.#settled) {
       this.#settled = settled;
-      void this.refresh();
+      if (!openingInspection) void this.refresh();
     }
   }
 
@@ -137,13 +164,13 @@ export class ConversationApplication {
 
   async refresh(): Promise<void> {
     const id = this.session.snapshot.info?.transcriptId;
-    if (!id) return;
+    if (!id || this.#recording) return;
     this.#inspection?.abort();
     const request = new AbortController();
     this.#inspection = request;
     this.publish({ inspectionStatus: 'loading', inspectionError: undefined });
     try {
-      const inspection = await this.transport.inspection(request.signal);
+      const inspection: ConversationInspection = await this.transport.inspection(request.signal);
       if (this.#inspection !== request || request.signal.aborted) return;
       if (inspection.transcriptId !== id) throw new Error('检查内容不属于当前对话。');
       const previous = this.#state.inspection;
@@ -154,11 +181,57 @@ export class ConversationApplication {
         this.#detail?.abort();
         this.#detail = undefined;
       }
-      this.publish({ inspection, inspectionStatus: 'ready', ...(!selectionAvailable ? { selectedCall: undefined, detail: undefined, detailStatus: 'idle', detailError: undefined } : {}) });
+      this.publish({ inspection, recording: inspection.recording, inspectionStatus: 'ready', ...(!selectionAvailable ? { selectedCall: undefined, detail: undefined, detailStatus: 'idle', detailError: undefined } : {}) });
       if (selectionAvailable) void this.selectCall(selected);
     } catch (error) {
       if (this.#inspection === request && !request.signal.aborted) this.publish({ inspectionStatus: 'failed', inspectionError: errorText(error) });
     }
+  }
+
+  /** Recording is host-owned; stopping this request never cancels the conversation. */
+  async changeRecording(command: RecordingCommand): Promise<void> {
+    if (this.#recording || this.session.snapshot.status !== 'ready') return;
+    const state = this.#state.recording;
+    if (!state) return;
+    const start = this.transport.startRecording?.bind(this.transport);
+    const stop = this.transport.stopRecording?.bind(this.transport);
+    const clear = this.transport.clearRecording?.bind(this.transport);
+    if (!start || !stop || !clear) return;
+    if ((command === 'start' && state.status !== 'idle') || (command === 'stop' && state.status !== 'recording') || (command === 'clear' && state.status !== 'stopped')) return;
+    const request = new AbortController();
+    this.#recording = request;
+    // An inspection issued before the control command cannot reinstall its old capture.
+    this.#inspection?.abort();
+    this.#inspection = undefined;
+    this.cancelDetailRequest();
+    this.publish({ recordingPending: command, recordingError: undefined });
+    try {
+      let recording: ConversationRecordingState;
+      if (command === 'start') recording = await start(request.signal);
+      else {
+        if (state.status === 'idle') return;
+        recording = command === 'stop' ? await stop(state.recorderId, request.signal) : await clear(state.recorderId, request.signal);
+      }
+      if (this.#recording !== request || request.signal.aborted) return;
+      const changed = recording.recorderId !== state.recorderId;
+      if (changed) this.cancelDetailRequest();
+      this.publish({ recording, ...(changed ? { inspection: undefined, selectedCall: undefined, detail: undefined, detailStatus: 'idle', detailError: undefined } : {}) });
+    } catch (error) {
+      if (this.#recording !== request || request.signal.aborted) return;
+      // A lost response does not prove the control command was not applied.
+      this.publish({ recording: undefined, recordingError: errorText(error) });
+    } finally {
+      if (this.#recording === request && !request.signal.aborted) {
+        this.#recording = undefined;
+        this.publish({ recordingPending: undefined });
+        await this.refresh();
+      }
+    }
+  }
+
+  private cancelDetailRequest(): void {
+    this.#detail?.abort();
+    this.#detail = undefined;
   }
 
   async refreshRecoveries(): Promise<void> {
@@ -194,6 +267,7 @@ export class ConversationApplication {
   }
 
   async selectCall(id: string): Promise<void> {
+    if (this.#recording) return;
     this.#detail?.abort();
     const request = new AbortController();
     this.#detail = request;
@@ -202,6 +276,7 @@ export class ConversationApplication {
     try {
       const detail = await this.transport.call(id, request.signal);
       if (this.#detail !== request || request.signal.aborted) return;
+      if (this.#state.inspection?.recording.recorderId !== recorderId) return;
       if (detail.root.id !== id || detail.recorderId !== recorderId) throw new Error('调用详情不属于选中的记录来源。');
       this.publish({ detail, detailStatus: 'ready' });
     } catch (error) {

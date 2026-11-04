@@ -14,6 +14,37 @@ const baseline = { type: 'baseline', submission: { conversationId: identity.conv
 const signal = () => new AbortController().signal;
 const stream = (frames) => new Response(frames.map((frame) => JSON.stringify(frame)).join('\n'));
 
+test('recording HTTP controls validate capture identities and state-specific results', async () => {
+  const calls = [];
+  let state = { status: 'recording', recorderId: 'capture' };
+  const transport = new SessionHttpTransport('', async (path, init) => {
+    calls.push({ path, init });
+    return Response.json(state);
+  });
+  assert.deepEqual(await transport.recording(), state);
+  assert.deepEqual(await transport.startRecording(), state);
+  state = { status: 'stopping', recorderId: 'capture' };
+  assert.deepEqual(await transport.stopRecording('capture'), state);
+  state = { status: 'idle' };
+  assert.deepEqual(await transport.clearRecording('capture'), state);
+  assert.deepEqual(
+    calls.map(({ path }) => path),
+    ['/api/recording', '/api/recording/start', '/api/recording/stop', '/api/recording/clear'],
+  );
+  assert.deepEqual(
+    calls.slice(1).map(({ init }) => JSON.parse(init.body)),
+    [{}, { recorderId: 'capture' }, { recorderId: 'capture' }],
+  );
+  for (const invalid of [{ status: 'idle', recorderId: 'capture' }, { status: 'stopped' }, { status: 'stopping', recorderId: '' }, { status: 'unexpected' }, { status: 'recording', recorderId: 'capture', extra: true }]) {
+    await assert.rejects(new SessionHttpTransport('', async () => Response.json(invalid)).recording(), HttpTransportError);
+  }
+  for (const invalid of [{ status: 'stopped', recorderId: 'other' }, { status: 'recording', recorderId: 'capture' }, { status: 'idle' }]) {
+    await assert.rejects(new SessionHttpTransport('', async () => Response.json(invalid)).stopRecording('capture'), HttpTransportError);
+  }
+  await assert.rejects(new SessionHttpTransport('', async () => Response.json({ status: 'stopped', recorderId: 'capture' })).startRecording(), HttpTransportError);
+  await assert.rejects(new SessionHttpTransport('', async () => Response.json({ status: 'recording', recorderId: 'capture' })).clearRecording('capture'), HttpTransportError);
+});
+
 test('recovery HTTP validates candidates and uses the normal submission feedback receiver', async () => {
   const candidates = [{ contextId: 'context', point: 'answerWaiting', available: true }];
   const calls = [];
@@ -88,8 +119,19 @@ test('submission HTTP distinguishes recoverable disconnection, unknown identity,
 });
 
 test('inspection checks entity sources and full call detail preserves the real Scene topology', async () => {
-  const inspection = { transcriptId: 'transcript', memories: { id: 'memories', sequence: 0, items: [] }, view: { revision: 0, sources: { messages: { id: 'transcript', scope: 'original' }, memories: { id: 'memories', scope: 'original' } }, members: [] }, recording: { recorderId: 'recorder', revision: 0, integrity: 'intact', calls: [], omitted: 0 } };
+  const inspection = { transcriptId: 'transcript', memories: { id: 'memories', sequence: 0, items: [] }, view: { revision: 0, sources: { messages: { id: 'transcript', scope: 'original' }, memories: { id: 'memories', scope: 'original' } }, members: [] }, recording: { status: 'recording', recorderId: 'recorder', revision: 0, integrity: 'intact', calls: [], omitted: 0 } };
   assert.deepEqual(await new SessionHttpTransport('', async () => Response.json(inspection)).inspection(), inspection);
+  const idle = { status: 'idle', revision: 0, integrity: 'intact', calls: [], omitted: 0 };
+  assert.deepEqual((await new SessionHttpTransport('', async () => Response.json({ ...inspection, recording: idle })).inspection()).recording, idle);
+  for (const recording of [
+    { ...idle, recorderId: 'fabricated' },
+    { ...idle, revision: 1 },
+    { ...idle, integrity: 'incomplete' },
+    { ...idle, omitted: 1 },
+    { ...inspection.recording, recorderId: undefined },
+  ]) {
+    await assert.rejects(new SessionHttpTransport('', async () => Response.json({ ...inspection, recording })).inspection(), HttpTransportError);
+  }
   await assert.rejects(new SessionHttpTransport('', async () => Response.json({ ...inspection, view: { ...inspection.view, members: [{ source: 'memories', key: 'missing' }] } })).inspection(), HttpTransportError);
   const source = snapshot();
   const detail = { recorderId: 'recorder', revision: 10, integrity: 'intact', root: source.rootCall, calls: source.calls, resources: source.resources, transcripts: source.transcripts, memories: source.memories, boundaries: source.boundaries, truncated: false };
@@ -126,6 +168,8 @@ test('real offline web host is consumed by the session and its inspected Scene r
   const transport = new SessionHttpTransport(origin, (url, options) => fetch(url, { ...options, headers: { ...options?.headers, Origin: origin } }));
   session = new ConversationSession(transport);
   await session.initialize();
+  assert.deepEqual(await transport.recording(), { status: 'idle' });
+  await transport.startRecording();
   await session.send('你好');
   assert.equal(session.snapshot.submission.remote.result.status, 'completed');
   for (let attempt = 0; attempt < 30 && !session.snapshot.canSend; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));

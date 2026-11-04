@@ -1,11 +1,12 @@
 import { z } from 'zod';
-import { validateExecutionRecordSnapshot, validateInvocationRecordValue, type CallableRecord, type ConversationCallDetail, type ConversationInspection, type ConversationServiceInfo, type InvocationBoundaryRecord, type MemoryRecord, type ResourceRecord, type TranscriptRecord } from '@capix/protocol';
+import { validateExecutionRecordSnapshot, validateInvocationRecordValue, type CallableRecord, type ConversationCallDetail, type ConversationInspection, type ConversationRecordingState, type ConversationServiceInfo, type InvocationBoundaryRecord, type MemoryRecord, type ResourceRecord, type TranscriptRecord } from '@capix/protocol';
 import { acceptResponse, admissionResponse, recordEntryResponse, submissionBaselineResponse } from './responses.js';
 import { HttpTransportError } from './errors.js';
 
 const id = z.string().min(1);
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const locator = z.object({ transcriptId: id, index });
+export const recordingResponse = z.discriminatedUnion('status', [z.strictObject({ status: z.literal('idle') }), z.strictObject({ status: z.enum(['recording', 'stopping', 'stopped']), recorderId: id })]) satisfies z.ZodType<ConversationRecordingState>;
 export const recoveriesResponse = z.array(z.strictObject({ contextId: id, point: id, available: z.boolean(), reason: z.string().optional() })).superRefine((items, context) => {
   if (new Set(items.map((item) => item.contextId)).size !== items.length || items.some((item) => item.available && item.reason !== undefined)) context.addIssue({ code: 'custom', message: 'Recovery candidates have conflicting identities or eligibility' });
 });
@@ -15,12 +16,14 @@ export const sessionResponse = z.object({ conversationId: id, transcriptId: id, 
 }) satisfies z.ZodType<ConversationServiceInfo>;
 
 const fileResult = z.object({ id, kind: z.literal('file-created'), answerIndex: index, receipt: z.object({ path: id, bytes: index, digest: z.string().regex(/^[a-f0-9]{64}$/u) }) });
+const callSummary = z.object({ id, contextId: id, name: z.string().optional(), status: z.enum(['running', 'succeeded', 'failed']), startedAt: z.string().optional(), input: locator.optional(), answer: locator.optional() });
+const recordingInspection = z.discriminatedUnion('status', [z.strictObject({ status: z.literal('idle'), revision: z.literal(0), integrity: z.literal('intact'), calls: z.array(callSummary).length(0), omitted: z.literal(0) }), z.strictObject({ status: z.enum(['recording', 'stopping', 'stopped']), recorderId: id, revision: index, integrity: z.enum(['intact', 'incomplete']), calls: z.array(callSummary), omitted: index })]);
 export const inspectionResponse = z
   .object({
     transcriptId: id,
     memories: z.object({ id, sequence: index, items: z.array(z.object({ id, topic: z.string(), content: z.string(), sourceIndexes: z.array(index), sourceResults: z.array(fileResult).optional() })) }),
     view: z.object({ revision: index, sources: z.object({ messages: z.object({ id, scope: id }), memories: z.object({ id, scope: id }) }), members: z.array(z.discriminatedUnion('source', [z.object({ source: z.literal('messages'), key: index }), z.object({ source: z.literal('memories'), key: id })])) }),
-    recording: z.object({ recorderId: id, revision: index, integrity: z.enum(['intact', 'incomplete']), calls: z.array(z.object({ id, contextId: id, name: z.string().optional(), status: z.enum(['running', 'succeeded', 'failed']), startedAt: z.string().optional(), input: locator.optional(), answer: locator.optional() })), omitted: index }),
+    recording: recordingInspection,
   })
   .superRefine((value, context) => {
     const memories = new Set(value.memories.items.map((item) => item.id));

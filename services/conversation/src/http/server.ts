@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Transcript } from '@capix/transcript';
-import type { ConversationCallDetail, ConversationInspection, ConversationServiceInfo, ConversationSubmissionFrame, TranscriptFrame, ConversationRecoverySummary, ConversationRecoveryActivity } from '@capix/protocol';
+import type { ConversationCallDetail, ConversationInspection, ConversationRecordingState, ConversationServiceInfo, ConversationSubmissionFrame, TranscriptFrame, ConversationRecoverySummary, ConversationRecoveryActivity } from '@capix/protocol';
 import { ConversationEvents } from './events.js';
 import { ConversationHttpError, ConversationSubmissions, type ConversationRunner } from './submission.js';
 import { streamFrames } from './stream.js';
@@ -20,6 +20,12 @@ export interface ConversationServerOptions {
   readonly assetsDirectory?: string;
   readonly submissionRetention?: number;
   readonly previewBytes?: number;
+  readonly recording?: {
+    state(): ConversationRecordingState;
+    start(): ConversationRecordingState;
+    stop(): ConversationRecordingState;
+    clear(): ConversationRecordingState;
+  };
   readonly recovery?: {
     list(): readonly ConversationRecoverySummary[];
     check(contextId: string): ReturnType<Parameters<ConversationSubmissions['resume']>[2]>;
@@ -78,6 +84,24 @@ export function createConversationServer(options: ConversationServerOptions) {
       return;
     }
     if (request.method === 'GET' && url.pathname === '/api/inspection') return json(response, 200, options.inspect());
+    if (request.method === 'GET' && url.pathname === '/api/recording') {
+      if (!options.recording) throw new ConversationHttpError('RECORDING_UNAVAILABLE', '当前服务未安装记录控制。', 409);
+      return json(response, 200, options.recording.state());
+    }
+    const recordingPath = /^\/api\/recording\/(start|stop|clear)$/.exec(url.pathname);
+    if (request.method === 'POST' && recordingPath) {
+      const body = await readBody(request);
+      const action = recordingPath[1];
+      if (!object(body) || (action === 'start' ? Object.keys(body).length !== 0 : Object.keys(body).length !== 1 || typeof body.recorderId !== 'string' || !body.recorderId)) throw new ConversationHttpError('INVALID_INPUT', action === 'start' ? '开始记录请求必须为空对象。' : '需要当前采集的准确身份。');
+      const recording = options.recording;
+      if (!recording) throw new ConversationHttpError('RECORDING_UNAVAILABLE', '当前服务未安装记录控制。', 409);
+      const state = recording.state();
+      if (action !== 'start' && state.recorderId !== body.recorderId) throw new ConversationHttpError('RECORDING_CONFLICT', '采集已变化，请刷新后操作当前记录。', 409);
+      if (action === 'start' && (state.status === 'stopping' || state.status === 'stopped')) throw new ConversationHttpError('RECORDING_CONFLICT', state.status === 'stopping' ? '请等待已纳入的调用完成记录。' : '请先清空上一次采集，再开始新记录。', 409);
+      if (action === 'clear' && (state.status === 'recording' || state.status === 'stopping')) throw new ConversationHttpError('RECORDING_CONFLICT', '请先停止记录，并等待已纳入的调用收尾。', 409);
+      // This synchronous check and action only control capture; neither starts nor cancels execution.
+      return json(response, 200, action === 'start' ? recording.start() : action === 'stop' ? recording.stop() : recording.clear());
+    }
     if (request.method === 'GET' && url.pathname === '/api/recoveries') {
       if (!options.recovery) return json(response, 200, []);
       // Discovery is a deliberate idle-host read, not a live execution probe.

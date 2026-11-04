@@ -28,6 +28,9 @@ export interface ConversationCallSummary {
   readonly answer?: MessageLocator;
 }
 
+/** Explicit process-local capture; stopping drains only calls already selected. */
+export type ConversationRecordingState = { readonly status: 'idle'; readonly recorderId?: never } | { readonly status: 'recording' | 'stopping' | 'stopped'; readonly recorderId: string };
+
 /** Explicit inspection, not part of every output delta. Contents are current entity facts. */
 export interface ConversationInspection {
   readonly transcriptId: string;
@@ -41,8 +44,7 @@ export interface ConversationInspection {
     readonly sources: Readonly<Record<'messages' | 'memories', { readonly id: string; readonly scope: string }>>;
     readonly members: readonly ({ readonly source: 'messages'; readonly key: number } | { readonly source: 'memories'; readonly key: string })[];
   };
-  readonly recording: {
-    readonly recorderId: string;
+  readonly recording: ConversationRecordingState & {
     readonly revision: number;
     readonly integrity: 'intact' | 'incomplete';
     /** Recent root calls in creation order, oldest first. */

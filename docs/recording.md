@@ -63,6 +63,8 @@ RecordRegistration 只覆盖一次记录登记，既不包含整个 Callable 调
 
 RecordingRootRecord 描述跨调用范围，CallableRecord 描述其中一次调用。记录根由环境的记录安装持有，Runner 不持有 Recorder。一次根调用及其全部后代共用该根调用的单调计时起点；InvocationBoundaryRecord 的 scopeId 指向该根调用，scope='work'。任务子树详情可以省略兄弟调用的边界，因此 sequence 允许有间隙。墙钟只作展示，不用于判定父子先后，也不把工作成功边界冒充实际成功交付。
 
+记录可以是主动分析的一次采集，不必伴随宿主常驻。新对话服务的 `ConversationRecording` 用现有安装端口实现 idle / recording / stopping / stopped：根入口选择一次采集目标、后代继承；停止仅拒绝新入口，原入口收尾后结果仍可查看、清空。每次开始创建新的记录载体，未开启不创建条目或执行描述。采集策略属于宿主预设，RecordBook 不需要因此新增自动淘汰、Invocation 不增加记录开关。静态 `bindRecording` 仍服务于显式全程采集的宿主；具体用法见 [主动记录](conversation-web.md#主动记录)。
+
 InvocationRecordHelper 只复用载体更新。旧调用索引及全局 Context 反查均已退出；记录句柄只存在于记录预设局部绑定中，归属查询由 RecordTree 提供，Book 是记录的存储。
 
 当前普通调用发布 execute（工作）与 control（结构停止），没有独立 receive/handling/continue 作者阶段。父子结果接收通过 relationChanges 表达 returned 与 accepted/handled/failed。过程保留 sequence、eventSequence、round、时间和正文；新普通运行 round 固定为 1，历史载体的旧阶段/轮次保持只读解释。

@@ -33,7 +33,7 @@ test('recovery notice distinguishes an eligible continuation from unavailable ev
   assert.match(html, /请先结束旧提交的本地跟踪/);
   assert.match(html, /disabled=""[^>]*>继续上次处理/);
 });
-const inspection = (recorderId = 'recorder', calls = []) => ({ transcriptId: 'transcript', memories: { id: 'memories', sequence: 0, items: [] }, view: { revision: 0, sources: { messages: { id: 'transcript', scope: 'all' }, memories: { id: 'memories', scope: 'all' } }, members: [] }, recording: { recorderId, revision: 0, integrity: 'intact', calls, omitted: 0 } });
+const inspection = (recorderId = 'recorder', calls = []) => ({ transcriptId: 'transcript', memories: { id: 'memories', sequence: 0, items: [] }, view: { revision: 0, sources: { messages: { id: 'transcript', scope: 'all' }, memories: { id: 'memories', scope: 'all' } }, members: [] }, recording: { status: 'recording', recorderId, revision: 0, integrity: 'intact', calls, omitted: 0 } });
 const call = (id, changes = []) => ({ id, contextId: `context-${id}`, structureKind: 'scene', status: 'succeeded', childIds: [], value: { input: 'input', output: 'output', processes: [], relationChanges: changes } });
 const detail = (id, recorderId = 'recorder') => ({ recorderId, revision: 1, integrity: 'intact', root: call(id), calls: [], resources: [], transcripts: [], memories: [], boundaries: [], truncated: false });
 const deferred = () => {

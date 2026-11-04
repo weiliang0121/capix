@@ -83,6 +83,10 @@ test('web host serves actual Scene records, reloads saved content and never rest
   assert.match(await (await fetch(origin + '/')).text(), /CAPiX web test/);
   const info = await get(origin, '/api/session');
   assert.equal(info.admission.status, 'ready');
+  assert.deepEqual(await get(origin, '/api/recording'), { status: 'idle' });
+  const capture = await fetch(origin + '/api/recording/start', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: '{}' });
+  assert.equal(capture.status, 200);
+  assert.equal((await capture.json()).status, 'recording');
   const frames = await submit(origin, info.conversationId, 'first-browser-request', '你好');
   assert.equal(frames.at(-1).submission?.result?.status ?? frames.at(-1).change?.result?.status, 'completed');
   const transcript = await get(origin, `/api/transcript?id=${info.transcriptId}`);

@@ -76,8 +76,8 @@ pnpm conversation --demo --db /tmp/capix-conversation.sqlite --records /tmp/capi
 
 `@capix/conversation-service/recording` 的 `createConversationRecording(scene, recorder, options?)` 复用现有记录预设。调用、资源、消息与记忆事实按实际关系进入同一 RecordBook；Scene 输入已追加而子层未建立，也保留真实的 Scene 与内容关系。提案失败被接收后，子 returned failed 和父 reception handled 均保留。
 
-描述只影响记录，不改变业务输入输出。服务摘要保留固定材料的来源 ID/版本和数量，正文记长度，数组记条数；不保存每个预览片段。单次摘要有界，整本记录仍随本进程调用次数增长，默认不启用。
+描述只影响记录，不改变业务输入输出。服务摘要保留固定材料的来源 ID/版本和数量，正文记长度，数组记条数；不保存每个预览片段。单次摘要有界，整本记录随实际采集调用次数增长。CLI 只有显式 `--records` 才安装静态记录；Web 使用默认 idle 的 ConversationRecording，用户控制开始、停止和清空，不作为常驻日志。
 
 CLI 排他建立 0600 文件并在退出时导出 `{format:'capix.conversation.recording', version:1, recorderId, rootId, integrity, book}`。`integrity` 为 `intact` 或 `incomplete`；可用 `RecordBook.restore(book)` 只读载入。记录安装默认隔离故障，但来源一旦漏记就永远标为 incomplete，不能把已有快照冒充完整轨迹。宿主自行安装时可显式采用 propagate，并提供自己的 invalidate 处理。
 
-这是正常收尾时的一次完整导出，不是逐条落盘：崩溃或导出失败可能留下空/不完整文件，消息等正式内容依旧按各自事务保存。导出不保存 Provider 配置/凭据、不重放旧记录，也不承担独立交互状态的归档；晚到外部反馈没有实际读取调用时，不伪造新的资源消费记录。浏览器宿主使用同一记录安装，通过自己的 HTTP 端点按需提供本进程记录；不载入 CLI 导出历史或迁移旧 Observer 投影。
+这是正常收尾时的一次完整导出，不是逐条落盘：崩溃或导出失败可能留下空/不完整文件，消息等正式内容依旧按各自事务保存。导出不保存 Provider 配置/凭据、不重放旧记录，也不承担独立交互状态的归档；晚到外部反馈没有实际读取调用时，不伪造新的资源消费记录。浏览器的每次主动采集复用同一记录预设，停止后保留结果供查看，显式清空释放；不载入 CLI 导出历史或迁移旧 Observer 投影，也不提供 Web 归档。详见 [主动记录](conversation-web.md#主动记录)。

@@ -3,7 +3,7 @@ import type { ConversationCallDetail, ConversationCallSummary, ConversationInspe
 import type { ConversationViewSource } from '../materials/view.js';
 
 /** HTTP inspection reads real entities; it never determines admission or submission outcomes. */
-export function inspectConversation(content: ConversationViewSource, recorder: Recorder, root: RecordingRootRecord, integrity: 'intact' | 'incomplete'): ConversationInspection {
+export function inspectConversation(content: ConversationViewSource, recorder: Recorder, root: RecordingRootRecord, integrity: 'intact' | 'incomplete', status: 'recording' | 'stopping' | 'stopped' = 'recording'): ConversationInspection {
   const ids = root.childIds;
   const calls: ConversationCallSummary[] = [];
   for (const id of ids.slice(-100)) {
@@ -22,11 +22,16 @@ export function inspectConversation(content: ConversationViewSource, recorder: R
     }
     calls.push({ id: call.id, contextId: call.contextId, status: call.status, ...(call.name ? { name: call.name } : {}), ...(call.value.startedAt ? { startedAt: call.value.startedAt } : {}), ...(input ? { input } : {}), ...(answer ? { answer } : {}) });
   }
+  return inspectConversationContent(content, { status, recorderId: recorder.id, revision: recorder.revision, integrity, calls, omitted: Math.max(0, ids.length - 100) });
+}
+
+/** Entity inspection is also available when no recording has been created. */
+export function inspectConversationContent(content: ConversationViewSource, recording: ConversationInspection['recording']): ConversationInspection {
   return {
     transcriptId: content.transcript.id,
     memories: { id: content.memories.id, sequence: content.memories.sequence, items: content.memories.snapshot() },
     view: content.view.exportState(),
-    recording: { recorderId: recorder.id, revision: recorder.revision, integrity, calls, omitted: Math.max(0, ids.length - 100) },
+    recording,
   };
 }
 

@@ -54,15 +54,16 @@ export function ConversationInspector({ application, state }: { application: Con
         )}
         {tab === 'calls' && (
           <>
-            <p className="conversation-caption">本进程产生的真实调用记录。运行中可手动刷新，完成后自动更新。</p>
+            <ConversationRecordingControls application={application} state={state} />
+            <p className="conversation-caption">仅展示主动采集的调用。运行中可手动刷新，完成后自动更新。</p>
             {inspection?.recording.integrity === 'incomplete' && <p className="conversation-notice conversation-problem">记录来源不完整，以下内容可能缺失；对话结果独立判断。</p>}
-            {inspection && !inspection.recording.calls.length && <p className="conversation-muted">本次服务启动后还没有调用记录。已有消息仍可继续使用。</p>}
+            {inspection && !inspection.recording.calls.length && <p className="conversation-muted">{inspection.recording.status === 'idle' ? '尚未开启记录。对话、消息保存和恢复照常工作。' : '这次采集还没有调用记录。'}</p>}
             <div className="conversation-call-list">
               {inspection?.recording.calls
                 .slice()
                 .reverse()
                 .map((call) => (
-                  <button className={`conversation-call-summary ${state.selectedCall === call.id ? 'selected' : ''}`} key={call.id} onClick={() => void application.selectCall(call.id)}>
+                  <button className={`conversation-call-summary ${state.selectedCall === call.id ? 'selected' : ''}`} key={call.id} disabled={Boolean(state.recordingPending)} onClick={() => void application.selectCall(call.id)}>
                     <span className="conversation-call-summary-top">
                       <span>{call.startedAt ? new Date(call.startedAt).toLocaleTimeString('zh-CN', { hour12: false }) : '开始时间未知'}</span>
                       <span className="conversation-tag">{statusLabel(call.status)}</span>
@@ -148,5 +149,36 @@ export function ConversationInspector({ application, state }: { application: Con
         )}
       </div>
     </aside>
+  );
+}
+
+export function ConversationRecordingControls({ application, state }: { application: ConversationApplication; state: ConversationApplicationState }) {
+  const transport = application.transport;
+  if (!transport.startRecording || !transport.stopRecording || !transport.clearRecording) return null;
+  const recording = state.recording;
+  const pending = state.recordingPending;
+  const unavailable = Boolean(pending) || state.session.status !== 'ready';
+  return (
+    <div className="conversation-recording-controls">
+      <div className="conversation-actions">
+        <button disabled={unavailable || recording?.status !== 'idle'} onClick={() => void application.changeRecording('start')}>
+          {pending === 'start' ? '正在开启…' : '开始记录'}
+        </button>
+        <button disabled={unavailable || recording?.status !== 'recording'} onClick={() => void application.changeRecording('stop')}>
+          {pending === 'stop' ? '正在停止…' : '停止记录'}
+        </button>
+        <button disabled={unavailable || recording?.status !== 'stopped'} onClick={() => void application.changeRecording('clear')}>
+          {pending === 'clear' ? '正在清空…' : '清空记录'}
+        </button>
+      </div>
+      <p className="conversation-caption" role="status">
+        {!recording ? '读取记录状态后可操作。' : recording.status === 'idle' ? '默认不记录。开启后，从下一次处理开始采集。' : recording.status === 'recording' ? '记录已开启。停止不会中断对话。' : recording.status === 'stopping' ? '正在等待已纳入的调用收尾，不再采集新调用。' : '记录已停止，可继续查看；清空后可以开始新的采集。'}
+      </p>
+      {state.recordingError && (
+        <p className="conversation-problem" role="alert">
+          记录操作未确认：{state.recordingError}。请刷新核对当前状态。
+        </p>
+      )}
+    </div>
   );
 }

@@ -14,7 +14,7 @@ const info = { ...identity, mode: 'demo', model: 'fixture', admission: { ...iden
 const transcript = { snapshot: { id: 'transcript', revision: 0, start: 0, end: 0, starts: [0], messages: [] }, sync: { status: 'live' } };
 const ready = { status: 'ready', info, transcript, canSend: true, canForget: false };
 const candidate = { contextId: 'unfinished', point: 'answerWaiting', available: true };
-const inspection = { transcriptId: 'transcript', memories: { id: 'memories', sequence: 0, items: [] }, view: { revision: 0, sources: {}, members: [] }, recording: { recorderId: 'recorder', revision: 0, integrity: 'intact', calls: [], omitted: 0 } };
+const inspection = { transcriptId: 'transcript', memories: { id: 'memories', sequence: 0, items: [] }, view: { revision: 0, sources: {}, members: [] }, recording: { status: 'recording', recorderId: 'recorder', revision: 0, integrity: 'intact', calls: [], omitted: 0 } };
 const deferred = () => Promise.withResolvers();
 
 function setup(t, receive = async () => [candidate]) {

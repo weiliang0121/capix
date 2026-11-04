@@ -17,7 +17,7 @@ node --env-file=.env services/conversation/dist/web/start.js --live
 
 Web 与 CLI 使用同一默认数据库（真实 `.capix/conversation.sqlite`，演示 `.capix/conversation-demo.sqlite`）。**先退出使用该数据库的 CLI**，再启动 Web；不会并发打开或复制另一份内容。可指定 `--db PATH --port 4318`，当前只管理这一个对话。
 
-页面提供正式消息、流式预览、取消与明确的失败/未确认状态，以及记忆、View 成员、实际 Scene 调用树和资源详情。首次载入读取内容基线，之后按消息事件同步；预览与提交分别使用增量，检查器按需读取，不随每个 token 重传历史和记录。默认展示本进程最近 100 次 Scene 调用，详情按真实父子关系读取。
+页面提供正式消息、流式预览、取消与明确的失败/未确认状态，以及记忆、View 成员、主动采集的 Scene 调用树和资源详情。首次载入读取内容基线，之后按消息事件同步；预览与提交分别使用增量，检查器按需读取，不随每个 token 重传历史和记录。默认不记录；点击“开始记录”后从下一次 Scene 调用采集，检查器展示本次采集最近 100 次调用，详情按真实父子关系读取。“停止记录”等待已纳入的调用收尾，不取消对话；停止后可查看和清空，清空后才能开始新的采集。
 
 刷新会根据本标签页保存的提交定位查询并接回；断线不会取消服务端调用，也不会重新 POST。未知或已淘汰提交保持“结果未确认”，可以核对正式消息后明确结束本地跟踪。服务重启载入内容，旧提交和本进程记录不恢复；默认链路可显式续接未结束的 CP，详见[有限恢复](../../docs/conversation-recovery.md)。多会话和文件操作仍不在这个入口中提供。详细边界见 [浏览器交付](../../docs/conversation-web.md)。
 
@@ -203,6 +203,24 @@ build 不发送请求。`createInteractionAnswer` 将历史组织为完整请求
 调用取消只停止局部读取，外部发送和晚到反馈继续存活；宿主等待 `settled()` 后再关闭 Interactions。持久反馈可重读不等于调用恢复，未完成发送不会在重启后自动重发。参见 [独立反馈读取示例](../../examples/conversation-interaction.mjs)、[消费边界验证](../../docs/interaction-consumption-validation.md) 和后文材料回答接线。
 
 ## 可选记录安装
+
+Web 使用 `ConversationRecording` 控制主动采集，安装本身不创建记录。业务和 CP 不依赖采集是否开启：
+
+```ts
+import { ConversationRecording } from '@capix/conversation-service/recording';
+
+const recording = new ConversationRecording(scene);
+const runner = new Runner(scene, resources, interactions, {
+  observations: [recording],
+}).build();
+recording.start(); // 后续从头开始的 Scene 及其子树纳入本次采集
+await runner.run('你好');
+recording.stop(); // 在途时为 stopping，已选入口释放后变为 stopped
+// recording.inspect(content) / recording.call(id) 读取当前结果。
+recording.clear(); // 仅停止后可清空；不改变业务实体或 CP
+```
+
+每次采集有独立 Recorder 身份，未开启时不求值记录摘要。停止期间出现的新子调用仍属于原已选入口，不被截断；已经运行的未采集调用也不会因开启而补录。浏览器控制、冲突与恢复边界见 [浏览器交付](../../docs/conversation-web.md#主动记录)。旧 Observer 和 CLI 显式 `--records` 的静态安装保持原有范围。
 
 记录属于宿主提供的观察能力，在 Runner build 前安装。业务 Scene/Node 不申请 Recorder，也不为记录重写处理逻辑：
 

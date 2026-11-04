@@ -100,6 +100,7 @@ test('browser host streams real content and exposes Scene records without replay
     },
   });
   const current = await fixture(t, model);
+  assert.equal((await current.send('/api/recording/start', {})).status, 200);
   const request = current.request();
   const response = await current.send('/api/run', request);
   await gate.entered.promise;
@@ -217,6 +218,7 @@ test('explicit cancellation ends local delivery while late external feedback sur
       },
     }),
   );
+  assert.equal((await current.send('/api/recording/start', {})).status, 200);
   const request = current.request();
   const response = await current.send('/api/run', request);
   await gate.entered.promise;
@@ -413,6 +415,7 @@ test('multiple real sessions recover busy rejection and stale tracking, then can
       },
     }),
   );
+  assert.equal((await current.send('/api/recording/start', {})).status, 200);
   const seed = current.request('seed');
   await frames(await current.send('/api/run', seed));
   const first = browserSession(t, current);
