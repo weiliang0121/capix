@@ -42,6 +42,34 @@ async function submit(origin, conversationId, submissionId, content) {
     .map((line) => JSON.parse(line));
 }
 
+test('Web host forwards fixed output limits and reports an exhausted answer without exposing model text', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'capix-web-budget-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const requests = [];
+  const model = {
+    async complete(request, controls = {}) {
+      requests.push(request);
+      controls.emit?.('unfinished preview');
+      return { ...reply('sensitive model body'), finishReason: 'length' };
+    },
+  };
+  const host = createConversationWebHost({ database: join(directory, 'budget.sqlite'), mode: 'demo', modelName: 'fixture', model, outputBudget: { answer: 123 } });
+  t.after(() => host.close());
+  const origin = await listen(host);
+  const session = await get(origin, '/api/session');
+  const frames = await submit(origin, session.conversationId, 'limited', 'long answer');
+  const result = frames.at(-1).change?.result ?? frames.at(-1).submission?.result;
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error.code, 'MODEL_OUTPUT_LIMIT');
+  assert.match(result.error.message, /123 token/);
+  assert.doesNotMatch(result.error.message, /sensitive model body/);
+  assert.deepEqual(
+    requests.map((request) => request.maxTokens),
+    [123],
+  );
+  assert.equal((await get(origin, `/api/transcript?id=${session.transcriptId}`)).messages.length, 1);
+});
+
 test('web host serves actual Scene records, reloads saved content and never restores an old submission', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'capix-web-host-'));
   t.after(() => rm(directory, { recursive: true, force: true }));

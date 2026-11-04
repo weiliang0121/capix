@@ -40,6 +40,8 @@ flowchart TD
 
 `runner.cancel()` 不等于取消模型发送。真实 Provider 自带总超时；宿主不能在本地等待取消后立即假定外部请求已经结束。
 
+输出预算是服务策略的独立配置：默认回答4096、记忆提取8192 tokens，CLI/Web 都支持 `--answer-tokens`、`--memory-tokens`。两个值必须为正安全整数，解析失败发生在打开数据库之前；模型是否支持该值仍由宿主选定的模型决定。嵌入宿主可向 `createMaterialConversationScene(outputBudget)` 传入部分覆盖，Web 的 `outputBudget` 同样在装配时固定。预算不自动随输入长短变化，不做补生成或截断接纳。`MODEL_OUTPUT_LIMIT` 仅暴露固定上限与安全原因，不包含模型正文。
+
 ## 保存的边界
 
 | 内容                          | 保存方式与恢复含义                                                         |

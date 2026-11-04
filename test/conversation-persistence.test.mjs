@@ -229,7 +229,7 @@ test('unknown databases and newer versions are rejected without reinitializing t
   loadConversationContent(store);
   store.close();
   const newer = new DatabaseSync(files.path);
-  newer.exec('PRAGMA user_version = 3');
+  newer.exec('PRAGMA user_version = 4');
   newer.close();
   assert.throws(() => ConversationStore.open(files.path), PersistenceError);
 });

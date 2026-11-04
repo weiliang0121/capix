@@ -56,7 +56,7 @@ test('v1 migrates transactionally while retaining content, View and fixed entity
   migrated.close();
   const metadata = new DatabaseSync(files.path);
   try {
-    assert.equal(metadata.prepare('PRAGMA user_version').get().user_version, 2);
+    assert.equal(metadata.prepare('PRAGMA user_version').get().user_version, 3);
   } finally {
     metadata.close();
   }

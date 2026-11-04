@@ -16,3 +16,6 @@ export { ModelReplyPending } from './model/pending.js';
 export type { ModelFeedbackInput, ModelProgressInput, ModelProgressDelta } from './model/feedback.js';
 export { CompletionInteraction } from './model/completion-contract.js';
 export { CompletionInteractionResource, createCompletionStartNode, createCompletionReplyNode, createInteractionCompletion } from './model/completion.js';
+
+export { defaultConversationOutputBudget, type ConversationOutputBudget } from './model/budget.js';
+export { ModelCompletionIncomplete } from './model/incomplete.js';

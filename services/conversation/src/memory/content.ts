@@ -7,9 +7,9 @@ import { acceptedMessageCodec, voidCodec } from '../recovery/codecs.js';
 import { createMemoryMaintenance } from './maintenance.js';
 
 /** Default content policy: include the formal message, then maintain the memory collection. */
-export function createContentMaintenance() {
+export function createContentMaintenance(maxTokens?: number) {
   const include = createMessageInclusion();
-  const remember = createMemoryMaintenance(createInteractionCompletion());
+  const remember = createMemoryMaintenance(createInteractionCompletion(), maxTokens);
   function checkInclusion(facts: CheckpointFacts<AcceptedConversationMessage>) {
     const child = facts.children.requireUnique(include, { parentRound: 1 });
     if (child.key !== 'include' || child.order !== 0 || !isDeepStrictEqual(child.input, facts.input) || child.returned?.status !== 'succeeded' || child.returned.output !== undefined || child.reception.status !== 'accepted' || child.reception.value !== undefined) throw new Error('Content maintenance requires its exact accepted message inclusion');

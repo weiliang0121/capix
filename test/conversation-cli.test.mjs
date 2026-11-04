@@ -10,6 +10,25 @@ import { RecordBook } from '@capix/records';
 
 const entry = fileURLToPath(new URL('../services/conversation/dist/start.js', import.meta.url));
 
+test('CLI fixes explicit answer and memory budgets in recovery state and rejects invalid values before opening storage', async (t) => {
+  const directory = await temporary(t);
+  const path = join(directory, 'budget.sqlite');
+  const completed = await cli(['--demo', '--db', path, '--answer-tokens', '2345', '--memory-tokens', '6789', '--input', 'budget']);
+  assert.equal(completed.code, 0, completed.stderr);
+  const store = ConversationStore.open(path);
+  try {
+    assert.deepEqual(store.checkpoints.listRoots()[0].image.state.outputBudget, { answer: 2345, memory: 6789 });
+  } finally {
+    store.close();
+  }
+  const invalid = join(directory, 'invalid.sqlite');
+  for (const value of ['0', '-1', '2.5', 'NaN', '9007199254740992']) {
+    const result = await cli(['--demo', '--db', invalid, '--answer-tokens', value, '--input', 'must not run']);
+    assert.notEqual(result.code, 0);
+    await assert.rejects(access(invalid));
+  }
+});
+
 function cli(args, { input = '', env = {}, imports = [], onOutput, cwd } = {}) {
   const child = spawn(process.execPath, [...imports.flatMap((path) => ['--import', path]), entry, ...args], { cwd, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, DEEPSEEK_API_KEY: '', ...env } });
   let stdout = '';

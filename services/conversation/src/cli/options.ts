@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import { parseArgs } from 'node:util';
 
 export interface ConversationCliOptions {
@@ -8,6 +9,7 @@ export interface ConversationCliOptions {
   readonly input?: string;
   readonly resume?: string;
   readonly help: boolean;
+  readonly outputBudget: ConversationOutputBudget;
 }
 
 export const usage = `Usage: pnpm conversation [--demo | --live] [--db PATH] [--records PATH] [--input TEXT | --resume CONTEXT_ID]
@@ -22,15 +24,21 @@ export const usage = `Usage: pnpm conversation [--demo | --live] [--db PATH] [--
 恢复不自动重发原模型请求；没有保存反馈时拒绝继续。
 Ctrl-C 停止当前调用；空闲时退出。外部模型请求仍由宿主等到结束。
 真实模式需要 DEEPSEEK_API_KEY，可选 DEEPSEEK_MODEL（默认 deepseek-flash）。
+--answer-tokens / --memory-tokens 设置每次回答/提取的输出 token 上限，默认4096/8192。
+上限不是保证完成；恢复时必须使用原预算。
 程序不读取 .env；可由启动命令显式加载。`;
 
 export function parseConversationOptions(args: readonly string[]): ConversationCliOptions {
-  const { values } = parseArgs({ args: [...args], options: { demo: { type: 'boolean' }, live: { type: 'boolean' }, db: { type: 'string' }, records: { type: 'string' }, input: { type: 'string' }, resume: { type: 'string' }, help: { type: 'boolean' } } });
+  const { values } = parseArgs({ args: [...args], options: { demo: { type: 'boolean' }, live: { type: 'boolean' }, db: { type: 'string' }, records: { type: 'string' }, input: { type: 'string' }, resume: { type: 'string' }, 'answer-tokens': { type: 'string' }, 'memory-tokens': { type: 'string' }, help: { type: 'boolean' } } });
+  for (const name of ['answer-tokens', 'memory-tokens'] as const) {
+    if (values[name] !== undefined && !/^[1-9]\d*$/.test(values[name])) throw new Error(`--${name} requires a positive integer`);
+  }
+  const outputBudget = resolveConversationOutputBudget({ answer: values['answer-tokens'] === undefined ? undefined : Number(values['answer-tokens']), memory: values['memory-tokens'] === undefined ? undefined : Number(values['memory-tokens']) });
   if (values.demo && values.live) throw new Error('Choose either --demo or --live');
   if (values.db !== undefined && !values.db.trim()) throw new Error('--db requires a nonempty path');
   if (values.records !== undefined && !values.records.trim()) throw new Error('--records requires a nonempty path');
   if (values.input !== undefined && !values.input.trim()) throw new Error('--input requires nonempty text');
   if (values.resume !== undefined && !values.resume.trim()) throw new Error('--resume requires a context identity');
   if (values.resume !== undefined && values.input !== undefined) throw new Error('Choose either --input or --resume');
-  return Object.freeze({ mode: values.live ? 'live' : 'demo', database: resolve(values.db ?? (values.live ? '.capix/conversation.sqlite' : '.capix/conversation-demo.sqlite')), ...(values.records === undefined ? {} : { records: resolve(values.records) }), ...(values.input === undefined ? {} : { input: values.input }), ...(values.resume === undefined ? {} : { resume: values.resume }), help: values.help ?? false });
+  return Object.freeze({ mode: values.live ? 'live' : 'demo', database: resolve(values.db ?? (values.live ? '.capix/conversation.sqlite' : '.capix/conversation-demo.sqlite')), ...(values.records === undefined ? {} : { records: resolve(values.records) }), ...(values.input === undefined ? {} : { input: values.input }), ...(values.resume === undefined ? {} : { resume: values.resume }), outputBudget, help: values.help ?? false });
 }

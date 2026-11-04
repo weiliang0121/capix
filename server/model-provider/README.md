@@ -36,6 +36,8 @@ console.log(reply.text);
 
 流式 ModelReply.text 由正文增量顺序累积；length 等结束原因及空正文继续交给业务决定。有限读取覆盖整条传输的实际字节（含事件封装和非正文数据），不在每个片段重置预算或总超时。
 
+JSON 与 SSE 的 `usage` 使用相同接纳规则，返回 `promptTokens / completionTokens / totalTokens`。DeepSeek 报告的 `prompt_cache_hit_tokens / prompt_cache_miss_tokens` 分别保留为可选 `promptCacheHitTokens / promptCacheMissTokens`；未报告时字段缺失，不能按零或全未命中统计。计数必须为非负安全整数，单项缓存计数不得超过 promptTokens；两项都报告时其和必须等于 promptTokens。当前不从其他厂商字段推导缓存数据，也不根据历史或重复请求估算命中。服务的交互及 CP 反馈可保留这些可选字段，既有无缓存计数反馈仍合法。缓存机制参考 [DeepSeek 上下文缓存](https://api-docs.deepseek.com/zh-cn/guides/kv_cache/)。
+
 ## 边界
 
 - Provider 固定 endpoint/model/key/超时等配置，每次 `complete` 发起一次请求，无自动重试。它不持有会话、消息实体或交互引用。

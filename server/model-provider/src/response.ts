@@ -1,5 +1,6 @@
 import { isRequestCancellation, ProviderError } from './error.js';
 import type { ModelReply } from './types.js';
+import { acceptUsage } from './usage.js';
 
 /** Count received bytes, including whitespace, before parsing the bounded envelope. */
 export async function readModelReply(response: Response, signal: AbortSignal, limit: number): Promise<ModelReply> {
@@ -40,20 +41,12 @@ function acceptReply(value: unknown): ModelReply {
   if (!record(value) || typeof value.id !== 'string' || !value.id || typeof value.model !== 'string' || !value.model || !Array.isArray(value.choices) || value.choices.length !== 1) throw envelope();
   const choice: unknown = value.choices[0];
   if (!record(choice) || (choice.index !== undefined && choice.index !== 0) || !record(choice.message) || typeof choice.message.content !== 'string' || typeof choice.finish_reason !== 'string' || !choice.finish_reason) throw envelope();
-  let usage: ModelReply['usage'] = null;
-  if (value.usage !== undefined && value.usage !== null) {
-    if (!record(value.usage) || !count(value.usage.prompt_tokens) || !count(value.usage.completion_tokens) || !count(value.usage.total_tokens)) throw envelope();
-    usage = Object.freeze({ promptTokens: value.usage.prompt_tokens, completionTokens: value.usage.completion_tokens, totalTokens: value.usage.total_tokens });
-  }
+  const usage = acceptUsage(value.usage);
   return Object.freeze({ id: value.id, model: value.model, text: choice.message.content, finishReason: choice.finish_reason, usage });
 }
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function count(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function envelope(): ProviderError {

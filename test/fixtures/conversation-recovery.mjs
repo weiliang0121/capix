@@ -98,8 +98,9 @@ const checkpoints = {
   },
 };
 const interactions = createConversationInteractions(model, interactionPort);
+const budget = mode.startsWith('changed-budget') ? { answer: 8192, memory: 8192 } : undefined;
 const resources = createConversationResources(content, model, store.view, 'test-v1');
-const runner = new Runner(createMaterialConversationScene(), resources, interactions, { checkpoints: { store: checkpoints } }).build();
+const runner = new Runner(createMaterialConversationScene(budget), resources, interactions, { checkpoints: { store: checkpoints } }).build();
 try {
   let result;
   if (mode === 'crash-history') {
@@ -111,7 +112,7 @@ try {
   else {
     const id = readFileSync(identityPath, 'utf8');
     if (mode === 'new-input') content.transcript.append({ role: 'user', content: '另一个新提交' });
-    assertConversationRecovery(content, store, mode === 'changed-config' ? 'test-v2' : 'test-v1', id);
+    if (mode !== 'changed-budget-direct') assertConversationRecovery(content, store, mode === 'changed-config' ? 'test-v2' : 'test-v1', id, budget);
     result = await runner.resume(id);
   }
   await interactions.settled();

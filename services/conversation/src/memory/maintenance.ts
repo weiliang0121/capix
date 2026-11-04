@@ -17,10 +17,10 @@ const proposalSchema: z.ZodType<Proposal> = z.discriminatedUnion('status', [z.st
 const proposalCodec = codec(proposalSchema);
 
 /** Extraction policy, fixed effect and View inclusion remain distinct ordinary operations. */
-export function createMemoryMaintenance(completion?: ConversationCompletion) {
+export function createMemoryMaintenance(completion?: ConversationCompletion, maxTokens?: number) {
   const deps = { context: ConversationMemoryResource.request(), view: ConversationViewResource.manage.request() };
   const viewDeps = { view: ConversationViewResource.manage.request() };
-  const propose = createMemoryProposal(completion);
+  const propose = createMemoryProposal(completion, maxTokens);
   const apply = createMemoryApplication();
   const received = reception(propose, { ...proposalCodec, check: (value: unknown) => proposalSchema.parse(value) });
   const result = { succeeded: (changes: readonly MemoryChange[]): Proposal => ({ status: 'ready', changes }), failed: (): Proposal => ({ status: 'skipped' }) };

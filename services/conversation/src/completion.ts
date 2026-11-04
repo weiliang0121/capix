@@ -4,6 +4,7 @@ import { InvocationCancelled } from '@capix/server-runtime';
 import { Node, checkpointPoint, type Group } from '@capix/structure';
 import { requireString, requireText } from './text.js';
 import { requireCompletionReply } from './model/completion-contract.js';
+import { ModelCompletionIncomplete } from './model/incomplete.js';
 import { modelReplyCodec, modelRequestCodec } from './recovery/model-codecs.js';
 
 /** Complete provider replies remain visible; each business node decides what to accept. */
@@ -50,7 +51,7 @@ export function createCompletionNode() {
 }
 
 /** This service accepts only complete, nonblank text; it does not repair or retry model output. */
-export function requireCompletionText(reply: ModelReply): string {
-  if (!reply || reply.finishReason !== 'stop') throw new Error('Model completion did not finish normally');
+export function requireCompletionText(reply: ModelReply, maxTokens?: number): string {
+  if (!reply || reply.finishReason !== 'stop') throw new ModelCompletionIncomplete(reply?.finishReason ?? 'unknown', maxTokens);
   return requireText(reply.text, 'Model completion text');
 }

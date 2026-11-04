@@ -19,7 +19,14 @@ export interface ModelReply {
   readonly text: string;
   /** Transport completion is not business acceptance; length/empty output stay visible. */
   readonly finishReason: string;
-  readonly usage: { readonly promptTokens: number; readonly completionTokens: number; readonly totalTokens: number } | null;
+  readonly usage: {
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+    readonly totalTokens: number;
+    /** DeepSeek-reported prompt cache counts; absence means unreported, not zero. */
+    readonly promptCacheHitTokens?: number;
+    readonly promptCacheMissTokens?: number;
+  } | null;
 }
 
 export interface ModelControls {

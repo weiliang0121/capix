@@ -4,3 +4,5 @@ export { createConversationResources } from './resources.js';
 export { createConversationInteractions } from './interactions.js';
 
 export { assertConversationRecovery, listConversationRecoveries } from '../recovery/index.js';
+
+export { defaultConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';

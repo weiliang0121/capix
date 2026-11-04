@@ -1,6 +1,7 @@
 import type { AnswerPreviewChange, AnswerPreviewSnapshot, ConversationAdmission, ConversationFailure, ConversationSubmissionBaseline, ConversationSubmissionChange, ConversationSubmissionFrame, ConversationSubmissionSnapshot, TranscriptEvent } from '@capix/protocol';
 import type { RunnerObservation, RunnerOutput } from '@capix/server-runtime';
 import type { ConversationEvents } from './events.js';
+import { ModelCompletionIncomplete } from '../model/incomplete.js';
 import type { AcceptedConversationMessage } from '../scene.js';
 
 export interface ConversationRunner {
@@ -303,8 +304,8 @@ export class ConversationSubmissions {
     try {
       await execute();
       result = { status: 'completed' };
-    } catch {
-      result = current.settledStatus === 'cancelled' ? { status: 'cancelled' } : { status: 'failed', error: failure() };
+    } catch (error) {
+      result = current.settledStatus === 'cancelled' ? { status: 'cancelled' } : { status: 'failed', error: failure(error) };
       if (result.status === 'cancelled' && !current.baseline.submission.cancelRequested) current.update({ cancelRequested: true });
       current.discard(result.status === 'cancelled' ? 'cancelled' : 'failed');
     }
@@ -313,6 +314,7 @@ export class ConversationSubmissions {
   }
 }
 
-function failure(): ConversationFailure {
+function failure(error: unknown): ConversationFailure {
+  if (error instanceof ModelCompletionIncomplete) return Object.freeze({ code: error.code, message: error.message });
   return Object.freeze({ code: 'CONVERSATION_FAILED', message: '本次处理未完成，已保存内容保留；可查看调用记录。' });
 }

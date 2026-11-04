@@ -164,12 +164,12 @@ test('restoration still rejects a saved incomplete model reply at the answer bou
     sends++;
     return { ...response, finishReason: 'length' };
   });
-  await assert.rejects(original.runner.run(material), /did not finish normally/);
+  await assert.rejects(original.runner.run(material), { code: 'MODEL_OUTPUT_LIMIT' });
   await original.interactions.settled();
   original.interactions.close();
   const boundary = store.writes.findIndex((write) => write.image?.contract.key === 'conversation.completion-reply' && write.image.point === 'waiting');
   const restored = modelHarness(prefix(store.writes, boundary), saved, () => assert.fail('business rejection cannot restart the model'));
-  await assert.rejects(restored.runner.resume(store.writes[0].image.frame.owner.contextId), /did not finish normally/);
+  await assert.rejects(restored.runner.resume(store.writes[0].image.frame.owner.contextId), { code: 'MODEL_OUTPUT_LIMIT' });
   assert.equal(sends, 1);
   restored.interactions.close();
 });

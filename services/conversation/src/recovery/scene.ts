@@ -1,3 +1,4 @@
+import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import { isDeepStrictEqual as equal } from 'node:util';
 import type { ResourcesOf } from '@capix/resources';
 import { Scene, checkpointPoint, childReference, reception, type ChildCall, type CheckpointFacts, type SceneWork } from '@capix/structure';
@@ -11,10 +12,11 @@ import { acceptedMessageCodec, acceptedMessageSchema, codec, stringCodec } from 
 import { materialInputSchema } from './model-codecs.js';
 
 /** Recovery is a default service policy. Arbitrary custom Scene strategies retain their own contracts. */
-export function createRecoverableConversationScene(answer: ConversationAnswer<ConversationMaterialInput>, prepare: ConversationPreparation<ConversationMaterialInput>, maintain: ConversationMaintenance) {
+export function createRecoverableConversationScene(answer: ConversationAnswer<ConversationMaterialInput>, prepare: ConversationPreparation<ConversationMaterialInput>, maintain: ConversationMaintenance, outputBudget: ConversationOutputBudget) {
+  const budget = resolveConversationOutputBudget(outputBudget);
   const deps = { messages: TranscriptResource.append.request(), recovery: ConversationRecoveryResource.request() };
   type Work = SceneWork<string, string, ResourcesOf<typeof deps>, typeof answer | typeof prepare | typeof maintain, string>;
-  const baseState = z.strictObject({ basis: recoveryBasisSchema });
+  const baseState = z.strictObject({ basis: recoveryBasisSchema, outputBudget: z.strictObject({ answer: z.literal(budget.answer), memory: z.literal(budget.memory) }) });
   const answerState = baseState.extend({ input: materialInputSchema });
   const finishedState = baseState.extend({ response: acceptedMessageSchema });
   const answerReception = reception(answer, { ...acceptedMessageCodec, check: (value: unknown) => acceptedMessageSchema.parse(value) });
@@ -116,7 +118,7 @@ export function createRecoverableConversationScene(answer: ConversationAnswer<Co
   });
   async function prepareInput(work: Work, basis: ConversationRecoveryBasis): Promise<string> {
     const child = work.children.create(prepare, basis.accepted, { key: 'prepare' });
-    work.checkpoint?.({ point: prepareWaiting, state: { basis }, refs: { child: child.ref } });
+    work.checkpoint?.({ point: prepareWaiting, state: { outputBudget: budget, basis }, refs: { child: child.ref } });
     return receivePreparation(work, basis, child);
   }
   async function receivePreparation(work: Work, basis: ConversationRecoveryBasis, child: ChildCall<typeof prepare>): Promise<string> {
@@ -129,7 +131,7 @@ export function createRecoverableConversationScene(answer: ConversationAnswer<Co
         },
       },
     });
-    work.checkpoint?.({ point: answerWaiting, state: { basis, input }, refs: { child: next.ref } });
+    work.checkpoint?.({ point: answerWaiting, state: { outputBudget: budget, basis, input }, refs: { child: next.ref } });
     return receiveAnswer(work, basis, next);
   }
   async function receiveAnswer(work: Work, basis: ConversationRecoveryBasis, child: ChildCall<typeof answer>): Promise<string> {
@@ -148,27 +150,27 @@ export function createRecoverableConversationScene(answer: ConversationAnswer<Co
         },
       },
     });
-    work.checkpoint?.({ point: answerAccepted, state: { basis, response }, refs: { child: child.ref } });
+    work.checkpoint?.({ point: answerAccepted, state: { outputBudget: budget, basis, response }, refs: { child: child.ref } });
     return maintainAnswer(work, basis, response);
   }
   async function maintainAnswer(work: Pick<Work, 'children' | 'checkpoint'>, basis: ConversationRecoveryBasis, response: AcceptedConversationMessage): Promise<string> {
     const child = work.children.create(maintain, response, { key: 'after' });
-    work.checkpoint?.({ point: afterWaiting, state: { basis, response }, refs: { child: child.ref } });
+    work.checkpoint?.({ point: afterWaiting, state: { outputBudget: budget, basis, response }, refs: { child: child.ref } });
     await child.invoke();
     return complete(work, basis, response, child.ref);
   }
   function complete(work: Pick<Work, 'checkpoint'>, basis: ConversationRecoveryBasis, response: AcceptedConversationMessage, ref: ChildCall<typeof maintain>['ref']): string {
-    work.checkpoint?.({ point: completed, state: { basis, response }, refs: { child: ref } });
+    work.checkpoint?.({ point: completed, state: { outputBudget: budget, basis, response }, refs: { child: ref } });
     return response.message.content;
   }
   const scene = new Scene<string, string, ResourcesOf<typeof deps>, string>({ name: 'conversation', deps, output: { result: (value) => requireText(value, 'Conversation answer'), delta: (value) => requireString(value, 'Conversation delta') } }).add({ prepare, answer, maintain });
-  scene.checkpoint = { key: conversationCheckpointKey, version: 1, input: stringCodec, output: stringCodec, points: [beforeWaiting, prepareWaiting, answerWaiting, answerAccepted, afterWaiting, completed], receptions: [answerReception] };
+  scene.checkpoint = { key: conversationCheckpointKey, version: 2, input: stringCodec, output: stringCodec, points: [beforeWaiting, prepareWaiting, answerWaiting, answerAccepted, afterWaiting, completed], receptions: [answerReception] };
   scene.run = async (work) => {
     const [accepted] = work.resources.messages.append([{ role: 'user', content: requireText(work.input, 'Conversation input') }]);
     if (!accepted) throw new Error('Missing accepted input');
     const basis = work.resources.recovery.capture(accepted);
     const child = work.children.create(maintain, accepted, { key: 'before' });
-    work.checkpoint?.({ point: beforeWaiting, state: { basis }, refs: { child: child.ref } });
+    work.checkpoint?.({ point: beforeWaiting, state: { outputBudget: budget, basis }, refs: { child: child.ref } });
     await child.invoke();
     return prepareInput(work, basis);
   };

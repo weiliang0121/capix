@@ -1,3 +1,4 @@
+import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import type { ModelProvider } from '@capix/model-provider';
 import { RecordBook, Recorder } from '@capix/records';
 import { Runner } from '@capix/server-runtime';
@@ -18,20 +19,22 @@ export interface ConversationWebHostOptions {
   readonly modelName: string;
   /** Custom hosts must change this when provider endpoint/configuration or policy changes. */
   readonly recoveryConfiguration?: string;
+  readonly outputBudget?: Partial<ConversationOutputBudget>;
   readonly assetsDirectory?: string;
 }
 
 /** The executable host owns the store and independent senders; HTTP only consumes their ports. */
 export function createConversationWebHost(options: ConversationWebHostOptions) {
+  const budget = resolveConversationOutputBudget(options.outputBudget);
   const store = ConversationStore.open(options.database);
   let interactions: ReturnType<typeof createConversationInteractions> | undefined;
   let http: ReturnType<typeof createConversationServer> | undefined;
   let recoveryActivity: RecoveryActivity | undefined;
-  const configuration = options.recoveryConfiguration ?? hostRecoveryConfiguration(options.mode, options.modelName);
+  const configuration = options.recoveryConfiguration ?? hostRecoveryConfiguration(options.mode, options.modelName, budget);
   try {
     const content = loadConversationContent(store);
     interactions = createConversationInteractions(options.model, store.interactions);
-    const scene = createMaterialConversationScene();
+    const scene = createMaterialConversationScene(budget);
     const events = new ConversationEvents(content.transcript);
     const recorder = new Recorder(new RecordBook());
     let integrity: 'intact' | 'incomplete' = 'intact';
@@ -60,8 +63,8 @@ export function createConversationWebHost(options: ConversationWebHostOptions) {
       call: (id) => inspectConversationCall(recorder, recording.root, id, integrity),
       assetsDirectory: options.assetsDirectory,
       recovery: {
-        list: () => listConversationRecoveries(content, store, configuration),
-        check: (contextId) => assertConversationRecovery(content, store, configuration, contextId),
+        list: () => listConversationRecoveries(content, store, configuration, budget),
+        check: (contextId) => assertConversationRecovery(content, store, configuration, contextId, budget),
         activity: () => activity.snapshot(),
       },
     });

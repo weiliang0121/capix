@@ -84,7 +84,7 @@ test('missing memory feedback remains an unavailable continuation rather than sk
   assert.equal(resumed.report.state.memories.items.length, 0);
 });
 
-for (const mode of ['new-input', 'changed-config']) {
+for (const mode of ['new-input', 'changed-config', 'changed-budget']) {
   test(`restart admission refuses ${mode} before invoking any model or applying an old effect`, (t) => {
     const path = database(t);
     assert.equal(run('crash', path, 'feedback').status, 73);
@@ -95,6 +95,16 @@ for (const mode of ['new-input', 'changed-config']) {
     assert.equal(resumed.report.state.transcript.messages.filter((message) => message.role === 'assistant').length, 0);
   });
 }
+
+test('Scene recovery codec rejects a changed budget before a model request exists even without host admission', (t) => {
+  const path = database(t);
+  assert.equal(run('crash', path, 'materials').status, 73);
+  const resumed = run('changed-budget-direct', path);
+  assert.equal(resumed.status, 1, JSON.stringify(resumed.report));
+  assert.equal(resumed.report.state.transcript.messages.length, 1);
+  assert.equal(resumed.report.state.memories.items.length, 0);
+  assert.throws(() => requests(path), { code: 'ENOENT' }, 'no model request was sent before or after the interruption');
+});
 
 for (const boundary of ['feedback', 'memory']) {
   test(`a later conversation restores ${boundary} with previous receipts and updates the existing memory identity`, (t) => {

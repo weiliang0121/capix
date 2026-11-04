@@ -17,7 +17,7 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
   }
   // Validate credentials before opening a store or accepting any input.
   const model = createHostModel(options.mode);
-  const configuration = hostRecoveryConfiguration(options.mode, hostModelName(options.mode));
+  const configuration = hostRecoveryConfiguration(options.mode, hostModelName(options.mode), options.outputBudget);
   const recording = options.records ? RecordingFile.open(options.records, options.database) : undefined;
   let openedStore: ConversationStore | undefined;
   let interactions: ReturnType<typeof createConversationInteractions> | undefined;
@@ -32,7 +32,7 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
     openedStore = store;
     interactions = createConversationInteractions(model, store.interactions);
     const content = loadConversationContent(store);
-    const scene = createMaterialConversationScene();
+    const scene = createMaterialConversationScene(options.outputBudget);
     const resources = createConversationResources(content, model, store.view, configuration);
     const installation = recording?.install(scene);
     const runner = new Runner(scene, resources, interactions, {
@@ -89,7 +89,7 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
       if (line.trim() === '/exit') return closeInput();
       if (line.trim() === '/status') return status();
       if (line.trim() === '/recoveries') {
-        const candidates = listConversationRecoveries(content, store, configuration);
+        const candidates = listConversationRecoveries(content, store, configuration, options.outputBudget);
         if (!ioFailed) console.log(candidates.length ? candidates.map((item) => `${item.contextId} · ${item.point} · ${item.available ? '可以续接' : `不可续接：${item.reason}`}`).join('\n') : '没有未终结的 checkpoint。');
         return;
       }
@@ -100,7 +100,7 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
         if (command) {
           const contextId = command[1]?.trim();
           if (!contextId) throw new Error('/resume requires a context identity');
-          assertConversationRecovery(content, store, configuration, contextId);
+          assertConversationRecovery(content, store, configuration, contextId, options.outputBudget);
           if (!ioFailed) console.log(`续接：${contextId}（保留原调用身份，不重建历史记录）`);
           result = await runner.resume(contextId);
         } else result = await runner.run(line);

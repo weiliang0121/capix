@@ -1,5 +1,6 @@
 import { isRequestCancellation, ModelEmissionFailure, ProviderError } from './error.js';
 import type { ModelReply } from './types.js';
+import { acceptUsage } from './usage.js';
 
 /** A stream is complete only after its terminal choice and the provider's [DONE] marker. */
 export async function readModelStream(response: Response, signal: AbortSignal, limit: number, emit?: (delta: string) => void): Promise<ModelReply> {
@@ -161,18 +162,8 @@ class TextCompletionStream {
   }
 }
 
-function acceptUsage(value: unknown): ModelReply['usage'] {
-  if (value === undefined || value === null) return null;
-  if (!record(value) || !count(value.prompt_tokens) || !count(value.completion_tokens) || !count(value.total_tokens)) throw envelope();
-  return Object.freeze({ promptTokens: value.prompt_tokens, completionTokens: value.completion_tokens, totalTokens: value.total_tokens });
-}
-
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function count(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function envelope(): ProviderError {

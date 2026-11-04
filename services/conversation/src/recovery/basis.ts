@@ -1,3 +1,4 @@
+import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual as equal } from 'node:util';
 import type { CheckpointHead, CheckpointStore } from '@capix/checkpoint';
@@ -49,7 +50,7 @@ interface RecoveryStore {
 }
 
 /** Eligibility is checked again immediately before resume; listing is not a reservation. */
-export function listConversationRecoveries(content: ConversationViewSource, store: RecoveryStore, configuration: string) {
+export function listConversationRecoveries(content: ConversationViewSource, store: RecoveryStore, configuration: string, outputBudget: Partial<ConversationOutputBudget> = {}) {
   store.assertAvailable();
   return store.checkpoints
     .listRoots()
@@ -57,7 +58,7 @@ export function listConversationRecoveries(content: ConversationViewSource, stor
     .map((head) => {
       const contextId = head.image.frame.owner.contextId;
       try {
-        assertConversationRecovery(content, store, configuration, contextId);
+        assertConversationRecovery(content, store, configuration, contextId, outputBudget);
         return { contextId, point: head.image.point, available: true as const };
       } catch (error) {
         return { contextId, point: head.image.point, available: false as const, reason: error instanceof Error ? error.message : 'Recovery evidence is unavailable' };
@@ -66,11 +67,13 @@ export function listConversationRecoveries(content: ConversationViewSource, stor
 }
 
 /** This is host admission, not a promise to resume an arbitrary custom strategy. */
-export function assertConversationRecovery(content: ConversationViewSource, store: RecoveryStore, configuration: string, contextId: string): { input: string; inputRevision: number; user: AcceptedConversationMessage; answer?: AcceptedConversationMessage } {
+export function assertConversationRecovery(content: ConversationViewSource, store: RecoveryStore, configuration: string, contextId: string, outputBudget: Partial<ConversationOutputBudget> = {}): { input: string; inputRevision: number; user: AcceptedConversationMessage; answer?: AcceptedConversationMessage } {
   store.assertAvailable();
   const root = store.checkpoints.read(contextId);
-  if (!root || root.delivery || root.image.contract.key !== conversationCheckpointKey || root.image.contract.version !== 1 || root.image.frame.owner.parentContextId !== undefined) throw changed('Only an unfinished default conversation checkpoint can resume');
-  const state = z.object({ basis: recoveryBasisSchema, response: acceptedMessageSchema.optional() }).parse(root.image.state);
+  if (!root || root.delivery || root.image.contract.key !== conversationCheckpointKey || root.image.contract.version !== 2 || root.image.frame.owner.parentContextId !== undefined) throw changed('Only an unfinished default conversation checkpoint can resume');
+  const state = z.object({ basis: recoveryBasisSchema, outputBudget: z.strictObject({ answer: count, memory: count }), response: acceptedMessageSchema.optional() }).parse(root.image.state);
+  const budget = resolveConversationOutputBudget(outputBudget);
+  if (!equal(state.outputBudget, budget)) throw changed('Conversation output budget changed');
   const basis = state.basis;
   if (basis.configuration !== configuration || root.image.frame.input !== basis.accepted.message.content) throw changed('Conversation configuration or original input changed');
   const { heads, handled } = subtree(root, store.checkpoints);

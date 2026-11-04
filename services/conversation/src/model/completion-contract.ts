@@ -21,7 +21,11 @@ export const modelReplySchema = z
     model: identity,
     text: z.string(),
     finishReason: identity,
-    usage: z.strictObject({ promptTokens: count, completionTokens: count, totalTokens: count }).readonly().nullable(),
+    usage: z
+      .strictObject({ promptTokens: count, completionTokens: count, totalTokens: count, promptCacheHitTokens: count.optional(), promptCacheMissTokens: count.optional() })
+      .refine((usage) => (usage.promptCacheHitTokens === undefined || usage.promptCacheHitTokens <= usage.promptTokens) && (usage.promptCacheMissTokens === undefined || usage.promptCacheMissTokens <= usage.promptTokens) && (usage.promptCacheHitTokens === undefined || usage.promptCacheMissTokens === undefined || usage.promptCacheHitTokens === usage.promptTokens - usage.promptCacheMissTokens), 'Prompt cache counts must match reported prompt tokens')
+      .readonly()
+      .nullable(),
   })
   .readonly();
 

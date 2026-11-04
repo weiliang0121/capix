@@ -36,6 +36,10 @@ pnpm conversation --demo
 
 真实模型须显式选择 `--live`，由宿主环境提供配置。CLI 不读取 `.env`，不输出或持久化密钥；具体配置及关闭语义见 [宿主与持久化](../../docs/conversation-host.md)。
 
+回答与记忆提取的输出上限分别为 **4096 / 8192 tokens**。CLI 和 Web 均可用 `--answer-tokens N --memory-tokens N` 覆盖；嵌入装配用 `createMaterialConversationScene({ answer: 4096, memory: 8192 })`，Web 宿主用 `outputBudget`。预算在建立结构时固定，后续修改原对象无效；默认值给长汇总和完整记忆提案留出余量，不保证任意任务都能完成，也不表示一定消耗到上限。应选择模型支持的值，服务不推测模型能力、不自动降级或重试。
+
+回答 `finishReason=length` 时返回 `MODEL_OUTPUT_LIMIT` 与该次上限，保留已保存内容，拒绝将截断预览接纳为助手消息。记忆提案仍按既有策略处理可接收的失败。默认 Scene CP 保存准确预算；恢复要求原预算，旧 v1 Scene/材料回答/记忆提案声明不能用新 v2 自动续接，正式消息和记忆仍可载入。
+
 ## 目录与依赖方向
 
 ```text
