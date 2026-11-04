@@ -1,6 +1,6 @@
 import type { Transcript } from '@capix/transcript';
 import type { TranscriptEvent, TranscriptFrame, TranscriptSnapshot } from '@capix/protocol';
-import type { ObservationInstallation } from '@capix/server-runtime';
+import type { ObservationInstallation, CheckpointInstallation } from '@capix/server-runtime';
 
 /** The host's message source. It consumes actual entity events, independently of recording. */
 export class ConversationEvents {
@@ -10,6 +10,17 @@ export class ConversationEvents {
   readonly observation: ObservationInstallation = {
     bindInvocation: () => ({ observe() {}, transcript: (event) => this.publish(event) }),
     invalidate: () => this.invalidate(),
+  };
+  /** Restored calls publish their actual new content facts through the CP channel. */
+  readonly checkpoint: NonNullable<CheckpointInstallation['feedback']> = {
+    receive: (event) => {
+      if (event.recovering && event.kind === 'transcript') this.publish(event.fact);
+      return undefined;
+    },
+    failed: () => {
+      this.invalidate();
+      return undefined;
+    },
   };
 
   constructor(readonly transcript: Transcript) {}

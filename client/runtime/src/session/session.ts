@@ -124,6 +124,28 @@ export class ConversationSession {
     if (remote?.result?.status === 'rejected' && !remote.input) throw new Error(remote.result.error.message);
   }
 
+  /** A deliberate new continuation request; transport reconnection still uses GET/follow only. */
+  async resume(contextId: string): Promise<void> {
+    if (typeof contextId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(contextId)) throw new TypeError('需要准确的 checkpoint 调用身份。');
+    if (!this.transport.resume) throw new Error('当前连接不支持恢复。');
+    if (!this.state.canSend || !this.state.info || !this.scope) throw new Error('当前对话尚不可恢复；请先确认连接与上一次结果。');
+    const scope = this.scope;
+    const request = { conversationId: this.state.info.conversationId, submissionId: globalThis.crypto.randomUUID(), contextId };
+    const submission = ClientSubmission.attach(request, this.state.info.transcriptId);
+    this.current = submission;
+    this.admissionVerified = false;
+    this.saveTracking();
+    this.changed(submission, scope);
+    await submission.connect((receive, signal) => this.transport.resume!(request, receive, signal), this.reception(submission, scope));
+    if (this.owns(submission, scope)) {
+      this.changed(submission, scope);
+      await this.confirmAdmission(submission, scope);
+      if (this.retryable(submission)) await this.follow(submission, scope, false);
+    }
+    const remote = submission.snapshot.remote;
+    if (remote?.result?.status === 'rejected') throw new Error(remote.result.error.message);
+  }
+
   async cancel(): Promise<void> {
     if (!this.current || !this.scope || this.current.snapshot.remote?.result) return;
     const submission = this.current;

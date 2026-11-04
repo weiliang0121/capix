@@ -19,7 +19,7 @@ Web 与 CLI 使用同一默认数据库（真实 `.capix/conversation.sqlite`，
 
 页面提供正式消息、流式预览、取消与明确的失败/未确认状态，以及记忆、View 成员、实际 Scene 调用树和资源详情。首次载入读取内容基线，之后按消息事件同步；预览与提交分别使用增量，检查器按需读取，不随每个 token 重传历史和记录。默认展示本进程最近 100 次 Scene 调用，详情按真实父子关系读取。
 
-刷新会根据本标签页保存的提交定位查询并接回；断线不会取消服务端调用，也不会重新 POST。未知或已淘汰提交保持“结果未确认”，可以核对正式消息后明确结束本地跟踪。服务重启只恢复内容，旧提交和本进程记录不恢复；多会话、文件操作、CP 续接不在这个入口中提供。详细边界见 [浏览器交付](../../docs/conversation-web.md)。
+刷新会根据本标签页保存的提交定位查询并接回；断线不会取消服务端调用，也不会重新 POST。未知或已淘汰提交保持“结果未确认”，可以核对正式消息后明确结束本地跟踪。服务重启载入内容，旧提交和本进程记录不恢复；默认链路可显式续接未结束的 CP，详见[有限恢复](../../docs/conversation-recovery.md)。多会话和文件操作仍不在这个入口中提供。详细边界见 [浏览器交付](../../docs/conversation-web.md)。
 
 ## 完整服务入口
 
@@ -53,7 +53,8 @@ assembly/                  组合已存在的公开能力
 scene.ts                   正式输入、回答接纳与维护时机
 materials/ memory/ model/  材料策略、记忆策略、模型调用能力
 
-persistence/               SQLite 内容存储，兑现实体的同步持久端口
+recovery/                  默认 Scene 续接策略、内容资格与固定值编码
+persistence/               SQLite 内容、CP 与交互持久端口
 recording/                 可选记录安装与服务摘要，消费已发生的运行事实
 ```
 
@@ -71,9 +72,10 @@ try {
   const content = loadConversationContent(store);
   const scene = createMaterialConversationScene();
   const resources = createConversationResources(content, model, store.view);
-  const interactions = createConversationInteractions(model);
+  const interactions = createConversationInteractions(model, store.interactions);
   try {
     const runner = new Runner(scene, resources, interactions, {
+      checkpoints: { store: store.checkpoints },
       validate() {
         store.assertAvailable();
       },
@@ -88,7 +90,7 @@ try {
 }
 ```
 
-`loadConversationContent` 只恢复正式实体，随后创建的是全新结构与调用。SQLite 不保存 Invocation、CP、预览、模型反馈或隐藏待办；未知旧请求不自动重发。装配和关闭失败的完整清理路径在 CLI 中，持久边界见下方文档。
+`loadConversationContent` 只恢复正式实体，随后创建全新结构。宿主另外安装 CP 与模型交互持久端口；显式恢复前核对原内容、配置及固定效果。不保存 JS 栈或预览，未知请求不自动重发。CLI `/recoveries` 列出未结束根，`/resume <contextId>` 续接；恢复范围见[有限恢复](../../docs/conversation-recovery.md)。装配和关闭失败的完整清理路径在 CLI 中，持久边界见下方文档。
 
 ## 阅读入口
 
@@ -106,7 +108,7 @@ try {
 | `src/materials/answer.ts`          | 普通回答 Group：组织固定请求，调用可替换的 completion 子结构，再接纳完整文本    |
 | `src/materials/maintenance.ts`     | 可选普通维护 Node：按正式追加回执，将本条用户或助手消息纳入 View                |
 | `src/memory/context.ts`            | 只读资源：核对正式助手位置，固定完整消息前缀与当前记忆全集                      |
-| `src/memory/proposal.ts`           | 模型提案 Node：严格接纳变更结构、真实来源、更新目标及既有凭据                   |
+| `src/memory/proposal.ts`           | 模型提案 Group：严格接纳变更结构、真实来源、更新目标及既有凭据                  |
 | `src/memory/maintenance.ts`        | 可选维护 Group：核对集合版本、写入正式记忆，将实际新建 ID 纳入 View             |
 | `src/model/feedback.ts`            | 在一次资源操作内跟随过程反馈、共享等待期限，并在窗口关闭时清理消费              |
 | `src/model/request.ts`             | 历史回答 Group：把固定消息组成完整请求，调用独立 completion 并接纳文本          |

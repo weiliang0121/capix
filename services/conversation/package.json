@@ -30,6 +30,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@capix/checkpoint": "workspace:*",
+    "@capix/contracts": "workspace:*",
     "@capix/records": "workspace:*",
     "@capix/diagnostics": "workspace:*",
     "@capix/memory": "workspace:*",

@@ -1,6 +1,6 @@
 import type { ConversationSession, ClientTrackingStore } from '@capix/client-runtime';
 import type { SessionHttpTransport } from '@capix/client-http';
-import type { ConversationCallDetail, ConversationInspection } from '@capix/protocol';
+import type { ConversationCallDetail, ConversationInspection, ConversationRecoverySummary } from '@capix/protocol';
 
 type Loading = 'idle' | 'loading' | 'ready' | 'failed';
 export interface ConversationApplicationState {
@@ -13,6 +13,8 @@ export interface ConversationApplicationState {
   readonly detailError?: string;
   readonly selectedCall?: string;
   readonly actionError?: string;
+  readonly recoveries?: readonly ConversationRecoverySummary[];
+  readonly recoveryError?: string;
 }
 
 const trackingKey = 'capix.conversation.tracking.v1';
@@ -39,7 +41,7 @@ export class ConversationApplication {
 
   constructor(
     readonly session: ConversationSession,
-    readonly transport: Pick<SessionHttpTransport, 'inspection' | 'call'>,
+    readonly transport: Pick<SessionHttpTransport, 'inspection' | 'call'> & Partial<Pick<SessionHttpTransport, 'recoveries'>>,
   ) {
     this.#state = { session: session.snapshot, inspectionStatus: 'idle', detailStatus: 'idle' };
   }
@@ -48,6 +50,7 @@ export class ConversationApplication {
   #unsubscribe?: () => void;
   #inspection?: AbortController;
   #detail?: AbortController;
+  #recoveries?: AbortController;
   #contentId?: string;
   #settled?: string;
 
@@ -70,8 +73,10 @@ export class ConversationApplication {
       this.session.stop();
       this.#inspection?.abort();
       this.#detail?.abort();
+      this.#recoveries?.abort();
       this.#inspection = undefined;
       this.#detail = undefined;
+      this.#recoveries = undefined;
       if (this.#frame !== undefined) cancelAnimationFrame(this.#frame);
       this.#frame = undefined;
       this.#contentId = undefined;
@@ -85,7 +90,7 @@ export class ConversationApplication {
     if (id && id !== this.#contentId) {
       this.#contentId = id;
       this.#detail?.abort();
-      this.publish({ inspection: undefined, detail: undefined, selectedCall: undefined, detailStatus: 'idle' });
+      this.publish({ inspection: undefined, detail: undefined, selectedCall: undefined, detailStatus: 'idle', recoveries: undefined, recoveryError: undefined });
       void this.refresh();
     }
     const settled = current.submission?.remote?.result ? current.submission.id : undefined;
@@ -117,6 +122,7 @@ export class ConversationApplication {
   async refresh(): Promise<void> {
     const id = this.session.snapshot.info?.transcriptId;
     if (!id) return;
+    void this.refreshRecoveries();
     this.#inspection?.abort();
     const request = new AbortController();
     this.#inspection = request;
@@ -135,6 +141,20 @@ export class ConversationApplication {
       if (selectionAvailable) void this.selectCall(selected);
     } catch (error) {
       if (this.#inspection === request && !request.signal.aborted) this.publish({ inspectionStatus: 'failed', inspectionError: errorText(error) });
+    }
+  }
+
+  async refreshRecoveries(): Promise<void> {
+    if (!this.transport.recoveries) return;
+    this.#recoveries?.abort();
+    const request = new AbortController();
+    this.#recoveries = request;
+    this.publish({ recoveryError: undefined });
+    try {
+      const recoveries = await this.transport.recoveries(request.signal);
+      if (this.#recoveries === request && !request.signal.aborted) this.publish({ recoveries });
+    } catch (error) {
+      if (this.#recoveries === request && !request.signal.aborted) this.publish({ recoveryError: errorText(error) });
     }
   }
 

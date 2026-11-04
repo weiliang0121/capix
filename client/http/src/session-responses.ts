@@ -6,6 +6,9 @@ import { HttpTransportError } from './errors.js';
 const id = z.string().min(1);
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const locator = z.object({ transcriptId: id, index });
+export const recoveriesResponse = z.array(z.strictObject({ contextId: id, point: id, available: z.boolean(), reason: z.string().optional() })).superRefine((items, context) => {
+  if (new Set(items.map((item) => item.contextId)).size !== items.length || items.some((item) => item.available && item.reason !== undefined)) context.addIssue({ code: 'custom', message: 'Recovery candidates have conflicting identities or eligibility' });
+});
 export const sessionResponse = z.object({ conversationId: id, transcriptId: id, mode: z.enum(['demo', 'live']), model: id, admission: admissionResponse, active: submissionBaselineResponse.optional() }).superRefine((info, context) => {
   const active = info.active?.submission;
   if (info.admission.conversationId !== info.conversationId || info.admission.transcriptId !== info.transcriptId || (active && (active.conversationId !== info.conversationId || active.result || [active.input, active.answer, active.admission].some((item) => item && item.transcriptId !== info.transcriptId) || (active.admission && active.admission.conversationId !== info.conversationId)))) context.addIssue({ code: 'custom', message: 'Service identity and active submission disagree' });

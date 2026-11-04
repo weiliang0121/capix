@@ -7,12 +7,17 @@ import { createConversationRecording } from '../recording/index.js';
 import { inspectConversation, inspectConversationCall } from '../recording/inspection.js';
 import { ConversationEvents } from '../http/events.js';
 import { createConversationServer } from '../http/server.js';
+import { assertConversationRecovery, listConversationRecoveries } from '../recovery/index.js';
+import { hostRecoveryConfiguration } from '../hosting/model.js';
+import { RecoveryActivity } from '../hosting/recovery.js';
 
 export interface ConversationWebHostOptions {
   readonly database: string;
   readonly model: ModelProvider;
   readonly mode: 'demo' | 'live';
   readonly modelName: string;
+  /** Custom hosts must change this when provider endpoint/configuration or policy changes. */
+  readonly recoveryConfiguration?: string;
   readonly assetsDirectory?: string;
 }
 
@@ -21,9 +26,11 @@ export function createConversationWebHost(options: ConversationWebHostOptions) {
   const store = ConversationStore.open(options.database);
   let interactions: ReturnType<typeof createConversationInteractions> | undefined;
   let http: ReturnType<typeof createConversationServer> | undefined;
+  let recoveryActivity: RecoveryActivity | undefined;
+  const configuration = options.recoveryConfiguration ?? hostRecoveryConfiguration(options.mode, options.modelName);
   try {
     const content = loadConversationContent(store);
-    interactions = createConversationInteractions(options.model);
+    interactions = createConversationInteractions(options.model, store.interactions);
     const scene = createMaterialConversationScene();
     const events = new ConversationEvents(content.transcript);
     const recorder = new Recorder(new RecordBook());
@@ -33,12 +40,15 @@ export function createConversationWebHost(options: ConversationWebHostOptions) {
         integrity = 'incomplete';
       },
     });
-    const runner = new Runner(scene, createConversationResources(content, options.model, store.view), interactions, {
+    const runner = new Runner(scene, createConversationResources(content, options.model, store.view, configuration), interactions, {
       observations: [recording, events.observation],
+      checkpoints: { store: store.checkpoints, feedback: events.checkpoint },
       validate: () => {
         store.assertAvailable();
       },
     }).build();
+    const activity = new RecoveryActivity(runner.observation);
+    recoveryActivity = activity;
     http = createConversationServer({
       runner,
       transcript: content.transcript,
@@ -49,10 +59,16 @@ export function createConversationWebHost(options: ConversationWebHostOptions) {
       inspect: () => inspectConversation(content, recorder, recording.root, integrity),
       call: (id) => inspectConversationCall(recorder, recording.root, id, integrity),
       assetsDirectory: options.assetsDirectory,
+      recovery: {
+        list: () => listConversationRecoveries(content, store, configuration),
+        check: (contextId) => assertConversationRecovery(content, store, configuration, contextId),
+        activity: () => activity.snapshot(),
+      },
     });
   } catch (error) {
     const failures = [error];
     try {
+      recoveryActivity?.close();
       http?.close();
     } catch (cause) {
       failures.push(cause);
@@ -96,6 +112,7 @@ export function createConversationWebHost(options: ConversationWebHostOptions) {
     }
     try {
       active.close();
+      recoveryActivity?.close();
     } catch (error) {
       failures.push(error);
     }

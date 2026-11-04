@@ -21,7 +21,7 @@ SessionHttpTransport → ConversationSession
                        → React 页面与按需检查器
 ```
 
-结构不取得 HTTP 对象，提交不从 Recorder 推断内容是否落实。ConversationEvents 安装到 Runner 的观察机制，接收带真实来源的正式消息事件；当前入口只允许这条业务链写入消息。消息来源失效明确停止同步，不伪造完整基线。预览可丢弃或与最终正文不同，正式正文由 Transcript 同步交付。
+结构不取得 HTTP 对象，提交不从 Recorder 推断内容是否落实。ConversationEvents 安装到 Runner 的普通观察与恢复 CP feedback，接收带真实来源的正式消息事件；当前入口只允许这条业务链写入消息。消息来源失效明确停止同步，不伪造完整基线。预览可丢弃或与最终正文不同，正式正文由 Transcript 同步交付。
 
 ## 从提交到接回
 
@@ -55,4 +55,4 @@ node --env-file=.env services/conversation/dist/web/start.js --live
 
 打开 `http://127.0.0.1:4318`，可通过 `--port` 或 `--db` 改变宿主配置。真实模式默认使用已有 `.capix/conversation.sqlite`，演示模式使用独立演示库。相同数据库单写者互斥，先正常退出原 CLI。Ctrl-C 停止接纳与本地调用，等待独立请求完成，再释放存储。
 
-当前不提供多会话管理、文件任务、服务CP续接或历史记录归档。开发界面仍可使用现有 Vite，以 `OBSERVER_API_ORIGIN` 显式指向新服务后打开 `/conversation.html`。
+默认服务提供显式 CP 续接及独立的恢复活动摘要，见[有限恢复](conversation-recovery.md)。当前不提供多会话管理、文件任务或历史记录归档。开发界面仍可使用现有 Vite，以 `OBSERVER_API_ORIGIN` 显式指向新服务后打开 `/conversation.html`。

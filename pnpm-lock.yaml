@@ -400,6 +400,12 @@ importers:
 
   services/conversation:
     dependencies:
+      '@capix/checkpoint':
+        specifier: workspace:*
+        version: link:../../server/checkpoint
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
       '@capix/diagnostics':
         specifier: workspace:*
         version: link:../../server/diagnostics

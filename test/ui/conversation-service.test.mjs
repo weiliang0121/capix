@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { ConversationApplication } from '../../apps/observer/.test-dist/conversation/binding.js';
 import { ConversationMessages } from '../../apps/observer/.test-dist/conversation/messages.js';
 import { ConversationCalls } from '../../apps/observer/.test-dist/conversation/calls.js';
+import { ConversationRecoveryNotice } from '../../apps/observer/.test-dist/conversation/App.js';
 import { installFrames } from '../web/frames.mjs';
 
 const requireApp = createRequire(new URL('../../apps/observer/package.json', import.meta.url));
@@ -12,6 +13,25 @@ const { renderToStaticMarkup } = requireApp('react-dom/server');
 const render = (component, props) => renderToStaticMarkup(createElement(component, props));
 const info = { conversationId: 'conversation', transcriptId: 'transcript', mode: 'demo', model: 'fixture', admission: { conversationId: 'conversation', transcriptId: 'transcript', status: 'ready' } };
 const initial = { status: 'ready', info, canSend: true };
+
+test('recovery notice distinguishes an eligible continuation from unavailable evidence and respects session admission', () => {
+  const state = {
+    session: { ...initial, canSend: false, canForget: true },
+    recoveries: [
+      { contextId: 'eligible', point: 'answerWaiting', available: true },
+      { contextId: 'changed', point: 'afterWaiting', available: false, reason: '内容已变化' },
+    ],
+    inspectionStatus: 'idle',
+    detailStatus: 'idle',
+  };
+  const application = { snapshot: () => state, subscribe: () => () => {}, session: {}, transport: {} };
+  const html = render(ConversationRecoveryNotice, { application, state });
+  assert.match(html, /发现上次未完成的处理/);
+  assert.match(html, /继续上次处理/);
+  assert.match(html, /内容已变化/);
+  assert.match(html, /请先结束旧提交的本地跟踪/);
+  assert.match(html, /disabled=""[^>]*>继续上次处理/);
+});
 const inspection = (recorderId = 'recorder', calls = []) => ({ transcriptId: 'transcript', memories: { id: 'memories', sequence: 0, items: [] }, view: { revision: 0, sources: { messages: { id: 'transcript', scope: 'all' }, memories: { id: 'memories', scope: 'all' } }, members: [] }, recording: { recorderId, revision: 0, integrity: 'intact', calls, omitted: 0 } });
 const call = (id, changes = []) => ({ id, contextId: `context-${id}`, structureKind: 'scene', status: 'succeeded', childIds: [], value: { input: 'input', output: 'output', processes: [], relationChanges: changes } });
 const detail = (id, recorderId = 'recorder') => ({ recorderId, revision: 1, integrity: 'intact', root: call(id), calls: [], resources: [], transcripts: [], memories: [], boundaries: [], truncated: false });

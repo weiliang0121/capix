@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Transcript } from '@capix/transcript';
-import type { ConversationCallDetail, ConversationInspection, ConversationServiceInfo, ConversationSubmissionFrame, TranscriptFrame } from '@capix/protocol';
+import type { ConversationCallDetail, ConversationInspection, ConversationServiceInfo, ConversationSubmissionFrame, TranscriptFrame, ConversationRecoverySummary, ConversationRecoveryActivity } from '@capix/protocol';
 import { ConversationEvents } from './events.js';
 import { ConversationHttpError, ConversationSubmissions, type ConversationRunner } from './submission.js';
 import { streamFrames } from './stream.js';
@@ -20,6 +20,11 @@ export interface ConversationServerOptions {
   readonly assetsDirectory?: string;
   readonly submissionRetention?: number;
   readonly previewBytes?: number;
+  readonly recovery?: {
+    list(): readonly ConversationRecoverySummary[];
+    check(contextId: string): ReturnType<Parameters<ConversationSubmissions['resume']>[2]>;
+    activity(): ConversationRecoveryActivity;
+  };
 }
 
 /** HTTP owns connections and submissions. The injected Runner owns execution and the host owns entities. */
@@ -73,6 +78,24 @@ export function createConversationServer(options: ConversationServerOptions) {
       return;
     }
     if (request.method === 'GET' && url.pathname === '/api/inspection') return json(response, 200, options.inspect());
+    if (request.method === 'GET' && url.pathname === '/api/recoveries') return json(response, 200, options.recovery?.list() ?? []);
+    if (request.method === 'GET' && url.pathname === '/api/recovery-activity') return json(response, 200, options.recovery?.activity() ?? { complete: true, events: [] });
+    if (request.method === 'POST' && url.pathname === '/api/resume') {
+      const recovery = options.recovery;
+      if (!recovery) throw new ConversationHttpError('RECOVERY_UNAVAILABLE', '当前服务未启用恢复。', 409);
+      const { id, contextId } = acceptRecovery(await readBody(request), submissions.conversationId);
+      const submission = submissions.resume(id, contextId, () => {
+        try {
+          return recovery.check(contextId);
+        } catch (error) {
+          // Eligibility errors carry no request, credential or saved body.
+          if (error instanceof Error && Reflect.get(error, 'code') === 'CHECKPOINT_CONTENT_CHANGED') throw new ConversationHttpError('RECOVERY_UNAVAILABLE', error.message, 409);
+          throw error;
+        }
+      });
+      follow(response, submission);
+      return;
+    }
     const callPath = /^\/api\/calls\/([a-zA-Z0-9_-]{1,128})$/.exec(url.pathname);
     if (request.method === 'GET' && callPath) {
       const detail = options.call(callPath[1]!);
@@ -154,6 +177,10 @@ function acceptSubmission(body: unknown, conversationId: string): { id: string; 
   const message: unknown = body.input.messages[0];
   if (!object(message) || Object.keys(message).some((key) => !['role', 'content'].includes(key)) || message.role !== 'user' || typeof message.content !== 'string' || !message.content.trim()) throw new ConversationHttpError('INVALID_INPUT', '输入必须是一条非空用户消息。');
   return { id: body.submissionId, input: message.content };
+}
+function acceptRecovery(body: unknown, conversationId: string): { id: string; contextId: string } {
+  if (!object(body) || Object.keys(body).some((key) => !['conversationId', 'submissionId', 'contextId'].includes(key)) || body.conversationId !== conversationId || typeof body.submissionId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(body.submissionId) || typeof body.contextId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(body.contextId)) throw new ConversationHttpError('INVALID_INPUT', '需要当前对话身份、新提交身份和准确的 checkpoint 调用身份。');
+  return { id: body.submissionId, contextId: body.contextId };
 }
 async function readBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];

@@ -1,9 +1,9 @@
 import { SessionConnectionError, type SessionTransport } from '@capix/client-runtime';
-import type { ConversationSubmissionFrame, ConversationSubmissionRequest } from '@capix/protocol';
+import type { ConversationSubmissionFrame, ConversationSubmissionRequest, ConversationRecoveryRequest } from '@capix/protocol';
 import { ConversationHttpTransport } from './conversation.js';
 import { HttpError, HttpTransportError } from './errors.js';
 import { acceptResponse } from './responses.js';
-import { acceptCallDetail, inspectionResponse, sessionResponse } from './session-responses.js';
+import { acceptCallDetail, inspectionResponse, sessionResponse, recoveriesResponse } from './session-responses.js';
 
 /** Single-conversation service endpoints; submissions share the established wire receiver. */
 export class SessionHttpTransport extends ConversationHttpTransport implements SessionTransport {
@@ -15,6 +15,12 @@ export class SessionHttpTransport extends ConversationHttpTransport implements S
   }
   async call(id: string, signal?: AbortSignal) {
     return acceptCallDetail(await this.get(`/api/calls/${encodeURIComponent(id)}`, signal), id);
+  }
+  async recoveries(signal?: AbortSignal) {
+    return acceptResponse(recoveriesResponse, await this.get('/api/recoveries', signal), '可恢复断点');
+  }
+  resume(request: ConversationRecoveryRequest, receive: (frame: ConversationSubmissionFrame) => void, signal: AbortSignal) {
+    return connection(() => this.feedback('/api/resume', request.submissionId, receive, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal }, request.conversationId), signal);
   }
   override submit(request: ConversationSubmissionRequest, receive: (frame: ConversationSubmissionFrame) => void, signal: AbortSignal) {
     return connection(() => super.submit(request, receive, signal), signal);

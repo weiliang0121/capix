@@ -1,0 +1,89 @@
+# 新对话服务的有限恢复
+
+默认材料对话链现已装载已有 Checkpoint 和 Interaction 持久契约。恢复入口显式续接一个未结束的 Scene；正常启动仍只载入正式内容，不自动重发输入或恢复调用。本文只约定 `createMaterialConversationScene()` 的默认策略，普通 `createConversationScene()` 和自定义业务结构仍自行决定恢复点。
+
+## 哪些事实由谁负责
+
+```mermaid
+flowchart LR
+  H[CLI / Web 宿主] -->|核对资格后 resume contextId| R[Runner]
+  R --> C[已声明的 Scene / Group / Node CP]
+  C -->|按原引用读取| I[独立 Interaction]
+  I -->|固定请求和完整反馈| DB[(ConversationStore)]
+  C -->|固定接纳操作| T[Transcript]
+  C -->|固定批次及原始依据| M[Memories]
+  C -->|默认确保成员策略| V[View]
+  T --> DB
+  M --> DB
+  V --> DB
+  C -->|Frame 与终态| DB
+```
+
+| 范围     | 保存与恢复规则                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------- |
+| Scene    | 原始用户消息、当时内容依据、直接子关系、回答接纳及后处理进度                                      |
+| 材料准备 | 已捕获的 query、View 来源版本和准确材料；恢复不重新选择历史                                       |
+| 模型调用 | 固定模型请求、发送返回的 Interaction 引用、等待和接纳关系；已保存反馈只读                         |
+| 助手消息 | 在 answer 的正式接纳内 `applyFixed`；同一父子接纳操作确认原凭据                                   |
+| 记忆维护 | 原始完整前缀、原记忆集合、已接纳提案或 handled skipped；不重新提取已接纳提案                      |
+| 记忆落实 | 独立 apply Node 保存 `{basis, changes, existingIds}`；先确认既有固定凭据，缺凭据才按原 basis 写入 |
+| View     | 默认策略确保本次消息及实际新建记忆已纳入；不宣称 View 与实体／CP 构成事务                         |
+
+父层保存等待关系，子层返回后由父层正式接纳。已有子结果可以重新交付，已处理的失败保持原 failed 与父 handled；接纳不改写成重新执行。每个点校验自己的输入、关键直接关系和已接纳事实，完整 Frame 仍由内核保存。
+
+## 资格检查与未知窗口
+
+`assertConversationRecovery(content, store, configuration, contextId)` 是宿主的准入检查，紧邻 `runner.resume(contextId)` 执行：
+
+- 必须是默认 Scene 的未结束 CP；成功、失败、取消的终态都不能再次执行。
+- 固定配置身份、结构恢复契约及原始输入必须兼容。默认配置身份包含模型入口、模型名、thinking 和策略版本，不含密钥；自定义 Provider 的宿主要显式提供稳定的 `recoveryConfiguration`。
+- 原用户输入和此前消息前缀、分段必须相同。后续最多存在本次固定接纳产生的一个助手消息；有新提交或其他内容变更则拒绝。
+- 当前记忆必须由原集合与本次子树的准确固定批次构成；已完成的落实必须有真实凭据。
+- View 必须处于默认按序纳入能产生的状态，已被 CP 证明完成的成员效果不能缺失。任意退出或自定义维护规则不属于这个恢复承诺。
+- 尚待执行的子层必须已经有自己的 CP。没有首个 CP、关系或反馈不明时明确拒绝，不推断“应该还没做”。
+
+输入追加早于首个 Scene CP、外部发送早于引用 CP、父层保存等待后子层尚未保存首个 CP，都存在未知窗口。这里不自动重发，也不以普通失败／取消伪装进程中断。
+
+独立 Interaction 在重启后没有完整反馈时为 unavailable。外部系统是否执行过、能否继续生产，需要它自己的协议；本服务不能从本地请求记录推出答案。预览片段不持久化，恢复不从最终文本伪造历史 delta。
+
+## 宿主装配与使用
+
+```ts
+const content = loadConversationContent(store);
+const configuration = 'my-provider-and-default-policy-v1'; // 公开配置身份，不放凭据
+const interactions = createConversationInteractions(model, store.interactions);
+const runner = new Runner(createMaterialConversationScene(), createConversationResources(content, model, store.view, configuration), interactions, { checkpoints: { store: store.checkpoints }, validate: () => store.assertAvailable() }).build();
+
+// 载入不会自动运行；宿主明确选择某个未结束的根。
+const candidates = listConversationRecoveries(content, store, configuration);
+assertConversationRecovery(content, store, configuration, contextId);
+const answer = await runner.resume(contextId);
+```
+
+这两个资格函数由 `@capix/conversation-service/assembly` 导出。宿主负责让资格核验与调用之间没有并发内容修改；默认 CLI/Web 使用数据库单写者及 Runner 入口占用。
+
+CLI 用 `/recoveries` 查看候选，用 `/resume <contextId>` 续接；也可独立启动：
+
+```sh
+pnpm conversation --demo --db /path/to/conversation.sqlite --resume <contextId>
+```
+
+Web 的 `GET /api/recoveries` 返回有限摘要；`POST /api/resume` 接收 `{conversationId, submissionId, contextId}`，产生新的传输提交并引用原正式输入，不再 append 用户消息。之后复用现有提交 follow/cancel 及消息同步。重复同一恢复提交 ID 只读取已保留的提交反馈；跨进程身份去重仍以真实 CP 终态和内容为依据。
+
+## 持久与观测边界
+
+SQLite v2 在原内容表之外保存不可变 CP image、CAS head、固定模型交互请求与完整反馈。v1 原库在同一排他事务中迁移，原实体和固定凭据保留；未知较新版本明确拒绝。CP／交互调用者冲突不毒化整个 Store，真实数据库失败或损坏会阻止继续接纳。CP 和完整交互分别有 8 MiB 边界；当前保留历史 image，无自动清理策略。
+
+恢复仍使用原 contextId，但有新的入口与恢复 activityId。恢复中的实际新消息从 CP feedback 接入消息源，既有固定消息确认不重复发布 append。`GET /api/recovery-activity` 返回本进程最多 1024 条恢复元数据，淘汰后标注不完整，不带完整 Frame 或正文。
+
+普通 Recorder 不伪造旧调用树；原 HTTP 提交、RecordBook、预览以及任意 JS 栈不恢复。恢复记录与本进程普通运行记录分开解释。客户端接回传输和内核 CP 续接仍是两个不同动作。
+
+## 验证
+
+测试使用离线 Provider 和临时数据库，真实子进程 `exit` / `SIGKILL`，不通过抛业务异常模拟崩溃：
+
+1. 模型反馈已持久化，本地消费尚未交付。
+2. 助手固定追加已提交，父接纳尚未写入下一 CP。
+3. 记忆固定批次已提交，View 尚未纳入新 ID。
+
+另覆盖已有对话／记忆后续接、原记忆 ID 更新、handled skipped、无变化批次、首个子 CP 缺失、没有反馈、配置／内容变化、终态拒绝、凭据与已完成成员缺失，以及 CLI/HTTP 消息同步和恢复观测。每个完成请求的发送次数、正式消息数、记忆序列及固定凭据都与中断前后对照。

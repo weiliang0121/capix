@@ -266,3 +266,50 @@ test('resource observation retains actual counts, sequences and changed IDs with
     access.close();
   }
 });
+
+test('fixed memory application confirms its exact original receipt before checking current sequence', () => {
+  const memories = new Memories(transcript());
+  const { access, endpoint } = open(memories);
+  try {
+    const expected = basis(memories);
+    const batch = { position: 'maintenance', changes: [create('fixed')] };
+    const receipt = endpoint.applyFixed(batch, expected);
+    endpoint.apply([create('later unrelated write')]);
+    assert.equal(endpoint.applyFixed(batch, expected), receipt);
+    assert.equal(memories.values().length, 2);
+    assert.equal(memories.sequence, 2);
+    assert.throws(() => endpoint.applyFixed(batch, { ...expected, sequence: 1 }), conflict);
+    assert.throws(() => endpoint.applyFixed(batch, { ...expected, transcriptId: 'foreign' }), conflict);
+    assert.throws(() => endpoint.applyFixed({ ...batch, changes: [create('different')] }, expected), { code: 'MEMORY_APPLY_CONFLICT' });
+    assert.throws(() => endpoint.applyFixed({ position: 'new', changes: [create('stale')] }, expected), conflict);
+    assert.equal(memories.values().length, 2);
+  } finally {
+    access.close();
+  }
+});
+
+test('fixed empty batch confirms without advancing sequence and stale absent receipt cannot establish an effect', () => {
+  let commits = 0;
+  const memories = new Memories(transcript(), {
+    persistence: {
+      commit() {
+        commits++;
+      },
+    },
+  });
+  const { access, endpoint } = open(memories);
+  try {
+    const expected = basis(memories);
+    const batch = { position: 'empty', changes: [] };
+    const receipt = endpoint.applyFixed(batch, expected);
+    assert.equal(commits, 1, 'an empty fixed effect still has a durable receipt');
+    assert.equal(endpoint.applyFixed(batch, expected), receipt);
+    assert.equal(commits, 1);
+    endpoint.apply([create('later')]);
+    assert.equal(endpoint.applyFixed(batch, expected), receipt);
+    assert.throws(() => endpoint.applyFixed({ position: 'another-empty', changes: [] }, expected), conflict);
+    assert.equal(commits, 2);
+  } finally {
+    access.close();
+  }
+});

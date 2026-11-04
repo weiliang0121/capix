@@ -14,6 +14,26 @@ const baseline = { type: 'baseline', submission: { conversationId: identity.conv
 const signal = () => new AbortController().signal;
 const stream = (frames) => new Response(frames.map((frame) => JSON.stringify(frame)).join('\n'));
 
+test('recovery HTTP validates candidates and uses the normal submission feedback receiver', async () => {
+  const candidates = [{ contextId: 'context', point: 'answerWaiting', available: true }];
+  const calls = [];
+  const request = { conversationId: identity.conversationId, submissionId: 'submission', contextId: 'context' };
+  const terminal = { ...baseline, submission: { ...baseline.submission, result: { status: 'rejected', error: { code: 'RECOVERY_UNAVAILABLE', message: 'changed' } } } };
+  const transport = new SessionHttpTransport('', async (path, init) => {
+    calls.push({ path, init });
+    return path === '/api/recoveries' ? Response.json(candidates) : stream([terminal]);
+  });
+  assert.deepEqual(await transport.recoveries(), candidates);
+  const frames = [];
+  await transport.resume(request, (frame) => frames.push(frame), signal());
+  assert.equal(calls[1].path, '/api/resume');
+  assert.deepEqual(JSON.parse(calls[1].init.body), request);
+  assert.equal(frames[0].submission.result.status, 'rejected');
+  for (const invalid of [[...candidates, ...candidates], [{ ...candidates[0], available: 'yes' }], [{ ...candidates[0], reason: 'contradictory' }]]) {
+    await assert.rejects(new SessionHttpTransport('', async () => Response.json(invalid)).recoveries(), HttpTransportError);
+  }
+});
+
 test('session HTTP checks service identity and active submission instead of loading old configuration', async () => {
   const paths = [];
   const transport = new SessionHttpTransport('http://local.test', async (url) => {

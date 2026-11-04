@@ -1,12 +1,14 @@
 import type { AnswerPreviewChange, AnswerPreviewSnapshot, ConversationAdmission, ConversationFailure, ConversationSubmissionBaseline, ConversationSubmissionChange, ConversationSubmissionFrame, ConversationSubmissionSnapshot, TranscriptEvent } from '@capix/protocol';
 import type { RunnerObservation, RunnerOutput } from '@capix/server-runtime';
 import type { ConversationEvents } from './events.js';
+import type { AcceptedConversationMessage } from '../scene.js';
 
 export interface ConversationRunner {
   readonly isRunning: boolean;
   readonly output: RunnerOutput<string, string>;
   readonly observation: RunnerObservation;
   run(input: string): Promise<string>;
+  resume?(contextId: string): Promise<string>;
   cancel(reason?: unknown): boolean;
 }
 
@@ -35,6 +37,7 @@ export class Submission {
     readonly id: string,
     readonly input: string,
     readonly previewLimit: number,
+    readonly recoveryContextId?: string,
   ) {
     this.#state = Object.freeze({ conversationId, submissionId: id, revision: 0, executions: Object.freeze([]), integrity: Object.freeze({ status: 'complete' }) });
   }
@@ -210,36 +213,69 @@ export class ConversationSubmissions {
   }
 
   submit(id: string, input: string): Submission {
+    return this.start(id, input);
+  }
+
+  resume(id: string, contextId: string, check: () => { readonly input: string; readonly inputRevision: number; readonly user: AcceptedConversationMessage; readonly answer?: AcceptedConversationMessage }): Submission {
+    if (this.#seen.has(id)) {
+      const existing = this.read(id);
+      if (existing.recoveryContextId !== contextId) throw new ConversationHttpError('SUBMISSION_EXISTS', '提交身份已用于其他输入或恢复。', 409);
+      return existing;
+    }
+    if (!this.runner.resume) throw new ConversationHttpError('RECOVERY_UNAVAILABLE', '当前运行器未启用恢复。', 409);
+    if (this.admission().status !== 'ready') return this.start(id, '', contextId);
+    // Check the same formal facts immediately before dispatch. No user message is appended.
+    let accepted: ReturnType<typeof check>;
+    try {
+      accepted = check();
+    } catch (error) {
+      if (!(error instanceof ConversationHttpError)) throw error;
+      const rejected = new Submission(this.conversationId, id, '', this.previewLimit, contextId);
+      this.retain(rejected);
+      rejected.update({ admission: this.admission(), result: { status: 'rejected', error: { code: error.code, message: error.message } } });
+      return rejected;
+    }
+    const user = accepted.user;
+    const input = { transcriptId: user.transcriptId, start: user.index, end: user.index + 1, revision: accepted.inputRevision };
+    const answer = accepted.answer ? { transcriptId: accepted.answer.transcriptId, index: accepted.answer.index } : undefined;
+    return this.start(id, accepted.input, contextId, { input, ...(answer ? { answer } : {}) });
+  }
+
+  private start(id: string, input: string, contextId?: string, existing?: Pick<ConversationSubmissionChange, 'input' | 'answer'>): Submission {
     if (this.#seen.has(id)) {
       const item = this.#items.get(id);
       if (item) {
-        if (item.input !== input) throw new ConversationHttpError('SUBMISSION_EXISTS', '提交身份已用于其他输入。', 409);
+        if (item.input !== input || item.recoveryContextId !== contextId) throw new ConversationHttpError('SUBMISSION_EXISTS', '提交身份已用于其他输入或恢复。', 409);
         return item;
       }
       return this.read(id);
     }
     const admission = this.admission();
-    const current = new Submission(this.conversationId, id, input, this.previewLimit);
-    if (this.#seen.size < 4096) {
-      this.#seen.add(id);
-      for (const [key, item] of this.#items) {
-        if (this.#items.size < this.retention) break;
-        if (item !== this.#current) this.#items.delete(key);
-      }
-      this.#items.set(id, current);
-    }
+    const current = new Submission(this.conversationId, id, input, this.previewLimit, contextId);
+    this.retain(current);
     if (admission.status !== 'ready') {
       current.update({ admission, result: { status: 'rejected', error: admission.status === 'busy' ? { code: 'RUNTIME_BUSY', message: '当前对话正在处理，请等待结束。' } : admission.error, ...(admission.status === 'busy' ? { retry: 'admission' as const } : {}) } });
       return current;
     }
     this.#current = current;
-    current.update({ admission: this.admission() });
-    const work = this.execute(current, input);
+    current.update({ ...existing, admission: this.admission() });
+    const work = this.execute(current, () => (contextId ? this.runner.resume!(contextId) : this.runner.run(input)));
     this.#running = work;
     void work.finally(() => {
       if (this.#running === work) this.#running = undefined;
     });
     return current;
+  }
+
+  private retain(current: Submission): void {
+    if (this.#seen.size < 4096) {
+      this.#seen.add(current.id);
+      for (const [key, item] of this.#items) {
+        if (this.#items.size < this.retention) break;
+        if (item !== this.#current) this.#items.delete(key);
+      }
+      this.#items.set(current.id, current);
+    }
   }
 
   cancel(id: string): Submission {
@@ -262,10 +298,10 @@ export class ConversationSubmissions {
     for (const dispose of this.#dispose.splice(0)) dispose();
   }
 
-  private async execute(current: Submission, input: string): Promise<void> {
+  private async execute(current: Submission, execute: () => Promise<string>): Promise<void> {
     let result: NonNullable<ConversationSubmissionSnapshot['result']>;
     try {
-      await this.runner.run(input);
+      await execute();
       result = { status: 'completed' };
     } catch {
       result = current.settledStatus === 'cancelled' ? { status: 'cancelled' } : { status: 'failed', error: failure() };

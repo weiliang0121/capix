@@ -2,7 +2,8 @@ import { createInterface, type Interface } from 'node:readline';
 import { Runner } from '@capix/server-runtime';
 import { createConversationInteractions, createConversationResources, createMaterialConversationScene, loadConversationContent } from '../assembly/index.js';
 import { ConversationStore } from '../persistence/index.js';
-import { createHostModel } from '../hosting/model.js';
+import { createHostModel, hostModelName, hostRecoveryConfiguration } from '../hosting/model.js';
+import { assertConversationRecovery, listConversationRecoveries } from '../recovery/index.js';
 import { failureLabel } from '../hosting/diagnostic.js';
 import { parseConversationOptions, usage } from './options.js';
 import { RecordingFile } from './recording.js';
@@ -16,6 +17,7 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
   }
   // Validate credentials before opening a store or accepting any input.
   const model = createHostModel(options.mode);
+  const configuration = hostRecoveryConfiguration(options.mode, hostModelName(options.mode));
   const recording = options.records ? RecordingFile.open(options.records, options.database) : undefined;
   let openedStore: ConversationStore | undefined;
   let interactions: ReturnType<typeof createConversationInteractions> | undefined;
@@ -28,13 +30,14 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
   try {
     const store = ConversationStore.open(options.database);
     openedStore = store;
-    interactions = createConversationInteractions(model);
+    interactions = createConversationInteractions(model, store.interactions);
     const content = loadConversationContent(store);
     const scene = createMaterialConversationScene();
-    const resources = createConversationResources(content, model, store.view);
+    const resources = createConversationResources(content, model, store.view, configuration);
     const installation = recording?.install(scene);
     const runner = new Runner(scene, resources, interactions, {
       ...(installation ? { observations: [installation] } : {}),
+      checkpoints: { store: store.checkpoints },
       validate: () => {
         store.assertAvailable();
       },
@@ -85,9 +88,22 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
       if (!line.trim()) return;
       if (line.trim() === '/exit') return closeInput();
       if (line.trim() === '/status') return status();
+      if (line.trim() === '/recoveries') {
+        const candidates = listConversationRecoveries(content, store, configuration);
+        if (!ioFailed) console.log(candidates.length ? candidates.map((item) => `${item.contextId} · ${item.point} · ${item.available ? '可以续接' : `不可续接：${item.reason}`}`).join('\n') : '没有未终结的 checkpoint。');
+        return;
+      }
+      const command = /^\/resume(?:\s+(.+))?$/.exec(line.trim());
       preview = false;
       try {
-        const result = await runner.run(line);
+        let result: string;
+        if (command) {
+          const contextId = command[1]?.trim();
+          if (!contextId) throw new Error('/resume requires a context identity');
+          assertConversationRecovery(content, store, configuration, contextId);
+          if (!ioFailed) console.log(`续接：${contextId}（保留原调用身份，不重建历史记录）`);
+          result = await runner.resume(contextId);
+        } else result = await runner.run(line);
         if (!ioFailed && preview) process.stdout.write('\n');
         preview = false;
         // This is the actual returned result. A preview is never substituted for it.
@@ -101,7 +117,9 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
         store.assertAvailable();
       }
     };
-    if (options.input !== undefined) {
+    if (options.resume !== undefined) {
+      await submit(`/resume ${options.resume}`);
+    } else if (options.input !== undefined) {
       await submit(options.input);
     } else {
       lines = createInterface({ input: process.stdin, output: process.stdout, terminal: Boolean(process.stdin.isTTY && process.stdout.isTTY) });

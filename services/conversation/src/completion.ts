@@ -1,9 +1,10 @@
 import type { ModelProvider, ModelReply, ModelRequest } from '@capix/model-provider';
 import { ResourceOffer, type ResourceOperation, type ResourcesOf } from '@capix/resources';
 import { InvocationCancelled } from '@capix/server-runtime';
-import { Node, type Group } from '@capix/structure';
+import { Node, checkpointPoint, type Group } from '@capix/structure';
 import { requireString, requireText } from './text.js';
 import { requireCompletionReply } from './model/completion-contract.js';
+import { modelReplyCodec, modelRequestCodec } from './recovery/model-codecs.js';
 
 /** Complete provider replies remain visible; each business node decides what to accept. */
 export const CompletionResource = new ResourceOffer({
@@ -29,11 +30,22 @@ export type ConversationCompletion = Node<ModelRequest, ModelReply, any, string>
 /** Direct completion uses the current invocation's signal and resource operation. */
 export function createCompletionNode() {
   const deps = { model: CompletionResource.request() };
+  const completed = checkpointPoint<'node', ModelRequest, ModelReply, string>()({
+    name: 'completed',
+    state: modelReplyCodec,
+    references: {},
+    resume: { run: (_work, reply) => reply },
+  });
   return new Node<ModelRequest, ModelReply, ResourcesOf<typeof deps>, string>({
     name: 'complete-model-request',
     deps,
     output: { result: requireCompletionReply, delta: (value) => requireString(value, 'Model completion delta') },
-    run: (work) => work.resources.model.complete(work.input, { delta: (value) => work.output.emit(value) }),
+    checkpoint: { key: 'conversation.direct-completion', version: 1, input: modelRequestCodec, output: modelReplyCodec, points: [completed] },
+    async run(work) {
+      const reply = await work.resources.model.complete(work.input, { delta: (value) => work.output.emit(value) });
+      work.checkpoint?.({ point: completed, state: reply, refs: {} });
+      return reply;
+    },
   });
 }
 

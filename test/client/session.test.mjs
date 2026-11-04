@@ -78,6 +78,54 @@ function setup(t, overrides = {}, remembered) {
   };
 }
 
+test('explicit checkpoint resume saves a new identity and a disconnected POST only reconnects by read/follow', async (t) => {
+  const resumes = [];
+  const f = setup(t, {
+    resume: async (request) => {
+      resumes.push(request);
+      assert.equal(f.tracking.submissionId, request.submissionId);
+      assert.deepEqual(Object.keys(request).sort(), ['contextId', 'conversationId', 'submissionId']);
+      throw new SessionConnectionError('response connection lost after admission');
+    },
+    read: async (id) => {
+      f.reads.push(id);
+      return baseline(id, { input: { ...input, revision: 1 }, answer: { transcriptId: identity.transcriptId, index: 1 }, executions: [{ contextId: 'original-context' }], result: { status: 'completed' }, admission: admission() });
+    },
+  });
+  await f.session.initialize();
+  f.append([
+    { role: 'user', content: 'original question' },
+    { role: 'assistant', content: 'saved answer' },
+  ]);
+  await f.session.resume('original-context');
+  assert.equal(resumes.length, 1);
+  assert.equal(resumes[0].contextId, 'original-context');
+  assert.equal(f.posts.length, 0);
+  assert.deepEqual(f.reads, [resumes[0].submissionId]);
+  assert.equal(f.session.snapshot.submission.remote.executions[0].contextId, 'original-context');
+  assert.equal(f.session.snapshot.submission.remote.result.status, 'completed');
+  assert.equal(f.session.snapshot.canSend, true);
+  assert.equal(f.tracking.submissionId, undefined);
+});
+
+test('a definite recovery rejection remains a known terminal result and permits another deliberate action', async (t) => {
+  let requests = 0;
+  const f = setup(t, {
+    resume: async (request, receive) => {
+      requests++;
+      receive(baseline(request.submissionId, { result: { status: 'rejected', error: { code: 'RECOVERY_UNAVAILABLE', message: 'Content has advanced' } }, admission: admission() }));
+    },
+  });
+  await f.session.initialize();
+  await assert.rejects(f.session.resume('old-context'), /Content has advanced/);
+  assert.equal(requests, 1);
+  assert.equal(f.session.snapshot.submission.remote.result.status, 'rejected');
+  assert.equal(f.session.snapshot.submission.remote.input, undefined);
+  assert.equal(f.session.snapshot.canSend, true);
+  assert.equal(f.session.snapshot.canForget, false);
+  assert.equal(f.posts.length, 0);
+});
+
 test('session separates accepted text synchronization from submission terminal facts', async (t) => {
   let deliver;
   const f = setup(t, {

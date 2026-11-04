@@ -1,8 +1,11 @@
 import type { MemoryChange } from '@capix/memory';
-import type { ResourcesOf } from '@capix/resources';
-import { Node } from '@capix/structure';
+import type { ModelRequest } from '@capix/model-provider';
+import { isDeepStrictEqual } from 'node:util';
+import { Group, checkpointPoint, childReference } from '@capix/structure';
 import { z } from 'zod';
-import { CompletionResource, requireCompletionText } from '../completion.js';
+import { createCompletionNode, requireCompletionText, type ConversationCompletion } from '../completion.js';
+import { voidCodec } from '../recovery/codecs.js';
+import { memoryChangesCodec, memoryContextCodec, memoryContextSchema } from './codecs.js';
 import type { ConversationMemoryContext } from './context.js';
 
 const indexes = z
@@ -45,22 +48,60 @@ function acceptProposal(raw: string, context: ConversationMemoryContext): readon
   );
 }
 
-export function createMemoryProposal() {
-  const deps = { model: CompletionResource.request() };
-  return new Node<ConversationMemoryContext, readonly MemoryChange[], ResourcesOf<typeof deps>>({
-    name: 'propose-conversation-memories',
-    deps,
-    async run(work) {
-      const reply = await work.resources.model.complete({
-        messages: [
-          { role: 'system', content: instructions },
-          { role: 'user', content: JSON.stringify(work.input) },
-        ],
-        responseFormat: 'json_object',
-        maxTokens: 3000,
-        temperature: 0,
-      });
-      return acceptProposal(requireCompletionText(reply), work.input);
+function modelRequest(context: ConversationMemoryContext): ModelRequest {
+  return {
+    messages: [
+      { role: 'system', content: instructions },
+      // The prompt uses the same declared representation before and after CP decoding.
+      { role: 'user', content: JSON.stringify(memoryContextSchema.parse(context)) },
+    ],
+    responseFormat: 'json_object',
+    maxTokens: 3000,
+    temperature: 0,
+  };
+}
+
+/** Direct completion remains the standalone default; durable hosts explicitly inject an interaction. */
+export function createMemoryProposal(completion: ConversationCompletion = createCompletionNode()) {
+  const completed = checkpointPoint<'group', ConversationMemoryContext, readonly MemoryChange[]>()({
+    name: 'completed',
+    state: memoryChangesCodec,
+    references: {},
+    check(changes, facts) {
+      const child = facts.children.requireUnique(completion, { parentRound: 1 });
+      if (facts.children.values().length !== 1 || child.key !== 'completion' || !isDeepStrictEqual(child.input, modelRequest(facts.input)) || child.returned?.status !== 'succeeded' || child.reception.status !== 'accepted' || !isDeepStrictEqual(child.reception.value, child.returned.output) || !isDeepStrictEqual(changes, acceptProposal(requireCompletionText(child.returned.output), facts.input))) throw new Error('Saved memory proposal differs from its accepted completion');
+    },
+    resume: { run: (_work, state) => state },
+  });
+  const waiting = checkpointPoint<'group', ConversationMemoryContext, readonly MemoryChange[]>()({
+    name: 'completionWaiting',
+    state: voidCodec,
+    references: { completion: childReference(completion) },
+    check(_state, facts) {
+      const child = facts.references.completion;
+      if (facts.children.values().length !== 1 || child.key !== 'completion' || child.returned || !isDeepStrictEqual(child.input, modelRequest(facts.input))) throw new Error('Memory proposal checkpoint changed its fixed model request');
+    },
+    resume: {
+      uses: [completion],
+      async run(work, _state, refs) {
+        const reply = await work.children.resume(refs.completion).invoke();
+        const changes = acceptProposal(requireCompletionText(reply), work.input);
+        work.checkpoint?.({ point: completed, state: changes, refs: {} });
+        return changes;
+      },
     },
   });
+  const propose = new Group<ConversationMemoryContext, readonly MemoryChange[]>({
+    name: 'propose-conversation-memories',
+    checkpoint: { key: 'conversation.memory.proposal', version: 1, input: memoryContextCodec, output: memoryChangesCodec, points: [waiting, completed] },
+  }).add({ completion });
+  propose.run = async (work) => {
+    const call = work.children.create(completion, modelRequest(work.input), { key: 'completion' });
+    work.checkpoint?.({ point: waiting, state: undefined, refs: { completion: call.ref } });
+    const reply = await call.invoke();
+    const changes = acceptProposal(requireCompletionText(reply), work.input);
+    work.checkpoint?.({ point: completed, state: changes, refs: {} });
+    return changes;
+  };
+  return propose;
 }

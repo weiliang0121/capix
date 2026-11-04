@@ -1,11 +1,23 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 const applicationId = 0x43415043;
-const version = 1;
-const tables = ['content', 'messages', 'memories', 'append_receipts', 'apply_receipts'];
+const version = 2;
+const contentTables = ['content', 'messages', 'memories', 'append_receipts', 'apply_receipts'];
+const recoveryTables = ['checkpoint_images', 'checkpoint_heads', 'completion_interactions'];
+const columns: Readonly<Record<string, readonly string[]>> = {
+  content: ['singleton', 'transcript_id', 'transcript_revision', 'starts', 'message_count', 'memories_id', 'memory_sequence', 'view_revision', 'view_state'],
+  messages: ['position', 'body'],
+  memories: ['ordinal', 'id', 'body'],
+  append_receipts: ['ordinal', 'operation', 'body'],
+  apply_receipts: ['ordinal', 'operation', 'body'],
+  checkpoint_images: ['id', 'context_id', 'revision', 'body'],
+  checkpoint_heads: ['context_id', 'revision', 'image_id', 'delivery'],
+  completion_interactions: ['id', 'revision', 'body'],
+};
+const integers = new Set(['singleton', 'transcript_revision', 'message_count', 'memory_sequence', 'view_revision', 'position', 'ordinal', 'revision']);
 
 /** Identify the database before changing journal mode or installing any tables. */
-export function inspectSchema(database: DatabaseSync): boolean {
+export function inspectSchema(database: DatabaseSync): 0 | 1 | 2 {
   const application = database.prepare('PRAGMA application_id').get()?.application_id;
   const savedVersion = database.prepare('PRAGMA user_version').get()?.user_version;
   const names = database
@@ -13,12 +25,31 @@ export function inspectSchema(database: DatabaseSync): boolean {
     .all()
     .map((row) => row.name);
   const object = database.prepare("SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1").get();
-  if (application === 0 && savedVersion === 0 && !object) return false;
-  if (application !== applicationId || savedVersion !== version || names.length !== tables.length || [...tables].sort().some((name, index) => names[index] !== name)) throw new Error('Unsupported conversation content database');
-  return true;
+  if (application === 0 && savedVersion === 0 && !object) return 0;
+  if (application !== applicationId || (savedVersion !== 1 && savedVersion !== version)) throw new Error('Unsupported conversation content database');
+  const tables = savedVersion === 1 ? contentTables : [...contentTables, ...recoveryTables];
+  if (names.length !== tables.length || [...tables].sort().some((name, index) => names[index] !== name)) throw new Error('Unsupported conversation content database');
+  const descriptions = database.prepare('PRAGMA table_list').all();
+  for (const table of tables) {
+    const actual = database.prepare(`PRAGMA table_info(${table})`).all();
+    const description = descriptions.find((row) => row.schema === 'main' && row.name === table);
+    if (
+      description?.strict !== 1 ||
+      description.ncol !== columns[table]!.length ||
+      actual.length !== columns[table]!.length ||
+      actual.some((row, index) => {
+        const name = columns[table]![index]!;
+        const type = integers.has(name) ? 'INTEGER' : 'TEXT';
+        const nullable = name === 'delivery' || (index === 0 && type === 'INTEGER');
+        return row.name !== name || row.type !== type || row.pk !== (index === 0 ? 1 : 0) || row.notnull !== (nullable ? 0 : 1) || row.dflt_value !== null;
+      })
+    )
+      throw new Error('Unsupported conversation table shape');
+  }
+  return savedVersion;
 }
 
-/** One content set per database. This format deliberately contains no invocation or queue state. */
+/** One content set per database; full invocation objects and queues are never persisted. */
 export function createSchema(database: DatabaseSync): void {
   database.exec(`
     CREATE TABLE content (
@@ -52,6 +83,32 @@ export function createSchema(database: DatabaseSync): void {
       body TEXT NOT NULL CHECK (json_valid(body))
     ) STRICT;
     PRAGMA application_id = ${applicationId};
+  `);
+  migrateSchema(database, 1);
+}
+
+/** Called inside the opening exclusive transaction, preserving all v1 content and receipts. */
+export function migrateSchema(database: DatabaseSync, previous: 1 | 2): void {
+  if (previous === version) return;
+  database.exec(`
+    CREATE TABLE checkpoint_images (
+      id TEXT PRIMARY KEY,
+      context_id TEXT NOT NULL,
+      revision INTEGER NOT NULL CHECK (revision > 0),
+      body TEXT NOT NULL CHECK (json_valid(body)),
+      UNIQUE (context_id, revision)
+    ) STRICT;
+    CREATE TABLE checkpoint_heads (
+      context_id TEXT PRIMARY KEY,
+      revision INTEGER NOT NULL CHECK (revision > 0),
+      image_id TEXT NOT NULL UNIQUE REFERENCES checkpoint_images(id),
+      delivery TEXT CHECK (delivery IS NULL OR json_valid(delivery))
+    ) STRICT;
+    CREATE TABLE completion_interactions (
+      id TEXT PRIMARY KEY,
+      revision INTEGER NOT NULL CHECK (revision >= 0),
+      body TEXT NOT NULL CHECK (json_valid(body))
+    ) STRICT;
     PRAGMA user_version = ${version};
   `);
 }

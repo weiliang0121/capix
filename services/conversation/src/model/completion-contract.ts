@@ -6,7 +6,7 @@ import { requireString } from '../text.js';
 const identity = z.string().refine((value) => /\S/.test(value), 'Completion identity must not be blank');
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const message = z.strictObject({ role: z.enum(['system', 'user', 'assistant']), content: z.string() }).readonly();
-const request = z
+export const modelRequestSchema = z
   .strictObject({
     messages: z.array(message).min(1).readonly(),
     maxTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
@@ -15,7 +15,7 @@ const request = z
     stream: z.boolean().optional(),
   })
   .readonly();
-const reply = z
+export const modelReplySchema = z
   .strictObject({
     id: identity,
     model: identity,
@@ -26,7 +26,7 @@ const reply = z
   .readonly();
 
 function isCompletionReply(value: unknown): value is ModelReply {
-  return reply.safeParse(value).success;
+  return modelReplySchema.safeParse(value).success;
 }
 
 /** Output validation keeps the exact returned object; the interaction owns fixed-value capture. */
@@ -38,7 +38,7 @@ export function requireCompletionReply(value: unknown): ModelReply {
 /** A complete transport reply is a fact; accepting its finish reason and text belongs to the caller. */
 export const CompletionInteraction: InteractionContract<ModelRequest, ModelReply, string> = Object.freeze({
   key: 'conversation.completion.v1',
-  request: (value: unknown) => request.parse(value),
+  request: (value: unknown) => modelRequestSchema.parse(value),
   reply: requireCompletionReply,
   progress: (value: unknown) => requireString(value, 'Completion progress'),
 });

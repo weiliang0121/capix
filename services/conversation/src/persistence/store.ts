@@ -9,7 +9,10 @@ import type { ViewCommit, ViewPersistence } from '@capix/view';
 import { z } from 'zod';
 import { restoreConversationContent, type ConversationState } from '../assembly/content.js';
 import type { ConversationMaterialSources } from '../materials/view.js';
-import { createSchema, inspectSchema } from './schema.js';
+import { createSchema, inspectSchema, migrateSchema } from './schema.js';
+import { SqliteCheckpoints, type ConversationCheckpoints } from './checkpoints.js';
+import { SqliteInteractions, type ConversationInteractions } from './interactions.js';
+import { RecoveryConflict } from './recovery.js';
 
 const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const metadata = z.object({ singleton: z.literal(1), transcript_id: z.string().min(1), transcript_revision: integer, starts: z.string(), message_count: integer, memories_id: z.string().min(1), memory_sequence: integer, view_revision: integer, view_state: z.string() }).strict();
@@ -26,6 +29,8 @@ export class ConversationStore {
   readonly transcript: TranscriptPersistence = Object.freeze({ commit: (change: TranscriptCommit) => this.commitTranscript(change) });
   readonly memories: MemoriesPersistence = Object.freeze({ commit: (change: MemoriesCommit) => this.commitMemories(change) });
   readonly view: ViewPersistence<ConversationMaterialSources> = Object.freeze({ commit: (change: ViewCommit<ConversationMaterialSources>) => this.commitView(change) });
+  readonly checkpoints: ConversationCheckpoints;
+  readonly interactions: ConversationInteractions;
 
   static open(path: string): ConversationStore {
     const file = resolve(path);
@@ -41,6 +46,7 @@ export class ConversationStore {
       database.exec('PRAGMA locking_mode = EXCLUSIVE; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; BEGIN EXCLUSIVE;');
       try {
         if (!existing) createSchema(database);
+        else migrateSchema(database, existing);
         database.exec('COMMIT');
       } catch (error) {
         database.exec('ROLLBACK');
@@ -60,6 +66,8 @@ export class ConversationStore {
 
   private constructor(database: DatabaseSync) {
     this.#database = database;
+    this.checkpoints = Object.freeze(new SqliteCheckpoints(database, (operation, work) => this.transaction(operation, work, true)));
+    this.interactions = Object.freeze(new SqliteInteractions(database, (operation, work) => this.transaction(operation, work, true)));
   }
 
   assertAvailable(): void {
@@ -73,7 +81,7 @@ export class ConversationStore {
       if (integrity.length !== 1 || integrity[0]?.quick_check !== 'ok') throw new Error('Conversation database integrity check failed');
       const row = this.#database.prepare('SELECT * FROM content').get();
       if (!row) {
-        for (const table of ['messages', 'memories', 'append_receipts', 'apply_receipts']) if (this.#database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('Content identities are missing from a nonempty database');
+        for (const table of ['messages', 'memories', 'append_receipts', 'apply_receipts', 'checkpoint_images', 'checkpoint_heads', 'completion_interactions']) if (this.#database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('Content identities are missing from a nonempty database');
         return undefined;
       }
       const saved = metadata.parse(row);
@@ -111,7 +119,7 @@ export class ConversationStore {
   initialize(state: ConversationState): void {
     this.transaction('conversation.initialize', () => {
       if (this.#database.prepare('SELECT 1 FROM content').get()) throw new Error('Conversation content already exists');
-      for (const table of ['messages', 'memories', 'append_receipts', 'apply_receipts']) if (this.#database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('Cannot initialize over orphaned content');
+      for (const table of ['messages', 'memories', 'append_receipts', 'apply_receipts', 'checkpoint_images', 'checkpoint_heads', 'completion_interactions']) if (this.#database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('Cannot initialize over orphaned content');
       const accepted = checkedState(state);
       this.#database.prepare('INSERT INTO content VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)').run(accepted.transcript.id, accepted.transcript.revision, JSON.stringify(accepted.transcript.starts), accepted.transcript.messages.length, accepted.memories.id, accepted.memories.sequence, accepted.view.revision, JSON.stringify(accepted.view));
       const append = this.#database.prepare('INSERT INTO messages VALUES (?, ?)');
@@ -220,7 +228,7 @@ export class ConversationStore {
     return metadata.parse(this.#database.prepare('SELECT * FROM content').get());
   }
 
-  private transaction<T>(operation: string, work: () => T): T {
+  private transaction<T>(operation: string, work: () => T, allowConflict = false): T {
     this.assertAvailable();
     let started = false;
     try {
@@ -237,6 +245,7 @@ export class ConversationStore {
           throw this.fail(operation, new AggregateError([cause, rollback], 'Conversation commit and rollback failed'));
         }
       }
+      if (allowConflict && cause instanceof RecoveryConflict) throw cause;
       throw this.fail(operation, cause);
     }
   }

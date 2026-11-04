@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from 'react';
 import { ArrowUp, RefreshCw, Square } from 'lucide-react';
-import { ConversationApplication, errorText } from './binding.js';
+import { ConversationApplication, errorText, type ConversationApplicationState } from './binding.js';
 import { ConversationMessages } from './messages.js';
 import { ConversationInspector } from './Inspector.js';
 
@@ -88,6 +88,7 @@ export function ConversationApp({ application }: { application: ConversationAppl
               消息同步已停止，当前显示的是已接收内容。<button onClick={() => void application.action(() => application.session.reconnect())}>重新同步</button>
             </div>
           )}
+          <ConversationRecoveryNotice application={application} state={state} />
           <ConversationMessages session={session} />
           {failed && (
             <p className="conversation-notice conversation-problem" role="status">
@@ -136,5 +137,35 @@ export function ConversationApp({ application }: { application: ConversationAppl
         <ConversationInspector application={application} state={state} />
       </main>
     </div>
+  );
+}
+
+export function ConversationRecoveryNotice({ application, state }: { application: ConversationApplication; state: ConversationApplicationState }) {
+  return (
+    <>
+      {state.recoveries?.length ? (
+        <div className="conversation-notice" role="status">
+          <p>发现上次未完成的处理。可以依据已保存结果继续，不会重新发送原模型请求。</p>
+          {state.recoveries.map((item) => (
+            <div className="conversation-actions" key={item.contextId}>
+              <small title={item.contextId}>
+                {item.contextId.slice(0, 8)} · {item.available ? '可继续' : item.reason || '当前不可继续'}
+              </small>
+              {item.available && (
+                <button disabled={!state.session.canSend} onClick={() => void application.action(() => application.session.resume(item.contextId))}>
+                  继续上次处理
+                </button>
+              )}
+            </div>
+          ))}
+          {state.session.canForget && <small>请先结束旧提交的本地跟踪，再选择继续。</small>}
+        </div>
+      ) : null}
+      {state.recoveryError && (
+        <p className="conversation-notice conversation-problem" role="status">
+          无法读取恢复依据：{state.recoveryError} <button onClick={() => void application.refreshRecoveries()}>重新查询</button>
+        </p>
+      )}
+    </>
   );
 }

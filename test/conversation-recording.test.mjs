@@ -134,8 +134,12 @@ test('conversation recording keeps two call trees, real entity origins and recep
   assert.equal(memoryRecords[0].memoryId, memoryRecords[1].memoryId);
   for (const record of memoryRecords) {
     const owner = current.recorder.book.get(record.parentId);
-    assert.equal(owner.name, 'maintain-conversation-memories');
-    assert.equal(owner.value.input.message.role, 'assistant');
+    assert.equal(owner.name, 'apply-conversation-memories');
+    assert.equal(owner.structureKind, 'node');
+    const maintenance = current.recorder.book.get(owner.parentId);
+    assert.equal(maintenance.name, 'maintain-conversation-memories');
+    assert.equal(maintenance.value.input.message.role, 'assistant');
+    assert.equal(owner.value.input.basis.memoriesId, current.content.memories.id);
     assert.equal(record.callId, owner.id);
     assert.equal(record.contextId, owner.contextId);
     assert.equal(record.memoriesId, current.content.memories.id);

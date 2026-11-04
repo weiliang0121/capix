@@ -100,7 +100,7 @@ export class ConversationHttpTransport extends HttpTransport implements Conversa
     return frame;
   }
 
-  private async feedback(path: string, id: string, receive: (frame: ConversationSubmissionFrame) => void, init: RequestInit, conversationId?: string): Promise<void> {
+  protected async feedback(path: string, id: string, receive: (frame: ConversationSubmissionFrame) => void, init: RequestInit, conversationId?: string): Promise<void> {
     let response: Response;
     try {
       response = await this.send(path, init);

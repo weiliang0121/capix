@@ -9,10 +9,20 @@ import { ConversationViewResource, type ConversationMaterialSources, type Conver
 import { ConversationMemoryResource } from '../memory/context.js';
 import { CompletionInteractionResource } from '../model/completion.js';
 import { CompletionInteraction } from '../model/completion-contract.js';
+import { ConversationRecoveryResource } from '../recovery/basis.js';
 
 /** Register actual entities and narrow Offers. The registry does not invent entity associations. */
-export function createConversationResources(content: ConversationViewSource, model: ModelProvider, viewPersistence?: ViewPersistence<ConversationMaterialSources>) {
+export function createConversationResources(content: ConversationViewSource, model: ModelProvider, viewPersistence?: ViewPersistence<ConversationMaterialSources>, configuration = 'embedded-v1') {
   const materials = new Resource({ ...content, persistence: viewPersistence });
   const memory = new Resource(content.memories);
-  return new Resources().register(new Resource(content.transcript), TranscriptResource.append).register(materials, ConversationViewResource.read).register(materials, ConversationViewResource.manage).register(memory, ConversationMemoryResource).register(memory, MemoryResource.apply).register(new Resource(model), CompletionResource).registerInteraction(CompletionInteractionResource.start, CompletionInteraction).registerInteraction(CompletionInteractionResource.feedback, CompletionInteraction);
+  return new Resources()
+    .register(new Resource({ ...content, configuration }), ConversationRecoveryResource)
+    .register(new Resource(content.transcript), TranscriptResource.append)
+    .register(materials, ConversationViewResource.read)
+    .register(materials, ConversationViewResource.manage)
+    .register(memory, ConversationMemoryResource)
+    .register(memory, MemoryResource.apply)
+    .register(new Resource(model), CompletionResource)
+    .registerInteraction(CompletionInteractionResource.start, CompletionInteraction)
+    .registerInteraction(CompletionInteractionResource.feedback, CompletionInteraction);
 }
