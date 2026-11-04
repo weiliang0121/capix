@@ -71,6 +71,8 @@ pnpm conversation --demo --db /path/to/conversation.sqlite --resume <contextId>
 
 Web 的 `GET /api/recoveries` 返回有限摘要；`POST /api/resume` 接收 `{conversationId, submissionId, contextId}`，产生新的传输提交并引用原正式输入，不再 append 用户消息。之后复用现有提交 follow/cancel 及消息同步。重复同一恢复提交 ID 只读取已保留的提交反馈；跨进程身份去重仍以真实 CP 终态和内容为依据。
 
+候选查询只用于发现，不参与调用推进，也不预占恢复资格。浏览器将它与内容／记录刷新分开：会话初始化完成且宿主空闲时检查一次，其余由用户明确检查；新运行、连接或已观察到的内容变化使旧列表过期。已启用恢复的 Web 宿主忙时返回409、不可用时返回503，在查询前拒绝扫描；不会以空列表代替暂不可查询。提交后的正常准入确认与已有提交接回保持原样，真正 resume 仍重新核验。具体客户端状态见 [浏览器交付](conversation-web.md)。
+
 ## 持久与观测边界
 
 SQLite v3 保存不可变 CP image、CAS head、固定模型交互请求与完整反馈。CP image 和 delivery 使用带编码及原始字节数的 Brotli JSON 存储封装；读取先执行有界解压、严格 Base64／UTF-8／长度检查，再经过原 Frame 和 head 校验。8 MiB 限制仍作用于未压缩值，Frame v5 和 CheckpointStore 契约不变。交互正文、正式内容和凭据的存储形态不变。

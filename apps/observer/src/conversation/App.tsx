@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from 'react';
 import { ArrowUp, RefreshCw, Square } from 'lucide-react';
-import { ConversationApplication, errorText, type ConversationApplicationState } from './binding.js';
+import { ConversationApplication, canInspectRecoveries, errorText, type ConversationApplicationState } from './binding.js';
 import { ConversationMessages } from './messages.js';
 import { ConversationInspector } from './Inspector.js';
 
@@ -141,12 +141,21 @@ export function ConversationApp({ application }: { application: ConversationAppl
 }
 
 export function ConversationRecoveryNotice({ application, state }: { application: ConversationApplication; state: ConversationApplicationState }) {
+  if (!application.transport.recoveries) return null;
+  const status = state.recoveryStatus;
+  const candidates = status === 'ready' ? state.recoveries : undefined;
   return (
-    <>
-      {state.recoveries?.length ? (
-        <div className="conversation-notice" role="status">
-          <p>发现上次未完成的处理。可以依据已保存结果继续，不会重新发送原模型请求。</p>
-          {state.recoveries.map((item) => (
+    <div className="conversation-notice">
+      <div className="conversation-actions">
+        <button disabled={status === 'loading' || !canInspectRecoveries(state.session)} onClick={() => void application.refreshRecoveries()}>
+          {status === 'loading' ? '正在检查…' : '检查可恢复处理'}
+        </button>
+        <small role="status">{status === 'idle' ? '尚未检查' : status === 'loading' ? '正在读取恢复依据' : status === 'stale' ? '之前的检查已过期，请重新检查' : status === 'ready' && !candidates?.length ? '没有未完成的处理' : undefined}</small>
+      </div>
+      {candidates?.length ? (
+        <>
+          <p>发现未完成的处理记录。符合恢复条件时，可以依据已保存结果继续。</p>
+          {candidates.map((item) => (
             <div className="conversation-actions" key={item.contextId}>
               <small title={item.contextId}>
                 {item.contextId.slice(0, 8)} · {item.available ? '可继续' : item.reason || '当前不可继续'}
@@ -159,13 +168,13 @@ export function ConversationRecoveryNotice({ application, state }: { application
             </div>
           ))}
           {state.session.canForget && <small>请先结束旧提交的本地跟踪，再选择继续。</small>}
-        </div>
+        </>
       ) : null}
-      {state.recoveryError && (
-        <p className="conversation-notice conversation-problem" role="status">
-          无法读取恢复依据：{state.recoveryError} <button onClick={() => void application.refreshRecoveries()}>重新查询</button>
+      {status === 'failed' && (
+        <p className="conversation-problem" role="status">
+          无法读取恢复依据：{state.recoveryError}
         </p>
       )}
-    </>
+    </div>
   );
 }

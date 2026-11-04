@@ -78,7 +78,15 @@ export function createConversationServer(options: ConversationServerOptions) {
       return;
     }
     if (request.method === 'GET' && url.pathname === '/api/inspection') return json(response, 200, options.inspect());
-    if (request.method === 'GET' && url.pathname === '/api/recoveries') return json(response, 200, options.recovery?.list() ?? []);
+    if (request.method === 'GET' && url.pathname === '/api/recoveries') {
+      if (!options.recovery) return json(response, 200, []);
+      // Discovery is a deliberate idle-host read, not a live execution probe.
+      // Check admission before decoding checkpoint heads; busy is not an empty list.
+      const admission = submissions.admission();
+      if (admission.status === 'busy') throw new ConversationHttpError('RUNTIME_BUSY', '当前对话正在处理，暂不能检查可恢复处理。', 409);
+      if (admission.status === 'unavailable') throw new ConversationHttpError(admission.error.code, admission.error.message, 503);
+      return json(response, 200, options.recovery.list());
+    }
     if (request.method === 'GET' && url.pathname === '/api/recovery-activity') return json(response, 200, options.recovery?.activity() ?? { complete: true, events: [] });
     if (request.method === 'POST' && url.pathname === '/api/resume') {
       const recovery = options.recovery;

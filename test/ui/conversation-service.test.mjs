@@ -17,6 +17,7 @@ const initial = { status: 'ready', info, canSend: true };
 test('recovery notice distinguishes an eligible continuation from unavailable evidence and respects session admission', () => {
   const state = {
     session: { ...initial, canSend: false, canForget: true },
+    recoveryStatus: 'ready',
     recoveries: [
       { contextId: 'eligible', point: 'answerWaiting', available: true },
       { contextId: 'changed', point: 'afterWaiting', available: false, reason: '内容已变化' },
@@ -24,9 +25,9 @@ test('recovery notice distinguishes an eligible continuation from unavailable ev
     inspectionStatus: 'idle',
     detailStatus: 'idle',
   };
-  const application = { snapshot: () => state, subscribe: () => () => {}, session: {}, transport: {} };
+  const application = { snapshot: () => state, subscribe: () => () => {}, session: {}, transport: { recoveries: async () => [] } };
   const html = render(ConversationRecoveryNotice, { application, state });
-  assert.match(html, /发现上次未完成的处理/);
+  assert.match(html, /发现未完成的处理记录/);
   assert.match(html, /继续上次处理/);
   assert.match(html, /内容已变化/);
   assert.match(html, /请先结束旧提交的本地跟踪/);
