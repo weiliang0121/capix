@@ -28,7 +28,8 @@ work.checkpoint({ point, state, refs })
   → Runtime 的作者适配核验 point/refs 与阶段资格
   → invocation 捕获完整调用关系
   → checkpoint 固定并校验 Image
-  → Store 按 revision 保存 Head
+  → Store 按 revision 保存并返回本次写入回执
+  → invocation 核对身份、修订、正文摘要，再发布 saved
 
 runner.resume(contextId)
   → Store 读取 Head，checkpoint 核验保存数据
@@ -82,6 +83,18 @@ CP 保存或最终交付落盘失败不属于可由业务 `result.failed` 处理
 返回关系与最终交付保存真实子 round、phase、currentInput，不能从较早 CP 或父 round 推测。固定交付视图不伪造原 execute 中间结果或未保存的后代。GenerateAnswer 的显式再次生成核对原拒绝码、诊断与真实 handled 关系，恢复不重置次数或产生第三次生成。
 
 `@capix/checkpoint` 提供 `MemoryCheckpointStore`，服务提供 `SqliteCheckpointStore` 并直接实现同一包的 CheckpointStore。SQLite CP/head 独立事务复用宿主 WAL/FULL 独占连接，与内容实体和模型交互的提交边界分开。每个 image、delivery、对话构造依据分别限制 8 MiB；拒绝 getter、函数、活实体、循环和超深结构。head 按 revision 比较更新，终态不可再推进；宿主复用同一端口并独占恢复入口，不承诺跨进程租约或多写者接管。声明版本不兼容明确拒绝，不自动迁移旧 CP。
+
+### 单次保存的认证与确认
+
+`cloneCheckpointImage` / `cloneCheckpointDelivery` 对未知输入仍完整复制、校验和深度冻结；只有本包已经认证的准确同一对象才直接复用。认证通过私有 WeakMap 保存，不写入 Frame，不依据 TypeScript 类型、调用者冻结或业务对象身份；反序列化后重新检查。构件的及时固定、组合镜像的完整预算及关系核验保留，不缓存 codec 或 point.check 的结果。
+
+读取与写入返回分开：`read(contextId)` 仍返回完整 `CheckpointHead`；`save` 返回 `CheckpointSaveReceipt`，`finish` 返回 `CheckpointFinishReceipt`。回执包含 kind、contextId、checkpointId、revision 和 digest；终态回执另含 status，不携带 image/delivery 正文。Store 适配器在真实提交成功后返回由 `checkpointSaveReceipt` / `checkpointFinishReceipt` 构造的确认。两者使用首次认证时已有 JSON 表达的 SHA-256；只缓存摘要，不长期保留第二份 JSON 正文。它是准确编码内容的关联依据，不是忽略对象字段顺序的通用语义摘要，也不能自行证明介质已经落盘。
+
+Invocation 使用 `checkCheckpointSaveReceipt` / `checkCheckpointFinishReceipt` 核对准确请求及 expectedRevision + 1，正常保存后只保留修订和最后镜像 ID，恢复另持完整快照。自定义 Store 的旧 Head 返回必须迁移；需要恢复内容的测试、宿主和工具显式调用 read。Frame v5 和现有 SQLite 格式不变，旧存量数据不需要迁移。
+
+保存入口固定修订基线，同一 writer 拒绝重入；穿过作者 codec/check 和 captured 通知后，提交前复核本次活动、阶段和修订。父字段也在每次 codec 返回后立即固定，避免后续 codec 复用临时对象改写已捕获值。Store 写口抛错或回执拒绝时，结果可能已经提交：该调用不再自动写入失败终态或重试保存，保留机制故障，不把失败解释为回滚。确认成功后的严格 saved 通知失败仍沿用既有失败收尾规则。
+
+本轮仅消除同一完整镜像跨边界的重复认证。SQLite 仍读取并完整核验旧 head，CAS/终态/固定 owner-contract-input 检查、压缩位置、同步事务及持久成功后返回的承诺保持；未实现构件统计复用、增量存储或后台提交。
 
 ## Observer 声明覆盖
 
@@ -180,3 +193,5 @@ Observer 默认绑定 `CheckpointObservation` 元数据载体：按真实祖先�
 实体提交、父接纳和 CP 不声明成一个事务。实体已落实而父 CP 尚未保存时，恢复只能用相同的固定操作确认；不能凭文件存在或消息内容相等猜测完成。父 CP 已保存 accepted/handled 时，消费该事实，不重新执行原接收回调。
 
 需要等待恢复点时：先 create，保存准确子引用，再 call.invoke；需要在返回后单独检查或写入时保留 run/accept。waiting 关系不保证子已有首份 CP/最终交付；缺少续接依据必须拒绝，不能退化为重新发起。结构的成员顺序、点名、reception 注册顺序或状态解释变动，需要提升相应父契约版本。
+
+200 会话下的同步成本、完整镜像重复处理及连接时序调查见 [CP 容量问题调查](checkpoint-capacity-investigation.md)。该调查不改变本文的保存／恢复契约；减少恢复点、修改 Frame 表达或后台提交仍需独立设计。

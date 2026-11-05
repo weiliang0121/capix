@@ -135,22 +135,22 @@ export async function runStudy({ scenario, provider, mode, modelName, out, count
         read: (id) => store.checkpoints.read(id),
         save(image, revision) {
           const started = performance.now();
-          const head = store.checkpoints.save(image, revision);
+          const receipt = store.checkpoints.save(image, revision);
           current.checkpoints.saveMs += performance.now() - started;
-          const bytes = jsonBytes(head.image);
+          const bytes = jsonBytes(image);
           current.checkpoints.images++;
           current.checkpoints.imageBytes += bytes;
           current.checkpoints.maxImageBytes = Math.max(current.checkpoints.maxImageBytes, bytes);
           totalImageBytes += bytes;
-          return head;
+          return receipt;
         },
         finish(id, revision, delivery) {
           const started = performance.now();
-          const head = store.checkpoints.finish(id, revision, delivery);
+          const receipt = store.checkpoints.finish(id, revision, delivery);
           current.checkpoints.saveMs += performance.now() - started;
           current.checkpoints.deliveries++;
           current.checkpoints.deliveryBytes += jsonBytes(delivery);
-          return head;
+          return receipt;
         },
       };
       const runner = new Runner(scene, createConversationResources(content, model, store.view, configuration), interactions, { observations: [recording], checkpoints: { store: checkpoints }, validate: () => store.assertAvailable() }).build();

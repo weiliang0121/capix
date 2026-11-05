@@ -25,8 +25,9 @@ function createContracts() {
 // objects nor live calls cross this boundary; no Scene, Binder or Runner is involved.
 function install(store, saved) {
   const copy = cloneCheckpointHead(JSON.parse(JSON.stringify(saved)));
-  const head = store.save(copy.image, 0);
-  return copy.delivery ? store.finish(copy.image.frame.owner.contextId, head.revision, copy.delivery) : head;
+  const receipt = store.save(copy.image, 0);
+  if (copy.delivery) store.finish(copy.image.frame.owner.contextId, receipt.revision, copy.delivery);
+  return store.read(copy.image.frame.owner.contextId);
 }
 
 function parentCall(store, counts, execute, restored) {

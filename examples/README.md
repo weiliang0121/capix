@@ -72,11 +72,14 @@ node examples/conversation-memory-live.mjs --live --out /tmp/capix-conversation-
 
 [调用退出诊断](invocation-exit.mjs) 通过资源清理故障验证原失败保留与 CP 占用释放。执行 `node examples/invocation-exit.mjs`，修复后全部检查为 true、退出码为 0，任何保证未满足仍返回非零退出码。它不是推荐业务写法；时序、故障范围及实际实现见 [退出契约](../docs/invocation-exit-contract.md)。
 
-| 阅读入口                                                       | 关注点                                                                 | 明确边界                                                                    | 运行                                          |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------- |
-| [意图识别](intent/README.md)                                   | 对照消息、记忆、Skill 材料对候选选择的影响                             | 人工小样本；候选返回计划，不执行真实业务；离线结果不是识别率                | `node examples/intent/run.mjs`                |
-| [interaction-message-retry.mjs](interaction-message-retry.mjs) | 发送方正式返回引用；反馈已保存，消息提交前失败，新调用重读并写入       | 引用由宿主变量保留；普通 append 重复消费会产生重复消息；没有跨实体事务      | `node examples/interaction-message-retry.mjs` |
-| [business-progress](business-progress/README.md)               | 业务实体保存交接与接纳依据，目标实体确认固定效果，新调用按真实事实继续 | 自定义业务规则与同步内存存储；JSON 重建不是实际进程崩溃；未知发送不自动恢复 | `node examples/business-progress.mjs`         |
+| 阅读入口                                                       | 关注点                                                                 | 明确边界                                                                    | 运行                                                                             |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| [意图识别](intent/README.md)                                   | 对照消息、记忆、Skill 材料对候选选择的影响                             | 人工小样本；候选返回计划，不执行真实业务；离线结果不是识别率                | `node examples/intent/run.mjs`                                                   |
+| [interaction-message-retry.mjs](interaction-message-retry.mjs) | 发送方正式返回引用；反馈已保存，消息提交前失败，新调用重读并写入       | 引用由宿主变量保留；普通 append 重复消费会产生重复消息；没有跨实体事务      | `node examples/interaction-message-retry.mjs`                                    |
+| [business-progress](business-progress/README.md)               | 业务实体保存交接与接纳依据，目标实体确认固定效果，新调用按真实事实继续 | 自定义业务规则与同步内存存储；JSON 重建不是实际进程崩溃；未知发送不自动恢复 | `node examples/business-progress.mjs`                                            |
+| [共享模型服务](shared-provider/README.md)                      | 两个会话共用实际 Provider，验证并发、取消、晚反馈和持久读取范围        | 受控离线 HTTP/SSE；内容与请求独立；不等同于多用户授权                       | `node examples/shared-provider/run.mjs`                                          |
+| [多会话容量](capacity/README.md)                               | 共享 Provider 的 10/50/100/200 会话负载，比较持久化、CP、记录和取消    | 独立进程模拟模型；测运行装配容量，不等同于多用户 HTTP 服务承诺              | `node examples/capacity/run.mjs --smoke --out .capix/capacity-smoke`             |
+| [HTTP 多进程容量](capacity/server/README.md)                   | 独立 HTTP 负载，固定会话归属，比较 1/2/4 个服务进程的容量曲线          | 公开 Web 宿主、SQLite + CP；本机模型模拟器，不含生产负载均衡和真实模型配额  | `node examples/capacity/server/run.mjs --smoke --out .capix/http-capacity-smoke` |
 
 `business-progress` 保留实体、资源端点与业务结构的完整实现，便于查看各方责任。它没有提取通用 Progress 实体或流程引擎；其中的操作身份、目标确认与版本比较，也不是每个普通对话都要增加的配置。
 

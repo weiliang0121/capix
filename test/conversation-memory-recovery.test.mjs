@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cloneCheckpointImage, cloneCheckpointDelivery } from '@capix/checkpoint';
+import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt } from '@capix/checkpoint';
 import { CompletionResource, ConversationMemoryResource, ConversationViewResource, createMemoryMaintenance, createMessageInclusion } from '@capix/conversation-service';
 import { Memories, MemoryResource } from '@capix/memory';
 import { Resource } from '@capix/resources';
@@ -26,14 +26,14 @@ class SavedHeads {
     const head = { revision: revision + 1, image: cloneCheckpointImage(image) };
     this.heads.set(image.frame.owner.contextId, head);
     this.afterSave?.(image);
-    return head;
+    return checkpointSaveReceipt(head.image, head.revision);
   }
   finish(id, revision, delivery) {
     const previous = this.read(id);
     assert.equal(previous.revision, revision);
     const head = { ...previous, revision: revision + 1, delivery: cloneCheckpointDelivery(delivery) };
     this.heads.set(id, head);
-    return head;
+    return checkpointFinishReceipt(id, head.image.id, head.delivery, head.revision);
   }
 }
 

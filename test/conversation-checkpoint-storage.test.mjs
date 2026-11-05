@@ -191,10 +191,13 @@ test('new checkpoint images and deliveries compress repeated UTF-8 material with
   loadConversationContent(store);
   const original = image();
   original.state = { text: '历史原文🙂'.repeat(16000), empty: null, numbers: [0, 1, -12.5], enabled: false };
-  const first = store.checkpoints.save(original, 0);
-  const next = store.checkpoints.save({ ...original, id: 'image-2', point: 'completed' }, 1);
+  store.checkpoints.save(original, 0);
+  const first = store.checkpoints.read('root');
+  store.checkpoints.save({ ...original, id: 'image-2', point: 'completed' }, 1);
+  const next = store.checkpoints.read('root');
   const delivery = { status: 'succeeded', output: { text: original.state.text }, progress: { round: 1, currentInput: original.frame.currentInput, phase: 'execute' } };
-  const final = store.checkpoints.finish('root', next.revision, delivery);
+  store.checkpoints.finish('root', next.revision, delivery);
+  const final = store.checkpoints.read('root');
   original.state.text = 'caller mutation';
   delivery.output.text = 'caller mutation';
   assert.notEqual(first.image.state.text, original.state.text);
@@ -261,7 +264,8 @@ test('listRoots validates child heads too instead of hiding damaged children beh
   const files = fixture(t);
   const initial = files.open();
   loadConversationContent(initial);
-  const root = initial.checkpoints.save(image(), 0);
+  initial.checkpoints.save(image(), 0);
+  const root = initial.checkpoints.read('root');
   initial.checkpoints.save(image('child-image', 'child', 'root'), 0);
   initial.close();
   files.sql((database) => database.prepare('UPDATE checkpoint_images SET body = ? WHERE context_id = ?').run(JSON.stringify({ encoding: 'br', jsonBytes: 100, data: 'AAAA' }), 'child'));

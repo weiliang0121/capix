@@ -1,4 +1,5 @@
 import { RuntimeError } from '@capix/contracts';
+import { createHash } from 'node:crypto';
 import type { CheckpointImage, CheckpointDelivery, CheckpointHead, CheckpointChild, CheckpointReference } from './contract.js';
 import type { CheckpointValue } from '@capix/contracts';
 
@@ -6,9 +7,17 @@ export const CHECKPOINT_MAX_BYTES = 8 * 1024 * 1024;
 const fail = (message: string): never => {
   throw new Error(`Invalid checkpoint: ${message}`);
 };
+// Only this module's successful, deeply fixed whole values carry these proofs.
+// No certificate survives serialization, and no raw business value is cached.
+const images = new WeakMap<object, string>();
+const deliveries = new WeakMap<object, string>();
 
 /** Own data properties only: capture never invokes getters, toJSON or entity methods. */
 export function cloneCheckpointValue(value: unknown): CheckpointValue {
+  return copyCheckpointValue(value).value;
+}
+
+function copyCheckpointValue(value: unknown): { value: CheckpointValue; json: string } {
   const ancestors = new Set<object>();
   let count = 0;
   let bytes = 0;
@@ -47,8 +56,9 @@ export function cloneCheckpointValue(value: unknown): CheckpointValue {
     }
   };
   const result = visit(value, 0);
-  if (Buffer.byteLength(JSON.stringify(result), 'utf8') > CHECKPOINT_MAX_BYTES) fail('encoded byte limit exceeded');
-  return result;
+  const json = JSON.stringify(result);
+  if (Buffer.byteLength(json, 'utf8') > CHECKPOINT_MAX_BYTES) fail('encoded byte limit exceeded');
+  return { value: result, json };
 }
 const object = (value: any): value is Record<string, any> => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value: any): boolean => typeof value === 'string' && value.trim().length > 0 && value.length <= 1024;
@@ -72,7 +82,9 @@ export function checkpointReference(child: CheckpointChild): CheckpointReference
 }
 
 export function cloneCheckpointImage(value: unknown): CheckpointImage {
-  const image: any = cloneCheckpointValue(value);
+  if (value && typeof value === 'object' && images.has(value)) return value as CheckpointImage;
+  const copied = copyCheckpointValue(value);
+  const image: any = copied.value;
   if (object(image) && Number.isSafeInteger(image.formatVersion) && image.formatVersion !== 5) throw new RuntimeError('CHECKPOINT_FORMAT_UNSUPPORTED', 'Only checkpoint formatVersion 5 is supported; historical content and records remain readable.', { formatVersion: image.formatVersion });
   if (!object(image) || !text(image.id) || image.formatVersion !== 5 || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 5 is supported');
   const frame = image.frame;
@@ -134,12 +146,25 @@ export function cloneCheckpointImage(value: unknown): CheckpointImage {
     if (Array.isArray(value)) value.forEach((reference) => checkpointReferenceChild(reference, frame.children));
     else checkpointReferenceChild(value, frame.children);
   }
+  images.set(image, createHash('sha256').update(copied.json).digest('hex'));
   return image as CheckpointImage;
 }
 export function cloneCheckpointDelivery(value: unknown): CheckpointDelivery {
-  const delivery: any = cloneCheckpointValue(value);
+  if (value && typeof value === 'object' && deliveries.has(value)) return value as CheckpointDelivery;
+  const copied = copyCheckpointValue(value);
+  const delivery: any = copied.value;
   if (!object(delivery) || !['succeeded', 'failed', 'cancelled'].includes(delivery.status) || (delivery.status === 'succeeded' && (!Object.hasOwn(delivery, 'output') || !progress(delivery.progress)))) fail('invalid delivery');
+  deliveries.set(delivery, createHash('sha256').update(copied.json).digest('hex'));
   return delivery as CheckpointDelivery;
+}
+
+// Internal receipt evidence; consumers cannot brand or substitute an arbitrary value.
+export function checkpointImageDigest(image: CheckpointImage): string {
+  return images.get(cloneCheckpointImage(image))!;
+}
+
+export function checkpointDeliveryDigest(delivery: CheckpointDelivery): string {
+  return deliveries.get(cloneCheckpointDelivery(delivery))!;
 }
 export function cloneCheckpointHead(value: CheckpointHead): CheckpointHead {
   if (!object(value) || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) fail('invalid head');

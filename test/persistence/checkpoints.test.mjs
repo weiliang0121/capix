@@ -41,7 +41,13 @@ test('checkpoint images and the latest version survive closing and reopening the
   const first = disk.open();
   assert.equal(first.store.read('missing'), undefined);
   const source = image();
-  const saved = first.store.save(source, 0);
+  const receipt = first.store.save(source, 0);
+  const saved = first.store.read('context-1');
+  assert.equal(receipt.kind, 'saved');
+  assert.equal(receipt.contextId, 'context-1');
+  assert.equal(receipt.checkpointId, 'cp-1');
+  assert.equal(receipt.revision, saved.revision);
+  assert.equal('image' in receipt, false);
   assert.equal(saved.revision, 1);
   assert.deepEqual(saved.image, source);
   source.state.output.content = 'caller mutation';
@@ -50,7 +56,8 @@ test('checkpoint images and the latest version survive closing and reopening the
   const second = image('cp-2');
   second.point = 'after-feedback';
   second.state = { result: 'next state' };
-  const latest = first.store.save(second, 1);
+  first.store.save(second, 1);
+  const latest = first.store.read('context-1');
   assert.equal(latest.revision, 2);
   assert.equal(first.database.prepare('SELECT count(*) AS count FROM checkpoint_images').get().count, 2);
   first.database.close();
@@ -62,7 +69,8 @@ test('checkpoint images and the latest version survive closing and reopening the
 test('stale checkpoint writers cannot overwrite the current head or leave orphan images', (t) => {
   const { database, store } = fixture(t).open();
   const other = new SqliteCheckpointStore(database);
-  const saved = store.save(image(), 0);
+  store.save(image(), 0);
+  const saved = store.read('context-1');
   assert.throws(() => other.save(image('stale'), 0), { code: 'CHECKPOINT_CONFLICT' });
   assert.equal(database.prepare('SELECT count(*) AS count FROM checkpoint_images').get().count, 1);
   assert.deepEqual(store.read('context-1'), saved);
@@ -73,7 +81,8 @@ test('stale checkpoint writers cannot overwrite the current head or leave orphan
 
 test('duplicate checkpoint identities never replace an immutable body or advance a different scope', (t) => {
   const { database, store } = fixture(t).open();
-  const saved = store.save(image(), 0);
+  store.save(image(), 0);
+  const saved = store.read('context-1');
   assert.throws(() => store.save(image(), 1), { code: 'CHECKPOINT_CONFLICT' });
   const replacement = image();
   replacement.state = { changed: true };
@@ -93,7 +102,8 @@ for (const [label, mutate] of [
 ]) {
   test(`checkpoint advancement preserves ${label}`, (t) => {
     const { store } = fixture(t).open();
-    const saved = store.save(image(), 0);
+    store.save(image(), 0);
+    const saved = store.read('context-1');
     const next = image('cp-2');
     mutate(next);
     assert.throws(() => store.save(next, 1), { code: 'CHECKPOINT_CONFLICT' });
@@ -106,7 +116,14 @@ for (const delivery of [{ status: 'succeeded', output: { content: 'final deliver
     const disk = fixture(t);
     const first = disk.open();
     first.store.save(image(), 0);
-    const finished = first.store.finish('context-1', 1, delivery);
+    const receipt = first.store.finish('context-1', 1, delivery);
+    const finished = first.store.read('context-1');
+    assert.equal(receipt.kind, 'finished');
+    assert.equal(receipt.contextId, 'context-1');
+    assert.equal(receipt.checkpointId, 'cp-1');
+    assert.equal(receipt.revision, finished.revision);
+    assert.equal(receipt.status, delivery.status);
+    assert.equal('delivery' in receipt, false);
     assert.equal(finished.revision, 2);
     assert.deepEqual(finished.delivery, delivery);
     assert.equal(finished.image.state.output.content, 'fixed output');
@@ -159,7 +176,8 @@ test('failure to install the head rolls back the immutable image in the same tra
 
 test('silently suppressed head updates cannot claim a successful checkpoint or final delivery', (t) => {
   const { database, store } = fixture(t).open();
-  const saved = store.save(image(), 0);
+  store.save(image(), 0);
+  const saved = store.read('context-1');
   database.exec('CREATE TRIGGER skip_checkpoint_head BEFORE UPDATE ON checkpoint_heads BEGIN SELECT RAISE(IGNORE); END;');
   assert.throws(() => store.save(image('cp-2'), 1), { code: 'CHECKPOINT_STORAGE_FAILURE' });
   assert.throws(() => store.finish('context-1', 1, { status: 'succeeded', output: 'not persisted', progress: { round: 1, phase: 'receive', currentInput: {} } }), { code: 'CHECKPOINT_STORAGE_FAILURE' });

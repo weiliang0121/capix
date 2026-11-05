@@ -186,8 +186,8 @@ test('a valid image and final delivery stay decodable together after the store c
   const value = 'x'.repeat(Math.floor(CHECKPOINT_MAX_BYTES * 0.6));
   const image = { ...savedRoot([]), state: value };
   store.save(image, 0);
-  const head = store.finish('root-context', 1, { status: 'succeeded', output: value, progress: { round: 1, phase: 'receive', currentInput: {} } });
-  assert.doesNotThrow(() => cloneCheckpointHead(head));
+  store.finish('root-context', 1, { status: 'succeeded', output: value, progress: { round: 1, phase: 'receive', currentInput: {} } });
+  assert.doesNotThrow(() => cloneCheckpointHead(store.read('root-context')));
 });
 
 test('fixed child deliveries require explicit final progress and stable sibling order', () => {
@@ -309,7 +309,8 @@ test('ordinary parallel child receptions remain supported without checkpoint or 
 test('a rejected continuation check publishes its failure without closing the saved work', async () => {
   const facts = [];
   const store = new MemoryCheckpointStore();
-  const saved = store.save(savedRoot([]), 0);
+  store.save(savedRoot([]), 0);
+  const saved = store.read('root-context');
   class Root extends Scene {
     checkpoint = {
       ...checkpoint('root', () => assert.fail('rejected continuation must not run')),

@@ -1,7 +1,8 @@
 import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
-import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery } from './contract.js';
+import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt } from './contract.js';
 import { cloneCheckpointImage, cloneCheckpointDelivery } from './value.js';
+import { checkpointSaveReceipt, checkpointFinishReceipt } from './receipt.js';
 
 /** Deterministic local installation; it provides no guarantee across process loss. */
 export class MemoryCheckpointStore implements CheckpointStore {
@@ -13,7 +14,7 @@ export class MemoryCheckpointStore implements CheckpointStore {
     return this.#heads.get(contextId);
   }
 
-  save(image: CheckpointImage, expectedRevision: number): CheckpointHead {
+  save(image: CheckpointImage, expectedRevision: number): CheckpointSaveReceipt {
     const fixed = cloneCheckpointImage(image);
     requireRevision(expectedRevision);
     const contextId = fixed.frame.owner.contextId;
@@ -24,10 +25,10 @@ export class MemoryCheckpointStore implements CheckpointStore {
     const head = Object.freeze({ revision: expectedRevision + 1, image: fixed });
     this.#images.set(fixed.id, fixed);
     this.#heads.set(contextId, head);
-    return head;
+    return checkpointSaveReceipt(fixed, head.revision);
   }
 
-  finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointHead {
+  finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointFinishReceipt {
     requireContext(contextId);
     requireRevision(expectedRevision);
     const fixed = cloneCheckpointDelivery(delivery);
@@ -36,7 +37,7 @@ export class MemoryCheckpointStore implements CheckpointStore {
     requireCurrent(current, expectedRevision);
     const head = Object.freeze({ revision: expectedRevision + 1, image: current.image, delivery: fixed });
     this.#heads.set(contextId, head);
-    return head;
+    return checkpointFinishReceipt(contextId, current.image.id, fixed, head.revision);
   }
 }
 

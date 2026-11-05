@@ -41,16 +41,16 @@ async function entry(mode, run, events, output) {
   const journal = new (class extends MemoryCheckpointStore {
     image;
     save(image, revision) {
-      const head = super.save(image, revision);
-      this.image ??= head.image;
-      return head;
+      const receipt = super.save(image, revision);
+      this.image ??= this.read(receipt.contextId).image;
+      return receipt;
     }
   })();
   await new Runner(scene(true), resources, undefined, { checkpoints: { store: journal } }).build().run(null);
   const store = new MemoryCheckpointStore();
   const saved = store.save(structuredClone(journal.image), 0);
   const runner = new Runner(scene(), resources, undefined, { checkpoints: { store } }).build();
-  return { runner, start: () => runner.resume(saved.image.frame.owner.contextId) };
+  return { runner, start: () => runner.resume(saved.contextId) };
 }
 
 for (const mode of ['normal', 'resume']) {

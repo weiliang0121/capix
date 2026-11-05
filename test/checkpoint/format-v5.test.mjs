@@ -152,7 +152,7 @@ test('v5 memory store and head validation retain independent image and final del
   const store = new MemoryCheckpointStore();
   const saved = store.save(value, 0);
   const completed = store.finish('parent', saved.revision, { status: 'succeeded', output: 'y'.repeat(5 * 1024 * 1024), progress: { round: 1, currentInput: {}, phase: 'receive' } });
-  assert.doesNotThrow(() => cloneCheckpointHead(completed));
+  assert.doesNotThrow(() => cloneCheckpointHead(store.read('parent')));
   assert.throws(() => store.save({ ...value, id: 'another' }, completed.revision), { code: 'CHECKPOINT_CONFLICT' });
 });
 

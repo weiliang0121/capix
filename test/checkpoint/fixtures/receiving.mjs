@@ -64,8 +64,8 @@ let contextId;
 if (mode.startsWith('capture')) {
   const save = store.save.bind(store);
   store.save = (image, revision) => {
-    const head = save(image, revision);
-    process.stdout.write(JSON.stringify(head));
+    const receipt = save(image, revision);
+    process.stdout.write(JSON.stringify(store.read(receipt.contextId)));
     process.exit(0);
   };
 } else {

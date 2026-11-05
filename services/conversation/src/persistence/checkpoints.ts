@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
-import { cloneCheckpointImage, cloneCheckpointDelivery, type CheckpointStore, type CheckpointImage, type CheckpointDelivery, type CheckpointHead } from '@capix/checkpoint';
+import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt, type CheckpointStore, type CheckpointImage, type CheckpointDelivery, type CheckpointHead, type CheckpointSaveReceipt, type CheckpointFinishReceipt } from '@capix/checkpoint';
 import { z } from 'zod';
 import { RecoveryConflict, requireIdentity, requireRevision, type RecoveryTransaction } from './recovery.js';
 import { encodeCheckpointStorage, decodeCheckpointImage, decodeCheckpointDelivery } from './checkpoint-storage.js';
@@ -39,7 +39,7 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
     });
   }
 
-  save(image: CheckpointImage, expectedRevision: number): CheckpointHead {
+  save(image: CheckpointImage, expectedRevision: number): CheckpointSaveReceipt {
     const fixed = cloneCheckpointImage(image);
     requireRevision(expectedRevision);
     return this.transaction('checkpoint.save', () => {
@@ -54,11 +54,11 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
         const result = this.database.prepare('UPDATE checkpoint_heads SET revision = ?, image_id = ? WHERE context_id = ? AND revision = ? AND delivery IS NULL').run(revision, fixed.id, contextId, expectedRevision);
         if (result.changes !== 1) throw new Error('Checkpoint head changed during exclusive commit');
       } else this.database.prepare('INSERT INTO checkpoint_heads (context_id, revision, image_id) VALUES (?, ?, ?)').run(contextId, revision, fixed.id);
-      return Object.freeze({ revision, image: fixed });
+      return checkpointSaveReceipt(fixed, revision);
     });
   }
 
-  finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointHead {
+  finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointFinishReceipt {
     requireIdentity(contextId);
     requireRevision(expectedRevision);
     const fixed = cloneCheckpointDelivery(delivery);
@@ -69,7 +69,7 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
       const revision = expectedRevision + 1;
       const result = this.database.prepare('UPDATE checkpoint_heads SET revision = ?, delivery = ? WHERE context_id = ? AND revision = ? AND delivery IS NULL').run(revision, encodeCheckpointStorage(fixed), contextId, expectedRevision);
       if (result.changes !== 1) throw new Error('Checkpoint head changed during exclusive commit');
-      return Object.freeze({ revision, image: current.image, delivery: fixed });
+      return checkpointFinishReceipt(contextId, current.image.id, fixed, revision);
     });
   }
 

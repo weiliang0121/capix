@@ -16,8 +16,9 @@ persistence.checkpoints.save = (image, revision) => {
 const finish = persistence.checkpoints.finish.bind(persistence.checkpoints);
 persistence.checkpoints.finish = (id, revision, delivery) => {
   const result = finish(id, revision, delivery);
-  if (result.image.contract.key === 'observer.generate-answer.conversation' && delivery.status === 'succeeded') crash('delivery');
-  if (result.image.contract.key === 'observer.conversation.task' && delivery.status === 'succeeded') crash('executionDelivery');
+  const head = persistence.checkpoints.read(id);
+  if (head.image.contract.key === 'observer.generate-answer.conversation' && delivery.status === 'succeeded') crash('delivery');
+  if (head.image.contract.key === 'observer.conversation.task' && delivery.status === 'succeeded') crash('executionDelivery');
   return result;
 };
 const commit = persistence.transcript.commit.bind(persistence.transcript);

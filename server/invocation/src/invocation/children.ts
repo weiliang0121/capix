@@ -8,6 +8,17 @@ import type { InvocationProgress } from './progress.js';
 import { DeclaredException } from '../exception/contract.js';
 import { InvocationProvenance, type InvocationPropagationScope, type InvocationExceptionOrigin } from './provenance.js';
 
+interface ReceptionScope {
+  readonly owner: symbol;
+  readonly childContextId: string;
+  readonly parent: ReceptionScope | undefined;
+  active: boolean;
+}
+
+// One async-context carrier for the mechanism. An ALS per parent would stay
+// enabled and add another property to every subsequent async resource.
+const receptions = new AsyncLocalStorage<ReceptionScope>();
+
 export interface ParentInvocation {
   readonly context: InvocationContext;
   readonly children: InvocationChildren;
@@ -27,7 +38,7 @@ export class InvocationChildren implements InvocationRelationOwner {
   readonly #items = new Map<string, InvocationRelation>();
   readonly #installed = new Set<string>();
   #nextOrder = 0;
-  #receptions?: AsyncLocalStorage<{ childContextId: string; active: boolean }>;
+  readonly #receptionOwner = Symbol();
   readonly view: InvocationView['children'];
   readonly #provenance: InvocationProvenance;
   readonly #calls = new Set<Promise<void>>();
@@ -81,7 +92,9 @@ export class InvocationChildren implements InvocationRelationOwner {
   }
   get reception(): Readonly<{ parentContextId: string; childContextId: string }> {
     this.requireHealthy();
-    const reception = this.#receptions?.getStore();
+    let reception = receptions.getStore();
+    while (reception && reception.owner !== this.#receptionOwner) reception = reception.parent;
+    // Never skip an expired matching scope to borrow an older one's authority.
     if (!reception?.active) throw new Error('Fixed entity operations require an active direct-child reception');
     return Object.freeze({ parentContextId: this.context.id, childContextId: reception.childContextId });
   }
@@ -143,10 +156,9 @@ export class InvocationChildren implements InvocationRelationOwner {
   }
   async receive<Value>(relation: InvocationRelation, work: () => Promise<Value>): Promise<Value> {
     const childContextId = relation.invocation.context.id;
-    this.#receptions ??= new AsyncLocalStorage();
-    const reception = { childContextId, active: true };
+    const reception: ReceptionScope = { owner: this.#receptionOwner, childContextId, active: true, parent: receptions.getStore() };
     try {
-      return await this.#receptions.run(reception, work);
+      return await receptions.run(reception, work);
     } finally {
       reception.active = false;
     }

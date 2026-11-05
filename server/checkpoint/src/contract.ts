@@ -72,9 +72,27 @@ export interface CheckpointHead {
   readonly delivery?: CheckpointDelivery;
 }
 
+/** A write acknowledgement, not a second read of the complete recovery image. */
+export interface CheckpointSaveReceipt {
+  readonly kind: 'saved';
+  readonly contextId: string;
+  readonly checkpointId: string;
+  readonly revision: number;
+  readonly digest: string;
+}
+
+export interface CheckpointFinishReceipt {
+  readonly kind: 'finished';
+  readonly contextId: string;
+  readonly checkpointId: string;
+  readonly revision: number;
+  readonly status: CheckpointDelivery['status'];
+  readonly digest: string;
+}
+
 /** Synchronous durable boundary, independent of records and optional observation. */
 export interface CheckpointStore {
   read(contextId: string): CheckpointHead | undefined;
-  save(image: CheckpointImage, expectedRevision: number): CheckpointHead;
-  finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointHead;
+  save(image: CheckpointImage, expectedRevision: number): CheckpointSaveReceipt;
+  finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointFinishReceipt;
 }

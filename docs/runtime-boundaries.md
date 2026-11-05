@@ -248,6 +248,8 @@ sequenceDiagram
 
 `returned` 不等于 `accepted`。Composite 可在 checkpoint.receptions 登记恢复编码用的 reception，接纳开始即固定契约；检查保持真实 V 引用，codec 只用于 CP。facts.accepted 要求准确 ref 与同一契约，undefined 可以是合法成功值。raw accept 不可事后补标签。
 
+接纳的异步作用域由调用包共享一个 AsyncLocalStorage 载体，每个父调用持有独立 owner，每次接纳建立带子调用身份的局部帧。嵌套接纳仍能查询有效祖先；并发链各自隔离，退出后帧失效。读取同一 owner 时只检查最近帧，不跳过失效帧借用外层权限。该载体不保存业务历史，也不为每个历史父调用保留独立异步钩子；200 会话验证曾暴露后者对所有后续 Promise 的传播成本。回归见 `test/invocation-reception-scope.test.mjs`。
+
 实体写入、父接纳事实和 CP 提交是不同边界。固定写入口用真实调用/接纳范围派生凭据；恢复核对已有凭据，不凭内容相同或记录存在重做。Frame v5 保存完整直接关系、业务 state/refs、接纳契约位置及 handled 接收事实，缺失或不兼容明确拒绝。详见 [Checkpoint](checkpoints.md)。
 
 ## 进展、观测与记录

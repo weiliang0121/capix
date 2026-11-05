@@ -76,12 +76,12 @@ let contextId;
 if (mode === 'capture') {
   const save = store.save.bind(store);
   store.save = (image, revision) => {
-    const head = save(image, revision);
+    const receipt = save(image, revision);
     if (image.contract.key === 'author-parent') {
-      process.stdout.write(JSON.stringify(head));
+      process.stdout.write(JSON.stringify(store.read(receipt.contextId)));
       process.exit(0);
     }
-    return head;
+    return receipt;
   };
 } else {
   const head = JSON.parse(readFileSync(0, 'utf8'));

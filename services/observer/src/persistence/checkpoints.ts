@@ -1,8 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
-import { cloneCheckpointImage, cloneCheckpointDelivery, CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
-import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery } from '@capix/checkpoint';
+import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt, CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
+import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt } from '@capix/checkpoint';
 
 type Row = Record<string, string | number | bigint | Uint8Array | null>;
 
@@ -38,7 +38,7 @@ export class SqliteCheckpointStore implements CheckpointStore {
     }
   }
 
-  save(image: CheckpointImage, expectedRevision: number): CheckpointHead {
+  save(image: CheckpointImage, expectedRevision: number): CheckpointSaveReceipt {
     const fixed = cloneCheckpointImage(image);
     requireRevision(expectedRevision);
     return this.transaction(() => {
@@ -54,11 +54,11 @@ export class SqliteCheckpointStore implements CheckpointStore {
       } else {
         requireWrite(this.database.prepare('INSERT INTO checkpoint_heads(context_id, revision, image_id) VALUES (?, ?, ?)').run(contextId, revision, fixed.id).changes);
       }
-      return Object.freeze({ revision, image: fixed });
+      return checkpointSaveReceipt(fixed, revision);
     });
   }
 
-  finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointHead {
+  finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointFinishReceipt {
     requireContext(contextId);
     requireRevision(expectedRevision);
     const fixed = cloneCheckpointDelivery(delivery);
@@ -68,7 +68,7 @@ export class SqliteCheckpointStore implements CheckpointStore {
       requireCurrent(current, expectedRevision);
       const revision = expectedRevision + 1;
       requireWrite(this.database.prepare('UPDATE checkpoint_heads SET revision = ?, delivery = ? WHERE context_id = ? AND revision = ? AND delivery IS NULL').run(revision, JSON.stringify(fixed), contextId, expectedRevision).changes);
-      return Object.freeze({ revision, image: current.image, delivery: fixed });
+      return checkpointFinishReceipt(contextId, current.image.id, fixed, revision);
     });
   }
 

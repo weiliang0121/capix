@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Scene, Group, bindCallSource } from '@capix/server-runtime';
 import { ResourceOffer } from '@capix/resources';
+import { checkpointSaveReceipt, checkpointFinishReceipt } from '@capix/checkpoint';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 
@@ -33,14 +34,14 @@ function storeOf(...initial) {
       assert.equal(heads.get(image.frame.owner.contextId)?.revision ?? 0, revision);
       const saved = { image: structuredClone(image), revision: revision + 1 };
       heads.set(image.frame.owner.contextId, saved);
-      return saved;
+      return checkpointSaveReceipt(saved.image, saved.revision);
     },
     finish(contextId, revision, delivery) {
       const previous = heads.get(contextId);
       assert.equal(previous?.revision, revision);
       const next = { ...previous, revision: revision + 1, delivery: structuredClone(delivery) };
       heads.set(contextId, next);
-      return next;
+      return checkpointFinishReceipt(contextId, previous.image.id, next.delivery, next.revision);
     },
   };
 }

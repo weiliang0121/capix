@@ -20,14 +20,14 @@ const material = {
 class Journal extends MemoryCheckpointStore {
   writes = [];
   save(image, revision) {
-    const head = super.save(image, revision);
-    this.writes.push({ image: head.image, revision });
-    return head;
+    const receipt = super.save(image, revision);
+    this.writes.push({ image: this.read(receipt.contextId).image, revision });
+    return receipt;
   }
   finish(id, revision, delivery) {
-    const head = super.finish(id, revision, delivery);
-    this.writes.push({ id, revision, delivery: head.delivery });
-    return head;
+    const receipt = super.finish(id, revision, delivery);
+    this.writes.push({ id, revision, delivery: this.read(id).delivery });
+    return receipt;
   }
 }
 

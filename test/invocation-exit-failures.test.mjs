@@ -21,9 +21,9 @@ class Journal extends MemoryCheckpointStore {
   image;
   finishes = [];
   save(image, revision) {
-    const head = super.save(image, revision);
-    this.image = head.image;
-    return head;
+    const receipt = super.save(image, revision);
+    this.image = this.read(receipt.contextId).image;
+    return receipt;
   }
   finish(contextId, revision, delivery) {
     this.finishes.push(delivery.status);

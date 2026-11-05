@@ -189,7 +189,7 @@ test('resuming a saved final child delivery needs no child invocation constructi
   const childContract = { key: definition.checkpoint.key, version: 1 };
   store.save({ id: 'child-cp', formatVersion: 5, contract: childContract, point: 'saved', frame: { owner: childIdentity, round: 1, phase: 'execute', input: 'child', currentInput: 'child', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   store.finish('child-context', 1, { status: 'succeeded', output: { answer: 'saved' }, progress: { round: 1, phase: 'receive', currentInput: 'child' } });
-  const saved = store.save(
+  store.save(
     {
       id: 'parent-cp',
       formatVersion: 5,
@@ -201,6 +201,7 @@ test('resuming a saved final child delivery needs no child invocation constructi
     },
     0,
   );
+  const saved = store.read('parent-context');
   const context = new CallableContext('parent', 'scene');
   context.installCheckpoint({ id: 'parent-context', round: 1, currentInput: 'parent' });
   const parent = new Invocation({

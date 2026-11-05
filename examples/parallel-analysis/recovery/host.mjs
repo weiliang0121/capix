@@ -99,18 +99,18 @@ const checkpointPort = {
   },
   finish: (...args) => store.checkpoints.finish(...args),
   save(image, revision) {
-    const head = store.checkpoints.save(image, revision);
+    const receipt = store.checkpoints.save(image, revision);
     if (mode === 'capture' && image.contract.key === 'conversation.completion-reply' && image.point === 'waiting') {
       const state = store.interactions.read(image.frame.input.id);
       if (state && inputOf(state.request).material?.index === 2) readerSaved = true;
     }
     if (mode === 'capture' && image.contract.key === 'example.parallel-recovery' && image.point === 'analyses') {
-      const primary = child(head, 'primary');
-      const secondary = child(head, 'secondary');
+      const primary = image.frame.children.find((entry) => entry.key === 'primary');
+      const secondary = image.frame.children.find((entry) => entry.key === 'secondary');
       if (['accepted', 'handled'].includes(primary?.state.reception?.kind) && secondary?.state.kind === 'waiting') partialSaved = true;
     }
     release();
-    return head;
+    return receipt;
   },
 };
 const interactionPort = {

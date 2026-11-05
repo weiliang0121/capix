@@ -1,4 +1,4 @@
-import { MemoryCheckpointStore, type CheckpointStore, type CheckpointImage, type InvocationCheckpointFrame, type CheckpointCodec } from '@capix/checkpoint';
+import { MemoryCheckpointStore, type CheckpointStore, type CheckpointImage, type InvocationCheckpointFrame, type CheckpointCodec, type CheckpointSaveReceipt, type CheckpointFinishReceipt } from '@capix/checkpoint';
 import type { InvocationIdentity, CheckpointCodec as CommonCodec } from '@capix/contracts';
 import type { CheckpointInstallation, CheckpointFact, CheckpointWriter, CheckpointRestoration } from '@capix/server-runtime';
 // @ts-expect-error Runtime observations are not part of the persistence package.
@@ -17,8 +17,14 @@ const frame: InvocationCheckpointFrame = { owner, round: 1, phase: 'execute', in
 const image: CheckpointImage = { id: 'saved-image', formatVersion: 5, contract: { key: 'typed-host', version: 1 }, point: 'prepared', frame, state: null, references: {} };
 const store: CheckpointStore = new MemoryCheckpointStore();
 const installation: CheckpointInstallation = { store };
-const saved = store.save(image, 0);
-const identity: InvocationIdentity = saved.image.frame.owner;
+const saved: CheckpointSaveReceipt = store.save(image, 0);
+const head = store.read(owner.contextId)!;
+const identity: InvocationIdentity = head.image.frame.owner;
+const finished: CheckpointFinishReceipt = store.finish(owner.contextId, saved.revision, { status: 'failed' });
+// @ts-expect-error Save acknowledgements do not expose restoration snapshots.
+saved.image;
+// @ts-expect-error Finish acknowledgements do not expose delivery payloads.
+finished.delivery;
 const codec: CheckpointCodec<string> = { encode: (value) => value, decode: (value) => String(value) };
 const commonCodec: CommonCodec<string> = codec;
 // @ts-expect-error Persisted identity cannot hold an arbitrary structural kind.
@@ -26,7 +32,7 @@ const wrongOwner: InvocationIdentity = { contextId: 'single-call', kind: 'tool' 
 // @ts-expect-error A stored checkpoint is not an executable invocation.
 saved.run();
 // @ts-expect-error Stored frames are immutable values.
-saved.image.frame.owner = owner;
+head.image.frame.owner = owner;
 declare const fact: CheckpointFact;
 declare const writer: CheckpointWriter;
 declare const restoration: CheckpointRestoration;

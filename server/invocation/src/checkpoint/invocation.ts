@@ -6,8 +6,8 @@ import { ProgressChannel } from '@capix/changes';
 import type { InvocationObservation } from '../observation/invocation.js';
 import { ObserverSession } from '../observation/session.js';
 import type { CheckpointFact, CheckpointInstallation, CheckpointRestoration, CheckpointWriter } from './contract.js';
-import type { CheckpointHead, CheckpointDelivery, CheckpointChild, CheckpointReferences } from '@capix/checkpoint';
-import { cloneCheckpointHead, cloneCheckpointImage, cloneCheckpointValue } from '@capix/checkpoint';
+import type { CheckpointHead, CheckpointChild, CheckpointReferences } from '@capix/checkpoint';
+import { cloneCheckpointHead, cloneCheckpointImage, cloneCheckpointDelivery, cloneCheckpointValue, checkCheckpointSaveReceipt, checkCheckpointFinishReceipt } from '@capix/checkpoint';
 import type { InvocationCheckpointWork } from './work.js';
 import type { InvocationTarget } from '../invocation/relation.js';
 import { captureCheckpointChildren, decodeCheckpointChild, resolveCheckpointChild } from './children.js';
@@ -23,7 +23,10 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
   readonly activityId = randomUUID();
   readonly observation: InvocationObservation;
   #sequence = 0;
-  #head?: CheckpointHead;
+  #revision = 0;
+  #checkpointId?: string;
+  #saving = false;
+  #commitUncertain = false;
   #claimed = false;
   #ready = false;
   #terminal = false;
@@ -44,7 +47,8 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     this.observation = new CheckpointObservation((event) => this.emit(event));
     if (restore) {
       this.#restore = cloneCheckpointHead(restore.head);
-      this.#head = this.#restore;
+      this.#revision = this.#restore.revision;
+      this.#checkpointId = this.#restore.image.id;
       const image = this.#restore.image;
       if (!work || this.#restore.delivery || image.contract.key !== work.key || image.contract.version !== work.version || !isEqual(image.frame.owner, invocation.identity) || image.frame.round !== 1 || image.frame.continuation !== undefined || !work.points[image.point]) throw new Error('Incompatible checkpoint continuation');
       if (invocation.context.progress.round !== image.frame.round || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.currentInput)), image.frame.currentInput) || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.input)), image.frame.input)) throw new Error('Checkpoint input changed during binding');
@@ -110,21 +114,37 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     return Object.freeze({
       save: (point: string, state: unknown, references: CheckpointReferences = {}) => {
         let stage: 'capture' | 'save' = 'capture';
+        let entered = false;
         try {
+          if (this.#saving) throw new Error('Checkpoint save cannot reenter the same invocation');
+          this.#saving = true;
+          entered = true;
+          const revision = this.#revision;
           this.invocation.requireActive();
           const context = this.invocation.context;
-          if (!this.#claimed || this.#terminal || context.progress.phase !== 'execute' || context.progress.round !== round) throw new Error('Checkpoint writer is outside its executing round');
+          if (!this.#claimed || this.#terminal || this.#commitUncertain || context.progress.phase !== 'execute' || context.progress.round !== round) throw new Error('Checkpoint writer is outside its executing round');
           const definition = this.work!.points[point];
           if (!definition) throw new Error('Checkpoint point is not declared');
           const children = captureCheckpointChildren(context, this.invocation.children, this.#savedChildren);
           const continuation = captureCheckpointContinuation(context.continuation, children.children);
-          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 5, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input: this.work!.input.encode(context.input), currentInput: this.work!.input.encode(context.currentInput), ...children, ...(continuation ? { continuation } : {}) }, state: definition.state.encode(state), references });
+          // Each codec result is fixed before another author callback can reuse it.
+          const input = cloneCheckpointValue(this.work!.input.encode(context.input));
+          const currentInput = cloneCheckpointValue(this.work!.input.encode(context.currentInput));
+          const savedState = cloneCheckpointValue(definition.state.encode(state));
+          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 5, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input, currentInput, ...children, ...(continuation ? { continuation } : {}) }, state: savedState, references });
           const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children, this.work!.receptions);
           checkCheckpointReferences(image.frame, image.references, definition.references);
           definition.check?.(image.frame, definition.state.decode(image.state), image.references, decoded);
           this.emit({ kind: 'captured', checkpointId: image.id, point });
           stage = 'save';
-          this.#head = cloneCheckpointHead(this.installation.store.save(image, this.#head?.revision ?? 0));
+          // Synchronous author/observer callbacks can still cancel or reenter.
+          this.invocation.requireActive();
+          if (!this.#claimed || this.#terminal || context.progress.phase !== 'execute' || context.progress.round !== round || this.#revision !== revision) throw new Error('Checkpoint save baseline changed before commit');
+          this.#commitUncertain = true;
+          const receipt = checkCheckpointSaveReceipt(this.installation.store.save(image, revision), image, revision);
+          this.#revision = receipt.revision;
+          this.#checkpointId = receipt.checkpointId;
+          this.#commitUncertain = false;
           this.emit({ kind: 'saved', checkpointId: image.id, point });
           return image;
         } catch (error) {
@@ -135,6 +155,8 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
             /* Preserve the primary storage/capture failure. */
           }
           throw error;
+        } finally {
+          if (entered) this.#saving = false;
         }
       },
     });
@@ -185,11 +207,18 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     }
   }
   private finalize(result: { status: 'succeeded'; output: Output } | { status: 'failed' | 'cancelled' }): void {
-    if (!this.#head || this.#terminal || !this.#claimed || !this.#ready) return;
-    const delivery: CheckpointDelivery = result.status === 'succeeded' ? { status: 'succeeded', output: cloneCheckpointValue(this.work!.output.encode(result.output)), progress: { round: this.invocation.context.progress.round, phase: this.invocation.context.progress.phase, currentInput: cloneCheckpointValue(this.work!.input.encode(this.invocation.context.currentInput)) } } : result;
+    // A throwing Store or invalid acknowledgement can follow a real commit.
+    // Do not issue a second write from the failure-finalization path.
+    if (!this.#checkpointId || this.#terminal || this.#commitUncertain || !this.#claimed || !this.#ready) return;
+    const revision = this.#revision;
+    const checkpointId = this.#checkpointId;
+    const delivery = cloneCheckpointDelivery(result.status === 'succeeded' ? { status: 'succeeded', output: cloneCheckpointValue(this.work!.output.encode(result.output)), progress: { round: this.invocation.context.progress.round, phase: this.invocation.context.progress.phase, currentInput: cloneCheckpointValue(this.work!.input.encode(this.invocation.context.currentInput)) } } : result);
     // Final-delivery checking precedes durable finalization; errors can still be owned here.
     this.emit({ kind: 'finishing', status: delivery.status });
-    this.#head = cloneCheckpointHead(this.installation.store.finish(this.invocation.context.id, this.#head.revision, delivery));
+    this.#commitUncertain = true;
+    const receipt = checkCheckpointFinishReceipt(this.installation.store.finish(this.invocation.context.id, revision, delivery), this.invocation.context.id, checkpointId, delivery, revision);
+    this.#revision = receipt.revision;
+    this.#commitUncertain = false;
     this.#terminal = true;
     // The committed delivery is fixed. A passive post-commit notification cannot rewrite it.
     try {

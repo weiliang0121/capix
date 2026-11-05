@@ -13,9 +13,9 @@ const settings = { model: 'fixture', contextBudget: 32768, maxOutputTokens: 256,
 class CapturedStore extends MemoryCheckpointStore {
   images = [];
   save(image, revision) {
-    const head = super.save(image, revision);
-    this.images.push(head.image);
-    return head;
+    const receipt = super.save(image, revision);
+    this.images.push(this.read(receipt.contextId).image);
+    return receipt;
   }
 }
 
