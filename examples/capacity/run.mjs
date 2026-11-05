@@ -7,12 +7,12 @@ import { cpus, totalmem, platform, arch } from 'node:os';
 import { capacityPlan } from './plan.mjs';
 import { renderReport } from './report.mjs';
 
-const { values } = parseArgs({ options: { out: { type: 'string' }, smoke: { type: 'boolean', default: false }, users: { type: 'string' }, duration: { type: 'string' }, rate: { type: 'string' }, help: { type: 'boolean', default: false } } });
+const { values } = parseArgs({ options: { out: { type: 'string' }, smoke: { type: 'boolean', default: false }, users: { type: 'string' }, duration: { type: 'string' }, rate: { type: 'string' }, transport: { type: 'string', default: 'yield' }, help: { type: 'boolean', default: false } } });
 if (values.help || !values.out) {
-  console.log('Usage: node examples/capacity/run.mjs --out NEW_DIRECTORY [--smoke] [--users 10,50,100,200] [--duration 60] [--rate 20]\n只运行本地可控模型，无真实模型或凭证。默认阶梯并发、四组装配对照、两组60秒持续负载和取消/解除订阅。--out 必须是新目录；保留结果和独立实验数据库，不覆盖旧数据。');
+  console.log('Usage: node examples/capacity/run.mjs --out NEW_DIRECTORY [--smoke] [--users 10,50,100,200] [--duration 60] [--rate 20] [--transport yield|direct]\n只运行本地可控模型，无真实模型或凭证。默认阶梯并发、四组装配对照、两组60秒持续负载和取消/解除订阅。--out 必须是新目录；保留结果和独立实验数据库，不覆盖旧数据。');
   if (!values.help) process.exitCode = 1;
 } else {
-  const cases = capacityPlan({ smoke: values.smoke, ...(values.users ? { users: values.users.split(',').map(Number) } : {}), ...(values.duration ? { durationSeconds: Number(values.duration) } : {}), ...(values.rate ? { rate: Number(values.rate) } : {}) });
+  const cases = capacityPlan({ smoke: values.smoke, transport: values.transport, ...(values.users ? { users: values.users.split(',').map(Number) } : {}), ...(values.duration ? { durationSeconds: Number(values.duration) } : {}), ...(values.rate ? { rate: Number(values.rate) } : {}) });
   const directory = resolve(values.out);
   mkdirSync(dirname(directory), { recursive: true, mode: 0o700 });
   mkdirSync(directory, { mode: 0o700 });

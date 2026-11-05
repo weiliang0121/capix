@@ -6,6 +6,8 @@
 
 模型端使用独立子进程中的本地 HTTP/SSE 模拟服务，客户端使用真正的 `ChatCompletionsProvider`。没有调用 DeepSeek 或其他真实模型，不读取 `.env`、API Key 或现有对话数据库。验证覆盖真实的模型协议解析、流式转交、交互等待、消息接纳和可选机制，但不评价模型智能、记忆质量或供应商并发额度。
 
+当前默认使用与 CLI/Web 相同的宿主 `createYieldingFetch`：发送前让出一次事件循环，并复核取消。`--transport direct` 保留未包装传输对照；每份配置和结果明确记录所选策略，旧报告不会被重新解释为新策略成绩。省略 transport 的旧配置重新运行时会规范化为 `yield`，需要重现旧传输时应明确选择 `direct`。这个让出不增加重试，不降低 CP 同步计算量，也不是清空所有 FIN 的保证。
+
 ## 使用
 
 在仓库根目录执行，Node 与 pnpm 版本沿用根 `package.json`。
@@ -15,6 +17,12 @@ pnpm build
 
 # 小规模回归：2、4 会话，以及全部装配组合和扰动场景。
 node examples/capacity/run.mjs --smoke --out .capix/capacity-smoke-01
+
+# 只比较相同的 CP 突发：200 会话、每会话两次提交，direct/yield 各两次，严格串行。
+node examples/capacity/transport.mjs --out .capix/capacity-transport-01
+
+# 对照工具的小规模回归。
+node examples/capacity/transport.mjs --smoke --repeats 1 --out .capix/capacity-transport-smoke-01
 
 # 默认完整计划：10、50、100、200 会话，最后两组持续负载各 60 秒。
 node examples/capacity/run.mjs --out .capix/capacity-200-01
@@ -26,6 +34,8 @@ node examples/capacity/run.mjs \
 ```
 
 `--out` 必须是尚不存在的新目录，避免覆盖结果或复用旧数据库。`--users` 是严格递增的会话数列表，最高 500；持续负载总提交数受配置上限约束。模拟模型参数固定在 [plan.mjs](./plan.mjs)，本工具没有真实模型模式。
+
+`transport.mjs` 独立保留每组数据库与完整结果，摘要包含模型失败、CPU、事件循环最大停顿、完成 p95 和重载检查。任一组失败（包括 direct 基线）都使命令非零退出；仍需分别读各组结果，不能把基线失败称为 yield 修复失败。连接失败消失与容量提升是不同结论。
 
 每个场景在新的 worker 进程中运行，场景之间串行；每个 worker 拥有自己的模拟上游进程。worker 未交付结果（如 OOM、超时或被终止）时停止后续负载；完整返回但未通过断言的场景保留失败结果，继续其余独立场景。任一失败均使套件非零退出。不要同时运行多个容量套件或单元测试后再将结果用于直接比较。
 
@@ -99,6 +109,7 @@ sqlite-burst-200/
 | 文件                                         | 职责                                                                              |
 | -------------------------------------------- | --------------------------------------------------------------------------------- |
 | [run.mjs](./run.mjs)                         | 创建新实验目录，串行启动独立 worker，维护汇总和报告，进程未交付结果时停止后续场景 |
+| [transport.mjs](./transport.mjs)             | 相同 CP 突发的 direct/yield 串行对照，保存实际策略和独立结果                      |
 | [plan.mjs](./plan.mjs)                       | 定义 profile、负载计划和有界参数检查                                              |
 | [worker.mjs](./worker.mjs)                   | 发起固定计划的提交、订阅真实入口与输出、核对结果并关闭资源                        |
 | [assembly.mjs](./assembly.mjs)               | 通过公开服务入口创建独立会话，选择持久化/CP/记录，关闭后重载及测量存储            |

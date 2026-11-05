@@ -66,6 +66,8 @@ recording/                 可选记录安装与服务摘要，消费已发生�
 
 业务节点不依赖 CLI 或 SQLite；装配不持有另一份运行状态。`@capix/conversation-service/assembly` 提供上述组合函数，`/persistence` 单独加载 SQLite，根出口仍是可单独使用的业务能力。examples 保留最小教学、策略验证和故障场景，不成为服务的运行依赖。
 
+CLI/Web 的真实模型装配使用 `/assembly` 导出的 `createYieldingFetch(fetcher?)`，在每次派发前让出一次 Node 事件循环，并在让出前后核对有效 signal；Provider 的总超时覆盖这段等待。宿主可以把它传入 `ChatCompletionsProvider` 的既有 `fetch` 配置，底层 fetch 在建立包装时固定，每次调用固定 init 顶层字段，Headers/body/Request 对象仍由宿主持有。它不全局替换 fetch、不增加重试，也不改变调用取消与独立交互发送的区别；让出不是“所有关闭连接已处理”的屏障，不会降低 CP 的同步计算成本。通用 Provider 默认行为保持不变，嵌入者自行选择宿主传输策略。
+
 完整宿主的核心接线如下（`model` 是宿主持有的 `ModelProvider`）：
 
 ```ts

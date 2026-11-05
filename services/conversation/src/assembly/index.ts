@@ -2,6 +2,7 @@ export { loadConversationContent, restoreConversationContent, type ConversationS
 export { createMaterialConversationScene } from './structure.js';
 export { createConversationResources } from './resources.js';
 export { createConversationInteractions } from './interactions.js';
+export { createYieldingFetch } from '../hosting/transport.js';
 
 export { assertConversationRecovery, listConversationRecoveries } from '../recovery/index.js';
 

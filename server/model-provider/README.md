@@ -49,4 +49,6 @@ JSON 与 SSE 的 `usage` 使用相同接纳规则，返回 `promptTokens / compl
 
 这是独立包的起点，Observer 既有业务 Provider 与流式链路保持现状。未来共享传输应另做等效迁移，不能把实验完成当成生产替换。
 
+原生工具调用的候选设计见 [工具调用与 MCP 接入方案](../../docs/native-tool-integration.md)。生产 Provider 尚未接入；已有的 [离线验证](../../examples/native-tools/README.md) 检查共同模型输出、适配器续接材料、ToolLoop 与恢复接缝，不改变本页的当前支持范围。
+
 协议依据：[Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[JSON Output](https://api-docs.deepseek.com/guides/json_mode/)、[SSE 事件解析](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation)。示例入口见 [意图识别实验](../../examples/intent/README.md)与[材料回答及记忆维护](../../examples/conversation-memory.mjs)。

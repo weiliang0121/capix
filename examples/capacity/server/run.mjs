@@ -9,12 +9,13 @@ import { runLoad } from './load.mjs';
 import { serverCapacityPlan } from './plan.mjs';
 import { renderServerReport } from './report.mjs';
 
-const { values } = parseArgs({ options: { out: { type: 'string' }, workers: { type: 'string' }, rates: { type: 'string' }, users: { type: 'string' }, duration: { type: 'string' }, history: { type: 'string' }, output: { type: 'string' }, smoke: { type: 'boolean', default: false }, help: { type: 'boolean' } } });
+const { values } = parseArgs({ options: { out: { type: 'string' }, workers: { type: 'string' }, rates: { type: 'string' }, users: { type: 'string' }, duration: { type: 'string' }, history: { type: 'string' }, output: { type: 'string' }, transport: { type: 'string', default: 'yield' }, smoke: { type: 'boolean', default: false }, help: { type: 'boolean' } } });
 if (values.help || !values.out) {
-  console.log('Usage: node examples/capacity/server/run.mjs --out NEW_DIRECTORY [--workers 1,2,4] [--rates 10,20,30] [--users 200] [--duration 30] [--history 2048] [--output 2048] [--smoke]\n--rates is submissions/second PER WORKER; each case uses total workers × rate. Separate local HTTP workers and model producer, SQLite + CP, no real credentials.');
+  console.log('Usage: node examples/capacity/server/run.mjs --out NEW_DIRECTORY [--workers 1,2,4] [--rates 10,20,30] [--users 200] [--duration 30] [--history 2048] [--output 2048] [--transport yield|direct] [--smoke]\n--rates is submissions/second PER WORKER; each case uses total workers × rate. Separate local HTTP workers and model producer, SQLite + CP, no real credentials.');
   if (!values.help) process.exitCode = 1;
 } else {
   const cases = serverCapacityPlan({
+    transport: values.transport,
     ...(values.smoke ? { workers: [1, 2], perWorkerRates: [4], users: 8, durationSeconds: 2, historyBytes: 256, outputBytes: 256, smoke: true } : {}),
     ...(values.workers ? { workers: values.workers.split(',').map(Number) } : {}),
     ...(values.rates ? { perWorkerRates: values.rates.split(',').map(Number) } : {}),

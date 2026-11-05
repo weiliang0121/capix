@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { performance } from 'node:perf_hooks';
 import { createConversationWebHost } from '@capix/conversation-service/web';
-import { loadConversationContent } from '@capix/conversation-service/assembly';
+import { createYieldingFetch, loadConversationContent } from '@capix/conversation-service/assembly';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { MemoryViewSource } from '@capix/memory';
 import { TranscriptViewSource } from '@capix/transcript';
@@ -53,13 +53,14 @@ async function dispatch(message) {
     if (!Number.isSafeInteger(config.users) || config.users < config.workers || config.users > 500) throw new Error('Invalid conversation count');
     if (!Number.isSafeInteger(config.historyBytes) || config.historyBytes < 0 || config.historyBytes > 1024 * 1024) throw new Error('Invalid history size');
     if (!Number.isSafeInteger(config.model?.outputBytes) || config.model.outputBytes < 128 || config.model.outputBytes > 64 * 1024) throw new Error('Invalid model output size');
+    if (!['direct', 'yield'].includes(config.transport)) throw new Error('Invalid model transport');
     const upstream = new URL(endpoint);
     if (upstream.protocol !== 'http:' || upstream.hostname !== '127.0.0.1' || upstream.username || upstream.password) throw new Error('Only an independent loopback model simulator is allowed');
     if (typeof message.directory !== 'string' || !message.directory) throw new Error('An experiment directory is required');
     configuration = config;
     directory = message.directory;
     mkdirSync(directory, { recursive: true, mode: 0o700 });
-    meter = modelMeter(new ChatCompletionsProvider({ endpoint, apiKey: 'offline-capacity-fixture', model: 'capacity-model', timeoutMs: 60_000 }));
+    meter = modelMeter(new ChatCompletionsProvider({ endpoint, apiKey: 'offline-capacity-fixture', model: 'capacity-model', timeoutMs: 60_000, ...(config.transport === 'yield' ? { fetch: createYieldingFetch() } : {}) }));
     for (let index = workerIndex; index < config.users; index += config.workers) {
       if (closing) throw new Error('Worker closed while initializing');
       const database = join(directory, `session-${index}.sqlite`);

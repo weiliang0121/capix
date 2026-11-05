@@ -1,13 +1,14 @@
 import { ChatCompletionsProvider, type ModelProvider } from '@capix/model-provider';
 import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import { createDemoModel } from './demo.js';
+import { createYieldingFetch } from './transport.js';
 
 /** Only the executable host reads credentials. Neither resources nor persisted content gets them. */
 export function createHostModel(mode: 'demo' | 'live'): ModelProvider {
   if (mode === 'demo') return createDemoModel();
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey?.trim()) throw new Error('Live mode requires DEEPSEEK_API_KEY');
-  return new ChatCompletionsProvider({ endpoint: 'https://api.deepseek.com/chat/completions', apiKey, model: hostModelName(mode), thinking: 'disabled', timeoutMs: 45_000 });
+  return new ChatCompletionsProvider({ endpoint: 'https://api.deepseek.com/chat/completions', apiKey, model: hostModelName(mode), thinking: 'disabled', timeoutMs: 45_000, fetch: createYieldingFetch() });
 }
 
 export function hostModelName(mode: 'demo' | 'live'): string {

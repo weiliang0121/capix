@@ -11,6 +11,7 @@ import { capacityPlan, validateCase } from '../examples/capacity/plan.mjs';
 
 const suite = fileURLToPath(new URL('../examples/capacity/run.mjs', import.meta.url));
 const worker = fileURLToPath(new URL('../examples/capacity/worker.mjs', import.meta.url));
+const transportComparison = fileURLToPath(new URL('../examples/capacity/transport.mjs', import.meta.url));
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'capix-capacity-test-'));
@@ -65,6 +66,29 @@ function result(directory) {
   return JSON.parse(readFileSync(join(directory, 'result.json'), 'utf8'));
 }
 
+test('transport comparison runs both policies serially in fresh workers and records the selected policy', { timeout: 30_000 }, async (t) => {
+  const f = fixture(t);
+  const out = join(f.directory, 'transport');
+  await f.run([transportComparison, '--smoke', '--repeats', '1', '--out', out]);
+  const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8'));
+  assert.deepEqual(
+    summary.map((entry) => entry.transport),
+    ['direct', 'yield'],
+  );
+  for (const entry of summary) {
+    assert.equal(entry.valid, true);
+    assert.equal(entry.modelRequests, 8);
+    assert.equal(entry.modelFailures, 0);
+    assert.deepEqual(entry.reloads, { expected: 2, verified: 2 });
+    assert.equal(result(join(out, entry.name)).config.transport, entry.transport);
+  }
+  const original = { ...capacityPlan({ smoke: true })[0] };
+  delete original.transport;
+  assert.equal(validateCase(original).transport, 'yield');
+  assert.equal(original.transport, undefined, 'normalization does not change caller configuration');
+  assert.throws(() => validateCase({ ...original, transport: 'retry' }), /transport/);
+});
+
 test('offline capacity smoke suite exercises all service profiles, steady arrivals, cancellation and clean persistence measurement', { timeout: 60_000 }, async (t) => {
   const f = fixture(t);
   const out = join(f.directory, 'suite');
@@ -74,6 +98,7 @@ test('offline capacity smoke suite exercises all service profiles, steady arriva
   assert.ok(readFileSync(join(out, 'report.md'), 'utf8').includes('多会话容量实验'));
   for (const summary of summaries) {
     const value = result(join(out, summary.config.name));
+    assert.equal(value.config.transport, 'yield');
     assert.equal(value.valid, true, JSON.stringify(value.failure));
     assert.deepEqual(value.residual, { runners: 0, interactions: 0, modelCalls: 0, upstreamRequests: 0, acquiredCalls: 0 });
     assert.equal(value.workload.failed, 0);
