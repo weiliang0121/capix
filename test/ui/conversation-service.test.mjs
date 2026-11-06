@@ -176,6 +176,28 @@ test('pending input disappears only once its formal input range is present', () 
   assert.equal((html.match(/conversation-message user/g) ?? []).length, 1);
 });
 
+test('tool stages explain silent work without inventing preview text and disappear after final submission', () => {
+  const stage = { contextId: 'call', kind: 'tool', label: 'search_history', status: 'running' };
+  const submission = { id: 'submission', feedback: { status: 'following' }, remote: { input: { transcriptId: 'transcript', start: 0, end: 1 }, stage } };
+  const session = { ...initial, info: { ...info, answerMode: 'tools' }, transcript: { snapshot: { id: 'transcript', messages: [{ role: 'user', content: '查找' }] } }, submission };
+  const running = render(ConversationMessages, { session });
+  assert.match(running, /正在使用工具：search_history/);
+  assert.doesNotMatch(running, /生成中 · 预览/);
+  const failedStep = render(ConversationMessages, { session: { ...session, submission: { ...submission, remote: { ...submission.remote, stage: { ...stage, status: 'failed' } } } } });
+  assert.match(failedStep, /当前步骤未完成，等待处理结果/);
+  const done = render(ConversationMessages, { session: { ...session, submission: { ...submission, remote: { ...submission.remote, result: { status: 'completed' } } } } });
+  assert.doesNotMatch(done, /正在使用工具/);
+});
+
+test('an unchecked tool recovery offers explicit verification without claiming it is already recoverable', () => {
+  const state = { session: initial, recoveryStatus: 'ready', recoveries: [{ contextId: 'tool-root', point: 'answer-waiting', available: false, eligibility: 'unchecked' }], inspectionStatus: 'idle', detailStatus: 'idle' };
+  const application = { session: {}, transport: { recoveries() {} } };
+  const html = render(ConversationRecoveryNotice, { application, state });
+  assert.match(html, /待核验恢复依据/);
+  assert.match(html, />核验并继续</);
+  assert.doesNotMatch(html, / · 可继续/);
+});
+
 test('actual scene tree distinguishes a failed child from a handled parent reception', () => {
   const selected = detail('root');
   const failure = { code: 'model', message: 'model failure' };

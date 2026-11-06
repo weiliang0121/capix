@@ -40,6 +40,8 @@ test('Runner observation connects root, child and resource metadata without eval
   assert.equal(events.at(-1).fact.kind, 'settled');
   const starts = events.filter((event) => event.source === 'invocation' && event.fact.kind === 'started');
   assert.equal(starts.length, 2);
+  assert.equal(starts.find((event) => event.fact.identity.kind === 'scene').fact.description.id, scene.id);
+  assert.equal(starts.find((event) => event.fact.identity.kind === 'node').fact.description.id, child.id);
   const root = starts.find((event) => event.fact.identity.kind === 'scene').fact.identity;
   const leaf = starts.find((event) => event.fact.identity.kind === 'node').fact.identity;
   assert.equal(leaf.parentContextId, root.contextId);

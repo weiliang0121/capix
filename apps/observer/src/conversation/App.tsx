@@ -50,6 +50,7 @@ export function ConversationApp({ application }: { application: ConversationAppl
         </div>
         <div className="conversation-connection">
           <span>{session.info?.mode === 'demo' ? '离线演示' : session.info?.mode === 'live' ? session.info.model : '连接服务'}</span>
+          {session.info?.answerMode === 'tools' && <span>工具调用</span>}
           <span className="conversation-tag" role="status">
             {status}
           </span>
@@ -158,11 +159,11 @@ export function ConversationRecoveryNotice({ application, state }: { application
           {candidates.map((item) => (
             <div className="conversation-actions" key={item.contextId}>
               <small title={item.contextId}>
-                {item.contextId.slice(0, 8)} · {item.available ? '可继续' : item.reason || '当前不可继续'}
+                {item.contextId.slice(0, 8)} · {item.eligibility === 'unchecked' ? '待核验恢复依据' : item.available ? '可继续' : item.reason || '当前不可继续'}
               </small>
-              {item.available && (
+              {(item.available || item.eligibility === 'unchecked') && (
                 <button disabled={!state.session.canSend} onClick={() => void application.action(() => application.session.resume(item.contextId))}>
-                  继续上次处理
+                  {item.eligibility === 'unchecked' ? '核验并继续' : '继续上次处理'}
                 </button>
               )}
             </div>

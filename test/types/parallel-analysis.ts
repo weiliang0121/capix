@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import { CompletionResource, ConversationViewResource, createConversationScene, createMaterialPreparation, type ConversationMaterialInput, type ConversationMaterialSources } from '@capix/conversation-service';
 import { Memories } from '@capix/memory';
 import type { ModelProvider } from '@capix/model-provider';
@@ -59,8 +60,8 @@ function createAnalysis(name: string) {
     deps,
     async run(work) {
       const reply = await work.resources.model.complete({ messages: [{ role: 'user', content: JSON.stringify(work.input) }], stream: true }, { delta: (value) => work.output.emit(value) });
-      if (reply.finishReason !== 'stop' || !reply.text.trim()) throw new Error('Incomplete analysis');
-      return reply.text;
+      if (reply.termination.reason !== 'stop' || !modelReplyText(reply).trim()) throw new Error('Incomplete analysis');
+      return modelReplyText(reply);
     },
   });
 }
@@ -159,7 +160,7 @@ const view = new View<ConversationMaterialSources>({
 const model: ModelProvider = {
   async complete(_request, controls) {
     controls?.emit?.('local preview');
-    return { id: 'offline', model: 'fixture', text: 'analysis', finishReason: 'stop', usage: null };
+    return { id: 'offline', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: 'analysis' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
   },
 };
 const resources = new Resources().register(new Resource(transcript), TranscriptResource.append).register(new Resource({ transcript, memories, view }), ConversationViewResource.read).register(new Resource(model), CompletionResource);

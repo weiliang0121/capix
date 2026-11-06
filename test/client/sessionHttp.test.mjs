@@ -46,7 +46,10 @@ test('recording HTTP controls validate capture identities and state-specific res
 });
 
 test('recovery HTTP validates candidates and uses the normal submission feedback receiver', async () => {
-  const candidates = [{ contextId: 'context', point: 'answerWaiting', available: true }];
+  const candidates = [
+    { contextId: 'context', point: 'answerWaiting', available: true },
+    { contextId: 'tool-context', point: 'answer-waiting', available: false, eligibility: 'unchecked', reason: 'Explicit resume verifies the archive' },
+  ];
   const calls = [];
   const request = { conversationId: identity.conversationId, submissionId: 'submission', contextId: 'context' };
   const terminal = { ...baseline, submission: { ...baseline.submission, result: { status: 'rejected', error: { code: 'RECOVERY_UNAVAILABLE', message: 'changed' } } } };
@@ -60,7 +63,7 @@ test('recovery HTTP validates candidates and uses the normal submission feedback
   assert.equal(calls[1].path, '/api/resume');
   assert.deepEqual(JSON.parse(calls[1].init.body), request);
   assert.equal(frames[0].submission.result.status, 'rejected');
-  for (const invalid of [[...candidates, ...candidates], [{ ...candidates[0], available: 'yes' }], [{ ...candidates[0], reason: 'contradictory' }]]) {
+  for (const invalid of [[...candidates, ...candidates], [{ ...candidates[0], available: 'yes' }], [{ ...candidates[0], reason: 'contradictory' }], [{ ...candidates[0], eligibility: 'unchecked' }], [{ ...candidates[1], eligibility: 'verified' }]]) {
     await assert.rejects(new SessionHttpTransport('', async () => Response.json(invalid)).recoveries(), HttpTransportError);
   }
 });
@@ -151,9 +154,9 @@ test('real offline web host is consumed by the session and its inspected Scene r
   const model = {
     async complete(input, controls = {}) {
       requests.push(input);
-      if (input.responseFormat === 'json_object') return { id: 'maintenance', model: 'fixture', text: '{"changes":[]}', finishReason: 'stop', usage: null };
+      if (input.responseFormat === 'json_object') return { id: 'maintenance', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: '{"changes":[]}' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
       controls.emit?.('candidate');
-      return { id: 'answer', model: 'fixture', text: '正式回答', finishReason: 'stop', usage: null };
+      return { id: 'answer', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: '正式回答' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
     },
   };
   const host = createConversationWebHost({ database: join(directory, 'session.sqlite'), model, mode: 'demo', modelName: 'fixture' });
@@ -203,7 +206,7 @@ test('a new session reconnects to a live HTTP submission after the original cons
           started.resolve();
           await release.promise;
         }
-        return { id: `response-${requests}`, model: 'fixture', text: input.responseFormat === 'json_object' ? '{"changes":[]}' : 'late answer', finishReason: 'stop', usage: null };
+        return { id: `response-${requests}`, model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: input.responseFormat === 'json_object' ? '{"changes":[]}' : 'late answer' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
       },
     },
   });

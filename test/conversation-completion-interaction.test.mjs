@@ -20,7 +20,7 @@ const request = () => ({
   temperature: 0.25,
   maxTokens: 1200,
 });
-const reply = (text = 'final answer', finishReason = 'stop') => ({ id: 'completion-1', model: 'fixture-model', text, finishReason, usage: { promptTokens: 10, completionTokens: 3, totalTokens: 13 } });
+const reply = (text = 'final answer', finishReason = 'stop') => ({ id: 'completion-1', model: 'fixture-model', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: finishReason === 'stop' ? 'completed' : 'incomplete', reason: finishReason }, usage: { promptTokens: 10, completionTokens: 3, totalTokens: 13 } });
 const preview = (outputs) => outputs.filter((event) => event.kind === 'delta').map((event) => event.delta);
 
 function storage() {
@@ -311,7 +311,7 @@ test('invalid completion requests never send and invalid full replies never turn
 
 test('length and blank replies remain real exchange feedback but material business refuses to append them', async (t) => {
   for (const response of [reply('partial', 'length'), reply('   ')]) {
-    await t.test(response.finishReason === 'length' ? 'length' : 'blank', async () => {
+    await t.test(response.termination.reason === 'length' ? 'length' : 'blank', async () => {
       const saved = storage();
       const roles = [];
       const interactions = new Interactions().register(CompletionInteraction, {
@@ -410,7 +410,7 @@ test('a material completion can use real provider SSE decoding while memory main
   assert.ok(content.view.has({ source: 'memories', key: content.memories.values()[0].id }));
   assert.equal(persisted.states.size, 1, 'memory extraction did not silently switch to independent interaction');
   const state = [...persisted.states.values()][0];
-  assert.deepEqual(state.feedback.payload, { id: 'sse-1', model: 'fixture-model', text: 'Hello there', finishReason: 'stop', usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 } });
+  assert.deepEqual(state.feedback.payload, { id: 'sse-1', model: 'fixture-model', formatVersion: 1, output: [{ kind: 'text', text: 'Hello there' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 } });
   await interactions.settled();
   interactions.close();
 });

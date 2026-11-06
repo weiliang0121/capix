@@ -3,29 +3,14 @@ import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
 import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt, CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
 import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt } from '@capix/checkpoint';
+import { initializeCheckpointRetention } from './checkpoint-retention.js';
 
 type Row = Record<string, string | number | bigint | Uint8Array | null>;
 
 /** Uses the host's single-writer connection; checkpoint commits never include content or records. */
 export class SqliteCheckpointStore implements CheckpointStore {
   constructor(private readonly database: DatabaseSync) {
-    this.transaction(() =>
-      this.database.exec(`
-      CREATE TABLE IF NOT EXISTS checkpoint_images (
-        id TEXT PRIMARY KEY,
-        context_id TEXT NOT NULL,
-        revision INTEGER NOT NULL CHECK (revision > 0),
-        body TEXT NOT NULL,
-        UNIQUE (context_id, revision)
-      );
-      CREATE TABLE IF NOT EXISTS checkpoint_heads (
-        context_id TEXT PRIMARY KEY,
-        revision INTEGER NOT NULL CHECK (revision > 0),
-        image_id TEXT NOT NULL REFERENCES checkpoint_images(id),
-        delivery TEXT
-      );
-    `),
-    );
+    this.transaction(() => initializeCheckpointRetention(this.database));
   }
 
   read(contextId: string): CheckpointHead | undefined {
@@ -51,6 +36,7 @@ export class SqliteCheckpointStore implements CheckpointStore {
       requireWrite(this.database.prepare('INSERT INTO checkpoint_images(id, context_id, revision, body) VALUES (?, ?, ?, ?)').run(fixed.id, contextId, revision, JSON.stringify(fixed)).changes);
       if (current) {
         requireWrite(this.database.prepare('UPDATE checkpoint_heads SET revision = ?, image_id = ? WHERE context_id = ? AND revision = ? AND delivery IS NULL').run(revision, fixed.id, contextId, expectedRevision).changes);
+        requireWrite(this.database.prepare('UPDATE checkpoint_images SET body = NULL WHERE id = ? AND context_id = ? AND revision = ? AND body IS NOT NULL AND NOT EXISTS (SELECT 1 FROM checkpoint_heads h WHERE h.image_id = checkpoint_images.id)').run(current.image.id, contextId, expectedRevision).changes);
       } else {
         requireWrite(this.database.prepare('INSERT INTO checkpoint_heads(context_id, revision, image_id) VALUES (?, ?, ?)').run(contextId, revision, fixed.id).changes);
       }

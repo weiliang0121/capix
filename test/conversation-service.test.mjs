@@ -12,7 +12,7 @@ const createTextTestRunner = (transcript, model, options) => createConversationR
 test('the default conversation consumes complete provider replies and accepts only normal finished text', async (t) => {
   for (const [label, reply] of [
     ['normal', modelReply('answer')],
-    ['truncated', modelReply('partial', { finishReason: 'length' })],
+    ['truncated', modelReply('partial', { termination: { kind: 'incomplete', reason: 'length' } })],
     ['invalid metadata', modelReply('answer', { usage: { promptTokens: -1, completionTokens: 1, totalTokens: 0 } })],
     ['bare text', 'answer'],
   ]) {

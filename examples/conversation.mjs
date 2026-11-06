@@ -7,7 +7,7 @@ import { Transcript, TranscriptResource } from '@capix/transcript';
 const transcript = new Transcript();
 const model = {
   async complete({ messages }) {
-    return { id: 'local-reply', model: 'local-demo', text: `收到：${messages.at(-1).content}`, finishReason: 'stop', usage: null };
+    return { id: 'local-reply', model: 'local-demo', formatVersion: 1, output: [{ kind: 'text', text: `收到：${messages.at(-1).content}` }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
   },
 };
 const messages = new Resource(transcript);

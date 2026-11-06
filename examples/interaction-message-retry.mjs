@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import assert from 'node:assert/strict';
 import { createCompletionReplyNode, CompletionInteractionResource, CompletionInteraction } from '@capix/conversation-service';
 import { PersistenceError } from '@capix/diagnostics';
@@ -31,7 +32,7 @@ const transcript = new Transcript([{ role: 'user', content: '请给出发布安�
 const interactions = new Interactions().register(CompletionInteraction, {
   send() {
     sends++;
-    return { id: 'saved-reply', model: 'local-demo', text: '周四复核，周五发布。', finishReason: 'stop', usage: null };
+    return { id: 'saved-reply', model: 'local-demo', formatVersion: 1, output: [{ kind: 'text', text: '周四复核，周五发布。' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
   },
   persistence: {
     create(state) {
@@ -58,8 +59,8 @@ accepting.run = (work) =>
   work.children.read.invoke(work.input, {
     result: {
       succeeded(reply) {
-        if (reply.finishReason !== 'stop' || !reply.text.trim()) throw new Error('模型回答不完整');
-        const text = reply.text;
+        if (reply.termination.reason !== 'stop' || !modelReplyText(reply).trim()) throw new Error('模型回答不完整');
+        const text = modelReplyText(reply);
         work.resources.messages.append([{ role: 'assistant', content: text }]);
         return text;
       },
@@ -82,7 +83,7 @@ try {
 
   // 新的 Invocation，继续读取同一反馈；不复活上一调用，不重放发送节点。
   const answer = await consumer.run(reference);
-  assert.equal(answer, feedback.payload.text);
+  assert.equal(answer, modelReplyText(feedback.payload));
   assert.equal(transcript.length, 2);
   assert.deepEqual(savedMessages, transcript.snapshot());
   assert.equal(sends, 1);

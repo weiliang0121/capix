@@ -13,9 +13,16 @@ import { ConversationRecoveryResource } from '../recovery/basis.js';
 
 /** Register actual entities and narrow Offers. The registry does not invent entity associations. */
 export function createConversationResources(content: ConversationViewSource, model: ModelProvider, viewPersistence?: ViewPersistence<ConversationMaterialSources>, configuration = 'embedded-v1') {
+  const resources = new Resources();
+  registerConversationResources(resources, content, model, viewPersistence, configuration);
+  return resources;
+}
+
+/** Preserve the host's entry options type when composing resource registrations. */
+export function registerConversationResources<Options extends object>(resources: Resources<Options>, content: ConversationViewSource, model: ModelProvider, viewPersistence?: ViewPersistence<ConversationMaterialSources>, configuration = 'embedded-v1'): void {
   const materials = new Resource({ ...content, persistence: viewPersistence });
   const memory = new Resource(content.memories);
-  return new Resources()
+  resources
     .register(new Resource({ ...content, configuration }), ConversationRecoveryResource)
     .register(new Resource(content.transcript), TranscriptResource.append)
     .register(materials, ConversationViewResource.read)

@@ -24,7 +24,7 @@ test('recording controls select subsequent Scene calls, drain the selected tree 
           entered[position]?.resolve();
           await gates[position]?.promise;
         }
-        return { id: 'fixture', model: 'fixture', text: request.responseFormat === 'json_object' ? '{"changes":[]}' : 'answer', finishReason: 'stop', usage: null };
+        return { id: 'fixture', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: request.responseFormat === 'json_object' ? '{"changes":[]}' : 'answer' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
       },
     },
   });

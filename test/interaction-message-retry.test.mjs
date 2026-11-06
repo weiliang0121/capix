@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createCompletionReplyNode, CompletionInteractionResource, ModelReplyPending, CompletionInteraction } from '@capix/conversation-service';
@@ -88,7 +89,7 @@ function acceptingReader(interactions, transcript) {
     work.children.reply.invoke(work.input, {
       result: {
         succeeded(reply) {
-          const content = reply.text;
+          const content = modelReplyText(reply);
           work.resources.messages.append([{ role: 'assistant', content }]);
           return content;
         },
@@ -132,7 +133,7 @@ test('a failed assistant commit leaves saved feedback readable and a fresh invoc
   await interactions.settled();
   const savedFeedback = storage.read(reference.id);
   assert.equal(savedFeedback.revision, 2);
-  assert.equal(savedFeedback.feedback.payload.text, answer);
+  assert.equal(modelReplyText(savedFeedback.feedback.payload), answer);
   const reader = acceptingReader(interactions, messages.transcript);
   const failure = messages.rejectNextAppend();
 
@@ -198,7 +199,7 @@ test('feedback arriving after local invocation exit survives a later message fai
   await interactions.settled();
   assert.equal(reader.observations.length, exitedEvents, 'late external feedback does not revive the finished invocation');
   const savedFeedback = storage.read(reference.id);
-  assert.equal(savedFeedback.feedback.payload.text, answer);
+  assert.equal(modelReplyText(savedFeedback.feedback.payload), answer);
   const failure = messages.rejectNextAppend();
   await assert.rejects(reader.runner.run(reference), (error) => error === failure);
   assertStoredMessages(messages, [input]);

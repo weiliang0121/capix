@@ -12,11 +12,16 @@ export function encodeCheckpointStorage(value: unknown): string {
 }
 
 export function decodeCheckpointImage(body: string): CheckpointImage {
-  return cloneCheckpointImage(decode(payloadSchema.parse(parseStored(body))));
+  return cloneCheckpointImage(decodeCheckpointStorage(body));
 }
 
 export function decodeCheckpointDelivery(body: string): CheckpointDelivery {
-  return cloneCheckpointDelivery(decode(payloadSchema.parse(parseStored(body))));
+  return cloneCheckpointDelivery(decodeCheckpointStorage(body));
+}
+
+/** Migration validates storage and identity without certifying an old Frame as recoverable. */
+export function decodeCheckpointStorage(body: string): unknown {
+  return decode(payloadSchema.parse(parseStored(body)));
 }
 
 function encode(value: unknown): z.infer<typeof payloadSchema> {

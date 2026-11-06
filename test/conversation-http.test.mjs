@@ -9,7 +9,7 @@ import { ClientSubmission, ConversationSession } from '@capix/client-runtime';
 import { SessionHttpTransport } from '@capix/client-http';
 import { PersistenceError } from '@capix/diagnostics';
 
-const reply = (text) => ({ id: 'web-offline', model: 'fixture', text, finishReason: 'stop', usage: null });
+const reply = (text) => ({ id: 'web-offline', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 function modelFixture({ answer, propose } = {}) {
   const requests = [];
   return {

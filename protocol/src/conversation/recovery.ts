@@ -3,6 +3,8 @@ export interface ConversationRecoverySummary {
   readonly contextId: string;
   readonly point: string;
   readonly available: boolean;
+  /** Lightweight listing has not yet loaded and verified the complete tool archive. */
+  readonly eligibility?: 'unchecked';
   readonly reason?: string;
 }
 

@@ -40,7 +40,7 @@ node --env-file=.env examples/long-conversation/run.mjs --live --turns 54 --out 
 - 成功保存的 CP image 数量、原 JSON 总字节/最大值及持久端口耗时；`finish` 的交付值另计。压缩之后仍保留这个口径，不把序列化材料变小等同于构造与校验计算消失。
 - DB/WAL/SHM 当时文件大小、当前装配 RecordBook 大小。记录在重新装配后重新开始；测量本身的快照与报告耗时单独记录。运行耗时包含同步 CP 计量和请求日志开销，不用来宣称无插桩性能。
 
-第 24、36、54 次完成后，关闭宿主并只读统计原 CP JSON、实际存储正文、最大 image 和数据库页占用。测量兼容 v2 原文存储与 v3 压缩存储：`images.bytes/maxBytes`、`heads.deliveryBytes/maxDeliveryBytes` 保留原 JSON 口径；`images.storedBytes/maxStoredBytes`、`heads.storedDeliveryBytes/maxStoredDeliveryBytes` 统计实际 TEXT 内容，包含压缩 Base64 与 envelope。v3 原大小来自检查过编码、字段和范围的 `jsonBytes` 元数据，测量不解压认证载荷，完整性校验仍由服务存储读取负责。`checkpoints.originalBytesSource` 标明原大小来源。
+第 24、36、54 次完成后，关闭宿主并只读统计保留的原 CP JSON、实际存储正文、最大 image 和数据库页占用。测量兼容 v2 原文存储与 v3–v6 压缩存储：`images.bytes/maxBytes`、`heads.deliveryBytes/maxDeliveryBytes` 保留原 JSON 口径；`images.storedBytes/maxStoredBytes`、`heads.storedDeliveryBytes/maxStoredDeliveryBytes` 统计实际 TEXT 内容，包含压缩 Base64 与 envelope。v3 起原大小来自检查过编码、字段和范围的 `jsonBytes` 元数据，测量不解压认证载荷，完整性校验仍由服务存储读取负责。`checkpoints.originalBytesSource` 标明原大小来源。v6 只保留各调用当前镜像正文；`images.count` 是身份行数，`retainedBodies/discardedBodies` 分别为保留/淘汰正文数，因此保留字节不再等于调用探针累计成功保存的 `totalImageBytes`。旧实验报告未包含正文计数时显示未测量，不补零。
 
 这些统计都不是 SQLite 累计物理写入量；存储正文不含索引、页开销，压缩迁移释放的页也可能仍留在 DB 文件中。继续阶段重新载入全部正式内容，比较包括固定凭据在内的完整状态，并确认重载没有发送模型请求。**这验证正常重载；真实进程中断与 CP 续接由已有恢复专项测试负责。** 本实验不改变 CP image 保留策略。
 

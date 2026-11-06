@@ -159,8 +159,8 @@ async function closeSession(runner, interactions, recording, store, content, dat
 
 /** Inspect closed experiment databases only; opening a second writer is never used. */
 export function measureStorage(directory) {
-  const tables = { messages: 0, memories: 0, append_receipts: 0, apply_receipts: 0, checkpoint_images: 0, checkpoint_heads: 0, completion_interactions: 0 };
-  const result = { databases: 0, databaseBytes: 0, walBytes: 0, shmBytes: 0, totalBytes: 0, tables, checkpointStoredBytes: 0, checkpointJsonBytes: 0, deliveryStoredBytes: 0, deliveryJsonBytes: 0, interactionStoredBytes: 0 };
+  const tables = { messages: 0, memories: 0, append_receipts: 0, apply_receipts: 0, checkpoint_images: 0, checkpoint_heads: 0, completion_interactions: 0, model_exchanges: 0, model_exchange_entries: 0 };
+  const result = { databases: 0, databaseBytes: 0, walBytes: 0, shmBytes: 0, totalBytes: 0, tables, checkpointRetainedBodies: 0, checkpointDiscardedBodies: 0, checkpointStoredBytes: 0, checkpointJsonBytes: 0, deliveryStoredBytes: 0, deliveryJsonBytes: 0, interactionStoredBytes: 0, exchangeStoredBytes: 0, exchangeMetadataBytes: 0, archiveJsonBytes: 0 };
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (!entry.isFile() || !/^session-\d+\.sqlite$/.test(entry.name)) continue;
     const path = join(directory, entry.name);
@@ -186,19 +186,26 @@ export function measureStorage(directory) {
     uri.searchParams.set('immutable', '1');
     const database = new DatabaseSync(uri.href, { readOnly: true, timeout: 0 });
     try {
-      if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || database.prepare('PRAGMA user_version').get().user_version !== 3) throw new Error('Expected an experiment conversation database in the current format');
+      if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || ![5, 6].includes(database.prepare('PRAGMA user_version').get().user_version)) throw new Error('Expected an experiment conversation database in storage format 5/6');
       for (const table of Object.keys(tables)) tables[table] += database.prepare(`SELECT count(*) AS count FROM ${table}`).get().count;
-      const images = database.prepare("SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS stored, coalesce(sum(json_extract(body, '$.jsonBytes')), 0) AS original FROM checkpoint_images").get();
+      const images = database.prepare("SELECT COUNT(body) AS retained, COUNT(*) - COUNT(body) AS discarded, coalesce(sum(length(CAST(body AS BLOB))), 0) AS stored, coalesce(sum(json_extract(body, '$.jsonBytes')), 0) AS original FROM checkpoint_images").get();
+      result.checkpointRetainedBodies += images.retained;
+      result.checkpointDiscardedBodies += images.discarded;
       result.checkpointStoredBytes += images.stored;
       result.checkpointJsonBytes += images.original;
       const deliveries = database.prepare("SELECT coalesce(sum(length(CAST(delivery AS BLOB))), 0) AS stored, coalesce(sum(json_extract(delivery, '$.jsonBytes')), 0) AS original FROM checkpoint_heads WHERE delivery IS NOT NULL").get();
       result.deliveryStoredBytes += deliveries.stored;
       result.deliveryJsonBytes += deliveries.original;
       result.interactionStoredBytes += database.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS bytes FROM completion_interactions').get().bytes;
+      result.exchangeStoredBytes += database.prepare('SELECT coalesce(sum(length(CAST(body AS BLOB))), 0) AS bytes FROM model_exchange_entries').get().bytes;
+      result.exchangeMetadataBytes += database.prepare('SELECT coalesce(sum(length(CAST(metadata AS BLOB))), 0) AS bytes FROM model_exchanges').get().bytes;
     } finally {
       database.close();
     }
   }
   result.totalBytes = result.databaseBytes + result.walBytes + result.shmBytes;
+  // The same retained JSON categories used by host admission, computed independently
+  // of its ledger. Neither file lengths nor cumulative write traffic are this total.
+  result.archiveJsonBytes = result.checkpointJsonBytes + result.deliveryJsonBytes + result.interactionStoredBytes + result.exchangeStoredBytes + result.exchangeMetadataBytes;
   return result;
 }

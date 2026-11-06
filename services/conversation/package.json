@@ -23,6 +23,14 @@
     "./web": {
       "types": "./dist/web/index.d.ts",
       "import": "./dist/web/index.js"
+    },
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js"
+    },
+    "./tools/hosting": {
+      "types": "./dist/tools/hosting.d.ts",
+      "import": "./dist/tools/hosting.js"
     }
   },
   "scripts": {
@@ -30,6 +38,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@capix/changes": "workspace:*",
     "@capix/checkpoint": "workspace:*",
     "@capix/contracts": "workspace:*",
     "@capix/records": "workspace:*",
@@ -43,6 +52,7 @@
     "@capix/structure": "workspace:*",
     "@capix/transcript": "workspace:*",
     "@capix/server-runtime": "workspace:*",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@capix/model-exchanges": "workspace:*"
   }
 }

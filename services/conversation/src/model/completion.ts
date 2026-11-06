@@ -58,7 +58,7 @@ export function createCompletionStartNode() {
   return new Node<ModelRequest, InteractionReference, ResourcesOf<typeof deps>>({
     name: 'start-completion-request',
     deps,
-    checkpoint: { key: 'conversation.completion-start', version: 1, input: modelRequestCodec, output: referenceCodec, points: [established] },
+    checkpoint: { key: 'conversation.completion-start', version: 2, input: modelRequestCodec, output: referenceCodec, points: [established] },
     async run(work) {
       const reference = await work.resources.requests.start(work.input);
       // Before this save the dispatch/reference handoff is unknown. A missing child
@@ -100,7 +100,7 @@ export function createCompletionReplyNode(waitMs = 30_000) {
     name: 'read-completion-reply',
     deps,
     output: { result: requireCompletionReply, delta: (value) => requireString(value, 'Completion preview') },
-    checkpoint: { key: 'conversation.completion-reply', version: 1, input: referenceCodec, output: modelReplyCodec, points: [waiting, completed] },
+    checkpoint: { key: 'conversation.completion-reply', version: 2, input: referenceCodec, output: modelReplyCodec, points: [waiting, completed] },
     async run(work) {
       const reference = Object.freeze({ id: work.input.id, contract: work.input.contract });
       work.checkpoint?.({ point: waiting, state: reference, refs: {} });
@@ -172,7 +172,7 @@ export function createInteractionCompletion(options: { readonly waitMs?: number 
     return reply;
   }
   const completion = new Group<ModelRequest, ModelReply, {}, string>({ name: 'interaction-completion', output: { result: requireCompletionReply, delta: (value) => requireString(value, 'Completion preview') } }).add({ send, read });
-  completion.checkpoint = { key: 'conversation.interaction-completion', version: 1, input: modelRequestCodec, output: modelReplyCodec, points: [sending, reading, completed] };
+  completion.checkpoint = { key: 'conversation.interaction-completion', version: 2, input: modelRequestCodec, output: modelReplyCodec, points: [sending, reading, completed] };
   completion.run = (work) => {
     const child = work.children.create(send, work.input, { key: 'send' });
     work.checkpoint?.({ point: sending, state: {}, refs: { send: child.ref } });

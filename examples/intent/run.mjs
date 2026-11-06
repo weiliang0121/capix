@@ -38,7 +38,7 @@ if (options.live) {
   model = new ChatCompletionsProvider({ endpoint: 'https://api.deepseek.com/chat/completions', apiKey, model: process.env.DEEPSEEK_MODEL ?? 'deepseek-flash', thinking: 'disabled', timeoutMs: 45000 });
 } else {
   // 只验证接线：固定返回同一决定，完全没有意图识别算法。
-  model = { complete: async () => ({ text: JSON.stringify({ kind: 'select', node: 'translate', reason: '离线固定响应，只验证装配。', evidence: [], question: null }), model: 'scripted-wiring-only', finishReason: 'stop', usage: null }) };
+  model = { complete: async () => ({ id: 'offline-intent', formatVersion: 1, output: [{ kind: 'text', text: JSON.stringify({ kind: 'select', node: 'translate', reason: '离线固定响应，只验证装配。', evidence: [], question: null }) }], native: { format: 'chat-completions', version: 1 }, model: 'scripted-wiring-only', termination: { kind: 'completed', reason: 'stop' }, usage: null }) };
 }
 // Reserve the report before spending model requests; an existing path fails immediately.
 const output = options.out ? await open(options.out, 'wx') : null;

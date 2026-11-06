@@ -10,7 +10,7 @@ import { Node, Scene } from '@capix/structure';
 import { Resources, Runner } from '@capix/server-runtime';
 
 const preview = 'PREVIEW_ONLY_NOT_FORMAL_CONTENT';
-const reply = (text) => ({ id: 'recording-offline', model: 'fixture', text, finishReason: 'stop', usage: null });
+const reply = (text) => ({ id: 'recording-offline', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 
 function modelFixture({ answer, propose } = {}) {
   const requests = [];
@@ -146,7 +146,7 @@ test('conversation recording keeps two call trees, real entity origins and recep
   }
   const send = calls.find((record) => record.name === 'start-completion-request');
   const reference = outputOf(send);
-  assert.equal(reference.contract, 'conversation.completion.v1');
+  assert.equal(reference.contract, 'conversation.completion.v2');
   const dispatched = recordsOf(current.recorder, 'resource').find((record) => record.parentId === send.id && record.phase === 'returned' && record.value.action === 'start');
   assert.deepEqual(dispatched.value.output, reference);
   const read = calls.find((record) => record.parentId === send.parentId && record.name === 'read-completion-reply');

@@ -1,27 +1,29 @@
 # 对话服务装配对照
 
-`@capix/conversation-service` 是与 Observer 并排的参考装配服务。从公开内核对象建立对话，验证第一作者需要承担哪些工作。完整入口组合独立模型交互、流式回答、View 材料和记忆维护，保存消息、记忆与 View 成员，重启后建立新 Runner 继续对话。直接模型、历史总结及独立反馈读取仍作为可选能力保留。真实路径统一消费 `ModelProvider` 的完整请求和回复；离线演示也只用这个契约的替身，不再提供 TextModel 生产接口。现有 Observer 继续使用原实现；新服务已有独立浏览器入口，复用消息与提交接纳机制及界面基础组件。
+`@capix/conversation-service` 是与 Observer 并排的参考装配服务。从公开内核对象建立对话，验证第一作者需要承担哪些工作。完整入口组合独立模型交互、材料或工具回答和记忆维护，保存消息、记忆与 View 成员，重启后建立新 Runner 继续对话。默认材料模式保留流式预览；工具模式按真实模型／工具阶段推进。直接模型、历史总结及独立反馈读取仍作为可选能力保留。真实路径统一消费 `ModelProvider` 的完整请求和回复；离线演示也只用这个契约的替身，不再提供 TextModel 生产接口。现有 Observer 继续使用原实现；新服务已有独立浏览器入口，复用消息与提交接纳机制及界面基础组件。
 
 ## 浏览器入口
 
 ```sh
 pnpm build
 pnpm conversation:web --demo
+# 或选择原生工具调用；与 --demo / --live 独立。
+pnpm conversation:web --demo --answer-mode tools
 ```
 
 打开 `http://127.0.0.1:4318`。真实模型配置在项目 `.env` 时，由启动命令显式加载：
 
 ```sh
-node --env-file=.env services/conversation/dist/web/start.js --live
+node --env-file=.env services/conversation/dist/web/start.js --live --answer-mode tools
 ```
 
 Web 与 CLI 使用同一默认数据库（真实 `.capix/conversation.sqlite`，演示 `.capix/conversation-demo.sqlite`）。**先退出使用该数据库的 CLI**，再启动 Web；不会并发打开或复制另一份内容。可指定 `--db PATH --port 4318`，当前只管理这一个对话。
 
-页面提供正式消息、流式预览、取消与明确的失败/未确认状态，以及记忆、View 成员、主动采集的 Scene 调用树和资源详情。首次载入读取内容基线，之后按消息事件同步；预览与提交分别使用增量，检查器按需读取，不随每个 token 重传历史和记录。默认不记录；点击“开始记录”后从下一次 Scene 调用采集，检查器展示本次采集最近 100 次调用，详情按真实父子关系读取。“停止记录”等待已纳入的调用收尾，不取消对话；停止后可查看和清空，清空后才能开始新的采集。
+页面提供正式消息、取消与明确的失败/未确认状态，以及记忆、View 成员、主动采集的 Scene 调用树和资源详情。`--answer-mode material|tools` 在启动时固定，默认 material 不变：材料模式提供正文预览，工具模式只提供真实模型／工具阶段与正式回答，不转发候选正文。阶段不依赖 Recorder，也不回放旧 CP 的执行过程。首次载入读取内容基线，之后按消息事件同步；提交反馈增量交付，检查器按需读取，不随每个 token 重传历史和记录。默认不记录；点击“开始记录”后从下一次 Scene 调用采集，检查器展示本次采集最近 100 次调用，详情按真实父子关系读取。“停止记录”等待已纳入的调用收尾，不取消对话；停止后可查看和清空，清空后才能开始新的采集。
 
 刷新会根据本标签页保存的提交定位查询并接回；断线不会取消服务端调用，也不会重新 POST。未知或已淘汰提交保持“结果未确认”，可以核对正式消息后明确结束本地跟踪。服务重启载入内容，旧提交和本进程记录不恢复；默认链路可显式续接未结束的 CP，详见[有限恢复](../../docs/conversation-recovery.md)。多会话和文件操作仍不在这个入口中提供。详细边界见 [浏览器交付](../../docs/conversation-web.md)。
 
-“检查可恢复处理”独立查询恢复候选。页面在每次初始化完成且宿主空闲时自动检查一次，普通提交结束和检查器刷新不扫描 CP；新的运行或内容变化会将旧检查标记过期。宿主忙碌或不可用时明确拒绝查询，不显示为“没有候选”。恢复按钮继续受提交准入限制，并由服务在真正执行前重新核验。
+“检查可恢复处理”独立查询恢复候选。页面在每次初始化完成且宿主空闲时自动检查一次，普通提交结束和检查器刷新不扫描 CP；新的运行或内容变化会将旧检查标记过期。宿主忙碌或存储不可用时明确拒绝查询，不显示为“没有候选”。工具根列表通过轻量检查后标为 `eligibility: 'unchecked'`，显示“待核验恢复依据”；用户明确续接时才核验原集合及完整 CP／交互事实。恢复按钮继续受写入口门槛限制，归档门槛本身不阻止只读候选查询。
 
 ## 完整服务入口
 
@@ -34,13 +36,15 @@ pnpm conversation --demo
 
 默认也是离线演示模式，明确标记固定模型替身，不访问网络。`--db /path/to/conversation.sqlite` 可指定文件；演示默认使用 `.capix/conversation-demo.sqlite`，真实模式默认 `.capix/conversation.sqlite`，都与 Observer 数据库分开。输入文本连续对话，`/status` 查看内容数量，`/exit` 正常关闭。再次使用同一数据库启动即可读取原内容并继续。单次验证可用 `--input '请使用简短中文回答'`。
 
+CLI 同样支持 `--answer-mode material|tools`，不传时仍走材料回答。工具模式可运行 `pnpm conversation --demo --answer-mode tools`；真实模型则将 `--demo` 改为 `--live` 并由宿主环境提供凭据。`/recoveries` 列出根恢复候选，`/resume <contextId>` 明确核验并续接，不自动重发旧模型请求。
+
 `--records /path/to/run.json` 可选导出本进程的调用记录，目标必须是新文件。记录在正常退出时保存，不承担崩溃恢复；详见下方记录安装。
 
 真实模型须显式选择 `--live`，由宿主环境提供配置。CLI 不读取 `.env`，不输出或持久化密钥；具体配置及关闭语义见 [宿主与持久化](../../docs/conversation-host.md)。
 
 回答与记忆提取的输出上限分别为 **4096 / 8192 tokens**。CLI 和 Web 均可用 `--answer-tokens N --memory-tokens N` 覆盖；嵌入装配用 `createMaterialConversationScene({ answer: 4096, memory: 8192 })`，Web 宿主用 `outputBudget`。预算在建立结构时固定，后续修改原对象无效；默认值给长汇总和完整记忆提案留出余量，不保证任意任务都能完成，也不表示一定消耗到上限。应选择模型支持的值，服务不推测模型能力、不自动降级或重试。
 
-回答 `finishReason=length` 时返回 `MODEL_OUTPUT_LIMIT` 与该次上限，保留已保存内容，拒绝将截断预览接纳为助手消息。记忆提案仍按既有策略处理可接收的失败。默认 Scene CP 保存准确预算；恢复要求原预算，旧 v1 Scene/材料回答/记忆提案声明不能用新 v2 自动续接，正式消息和记忆仍可载入。
+材料回答 `termination.reason=length` 时返回 `MODEL_OUTPUT_LIMIT` 与该次上限，保留已保存内容，拒绝将截断预览接纳为助手消息；工具模式同样拒绝把不完整模型回复作为最终回答。记忆提案仍按既有策略处理可接收的失败。默认 Scene CP 保存准确预算；恢复要求原预算，旧 v1/v2 Scene/材料回答/记忆提案声明不能用新 v3 自动续接，正式消息和记忆仍可载入。
 
 ## 目录与依赖方向
 
@@ -48,19 +52,22 @@ pnpm conversation --demo
 cli/                       终端输入、预览展示、可选导出、关闭
 web/                       浏览器宿主装配、启动、完整关闭
 http/                      提交反馈、消息同步、读取接口与连接
-hosting/                   两个可执行宿主共用的模型配置与离线替身
+hosting/                   共用装配、模型配置、工具归档 use、入口门槛与阶段投影
   ↓
 assembly/                  组合已存在的公开能力
   content.ts               载入／建立实体，核验关联
   resources.ts             固定实体与 Offer 登记
   interactions.ts          宿主持有的模型发送
   structure.ts             默认业务策略的 Scene/Group 组合
+  tools.ts                 工具准备、历史工具及回答链路的固定接线
   ↓
 scene.ts                   正式输入、回答接纳与维护时机
 materials/ memory/ model/  材料策略、记忆策略、模型调用能力
+history/tools/             固定问题前缀内的历史搜索与消息片段读取
+tools/                     原生工具调用预设、目录、预算及恢复契约
 
 recovery/                  默认 Scene 续接策略、内容资格与固定值编码
-persistence/               SQLite 内容、CP 与交互持久端口
+persistence/               SQLite 内容、CP、交互与多交换集合的持久端口和存量计量
 recording/                 可选记录安装与服务摘要，消费已发生的运行事实
 ```
 
@@ -72,33 +79,37 @@ CLI/Web 的真实模型装配使用 `/assembly` 导出的 `createYieldingFetch(f
 
 ```ts
 import { Runner } from '@capix/server-runtime';
-import { loadConversationContent, createMaterialConversationScene, createConversationResources, createConversationInteractions } from '@capix/conversation-service/assembly';
+import { loadConversationContent, createConversationHostAssembly } from '@capix/conversation-service/assembly';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 
 const store = ConversationStore.open('.capix/conversation.sqlite');
 try {
   const content = loadConversationContent(store);
-  const scene = createMaterialConversationScene();
-  const resources = createConversationResources(content, model, store.view);
-  const interactions = createConversationInteractions(model, store.interactions);
+  const host = createConversationHostAssembly({
+    content,
+    store,
+    model,
+    answerMode: 'tools', // 默认是 material；两种模式共用入口与内容接纳。
+    configuration: 'my-provider-and-policy-v1', // 实际模型配置／策略变化时更换此依据。
+  });
   try {
-    const runner = new Runner(scene, resources, interactions, {
-      checkpoints: { store: store.checkpoints },
-      validate() {
-        store.assertAvailable();
-      },
+    const runner = new Runner(host.scene, host.resources, host.interactions, {
+      checkpoints: { store: host.checkpoints },
+      validate: host.assertAdmission,
     }).build();
-    console.log(await runner.run('你好'));
+    // 入口适配只拥有本次归档 use；finally 释放，运行仍由原 Runner 执行。
+    const entry = host.entry(runner);
+    console.log(await entry.run('你好'));
   } finally {
-    await interactions.settled();
-    interactions.close();
+    await host.interactions.settled();
+    host.interactions.close();
   }
 } finally {
   store.close();
 }
 ```
 
-`loadConversationContent` 只恢复正式实体，随后创建全新结构。宿主另外安装 CP 与模型交互持久端口；显式恢复前核对原内容、配置及固定效果。不保存 JS 栈或预览，未知请求不自动重发。CLI `/recoveries` 列出未结束根，`/resume <contextId>` 续接；恢复范围见[有限恢复](../../docs/conversation-recovery.md)。装配和关闭失败的完整清理路径在 CLI 中，持久边界见下方文档。
+`loadConversationContent` 只恢复正式实体，随后创建全新结构。共用装配提供 CP 与模型交互持久端口及恢复资格检查；显式恢复经 `entry.resume(contextId)` 核对原内容、配置及固定效果。不保存 JS 栈或预览，未知请求不自动重发。每个入口／资格检查在 finally 释放自己的 use，busy 拒绝、取消或同步重入不释放其他入口的实体，也不删除磁盘归档。恢复范围见[有限恢复](../../docs/conversation-recovery.md)。装配和关闭失败的完整清理路径在 CLI 中，持久边界见下方文档。
 
 ## 阅读入口
 
@@ -162,7 +173,7 @@ const resources = new Resources().register(messages, TranscriptResource.append).
 const runner = new Runner(scene, resources).build();
 ```
 
-所有真实模型路径使用 `ModelRequest → ModelReply`，保留 id、model、text、finishReason 和 usage。资源接纳完整反馈形状，业务只在正常结束且正文非空时接纳为回答。`length` 等状态不会因剥成字符串而丢失；提案、总结与改写也使用同一 Provider 契约。纯文本替身只用于测试适配，生产包不导出 TextModel、ModelResource 或 TextModelInteraction。
+所有真实模型路径使用 `ModelRequest → ModelReply`，保留 id、model、output、termination、usage 和不重叠的 native 扩展。资源接纳完整反馈形状，业务只在正常结束且正文非空时接纳为回答。`length` 等状态不会因剥成字符串而丢失；提案、总结与改写也使用同一 Provider 契约。纯文本替身只用于测试适配，生产包不导出 TextModel、ModelResource 或 TextModelInteraction。
 
 完整离线示例见 [conversation.mjs](../../examples/conversation.mjs) 和 [conversation-streaming.mjs](../../examples/conversation-streaming.mjs)。示例中的固定回复也实现 ModelProvider，不绕过生产接纳链路。TypeScript 可用 `satisfies ModelProvider` 检查宿主实现。
 
@@ -415,15 +426,15 @@ sequenceDiagram
 
 ## 与 Observer 对照
 
-| 关注点     | 现有 Observer                             | 本包当前实现                                                    |
-| ---------- | ----------------------------------------- | --------------------------------------------------------------- |
-| 输入       | HTTP / submission 接纳及内容同步          | `runner.run(string)`，Scene 写入用户消息                        |
-| 材料       | 活跃视图、记忆、维护及准备                | 完整消息前缀，或 View 固定材料与可选的正式消息纳入策略          |
-| 模型       | 固定配置、Provider 适配、独立 Interaction | 统一完整 Provider；直接完成或独立 CompletionInteraction         |
-| 推进       | 决策、澄清、回答、文件与记忆能力          | 一个可替换的回答 Node/Group；两条路径共用消息接纳               |
-| 观测       | 记录安装、来源投影与客户端交付            | Runner 输出/元数据、可选真实记录树与退出快照导出                |
-| 持久与恢复 | SQLite 内容、记录、交互和显式 CP          | 独立 SQLite 保存消息／记忆／View；新 Runner 续用内容，无服务 CP |
-| 对外服务   | 会话管理、HTTP、同步与 UI                 | 进程内包、连续对话 CLI 和独立单会话 Web 入口                    |
+| 关注点     | 现有 Observer                             | 本包当前实现                                                  |
+| ---------- | ----------------------------------------- | ------------------------------------------------------------- |
+| 输入       | HTTP / submission 接纳及内容同步          | `runner.run(string)`，Scene 写入用户消息                      |
+| 材料       | 活跃视图、记忆、维护及准备                | 完整消息前缀，或 View 固定材料与可选的正式消息纳入策略        |
+| 模型       | 固定配置、Provider 适配、独立 Interaction | 统一完整 Provider；直接完成或独立 CompletionInteraction       |
+| 推进       | 决策、澄清、回答、文件与记忆能力          | 可替换回答 Node/Group；材料／原生工具模式共用消息接纳         |
+| 观测       | 记录安装、来源投影与客户端交付            | Runner 输出/元数据、可选真实记录树与退出快照导出              |
+| 持久与恢复 | SQLite 内容、记录、交互和显式 CP          | 独立 SQLite 保存内容、交互、交换集合和 CP；显式核验后有限续接 |
+| 对外服务   | 会话管理、HTTP、同步与 UI                 | 进程内包、连续对话 CLI 和独立单会话 Web 入口                  |
 
 这不是旧服务的等效替代。完整历史可能达到模型容量边界；本版没有实现容量维护、选择或压缩策略，也不在装配函数里暗中截断。真实模型协议、超时和容量约束由宿主适配，后续作为明确能力逐项讨论。
 
@@ -437,7 +448,7 @@ sequenceDiagram
 
 独立交互的过程反馈、局部等待、取消和引用继续由公共 Interaction 端口处理。回归保留了跨调用续读、窗口清理、预览失效、游标及固定期限，见 `test/conversation-interaction-progress.test.mjs`。记录回归见 `test/conversation-recording.test.mjs`，验证真实关系、材料依据、隔离与严格失败以及关闭边界。
 
-材料筛选、容量策略与服务 CP 仍需分别设计；Web 交付只投影已发生的内容与调用事实，不扩展执行恢复。
+材料筛选与归档退休策略仍需按业务需要设计；已有入口门槛和显式 CP 续接保持各自边界，Web 交付只投影已发生的内容与调用事实，不扩展执行恢复。
 
 ## 材料回答的流式输出
 
@@ -445,7 +456,7 @@ sequenceDiagram
 
 ```text
 Provider 正文片段 → ResourceOperation.emit → completion 子结构 → 回答 Group → Scene → Runner.output
-Provider 完整回复 → finishReason/非空校验 → 正式助手消息 → 可选维护 → 根完成
+Provider 完整回复 → termination/非空校验 → 正式助手消息 → 可选维护 → 根完成
 ```
 
 模型流在最终回复前断开、超限、取消或得到非正常结束时，已显示的片段仍只是预览，不追加助手消息，也不启动该回答的记忆提取。正式追加失败同样不进入维护。提取的可处理异常继续按下节跳过；必要持久错误保留原边界。Scene 仍等待维护结束，不把输出预览当成根调用完成。
@@ -476,11 +487,11 @@ const runner = new Runner(scene, resources, interactions).build();
 
 `ConversationCompletion` 是 `Node<ModelRequest, ModelReply, …, string>` 或相同 I/O/Delta 的 Group，普通业务结构也可以实现它。默认直接成员使用本次调用的 signal；独立交互成员的 signal 仅停止本地读取。记忆维护仍按其自身 deps 使用直接 `CompletionResource`，上述选择不隐式改变其他模型调用的生命周期。
 
-`CompletionInteraction` 使用独立版本键 `conversation.completion.v1`。它保存带 system/user/assistant 消息、stream、responseFormat、maxTokens、temperature 的固定请求，并保留完整 `id/model/text/finishReason/usage` 反馈。这些都是不含凭据的值；Provider 的 endpoint/key/model 配置由宿主发送者持有。原纯文本交互接口已退出服务；旧版本持久反馈不自动迁移为这个格式。
+`CompletionInteraction` 使用独立版本键 `conversation.completion.v2`。它保存带 system/user/assistant 消息、stream、responseFormat、maxTokens、temperature 的固定请求，并保留完整 `id/model/output/termination/usage/native` 反馈。这些都是不含凭据的值；Provider 的 endpoint/key/model 配置由宿主发送者持有。原纯文本交互接口已退出服务；旧版本持久反馈不自动迁移为这个格式。
 
 交互仍要求固定 JSON 数据：未配置的可选字段应省略，不传显式 `undefined`、signal、函数或活对象。默认材料请求符合这个要求；自定义 completion 结构需自行遵守持久边界，不能仅凭 TypeScript 的 ModelRequest 类型推断任意 JavaScript 值均可保存。
 
-交互检查数据形状，不要求 `finishReason === 'stop'` 或正文非空。`length`、空正文等回复可以被保存、再次读取；材料回答仍在取得完整反馈之后检查正常完成与非空，再交给 Scene 正式追加。原始反馈与业务接纳事实因此分别保留。预览丢失或超限时仍读取最终反馈；流封闭不等于最终反馈已保存。完成 Node 的输出检查返回原对象，不用新的解码对象替换成功返回值。
+交互检查数据形状，不要求 `termination.reason === 'stop'` 或正文非空。`length`、空正文等回复可以被保存、再次读取；材料回答仍在取得完整反馈之后检查正常完成与非空，再交给 Scene 正式追加。原始反馈与业务接纳事实因此分别保留。预览丢失或超限时仍读取最终反馈；流封闭不等于最终反馈已保存。完成 Node 的输出检查返回原对象，不用新的解码对象替换成功返回值。
 
 `createInteractionCompletion()` 组合发送和读取，等待到期交付现有 `ModelReplyPending.reference`；取消或其他失败不保证向宿主交付引用。确需跨调用继续时，可以先用 `createCompletionStartNode()` 的正式返回值取得引用，由宿主保存，再把它交给 `createCompletionReplyNode()`。发送、引用保存和消息落实仍不构成事务。本轮不增加隐藏引用表、自动重发或自动补写。
 
@@ -539,3 +550,21 @@ Scene 等待维护结束 → 返回已保存的回答
 记忆写入与 View 纳入分别提交。记忆提交失败不进入纳入；必要变化发布失败可能发生在记忆已安装之后；View 提交失败保留已写入记忆。各处失败都保留此前正式助手消息，不重跑模型、不补写或补纳入。后续新提交仍能读取真实记忆全集，由新的提案决定处理；不从缺少 View 成员推断记忆尚未写入。
 
 离线完整示例：[conversation-memory.mjs](../../examples/conversation-memory.mjs)，运行 `node examples/conversation-memory.mjs`。它从空记忆集合开始，验证真实 ID、新建纳入、后续读取、同 ID 更新及退出后不回流。固定模型响应只验证链路与契约，不评价真实模型提取率；只有显式装载这个维护 Group 才启用提取。测试见 `test/conversation-memory.test.mjs`、`test/types/conversation-memory.*` 与 `test/memory/apply-resource.test.mjs`。
+
+## 原生工具调用
+
+`@capix/conversation-service/tools` 提供显式选装的 `tool / createToolLoop / createToolAnswer / registerToolLoopResources`。工具仍是已登记 Node/Group，输入 Schema 与结果映射是该预设的业务契约，不改变 Invocation 或 CP Frame。使用和恢复边界见 [工具预设](src/tools/README.md)。
+
+工具宿主的第一闭环在 `@capix/conversation-service/tools/hosting`：每次回答分配独立交换集合，先保存 prepared 空计划，再初始化集合；waiting 只载入原集合。宿主用 ToolExchanges.openUse() 持有本次准确实体，run/resume/资格核验在 finally 中关闭句柄，释放内存不删除事实或停止独立交互。Provider 的 inspectRequest 复用实际编码做无网络预检，发送者在成功反馈持久前执行回复字节预算。
+
+CLI/Web 已通过共用装配接入此链路。工具模式准备当前正式问题与活跃记忆；`search_history` 按受限页搜索问题之前的准确 Transcript 前缀，`read_message` 按真实索引读取受限片段。当前问题及之后的消息不进入工具历史范围；后续追加不扩大原问题的读取范围。工具回复带来源与继续读取位置，局部材料不冒充完整历史。模型和工具阶段来自实际直属子调用，不要求开启记录；正式助手消息和维护仍沿用公共接纳链路。
+
+SQLite v5 引入按集合 ID 载入和分页目录，当前 v6 延续此接口；启动不加载所有旧交换正文，v4 集合迁为未锚定只读。`store.archiveUsage()` 联合统计交换及元数据、当前 Interaction、每个调用当前 CP 镜像及已有终态交付的逻辑 JSON 字节，计数跟随事务；CP 按未压缩编码计量。被替代镜像只保留拒重身份，不保留正文。**material/tools 两种模式都安装归档入口门槛**：当前存量加在途回复估算和入口余量，必须低于参考阈值。默认阈值 **2 GiB**、余量 **512 MiB**、每个在途回复估算 **2 MiB**，嵌入宿主可通过 `archivePolicy` 覆盖。
+
+这些数值是当前实测的经验参考，不是硬配额或增长上界。`assertArchiveAdmission(usage, interactions.pendingCount, policy)` 只在入口使用，不预留空间，不阻止已接纳调用和晚到独立反馈保存；存量仍可能超过阈值。门槛拒绝新运行／恢复后，只读消息、提交接回和恢复候选仍可查询。没有自动退休、删除或 VACUUM，View 排除和 use 释放也不删除归档。具体边界见 [宿主与持久化](../../docs/conversation-host.md) 和 [宿主设计](../../docs/native-tool-host-integration.md)。
+
+工具根候选先标为 `unchecked`，不以轻量列表查询冒充完整恢复资格。明确 `/resume` 或页面“核验并继续”时才核对原集合、已保存模型反馈、目录与输入、内容和 CP；终态、缺失或不兼容依据均拒绝，不自动重发。恢复展示本次实际推进，不重建旧阶段或记录。
+
+运行 `pnpm build && node examples/tool-conversation.mjs` 可验证生产 Provider、工具节点、独立 ModelExchanges 与正式对话的装配。示例使用离线 HTTP 样本，不读取凭据、不评价模型能力。CLI/Web 通过 `--answer-mode tools` 选装，默认仍使用原材料回答；此选项是宿主启动配置，页面不修改运行中的结构。
+
+宿主持久化时，`store.exchanges.load/initialize/commit` 对接独立交换实体。旧 `conversation.completion.v1` 文本交互经 `store.interactions.readHistory(id)` 原形状读取；新 v2 入口拒绝旧数据，不自动添加不存在的原生材料。正式消息、记忆和 View 不迁移含义。

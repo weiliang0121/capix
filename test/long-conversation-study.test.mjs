@@ -37,9 +37,15 @@ test('24-submission study uses the real persistent assembly and keeps evaluation
   assert.equal(requests, 48);
   assert.equal(summary.semanticEvaluation, 'not-applicable');
   const snapshot = summary.snapshots[0].database;
+  assert.equal(snapshot.schemaVersion, 6);
   assert.equal(snapshot.messages.count, 48);
   assert.equal(snapshot.completionInteractions.count, 48);
-  assert.equal(snapshot.checkpoints.images.bytes, summary.totalImageBytes);
+  assert.ok(snapshot.checkpoints.images.bytes < summary.totalImageBytes, 'retained bodies are not cumulative successful save bytes');
+  assert.equal(snapshot.checkpoints.images.retainedBodies, snapshot.checkpoints.heads.count);
+  assert.ok(snapshot.checkpoints.images.discardedBodies > 0);
+  assert.equal(snapshot.checkpoints.images.count, snapshot.checkpoints.images.retainedBodies + snapshot.checkpoints.images.discardedBodies);
+  assert.equal(snapshot.modelExchanges.collections, 0);
+  assert.equal(snapshot.archiveJsonBytes, snapshot.checkpoints.images.bytes + snapshot.checkpoints.heads.deliveryBytes + snapshot.completionInteractions.bytes);
   const events = (await readFile(join(out, 'events.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
   const submissions = events.filter((row) => row.kind === 'submission');
   assert.equal(submissions.length, 24);

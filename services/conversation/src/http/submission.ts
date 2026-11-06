@@ -3,6 +3,8 @@ import type { RunnerObservation, RunnerOutput } from '@capix/server-runtime';
 import type { ConversationEvents } from './events.js';
 import { ModelCompletionIncomplete } from '../model/incomplete.js';
 import type { AcceptedConversationMessage } from '../scene.js';
+import type { ToolStages } from '../hosting/tool-stages.js';
+import { ConversationArchiveFull } from '../hosting/archive-admission.js';
 
 export interface ConversationRunner {
   readonly isRunning: boolean;
@@ -64,7 +66,7 @@ export class Submission {
     return () => this.#listeners.delete(receive);
   }
 
-  update(change: Pick<ConversationSubmissionChange, 'input' | 'answer' | 'executions' | 'result' | 'cancelRequested' | 'integrity'> & { readonly admission?: ConversationAdmission }): void {
+  update(change: Pick<ConversationSubmissionChange, 'input' | 'answer' | 'executions' | 'result' | 'cancelRequested' | 'integrity' | 'stage'> & { readonly admission?: ConversationAdmission }): void {
     if (this.#state.result) return;
     const fromRevision = this.#state.revision;
     const revision = fromRevision + 1;
@@ -147,7 +149,18 @@ export class ConversationSubmissions {
     readonly assertAvailable: () => void = () => {},
     readonly retention = 64,
     readonly previewLimit = 256 * 1024,
+    stages?: Pick<ToolStages, 'subscribe'>,
+    readonly assertAdmission: () => void = () => {},
   ) {
+    if (stages)
+      this.#dispose.push(
+        stages.subscribe({
+          receive: ({ entryId, stage }) => {
+            if (this.#current?.entryId === entryId) this.#current.update({ stage });
+            return undefined;
+          },
+        }),
+      );
     this.#dispose.push(
       events.subscribe((event) => {
         try {
@@ -196,7 +209,8 @@ export class ConversationSubmissions {
   get active(): ConversationSubmissionBaseline | undefined {
     return this.#current?.baseline;
   }
-  admission(): ConversationAdmission {
+  /** Read discovery needs availability/busy checks, but never reserves or budgets a new entry. */
+  admission(checkEntry = true): ConversationAdmission {
     const identity = { conversationId: this.conversationId, transcriptId: this.events.transcript.id };
     try {
       this.assertAvailable();
@@ -204,6 +218,13 @@ export class ConversationSubmissions {
       return { ...identity, status: 'unavailable', error: { code: 'CONTENT_UNAVAILABLE', message: '内容存储不可用，不能接纳新消息。' } };
     }
     if (this.#closed || !this.events.available || this.#seen.size >= 4096) return { ...identity, status: 'unavailable', error: { code: 'SERVICE_UNAVAILABLE', message: '当前服务不能接纳新消息。' } };
+    if (checkEntry) {
+      try {
+        this.assertAdmission();
+      } catch (error) {
+        return { ...identity, status: 'unavailable', error: error instanceof ConversationArchiveFull ? { code: error.code, message: error.message } : { code: 'SERVICE_UNAVAILABLE', message: '当前服务不能接纳新消息。' } };
+      }
+    }
     return { ...identity, status: this.#current || this.runner.isRunning ? 'busy' : 'ready' };
   }
 
@@ -315,6 +336,7 @@ export class ConversationSubmissions {
 }
 
 function failure(error: unknown): ConversationFailure {
+  if (error instanceof ConversationArchiveFull) return Object.freeze({ code: error.code, message: error.message });
   if (error instanceof ModelCompletionIncomplete) return Object.freeze({ code: error.code, message: error.message });
   return Object.freeze({ code: 'CONVERSATION_FAILED', message: '本次处理未完成，已保存内容保留；可查看调用记录。' });
 }

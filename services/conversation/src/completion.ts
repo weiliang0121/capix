@@ -1,4 +1,4 @@
-import type { ModelProvider, ModelReply, ModelRequest } from '@capix/model-provider';
+import { modelReplyText, type ModelProvider, type ModelReply, type ModelRequest } from '@capix/model-provider';
 import { ResourceOffer, type ResourceOperation, type ResourcesOf } from '@capix/resources';
 import { InvocationCancelled } from '@capix/server-runtime';
 import { Node, checkpointPoint, type Group } from '@capix/structure';
@@ -21,7 +21,7 @@ export const CompletionResource = new ResourceOffer({
     },
   },
   observation: {
-    methods: { complete: { input: (request) => ({ messages: request.messages.length, responseFormat: request.responseFormat, stream: request.stream === true }), output: (reply) => ({ model: reply.model, finishReason: reply.finishReason, usage: reply.usage }) } },
+    methods: { complete: { input: (request) => ({ messages: request.messages.length, responseFormat: request.responseFormat, stream: request.stream === true }), output: (reply) => ({ model: reply.model, termination: reply.termination, usage: reply.usage }) } },
   },
 });
 
@@ -41,7 +41,7 @@ export function createCompletionNode() {
     name: 'complete-model-request',
     deps,
     output: { result: requireCompletionReply, delta: (value) => requireString(value, 'Model completion delta') },
-    checkpoint: { key: 'conversation.direct-completion', version: 1, input: modelRequestCodec, output: modelReplyCodec, points: [completed] },
+    checkpoint: { key: 'conversation.direct-completion', version: 2, input: modelRequestCodec, output: modelReplyCodec, points: [completed] },
     async run(work) {
       const reply = await work.resources.model.complete(work.input, { delta: (value) => work.output.emit(value) });
       work.checkpoint?.({ point: completed, state: reply, refs: {} });
@@ -52,6 +52,6 @@ export function createCompletionNode() {
 
 /** This service accepts only complete, nonblank text; it does not repair or retry model output. */
 export function requireCompletionText(reply: ModelReply, maxTokens?: number): string {
-  if (!reply || reply.finishReason !== 'stop') throw new ModelCompletionIncomplete(reply?.finishReason ?? 'unknown', maxTokens);
-  return requireText(reply.text, 'Model completion text');
+  if (!reply || reply.termination.kind !== 'completed' || reply.termination.reason !== 'stop') throw new ModelCompletionIncomplete(reply?.termination.reason ?? 'unknown', maxTokens);
+  return requireText(modelReplyText(reply), 'Model completion text');
 }

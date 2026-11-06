@@ -1,6 +1,6 @@
 # 原生工具调用与 MCP 接入方案
 
-状态：设计与离线迁移验证，2026-11-05。依据当前代码与交叉审查整理；文中的新增生产 API、包和目录仍是候选。离线验证与生产支持分别说明，不把 example 中的协议探针视为已经迁移 ModelProvider、服务持久格式或客户端。
+状态：生产契约与首版工具循环已实现，2026-11-05。下文保留设计和离线验证的来由，当前落地范围见末节；协议样本不代表真实模型质量或多厂商兼容认证。
 
 ## 1. 目标与范围
 
@@ -12,7 +12,7 @@
 
 原生工具调用不是 DeepSeek 专有能力；共同的是工具声明、调用请求和结果关联，传输协议不同。首个实际适配沿用 DeepSeek Chat Completions；Responses 和 Claude 用离线样本检验契约，不据此宣称已经支持这些接口。
 
-## 2. 当前实现与真实接缝
+## 2. 实施前基线与接缝
 
 | 位置                                                                                                             | 当前事实                                        | 本轮需要处理                                      |
 | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------- |
@@ -54,7 +54,7 @@ flowchart TD
 | Interaction    | 可选的独立发送、反馈保存、局部等待与再次读取         | 模型循环、远端幂等、任意调用恢复                        |
 | 宿主           | 实体、Provider/MCP Client、持久端口、结构装配与关闭  | 根据记录猜测业务效果                                    |
 
-共同模型类型先归 `@capix/model-provider`，不因被多个包使用就晋级到通用 contracts 或跨端 protocol。模型交换实体可独立放在候选 `@capix/model-exchanges`；它消费模型纯值及 resources/view/changes 等公开端口，不依赖 Invocation 或 Runtime。其持久存储仍由宿主实现。
+共同模型类型先归 `@capix/model-provider`，不因被多个包使用就晋级到通用 contracts 或跨端 protocol。模型交换实体独立放在 `@capix/model-exchanges`；它消费模型纯值及 resources/view/changes 等公开端口，不依赖 Invocation 或 Runtime。其持久存储仍由宿主实现。
 
 ToolLoop 先在服务的独立 tools 目录实现，通过 example 验证；稳定后再决定公共预设包。不要放入 `@capix/structure`，以免通用结构包反向依赖模型协议。MCP 客户端适配也独立于模型 Provider。
 
@@ -69,7 +69,7 @@ ToolLoop 先在服务的独立 tools 目录实现，通过 example 验证；稳�
 
 共同层保留有序正文、工具请求、结束状态和用量，普通消费者直接读取；只有生成原生续接表达时需要对应适配器。原生补充保存共同部分无法表达的内容及准确关联，不另存一份完整 assistant/tool_calls，也不把全部回复装进不透明 payload 再要求每个消费者寻找适配器。
 
-以下是职责伪代码，字段和类型需通过第 13 节门槛后定稿：
+以下保留跨协议职责伪代码；首版精确类型见 model-provider/types.ts，只支持 json-text 和 Chat Completions 的严格 native 形状：
 
 ```ts
 type ToolArguments = { encoding: 'json-text'; text: string } | { encoding: 'json-value'; value: JsonValue };
@@ -441,3 +441,19 @@ examples/native-tools/      离线闭环、真实模型显式入口、故障验�
 - [Claude Handle tool calls](https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls)：tool_use/tool_result 内容块、关联与错误表达。
 - [MCP Architecture](https://modelcontextprotocol.io/docs/learn/architecture)、[MCP Tools](https://modelcontextprotocol.io/specification/latest/server/tools)：外部发现与调用接缝；本轮查询的 latest 指向 2026-07-28。
 - 仓库：[模型 Provider](../server/model-provider/README.md)、[资源包](resources-package.md)、[结构包](structure-package.md)、[交互](interactions.md)、[Checkpoint](checkpoints.md)、[操作失败](exceptions.md)、[退出契约](invocation-exit-contract.md)。
+
+## 16. 首版生产落地
+
+生产出口落在三处：
+
+- `@capix/model-provider`：ModelReply v1 唯一材料、Chat Completions JSON/SSE 工具解析、完整交换续接，以及 `modelReplyText` 纯投影。`native.format` 表达协议，不将通用端点伪装成某厂商。
+- `@capix/model-exchanges`：完整交换实体、按 callId 固定反馈、准确接纳凭据、同步持久接口及 ViewSource。SQLite v4 新增对应独立表。
+- `@capix/conversation-service/tools`：普通 ToolLoop Group、类型关联的 `tool()`、显式资源装配与 `createToolAnswer`。默认无需 CP；选装恢复要求工具 CP 和宿主原交互读取，核对准确请求与完整反馈后再消费。首版串行工具，不转交候选正文预览；Provider 自身仍支持 SSE 工具聚合。
+
+回复迁移覆盖现有服务、测试替身及公开 Provider 的 examples，未修改旧 Observer 自有模型协议。新交互使用 v2，默认 Scene、材料回答及记忆提案 CP 使用 v3，模型完成节点及 Group 使用 v2。旧文本历史通过独立只读入口保留，不假造原生续接依据。Frame v5、Invocation、资源窗口、接纳与终态恢复规则不变。
+
+模型节点从输入到资源操作都只携带交换引用。根和回答/循环输入仍可能各持一份固定基础材料；CP 仍保存完整直接关系和回复输出，没有物理去重承诺。完整累计请求在发送资源边界形成并由 Interaction 保存，接受随步数增长的存储成本。集成测量分别报告 save/finish 次数、同步耗时、最大镜像及累计字节、直接子项和请求字节，不能把引用化理解为消除了 CP CPU 或所有平方增长。
+
+生产使用示例见 `examples/tool-conversation.mjs`。集成测试通过 localhost HTTP、SQLite 重开及新进程 CP 续接验证，不调用真实模型。目录生成器升级和纯映射仍受前文契约约束。MCP、多协议实现、并行工具、候选预览及默认 Web 工具模式不在首版范围。
+
+后续宿主闭环已于 2026-11-06 接入 CLI/Web 的可选工具模式、多集合存储、入口门槛及完整工具根恢复；该阶段工具完成 CP 更新为 v3，SQLite 更新为 v5。随后的 SQLite v6 将 CP 保留收敛为每个调用的当前镜像正文，旧镜像身份继续保留拒重；这不改变 Frame v5 或工具恢复契约。默认 Web 仍为材料模式。当前范围见 [原生工具调用的宿主接入](native-tool-host-integration.md)，容量与真实模型结果见 [宿主验证报告](native-tool-host-validation.md)。

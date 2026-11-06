@@ -1,7 +1,7 @@
 import type { Message } from '../content/message.js';
 import type { ModelSettings } from './settings.js';
 import type { MessageLocator, TranscriptRangeLocator, TranscriptSnapshot } from '../content/transcript.js';
-import type { ConversationActivities, ConversationActivityChange } from './activity.js';
+import type { ConversationActivities, ConversationActivityChange, ConversationStage } from './activity.js';
 import type { FileTask, FileOutput } from './files.js';
 import type { ConversationTask } from './task.js';
 
@@ -31,6 +31,8 @@ export interface ConversationSubmissionSnapshot {
   readonly executions: readonly { readonly contextId: string }[];
   /** Optional, independently complete progress projection. It never determines the submission result. */
   readonly activities?: ConversationActivities;
+  /** Optional current processing stage; never determines the final submission result. */
+  readonly stage?: ConversationStage;
   /** Fixed after parent acceptance; a proposal or explicit input alone is not this fact. */
   readonly task?: ConversationTask;
   readonly fileOutput?: FileOutput;
@@ -50,6 +52,7 @@ export interface ConversationSubmissionChange {
   /** Newly attached executions, in attachment order. Overlapping baselines may already contain a prefix. */
   readonly executions?: readonly { readonly contextId: string }[];
   readonly activities?: ConversationActivityChange;
+  readonly stage?: ConversationStage;
   readonly task?: ConversationTask;
   readonly fileOutput?: FileOutput;
   readonly cancelRequested?: true;

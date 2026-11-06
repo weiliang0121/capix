@@ -22,17 +22,27 @@ export function analyzeFrames(databasePath) {
   uri.searchParams.set('immutable', '1');
   const database = new DatabaseSync(uri.href, { readOnly: true, timeout: 0 });
   try {
-    if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || database.prepare('PRAGMA user_version').get().user_version !== 3) throw new Error('Expected a conversation experiment database in storage format 3');
+    const storageFormat = database.prepare('PRAGMA user_version').get().user_version;
+    if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || ![3, 4, 5, 6].includes(storageFormat)) throw new Error('Expected a conversation experiment database in storage format 3/4/5/6');
     const totals = counter();
     const groups = new Map();
     const latest = new Map();
+    let imageIdentities = 0;
+    let discardedBodies = 0;
     for (const row of database.prepare('SELECT id, context_id, revision, body FROM checkpoint_images ORDER BY rowid').iterate()) {
-      const decoded = decode(row.body);
-      const image = cloneCheckpointImage(decoded.value);
-      if (image.id !== row.id || image.frame.owner.contextId !== row.context_id || !Number.isSafeInteger(row.revision) || row.revision < 1) throw new Error('Checkpoint image identity or revision differs from its row');
+      if (typeof row.id !== 'string' || !row.id.length || typeof row.context_id !== 'string' || !row.context_id.length || !Number.isSafeInteger(row.revision) || row.revision < 1) throw new Error('Invalid checkpoint image identity or revision');
       const previous = latest.get(row.context_id);
       if (previous && row.revision <= previous.revision) throw new Error('Checkpoint image revisions are not ordered');
-      latest.set(row.context_id, { id: row.id, revision: row.revision });
+      latest.set(row.context_id, { id: row.id, revision: row.revision, retained: row.body !== null });
+      imageIdentities++;
+      if (row.body === null) {
+        if (storageFormat < 6) throw new Error('Historical checkpoint body is missing in a format that retains all images');
+        discardedBodies++;
+        continue;
+      }
+      const decoded = decode(row.body);
+      const image = cloneCheckpointImage(decoded.value);
+      if (image.id !== row.id || image.frame.owner.contextId !== row.context_id) throw new Error('Checkpoint image identity differs from its row');
       const key = JSON.stringify([image.contract.key, image.contract.version]);
       let group = groups.get(key);
       if (!group) {
@@ -50,6 +60,7 @@ export function analyzeFrames(databasePath) {
       const image = latest.get(row.context_id);
       const delivered = row.delivery !== null;
       if (!image || row.image_id !== image.id || row.revision !== image.revision + Number(delivered)) throw new Error('Checkpoint head differs from its latest image');
+      if (!image.retained) throw new Error('Current checkpoint head body is missing');
       if (delivered) {
         cloneCheckpointDelivery(decode(row.delivery).value);
         deliveries++;
@@ -57,11 +68,13 @@ export function analyzeFrames(databasePath) {
       heads++;
     }
     if (heads !== latest.size) throw new Error('Checkpoint images have no owning head');
+    if (storageFormat === 6 && totals.retainedBodies !== heads) throw new Error('Superseded checkpoint bodies remain in head-only storage');
     return {
-      formatVersion: 1,
+      formatVersion: 2,
+      storageFormat,
       scope: 'read-only closed experiment database; no body text or invocation identities',
-      accounting: 'JSON bytes for images and individual fields; repeated value bytes are not a promised storage saving. A value may be stored at several different semantic boundaries.',
-      totals: { ...totals, heads, deliveries },
+      accounting: 'JSON bytes and field counts describe retained image bodies only, not cumulative bytes written or capture/encode/compress cost. Discarded bodies cannot be reconstructed from identity rows. Repeated value bytes are not a promised storage saving; values may occur at different semantic boundaries.',
+      totals: { imageIdentities, discardedBodies, ...totals, heads, deliveries },
       contracts: [...groups.values()].map((group) => ({ contract: group.contract, ...group.counts, contexts: group.contexts.size, points: Object.fromEntries(group.points) })),
     };
   } finally {
@@ -70,11 +83,11 @@ export function analyzeFrames(databasePath) {
 }
 
 function counter() {
-  return { images: 0, jsonBytes: 0, frameBytes: 0, stateBytes: 0, inputBytes: 0, currentInputBytes: 0, childrenBytes: 0, childInputBytes: 0, sameInputCount: 0, sameInputBytes: 0, sameChildCurrentCount: 0, sameChildCurrentBytes: 0, sameReceptionCount: 0, sameReceptionBytes: 0 };
+  return { retainedBodies: 0, jsonBytes: 0, frameBytes: 0, stateBytes: 0, inputBytes: 0, currentInputBytes: 0, childrenBytes: 0, childInputBytes: 0, sameInputCount: 0, sameInputBytes: 0, sameChildCurrentCount: 0, sameChildCurrentBytes: 0, sameReceptionCount: 0, sameReceptionBytes: 0 };
 }
 
 function add(counts, image, jsonBytes) {
-  counts.images++;
+  counts.retainedBodies++;
   counts.jsonBytes += jsonBytes;
   counts.frameBytes += bytes(image.frame);
   counts.stateBytes += bytes(image.state);
@@ -134,5 +147,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (process.argv.length !== 4) throw new Error('Usage: node analyze-frames.mjs CLOSED_EXPERIMENT_DB NEW_OUTPUT_FILE');
   const report = analyzeFrames(process.argv[2]);
   writeFileSync(process.argv[3], `${JSON.stringify(report, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
-  console.log(`Analyzed ${report.totals.images} images and ${report.totals.heads} heads; wrote metadata-only report`);
+  console.log(`Analyzed ${report.totals.imageIdentities} image identities, ${report.totals.retainedBodies} retained bodies, ${report.totals.discardedBodies} discarded bodies and ${report.totals.heads} heads; wrote metadata-only report`);
 }

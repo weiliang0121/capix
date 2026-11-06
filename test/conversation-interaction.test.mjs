@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationScene, createInteractionAnswer, createCompletionReplyNode, HistoryResource, CompletionInteractionResource, ModelReplyPending, CompletionInteraction } from '@capix/conversation-service';
@@ -113,7 +114,7 @@ test('cancelled local waiting releases the Runner while the model continues and 
   assert.deepEqual(transcript.snapshot(), messages);
   response.resolve(modelReply('late answer'));
   await interactions.settled();
-  assert.equal((await reader(interactions).run(reference)).text, 'late answer');
+  assert.equal(modelReplyText(await reader(interactions).run(reference)), 'late answer');
   assert.equal(sends, 1);
   assert.deepEqual(transcript.snapshot(), messages, 'reading feedback does not automatically accept a conversation answer');
   interactions.close();
@@ -142,8 +143,8 @@ test('wait expiry returns the exact exchange reference and a fresh reader consum
   response.resolve(modelReply('late answer'));
   await interactions.settled();
   const fresh = reader(interactions, 0);
-  assert.equal((await fresh.run(pending.reference)).text, 'late answer');
-  assert.equal((await fresh.run(structuredClone(pending.reference))).text, 'late answer');
+  assert.equal(modelReplyText(await fresh.run(pending.reference)), 'late answer');
+  assert.equal(modelReplyText(await fresh.run(structuredClone(pending.reference))), 'late answer');
   assert.equal(sends, 1);
   assert.deepEqual(transcript.snapshot(), messages);
   interactions.close();
@@ -166,8 +167,8 @@ test('persisted feedback can be read by rebuilt resource and interaction hosts w
     },
   });
   const restoredReader = reader(restored, 0);
-  assert.equal((await restoredReader.run(reference)).text, 'saved answer');
-  assert.equal((await restoredReader.run(reference)).text, 'saved answer');
+  assert.equal(modelReplyText(await restoredReader.run(reference)), 'saved answer');
+  assert.equal(modelReplyText(await restoredReader.run(reference)), 'saved answer');
   assert.equal(storage.states.size, 1);
   assert.equal(restored.active, false);
   restored.close();

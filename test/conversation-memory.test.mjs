@@ -12,7 +12,7 @@ import { View } from '@capix/view';
 
 const messageRef = (key) => ({ source: 'messages', key });
 const memoryRef = (key) => ({ source: 'memories', key });
-const reply = (text) => ({ id: 'offline-memory', model: 'fixture', text, finishReason: 'stop', usage: null });
+const reply = (text) => ({ id: 'offline-memory', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 const create = (content = 'Prefer short Chinese answers', indexes = [0]) => ({ action: 'create', memoryId: null, change: 'Preserve the stated preference', sourceIndexes: indexes, result: { topic: 'Answer preference', content, sourceIndexes: indexes } });
 const update = (memory, content = memory.content, indexes = memory.sourceIndexes) => ({ ...create(content, indexes), action: 'update', memoryId: memory.id, result: { topic: memory.topic, content, sourceIndexes: indexes } });
 
@@ -245,7 +245,7 @@ test('model and completion failures are handled as skipped proposals without mem
         async complete() {
           calls++;
           if (kind === 'rejection') throw new Error('model unavailable');
-          if (kind === 'length') return { ...reply('{"changes":[]}'), finishReason: 'length' };
+          if (kind === 'length') return { ...reply('{"changes":[]}'), termination: { kind: 'incomplete', reason: 'length' } };
           if (kind === 'empty') return reply('');
           if (kind === 'invalid JSON') return reply('not json');
           return reply('{"changes":[],"note":"extra"}');

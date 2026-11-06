@@ -2,11 +2,22 @@
 
 浏览器与 CLI 使用同一条公开资源、结构和 Runner 装配，Web 宿主增加提交反馈、消息同步和检查端点。它不复用旧 Observer 的业务环境，不为界面重建 Task Group；实际 Scene 调用就是每次处理的观测根。
 
+## 回答模式
+
+CLI/Web 都通过启动参数 `--answer-mode material|tools` 选择回答方式，默认仍为 `material`；它与 `--demo` / `--live` 独立。模式在宿主装配时固定，页面展示当前模式，不在已有运行中切换结构。
+
+- `material` 使用固定 View 材料回答，保留正文流式预览。
+- `tools` 使用原生工具调用，由模型选择 `search_history` 搜索历史或 `read_message` 读取消息片段。准备节点固定本次正式问题及活跃记忆；历史工具只读取该问题之前的准确 Transcript 前缀，不读取本次问题或之后追加的消息。搜索有分页和结果上限，读取有片段与字节边界，不把局部结果冒充完整历史。
+
+工具模式展示真实的模型／工具执行阶段和正式回答，不转发模型中间候选正文。阶段来自 ToolLoop 直属模型或工具子调用的实际事实，不依赖开启 Recorder；恢复只展示本次实际推进，不回放旧 CP 的阶段。阶段结束不代表根调用已经交付，正式消息、记忆维护和根终态仍分别表达。
+
 ## 所有权
 
 ```text
 web/host
+  ├─ createConversationHostAssembly → 固定模式、结构与供给
   ├─ ConversationStore → Transcript / Memories / View
+  ├─ ToolExchanges → 每次入口的交换集合 use；退出只释放内存
   ├─ ModelProvider → Interactions
   ├─ Scene + Resources + Interactions → Runner
   ├─ ConversationRecording → 显式采集时才建立 Recorder / RecordBook
@@ -28,12 +39,16 @@ SessionHttpTransport → ConversationSession
 1. 页面读取单会话身份、服务受理状态，建立消息同步。
 2. 发送前将提交定位保存到本标签页 sessionStorage；不保存正文或运行中间态。
 3. HTTP 按单条用户文本接纳，服务 Runner 负责真正的忙闲与运行；客户端身份只是关联，不承诺跨进程幂等。
-4. 输出增量与提交修订独立发送。正式助手追加即能显示，即使之后的维护尚未完成。
+4. 材料预览或工具阶段通过提交反馈传递。正式助手追加即能显示，即使之后的维护尚未完成。
 5. 最终状态取自 Runner 实际返回/失败，包括释放处理。停止请求不等于已经取消。
 6. 浏览器断开只解除连接。刷新后先查询原 ID 并 follow；没有本地定位时可发现本进程当前活动提交。
 7. 未知或淘汰的 ID 保持未确认，不重发。用户可检查实际消息后结束本地跟踪，再发一条新输入。
 
 HTTP 仅有限保留本进程反馈。重启后内容仍在，提交与调用记录不恢复；“没有活动提交”不能反证旧输入未执行。发送、模型反馈、消息写入和记忆/View 操作仍是独立事实，不合并为事务。
+
+两种回答模式共用归档入口门槛：统计交换集合、当前模型交互以及每个调用当前 CP 镜像和已有终态交付的逻辑 JSON 字节。被替代镜像只保留拒重身份，不保留正文。默认参考阈值为 **2 GiB**，为下一次入口增加 **512 MiB** 经验余量，并按在途交互估计尚未保存的回复。这是实测工作负载下的准入参考，不是硬配额或单次增长上界；已接纳工作和晚到反馈继续保存，提交时不以门槛拒绝。超限阻止新运行／恢复，不阻止读取消息、已有提交或检查恢复候选；存储本身失效仍停止服务接纳。嵌入宿主可显式配置 `archivePolicy`。
+
+每次 run/resume 和显式恢复资格检查各自持有一个 use，在 finally 中释放自己的交换实体引用。拒绝 busy、取消和失败也走同一释放路径，不影响其他入口的句柄或独立发送。磁盘事实继续保留，不自动退休、删除、清理交互或 CP；退出 View 也不会释放这些归档。
 
 ## 传输与检查
 
@@ -44,7 +59,7 @@ HTTP 仅有限保留本进程反馈。重启后内容仍在，提交与调用记
 - 刷新内容不自动重试模型，检查器也不发起业务调用。没有逐 token 发送整份实体或 RecordBook。
 - 恢复候选是独立的发现操作，不随普通提交结束或检查器刷新查询。应用在每次会话初始化完成且宿主 ready、没有活动提交时自动检查一次；同一会话 ID 的重新初始化也适用。旧本地跟踪尚未判明时等待查询结果；确认在途或宿主 busy 时先跟随原提交，不在随后结束时补做自动检查。新本地提交尚在发送或跟随时，即便旧会话信息仍显示 ready，也禁止查询。用户可明确点击“检查可恢复处理”。本地未知跟踪不阻止只读检查，真正恢复仍须满足 canSend，不能借查询自动清除跟踪。
 - 恢复检查区分未检查、加载、已检查（可为空）、过期和失败。新的提交、已观察到的消息／记忆／View 变化或连接变化使原结果过期并解除旧请求消费；过期响应不得回写，不把“未检查／暂不可查询”当作没有候选。页面只投影查询结果，不决定 CP 资格。
-- 装载恢复能力的宿主在 `GET /api/recoveries` 前检查当前准入：busy 返回409、不扫描 CP；unavailable 返回503及准入错误。真正查询仍执行原 Store／业务资格校验，`POST /api/resume` 仍在派发前检查准入与准确依据。普通提交后的 `/api/session` 准入确认、提交 read/follow 不变；不修改 CP、增加轮询或跨查询缓存。
+- 装载恢复能力的宿主在 `GET /api/recoveries` 前检查存储健康和忙闲：busy 返回409、不扫描 CP；存储不可用返回503。归档写入门槛不阻止这个只读查询。工具根列表只检查轻量身份与内容依据，符合者标为 `eligibility: 'unchecked'`，不是已证明可恢复；页面显示“待核验恢复依据”，用户明确续接时才核验原集合、交互反馈、内容、配置和完整 CP 依据。`POST /api/resume` 在派发前及实际入口重新检查准入与准确依据，不隐式重发模型。普通提交后的 `/api/session` 准入确认、提交 read/follow 不变；不增加轮询或跨查询缓存。
 - 服务只监听本机，HTTP核对 Host、POST同源与JSON类型，输入有限，静态文件只来自构建目录；Provider配置和密钥不进入响应。
 
 ## 主动记录
@@ -69,10 +84,12 @@ Web 默认不采集调用记录。检查器中的“开始记录”从下一次 
 ```sh
 pnpm build
 pnpm conversation:web --demo
+# 工具模式的离线链路验证
+pnpm conversation:web --demo --answer-mode tools
 # 真实模式，凭据由启动宿主加载
-node --env-file=.env services/conversation/dist/web/start.js --live
+node --env-file=.env services/conversation/dist/web/start.js --live --answer-mode tools
 ```
 
 打开 `http://127.0.0.1:4318`，可通过 `--port` 或 `--db` 改变宿主配置。真实模式默认使用已有 `.capix/conversation.sqlite`，演示模式使用独立演示库。相同数据库单写者互斥，先正常退出原 CLI。Ctrl-C 停止接纳与本地调用，等待独立请求完成，再释放存储。
 
-默认服务提供显式 CP 续接及独立的恢复活动摘要，见[有限恢复](conversation-recovery.md)。当前不提供多会话管理、文件任务或历史记录归档。开发界面仍可使用现有 Vite，以 `OBSERVER_API_ORIGIN` 显式指向新服务后打开 `/conversation.html`。
+材料和工具模式各自提供显式 CP 续接及独立的恢复活动摘要，见[有限恢复](conversation-recovery.md)。当前不提供多会话管理、文件任务或历史采集记录的导入／归档界面。开发界面仍可使用现有 Vite，以 `OBSERVER_API_ORIGIN` 显式指向新服务后打开 `/conversation.html`。

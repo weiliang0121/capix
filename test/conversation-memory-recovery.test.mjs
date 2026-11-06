@@ -56,7 +56,7 @@ function setup(state, store, { fail = false, forbidModel = false, include = fals
       calls++;
       if (forbidModel) throw new Error('A restored accepted proposal must not call the model');
       if (fail) throw new Error('No valid extraction');
-      return { id: 'model', model: 'fixture', text: JSON.stringify({ changes: [create('Concise')] }), finishReason: 'stop', usage: null };
+      return { id: 'model', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: JSON.stringify({ changes: [create('Concise')] }) }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
     },
   };
   const maintenance = include ? createMessageInclusion() : createMemoryMaintenance();

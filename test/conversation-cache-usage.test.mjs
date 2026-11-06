@@ -10,7 +10,7 @@ import { Interaction } from '@capix/interaction';
 
 const request = { messages: [{ role: 'user', content: 'question' }] };
 const baseUsage = { promptTokens: 20, completionTokens: 5, totalTokens: 25 };
-const reply = (usage) => ({ id: 'reply', model: 'fixture', text: 'answer', finishReason: 'stop', usage });
+const reply = (usage) => ({ id: 'reply', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: 'answer' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage });
 
 test('completion contract and CP codecs preserve optional cache counts and reject inconsistent usage', () => {
   const node = createCompletionNode();

@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -41,7 +42,7 @@ function capture(path, variant) {
   assert.equal(report.interaction.id, report.reference.id);
   assert.equal(report.interaction.contract, report.reference.contract);
   assert.deepEqual(report.interaction.request, second.input);
-  assert.equal(report.interaction.feedback.payload.text, 'B 保留测试时间。');
+  assert.equal(modelReplyText(report.interaction.feedback.payload), 'B 保留测试时间。');
   assert.deepEqual(report.preview, [], 'analysis previews remain local');
   return report;
 }

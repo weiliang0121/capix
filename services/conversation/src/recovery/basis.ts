@@ -43,7 +43,7 @@ export const ConversationRecoveryResource = new ResourceOffer({
   }),
 });
 
-interface RecoveryStore {
+export interface RecoveryStore {
   readonly checkpoints: CheckpointStore & { listRoots(): readonly CheckpointHead[] };
   readonly interactions: { read(id: string): InteractionState<ModelRequest, ModelReply> | undefined };
   assertAvailable(): void;
@@ -69,14 +69,28 @@ export function listConversationRecoveries(content: ConversationViewSource, stor
 /** This is host admission, not a promise to resume an arbitrary custom strategy. */
 export function assertConversationRecovery(content: ConversationViewSource, store: RecoveryStore, configuration: string, contextId: string, outputBudget: Partial<ConversationOutputBudget> = {}): { input: string; inputRevision: number; user: AcceptedConversationMessage; answer?: AcceptedConversationMessage } {
   store.assertAvailable();
-  const root = store.checkpoints.read(contextId);
-  if (!root || root.delivery || root.image.contract.key !== conversationCheckpointKey || root.image.contract.version !== 2 || root.image.frame.owner.parentContextId !== undefined) throw changed('Only an unfinished default conversation checkpoint can resume');
+  const root = requireConversationRecoveryRoot(store.checkpoints.read(contextId), { key: conversationCheckpointKey, version: 3 });
+  const state = requireConversationRecoveryState(root, configuration, outputBudget);
+  const { heads, handled } = recoverySubtree(root, store.checkpoints);
+  assertCompletionRecovery(heads, handled, store.interactions);
+  return assertConversationContentRecovery(content, root, state, heads);
+}
+
+export function requireConversationRecoveryRoot(root: CheckpointHead | undefined, contract: { readonly key: string; readonly version: number }): CheckpointHead {
+  if (!root || root.delivery || !equal(root.image.contract, contract) || root.image.frame.owner.parentContextId !== undefined) throw changed('Only an unfinished compatible conversation checkpoint can resume');
+  return root;
+}
+
+export function requireConversationRecoveryState(root: CheckpointHead, configuration: string, outputBudget: Partial<ConversationOutputBudget>) {
   const state = z.object({ basis: recoveryBasisSchema, outputBudget: z.strictObject({ answer: count, memory: count }), response: acceptedMessageSchema.optional() }).parse(root.image.state);
   const budget = resolveConversationOutputBudget(outputBudget);
   if (!equal(state.outputBudget, budget)) throw changed('Conversation output budget changed');
   const basis = state.basis;
   if (basis.configuration !== configuration || root.image.frame.input !== basis.accepted.message.content) throw changed('Conversation configuration or original input changed');
-  const { heads, handled } = subtree(root, store.checkpoints);
+  return state;
+}
+
+export function assertCompletionRecovery(heads: ReadonlyMap<string, CheckpointHead>, handled: ReadonlySet<string>, interactions: RecoveryStore['interactions']): void {
   // This host resumes only exchanges whose full feedback survived. A restored
   // absence is missing recovery evidence, not an ordinary model proposal failure.
   // New steps reached after resume still start ordinary independent interactions.
@@ -84,15 +98,15 @@ export function assertConversationRecovery(content: ConversationViewSource, stor
     if (head.image.contract.key !== 'conversation.completion-start' || handled.has(head.image.frame.owner.contextId)) continue;
     const reference = referenceSchema.parse(head.image.state);
     const request = modelRequestSchema.parse(head.image.frame.input);
-    const saved = store.interactions.read(reference.id);
+    const saved = interactions.read(reference.id);
     if (!saved || saved.contract !== reference.contract || !equal(saved.request, request) || !saved.feedback) throw changed('The saved model interaction has no matching durable feedback; it will not be sent again');
   }
-  const transcript = content.transcript.exportState();
-  const base = basis.transcript;
-  if (transcript.id !== basis.accepted.transcriptId || base.end !== basis.accepted.index + 1 || basis.accepted.message.role !== 'user' || !equal(transcript.messages[basis.accepted.index], basis.accepted.message) || digest(transcript.messages.slice(0, base.end)) !== base.digest || !equal(transcript.starts, base.starts)) throw changed('Formal input or its preceding transcript changed');
-  const suffix = transcript.messages.slice(base.end);
-  if (suffix.length > 1 || transcript.revision !== base.revision + suffix.length) throw changed('A later submission or transcript change prevents continuation');
-  if (state.response && (!suffix[0] || state.response.transcriptId !== transcript.id || state.response.index !== base.end || !equal(state.response.message, suffix[0]))) throw changed('The accepted answer is missing from durable content');
+}
+
+export function assertConversationContentRecovery(content: ConversationViewSource, root: CheckpointHead, state: ReturnType<typeof requireConversationRecoveryState>, heads: ReadonlyMap<string, CheckpointHead>) {
+  const contextId = root.image.frame.owner.contextId;
+  const basis = state.basis;
+  const { transcript, base, suffix } = assertConversationInputRecovery(content, root, state);
   const savedAnswer = root.image.frame.children.find((child) => child.key === 'answer');
   if (savedAnswer?.state.kind === 'returned' && savedAnswer.state.reception.kind === 'accepted' && !suffix.length) throw changed('The accepted answer effect is missing');
   if (suffix.length) {
@@ -160,7 +174,19 @@ export function assertConversationRecovery(content: ConversationViewSource, stor
   return { input: basis.accepted.message.content, inputRevision: base.revision, user: basis.accepted, ...(suffix[0] ? { answer: { transcriptId: transcript.id, index: base.end, message: suffix[0] } } : {}) };
 }
 
-function subtree(root: CheckpointHead, store: CheckpointStore): { heads: Map<string, CheckpointHead>; handled: Set<string> } {
+/** Light candidate check; it does not certify model feedback, archive slots or memory effects. */
+export function assertConversationInputRecovery(content: ConversationViewSource, _root: CheckpointHead, state: ReturnType<typeof requireConversationRecoveryState>) {
+  const basis = state.basis;
+  const transcript = content.transcript.exportState();
+  const base = basis.transcript;
+  if (transcript.id !== basis.accepted.transcriptId || base.end !== basis.accepted.index + 1 || basis.accepted.message.role !== 'user' || !equal(transcript.messages[basis.accepted.index], basis.accepted.message) || digest(transcript.messages.slice(0, base.end)) !== base.digest || !equal(transcript.starts, base.starts)) throw changed('Formal input or its preceding transcript changed');
+  const suffix = transcript.messages.slice(base.end);
+  if (suffix.length > 1 || transcript.revision !== base.revision + suffix.length) throw changed('A later submission or transcript change prevents continuation');
+  if (state.response && (!suffix[0] || state.response.transcriptId !== transcript.id || state.response.index !== base.end || !equal(state.response.message, suffix[0]))) throw changed('The accepted answer is missing from durable content');
+  return { transcript, base, suffix };
+}
+
+export function recoverySubtree(root: CheckpointHead, store: Pick<CheckpointStore, 'read'>): { heads: Map<string, CheckpointHead>; handled: Set<string> } {
   const heads = new Map<string, CheckpointHead>();
   const handled = new Set<string>();
   const queue = [{ head: root, handled: false }];
@@ -180,7 +206,7 @@ function subtree(root: CheckpointHead, store: CheckpointStore): { heads: Map<str
         if (!wasHandled && child.state.kind === 'waiting') throw changed('A pending child has no saved checkpoint; its dispatch cannot be repeated');
         continue;
       }
-      if (!equal(saved.image.frame.owner, child.identity) || saved.image.frame.owner.parentContextId !== id || !equal(saved.image.contract, child.contract)) throw changed('Checkpoint direct ownership or contract changed');
+      if (!equal(saved.image.frame.owner, child.identity) || saved.image.frame.owner.parentContextId !== id || !equal(saved.image.contract, child.contract) || !equal(saved.image.frame.input, child.input)) throw changed('Checkpoint direct ownership, input or contract changed');
       if (!wasHandled && child.state.kind === 'waiting' && saved.delivery && saved.delivery.status !== 'succeeded') throw changed('A failed or cancelled child cannot execute again');
       queue.push({ head: saved, handled: wasHandled });
     }

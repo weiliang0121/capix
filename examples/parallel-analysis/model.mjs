@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import { createCompletionNode, ModelCompletionIncomplete } from '@capix/conversation-service';
 import { Group } from '@capix/structure';
 import { delta, text } from './structure.mjs';
@@ -27,8 +28,8 @@ function modelStep(name, stage, instruction, maxTokens) {
       },
       { delta: (value) => work.output.emit(value) },
     );
-    if (reply.finishReason !== 'stop') throw new ModelCompletionIncomplete(reply.finishReason, maxTokens);
-    return text(reply.text);
+    if (reply.termination.reason !== 'stop') throw new ModelCompletionIncomplete(reply.termination.reason, maxTokens);
+    return text(modelReplyText(reply));
   };
   return node;
 }

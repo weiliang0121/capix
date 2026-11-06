@@ -11,7 +11,7 @@ import { Runner } from '@capix/server-runtime';
 
 const messageRef = (key) => ({ source: 'messages', key });
 const memoryRef = (key) => ({ source: 'memories', key });
-const reply = (text) => ({ id: 'assembly-offline', model: 'fixture', text, finishReason: 'stop', usage: null });
+const reply = (text) => ({ id: 'assembly-offline', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 
 async function database(t) {
   const directory = await mkdtemp(join(tmpdir(), 'capix-assembly-'));

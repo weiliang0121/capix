@@ -73,7 +73,7 @@ const model = {
       assert.equal(input.secondary.material.index, 2);
       const text = input.primary.status === 'unavailable' ? 'A 分析不可用；B 保留测试时间。' : 'A 发布更早；B 保留测试时间。';
       controls.emit?.(text);
-      return { id: 'merge-offline', model: 'offline-parallel-recovery', text, finishReason: 'stop', usage: null };
+      return { id: 'merge-offline', model: 'offline-parallel-recovery', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
     }
     assert.equal(input.stage, 'analysis');
     const index = input.material.index;
@@ -86,7 +86,7 @@ const model = {
     release();
     await gate.promise;
     controls.emit?.(`内部分析 ${index}`);
-    return { id: `analysis-${index}`, model: 'offline-parallel-recovery', text: index === 0 ? 'A 发布更早。' : 'B 保留测试时间。', finishReason: index === 0 && variant === 'handled' ? 'length' : 'stop', usage: null };
+    return { id: `analysis-${index}`, model: 'offline-parallel-recovery', formatVersion: 1, output: [{ kind: 'text', text: index === 0 ? 'A 发布更早。' : 'B 保留测试时间。' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: index === 0 && variant === 'handled' ? 'incomplete' : 'completed', reason: index === 0 && variant === 'handled' ? 'length' : 'stop' }, usage: null };
   },
 };
 
@@ -145,7 +145,7 @@ function requireEvidence(condition, message) {
 function linkedHead(port, relation, parentId, contract, point) {
   requireEvidence(relation?.identity.parentContextId === parentId, 'Child ownership changed');
   const head = port.read(relation.identity.contextId);
-  requireEvidence(head && !head.delivery && head.image.contract.key === contract && head.image.contract.version === 1 && head.image.point === point, 'Required waiting child checkpoint is unavailable');
+  requireEvidence(head && !head.delivery && head.image.contract.key === contract && head.image.contract.version === (contract.startsWith('conversation.completion') || contract === 'conversation.interaction-completion' ? 2 : 1) && head.image.point === point, 'Required waiting child checkpoint is unavailable');
   requireEvidence(equal(head.image.frame.owner, relation.identity) && equal(head.image.contract, relation.contract) && equal(head.image.frame.input, relation.input) && head.image.frame.round === 1, 'Child checkpoint differs from its saved relationship');
   return head;
 }

@@ -9,7 +9,7 @@ import { Resources, Runner } from '@capix/server-runtime';
 import { Transcript, TranscriptResource } from '@capix/transcript';
 import { View } from '@capix/view';
 
-const reply = (text, finishReason = 'stop') => ({ id: 'completion', model: 'offline', text, finishReason, usage: null });
+const reply = (text, finishReason = 'stop') => ({ id: 'completion', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: finishReason === 'stop' ? 'completed' : 'incomplete', reason: finishReason }, usage: null });
 const deltas = (events) => events.filter((event) => event.kind === 'delta').map((event) => event.delta);
 const completed = (events) => events.filter((event) => event.kind === 'completed');
 const proposal = (index = 0) => ({ changes: [{ action: 'create', memoryId: null, change: 'Preserve the request', sourceIndexes: [index], result: { topic: 'Preference', content: 'Use concise Chinese', sourceIndexes: [index] } }] });

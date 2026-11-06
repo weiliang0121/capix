@@ -6,11 +6,11 @@ import type { InvocationProgress } from './progress.js';
 
 /** Project established facts without publishing, sequencing or changing their producer. */
 export function invocationProgress(fact: InvocationFact, signal: AbortSignal): InvocationProgress {
-  const description: { name?: string; label?: string } = {};
+  const description: { id?: string; name?: string; label?: string } = {};
   // Optional descriptions must not execute getters or break passive progress.
   try {
     if (fact.description) {
-      for (const key of ['name', 'label'] as const) {
+      for (const key of ['id', 'name', 'label'] as const) {
         const property = Object.getOwnPropertyDescriptor(fact.description, key);
         if (property && 'value' in property && typeof property.value === 'string') description[key] = property.value;
       }

@@ -3,11 +3,14 @@ import { isDeepStrictEqual } from 'node:util';
 import { Interaction, type InteractionState, type InteractionPersistence, type InteractionCommit } from '@capix/interaction';
 import type { ModelRequest, ModelReply } from '@capix/model-provider';
 import { z } from 'zod';
+import { LegacyCompletionInteraction } from '../model/legacy-completion.js';
 import { CompletionInteraction } from '../model/completion-contract.js';
 import { RecoveryConflict, requireIdentity, requireRevision, type RecoveryTransaction } from './recovery.js';
 
 export interface ConversationInteractions extends InteractionPersistence<ModelRequest, ModelReply> {
   read(id: string): InteractionState<ModelRequest, ModelReply> | undefined;
+  /** Original validated persisted shape, including read-only text v1 history. */
+  readHistory(id: string): InteractionState | undefined;
 }
 
 const maxBytes = 8 * 1024 * 1024;
@@ -49,12 +52,26 @@ export class SqliteInteractions implements ConversationInteractions {
     return this.transaction('interaction.read', () => this.readCurrent(id));
   }
 
+  readHistory(id: string): InteractionState | undefined {
+    requireIdentity(id);
+    return this.transaction('interaction.history', () => this.readStored(id));
+  }
+
   private readCurrent(id: string): InteractionState<ModelRequest, ModelReply> | undefined {
+    const state = this.readStored(id);
+    if (!state) return undefined;
+    if (state.contract !== CompletionInteraction.key) throw conflict('Historical text interaction cannot be consumed by the native reply contract');
+    return capture(state);
+  }
+
+  private readStored(id: string): InteractionState | undefined {
     const value = this.database.prepare('SELECT * FROM completion_interactions WHERE id = ?').get(id);
     if (!value) return undefined;
     const row = rowSchema.parse(value);
     if (Buffer.byteLength(row.body, 'utf8') > maxBytes) throw new Error('Persisted interaction exceeds its byte limit');
-    const state = capture(JSON.parse(row.body));
+    const raw: InteractionState = JSON.parse(row.body);
+    const state = raw.contract === LegacyCompletionInteraction.key ? Interaction.restore(raw, { contract: LegacyCompletionInteraction }).exportState() : capture(raw);
+    if (!isDeepStrictEqual(raw, state)) throw new TypeError('Historical interaction contains unsupported fields');
     if (state.id !== row.id || state.revision !== row.revision) throw new Error('Persisted interaction differs from its row');
     return state;
   }

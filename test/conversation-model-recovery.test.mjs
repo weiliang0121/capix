@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { MemoryCheckpointStore } from '@capix/checkpoint';
@@ -11,7 +12,7 @@ import { Transcript } from '@capix/transcript';
 import { View } from '@capix/view';
 
 const clone = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
-const response = { id: 'saved-reply', model: 'offline', text: '正式回答', finishReason: 'stop', usage: null };
+const response = { id: 'saved-reply', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: '正式回答' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
 const material = {
   query: { transcriptId: 'messages', index: 1, content: '继续' },
   materials: { basis: { viewRevision: 3, sources: { messages: { id: 'messages', scope: 'whole', version: '2' }, memories: { id: 'memories', scope: 'whole', version: '0' } } }, entries: [{ source: 'messages', key: 0, value: { role: 'assistant', content: '前文' } }] },
@@ -107,7 +108,7 @@ for (const [contract, point] of [
         if (event.kind === 'delta') previews.push(event.delta);
       },
     });
-    assert.equal(await original.runner.run(material), response.text);
+    assert.equal(await original.runner.run(material), modelReplyText(response));
     await original.interactions.settled();
     original.interactions.close();
     assert.deepEqual(previews, ['预览']);
@@ -120,7 +121,7 @@ for (const [contract, point] of [
         if (event.kind === 'delta') replay.push(event.delta);
       },
     });
-    assert.equal(await restored.runner.resume(store.writes[0].image.frame.owner.contextId), response.text);
+    assert.equal(await restored.runner.resume(store.writes[0].image.frame.owner.contextId), modelReplyText(response));
     assert.deepEqual(replay, []);
     assert.equal(sends, 1);
     await restored.interactions.settled();
@@ -162,7 +163,7 @@ test('restoration still rejects a saved incomplete model reply at the answer bou
   let sends = 0;
   const original = modelHarness(store, saved, () => {
     sends++;
-    return { ...response, finishReason: 'length' };
+    return { ...response, termination: { kind: 'incomplete', reason: 'length' } };
   });
   await assert.rejects(original.runner.run(material), { code: 'MODEL_OUTPUT_LIMIT' });
   await original.interactions.settled();
@@ -178,11 +179,11 @@ test('a direct model call can restore its saved completion but never repeats the
   const store = new Journal();
   const firstResources = new Resources().register(new Resource({ complete: async () => response }), CompletionResource);
   const first = new Runner(fixtureScene(createMaterialAnswer(createCompletionNode())), firstResources, undefined, { checkpoints: { store } }).build();
-  assert.equal(await first.run(material), response.text);
+  assert.equal(await first.run(material), modelReplyText(response));
   const boundary = store.writes.findIndex((write) => write.image?.contract.key === 'conversation.direct-completion');
   const restoredResources = new Resources().register(new Resource({ complete: () => assert.fail('completed direct request cannot repeat') }), CompletionResource);
   const restored = new Runner(fixtureScene(createMaterialAnswer(createCompletionNode())), restoredResources, undefined, { checkpoints: { store: prefix(store.writes, boundary) } }).build();
-  assert.equal(await restored.resume(store.writes[0].image.frame.owner.contextId), response.text);
+  assert.equal(await restored.resume(store.writes[0].image.frame.owner.contextId), modelReplyText(response));
 });
 
 test('saved preparation resumes its fixed material without consulting a changed view', async () => {
@@ -241,11 +242,11 @@ test('material request identity survives input field order changes at checkpoint
   const store = new Journal();
   const saved = persistence();
   const original = modelHarness(store, saved, () => response);
-  assert.equal(await original.runner.run(reordered), response.text);
+  assert.equal(await original.runner.run(reordered), modelReplyText(response));
   await original.interactions.settled();
   original.interactions.close();
   const boundary = store.writes.findIndex((write) => write.image?.contract.key === 'conversation.completion-reply' && write.image.point === 'waiting');
   const restored = modelHarness(prefix(store.writes, boundary), saved, () => assert.fail('request field ordering cannot trigger another send'));
-  assert.equal(await restored.runner.resume(store.writes[0].image.frame.owner.contextId), response.text);
+  assert.equal(await restored.runner.resume(store.writes[0].image.frame.owner.contextId), modelReplyText(response));
   restored.interactions.close();
 });

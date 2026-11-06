@@ -7,6 +7,7 @@ import { acceptFileOutput } from './files.js';
 import { acceptConversationTask } from './task.js';
 import { validAdmission } from './admission.js';
 import { AnswerPreviewReceiver, type AnswerPreviewState } from './preview.js';
+import { acceptStage } from './stage.js';
 
 export type SubmissionFeedback = { readonly status: 'idle' | 'connecting' | 'following' | 'ended' } | { readonly status: 'interrupted' | 'unavailable'; readonly error: unknown };
 export type SubmissionCancellation = { readonly status: 'requested' | 'sending' | 'acknowledged' } | { readonly status: 'uncertain'; readonly error: unknown };
@@ -183,14 +184,16 @@ export class ClientSubmission {
     let activities;
     let task;
     let fileOutput;
+    let stage;
     try {
       activities = acceptActivities(next.activities, previous?.activities);
       task = acceptConversationTask(next.task, previous?.task, this.input?.fileTask);
       fileOutput = acceptFileOutput(next.fileOutput, previous?.fileOutput, task?.kind === 'file' ? task.task : undefined);
+      stage = acceptStage(next.stage, previous?.stage);
     } catch (cause) {
       throw new SubmissionContractError('提交过程或文件结果无效。', { cause });
     }
-    const accepted = { ...next, ...(activities ? { activities } : {}), ...(task ? { task } : {}), ...(fileOutput ? { fileOutput } : {}) };
+    const accepted = { ...next, ...(activities ? { activities } : {}), ...(task ? { task } : {}), ...(fileOutput ? { fileOutput } : {}), ...(stage ? { stage } : {}) };
     if (previous) {
       if (next.revision === previous.revision) {
         if (!isEqual(accepted, previous)) throw new SubmissionContractError('同一提交修订包含不同事实。');
@@ -235,10 +238,12 @@ export class ClientSubmission {
     let activities = previous.activities;
     let task = previous.task;
     let fileOutput = previous.fileOutput;
+    let stage = previous.stage;
     try {
       if (change.activities !== undefined) activities = acceptActivityChange(change.activities, previous.activities);
       if (change.task !== undefined) task = acceptConversationTask(change.task, previous.task, this.input?.fileTask);
       if (change.fileOutput !== undefined) fileOutput = acceptFileOutput(change.fileOutput, previous.fileOutput, task?.kind === 'file' ? task.task : undefined);
+      if (change.stage !== undefined) stage = acceptStage(change.stage, previous.stage);
     } catch (cause) {
       throw new SubmissionContractError('提交过程或文件结果无效。', { cause });
     }
@@ -255,12 +260,13 @@ export class ClientSubmission {
       ...(activities ? { activities } : {}),
       ...(task ? { task } : {}),
       ...(fileOutput ? { fileOutput } : {}),
+      ...(stage ? { stage } : {}),
     };
     assertSubmissionFacts(next);
     if (next.input && this.transcriptId && next.input.transcriptId !== this.transcriptId) throw new SubmissionContractError('提交输入不属于当前消息集合。');
     if ((previous.input && !isEqual(next.input, previous.input)) || (previous.answer && !isEqual(next.answer, previous.answer)) || (previous.result && !isEqual(next.result, previous.result)) || (previous.integrity.status === 'incomplete' && !isEqual(next.integrity, previous.integrity))) throw new SubmissionContractError('提交反馈中的既有事实发生回退或改变。');
     if (frame.revision === previous.revision) {
-      if (executions !== previous.executions || activities !== previous.activities || !isEqual(next.input, previous.input) || !isEqual(next.answer, previous.answer) || !isEqual(next.task, previous.task) || !isEqual(next.fileOutput, previous.fileOutput) || next.cancelRequested !== previous.cancelRequested || !isEqual(next.result, previous.result) || !isEqual(next.integrity, previous.integrity) || !isEqual(next.admission, previous.admission)) throw new SubmissionContractError('同一提交修订包含不同事实。');
+      if (executions !== previous.executions || activities !== previous.activities || !isEqual(next.stage, previous.stage) || !isEqual(next.input, previous.input) || !isEqual(next.answer, previous.answer) || !isEqual(next.task, previous.task) || !isEqual(next.fileOutput, previous.fileOutput) || next.cancelRequested !== previous.cancelRequested || !isEqual(next.result, previous.result) || !isEqual(next.integrity, previous.integrity) || !isEqual(next.admission, previous.admission)) throw new SubmissionContractError('同一提交修订包含不同事实。');
       return;
     }
     const remote = copySubmission(next, false);
@@ -374,6 +380,7 @@ function assertSubmissionFacts(snapshot: ConversationSubmissionSnapshot): void {
   if ((snapshot.result && !['completed', 'cancelled', 'failed', 'rejected'].includes(snapshot.result.status)) || (snapshot.result && (snapshot.result.status === 'failed' || snapshot.result.status === 'rejected') && !validFailure(snapshot.result.error)) || (snapshot.integrity.status === 'incomplete' && !validFailure(snapshot.integrity.error))) throw new SubmissionContractError('提交结果或来源完整性诊断无效。');
   if (snapshot.result && snapshot.fileOutput?.status === 'pending') throw new SubmissionContractError('已结束的提交不能保留待创建的文件状态。');
   if (snapshot.task !== undefined && !snapshot.input) throw new SubmissionContractError('处理任务需要已接纳的输入。');
+  if (snapshot.stage !== undefined && (!snapshot.input || snapshot.result?.status === 'rejected')) throw new SubmissionContractError('提交阶段需要已接纳的输入。');
   if (snapshot.result?.status === 'rejected' && (snapshot.task !== undefined || snapshot.fileOutput !== undefined)) throw new SubmissionContractError('未接纳的提交不能包含任务或文件执行事实。');
   if (snapshot.cancelRequested !== undefined && snapshot.cancelRequested !== true) throw new SubmissionContractError('取消请求事实无效。');
   if (snapshot.result?.status === 'cancelled' && !snapshot.cancelRequested) throw new SubmissionContractError('取消结果缺少取消请求事实。');
@@ -392,6 +399,7 @@ function copySubmission(snapshot: ConversationSubmissionSnapshot, copyExecutions
     ...(snapshot.answer ? { answer: Object.freeze({ ...snapshot.answer }) } : {}),
     executions: copyExecutions ? Object.freeze(snapshot.executions.map((execution) => Object.freeze({ ...execution }))) : snapshot.executions,
     ...(snapshot.activities ? { activities: snapshot.activities } : {}),
+    ...(snapshot.stage ? { stage: snapshot.stage } : {}),
     ...(snapshot.task ? { task: snapshot.task } : {}),
     ...(snapshot.fileOutput ? { fileOutput: snapshot.fileOutput } : {}),
     ...(snapshot.admission ? { admission: Object.freeze({ ...snapshot.admission, ...(snapshot.admission.status === 'unavailable' ? { error: Object.freeze({ ...snapshot.admission.error }) } : {}) }) } : {}),

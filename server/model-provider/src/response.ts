@@ -1,6 +1,6 @@
 import { isRequestCancellation, ProviderError } from './error.js';
 import type { ModelReply } from './types.js';
-import { acceptUsage } from './usage.js';
+import { acceptWireReply } from './wire.js';
 
 /** Count received bytes, including whitespace, before parsing the bounded envelope. */
 export async function readModelReply(response: Response, signal: AbortSignal, limit: number): Promise<ModelReply> {
@@ -25,7 +25,7 @@ export async function readModelReply(response: Response, signal: AbortSignal, li
     signal.throwIfAborted();
     text += decoder.decode();
     complete = true;
-    return acceptReply(JSON.parse(text));
+    return acceptWireReply(JSON.parse(text));
   } catch (error) {
     if (isRequestCancellation(error, signal)) throw signal.reason;
     if (error instanceof ProviderError) throw error;
@@ -37,18 +37,6 @@ export async function readModelReply(response: Response, signal: AbortSignal, li
   }
 }
 
-function acceptReply(value: unknown): ModelReply {
-  if (!record(value) || typeof value.id !== 'string' || !value.id || typeof value.model !== 'string' || !value.model || !Array.isArray(value.choices) || value.choices.length !== 1) throw envelope();
-  const choice: unknown = value.choices[0];
-  if (!record(choice) || (choice.index !== undefined && choice.index !== 0) || !record(choice.message) || typeof choice.message.content !== 'string' || typeof choice.finish_reason !== 'string' || !choice.finish_reason) throw envelope();
-  const usage = acceptUsage(value.usage);
-  return Object.freeze({ id: value.id, model: value.model, text: choice.message.content, finishReason: choice.finish_reason, usage });
-}
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function envelope(): ProviderError {
-  return new ProviderError('ENVELOPE', 'Model response is not a supported text completion envelope');
+  return new ProviderError('ENVELOPE', 'Model response is not a supported Chat Completions envelope');
 }

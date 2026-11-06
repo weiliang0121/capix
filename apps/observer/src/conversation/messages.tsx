@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { ConversationSession } from '@capix/client-runtime';
+import type { ConversationStage } from '@capix/protocol';
 import { ArrowDown } from 'lucide-react';
 import { MessageContent } from '../components/message-content.js';
 import { CopyMessageButton } from '../features/conversation/CopyMessageButton.js';
@@ -34,7 +35,7 @@ export function ConversationMessages({ session }: { session: ConversationSession
   useLayoutEffect(() => {
     if (pinned.current) latest();
     else track();
-  }, [messages.length, preview?.text, pending]);
+  }, [messages.length, preview?.text, pending, remote?.stage]);
   useLayoutEffect(() => {
     const observer = new ResizeObserver(() => {
       if (pinned.current) latest();
@@ -51,7 +52,7 @@ export function ConversationMessages({ session }: { session: ConversationSession
           {!messages.length && !pending && (
             <div className="conversation-empty">
               <h3>从一条消息开始</h3>
-              <p>回答会实时显示。右侧可以查看调用过程，以及对话中形成的记忆。</p>
+              <p>{session.info?.answerMode === 'tools' ? '处理期间显示模型与工具阶段，完成后展示回答。' : '回答会实时显示。'}右侧可以查看调用过程，以及对话中形成的记忆。</p>
             </div>
           )}
           {messages.map((message, index) => (
@@ -93,7 +94,7 @@ export function ConversationMessages({ session }: { session: ConversationSession
           )}
           {!showPreview && submission && !remote?.result && !answerLoaded && (
             <p className="conversation-waiting" role="status">
-              {submission.feedback.status === 'unavailable' ? '提交结果暂不可查询' : submission.feedback.status === 'interrupted' ? '等待接回提交' : '正在处理…'}
+              {submission.feedback.status === 'unavailable' ? '提交结果暂不可查询' : submission.feedback.status === 'interrupted' ? '等待接回提交' : stageText(remote?.stage)}
             </p>
           )}
         </div>
@@ -106,4 +107,11 @@ export function ConversationMessages({ session }: { session: ConversationSession
       )}
     </div>
   );
+}
+
+function stageText(stage?: ConversationStage): string {
+  if (!stage) return '正在处理…';
+  if (stage.status === 'running') return stage.kind === 'tool' ? `正在使用工具：${stage.label}` : '模型正在处理…';
+  if (stage.status === 'succeeded') return stage.kind === 'tool' ? `工具 ${stage.label} 已返回，继续处理…` : '模型已返回，继续处理…';
+  return stage.status === 'cancelled' ? '当前步骤已取消，等待处理结果…' : '当前步骤未完成，等待处理结果…';
 }

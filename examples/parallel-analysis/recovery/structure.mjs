@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import { isDeepStrictEqual as equal } from 'node:util';
 import { z } from 'zod';
 import { Scene, Node, checkpointPoint, childReference, reception } from '@capix/structure';
@@ -38,8 +39,8 @@ function mergeRequest(input, primary, secondary) {
 }
 
 function completeText(reply) {
-  if (reply.finishReason !== 'stop') throw new AnalysisUnavailable(`Analysis ended with ${reply.finishReason}`);
-  return text(reply.text);
+  if (reply.termination.reason !== 'stop') throw new AnalysisUnavailable(`Analysis ended with ${reply.termination.reason}`);
+  return text(modelReplyText(reply));
 }
 
 /** A concrete recovery exercise, not a generic parallel/checkpoint preset.
@@ -86,8 +87,8 @@ export function createRecoveryScene({ report = () => {} } = {}) {
     if (!equal(value.material, selected)) throw new Error('Analysis changed its selected source');
     if (value.status === 'available') {
       const returned = fact.returned;
-      const result = typeof returned?.output === 'string' ? returned.output : returned?.output?.text;
-      if (returned?.status !== 'succeeded' || fact.reception.status !== 'accepted' || value.analysis !== result || (typeof returned.output !== 'string' && returned.output.finishReason !== 'stop')) throw new Error('Accepted analysis differs from its returned text');
+      const result = typeof returned?.output === 'string' ? returned.output : returned?.status === 'succeeded' ? modelReplyText(returned.output) : undefined;
+      if (returned?.status !== 'succeeded' || fact.reception.status !== 'accepted' || value.analysis !== result || (typeof returned.output !== 'string' && returned.output.termination.reason !== 'stop')) throw new Error('Accepted analysis differs from its returned text');
     } else if (!allowUnavailable || fact.returned?.status !== 'failed' || fact.reception.status !== 'handled' || value.reason !== fact.returned.diagnostic.message) throw new Error('Unavailable analysis needs its handled failure');
   }
 
@@ -140,7 +141,7 @@ export function createRecoveryScene({ report = () => {} } = {}) {
     check: (value, facts) => {
       const values = checkInputs(facts, 3);
       const child = facts.references.merge;
-      if (!values.primary || !values.secondary || child.order !== 2 || child.key !== 'merge' || !equal(child.input, mergeRequest(facts.input, values.primary, values.secondary)) || child.returned?.status !== 'succeeded' || child.returned.output.text !== value || facts.children.accepted(child.ref, mergeReception) !== value) throw new Error('Final text differs from the accepted merge');
+      if (!values.primary || !values.secondary || child.order !== 2 || child.key !== 'merge' || !equal(child.input, mergeRequest(facts.input, values.primary, values.secondary)) || child.returned?.status !== 'succeeded' || modelReplyText(child.returned.output) !== value || facts.children.accepted(child.ref, mergeReception) !== value) throw new Error('Final text differs from the accepted merge');
     },
     resume: { run: (_work, value) => value },
   });

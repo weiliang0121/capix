@@ -1,7 +1,10 @@
 import { isRequestCancellation, ModelEmissionFailure, ProviderError } from './error.js';
 import { readModelReply } from './response.js';
 import { readModelStream } from './stream.js';
-import type { ChatCompletionsConfiguration, ModelControls, ModelProvider, ModelReply, ModelRequest } from './types.js';
+import { measureModelRequest } from './contract.js';
+import { encodeMessages } from './wire.js';
+import { valueLimit } from './value.js';
+import type { ChatCompletionsConfiguration, ModelControls, ModelProvider, ModelReply, ModelRequest, ModelRequestInspection } from './types.js';
 
 /** One bounded HTTP request. No resource, interaction or conversation lifecycle is owned here. */
 export class ChatCompletionsProvider implements ModelProvider {
@@ -27,15 +30,18 @@ export class ChatCompletionsProvider implements ModelProvider {
     this.#fetch = configuration.fetch ?? globalThis.fetch;
   }
 
+  /** Uses the same fixed configuration and encoder as complete, without opening transport. */
+  inspectRequest(request: ModelRequest): ModelRequestInspection {
+    return this.prepareRequest(request).inspection;
+  }
+
   async complete(request: ModelRequest, controls: ModelControls = {}): Promise<ModelReply> {
     const external = controls.signal;
     external?.throwIfAborted();
     const emit = controls.emit;
     if (emit !== undefined && typeof emit !== 'function') throw new ProviderError('REQUEST', 'Model preview consumer must be a function');
-    const stream = request?.stream;
-    if (stream !== undefined && typeof stream !== 'boolean') throw new ProviderError('REQUEST', 'stream must be a boolean');
-    const streaming = stream === true;
-    const body = this.requestBody(request, streaming);
+    // Inspection is not a reservation: the current value is always checked again before sending.
+    const { body, streaming } = this.prepareRequest(request);
     const controller = new AbortController();
     const abort = () => controller.abort(external?.reason);
     external?.addEventListener('abort', abort, { once: true });
@@ -72,15 +78,24 @@ export class ChatCompletionsProvider implements ModelProvider {
     }
   }
 
+  private prepareRequest(request: ModelRequest) {
+    try {
+      const requestBytes = measureModelRequest(request);
+      const streaming = request.stream === true;
+      const body = this.requestBody(request, streaming);
+      const wireBytes = Buffer.byteLength(body);
+      if (wireBytes > valueLimit) throw new TypeError('Model wire request exceeds byte limit');
+      return { body, streaming, inspection: Object.freeze({ requestBytes, wireBytes }) };
+    } catch {
+      throw new ProviderError('REQUEST', 'Model request has invalid, unsupported or excessive content');
+    }
+  }
+
   private requestBody(request: ModelRequest, stream: boolean): string {
-    if (!request || !Array.isArray(request.messages) || request.messages.length === 0) throw new ProviderError('REQUEST', 'At least one model message is required');
-    const messages = Array.from(request.messages, (message) => {
-      if (!message || !['system', 'user', 'assistant'].includes(message.role) || typeof message.content !== 'string') throw new ProviderError('REQUEST', 'Model messages require a supported role and text');
-      return { role: message.role, content: message.content };
-    });
-    if (request.maxTokens !== undefined && (!Number.isSafeInteger(request.maxTokens) || request.maxTokens < 1)) throw new ProviderError('REQUEST', 'maxTokens must be a positive integer');
-    if (request.temperature !== undefined && (!Number.isFinite(request.temperature) || request.temperature < 0 || request.temperature > 2)) throw new ProviderError('REQUEST', 'temperature must be between zero and two');
-    if (request.responseFormat !== undefined && !['text', 'json_object'].includes(request.responseFormat)) throw new ProviderError('REQUEST', 'Unsupported response format');
-    return JSON.stringify({ model: this.#configuration.model, messages, stream, ...(stream ? { stream_options: { include_usage: true } } : {}), ...(request.maxTokens === undefined ? {} : { max_tokens: request.maxTokens }), ...(request.temperature === undefined ? {} : { temperature: request.temperature }), ...(request.responseFormat === undefined ? {} : { response_format: { type: request.responseFormat } }), ...(this.#configuration.thinking === undefined ? {} : { thinking: { type: this.#configuration.thinking } }) });
+    const messages = encodeMessages(request);
+    const tools = request.tools?.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.parameters } }));
+    const choice = request.toolChoice;
+    const body = JSON.stringify({ model: this.#configuration.model, messages, stream, ...(tools ? { tools } : {}), ...(choice === undefined ? {} : { tool_choice: typeof choice === 'string' ? choice : { type: 'function', function: { name: choice.name } } }), ...(stream ? { stream_options: { include_usage: true } } : {}), ...(request.maxTokens === undefined ? {} : { max_tokens: request.maxTokens }), ...(request.temperature === undefined ? {} : { temperature: request.temperature }), ...(request.responseFormat === undefined ? {} : { response_format: { type: request.responseFormat } }), ...(this.#configuration.thinking === undefined ? {} : { thinking: { type: this.#configuration.thinking } }) });
+    return body;
   }
 }

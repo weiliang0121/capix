@@ -20,12 +20,12 @@ const model = {
       if (branches.size === 2) bothStarted.resolve();
       const analysis = await gate.promise;
       completed.push(input.material.index);
-      return { id: `analysis-${input.material.index}`, model: 'offline', text: analysis, finishReason: 'stop', usage: null };
+      return { id: `analysis-${input.material.index}`, model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: analysis }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
     }
     merged = input;
     controls.emit('两个方案的主要区别：');
     controls.emit('发布时间与测试余量。');
-    return { id: 'merged', model: 'offline', text: '两个方案的主要区别：发布时间与测试余量。', finishReason: 'stop', usage: null };
+    return { id: 'merged', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: '两个方案的主要区别：发布时间与测试余量。' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
   },
 };
 

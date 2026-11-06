@@ -15,7 +15,7 @@ const model: ModelProvider = {
     // @ts-expect-error Model producers can emit only text chunks.
     emit?.(42);
     void [history, signal];
-    return { id: 'reply', model: 'test', text: 'answer', finishReason: 'stop', usage: null };
+    return { id: 'reply', model: 'test', formatVersion: 1, output: [{ kind: 'text', text: 'answer' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
   },
 };
 const runner = createConversationRunner(new Transcript(), model);

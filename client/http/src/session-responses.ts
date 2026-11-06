@@ -7,10 +7,10 @@ const id = z.string().min(1);
 const index = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const locator = z.object({ transcriptId: id, index });
 export const recordingResponse = z.discriminatedUnion('status', [z.strictObject({ status: z.literal('idle') }), z.strictObject({ status: z.enum(['recording', 'stopping', 'stopped']), recorderId: id })]) satisfies z.ZodType<ConversationRecordingState>;
-export const recoveriesResponse = z.array(z.strictObject({ contextId: id, point: id, available: z.boolean(), reason: z.string().optional() })).superRefine((items, context) => {
-  if (new Set(items.map((item) => item.contextId)).size !== items.length || items.some((item) => item.available && item.reason !== undefined)) context.addIssue({ code: 'custom', message: 'Recovery candidates have conflicting identities or eligibility' });
+export const recoveriesResponse = z.array(z.strictObject({ contextId: id, point: id, available: z.boolean(), eligibility: z.literal('unchecked').optional(), reason: z.string().optional() })).superRefine((items, context) => {
+  if (new Set(items.map((item) => item.contextId)).size !== items.length || items.some((item) => item.available && (item.reason !== undefined || item.eligibility !== undefined))) context.addIssue({ code: 'custom', message: 'Recovery candidates have conflicting identities or eligibility' });
 });
-export const sessionResponse = z.object({ conversationId: id, transcriptId: id, mode: z.enum(['demo', 'live']), model: id, admission: admissionResponse, active: submissionBaselineResponse.optional() }).superRefine((info, context) => {
+export const sessionResponse = z.object({ conversationId: id, transcriptId: id, mode: z.enum(['demo', 'live']), answerMode: z.enum(['material', 'tools']).optional(), model: id, admission: admissionResponse, active: submissionBaselineResponse.optional() }).superRefine((info, context) => {
   const active = info.active?.submission;
   if (info.admission.conversationId !== info.conversationId || info.admission.transcriptId !== info.transcriptId || (active && (active.conversationId !== info.conversationId || active.result || [active.input, active.answer, active.admission].some((item) => item && item.transcriptId !== info.transcriptId) || (active.admission && active.admission.conversationId !== info.conversationId)))) context.addIssue({ code: 'custom', message: 'Service identity and active submission disagree' });
 }) satisfies z.ZodType<ConversationServiceInfo>;

@@ -14,7 +14,7 @@ const earlier = [
   { role: 'user', content: '安排周四复核，周五发布。' },
   { role: 'assistant', content: '周四复核完成后确认发布。' },
 ];
-const reply = (text) => ({ id: 'offline', model: 'test', text, finishReason: 'stop', usage: null });
+const reply = (text) => ({ id: 'offline', model: 'test', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 
 function fixture(transcript = new Transcript(earlier), ViewType = View) {
   const memories = new Memories(transcript);

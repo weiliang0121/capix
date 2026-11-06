@@ -9,6 +9,7 @@ import { CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent } from '@capix/conversation-service/assembly';
 import { PersistenceError } from '@capix/diagnostics';
+import { restoreLegacyCheckpointTables } from './fixtures/checkpoint-storage.mjs';
 
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), 'capix-cp-storage-'));
@@ -60,13 +61,16 @@ function legacy(t) {
   const child = image('child-image', 'child', 'root');
   const delivery = { status: 'succeeded', output: { text: first.state.text }, progress: { round: 1, currentInput: first.frame.currentInput, phase: 'execute' } };
   files.sql((database) => {
+    for (const row of database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) database.exec(`DROP TRIGGER ${row.name}`);
+    database.exec('DROP TABLE archive_usage');
+    restoreLegacyCheckpointTables(database);
     const insert = database.prepare('INSERT INTO checkpoint_images VALUES (?, ?, ?, ?)');
     insert.run(first.id, 'root', 1, JSON.stringify(first));
     insert.run(second.id, 'root', 2, JSON.stringify(second));
     insert.run(child.id, 'child', 1, JSON.stringify(child));
     database.prepare('INSERT INTO checkpoint_heads VALUES (?, ?, ?, ?)').run('root', 3, second.id, JSON.stringify(delivery));
     database.prepare('INSERT INTO checkpoint_heads VALUES (?, ?, ?, ?)').run('child', 1, child.id, null);
-    database.exec('PRAGMA user_version = 2');
+    database.exec('DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; PRAGMA user_version = 2');
   });
   return { files, state, first, second, child, delivery };
 }
@@ -98,7 +102,7 @@ test('v2 checkpoint storage migration preserves all image identities, current he
 
   files.sql((database) => {
     const saved = rows(database);
-    assert.equal(saved.version, 3);
+    assert.equal(saved.version, 6);
     assert.deepEqual(
       saved.images.map(({ id, context_id, revision }) => ({ id, context_id, revision })),
       [
@@ -108,6 +112,10 @@ test('v2 checkpoint storage migration preserves all image identities, current he
       ],
     );
     for (const [index, original] of [first, second, child].entries()) {
+      if (original === first) {
+        assert.equal(saved.images[index].body, null);
+        continue;
+      }
       const payload = JSON.parse(saved.images[index].body);
       assert.deepEqual(Object.keys(payload).sort(), ['data', 'encoding', 'jsonBytes']);
       assert.equal(payload.encoding, 'br');
@@ -138,7 +146,7 @@ for (const fault of ['image-write', 'delivery-write', 'historical-image-id-misma
   });
 }
 
-test('v2 migration preserves opaque past and future non-head Frames without applying current recovery eligibility', (t) => {
+test('v2 migration retains identities of opaque non-head Frames without certifying them for recovery', (t) => {
   const { files, state, first, second, delivery } = legacy(t);
   const past = { ...first, formatVersion: 4, historicalField: { noLongerInterpreted: true } };
   const future = { ...second, formatVersion: 6, futureField: ['unknown', { retained: true }] };
@@ -158,10 +166,9 @@ test('v2 migration preserves opaque past and future non-head Frames without appl
   migrated.assertAvailable();
   migrated.close();
   files.sql((database) => {
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 3);
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6);
     for (const expected of [past, future]) {
-      const payload = JSON.parse(database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get(expected.id).body);
-      assert.deepEqual(JSON.parse(brotliDecompressSync(Buffer.from(payload.data, 'base64')).toString('utf8')), expected);
+      assert.equal(database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get(expected.id).body, null);
     }
   });
 });
@@ -175,7 +182,7 @@ test('v2 migration preserves opaque delivery data and leaves formal content read
   migrated.assertAvailable();
   migrated.close();
   files.sql((database) => {
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 3);
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6);
     const payload = JSON.parse(database.prepare('SELECT delivery FROM checkpoint_heads WHERE context_id = ?').get('root').delivery);
     assert.deepEqual(JSON.parse(brotliDecompressSync(Buffer.from(payload.data, 'base64')).toString('utf8')), opaque);
   });
@@ -185,7 +192,7 @@ test('v2 migration preserves opaque delivery data and leaves formal content read
   assert.throws(() => reopened.checkpoints.read('root'), PersistenceError);
 });
 
-test('new checkpoint images and deliveries compress repeated UTF-8 material without changing returned values or retaining only the latest image', (t) => {
+test('checkpoint storage compresses UTF-8 material and retains only the latest body without changing returned values', (t) => {
   const files = fixture(t);
   const store = files.open();
   loadConversationContent(store);
@@ -208,8 +215,10 @@ test('new checkpoint images and deliveries compress repeated UTF-8 material with
   files.sql((database) => {
     const saved = rows(database);
     assert.equal(saved.images.length, 2);
+    assert.equal(saved.images[0].body, null);
+    assert.equal(typeof saved.images[1].body, 'string');
     const rawBytes = Buffer.byteLength(JSON.stringify(first.image)) + Buffer.byteLength(JSON.stringify(next.image)) + Buffer.byteLength(JSON.stringify(final.delivery));
-    const storedBytes = saved.images.reduce((total, row) => total + Buffer.byteLength(row.body), 0) + Buffer.byteLength(saved.heads[0].delivery);
+    const storedBytes = saved.images.reduce((total, row) => total + (row.body === null ? 0 : Buffer.byteLength(row.body)), 0) + Buffer.byteLength(saved.heads[0].delivery);
     assert.ok(storedBytes < rawBytes / 20, 'Repeated fixture material should reduce encoded SQL payload bytes, without claiming the same ratio for arbitrary data');
   });
   const reopened = files.open();

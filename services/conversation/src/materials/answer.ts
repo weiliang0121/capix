@@ -41,7 +41,7 @@ export function createMaterialAnswer(completion: ConversationCompletion = create
   const answer = new Group<ConversationMaterialInput, string, {}, string>({
     name: 'answer-from-materials',
     output: { result: (value) => requireText(value, 'Material answer'), delta: (value) => requireString(value, 'Material preview') },
-    checkpoint: { key: 'conversation.material-answer', version: 2, input: materialInputCodec, output: stringCodec, points: [waiting, completed] },
+    checkpoint: { key: 'conversation.material-answer', version: 3, input: materialInputCodec, output: stringCodec, points: [waiting, completed] },
   }).add({ completion });
   answer.run = (work) => {
     const child = work.children.create(completion, materialRequest(work.input, maxTokens), {

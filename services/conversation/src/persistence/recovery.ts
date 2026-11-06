@@ -2,7 +2,7 @@ import { RuntimeError } from '@capix/contracts';
 
 /** A rejected caller transition is known not to have written anything. */
 export class RecoveryConflict extends RuntimeError {
-  constructor(code: 'CHECKPOINT_CONFLICT' | 'INTERACTION_PERSISTENCE_CONFLICT', message: string) {
+  constructor(code: 'CHECKPOINT_CONFLICT' | 'INTERACTION_PERSISTENCE_CONFLICT' | 'MODEL_EXCHANGE_PERSISTENCE_CONFLICT', message: string) {
     super(code, message);
   }
 }

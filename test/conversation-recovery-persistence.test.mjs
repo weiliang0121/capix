@@ -33,7 +33,7 @@ function image(id = 'image-1', contextId = 'root') {
 }
 
 function reply(text = 'answer') {
-  return { id: 'reply', model: 'offline', text, finishReason: 'stop', usage: null };
+  return { id: 'reply', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
 }
 
 test('v1 migrates transactionally while retaining content, View and fixed entity receipts', (t) => {
@@ -45,7 +45,9 @@ test('v1 migrates transactionally while retaining content, View and fixed entity
   const state = initial.load();
   initial.close();
   const legacy = new DatabaseSync(files.path);
-  legacy.exec('DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1;');
+  for (const row of legacy.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) legacy.exec(`DROP TRIGGER ${row.name}`);
+  legacy.exec('DROP TABLE archive_usage');
+  legacy.exec('DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1;');
   legacy.close();
 
   const migrated = files.open();
@@ -56,7 +58,7 @@ test('v1 migrates transactionally while retaining content, View and fixed entity
   migrated.close();
   const metadata = new DatabaseSync(files.path);
   try {
-    assert.equal(metadata.prepare('PRAGMA user_version').get().user_version, 3);
+    assert.equal(metadata.prepare('PRAGMA user_version').get().user_version, 6);
   } finally {
     metadata.close();
   }
@@ -69,7 +71,9 @@ test('unrecognized v1 layouts are rejected before any migration or journal chang
   loadConversationContent(store);
   store.close();
   const malformed = new DatabaseSync(files.path);
-  malformed.exec('DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1; ALTER TABLE messages RENAME COLUMN body TO payload;');
+  for (const row of malformed.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) malformed.exec(`DROP TRIGGER ${row.name}`);
+  malformed.exec('DROP TABLE archive_usage');
+  malformed.exec('DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1; ALTER TABLE messages RENAME COLUMN body TO payload;');
   malformed.close();
   const bytes = readFileSync(files.path);
   assert.throws(() => ConversationStore.open(files.path), PersistenceError);
@@ -196,13 +200,13 @@ test('completion request and full feedback reopen read-only without re-sending o
   await interaction.settled();
   const saved = store.interactions.read(interaction.id);
   assert.equal(saved.revision, 2);
-  assert.equal(saved.feedback.payload.text, 'answer');
+  assert.deepEqual(saved.feedback.payload, reply());
   assert.ok(Object.isFrozen(saved.request.messages));
   store.close();
   const reopened = files.open();
   const restored = Interaction.restore(reopened.interactions.read(interaction.id), { contract: CompletionInteraction });
   assert.equal(restored.read().kind, 'received');
-  assert.equal(restored.read().feedback.payload.text, 'answer');
+  assert.deepEqual(restored.read().feedback.payload, reply());
   assert.throws(
     () =>
       restored.start(() => {

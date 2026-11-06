@@ -10,6 +10,31 @@ const call = (contextId = 'r', patch = {}) => ({ contextId, kind: 'scene', label
 const baseline = (submission, patch = {}) => ({ type: 'baseline', submission: submissionSnapshot(submission.id, patch) });
 const update = (submission, fromRevision, revision, change, patch = {}) => ({ type: 'submission', conversationId: submission.conversationId, submissionId: submission.id, fromRevision, revision, change, ...patch });
 
+test('current tool stages survive reconnect and reject malformed or rewritten facts without deciding the submission result', () => {
+  const submission = create();
+  const stage = { contextId: 'tool-1', kind: 'tool', label: 'read_message', status: 'running' };
+  submission.receiveFrame(baseline(submission, { input }));
+  submission.receiveFrame(update(submission, 0, 1, { stage }));
+  assert.deepEqual(submission.snapshot.remote.stage, stage);
+  assert.equal(submission.snapshot.remote.result, undefined);
+  submission.receiveFrame(baseline(submission, { ...submission.snapshot.remote }));
+  submission.receiveFrame(update(submission, 1, 2, { stage: { ...stage, status: 'failed' } }));
+  assert.equal(submission.snapshot.remote.result, undefined, 'A handled tool failure is not a failed root result');
+  const accepted = submission.snapshot.remote;
+  for (const bad of [
+    { ...stage, status: 'running' },
+    { ...stage, label: 'rewritten', status: 'failed' },
+    { ...stage, status: 'unknown' },
+    { ...stage, contextId: '', status: 'failed' },
+  ]) {
+    assert.throws(() => submission.receiveFrame(update(submission, 2, 3, { stage: bad })), SubmissionContractError);
+    assert.strictEqual(submission.snapshot.remote, accepted);
+  }
+  submission.receiveFrame(update(submission, 2, 3, { stage: { contextId: 'model-2', kind: 'model', label: '模型处理', status: 'running' } }));
+  submission.receiveFrame(update(submission, 3, 4, { result: { status: 'completed' } }));
+  assert.equal(submission.snapshot.remote.result.status, 'completed');
+});
+
 test('submission changes require a baseline and contiguous revision coverage while stale frames preserve the replica', () => {
   const submission = create();
   assert.throws(() => submission.receiveFrame(update(submission, 0, 1, { input })), SubmissionContractError);

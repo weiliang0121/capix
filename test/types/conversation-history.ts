@@ -11,7 +11,7 @@ const model: ModelProvider = {
     const signal: AbortSignal | undefined = controls?.signal;
     const input: ModelRequest = request;
     void [signal, input];
-    return { id: 'typed', model: 'offline', text: 'answer', finishReason: 'stop', usage: null };
+    return { id: 'typed', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: 'answer' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
   },
 };
 const entity = new Resource(new Transcript());

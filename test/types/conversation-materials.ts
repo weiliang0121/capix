@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import { CompletionResource, ConversationViewResource, createConversationScene, createMaterialAnswer, createMaterialPreparation, type AcceptedConversationMessage, type ConversationMaterialInput, type ConversationMaterialSources } from '@capix/conversation-service';
 import { Memories } from '@capix/memory';
 import { Resource, type ResourcesOf } from '@capix/resources';
@@ -81,11 +82,11 @@ const streamed = new Node<string, string, ResourcesOf<typeof modelDeps>, string>
         value.finishReason;
       },
     });
-    const finishReason: string = reply.finishReason;
+    const finishReason: string = reply.termination.reason;
     // @ts-expect-error A resource delta consumer cannot claim numeric chunks.
     work.resources.model.complete(request, { delta: (value: number) => void value });
     void finishReason;
-    return reply.text;
+    return modelReplyText(reply);
   },
 });
 void [response, accepted, missingSource, readOnly, streamed];

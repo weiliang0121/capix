@@ -35,7 +35,7 @@ const model = {
     received.push(input);
     const message = input.materials.entries.findLast((entry) => entry.source === 'messages');
     const memory = input.materials.entries.find((entry) => entry.source === 'memories');
-    return { id: `offline-${received.length}`, model: 'offline', text: `依据：${message?.value.content ?? '无历史消息'}；偏好：${memory?.value.content ?? '无记忆'}。`, finishReason: 'stop', usage: null };
+    return { id: `offline-${received.length}`, model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: `依据：${message?.value.content ?? '无历史消息'}；偏好：${memory?.value.content ?? '无记忆'}。` }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
   },
 };
 

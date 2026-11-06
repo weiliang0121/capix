@@ -65,7 +65,7 @@ const model = {
     const prior = context?.memories[0];
     const sourceIndex = context ? context.acceptedIndex - 1 : 0;
     const text = kind === 'answer' ? answer : boundary === 'invalid-memory-json' ? 'not JSON' : JSON.stringify({ changes: [{ action: prior ? 'update' : 'create', memoryId: prior?.id ?? null, change: '用户表达偏好', sourceIndexes: [sourceIndex], result: { topic: '回答偏好', content: prior ? '再次确认偏好简短的中文回答。' : '偏好简短的中文回答。', sourceIndexes: [sourceIndex] } }] });
-    const reply = { id: `reply-${kind}`, model: 'offline-crash-fixture', text, finishReason: kind === 'memory' && boundary === 'invalid-memory-length' ? 'length' : 'stop', usage: null };
+    const reply = { id: `reply-${kind}`, model: 'offline-crash-fixture', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: kind === 'memory' && boundary === 'invalid-memory-length' ? 'incomplete' : 'completed', reason: kind === 'memory' && boundary === 'invalid-memory-length' ? 'length' : 'stop' }, usage: null };
     return new Promise((resolve, reject) => {
       pending = () => (kind === 'memory' && boundary.startsWith('handled-memory-failure') ? reject(new Error('Offline memory provider network failure')) : resolve(reply));
     });

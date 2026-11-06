@@ -8,7 +8,7 @@ import test from 'node:test';
 import { jsonBytes, measureDatabase, measureFiles, measureUsage, textBytes } from '../examples/long-conversation/measurement.mjs';
 import { renderReport } from '../examples/long-conversation/report.mjs';
 
-for (const version of [2, 3])
+for (const version of [2, 3, 4, 5, 6])
   test(`long-conversation v${version} measurements distinguish original JSON, stored payload and WAL without modifying the database`, (t) => {
     const directory = mkdtempSync(join(tmpdir(), 'capix-long-conversation-measurement-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -26,13 +26,23 @@ for (const version of [2, 3])
     CREATE TABLE memories (ordinal INTEGER PRIMARY KEY, id TEXT NOT NULL, body TEXT NOT NULL);
     CREATE TABLE append_receipts (ordinal INTEGER PRIMARY KEY, operation TEXT NOT NULL, body TEXT NOT NULL);
     CREATE TABLE apply_receipts (ordinal INTEGER PRIMARY KEY, operation TEXT NOT NULL, body TEXT NOT NULL);
-    CREATE TABLE checkpoint_images (id TEXT PRIMARY KEY, context_id TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT NOT NULL);
+    CREATE TABLE checkpoint_images (id TEXT PRIMARY KEY, context_id TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT ${version >= 6 ? '' : 'NOT NULL'});
     CREATE TABLE checkpoint_heads (context_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, image_id TEXT NOT NULL, delivery TEXT);
     CREATE TABLE completion_interactions (id TEXT PRIMARY KEY, revision INTEGER NOT NULL, body TEXT NOT NULL);
   `);
+    const exchange = { reply: { text: '工具回复🙂' }, feedback: [{ content: '工具结果' }] };
+    const exchangeMetadata = { scope: '测量', source: { transcriptId: 'transcript', index: 0 } };
+    if (version >= 4) {
+      writer.exec('CREATE TABLE model_exchanges (id TEXT PRIMARY KEY, metadata TEXT); CREATE TABLE model_exchange_entries (id TEXT PRIMARY KEY, body TEXT NOT NULL);');
+      writer.prepare('INSERT INTO model_exchanges VALUES (?, ?)').run('collection', version >= 5 ? JSON.stringify(exchangeMetadata) : null);
+      writer.prepare('INSERT INTO model_exchange_entries VALUES (?, ?)').run('exchange', JSON.stringify(exchange));
+    }
     const stored = (value) => (version === 2 ? JSON.stringify(value) : JSON.stringify({ encoding: 'br', jsonBytes: jsonBytes(value), data: brotliCompressSync(JSON.stringify(value)).toString('base64') }));
     const images = [{ text: '甲' }, { text: '重复材料🙂'.repeat(1000) }, { text: '末次' }];
-    for (const [index, image] of images.entries()) writer.prepare('INSERT INTO checkpoint_images VALUES (?, ?, ?, ?)').run(`image-${index}`, 'context-1', index + 1, stored(image));
+    for (const [index, image] of images.entries()) writer.prepare('INSERT INTO checkpoint_images VALUES (?, ?, ?, ?)').run(`image-${index}`, 'context-1', index + 1, version >= 6 && index < 2 ? null : stored(image));
+    const waitingImage = { text: '在途' };
+    writer.prepare('INSERT INTO checkpoint_images VALUES (?, ?, ?, ?)').run('image-unused', 'context-2', 1, stored(waitingImage));
+    const retained = version >= 6 ? [images[2], waitingImage] : [...images, waitingImage];
     const delivery = { kind: 'succeeded', value: '回答🙂' };
     writer.prepare('INSERT INTO checkpoint_heads VALUES (?, ?, ?, ?)').run('context-1', 4, 'image-2', stored(delivery));
     writer.prepare('INSERT INTO checkpoint_heads VALUES (?, ?, ?, ?)').run('context-2', 1, 'image-unused', null);
@@ -67,12 +77,15 @@ for (const version of [2, 3])
     const beforeStat = statSync(path);
     const measured = measureDatabase(path);
     assert.equal(measured.schemaVersion, version);
-    assert.equal(measured.checkpoints.originalBytesSource, version === 3 ? 'storage-metadata' : 'body-text');
-    assert.deepEqual(measured.checkpoints.images, { count: 3, bytes: images.reduce((total, value) => total + jsonBytes(value), 0), maxBytes: jsonBytes(images[1]), storedBytes: images.reduce((total, value) => total + textBytes(stored(value)), 0), maxStoredBytes: Math.max(...images.map((value) => textBytes(stored(value)))) });
+    assert.equal(measured.checkpoints.originalBytesSource, version >= 3 ? 'storage-metadata' : 'body-text');
+    assert.deepEqual(measured.checkpoints.images, { count: 4, retainedBodies: retained.length, discardedBodies: 4 - retained.length, bytes: retained.reduce((total, value) => total + jsonBytes(value), 0), maxBytes: Math.max(...retained.map(jsonBytes)), storedBytes: retained.reduce((total, value) => total + textBytes(stored(value)), 0), maxStoredBytes: Math.max(...retained.map((value) => textBytes(stored(value)))) });
     assert.ok(measured.checkpoints.images.bytes > measured.checkpoints.images.maxBytes);
-    if (version === 3) assert.ok(measured.checkpoints.images.storedBytes < measured.checkpoints.images.bytes / 10);
+    if (version >= 3 && version < 6) assert.ok(measured.checkpoints.images.storedBytes < measured.checkpoints.images.bytes / 10);
     assert.deepEqual(measured.checkpoints.heads, { count: 2, deliveryBytes: jsonBytes(delivery), maxDeliveryBytes: jsonBytes(delivery), storedDeliveryBytes: textBytes(stored(delivery)), maxStoredDeliveryBytes: textBytes(stored(delivery)) });
     for (const [name, body] of Object.entries({ completionInteractions: interaction, messages: message, memories: memory, appendReceipts: appendReceipt, applyReceipts: applyReceipt })) assert.deepEqual(measured[name], { count: 1, bytes: jsonBytes(body), maxBytes: jsonBytes(body) });
+    if (version >= 4) assert.deepEqual(measured.modelExchanges, { collections: 1, entries: { count: 1, bytes: jsonBytes(exchange), maxBytes: jsonBytes(exchange) }, metadataBytes: version >= 5 ? jsonBytes(exchangeMetadata) : 0 });
+    else assert.equal(measured.modelExchanges, undefined);
+    assert.equal(measured.archiveJsonBytes, retained.reduce((sum, image) => sum + jsonBytes(image), 0) + jsonBytes(delivery) + jsonBytes(interaction) + (version >= 4 ? jsonBytes(exchange) : 0) + (version >= 5 ? jsonBytes(exchangeMetadata) : 0));
     assert.deepEqual(measured.content, { count: 1, startsBytes: textBytes('[0]'), viewStateBytes: jsonBytes(view) });
     assert.equal(measured.sqlite.logicalBytes, measured.sqlite.pageCount * measured.sqlite.pageSize);
     assert.ok(measured.sqlite.freelistCount >= 0);
@@ -86,7 +99,17 @@ for (const version of [2, 3])
     assert.equal(statSync(path).mtimeMs, beforeStat.mtimeMs);
     assert.equal(statSync(path).ctimeMs, beforeStat.ctimeMs);
 
-    if (version === 3) {
+    if (version >= 6) {
+      const corruptor = new DatabaseSync(path);
+      corruptor.exec("UPDATE checkpoint_images SET body = NULL WHERE id = 'image-2'");
+      corruptor.close();
+      assert.throws(() => measureDatabase(path), /Current checkpoint head body is missing/);
+      const reset = new DatabaseSync(path);
+      reset.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(stored(images[2]), 'image-2');
+      reset.close();
+    }
+
+    if (version >= 3) {
       const valid = JSON.parse(stored(images[0]));
       const invalid = [
         { ...valid, encoding: 'gzip' },
@@ -105,7 +128,7 @@ for (const version of [2, 3])
         assert.deepEqual(readFileSync(path), bytes);
       }
       const reset = new DatabaseSync(path);
-      reset.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(stored(images[0]), 'image-0');
+      reset.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(version >= 6 ? null : stored(images[0]), 'image-0');
       reset.close();
     }
     const modifier = new DatabaseSync(path);

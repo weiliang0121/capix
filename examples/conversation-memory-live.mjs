@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 // 显式真实模型小样本；不读取 .env、不重试、不改动 Observer 内容。
 import { closeSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -65,7 +66,7 @@ async function study(record) {
         measured.elapsedMs = Math.round(performance.now() - started);
         measured.reply = reply;
         record({ kind: 'reply', submission: current.number, ...measured });
-        console.log(`提交 ${current.number} / ${phase}: ${measured.elapsedMs} ms, first delta ${measured.firstDeltaMs ?? '-'} ms, ${reply.finishReason}`);
+        console.log(`提交 ${current.number} / ${phase}: ${measured.elapsedMs} ms, first delta ${measured.firstDeltaMs ?? '-'} ms, ${reply.termination.reason}`);
         return reply;
       } catch (error) {
         providerFailed = true;
@@ -137,8 +138,8 @@ async function study(record) {
         outputs: current.outputs,
         checks: {
           runnerReleased: !runner.isRunning,
-          previewMatchesProvider: answer?.reply ? preview === answer.reply.text : null,
-          finalMatchesProvider: answer?.reply && !error ? result === answer.reply.text : null,
+          previewMatchesProvider: answer?.reply ? preview === modelReplyText(answer.reply) : null,
+          finalMatchesProvider: answer?.reply && !error ? result === modelReplyText(answer.reply) : null,
           finalMatchesFormalMessage: !error ? transcript.snapshot().at(-1)?.content === result : null,
           completedOutputs: current.outputs.filter((event) => event.kind === 'completed').length,
           messageMaterialCount: answer?.input.materials.entries.filter((entry) => entry.source === 'messages').length ?? null,

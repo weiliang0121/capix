@@ -7,14 +7,18 @@ import type { ConversationCallDetail, ConversationInspection, ConversationRecord
 import { ConversationEvents } from './events.js';
 import { ConversationHttpError, ConversationSubmissions, type ConversationRunner } from './submission.js';
 import { streamFrames } from './stream.js';
+import type { ToolStages } from '../hosting/tool-stages.js';
 
 export interface ConversationServerOptions {
   readonly runner: ConversationRunner;
   readonly transcript: Transcript;
   readonly events: ConversationEvents;
   readonly mode: 'demo' | 'live';
+  readonly answerMode?: 'material' | 'tools';
   readonly model: string;
   readonly assertAvailable?: () => void;
+  readonly assertAdmission?: () => void;
+  readonly stages?: Pick<ToolStages, 'subscribe'>;
   readonly inspect: () => ConversationInspection;
   readonly call: (id: string) => ConversationCallDetail | undefined;
   readonly assetsDirectory?: string;
@@ -38,7 +42,7 @@ export function createConversationServer(options: ConversationServerOptions) {
   if (options.events.transcript !== options.transcript) throw new TypeError('Conversation HTTP sources must share the same Transcript');
   if (options.submissionRetention !== undefined && (!Number.isSafeInteger(options.submissionRetention) || options.submissionRetention < 1 || options.submissionRetention > 128)) throw new RangeError('Invalid submission retention');
   if (options.previewBytes !== undefined && (!Number.isSafeInteger(options.previewBytes) || options.previewBytes < 1 || options.previewBytes > 512 * 1024)) throw new RangeError('Invalid preview capacity');
-  const submissions = new ConversationSubmissions(options.runner, options.events, options.assertAvailable, options.submissionRetention, options.previewBytes);
+  const submissions = new ConversationSubmissions(options.runner, options.events, options.assertAvailable, options.submissionRetention, options.previewBytes, options.stages, options.assertAdmission);
   const connections = new Set<ServerResponse>();
   const assets = options.assetsDirectory ?? fileURLToPath(new URL('../../../../apps/observer/dist', import.meta.url));
   const server = createServer((request, response) => {
@@ -60,7 +64,7 @@ export function createConversationServer(options: ConversationServerOptions) {
 
   function session(): ConversationServiceInfo {
     const active = submissions.active;
-    return { conversationId: submissions.conversationId, transcriptId: options.transcript.id, mode: options.mode, model: options.model, admission: submissions.admission(), ...(active ? { active } : {}) };
+    return { conversationId: submissions.conversationId, transcriptId: options.transcript.id, mode: options.mode, answerMode: options.answerMode ?? 'material', model: options.model, admission: submissions.admission(), ...(active ? { active } : {}) };
   }
 
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -106,7 +110,7 @@ export function createConversationServer(options: ConversationServerOptions) {
       if (!options.recovery) return json(response, 200, []);
       // Discovery is a deliberate idle-host read, not a live execution probe.
       // Check admission before decoding checkpoint heads; busy is not an empty list.
-      const admission = submissions.admission();
+      const admission = submissions.admission(false);
       if (admission.status === 'busy') throw new ConversationHttpError('RUNTIME_BUSY', '当前对话正在处理，暂不能检查可恢复处理。', 409);
       if (admission.status === 'unavailable') throw new ConversationHttpError(admission.error.code, admission.error.message, 503);
       return json(response, 200, options.recovery.list());

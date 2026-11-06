@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChatCompletionsProvider, ProviderError } from '@capix/model-provider';
+import { ChatCompletionsProvider, ProviderError, modelReplyText } from '@capix/model-provider';
 
 const messages = [{ role: 'user', content: 'Explain this material' }];
 const encoder = new TextEncoder();
@@ -39,7 +39,7 @@ test('streaming is explicit and returns a complete envelope with final-chunk usa
   const reply = await model.complete({ messages, stream: true, maxTokens: 50, responseFormat: 'text' }, { emit: (text) => deltas.push(text) });
   assert.equal(sends, 1);
   assert.deepEqual(deltas, ['你好', '世界']);
-  assert.deepEqual(reply, { id: 'stream-1', model: 'fixture-model', text: '你好世界', finishReason: 'stop', usage: { promptTokens: 12, completionTokens: 3, totalTokens: 15 } });
+  assert.deepEqual(reply, { formatVersion: 1, id: 'stream-1', model: 'fixture-model', output: [{ kind: 'text', text: '你好世界' }], termination: { kind: 'completed', reason: 'stop' }, native: { format: 'chat-completions', version: 1 }, usage: { promptTokens: 12, completionTokens: 3, totalTokens: 15 } });
   assert.ok(Object.isFrozen(reply));
   assert.ok(Object.isFrozen(reply.usage));
 });
@@ -54,7 +54,7 @@ test('SSE framing survives bytewise UTF-8, CRLF, multi-line data and separate fi
     const deltas = [];
     const reply = await provider(async () => fragmented(wire, width)).complete({ messages, stream: true }, { emit: (text) => deltas.push(text) });
     assert.deepEqual(deltas, ['你', '好🌏']);
-    assert.equal(reply.text, '你好🌏');
+    assert.equal(modelReplyText(reply), '你好🌏');
     assert.equal(reply.usage.totalTokens, 15);
   }
 });
@@ -66,8 +66,8 @@ test('a stream can be consumed without a preview receiver, including empty or le
     ['partial', 'length'],
   ]) {
     const result = await provider(async () => response(completeStream(text, finishReason))).complete({ messages, stream: true });
-    assert.equal(result.text, text);
-    assert.equal(result.finishReason, finishReason);
+    assert.equal(modelReplyText(result), text);
+    assert.equal(result.termination.reason, finishReason);
     assert.equal(result.usage, null);
   }
 });
@@ -95,7 +95,7 @@ test('preview arrives before the final envelope and DONE releases a still-open H
   assert.equal(await preview, 'first');
   assert.equal(completed, false);
   controller.enqueue(encoder.encode(event(chunk({ content: ' last' }, 'stop')) + event('[DONE]')));
-  assert.equal((await result).text, 'first last');
+  assert.equal(modelReplyText(await result), 'first last');
   assert.equal(cancelled, 1);
   assert.equal(body.locked, false);
 });
@@ -117,7 +117,7 @@ test('invalid or incomplete streams fail without fabricating completion or leaki
     'multiple choices': first + event(chunk({}, null, { choices: [chunk().choices[0], chunk().choices[0]] })) + done,
     'nonzero choice': first + event(chunk({}, null, { choices: [{ index: 1, delta: { content: 'other' }, finish_reason: 'stop' }] })) + done,
     'non-text content': first + event(chunk({ content: 42 }, 'stop')) + done,
-    'tool call': first + event(chunk({ tool_calls: [{ index: 0, id: 'tool-1', type: 'function', function: { name: 'invoke', arguments: '{}' } }] }, 'tool_calls')) + done,
+    'unsupported tool type': first + event(chunk({ tool_calls: [{ index: 0, id: 'tool-1', type: 'computer', function: { name: 'invoke', arguments: '{}' } }] }, 'tool_calls')) + done,
     'legacy function call': first + event(chunk({ function_call: { name: 'invoke', arguments: '{}' } }, 'function_call')) + done,
     'content after finish': first + finish + event(chunk({ content: 'unexpected' })) + done,
     'invalid usage': first + event(chunk({}, 'stop', { usage: { ...usage, completion_tokens: -1 } })) + done,
@@ -332,7 +332,7 @@ test('an emit callback alone does not turn a non-streaming request into a stream
     assert.equal(body.stream_options, undefined);
     return Response.json({ id: 'reply-1', model: 'fixture-model', choices: [{ index: 0, message: { content: 'final' }, finish_reason: 'stop' }] });
   });
-  assert.equal((await model.complete({ messages }, { emit: (text) => deltas.push(text) })).text, 'final');
+  assert.equal(modelReplyText(await model.complete({ messages }, { emit: (text) => deltas.push(text) })), 'final');
   assert.deepEqual(deltas, []);
 });
 

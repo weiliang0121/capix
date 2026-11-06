@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationScene, createInteractionAnswer, createCompletionReplyNode, HistoryResource, CompletionInteractionResource, ModelReplyPending, CompletionInteraction } from '@capix/conversation-service';
@@ -31,7 +32,7 @@ function fixedAnswerWriter(interactions, transcript) {
     work.children.reply.invoke(work.input, {
       result: {
         succeeded(reply) {
-          const content = reply.text;
+          const content = modelReplyText(reply);
           const append = { position: 'answer', messages: [{ role: 'assistant', content }] };
           const receipt = work.resources.messages.applyFixed(append);
           assert.equal(work.resources.messages.applyFixed(append), receipt, 'the same genuine reception does not write twice');
@@ -81,7 +82,7 @@ test('retrying the original conversation after message persistence fails sends a
   assert.equal(requests.length, 1);
   assert.deepEqual(transcript.snapshot(), [question]);
   const firstState = [...storage.states.values()][0];
-  assert.equal(firstState.feedback.payload.text, 'answer 1', 'external feedback is already saved even though formal answer persistence failed');
+  assert.equal(modelReplyText(firstState.feedback.payload), 'answer 1', 'external feedback is already saved even though formal answer persistence failed');
 
   // Storage inspection proves the external fact; neither it nor observation is
   // used to manufacture a business retry reference for the original helper.

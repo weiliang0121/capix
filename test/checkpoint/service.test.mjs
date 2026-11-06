@@ -93,7 +93,7 @@ for (const formatVersion of [1, 2, 3, 4, 99]) {
     host.close();
 
     const database = new DatabaseSync(path);
-    const rows = database.prepare('SELECT id, body FROM checkpoint_images').all();
+    const rows = database.prepare('SELECT id, body FROM checkpoint_images WHERE body IS NOT NULL').all();
     for (const row of rows) {
       const image = JSON.parse(row.body);
       image.formatVersion = formatVersion;

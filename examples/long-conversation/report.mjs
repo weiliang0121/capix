@@ -23,19 +23,19 @@ export function renderReport(summary, rows) {
     '',
     '逐次请求的 ModelRequest JSON 字节、prompt 文本字节、真实 HTTP 请求正文（仅 live）、usage、首片段/完成耗时、正式内容及记忆快照保存在 events.jsonl。JSON 字节不能当作 token 数或含协议头的网络流量。',
     '',
-    '调用侧 CP 计量仍统计保存成功的原 image JSON；压缩不表示这些材料的构造、校验和序列化计算消失。数据库在检查点关闭后只读统计，文件大小区分 DB / WAL / SHM。重开只验证正式内容重新载入，不模拟崩溃续接。',
+    '调用侧 CP 计量仍累计保存成功的原 image JSON；压缩或淘汰旧正文不表示这些材料的构造、校验和序列化计算消失。数据库在检查点关闭后只读统计当前保留内容，文件大小区分 DB / WAL / SHM。重开只验证正式内容重新载入，不模拟崩溃续接。',
     '',
-    '| 检查点 | CP images | CP 原 JSON MiB | CP 存储正文 MiB | 最大原 image KiB | DB 文件 MiB | 空闲页 MiB |',
+    '| 检查点 | CP 身份行/保留正文/淘汰正文 | CP 保留原 JSON MiB | CP 保留存储正文 MiB | 最大保留 image KiB | DB 文件 MiB | 空闲页 MiB |',
     '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
     // Database shape is also preserved verbatim in summary.json for independent inspection.
     ...summary.snapshots.map((item) => {
       const { images, heads } = item.database.checkpoints;
       const original = images.bytes + heads.deliveryBytes;
       const stored = (images.storedBytes ?? images.bytes) + (heads.storedDeliveryBytes ?? heads.deliveryBytes);
-      return `| ${item.after} | ${images.count} | ${mib(original)} | ${mib(stored)} | ${kib(images.maxBytes)} | ${mib(item.database.files.dbBytes)} | ${mib(item.database.sqlite.freelistCount * item.database.sqlite.pageSize)} |`;
+      return `| ${item.after} | ${images.count}/${images.retainedBodies ?? '未测量'}/${images.discardedBodies ?? '未测量'} | ${mib(original)} | ${mib(stored)} | ${kib(images.maxBytes)} | ${mib(item.database.files.dbBytes)} | ${mib(item.database.sqlite.freelistCount * item.database.sqlite.pageSize)} |`;
     }),
     '',
-    '此表 CP 原 JSON 与存储正文均合计 image 和 head delivery，排除索引及 SQLite 页开销。v2 原 JSON 按正文计量；v3 从已检查编码与大小范围的 jsonBytes 元数据汇总，不解压认证载荷。存储正文包含压缩包的 Base64 和 envelope，既不是压缩二进制净大小，也不是磁盘累计写入量。迁移产生的空闲页可能仍占文件空间。',
+    '此表 CP 原 JSON 与存储正文均合计保留的 image 和 head delivery，排除索引及 SQLite 页开销。身份行包含已淘汰正文的旧镜像；旧报告缺少正文数量时显示未测量，不补零。v2 原 JSON 按正文计量；v3 起从已检查编码与大小范围的 jsonBytes 元数据汇总，不解压认证载荷。存储正文包含压缩包的 Base64 和 envelope，既不是压缩二进制净大小，也不是磁盘累计写入量。迁移产生的空闲页可能仍占文件空间。',
     '',
     '| 阶段 | 请求数 | usage 覆盖 | 累计请求 JSON MiB | 已报告 input tokens | 已报告 output tokens |',
     '| --- | ---: | ---: | ---: | ---: | ---: |',

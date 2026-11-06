@@ -5,7 +5,7 @@ import { Node } from '@capix/structure';
 import { createComparisonExample } from '../examples/parallel-analysis/assembly.mjs';
 import { AnalysisUnavailable } from '../examples/parallel-analysis/structure.mjs';
 
-const reply = (text) => ({ id: 'parallel-offline', model: 'fixture', text, finishReason: 'stop', usage: null });
+const reply = (text) => ({ id: 'parallel-offline', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 const inputOf = (request) => JSON.parse(request.messages.find((message) => message.role === 'user').content);
 const deltas = (events) => events.filter((event) => event.kind === 'delta').map((event) => event.delta);
 const relationsTo = (parent, child) => parent.value.relationChanges.filter((relation) => relation.childId === child.id).map((relation) => relation.change);

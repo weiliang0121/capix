@@ -101,7 +101,7 @@ test('HTTP recovery has a new submission, streams actual resumed appends and exp
     async complete(request) {
       requests++;
       assert.equal(request.responseFormat, 'json_object', 'saved answer must be read instead of sent again');
-      return { id: 'memory', model: 'fixture', text: '{"changes":[]}', finishReason: 'stop', usage: null };
+      return { id: 'memory', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: '{"changes":[]}' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
     },
   };
   const host = createConversationWebHost({ database, model, modelName: 'offline-demo', mode: 'demo' });

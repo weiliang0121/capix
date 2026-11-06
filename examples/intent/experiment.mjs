@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import { createHash } from 'node:crypto';
 import { Resource, ResourceOffer } from '@capix/resources';
 import { Group, Node, Scene } from '@capix/structure';
@@ -56,10 +57,10 @@ export function createIntentScene() {
       const common = { material, requestBytes: Buffer.byteLength(serialized, 'utf8'), requestSha256: createHash('sha256').update(serialized).digest('hex') };
       if (!received.ok) return { ...common, status: 'provider-error', error: received.error };
       const reply = received.reply;
-      const response = { ...common, raw: reply.text, model: reply.model ?? null, usage: reply.usage ?? null, finishReason: reply.finishReason };
-      if (reply.finishReason !== 'stop') return { ...response, status: 'contract-error', error: { code: 'unfinished-output' } };
+      const response = { ...common, raw: modelReplyText(reply), model: reply.model ?? null, usage: reply.usage ?? null, finishReason: reply.termination.reason };
+      if (reply.termination.reason !== 'stop') return { ...response, status: 'contract-error', error: { code: 'unfinished-output' } };
       try {
-        const decision = acceptDecision(reply.text, material);
+        const decision = acceptDecision(modelReplyText(reply), material);
         return { ...response, status: decision.kind, decision };
       } catch (error) {
         if (!(error instanceof DecisionContractError)) throw error;

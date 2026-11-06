@@ -13,7 +13,7 @@ export interface ConversationCheckpoints extends CheckpointStore {
 const rowSchema = z.strictObject({ context_id: z.string().min(1), revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), image_id: z.string().min(1), delivery: z.string().nullable(), image_context: z.string().min(1), image_revision: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), body: z.string() });
 const select = 'SELECT h.context_id, h.revision, h.image_id, h.delivery, i.context_id AS image_context, i.revision AS image_revision, i.body FROM checkpoint_heads h LEFT JOIN checkpoint_images i ON i.id = h.image_id';
 
-/** SQL stores immutable images and advances a single CAS head per invocation. */
+/** SQL retains one complete image per invocation; old rows only reserve their identities. */
 export class SqliteCheckpoints implements ConversationCheckpoints {
   constructor(
     private readonly database: DatabaseSync,
@@ -53,6 +53,8 @@ export class SqliteCheckpoints implements ConversationCheckpoints {
       if (current) {
         const result = this.database.prepare('UPDATE checkpoint_heads SET revision = ?, image_id = ? WHERE context_id = ? AND revision = ? AND delivery IS NULL').run(revision, fixed.id, contextId, expectedRevision);
         if (result.changes !== 1) throw new Error('Checkpoint head changed during exclusive commit');
+        const discarded = this.database.prepare('UPDATE checkpoint_images SET body = NULL WHERE id = ? AND context_id = ? AND body IS NOT NULL AND NOT EXISTS (SELECT 1 FROM checkpoint_heads WHERE image_id = checkpoint_images.id)').run(current.image.id, contextId);
+        if (discarded.changes !== 1) throw new Error('Superseded checkpoint body could not be released');
       } else this.database.prepare('INSERT INTO checkpoint_heads (context_id, revision, image_id) VALUES (?, ?, ?)').run(contextId, revision, fixed.id);
       return checkpointSaveReceipt(fixed, revision);
     });

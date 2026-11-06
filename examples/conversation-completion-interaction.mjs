@@ -14,7 +14,7 @@ const delayed = Promise.withResolvers();
 const previewed = Promise.withResolvers();
 const requests = [];
 let emitLater;
-const reply = (text) => ({ id: 'offline-reply', model: 'offline', text, finishReason: 'stop', usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } });
+const reply = (text) => ({ id: 'offline-reply', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 } });
 const model = {
   async complete(request, { emit } = {}) {
     requests.push(request);
@@ -107,7 +107,7 @@ try {
   assert.deepEqual(result, reply('外部请求的最终回复。'));
   assert.equal(transcript.length, 3, '单独读取不自动写回原对话');
   console.log('新调用读取完整回复：', result);
-  console.log('最终读取保留 finishReason 与 usage；是否接纳、写入哪个对话由业务决定。');
+  console.log('最终读取保留 termination 与 usage；是否接纳、写入哪个对话由业务决定。');
 } finally {
   stopReplay();
   await interactions.settled();

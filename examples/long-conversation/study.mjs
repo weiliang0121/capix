@@ -102,7 +102,7 @@ export async function runStudy({ scenario, provider, mode, modelName, out, count
         measured.elapsedMs = performance.now() - started;
         measured.replyBytes = jsonBytes(reply);
         measured.usage = reply.usage;
-        measured.finishReason = reply.finishReason;
+        measured.finishReason = reply.termination.reason;
         record({ kind: 'model-reply', submission: current.number, ...measured, reply });
         return reply;
       } catch (error) {

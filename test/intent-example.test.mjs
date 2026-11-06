@@ -1,3 +1,4 @@
+import { modelReply } from './fixtures/conversation-model.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -10,7 +11,7 @@ import { acceptDecision } from '../examples/intent/catalog.mjs';
 import { fixtures } from '../examples/intent/fixtures.mjs';
 
 const select = (node, evidence = []) => ({ kind: 'select', node, reason: '用于验证契约的固定响应', evidence, question: null });
-const reply = (decision, extra = {}) => ({ text: JSON.stringify(decision), finishReason: 'stop', usage: null, ...extra });
+const reply = (decision, extra = {}) => modelReply(JSON.stringify(decision), extra);
 const fixture = (id) => fixtures.find((item) => item.id === id);
 
 test('intent example invokes a real registered candidate through the public resource/structure/runner chain', async () => {
@@ -81,7 +82,7 @@ for (const [title, text, code] of [
   ['extra fields', JSON.stringify({ ...select('translate'), debug: true }), 'invalid-shape'],
 ])
   test(`intent example rejects ${title} before invoking any candidate`, async () => {
-    const row = await runCase({ fixture: fixtures[0], condition: 'input', model: { complete: async () => ({ text, finishReason: 'stop' }) } });
+    const row = await runCase({ fixture: fixtures[0], condition: 'input', model: { complete: async () => modelReply(text) } });
     assert.equal(row.status, 'contract-error');
     assert.equal(row.error.code, code);
     assert.equal(row.plan, undefined);
@@ -89,7 +90,7 @@ for (const [title, text, code] of [
 
 test('finish reason, transport failure, and a valid but wrong choice remain distinct', async () => {
   const models = [
-    { complete: async () => reply(select('translate'), { finishReason: 'length' }) },
+    { complete: async () => reply(select('translate'), { termination: { kind: 'incomplete', reason: 'length' } }) },
     {
       complete: async () => {
         throw new Error('provider response could contain a secret; do not print it');

@@ -95,7 +95,7 @@ export function createMemoryProposal(completion: ConversationCompletion = create
   });
   const propose = new Group<ConversationMemoryContext, readonly MemoryChange[]>({
     name: 'propose-conversation-memories',
-    checkpoint: { key: 'conversation.memory.proposal', version: 2, input: memoryContextCodec, output: memoryChangesCodec, points: [waiting, completed] },
+    checkpoint: { key: 'conversation.memory.proposal', version: 3, input: memoryContextCodec, output: memoryChangesCodec, points: [waiting, completed] },
   }).add({ completion });
   propose.run = async (work) => {
     const call = work.children.create(completion, modelRequest(work.input, maxTokens), { key: 'completion' });

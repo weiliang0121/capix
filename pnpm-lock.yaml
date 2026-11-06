@@ -41,6 +41,9 @@ importers:
       '@capix/memory':
         specifier: workspace:*
         version: link:server/memory
+      '@capix/model-exchanges':
+        specifier: workspace:*
+        version: link:server/model-exchanges
       '@capix/model-provider':
         specifier: workspace:*
         version: link:server/model-provider
@@ -288,6 +291,27 @@ importers:
         specifier: 1.52.0
         version: 1.52.0
 
+  server/model-exchanges:
+    dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../changes
+      '@capix/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@capix/diagnostics':
+        specifier: workspace:*
+        version: link:../diagnostics
+      '@capix/model-provider':
+        specifier: workspace:*
+        version: link:../model-provider
+      '@capix/resources':
+        specifier: workspace:*
+        version: link:../resources
+      '@capix/view':
+        specifier: workspace:*
+        version: link:../view
+
   server/model-provider: {}
 
   server/records:
@@ -400,6 +424,9 @@ importers:
 
   services/conversation:
     dependencies:
+      '@capix/changes':
+        specifier: workspace:*
+        version: link:../../server/changes
       '@capix/checkpoint':
         specifier: workspace:*
         version: link:../../server/checkpoint
@@ -415,6 +442,9 @@ importers:
       '@capix/memory':
         specifier: workspace:*
         version: link:../../server/memory
+      '@capix/model-exchanges':
+        specifier: workspace:*
+        version: link:../../server/model-exchanges
       '@capix/model-provider':
         specifier: workspace:*
         version: link:../../server/model-provider

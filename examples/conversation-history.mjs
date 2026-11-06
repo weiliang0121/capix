@@ -16,7 +16,7 @@ const provider = live
         const input = JSON.parse(request.messages[1].content);
         // 这是示例脚本响应，不是框架的意图算法，也不用于评价模型质量。
         const text = request.responseFormat === 'json_object' ? JSON.stringify({ kind: input.query.includes('再短') ? 'revise_answer' : 'summarize_history', question: null }) : input.answer ? '周四完成复核，周五发布。' : '已确认周四完成代码复核，周五发布；发布前仍需完成复核。';
-        return { id: 'scripted', model: 'scripted-wiring-only', text, finishReason: 'stop', usage: null };
+        return { id: 'scripted', model: 'scripted-wiring-only', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
       },
     };
 

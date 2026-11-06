@@ -16,6 +16,11 @@ function fixture(t) {
     rmSync(directory, { recursive: true, force: true });
   });
   return {
+    raw() {
+      const database = new DatabaseSync(path, { enableForeignKeyConstraints: true });
+      databases.push(database);
+      return database;
+    },
     open() {
       const database = new DatabaseSync(path, { enableForeignKeyConstraints: true });
       databases.push(database);
@@ -36,7 +41,7 @@ function image(id = 'cp-1', contextId = 'context-1') {
   };
 }
 
-test('checkpoint images and the latest version survive closing and reopening the host database', (t) => {
+test('checkpoint identities and the latest image survive reopening while superseded bodies retire', (t) => {
   const disk = fixture(t);
   const first = disk.open();
   assert.equal(first.store.read('missing'), undefined);
@@ -63,7 +68,9 @@ test('checkpoint images and the latest version survive closing and reopening the
   first.database.close();
   const reopened = disk.open();
   assert.deepEqual(reopened.store.read('context-1'), latest);
-  assert.equal(JSON.parse(reopened.database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get('cp-1').body).state.output.content, 'fixed output');
+  assert.equal(reopened.database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get('cp-1').body, null);
+  assert.throws(() => reopened.store.save(image('cp-1'), 2), { code: 'CHECKPOINT_CONFLICT' });
+  assert.throws(() => reopened.store.save(image('cp-1', 'context-2'), 0), { code: 'CHECKPOINT_CONFLICT' });
 });
 
 test('stale checkpoint writers cannot overwrite the current head or leave orphan images', (t) => {
@@ -201,6 +208,7 @@ for (const [label, mutate] of [
   ['image identity mismatch', (database) => database.prepare('UPDATE checkpoint_images SET body = ?').run(JSON.stringify(image('other-id')))],
   ['image context mismatch', (database) => database.prepare('UPDATE checkpoint_images SET context_id = ?').run('other-context')],
   ['invalid frame', (database) => database.prepare('UPDATE checkpoint_images SET body = ?').run(JSON.stringify({ ...image(), frame: {} }))],
+  ['head body missing', (database) => database.exec('UPDATE checkpoint_images SET body = NULL')],
   ['head version mismatch', (database) => database.exec('UPDATE checkpoint_heads SET revision = 8')],
   ['head missing', (database) => database.exec('DELETE FROM checkpoint_heads')],
   ['malformed final delivery', (database) => database.prepare('UPDATE checkpoint_heads SET revision = 2, delivery = ?').run('{ broken')],
@@ -212,8 +220,10 @@ for (const [label, mutate] of [
     first.store.save(image(), 0);
     mutate(first.database);
     first.database.close();
-    const reopened = disk.open();
     const code = label.startsWith('unsupported format') ? 'CHECKPOINT_FORMAT_UNSUPPORTED' : 'CHECKPOINT_STORAGE_FAILURE';
+    // An orphan non-head body also triggers safe-retirement validation at open.
+    if (label === 'head missing') return assert.throws(() => disk.open(), { code });
+    const reopened = disk.open();
     assert.throws(() => reopened.store.read('context-1'), { code });
     assert.throws(() => reopened.store.save(image('cp-2'), 1), { code });
   });
@@ -234,4 +244,168 @@ test('stored checkpoint bodies are bounded before JSON parsing', (t) => {
     () => store.read('context-1'),
     (error) => error.code === 'CHECKPOINT_STORAGE_FAILURE' && error.cause.message.includes('byte limit'),
   );
+});
+
+const legacySchema = `CREATE TABLE checkpoint_images (
+    id TEXT PRIMARY KEY, context_id TEXT NOT NULL, revision INTEGER NOT NULL CHECK (revision > 0),
+    body TEXT NOT NULL, UNIQUE (context_id, revision));
+    CREATE TABLE checkpoint_heads (
+      context_id TEXT PRIMARY KEY, revision INTEGER NOT NULL CHECK (revision > 0),
+      image_id TEXT NOT NULL REFERENCES checkpoint_images(id), delivery TEXT);
+    PRAGMA user_version = 6;`;
+
+function installLegacy(database, formatVersion = 5) {
+  database.exec(legacySchema);
+  const old = { ...image('old'), formatVersion };
+  const latest = { ...image('latest'), formatVersion, state: { final: true } };
+  const other = image('other-image', 'context-2');
+  const insert = database.prepare('INSERT INTO checkpoint_images VALUES (?, ?, ?, ?)');
+  insert.run('old', 'context-1', 1, JSON.stringify(old));
+  insert.run('latest', 'context-1', 2, JSON.stringify(latest));
+  insert.run('other-image', 'context-2', 1, JSON.stringify(other));
+  const delivery = { status: 'succeeded', output: 'delivered', progress: { round: 1, phase: 'execute', currentInput: latest.frame.input } };
+  database.prepare('INSERT INTO checkpoint_heads VALUES (?, ?, ?, ?)').run('context-1', 3, 'latest', JSON.stringify(delivery));
+  database.prepare('INSERT INTO checkpoint_heads VALUES (?, ?, ?, NULL)').run('context-2', 1, 'other-image');
+  return { old, latest, other, delivery };
+}
+
+function savedArchive(database) {
+  return {
+    images: database.prepare('SELECT * FROM checkpoint_images ORDER BY id').all(),
+    heads: database.prepare('SELECT * FROM checkpoint_heads ORDER BY context_id').all(),
+    version: database.prepare('PRAGMA user_version').get().user_version,
+    bodyNotNull: database
+      .prepare('PRAGMA table_info(checkpoint_images)')
+      .all()
+      .find((row) => row.name === 'body').notnull,
+  };
+}
+
+for (const nullable of [false, true]) {
+  for (const [label, change] of [
+    ['body type', (sql) => sql.replace('body TEXT', 'body BLOB')],
+    ['context nullability', (sql) => sql.replace('context_id TEXT NOT NULL', 'context_id TEXT')],
+    ['head primary key', (sql) => sql.replace('context_id TEXT PRIMARY KEY', 'context_id TEXT')],
+    ['missing head foreign key', (sql) => sql.replace(' REFERENCES checkpoint_images(id)', '')],
+    ['foreign key action', (sql) => sql.replace('REFERENCES checkpoint_images(id)', 'REFERENCES checkpoint_images(id) ON DELETE CASCADE')],
+    ['revision uniqueness', (sql) => sql.replace(', UNIQUE (context_id, revision)', '')],
+  ]) {
+    test(`Observer refuses unknown ${nullable ? 'nullable' : 'legacy'} schema ${label} without modifying storage`, (t) => {
+      const database = fixture(t).raw();
+      database.exec(change(nullable ? legacySchema.replace('body TEXT NOT NULL', 'body TEXT') : legacySchema));
+      const before = savedArchive(database);
+      const schema = database.prepare('SELECT * FROM sqlite_master ORDER BY name').all();
+      assert.throws(() => new SqliteCheckpointStore(database), { code: 'CHECKPOINT_STORAGE_FAILURE' });
+      assert.deepEqual(savedArchive(database), before);
+      assert.deepEqual(database.prepare('SELECT * FROM sqlite_master ORDER BY name').all(), schema);
+      assert.equal(database.isTransaction, false);
+    });
+  }
+}
+
+for (const [label, index] of [
+  ['wrong column', 'CREATE INDEX checkpoint_heads_image ON checkpoint_heads(revision)'],
+  ['wrong table', 'CREATE INDEX checkpoint_heads_image ON checkpoint_images(id)'],
+  ['partial index', 'CREATE INDEX checkpoint_heads_image ON checkpoint_heads(image_id) WHERE delivery IS NULL'],
+]) {
+  test(`Observer rejects a same-named head index with ${label} before migrating or retiring bodies`, (t) => {
+    const database = fixture(t).raw();
+    installLegacy(database);
+    database.exec(index);
+    const before = savedArchive(database);
+    const schema = database.prepare('SELECT * FROM sqlite_master ORDER BY name').all();
+    assert.throws(() => new SqliteCheckpointStore(database), { code: 'CHECKPOINT_STORAGE_FAILURE' });
+    assert.deepEqual(savedArchive(database), before);
+    assert.deepEqual(database.prepare('SELECT * FROM sqlite_master ORDER BY name').all(), schema);
+    assert.equal(database.isTransaction, false);
+  });
+}
+
+test('Observer migrates complete legacy archives to nullable bodies without changing head, delivery or host version', (t) => {
+  const database = fixture(t).raw();
+  const saved = installLegacy(database);
+  const store = new SqliteCheckpointStore(database);
+  assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6);
+  assert.equal(
+    database
+      .prepare('PRAGMA table_info(checkpoint_images)')
+      .all()
+      .find((row) => row.name === 'body').notnull,
+    0,
+  );
+  assert.equal(database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get('old').body, null);
+  assert.equal(database.prepare('SELECT count(*) AS n FROM checkpoint_images').get().n, 3);
+  assert.deepEqual(store.read('context-1'), { revision: 3, image: saved.latest, delivery: saved.delivery });
+  assert.deepEqual(store.read('context-2'), { revision: 1, image: saved.other });
+  assert.throws(() => store.save(image('old', 'new-context'), 0), { code: 'CHECKPOINT_CONFLICT' });
+  assert.throws(() => store.save(image('new'), 3), { code: 'CHECKPOINT_CONFLICT' });
+  assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all(), []);
+  assert.equal(database.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%_next'").all().length, 0);
+});
+
+test('Observer retirement preserves unsupported historical head formats and their explicit read refusal', (t) => {
+  const database = fixture(t).raw();
+  const saved = installLegacy(database, 4);
+  const store = new SqliteCheckpointStore(database);
+  assert.equal(database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get('old').body, null);
+  assert.deepEqual(JSON.parse(database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get('latest').body), saved.latest);
+  assert.throws(() => store.read('context-1'), { code: 'CHECKPOINT_FORMAT_UNSUPPORTED' });
+  assert.deepEqual(store.read('context-2').image, saved.other);
+});
+
+for (const [label, damage] of [
+  ['old body identity', (db) => db.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(JSON.stringify(image('wrong')), 'old')],
+  ['old body context', (db) => db.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(JSON.stringify(image('old', 'wrong-context')), 'old')],
+  ['changed input', (db) => db.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(JSON.stringify({ ...image('old'), frame: { ...image().frame, input: 'changed' } }), 'old')],
+  ['changed contract', (db) => db.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(JSON.stringify({ ...image('old'), contract: { key: 'different', version: 1 } }), 'old')],
+  ['changed parent', (db) => db.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(JSON.stringify({ ...image('old'), frame: { ...image().frame, owner: { ...image().frame.owner, parentContextId: 'different' } } }), 'old')],
+  ['malformed old JSON', (db) => db.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run('{invalid', 'old')],
+  ['oversized old body', (db) => db.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(' '.repeat(CHECKPOINT_MAX_BYTES + 1), 'old')],
+  ['revision gap', (db) => db.prepare('UPDATE checkpoint_images SET revision = 9 WHERE id = ?').run('old')],
+  ['missing first revision', (db) => db.prepare('DELETE FROM checkpoint_images WHERE id = ?').run('old')],
+  ['head behind newest image', (db) => db.exec("UPDATE checkpoint_heads SET image_id = 'old', revision = 1, delivery = NULL WHERE context_id = 'context-1'")],
+  ['head delivery revision', (db) => db.exec("UPDATE checkpoint_heads SET revision = 2 WHERE context_id = 'context-1'")],
+  ['invalid terminal delivery', (db) => db.exec('UPDATE checkpoint_heads SET delivery = \'{"status":"succeeded"}\' WHERE context_id = \'context-1\'')],
+  ['orphan history', (db) => db.exec("DELETE FROM checkpoint_heads WHERE context_id = 'context-1'")],
+]) {
+  test(`Observer retention refuses ${label} before discarding any historical body`, (t) => {
+    const database = fixture(t).raw();
+    installLegacy(database);
+    damage(database);
+    const before = savedArchive(database);
+    assert.throws(() => new SqliteCheckpointStore(database), { code: 'CHECKPOINT_STORAGE_FAILURE' });
+    assert.deepEqual(savedArchive(database), before);
+    assert.equal(database.isTransaction, false);
+    assert.equal(database.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%_next'").all().length, 0);
+  });
+}
+
+for (const result of ["ABORT, 'retirement failed'", 'IGNORE']) {
+  test(`Observer old-body retirement ${result} rolls back new image and head advancement`, (t) => {
+    const { database, store } = fixture(t).open();
+    store.save(image(), 0);
+    const before = savedArchive(database);
+    database.exec(`CREATE TRIGGER fail_retirement BEFORE UPDATE OF body ON checkpoint_images WHEN NEW.body IS NULL BEGIN SELECT RAISE(${result}); END;`);
+    assert.throws(() => store.save(image('cp-2'), 1), { code: 'CHECKPOINT_STORAGE_FAILURE' });
+    assert.deepEqual(savedArchive(database), before);
+    database.exec('DROP TRIGGER fail_retirement');
+    assert.equal(store.save(image('cp-2'), 1).revision, 2);
+    assert.equal(database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get('cp-1').body, null);
+  });
+}
+
+test('Observer reclaims bodies retained by an older writer only after validating the exact archive', (t) => {
+  const { database, store } = fixture(t).open();
+  store.save(image(), 0);
+  store.save(image('cp-2'), 1);
+  const head = store.read('context-1');
+  // Simulate the previous writer, which does not clear the earlier image body.
+  database.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(JSON.stringify(image()), 'cp-1');
+  new SqliteCheckpointStore(database);
+  assert.deepEqual(store.read('context-1'), head);
+  assert.equal(database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get('cp-1').body, null);
+  database.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run('{broken', 'cp-1');
+  assert.throws(() => new SqliteCheckpointStore(database), { code: 'CHECKPOINT_STORAGE_FAILURE' });
+  assert.equal(database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get('cp-1').body, '{broken');
+  assert.deepEqual(store.read('context-1'), head);
 });

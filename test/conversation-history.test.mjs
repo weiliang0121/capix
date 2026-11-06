@@ -9,7 +9,7 @@ const earlier = [
   { role: 'user', content: '发布改到周五，周四先完成代码复核。' },
   { role: 'assistant', content: '同意，周四复核后再确认周五发布。' },
 ];
-const reply = (text, finishReason = 'stop') => ({ id: 'test-completion', model: 'offline', text, finishReason, usage: null });
+const reply = (text, finishReason = 'stop') => ({ id: 'test-completion', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: finishReason === 'stop' ? 'completed' : 'incomplete', reason: finishReason }, usage: null });
 const decision = (kind, question = null) => reply(JSON.stringify({ kind, question }));
 const payload = (request) => JSON.parse(request.messages[1].content);
 

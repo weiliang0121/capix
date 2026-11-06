@@ -1,9 +1,11 @@
 import { resolve } from 'node:path';
 import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import { parseArgs } from 'node:util';
+import { parseAnswerMode, type ConversationAnswerMode } from '../hosting/options.js';
 
 export interface ConversationCliOptions {
   readonly mode: 'demo' | 'live';
+  readonly answerMode: ConversationAnswerMode;
   readonly database: string;
   readonly records?: string;
   readonly input?: string;
@@ -12,9 +14,11 @@ export interface ConversationCliOptions {
   readonly outputBudget: ConversationOutputBudget;
 }
 
-export const usage = `Usage: pnpm conversation [--demo | --live] [--db PATH] [--records PATH] [--input TEXT | --resume CONTEXT_ID]
+export const usage = `Usage: pnpm conversation [--demo | --live] [--answer-mode material|tools] [--db PATH] [--records PATH] [--input TEXT | --resume CONTEXT_ID]
 
 默认是离线演示，不访问模型。--live 显式启用真实 DeepSeek 请求。
+--answer-mode tools 选择历史工具对话；默认 material 保持材料回答与正文预览。
+工具模式显示真实阶段与最终回答，不拼接中间候选正文；两种模式均保存内容及记忆。
 --db 默认离线 .capix/conversation-demo.sqlite、真实 .capix/conversation.sqlite。
 每个库保存一个对话的内容、checkpoint 与完整模型交互；显式 --db 可选择其他位置。
 --records PATH 可选导出本进程调用记录；退出时写入新文件，不覆盖已有文件。
@@ -29,7 +33,8 @@ Ctrl-C 停止当前调用；空闲时退出。外部模型请求仍由宿主等�
 程序不读取 .env；可由启动命令显式加载。`;
 
 export function parseConversationOptions(args: readonly string[]): ConversationCliOptions {
-  const { values } = parseArgs({ args: [...args], options: { demo: { type: 'boolean' }, live: { type: 'boolean' }, db: { type: 'string' }, records: { type: 'string' }, input: { type: 'string' }, resume: { type: 'string' }, 'answer-tokens': { type: 'string' }, 'memory-tokens': { type: 'string' }, help: { type: 'boolean' } } });
+  const { values } = parseArgs({ args: [...args], options: { demo: { type: 'boolean' }, live: { type: 'boolean' }, 'answer-mode': { type: 'string' }, db: { type: 'string' }, records: { type: 'string' }, input: { type: 'string' }, resume: { type: 'string' }, 'answer-tokens': { type: 'string' }, 'memory-tokens': { type: 'string' }, help: { type: 'boolean' } } });
+  const answerMode = parseAnswerMode(values['answer-mode']);
   for (const name of ['answer-tokens', 'memory-tokens'] as const) {
     if (values[name] !== undefined && !/^[1-9]\d*$/.test(values[name])) throw new Error(`--${name} requires a positive integer`);
   }
@@ -40,5 +45,5 @@ export function parseConversationOptions(args: readonly string[]): ConversationC
   if (values.input !== undefined && !values.input.trim()) throw new Error('--input requires nonempty text');
   if (values.resume !== undefined && !values.resume.trim()) throw new Error('--resume requires a context identity');
   if (values.resume !== undefined && values.input !== undefined) throw new Error('Choose either --input or --resume');
-  return Object.freeze({ mode: values.live ? 'live' : 'demo', database: resolve(values.db ?? (values.live ? '.capix/conversation.sqlite' : '.capix/conversation-demo.sqlite')), ...(values.records === undefined ? {} : { records: resolve(values.records) }), ...(values.input === undefined ? {} : { input: values.input }), ...(values.resume === undefined ? {} : { resume: values.resume }), outputBudget, help: values.help ?? false });
+  return Object.freeze({ mode: values.live ? 'live' : 'demo', answerMode, database: resolve(values.db ?? (values.live ? '.capix/conversation.sqlite' : '.capix/conversation-demo.sqlite')), ...(values.records === undefined ? {} : { records: resolve(values.records) }), ...(values.input === undefined ? {} : { input: values.input }), ...(values.resume === undefined ? {} : { resume: values.resume }), outputBudget, help: values.help ?? false });
 }

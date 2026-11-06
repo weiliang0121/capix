@@ -6,7 +6,7 @@ import { Resources, Runner } from '@capix/server-runtime';
 import { Group, Node, Scene } from '@capix/structure';
 
 const request: ModelRequest = { messages: [{ role: 'system', content: 'instruction' }], stream: true, responseFormat: 'json_object', maxTokens: 100, temperature: 0 };
-const reply: ModelReply = { id: 'completion', model: 'model', text: 'answer', finishReason: 'stop', usage: null };
+const reply: ModelReply = { id: 'completion', model: 'model', formatVersion: 1, output: [{ kind: 'text', text: 'answer' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
 const interactions = new Interactions().register(CompletionInteraction, {
   send(value, { publish }) {
     const typed: Readonly<ModelRequest> = value;
@@ -56,7 +56,7 @@ const follower = new Node<InteractionReference, ModelReply, ResourcesOf<typeof d
     // @ts-expect-error Reading permission cannot send requests.
     work.resources.feedback.start(request);
     if (feedback.kind !== 'received') throw new Error('Not ready');
-    const reason: string = feedback.feedback.payload.finishReason;
+    const reason: string = feedback.feedback.payload.termination.reason;
     void reason;
     return feedback.feedback.payload;
   },

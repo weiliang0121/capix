@@ -1,6 +1,6 @@
 import { createConversationScene, createInteractionAnswer, createCompletionReplyNode, CompletionInteractionResource, ModelReplyPending, CompletionInteraction } from '@capix/conversation-service';
 import { Interactions, type InteractionCursor, type InteractionReference } from '@capix/interaction';
-import type { ModelReply } from '@capix/model-provider';
+import { modelReplyText, type ModelReply } from '@capix/model-provider';
 import type { Message } from '@capix/protocol';
 import type { ResourcesOf } from '@capix/resources';
 import { Node, Scene } from '@capix/structure';
@@ -9,13 +9,13 @@ import { Resources, Runner } from '@capix/server-runtime';
 type Messages = readonly Readonly<Message>[];
 const messages: Messages = [{ role: 'user', content: 'question' }];
 const interactions = new Interactions().register(CompletionInteraction, {
-  send(request, { publish }) {
+  send(request, { publish }): ModelReply {
     const history = request.messages;
     publish('preview');
     // @ts-expect-error Model process feedback is text, not a provider envelope.
     publish({ text: 'preview' });
     void history;
-    return { id: 'reply', model: 'test', text: 'answer', finishReason: 'stop', usage: null };
+    return { id: 'reply', model: 'test', formatVersion: 1, output: [{ kind: 'text', text: 'answer' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
   },
 });
 // @ts-expect-error Feedback must satisfy the complete ModelReply contract.
@@ -63,8 +63,8 @@ const startAndRead = new Node<Messages, string, ResourcesOf<typeof deps>>({
       },
     );
     if (outcome.kind === 'received') {
-      const text: string = outcome.feedback.payload.text;
-      // @ts-expect-error Complete feedback has a text field, not content.
+      const text: string = modelReplyText(outcome.feedback.payload);
+      // @ts-expect-error Complete feedback has output blocks, not a content shortcut.
       outcome.feedback.payload.content;
       return text;
     }

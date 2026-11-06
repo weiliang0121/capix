@@ -13,14 +13,14 @@ export function renderReport(environment, cases) {
     const work = result.work ?? {};
     lines.push(`| ${result.config.name} | ${number(result.build?.elapsedMs)} | ${number(work.cpuPercentOfOneCore)}% | ${number(work.eventLoopDelayMs?.p99)} | ${mib(work.memory?.peakSampled?.rss)} | ${mib(work.memory?.peakSampled?.heapUsed)} | ${mib(result.afterCloseMemory?.heapUsed)} | ${number(result.workload?.externalDrainMs)} |`);
   }
-  lines.push('', '| 场景 | 数据库数 | 关闭后文件 MiB | CP 镜像数 | CP 存储/原始 JSON MiB | 反馈条目 | 重载核对 |', '| --- | --- | --- | --- | --- | --- | --- |');
+  lines.push('', '| 场景 | 数据库数 | 关闭后文件 MiB | CP 身份行/保留正文/淘汰正文 | CP 保留存储/原始 JSON MiB | 反馈条目 | 重载核对 |', '| --- | --- | --- | --- | --- | --- | --- |');
   for (const result of cases) {
     const storage = result.storage ?? {};
-    lines.push(`| ${result.config.name} | ${storage.databases ?? 0} | ${mib(storage.totalBytes)} | ${storage.tables?.checkpoint_images ?? 0} | ${mib(storage.checkpointStoredBytes)}/${mib(storage.checkpointJsonBytes)} | ${storage.tables?.completion_interactions ?? 0} | ${result.persistenceReloads?.verified ?? 0}/${result.persistenceReloads?.expected ?? 0} |`);
+    lines.push(`| ${result.config.name} | ${storage.databases ?? 0} | ${mib(storage.totalBytes)} | ${storage.tables?.checkpoint_images ?? 0}/${storage.checkpointRetainedBodies ?? '未测量'}/${storage.checkpointDiscardedBodies ?? '未测量'} | ${mib(storage.checkpointStoredBytes)}/${mib(storage.checkpointJsonBytes)} | ${storage.tables?.completion_interactions ?? 0} | ${result.persistenceReloads?.verified ?? 0}/${result.persistenceReloads?.expected ?? 0} |`);
   }
   lines.push(
     '',
-    '各场景完整的模型耗时/流量、上游实际 CPU/时序、关闭后的数据库统计、残留活动和逐提交时延见对应 `result.json`。文件尺寸是落盘状态，不是累计写入字节。',
+    '各场景完整的模型耗时/流量、上游实际 CPU/时序、关闭后的数据库统计、残留活动和逐提交时延见对应 `result.json`。CP 身份行包括已淘汰正文的旧镜像；正文数量缺失的旧报告保持未测量。文件尺寸与保留 JSON 存量都不是累计写入字节。',
     '',
     '## 解读约束',
     '',

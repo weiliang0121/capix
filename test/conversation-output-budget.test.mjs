@@ -8,7 +8,7 @@ import { createConversationInteractions, createConversationResources, createMate
 import { ConversationStore } from '@capix/conversation-service/persistence';
 import { Runner } from '@capix/server-runtime';
 
-const reply = (text, finishReason = 'stop') => ({ id: 'budget-fixture', model: 'offline', text, finishReason, usage: null });
+const reply = (text, finishReason = 'stop') => ({ id: 'budget-fixture', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: finishReason === 'stop' ? 'completed' : 'incomplete', reason: finishReason }, usage: null });
 
 async function fixture(t, budget, answerReason = 'stop', memoryReason = 'stop') {
   const directory = await mkdtemp(join(tmpdir(), 'capix-output-budget-'));
@@ -44,7 +44,7 @@ test('default output ceilings leave headroom and are fixed in both requests and 
   );
   assert.deepEqual(defaultConversationOutputBudget, { answer: 4096, memory: 8192 });
   const head = f.store.checkpoints.listRoots()[0];
-  assert.equal(head.image.contract.version, 2);
+  assert.equal(head.image.contract.version, 3);
   assert.deepEqual(head.image.state.outputBudget, defaultConversationOutputBudget);
 });
 

@@ -46,6 +46,7 @@
     "@capix/interaction": "workspace:*",
     "@capix/diagnostics": "workspace:*",
     "@capix/conversation-service": "workspace:*",
-    "@capix/model-provider": "workspace:*"
+    "@capix/model-provider": "workspace:*",
+    "@capix/model-exchanges": "workspace:*"
   }
 }

@@ -7,7 +7,7 @@ const model = {
     // Replace this local model with the host's provider. Emit only during this operation.
     const answer = `收到：${messages.at(-1).content}`;
     for (const chunk of ['收到：', messages.at(-1).content]) emit(chunk);
-    return { id: 'local-reply', model: 'local-demo', text: answer, finishReason: 'stop', usage: null };
+    return { id: 'local-reply', model: 'local-demo', formatVersion: 1, output: [{ kind: 'text', text: answer }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
   },
 };
 const runner = createConversationRunner(transcript, model);

@@ -42,6 +42,25 @@ test('memory checkpoint advancement keeps owner, original input and contract fix
   }
 });
 
+test('memory checkpoint identities stay reserved after their bodies leave the head', () => {
+  const store = new MemoryCheckpointStore();
+  for (let revision = 0; revision < 3; revision++) store.save(image(`cp-${revision}`), revision);
+  const current = store.read('scope-1');
+  assert.equal(current.image.id, 'cp-2');
+  assert.deepEqual(current.image.state, { content: 'saved' });
+  for (const id of ['cp-0', 'cp-1']) {
+    assert.throws(() => store.save(image(id), 3), { code: 'CHECKPOINT_CONFLICT' });
+    assert.throws(() => store.save(image(id, 'scope-2'), 0), { code: 'CHECKPOINT_CONFLICT' });
+  }
+  assert.equal(store.read('scope-1'), current);
+  assert.equal(store.read('scope-2'), undefined);
+  store.finish('scope-1', 3, { status: 'failed' });
+  assert.equal(store.read('scope-1').image, current.image, 'finishing retains the complete last image');
+  assert.throws(() => store.save(image('cp-0', 'scope-2'), 0), { code: 'CHECKPOINT_CONFLICT' });
+  assert.equal(store.save(image('cp-3', 'scope-2'), 0).revision, 1);
+  assert.equal(store.read('scope-1').delivery.status, 'failed');
+});
+
 for (const status of ['succeeded', 'failed', 'cancelled']) {
   test(`memory checkpoint ${status} delivery closes the scope`, () => {
     const store = new MemoryCheckpointStore();

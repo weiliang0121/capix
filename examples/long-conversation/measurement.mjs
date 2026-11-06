@@ -42,12 +42,13 @@ export function measureFiles(path) {
 }
 
 /**
- * Measure a closed conversation v2/v3 database. The caller must stop the host and keep it closed.
+ * Measure a closed conversation v2/v3/v4/v5/v6 database. The caller must stop the host and keep it closed.
  * Ordinary SQLite read-only connections can create WAL/SHM files; immutable mode avoids that,
  * but ignores WAL, so reject any nonempty WAL instead of reporting incomplete SQL contents.
  * CP `bytes`/`maxBytes` retain the original JSON size; v3 obtains it from validated storage
  * metadata, without decompressing or certifying the payload. `storedBytes` measures the actual
- * envelope text, including base64. Other body sizes remain UTF-8 JSON text.
+ * envelope text, including base64. Both measure retained bodies, not cumulative saves;
+ * v6 keeps historical identity rows after discarding their body. Other body sizes remain UTF-8 JSON text.
  * `logicalBytes` includes free pages; file lengths are separate and are not cumulative writes.
  */
 export function measureDatabase(path) {
@@ -59,11 +60,16 @@ export function measureDatabase(path) {
   try {
     const applicationId = database.prepare('PRAGMA application_id').get().application_id;
     const schemaVersion = database.prepare('PRAGMA user_version').get().user_version;
-    if (applicationId !== 0x43415043 || (schemaVersion !== 2 && schemaVersion !== 3)) throw new Error('Measurement requires a conversation schema v2/v3 database');
+    if (applicationId !== 0x43415043 || ![2, 3, 4, 5, 6].includes(schemaVersion)) throw new Error('Measurement requires a conversation schema v2/v3/v4/v5/v6 database');
+    if (schemaVersion >= 6 && database.prepare('SELECT 1 FROM checkpoint_heads h LEFT JOIN checkpoint_images i ON i.id = h.image_id WHERE i.id IS NULL OR i.body IS NULL LIMIT 1').get()) throw new Error('Current checkpoint head body is missing');
     const images = measureCheckpoints(database, schemaVersion, 'checkpoint_images', 'body');
     const deliveries = measureCheckpoints(database, schemaVersion, 'checkpoint_heads', 'delivery');
     const heads = { count: deliveries.count, deliveryBytes: deliveries.bytes, maxDeliveryBytes: deliveries.maxBytes, storedDeliveryBytes: deliveries.storedBytes, maxStoredDeliveryBytes: deliveries.maxStoredBytes };
     const completionInteractions = measureBodies(database, 'completion_interactions');
+    const modelExchanges = schemaVersion >= 4 ? { collections: database.prepare('SELECT COUNT(*) AS count FROM model_exchanges').get().count, entries: measureBodies(database, 'model_exchange_entries'), metadataBytes: schemaVersion >= 5 ? database.prepare('SELECT COALESCE(SUM(length(CAST(metadata AS BLOB))), 0) AS bytes FROM model_exchanges').get().bytes : 0 } : undefined;
+    // Recompute the host's retained JSON categories; do not trust its accounting
+    // table as independent experimental evidence or confuse this with file size.
+    const archiveJsonBytes = images.bytes + heads.deliveryBytes + completionInteractions.bytes + (modelExchanges?.entries.bytes ?? 0) + (modelExchanges?.metadataBytes ?? 0);
     const messages = measureBodies(database, 'messages');
     const memories = measureBodies(database, 'memories');
     const appendReceipts = measureBodies(database, 'append_receipts');
@@ -72,7 +78,7 @@ export function measureDatabase(path) {
     const pageCount = database.prepare('PRAGMA page_count').get().page_count;
     const freelistCount = database.prepare('PRAGMA freelist_count').get().freelist_count;
     const pageSize = database.prepare('PRAGMA page_size').get().page_size;
-    return { schemaVersion, checkpoints: { originalBytesSource: schemaVersion === 3 ? 'storage-metadata' : 'body-text', images, heads }, completionInteractions, messages, memories, appendReceipts, applyReceipts, content, sqlite: { pageCount, freelistCount, pageSize, logicalBytes: pageCount * pageSize }, files };
+    return { schemaVersion, checkpoints: { originalBytesSource: schemaVersion >= 3 ? 'storage-metadata' : 'body-text', images, heads }, completionInteractions, ...(modelExchanges ? { modelExchanges } : {}), archiveJsonBytes, messages, memories, appendReceipts, applyReceipts, content, sqlite: { pageCount, freelistCount, pageSize, logicalBytes: pageCount * pageSize }, files };
   } finally {
     database.close();
   }
@@ -85,18 +91,26 @@ function measureBodies(database, table) {
 
 function measureCheckpoints(database, version, table, column) {
   const totals = { count: 0, bytes: 0, maxBytes: 0, storedBytes: 0, maxStoredBytes: 0 };
+  let retainedBodies = 0;
+  let discardedBodies = 0;
   // Names are fixed by the two calls above. Count heads without a terminal delivery as well.
   for (const row of database.prepare(`SELECT ${column} AS body FROM ${table}`).iterate()) {
     totals.count++;
-    if (row.body === null && column === 'delivery') continue;
+    if (row.body === null) {
+      if (column === 'delivery') continue;
+      if (version < 6) throw new Error('Historical checkpoint body is missing in a format that retains all images');
+      discardedBodies++;
+      continue;
+    }
+    retainedBodies++;
     const storedBytes = textBytes(row.body);
-    const bytes = version === 3 ? originalCheckpointBytes(row.body, storedBytes) : storedBytes;
+    const bytes = version >= 3 ? originalCheckpointBytes(row.body, storedBytes) : storedBytes;
     totals.bytes += bytes;
     totals.maxBytes = Math.max(totals.maxBytes, bytes);
     totals.storedBytes += storedBytes;
     totals.maxStoredBytes = Math.max(totals.maxStoredBytes, storedBytes);
   }
-  return totals;
+  return column === 'body' ? { ...totals, retainedBodies, discardedBodies } : totals;
 }
 
 function originalCheckpointBytes(body, storedBytes) {

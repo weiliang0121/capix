@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { createConversationWebHost } from '@capix/conversation-service/web';
 import { ConversationStore } from '@capix/conversation-service/persistence';
 
-const reply = (text) => ({ id: 'web-host-test', model: 'fixture', text, finishReason: 'stop', usage: null });
+const reply = (text) => ({ id: 'web-host-test', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 function provider() {
   let requests = 0;
   return {
@@ -50,7 +50,7 @@ test('Web host forwards fixed output limits and reports an exhausted answer with
     async complete(request, controls = {}) {
       requests.push(request);
       controls.emit?.('unfinished preview');
-      return { ...reply('sensitive model body'), finishReason: 'length' };
+      return { ...reply('sensitive model body'), termination: { kind: 'incomplete', reason: 'length' } };
     },
   };
   const host = createConversationWebHost({ database: join(directory, 'budget.sqlite'), mode: 'demo', modelName: 'fixture', model, outputBudget: { answer: 123 } });

@@ -47,7 +47,7 @@ console.log('本次调用已停止：', !runner.isRunning, '外部交互仍在�
 
 // The original call has ended, but its external exchange can still receive its final reply.
 publish('调用结束后仍可产生的预览。');
-reply.resolve({ id: 'late-reply', model: 'local-demo', text: '晚到的模型回答', finishReason: 'stop', usage: null });
+reply.resolve({ id: 'late-reply', model: 'local-demo', formatVersion: 1, output: [{ kind: 'text', text: '晚到的模型回答' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 await interactions.settled();
 
 // Grant only feedback reading to a new invocation. Reading cannot dispatch another request.

@@ -38,6 +38,7 @@ interface RegistrationEntry {
   readonly key: string;
   readonly channel: unknown;
   active(): boolean;
+  pendingCount(): number;
   settled(): Promise<void>;
   clear(): void;
 }
@@ -66,6 +67,7 @@ export class Interactions {
       key: contract.key,
       channel: registered.channel,
       active: () => registered.active,
+      pendingCount: () => registered.pendingCount,
       settled: () => registered.settled(),
       clear: () => registered.clear(),
     });
@@ -85,6 +87,15 @@ export class Interactions {
 
   get active(): boolean {
     return [...this.#registrations.values()].some((registration) => registration.active());
+  }
+
+  /** Installed live exchanges that have not settled, including feedback validation and persistence.
+   * Preparation before installation and read-only restoration are excluded; active still protects preparation.
+   */
+  get pendingCount(): number {
+    let count = 0;
+    for (const registration of this.#registrations.values()) count += registration.pendingCount();
+    return count;
   }
 
   /** Join host-owned sends. Ending a resource access window never invokes this method. */
@@ -157,6 +168,10 @@ class RegisteredInteractions<Request, Reply, Delta> {
 
   get active(): boolean {
     return this.#preparing > 0 || this.#active.size > 0;
+  }
+
+  get pendingCount(): number {
+    return this.#active.size;
   }
 
   async settled(): Promise<void> {

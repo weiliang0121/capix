@@ -49,7 +49,7 @@ test('recovery discovery checks live host admission before scanning checkpoint h
         entered.resolve();
         await gate.promise;
       }
-      return { id: 'query-fixture', model: 'fixture', text: request.responseFormat === 'text' ? 'accepted answer' : '{"changes":[]}', finishReason: 'stop', usage: null };
+      return { id: 'query-fixture', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: request.responseFormat === 'text' ? 'accepted answer' : '{"changes":[]}' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
     },
   };
   host = createConversationWebHost({ database, model, modelName: 'fixture', mode: 'demo' });

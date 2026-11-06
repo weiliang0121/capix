@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CompletionInteraction } from '@capix/conversation-service';
@@ -52,8 +53,8 @@ test('saved feedback respects the host read scope; separate Interactions and UUI
   const referenceB = result.references.B[0];
   const savedA = persistence.A.read(referenceA.id);
   const savedB = persistence.B.read(referenceB.id);
-  assert.equal(savedA.feedback.payload.text, 'A:preview:late');
-  assert.equal(savedB.feedback.payload.text, 'B:preview:final');
+  assert.equal(modelReplyText(savedA.feedback.payload), 'A:preview:late');
+  assert.equal(modelReplyText(savedB.feedback.payload), 'B:preview:final');
   assert.equal(persistence.A.read(referenceB.id), undefined);
   assert.equal(persistence.B.read(referenceA.id), undefined);
   const { model, transport } = createControlledProvider();

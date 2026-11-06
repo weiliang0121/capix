@@ -90,11 +90,30 @@ CP 保存或最终交付落盘失败不属于可由业务 `result.failed` 处理
 
 读取与写入返回分开：`read(contextId)` 仍返回完整 `CheckpointHead`；`save` 返回 `CheckpointSaveReceipt`，`finish` 返回 `CheckpointFinishReceipt`。回执包含 kind、contextId、checkpointId、revision 和 digest；终态回执另含 status，不携带 image/delivery 正文。Store 适配器在真实提交成功后返回由 `checkpointSaveReceipt` / `checkpointFinishReceipt` 构造的确认。两者使用首次认证时已有 JSON 表达的 SHA-256；只缓存摘要，不长期保留第二份 JSON 正文。它是准确编码内容的关联依据，不是忽略对象字段顺序的通用语义摘要，也不能自行证明介质已经落盘。
 
-Invocation 使用 `checkCheckpointSaveReceipt` / `checkCheckpointFinishReceipt` 核对准确请求及 expectedRevision + 1，正常保存后只保留修订和最后镜像 ID，恢复另持完整快照。自定义 Store 的旧 Head 返回必须迁移；需要恢复内容的测试、宿主和工具显式调用 read。Frame v5 和现有 SQLite 格式不变，旧存量数据不需要迁移。
+Invocation 使用 `checkCheckpointSaveReceipt` / `checkCheckpointFinishReceipt` 核对准确请求及 expectedRevision + 1，正常保存后只保留修订和最后镜像 ID，恢复另持完整快照。自定义 Store 的旧 Head 返回必须迁移；需要恢复内容的测试、宿主和工具显式调用 read。回执改动本身不改变 Frame 或 SQLite 格式；后续存储保留迁移见下节。
 
 保存入口固定修订基线，同一 writer 拒绝重入；穿过作者 codec/check 和 captured 通知后，提交前复核本次活动、阶段和修订。父字段也在每次 codec 返回后立即固定，避免后续 codec 复用临时对象改写已捕获值。Store 写口抛错或回执拒绝时，结果可能已经提交：该调用不再自动写入失败终态或重试保存，保留机制故障，不把失败解释为回滚。确认成功后的严格 saved 通知失败仍沿用既有失败收尾规则。
 
-本轮仅消除同一完整镜像跨边界的重复认证。SQLite 仍读取并完整核验旧 head，CAS/终态/固定 owner-contract-input 检查、压缩位置、同步事务及持久成功后返回的承诺保持；未实现构件统计复用、增量存储或后台提交。
+上述认证优化仅消除同一完整镜像跨边界的重复认证。SQLite 仍读取并完整核验旧 head，CAS/终态/固定 owner-contract-input 检查、压缩位置、同步事务及持久成功后返回的承诺保持；未实现构件统计复用、增量存储或后台提交。
+
+### 正文保留：每个调用只留当前 head
+
+2026-11-06 起，内存和两个 SQLite Store 只保留每个调用的当前完整 image，以及已有终态 delivery。旧 image ID 永久保留作拒重依据；`read(contextId)` 仍返回完整 head，公开契约不出现 nullable image。Frame v5、作者恢复点及业务契约版本不变。
+
+| 内容              | 保存规则                                                | 用途                                      |
+| ----------------- | ------------------------------------------------------- | ----------------------------------------- |
+| 当前 image 正文   | 每个调用一份                                            | 恢复及固定依据核验                        |
+| 旧 image 身份     | 保留 ID；SQL 同时保留 context_id/revision，body 为 NULL | 阻止同一 ID 再次提交，包括换 context 使用 |
+| 终态 delivery     | 保留，且当前 image 继续存在                             | 父层核对准确子交付、拒绝终态再推进        |
+| 已完成根与子 head | 本轮全部保留                                            | 不把完成判断等同于整棵子树可退休          |
+
+`save` 在同一事务中校验原 head、插入新正文、CAS 推进 head，最后按准确旧 ID 释放正文并更新存量计数；清理必须命中一行且不能仍被任何 head 引用。任一步失败都回滚。`finish` 不释放当前正文。head 指向 NULL 属于损坏，不能回退到旧 image 或当作尚未保存。内存 Store 以 used-ID 集合代替历史 image Map，不保留旧正文引用。
+
+Conversation SQLite v6 在排他打开事务中迁移 v1–v5：逐行有界校验历史正文与身份、固定 owner/contract/input、连续修订、head/delivery 关系，再重建可空 body 表并重算经核对的存量计数；当前 head 的存储编码和所有身份保持。当前 Frame 按其契约校验，旧格式只核验存储依据，不因此获得恢复资格。失败整笔回滚。迁移需要一次性扫描与解码旧正文，不能把它当作无成本的改表。旧 Observer 独立识别 CP 表的原 NOT NULL／新 nullable 形状，内容库仍为 v6；旧 writer 可读 head，但可能多留正文，新版本重新打开时校验并回收这些正文。
+
+不自动 VACUUM；释放页面可被 SQLite 复用，但数据库文件不保证立刻变小。身份行、head 和交付仍持续增长，不能宣称总存储恒定。普通 CP 观测仍发布真实保存事件；需要完整历史正文的诊断应另作显式采集，现存数据库不再代表累计保存量。
+
+此改动减少**保留存量**，不会省略每次捕获、编码、认证、压缩完整 Frame，也没有减少 save/finish 次数。容量诊断分别报告身份数、保留正文数和淘汰正文数；累计写入字节与同步耗时由实际运行探针统计。分叉、整树退休、次间增量计算留作独立议题。
 
 ## Observer 声明覆盖
 

@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import assert from 'node:assert/strict';
 import { createSession, createFeedbackReader } from './assembly.mjs';
 import { createControlledProvider } from './transport.mjs';
@@ -143,8 +144,8 @@ export async function verifySharedCancellation(mode, persistence = {}) {
       lateReply = result.value;
       assert.equal(lateReply.id, `reply-${aRequest.index}`);
       assert.equal(lateReply.model, 'shared-fixture-model');
-      assert.equal(lateReply.finishReason, 'stop');
-      assert.equal(lateReply.text, 'A:preview:late');
+      assert.equal(lateReply.termination.reason, 'stop');
+      assert.equal(modelReplyText(lateReply), 'A:preview:late');
       assert.deepEqual(readerOutput.deltas(), ['A:preview', ':late']);
       assert.deepEqual(a.content.transcript.exportState(), aBeforeRead, 'reading late feedback does not accept an assistant message');
       assert.equal(transport.requests.length, 2, 're-reading feedback never dispatches again');
@@ -178,7 +179,7 @@ export async function verifySharedCancellation(mode, persistence = {}) {
       sends: transport.requests.length,
       cancelledRequestAborted: aRequest.signal.aborted,
       peerRequestAborted: bRequest.signal.aborted,
-      lateFeedback: lateReply?.text,
+      lateFeedback: lateReply ? modelReplyText(lateReply) : undefined,
       references: { A: a.references, B: b.references },
       assistantMessages: {
         A: a.content.transcript

@@ -23,7 +23,7 @@ try {
           resolve();
         });
       });
-      console.log(`CAPiX 对话：http://127.0.0.1:${options.port}（${options.mode === 'demo' ? '离线演示' : '真实模型'}）`);
+      console.log(`CAPiX 对话：http://127.0.0.1:${options.port}（${options.mode === 'demo' ? '离线演示' : '真实模型'} · ${options.answerMode === 'tools' ? '原生工具调用' : '材料回答'}）`);
       console.log('消息、记忆、View、模型反馈与 checkpoint 自动保存；恢复需显式选择，调用记录与提交接回仅限本进程。');
       await new Promise<void>((resolve) => {
         stop = resolve;

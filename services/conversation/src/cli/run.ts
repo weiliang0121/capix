@@ -1,12 +1,13 @@
 import { createInterface, type Interface } from 'node:readline';
 import { Runner } from '@capix/server-runtime';
-import { createConversationInteractions, createConversationResources, createMaterialConversationScene, loadConversationContent } from '../assembly/index.js';
+import { loadConversationContent } from '../assembly/index.js';
+import { createConversationHostAssembly } from '../hosting/assembly.js';
 import { ConversationStore } from '../persistence/index.js';
 import { createHostModel, hostModelName, hostRecoveryConfiguration } from '../hosting/model.js';
-import { assertConversationRecovery, listConversationRecoveries } from '../recovery/index.js';
 import { failureLabel } from '../hosting/diagnostic.js';
 import { parseConversationOptions, usage } from './options.js';
 import { RecordingFile } from './recording.js';
+import { ToolStages } from '../hosting/tool-stages.js';
 
 /** The executable owns I/O and lifetimes; Runner remains the sole owner of invocation activity. */
 export async function runConversationCli(args: readonly string[]): Promise<number> {
@@ -17,12 +18,13 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
   }
   // Validate credentials before opening a store or accepting any input.
   const model = createHostModel(options.mode);
-  const configuration = hostRecoveryConfiguration(options.mode, hostModelName(options.mode), options.outputBudget);
+  const configuration = hostRecoveryConfiguration(options.mode, hostModelName(options.mode), options.outputBudget, options.answerMode);
   const recording = options.records ? RecordingFile.open(options.records, options.database) : undefined;
   let openedStore: ConversationStore | undefined;
-  let interactions: ReturnType<typeof createConversationInteractions> | undefined;
+  let interactions: ReturnType<typeof createConversationHostAssembly>['interactions'] | undefined;
   let lines: Interface | undefined;
   let unsubscribe: (() => void) | undefined;
+  let stages: ToolStages | undefined;
   let onInterrupt: (() => void) | undefined;
   let onTerminate: (() => void) | undefined;
   let onIoError: (() => void) | undefined;
@@ -30,21 +32,27 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
   try {
     const store = ConversationStore.open(options.database);
     openedStore = store;
-    interactions = createConversationInteractions(model, store.interactions);
     const content = loadConversationContent(store);
-    const scene = createMaterialConversationScene(options.outputBudget);
-    const resources = createConversationResources(content, model, store.view, configuration);
-    const installation = recording?.install(scene);
-    const runner = new Runner(scene, resources, interactions, {
+    const assembly = createConversationHostAssembly({ content, store, model, configuration, answerMode: options.answerMode, outputBudget: options.outputBudget });
+    interactions = assembly.interactions;
+    const installation = recording?.install(assembly.scene);
+    const runner = new Runner(assembly.scene, assembly.resources, interactions, {
       ...(installation ? { observations: [installation] } : {}),
-      checkpoints: { store: store.checkpoints },
-      validate: () => {
-        store.assertAvailable();
-      },
+      checkpoints: { store: assembly.checkpoints },
+      validate: assembly.assertAdmission,
     }).build();
+    const entry = assembly.entry(runner);
     let closing = false;
     let ioFailed = false;
     let preview = false;
+    if (assembly.toolLoop) {
+      stages = new ToolStages(runner.observation, assembly.toolLoop);
+      stages.subscribe({
+        receive({ stage }) {
+          if (!ioFailed && stage.status === 'running') console.log(`阶段：${stage.kind === 'model' ? '请求模型' : `执行工具 ${stage.label}`}`);
+        },
+      });
+    }
     unsubscribe = runner.output.subscribe({
       receive(event) {
         if (ioFailed || event.kind !== 'delta') return;
@@ -83,14 +91,15 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
       if (!ioFailed) console.log(`状态：消息 ${content.transcript.length}，记忆 ${content.memories.values().length}，View 成员 ${content.view.members().length}`);
     };
     console.log(options.mode === 'demo' ? '离线演示：使用固定模型替身；不访问网络。记忆策略仅保存最近输入。' : '真实模型模式：每次回答后还会请求记忆提取；无自动重试。');
+    if (options.answerMode === 'tools') console.log('工具回答：历史搜索与消息片段读取；展示阶段和最终回答，不展示候选正文。');
     status();
     const submit = async (line: string) => {
       if (!line.trim()) return;
       if (line.trim() === '/exit') return closeInput();
       if (line.trim() === '/status') return status();
       if (line.trim() === '/recoveries') {
-        const candidates = listConversationRecoveries(content, store, configuration, options.outputBudget);
-        if (!ioFailed) console.log(candidates.length ? candidates.map((item) => `${item.contextId} · ${item.point} · ${item.available ? '可以续接' : `不可续接：${item.reason}`}`).join('\n') : '没有未终结的 checkpoint。');
+        const candidates = assembly.listRecoveries();
+        if (!ioFailed) console.log(candidates.length ? candidates.map((item) => `${item.contextId} · ${item.point} · ${'eligibility' in item && item.eligibility === 'unchecked' ? '候选：执行 /resume 时核验完整依据' : item.available ? '可以续接' : `不可续接：${item.reason}`}`).join('\n') : '没有未终结的 checkpoint。');
         return;
       }
       const command = /^\/resume(?:\s+(.+))?$/.exec(line.trim());
@@ -100,10 +109,9 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
         if (command) {
           const contextId = command[1]?.trim();
           if (!contextId) throw new Error('/resume requires a context identity');
-          assertConversationRecovery(content, store, configuration, contextId, options.outputBudget);
           if (!ioFailed) console.log(`续接：${contextId}（保留原调用身份，不重建历史记录）`);
-          result = await runner.resume(contextId);
-        } else result = await runner.run(line);
+          result = await entry.resume(contextId);
+        } else result = await entry.run(line);
         if (!ioFailed && preview) process.stdout.write('\n');
         preview = false;
         // This is the actual returned result. A preview is never substituted for it.
@@ -140,6 +148,7 @@ export async function runConversationCli(args: readonly string[]): Promise<numbe
   } finally {
     lines?.close();
     unsubscribe?.();
+    stages?.close();
     // Shutdown does not reinterpret local cancellation as cancellation of the external sender.
     try {
       await interactions?.settled();

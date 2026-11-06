@@ -5,9 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
+import { brotliCompressSync } from 'node:zlib';
 import { measureStorage } from '../examples/capacity/assembly.mjs';
+import { analyzeFrames } from '../examples/capacity/diagnostics/analyze-frames.mjs';
 import { distribution } from '../examples/capacity/measurement.mjs';
 import { capacityPlan, validateCase } from '../examples/capacity/plan.mjs';
+import { renderReport } from '../examples/capacity/report.mjs';
 
 const suite = fileURLToPath(new URL('../examples/capacity/run.mjs', import.meta.url));
 const worker = fileURLToPath(new URL('../examples/capacity/worker.mjs', import.meta.url));
@@ -65,6 +69,75 @@ function fixture(t) {
 function result(directory) {
   return JSON.parse(readFileSync(join(directory, 'result.json'), 'utf8'));
 }
+
+function frameDatabase(t, version, mutate = () => {}) {
+  const { directory } = fixture(t);
+  const path = join(directory, 'frames.sqlite');
+  const database = new DatabaseSync(path);
+  const image = (id, point) => ({ id, formatVersion: 5, contract: { key: 'capacity-fixture', version: 1 }, point, frame: { owner: { contextId: 'fixture-context', kind: 'scene' }, round: 1, phase: 'execute', input: 'private-input', currentInput: 'private-input', nextChildOrder: 0, children: [] }, state: null, references: {} });
+  const images = [image('old-image', 'previous'), image('current-image', 'latest')];
+  const encode = (value) => {
+    const json = Buffer.from(JSON.stringify(value));
+    return JSON.stringify({ encoding: 'br', jsonBytes: json.byteLength, data: brotliCompressSync(json).toString('base64') });
+  };
+  try {
+    database.exec(`PRAGMA application_id = 1128353859; PRAGMA user_version = ${version};
+      CREATE TABLE checkpoint_images (id TEXT PRIMARY KEY, context_id TEXT NOT NULL, revision INTEGER NOT NULL, body TEXT);
+      CREATE TABLE checkpoint_heads (context_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, image_id TEXT NOT NULL, delivery TEXT);`);
+    const insert = database.prepare('INSERT INTO checkpoint_images VALUES (?, ?, ?, ?)');
+    images.forEach((entry, index) => insert.run(entry.id, entry.frame.owner.contextId, index + 1, version === 6 && index === 0 ? null : encode(entry)));
+    database.prepare('INSERT INTO checkpoint_heads VALUES (?, ?, ?, ?)').run('fixture-context', 3, 'current-image', encode({ status: 'failed' }));
+    mutate(database);
+  } finally {
+    database.close();
+  }
+  return { path, images };
+}
+
+test('frame diagnostics distinguish retained bodies from historical identities in v6', (t) => {
+  const { path, images } = frameDatabase(t, 6);
+  const before = readFileSync(path);
+  const report = analyzeFrames(path);
+  assert.equal(report.formatVersion, 2);
+  assert.equal(report.storageFormat, 6);
+  assert.equal(report.totals.imageIdentities, 2);
+  assert.equal(report.totals.retainedBodies, 1);
+  assert.equal(report.totals.discardedBodies, 1);
+  assert.equal(report.totals.heads, 1);
+  assert.equal(report.totals.deliveries, 1);
+  assert.equal(report.totals.jsonBytes, Buffer.byteLength(JSON.stringify(images[1])));
+  assert.equal(report.contracts[0].retainedBodies, 1);
+  assert.deepEqual(report.contracts[0].points, { latest: 1 });
+  assert.match(report.accounting, /not cumulative bytes written/);
+  assert.equal(JSON.stringify(report).includes('private-input'), false);
+  assert.equal(JSON.stringify(report).includes('fixture-context'), false);
+  assert.deepEqual(readFileSync(path), before, 'read-only analysis does not modify the database');
+});
+
+for (const version of [3, 4, 5]) {
+  test(`frame diagnostics still analyze all retained images in legacy format ${version}`, (t) => {
+    const { path, images } = frameDatabase(t, version);
+    const report = analyzeFrames(path);
+    assert.equal(report.storageFormat, version);
+    assert.equal(report.totals.imageIdentities, 2);
+    assert.equal(report.totals.retainedBodies, 2);
+    assert.equal(report.totals.discardedBodies, 0);
+    assert.equal(
+      report.totals.jsonBytes,
+      images.reduce((sum, image) => sum + Buffer.byteLength(JSON.stringify(image)), 0),
+    );
+    assert.deepEqual(report.contracts[0].points, { previous: 1, latest: 1 });
+  });
+}
+
+test('frame diagnostics reject missing current bodies and pre-v6 body loss', (t) => {
+  const current = frameDatabase(t, 6, (database) => database.exec("UPDATE checkpoint_images SET body = NULL WHERE id = 'current-image'"));
+  assert.throws(() => analyzeFrames(current.path), /Current checkpoint head body is missing/);
+  const legacy = frameDatabase(t, 5, (database) => database.exec("UPDATE checkpoint_images SET body = NULL WHERE id = 'old-image'"));
+  assert.throws(() => analyzeFrames(legacy.path), /Historical checkpoint body is missing/);
+  const obsolete = frameDatabase(t, 5, (database) => database.exec('PRAGMA user_version = 6'));
+  assert.throws(() => analyzeFrames(obsolete.path), /Superseded checkpoint bodies remain/);
+});
 
 test('transport comparison runs both policies serially in fresh workers and records the selected policy', { timeout: 30_000 }, async (t) => {
   const f = fixture(t);
@@ -134,6 +207,11 @@ test('offline capacity smoke suite exercises all service profiles, steady arriva
       assert.ok(value.storage.databaseBytes > 0);
       assert.equal(value.storage.walBytes, 0);
       assert.equal(value.storage.shmBytes, 0);
+      assert.equal(value.storage.tables.model_exchanges, 0);
+      assert.equal(value.storage.tables.model_exchange_entries, 0);
+      assert.equal(value.storage.checkpointRetainedBodies, value.storage.tables.checkpoint_heads);
+      assert.equal(value.storage.checkpointRetainedBodies + value.storage.checkpointDiscardedBodies, value.storage.tables.checkpoint_images);
+      assert.equal(value.storage.archiveJsonBytes, value.storage.checkpointJsonBytes + value.storage.deliveryJsonBytes + value.storage.interactionStoredBytes + value.storage.exchangeStoredBytes + value.storage.exchangeMetadataBytes);
     }
     for (const content of value.content) {
       assert.equal(content.reloadVerified, profile !== 'memory');
@@ -155,6 +233,11 @@ test('offline capacity smoke suite exercises all service profiles, steady arriva
   const closed = join(out, 'checkpoint-burst-4');
   const before = readdirSync(closed).sort();
   const measured = measureStorage(closed);
+  const frames = analyzeFrames(join(closed, 'session-0.sqlite'));
+  assert.equal(frames.storageFormat, 6);
+  assert.equal(frames.totals.retainedBodies, frames.totals.heads);
+  assert.ok(frames.totals.discardedBodies > 0);
+  assert.equal(frames.totals.imageIdentities, frames.totals.retainedBodies + frames.totals.discardedBodies);
   assert.deepEqual(readdirSync(closed).sort(), before);
   assert.equal(measured.walBytes, 0);
   const wal = join(closed, 'session-0.sqlite-wal');
@@ -200,4 +283,17 @@ test('capacity plans remain bounded and percentile samples exclude absent measur
   assert.equal(measured.count, 3);
   assert.equal(measured.p50, 20);
   assert.equal(measured.max, 30);
+});
+
+test('capacity reports distinguish image identities from retained bodies without inventing legacy counts', () => {
+  const storage = { databases: 1, totalBytes: 4096, tables: { checkpoint_images: 3, completion_interactions: 1 }, checkpointStoredBytes: 128, checkpointJsonBytes: 256 };
+  const cases = [
+    { config: { name: 'legacy' }, storage },
+    { config: { name: 'head-only' }, storage: { ...storage, checkpointRetainedBodies: 1, checkpointDiscardedBodies: 2 } },
+  ];
+  const report = renderReport({ cases }, cases);
+  assert.match(report, /CP 身份行\/保留正文\/淘汰正文/);
+  assert.match(report, /3\/未测量\/未测量/);
+  assert.match(report, /3\/1\/2/);
+  assert.match(report, /文件尺寸与保留 JSON 存量都不是累计写入字节/);
 });

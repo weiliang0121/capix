@@ -12,6 +12,8 @@ export interface ConversationServiceInfo {
   readonly conversationId: string;
   readonly transcriptId: string;
   readonly mode: 'demo' | 'live';
+  /** Host-selected answer strategy, independent of demo/live provider selection. */
+  readonly answerMode?: 'material' | 'tools';
   readonly model: string;
   readonly admission: ConversationAdmission;
   readonly active?: ConversationSubmissionBaseline;

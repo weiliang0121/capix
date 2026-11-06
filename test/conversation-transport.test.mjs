@@ -178,6 +178,6 @@ test('ordinary provider completion still returns the same accepted model reply t
       return Response.json(envelope);
     }),
   );
-  assert.deepEqual(await model.complete(request), { id: 'reply-1', model: 'fixture', text: 'hello', finishReason: 'stop', usage: null });
+  assert.deepEqual(await model.complete(request), { id: 'reply-1', model: 'fixture', formatVersion: 1, output: [{ kind: 'text', text: 'hello' }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
   assert.equal(sends, 1);
 });

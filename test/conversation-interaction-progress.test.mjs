@@ -1,3 +1,4 @@
+import { modelReplyText } from '@capix/model-provider';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createConversationScene, createInteractionAnswer, HistoryResource, CompletionInteractionResource, CompletionInteraction } from '@capix/conversation-service';
@@ -81,7 +82,7 @@ test('cancelling a follower stops its preview while late production and a new cu
   const newItems = [];
   const result = await follower(interactions, (item) => newItems.push(item)).run({ reference, after: oldItems[0].cursor, waitMs: 1000 });
   assert.equal(result.kind, 'received');
-  assert.equal(result.feedback.payload.text, 'final');
+  assert.equal(modelReplyText(result.feedback.payload), 'final');
   assert.deepEqual(
     oldItems.map((item) => item.value),
     ['first'],
@@ -248,6 +249,6 @@ test('one follow operation fixes its exchange identity across preview and final 
     mutable.id = second.id;
   }).run({ reference: mutable, waitMs: 1000 });
   assert.equal(result.kind, 'received');
-  assert.equal(result.feedback.payload.text, 'answer 1');
+  assert.equal(modelReplyText(result.feedback.payload), 'answer 1');
   interactions.close();
 });

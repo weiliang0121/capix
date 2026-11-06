@@ -7,7 +7,8 @@ import { checkpointSaveReceipt, checkpointFinishReceipt } from './receipt.js';
 /** Deterministic local installation; it provides no guarantee across process loss. */
 export class MemoryCheckpointStore implements CheckpointStore {
   readonly #heads = new Map<string, CheckpointHead>();
-  readonly #images = new Map<string, CheckpointImage>();
+  // Historical identities remain reserved; only each head retains its image body.
+  readonly #usedImageIds = new Set<string>();
 
   read(contextId: string): CheckpointHead | undefined {
     requireContext(contextId);
@@ -21,9 +22,9 @@ export class MemoryCheckpointStore implements CheckpointStore {
     const current = this.#heads.get(contextId);
     requireCurrent(current, expectedRevision);
     if (current && (!isEqual(current.image.frame.owner, fixed.frame.owner) || !isEqual(current.image.contract, fixed.contract) || !isEqual(current.image.frame.input, fixed.frame.input))) throw conflict('Checkpoint owner, contract and original input cannot change');
-    if (this.#images.has(fixed.id)) throw conflict('Checkpoint identity has already been saved');
+    if (this.#usedImageIds.has(fixed.id)) throw conflict('Checkpoint identity has already been saved');
     const head = Object.freeze({ revision: expectedRevision + 1, image: fixed });
-    this.#images.set(fixed.id, fixed);
+    this.#usedImageIds.add(fixed.id);
     this.#heads.set(contextId, head);
     return checkpointSaveReceipt(fixed, head.revision);
   }

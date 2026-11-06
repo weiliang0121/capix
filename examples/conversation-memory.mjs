@@ -24,7 +24,7 @@ const requests = ['以后请用简短中文回答。', '仍用简短中文，并
 const preferences = ['使用简短中文回答。', '使用简短中文回答，先给结论。', '使用简短中文回答，先给结论，必要时列点。'];
 const answerInputs = [];
 const extractionInputs = [];
-const reply = (text) => ({ id: 'offline-completion', model: 'offline', text, finishReason: 'stop', usage: null });
+const reply = (text) => ({ id: 'offline-completion', model: 'offline', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null });
 const model = {
   async complete(request, { emit } = {}) {
     const input = JSON.parse(request.messages[1].content);

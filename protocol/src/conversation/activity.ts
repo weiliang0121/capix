@@ -1,6 +1,14 @@
 import type { CallableKind, InvocationProcessStage, InvocationRelationPhase } from '../invocation/types.js';
 import type { ConversationFailure } from './delivery.js';
 
+/** Current real ToolLoop child activity, not a transcript message or replayed CP history. */
+export interface ConversationStage {
+  readonly contextId: string;
+  readonly kind: 'model' | 'tool';
+  readonly label: string;
+  readonly status: 'running' | 'succeeded' | 'failed' | 'cancelled';
+}
+
 /** Public call metadata for one submission. No inputs, outputs, source paths or model reasoning. */
 export interface ConversationActivity {
   readonly contextId: string;

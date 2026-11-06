@@ -9,6 +9,6 @@ export type InvocationProgress = Readonly<
     /** Ordered within the producing invocation, not across its subtree or a transport. */
     eventSequence: number;
     occurredAt: string;
-    description?: Readonly<{ name?: string; label?: string }>;
+    description?: Readonly<{ id?: string; name?: string; label?: string }>;
   } & ({ kind: 'started' } | { kind: 'process'; processSequence: number; round: number; stage: InvocationProcess['stage']; action: InvocationProcess['type'] } | { kind: 'relation'; relation: InvocationRelationIdentity; phase: Exclude<InvocationRelationChange['kind'], 'returned'> } | { kind: 'relation'; relation: InvocationRelationIdentity; phase: 'returned'; status: 'succeeded' | 'failed' | 'cancelled' } | { kind: 'finished'; status: 'succeeded' | 'failed' | 'cancelled' })
 >;

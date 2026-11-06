@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ChatCompletionsProvider, ProviderError } from '@capix/model-provider';
+import { ChatCompletionsProvider, ProviderError, modelReplyText } from '@capix/model-provider';
 
 const messages = [{ role: 'user', content: '把这段文字翻译成英文' }];
 const endpoint = 'https://provider.example/chat/completions';
@@ -41,15 +41,15 @@ test('model provider sends explicit configuration and returns a provider envelop
   );
   const result = await model.complete({ messages, maxTokens: 128, responseFormat: 'json_object', temperature: 0 });
   assert.equal(sends, 1);
-  assert.deepEqual(result, { id: 'completion-1', model: 'fixture-model', text: '{"selected":"translate"}', finishReason: 'stop', usage: { promptTokens: 20, completionTokens: 5, totalTokens: 25 } });
+  assert.deepEqual(result, { formatVersion: 1, id: 'completion-1', model: 'fixture-model', output: [{ kind: 'text', text: '{"selected":"translate"}' }], termination: { kind: 'completed', reason: 'stop' }, native: { format: 'chat-completions', version: 1 }, usage: { promptTokens: 20, completionTokens: 5, totalTokens: 25 } });
 });
 
 test('length and empty content remain visible for business acceptance instead of becoming successful invented text', async () => {
   for (const text of ['', '{"selected":']) {
     const model = provider(async () => Response.json(envelope({ choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'length' }], usage: null })));
     const result = await model.complete({ messages });
-    assert.equal(result.text, text);
-    assert.equal(result.finishReason, 'length');
+    assert.equal(modelReplyText(result), text);
+    assert.equal(result.termination.reason, 'length');
     assert.equal(result.usage, null);
   }
 });

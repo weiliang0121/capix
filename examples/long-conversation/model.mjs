@@ -28,7 +28,7 @@ export function createFixtureModel(turns) {
 }
 
 function reply(text) {
-  return { id: randomUUID(), model: 'offline-long-conversation', text, finishReason: 'stop', usage: null };
+  return { id: randomUUID(), model: 'offline-long-conversation', formatVersion: 1, output: [{ kind: 'text', text: text }], native: { format: 'chat-completions', version: 1 }, termination: { kind: 'completed', reason: 'stop' }, usage: null };
 }
 
 export function createLiveModel(onBody) {
