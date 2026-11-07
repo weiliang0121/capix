@@ -6,6 +6,7 @@ import ts from 'typescript';
 const options = { strict: true, noEmit: true, skipLibCheck: true, noUncheckedIndexedAccess: true, verbatimModuleSyntax: true, target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
 const entry = fileURLToPath(new URL('./types/reception-contract.ts', import.meta.url));
 const source = `
+import type { Stable } from '@capix/contracts';
 import { Node, Group, defineNode, defineGroup, defineScene, reception } from '@capix/server-runtime';
 import type { NodeWork, CheckpointCodec, ChildCall, ChildContract, ChildFacts, ChildReference, CallableContract, CallableOutput, GroupWork, ReceptionDefinition, ReceptionValue } from '@capix/server-runtime';
 import {z} from 'zod';
@@ -85,13 +86,13 @@ expectType<Receipt>(noActions.children.facts.accepted(first, saved));
 noActions.children.create(child, { path: '' });
 
 // The same contract works through a helper without carrying the parent's registry.
-function received<Definition extends ChildContract, Value>(history: Pick<ChildFacts, 'accepted'>, ref: ChildReference<Definition>, contract: ReceptionDefinition<NoInfer<Definition>, Value>): Value {
+function received<Definition extends ChildContract, Value>(history: Pick<ChildFacts, 'accepted'>, ref: ChildReference<Definition>, contract: ReceptionDefinition<NoInfer<Definition>, Value>): Stable<Value> {
   return history.accepted(ref, contract);
 }
 expectType<Receipt>(received(facts, first, saved));
 // @ts-expect-error helper cannot infer a broader target to admit a wrong contract
 received(facts, otherRef, saved);
-function acceptReceipt<Definition extends ChildContract, Value>(handle: ChildCall<Definition>, contract: ReceptionDefinition<NoInfer<Definition>, Value>, receive: (result: CallableOutput<Definition>) => NoInfer<Value> | Promise<NoInfer<Value>>): Promise<Value> {
+function acceptReceipt<Definition extends ChildContract, Value>(handle: ChildCall<Definition>, contract: ReceptionDefinition<NoInfer<Definition>, Value>, receive: (result: Stable<CallableOutput<Definition>>) => NoInfer<Value> | NoInfer<Stable<Value>> | Promise<NoInfer<Value> | NoInfer<Stable<Value>>>): Promise<Stable<Value>> {
   return handle.accept(contract, receive);
 }
 expectType<Promise<Receipt>>(acceptReceipt(call, saved, result => ({ location: result.text, bytes: 1 })));
@@ -110,9 +111,9 @@ function receiptContract<Definition extends ChildContract>(definition: Definitio
   return reception(definition, value);
 }
 expectType<Promise<Receipt>>(call.accept(receiptContract(child, receiptValue), () => receipt));
-declare const dateValue: ReceptionValue<Date>;
+declare const dateValue: ReceptionValue<{ timestamp: string }>;
 const dated = reception(child, dateValue);
-expectType<Promise<Date>>(call.accept(dated, () => new Date()));
+expectType<Promise<{ readonly timestamp: string }>>(call.accept(dated, () => ({ timestamp: '2026-11-07' })));
 declare const asyncValue: ReceptionValue<Promise<number>>;
 // @ts-expect-error a named value contract cannot make acceptance values into promises
 reception(child, asyncValue);

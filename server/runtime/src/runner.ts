@@ -10,7 +10,7 @@ import { CallableBuilder } from './structure/builder.js';
 import { runEntry, type EntryChange, type EntryState } from './entry.js';
 import { snapshotInvocationCapabilities, type InvocationCapabilities } from './construction/capabilities.js';
 import { Scene } from '@capix/structure';
-import type { CallableInput, CallableOutput, CallableDelta } from '@capix/contracts';
+import type { CallableInput, CallableOutput, CallableDelta, Stable } from '@capix/contracts';
 import type { CheckpointStore } from '@capix/checkpoint';
 import { Resources } from './resource/resources.js';
 import { Interactions } from '@capix/interaction';
@@ -105,15 +105,15 @@ export class Runner<Structure extends Extract<AnyCallable, { readonly kind: 'sce
     }
   }
 
-  run(input: NoInfer<CallableInput<Structure>>, ...args: RunnerArguments<Options>): Promise<CallableOutput<Structure>> {
+  run(input: NoInfer<CallableInput<Structure> | Stable<CallableInput<Structure>>>, ...args: RunnerArguments<Options>): Promise<Stable<CallableOutput<Structure>>> {
     return this.perform({ input }, args[0] ?? ({} as Options & InvocationControls));
   }
 
-  resume(contextId: string, ...args: RunnerArguments<Options>): Promise<CallableOutput<Structure>> {
+  resume(contextId: string, ...args: RunnerArguments<Options>): Promise<Stable<CallableOutput<Structure>>> {
     return this.perform({ contextId }, args[0] ?? ({} as Options & InvocationControls));
   }
 
-  private async perform(request: { input: CallableInput<Structure> } | { contextId: string }, options: Options & InvocationControls): Promise<CallableOutput<Structure>> {
+  private async perform(request: { input: CallableInput<Structure> | Stable<CallableInput<Structure>> } | { contextId: string }, options: Options & InvocationControls): Promise<Stable<CallableOutput<Structure>>> {
     const feedback = new RunnerEntryFeedback(this.id, this.#observations, this.#clock);
     const mode = 'contextId' in request ? 'resume' : 'run';
     const requestedContextId = 'contextId' in request ? request.contextId : undefined;
@@ -127,7 +127,7 @@ export class Runner<Structure extends Extract<AnyCallable, { readonly kind: 'sce
       feedback.requested(mode, requestedContextId);
       const structure = this.#built;
       if (!structure) throw new Error('Runner must be built before running');
-      let result: CallableOutput<Structure>;
+      let result: Stable<CallableOutput<Structure>>;
       if (this.#entry.running) {
         // A rejected request has feedback, but never takes over active cancellation.
         result = await runEntry(this.#entry, structure, request, fixedOptions, (change) => this.publish(change, feedback));

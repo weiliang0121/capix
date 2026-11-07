@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { cloneCheckpointValue } from '@capix/checkpoint';
-import { type CheckpointCodec } from '@capix/structure';
+import { type CheckpointCodec, type CheckpointValue } from '@capix/structure';
+import type { Stable } from '@capix/contracts';
 import { answerOutputContract } from './group/answer/output.js';
 import type { GenerationOutput } from '@capix/protocol';
 import { preparedConversationContextSchema } from './group/context/schema.js';
 
 /** Service data contracts, shared by the actual R/E continuation declarations. */
-export function checkpointCodec<Value>(schema: z.ZodType<Value>): CheckpointCodec<Value> {
-  return { encode: (value) => cloneCheckpointValue(schema.parse(value)), decode: (value) => schema.parse(value) };
+export function checkpointCodec<Value>(schema: z.ZodType<Value>) {
+  return { encode: (value: Stable<Value>) => cloneCheckpointValue(schema.parse(value)), decode: (value: CheckpointValue): Value => schema.parse(value) } satisfies CheckpointCodec<Value>;
 }
 export const conversationCheckpointInput: CheckpointCodec<unknown> = { encode: cloneCheckpointValue, decode: cloneCheckpointValue };
 export const conversationCheckpointOutput: CheckpointCodec<GenerationOutput> = { encode: (value) => cloneCheckpointValue(answerOutputContract.accept(value)), decode: (value) => answerOutputContract.accept(value) };
@@ -43,12 +44,12 @@ export const executionWaitingState = checkpointCodec(executionContinuationSchema
 export const executionDecisionState = checkpointCodec(executionContinuationSchema.extend({ choice: acceptedDecisionSchema }));
 export const executionCapabilityState = checkpointCodec(executionContinuationSchema.extend({ capability: z.enum(['checkFile', 'answer', 'document', 'save']), arguments: z.unknown() }));
 export const executionAcceptedState = checkpointCodec(executionContinuationSchema);
-export type ExecutionProgress = z.infer<typeof executionProgressSchema>;
-export type ExecutionContinuation = z.infer<typeof executionContinuationSchema>;
-export type ExecutionWaitingState = ReturnType<typeof executionWaitingState.decode>;
-export type ExecutionDecisionState = ReturnType<typeof executionDecisionState.decode>;
-export type ExecutionCapabilityState = ReturnType<typeof executionCapabilityState.decode>;
+export type ExecutionProgress = Stable<z.infer<typeof executionProgressSchema>>;
+export type ExecutionContinuation = Stable<z.infer<typeof executionContinuationSchema>>;
+export type ExecutionWaitingState = Stable<ReturnType<typeof executionWaitingState.decode>>;
+export type ExecutionDecisionState = Stable<ReturnType<typeof executionDecisionState.decode>>;
+export type ExecutionCapabilityState = Stable<ReturnType<typeof executionCapabilityState.decode>>;
 
 export const decisionAcceptanceSchema = z.strictObject({ choice: acceptedDecisionSchema, progress: executionProgressSchema, checkedCandidates: z.array(z.string()).max(16) });
 
-export type DecisionAcceptance = z.infer<typeof decisionAcceptanceSchema>;
+export type DecisionAcceptance = Stable<z.infer<typeof decisionAcceptanceSchema>>;

@@ -135,7 +135,7 @@ test('selection schema preserves empty results, ranked indexes and detailed stri
   );
 });
 
-test('Named actions pass values by reference, await each boundary, without ancestor access', async () => {
+test('Named actions pass stable values, await each boundary, without ancestor access', async () => {
   const input = { content: 'x' },
     loadedOutput = { request: 'y' },
     result = { raw: 'z' };
@@ -143,19 +143,19 @@ test('Named actions pass values by reference, await each boundary, without ances
   const op = {
     async load(value, context) {
       assert.equal(context.input, value);
-      assert.equal(value, input);
+      assert.deepEqual(value, input);
       order.push('load');
       return loadedOutput;
     },
     async transform(value, context) {
       assert.equal(context.input, value);
-      assert.equal(value, loadedOutput);
+      assert.deepEqual(value, loadedOutput);
       order.push('transform');
       return result;
     },
     accept(value, context) {
       assert.equal(context.input, value);
-      assert.equal(value, result);
+      assert.deepEqual(value, result);
       assert.equal(context.operationContext, undefined);
       order.push('accept');
       return 'accepted';

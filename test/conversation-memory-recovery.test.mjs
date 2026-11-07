@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt } from '@capix/checkpoint';
+import { MemoryCheckpointStore } from '@capix/checkpoint';
 import { CompletionResource, ConversationMemoryResource, ConversationViewResource, createMemoryMaintenance, createMessageInclusion } from '@capix/conversation-service';
 import { Memories, MemoryResource } from '@capix/memory';
 import { Resource } from '@capix/resources';
@@ -15,25 +15,29 @@ const create = (content) => ({ action: 'create', memoryId: null, change: 'rememb
 
 class SavedHeads {
   constructor(heads = []) {
-    this.heads = new Map(structuredClone(heads));
+    this.store = new MemoryCheckpointStore();
+    this.heads = new Map();
+    for (const [id, head] of structuredClone(heads)) {
+      const receipt = this.store.save(head.image, 0);
+      if (head.delivery) this.store.finish(id, receipt.revision, head.delivery);
+      this.heads.set(id, this.store.read(id));
+    }
   }
   read(id) {
-    return this.heads.get(id);
+    return this.store.read(id);
   }
-  save(image, revision) {
-    this.beforeSave?.(image);
-    assert.equal(this.read(image.frame.owner.contextId)?.revision ?? 0, revision);
-    const head = { revision: revision + 1, image: cloneCheckpointImage(image) };
-    this.heads.set(image.frame.owner.contextId, head);
-    this.afterSave?.(image);
-    return checkpointSaveReceipt(head.image, head.revision);
+  save(commit, revision) {
+    this.beforeSave?.(commit);
+    const receipt = this.store.save(commit, revision);
+    const head = this.store.read(receipt.contextId);
+    this.heads.set(receipt.contextId, head);
+    this.afterSave?.(head.image);
+    return receipt;
   }
   finish(id, revision, delivery) {
-    const previous = this.read(id);
-    assert.equal(previous.revision, revision);
-    const head = { ...previous, revision: revision + 1, delivery: cloneCheckpointDelivery(delivery) };
-    this.heads.set(id, head);
-    return checkpointFinishReceipt(id, head.image.id, head.delivery, head.revision);
+    const receipt = this.store.finish(id, revision, delivery);
+    this.heads.set(id, this.store.read(id));
+    return receipt;
   }
 }
 

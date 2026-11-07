@@ -42,9 +42,15 @@ test('one Execution and Operation can be called again after success and failure 
   const first = { value: 'first' };
   const last = { value: 'last' };
   assert.equal(snapshots.length, 0);
-  assert.equal(await execution.call(first, { settings }), first);
+  const firstResult = await execution.call(first, { settings });
+  assert.deepEqual(firstResult, first);
+  assert.notEqual(firstResult, first);
+  assert.equal(contexts[0].state.output, firstResult);
   await assert.rejects(execution.call({ fail: true }, { settings }), (error) => error === failure);
-  assert.equal(await execution.call(last, { settings }), last);
+  const lastResult = await execution.call(last, { settings });
+  assert.deepEqual(lastResult, last);
+  assert.notEqual(lastResult, last);
+  assert.equal(contexts[2].state.output, lastResult);
   assert.equal(new Set(contexts.map((context) => context.id)).size, 3);
   assert.deepEqual(
     contexts.map((context) => context.status),

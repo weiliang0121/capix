@@ -1,5 +1,11 @@
 /** Rebuild an authentic pre-v6 table shape for migration tests; never used by production. */
 export function restoreLegacyCheckpointTables(database) {
+  for (const table of ['checkpoint_values', 'checkpoint_relations']) {
+    if (database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)) {
+      if (database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('Legacy fixture cannot discard published v6 facts');
+      database.exec(`DROP TABLE ${table}`);
+    }
+  }
   const triggers = database.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name IN ('checkpoint_images', 'checkpoint_heads')").all();
   for (const trigger of triggers) database.exec(`DROP TRIGGER ${trigger.name}`);
   database.exec(`

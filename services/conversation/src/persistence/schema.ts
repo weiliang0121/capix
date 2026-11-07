@@ -6,10 +6,11 @@ import { inspectArchiveUsage, installArchiveUsage, removeArchiveUsageForMigratio
 import { retainCheckpointHeads } from './checkpoint-migration.js';
 
 const applicationId = 0x43415043;
-const version = 6;
+const version = 7;
 const contentTables = ['content', 'messages', 'memories', 'append_receipts', 'apply_receipts'];
 const recoveryTables = ['checkpoint_images', 'checkpoint_heads', 'completion_interactions'];
 const exchangeTables = ['model_exchanges', 'model_exchange_entries', 'model_exchange_operations'];
+const factsTables = ['checkpoint_values', 'checkpoint_relations'];
 const columns: Readonly<Record<string, readonly string[]>> = {
   content: ['singleton', 'transcript_id', 'transcript_revision', 'starts', 'message_count', 'memories_id', 'memory_sequence', 'view_revision', 'view_state'],
   messages: ['position', 'body'],
@@ -18,6 +19,8 @@ const columns: Readonly<Record<string, readonly string[]>> = {
   apply_receipts: ['ordinal', 'operation', 'body'],
   checkpoint_images: ['id', 'context_id', 'revision', 'body'],
   checkpoint_heads: ['context_id', 'revision', 'image_id', 'delivery'],
+  checkpoint_values: ['context_id', 'id', 'metadata', 'body'],
+  checkpoint_relations: ['context_id', 'child_id', 'ordinal', 'body'],
   completion_interactions: ['id', 'revision', 'body'],
   model_exchanges: ['id', 'sequence', 'bytes', 'entry_count', 'metadata'],
   model_exchange_entries: ['collection', 'id', 'ordinal', 'revision', 'body'],
@@ -29,7 +32,7 @@ const integers = new Set(['singleton', 'transcript_revision', 'message_count', '
 const legacyIdentity = z.object({ id: z.string().min(1), frame: z.object({ owner: z.object({ contextId: z.string().min(1) }) }) });
 
 /** Identify the database before changing journal mode or installing any tables. */
-export function inspectSchema(database: DatabaseSync): 0 | 1 | 2 | 3 | 4 | 5 | 6 {
+export function inspectSchema(database: DatabaseSync): 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 {
   const application = database.prepare('PRAGMA application_id').get()?.application_id;
   const savedVersion = database.prepare('PRAGMA user_version').get()?.user_version;
   const names = database
@@ -38,8 +41,8 @@ export function inspectSchema(database: DatabaseSync): 0 | 1 | 2 | 3 | 4 | 5 | 6
     .map((row) => row.name);
   const object = database.prepare("SELECT 1 FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' LIMIT 1").get();
   if (application === 0 && savedVersion === 0 && !object) return 0;
-  if (application !== applicationId || (savedVersion !== 1 && savedVersion !== 2 && savedVersion !== 3 && savedVersion !== 4 && savedVersion !== 5 && savedVersion !== version)) throw new Error('Unsupported conversation content database');
-  const tables = savedVersion === 1 ? contentTables : [...contentTables, ...recoveryTables, ...(savedVersion >= 4 ? exchangeTables : []), ...(savedVersion >= 5 ? ['archive_usage'] : [])];
+  if (application !== applicationId || (savedVersion !== 1 && savedVersion !== 2 && savedVersion !== 3 && savedVersion !== 4 && savedVersion !== 5 && savedVersion !== 6 && savedVersion !== version)) throw new Error('Unsupported conversation content database');
+  const tables = savedVersion === 1 ? contentTables : [...contentTables, ...recoveryTables, ...(savedVersion >= 4 ? exchangeTables : []), ...(savedVersion >= 5 ? ['archive_usage'] : []), ...(savedVersion >= 7 ? factsTables : [])];
   if (names.length !== tables.length || [...tables].sort().some((name, index) => names[index] !== name)) throw new Error('Unsupported conversation content database');
   const descriptions = database.prepare('PRAGMA table_list').all();
   for (const table of tables) {
@@ -53,8 +56,8 @@ export function inspectSchema(database: DatabaseSync): 0 | 1 | 2 | 3 | 4 | 5 | 6
       actual.some((row, index) => {
         const name = expected[index]!;
         const type = integers.has(name) ? 'INTEGER' : 'TEXT';
-        const nullable = name === 'delivery' || name === 'call_id' || name === 'metadata' || (savedVersion >= 6 && table === 'checkpoint_images' && name === 'body') || (index === 0 && type === 'INTEGER');
-        const compound = savedVersion >= 5 && (table === 'model_exchange_entries' || table === 'model_exchange_operations');
+        const nullable = name === 'delivery' || name === 'call_id' || (name === 'metadata' && table === 'model_exchanges') || ((table === 'checkpoint_values' || (savedVersion >= 6 && table === 'checkpoint_images')) && name === 'body') || (index === 0 && type === 'INTEGER');
+        const compound = savedVersion >= 5 && (table === 'model_exchange_entries' || table === 'model_exchange_operations' || factsTables.includes(table));
         const primary = compound && index < 2 ? index + 1 : index === 0 ? 1 : 0;
         return row.name !== name || row.type !== type || row.pk !== primary || row.notnull !== (nullable ? 0 : 1) || row.dflt_value !== null;
       })
@@ -104,7 +107,7 @@ export function createSchema(database: DatabaseSync): void {
 }
 
 /** Called inside the opening exclusive transaction, preserving all v1 content and receipts. */
-export function migrateSchema(database: DatabaseSync, previous: 1 | 2 | 3 | 4 | 5 | 6): void {
+export function migrateSchema(database: DatabaseSync, previous: 1 | 2 | 3 | 4 | 5 | 6 | 7): void {
   if (previous === version) return;
   if (previous === 1)
     database.exec(`
@@ -167,7 +170,21 @@ export function migrateSchema(database: DatabaseSync, previous: 1 | 2 | 3 | 4 | 
   `);
   if (previous < 5) migrateExchanges(database);
   else removeArchiveUsageForMigration(database);
-  retainCheckpointHeads(database);
+  if (previous < 6) retainCheckpointHeads(database);
+  database.exec(`
+    CREATE TABLE checkpoint_values (
+      context_id TEXT NOT NULL, id TEXT NOT NULL,
+      metadata TEXT NOT NULL CHECK(json_valid(metadata)),
+      body TEXT CHECK(body IS NULL OR json_valid(body)),
+      PRIMARY KEY(context_id,id)
+    ) STRICT;
+    CREATE TABLE checkpoint_relations (
+      context_id TEXT NOT NULL, child_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+      body TEXT NOT NULL CHECK(json_valid(body)),
+      PRIMARY KEY(context_id,child_id), UNIQUE(context_id,ordinal)
+    ) STRICT;
+  `);
   installArchiveUsage(database);
   database.exec(`PRAGMA user_version = ${version};`);
 }

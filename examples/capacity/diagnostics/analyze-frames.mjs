@@ -5,6 +5,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
 import { isDeepStrictEqual } from 'node:util';
 import { CHECKPOINT_MAX_BYTES, cloneCheckpointImage, cloneCheckpointDelivery } from '@capix/checkpoint';
+import { decodeCheckpointRecord, isCheckpointRecord, materializeCheckpointHead, decodeCheckpointData } from '@capix/checkpoint/storage';
 
 const maxStoredBytes = Math.ceil((CHECKPOINT_MAX_BYTES + 1024) / 3) * 4 + 1024;
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value));
@@ -23,7 +24,7 @@ export function analyzeFrames(databasePath) {
   const database = new DatabaseSync(uri.href, { readOnly: true, timeout: 0 });
   try {
     const storageFormat = database.prepare('PRAGMA user_version').get().user_version;
-    if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || ![3, 4, 5, 6].includes(storageFormat)) throw new Error('Expected a conversation experiment database in storage format 3/4/5/6');
+    if (database.prepare('PRAGMA application_id').get().application_id !== 0x43415043 || ![3, 4, 5, 6, 7].includes(storageFormat)) throw new Error('Expected a conversation experiment database in storage format 3/4/5/6/7');
     const totals = counter();
     const groups = new Map();
     const latest = new Map();
@@ -40,8 +41,10 @@ export function analyzeFrames(databasePath) {
         discardedBodies++;
         continue;
       }
-      const decoded = decode(row.body);
-      const image = cloneCheckpointImage(decoded.value);
+      const incremental = isCheckpointRecord(row.body);
+      const decoded = incremental ? undefined : decode(row.body);
+      const image = incremental ? materialize(database, row) : cloneCheckpointImage(decoded.value);
+      const logicalBytes = incremental ? bytes(image) : decoded.jsonBytes;
       if (image.id !== row.id || image.frame.owner.contextId !== row.context_id) throw new Error('Checkpoint image identity differs from its row');
       const key = JSON.stringify([image.contract.key, image.contract.version]);
       let group = groups.get(key);
@@ -51,8 +54,8 @@ export function analyzeFrames(databasePath) {
       }
       group.contexts.add(row.context_id);
       group.points.set(image.point, (group.points.get(image.point) ?? 0) + 1);
-      add(totals, image, decoded.jsonBytes);
-      add(group.counts, image, decoded.jsonBytes);
+      add(totals, image, logicalBytes);
+      add(group.counts, image, logicalBytes);
     }
     let heads = 0;
     let deliveries = 0;
@@ -62,24 +65,47 @@ export function analyzeFrames(databasePath) {
       if (!image || row.image_id !== image.id || row.revision !== image.revision + Number(delivered)) throw new Error('Checkpoint head differs from its latest image');
       if (!image.retained) throw new Error('Current checkpoint head body is missing');
       if (delivered) {
-        cloneCheckpointDelivery(decode(row.delivery).value);
+        const decoded = decode(row.delivery).value;
+        cloneCheckpointDelivery(decoded?.format === 'capix.checkpoint.value@1' ? decodeCheckpointData(JSON.stringify(decoded)) : decoded);
         deliveries++;
       }
       heads++;
     }
     if (heads !== latest.size) throw new Error('Checkpoint images have no owning head');
-    if (storageFormat === 6 && totals.retainedBodies !== heads) throw new Error('Superseded checkpoint bodies remain in head-only storage');
+    if (storageFormat >= 6 && totals.retainedBodies !== heads) throw new Error('Superseded checkpoint bodies remain in head-only storage');
     return {
       formatVersion: 2,
       storageFormat,
       scope: 'read-only closed experiment database; no body text or invocation identities',
-      accounting: 'JSON bytes and field counts describe retained image bodies only, not cumulative bytes written or capture/encode/compress cost. Discarded bodies cannot be reconstructed from identity rows. Repeated value bytes are not a promised storage saving; values may occur at different semantic boundaries.',
+      accounting: 'JSON bytes and field counts describe retained logical images reconstructed from v6 fact blocks when needed, not cumulative bytes written, physical stored bytes or capture/encode/compress cost. Discarded bodies cannot be reconstructed from identity rows. Repeated logical value bytes are not duplicated physical block bytes.',
       totals: { imageIdentities, discardedBodies, ...totals, heads, deliveries },
       contracts: [...groups.values()].map((group) => ({ contract: group.contract, ...group.counts, contexts: group.contexts.size, points: Object.fromEntries(group.points) })),
     };
   } finally {
     database.close();
   }
+}
+
+function materialize(database, row) {
+  const head = decodeCheckpointRecord('head', row.body);
+  if (head.commit.id !== row.id || head.commit.frame.owner.contextId !== row.context_id || head.revision !== row.revision) throw new Error('Checkpoint metadata differs from its row');
+  const children = database
+    .prepare('SELECT child_id,ordinal,body FROM checkpoint_relations WHERE context_id=? ORDER BY ordinal')
+    .all(row.context_id)
+    .map((item) => {
+      const child = decodeCheckpointRecord('child', item.body);
+      if (child.child.identity.contextId !== item.child_id || child.child.order !== item.ordinal) throw new Error('Checkpoint relation row differs');
+      return child;
+    });
+  const values = database
+    .prepare('SELECT id,metadata,body FROM checkpoint_values WHERE context_id=? AND body IS NOT NULL')
+    .all(row.context_id)
+    .map((item) => {
+      const stored = decodeCheckpointRecord('value', item.metadata);
+      if (stored.id !== item.id) throw new Error('Checkpoint value row differs');
+      return { stored, body: JSON.stringify(decode(item.body).value) };
+    });
+  return materializeCheckpointHead(head, children, values).image;
 }
 
 function counter() {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Scene, Group, bindCallSource } from '@capix/server-runtime';
 import { ResourceOffer } from '@capix/resources';
-import { checkpointSaveReceipt, checkpointFinishReceipt } from '@capix/checkpoint';
+import { MemoryCheckpointStore, checkpointSaveReceipt, checkpointFinishReceipt } from '@capix/checkpoint';
 
 const codec = { encode: (value) => structuredClone(value), decode: (value) => structuredClone(value) };
 
@@ -16,7 +16,7 @@ function head(key, contextId, kind, state, children = [], parentContextId) {
     revision: 1,
     image: {
       id: `checkpoint-${contextId}`,
-      formatVersion: 5,
+      formatVersion: 6,
       contract: { key, version: 1 },
       point: 'saved',
       frame: { owner: { contextId, kind, ...(parentContextId ? { parentContextId } : {}) }, round: 1, phase: 'execute', input: { original: contextId }, currentInput: { original: contextId }, nextChildOrder: children.length, children },
@@ -27,23 +27,12 @@ function head(key, contextId, kind, state, children = [], parentContextId) {
 }
 
 function storeOf(...initial) {
-  const heads = new Map(initial.map((item) => [item.image.frame.owner.contextId, structuredClone(item)]));
-  return {
-    read: (id) => heads.get(id),
-    save(image, revision) {
-      assert.equal(heads.get(image.frame.owner.contextId)?.revision ?? 0, revision);
-      const saved = { image: structuredClone(image), revision: revision + 1 };
-      heads.set(image.frame.owner.contextId, saved);
-      return checkpointSaveReceipt(saved.image, saved.revision);
-    },
-    finish(contextId, revision, delivery) {
-      const previous = heads.get(contextId);
-      assert.equal(previous?.revision, revision);
-      const next = { ...previous, revision: revision + 1, delivery: structuredClone(delivery) };
-      heads.set(contextId, next);
-      return checkpointFinishReceipt(contextId, previous.image.id, next.delivery, next.revision);
-    },
-  };
+  const store = new MemoryCheckpointStore();
+  for (const head of initial) {
+    store.save(head.image, 0);
+    if (head.delivery) store.finish(head.image.frame.owner.contextId, 1, head.delivery);
+  }
+  return store;
 }
 
 function assemble(definition, options = {}) {

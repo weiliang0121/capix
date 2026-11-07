@@ -182,7 +182,7 @@ test('final validation preserves original result identity', async () => {
   const call = make({ output: { result: (value) => ({ ...value }) }, execute: () => result });
   await assert.rejects(call.run(), { code: 'OUTPUT_CONTRACT' });
   const accepted = make({ output: { result: (value) => value }, execute: () => result });
-  assert.equal(await accepted.run(), result);
+  assert.deepEqual(await accepted.run(), result);
 });
 
 test('consumer failure is isolated and the failed receiver stays disabled for later events', async () => {

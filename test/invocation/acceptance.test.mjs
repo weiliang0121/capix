@@ -21,20 +21,24 @@ test('parent acceptance receives the exact delivery of the selected child, indep
   const runtime = assemble(child, async (work) => {
     const firstCall = work.children.create(child, first);
     const secondCall = work.children.create(child, second);
-    await firstCall.run();
-    await secondCall.run();
+    const firstDelivery = await firstCall.run();
+    const secondDelivery = await secondCall.run();
+    assert.deepEqual(firstDelivery, first);
+    assert.deepEqual(secondDelivery, second);
+    assert.notEqual(firstDelivery, first);
+    assert.notEqual(secondDelivery, second);
     const secondAccepted = await secondCall.accept(async (delivered) => {
-      assert.equal(delivered, second);
+      assert.equal(delivered, secondDelivery);
       assert.equal(work.children.facts.get(secondCall.ref).reception.status, 'receiving');
       await Promise.resolve();
       return { accepted: delivered.value * 10 };
     });
     const firstAccepted = await firstCall.accept((delivered) => {
-      assert.equal(delivered, first);
+      assert.equal(delivered, firstDelivery);
       return { accepted: delivered.value * 10 };
     });
-    assert.equal(work.children.facts.get(firstCall.ref).returned.output, first);
-    assert.equal(work.children.facts.get(secondCall.ref).returned.output, second);
+    assert.equal(work.children.facts.get(firstCall.ref).returned.output, firstDelivery);
+    assert.equal(work.children.facts.get(secondCall.ref).returned.output, secondDelivery);
     assert.equal(work.children.facts.get(firstCall.ref).reception.value, firstAccepted);
     assert.equal(work.children.facts.get(secondCall.ref).reception.value, secondAccepted);
     return [firstAccepted, secondAccepted];
@@ -102,7 +106,9 @@ test('a successful delivery enters parent acceptance only once', async () => {
     await call.run();
     const output = await call.accept((delivered) => {
       received++;
-      assert.equal(delivered, delivery);
+      assert.deepEqual(delivered, delivery);
+      assert.notEqual(delivered, delivery);
+      assert.equal(delivered, work.children.facts.get(call.ref).returned.output);
       return delivered.value;
     });
     await assert.rejects(

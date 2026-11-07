@@ -320,7 +320,7 @@ test('Runner resume keeps the original identity and input and skips started regi
   store.save(
     {
       id: 'runner-saved',
-      formatVersion: 5,
+      formatVersion: 6,
       contract: { key: 'runner.resume', version: 1 },
       point: 'saved',
       frame: { owner: { contextId: 'runner-context', kind: 'scene' }, round: 1, phase: 'execute', input: 'original', currentInput: 'original', nextChildOrder: 0, children: [] },
@@ -525,7 +525,7 @@ test('run and resume fix top-level options before delayed child capture without 
       store.save(
         {
           id: 'runner-options-cp',
-          formatVersion: 5,
+          formatVersion: 6,
           contract: { key: 'runner.fixed-options', version: 1 },
           point: 'waiting',
           frame: { owner: { contextId: 'runner-options-context', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] },

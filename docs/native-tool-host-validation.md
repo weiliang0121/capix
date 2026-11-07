@@ -179,3 +179,5 @@ node examples/capacity/server/run.mjs --workers 1 --rates 20 --users 200 \
 后续独立项包括 MCP、候选正文预览、并行/默认写工具和自动归档退休。当前会保留每个调用的 head/delivery、交互及交换归档，达到入口门槛后拒绝新运行；本轮释放历史 CP 正文并不消除长期增长。完整 Frame 的捕获/编码/压缩成本也仍然存在。这些边界保持显式，不作为本次首版承诺的一部分。
 
 本轮最终 `pnpm check` 通过：全部构建、类型检查、3,061 项测试（0 失败）及格式检查通过；`git diff --check` 通过。性能实验与回归分开运行，原始数据库和报告留在被忽略的 `.capix/`，不随源码提交。
+
+后续 [CP 相邻保存复用验证](checkpoint-reuse-validation.md) 增加了不变量反例与分阶段采样，并发现本页旧基准脚本的 finish 计时包含其后的 JSON 字节统计。旧成绩原样保留；新报告在统一 save/finish 计时口径后独立复测，不用两轮数字直接宣称优化收益。

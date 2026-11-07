@@ -1,4 +1,4 @@
-import type { CallableKind, OutputDeclaration } from '@capix/contracts';
+import type { CallableKind, OutputDeclaration, Stable } from '@capix/contracts';
 import type { ResourceRequirements } from '@capix/resources';
 import type { ChildContractsOf } from './children.js';
 import type { InvocationCheckpointDefinition } from './checkpoint.js';
@@ -8,7 +8,7 @@ import type { NamedWork } from './composition.js';
 export type { InvocationCheckpointPoint, InvocationCheckpointDefinition } from './checkpoint.js';
 export type EmptyResources = Readonly<Record<never, never>>;
 
-export type CallableRun<Input, Output, Kind extends CallableKind, Resources extends object, Allowed extends ChildContractsOf<Kind> = ChildContractsOf<Kind>, Delta = never, Owner = unknown> = (work: NamedWork<CallableWork<Kind, Input, Output, Resources, Allowed, Delta>, Owner, Allowed>) => Output | Promise<Output>;
+export type CallableRun<Input, Output, Kind extends CallableKind, Resources extends object, Allowed extends ChildContractsOf<Kind> = ChildContractsOf<Kind>, Delta = never, Owner = unknown> = (work: NamedWork<CallableWork<Kind, Input, Output, Resources, Allowed, Delta>, Owner, Allowed>) => Output | Stable<Output> | Promise<Output | Stable<Output>>;
 
 /** Explanatory metadata and producer contracts do not create extra business stages. */
 export interface CallableDescription<Input, Output, Kind extends CallableKind, Delta = never> {

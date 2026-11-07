@@ -17,15 +17,15 @@ const child = defineGroup()({
 });
 const dateValue = {
   check(value) {
-    assert.ok(value instanceof Date && Number.isFinite(value.getTime()));
+    assert.ok(typeof value?.iso === 'string' && Number.isFinite(Date.parse(value.iso)));
     return value;
   },
   encode(value) {
-    return value.toISOString();
+    return value.iso;
   },
   decode(value) {
     if (variant === 'reject-codec') throw new Error('fixture rejects date encoding');
-    return new Date(value);
+    return { iso: value };
   },
 };
 const dateReception = reception(child, dateValue);
@@ -46,11 +46,11 @@ const emptyReception = reception(child, {
 const checkValues = (facts, refs) => {
   const first = facts.accepted(refs.first, dateReception);
   const second = facts.accepted(refs.second, dateReception);
-  assert.ok(first instanceof Date);
-  assert.ok(second instanceof Date);
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal(Object.isFrozen(second), true);
   assert.notEqual(first, second);
-  assert.equal(first.toISOString(), '2026-01-01T00:00:00.000Z');
-  assert.equal(second.toISOString(), '2026-02-01T00:00:00.000Z');
+  assert.equal(first.iso, '2026-01-01T00:00:00.000Z');
+  assert.equal(second.iso, '2026-02-01T00:00:00.000Z');
   assert.equal(facts.accepted(refs.empty, emptyReception), undefined);
   assert.equal(facts.get(refs.empty).reception.status, 'accepted');
   return first;
@@ -68,7 +68,7 @@ const point = checkpointPoint()({
       if (variant === 'wrong-contract') work.children.facts.accepted(refs.first, anotherDateReception);
       assert.equal(runs, 0);
       assert.equal(acceptances, 0);
-      return { value: first.toISOString(), pid: process.pid, empty: work.children.facts.get(refs.empty).reception.status };
+      return { value: first.iso, pid: process.pid, empty: work.children.facts.get(refs.empty).reception.status };
     },
   },
 });
@@ -82,11 +82,11 @@ const root = defineScene()({
     await Promise.all([first.run(), second.run(), empty.run()]);
     await first.accept(dateReception, (value) => {
       acceptances++;
-      return new Date(value);
+      return { iso: value };
     });
     await second.accept(dateReception, (value) => {
       acceptances++;
-      return new Date(value);
+      return { iso: value };
     });
     await empty.accept(emptyReception, () => undefined);
     work.checkpoint({ point: point, state: { pid: process.pid }, refs: { first: first.ref, second: second.ref, empty: empty.ref } });

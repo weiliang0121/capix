@@ -24,8 +24,8 @@ test('constructors and field assignments configure the same callable objects wit
   assert.notEqual(direct, configured);
   assert.equal(calls, 0);
   const driver = new Driver();
-  assert.equal(await driver.run(build(driver, direct), null, {}), result);
-  assert.equal(await driver.run(build(driver, configured), null, {}), result);
+  assert.deepEqual(await driver.run(build(driver, direct), null, {}), result);
+  assert.deepEqual(await driver.run(build(driver, configured), null, {}), result);
   assert.equal(calls, 2);
 });
 

@@ -118,7 +118,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 - Interaction 有自己的生命；调用退出不等待其结束、不取消外部发送、不重发未知请求。晚到反馈仍可保存。
 - 技术故障已归属后不能由业务 catch 清除；声明异常按 ChildCallFailure 传播凭据判断，不能扫描原错误对象猜来源。
 
-普通调用只执行一次 run，业务循环每次建立新子调用；没有旧 continue/maxRounds 状态机。真实输出/异常保持引用，记录及持久化才复制为纯数据。恢复格式仍能解释历史进度，但新执行拒绝旧 round 2/continuation 镜像。详见 [异常边界](exceptions.md)。
+普通调用只执行一次 run，业务循环每次建立新子调用；没有旧 continue/maxRounds 状态机。调用输入、输出和父接纳在事实成立边界固定为稳定数据；真实异常对象仍保持引用，另行固定其诊断。新保存使用 Frame v6，v5 可低层只读解释，新的执行恢复拒绝 v5 及旧 round 2/continuation 镜像。详见 [异常边界](exceptions.md)。
 
 ### 调用独立包与装配接缝
 
@@ -128,7 +128,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | invocation            | Invocation、Context、Control、Execution、Children/Relation、接收与故障来源、输出、调用事实与观察会话 |
 | invocation 的资源适配 | 本次固定供给的阶段访问、关闭与故障归属；资源定义、登记和原子操作仍由 resources 包负责                |
-| invocation 的 CP 适配 | 捕获活关系、安装保存状态、续接和固定交付；Frame/Store 仍由 checkpoint 包负责                         |
+| invocation 的 CP 适配 | 消费已成立事实、发布新增正文与关系、续接和固定交付；Frame/Store 仍由 checkpoint 包负责               |
 | Runtime 装配          | Runner、结构 Binder/Builder、资源范围解算、调用构造、观测安装及记录预设                              |
 | Runtime 作者适配      | InvocationWorkBinding、InvocationAccess、ChildBindingsBuilder：依据已固定声明和成员签发本次 Work     |
 
@@ -138,7 +138,7 @@ Invocation 协调整次调用、真实交付和故障归属。CallableContext �
 
 验证入口：
 
-- `test/invocation-boundary-core.test.mjs`：直接构造调用，验证结果引用与单次启动；业务子失败可以 handled，机制故障不能通过 fallback 清除；资源端点在成功或失败退出后关闭且不可重开。
+- `test/invocation-boundary-core.test.mjs`：直接构造调用，验证结果稳定性与单次启动；业务子失败可以 handled，机制故障不能通过 fallback 清除；资源端点在成功或失败退出后关闭且不可重开。
 - `test/invocation-boundary-checkpoint.test.mjs`：真实保存等待关系与接纳事实，经 JSON 往返在新 Store/Context 和重建的 CP 契约中续接；固定子交付不重跑，已接纳事实不重复回调，缺失或不一致的子依据明确拒绝。
 - `test/invocation-boundary-package.test.mjs`：检查独立编译、声明产出和实际模块加载，不借 Runtime/Structure 反向完成工作；执行覆盖父子接纳、调用观测和真实 CP 保存后的续接。
 
@@ -195,7 +195,7 @@ sequenceDiagram
     Build-->>Runner: 已构建的原 Scene
     Host->>Runner: run(input, options)
     Runner->>Runner: 固定 options → 检查已构建 → 取得占用 → 检查预取消
-    Runner->>Calls: 校验 → 建立供给 → 构造 Context / Invocation
+    Runner->>Calls: 固定输入 → 校验 → 建立供给 → 构造 Context / Invocation
     Calls-->>Runner: 根 Invocation
     Runner->>Invoke: run()
     Invoke->>Adapt: 执行固定 Work 接线
@@ -210,8 +210,8 @@ sequenceDiagram
         Adapt-->>Business: 操作接收结果
     end
     Business-->>Adapt: 本层结果或失败
-    Adapt-->>Invoke: 原始返回或抛错（无额外 async 包装）
-    Invoke->>Invoke: 封口输出，等待已开始接纳
+    Adapt-->>Invoke: 返回候选或原始抛错（无额外 async 包装）
+    Invoke->>Invoke: 固定返回候选／失败诊断 → 封口输出，等待已开始接纳
     Invoke->>Adapt: 同步 close 当前 Work
     Adapt-->>Invoke: OperationOutcome
     Invoke->>Invoke: 等待子调用、关闭剩余窗口、按实际结果固定交付、释放 CP 占用
@@ -244,13 +244,31 @@ sequenceDiagram
 - **交互接线与独立机制。** Interaction/Interactions 已归 `@capix/interaction`，Runtime 保留 Runner 可选参数和资源通道接线；共享 PersistenceError/RuntimeErrorHelper 已归 diagnostics。更完整的外部执行、沙箱和工作区是后续议题，不由本次分包提前定义。
 - **记录预设与公开出口。** 记录连接结构观察声明、调用事实与记录资源，有作为组合预设的依据。Initializer 仍只是一次性同步创建辅助；这些暂不新增包。普通入口、低层构造与历史重导继续明确标注，不为了减少导出数另建门面。
 
+## 稳定调用数据与事实成立
+
+稳定性是调用的数据契约，不取决于是否安装 CP。`@capix/contracts` 的 `stableValue` 负责隔离普通数据，`Stable<T>` 表达递归只读的消费类型；调用、Relation 和 CP 共享同一份已经成立的值。
+
+| 边界                                  | 成立的值                       | 后续行为                                                                       |
+| ------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------ |
+| 输入进入调用构造、capture/refine 之前 | 本次固定 input                 | 父层再调用其他孩子、作者修改原参数，都不改写本次输入                           |
+| 内核取得 run/resume 返回候选          | 固定候选                       | 清理及最终成功确认仍未完成，不能提前宣称交付成功                               |
+| 子最终交付 / 父接纳回调完成           | returned / accepted 或 handled | 两份事实分开；父层加工生成新值，不改写子交付                                   |
+| 失败归属确定                          | 纯数据诊断及失败来源           | 原 Error/DeclaredException/ChildCallFailure 仍按既有身份传播，不深冻结真实异常 |
+| 首次 CP 发布该事实                    | 经过往返校验的准确编码及块引用 | 后续热保存不再编码旧正文；冷恢复重新认证后建立本地依据                         |
+
+支持 undefined、null、布尔、字符串、有限数（含 -0）、密集数组、普通和 null 原型记录，保留缺失字段与显式 undefined 的区别。Date、Map、Set、Error 实例、函数、访问器、隐藏/symbol 属性、稀疏数组和循环不是稳定数据；业务先显式转成所需材料。资源端点、Work、实体、结构、宿主 options 内的能力引用和闭包都不进入这项隔离。资源方法自身不因此获得 CP、幂等或跨实体事务承诺。
+
+当前内容限额是深度64、展开1000000值、展开文本与记录键共64×1024×1024个UTF-16代码单元。DAG 可在进程内共享固定副本，重复边仍累计展开内容；只有 `stableValue` 自己成功产生的不可变子图具有复用证据，`Object.freeze`、类型断言与外部承诺不能替代。恢复保证数据含义，不保证跨进程对象身份、原型或共享拓扑。限额不是 JS 堆上限，Proxy 的元操作仍可能执行；固定失败是受保护机制故障，不能通过业务 fallback 假造成功。
+
+需要修改收到的数组或记录时生成新值。稳定候选、正式交付、实体落实、CP 提交是四个不同边界；本轮不增加草稿恢复、全局事务、自动重试或新的调用状态实体。实体自己的版本化快照、快照缓存及分块前缀另行推进。
+
 ## 返回、接纳与实体落实
 
-`returned` 不等于 `accepted`。Composite 可在 checkpoint.receptions 登记恢复编码用的 reception，接纳开始即固定契约；检查保持真实 V 引用，codec 只用于 CP。facts.accepted 要求准确 ref 与同一契约，undefined 可以是合法成功值。raw accept 不可事后补标签。
+`returned` 不等于 `accepted`。Composite 可在 checkpoint.receptions 登记恢复编码用的 reception，接纳开始即固定契约；回调结果先固定为 Stable<V> 再检查，安装后不可改写。check 只依赖固定值及已绑定参数，不承担当前外部业务条件；同步返回值不替换接纳值，thenable 拒绝。codec 在首次发布持久表示时检查往返，后续热保存复用准确表示；冷恢复重新解码/检查。facts.accepted 要求准确 ref 与同一契约，undefined 可以是合法成功值。raw accept 不可事后补标签。
 
 接纳的异步作用域由调用包共享一个 AsyncLocalStorage 载体，每个父调用持有独立 owner，每次接纳建立带子调用身份的局部帧。嵌套接纳仍能查询有效祖先；并发链各自隔离，退出后帧失效。读取同一 owner 时只检查最近帧，不跳过失效帧借用外层权限。该载体不保存业务历史，也不为每个历史父调用保留独立异步钩子；200 会话验证曾暴露后者对所有后续 Promise 的传播成本。回归见 `test/invocation-reception-scope.test.mjs`。
 
-实体写入、父接纳事实和 CP 提交是不同边界。固定写入口用真实调用/接纳范围派生凭据；恢复核对已有凭据，不凭内容相同或记录存在重做。Frame v5 保存完整直接关系、业务 state/refs、接纳契约位置及 handled 接收事实，缺失或不兼容明确拒绝。详见 [Checkpoint](checkpoints.md)。
+实体写入、父接纳事实和 CP 提交是不同边界。固定写入口用真实调用/接纳范围派生凭据；恢复核对已有凭据，不凭内容相同或记录存在重做。Frame v6 保持完整逻辑直接关系、业务 state/refs、接纳契约位置及 handled 事实；物理提交只写新增固定正文、变化关系和 head，冷恢复完整重建。state/refs 仍每次完整提交，point.check 仍每次执行；缺失或不兼容明确拒绝。详见 [Checkpoint](checkpoints.md)。
 
 ## 进展、观测与记录
 

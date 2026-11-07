@@ -161,7 +161,7 @@ test('real Invocation captures in one process and resumes successful no-CP child
   const first = spawnSync(process.execPath, [worker.pathname, 'capture'], { cwd: process.cwd(), encoding: 'utf8' });
   assert.equal(first.status, 0, first.stderr);
   const saved = JSON.parse(first.stdout);
-  assert.equal(saved.image.formatVersion, 5);
+  assert.equal(saved.image.formatVersion, 6);
   assert.equal(saved.delivery, undefined);
   assert.equal(saved.image.frame.children[0].contract, undefined);
   assert.equal(saved.image.frame.children[0].state.reception.kind, 'pending');
@@ -175,27 +175,21 @@ test('real Invocation captures in one process and resumes successful no-CP child
   assert.equal(completed.head.image.frame.children[0].state.reception.output, completed.result);
 });
 
-test('production codecs decode complete saved-time IO and progress without re-cloning business objects', async () => {
+test('production codecs decode complete historical IO into stable data with explicit domain wire encoding', async () => {
   const { decodeCheckpointFrame, checkCheckpointReferences } = await import('@capix/server-runtime/construction');
-  class DomainValue {
-    constructor(text) {
-      this.text = text;
-    }
-    render() {
-      return `domain:${this.text}`;
-    }
-  }
+  // Domain behavior stays outside the formal value; the codec returns plain data.
+  const render = (value) => `domain:${value.text}`;
   const codec = {
     encode(value) {
-      assert.ok(value instanceof DomainValue);
+      assert.equal(typeof value?.text, 'string');
       return { tag: 'domain', text: value.text };
     },
     decode(value) {
       if (value?.tag !== 'domain' || typeof value.text !== 'string') throw new Error('invalid domain wire value');
-      return new DomainValue(value.text);
+      return { text: value.text };
     },
   };
-  const wire = (text) => codec.encode(new DomainValue(text));
+  const wire = (text) => codec.encode({ text });
   const binding = { key: 'domain-parent', version: 1, input: codec, output: codec };
   const childBinding = { key: 'domain-child', version: 1, input: codec, output: codec };
   const value = image();
@@ -218,16 +212,16 @@ test('production codecs decode complete saved-time IO and progress without re-cl
   const saved = cloneCheckpointImage(value);
   const layout = [{ kind: 'node', binding: childBinding }];
   const decoded = decodeCheckpointFrame(saved.frame, binding, layout);
-  assert.equal(decoded.input.render(), 'domain:parent-initial');
-  assert.equal(decoded.currentInput.render(), 'domain:parent-current');
+  assert.equal(render(decoded.input), 'domain:parent-initial');
+  assert.equal(render(decoded.currentInput), 'domain:parent-current');
   for (const child of decoded.children) {
-    assert.ok(child.input instanceof DomainValue);
-    assert.ok(child.state.progress.currentInput instanceof DomainValue);
-    assert.ok(child.state.output instanceof DomainValue);
-    assert.equal(Object.isFrozen(child.state.output), false, 'codec business value is not frozen as kernel data');
+    assert.equal(typeof child.input.text, 'string');
+    assert.equal(typeof child.state.progress.currentInput.text, 'string');
+    assert.equal(typeof child.state.output.text, 'string');
+    assert.equal(Object.isFrozen(child.state.output), true, 'decoded formal values use the same stable boundary as live delivery');
   }
   assert.equal(saved.frame.children[1].state.output.tag, 'domain');
-  assert.equal(decoded.children[1].state.output.render(), 'domain:second-output');
+  assert.equal(render(decoded.children[1].state.output), 'domain:second-output');
   const slots = { chosen: { cardinality: 'one', position: 0 }, all: { cardinality: 'many', position: 0 }, repeated: { cardinality: 'one', position: 0 } };
   checkCheckpointReferences(saved.frame, saved.references, slots);
   for (const alter of [
@@ -251,6 +245,8 @@ test('production codecs decode complete saved-time IO and progress without re-cl
     alter(invalid);
     assert.throws(() => decodeCheckpointFrame(invalid.frame, binding, layout), /invalid domain/);
   }
+  const liveCodec = { ...codec, decode: () => new Date(0) };
+  assert.throws(() => decodeCheckpointFrame(saved.frame, { ...binding, input: liveCodec }, layout), /ordinary data/);
   assert.throws(() => decodeCheckpointFrame(saved.frame, binding, []), /declaration position/);
   assert.throws(() => checkCheckpointReferences(saved.frame, { chosen: saved.references.chosen }, slots), /slots differ/);
   assert.throws(() => checkCheckpointReferences(saved.frame, { ...saved.references, all: saved.references.chosen }, slots), /cardinality/);
@@ -265,13 +261,13 @@ test('production codecs decode complete saved-time IO and progress without re-cl
     import {readFileSync} from 'node:fs';
     import { cloneCheckpointImage } from '@capix/checkpoint';
     import {decodeCheckpointFrame} from '@capix/server-runtime/construction';
-    class DomainValue { constructor(text) { this.text = text; } render() { return 'domain:' + this.text; } }
-    const codec = { decode(v) { if (v?.tag !== 'domain' || typeof v.text !== 'string') throw new Error('invalid domain'); return new DomainValue(v.text); } };
+    const render = (value) => 'domain:' + value.text;
+    const codec = { decode(v) { if (v?.tag !== 'domain' || typeof v.text !== 'string') throw new Error('invalid domain'); return { text: v.text }; } };
     const saved = cloneCheckpointImage(JSON.parse(readFileSync(0, 'utf8')));
     const binding = { key: 'domain-parent', version: 1, input: codec, output: codec };
     const child = { key: 'domain-child', version: 1, input: codec, output: codec };
     const decoded = decodeCheckpointFrame(saved.frame, binding, [{ kind: 'node', binding: child }]);
-    process.stdout.write(JSON.stringify([decoded.input.render(), decoded.currentInput.render(), ...decoded.children.flatMap(c => [c.input.render(), c.state.progress.currentInput.render(), c.state.output.render()])]));
+    process.stdout.write(JSON.stringify([render(decoded.input), render(decoded.currentInput), ...decoded.children.flatMap(c => [render(c.input), render(c.state.progress.currentInput), render(c.state.output)])]));
   `,
     ],
     { input: JSON.stringify(saved), encoding: 'utf8', cwd: process.cwd() },
@@ -304,7 +300,7 @@ test('real factory declarations preserve scoped child identities, duplicate defi
   for (const variant of ['forged-point', 'forged-reference', 'wrong-declaration', 'live-acceptance']) {
     const rejected = run('capture', undefined, variant);
     assert.equal(rejected.status, 1, rejected.stdout);
-    assert.match(rejected.stderr, /registered|foreign|different child declaration|live objects/);
+    assert.match(rejected.stderr, /registered|foreign|different child declaration|ordinary data/);
     assert.equal(rejected.stdout, '', 'rejected capture must not save a partial parent image');
   }
 });

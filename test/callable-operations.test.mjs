@@ -27,7 +27,7 @@ function observation(facts, businesses = []) {
   };
 }
 
-test('invoke preserves successful references and establishes one parent acceptance', async () => {
+test('invoke delivers stable values and establishes one parent acceptance', async () => {
   const value = { text: 'unchanged' };
   const child = new Node({ run: () => value });
   let fact;
@@ -38,9 +38,9 @@ test('invoke preserves successful references and establishes one parent acceptan
       return result;
     },
   }).add(child);
-  assert.equal(await setup(scene).run(null), value);
-  assert.equal(fact.returned.output, value);
-  assert.equal(fact.reception.value, value);
+  assert.deepEqual(await setup(scene).run(null), value);
+  assert.deepEqual(fact.returned.output, value);
+  assert.deepEqual(fact.reception.value, value);
   assert.equal(fact.reception.status, 'accepted');
 });
 

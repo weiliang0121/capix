@@ -1,7 +1,7 @@
 import type { Invocation } from '../invocation/invocation.js';
 import type { InvocationContext } from '../context/context.js';
 import type { CheckpointReferences, InvocationCheckpointFrame } from '@capix/checkpoint';
-import type { CheckpointCodec, CheckpointContract, CallableKind } from '@capix/contracts';
+import type { CheckpointCodec, CheckpointContract, CallableKind, Stable } from '@capix/contracts';
 import type { DecodedCheckpointFrame } from './facts.js';
 import type { InvocationReceptionBinding } from '../invocation/reception.js';
 
@@ -27,7 +27,7 @@ export interface InvocationCheckpointWork<Input, Output, Context extends Invocat
         readonly state: CheckpointCodec<any>;
         readonly references?: Readonly<Record<string, CheckpointReferenceSlot>>;
         check?(frame: InvocationCheckpointFrame, state: any, references: CheckpointReferences, decoded: DecodedCheckpointFrame): void;
-        execute(context: Context, invocation: Invocation<Input, Output, Context>, state: any, references: CheckpointReferences): Output | Promise<Output>;
+        execute(context: Context, invocation: Invocation<Input, Output, Context>, state: any, references: CheckpointReferences): Output | Stable<Output> | Promise<Output | Stable<Output>>;
       }
     >
   >;

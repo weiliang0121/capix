@@ -1,10 +1,11 @@
+import type { Stable } from './value.js';
 import type { ChildCalls, ChildContract, ResumeChildCalls } from './children/index.js';
 import type { BusinessEvent } from './observation.js';
 import type { InvocationOutputWriter } from './output.js';
 
 /** Business processing sees its input and current controlled operation endpoints. */
 export interface Work<Input, Resources extends object> {
-  readonly input: Input;
+  readonly input: Stable<Input>;
   readonly resources: Readonly<Resources>;
   readonly signal: AbortSignal;
   observation(event: BusinessEvent): void;

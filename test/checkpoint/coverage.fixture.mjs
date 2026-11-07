@@ -13,6 +13,7 @@ const persistence = SqliteObserverStore.open(path);
 const save = persistence.checkpoints.save.bind(persistence.checkpoints);
 persistence.checkpoints.save = (image, revision) => {
   const result = save(image, revision);
+  image = persistence.checkpoints.read(result.contextId).image;
   const key = image.contract.key;
   if (key === 'observer.prepare-context' && image.point === 'completed') crash('preparationResult');
   if (key === 'observer.request-model.understanding' && image.point === 'feedbackAccepted') crash('understandingFeedback');

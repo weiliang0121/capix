@@ -55,7 +55,7 @@ export interface InvocationCheckpointFrame {
 
 export interface CheckpointImage {
   readonly id: string;
-  readonly formatVersion: 5;
+  readonly formatVersion: 5 | 6;
   readonly contract: CheckpointContract;
   readonly point: string;
   readonly frame: InvocationCheckpointFrame;
@@ -70,6 +70,8 @@ export interface CheckpointHead {
   readonly revision: number;
   readonly image: CheckpointImage;
   readonly delivery?: CheckpointDelivery;
+  /** Serializable v6 publication references, authenticated against the complete image on cold read. */
+  readonly publication?: CheckpointCommit;
 }
 
 /** A write acknowledgement, not a second read of the complete recovery image. */
@@ -93,6 +95,39 @@ export interface CheckpointFinishReceipt {
 /** Synchronous durable boundary, independent of records and optional observation. */
 export interface CheckpointStore {
   read(contextId: string): CheckpointHead | undefined;
-  save(image: CheckpointImage, expectedRevision: number): CheckpointSaveReceipt;
+  save(image: CheckpointImage | CheckpointCommit, expectedRevision: number): CheckpointSaveReceipt;
   finish(contextId: string, expectedRevision: number, delivery: CheckpointDelivery): CheckpointFinishReceipt;
+}
+
+/** A value is published inside one owning checkpoint scope, never by digest alone. */
+export interface CheckpointValueReference {
+  readonly id: string;
+  readonly digest: string;
+}
+
+export interface CheckpointValueBlock extends CheckpointValueReference {
+  readonly value: CheckpointValue;
+}
+
+type ReferencedProgress = { readonly round: number; readonly currentInput: CheckpointValueReference; readonly phase: 'execute' | 'receive' | 'handling' };
+type ReferencedReception = { readonly kind: 'pending' } | { readonly kind: 'receiving'; readonly contract?: CheckpointReceptionContract } | { readonly kind: 'accepted'; readonly contract?: CheckpointReceptionContract; readonly output?: CheckpointValueReference } | { readonly kind: 'failed'; readonly contract?: CheckpointReceptionContract; readonly error: CheckpointValueReference; readonly failure: InvocationFailureFact & { readonly kind: 'exception'; readonly contract: string } };
+
+/** Only changed current relations are submitted. Fixed large fields are value references. */
+export interface CheckpointChildRecord extends Omit<CheckpointChild, 'input' | 'state'> {
+  readonly input: CheckpointValueReference;
+  readonly state: { readonly kind: 'waiting' } | { readonly kind: 'returned'; readonly output: CheckpointValueReference; readonly progress: ReferencedProgress; readonly reception: ReferencedReception } | { readonly kind: 'failed'; readonly error: CheckpointValueReference; readonly failure: InvocationFailureFact; readonly progress: ReferencedProgress; readonly reception?: { readonly kind: 'handled'; readonly contract?: CheckpointReceptionContract; readonly output?: CheckpointValueReference } };
+}
+
+/** Incremental physical write; read() still returns the fully authenticated logical image. */
+export interface CheckpointCommit {
+  readonly kind: 'commit';
+  readonly formatVersion: 6;
+  readonly id: string;
+  readonly contract: CheckpointContract;
+  readonly point: string;
+  readonly frame: Omit<InvocationCheckpointFrame, 'input' | 'currentInput' | 'children'> & { readonly input: CheckpointValueReference; readonly currentInput: CheckpointValueReference };
+  readonly state: CheckpointValueReference;
+  readonly references: CheckpointValueReference;
+  readonly values: readonly CheckpointValueBlock[];
+  readonly children: readonly CheckpointChildRecord[];
 }

@@ -17,11 +17,11 @@ const child = defineGroup()({
 });
 const value = {
   check: (item) => {
-    assert.ok(item instanceof Date);
+    assert.equal(typeof item?.iso, 'string');
     return item;
   },
-  encode: (item) => item.toISOString(),
-  decode: (item) => new Date(item),
+  encode: (item) => item.iso,
+  decode: (item) => ({ iso: item }),
 };
 const original = reception(child, value);
 const other = reception(child, value);
@@ -37,12 +37,12 @@ const point = checkpointPoint()({
       const handle = work.children.open(refs.selected);
       const receive = (output) => {
         callbacks++;
-        return new Date(output);
+        return { iso: output };
       };
       const result = variant === 'raw' ? await handle.accept(receive) : await handle.accept(variant === 'other' ? other : original, receive);
       assert.equal(runs, 0);
       assert.equal(callbacks, 1);
-      return result.toISOString();
+      return result.iso;
     },
   },
 });
@@ -54,7 +54,7 @@ const root = defineScene()({
     await handle.run();
     const receive = (output) => {
       work.checkpoint({ point: point, state: null, refs: { selected: handle.ref } });
-      return new Date(output);
+      return { iso: output };
     };
     return mode === 'capture-raw' ? handle.accept(receive) : handle.accept(original, receive);
   },

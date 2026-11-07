@@ -5,9 +5,9 @@ import { modelRequestSchema, modelOutputSchema } from './interactions.js';
 import type { ModelOutput, ModelRequest } from './types.js';
 
 export interface ModelRegenerationInput {
-  request: ModelRequest;
-  output: ModelOutput;
-  error: { code: string; message: string };
+  readonly request: ModelRequest;
+  readonly output: ModelOutput;
+  readonly error: { readonly code: string; readonly message: string };
 }
 
 /** A service policy for a complete but invalid answer, not a runtime execution round. */

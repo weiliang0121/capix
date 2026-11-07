@@ -11,7 +11,7 @@ import { MemoryCheckpointStore } from '@capix/checkpoint';
 const build = (scene, resources = new Resources(), capabilities = {}) => new Runner(scene, resources, undefined, capabilities).build();
 const codec = { encode: (value) => value, decode: (value) => value };
 
-test('Scene(child) registers and invokes the same member, preserving final identity and ordinary reception', async () => {
+test('Scene(child) registers and invokes the same member, preserving stable final data and ordinary reception', async () => {
   const child = new Node({ run: (work) => work.input });
   const scene = new Scene(child);
   const calls = new Map();
@@ -24,7 +24,10 @@ test('Scene(child) registers and invokes the same member, preserving final ident
   );
   const runner = build(scene, new Resources(), { hooks });
   const input = { text: 'hello' };
-  assert.equal(await runner.run(input), input);
+  const result = await runner.run(input);
+  assert.deepEqual(result, input);
+  assert.notEqual(result, input);
+  assert.equal(Object.isFrozen(result), true);
   assert.deepEqual(scene.members, [child]);
   assert.deepEqual(scene.names, {});
   assert.equal(scene.kind, 'scene');
@@ -32,9 +35,11 @@ test('Scene(child) registers and invokes the same member, preserving final ident
   const relation = calls.get(scene).children.get(calls.get(child));
   assert.equal(relation.returned.status, 'succeeded');
   assert.equal(relation.reception.status, 'accepted');
-  assert.equal(relation.reception.output, input);
+  assert.equal(relation.reception.output, result);
+  input.text = 'changed outside';
+  assert.equal(result.text, 'hello');
   const firstCall = calls.get(child).context.id;
-  assert.equal(await runner.run(input), input);
+  assert.deepEqual(await runner.run(input), input);
   assert.notEqual(calls.get(child).context.id, firstCall);
 });
 

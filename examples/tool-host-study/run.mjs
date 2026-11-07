@@ -7,12 +7,14 @@ import { ConversationStore } from '@capix/conversation-service/persistence';
 import { loadConversationContent, createConversationHostAssembly } from '@capix/conversation-service/assembly';
 import { ToolStages } from '@capix/conversation-service/tools/hosting';
 import { studyModel } from './model.mjs';
+import { startCpuProfile } from './cpu-profile.mjs';
 
-const { values } = parseArgs({ options: { live: { type: 'boolean' }, out: { type: 'string' }, case: { type: 'string' }, help: { type: 'boolean' } } });
+const { values } = parseArgs({ options: { live: { type: 'boolean' }, out: { type: 'string' }, case: { type: 'string' }, 'cpu-profile': { type: 'boolean' }, help: { type: 'boolean' } } });
 if (values.help) {
-  console.log('node examples/tool-host-study/run.mjs --out NEW_DIRECTORY [--live] [--case NAME]\n默认离线容量测量；--live 显式执行思考/非思考及错误/取消/局部超时历史工具对话。不读.env，不覆盖旧目录，不记录凭证、不自动重试。');
+  console.log('node examples/tool-host-study/run.mjs --out NEW_DIRECTORY [--live] [--case NAME] [--cpu-profile]\n默认离线容量测量；--cpu-profile 仅对离线入口采样，不改写生产模块；--live 显式执行思考/非思考及错误/取消/局部超时历史工具对话。不读.env，不覆盖旧目录，不记录凭证、不自动重试。');
 } else {
   if (!values.out) throw new Error('--out requires a new directory');
+  if (values.live && values['cpu-profile']) throw new Error('CPU profiling is limited to the offline study');
   if (values.live && !process.env.DEEPSEEK_API_KEY?.trim()) throw new Error('Live study requires DEEPSEEK_API_KEY');
   const output = resolve(values.out);
   await mkdir(output, { recursive: false });
@@ -45,19 +47,24 @@ if (values.help) {
       const content = loadConversationContent(store);
       content.transcript.append({ role: 'user', content: values.live ? '青松项目：预算48万元，上线日期2026年12月18日。负责人林岚。' : 'history material '.repeat(1000) }, { role: 'assistant', content: '已记录青松项目。' }, { role: 'user', content: '赤岩项目：预算31万元，验收日期2027年1月12日。负责人周远。' }, { role: 'assistant', content: '已记录赤岩项目。' });
       assembly = createConversationHostAssembly({ content, store, model: model.provider, answerMode: 'tools', configuration: JSON.stringify({ study: 'tool-host-v1', model: model.name, thinking: plan.thinking }), ...(plan.waitMs ? { toolPolicy: { modelWaitMs: plan.waitMs } } : {}) });
+      const relationIds = new Map();
       const checkpoints = {
         read: (id) => assembly.checkpoints.read(id),
         save(image, revision) {
           const started = performance.now();
           const result = assembly.checkpoints.save(image, revision);
           const elapsedMs = performance.now() - started;
-          metrics.checkpoints.push({ operation: 'save', point: image.point, contract: image.contract.key, children: image.frame.children.length, bytes: Buffer.byteLength(JSON.stringify(image)), elapsedMs });
+          const ids = relationIds.get(image.frame.owner.contextId) ?? new Set();
+          for (const child of image.kind === 'commit' ? image.children : image.frame.children) ids.add(child.identity.contextId);
+          relationIds.set(image.frame.owner.contextId, ids);
+          metrics.checkpoints.push({ operation: 'save', representation: image.kind === 'commit' ? 'delta' : 'full', point: image.point, contract: image.contract.key, children: ids.size, changedChildren: image.kind === 'commit' ? image.children.length : image.frame.children.length, bytes: Buffer.byteLength(JSON.stringify(image)), elapsedMs });
           return result;
         },
         finish(contextId, revision, delivery) {
           const started = performance.now();
           const result = assembly.checkpoints.finish(contextId, revision, delivery);
-          metrics.checkpoints.push({ operation: 'finish', bytes: Buffer.byteLength(JSON.stringify(delivery)), elapsedMs: performance.now() - started });
+          const elapsedMs = performance.now() - started;
+          metrics.checkpoints.push({ operation: 'finish', bytes: Buffer.byteLength(JSON.stringify(delivery)), elapsedMs });
           return result;
         },
       };
@@ -71,6 +78,7 @@ if (values.help) {
       });
       const questions = plan.questions ?? [`请处理：${'x'.repeat(plan.materialBytes)}`];
       for (const input of questions) {
+        const profiler = values['cpu-profile'] ? await startCpuProfile() : undefined;
         const started = performance.now();
         const cpuStarted = process.cpuUsage();
         try {
@@ -86,6 +94,14 @@ if (values.help) {
         }
         const cpu = process.cpuUsage(cpuStarted);
         metrics.turns.at(-1).cpuMs = (cpu.user + cpu.system) / 1000;
+        if (profiler) {
+          const { profile, summary } = await profiler.stop();
+          const file = `${plan.name}-${metrics.turns.length}.cpuprofile`;
+          // Serialize outside the measured entry. Raw V8 samples contain stacks,
+          // not business values; retain them so classifications can be audited.
+          await writeFile(join(output, file), `${JSON.stringify(profile)}\n`, { flag: 'wx', mode: 0o600 });
+          metrics.turns.at(-1).cpuProfile = { file, ...summary };
+        }
         console.log(`完成：${plan.name} · ${metrics.turns.length}/${questions.length} · ${metrics.turns.at(-1).status}`);
       }
       await assembly.interactions.settled();
@@ -125,7 +141,7 @@ if (values.help) {
       store.close();
     }
   }
-  await writeFile(join(output, 'summary.json'), `${JSON.stringify({ version: 1, results, note: 'Offline bytes/timing measure this host and synthetic workload; not a maximum guarantee. Archive usage and checkpointRetention describe retained data; totalCheckpointWriteBytes sums successful save/finish payloads and excludes SQLite/WAL overhead. cpuMs is process CPU during each run, not checkpoint-only CPU. Live cases test compatibility, not general tool-selection accuracy. No automatic retry.' }, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  await writeFile(join(output, 'summary.json'), `${JSON.stringify({ version: 1, results, processUsage: { node: process.version, maxRssKiB: process.resourceUsage().maxRSS }, note: 'Offline bytes/timing measure this host and synthetic workload; not a maximum guarantee. Archive usage and checkpointRetention describe retained data; totalCheckpointWriteBytes sums successful save/finish payloads and excludes SQLite/WAL overhead. cpuMs is process CPU during each run, not checkpoint-only CPU; maxRssKiB is the whole process high-water mark, including imports and report preparation. Optional CPU profile buckets are mutually exclusive V8 sampling estimates, not exact per-stage timings or call counts; profiling changes overhead. Live cases test compatibility, not general tool-selection accuracy. No automatic retry.' }, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
   console.log(`报告：${join(output, 'summary.json')}`);
   if (results.some((item) => !item.passed)) process.exitCode = 1;
 }

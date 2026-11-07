@@ -23,7 +23,7 @@ async function captureExecution(t, fileTask) {
   const save = environment.checkpoints.save.bind(environment.checkpoints);
   environment.checkpoints.save = (image, revision) => {
     const result = save(image, revision);
-    if (image.contract.key === 'observer.conversation.task') images.push(image);
+    if (image.contract.key === 'observer.conversation.task') images.push(environment.checkpoints.read(result.contextId).image);
     return result;
   };
   await environment.runner.run({ messages: [{ role: 'user', content: '整理资料' }], ...(fileTask ? { fileTask } : {}) }, { settings });
@@ -34,7 +34,12 @@ async function captureExecution(t, fileTask) {
   const check = (image) => {
     const point = definition.checkpoint.points.find((point) => point.name === image.point);
     const decoded = decodeCheckpointFrame(image.frame, definition.checkpoint, children.checkpointLayout(), receptions.bindings());
-    point.check?.(point.state.decode(image.state), savedCheckpointFacts(decoded, image.references, children, receptions));
+    const query = savedCheckpointFacts(decoded, image.references, children, receptions);
+    try {
+      point.check?.(point.state.decode(image.state), query.facts);
+    } finally {
+      query.close();
+    }
   };
   return { check, images };
 }

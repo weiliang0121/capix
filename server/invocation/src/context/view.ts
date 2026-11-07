@@ -1,11 +1,12 @@
 import { InvocationResources } from '../invocation/resource-access.js';
 import type { ContextState, InvocationContext } from './context.js';
+import type { Stable } from '@capix/contracts';
 
 /** Business sees the live call values, never lifecycle mutation or binding machinery. */
 export interface InvocationContextView<Input = unknown, Output = unknown> {
   readonly id: string;
-  readonly input: Input;
-  readonly currentInput: Input;
+  readonly input: Stable<Input>;
+  readonly currentInput: Stable<Input>;
   readonly progress: InvocationContext<Input, Output>['progress'];
   readonly state: ContextState<Output>;
   readonly status: ContextState<Output>['status'];

@@ -15,19 +15,24 @@ test('invocation boundary owns one execution and preserves its final value', asy
     work: {
       execute(context) {
         executions++;
-        assert.equal(context.currentInput, input);
+        assert.deepEqual(context.currentInput, input);
+        assert.notEqual(context.currentInput, input);
+        assert.equal(Object.isFrozen(context.currentInput), true);
         return output;
       },
       output: { result: (value) => value },
     },
   });
 
-  assert.equal(await call.run(), output);
-  assert.equal(call.context.state.output, output);
-  assert.equal(call.context.progress.result.output, output);
+  const result = await call.run();
+  assert.deepEqual(result, output);
+  assert.notEqual(result, output);
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal(call.context.state.output, result);
+  assert.equal(call.context.progress.result.output, result);
   await assert.rejects(call.run(), /already started/);
   assert.equal(executions, 1);
-  assert.equal(call.context.state.output, output);
+  assert.equal(call.context.state.output, result);
 });
 
 test('invocation boundary handles a child business failure without making technical faults receivable', async () => {
@@ -61,12 +66,15 @@ test('invocation boundary handles a child business failure without making techni
     },
   });
 
-  assert.equal(await parent.run(), fallback);
+  const result = await parent.run();
+  assert.deepEqual(result, fallback);
+  assert.notEqual(result, fallback);
+  assert.equal(Object.isFrozen(result), true);
   assert.equal(received, 1);
   assert.equal(failedChild.context.status, 'failed');
   assert.equal(parent.children.get(failedChild).returned.error, unavailable);
   assert.equal(parent.children.get(failedChild).reception.status, 'handled');
-  assert.equal(parent.children.get(failedChild).reception.output, fallback);
+  assert.equal(parent.children.get(failedChild).reception.output, result);
 
   let invalidChild;
   let invalidDelivery;

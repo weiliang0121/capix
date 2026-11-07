@@ -14,7 +14,7 @@ import { TestOperation } from './fixtures/operation.mjs';
 const options = { input: {}, settings: {} };
 const recorder = () => new Recorder(new RecordBook());
 
-test('Context keeps live refs, separates undefined outcomes, and fixes execution configuration and Transcript visibility', () => {
+test('Context fixes data input, separates undefined outcomes, and fixes execution configuration and Transcript visibility', () => {
   const input = { text: 'hello' },
     settings = { model: 'original', temperature: 0 },
     transcript = new Transcript([]),
@@ -23,7 +23,11 @@ test('Context keeps live refs, separates undefined outcomes, and fixes execution
   settings.model = 'changed';
   assert.equal(sourceFor(context).settings.model, 'original');
   assert.ok(Object.isFrozen(sourceFor(context).settings));
-  assert.equal(context.input, input);
+  assert.deepEqual(context.input, input);
+  assert.notEqual(context.input, input);
+  input.text = 'changed';
+  assert.equal(context.input.text, 'hello');
+  assert.equal(Object.isFrozen(context.input), true);
   assert.equal(sourceFor(context).transcriptRange.transcript, transcript);
   assert.equal(sourceFor(context).transcriptRange.end, 0);
   assert.equal(context.signal, controller.signal);
@@ -42,24 +46,29 @@ test('Context keeps live refs, separates undefined outcomes, and fixes execution
   assert.throws(() => context.fail('later'), /ended/);
   const failed = new InvocationContext(undefined);
   failed.fail(undefined);
-  assert.deepEqual(failed.state, { status: 'failed', error: undefined });
+  assert.equal(failed.state.status, 'failed');
+  assert.equal(failed.state.error, undefined);
+  assert.equal(Object.isFrozen(failed.state.diagnostic), true);
 });
 
-test('Operation executes named actions without records and preserves non-JSON intermediate and output refs', async () => {
+test('Operation composes named actions with stable data while local capabilities remain outside delivery', async () => {
   const runtime = createBoundRuntime(),
     seen = [],
-    input = new Map([['content', 'hello']]);
-  const fn = () => input.get('content');
+    input = { content: 'hello' };
+  const localRead = () => input.content;
   const node = new TestOperation(runtime, {
     load(value) {
       seen.push('load');
-      assert.equal(value, input);
-      return fn;
+      assert.deepEqual(value, input);
+      assert.notEqual(value, input);
+      assert.equal(Object.isFrozen(value), true);
+      return { content: localRead() };
     },
     transform(value) {
       seen.push('transform');
-      assert.equal(value, fn);
-      return new Set([value()]);
+      assert.deepEqual(value, { content: 'hello' });
+      assert.equal(Object.isFrozen(value), true);
+      return [value.content];
     },
     accept(value, context) {
       seen.push('accept');
@@ -74,12 +83,13 @@ test('Operation executes named actions without records and preserves non-JSON in
     return node.call(callFor(context), context.input);
   });
   assert.deepEqual(seen, ['load', 'transform', 'accept']);
-  assert.ok(result instanceof Set);
+  assert.deepEqual(result, ['hello']);
+  assert.equal(Object.isFrozen(result), true);
   assert.equal(execution.state.output, result);
   assert.equal(runtime.recorder, undefined);
 });
 
-test('an unrecordable execute result stops strict delivery and leaves the damaged recording incomplete', async () => {
+test('an unsupported execute value fails before successful delivery and keeps the actual failure record', async () => {
   const records = recorder();
   const runtime = createBoundRuntime({ recorder: records });
   const root = lifecycleFor(runtime).execution(options);
@@ -93,15 +103,15 @@ test('an unrecordable execute result stops strict delivery and leaves the damage
       count++;
       return result;
     }),
-    (error) => error.code === 'OBSERVATION_FAILED' && error.cause.code === 'RECORDING_FAILED',
+    (error) => error.code === 'UNSUPPORTED_VALUE',
   );
   assert.equal(count, 1);
   assert.equal(context.status, 'failed');
-  assert.equal(context.progress.result.output, result);
-  // The disabled writer cannot invent a complete failure record after losing a fact.
-  assert.equal(recordFor(context).status, 'running');
-  assert.equal(recordFor(context).value.error, undefined);
-  assert.equal(observeCall(runtime.recording, callFor(execution)).events.filter((event) => event.callId === recordFor(context).id).length, 1);
+  assert.equal(context.progress.result.status, 'failed');
+  assert.equal(context.progress.result.error, context.state.error);
+  assert.equal(context.progress.result.diagnostic.code, 'UNSUPPORTED_VALUE');
+  assert.equal(recordFor(context).status, 'failed');
+  assert.equal(recordFor(context).value.error.code, 'UNSUPPORTED_VALUE');
   assert.throws(
     () => callFor(execution).requireHealthy(),
     (error) => error === context.state.error,

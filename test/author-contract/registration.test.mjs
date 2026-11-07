@@ -50,7 +50,7 @@ for (const children of [[], [defineNode()({ ...metadata, run: (work) => work.inp
   });
 }
 
-test('a class and its complete factory path retain the receiver and original output reference without recording', async () => {
+test('a class and its complete factory path retain the receiver and deliver fixed output without recording', async () => {
   class Reader extends Node {
     name = 'read';
     label = 'read';
@@ -62,8 +62,8 @@ test('a class and its complete factory path retain the receiver and original out
   const reader = new Reader();
   const runtime = assemble(reader);
   const original = reader.outputValue;
-  assert.equal(await runtime.run({}, {}), original);
+  assert.deepEqual(await runtime.run({}, {}), original);
   assert.equal(Object.isFrozen(reader), false);
   reader.outputValue = { content: 'next' };
-  assert.equal(await runtime.run({}, {}), reader.outputValue);
+  assert.deepEqual(await runtime.run({}, {}), reader.outputValue);
 });

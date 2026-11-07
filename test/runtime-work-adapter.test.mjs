@@ -25,7 +25,7 @@ for (const mode of ['direct', 'handle']) {
         return delivered;
       },
     });
-    const contract = reception(child, { ...codec, check: (value) => assert.equal(value, accepted) });
+    const contract = reception(child, { ...codec, check: (value) => assert.deepEqual(value, accepted) });
     const scene = new Scene({
       checkpoint: checkpoint([contract]),
       async run(work) {
@@ -35,7 +35,7 @@ for (const mode of ['direct', 'handle']) {
           succeeded(value) {
             assert.equal(this, result);
             assert.equal(this.marker, 'live');
-            assert.equal(value, delivered);
+            assert.deepEqual(value, delivered);
             return accepted;
           },
           failed: () => assert.fail('the child succeeds'),
@@ -60,16 +60,16 @@ for (const mode of ['direct', 'handle']) {
         options.key = 'changed';
         options.output = { receive: () => assert.fail('the original output receiver is fixed') };
         gate.resolve();
-        assert.equal(await pending, accepted);
+        assert.deepEqual(await pending, accepted);
         const fact = facts.list(child)[0];
         assert.equal(fact.key, 'fixed');
-        assert.equal(fact.returned.output, delivered);
-        assert.equal(facts.accepted(fact.ref, contract), accepted);
+        assert.deepEqual(fact.returned.output, delivered);
+        assert.deepEqual(facts.accepted(fact.ref, contract), accepted);
         return accepted;
       },
     }).add(child);
-    assert.equal(await new Runner(scene, new Resources()).build().run(null), accepted);
-    assert.equal(facts.list(child)[0].reception.value, accepted);
+    assert.deepEqual(await new Runner(scene, new Resources()).build().run(null), accepted);
+    assert.deepEqual(facts.list(child)[0].reception.value, accepted);
     assert.deepEqual(events, ['preview']);
   });
 
@@ -83,7 +83,7 @@ for (const mode of ['direct', 'handle']) {
         throw failure;
       },
     });
-    const contract = reception(child, { ...codec, check: (value) => assert.equal(value, handled) });
+    const contract = reception(child, { ...codec, check: (value) => assert.deepEqual(value, handled) });
     const scene = new Scene({
       checkpoint: checkpoint([contract]),
       async run(work) {
@@ -98,7 +98,7 @@ for (const mode of ['direct', 'handle']) {
         const pending = invoke(mode, work, child, { result, reception: contract });
         result.failed = () => assert.fail('the failed receiver was already fixed');
         gate.resolve();
-        assert.equal(await pending, handled);
+        assert.deepEqual(await pending, handled);
         const fact = work.children.facts.list(child)[0];
         assert.equal(fact.returned.status, 'failed');
         assert.equal(fact.returned.diagnostic.message, failure.message);
@@ -106,7 +106,7 @@ for (const mode of ['direct', 'handle']) {
         return work.children.facts.handled(fact.ref, contract);
       },
     }).add(child);
-    assert.equal(await new Runner(scene, new Resources()).build().run(null), handled);
+    assert.deepEqual(await new Runner(scene, new Resources()).build().run(null), handled);
   });
 
   test(`${mode} reception failure preserves its exact child origin without entering failed`, async () => {

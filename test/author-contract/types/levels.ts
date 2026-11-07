@@ -1,3 +1,4 @@
+import type { Stable } from '@capix/contracts';
 import { Group, defineGroup } from '@capix/server-runtime';
 import type { Node, SceneWork, GroupWork, NodeWork, ResumeWork, CallableRun, InvocationCheckpointPoint, ChildReference, ChildrenOf, CallableInput, CallableOutput } from '@capix/server-runtime';
 declare const operation: Group<string, number>;
@@ -14,7 +15,7 @@ export function leafHelper(work: NodeWork<string, number>): number {
   return work.input.length;
 }
 export function specificHelper<Definition extends ChildrenOf<'group'>>(work: GroupWork<string, number, Record<string, never>, Definition>, child: Definition, input: CallableInput<Definition>) {
-  expectType<Promise<CallableOutput<Definition>>>(work.children.invoke(child, input));
+  expectType<Promise<Stable<CallableOutput<Definition>>>>(work.children.invoke(child, input));
 }
 export class NamedGroup extends Group<string, number> {
   constructor() {

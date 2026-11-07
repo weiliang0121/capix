@@ -1,16 +1,21 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isEqual } from 'es-toolkit';
 import { RuntimeError } from '@capix/contracts';
-import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt, CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
-import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt } from '@capix/checkpoint';
+import { cloneCheckpointImage, cloneCheckpointDelivery, checkpointSaveReceipt, checkpointFinishReceipt, checkpointHeadCommit, CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
+import type { CheckpointStore, CheckpointImage, CheckpointHead, CheckpointDelivery, CheckpointSaveReceipt, CheckpointFinishReceipt, CheckpointCommit } from '@capix/checkpoint';
+import { isCheckpointRecord, checkpointImageCommit } from '@capix/checkpoint/storage';
 import { initializeCheckpointRetention } from './checkpoint-retention.js';
+import { initializeCheckpointFacts, saveCheckpointFacts, readCheckpointFacts, finishCheckpointFacts } from './checkpoint-facts.js';
 
 type Row = Record<string, string | number | bigint | Uint8Array | null>;
 
 /** Uses the host's single-writer connection; checkpoint commits never include content or records. */
 export class SqliteCheckpointStore implements CheckpointStore {
   constructor(private readonly database: DatabaseSync) {
-    this.transaction(() => initializeCheckpointRetention(this.database));
+    this.transaction(() => {
+      initializeCheckpointRetention(this.database);
+      initializeCheckpointFacts(this.database);
+    });
   }
 
   read(contextId: string): CheckpointHead | undefined {
@@ -23,12 +28,21 @@ export class SqliteCheckpointStore implements CheckpointStore {
     }
   }
 
-  save(image: CheckpointImage, expectedRevision: number): CheckpointSaveReceipt {
+  save(image: CheckpointImage | CheckpointCommit, expectedRevision: number): CheckpointSaveReceipt {
+    if ('kind' in image && image.kind === 'commit') return this.transaction(() => saveCheckpointFacts(this.database, image, expectedRevision));
     const fixed = cloneCheckpointImage(image);
     requireRevision(expectedRevision);
+    if (fixed.formatVersion === 6) {
+      this.transaction(() => {
+        const current = this.readHead(fixed.frame.owner.contextId);
+        return saveCheckpointFacts(this.database, checkpointImageCommit(fixed, current && checkpointHeadCommit(current)), expectedRevision);
+      });
+      return checkpointSaveReceipt(fixed, expectedRevision + 1);
+    }
     return this.transaction(() => {
       const contextId = fixed.frame.owner.contextId;
       const current = this.readHead(contextId);
+      if (current?.image.formatVersion === 6) throw conflict('Cannot replace v6 facts with a legacy full image');
       requireCurrent(current, expectedRevision);
       if (current && (!isEqual(current.image.frame.owner, fixed.frame.owner) || !isEqual(current.image.contract, fixed.contract) || !isEqual(current.image.frame.input, fixed.frame.input))) throw conflict('Checkpoint owner, contract and original input cannot change');
       if (this.database.prepare('SELECT 1 FROM checkpoint_images WHERE id = ?').get(fixed.id)) throw conflict('Checkpoint identity has already been saved');
@@ -49,6 +63,8 @@ export class SqliteCheckpointStore implements CheckpointStore {
     requireRevision(expectedRevision);
     const fixed = cloneCheckpointDelivery(delivery);
     return this.transaction(() => {
+      const row = this.database.prepare('SELECT h.context_id,h.revision,h.image_id,h.delivery,i.context_id AS image_context,i.revision AS image_revision,i.body FROM checkpoint_heads h LEFT JOIN checkpoint_images i ON i.id=h.image_id WHERE h.context_id=?').get(contextId);
+      if (row && typeof row.body === 'string' && isCheckpointRecord(row.body)) return finishCheckpointFacts(this.database, row, expectedRevision, fixed);
       const current = this.readHead(contextId);
       if (!current) throw conflict('Cannot finish a checkpoint scope without a saved image');
       requireCurrent(current, expectedRevision);
@@ -62,9 +78,10 @@ export class SqliteCheckpointStore implements CheckpointStore {
     const row = this.database.prepare('SELECT h.context_id, h.revision, h.image_id, h.delivery, i.context_id AS image_context_id, i.revision AS image_revision, i.body FROM checkpoint_heads h LEFT JOIN checkpoint_images i ON i.id = h.image_id WHERE h.context_id = ?').get(contextId);
     if (!row) {
       if (this.database.prepare('SELECT 1 FROM checkpoint_images WHERE context_id = ? LIMIT 1').get(contextId)) throw new Error('Stored checkpoint head is missing');
+      if (this.database.prepare('SELECT 1 FROM checkpoint_values WHERE context_id=? UNION ALL SELECT 1 FROM checkpoint_relations WHERE context_id=? LIMIT 1').get(contextId, contextId)) throw new Error('Stored checkpoint facts head is missing');
       return undefined;
     }
-    return decodeHead(row);
+    return typeof row.body === 'string' && isCheckpointRecord(row.body) ? readCheckpointFacts(this.database, row) : decodeHead(row);
   }
 
   private transaction<Result>(work: () => Result): Result {

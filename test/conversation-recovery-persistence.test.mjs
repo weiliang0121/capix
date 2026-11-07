@@ -47,7 +47,7 @@ test('v1 migrates transactionally while retaining content, View and fixed entity
   const legacy = new DatabaseSync(files.path);
   for (const row of legacy.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) legacy.exec(`DROP TRIGGER ${row.name}`);
   legacy.exec('DROP TABLE archive_usage');
-  legacy.exec('DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1;');
+  legacy.exec('DROP TABLE checkpoint_values; DROP TABLE checkpoint_relations; DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1;');
   legacy.close();
 
   const migrated = files.open();
@@ -58,7 +58,7 @@ test('v1 migrates transactionally while retaining content, View and fixed entity
   migrated.close();
   const metadata = new DatabaseSync(files.path);
   try {
-    assert.equal(metadata.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(metadata.prepare('PRAGMA user_version').get().user_version, 7);
   } finally {
     metadata.close();
   }
@@ -73,7 +73,7 @@ test('unrecognized v1 layouts are rejected before any migration or journal chang
   const malformed = new DatabaseSync(files.path);
   for (const row of malformed.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'archive_%'").all()) malformed.exec(`DROP TRIGGER ${row.name}`);
   malformed.exec('DROP TABLE archive_usage');
-  malformed.exec('DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1; ALTER TABLE messages RENAME COLUMN body TO payload;');
+  malformed.exec('DROP TABLE checkpoint_values; DROP TABLE checkpoint_relations; DROP TABLE model_exchange_operations; DROP TABLE model_exchange_entries; DROP TABLE model_exchanges; DROP TABLE checkpoint_heads; DROP TABLE checkpoint_images; DROP TABLE completion_interactions; PRAGMA user_version = 1; ALTER TABLE messages RENAME COLUMN body TO payload;');
   malformed.close();
   const bytes = readFileSync(files.path);
   assert.throws(() => ConversationStore.open(files.path), PersistenceError);

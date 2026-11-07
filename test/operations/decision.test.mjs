@@ -105,7 +105,7 @@ test('a function decision uses the same operation contract and supports asynchro
   assert.deepEqual(definition.members, []);
   assert.deepEqual(definition.deps, {});
   const { input, result, requests } = await decide({ definition });
-  assert.equal(inputs[0], input);
+  assert.deepEqual(inputs[0], input);
   assert.deepEqual(result, { kind: 'invoke', capability: 'answer', arguments: {} });
   assert.equal(requests.length, 0);
 });

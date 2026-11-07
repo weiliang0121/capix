@@ -1,6 +1,6 @@
 import { ProgressChannel } from '@capix/changes';
-import { RuntimeError } from '@capix/contracts';
-import type { InvocationOutputEvent, InvocationOutputWriter, OutputDeclaration } from '@capix/contracts';
+import { RuntimeError, stableValue } from '@capix/contracts';
+import type { InvocationOutputEvent, InvocationOutputWriter, OutputDeclaration, Stable } from '@capix/contracts';
 
 /** One producer-owned segment. Delivery is passive and never controls its lifetime. */
 export class InvocationOutputSection<Result> {
@@ -33,6 +33,7 @@ export class InvocationOutputSection<Result> {
       if (!this.declaration?.delta) throw new RuntimeError('OUTPUT_UNDECLARED', 'This declaration does not produce incremental output');
       delta = this.declaration.delta(value);
       rejectPromise(delta);
+      delta = stableValue(delta);
     } catch (cause) {
       const error = new RuntimeError('OUTPUT_CONTRACT', 'Produced incremental output violates its declaration', undefined, { cause });
       this.controls.reject(error);
@@ -56,7 +57,7 @@ export class InvocationOutputSection<Result> {
     this.publish({ kind: 'discarded', reason });
   }
 
-  validateResult(value: Result): Result {
+  validateResult(value: Stable<Result>): Stable<Result> {
     try {
       const result = this.declaration ? this.declaration.result(value) : value;
       if (this.declaration) rejectPromise(result);
@@ -69,14 +70,14 @@ export class InvocationOutputSection<Result> {
     }
   }
 
-  complete(result: Result): void {
+  complete(result: Stable<Result>): void {
     if (this.#state === 'open' || this.#state === 'completed') throw new Error('Output segment cannot complete from this state');
     const discarded = this.#state === 'discarded';
     this.#state = 'completed';
     this.publish({ kind: 'completed', result, discarded });
   }
 
-  private publish(event: { kind: 'started' | 'sealed' } | { kind: 'delta'; delta: unknown } | { kind: 'discarded'; reason: 'exception' | 'continue' | 'failed' } | { kind: 'completed'; result: Result; discarded: boolean }): void {
+  private publish(event: { kind: 'started' | 'sealed' } | { kind: 'delta'; delta: unknown } | { kind: 'discarded'; reason: 'exception' | 'continue' | 'failed' } | { kind: 'completed'; result: Stable<Result>; discarded: boolean }): void {
     this.#delivery?.publish(Object.freeze({ ...event, contextId: this.contextId, round: this.round, sequence: ++this.#sequence }));
   }
 }

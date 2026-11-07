@@ -265,28 +265,19 @@ test('record write failure obeys isolate/propagate without undoing or repeating 
   }
 });
 
-test('service descriptions preserve execution identity without evaluating accessors or copying unusual values', async () => {
-  let getters = 0;
-  const result = { absent: undefined, finite: 42, infinite: Infinity, nan: NaN, big: 1n, array: Array.from({ length: 100 }, () => 'PRIVATE_ARRAY_CONTENT') };
-  Object.defineProperty(result, 'derived', {
-    enumerable: true,
-    get() {
-      getters++;
-      throw new Error('not a recording operation');
-    },
-  });
+test('service descriptions summarize stable data without leaking complete material', async () => {
+  const result = { absent: undefined, finite: 42, array: Array.from({ length: 100 }, () => 'PRIVATE_ARRAY_CONTENT') };
   const node = new Node({ run: () => result });
   const scene = new Scene(node);
   const recorder = new Recorder(new RecordBook());
   const invalidated = [];
   const installation = createConversationRecording(scene, recorder, { invalidate: (error) => invalidated.push(error) });
   const runner = new Runner(scene, new Resources(), undefined, { observations: [installation] }).build();
-  assert.equal(await runner.run(null), result);
-  assert.equal(getters, 0);
+  assert.deepEqual(await runner.run(null), result);
   assert.deepEqual(invalidated, []);
   for (const record of recordsOf(recorder, 'invocation')) {
     assert.equal(record.status, 'succeeded');
-    assert.deepEqual(outputOf(record), { absent: { type: 'undefined' }, finite: 42, infinite: { type: 'number', value: 'Infinity' }, nan: { type: 'number', value: 'NaN' }, big: { type: 'bigint' }, array: { items: 100 }, derived: { type: 'accessor' } });
+    assert.deepEqual(outputOf(record), { absent: { type: 'undefined' }, finite: 42, array: { items: 100 } });
   }
   assert.ok(!JSON.stringify(recorder.book.exportState()).includes('PRIVATE_ARRAY_CONTENT'));
 });

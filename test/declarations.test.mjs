@@ -155,7 +155,7 @@ test('host recording maps recorded IO without changing business values', async (
   const create = () =>
     new Group({
       run(work) {
-        assert.equal(work.input, input);
+        assert.deepEqual(work.input, input);
         return output;
       },
     });
@@ -169,13 +169,13 @@ test('host recording maps recorded IO without changing business values', async (
       return { public: value.public };
     },
   };
-  assert.equal(await assemble(create()).run(input, {}), output);
+  assert.deepEqual(await assemble(create()).run(input, {}), output);
   assert.equal(descriptions, 0);
   const recorder = new Recorder(new RecordBook());
   const main = create();
   const recording = bindRecording(recorder, { failure: 'propagate' }).describe(main, description);
   const runtime = assemble(main, [], recording);
-  assert.equal(
+  assert.deepEqual(
     await runtime.run(input, {
       execution: {
         started: (_context, invocation) => {
@@ -185,7 +185,7 @@ test('host recording maps recorded IO without changing business values', async (
     }),
     output,
   );
-  assert.equal(call.context.state.output, output);
+  assert.deepEqual(call.context.state.output, output);
   const snapshot = CallableRecordHelper.snapshot(recorder, recordedCall(recorder, call).id);
   validateExecutionRecordSnapshot(snapshot);
   assert.deepEqual(snapshot.execution.value.input, { public: 2 });

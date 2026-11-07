@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Stable } from '@capix/contracts';
 import type { ChildContractsOf, ChildCalls, ChildOptions, CallableInput, CallableOutput, CallableDelta, InvocationOutputReceiver, ChildCall } from '@capix/structure';
 import type { ConversationCapabilityName, ConversationCapabilityOffer, ConversationDecisionFeedback } from './types.js';
 import { modelTextSchema } from '../model/schema.js';
@@ -18,7 +19,7 @@ export interface ConversationCapability<State> {
   available(state: State): boolean;
   validate(value: unknown): boolean;
   create(value: unknown, state: State): ConversationCapabilityCall;
-  receive(child: ConversationCapabilityCall, state: State): Promise<State>;
+  receive(child: ConversationCapabilityCall, state: State): Promise<Stable<Awaited<State>>>;
 }
 
 /** This adapter creates one declared capability; historical lookup does not grant creation. */
@@ -36,7 +37,7 @@ export function conversationCapability<Arguments, State, Definition extends Capa
     readonly schema: z.ZodType<Arguments>;
     readonly available: (state: State) => boolean;
     readonly input: (arguments_: Arguments, state: State) => CallableInput<Definition>;
-    readonly accept: (delivered: CallableOutput<Definition>, state: State, child: ChildCall<Definition>) => State;
+    readonly accept: (delivered: Stable<CallableOutput<Definition>>, state: State, child: ChildCall<Definition>) => State;
   },
   children: CapabilityCalls<NoInfer<Definition>>,
 ): ConversationCapability<State> {

@@ -30,7 +30,10 @@ test('ordinary Work has one business entry and does not expose runtime control o
       },
     ],
   });
-  assert.equal(await installed.run(null, {}), output);
+  const result = await installed.run(null, {});
+  assert.deepEqual(result, output);
+  assert.notEqual(result, output);
+  assert.equal(Object.isFrozen(result), true);
   assert.deepEqual(
     processes.map((process) => [process.stage, process.type]),
     [
@@ -123,7 +126,7 @@ test('recovery has its own declared resource window and never reopens normal run
   });
   const scene = new Scene({ deps: { normal: normal.request() }, run: () => assert.fail('must not replay'), checkpoint: { key: 'access.recovery', version: 2, input: codec, output: codec, points: [point] } }).add(child);
   const store = new MemoryCheckpointStore();
-  store.save({ id: 'image', formatVersion: 5, contract: { key: scene.checkpoint.key, version: 2 }, point: 'saved', frame: { owner: { contextId: 'restored', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'image', formatVersion: 6, contract: { key: scene.checkpoint.key, version: 2 }, point: 'saved', frame: { owner: { contextId: 'restored', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   assert.equal(await assemble(scene, { checkpoints: { store }, providers: [normal.provide(() => null), restored.provide(() => null)] }).resume('restored', {}), 'child result:received');
   assert.deepEqual(realized, ['restored']);
 });
@@ -146,7 +149,7 @@ test('retained restored resource and checkpoint endpoints close permanently at r
   });
   const scene = new Scene({ run: () => assert.fail('must not replay'), checkpoint: { key: 'access.closed', version: 2, input: codec, output: codec, points: [point] } });
   const store = new MemoryCheckpointStore();
-  store.save({ id: 'image', formatVersion: 5, contract: { key: scene.checkpoint.key, version: 2 }, point: 'saved', frame: { owner: { contextId: 'restored', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'image', formatVersion: 6, contract: { key: scene.checkpoint.key, version: 2 }, point: 'saved', frame: { owner: { contextId: 'restored', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   assert.equal(await assemble(scene, { checkpoints: { store }, providers: [offer.provide(() => null)] }).resume('restored', {}), 7);
   assert.throws(() => retained.work.resources.data, /closed|ended/);
   assert.throws(() => retained.endpoint.read(), /closed|ended/);
@@ -196,7 +199,7 @@ test('execute and restored point bodies seal output while entered reception reta
         checkpoint: { key: `output-reception-window.${mode}`, version: 1, input: codec, output: codec, points: [point] },
       }).add(child);
       const store = new MemoryCheckpointStore();
-      if (mode === 'restored') store.save({ id: 'output-window-image', formatVersion: 5, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'output-window-call', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+      if (mode === 'restored') store.save({ id: 'output-window-image', formatVersion: 6, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId: 'output-window-call', kind: 'scene' }, round: 1, phase: 'execute', input: null, currentInput: null, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
       const runtime = assemble(definition, {
         checkpoints: { store },
         providers: [resource.provide(() => null)],
@@ -231,7 +234,10 @@ test('execute and restored point bodies seal output while entered reception reta
       } finally {
         gate.resolve();
       }
-      assert.equal(await completion, final);
+      const result = await completion;
+      assert.deepEqual(result, final);
+      assert.notEqual(result, final);
+      assert.equal(Object.isFrozen(result), true);
       assert.equal(receptionFinished, true);
       assert.equal(await reception, 'child result');
       assert.deepEqual(reads, ['phase resource', 'phase resource']);
@@ -239,7 +245,7 @@ test('execute and restored point bodies seal output while entered reception reta
         events.map((event) => event.kind),
         ['started', 'delta', 'sealed', 'completed'],
       );
-      assert.equal(events.at(-1).result, final);
+      assert.equal(events.at(-1).result, result);
     });
   }
 });

@@ -23,7 +23,7 @@ test('ordinary control-shaped return data never changes invocation execution', a
       return value;
     },
   });
-  assert.equal(await runtime(definition).run('initial', {}), value);
+  assert.deepEqual(await runtime(definition).run('initial', {}), value);
   assert.equal(executions, 1);
   assert.equal('continueWith' in new InvocationContext(null), false);
 });
@@ -65,7 +65,7 @@ test('checkpoint resumes a declared point without replaying run or interpreting 
   assert.equal(await runtime(definition(), new Capture()).run('initial', {}), 'original');
   const restored = new MemoryCheckpointStore();
   restored.save(image, 0);
-  assert.equal(await runtime(definition(), restored).resume(image.frame.owner.contextId, {}), value);
+  assert.deepEqual(await runtime(definition(), restored).resume(image.frame.owner.contextId, {}), value);
   assert.equal(normal, 1);
   assert.equal(resumed, 1);
 });

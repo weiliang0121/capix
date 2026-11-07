@@ -496,7 +496,7 @@ export class ConversationGroup extends Group<AcceptedConversationInput, Generati
     const expectedStep = last.key === 'preparation' ? 0 : last.key === 'decision' || last.key === 'extraction' || last.key === 'maintenance' || !last.returned ? count - 1 : count;
     if (state.step !== expectedStep) throw new Error('Conversation continuation has an inconsistent decision budget');
     let expectedProgress: ExecutionProgress = {};
-    let expectedCandidates: string[] = [];
+    let expectedCandidates: readonly string[] = [];
     for (const child of all) {
       if (child.returned?.status !== 'succeeded' || child.reception.status !== 'accepted') continue;
       if (child.key === 'decision') {

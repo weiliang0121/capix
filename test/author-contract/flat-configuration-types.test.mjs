@@ -77,17 +77,19 @@ test('configuration, factory and assigned callbacks keep their specified receive
   assert.equal(factoryConfiguration.count, 1);
 });
 
-test('producer result validation preserves the actual successful reference', async () => {
+test('producer result validation receives the fixed successful value', async () => {
   const driver = new Driver();
   const output = { value: 1 };
   const direct = new Node({
     output: {
       result(value) {
-        assert.equal(value, output);
+        assert.deepEqual(value, output);
+        assert.notEqual(value, output);
+        assert.ok(Object.isFrozen(value));
         return value;
       },
     },
     run: () => output,
   });
-  assert.equal(await driver.run(driver.build(direct, emptyBinding), null, {}), output);
+  assert.deepEqual(await driver.run(driver.build(direct, emptyBinding), null, {}), output);
 });

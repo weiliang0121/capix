@@ -178,7 +178,7 @@ test('v3 migration adds empty exchange storage without rewriting content, curren
   assert.deepEqual(migrated.exchanges.list(), { items: [] });
   migrated.close();
   files.sql((database) => {
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 7);
     assert.deepEqual({ images: database.prepare('SELECT * FROM checkpoint_images').all(), heads: database.prepare('SELECT * FROM checkpoint_heads').all(), interactions: database.prepare('SELECT * FROM completion_interactions').all() }, original);
   });
 });

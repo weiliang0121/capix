@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { stableValue } from '@capix/contracts';
 import { test } from 'node:test';
 import { ConversationRecording } from '@capix/conversation-service/recording';
 import { RecordBook } from '@capix/records';
@@ -48,15 +49,12 @@ test('disabled recording creates no entries or business summaries, including cal
     return add.call(this, record);
   });
   let described = 0;
-  const input = new Proxy(
-    { text: 'hello' },
-    {
-      ownKeys(value) {
-        described++;
-        return Reflect.ownKeys(value);
-      },
-    },
-  );
+  const input = stableValue({ text: 'hello' });
+  const keys = Object.keys;
+  t.mock.method(Object, 'keys', (value) => {
+    if (value === input) described++;
+    return keys(value);
+  });
   const f = fixture(new Scene({ run: () => 'answer' }));
   assert.deepEqual(f.recording.state(), { status: 'idle' });
   assert.equal(await f.runner.run(input), 'answer');
@@ -224,15 +222,13 @@ test('released feedback reentry cannot transfer the old capture to a newly start
   assert.equal(f.inspect().calls.length, 1);
 });
 
-test('recording projection failure stays isolated and leaves its capture explicitly incomplete', async () => {
-  const input = new Proxy(
-    {},
-    {
-      ownKeys() {
-        throw new Error('projection fault');
-      },
-    },
-  );
+test('recording projection failure stays isolated and leaves its capture explicitly incomplete', async (t) => {
+  const input = stableValue({});
+  const keys = Object.keys;
+  t.mock.method(Object, 'keys', (value) => {
+    if (value === input) throw new Error('projection fault');
+    return keys(value);
+  });
   const f = fixture(new Scene({ run: () => 'business completed' }));
   f.recording.start();
   assert.equal(await f.runner.run(input), 'business completed');

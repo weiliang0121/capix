@@ -118,7 +118,7 @@ test('unconfigured preparation captures current content at execution and never c
     prepared.context.selectedMessages.map((item) => item.message.content),
     ['old', 'just arrived'],
   );
-  assert.equal(prepared.context.message, content.transcript.get(1));
+  assert.deepEqual(prepared.context.message, content.transcript.get(1));
   assert.deepEqual(
     progress.filter((fact) => fact.kind === 'started' && fact.description?.name).map((fact) => fact.description.name),
     ['prepareContext'],

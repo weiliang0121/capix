@@ -193,7 +193,7 @@ test('v5 migration retains exact head bytes, deliveries and identities, subtract
   migrated.close();
   files.sql((database) => {
     const after = snapshot(database);
-    assert.equal(after.version, 6);
+    assert.equal(after.version, 7);
     assert.deepEqual(after.heads, before.heads);
     assert.deepEqual(
       after.images.map((row) => ({ ...row })),

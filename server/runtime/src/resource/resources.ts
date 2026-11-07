@@ -1,7 +1,7 @@
 import type { AnyCallable } from '../binding/declarations.js';
 import type { ChildResourceBinding } from '../binding/resources.js';
 import { type ChildCallable, Callable } from '@capix/structure';
-import type { CallableInput } from '@capix/contracts';
+import type { CallableInput, Stable } from '@capix/contracts';
 import type { InteractionContract } from '@capix/interaction';
 import type { InteractionChannel, Interactions } from '@capix/interaction';
 import { ResourceOffer, type ResourceIdentity, type ResourceProvider, type ResourceRefinement, Resource } from '@capix/resources';
@@ -55,15 +55,15 @@ export class Resources<Options extends object = {}> {
     return this;
   }
 
-  capture<Structure extends AnyCallable, Snapshot>(structure: Structure, capture: (input: CallableInput<Structure>, options: Options) => Synchronous<Snapshot>): CapturedResources<Snapshot> {
+  capture<Structure extends AnyCallable, Snapshot>(structure: Structure, capture: (input: Stable<CallableInput<Structure>>, options: Options) => Synchronous<Snapshot>): CapturedResources<Snapshot> {
     requireCallable(structure);
     if (this.#scopes.has(structure)) throw new Error('Duplicate resource capture scope');
     const registrations: ResourceRegistration[] = [];
-    this.#scopes.set(structure, { capture: (input, options) => synchronous(capture(input as CallableInput<Structure>, options), 'Resource capture'), registrations });
+    this.#scopes.set(structure, { capture: (input, options) => synchronous(capture(input as Stable<CallableInput<Structure>>, options), 'Resource capture'), registrations });
     return new CapturedResources<Snapshot>(registrations);
   }
 
-  refine<Structure extends ChildCallable>(structure: Structure, ...rules: readonly ResourceRefinement<NoInfer<CallableInput<Structure>>>[]): this {
+  refine<Structure extends ChildCallable>(structure: Structure, ...rules: readonly ResourceRefinement<NoInfer<Stable<CallableInput<Structure>>>>[]): this {
     requireCallable(structure);
     if (structure.kind !== 'group' && structure.kind !== 'node') throw new Error('Resource refinement requires a child structure');
     const previous = this.#refinements.get(structure) ?? [];

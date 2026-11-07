@@ -15,7 +15,7 @@ class CapturedStore extends MemoryCheckpointStore {
   writes = [];
   save(image, revision) {
     const head = super.save(image, revision);
-    this.writes.push({ kind: 'save', image, revision });
+    this.writes.push({ kind: 'save', image: this.read(head.contextId).image, commit: image, revision });
     return head;
   }
   finish(id, revision, delivery) {
@@ -341,8 +341,12 @@ test('retry preparation and candidate checkpoints retain the actual rejection di
     const image = writes.at(-1).image;
     const request = image.frame.children.find((child) => child.key === 'regeneration');
     request.input.error = { code: 'EMPTY_OUTPUT', message: 'different declared rejection' };
-    const restored = harness(t, () => assert.fail('invalid continuation cannot access a model'), restoreWrites(writes));
-    await assert.rejects(restored.runtime.resume(writes[0].image.frame.owner.contextId, {}), /rejection|regeneration/i);
+    await assert.rejects(async () => {
+      // Existing fixed child inputs may already be rejected by the Store import;
+      // first appearances are checked against business rejection evidence on resume.
+      const restored = harness(t, () => assert.fail('invalid continuation cannot access a model'), restoreWrites(writes));
+      await restored.runtime.resume(writes[0].image.frame.owner.contextId, {});
+    }, /rejection|regeneration|child identity and input cannot change/i);
   }
 });
 

@@ -7,6 +7,7 @@ import { type ResourceRequirements, ResourceSupply } from '@capix/resources';
 import type { ResourceRefinement } from '@capix/resources';
 import type { InvocationCapabilities } from './capabilities.js';
 import { checkpointFeedback, type CallableFeedbackBinding } from './feedback.js';
+import { stableValue, type Stable } from '@capix/contracts';
 
 export type CallableInvocationStarted<Input, Output, Resources extends object = object> = InvocationStarted<Input, Output, CallableContext<Input, Output, Resources>>;
 
@@ -23,7 +24,7 @@ export interface CallableInvocationRequest<Input, Output, Resources extends obje
   readonly deps?: ResourceRequirements<Resources>;
   readonly initial?: ResourceRequirements;
   readonly supply?: ResourceRequirements;
-  readonly refinements?: readonly ResourceRefinement<Input>[];
+  readonly refinements?: readonly ResourceRefinement<Stable<Input>>[];
   readonly observation?: readonly InvocationObservationDeclaration[];
   readonly description?: InvocationDescription;
   readonly work: InvocationWork<Input, Output, CallableContext<Input, Output, Resources>>;
@@ -47,7 +48,7 @@ export class CallableInvocationBuilder {
     return prepareCheckpointRestoration(checkpointFeedback(this.capabilities.checkpoints, feedback?.checkpoint), work.checkpoint, contextId, { kind, ...(parentContextId ? { parentContextId } : {}) }, construct);
   }
 
-  create<Input, Output, Resources extends object = object>(input: Input, request: CallableInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, CallableContext<Input, Output, Resources>> {
+  create<Input, Output, Resources extends object = object>(input: Input | Stable<Input>, request: CallableInvocationRequest<Input, Output, Resources>): Invocation<Input, Output, CallableContext<Input, Output, Resources>> {
     const parent = request.parent;
     if (parent) this.check(parent);
     const controls = parent ? { signal: parent.context.signal } : request.controls;
@@ -55,12 +56,15 @@ export class CallableInvocationBuilder {
     if (request.supplied && request.resources) throw new Error('Call construction must provide one resource supply');
     const supplied = request.supplied ?? request.resources?.supply ?? parent?.context.resources.supply ?? new ResourceSupply();
     const deps = request.deps ?? ({} as ResourceRequirements<Resources>);
-    const selected = supplied.select(request.supply ?? deps).refine(input, request.refinements ?? []);
+    const fixedInput = stableValue<Input>(input);
+    if (parent) this.check(parent);
+    if (controls?.signal) requireNotCancelled(controls.signal);
+    const selected = supplied.select(request.supply ?? deps).refine(fixedInput, request.refinements ?? []);
     const resources = new InvocationResources(deps, selected.entries, request.initial, request.supply);
     // Resource capture/refinement may run host code; recheck before establishing the child.
     if (parent) this.check(parent);
     if (controls?.signal) requireNotCancelled(controls.signal);
-    const context = new CallableContext<Input, Output, Resources>(input, request.kind, controls, resources, this);
+    const context = new CallableContext<Input, Output, Resources>(fixedInput, request.kind, controls, resources, this);
     if (request.restore) {
       if (!request.work.checkpoint) throw new Error('Checkpoint declaration is missing');
       const frame = request.restore.head.image.frame;

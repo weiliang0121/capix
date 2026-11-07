@@ -12,20 +12,20 @@ export interface ModelProvider {
   invoke(request: ModelRequest, purpose: Purpose, signal: AbortSignal, progress?: ProgressChannel<ModelTextDelta>): Promise<ModelOutput>;
 }
 export interface Selection {
-  historyIndexes: number[];
+  readonly historyIndexes: readonly number[];
 }
 export interface ModelRequest {
-  model: string;
-  messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
-  response_format: { type: 'json_object' };
-  thinking: { type: 'disabled' };
-  max_tokens: number;
-  stream: boolean;
+  readonly model: string;
+  readonly messages: readonly { readonly role: 'system' | 'user' | 'assistant'; readonly content: string }[];
+  readonly response_format: { readonly type: 'json_object' };
+  readonly thinking: { readonly type: 'disabled' };
+  readonly max_tokens: number;
+  readonly stream: boolean;
 }
 export interface ModelOutput {
-  id: string;
-  model: string;
-  content: string;
-  finishReason: string;
-  usage: { promptTokens: number; completionTokens: number; totalTokens: number } | null;
+  readonly id: string;
+  readonly model: string;
+  readonly content: string;
+  readonly finishReason: string;
+  readonly usage: { readonly promptTokens: number; readonly completionTokens: number; readonly totalTokens: number } | null;
 }

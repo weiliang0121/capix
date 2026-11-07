@@ -100,7 +100,14 @@ export class InvocationWorkBinding<Input, Output, Context extends CallableContex
               return [name, { cardinality: reference.many ? ('many' as const) : ('one' as const), position: this.children.position(reference.definition) }];
             }),
           ),
-          check: (_frame: unknown, state: unknown, references: CheckpointReferences, decoded: import('@capix/invocation').DecodedCheckpointFrame) => point.check?.(state, savedCheckpointFacts(decoded, references, this.children, this.#childBindingsBuilder.receptions) as never),
+          check: (_frame: unknown, state: unknown, references: CheckpointReferences, decoded: import('@capix/invocation').DecodedCheckpointFrame) => {
+            const query = savedCheckpointFacts(decoded, references, this.children, this.#childBindingsBuilder.receptions);
+            try {
+              return point.check?.(state, query.facts as never);
+            } finally {
+              query.close();
+            }
+          },
           execute: (_context: Context, invocation: Invocation<Input, Output, Context>, state: unknown, references: CheckpointReferences) => this.resume(point, invocation, state, references),
         },
       ]),

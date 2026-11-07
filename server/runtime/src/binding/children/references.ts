@@ -1,5 +1,5 @@
-import type { ChildContract, ChildReference, ChildFact, ChildFacts, ExceptionOrigin, ContinuationFact, ReceptionDefinition } from '@capix/contracts';
-import { type Invocation, type InvocationRelation, type InvocationTarget, type InvocationExceptionOrigin, type CheckpointContinuationFact, failureFact, RuntimeErrorHelper, isInvocationCancelled } from '@capix/invocation';
+import type { ChildContract, ChildReference, ChildFact, ChildFacts, ExceptionOrigin, ContinuationFact, ReceptionDefinition, Stable, ChildReturnFact } from '@capix/contracts';
+import { type Invocation, type InvocationRelation, type InvocationTarget, type InvocationExceptionOrigin, type CheckpointContinuationFact, failureFact, failureDiagnostic, isInvocationCancelled } from '@capix/invocation';
 import type { CheckpointReference } from '@capix/checkpoint';
 import type { BoundChildren } from './bound.js';
 import type { BoundReceptions } from '../receptions.js';
@@ -23,25 +23,25 @@ export class InvocationChildReferences {
   ) {
     this.facts = Object.freeze({
       get: <D extends ChildContract>(ref: ChildReference<D>) => this.fact(this.require(ref)) as ChildFact<D>,
-      accepted: <D extends ChildContract, Value>(ref: ChildReference<D>, contract: ReceptionDefinition<NoInfer<D>, Value>): Value => {
+      accepted: <D extends ChildContract, Value>(ref: ChildReference<D>, contract: ReceptionDefinition<NoInfer<D>, Value>): Stable<Value> => {
         try {
           const entry = this.require(ref);
           const binding = this.receptions.require(contract, entry.definition as D);
           const reception = entry.relation.reception;
           if (reception.status !== 'accepted' || reception.contract !== binding) throw new Error('Child has no accepted value under this reception contract');
-          return reception.output as Value;
+          return reception.output as Stable<Value>;
         } catch (error) {
           this.parent.reject(error);
           throw error;
         }
       },
-      handled: <D extends ChildContract, Value>(ref: ChildReference<D>, contract: ReceptionDefinition<NoInfer<D>, Value>): Value => {
+      handled: <D extends ChildContract, Value>(ref: ChildReference<D>, contract: ReceptionDefinition<NoInfer<D>, Value>): Stable<Value> => {
         try {
           const entry = this.require(ref);
           const binding = this.receptions.require(contract, entry.definition as D);
           const reception = entry.relation.reception;
           if (reception.status !== 'handled' || reception.contract !== binding) throw new Error('Child has no handled value under this reception contract');
-          return reception.output as Value;
+          return reception.output as Stable<Value>;
         } catch (error) {
           this.parent.reject(error);
           throw error;
@@ -128,9 +128,9 @@ export class InvocationChildReferences {
     const context = target.context;
     const returned = relation.returned;
     const signal = 'signal' in context ? context.signal : undefined;
-    const result = returned?.status === 'succeeded' ? Object.freeze({ status: 'succeeded' as const, output: returned.output }) : returned ? (signal instanceof AbortSignal && isInvocationCancelled(returned.error, signal) ? Object.freeze({ status: 'cancelled' as const, diagnostic: returned.diagnostic ?? RuntimeErrorHelper.format(returned.error) }) : Object.freeze({ status: 'failed' as const, diagnostic: returned.diagnostic ?? RuntimeErrorHelper.format(returned.error), ...(returned.failure ? { failure: Object.freeze(failureFact(returned.failure)) } : {}) })) : undefined;
+    const result: ChildReturnFact<unknown> | undefined = returned?.status === 'succeeded' ? Object.freeze({ status: 'succeeded' as const, output: returned.output }) : returned ? (signal instanceof AbortSignal && isInvocationCancelled(returned.error, signal) ? Object.freeze({ status: 'cancelled' as const, diagnostic: returned.diagnostic ?? failureDiagnostic(returned.error) }) : Object.freeze({ status: 'failed' as const, diagnostic: returned.diagnostic ?? failureDiagnostic(returned.error), ...(returned.failure ? { failure: Object.freeze(failureFact(returned.failure)) } : {}) })) : undefined;
     const reception = relation.reception;
-    const received = reception.status === 'accepted' || reception.status === 'handled' ? Object.freeze({ status: reception.status, value: reception.output }) : reception.status === 'failed' ? Object.freeze({ status: 'failed' as const, diagnostic: reception.diagnostic ?? RuntimeErrorHelper.format(reception.error), ...(reception.failure ? { failure: Object.freeze(failureFact(reception.failure)) } : {}) }) : Object.freeze({ status: reception.status });
+    const received: ChildFact['reception'] = reception.status === 'accepted' || reception.status === 'handled' ? Object.freeze({ status: reception.status, value: reception.output }) : reception.status === 'failed' ? Object.freeze({ status: 'failed' as const, diagnostic: reception.diagnostic ?? failureDiagnostic(reception.error), ...(reception.failure ? { failure: Object.freeze(failureFact(reception.failure)) } : {}) }) : Object.freeze({ status: reception.status });
     return Object.freeze({ ref: entry.ref, ...(relation.key ? { key: relation.key } : {}), parentRound: relation.round as 1 | 2, order: relation.order, input: context.input, returned: result, reception: received, ...(context.progress.round ? { progress: Object.freeze({ round: context.progress.round as 1 | 2, currentInput: context.currentInput, phase: context.progress.phase }) } : {}) });
   }
 

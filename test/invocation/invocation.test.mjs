@@ -15,13 +15,17 @@ test('separate Invocations can overlap without mixing contexts or outputs', asyn
   const firstResult = first.run();
   const secondResult = second.run();
   pending.get('b')(b);
-  assert.equal(await secondResult, b);
+  const bDelivered = await secondResult;
+  assert.deepEqual(bDelivered, b);
+  assert.notEqual(bDelivered, b);
   assert.equal(first.context.status, 'running');
   pending.get('a')(a);
-  assert.equal(await firstResult, a);
+  const aDelivered = await firstResult;
+  assert.deepEqual(aDelivered, a);
+  assert.notEqual(aDelivered, a);
   assert.notEqual(first.context.id, second.context.id);
-  assert.equal(first.context.state.output, a);
-  assert.equal(second.context.state.output, b);
+  assert.equal(first.context.state.output, aDelivered);
+  assert.equal(second.context.state.output, bDelivered);
 });
 
 test('an ended context cannot start a new Invocation or write a start record', async () => {
@@ -207,6 +211,7 @@ test('started registers one invocation even when business code performs several 
 
 test('low-level work fixes its output contract and preserves its execution receiver', async () => {
   const value = { answer: 'result' };
+  let validated;
   let reads = 0;
   let started = false;
   const work = {
@@ -214,7 +219,10 @@ test('low-level work fixes its output contract and preserves its execution recei
       reads++;
       return {
         result: (actual) => {
-          assert.equal(actual, value);
+          assert.deepEqual(actual, value);
+          assert.notEqual(actual, value);
+          assert.equal(Object.isFrozen(actual), true);
+          validated = actual;
           return actual;
         },
       };
@@ -234,6 +242,6 @@ test('low-level work fixes its output contract and preserves its execution recei
     },
   });
   assert.equal(reads, 1);
-  assert.equal(await invocation.run(), value);
+  assert.equal(await invocation.run(), validated);
   assert.equal(reads, 1);
 });

@@ -106,7 +106,7 @@ test('Operation reuses its three Attempt instances while keeping call contexts a
   }
 });
 
-test('Attempt works without a recorder and preserves non-JSON input and output identity', async () => {
+test('Attempt works without a recorder and fixes ordinary data before child consumption', async () => {
   const runtime = createBoundRuntime();
   const contexts = [];
   class Identity extends AttemptFixture {
@@ -119,13 +119,15 @@ test('Attempt works without a recorder and preserves non-JSON input and output i
       return context.input;
     }
   }
-  const input = new Map([['content', 'original']]);
+  const input = { content: 'original', absent: undefined, zero: -0 };
   const operation = new TestOperation(runtime);
   const attempt = new Identity(runtime.attemptInvocationBuilder);
   const output = await invoke(lifecycleFor(runtime).execution({ input, settings: {} }), (execution) => invoke(lifecycleFor(runtime).operation(execution, operation, input), (context, invocation) => attempt.call(invocation, input)));
-  assert.equal(output, input);
-  assert.equal(contexts[0].input, input);
-  assert.equal(contexts[0].state.output, input);
+  assert.deepEqual(output, input);
+  assert.notEqual(output, input);
+  assert.ok(Object.isFrozen(output));
+  assert.deepEqual(contexts[0].input, input);
+  assert.equal(contexts[0].state.output, output);
 });
 
 test('operations can organize any number of named actions without a fixed stage vocabulary', async () => {

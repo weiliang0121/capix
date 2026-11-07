@@ -65,7 +65,7 @@ test('default E/O/A results keep one local output snapshot and survive JSON obse
     validateExecutionRecordSnapshot(snapshot);
     publications.push(snapshot);
   });
-  assert.equal(
+  assert.deepEqual(
     await new Main(runtime.executionInvocationBuilder).call(null, { settings: {} }, (c) => {
       context = c;
     }),
@@ -110,14 +110,15 @@ test('parent reception keeps the child returned snapshot separate from the trans
       work.children.child.invoke(work.input, {
         result: {
           succeeded(value) {
-            if (mutate) value.content = 'changed';
-            return value;
+            assert.ok(Object.isFrozen(value));
+            return mutate ? { ...value, content: 'changed' } : value;
           },
         },
       });
     const input = { content: 'original' };
     const result = await new Runner(scene, new Resources(), undefined, { observations: [bindRecording(recorder)] }).build().run(input);
-    assert.equal(result, input);
+    assert.deepEqual(result, { content: mutate ? 'changed' : 'original' });
+    assert.equal(input.content, 'original');
     const records = [...recorder.book.values()].filter((record) => record instanceof CallableRecord);
     const childRecord = records.find((record) => record.structureKind === 'node');
     const parentRecord = records.find((record) => record.structureKind === 'scene');

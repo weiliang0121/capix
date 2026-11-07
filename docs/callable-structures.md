@@ -118,7 +118,7 @@ work.observation({ event: 'translation-received', length: content.length });
 return content;
 ```
 
-成功默认保留原引用，失败默认继续交付。只执行对应分支；回调失败不再次进入同一 failed。只提供 failed 时，返回类型保留原成功类型与备用值类型。`result` 是这一次操作的接收，不是全节点错误扫描器；取消、越界、必要捕获、CP 和严格观测失败不允许 fallback 掩盖。
+子调用成功值与父接纳值是按成立边界固定的 `Stable<T>`，不再承诺作者原对象身份；失败默认继续交付。资源原子操作本身继续遵守各资源契约，不因采用相同 result 形状而自动获得稳定事实或持久化承诺。只执行对应分支；回调失败不再次进入同一 failed。只提供 failed 时，返回类型保留原成功类型与备用值类型。`result` 是这一次操作的接收，不是全节点错误扫描器；取消、越界、必要捕获、CP 和严格观测失败不允许 fallback 掩盖。
 
 子成功返回与父 accepted 分开；子失败经 failed 处理后仍 returned failed，父关系记 handled。资源方法不变成子 Invocation，仍用资源事实表达。输出 delta 的消费故障隔离；生产者 output.result/output.delta 负责验证最终值和增量，消费侧 result/delta 负责这次接收，两者不混用。
 
@@ -140,7 +140,11 @@ Sequence 以 `new Sequence([node, {node, input?, result?, delta?}, …])` 一次
 
 通常使用 invoke。需要“创建→保存 waiting CP→启动/接收”的边界时，可用 create→checkpoint→call.invoke；需要更细中间步骤时保留 create/run/accept/open/facts。ChildCall.invoke 的接收选项不能晚改创建时已经固定的 output/delta/key。
 
-恢复点使用 `work.checkpoint?.({point,state,refs})`，checkpoint 配置含 key/version、codecs、points 和可选 receptions。具名 reception 是恢复编码契约，属于 checkpoint；普通接收不要求它，也不增加全节点 accept 阶段。恢复点的 resume.deps/uses 明确当前恢复行动，ResumeWork 保留历史事实查询接口。Frame v5 仍可读取历史诊断格式，但新运行只有一轮；旧 round 2/continuation 执行恢复明确拒绝。详情见 [Checkpoint](checkpoints.md)。
+调用输入在资源捕获前隔离，run 返回候选在进入清理前隔离；接纳回调可以生成新值，不能改写孩子的固定交付。即使不开 CP，后续修改原对象也不影响调用事实。`Stable<T>` 支持普通数据和 undefined，不支持 Date、Error、函数或能力对象作为数据交付；真实失败仍使用原异常对象，端点、实体和闭包不会被深冻结。需要修改收到的数组或记录时，业务生成新值。完整值域及额度见 [运行边界](runtime-boundaries.md#稳定调用数据与事实成立)。
+
+output.result 验证收到的是已经固定的最终值，必须返回该值本身；delta 经声明转换后固定并交付。内容固定不代表输出最终成功：清理、取消、严格观测或必要持久化仍可阻止成功。
+
+恢复点使用 `work.checkpoint?.({point,state,refs})`，checkpoint 配置含 key/version、codecs、points 和可选 receptions。具名 reception 是恢复编码契约，属于 checkpoint；普通接收不要求它，也不增加全节点 accept 阶段。恢复点的 resume.deps/uses 明确当前恢复行动，ResumeWork 保留历史事实查询接口。新保存为 Frame v6：固定事实首次编码后按准确引用复用，Store 仍重建完整逻辑 Frame；新运行只有一轮，v5 仅保留低层只读核验，旧 round 2/continuation 的执行恢复也明确拒绝。详情见 [Checkpoint](checkpoints.md)。
 
 保留的边界是：返回、父接纳、实体落实和 CP 提交各自独立；接纳排空后才关闭窗口；最终交付等待已启动子调用退出；未启动关系不阻塞；不自动接纳或停止兄弟。Interaction 独立生存，本地取消不重发请求、不取消外部发送。记录和恢复不能替代实体自己的固定效果凭据。
 

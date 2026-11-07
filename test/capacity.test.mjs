@@ -211,7 +211,7 @@ test('offline capacity smoke suite exercises all service profiles, steady arriva
       assert.equal(value.storage.tables.model_exchange_entries, 0);
       assert.equal(value.storage.checkpointRetainedBodies, value.storage.tables.checkpoint_heads);
       assert.equal(value.storage.checkpointRetainedBodies + value.storage.checkpointDiscardedBodies, value.storage.tables.checkpoint_images);
-      assert.equal(value.storage.archiveJsonBytes, value.storage.checkpointJsonBytes + value.storage.deliveryJsonBytes + value.storage.interactionStoredBytes + value.storage.exchangeStoredBytes + value.storage.exchangeMetadataBytes);
+      assert.equal(value.storage.archiveJsonBytes, value.storage.checkpointJsonBytes + value.storage.checkpointValueJsonBytes + value.storage.checkpointMetadataBytes + value.storage.deliveryJsonBytes + value.storage.interactionStoredBytes + value.storage.exchangeStoredBytes + value.storage.exchangeMetadataBytes);
     }
     for (const content of value.content) {
       assert.equal(content.reloadVerified, profile !== 'memory');
@@ -234,7 +234,7 @@ test('offline capacity smoke suite exercises all service profiles, steady arriva
   const before = readdirSync(closed).sort();
   const measured = measureStorage(closed);
   const frames = analyzeFrames(join(closed, 'session-0.sqlite'));
-  assert.equal(frames.storageFormat, 6);
+  assert.equal(frames.storageFormat, 7);
   assert.equal(frames.totals.retainedBodies, frames.totals.heads);
   assert.ok(frames.totals.discardedBodies > 0);
   assert.equal(frames.totals.imageIdentities, frames.totals.retainedBodies + frames.totals.discardedBodies);

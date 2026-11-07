@@ -3,6 +3,8 @@ export { callableKinds } from './callable/kind.js';
 export type { CallableKind } from './callable/kind.js';
 export type * from './callable/signature.js';
 export type { InvocationIdentity } from './invocation.js';
+export { stableValue, stableValueLimits, StableValueError } from './value.js';
+export type { Stable, StableArray, StableValueErrorCode } from './value.js';
 
 // Operations and the ports shared by authors and running hosts.
 export type * from './operation.js';

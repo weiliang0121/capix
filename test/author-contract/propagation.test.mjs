@@ -76,7 +76,7 @@ test('nested reception failure preserves the outer successful return and inner f
     },
   }).add(outer, inner);
   await assert.rejects(runtime(operation).run(null), (error) => error === exception);
-  assert.equal(facts[0].returned.output, value);
+  assert.deepEqual(facts[0].returned.output, value);
   assert.equal(facts[0].reception.status, 'failed');
   assert.equal(facts[1].returned.status, 'failed');
 });

@@ -24,13 +24,13 @@ export function harness(store, counters, { failDuringHandling = false, reopen = 
   });
   const contract = reception(primary, {
     check(value) {
-      assert.ok(value instanceof Date && Number.isFinite(value.getTime()));
+      assert.ok(typeof value?.iso === 'string' && Number.isFinite(Date.parse(value.iso)));
       return value;
     },
-    encode: (value) => value.toISOString(),
+    encode: (value) => value.iso,
     decode(value) {
       assert.equal(typeof value, 'string');
-      return new Date(value);
+      return { iso: value };
     },
   });
   const point = checkpointPoint()({
@@ -41,7 +41,7 @@ export function harness(store, counters, { failDuringHandling = false, reopen = 
       const first = facts.references.primary;
       assert.equal(first.returned.status, 'failed');
       assert.equal(first.reception.status, 'handled');
-      if (checkResult) assert.equal(facts.children.handled(first.ref, contract).toISOString(), iso);
+      if (checkResult) assert.equal(facts.children.handled(first.ref, contract).iso, iso);
     },
     resume: {
       async run(work, _state, refs) {
@@ -51,10 +51,11 @@ export function harness(store, counters, { failDuringHandling = false, reopen = 
         assert.equal(first.returned.diagnostic instanceof Error, false);
         assert.equal(first.returned.diagnostic.message, 'primary source failed');
         const value = work.children.facts.handled(refs.primary, contract);
-        assert.ok(value instanceof Date);
+        assert.equal(typeof value.iso, 'string');
+        assert.equal(Object.isFrozen(value), true);
         if (reopen) return work.children.open(refs.primary).run();
         work.checkpoint({ point, state: null, refs });
-        return value.toISOString();
+        return value.iso;
       },
     },
   });
@@ -71,7 +72,7 @@ export function harness(store, counters, { failDuringHandling = false, reopen = 
               const first = work.children.facts.requireUnique(primary, { parentRound: 1 });
               work.checkpoint({ point, state: null, refs: { primary: first.ref } });
             }
-            return new Date(await work.children.invoke(backup, null));
+            return { iso: await work.children.invoke(backup, null) };
           },
         },
       });
@@ -80,7 +81,7 @@ export function harness(store, counters, { failDuringHandling = false, reopen = 
       assert.equal(first.reception.status, 'handled');
       assert.equal(work.children.facts.handled(first.ref, contract), value);
       work.checkpoint({ point, state: null, refs: { primary: first.ref } });
-      return value.toISOString();
+      return value.iso;
     },
   }).add(primary, backup);
   return new Runner(scene, new Resources(), undefined, { checkpoints: { store } }).build();
@@ -92,8 +93,9 @@ export async function capture(options) {
   const store = {
     read: (id) => memory.read(id),
     save(image, revision) {
-      images.push(image);
-      return memory.save(image, revision);
+      const receipt = memory.save(image, revision);
+      images.push(memory.read(receipt.contextId).image);
+      return receipt;
     },
     finish: (id, revision, delivery) => memory.finish(id, revision, delivery),
   };

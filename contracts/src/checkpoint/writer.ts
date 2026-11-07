@@ -9,5 +9,5 @@ export interface CheckpointPointOwner<Kind extends CallableKind, Input, Output, 
 }
 
 export interface AuthorCheckpointWriter<Kind extends CallableKind, Input, Output, Delta = never> {
-  <Point extends CheckpointPointOwner<Kind, Input, Output, Delta> & { readonly state: CheckpointCodec<unknown>; readonly references: CheckpointReferenceSlots }>(options: { readonly point: Point; readonly state: NoInfer<Point extends { readonly state: CheckpointCodec<infer State> } ? State : never> } & (keyof Point['references'] extends never ? { readonly refs?: NoInfer<SavedReferences<Point['references']>> } : { readonly refs: NoInfer<SavedReferences<Point['references']>> })): void;
+  <Point extends CheckpointPointOwner<Kind, Input, Output, Delta> & { readonly state: CheckpointCodec<any>; readonly references: CheckpointReferenceSlots }>(options: { readonly point: Point; readonly state: NoInfer<ReturnType<Point['state']['decode']>> } & (keyof Point['references'] extends never ? { readonly refs?: NoInfer<SavedReferences<Point['references']>> } : { readonly refs: NoInfer<SavedReferences<Point['references']>> })): void;
 }

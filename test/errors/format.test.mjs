@@ -127,14 +127,124 @@ test('non-Error throws, unreadable properties and revoked proxies remain recorda
   proxy.revoke();
   for (const error of [undefined, null, 'thrown string', 42, 1n, Symbol('x'), () => {}, { reason: 'bad' }, proxy.proxy]) recordable(RuntimeErrorHelper.format(error));
   const error = new Error('test');
+  let reads = 0;
   Object.defineProperty(error, 'stack', {
     get() {
+      reads++;
       throw new Error('unreadable');
     },
   });
   const value = recordable(RuntimeErrorHelper.format(error));
   assert.equal(value.message, 'test');
-  assert.equal(value.stack, '[Unreadable property]');
+  assert.equal(value.stack, '[Accessor not evaluated]');
+  assert.equal(reads, 0);
+});
+
+test('error fields and aggregate members are inspected as data without running author accessors', () => {
+  let reads = 0;
+  const error = new AggregateError([], 'opaque');
+  for (const key of ['code', 'message', 'name', 'stack', 'detail', 'cause', 'errors'])
+    Object.defineProperty(error, key, {
+      configurable: true,
+      get() {
+        reads++;
+        throw new Error('must not execute');
+      },
+    });
+  const opaque = recordable(RuntimeErrorHelper.format(error));
+  assert.equal(reads, 0);
+  assert.equal(opaque.message, '[Accessor not evaluated]');
+  assert.equal(opaque.errors[0].code, 'UNREADABLE_ERROR');
+  const members = [new Error('retained')];
+  Object.defineProperty(members, '1', {
+    get() {
+      reads++;
+      throw new Error('must not execute');
+    },
+  });
+  const nested = new AggregateError([], 'members');
+  nested.errors = members;
+  const value = recordable(RuntimeErrorHelper.format(nested));
+  assert.equal(reads, 0);
+  assert.equal(value.errors[0].message, 'retained');
+  assert.equal(value.errors[1].code, 'NON_ERROR_THROWN');
+  assert.equal(value.errors[1].detail, '[Accessor not evaluated]');
+});
+
+test('proxy errors and aggregate member arrays do not run diagnostic traps', () => {
+  let traps = 0;
+  const handler = Object.fromEntries(
+    ['get', 'getPrototypeOf', 'getOwnPropertyDescriptor', 'ownKeys'].map((name) => [
+      name,
+      () => {
+        traps++;
+        throw new Error(`diagnostics must not invoke ${name}`);
+      },
+    ]),
+  );
+  const wrapped = new Proxy(new Error('original'), handler);
+  assert.equal(recordable(RuntimeErrorHelper.format(wrapped)).code, 'UNREADABLE_ERROR');
+  const members = new Proxy([new Error('member')], handler);
+  const aggregate = new AggregateError([], 'original aggregate');
+  aggregate.errors = members;
+  const value = recordable(RuntimeErrorHelper.format(aggregate));
+  assert.equal(value.message, 'original aggregate');
+  assert.equal(value.errors[0].code, 'UNREADABLE_ERROR');
+  assert.equal(traps, 0);
+  assert.equal(aggregate.errors, members, 'diagnostic isolation never replaces the live error');
+});
+
+test('native lazy stacks do not call author name getters or replacement stack formatters', () => {
+  let reads = 0;
+  const named = new Error('message');
+  Object.defineProperty(named, 'name', {
+    get() {
+      reads++;
+      return 'custom';
+    },
+  });
+  assert.equal(RuntimeErrorHelper.format(named).stack, '[Accessor not evaluated]');
+  assert.equal(reads, 0);
+  const original = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+  try {
+    Object.defineProperty(Error, 'prepareStackTrace', {
+      configurable: true,
+      value() {
+        reads++;
+        return 'custom stack';
+      },
+    });
+    assert.equal(RuntimeErrorHelper.format(new Error('message')).stack, '[Accessor not evaluated]');
+    assert.equal(reads, 0);
+  } finally {
+    if (original) Object.defineProperty(Error, 'prepareStackTrace', original);
+    else delete Error.prepareStackTrace;
+  }
+});
+
+test('inherited data diagnostics remain readable and hostile prototype chains are bounded', () => {
+  const prototype = Object.create(Error.prototype, { code: { value: 'INHERITED' } });
+  const error = new Error('original');
+  Object.setPrototypeOf(error, prototype);
+  assert.equal(RuntimeErrorHelper.format(error).code, 'INHERITED');
+  let inspected = 0;
+  const loop = new Proxy(
+    {},
+    {
+      getOwnPropertyDescriptor() {
+        inspected++;
+        return undefined;
+      },
+      getPrototypeOf() {
+        return loop;
+      },
+    },
+  );
+  Object.setPrototypeOf(error, loop);
+  const value = recordable(RuntimeErrorHelper.format(error));
+  assert.equal(value.message, 'original');
+  assert.equal(value.code, '[Unreadable property]');
+  assert.ok(inspected < 100, 'each requested field has a finite prototype search');
 });
 
 test('circular and oversized diagnostics stop with visible markers', () => {

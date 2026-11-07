@@ -24,10 +24,10 @@ test('an exact child reference separates returned output from parent reception',
     async execute(work) {
       facts = work.children.facts;
       call = work.children.create(child, null);
-      assert.equal(await call.run(), delivered);
+      assert.deepEqual(await call.run(), delivered);
       assert.equal(facts.get(call.ref).reception.status, 'pending');
       return work.children.open(call.ref).accept((value) => {
-        assert.equal(value, delivered);
+        assert.deepEqual(value, delivered);
         return value.value * 2;
       });
     },
@@ -187,12 +187,12 @@ test('resuming a saved final child delivery needs no child invocation constructi
   const store = new MemoryCheckpointStore();
   const childIdentity = { contextId: 'child-context', kind: 'group', parentContextId: 'parent-context' };
   const childContract = { key: definition.checkpoint.key, version: 1 };
-  store.save({ id: 'child-cp', formatVersion: 5, contract: childContract, point: 'saved', frame: { owner: childIdentity, round: 1, phase: 'execute', input: 'child', currentInput: 'child', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'child-cp', formatVersion: 6, contract: childContract, point: 'saved', frame: { owner: childIdentity, round: 1, phase: 'execute', input: 'child', currentInput: 'child', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   store.finish('child-context', 1, { status: 'succeeded', output: { answer: 'saved' }, progress: { round: 1, phase: 'receive', currentInput: 'child' } });
   store.save(
     {
       id: 'parent-cp',
-      formatVersion: 5,
+      formatVersion: 6,
       contract: { key: 'test.lazy.parent', version: 1 },
       point: 'waiting',
       frame: { owner: { contextId: 'parent-context', kind: 'scene' }, round: 1, phase: 'execute', input: 'parent', currentInput: 'parent', nextChildOrder: 1, children: [{ identity: childIdentity, target: { position: 0 }, contract: childContract, round: 1, order: 0, input: 'child', state: { kind: 'waiting' } }] },

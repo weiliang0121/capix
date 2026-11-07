@@ -1,4 +1,5 @@
 import { modelRequestCodec } from '../../model/checkpoint.js';
+import type { Stable } from '@capix/contracts';
 import { checkLeafResult } from '../../group/checkpoint.js';
 import { ModelSettingsResource } from '../../model/resources.js';
 import type { ResourceRequirements } from '@capix/resources';
@@ -13,7 +14,7 @@ import { checkCapacity } from '../../model/capacity.js';
 export class PrepareModelRequest<Input, Resources extends ModelRequestResources = ModelRequestResources> extends Node<Input, ModelRequest, Resources> {
   static readonly deps = Object.freeze({ settings: ModelSettingsResource.snapshot.request() });
 
-  constructor(createRequest: (input: Input, resources: Resources) => ModelRequest, deps: ResourceRequirements<Resources> = PrepareModelRequest.deps as ResourceRequirements<Resources>) {
+  constructor(createRequest: (input: Stable<Input>, resources: Resources) => ModelRequest, deps: ResourceRequirements<Resources> = PrepareModelRequest.deps as ResourceRequirements<Resources>) {
     const resultPoint = checkpointPoint<'node', Input, ModelRequest>()({ name: 'result', state: modelRequestCodec, references: {}, check: (_state, facts) => checkLeafResult(facts), resume: { run: (_work, output) => output } });
     super();
     this.deps = deps;

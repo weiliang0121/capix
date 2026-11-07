@@ -38,9 +38,9 @@ test('Sequence is a Group whose accepted results feed the next step, with origin
   assert.deepEqual(seen, ['notes.md', 'next.md']);
 });
 
-test('empty Sequence returns the exact input; repeated steps share a member, never a call', async () => {
+test('empty Sequence returns stable input; repeated steps share a member, never a call', async () => {
   const original = { value: 1 };
-  assert.equal(await install(new Sequence([])).run(original), original);
+  assert.deepEqual(await install(new Sequence([])).run(original), original);
   const node = new Node({ run: (work) => work.input + 1 });
   const sequence = new Sequence([node, node]);
   const calls = [];

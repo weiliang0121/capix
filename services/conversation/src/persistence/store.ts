@@ -31,7 +31,10 @@ export class ConversationStore {
   readonly transcript: TranscriptPersistence = Object.freeze({ commit: (change: TranscriptCommit) => this.commitTranscript(change) });
   readonly memories: MemoriesPersistence = Object.freeze({ commit: (change: MemoriesCommit) => this.commitMemories(change) });
   readonly view: ViewPersistence<ConversationMaterialSources> = Object.freeze({ commit: (change: ViewCommit<ConversationMaterialSources>) => this.commitView(change) });
-  readonly checkpoints: ConversationCheckpoints;
+  readonly #checkpoints: Readonly<SqliteCheckpoints>;
+  get checkpoints(): ConversationCheckpoints {
+    return this.#checkpoints;
+  }
   readonly interactions: ConversationInteractions;
   readonly exchanges: ConversationExchanges;
 
@@ -69,7 +72,7 @@ export class ConversationStore {
 
   private constructor(database: DatabaseSync) {
     this.#database = database;
-    this.checkpoints = Object.freeze(new SqliteCheckpoints(database, (operation, work) => this.transaction(operation, work, true)));
+    this.#checkpoints = Object.freeze(new SqliteCheckpoints(database, (operation, work) => this.transaction(operation, work, true)));
     this.interactions = Object.freeze(new SqliteInteractions(database, (operation, work) => this.transaction(operation, work, true)));
     this.exchanges = Object.freeze(new SqliteExchanges(database, (operation, work) => this.transaction(operation, work, true)));
   }
@@ -90,7 +93,7 @@ export class ConversationStore {
       if (integrity.length !== 1 || integrity[0]?.quick_check !== 'ok') throw new Error('Conversation database integrity check failed');
       const row = this.#database.prepare('SELECT * FROM content').get();
       if (!row) {
-        for (const table of ['messages', 'memories', 'append_receipts', 'apply_receipts', 'checkpoint_images', 'checkpoint_heads', 'completion_interactions', 'model_exchanges', 'model_exchange_entries', 'model_exchange_operations']) if (this.#database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('Content identities are missing from a nonempty database');
+        for (const table of ['messages', 'memories', 'append_receipts', 'apply_receipts', 'checkpoint_images', 'checkpoint_heads', 'checkpoint_values', 'checkpoint_relations', 'completion_interactions', 'model_exchanges', 'model_exchange_entries', 'model_exchange_operations']) if (this.#database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('Content identities are missing from a nonempty database');
         return undefined;
       }
       const saved = metadata.parse(row);
@@ -128,7 +131,7 @@ export class ConversationStore {
   initialize(state: ConversationState): void {
     this.transaction('conversation.initialize', () => {
       if (this.#database.prepare('SELECT 1 FROM content').get()) throw new Error('Conversation content already exists');
-      for (const table of ['messages', 'memories', 'append_receipts', 'apply_receipts', 'checkpoint_images', 'checkpoint_heads', 'completion_interactions', 'model_exchanges', 'model_exchange_entries', 'model_exchange_operations']) if (this.#database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('Cannot initialize over orphaned content');
+      for (const table of ['messages', 'memories', 'append_receipts', 'apply_receipts', 'checkpoint_images', 'checkpoint_heads', 'checkpoint_values', 'checkpoint_relations', 'completion_interactions', 'model_exchanges', 'model_exchange_entries', 'model_exchange_operations']) if (this.#database.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('Cannot initialize over orphaned content');
       const accepted = checkedState(state);
       this.#database.prepare('INSERT INTO content VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)').run(accepted.transcript.id, accepted.transcript.revision, JSON.stringify(accepted.transcript.starts), accepted.transcript.messages.length, accepted.memories.id, accepted.memories.sequence, accepted.view.revision, JSON.stringify(accepted.view));
       const append = this.#database.prepare('INSERT INTO messages VALUES (?, ?)');
@@ -147,6 +150,8 @@ export class ConversationStore {
       this.#closed = true;
     } catch (cause) {
       throw this.fail('conversation.close', cause);
+    } finally {
+      this.#checkpoints.clearCache();
     }
   }
 

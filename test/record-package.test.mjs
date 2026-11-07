@@ -208,7 +208,7 @@ test('automatic recording uses independent writer windows without changing resul
   const resources = new Resources().register(new Resource(recorder), RecordResource.write);
   const runner = new Runner(new Scene(node), resources, undefined, { observations: [installation] }).build();
   const output = { content: 'same reference' };
-  assert.equal(await runner.run(output), output);
+  assert.deepEqual(await runner.run(output), output);
   const records = [...recorder.book.values()];
   const calls = records.filter((record) => record instanceof CallableRecord);
   const scene = calls.find((record) => record.structureKind === 'scene');
@@ -270,7 +270,7 @@ test('record write failure follows isolate or propagate without replaying succes
     });
     const runner = new Runner(new Scene(node), new Resources(), undefined, { observations: [installation] }).build();
     const output = { content: 'completed before recording failed' };
-    if (failure === 'isolate') assert.equal(await runner.run(output), output);
+    if (failure === 'isolate') assert.deepEqual(await runner.run(output), output);
     else
       await assert.rejects(runner.run(output), (error) => {
         const pending = [error];

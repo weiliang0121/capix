@@ -2,11 +2,11 @@ import { types } from 'node:util';
 import { Group } from '../group.js';
 import type { MemberInput } from './input.js';
 import type { ChildCallable } from '../definition/children.js';
-import type { CallableInput, CallableOutput } from '@capix/contracts';
+import type { CallableInput, CallableOutput, Stable } from '@capix/contracts';
 import type { MemberRegistration, NamedMembers } from '../definition/composition.js';
 import { checkMemberName } from '../members.js';
 
-export type DynamicCall<Options extends NamedMembers> = { [Name in keyof Options & string]: { readonly kind: 'call'; readonly option: Name; readonly input: MemberInput<Options[Name]> } }[keyof Options & string];
+export type DynamicCall<Options extends NamedMembers> = { [Name in keyof Options & string]: { readonly kind: 'call'; readonly option: Name; readonly input: MemberInput<Options[Name]> | Stable<MemberInput<Options[Name]>> } }[keyof Options & string];
 export type DynamicFinish<Output> = { readonly kind: 'finish'; readonly value: Output };
 export type DynamicDecision<Options extends NamedMembers, Output> = DynamicCall<Options> | DynamicFinish<Output>;
 
@@ -40,7 +40,7 @@ export class Dynamic<const Options extends NamedMembers, Decision extends ChildC
       for (let step = 0; step <= maxSteps; step++) {
         const next: unknown = await work.children.invoke(decision, work.input, { key: `decision:${step}` });
         const selected = checkDecision(next, options);
-        if (selected.kind === 'finish') return selected.value as DynamicOutput<Decision>;
+        if (selected.kind === 'finish') return selected.value as Stable<DynamicOutput<Decision>>;
         if (step < maxSteps) await work.children.invoke(selected.node, selected.input, { key: `option:${step}:${selected.option}` });
       }
       throw new Error(`Dynamic exceeded ${maxSteps} action steps`);

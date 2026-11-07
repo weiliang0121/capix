@@ -1,5 +1,5 @@
 import type { ResourceRequirements, ResourceRequests, ResourcesOf } from '@capix/resources';
-import type { CallableKind, CheckpointCodec, CheckpointContract, ChildContract, ChildReferenceSlot, CheckpointReferenceSlots, SavedReferences, CheckpointFacts, CheckpointPointOwner } from '@capix/contracts';
+import type { Stable, CallableKind, CheckpointCodec, CheckpointContract, ChildContract, ChildReferenceSlot, CheckpointReferenceSlots, SavedReferences, CheckpointFacts, CheckpointPointOwner } from '@capix/contracts';
 import type { ChildContractsOf } from './children.js';
 import type { ResumeWork } from './work.js';
 import type { DefinitionReceptions } from './reception.js';
@@ -17,11 +17,11 @@ export interface InvocationCheckpointPoint<Input, Output, Kind extends CallableK
   readonly name: string;
   readonly state: CheckpointCodec<State>;
   readonly references: Slots;
-  check?(state: State, facts: CheckpointFacts<Input, Slots>): void;
+  check?(state: Stable<State>, facts: CheckpointFacts<Input, Slots>): void;
   readonly resume: {
     readonly deps: ResourceRequirements<Resources>;
     readonly uses?: readonly Allowed[];
-    run(work: ResumeWork<Kind, Input, Output, Resources, Allowed, Delta>, state: State, saved: SavedReferences<Slots>): Output | Promise<Output>;
+    run(work: ResumeWork<Kind, Input, Output, Resources, Allowed, Delta>, state: Stable<State>, saved: SavedReferences<Slots>): Output | Stable<Output> | Promise<Output | Stable<Output>>;
   };
 }
 
@@ -37,11 +37,11 @@ interface PointOptions<Kind extends CallableKind, Input, Output, State, Slots ex
   readonly name: string;
   readonly state: CheckpointCodec<State>;
   readonly references: Slots;
-  readonly check?: (state: NoInfer<State>, facts: CheckpointFacts<Input, NoInfer<Slots>>) => void;
+  readonly check?: (state: NoInfer<Stable<State>>, facts: CheckpointFacts<Input, NoInfer<Slots>>) => void;
   readonly resume: {
     readonly deps?: Deps;
     readonly uses?: Uses;
-    readonly run: (work: ResumeWork<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, Uses[number], Delta>, state: NoInfer<State>, saved: SavedReferences<NoInfer<Slots>>) => Output | Promise<Output>;
+    readonly run: (work: ResumeWork<Kind, Input, Output, ResourcesOf<NoInfer<Deps>>, Uses[number], Delta>, state: NoInfer<Stable<State>>, saved: SavedReferences<NoInfer<Slots>>) => Output | Stable<Output> | Promise<Output | Stable<Output>>;
   };
 }
 

@@ -1,6 +1,7 @@
 import { brotliCompressSync, brotliDecompressSync, constants } from 'node:zlib';
 import { CHECKPOINT_MAX_BYTES, cloneCheckpointImage, cloneCheckpointDelivery, type CheckpointImage, type CheckpointDelivery } from '@capix/checkpoint';
 import { z } from 'zod';
+import { decodeCheckpointData } from '@capix/checkpoint/storage';
 
 // This is a SQLite representation, not a new Checkpoint Frame or recovery contract.
 const payloadSchema = z.strictObject({ encoding: z.literal('br'), jsonBytes: z.number().int().positive().max(CHECKPOINT_MAX_BYTES), data: z.string() });
@@ -16,7 +17,8 @@ export function decodeCheckpointImage(body: string): CheckpointImage {
 }
 
 export function decodeCheckpointDelivery(body: string): CheckpointDelivery {
-  return cloneCheckpointDelivery(decodeCheckpointStorage(body));
+  const value = decodeCheckpointStorage(body);
+  return cloneCheckpointDelivery(value && typeof value === 'object' && 'format' in value && value.format === 'capix.checkpoint.value@1' ? decodeCheckpointData(JSON.stringify(value)) : value);
 }
 
 /** Migration validates storage and identity without certifying an old Frame as recoverable. */

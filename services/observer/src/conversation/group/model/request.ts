@@ -148,7 +148,8 @@ function originalRequest(facts: CheckpointFacts<ModelRequest>): void {
   if (facts.round !== 1 || !isEqual(facts.initialInput, facts.input)) throw new Error('Model feedback checkpoint must preserve its original request');
 }
 
-function acceptedOutput<D extends InvokeModel | FollowModel>(child: ChildFact<D>): import('@capix/server-runtime').CallableOutput<D> {
+function acceptedOutput<D extends InvokeModel | FollowModel>(child: ChildFact<D>): Stable<import('@capix/server-runtime').CallableOutput<D>> {
   if (child.parentRound !== 1 || child.returned?.status !== 'succeeded' || child.reception.status !== 'accepted' || !isEqual(child.returned.output, child.reception.value)) throw new Error('Model feedback checkpoint requires a returned and accepted child');
   return child.returned.output;
 }
+import type { Stable } from '@capix/contracts';

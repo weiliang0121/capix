@@ -65,7 +65,7 @@ test('request-model keeps its progress subscription until the follow child retur
     providers: [ModelSettingsResource.snapshot.provide(() => settings), ModelSettingsResource.timeout.provide(() => settings.timeoutMs), ModelResource.create.provide(() => interactions), ModelResource.read.provide(() => interactions)],
     source: { entry: () => null, capture: () => null },
   });
-  assert.equal(await runtime.run(request, {}), output);
+  assert.deepEqual(await runtime.run(request, {}), output);
   assert.equal(starts, 1);
   assert.equal(detachCount, 1);
   assert.equal(subscribed, false);

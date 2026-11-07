@@ -7,12 +7,12 @@ import { decodeCheckpointFrame } from '@capix/server-runtime/construction';
 import { capture, harness, iso } from './fixtures/handled.mjs';
 
 const codec = { encode: (value) => value, decode: (value) => value };
-const binding = { position: 0, childPosition: 0, check: (value) => assert.ok(value instanceof Date), codec: { encode: (value) => value.toISOString(), decode: (value) => new Date(value) } };
+const binding = { position: 0, childPosition: 0, check: (value) => assert.equal(typeof value?.iso, 'string'), codec: { encode: (value) => value.iso, decode: (value) => ({ iso: value }) } };
 
 function image() {
   return {
     id: 'handled-image',
-    formatVersion: 5,
+    formatVersion: 6,
     contract: { key: 'parent', version: 1 },
     point: 'handled',
     frame: {
@@ -45,13 +45,13 @@ function image() {
 }
 const decode = (source, receptions = [binding]) => decodeCheckpointFrame(cloneCheckpointImage(source).frame, { input: codec, output: codec }, [{ kind: 'node' }], receptions);
 
-test('v5 keeps a same-round failure and its typed handled result as independent facts', () => {
+test('v6 keeps a same-round failure and its typed handled result as independent facts', () => {
   const decoded = decode(image());
   const state = decoded.children[0].state;
   assert.equal(state.kind, 'failed');
   assert.equal(state.failure.kind, 'error');
   assert.equal(state.reception.kind, 'handled');
-  assert.equal(state.reception.output.toISOString(), iso);
+  assert.equal(state.reception.output.iso, iso);
   assert.equal(state.error instanceof Error, false);
   const raw = image();
   raw.frame.children[0].state.reception = { kind: 'handled' };
@@ -80,7 +80,7 @@ test('handled undefined has an explicit codec and cannot be confused with missin
   assert.equal(handled.output, undefined);
 });
 
-test('v5 rejects unfinished, misattributed or relabelled same-round failure handling', () => {
+test('v6 rejects unfinished, misattributed or relabelled same-round failure handling', () => {
   const mutations = [
     (source) => {
       delete source.frame.children[0].state.reception;
@@ -128,7 +128,7 @@ test('v5 rejects unfinished, misattributed or relabelled same-round failure hand
 test('handled codecs remain attached to the exact parent reception and child positions', () => {
   assert.throws(() => decode(image(), []), /reception contract position/);
   assert.throws(() => decode(image(), [{ ...binding, childPosition: 1 }]), /child declaration/);
-  assert.throws(() => decode(image(), [{ ...binding, codec: { ...binding.codec, decode: () => 'not a Date' } }]), /assertion|instanceof/i);
+  assert.throws(() => decode(image(), [{ ...binding, codec: { ...binding.codec, decode: () => ({ invalid: true }) } }]), /assertion|equal/i);
 });
 
 for (const nested of [false, true])
@@ -140,7 +140,7 @@ for (const nested of [false, true])
     const saved = JSON.parse(original.stdout);
     assert.equal(saved.result, iso);
     assert.deepEqual(saved.counters, { primary: 1, backup: 1, handled: 1 });
-    assert.equal(saved.image.formatVersion, 5);
+    assert.equal(saved.image.formatVersion, 6);
     assert.equal(saved.image.frame.round, 1);
     assert.equal(saved.image.frame.children[0].state.kind, 'failed');
     assert.equal(saved.image.frame.children[0].state.reception.kind, 'handled');

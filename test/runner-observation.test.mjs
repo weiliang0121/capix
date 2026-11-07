@@ -428,7 +428,7 @@ test('separate recovery activities keep one context identity but distinct entry 
   store.save(
     {
       id: 'saved-image',
-      formatVersion: 5,
+      formatVersion: 6,
       contract: { key: 'restored-observation', version: 1 },
       point: 'saved',
       frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: 'PRIVATE_RESTORED_INPUT', currentInput: 'PRIVATE_RESTORED_INPUT', nextChildOrder: 0, children: [] },

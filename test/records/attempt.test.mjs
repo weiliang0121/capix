@@ -56,14 +56,14 @@ test('each named action invocation has its own attempt; an unsuccessful attempt 
   );
   assert.notEqual(during.attempts[0].id, during.attempts[1].id);
   input.text = 'changed';
-  assert.equal(second.input.text, 'changed');
+  assert.equal(second.input.text, 'original');
   assert.equal(secondRecord.value.input.text, 'original');
   const output = { accepted: true };
   secondLifecycle.succeed(second, output);
   operationLifecycle.succeed(operation, output);
   executionLifecycle.succeed(execution, output);
   output.accepted = false;
-  assert.equal(second.state.output.accepted, false);
+  assert.equal(second.state.output.accepted, true);
   assert.equal(readOutput(secondRecord.value).accepted, true);
   assert.throws(() => second.complete({}), /ended/);
   assert.throws(() => lifecycleFor(runtime).attempt(operation, attempt, {}).begin(), /ended/);

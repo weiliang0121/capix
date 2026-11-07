@@ -1,6 +1,6 @@
 import type { InvocationIdentity } from '@capix/contracts';
 import type { ProgressReceiver } from '@capix/changes';
-import type { CheckpointChild, CheckpointDelivery, CheckpointHead, CheckpointImage, CheckpointReferences, CheckpointStore, InvocationCheckpointFrame } from '@capix/checkpoint';
+import type { CheckpointChild, CheckpointDelivery, CheckpointHead, CheckpointImage, CheckpointSaveReceipt, CheckpointReferences, CheckpointStore, InvocationCheckpointFrame } from '@capix/checkpoint';
 
 export type CheckpointFact = Readonly<
   {
@@ -21,7 +21,7 @@ export interface CheckpointInstallation {
 }
 
 export interface CheckpointWriter {
-  save(point: string, state: unknown, references?: CheckpointReferences): CheckpointImage;
+  save(point: string, state: unknown, references?: CheckpointReferences): CheckpointSaveReceipt;
 }
 
 /** Internal construction data; never accepted from a business invocation view. */

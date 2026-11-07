@@ -35,8 +35,8 @@ test('Runner output subscriptions span independent runs and coexist with exact s
   const first = { label: 'first' };
   const second = { label: 'second' };
 
-  assert.equal(await runner.run(first), first);
-  assert.equal(await runner.run(second), second);
+  assert.deepEqual(await runner.run(first), first);
+  assert.deepEqual(await runner.run(second), second);
   assert.deepEqual(
     events.map((event) => event.kind),
     ['started', 'delta', 'sealed', 'completed', 'started', 'delta', 'sealed', 'completed'],
@@ -48,8 +48,8 @@ test('Runner output subscriptions span independent runs and coexist with exact s
   assert.notEqual(events[0].contextId, events[4].contextId);
   assert.ok(events.slice(0, 4).every((event) => event.contextId === events[0].contextId));
   assert.ok(events.slice(4).every((event) => event.contextId === events[4].contextId));
-  assert.equal(events[3].result, first);
-  assert.equal(events[7].result, second);
+  assert.deepEqual(events[3].result, first);
+  assert.deepEqual(events[7].result, second);
   assert.equal(events.length, hookEvents.length);
   assert.ok(
     events.every(({ entryId, ...event }, index) => {
@@ -397,7 +397,7 @@ test('Runner output subscriptions also receive restored root output while resume
   store.save(
     {
       id: 'runner-ports-image',
-      formatVersion: 5,
+      formatVersion: 6,
       contract: { key: 'runner-ports', version: 1 },
       point: 'saved',
       frame: { owner: { contextId, kind: 'scene' }, round: 1, phase: 'execute', input: 'fixed input', currentInput: 'fixed input', nextChildOrder: 0, children: [] },

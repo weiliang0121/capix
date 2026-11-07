@@ -7,7 +7,7 @@ import { Transcript } from '@capix/transcript';
 import { ResourceAccessClosed, ResourceOffer } from '@capix/resources';
 
 function call({ observe, failure, work, parent, declarations, resources, capture, installations = [] } = {}) {
-  const context = new InvocationContext({ mutable: new Map() });
+  const context = new InvocationContext({ value: [] });
   const identity = { contextId: context.id, kind: 'node', ...(parent ? { parentContextId: parent.context.id } : {}) };
   return new Invocation({ context, identity, parent: parent ? { invocation: parent } : undefined, signal: new AbortController().signal, work: { execute: () => 'output', ...work }, observation: bindInvocationObservation({ identity, resources: resources ?? new ResourceBindings({}), declarations: declarations ?? [defineObservation({ deps: {}, observe: observe ?? (() => undefined) }, { failure })] }, installations, parent?.observation), changes: capture ? new InvocationChangeEmitter(identity, capture) : undefined });
 }

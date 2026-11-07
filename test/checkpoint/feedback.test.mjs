@@ -22,7 +22,7 @@ function create(work, checkpoints, { restore, resources = new InvocationResource
 }
 
 function saved(store) {
-  store.save({ id: 'saved-image', formatVersion: 5, contract: { key: 'feedback-test', version: 1 }, point: 'saved', frame: { owner: { contextId: 'saved-context', kind: 'scene' }, phase: 'execute', round: 1, input: 'input', currentInput: 'input', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'saved-image', formatVersion: 6, contract: { key: 'feedback-test', version: 1 }, point: 'saved', frame: { owner: { contextId: 'saved-context', kind: 'scene' }, phase: 'execute', round: 1, input: 'input', currentInput: 'input', nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   return store.read('saved-context');
 }
 

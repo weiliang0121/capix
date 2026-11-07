@@ -102,7 +102,7 @@ test('v2 checkpoint storage migration preserves all image identities, current he
 
   files.sql((database) => {
     const saved = rows(database);
-    assert.equal(saved.version, 6);
+    assert.equal(saved.version, 7);
     assert.deepEqual(
       saved.images.map(({ id, context_id, revision }) => ({ id, context_id, revision })),
       [
@@ -166,7 +166,7 @@ test('v2 migration retains identities of opaque non-head Frames without certifyi
   migrated.assertAvailable();
   migrated.close();
   files.sql((database) => {
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 7);
     for (const expected of [past, future]) {
       assert.equal(database.prepare('SELECT body FROM checkpoint_images WHERE id = ?').get(expected.id).body, null);
     }
@@ -182,7 +182,7 @@ test('v2 migration preserves opaque delivery data and leaves formal content read
   migrated.assertAvailable();
   migrated.close();
   files.sql((database) => {
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 7);
     const payload = JSON.parse(database.prepare('SELECT delivery FROM checkpoint_heads WHERE context_id = ?').get('root').delivery);
     assert.deepEqual(JSON.parse(brotliDecompressSync(Buffer.from(payload.data, 'base64')).toString('utf8')), opaque);
   });

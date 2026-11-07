@@ -5,6 +5,7 @@ import type { AnyCallable } from '../binding/declarations.js';
 import type { CallableCallScope } from '../binding/calls.js';
 import { callableConstruction, type AnyBuiltCallable, type BuiltCallable, type BuiltOptions } from '../structure/construction.js';
 import type { CallableInvocationStarted } from './invocation.js';
+import { stableValue, type Stable } from '@capix/contracts';
 
 export interface CallableInvocationCallbacks<Input, Output, Resources extends object> {
   readonly started?: CallableInvocationStarted<Input, Output, Resources>;
@@ -17,16 +18,16 @@ export interface RootInvocationOptions<Output, Delta = unknown> extends Invocati
   readonly created?: ProgressReceiver<InvocationIdentity>;
 }
 
-export function createCallableInvocation<Structure extends AnyCallable>(structure: Structure, parent: Invocation<unknown, unknown, CallableContext>, input: CallableInput<Structure>, options: InvocationRelationOptions = {}): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>> {
+export function createCallableInvocation<Structure extends AnyCallable>(structure: Structure, parent: Invocation<unknown, unknown, CallableContext>, input: CallableInput<Structure> | Stable<CallableInput<Structure>>, options: InvocationRelationOptions = {}): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>> {
   const construction = callableConstruction(structure);
   construction.invocations.check(parent);
   const scope = construction.calls.require(parent.construction);
   return construct(structure, input, scope, {}, parent, options);
 }
 
-export function createRootInvocation<Structure extends AnyCallable, Options>(structure: BuiltCallable<Structure, Options>, input: NoInfer<CallableInput<Structure>>, options: NoInfer<Options>, controls?: RootInvocationOptions<CallableOutput<Structure>, CallableDelta<Structure>>): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>>;
-export function createRootInvocation<Structure extends AnyBuiltCallable>(structure: Structure, input: NoInfer<CallableInput<Structure>>, options: NoInfer<BuiltOptions<Structure>>, controls?: RootInvocationOptions<CallableOutput<Structure>, CallableDelta<Structure>>): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>>;
-export function createRootInvocation<Structure extends AnyCallable>(structure: Structure, input: CallableInput<Structure>, options: unknown, controls: RootInvocationOptions<CallableOutput<Structure>> = {}): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>> {
+export function createRootInvocation<Structure extends AnyCallable, Options>(structure: BuiltCallable<Structure, Options>, input: NoInfer<CallableInput<Structure> | Stable<CallableInput<Structure>>>, options: NoInfer<Options>, controls?: RootInvocationOptions<CallableOutput<Structure>, CallableDelta<Structure>>): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>>;
+export function createRootInvocation<Structure extends AnyBuiltCallable>(structure: Structure, input: NoInfer<CallableInput<Structure> | Stable<CallableInput<Structure>>>, options: NoInfer<BuiltOptions<Structure>>, controls?: RootInvocationOptions<CallableOutput<Structure>, CallableDelta<Structure>>): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>>;
+export function createRootInvocation<Structure extends AnyCallable>(structure: Structure, input: CallableInput<Structure> | Stable<CallableInput<Structure>>, options: unknown, controls: RootInvocationOptions<CallableOutput<Structure>> = {}): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>> {
   if (controls.signal) requireNotCancelled(controls.signal);
   const scope = callableConstruction(structure).calls.begin(options, controls.feedback);
   return construct(structure, input, scope, controls);
@@ -56,24 +57,29 @@ function restore<Structure extends AnyCallable>(structure: Structure, contextId:
     binding.declaration.kind,
     parent?.context.id,
     (restoration) => {
-      const input = binding.declaration.checkpoint!.input.decode(restoration.head.image.frame.input) as CallableInput<Structure>;
+      const input = binding.declaration.checkpoint!.input.decode(restoration.head.image.frame.input) as CallableInput<Structure> | Stable<CallableInput<Structure>>;
       return construct(structure, input, scope, controls, parent, options, restoration);
     },
     scope.feedback,
   );
 }
 
-function construct<Structure extends AnyCallable>(structure: Structure, input: CallableInput<Structure>, scope: CallableCallScope, controls: RootInvocationOptions<CallableOutput<Structure>>, parent?: Invocation<unknown, unknown, CallableContext>, options: InvocationRelationOptions = {}, restore?: CheckpointRestoration): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>> {
+function construct<Structure extends AnyCallable>(structure: Structure, input: CallableInput<Structure> | Stable<CallableInput<Structure>>, scope: CallableCallScope, controls: RootInvocationOptions<CallableOutput<Structure>>, parent?: Invocation<unknown, unknown, CallableContext>, options: InvocationRelationOptions = {}, restore?: CheckpointRestoration): Invocation<CallableInput<Structure>, CallableOutput<Structure>, CallableContext<CallableInput<Structure>, CallableOutput<Structure>>> {
   const { binding, invocations } = callableConstruction(structure);
   const declaration = binding.declaration;
   const initial = restore ? declaration.checkpoint?.points.find((point) => point.name === restore.head.image.point)?.resume.deps : declaration.deps;
   if (!initial) throw new Error('Checkpoint point is not declared');
   const signal = parent?.context.signal ?? controls.signal;
   if (signal) requireNotCancelled(signal);
-  const prepared = scope.prepare(structure, input, !!restore, parent?.context.resources.supply, signal);
+  // Host validation/capture and resource refinement consume the same input fact
+  // as Context. No host callback receives the caller's mutable source object.
+  const fixedInput = stableValue<CallableInput<Structure>>(input);
+  if (parent) invocations.check(parent);
+  if (signal) requireNotCancelled(signal);
+  const prepared = scope.prepare(structure, fixedInput, !!restore, parent?.context.resources.supply, signal);
   if (signal) requireNotCancelled(signal);
   const { name, label, source } = declaration;
-  return invocations.create<CallableInput<Structure>, CallableOutput<Structure>, object>(input, {
+  return invocations.create<CallableInput<Structure>, CallableOutput<Structure>, object>(fixedInput, {
     kind: declaration.kind,
     controls,
     parent,

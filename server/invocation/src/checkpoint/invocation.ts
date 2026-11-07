@@ -1,3 +1,4 @@
+import { stableValue, type Stable } from '@capix/contracts';
 import { randomUUID } from 'node:crypto';
 import { isEqual } from 'es-toolkit';
 import type { Invocation } from '../invocation/invocation.js';
@@ -6,13 +7,16 @@ import { ProgressChannel } from '@capix/changes';
 import type { InvocationObservation } from '../observation/invocation.js';
 import { ObserverSession } from '../observation/session.js';
 import type { CheckpointFact, CheckpointInstallation, CheckpointRestoration, CheckpointWriter } from './contract.js';
-import type { CheckpointHead, CheckpointChild, CheckpointReferences } from '@capix/checkpoint';
-import { cloneCheckpointHead, cloneCheckpointImage, cloneCheckpointDelivery, cloneCheckpointValue, checkCheckpointSaveReceipt, checkCheckpointFinishReceipt } from '@capix/checkpoint';
+import type { CheckpointHead, CheckpointChild, CheckpointReferences, CheckpointValueBlock, CheckpointCommit, InvocationCheckpointFrame } from '@capix/checkpoint';
+import { cloneCheckpointHead, cloneCheckpointDelivery, cloneCheckpointValue, checkCheckpointFinishReceipt, checkpointHeadCommit, createCheckpointValueBlock, checkCheckpointCommitReceipt } from '@capix/checkpoint';
 import type { InvocationCheckpointWork } from './work.js';
 import type { InvocationTarget } from '../invocation/relation.js';
-import { captureCheckpointChildren, decodeCheckpointChild, resolveCheckpointChild } from './children.js';
+import { publishCheckpointChild, publishCheckpointValue, encodeCheckpointFact, restoredCheckpointChild, type PublishedCheckpointValue, type PublishedCheckpointChild } from './publication.js';
+import { checkpointDataEqual, runCheckpointCheck } from './data.js';
+import type { DecodedCheckpointFrame } from './facts.js';
+import { decodeCheckpointChild, resolveCheckpointChild } from './children.js';
 import { checkpointChildBinding, checkCheckpointReferences, decodeCheckpointFrame } from './facts.js';
-import { captureCheckpointContinuation, restoreCheckpointContinuation } from './continuation.js';
+import { restoreCheckpointContinuation } from './continuation.js';
 import { CheckpointObservation } from './observation.js';
 
 type Event = CheckpointFact extends infer F ? (F extends CheckpointFact ? Omit<F, 'activityId' | 'contextId' | 'owner' | 'recovering' | 'sequence' | 'occurredAt'> : never) : never;
@@ -31,6 +35,9 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
   #ready = false;
   #terminal = false;
   #restore?: CheckpointHead;
+  #input?: PublishedCheckpointValue;
+  #currentInput?: PublishedCheckpointValue;
+  readonly #published = new Map<string, PublishedCheckpointChild>();
   readonly #savedChildren = new Map<string, CheckpointChild>();
   readonly #resumedChildren = new Map<string, InvocationTarget>();
   readonly #observer?: ObserverSession<{ observe(fact: CheckpointFact): void; available?(): boolean }>;
@@ -50,13 +57,35 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       this.#revision = this.#restore.revision;
       this.#checkpointId = this.#restore.image.id;
       const image = this.#restore.image;
-      if (!work || this.#restore.delivery || image.contract.key !== work.key || image.contract.version !== work.version || !isEqual(image.frame.owner, invocation.identity) || image.frame.round !== 1 || image.frame.continuation !== undefined || !work.points[image.point]) throw new Error('Incompatible checkpoint continuation');
-      if (invocation.context.progress.round !== image.frame.round || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.currentInput)), image.frame.currentInput) || !isEqual(cloneCheckpointValue(work.input.encode(invocation.context.input)), image.frame.input)) throw new Error('Checkpoint input changed during binding');
+      if (!work || image.formatVersion !== 6 || this.#restore.delivery || image.contract.key !== work.key || image.contract.version !== work.version || !isEqual(image.frame.owner, invocation.identity) || image.frame.round !== 1 || image.frame.continuation !== undefined || !work.points[image.point]) throw new Error('Incompatible checkpoint continuation');
+      if (invocation.context.progress.round !== image.frame.round || !checkpointDataEqual(cloneCheckpointValue(work.input.encode(invocation.context.currentInput)), image.frame.currentInput) || !checkpointDataEqual(cloneCheckpointValue(work.input.encode(invocation.context.input)), image.frame.input)) throw new Error('Checkpoint input changed during binding');
       if (!isEqual(invocation.context.continuation, restoreCheckpointContinuation(image.frame))) throw new Error('Checkpoint continuation changed during binding');
       checkCheckpointReferences(image.frame, image.references, work.points[image.point]!.references);
       const children = image.frame.children.map((child) => decodeCheckpointChild(child, checkpointChildBinding(child, work.children), signal, work.receptions));
       invocation.children.install(image.frame.nextChildOrder, children);
-      for (const child of image.frame.children) this.#savedChildren.set(child.identity.contextId, child);
+      let basis = checkpointHeadCommit(this.#restore);
+      if (!basis) {
+        const current = installation.store.read(invocation.context.id);
+        if (!current || current.revision !== this.#restore.revision || !checkpointDataEqual(current.image, image) || current.delivery) throw new Error('Checkpoint publication differs from the supplied head');
+        basis = checkpointHeadCommit(current);
+      }
+      if (!basis) throw new Error('Checkpoint has no authenticated publication basis');
+      this.#input = Object.freeze({ source: invocation.context.input, encoded: image.frame.input, reference: basis.frame.input });
+      this.#currentInput = Object.freeze({ source: invocation.context.currentInput, encoded: image.frame.currentInput, reference: basis.frame.currentInput });
+      const decoded = decodeCheckpointFrame(image.frame, work, work.children, work.receptions);
+      const records = new Map(basis.children.map((child) => [child.identity.contextId, child]));
+      for (let index = 0; index < image.frame.children.length; index++) {
+        const child = image.frame.children[index]!;
+        const relation = invocation.children.byContextId(child.identity.contextId)!;
+        const record = records.get(child.identity.contextId);
+        if (!record) throw new Error('Checkpoint child publication basis is missing');
+        this.#savedChildren.set(child.identity.contextId, child);
+        this.#published.set(child.identity.contextId, restoredCheckpointChild(child, decoded.children[index]!, record, relation));
+      }
+    }
+    if (work) {
+      invocation.children.trackFacts();
+      if (restore) invocation.children.acknowledgeFacts(invocation.children.factRevision);
     }
   }
   private emit(event: Event): void {
@@ -96,11 +125,11 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     const image = this.#restore.image;
     this.emit({ kind: 'checking', checkpointId: image.id, point: image.point });
     const current = this.installation.store.read(this.invocation.context.id);
-    if (!current || current.delivery || current.revision !== this.#restore.revision || current.image.id !== image.id) throw new Error('Checkpoint head changed before continuation');
+    if (!current || current.delivery || current.revision !== this.#restore.revision || !checkpointDataEqual(current.image, image)) throw new Error('Checkpoint head changed before continuation');
     const point = this.work!.points[image.point]!;
     const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children, this.work!.receptions);
     checkCheckpointReferences(image.frame, image.references, point.references);
-    point.check?.(image.frame, point.state.decode(image.state), image.references, decoded);
+    this.invocation.children.readFacts(() => runCheckpointCheck(() => point.check?.(image.frame, stableValue(point.state.decode(image.state)), image.references, decoded)));
     this.emit({ kind: 'installed', checkpointId: image.id, point: image.point, frame: image.frame });
     this.#ready = true;
   }
@@ -125,28 +154,82 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
           if (!this.#claimed || this.#terminal || this.#commitUncertain || context.progress.phase !== 'execute' || context.progress.round !== round) throw new Error('Checkpoint writer is outside its executing round');
           const definition = this.work!.points[point];
           if (!definition) throw new Error('Checkpoint point is not declared');
-          const children = captureCheckpointChildren(context, this.invocation.children, this.#savedChildren);
-          const continuation = captureCheckpointContinuation(context.continuation, children.children);
-          // Each codec result is fixed before another author callback can reuse it.
-          const input = cloneCheckpointValue(this.work!.input.encode(context.input));
-          const currentInput = cloneCheckpointValue(this.work!.input.encode(context.currentInput));
-          const savedState = cloneCheckpointValue(definition.state.encode(state));
-          const image = cloneCheckpointImage({ id: randomUUID(), formatVersion: 5, contract: { key: this.work!.key, version: this.work!.version }, point, frame: { owner: this.invocation.identity, phase: 'execute', round, input, currentInput, ...children, ...(continuation ? { continuation } : {}) }, state: savedState, references });
-          const decoded = decodeCheckpointFrame(image.frame, this.work!, this.work!.children, this.work!.receptions);
-          checkCheckpointReferences(image.frame, image.references, definition.references);
-          definition.check?.(image.frame, definition.state.decode(image.state), image.references, decoded);
-          this.emit({ kind: 'captured', checkpointId: image.id, point });
-          stage = 'save';
-          // Synchronous author/observer callbacks can still cancel or reenter.
-          this.invocation.requireActive();
-          if (!this.#claimed || this.#terminal || context.progress.phase !== 'execute' || context.progress.round !== round || this.#revision !== revision) throw new Error('Checkpoint save baseline changed before commit');
-          this.#commitUncertain = true;
-          const receipt = checkCheckpointSaveReceipt(this.installation.store.save(image, revision), image, revision);
-          this.#revision = receipt.revision;
-          this.#checkpointId = receipt.checkpointId;
-          this.#commitUncertain = false;
-          this.emit({ kind: 'saved', checkpointId: image.id, point });
-          return image;
+          return this.invocation.children.readFacts(() => {
+            let activeCut = true;
+            try {
+              const factRevision = this.invocation.children.factRevision;
+              const blocks: CheckpointValueBlock[] = [];
+              this.#input ??= publishCheckpointValue(context.input, this.work!.input, blocks);
+              const input = this.#input;
+              this.#currentInput ??= Object.is(input.source, context.currentInput) ? input : publishCheckpointValue(context.currentInput, this.work!.input, blocks);
+              const currentInput = this.#currentInput;
+              if (!Object.is(input.source, context.input) || !Object.is(currentInput.source, context.currentInput)) throw new Error('Checkpoint fixed input changed');
+              const changes = new Map<string, PublishedCheckpointChild>();
+              for (const relation of this.invocation.children.changedFacts()) {
+                const id = relation.invocation.context.id;
+                const publication = publishCheckpointChild(context, relation, this.#savedChildren.get(id), this.#published.get(id), blocks);
+                checkpointChildBinding(publication.encoded, this.work!.children);
+                changes.set(id, publication);
+              }
+              const lookup = (id: string) => {
+                if (!activeCut) throw new Error('Checkpoint frame query is outside its save');
+                return changes.get(id) ?? this.#published.get(id);
+              };
+              const all = () => {
+                if (!activeCut) throw new Error('Checkpoint frame query is outside its save');
+                const children = Array.from(this.#published, ([id, child]) => changes.get(id) ?? child);
+                for (const [id, child] of changes) if (!this.#published.has(id)) children.push(child);
+                return children;
+              };
+              const savedState = cloneCheckpointValue(definition.state.encode(state));
+              const decodedState = stableValue(definition.state.decode(savedState));
+              const stateBlock = createCheckpointValueBlock(randomUUID(), savedState);
+              const referencesBlock = createCheckpointValueBlock(randomUUID(), references);
+              blocks.push(stateBlock, referencesBlock);
+              const fixedReferences = referencesBlock.value as unknown as CheckpointReferences;
+              const frame: InvocationCheckpointFrame = Object.freeze({
+                owner: this.invocation.identity,
+                phase: 'execute',
+                round,
+                input: input.encoded,
+                currentInput: currentInput.encoded,
+                nextChildOrder: this.invocation.children.nextOrder,
+                get children() {
+                  return Object.freeze(all().map((child) => child.encoded));
+                },
+              });
+              const decoded: DecodedCheckpointFrame = Object.freeze({
+                owner: this.invocation.identity,
+                phase: 'execute',
+                round,
+                input: context.input,
+                currentInput: context.currentInput,
+                nextChildOrder: frame.nextChildOrder,
+                child: (id: string) => lookup(id)?.decoded,
+                get children() {
+                  return Object.freeze(all().map((child) => child.decoded));
+                },
+              });
+              checkCheckpointReferences(frame, fixedReferences, definition.references, (id) => lookup(id)?.encoded);
+              runCheckpointCheck(() => definition.check?.(frame, decodedState, fixedReferences, decoded));
+              const commit: CheckpointCommit = Object.freeze({ kind: 'commit', formatVersion: 6, id: randomUUID(), contract: Object.freeze({ key: this.work!.key, version: this.work!.version }), point, frame: Object.freeze({ owner: this.invocation.identity, phase: 'execute' as const, round, input: input.reference, currentInput: currentInput.reference, nextChildOrder: frame.nextChildOrder }), state: Object.freeze({ id: stateBlock.id, digest: stateBlock.digest }), references: Object.freeze({ id: referencesBlock.id, digest: referencesBlock.digest }), values: Object.freeze(blocks), children: Object.freeze(Array.from(changes.values(), (child) => child.record)) });
+              this.emit({ kind: 'captured', checkpointId: commit.id, point });
+              stage = 'save';
+              this.invocation.requireActive();
+              if (!this.#claimed || this.#terminal || context.progress.phase !== 'execute' || context.progress.round !== round || this.#revision !== revision || this.invocation.children.factRevision !== factRevision) throw new Error('Checkpoint save baseline changed before commit');
+              this.#commitUncertain = true;
+              const receipt = checkCheckpointCommitReceipt(this.installation.store.save(commit, revision), commit, revision);
+              this.#revision = receipt.revision;
+              this.#checkpointId = receipt.checkpointId;
+              for (const [id, child] of changes) this.#published.set(id, child);
+              this.invocation.children.acknowledgeFacts(factRevision);
+              this.#commitUncertain = false;
+              this.emit({ kind: 'saved', checkpointId: commit.id, point });
+              return receipt;
+            } finally {
+              activeCut = false;
+            }
+          });
         } catch (error) {
           this.invocation.reject(error);
           try {
@@ -161,7 +244,7 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       },
     });
   }
-  resume(): Output | Promise<Output> {
+  resume(): Output | Stable<Output> | Promise<Output | Stable<Output>> {
     if (!this.#restore || !this.work) throw new Error('Invocation has no continuation');
     const image = this.#restore.image;
     const point = this.work.points[image.point]!;
@@ -185,6 +268,8 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       const target = create();
       const relation = this.invocation.children.get(target);
       if (target.context.id !== contextId || relation.round !== saved.round || relation.order !== saved.order || relation.declarationPosition !== saved.target.position) throw new Error('Child continuation did not adopt the saved relationship');
+      const published = this.#published.get(contextId);
+      if (published) this.#published.set(contextId, restoredCheckpointChild(published.encoded, published.decoded, published.record, relation));
       this.#savedChildren.delete(contextId);
       this.#resumedChildren.set(contextId, target);
       this.emit({ kind: 'child-restored', child: saved, mode: 'continuation' });
@@ -193,12 +278,14 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
     const child = restored.child;
     const decoded = decodeCheckpointChild(child, binding, this.signal, this.work?.receptions);
     this.invocation.children.replaceSaved(contextId, decoded.target, decoded.state);
+    const published = this.#published.get(contextId);
+    if (published) this.#published.set(contextId, restoredCheckpointChild(published.encoded, published.decoded, published.record, this.invocation.children.get(decoded.target)));
     this.#savedChildren.set(contextId, child);
     this.#resumedChildren.set(contextId, decoded.target);
     this.emit({ kind: 'child-restored', child, mode: 'delivery' });
     return decoded.target;
   }
-  finish(result: { status: 'succeeded'; output: Output } | { status: 'failed' | 'cancelled' }): void {
+  finish(result: { status: 'succeeded'; output: Stable<Output> } | { status: 'failed' | 'cancelled' }): void {
     try {
       this.finalize(result);
     } catch (error) {
@@ -206,13 +293,13 @@ export class InvocationCheckpoint<Input, Output, Context extends InvocationConte
       throw error;
     }
   }
-  private finalize(result: { status: 'succeeded'; output: Output } | { status: 'failed' | 'cancelled' }): void {
+  private finalize(result: { status: 'succeeded'; output: Stable<Output> } | { status: 'failed' | 'cancelled' }): void {
     // A throwing Store or invalid acknowledgement can follow a real commit.
     // Do not issue a second write from the failure-finalization path.
     if (!this.#checkpointId || this.#terminal || this.#commitUncertain || !this.#claimed || !this.#ready) return;
     const revision = this.#revision;
     const checkpointId = this.#checkpointId;
-    const delivery = cloneCheckpointDelivery(result.status === 'succeeded' ? { status: 'succeeded', output: cloneCheckpointValue(this.work!.output.encode(result.output)), progress: { round: this.invocation.context.progress.round, phase: this.invocation.context.progress.phase, currentInput: cloneCheckpointValue(this.work!.input.encode(this.invocation.context.currentInput)) } } : result);
+    const delivery = cloneCheckpointDelivery(result.status === 'succeeded' ? { status: 'succeeded', output: encodeCheckpointFact(result.output, this.work!.output).encoded, progress: { round: this.invocation.context.progress.round, phase: this.invocation.context.progress.phase, currentInput: this.#currentInput!.encoded } } : result);
     // Final-delivery checking precedes durable finalization; errors can still be owned here.
     this.emit({ kind: 'finishing', status: delivery.status });
     this.#commitUncertain = true;

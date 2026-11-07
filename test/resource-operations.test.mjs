@@ -117,7 +117,7 @@ test('an offer requires a configuration object and rejects the removed positiona
   assert.throws(() => new ResourceOffer({ name: 'missing-endpoint' }), /requires an endpoint declaration/);
 });
 
-test('resource methods register an origin directly and preserve successful values by reference', async () => {
+test('resource methods preserve origin values while invocation delivery fixes them', async () => {
   const origin = { value: { text: 'one' } };
   const resource = new Resource(origin);
   const offer = new ResourceOffer({
@@ -131,17 +131,20 @@ test('resource methods register an origin directly and preserve successful value
   const seen = [];
   const scene = new Scene({
     deps: { source: offer.request() },
-    run(work) {
+    async run(work) {
       seen.push(work.resources.source);
-      return work.resources.source.read(work.input);
+      const value = await work.resources.source.read(work.input);
+      assert.equal(value, origin.value);
+      assert.equal(Object.isFrozen(value), false);
+      return value;
     },
   });
   const resources = new Resources().register(resource, offer);
   const runner = new Runner(scene, resources).build();
   assert.equal(resource.origin, origin);
-  assert.equal(await runner.run('requested'), origin.value);
+  assert.deepEqual(await runner.run('requested'), origin.value);
   origin.value = { text: 'two' };
-  assert.equal(await runner.run('requested'), origin.value);
+  assert.deepEqual(await runner.run('requested'), origin.value);
   assert.notEqual(seen[0], seen[1]);
   await assert.rejects(seen[0].read('requested'), /ended|running|closed/);
   assert.throws(() => resources.register(resource, offer), /Duplicate resource registration/);

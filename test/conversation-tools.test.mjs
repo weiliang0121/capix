@@ -76,7 +76,7 @@ class Journal extends MemoryCheckpointStore {
   capture = () => undefined;
   save(image, revision) {
     const value = super.save(image, revision);
-    this.writes.push({ image: this.read(value.contextId).image, revision });
+    this.writes.push({ image: this.read(value.contextId).image, commit: image, revision });
     this.cuts.push(this.capture());
     return value;
   }
@@ -89,7 +89,7 @@ class Journal extends MemoryCheckpointStore {
   prefix(index) {
     const next = new Journal();
     for (const value of this.writes.slice(0, index + 1)) {
-      if (value.image) next.save(value.image, value.revision);
+      if (value.image) next.save(value.commit ?? value.image, value.revision);
       else next.finish(value.id, value.revision, value.delivery);
     }
     next.writes = [];

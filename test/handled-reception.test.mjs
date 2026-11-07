@@ -33,7 +33,12 @@ async function recordedHandling() {
   const recording = bindRecording(recorder, { failure: 'propagate' });
   recording.describe(scene, { output: (output) => output.text, relationHandled: (output) => ({ text: output.text }) });
   const runner = new Runner(scene, new Resources(), undefined, { observations: [recording] }).build();
-  assert.equal(await runner.run(null), result);
+  const delivered = await runner.run(null);
+  assert.deepEqual(delivered, result);
+  assert.notEqual(delivered, result);
+  assert.equal(Object.isFrozen(delivered), true);
+  result.text = 'changed';
+  assert.equal(delivered.text, 'fallback');
   const records = [...recorder.book.values()].filter((record) => record instanceof CallableRecord);
   return { parent: records.find((record) => record.structureKind === 'scene'), child: records.find((record) => record.structureKind === 'node') };
 }

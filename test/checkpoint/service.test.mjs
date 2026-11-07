@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Transcript } from '@capix/transcript';
 import { Memories } from '@capix/memory';
-import { ObserverConversations, SqliteObserverStore, MemoryConversationCheckpointRuns, copyConversationCheckpointRun, checkpointTranscriptFingerprint, validateConversationCheckpointContent, validateConversationCheckpointDeliveryContent, validateConversationCheckpointReceipt, validateConversationCheckpointHeads } from '@capix/observer-service/assembly';
+import { ObserverConversations, SqliteObserverStore, SqliteCheckpointStore, MemoryConversationCheckpointRuns, copyConversationCheckpointRun, checkpointTranscriptFingerprint, validateConversationCheckpointContent, validateConversationCheckpointDeliveryContent, validateConversationCheckpointReceipt, validateConversationCheckpointHeads } from '@capix/observer-service/assembly';
 
 const settings = { model: 'test', contextBudget: 16000, maxOutputTokens: 1536, timeoutMs: 1000 };
 const raw = (value) => ({ id: 'fixture', model: 'test', content: JSON.stringify(value), finishReason: 'stop', usage: null });
@@ -93,10 +93,12 @@ for (const formatVersion of [1, 2, 3, 4, 99]) {
     host.close();
 
     const database = new DatabaseSync(path);
-    const rows = database.prepare('SELECT id, body FROM checkpoint_images WHERE body IS NOT NULL').all();
-    for (const row of rows) {
-      const image = JSON.parse(row.body);
-      image.formatVersion = formatVersion;
+    const checkpoints = new SqliteCheckpointStore(database);
+    const rows = database.prepare('SELECT id, context_id FROM checkpoint_images WHERE body IS NOT NULL').all();
+    const images = rows.map((row) => ({ row, image: checkpoints.read(row.context_id).image }));
+    for (const { row, image: current } of images) {
+      // A historical Frame is a complete old image, not a corrupt new metadata envelope.
+      const image = { ...current, formatVersion };
       database.prepare('UPDATE checkpoint_images SET body = ? WHERE id = ?').run(JSON.stringify(image), row.id);
     }
     database.close();
@@ -111,7 +113,7 @@ for (const formatVersion of [1, 2, 3, 4, 99]) {
     await current.runner.run({ messages: [{ role: 'user', content: 'after upgrade' }] }, { settings });
     assert.equal(current.transcript.length, 4);
     const latest = current.checkpointRuns.list(conversation.id).find((candidate) => candidate.rootContextId !== run.rootContextId);
-    assert.equal(current.checkpoints.read(latest.rootContextId).image.formatVersion, 5);
+    assert.equal(current.checkpoints.read(latest.rootContextId).image.formatVersion, 6);
   });
 }
 

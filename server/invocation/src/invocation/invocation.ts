@@ -2,7 +2,7 @@ import { InvocationCheckpoint } from '../checkpoint/invocation.js';
 import type { CheckpointInstallation, CheckpointRestoration, CheckpointWriter } from '../checkpoint/contract.js';
 import type { CheckpointBinding } from '../checkpoint/work.js';
 import type { InvocationTarget } from './relation.js';
-import type { InvocationOutputWriter, InvocationOutputReceiver, OperationOutcome } from '@capix/contracts';
+import type { InvocationOutputWriter, InvocationOutputReceiver, OperationOutcome, Stable } from '@capix/contracts';
 import type { InvocationResources } from './resource-access.js';
 import { isUndefined } from 'es-toolkit/predicate';
 import { Clock } from '../clock.js';
@@ -74,7 +74,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
   readonly origin: Readonly<{ contextId: string }>;
   readonly view: InvocationView<Input, Output, ContextFactsOf<Context>>;
   readonly callView: ChildInvocationView<Input, Output, ContextFactsOf<Context>>;
-  readonly #parentRelation?: InvocationRelation;
+  readonly #parentRelation?: InvocationRelation<Output>;
   #parentDeliveryScope?: InvocationPropagationScope;
 
   constructor(private readonly options: InvocationOptions<Input, Output, Context>) {
@@ -105,8 +105,8 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
       },
       children: this.children.view,
     };
-    this.view = invocationView(source, context);
-    this.callView = childInvocationView(source, context, () => this.run());
+    this.view = invocationView<Input, Output, ContextFactsOf<Context>>(source, context);
+    this.callView = childInvocationView<Input, Output, ContextFactsOf<Context>>(source, context, () => this.run());
     if (options.restore && !options.checkpoints) throw new Error('Checkpoint persistence is missing');
     this.#execution = new InvocationExecution(
       options.context,
@@ -178,7 +178,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     return this.recovering ? this.#checkpoint?.observation : this.options.observation;
   }
 
-  run(): Promise<Output> {
+  run(): Promise<Stable<Output>> {
     try {
       this.#control.start();
       this.#parentDeliveryScope = this.options.parent?.invocation.children.captureDelivery();
@@ -189,9 +189,9 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     }
   }
 
-  private async deliver(): Promise<Output> {
+  private async deliver(): Promise<Stable<Output>> {
     try {
-      let outcome: OperationOutcome<Output>;
+      let outcome: OperationOutcome<Stable<Output>>;
       try {
         this.#checkpoint?.begin();
         outcome = { status: 'succeeded', value: await this.runWork() };
@@ -220,7 +220,7 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     return 'resources' in this.context ? (this.context.resources as InvocationResources).closeAllResult() : { status: 'succeeded', value: undefined };
   }
 
-  private finishDelivery(outcome: OperationOutcome<Output>): OperationOutcome<Output> {
+  private finishDelivery(outcome: OperationOutcome<Stable<Output>>): OperationOutcome<Stable<Output>> {
     if (outcome.status === 'failed') return this.failDelivery(outcome.failure);
     try {
       this.#checkpoint?.finish({ status: 'succeeded', output: outcome.value });
@@ -231,10 +231,10 @@ export class Invocation<Input = unknown, Output = unknown, Context extends Invoc
     }
   }
 
-  private async runWork(): Promise<Output> {
+  private async runWork(): Promise<Stable<Output>> {
     const context = this.context;
     context.requireRunning();
-    let outcome: OperationOutcome<Output>;
+    let outcome: OperationOutcome<Stable<Output>>;
     try {
       this.startWork();
       const execution = await this.#execution.run(this.restoring ? () => this.#checkpoint!.resume() : undefined);

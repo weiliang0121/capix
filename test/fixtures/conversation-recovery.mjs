@@ -85,6 +85,7 @@ const checkpoints = {
   finish: (...args) => store.checkpoints.finish(...args),
   save(image, revision) {
     const head = store.checkpoints.save(image, revision);
+    image = store.checkpoints.read(head.contextId).image;
     if (armed && boundary === 'materials' && image.contract.key === 'conversation.material-preparation' && image.point === 'captured') halt();
     if (armed && boundary.startsWith('handled-memory-failure') && image.contract.key === 'conversation.memory.maintenance' && image.point === (boundary.endsWith('completed') ? 'completed' : 'proposalReceived') && image.frame.input.message.role === 'assistant') halt();
     if (image.contract.key === 'conversation.completion-reply' && image.point === 'waiting') {

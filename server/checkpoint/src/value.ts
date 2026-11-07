@@ -2,6 +2,9 @@ import { RuntimeError } from '@capix/contracts';
 import { createHash } from 'node:crypto';
 import type { CheckpointImage, CheckpointDelivery, CheckpointHead, CheckpointChild, CheckpointReference } from './contract.js';
 import type { CheckpointValue } from '@capix/contracts';
+import { encodeCheckpointData } from './encoding.js';
+import { checkpointHeadCommit, rememberCheckpointHead } from './evidence.js';
+import { checkCheckpointPublication } from './incremental.js';
 
 export const CHECKPOINT_MAX_BYTES = 8 * 1024 * 1024;
 const fail = (message: string): never => {
@@ -11,8 +14,12 @@ const fail = (message: string): never => {
 // No certificate survives serialization, and no raw business value is cached.
 const images = new WeakMap<object, string>();
 const deliveries = new WeakMap<object, string>();
+// Pure-value evidence is weaker than image evidence: it permits reusing this
+// module's exact fixed value, never skipping Frame relationships or total limits.
+// Keep only root statistics, not JSON copies or certificates for every descendant.
+const fixedValues = new WeakMap<object, { readonly nodes: number; readonly bytes: number; readonly depth: number }>();
 
-/** Own data properties only: capture never invokes getters, toJSON or entity methods. */
+/** Own data properties only. CP-owned fixed values may share identity; raw values never do. */
 export function cloneCheckpointValue(value: unknown): CheckpointValue {
   return copyCheckpointValue(value).value;
 }
@@ -21,8 +28,19 @@ function copyCheckpointValue(value: unknown): { value: CheckpointValue; json: st
   const ancestors = new Set<object>();
   let count = 0;
   let bytes = 0;
+  let deepest = 0;
   const visit = (item: unknown, depth: number): CheckpointValue => {
+    const fixed = item && typeof item === 'object' ? fixedValues.get(item) : undefined;
+    if (fixed) {
+      count += fixed.nodes;
+      bytes += fixed.bytes;
+      deepest = Math.max(deepest, depth + fixed.depth);
+      if (count > 100000 || deepest > 64) return fail('structure limit exceeded');
+      if (bytes > CHECKPOINT_MAX_BYTES) return fail('byte limit exceeded');
+      return item as CheckpointValue;
+    }
     if (++count > 100000 || depth > 64) return fail('structure limit exceeded');
+    deepest = Math.max(deepest, depth);
     if (typeof item === 'string') bytes += Buffer.byteLength(item, 'utf8');
     else bytes += 8;
     if (bytes > CHECKPOINT_MAX_BYTES) return fail('byte limit exceeded');
@@ -58,6 +76,9 @@ function copyCheckpointValue(value: unknown): { value: CheckpointValue; json: st
   const result = visit(value, 0);
   const json = JSON.stringify(result);
   if (Buffer.byteLength(json, 'utf8') > CHECKPOINT_MAX_BYTES) fail('encoded byte limit exceeded');
+  // Publish evidence only after the entire root passes both traversal and JSON
+  // budgets. Raw inputs never receive it, including failed copies and proxies.
+  if (result && typeof result === 'object' && !fixedValues.has(result)) fixedValues.set(result, { nodes: count, bytes, depth: deepest });
   return { value: result, json };
 }
 const object = (value: any): value is Record<string, any> => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -85,8 +106,8 @@ export function cloneCheckpointImage(value: unknown): CheckpointImage {
   if (value && typeof value === 'object' && images.has(value)) return value as CheckpointImage;
   const copied = copyCheckpointValue(value);
   const image: any = copied.value;
-  if (object(image) && Number.isSafeInteger(image.formatVersion) && image.formatVersion !== 5) throw new RuntimeError('CHECKPOINT_FORMAT_UNSUPPORTED', 'Only checkpoint formatVersion 5 is supported; historical content and records remain readable.', { formatVersion: image.formatVersion });
-  if (!object(image) || !text(image.id) || image.formatVersion !== 5 || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 5 is supported');
+  if (object(image) && Number.isSafeInteger(image.formatVersion) && image.formatVersion !== 5 && image.formatVersion !== 6) throw new RuntimeError('CHECKPOINT_FORMAT_UNSUPPORTED', 'Only checkpoint formatVersion 5 and 6 are supported; historical content and records remain readable.', { formatVersion: image.formatVersion });
+  if (!object(image) || !text(image.id) || ![5, 6].includes(image.formatVersion) || !contract(image.contract) || !text(image.point) || !Object.hasOwn(image, 'state') || !object(image.references)) fail('invalid image; only checkpoint formatVersion 5 and 6 are supported');
   const frame = image.frame;
   if (!object(frame) || !identity(frame.owner) || !integer(frame.round, 1) || frame.round > 2 || frame.phase !== 'execute' || !Object.hasOwn(frame, 'input') || !Object.hasOwn(frame, 'currentInput') || !integer(frame.nextChildOrder) || !Array.isArray(frame.children) || frame.children.length > 4096) fail('invalid frame');
   const ids = new Set<string>();
@@ -146,7 +167,9 @@ export function cloneCheckpointImage(value: unknown): CheckpointImage {
     if (Array.isArray(value)) value.forEach((reference) => checkpointReferenceChild(reference, frame.children));
     else checkpointReferenceChild(value, frame.children);
   }
-  images.set(image, createHash('sha256').update(copied.json).digest('hex'));
+  const encoded = image.formatVersion === 6 ? encodeCheckpointData(image) : copied.json;
+  if (Buffer.byteLength(encoded) > CHECKPOINT_MAX_BYTES) fail('encoded image exceeds byte limit');
+  images.set(image, createHash('sha256').update(encoded).digest('hex'));
   return image as CheckpointImage;
 }
 export function cloneCheckpointDelivery(value: unknown): CheckpointDelivery {
@@ -154,7 +177,9 @@ export function cloneCheckpointDelivery(value: unknown): CheckpointDelivery {
   const copied = copyCheckpointValue(value);
   const delivery: any = copied.value;
   if (!object(delivery) || !['succeeded', 'failed', 'cancelled'].includes(delivery.status) || (delivery.status === 'succeeded' && (!Object.hasOwn(delivery, 'output') || !progress(delivery.progress)))) fail('invalid delivery');
-  deliveries.set(delivery, createHash('sha256').update(copied.json).digest('hex'));
+  const encoded = encodeCheckpointData(delivery);
+  if (Buffer.byteLength(encoded) > CHECKPOINT_MAX_BYTES) fail('encoded delivery exceeds byte limit');
+  deliveries.set(delivery, createHash('sha256').update(encoded).digest('hex'));
   return delivery as CheckpointDelivery;
 }
 
@@ -170,7 +195,7 @@ export function cloneCheckpointHead(value: CheckpointHead): CheckpointHead {
   if (!object(value) || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) fail('invalid head');
   const properties = Object.getOwnPropertyDescriptors(value);
   for (const key of Reflect.ownKeys(properties)) {
-    if (typeof key !== 'string' || !['revision', 'image', 'delivery'].includes(key)) return fail('invalid head property');
+    if (typeof key !== 'string' || !['revision', 'image', 'delivery', 'publication'].includes(key)) return fail('invalid head property');
     const property = properties[key]!;
     if (!('value' in property) || !property.enumerable) fail('accessor or hidden head property');
   }
@@ -178,5 +203,9 @@ export function cloneCheckpointHead(value: CheckpointHead): CheckpointHead {
   if (typeof revision !== 'number' || !integer(revision, 1) || !properties.image) return fail('invalid head revision or image');
   // Images and final deliveries have independent storage budgets. Validate the envelope
   // without evaluating accessors or copying their two payloads through one shared budget.
-  return Object.freeze({ revision, image: cloneCheckpointImage(properties.image.value), ...(properties.delivery ? { delivery: cloneCheckpointDelivery(properties.delivery.value) } : {}) });
+  const image = cloneCheckpointImage(properties.image.value);
+  const publication = checkpointHeadCommit(value) ?? (properties.publication ? checkCheckpointPublication(image, properties.publication.value) : undefined);
+  const head = Object.freeze({ revision, image, ...(properties.delivery ? { delivery: cloneCheckpointDelivery(properties.delivery.value) } : {}), ...(publication ? { publication } : {}) });
+  if (publication) rememberCheckpointHead(head, publication);
+  return head;
 }

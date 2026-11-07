@@ -192,6 +192,9 @@ test('invocation CP boundary rejects missing or mismatched child evidence before
       changed.image.frame.input = 'another request';
       changed.image.frame.currentInput = 'another request';
       changed.delivery.progress.currentInput = 'another request';
+      // Import a coherent but wrong child; the parent must reject its association.
+      // Publication-tampering rejection is covered by incremental Store tests.
+      delete changed.publication;
       install(store, changed);
     }
     const call = parentCall(store, counts, undefined, waiting);

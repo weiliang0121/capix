@@ -18,7 +18,9 @@ test('one invocation executes once and reports no independent receive or handlin
   const scene = new Scene({
     run(work) {
       runs++;
-      assert.equal(work.input, input);
+      assert.deepEqual(work.input, input);
+      assert.notEqual(work.input, input);
+      assert.equal(Object.isFrozen(work.input), true);
       assert.equal('round' in work, false);
       assert.equal('initialInput' in work, false);
       assert.equal('continue' in work, false);
@@ -26,7 +28,10 @@ test('one invocation executes once and reports no independent receive or handlin
       return output;
     },
   });
-  assert.equal(await runtime(scene, { observations: [observer(facts)] }).run(input), output);
+  const result = await runtime(scene, { observations: [observer(facts)] }).run(input);
+  assert.deepEqual(result, output);
+  assert.notEqual(result, output);
+  assert.equal(Object.isFrozen(result), true);
   assert.equal(runs, 1);
   assert.deepEqual(
     facts.filter((fact) => fact.kind === 'process').map((fact) => [fact.process.stage, fact.process.type]),
@@ -104,20 +109,26 @@ test('cancellation before the final result prevents successful delivery', async 
   assert.equal(call.context.status, 'failed');
 });
 
-test('success preserves references and output validation cannot replace the value', async () => {
+test('success fixes the candidate once and output validation cannot replace the stable value', async () => {
   const value = { output: true };
+  let validated;
   const good = make(() => value, {
     work: {
       execute: () => value,
       output: {
         result: (actual) => {
-          assert.equal(actual, value);
+          assert.deepEqual(actual, value);
+          assert.notEqual(actual, value);
+          assert.equal(Object.isFrozen(actual), true);
+          validated = actual;
           return actual;
         },
       },
     },
   });
-  assert.equal(await good.run(), value);
+  const result = await good.run();
+  assert.equal(result, validated);
+  assert.equal(good.context.state.output, result);
   const bad = make(() => value, { work: { execute: () => value, output: { result: () => ({ output: true }) } } });
   await assert.rejects(bad.run(), (error) => error.code === 'OUTPUT_CONTRACT');
 });

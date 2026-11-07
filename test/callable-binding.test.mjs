@@ -82,7 +82,7 @@ test('scene, nested groups and nodes execute their own work through the shared c
       }),
     },
   });
-  assert.equal(await driver.run('input', {}), result);
+  assert.deepEqual(await driver.run('input', {}), result);
   assert.deepEqual(executed, ['scene', 'outer', 'inner', 'node']);
   assert.deepEqual(kinds, ['scene', 'group', 'group', 'node']);
 });

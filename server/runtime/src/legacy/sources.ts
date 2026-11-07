@@ -8,20 +8,21 @@ import type { CallableInvocationStarted } from '../construction/invocation.js';
 import type { AnyCallable, ResolvedCallable } from '../binding/declarations.js';
 import { CallableCallScope, type PreparedCall, type CallInstallation } from '../binding/calls.js';
 import type { CallableFeedback } from '../construction/feedback.js';
+import { stableValue, type Stable } from '@capix/contracts';
 
 /** Host input establishes one root supply. The callable lifecycle remains independent of this source. */
 export interface CallableCallSource<Input, Options, Source> {
-  capture(input: Input, options: Options): Source;
+  capture(input: Stable<Input>, options: Options): Source;
   validate?(options: Options): void;
   started?(options: Options): CallableInvocationStarted<any, any, any> | undefined;
-  progress?(input: Input, options: Options): ProgressReceiver<InvocationProgress> | undefined;
-  output?(input: Input, options: Options): InvocationOutputReceiver<any, any> | undefined;
+  progress?(input: Stable<Input>, options: Options): ProgressReceiver<InvocationProgress> | undefined;
+  output?(input: Stable<Input>, options: Options): InvocationOutputReceiver<any, any> | undefined;
 }
 
 /** An explicit registration selects a source boundary by declaration identity, never by kind. */
 export interface CallableSourceBinding<Options, Source, Definition extends ChildCallable = ChildCallable> {
   readonly definition: Definition;
-  capture?(input: CallableInput<Definition>, options: Options): Source;
+  capture?(input: Stable<CallableInput<Definition>>, options: Options): Source;
   started?(options: Options): CallableInvocationStarted<any, any, any> | undefined;
   progress?(options: Options): ProgressReceiver<InvocationProgress> | undefined;
   output?(options: Options): InvocationOutputReceiver<any, any> | undefined;
@@ -58,11 +59,12 @@ export class CallableSources<Options = unknown> implements CallInstallation<Opti
   prepare(definition: AnyCallable, input: unknown, options: Options, restoring: boolean): PreparedCall {
     const source = this.sources.get(definition);
     if (!source) throw new Error('Callable source is not registered in this installation');
+    const fixedInput = stableValue(input);
     return {
-      supply: source.capture?.(input, options).supply,
+      supply: source.capture?.(fixedInput, options).supply,
       started: restoring ? undefined : source.started?.(options),
-      progress: source.progress?.(input, options),
-      output: source.output?.(input, options),
+      progress: source.progress?.(fixedInput, options),
+      output: source.output?.(fixedInput, options),
     };
   }
 }
@@ -89,10 +91,10 @@ export function bindCallableSources<Input, Options, Source>(root: ResolvedCallab
     const capture = (value: Source) => new InvocationResources(resolved.supply, ResourceSupply.capture(selected, value).entries);
     if (resolved === root) {
       fixed.set(resolved.definition, {
-        capture: (input, options) => capture(rootCapture(input as Input, options)),
+        capture: (input, options) => capture(rootCapture(input as Stable<Input>, options)),
         started: rootStarted,
-        progress: rootProgress ? (input, options) => rootProgress(input as Input, options) : undefined,
-        output: rootOutput ? (input, options) => rootOutput(input as Input, options) : undefined,
+        progress: rootProgress ? (input, options) => rootProgress(input as Stable<Input>, options) : undefined,
+        output: rootOutput ? (input, options) => rootOutput(input as Stable<Input>, options) : undefined,
       });
     } else {
       const binding = registered.get(resolved.definition as ChildCallable);

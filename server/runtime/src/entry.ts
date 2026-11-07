@@ -1,4 +1,4 @@
-import { RuntimeError, type CallableInput, type CallableOutput } from '@capix/contracts';
+import { RuntimeError, type CallableInput, type CallableOutput, type Stable } from '@capix/contracts';
 import { requireNotCancelled, type InvocationControls } from '@capix/invocation';
 import type { AnyBuiltCallable, BuiltCallable, BuiltOptions } from './structure/construction.js';
 import type { AnyCallable } from './binding/declarations.js';
@@ -13,9 +13,9 @@ export interface EntryState {
 export type EntryChange = { kind: 'established' } | ({ boundId: string } & ({ kind: 'acquired' | 'released' } | { kind: 'rejected'; reason: 'busy'; error: unknown } | { kind: 'entry-failed'; error: unknown }));
 
 /** Run one root call, preserving construction failure and release failure independently. */
-export function runEntry<Structure extends AnyCallable, Options>(entry: EntryState, structure: BuiltCallable<Structure, Options>, request: { input: NoInfer<CallableInput<Structure>> } | { contextId: string }, options: NoInfer<Options> & InvocationControls, publish: (change: EntryChange) => void, execution?: RootInvocationOptions<CallableOutput<Structure>>): Promise<CallableOutput<Structure>>;
-export function runEntry<Structure extends AnyBuiltCallable>(entry: EntryState, structure: Structure, request: { input: NoInfer<CallableInput<Structure>> } | { contextId: string }, options: NoInfer<BuiltOptions<Structure>> & InvocationControls, publish: (change: EntryChange) => void, execution?: RootInvocationOptions<CallableOutput<Structure>>): Promise<CallableOutput<Structure>>;
-export async function runEntry<Structure extends AnyBuiltCallable>(entry: EntryState, structure: Structure, request: { input: CallableInput<Structure> } | { contextId: string }, options: BuiltOptions<Structure> & InvocationControls, publish: (change: EntryChange) => void, execution?: RootInvocationOptions<CallableOutput<Structure>>): Promise<CallableOutput<Structure>> {
+export function runEntry<Structure extends AnyCallable, Options>(entry: EntryState, structure: BuiltCallable<Structure, Options>, request: { input: NoInfer<CallableInput<Structure> | Stable<CallableInput<Structure>>> } | { contextId: string }, options: NoInfer<Options> & InvocationControls, publish: (change: EntryChange) => void, execution?: RootInvocationOptions<CallableOutput<Structure>>): Promise<Stable<CallableOutput<Structure>>>;
+export function runEntry<Structure extends AnyBuiltCallable>(entry: EntryState, structure: Structure, request: { input: NoInfer<CallableInput<Structure> | Stable<CallableInput<Structure>>> } | { contextId: string }, options: NoInfer<BuiltOptions<Structure>> & InvocationControls, publish: (change: EntryChange) => void, execution?: RootInvocationOptions<CallableOutput<Structure>>): Promise<Stable<CallableOutput<Structure>>>;
+export async function runEntry<Structure extends AnyBuiltCallable>(entry: EntryState, structure: Structure, request: { input: CallableInput<Structure> | Stable<CallableInput<Structure>> } | { contextId: string }, options: BuiltOptions<Structure> & InvocationControls, publish: (change: EntryChange) => void, execution?: RootInvocationOptions<CallableOutput<Structure>>): Promise<Stable<CallableOutput<Structure>>> {
   const boundId = structure.id;
   if (entry.running) {
     const error = new RuntimeError('RUNTIME_BUSY', '当前环境正在执行，请等待本次调用结束。');

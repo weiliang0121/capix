@@ -240,7 +240,7 @@ test('v4 collection migrates intact as unanchored read-only data beside new inde
   assert.ok(migrated.archiveUsage().checkpointBytes > 0);
   migrated.close();
   files.sql((database) => {
-    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(database.prepare('PRAGMA user_version').get().user_version, 7);
     assert.deepEqual(database.prepare('SELECT * FROM checkpoint_images').all(), preserved.images);
     assert.deepEqual(database.prepare('SELECT * FROM checkpoint_heads').all(), preserved.heads);
     assert.deepEqual(database.prepare('SELECT * FROM completion_interactions').all(), preserved.interactions);

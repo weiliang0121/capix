@@ -455,8 +455,9 @@ test('Runner restoration opens fresh resource endpoints and preserves fixed inpu
   };
   class Capture extends MemoryCheckpointStore {
     save(image, revision) {
-      saved = image;
-      return super.save(image, revision);
+      const receipt = super.save(image, revision);
+      saved = this.read(receipt.contextId).image;
+      return receipt;
     }
   }
   assert.equal(await build(new Capture()).run('original', { snapshot: 'fixed' }), 'normal');
@@ -509,8 +510,9 @@ test('a saved returned child is accepted through new resource access without rer
   };
   class Capture extends MemoryCheckpointStore {
     save(image, revision) {
-      saved = image;
-      return super.save(image, revision);
+      const receipt = super.save(image, revision);
+      saved = this.read(receipt.contextId).image;
+      return receipt;
     }
   }
   const original = await build(new Capture()).run(null);

@@ -5,6 +5,7 @@ import type { InvocationExecutionWork, InvocationProcess } from './work.js';
 import { InvocationOutputSection } from '../output/section.js';
 import type { InvocationOutputEvent, InvocationOutputReceiver, InvocationOutputWriter, OperationOutcome } from '@capix/contracts';
 import { ProgressChannel } from '@capix/changes';
+import { stableValue, type Stable } from '@capix/contracts';
 
 export interface InvocationExecutionControls {
   healthy(): void;
@@ -53,12 +54,12 @@ export class InvocationExecution<Input, Output> {
     this.#outputSection?.discard(reason);
   }
 
-  completeOutput(output: Output): void {
+  completeOutput(output: Stable<Output>): void {
     this.#outputSection?.complete(output);
   }
 
   /** Recovery selects a declared entry; it never replays the original business function. */
-  async run(resume?: () => Output | Promise<Output>): Promise<OperationOutcome<Output, InvocationFailure>> {
+  async run(resume?: () => Output | Stable<Output> | Promise<Output | Stable<Output>>): Promise<OperationOutcome<Stable<Output>, InvocationFailure>> {
     try {
       this.controls.healthy();
       requireNotCancelled(this.options.signal);
@@ -71,10 +72,19 @@ export class InvocationExecution<Input, Output> {
     } catch (error) {
       return this.failed(this.controls.classify(error, 'execute', true));
     }
-    let body: OperationOutcome<Output>;
+    let body: OperationOutcome<Stable<Output>>;
+    let fixingFailed = false;
     try {
       this.controls.active();
-      body = { status: 'succeeded', value: await (resume ? resume() : this.work.execute()) };
+      const candidate = await (resume ? resume() : this.work.execute());
+      try {
+        // The candidate is fixed before acceptance draining or cleanup can mutate
+        // its producer's aliases. This does not establish successful delivery.
+        body = { status: 'succeeded', value: stableValue<Output>(candidate) };
+      } catch (failure) {
+        fixingFailed = true;
+        body = { status: 'failed', failure };
+      }
     } catch (failure) {
       // Capture only. Installing a body failure here would revoke in-flight receptions.
       body = { status: 'failed', failure };
@@ -84,7 +94,7 @@ export class InvocationExecution<Input, Output> {
     const settling = this.controls.settleAcceptances();
     if (settling) await settling;
     // Authenticate the exact body delivery before any cleanup failure can become authoritative.
-    let failure = body.status === 'failed' ? this.controls.classify(body.failure, 'execute') : undefined;
+    let failure = body.status === 'failed' ? this.controls.classify(body.failure, 'execute', fixingFailed) : undefined;
     const closing = this.work.close();
     if (closing.status === 'failed') failure = this.closeFailure(failure, closing.failure);
     if (failure) {

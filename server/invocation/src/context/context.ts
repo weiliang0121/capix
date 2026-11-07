@@ -2,15 +2,17 @@ import type { InvocationFailure } from '../invocation/failure.js';
 import { randomUUID } from 'node:crypto';
 import type { InvocationResult } from '../invocation/result.js';
 import type { CheckpointContinuationFact } from '../checkpoint/continuation.js';
+import { stableValue, type Stable, type RuntimeErrorValue } from '@capix/contracts';
+import { failureDiagnostic } from '../invocation/failure.js';
 
 /** Per-invocation controls; application settings and resource selection belong to binding. */
 export interface InvocationControls {
   readonly signal?: AbortSignal;
 }
 
-export type ContextState<Output> = Readonly<{ status: 'running' } | { status: 'succeeded'; output: Output } | { status: 'failed'; error: unknown; failure?: InvocationFailure }>;
+export type ContextState<Output> = Readonly<{ status: 'running' } | { status: 'succeeded'; output: Stable<Output> } | { status: 'failed'; error: unknown; diagnostic: Stable<RuntimeErrorValue>; failure?: InvocationFailure }>;
 
-/** Live invocation state. Values keep their identity; recording policy does not belong here. */
+/** Live invocation state owns stable data facts; thrown errors retain their live identity. */
 export class InvocationContext<Input = unknown, Output = unknown> {
   #id: string = randomUUID();
   get id(): string {
@@ -25,40 +27,43 @@ export class InvocationContext<Input = unknown, Output = unknown> {
   }
 
   /** Final delivery baseline: preserves saved progress without inventing an execute result. */
-  installDelivery(frame: { id: string; round: number; currentInput: Input; phase: 'execute' | 'receive' | 'handling' }, output: Output): void {
+  installDelivery(frame: { id: string; round: number; currentInput: Input | Stable<Input>; phase: 'execute' | 'receive' | 'handling' }, output: Output | Stable<Output>): void {
     this.installCheckpoint(frame);
-    this.#progress = Object.freeze({ round: frame.round, input: frame.currentInput, phase: frame.phase });
+    this.#progress = Object.freeze({ round: frame.round, input: this.currentInput, phase: frame.phase });
     this.complete(output);
   }
 
   /** A past declared failure remains diagnostic history, never a runnable exception. */
-  installFailure(frame: { id: string; round: number; currentInput: Input; phase: 'execute' | 'receive' | 'handling' }, failure: InvocationFailure): void {
+  installFailure(frame: { id: string; round: number; currentInput: Input | Stable<Input>; phase: 'execute' | 'receive' | 'handling' }, failure: InvocationFailure, diagnostic?: Stable<RuntimeErrorValue>): void {
     this.installCheckpoint(frame);
-    this.#progress = Object.freeze({ round: frame.round, input: frame.currentInput, phase: frame.phase });
-    this.fail(failure.error, failure);
+    this.#progress = Object.freeze({ round: frame.round, input: this.currentInput, phase: frame.phase });
+    this.fail(failure.error, failure, diagnostic);
   }
 
   /** Construction-only installation; never exposed through ContextView. */
-  installCheckpoint(frame: { id: string; round: number; currentInput: Input; continuation?: CheckpointContinuationFact }): void {
+  installCheckpoint(frame: { id: string; round: number; currentInput: Input | Stable<Input>; continuation?: CheckpointContinuationFact }): void {
     this.requireRunning();
     if (this.#progress.round !== 0 || !frame.id || !Number.isInteger(frame.round) || frame.round < 1 || frame.round > 2) throw new Error('Invalid checkpoint context installation');
+    const input = stableValue<Input>(frame.currentInput);
     this.#id = frame.id;
-    this.#progress = Object.freeze({ round: frame.round, input: frame.currentInput, phase: 'execute' });
+    this.#progress = Object.freeze({ round: frame.round, input, phase: 'execute' });
     this.#continuation = frame.continuation ? Object.freeze({ ...frame.continuation }) : undefined;
   }
   #state: ContextState<Output> = Object.freeze({ status: 'running' });
   #continuation?: CheckpointContinuationFact;
 
-  #progress: Readonly<{ round: number; input: Input; phase: 'execute' | 'receive' | 'handling'; result?: InvocationResult<Output> }>;
+  #progress: Readonly<{ round: number; input: Stable<Input>; phase: 'execute' | 'receive' | 'handling'; result?: InvocationResult<Output> }>;
+  readonly input: Stable<Input>;
 
-  constructor(readonly input: Input) {
-    this.#progress = Object.freeze({ round: 0, input, phase: 'execute' });
+  constructor(input: Input | Stable<Input>) {
+    this.input = stableValue<Input>(input);
+    this.#progress = Object.freeze({ round: 0, input: this.input, phase: 'execute' });
   }
 
   get progress() {
     return this.#progress;
   }
-  get currentInput(): Input {
+  get currentInput(): Stable<Input> {
     return this.#progress.input;
   }
 
@@ -75,7 +80,9 @@ export class InvocationContext<Input = unknown, Output = unknown> {
 
   returned(result: InvocationResult<Output>): void {
     this.requireRunning();
-    this.#progress = Object.freeze({ ...this.#progress, result: Object.freeze(result) });
+    const fixed = result.status === 'succeeded' ? { ...result, output: stableValue<Output>(result.output) } : { ...result, diagnostic: result.diagnostic ? stableValue<RuntimeErrorValue>(result.diagnostic) : failureDiagnostic(result.error) };
+    this.requireRunning();
+    this.#progress = Object.freeze({ ...this.#progress, result: Object.freeze(fixed) });
   }
 
   get state(): ContextState<Output> {
@@ -86,14 +93,18 @@ export class InvocationContext<Input = unknown, Output = unknown> {
     return this.#state.status;
   }
 
-  complete(output: Output): void {
+  complete(output: Output | Stable<Output>): void {
     this.requireRunning();
-    this.#state = Object.freeze({ status: 'succeeded', output });
+    const fixed = stableValue<Output>(output);
+    this.requireRunning();
+    this.#state = Object.freeze({ status: 'succeeded', output: fixed });
   }
 
-  fail(error: unknown, failure?: InvocationFailure): void {
+  fail(error: unknown, failure?: InvocationFailure, diagnostic?: Stable<RuntimeErrorValue>): void {
     this.requireRunning();
-    this.#state = Object.freeze({ status: 'failed', error, ...(failure ? { failure } : {}) });
+    const fixed = diagnostic ? stableValue<RuntimeErrorValue>(diagnostic) : failureDiagnostic(error);
+    this.requireRunning();
+    this.#state = Object.freeze({ status: 'failed', error, diagnostic: fixed, ...(failure ? { failure } : {}) });
   }
 
   requireRunning(): void {

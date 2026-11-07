@@ -40,7 +40,7 @@ for (const mode of ['child', 'raw-reception', 'typed-reception']) {
       checkpoints: { store },
     });
     const before = store.read('root');
-    await assert.rejects(runtime.resume('root', {}), /retired multi-round/);
+    await assert.rejects(runtime.resume('root', {}), /retired/);
     assert.equal(captures, 0);
     assert.equal(store.read('root'), before);
     assert.equal(runtime.running, false);

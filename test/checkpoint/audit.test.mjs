@@ -12,7 +12,7 @@ function checkpoint(key, execute, uses = []) {
 }
 
 function savedRoot(children) {
-  return { id: 'root-cp', formatVersion: 5, contract: { key: 'root', version: 1 }, point: 'saved', frame: { owner: { contextId: 'root-context', kind: 'scene' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: children.length, children }, state: null, references: {} };
+  return { id: 'root-cp', formatVersion: 6, contract: { key: 'root', version: 1 }, point: 'saved', frame: { owner: { contextId: 'root-context', kind: 'scene' }, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: children.length, children }, state: null, references: {} };
 }
 
 function returnedChild() {
@@ -237,7 +237,7 @@ test('a final child delivery preserves its own second-round input without rerunn
   relation.state = { kind: 'waiting' };
   const store = new MemoryCheckpointStore();
   store.save(savedRoot([relation]), 0);
-  store.save({ id: 'child-cp', formatVersion: 5, contract: { key: 'child-a', version: 1 }, point: 'saved', frame: { owner: relation.identity, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
+  store.save({ id: 'child-cp', formatVersion: 6, contract: { key: 'child-a', version: 1 }, point: 'saved', frame: { owner: relation.identity, round: 1, phase: 'execute', input: {}, currentInput: {}, nextChildOrder: 0, children: [] }, state: null, references: {} }, 0);
   store.finish('child-context', 1, { status: 'succeeded', output: 'final round output', progress: { round: 2, phase: 'handling', currentInput: { retry: true } } });
   const runtime = installCallable(new Root(), { source, providers: [], checkpoints: { store } });
   assert.equal(await runtime.resume('root-context', {}), 'final round output');
@@ -331,7 +331,7 @@ test('a rejected continuation check publishes its failure without closing the sa
   }
   const runtime = installCallable(new Root(), { source, providers: [], checkpoints: { store, observation: { observe: (fact) => facts.push(fact) } } });
   await assert.rejects(runtime.resume('root-context', {}), /incompatible/);
-  assert.equal(store.read('root-context'), saved);
+  assert.deepEqual(store.read('root-context'), saved);
   assert.ok(facts.some((fact) => fact.kind === 'failed' && fact.stage === 'restore'));
   assert.equal(
     facts.some((fact) => fact.kind === 'continued'),

@@ -70,11 +70,11 @@ function executionRuntime(execute, { changes, recording, parentAccept } = {}) {
   return installCallable(new R(), { changes, observations: recording ? [recording] : [], providers: [], source: { entry: () => ({}), capture: () => ({}) } });
 }
 
-test('all live sources remain observable without Recorder and do not serialize arbitrary invocation IO', async () => {
+test('all live sources remain observable without Recorder and use fixed ordinary invocation data', async () => {
   const changes = new ChangeBuffer();
   const transcript = new Transcript([{ role: 'user', content: 'evidence' }], { changes });
   const memories = new Memories(transcript, { changes });
-  const opaque = new Map([['external', () => {}]]);
+  const opaque = { external: ['value'] };
   const runtime = executionRuntime(
     () => {
       const [memory] = memories.apply([memoryChange('one')]);
@@ -84,7 +84,7 @@ test('all live sources remain observable without Recorder and do not serialize a
     },
     { changes },
   );
-  assert.equal(await runtime.run(opaque, {}), opaque);
+  assert.deepEqual(await runtime.run(opaque, {}), opaque);
   const events = changes.take();
   assert.equal(
     events.some((event) => event.type === 'record'),

@@ -62,7 +62,9 @@ const checkpointStore = {
     }
     const start = performance.now();
     const result = store.checkpoints.save(image, revision);
-    measurements.push({ kind: 'save', contract: image.contract.key, point: image.point, bytes: Buffer.byteLength(JSON.stringify(image)), syncMs: performance.now() - start, children: image.frame.children.length, modelInput: image.contract.key === 'conversation.tools.completion' ? image.frame.input : undefined });
+    const elapsedMs = performance.now() - start;
+    image = store.checkpoints.read(image.frame.owner.contextId).image;
+    measurements.push({ kind: 'save', contract: image.contract.key, point: image.point, bytes: Buffer.byteLength(JSON.stringify(image)), syncMs: elapsedMs, children: image.frame.children.length, modelInput: image.contract.key === 'conversation.tools.completion' ? image.frame.input : undefined });
     if (mode === 'crash' && image.contract.key === 'conversation.tools.loop' && image.point === 'tools' && image.state.cursor === 1) {
       console.log(JSON.stringify({ status: 'crashed', measurements }));
       process.exit(73);

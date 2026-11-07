@@ -621,7 +621,7 @@ test('proposal skips stay inside maintenance while a broader decision only recei
       const maintain = new Group({ name: 'maintenance-with-explicit-decision' }).add({ remember, decide });
       maintain.run = async (work) => {
         await work.children.remember.invoke(work.input, {
-          result: { failed: (error) => work.children.decide.invoke(error) },
+          result: { failed: (error) => work.children.decide.invoke({ name: error.name, message: error.message, code: error.code }) },
         });
         facts.push(...work.children.facts.list(remember));
       };

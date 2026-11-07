@@ -355,7 +355,7 @@ test('resume explicitly selects an owned binding and releases failures without r
   store.save(
     {
       id: 'saved-checkpoint',
-      formatVersion: 5,
+      formatVersion: 6,
       contract: { key: 'driver.resume', version: 1 },
       point: 'saved',
       frame: { owner: { contextId: 'saved-context', kind: 'node' }, round: 1, phase: 'execute', input: 'original', currentInput: 'original', nextChildOrder: 0, children: [] },

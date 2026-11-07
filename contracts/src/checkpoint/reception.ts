@@ -1,3 +1,4 @@
+import type { Stable } from '../value.js';
 import type { CheckpointValue } from './codec.js';
 import type { ChildContract } from '../children/contract.js';
 import type { CallableShape } from '../callable/signature.js';
@@ -5,9 +6,9 @@ import type { CallableShape } from '../callable/signature.js';
 /** Validation never replaces the accepted value; encoding is only for checkpoints. */
 export interface ReceptionValue<Value> {
   /** Must finish synchronously; a returned copy is ignored after successful validation. */
-  readonly check: (value: unknown) => Value;
-  readonly encode: (value: NoInfer<Value>) => CheckpointValue;
-  readonly decode: (value: CheckpointValue) => NoInfer<Value>;
+  readonly check: (value: unknown) => Value | Stable<Value>;
+  readonly encode: (value: NoInfer<Stable<Value>>) => CheckpointValue;
+  readonly decode: (value: CheckpointValue) => NoInfer<Value> | NoInfer<Stable<Value>>;
 }
 
 declare const receptionSignature: unique symbol;

@@ -25,7 +25,7 @@ export class CheckpointJournal extends MemoryCheckpointStore {
     const elapsedMs = performance.now() - start;
     const saved = this.read(receipt.contextId).image;
     this.writes.push({ image: saved, revision });
-    this.samples.push({ kind: 'save', contract: image.contract.key, point: image.point, contextId: image.frame.owner.contextId, children: image.frame.children.length, value: saved, elapsedMs, snapshot: this.capture() });
+    this.samples.push({ kind: 'save', contract: image.contract.key, point: image.point, contextId: image.frame.owner.contextId, children: saved.frame.children.length, value: saved, elapsedMs, snapshot: this.capture() });
     return receipt;
   }
   finish(id, revision, delivery) {

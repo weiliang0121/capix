@@ -55,7 +55,12 @@ test('standalone structures and runtime exports share identities and run the dic
   assert.equal(runner.scene, scene);
   assert.equal(scene.names.group, group);
   assert.equal(group.names.translate, translate);
-  assert.equal(await runner.run('hello'), greeting, 'cross-package construction preserves successful references');
+  const translated = await runner.run('hello');
+  assert.deepEqual(translated, greeting);
+  assert.notEqual(translated, greeting, 'resource aliases do not escape as mutable call facts');
+  greeting.text = 'changed source';
+  assert.equal(translated.text, '你好');
+  assert.equal(Object.isFrozen(translated), true);
   assert.equal(await runner.run('untranslated'), 'untranslated');
 });
 

@@ -1,3 +1,4 @@
+import type { Stable } from '@capix/contracts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { InvocationRelationChange, InvocationRelationIdentity } from '../observation/facts.js';
 import type { InvocationFailure } from './failure.js';
@@ -43,6 +44,10 @@ export class InvocationChildren implements InvocationRelationOwner {
   readonly #provenance: InvocationProvenance;
   readonly #calls = new Set<Promise<void>>();
   readonly #acceptances = new Set<Promise<void>>();
+  #trackingFacts = false;
+  #readingFacts = false;
+  #factRevision = 0;
+  readonly #changedFacts = new Map<string, number>();
   constructor(
     private readonly context: InvocationContext,
     private readonly failed?: (failure: InvocationFailure) => void,
@@ -108,13 +113,14 @@ export class InvocationChildren implements InvocationRelationOwner {
     this.failed?.(failure);
   }
   publish(relation: InvocationRelation, change: InvocationRelationChange): unknown | undefined {
+    if (this.#trackingFacts) this.#changedFacts.set(relation.invocation.context.id, ++this.#factRevision);
     const identity = Object.freeze({ parentContextId: this.context.id, childContextId: relation.invocation.context.id, parentRound: relation.round, ...(relation.key ? { key: relation.key } : {}) });
     return this.observe?.(identity, change);
   }
   private relation<Output>(target: InvocationTarget<Output>, round: number, order: number, key?: string, declarationPosition?: number, receiveFailure?: boolean): InvocationRelation<Output> {
     return new InvocationRelation({ target, round, order, key, declarationPosition, receiveFailure }, this);
   }
-  run<Value>(target: InvocationTarget<Value>, work: () => Promise<Value>): Promise<Value> {
+  run<Value>(target: InvocationTarget<Value>, work: () => Promise<Stable<Value>>): Promise<Stable<Value>> {
     // Start admission is checked inside the child's delivery boundary, so a rejected
     // start still fixes that call's failed Context and returned relationship.
     this.get(target);
@@ -164,6 +170,7 @@ export class InvocationChildren implements InvocationRelationOwner {
     }
   }
   attach<Output>(target: InvocationTarget<Output>, options: InvocationRelationOptions = {}): InvocationRelation<Output> {
+    this.changing();
     this.context.requireRunning();
     this.requireHealthy();
     if (this.#items.has(target.context.id)) throw new Error('Child invocation is already attached');
@@ -174,6 +181,7 @@ export class InvocationChildren implements InvocationRelationOwner {
     return relation;
   }
   adopt<Output>(target: InvocationTarget<Output>): InvocationRelation<Output> {
+    this.changing();
     this.requireHealthy();
     const relation = this.#items.get(target.context.id);
     if (!relation || !this.#installed.has(target.context.id) || relation.returned || relation.invocation.context.status !== 'running') throw new Error('Restored child is not the saved waiting child');
@@ -190,12 +198,15 @@ export class InvocationChildren implements InvocationRelationOwner {
     return this.#nextOrder;
   }
   replaceSaved(id: string, target: InvocationTarget, state: InvocationRelationBaseline): void {
+    this.changing();
     const relation = this.#items.get(id);
     if (!relation || !this.#installed.has(id)) throw new Error('No saved child relation');
     if (target.context.id !== id) throw new Error('Restored child identity changed');
     relation.install(target, state);
+    if (this.#trackingFacts) this.#changedFacts.set(id, ++this.#factRevision);
   }
   install(nextOrder: number, children: readonly InvocationChildBaseline[]): void {
+    this.changing();
     if (this.#items.size || this.#nextOrder) throw new Error('Child baseline already installed');
     this.#nextOrder = nextOrder;
     for (const child of children) {
@@ -207,5 +218,46 @@ export class InvocationChildren implements InvocationRelationOwner {
   }
   values(): readonly InvocationRelation[] {
     return Object.freeze([...this.#items.values()]);
+  }
+
+  /** Point lookup never grants a child action or changes its lifecycle. */
+  byContextId(contextId: string): InvocationRelation | undefined {
+    return this.#items.get(contextId);
+  }
+
+  /** A checkpoint observes real owner changes, not optional observation events. */
+  trackFacts(): void {
+    this.#trackingFacts = true;
+    for (const id of this.#items.keys()) this.#changedFacts.set(id, ++this.#factRevision);
+  }
+
+  get factRevision(): number {
+    return this.#factRevision;
+  }
+
+  changedFacts(): readonly InvocationRelation[] {
+    return [...this.#changedFacts.keys()].map((id) => this.#items.get(id)!);
+  }
+
+  acknowledgeFacts(revision: number): void {
+    for (const [id, changed] of this.#changedFacts) if (changed <= revision) this.#changedFacts.delete(id);
+  }
+
+  /** No lock crosses an await. Author code cannot mutate this owner during a save cut. */
+  readFacts<Value>(read: () => Value): Value {
+    if (this.#readingFacts) throw new Error('Invocation fact inspection cannot reenter');
+    this.#readingFacts = true;
+    try {
+      return read();
+    } finally {
+      this.#readingFacts = false;
+    }
+  }
+
+  changing(): void {
+    if (!this.#readingFacts) return;
+    const error = new Error('Invocation facts cannot change during checkpoint inspection');
+    this.reject(error);
+    throw error;
   }
 }

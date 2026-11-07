@@ -5,7 +5,7 @@ import type { Composite, NamedMembers, MemberRegistration, NamedMemberRegistrati
 import type { ChildCallable } from './definition/children.js';
 import type { EmptyResources } from './definition/callable.js';
 import { assertStructureConfigurable } from './configuration.js';
-import type { CallableContract } from '@capix/contracts';
+import type { CallableContract, Stable } from '@capix/contracts';
 
 /** A callable root with ordinary configuration and explicit member composition. */
 export class Scene<Input = unknown, Output = unknown, Resources extends object = EmptyResources, Delta = never> extends Callable<Input, Output, 'scene', Resources, Delta> implements Composite {
@@ -28,7 +28,8 @@ export class Scene<Input = unknown, Output = unknown, Resources extends object =
       requireChildCallable(definition);
       super('scene');
       this.add(definition);
-      this.run = (work) => work.children.invoke(definition, work.input);
+      // The overload retains the single member’s I/O witness across heterogeneous storage.
+      this.run = async (work) => (await work.children.invoke(definition, work.input)) as Stable<Output>;
     } else {
       super('scene', definition);
     }

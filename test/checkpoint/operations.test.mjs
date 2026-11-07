@@ -14,7 +14,7 @@ class CapturedStore extends MemoryCheckpointStore {
   writes = [];
   save(image, revision) {
     const head = super.save(image, revision);
-    this.writes.push({ image, revision });
+    this.writes.push({ image: this.read(head.contextId).image, commit: image, revision });
     return head;
   }
   finish(id, revision, delivery) {

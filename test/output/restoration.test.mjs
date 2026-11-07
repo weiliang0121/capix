@@ -12,7 +12,7 @@ function restore(definition, { round = 1, currentInput = { stage: 'saved' } } = 
   const store = new MemoryCheckpointStore(),
     events = [];
   const contextId = `restored-round-${round}`;
-  store.save({ id: 'saved-image', formatVersion: 5, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, kind: 'scene' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [], ...(round === 2 ? { continuation: { fromRound: 1, stage: 'accept', reason: 'saved continuation' } } : {}) }, state: { source: 'durable' }, references: {} }, 0);
+  store.save({ id: 'saved-image', formatVersion: 6, contract: { key: definition.checkpoint.key, version: 1 }, point: 'saved', frame: { owner: { contextId, kind: 'scene' }, round, phase: 'execute', input: { stage: 'original' }, currentInput, nextChildOrder: 0, children: [], ...(round === 2 ? { continuation: { fromRound: 1, stage: 'accept', reason: 'saved continuation' } } : {}) }, state: { source: 'durable' }, references: {} }, 0);
   let captures = 0;
   const runtime = installCallable(new Scene(definition), {
     providers: [],
@@ -72,8 +72,14 @@ for (const failed of [false, true]) {
       },
     };
     const { runtime, store, events, contextId } = restore(definition);
+    let result;
     if (failed) await assert.rejects(runtime.resume(contextId, {}), (error) => error === rejected);
-    else assert.equal(await runtime.resume(contextId, {}), final);
+    else {
+      result = await runtime.resume(contextId, {});
+      assert.deepEqual(result, final);
+      assert.notEqual(result, final);
+      assert.equal(Object.isFrozen(result), true);
+    }
     assert.equal(executions, 1);
     assert.throws(() => writer.emit('late'), { code: 'OUTPUT_CLOSED' });
     assert.deepEqual(
@@ -86,7 +92,7 @@ for (const failed of [false, true]) {
     );
     assert.ok(events.every((event) => event.contextId === contextId && event.round === 1));
     if (failed) assert.equal(events.at(-1).reason, 'exception');
-    else assert.equal(events.at(-1).result, final);
+    else assert.equal(events.at(-1).result, result);
     const head = store.read(contextId);
     assert.equal(head.image.frame.round, 1);
     assert.deepEqual(head.image.state, { source: 'resumed' });
@@ -108,9 +114,9 @@ test('retired second-round checkpoints are readable data but rejected before cap
   };
   const { runtime, store, events, contextId, captures } = restore(definition, { round: 2 });
   const saved = store.read(contextId);
-  await assert.rejects(runtime.resume(contextId, {}), /retired multi-round/);
+  await assert.rejects(runtime.resume(contextId, {}), /retired/);
   assert.equal(captures(), 0);
   assert.equal(events.length, 0);
-  assert.equal(store.read(contextId), saved);
+  assert.deepEqual(store.read(contextId), saved);
   assert.equal(runtime.running, false);
 });

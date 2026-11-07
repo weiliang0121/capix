@@ -1,5 +1,5 @@
 import type { InvocationCheckpointWork } from '../checkpoint/work.js';
-import type { OperationOutcome, OutputDeclaration } from '@capix/contracts';
+import type { OperationOutcome, OutputDeclaration, Stable } from '@capix/contracts';
 import { InvocationStopped } from './stop.js';
 import type { Invocation } from './invocation.js';
 import type { InvocationContext } from '../context/context.js';
@@ -8,7 +8,7 @@ import type { InvocationFailure } from './failure.js';
 export interface InvocationWork<Input, Output, Context extends InvocationContext<Input, Output>> {
   readonly output?: OutputDeclaration<Output, unknown>;
   readonly checkpoint?: InvocationCheckpointWork<Input, Output, Context>;
-  execute(context: Context, invocation: Invocation<Input, Output, Context>): Output | Promise<Output>;
+  execute(context: Context, invocation: Invocation<Input, Output, Context>): Output | Stable<Output> | Promise<Output | Stable<Output>>;
   /** Mechanism port: synchronously revoke this entry's Work after started receptions drain. */
   close?(context: Context, invocation: Invocation<Input, Output, Context>): OperationOutcome<void>;
 }
@@ -19,7 +19,7 @@ export type InvocationProcess = { stage: 'execute'; type: 'start'; input: unknow
 /** Fixed business entry bound to one invocation; no independent acceptance or error interpreter. */
 export interface InvocationExecutionWork<Output> {
   readonly output?: OutputDeclaration<Output, unknown>;
-  execute(): Output | Promise<Output>;
+  execute(): Output | Stable<Output> | Promise<Output | Stable<Output>>;
   close(): OperationOutcome<void>;
 }
 

@@ -162,8 +162,8 @@ test('construction does not execute; repeated calls share the callable identity,
   const execution = begin(runtime);
   assert.equal(directCalls(runtime.recorder, recordFor(execution)).length, 0);
   const value = { x: 1 };
-  assert.equal(await node.call(callFor(execution), value), value);
-  assert.equal(await node.call(callFor(execution), value), value);
+  assert.deepEqual(await node.call(callFor(execution), value), value);
+  assert.deepEqual(await node.call(callFor(execution), value), value);
   const calls = directCalls(runtime.recorder, recordFor(execution));
   assert.equal(calls.length, 2);
   assert.notEqual(calls[0].id, calls[1].id);
@@ -456,7 +456,7 @@ test('publication failure does not change execution facts or operation output', 
   });
   const execution = begin(runtime);
   const node = new TestOperation(runtime, echo);
-  assert.equal(await node.call(callFor(execution), input), input);
+  assert.deepEqual(await node.call(callFor(execution), input), input);
   complete(execution, input);
   assert.equal(projectExecution(observeCall(runtime.recording, callFor(execution))).status, 'succeeded');
   const snapshot = observeCall(runtime.recording, callFor(execution));

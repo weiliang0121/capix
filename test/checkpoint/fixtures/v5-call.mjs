@@ -5,8 +5,12 @@ import { MemoryCheckpointStore, cloneCheckpointHead, checkpointReference } from 
 
 const codec = { encode: (value) => value, decode: (value) => value };
 const store = new MemoryCheckpointStore();
-const restore = process.argv[2] === 'restore' ? cloneCheckpointHead(JSON.parse(readFileSync(0, 'utf8'))) : undefined;
-if (restore) store.save(restore.image, 0);
+let restore = process.argv[2] === 'restore' ? cloneCheckpointHead(JSON.parse(readFileSync(0, 'utf8'))) : undefined;
+if (restore) {
+  store.save(restore.image, 0);
+  // Full-image import establishes this Store's physical publication references.
+  restore = store.read(restore.image.frame.owner.contextId);
+}
 const context = new InvocationContext({ request: 'start' });
 if (restore) context.installCheckpoint({ id: restore.image.frame.owner.contextId, round: restore.image.frame.round, currentInput: restore.image.frame.currentInput });
 const signal = new AbortController().signal;

@@ -1,3 +1,5 @@
+import { stableValue } from '@capix/contracts';
+import { decodeCheckpointData, runCheckpointCheck } from './data.js';
 import type { RuntimeErrorDetail, RuntimeErrorValue, CheckpointValue } from '@capix/contracts';
 import type { CheckpointChild, CheckpointChildReception, CheckpointHandledReception, CheckpointReferences, InvocationCheckpointFrame } from '@capix/checkpoint';
 import type { CheckpointBinding, CheckpointChildBinding, CheckpointReferenceSlot } from './work.js';
@@ -11,7 +13,7 @@ export type DecodedCheckpointChild = Omit<CheckpointChild, 'input' | 'state'> & 
   readonly input: unknown;
   readonly state: { readonly kind: 'waiting' } | { readonly kind: 'returned'; readonly output: unknown; readonly progress: ChildProgress; readonly reception: DecodedCheckpointReception } | (Omit<Extract<CheckpointChild['state'], { kind: 'failed' }>, 'progress' | 'reception'> & { readonly progress: ChildProgress; readonly reception?: DecodedCheckpointHandledReception });
 };
-export type DecodedCheckpointFrame = Omit<InvocationCheckpointFrame, 'input' | 'currentInput' | 'children'> & { readonly input: unknown; readonly currentInput: unknown; readonly children: readonly DecodedCheckpointChild[] };
+export type DecodedCheckpointFrame = Omit<InvocationCheckpointFrame, 'input' | 'currentInput' | 'children'> & { readonly input: unknown; readonly currentInput: unknown; readonly children: readonly DecodedCheckpointChild[]; readonly child?: (contextId: string) => DecodedCheckpointChild | undefined };
 
 /** A persisted position is meaningful only inside this parent's fixed contract. */
 export function checkpointChildBinding(child: CheckpointChild, children: readonly CheckpointChildBinding[] = []): CheckpointBinding | undefined {
@@ -34,10 +36,11 @@ export function checkpointReceptionBinding(child: CheckpointChild, receptions: r
 export function decodeCheckpointReception(child: CheckpointChild, binding: InvocationReceptionBinding | undefined): DecodedCheckpointReception {
   if (child.state.kind !== 'returned') throw new Error('Only returned children have saved reception facts');
   const saved = child.state.reception;
-  if (saved.kind !== 'accepted' || !binding) return saved;
+  if (saved.kind !== 'accepted') return saved;
+  if (!binding) return Object.freeze({ ...saved, ...(Object.hasOwn(saved, 'output') ? { output: decodeCheckpointData(saved.output!) } : {}) });
   if (!Object.hasOwn(saved, 'output')) throw new Error('Contracted checkpoint reception requires encoded output');
-  const output = binding.codec.decode(saved.output!);
-  binding.check(output);
+  const output = stableValue(binding.codec.decode(saved.output!));
+  runCheckpointCheck(() => binding.check(output));
   return Object.freeze({ ...saved, output });
 }
 
@@ -45,20 +48,31 @@ export function decodeCheckpointReception(child: CheckpointChild, binding: Invoc
 export function decodeCheckpointHandledReception(child: CheckpointChild, binding: InvocationReceptionBinding | undefined): DecodedCheckpointHandledReception | undefined {
   if (child.state.kind !== 'failed') throw new Error('Only failed children have handled reception facts');
   const saved = child.state.reception;
-  if (!saved || !binding) return saved;
+  if (!saved) return saved;
+  if (!binding) return Object.freeze({ ...saved, ...(Object.hasOwn(saved, 'output') ? { output: decodeCheckpointData(saved.output!) } : {}) });
   if (!Object.hasOwn(saved, 'output')) throw new Error('Contracted checkpoint handling requires encoded output');
-  const output = binding.codec.decode(saved.output!);
-  binding.check(output);
+  const output = stableValue(binding.codec.decode(saved.output!));
+  runCheckpointCheck(() => binding.check(output));
   return Object.freeze({ ...saved, output });
 }
 
-export function checkCheckpointReferences(frame: InvocationCheckpointFrame, references: CheckpointReferences, slots: Readonly<Record<string, CheckpointReferenceSlot>> = {}): void {
+export function checkCheckpointReferences(frame: InvocationCheckpointFrame, references: CheckpointReferences, slots: Readonly<Record<string, CheckpointReferenceSlot>> = {}, lookup?: (id: string) => CheckpointChild | undefined): void {
   if (Object.keys(references).length !== Object.keys(slots).length || Object.keys(references).some((name) => !Object.hasOwn(slots, name))) throw new Error('Checkpoint reference slots differ from the registered point');
+  let index: Map<string, CheckpointChild> | undefined;
+  const find =
+    lookup ??
+    ((id: string) => {
+      index ??= new Map(frame.children.map((child) => [child.identity.contextId, child]));
+      return index.get(id);
+    });
   for (const [name, slot] of Object.entries(slots)) {
     const saved = references[name];
     if (!saved || (slot.cardinality === 'many') !== Array.isArray(saved)) throw new Error('Checkpoint reference cardinality differs from the registered point');
     const values = Array.isArray(saved) ? saved : [saved];
-    for (const reference of values) if (checkpointReferenceChild(reference, frame.children).target.position !== slot.position) throw new Error('Checkpoint reference targets a different child declaration');
+    for (const reference of values) {
+      const child = find(reference.contextId);
+      if (!child || checkpointReferenceChild(reference, [child]).target.position !== slot.position) throw new Error('Checkpoint reference targets a different child declaration');
+    }
   }
 }
 
@@ -66,18 +80,18 @@ export function checkCheckpointReferences(frame: InvocationCheckpointFrame, refe
 export function decodeCheckpointFrame(frame: InvocationCheckpointFrame, binding: CheckpointBinding, children: readonly CheckpointChildBinding[] = [], receptions: readonly InvocationReceptionBinding[] = []): DecodedCheckpointFrame {
   const decoded = frame.children.map((child): DecodedCheckpointChild => {
     const target = checkpointChildBinding(child, children);
-    const input = target ? target.input.decode(child.input) : child.input;
+    const input = target ? stableValue(target.input.decode(child.input)) : decodeCheckpointData(child.input);
     const saved = child.state;
     if (saved.kind === 'waiting') return Object.freeze({ ...child, input, state: saved });
-    const progress = Object.freeze({ ...saved.progress, currentInput: target ? target.input.decode(saved.progress.currentInput) : saved.progress.currentInput });
+    const progress = Object.freeze({ ...saved.progress, currentInput: target ? stableValue(target.input.decode(saved.progress.currentInput)) : decodeCheckpointData(saved.progress.currentInput) });
     if (saved.kind === 'failed') {
       const reception = decodeCheckpointHandledReception(child, checkpointReceptionBinding(child, receptions));
       return Object.freeze({ ...child, input, state: Object.freeze({ ...saved, progress, ...(reception ? { reception } : {}) }) });
     }
     const reception = decodeCheckpointReception(child, checkpointReceptionBinding(child, receptions));
-    return Object.freeze({ ...child, input, state: Object.freeze({ ...saved, progress, reception, output: target ? target.output.decode(saved.output) : saved.output }) });
+    return Object.freeze({ ...child, input, state: Object.freeze({ ...saved, progress, reception, output: target ? stableValue(target.output.decode(saved.output)) : decodeCheckpointData(saved.output) }) });
   });
-  return Object.freeze({ ...frame, input: binding.input.decode(frame.input), currentInput: binding.input.decode(frame.currentInput), children: Object.freeze(decoded) });
+  return Object.freeze({ ...frame, input: stableValue(binding.input.decode(frame.input)), currentInput: stableValue(binding.input.decode(frame.currentInput)), children: Object.freeze(decoded) });
 }
 
 /** A stored diagnostic remains inert data; never format it as a new thrown Error. */

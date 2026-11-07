@@ -43,12 +43,16 @@ test('Runner child output uses the exact registered port, preserves final identi
       }),
     ],
   }).build();
-  assert.equal(await runner.run(null), final);
+  const delivered = await runner.run(null);
+  assert.deepEqual(delivered, final);
+  assert.notEqual(delivered, final);
+  assert.ok(Object.isFrozen(delivered));
   assert.deepEqual(
     events.filter((event) => event.kind === 'delta').map((event) => event.delta),
     ['hel', 'lo'],
   );
-  assert.equal(events.find((event) => event.kind === 'completed').result, final);
+  assert.equal(events.find((event) => event.kind === 'completed').result, delivered);
+  assert.equal(parentEvents.find((event) => event.kind === 'completed').result, delivered);
   assert.equal(
     parentEvents.some((event) => event.kind === 'delta'),
     false,
@@ -86,6 +90,6 @@ test('a failing Runner output consumer is isolated from the real result', async 
       }),
     ],
   }).build();
-  assert.equal(await runner.run(null), result);
+  assert.deepEqual(await runner.run(null), result);
   assert.equal(reported, 1);
 });

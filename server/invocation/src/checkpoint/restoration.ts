@@ -33,6 +33,7 @@ function readCheckpoint(installation: CheckpointInstallation | undefined, contra
   if (!saved) throw new Error('Checkpoint work is unavailable');
   const head = cloneCheckpointHead(saved);
   const image = head.image;
+  if (image.formatVersion !== 6) throw new Error('Checkpoint uses the retired live-reference format; start a new invocation');
   if (image.contract.key !== contract.key || image.contract.version !== contract.version) throw new Error('Checkpoint declaration is incompatible');
   if (image.frame.owner.contextId !== contextId || image.frame.owner.kind !== owner.kind || image.frame.owner.parentContextId !== owner.parentContextId) throw new Error('Checkpoint work belongs to another scope');
   if (head.delivery) throw new Error('A terminal checkpoint work cannot execute again');

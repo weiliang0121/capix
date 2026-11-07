@@ -26,7 +26,24 @@ node examples/tool-host-study/run.mjs --live --case edges --out .capix/tool-host
 
 `totalCheckpointSyncMs` 只测保存端口调用的同步耗时，不包含调用侧此前捕获/编码或其他资源工作。每次提交的 `cpuMs` 是该区间的进程 CPU 时间，不是 CP 专属 CPU。`totalCheckpointWriteBytes` 继续累计成功 save/finish 的逻辑 payload，不包含 SQLite/WAL 开销，也不因淘汰旧正文而减少。逻辑 JSON 存量、累计 CP 写入和 SQLite/WAL 大小分别报告。缓冲与测量比值不构成“未来一定不会超额”的保证。
 
+`processUsage.maxRssKiB` 是整个独立 Node 进程的 RSS 高水位，包括导入和报告准备，不等于 CP 缓存大小或精确堆分配量。对照实现时使用相同脚本、独立进程和新数据库，交错重复运行；保存次数、逻辑字节和实际交付应一起核对。脚本不会切换生产实现，候选对照的构建选择由实验宿主负责，不能在运行期间替换 dist。
+
 实际结果及已知限制见 [宿主验证报告](../../docs/native-tool-host-validation.md)。
+
+## CP 计算采样
+
+在离线样本中显式开启 V8 CPU 采样。采样围绕每次 `entry.run`，不改写生产源码或构建产物，不安装候选缓存；Inspector 启停会有少量边界开销。数据库打开、结构构建及最后检查不在该采样窗口中。
+
+```sh
+node examples/tool-host-study/run.mjs --out .capix/cp-baseline-new --case eight-models-32-slots
+node examples/tool-host-study/run.mjs --out .capix/cp-profile-new --case eight-models-32-slots --cpu-profile
+```
+
+先串行运行基线，再运行采样，重复对照；不要与其他性能测试并行。`--cpu-profile` 不接受 `--live`。每次入口额外生成原始 `.cpuprofile`，可以导入 Chrome DevTools；`turns[].cpuProfile` 提供按调用栈归类的样本、加权时间和占比。
+
+分类优先归属外层阶段：旧 head 读取包含其解压和认证，子关系捕获包含其 codec 和纯值复制，存储编码包含 JSON/Brotli。样本只计一次。GC、idle、未分类以及测量脚本自己的字节统计独立保留。`sampleMs` 按 V8 `timeDeltas` 加权，**不是精确阶段耗时或调用次数**；未分类不能全部算成 CP。原始栈及汇总都保留，方便复核归类。采样会增加开销，不能把采样／基线差异解释为性能优化收益。
+
+同一轮的复用边界测试与测量结论见 [CP 复用验证](../../docs/checkpoint-reuse-validation.md)。
 
 ## CP 保留迁移复测
 

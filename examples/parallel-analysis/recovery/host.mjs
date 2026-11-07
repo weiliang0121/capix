@@ -100,6 +100,8 @@ const checkpointPort = {
   finish: (...args) => store.checkpoints.finish(...args),
   save(image, revision) {
     const receipt = store.checkpoints.save(image, revision);
+    // Crash probes inspect the explicit logical read, not the delta submission.
+    image = store.checkpoints.read(receipt.contextId).image;
     if (mode === 'capture' && image.contract.key === 'conversation.completion-reply' && image.point === 'waiting') {
       const state = store.interactions.read(image.frame.input.id);
       if (state && inputOf(state.request).material?.index === 2) readerSaved = true;

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
 import { CHECKPOINT_MAX_BYTES } from '@capix/checkpoint';
+import { decodeCheckpointRecord, isCheckpointRecord } from '@capix/checkpoint/storage';
 
 /** UTF-8 bytes of the text itself, without JSON quotes or escaping. */
 export function textBytes(text) {
@@ -42,7 +43,7 @@ export function measureFiles(path) {
 }
 
 /**
- * Measure a closed conversation v2/v3/v4/v5/v6 database. The caller must stop the host and keep it closed.
+ * Measure a closed conversation v2/v3/v4/v5/v6/v7 database. The caller must stop the host and keep it closed.
  * Ordinary SQLite read-only connections can create WAL/SHM files; immutable mode avoids that,
  * but ignores WAL, so reject any nonempty WAL instead of reporting incomplete SQL contents.
  * CP `bytes`/`maxBytes` retain the original JSON size; v3 obtains it from validated storage
@@ -60,16 +61,24 @@ export function measureDatabase(path) {
   try {
     const applicationId = database.prepare('PRAGMA application_id').get().application_id;
     const schemaVersion = database.prepare('PRAGMA user_version').get().user_version;
-    if (applicationId !== 0x43415043 || ![2, 3, 4, 5, 6].includes(schemaVersion)) throw new Error('Measurement requires a conversation schema v2/v3/v4/v5/v6 database');
+    if (applicationId !== 0x43415043 || ![2, 3, 4, 5, 6, 7].includes(schemaVersion)) throw new Error('Measurement requires a conversation schema v2/v3/v4/v5/v6/v7 database');
     if (schemaVersion >= 6 && database.prepare('SELECT 1 FROM checkpoint_heads h LEFT JOIN checkpoint_images i ON i.id = h.image_id WHERE i.id IS NULL OR i.body IS NULL LIMIT 1').get()) throw new Error('Current checkpoint head body is missing');
     const images = measureCheckpoints(database, schemaVersion, 'checkpoint_images', 'body');
     const deliveries = measureCheckpoints(database, schemaVersion, 'checkpoint_heads', 'delivery');
     const heads = { count: deliveries.count, deliveryBytes: deliveries.bytes, maxDeliveryBytes: deliveries.maxBytes, storedDeliveryBytes: deliveries.storedBytes, maxStoredDeliveryBytes: deliveries.maxStoredBytes };
+    const facts =
+      schemaVersion >= 7
+        ? {
+            values: measureCheckpoints(database, schemaVersion, 'checkpoint_values', 'body'),
+            metadataBytes: database.prepare('SELECT coalesce(sum(length(CAST(metadata AS BLOB))),0) AS bytes FROM checkpoint_values').get().bytes,
+            relations: measureBodies(database, 'checkpoint_relations'),
+          }
+        : undefined;
     const completionInteractions = measureBodies(database, 'completion_interactions');
     const modelExchanges = schemaVersion >= 4 ? { collections: database.prepare('SELECT COUNT(*) AS count FROM model_exchanges').get().count, entries: measureBodies(database, 'model_exchange_entries'), metadataBytes: schemaVersion >= 5 ? database.prepare('SELECT COALESCE(SUM(length(CAST(metadata AS BLOB))), 0) AS bytes FROM model_exchanges').get().bytes : 0 } : undefined;
     // Recompute the host's retained JSON categories; do not trust its accounting
     // table as independent experimental evidence or confuse this with file size.
-    const archiveJsonBytes = images.bytes + heads.deliveryBytes + completionInteractions.bytes + (modelExchanges?.entries.bytes ?? 0) + (modelExchanges?.metadataBytes ?? 0);
+    const archiveJsonBytes = (facts ? facts.values.bytes + facts.metadataBytes + facts.relations.bytes : 0) + images.bytes + heads.deliveryBytes + completionInteractions.bytes + (modelExchanges?.entries.bytes ?? 0) + (modelExchanges?.metadataBytes ?? 0);
     const messages = measureBodies(database, 'messages');
     const memories = measureBodies(database, 'memories');
     const appendReceipts = measureBodies(database, 'append_receipts');
@@ -78,7 +87,7 @@ export function measureDatabase(path) {
     const pageCount = database.prepare('PRAGMA page_count').get().page_count;
     const freelistCount = database.prepare('PRAGMA freelist_count').get().freelist_count;
     const pageSize = database.prepare('PRAGMA page_size').get().page_size;
-    return { schemaVersion, checkpoints: { originalBytesSource: schemaVersion >= 3 ? 'storage-metadata' : 'body-text', images, heads }, completionInteractions, ...(modelExchanges ? { modelExchanges } : {}), archiveJsonBytes, messages, memories, appendReceipts, applyReceipts, content, sqlite: { pageCount, freelistCount, pageSize, logicalBytes: pageCount * pageSize }, files };
+    return { schemaVersion, checkpoints: { originalBytesSource: schemaVersion >= 3 ? 'storage-metadata' : 'body-text', images, heads, ...(facts ? { facts } : {}) }, completionInteractions, ...(modelExchanges ? { modelExchanges } : {}), archiveJsonBytes, messages, memories, appendReceipts, applyReceipts, content, sqlite: { pageCount, freelistCount, pageSize, logicalBytes: pageCount * pageSize }, files };
   } finally {
     database.close();
   }
@@ -116,6 +125,10 @@ function measureCheckpoints(database, version, table, column) {
 function originalCheckpointBytes(body, storedBytes) {
   const maxStoredBytes = Math.ceil((CHECKPOINT_MAX_BYTES + 1024) / 3) * 4 + 1024;
   if (storedBytes > maxStoredBytes) throw new Error('Checkpoint storage metadata exceeds its byte limit');
+  if (isCheckpointRecord(body)) {
+    decodeCheckpointRecord('head', body);
+    return storedBytes;
+  }
   const payload = JSON.parse(body);
   if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).sort().join(',') !== 'data,encoding,jsonBytes' || payload.encoding !== 'br' || !Number.isSafeInteger(payload.jsonBytes) || payload.jsonBytes <= 0 || payload.jsonBytes > CHECKPOINT_MAX_BYTES || typeof payload.data !== 'string' || !payload.data.length || payload.data.length % 4 !== 0) throw new Error('Invalid checkpoint storage metadata');
   const compressed = Buffer.from(payload.data, 'base64');

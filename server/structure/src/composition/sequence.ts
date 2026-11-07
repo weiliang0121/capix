@@ -4,18 +4,18 @@ import { Group } from '../group.js';
 import { requireChildCallable } from '../members.js';
 import type { ChildCallable } from '../definition/children.js';
 import type { MemberInput } from './input.js';
-import type { ChildCalls, CallableDelta, CallableOutput, InvocationOutputWriter, OperationResult, OutputDeclaration } from '@capix/contracts';
+import type { Stable, ChildCalls, CallableDelta, CallableOutput, InvocationOutputWriter, OperationResult, OutputDeclaration } from '@capix/contracts';
 
-export type SequenceScope<Input, Previous, Delta = never> = { readonly input: Input; readonly previous: Previous } & ([Delta] extends [never] ? object : { readonly output: InvocationOutputWriter<Delta> });
+export type SequenceScope<Input, Previous, Delta = never> = { readonly input: Stable<Input>; readonly previous: Stable<Previous> } & ([Delta] extends [never] ? object : { readonly output: InvocationOutputWriter<Delta> });
 
 /** Use satisfies to contextually type a configured step without losing its exact callback results. */
 export interface SequenceStep<Member extends ChildCallable, Input = MemberInput<Member>, Previous = Input, Delta = never> {
   readonly node: Member;
   readonly key?: string;
-  readonly input?: (scope: SequenceScope<Input, Previous, Delta>) => MemberInput<Member>;
-  readonly delta?: [CallableDelta<Member>] extends [never] ? never : (delta: CallableDelta<Member>, scope: SequenceScope<Input, Previous, Delta>) => void;
+  readonly input?: (scope: SequenceScope<Input, Previous, Delta>) => MemberInput<Member> | Stable<MemberInput<Member>>;
+  readonly delta?: [CallableDelta<Member>] extends [never] ? never : (delta: Stable<CallableDelta<Member>>, scope: SequenceScope<Input, Previous, Delta>) => void;
   readonly result?: {
-    readonly succeeded?: (value: CallableOutput<Member>, scope: SequenceScope<Input, Previous, Delta>) => unknown;
+    readonly succeeded?: (value: Stable<CallableOutput<Member>>, scope: SequenceScope<Input, Previous, Delta>) => unknown;
     readonly failed?: (failure: unknown, scope: SequenceScope<Input, Previous, Delta>) => unknown;
   };
 }
@@ -24,11 +24,11 @@ export interface SequenceStep<Member extends ChildCallable, Input = MemberInput<
 // it does not contextually widen callback arguments or results to any.
 export type SequenceItem = ChildCallable | { readonly node: ChildCallable };
 type StepNode<Step> = Step extends ChildCallable ? Step : Step extends { readonly node: infer Member extends ChildCallable } ? Member : never;
-type Accepted<Step> = OperationResult<CallableOutput<StepNode<Step>>, Step>;
+type Accepted<Step> = Stable<OperationResult<Stable<CallableOutput<StepNode<Step>>>, Step>>;
 type Initial<Step> = Step extends { readonly input: (scope: infer Scope) => unknown } ? (Scope extends { readonly input: infer Input } ? Input : unknown) : MemberInput<StepNode<Step>>;
 export type SequenceInput<Steps extends readonly SequenceItem[]> = Steps extends readonly [infer First, ...unknown[]] ? Initial<First> : unknown;
 export type SequenceOutput<Steps extends readonly SequenceItem[]> = Steps extends readonly [...unknown[], infer Last] ? Accepted<Last> : SequenceInput<Steps>;
-type ValidStep<Step, Input, Previous, Delta> = Step extends ChildCallable ? ([Previous] extends [MemberInput<Step>] ? true : false) : Step extends SequenceStep<StepNode<Step>, Input, Previous, Delta> ? (Step extends { readonly input: (scope: never) => unknown } ? true : [Previous] extends [MemberInput<StepNode<Step>>] ? true : false) : false;
+type ValidStep<Step, Input, Previous, Delta> = Step extends ChildCallable ? ([Previous] extends [MemberInput<Step> | Stable<MemberInput<Step>>] ? true : false) : Step extends SequenceStep<StepNode<Step>, Input, Previous, Delta> ? (Step extends { readonly input: (scope: never) => unknown } ? true : [Previous] extends [MemberInput<StepNode<Step>> | Stable<MemberInput<StepNode<Step>>>] ? true : false) : false;
 type ValidSteps<Steps extends readonly SequenceItem[], Input, Previous, Delta> = Steps extends readonly [infer First extends SequenceItem, ...infer Rest extends readonly SequenceItem[]] ? ([ValidStep<First, Input, Previous, Delta>] extends [true] ? ValidSteps<Rest, Input, Accepted<First>, Delta> : false) : Steps extends readonly [] ? true : false;
 type CheckedSteps<Steps extends readonly SequenceItem[], Delta> = [SequenceInput<Steps>] extends [never] ? never : ValidSteps<Steps, SequenceInput<Steps>, SequenceInput<Steps>, Delta> extends true ? unknown : never;
 
@@ -63,7 +63,7 @@ export class Sequence<const Steps extends readonly SequenceItem[], Delta = never
       const output = 'output' in work ? (work.output as InvocationOutputWriter<unknown>) : undefined;
       for (const step of this.#steps) previous = await step.invoke(work.input, previous, work.children, output);
       // The constructor checks every adjacent input and reception result before erasing the tuple for storage.
-      return previous as SequenceOutput<Steps>;
+      return previous as Stable<SequenceOutput<Steps>>;
     };
     Object.defineProperty(this, 'run', { get: () => run, enumerable: true, configurable: true });
     Object.defineProperty(this, 'output', { get: () => outputDeclaration, enumerable: true, configurable: true });

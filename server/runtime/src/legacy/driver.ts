@@ -11,7 +11,7 @@ import { runEntry, type EntryChange, type EntryState } from '../entry.js';
 import { snapshotInvocationCapabilities, type InvocationCapabilities } from '../construction/capabilities.js';
 import { type CallableBindingOptions } from './binding.js';
 import type { AnyCallable } from '../binding/declarations.js';
-import type { CallableInput, CallableOutput } from '@capix/contracts';
+import type { CallableInput, CallableOutput, Stable } from '@capix/contracts';
 import type { CheckpointStore } from '@capix/checkpoint';
 
 /** Legacy multi-root host. New hosts use Runner; both share entry and invocation mechanisms. */
@@ -47,11 +47,11 @@ export class Driver {
     return this.entry(structure).running;
   }
 
-  run<Structure extends AnyBuiltCallable>(structure: Structure, input: NoInfer<CallableInput<Structure>>, options: NoInfer<BuiltOptions<Structure>> & InvocationControls): Promise<CallableOutput<Structure>> {
+  run<Structure extends AnyBuiltCallable>(structure: Structure, input: NoInfer<CallableInput<Structure> | Stable<CallableInput<Structure>>>, options: NoInfer<BuiltOptions<Structure>> & InvocationControls): Promise<Stable<CallableOutput<Structure>>> {
     return this.perform(structure, { input }, options);
   }
 
-  resume<Structure extends AnyBuiltCallable>(structure: Structure, contextId: string, options: NoInfer<BuiltOptions<Structure>> & InvocationControls): Promise<CallableOutput<Structure>> {
+  resume<Structure extends AnyBuiltCallable>(structure: Structure, contextId: string, options: NoInfer<BuiltOptions<Structure>> & InvocationControls): Promise<Stable<CallableOutput<Structure>>> {
     return this.perform(structure, { contextId }, options);
   }
 
@@ -61,7 +61,7 @@ export class Driver {
     return entry;
   }
 
-  private async perform<Structure extends AnyBuiltCallable>(structure: Structure, request: { input: CallableInput<Structure> } | { contextId: string }, options: BuiltOptions<Structure> & InvocationControls): Promise<CallableOutput<Structure>> {
+  private async perform<Structure extends AnyBuiltCallable>(structure: Structure, request: { input: CallableInput<Structure> | Stable<CallableInput<Structure>> } | { contextId: string }, options: BuiltOptions<Structure> & InvocationControls): Promise<Stable<CallableOutput<Structure>>> {
     const entry = this.entry(structure);
     return runEntry(entry, structure, request, options, (change) => this.publish(change));
   }

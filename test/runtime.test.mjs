@@ -21,7 +21,7 @@ const begin = (runtime) => {
 };
 const createRecorder = (clock = new Clock()) => new Recorder(new RecordBook(), { clock });
 
-test('Runtime passes live Contexts; records retain separate identities, relations and snapshots', async () => {
+test('Runtime passes live Contexts with stable input; records retain separate identities and snapshots', async () => {
   const recorder = createRecorder(),
     runtime = createBoundRuntime({ recorder }),
     execution = begin(runtime);
@@ -31,19 +31,21 @@ test('Runtime passes live Contexts; records retain separate identities, relation
   const output = await invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), input), async (context) => {
     parent = context;
     assert.ok(context instanceof CallableContext);
-    assert.equal(context.input, input);
+    assert.deepEqual(context.input, input);
     assert.equal(context.signal, execution.signal);
     assert.equal(context.executionContext, undefined);
     assert.notEqual(recordFor(context).id, context.id);
     assert.equal(recordFor(context).value.input.count, 0);
-    context.input.count++;
-    return invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), context.input, context), (nested) => {
+    assert.throws(() => context.input.count++, TypeError);
+    const nextInput = { ...context.input, count: context.input.count + 1 };
+    return invoke(lifecycleFor(runtime).operation(execution, new TestOperation(runtime), nextInput, context), (nested) => {
       child = nested;
       return nested.input;
     });
   });
-  assert.equal(output, input);
-  assert.equal(parent.state.output, input);
+  assert.deepEqual(output, { count: 1 });
+  assert.equal(input.count, 0);
+  assert.equal(parent.state.output, output);
   assert.equal(Object.hasOwn(child, 'parentOperationId'), false);
   const parentRecord = recordFor(parent),
     childRecord = recordFor(child);

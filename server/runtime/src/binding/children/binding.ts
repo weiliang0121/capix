@@ -1,5 +1,5 @@
 import { createCallableInvocation, restoreCallableInvocation } from '../../construction/calls.js';
-import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls, ReceptionDefinition, OperationOptions } from '@capix/contracts';
+import type { ChildCall, ChildCalls, ChildContract, ChildOptions, ChildReference, CallableInput, CallableOutput, CallableDelta, ResumeChildCalls, ReceptionDefinition, OperationOptions, Stable } from '@capix/contracts';
 import { InvocationCancelled, type Invocation, ChildCallFailure, combineOutputReceivers } from '@capix/invocation';
 import type { BoundChildren } from './bound.js';
 import type { InvocationChildReferences } from './references.js';
@@ -8,7 +8,7 @@ import type { BoundReceptions } from '../receptions.js';
 export type ChildBindingsParent = Invocation<any, any, any>;
 
 /** Public overloads have checked result/reception association before heterogeneous dispatch. */
-type InvocationChildOperationOptions<D extends ChildContract> = ChildOptions<D> & OperationOptions<CallableOutput<D>, unknown, unknown, CallableDelta<D>> & { readonly reception?: ReceptionDefinition<D, any> };
+type InvocationChildOperationOptions<D extends ChildContract> = ChildOptions<D> & OperationOptions<Stable<CallableOutput<D>>, unknown, unknown, Stable<CallableDelta<D>>> & { readonly reception?: ReceptionDefinition<D, any> };
 
 interface ChildAccessOptions {
   readonly children: BoundChildren;
@@ -36,7 +36,7 @@ export class InvocationChildBindings {
     });
   }
 
-  private invoke<D extends ChildContract>(definition: D, input: CallableInput<D>, options: InvocationChildOperationOptions<D> = {}): Promise<any> {
+  private invoke<D extends ChildContract>(definition: D, input: CallableInput<D> | Stable<CallableInput<D>>, options: InvocationChildOperationOptions<D> = {}): Promise<any> {
     return this.perform(() =>
       this.options.parent.children.accepting(async () => {
         this.requireAllowed(definition);
@@ -110,7 +110,7 @@ export class InvocationChildBindings {
     }, contract);
   }
 
-  private create<D extends ChildContract>(definition: D, input: CallableInput<D>, options: ChildOptions<D> = {}): ChildCall<D> {
+  private create<D extends ChildContract>(definition: D, input: CallableInput<D> | Stable<CallableInput<D>>, options: ChildOptions<D> = {}): ChildCall<D> {
     return this.guard(() => {
       this.requireAllowed(definition);
       const child = createCallableInvocation(this.options.children.get(definition), this.options.parent, input, { ...options, declarationPosition: this.options.children.position(definition) });
@@ -138,18 +138,18 @@ export class InvocationChildBindings {
     const entry = this.options.references.require(ref);
     const relation = entry.relation;
     const access = this;
-    function accept(): Promise<CallableOutput<D>>;
-    function accept<Value>(receive: (output: CallableOutput<D>) => Value | Promise<Value>): Promise<Value>;
-    function accept<Value>(contract: ReceptionDefinition<D, Value>, receive: (output: CallableOutput<D>) => NoInfer<Value> | Promise<NoInfer<Value>>): Promise<Value>;
-    function accept<Value = CallableOutput<D>>(first?: ReceptionDefinition<D, Value> | ((output: CallableOutput<D>) => Value | Promise<Value>), receive?: (output: CallableOutput<D>) => Value | Promise<Value>): Promise<Value> {
+    function accept(): Promise<Stable<CallableOutput<D>>>;
+    function accept<Value>(receive: (output: Stable<CallableOutput<D>>) => Value | Stable<Value> | Promise<Value | Stable<Value>>): Promise<Stable<Value>>;
+    function accept<Value>(contract: ReceptionDefinition<D, Value>, receive: (output: Stable<CallableOutput<D>>) => NoInfer<Value | Stable<Value>> | Promise<NoInfer<Value | Stable<Value>>>): Promise<Stable<Value>>;
+    function accept<Value = CallableOutput<D>>(first?: ReceptionDefinition<D, Value> | ((output: Stable<CallableOutput<D>>) => Value | Stable<Value> | Promise<Value | Stable<Value>>), receive?: (output: Stable<CallableOutput<D>>) => Value | Stable<Value> | Promise<Value | Stable<Value>>): Promise<Stable<Value>> {
       return access.perform(() => {
         if (first !== undefined && typeof first !== 'function' && (typeof first !== 'object' || first === null)) throw new Error('Invalid child reception contract or callback');
         const contract = typeof first === 'object' && first !== null ? access.options.receptions.require(first, entry.definition as D) : undefined;
         const callback = typeof first === 'function' ? first : receive;
         if (contract && typeof callback !== 'function') throw new Error('Typed reception requires a callback');
-        return relation.accept((output) => {
+        return relation.accept<Value>((output) => {
           access.checkActive();
-          return callback ? callback(output as CallableOutput<D>) : (output as Value);
+          return callback ? callback(output as Stable<CallableOutput<D>>) : (output as Stable<Value>);
         }, contract);
       });
     }
@@ -160,7 +160,7 @@ export class InvocationChildBindings {
         this.perform(async () => {
           // Reading a saved delivery starts no new work. Every real start still requires uses.
           if (!relation.returned) this.requireAllowed(entry.definition);
-          return (await relation.invocation.run()) as CallableOutput<D>;
+          return (await relation.invocation.run()) as Stable<CallableOutput<D>>;
         }),
       invoke: (options: Pick<InvocationChildOperationOptions<D>, 'result' | 'reception'> = {}) =>
         this.perform(() =>

@@ -130,7 +130,7 @@ test('equivalent children have independent parent Accepted values in factory and
   assert.equal(await runtime(new NamedParent()).run(null, {}), 5);
 });
 
-test('normal checking preserves the callback reference and never calls persistence codecs', async () => {
+test('normal checking validates fixed callback data once and never calls persistence codecs', async () => {
   const child = leaf();
   const original = { committed: true };
   let checks = 0;
@@ -138,19 +138,19 @@ test('normal checking preserves the callback reference and never calls persisten
     child,
     checked((value) => {
       checks++;
-      assert.equal(value, original);
+      assert.deepEqual(value, original);
       return { committed: true };
     }),
   );
   const definition = parent(child, [contract], async (work) => {
     const call = work.children.create(child, 'candidate');
     await call.run();
-    assert.equal(await call.accept(contract, () => original), original);
-    assert.equal(work.children.facts.accepted(call.ref, contract), original);
-    assert.equal(work.children.facts.get(call.ref).reception.value, original);
+    assert.deepEqual(await call.accept(contract, () => original), original);
+    assert.deepEqual(work.children.facts.accepted(call.ref, contract), original);
+    assert.deepEqual(work.children.facts.get(call.ref).reception.value, original);
     return original;
   });
-  assert.equal(await runtime(definition).run(null, {}), original);
+  assert.deepEqual(await runtime(definition).run(null, {}), original);
   assert.equal(checks, 1, 'reading an accepted fact does not execute check again');
 });
 

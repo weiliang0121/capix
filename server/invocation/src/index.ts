@@ -4,7 +4,7 @@ export { InvocationContext, type InvocationControls, type ContextState } from '.
 export { CallableContext } from './context/callable.js';
 export type { InvocationWork, InvocationProcess } from './invocation/work.js';
 export type { InvocationResult } from './invocation/result.js';
-export { failureFact, type InvocationFailure, type InvocationPhase } from './invocation/failure.js';
+export { failureFact, failureDiagnostic, type InvocationFailure, type InvocationPhase } from './invocation/failure.js';
 export { Clock } from './clock.js';
 
 // Direct relationships and their independent returned/reception facts.

@@ -67,7 +67,9 @@ const checkpoints = {
   save(image, revision) {
     const start = performance.now();
     const receipt = store.checkpoints.save(image, revision);
-    measurements.push({ kind: 'save', key: image.contract.key, point: image.point, bytes: Buffer.byteLength(JSON.stringify(image)), syncMs: performance.now() - start, children: image.frame.children.length });
+    const elapsedMs = performance.now() - start;
+    image = store.checkpoints.read(image.frame.owner.contextId).image;
+    measurements.push({ kind: 'save', key: image.contract.key, point: image.point, bytes: Buffer.byteLength(JSON.stringify(image)), syncMs: elapsedMs, children: image.frame.children.length });
     if (image.contract.key === 'conversation.tools.archived-answer' && mode === `crash-${image.point}`) stop(image.point);
     return receipt;
   },

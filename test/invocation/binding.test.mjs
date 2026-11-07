@@ -170,12 +170,14 @@ test('without recording, the invocation still provides the live parent and no re
       maxRounds: 1,
       execute(context, invocation) {
         assert.equal(invocation.source, undefined);
-        const child = runtime.operationInvocationBuilder.create(invocation, { input: new Map([['value', 1]]), description: operation, work: identity });
+        const child = runtime.operationInvocationBuilder.create(invocation, { input: { value: 1 }, description: operation, work: identity });
         assert.equal(child.record, undefined);
         assert.equal(child.source, undefined);
         return child.run();
       },
     },
   });
-  assert.equal((await root.run()).get('value'), 1);
+  const result = await root.run();
+  assert.equal(result.value, 1);
+  assert.equal(Object.isFrozen(result), true);
 });

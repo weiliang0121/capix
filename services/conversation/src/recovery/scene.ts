@@ -1,3 +1,4 @@
+import type { Stable } from '@capix/contracts';
 import { resolveConversationOutputBudget, type ConversationOutputBudget } from '../model/budget.js';
 import { isDeepStrictEqual as equal } from 'node:util';
 import type { ResourcesOf } from '@capix/resources';
@@ -30,17 +31,17 @@ export function createContentRecoveryScene(answer: ConversationAnswer<Conversati
   const answerReception = reception(answer, { ...acceptedMessageCodec, check: (value: unknown) => acceptedMessageSchema.parse(value) });
   const point = checkpointPoint<'scene', string, string, string>();
 
-  function checkBasis(basis: ConversationRecoveryBasis, facts: CheckpointFacts<string>): void {
+  function checkBasis(basis: Stable<ConversationRecoveryBasis>, facts: CheckpointFacts<string>): void {
     if (facts.input !== basis.accepted.message.content || basis.accepted.message.role !== 'user' || basis.accepted.index + 1 !== basis.transcript.end) throw new Error('Scene checkpoint changed its formal input');
   }
-  function checkedPrepared(facts: CheckpointFacts<string>, basis: ConversationRecoveryBasis): ConversationMaterialInput {
+  function checkedPrepared(facts: CheckpointFacts<string>, basis: Stable<ConversationRecoveryBasis>): ConversationMaterialInput {
     checkBasis(basis, facts);
     const before = facts.children.list(maintain).find((child) => child.key === 'before');
     const preparation = facts.children.requireUnique(prepare, { parentRound: 1 });
     if (!before || before.order !== 0 || before.reception.status !== 'accepted' || before.returned?.status !== 'succeeded' || !equal(before.input, basis.accepted) || preparation.order !== 1 || preparation.key !== 'prepare' || !equal(preparation.input, basis.accepted) || preparation.reception.status !== 'accepted' || preparation.returned?.status !== 'succeeded' || !equal(preparation.reception.value, preparation.returned.output)) throw new Error('Scene preparation lacks its accepted predecessor');
     return preparation.returned.output;
   }
-  function checkedResponse(facts: CheckpointFacts<string>, basis: ConversationRecoveryBasis): AcceptedConversationMessage {
+  function checkedResponse(facts: CheckpointFacts<string>, basis: Stable<ConversationRecoveryBasis>): AcceptedConversationMessage {
     const input = checkedPrepared(facts, basis);
     const child = facts.children.requireUnique(answer, { parentRound: 1 });
     const response = facts.children.accepted(child.ref, answerReception);
@@ -124,12 +125,12 @@ export function createContentRecoveryScene(answer: ConversationAnswer<Conversati
     },
     resume: { run: (_work, { response }) => response.message.content },
   });
-  async function prepareInput(work: Work, basis: ConversationRecoveryBasis): Promise<string> {
+  async function prepareInput(work: Work, basis: Stable<ConversationRecoveryBasis>): Promise<string> {
     const child = work.children.create(prepare, basis.accepted, { key: 'prepare' });
     work.checkpoint?.({ point: prepareWaiting, state: { ...fixedState, basis }, refs: { child: child.ref } });
     return receivePreparation(work, basis, child);
   }
-  async function receivePreparation(work: Work, basis: ConversationRecoveryBasis, child: ChildCall<typeof prepare>): Promise<string> {
+  async function receivePreparation(work: Work, basis: Stable<ConversationRecoveryBasis>, child: ChildCall<typeof prepare>): Promise<string> {
     const input = await child.invoke();
     const next = work.children.create(answer, input, {
       key: 'answer',
@@ -142,7 +143,7 @@ export function createContentRecoveryScene(answer: ConversationAnswer<Conversati
     work.checkpoint?.({ point: answerWaiting, state: { ...fixedState, basis, input }, refs: { child: next.ref } });
     return receiveAnswer(work, basis, next);
   }
-  async function receiveAnswer(work: Work, basis: ConversationRecoveryBasis, child: ChildCall<typeof answer>): Promise<string> {
+  async function receiveAnswer(work: Work, basis: Stable<ConversationRecoveryBasis>, child: ChildCall<typeof answer>): Promise<string> {
     const response = await child.invoke({
       reception: answerReception,
       result: {
@@ -161,13 +162,13 @@ export function createContentRecoveryScene(answer: ConversationAnswer<Conversati
     work.checkpoint?.({ point: answerAccepted, state: { ...fixedState, basis, response }, refs: { child: child.ref } });
     return maintainAnswer(work, basis, response);
   }
-  async function maintainAnswer(work: Pick<Work, 'children' | 'checkpoint'>, basis: ConversationRecoveryBasis, response: AcceptedConversationMessage): Promise<string> {
+  async function maintainAnswer(work: Pick<Work, 'children' | 'checkpoint'>, basis: Stable<ConversationRecoveryBasis>, response: AcceptedConversationMessage): Promise<string> {
     const child = work.children.create(maintain, response, { key: 'after' });
     work.checkpoint?.({ point: afterWaiting, state: { ...fixedState, basis, response }, refs: { child: child.ref } });
     await child.invoke();
     return complete(work, basis, response, child.ref);
   }
-  function complete(work: Pick<Work, 'checkpoint'>, basis: ConversationRecoveryBasis, response: AcceptedConversationMessage, ref: ChildCall<typeof maintain>['ref']): string {
+  function complete(work: Pick<Work, 'checkpoint'>, basis: Stable<ConversationRecoveryBasis>, response: AcceptedConversationMessage, ref: ChildCall<typeof maintain>['ref']): string {
     work.checkpoint?.({ point: completed, state: { ...fixedState, basis, response }, refs: { child: ref } });
     return response.message.content;
   }
